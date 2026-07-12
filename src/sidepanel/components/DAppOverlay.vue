@@ -993,6 +993,17 @@ const signDataDomain = computed(() => {
   }
 });
 
+// Active-wallet computeds (WalletStore-backed). Declared HERE (early) rather
+// than lower down because a `watch(loggedWallet)` and several computeds below
+// reference `loggedWallet` — a late declaration is a temporal-dead-zone crash
+// in setup(). (They only read WalletStore.state, so an early position is safe.)
+const walletType = computed(() => WalletStore.state.loggedWallet?.type);
+const isPrfWallet = computed(() => WalletStore.state.loggedWallet?.encryptionMethod === 'prf');
+const loggedWallet = computed(() => WalletStore.state.loggedWallet);
+const keys = computed(() => WalletStore.state.keys);
+const utxos = computed(() => WalletStore.state.utxos);
+const isBT = computed(() => WalletStore.state.loggedWallet?.connectionType === 'bluetooth');
+
 // ── Midnight makeTransfer (DApp Connector) — approval preview ────────────────
 // Phase 2: native-NIGHT unshielded transfers. The desiredOutputs `value`s
 // arrive as base-unit decimal STRINGS (the page bridge stringifies the bigint);
@@ -1963,12 +1974,10 @@ const keystoneType = ref('');
 const keystoneCbor = ref('');
 const keystoneUseHash = ref(false);
 
-const walletType = computed(() => WalletStore.state.loggedWallet?.type);
-const isPrfWallet = computed(() => WalletStore.state.loggedWallet?.encryptionMethod === 'prf');
-const loggedWallet = computed(() => WalletStore.state.loggedWallet);
-const keys = computed(() => WalletStore.state.keys);
-const utxos = computed(() => WalletStore.state.utxos);
-const isBT = computed(() => WalletStore.state.loggedWallet?.connectionType === 'bluetooth');
+// NOTE: walletType / isPrfWallet / loggedWallet / keys / utxos / isBT are
+// declared EARLY (right after signDataDomain) — a `watch(loggedWallet)` and
+// several computeds above reference them, so declaring them here (late) is a
+// temporal-dead-zone crash in setup(). Do not move them back down.
 
 // Reset state when request changes
 watch(currentRequest, () => {
