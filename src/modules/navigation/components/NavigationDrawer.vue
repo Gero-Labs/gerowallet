@@ -14,7 +14,7 @@
         <v-list-item-content class="pb-2" style="padding-top: 22px;">
           <v-list-item-title>
             <img
-              :src="isApex ? assets.geroDashboardApex : assets.geroNoText"
+              :src="isApex ? assets.geroNoTextApex : assets.geroNoText"
               width="64"
               alt="logo"
             />

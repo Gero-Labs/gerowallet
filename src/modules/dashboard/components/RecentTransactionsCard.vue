@@ -112,7 +112,10 @@ function formatAmount(tx: StoredTransaction): string {
 /* Match the portfolio metrics + chart panels' glass exactly (same rgba/blur)
    so all three hero cards read as one material. */
 .recent-tx-card {
-  border-radius: 12px;
+  /* !important so the radius wins the Vuetify .v-sheet.v-card tie (CSS emitted
+     twice); without it the card clips at Vuetify's 4px and the corners read
+     tighter than the div-based portfolio panels beside it. */
+  border-radius: var(--g-r-card) !important;
   overflow: hidden;
   background: rgba(0, 0, 0, 0.4) !important;
   backdrop-filter: blur(20px) saturate(1.8);

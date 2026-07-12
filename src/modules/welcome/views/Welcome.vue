@@ -24,7 +24,7 @@
         :class="{ 'background-active': selectedNetwork?.blockchain?.includes('Bitcoin') }"
       />
       <img
-        :src="assets.midnightBg"
+        :src="assets.midnightLoginBg"
         class="welcome-background-image"
         :class="{ 'background-active': selectedNetwork?.blockchain?.includes('Midnight') }"
       />
