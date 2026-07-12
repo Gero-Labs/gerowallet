@@ -29,7 +29,8 @@ MetaMask "Social Login" (= MetaMask Embedded Wallets, formerly Web3Auth) solves 
 - **D1 — Match MetaMask's UX.** Password becomes the recovery factor; drop the downloadable file; add a revealable SRP.
 - **D2 — Stay self-hosted; do NOT adopt Web3Auth/Torus nodes.** Web3Auth's node network would remove the custody caveat (D3) via share distribution and is exactly MetaMask's stack, but it is a **paid SaaS** (per-MAW pricing) and puts a **third-party vendor in the trust + availability path** — which this project explicitly rejected at kickoff ("Managed MPC (vendor in trust model)"). Self-sovereignty and zero per-user cost win.
 - **D3 — Accepted custody premise (unavoidable consequence of D1 + D2).** Fileless cross-device recovery on a *single* backend is only possible if the backend serves the second share. So the recovery share moves to the backend as a **password-encrypted blob**, and the backend then holds **2 of 3 shares** (login + encrypted-recovery). A backend breach **plus** a crack of a weak recovery password = reconstruct. This reverses the earlier "no two reconstructable shares server-side" rule. Mitigated (not erased) by: Argon2id, a **second server-side at-rest wrap** (KMS key), enforced recovery-password strength, separate storage/access paths, and rate-limiting. The **device share never touches the backend**, so a breach *without the password* still cannot reconstruct — the recovery password is the load-bearing secret. This mirrors MetaMask's own "lose the password → unrecoverable" cliff.
-- **D4 — Avoid hand-rolled GF(256) crypto.** Recomputing the original recovery share from entropy + one share is mathematically possible (2-of-3 ⇒ degree-1 line) but needs custom field arithmetic matching the `shamir-secret-sharing` library — rejected as risk. Consequence: "forgot recovery password" cannot cheaply re-wrap the old share, so it does a **full re-split** (§3 reset path).
+- **D4 — Avoid hand-rolled GF(256) crypto.** Recomputing the original recovery share from entropy + one share is mathematically possible (2-of-3 ⇒ degree-1 line) but needs custom field arithmetic matching the `shamir-secret-sharing` library — rejected as risk. Consequence: "change recovery password" cannot cheaply re-wrap the old share, so it does a **full re-split** (§3).
+- **D5 — Change recovery password never asks the old one (MetaMask parity).** MetaMask lets a logged-in user set a new password without the old one. Given D4, we honor this by making "change" a **re-split** from the unlocked session (device+login → entropy → fresh split → store under the new password). One consequence, treated as a feature: a password change **rotates all three shares**, so it also voids a previously-leaked recovery blob — there is no separate compromise-rotation action.
 
 ## Non-goals (v1)
 
@@ -53,8 +54,7 @@ Same Shamir **2-of-3**; only the third factor changes.
 - **Onboarding:** user sets a **recovery password** (already captured in `StepGoogleSecure`). Client wraps the recovery share with `encryptRecoveryShare()` (Argon2id + XChaCha20) and **uploads the ciphertext** (+ the non-secret xpub anchor). No file download.
 - **Recover on a new device:** Google sign-in → backend returns login share + encrypted recovery blob + xpub anchor → user types recovery password → decrypt → login + recovery = 2 → reconstruct → establish local device share. Fileless.
 - **Reveal SRP (new escape hatch):** an unlocked wallet reveals its seed (`entropy → entropyToMnemonic`) behind a device-secret re-auth, shown once → exportable to any BIP39 wallet.
-- **Change recovery password:** re-wrap under a new `Argon2id(newPassword)`, replace the backend blob (cheap, no re-split).
-- **Reset (forgot password) / rotate (compromise):** full crash-safe re-split (§3), then store the fresh recovery blob under the new password. **Requires an unlocked wallet** (an existing device — device+login reconstruct the entropy). A user on a *new* device who has *also* forgotten the recovery password has only the login share (1 of 3) → genuinely unrecoverable, identical to MetaMask's "lose the password → unrecoverable" cliff.
+- **Set / change recovery password (MetaMask parity):** one action, from an **unlocked wallet** (existing device — device+login reconstruct entropy). It **never asks for the old password** (we can't retrieve the old share without it, D4); instead it performs a crash-safe **re-split** (§3) and stores the fresh recovery blob under the new password. Because the underlying share changes, a password change also **voids any previously-leaked recovery blob** — i.e. it doubles as compromise-rotation; there is no separate "rotate" action. A user on a *new* device who has *also* forgotten the recovery password has only the login share (1 of 3) → genuinely unrecoverable, identical to MetaMask's "lose the password → unrecoverable" cliff.
 
 **Recovery-password strength (concrete floor):** minimum **12 characters** + a visible strength meter; the weakest tier is rejected before any store. This is the load-bearing secret (D3), so the floor is enforced client-side on set and change.
 
@@ -102,8 +102,7 @@ Breach now needs **DB + server at-rest key + a crack of the recovery password**.
 - **Onboarding store:** after `createMpcGoogleWalletFlow` yields the recovery share → `encryptRecoveryShare(share, recoveryPassword)` → `storeRecovery(+xpub)`. **Non-fatal** on failure → wallet works (device+login); surface "recovery not set → finish in Settings."
 - **Recover (new device)** — rework `recoverMpcGoogleWalletFlow`: `fetchRecovery` → `decryptRecoveryShare(blob, password)` → `getLoginShare` → `reconstructAndValidateEntropy(recovery, login, xpubFromBackend)` → recreate wallet + establish local device share. Replaces the file-picker path. `404` → "no recovery on file."
 - **`REVEAL_MPC_SRP`** (new): unlocked session **+ device-secret re-auth** → reconstruct entropy → `entropyToMnemonic` → return once. Never persisted, never logged.
-- **`CHANGE_RECOVERY_PASSWORD`** (knows current): `fetchRecovery` → `decrypt(old)` → `encrypt(new)` → `storeRecovery`. Cheap; no re-split.
-- **`RESET_RECOVERY` / rotate** (forgot password or compromise): full **crash-safe re-split** — retains the staged `mpcDeviceShareNext` + backend `rotate` design (see §4) — then stores the fresh recovery blob under the new password.
+- **`SET_RECOVERY_PASSWORD`** (change / reset, from an unlocked wallet; **never asks the old password**, MetaMask parity): full **crash-safe re-split** — staged `mpcDeviceShareNext` + backend `rotate` (see §4) — then stores the fresh recovery blob under the new password. Single handler covers both "change" and "forgot but still logged in"; also serves compromise-rotation.
 
 **C. Onboarding UI:**
 - `StepGoogleSecure` — keep capturing the recovery password; add a **strength meter + minimum** (now the load-bearing secret).
@@ -111,7 +110,7 @@ Breach now needs **DB + server at-rest key + a crack of the recovery password**.
 - `StepGoogleRestore` — replace the file-picker with a **recovery-password field**.
 
 **D. Settings (`SecurityTab`, MPC rows):**
-- **"Recovery password → Change"** (change dialog; "forgot?" → reset/re-split).
+- **"Change recovery password"** (one dialog: enter a new password + confirm; **no old-password field** — runs `SET_RECOVERY_PASSWORD` re-split; covers both change and forgot-while-logged-in).
 - **"Reveal secret recovery phrase"** — behind device-secret re-auth, shown once, with an "anyone with this controls your wallet" warning.
 - Optional red-dot nudge if onboarding upload failed (recovery not set).
 
@@ -133,8 +132,7 @@ Breach now needs **DB + server at-rest key + a crack of the recovery password**.
 |---|---|
 | Onboarding store | Wallet (device+login) is the atomic core (exists). Recovery store is a **non-fatal** follow-up → "recovery not set → Settings." No brick; recovery blob is independent of daily unlock. |
 | Recover (new device) | Read-only fetches + client reconstruct. Any failure (wrong pw → decrypt fail, 404, xpub-mismatch → reject) writes **no state**; retry. Local wallet + device share written only after reconstruct+validate. |
-| Change password (knows old) | fetch → decrypt(old) → encrypt(new) → store = **one transactional backend replace**. Wrong old pw → abort, backend unchanged. Store fails → old blob remains, old pw still works. No staging. |
-| Reset / rotate | Crash-safe staged re-split, order: **1** stage `deviceShareNext` (old kept) → **2** backend `rotate` login → **3** promote device → **4** store recovery' blob (new pw) → **5** clear `mpcLoginShareCache`. Recovery store is **last** (only written once S' is live). **Resume-on-unlock:** device+login mismatch → try `deviceShareNext`+login → promote. Backend-rotate fail → drop `next`, stay on old split. Never bricks. |
+| Set / change recovery password (re-split) | Crash-safe staged re-split, order: **1** stage `deviceShareNext` (old kept) → **2** backend `rotate` login → **3** promote device → **4** store recovery' blob (new pw) → **5** clear `mpcLoginShareCache`. Recovery store is **last** (only written once S' is live). **Resume-on-unlock:** device+login mismatch → try `deviceShareNext`+login → promote. Backend-rotate fail → drop `next`, stay on old split. Never bricks. Never asks the old password. |
 
 **Crash-safety field:** new nullable wallet field `mpcDeviceShareNext`. On every MPC unlock: device+login reconstructs → drop any stale `next`; device+login fails but `next`+login succeeds → promote `next`, continue unlocked.
 
@@ -163,7 +161,7 @@ Breach now needs **DB + server at-rest key + a crack of the recovery password**.
 
 **Client unit (vitest, extend existing MPC specs):**
 - `mpc.api.spec`: `storeRecovery` / `fetchRecovery` post exact bodies, parse responses.
-- `mpcWalletHandlers.spec`: onboarding store (encrypts + `storeRecovery(+xpub)`; non-fatal on failure); recover-new-device (fetch→decrypt→login→validate→recreate; wrong pw → no state; 404; xpub-mismatch → reject); `REVEAL_MPC_SRP` (entropy→mnemonic; requires re-auth; never persists); `CHANGE_RECOVERY_PASSWORD` (wrong old → abort; store fail → old intact); reset/rotate (all three shares same split; crash-resume promotes; recovery stored last; backend-rotate fail → rollback).
+- `mpcWalletHandlers.spec`: onboarding store (encrypts + `storeRecovery(+xpub)`; non-fatal on failure); recover-new-device (fetch→decrypt→login→validate→recreate; wrong pw → no state; 404; xpub-mismatch → reject); `REVEAL_MPC_SRP` (entropy→mnemonic; requires re-auth; never persists); `SET_RECOVERY_PASSWORD` (never asks old pw; re-split → all three shares new; old recovery blob dead; crash-resume promotes; recovery stored last; backend-rotate fail → rollback to old split).
 - Recovery-password **strength validator** unit; `recoveryShare.spec` already covers encrypt/decrypt + wrong-pw reject.
 
 **Property / adversarial (security):**
