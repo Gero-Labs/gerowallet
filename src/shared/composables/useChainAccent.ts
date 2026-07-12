@@ -30,6 +30,10 @@ export function useChainAccent(): void {
         root.style.setProperty('--g-accent', a.accent);
         root.style.setProperty('--g-grad-1', a.gradient1);
         root.style.setProperty('--g-grad-2', a.gradient2);
+        // On-gradient text: only chains that override it (Midnight = pure black)
+        // set the inline value; the rest fall back to the tokens.css default.
+        if (a.onGrad) root.style.setProperty('--g-on-grad', a.onGrad);
+        else root.style.removeProperty('--g-on-grad');
         // legacy aliases (do not add new consumers)
         root.style.setProperty('--chain-primary', a.accent);
         root.style.setProperty('--chain-gradient1', a.gradient1);
