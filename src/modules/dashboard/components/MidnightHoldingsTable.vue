@@ -57,7 +57,11 @@
     </template>
 
     <template v-slot:[`item.change24h`]="{ item }">
-      <span class="text--secondary" style="font-size: 12px;">{{ item.change24h }}</span>
+      <span
+        class="g-num"
+        :class="item.change24hRaw === null ? 'text--secondary' : (item.change24hRaw >= 0 ? 'delta-up' : 'delta-down')"
+        style="font-size: 12px;"
+      >{{ item.change24h }}</span>
     </template>
 
     <template v-slot:[`item.mcap`]="{ item }">
@@ -75,13 +79,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, toRefs } from 'vue';
+import { computed, toRefs, watch } from 'vue';
 import { midnightStore } from '@/stores/midnightStore';
 import { walletStore } from '@/stores/walletStore';
 import { Network } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useMidnightLoading } from '@/shared/composables/useMidnightLoading';
+import { useNightFiat } from '@/shared/composables/useNightFiat';
+import { formatPrice, formatUsd, formatSignedChange } from '@/shared/utils/format';
 import midnightLogo from '@/assets/svg/midnight.svg';
 
 const { t } = useTranslation();
@@ -92,6 +98,11 @@ const { loggedWallet } = toRefs(walletStore);
 
 const isMainnet = computed(() => loggedWallet.value?.network === Network.MAINNET);
 const nightCurrency = computed(() => (isMainnet.value ? 'NIGHT' : 'tNIGHT'));
+
+// NIGHT fiat price - mainnet only (testnet tNIGHT has no market). Mirrors the
+// sidepanel BalanceSection's usage of the same composable (mirror-dashboard rule).
+const nightFiat = useNightFiat();
+watch(isMainnet, (on) => { if (on) void nightFiat.refresh(); }, { immediate: true });
 
 const NIGHT_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.NIGHT);
 
@@ -129,6 +140,8 @@ interface MidnightHoldingRow {
   price: string;
   value: string;
   change24h: string;
+  /** Raw 24h change for delta-up/delta-down coloring; null when no price data. */
+  change24hRaw: number | null;
   mcap: string;
   avgCost: string;
   pnl: string;
@@ -160,6 +173,14 @@ const breakdownText = computed<string>(() => {
   return `${t('midnight.common.public')} ${pub} / ${t('midnight.common.private')} ${priv}`;
 });
 
+// NIGHT has a market on mainnet only; testnet tNIGHT keeps the placeholders.
+const hasNightPrice = computed(() => isMainnet.value && nightFiat.hasPrice.value);
+
+const nightValueUsd = computed<number>(() => {
+  if (!hasNightPrice.value || !nightFiat.usd.value) return 0;
+  return Number(totalNight.value) / Number(NIGHT_DIVISOR) * nightFiat.usd.value;
+});
+
 // tDUST is deliberately NOT a table row — the dedicated DUST battery panel
 // above owns the live DUST display (it's a fee resource, not a holding).
 const rows = computed<MidnightHoldingRow[]>(() => [
@@ -168,9 +189,12 @@ const rows = computed<MidnightHoldingRow[]>(() => [
     name: 'Midnight Native Token',
     balanceFormatted: `${formatBigDecimal(totalNight.value, NIGHT_DIVISOR, 2)} ${nightCurrency.value}`,
     breakdownText: breakdownText.value,
-    price: '—',
-    value: '—',
-    change24h: '—',
+    price: hasNightPrice.value && nightFiat.usd.value ? formatPrice(nightFiat.usd.value) : '—',
+    value: hasNightPrice.value ? formatUsd(nightValueUsd.value) : '—',
+    change24h: hasNightPrice.value && nightFiat.change24h.value !== null
+      ? formatSignedChange(nightFiat.change24h.value)
+      : '—',
+    change24hRaw: hasNightPrice.value ? nightFiat.change24h.value : null,
     mcap: '—',
     avgCost: '—',
     pnl: '—',

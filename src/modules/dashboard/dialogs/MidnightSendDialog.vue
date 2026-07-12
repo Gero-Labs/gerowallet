@@ -218,7 +218,7 @@
                 <!-- Global total — identical styling to the Cardano step-1 total. -->
                 <div v-if="amount && Number(amount) > 0" class="global-total">
                   <div class="global-total__row global-total__fee-row">
-                    <span class="global-total__fee-label">{{ t('signTx.networkFee') }}</span>
+                    <span class="global-total__fee-label">{{ t('midnight.send.estimatedNetworkFee') }}</span>
                     <span class="global-total__fee">{{ feeEstimateDisplay }} {{ dustCurrency }}</span>
                   </div>
                   <div class="global-total__row global-total__total-row">
@@ -244,6 +244,7 @@
                 :totals="reviewTotals"
                 :unit="nightCurrency"
                 :fee-unit="dustCurrency"
+                :fee-label="t('midnight.send.estimatedNetworkFee')"
               />
               <!-- Public-chain disclosure: unshielded transfers are indexer-visible.
                    Informational, not a warning - no error/warning coloring. -->
