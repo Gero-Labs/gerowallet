@@ -20,7 +20,7 @@
       <div class="token-right">
         <div class="token-value text-body-2 grey--text">--</div>
         <div v-if="showNightBreakdown" class="token-change t-caption g-num">
-          {{ nightBreakdownText }}
+          {{ hideBalances ? '••••••' : nightBreakdownText }}
         </div>
       </div>
     </div>
