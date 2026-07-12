@@ -1,276 +1,118 @@
 <template>
-  <v-card
-    flat
-    class="empty-state-hero liquid-glass"
-    :style="{
-      minHeight: '400px',
-      position: 'relative',
-      overflow: 'hidden'
-    }"
-  >
+  <div class="es-root">
 
-    <!-- Content container -->
-    <v-card-text class="hero-content">
-      <!-- Welcome message -->
-      <div class="welcome-section">
-        <h1 class="hero-title">
-          {{ isNewUser ? $t('common.welcomeToGeroDashboard') : $t('dashboard.emptyWallet') }}
-        </h1>
+    <!-- Slim backup strip: the security ask stays visible but no longer owns
+         the visual center (the first deposit does). -->
+    <button
+      v-if="shouldBackup && !isBackupComplete"
+      type="button"
+      class="es-backup es-reveal"
+      style="--es-d: 0ms"
+      @click="$emit('backup-wallet')"
+    >
+      <v-icon size="16" color="var(--g-warning)">mdi-shield-alert-outline</v-icon>
+      <span class="es-backup__text">
+        <strong>{{ $t('dashboard.backupStripTitle') }}</strong>
+        {{ $t('dashboard.backupStripBody') }}
+      </span>
+      <span class="es-backup__cta">{{ $t('dashboard.backupStripCta') }} →</span>
+    </button>
 
-        <p class="hero-subtitle">
-          {{ subtitle }}
-        </p>
+    <!-- ═══ Act 1: the zero moment ═══ -->
+    <section class="es-hero es-reveal" style="--es-d: 60ms">
+      <div class="es-balance g-num">
+        <span class="es-balance__cur">{{ currencySymbol }}</span><span class="es-balance__zero">0.00</span>
       </div>
-
-      <!-- Backup reminder/status for empty wallets - Full Width -->
-      <div class="backup-section mt-6 backup-container" v-if="shouldBackup || isBackupComplete">
-        <v-card class="backup-card liquid-glass-subtle">
-          <v-card-text class="pa-4 pb-3">
-            <div class="d-flex align-center mb-3">
-              <v-icon
-                :color="isBackupComplete ? 'success' : primaryColor"
-                class="mr-3"
-                size="32"
-              >
-                {{ isBackupComplete ? 'mdi-shield-check-outline' : 'mdi-shield-check' }}
-              </v-icon>
-              <div>
-                <h3 class="backup-title mb-1">
-                  {{ isBackupComplete ? $t('dashboard.walletSecured') : $t('dashboard.secureYourWallet') }}
-                </h3>
-                <p class="backup-subtitle mb-0">
-                  {{ isBackupComplete
-                    ? $t('dashboard.seedPhraseBackedUp')
-                    : $t('dashboard.backupSeedPhrase')
-                  }}
-                </p>
-              </div>
-            </div>
-
-            <!-- Show different content based on backup status -->
-            <template v-if="!isBackupComplete">
-              <v-alert
-                type="error"
-                text
-                class="mb-3 backup-alert"
-              >
-                {{ $t('dashboard.seedPhraseRecoveryWarning') }}
-              </v-alert>
-
-              <div class="text-center">
-                <v-btn
-                  :color="primaryColor"
-                  @click="$emit('backup-wallet')"
-                  class="backup-btn"
-                >
-                  <v-icon left small>mdi-key</v-icon>
-                  {{ $t('dashboard.backupSeed') }}
-                </v-btn>
-                <p class="mt-1 mb-0 text-caption backup-help-text">
-                  {{ $t('dashboard.quickAndSecure') }}
-                </p>
-              </div>
-            </template>
-
-            <!-- Completed state -->
-            <template v-else>
-              <v-alert
-                type="success"
-                text
-                class="mb-0 backup-alert"
-                :icon="false"
-              >
-                {{ $t('dashboard.greatJobProtected') }}
-              </v-alert>
-            </template>
-          </v-card-text>
-        </v-card>
+      <p class="es-tagline">{{ tagline }}</p>
+      <div class="es-ctas">
+        <v-btn v-if="buySupported" large class="geroButton es-cta" @click="$emit('buy-crypto')">
+          {{ $t('dashboard.buy') }} {{ currencyTicker }}
+        </v-btn>
+        <v-btn large outlined class="es-cta es-cta--ghost" @click="$emit('show-receive')">
+          <v-icon small left>mdi-qrcode</v-icon>
+          {{ $t('dashboard.receiveAction') }}
+        </v-btn>
       </div>
+    </section>
 
+    <!-- ═══ Act 2: ways to fund ═══ -->
+    <section class="es-sect-wrap es-reveal" style="--es-d: 160ms">
+      <h2 class="es-sect">{{ $t('dashboard.fundWaysTitle') }}</h2>
+      <div class="es-ways">
+        <button v-if="buySupported" type="button" class="es-way" @click="$emit('buy-crypto')">
+          <span class="es-way__icon es-way__icon--buy">
+            <v-icon size="19" color="var(--g-success)">mdi-credit-card-outline</v-icon>
+          </span>
+          <span class="es-way__text">
+            <span class="es-way__title">{{ $t('dashboard.fundBuyTitle') }}</span>
+            <span class="es-way__desc">{{ $t('dashboard.fundBuyDesc', { ticker: currencyTicker }) }}</span>
+          </span>
+          <span class="es-way__meta">
+            <span class="es-badge">{{ $t('dashboard.fundBuyBadge') }}</span>
+            <v-icon size="18" color="var(--g-text-3)">mdi-chevron-right</v-icon>
+          </span>
+        </button>
 
-      <!-- Feature cards with spanning background -->
-      <v-row class="mt-8 feature-cards-grid" justify="center">
-        <!-- Card 1: Buy Crypto (only for Cardano) -->
-        <v-col cols="12" sm="6" md="4" lg="2" v-if="networks.resolveBuySupported(loggedWallet?.chain, loggedWallet?.network)">
-          <div class="feature-card-container buy-card-emphasized">
-            <div
-              class="feature-card-background card-1"
-              :style="{
-                backgroundImage: `url(${featureBackgroundImage})`,
-                backgroundSize: cardBackgroundSize,
-                backgroundPosition: '0% center',
-                backgroundRepeat: 'no-repeat'
-              }"
-            ></div>
-            <div class="feature-card-glass" @click="$emit('buy-crypto')">
-              <!-- Ray of light effect -->
-              <div class="light-ray"></div>
-              <div class="feature-card-content">
-                <div class="feature-card-main">
-                  <v-icon size="48" :color="primaryColor" class="mb-3">
-                    mdi-credit-card-plus
-                  </v-icon>
-                  <h3 class="feature-title">{{ t('dashboard.buy') }} {{ currencySymbol }}</h3>
-                  <p class="feature-description">{{ t('dashboard.purchaseWithCreditCard') }}</p>
-                </div>
-                <v-chip small :color="primaryColor" text-color="white">
-                  {{ t('dashboard.instant') }}
-                </v-chip>
-              </div>
-            </div>
-          </div>
-        </v-col>
+        <button type="button" class="es-way" @click="$emit('show-receive')">
+          <span class="es-way__icon es-way__icon--rec">
+            <v-icon size="19" color="var(--g-accent)">mdi-bank-transfer-in</v-icon>
+          </span>
+          <span class="es-way__text">
+            <span class="es-way__title">{{ $t('dashboard.fundExchangeTitle') }}</span>
+            <span class="es-way__desc">{{ $t('dashboard.fundExchangeDesc') }}</span>
+          </span>
+          <span class="es-way__meta">
+            <span
+              v-if="truncatedAddress"
+              class="es-addr g-mono"
+              role="button"
+              :title="$t('dashboard.copyAddress')"
+              @click.stop="copyToClipboard"
+            >
+              {{ copiedFeedback ? $t('dashboard.copied') : truncatedAddress }}
+              <v-icon size="12" color="var(--g-text-3)">{{ copiedFeedback ? 'mdi-check' : 'mdi-content-copy' }}</v-icon>
+            </span>
+            <v-icon size="18" color="var(--g-text-3)">mdi-chevron-right</v-icon>
+          </span>
+        </button>
 
-        <!-- Card 2: Receive -->
-        <v-col cols="12" sm="6" md="4" lg="2">
-          <div class="feature-card-container">
-            <div
-              class="feature-card-background card-2"
-              :style="{
-                backgroundImage: `url(${featureBackgroundImage})`,
-                backgroundSize: cardBackgroundSize,
-                backgroundPosition: isApex ? '0% center' : '20% center',
-                backgroundRepeat: 'no-repeat'
-              }"
-            ></div>
-            <div class="feature-card-glass" @click="$emit('show-receive')">
-              <div class="feature-card-content">
-                <div class="feature-card-main">
-                  <v-icon size="48" :color="primaryColor" class="mb-3">
-                    mdi-qrcode
-                  </v-icon>
-                  <h3 class="feature-title">{{ t('dashboard.receiveAction') }}</h3>
-                  <p class="feature-description">{{ t('dashboard.shareYourAddress') }}</p>
-                </div>
-                <v-chip
-                  v-if="walletAddress"
-                  small
-                  :color="copiedFeedback ? 'success' : primaryColor"
-                  text-color="white"
-                  @click.stop="copyToClipboard"
-                >
-                  <v-icon small left>{{ copiedFeedback ? 'mdi-check' : 'mdi-content-copy' }}</v-icon>
-                  {{ copiedFeedback ? t('dashboard.copied') : t('dashboard.copyAddress') }}
-                </v-chip>
-              </div>
-            </div>
-          </div>
-        </v-col>
+        <button type="button" class="es-way" @click="$emit('show-receive')">
+          <span class="es-way__icon es-way__icon--mov">
+            <v-icon size="19" color="var(--g-info)">mdi-swap-horizontal</v-icon>
+          </span>
+          <span class="es-way__text">
+            <span class="es-way__title">{{ $t('dashboard.fundWalletTitle') }}</span>
+            <span class="es-way__desc">{{ $t('dashboard.fundWalletDesc', { blockchain }) }}</span>
+          </span>
+          <span class="es-way__meta">
+            <v-icon size="18" color="var(--g-text-3)">mdi-chevron-right</v-icon>
+          </span>
+        </button>
+      </div>
+    </section>
 
-        <!-- Card 4: Gero Card (only for Cardano) -->
-        <v-col cols="12" sm="6" md="4" lg="2" v-if="networks.resolveGeroCardSupport(loggedWallet?.chain, loggedWallet?.network)">
-          <div class="feature-card-container">
-            <div
-              class="feature-card-background card-4"
-              :style="{
-                backgroundImage: `url(${featureBackgroundImage})`,
-                backgroundSize: cardBackgroundSize,
-                backgroundPosition: '60% center',
-                backgroundRepeat: 'no-repeat'
-              }"
-            />
-            <div class="feature-card-glass" @click="navigateToCard">
-              <div class="feature-card-content">
-                <div class="feature-card-main">
-                  <v-icon size="48" :color="primaryColor" class="mb-3">
-                    mdi-credit-card
-                  </v-icon>
-                  <h3 class="feature-title">{{ t('dashboard.geroCard') }}</h3>
-                  <p class="feature-description">{{ t('dashboard.topUpWithAda') }}</p>
-                </div>
-                <v-chip small :color="primaryColor" text-color="white">
-                  {{ t('dashboard.orderNow') }}
-                </v-chip>
-              </div>
-            </div>
-          </div>
-        </v-col>
+    <!-- ═══ Act 3: what the funds unlock (chain-aware, de-emphasized) ═══ -->
+    <section v-if="perks.length" class="es-sect-wrap es-reveal" style="--es-d: 260ms">
+      <h2 class="es-sect">{{ $t('dashboard.onceFundedTitle') }}</h2>
+      <div class="es-perks">
+        <button v-for="perk in perks" :key="perk.key" type="button" class="es-perk" @click="perk.go()">
+          <span class="es-perk__title">
+            <v-icon size="15" color="var(--g-accent)">{{ perk.icon }}</v-icon>
+            {{ $t(perk.title) }}
+          </span>
+          <span class="es-perk__desc">{{ $t(perk.desc, { ticker: currencyTicker }) }}</span>
+        </button>
+      </div>
+    </section>
 
-        <!-- Card 4/5: Staking Rewards -->
-        <v-col cols="12" sm="6" md="4" lg="2">
-          <div class="feature-card-container">
-            <div
-              class="feature-card-background card-5"
-              :style="{
-                backgroundImage: `url(${featureBackgroundImage})`,
-                backgroundSize: cardBackgroundSize,
-                backgroundPosition: isApex ? '66% center' : '80% center',
-                backgroundRepeat: 'no-repeat'
-              }"
-            />
-            <div class="feature-card-glass" @click="navigateToStaking">
-              <div class="feature-card-content">
-                <div class="feature-card-main">
-                  <v-icon size="48" :color="primaryColor" class="mb-3">
-                    mdi-cash-clock
-                  </v-icon>
-                  <h3 class="feature-title">{{ t('dashboard.stakingRewards') }}</h3>
-                  <p class="feature-description">{{ t('dashboard.earnRewardsByStakingShort') }}</p>
-                </div>
-                <v-chip small :color="primaryColor" text-color="white">
-                  {{ t('dashboard.exploreStaking') }}
-                </v-chip>
-              </div>
-            </div>
-          </div>
-        </v-col>
-
-        <!-- Card 5/6: Cashback (only for Cardano) -->
-        <v-col cols="12" sm="6" md="4" lg="2" v-if="!isApex">
-          <div class="feature-card-container">
-            <div
-              class="feature-card-background card-6"
-              :style="{
-                backgroundImage: `url(${featureBackgroundImage})`,
-                backgroundSize: cardBackgroundSize,
-                backgroundPosition: '100% center',
-                backgroundRepeat: 'no-repeat'
-              }"
-            ></div>
-            <div class="feature-card-glass" @click="navigateToCashback">
-              <div class="feature-card-content">
-                <div class="feature-card-main">
-                  <v-icon size="48" :color="primaryColor" class="mb-3">
-                    mdi-cash-refund
-                  </v-icon>
-                  <h3 class="feature-title">{{ t('dashboard.cashbackAction') }}</h3>
-                  <p class="feature-description">{{ t('dashboard.earnCashbackOnline') }}</p>
-                </div>
-                <v-chip small :color="primaryColor" text-color="white">
-                  {{ t('dashboard.browseDeals') }}
-                </v-chip>
-              </div>
-            </div>
-          </div>
-        </v-col>
-      </v-row>
-
-    </v-card-text>
-
-    <!-- Animated background elements -->
-    <div class="floating-elements">
-      <div
-        v-for="i in 5"
-        :key="i"
-        class="floating-circle"
-        :style="{
-          width: `${Math.random() * 100 + 50}px`,
-          height: `${Math.random() * 100 + 50}px`,
-          left: `${Math.random() * 100}%`,
-          animationDelay: `${Math.random() * 5}s`,
-          animationDuration: `${15 + Math.random() * 10}s`
-        }"
-      ></div>
-    </div>
-  </v-card>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import { toRefs, ref, getCurrentInstance, computed } from 'vue';
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain } from '@/models/types';
-import assets from '@/utils/assets';
 import networks from '@/utils/networks';
 
 const { t } = useTranslation();
@@ -288,7 +130,7 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   isNewUser: false,
-  showTutorial: true
+  showTutorial: true,
 });
 
 defineEmits([
@@ -297,418 +139,358 @@ defineEmits([
   'open-learn',
   'start-tutorial',
   'load-sample-data',
-  'backup-wallet'
+  'backup-wallet',
 ]);
 
 const blockchain = computed(() => loggedWallet.value?.chain || 'Blockchain');
 
-const currencySymbol = computed(() => {
-  return networks.resolveCurrencySymbol(loggedWallet.value?.chain, loggedWallet.value?.network);
+const currencySymbol = computed(() =>
+  networks.resolveCurrencySymbol(loggedWallet.value?.chain, loggedWallet.value?.network));
+
+const currencyTicker = computed(() =>
+  networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network));
+
+const buySupported = computed(() =>
+  networks.resolveBuySupported(loggedWallet.value?.chain, loggedWallet.value?.network));
+
+const tagline = computed(() => {
+  if (props.isNewUser) return t('dashboard.emptyTaglineNew');
+  return t('dashboard.addCurrencyToStart', { currency: currencyTicker.value });
 });
 
-const isApex = computed(() => {
-  return loggedWallet.value?.chain === Blockchain.APEX_PRIME ||
-         loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
-});
-
-const primaryColor = computed(() => {
-  return isApex.value ? '#dc753e' : '#00c7f3';
-});
-
-const cardBackgroundSize = computed(() => {
-  // For Apex: 3 cards spanning, for Cardano: 6 cards spanning
-  return isApex.value ? '300% 100%' : '600% 100%';
-});
-
-// Background image for the feature cards spanning effect
-const featureBackgroundImage = computed(() => {
-  return assets.emptyState;
-});
-
-const subtitle = computed(() => {
-  if (props.isNewUser) {
-    return t('dashboard.letsGetYouStarted', { currency: currencySymbol.value, blockchain: blockchain.value });
+// Chain-aware perks: each entry only renders where the feature exists.
+const perks = computed(() => {
+  const chain = loggedWallet.value?.chain;
+  const network = loggedWallet.value?.network;
+  const list: { key: string; icon: string; title: string; desc: string; go: () => void }[] = [];
+  if (networks.resolveStakingSupport(chain, network)) {
+    list.push({
+      key: 'stake', icon: 'mdi-chart-timeline-variant', title: 'dashboard.perkStakeTitle',
+      desc: 'dashboard.perkStakeDesc', go: () => router?.push('/staking'),
+    });
   }
-  return t('dashboard.addCurrencyToStart', { currency: currencySymbol.value });
+  if (networks.resolveGeroCardSupport(chain, network)) {
+    list.push({
+      key: 'card', icon: 'mdi-credit-card-outline', title: 'dashboard.perkSpendTitle',
+      desc: 'dashboard.perkSpendDesc', go: () => router?.push('/card'),
+    });
+  }
+  if (chain === Blockchain.CARDANO) {
+    list.push({
+      key: 'cashback', icon: 'mdi-cash-refund', title: 'dashboard.perkCashbackTitle',
+      desc: 'dashboard.perkCashbackDesc', go: () => router?.push('/cashback'),
+    });
+  }
+  return list;
 });
 
 const walletAddress = computed(() => loggedWallet.value?.baseAddress || '');
 
-// Check if wallet backup is complete
+const truncatedAddress = computed(() => {
+  const a = walletAddress.value;
+  if (!a) return '';
+  return a.length > 16 ? `${a.slice(0, 9)}…${a.slice(-5)}` : a;
+});
+
 const isBackupComplete = computed(() => {
-  // Access config directly from reactive store for better reactivity
   const config = walletStore.config;
   return config && 'backup' in config && config.backup === true;
 });
 
-// Copy functionality
 const copiedFeedback = ref(false);
 
 const copyToClipboard = async () => {
   if (!walletAddress.value) return;
-
   try {
     await navigator.clipboard.writeText(walletAddress.value);
-    copiedFeedback.value = true;
-
-    // Reset feedback after 2 seconds
-    setTimeout(() => {
-      copiedFeedback.value = false;
-    }, 2000);
   } catch (err) {
-    console.error('Failed to copy address:', err);
-    // Fallback for older browsers
     const textArea = document.createElement('textarea');
     textArea.value = walletAddress.value;
     document.body.appendChild(textArea);
     textArea.select();
     document.execCommand('copy');
     document.body.removeChild(textArea);
-
-    copiedFeedback.value = true;
-    setTimeout(() => {
-      copiedFeedback.value = false;
-    }, 2000);
   }
-};
-
-// Navigation functions
-const navigateToCard = () => {
-  if (router) {
-    router.push('/card');
-  }
-};
-
-const navigateToStaking = () => {
-  if (router) {
-    router.push('/staking');
-  }
-};
-
-const navigateToCashback = () => {
-  if (router) {
-    router.push('/cashback');
-  }
+  copiedFeedback.value = true;
+  setTimeout(() => { copiedFeedback.value = false; }, 2000);
 };
 </script>
 
 <style scoped>
-.empty-state-hero {
-  position: relative;
+.es-root {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 36px 16px 56px;
+}
+
+/* Staggered load reveal */
+.es-reveal {
+  animation: es-rise var(--g-dur-slow) var(--g-ease) both;
+  animation-delay: var(--es-d, 0ms);
+}
+
+@keyframes es-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .es-reveal { animation: none; }
+}
+
+/* ── Backup strip ── */
+.es-backup {
+  appearance: none;
+  font: inherit;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  border-radius: var(--g-r-control);
+  background: color-mix(in srgb, var(--g-warning) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--g-warning) 30%, transparent);
+  font-size: 13px;
+  color: var(--g-text-2);
+  text-align: left;
+  cursor: pointer;
+  margin-bottom: 40px;
+  transition: border-color var(--g-dur-fast) var(--g-ease);
+}
+
+.es-backup:hover {
+  border-color: color-mix(in srgb, var(--g-warning) 55%, transparent);
+}
+
+.es-backup__text { flex: 1; min-width: 0; }
+
+.es-backup__text strong {
+  color: var(--g-warning);
+  font-weight: 600;
+  margin-right: 4px;
+}
+
+.es-backup__cta {
+  color: var(--g-warning);
+  font-weight: 600;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+/* ── Hero: the zero ── */
+.es-hero {
+  text-align: center;
+  margin-bottom: 46px;
+}
+
+.es-balance {
+  font-size: 72px;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  color: var(--g-text-1);
+}
+
+.es-balance__cur {
+  background: linear-gradient(90deg, var(--g-grad-1), var(--g-grad-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.es-balance__zero { color: var(--g-text-3); }
+
+.es-tagline {
+  font-size: 16.5px;
+  color: var(--g-text-2);
+  margin: 14px auto 0;
+  max-width: 480px;
+}
+
+.es-ctas {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 24px;
+}
+
+.es-cta {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+  min-width: 150px;
+}
+
+.es-cta--ghost {
+  color: var(--g-text-1) !important;
+  border-color: var(--g-hairline-3) !important;
+}
+
+.es-cta--ghost:hover {
+  border-color: var(--g-accent) !important;
+  color: var(--g-accent) !important;
+}
+
+/* ── Section labels ── */
+.es-sect-wrap { margin-bottom: 40px; }
+
+.es-sect {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--g-text-3);
+  margin: 0 0 12px 2px;
+}
+
+/* ── Funding rows ── */
+.es-ways {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.es-way {
+  appearance: none;
+  font: inherit;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 15px 18px;
+  border-radius: var(--g-r-card);
+  background: var(--g-surface);
+  border: 1px solid var(--g-hairline-1);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color var(--g-dur-fast) var(--g-ease),
+    background var(--g-dur-fast) var(--g-ease),
+    transform var(--g-dur-fast) var(--g-ease);
+}
+
+.es-way:hover {
+  border-color: var(--g-hairline-3);
+  background: var(--g-raised);
+  transform: translateY(-1px);
+}
+
+.es-way:active { transform: scale(0.995); }
+
+.es-way__icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
-.hero-content {
-  position: relative;
-  z-index: 2;
-  padding: 48px 24px !important;
-  width: 100%;
-  max-width: 1200px;
-  margin: 0 auto;
+.es-way__icon--buy { background: color-mix(in srgb, var(--g-success) 13%, transparent); }
+.es-way__icon--rec { background: color-mix(in srgb, var(--g-accent) 13%, transparent); }
+.es-way__icon--mov { background: color-mix(in srgb, var(--g-info) 13%, transparent); }
+
+.es-way__text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
 }
 
-.welcome-section {
-  text-align: center;
-  margin-bottom: 32px;
+.es-way__title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--g-text-1);
 }
 
-.hero-avatar {
-  background: var(--g-raised) !important;
-  border: 2px solid var(--g-hairline-3) !important;
+.es-way__desc {
+  font-size: 13px;
+  color: var(--g-text-3);
+  line-height: 1.45;
 }
 
-.hero-title {
-  font-size: 2.5rem !important;
-  font-weight: 600 !important;
-  color: var(--g-text-1) !important;
-  margin-bottom: 16px !important;
+.es-way__meta {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
 }
 
-.hero-subtitle {
-  font-size: 1.125rem !important;
-  color: var(--g-text-1) !important;
-  max-width: 600px;
-  margin: 0 auto;
+.es-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: var(--g-r-pill);
+  background: color-mix(in srgb, var(--g-success) 12%, transparent);
+  color: var(--g-success);
 }
 
-.quick-actions-grid {
-  max-width: 1000px;
-  margin: 0 auto;
+.es-addr {
+  font-size: 12px;
+  color: var(--g-text-3);
+  background: var(--g-overlay);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: 6px;
+  padding: 4px 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: border-color var(--g-dur-fast) var(--g-ease);
 }
 
-.action-card {
+.es-addr:hover {
+  border-color: var(--g-accent);
+  color: var(--g-text-2);
+}
+
+/* ── Perks ── */
+.es-perks {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px;
+}
+
+.es-perk {
+  appearance: none;
+  font: inherit;
+  padding: 15px 16px;
+  border-radius: var(--g-r-card);
+  background: transparent;
+  border: 1px solid var(--g-hairline-1);
   cursor: pointer;
-  transition: transform var(--g-dur-slow) ease,
-              border-color var(--g-dur-slow) ease,
-              box-shadow var(--g-dur-slow) ease !important;
-  border: 1px solid var(--g-hairline-2) !important;
-  min-height: 200px;
+  text-align: left;
+  transition: border-color var(--g-dur-fast) var(--g-ease),
+    background var(--g-dur-fast) var(--g-ease);
+}
+
+.es-perk:hover {
+  border-color: var(--g-hairline-3);
+  background: var(--g-surface);
+}
+
+.es-perk__title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--g-text-1);
   display: flex;
   align-items: center;
+  gap: 7px;
+  margin-bottom: 4px;
 }
 
-.action-card:hover {
-  transform: translateY(-4px);
-  border-color: v-bind(primaryColor) !important;
-  box-shadow: var(--g-shadow-menu) !important;
+.es-perk__desc {
+  display: block;
+  font-size: 12.5px;
+  color: var(--g-text-3);
+  line-height: 1.45;
 }
 
+/* ── Responsive ── */
+@media (max-width: 700px) {
+  .es-balance { font-size: 54px; }
 
-.copy-address-chip {
-  transition: transform var(--g-dur-base) ease !important;
-  cursor: pointer !important;
-}
-
-.copy-address-chip:hover {
-  transform: scale(1.05) !important;
-}
-
-.action-title {
-  font-size: 1.125rem !important;
-  font-weight: 600 !important;
-  color: var(--g-text-1) !important;
-  margin-bottom: 8px !important;
-}
-
-.action-description {
-  font-size: 0.875rem !important;
-  color: var(--g-text-2) !important;
-  line-height: 1.4 !important;
-}
-
-.liquid-glass-subtle {
-  background-color: rgba(255, 255, 255, 0.05) !important;
-  backdrop-filter: blur(20px) saturate(1.8) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
-}
-
-.tutorial-card {
-  border: 1px solid v-bind(primaryColor) !important;
-}
-
-/* Backup section styles - toned down */
-.backup-card {
-  border: 1px solid var(--g-hairline-3) !important;
-}
-
-.backup-container {
-  max-width: 50%;
-  margin: 0 auto;
-}
-
-.backup-title {
-  font-size: 1.25rem !important;
-  font-weight: 600 !important;
-  color: var(--g-text-1) !important;
-}
-
-.backup-subtitle {
-  font-size: 0.875rem !important;
-  color: var(--g-text-2) !important;
-  line-height: 1.4 !important;
-}
-
-.backup-btn {
-  min-width: 180px !important;
-  font-weight: 500 !important;
-  text-transform: none !important;
-}
-
-.backup-alert {
-  font-size: 0.875rem !important;
-}
-
-.backup-help-text {
-  color: var(--g-text-2) !important;
-  font-size: 0.75rem !important;
-}
-
-.sample-data-btn {
-  color: var(--g-text-2) !important;
-  text-transform: none !important;
-}
-
-.sample-data-btn:hover {
-  color: var(--g-text-1) !important;
-}
-
-/* Floating animation elements */
-.floating-elements {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  overflow: hidden;
-  z-index: 0;
-}
-
-.floating-circle {
-  position: absolute;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
-}
-
-/* Feature cards with spanning background */
-.feature-cards-grid {
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-.feature-card-container {
-  position: relative;
-  border-radius: var(--g-r-card);
-  overflow: hidden;
-  height: 220px;
-  transition: transform var(--g-dur-slow) ease;
-}
-
-.feature-card-container:hover {
-  transform: translateY(-4px);
-}
-
-.feature-card-background {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  border-radius: var(--g-r-card);
-  z-index: 1;
-}
-
-.feature-card-glass ::v-deep .v-chip {
-  cursor: pointer !important;
-}
-
-.feature-card-glass {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  cursor: pointer;
-  border-radius: var(--g-r-card);
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
-
-  /* Liquid glass effect */
-  backdrop-filter: blur(20px) saturate(1.8);
-  -webkit-backdrop-filter: blur(20px) saturate(1.8);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  isolation: isolate;
-}
-
-.feature-card-container:hover .feature-card-glass {
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.25);
-}
-
-.feature-card-content {
-  position: relative;
-  z-index: 2;
-  padding: 20px 16px 16px 16px;
-  text-align: center;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.feature-card-main {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  flex-grow: 1;
-}
-
-.feature-card-main .v-icon {
-  margin-bottom: 12px;
-}
-
-.feature-card-main .feature-title {
-  margin-top: 8px;
-  margin-bottom: 8px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-}
-
-.feature-card-main .feature-description {
-  flex-grow: 1;
-  display: flex;
-  align-items: flex-start;
-  margin-bottom: 16px;
-}
-
-.feature-title {
-  font-size: 1rem !important;
-  font-weight: 600 !important;
-  color: var(--g-text-1) !important;
-  margin-bottom: 8px !important;
-}
-
-.feature-description {
-  font-size: 0.875rem !important;
-  color: var(--g-text-2) !important;
-  line-height: 1.4 !important;
-  margin-bottom: 16px !important;
-}
-
-/* Light ray for Buy card */
-.buy-card-emphasized .light-ray {
-  position: absolute;
-  top: -50%;
-  left: -150%;
-  width: 150%;
-  height: 200%;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0) 40%,
-    rgba(255, 255, 255, 0.3) 50%,
-    rgba(255, 255, 255, 0) 60%,
-    transparent 100%
-  );
-  transform: rotate(25deg);
-  z-index: 3;
-  pointer-events: none;
-}
-
-/* Enhance the buy card on hover */
-.buy-card-emphasized:hover {
-  transform: translateY(-6px);
-  transition: transform var(--g-dur-slow) ease;
-}
-
-.buy-card-emphasized .feature-card-glass {
-  border-color: rgba(255, 255, 255, 0.25);
-  box-shadow: 0 8px 32px rgba(0, 199, 243, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.15);
-}
-
-.buy-card-emphasized:hover .feature-card-glass {
-  box-shadow: 0 12px 40px rgba(0, 199, 243, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.35);
-}
-
-/* Responsive adjustments */
-@media (max-width: 960px) {
-  .hero-title {
-    font-size: 2rem !important;
-  }
-
-  .hero-content {
-    padding: 32px 16px !important;
-  }
-
-  .action-card {
-    min-height: 180px;
-  }
-
-  .feature-card-wrapper {
-    min-height: 180px;
-  }
+  .es-addr { display: none; }
 }
 </style>

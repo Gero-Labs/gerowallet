@@ -1,17 +1,17 @@
 {
-  "hexOccurrences": 661,
+  "hexOccurrences": 659,
   "hexDistinct": 227,
-  "fontSizeDistinct": 81,
+  "fontSizeDistinct": 80,
   "radiusDistinct": 60,
   "zIndexDistinct": 24,
-  "backdropFilters": 94,
-  "uppercase": 107,
+  "backdropFilters": 90,
+  "uppercase": 108,
   "infiniteAnimations": 49,
-  "importantCount": 2342,
+  "importantCount": 2292,
   "lowAlphaText": 22,
   "transitionAll": 8,
   "corruptedMdiNames": 0,
   "formatFnForks": 16,
-  "clickableDivs": 113,
+  "clickableDivs": 109,
   "outlineNone": 27
 }
