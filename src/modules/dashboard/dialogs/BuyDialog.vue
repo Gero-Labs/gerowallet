@@ -50,9 +50,6 @@
                 <v-row class="px-6" style="gap: 0;">
                   <v-col cols="12" class="pa-2">
                     <button type="button" class="bs-choice" @click="chooseBuy">
-                      <div class="bs-choice__icon">
-                        <v-icon size="26" color="var(--g-success)">mdi-arrow-down-bold-circle-outline</v-icon>
-                      </div>
                       <div class="bs-choice__text">
                         <div class="bs-choice__title">{{ buyLabel }}</div>
                         <div class="bs-choice__desc">{{ buyDescription }}</div>
@@ -61,9 +58,6 @@
                   </v-col>
                   <v-col cols="12" class="pa-2">
                     <button type="button" class="bs-choice" @click="chooseSell">
-                      <div class="bs-choice__icon">
-                        <v-icon size="26" color="var(--g-accent)">mdi-arrow-up-bold-circle-outline</v-icon>
-                      </div>
                       <div class="bs-choice__text">
                         <div class="bs-choice__title">{{ sellLabel }}</div>
                         <div class="bs-choice__desc">{{ sellDescription }}</div>
@@ -315,12 +309,6 @@ iframe html {
   border-color: var(--g-accent);
   transform: translateY(-2px);
   box-shadow: var(--g-shadow-menu);
-}
-
-.bs-choice__icon {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
 }
 
 .bs-choice__title {
