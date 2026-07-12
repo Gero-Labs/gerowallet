@@ -387,10 +387,11 @@ const steps = ref([
 const currentStep = ref(1);
 const shakeError = ref(false);
 
-const shieldedAvailable = computed(() => {
-  const vk = midnightStore.addresses?.zswapViewingKey;
-  return typeof vk === 'string' && vk.startsWith('mn_shield-esk_');
-});
+// The raw zswap viewing key is a forever-decrypt secret and is deliberately
+// kept out of midnightStore (see midnightStore.setActive) — the UI only needs
+// to know whether shielded sync is available, which the store publishes as a
+// boolean derived from the same `mn_shield-esk_` validity check.
+const shieldedAvailable = computed(() => midnightStore.shieldedSyncAvailable);
 
 const activeTab = ref(0);
 const isShielded = computed(() => activeTab.value === 1);
@@ -566,20 +567,20 @@ const addressRules = computed(() => {
 const amountRules = computed(() => {
   if (isShielded.value) {
     return [
-      (v: string) => !!v || 'Amount required',
+      (v: string) => !!v || t('midnight.send.amountRequired'),
       (v: string) => {
         const n = Number(v);
-        return (Number.isFinite(n) && n > 0) || 'Must be positive';
+        return (Number.isFinite(n) && n > 0) || t('send.amountMustBePositive');
       },
     ];
   }
   return [
-    (v: string) => !!v || 'Amount required',
+    (v: string) => !!v || t('midnight.send.amountRequired'),
     (v: string) => {
       const n = Number(v);
-      return (Number.isFinite(n) && n > 0) || 'Must be positive';
+      return (Number.isFinite(n) && n > 0) || t('send.amountMustBePositive');
     },
-    (v: string) => parseAmount(v) <= available.value || 'Exceeds available balance',
+    (v: string) => parseAmount(v) <= available.value || t('errors.insufficientBalance'),
   ];
 });
 
