@@ -7,7 +7,7 @@
         <div class="metrics-header-row">
           <div class="portfolio-label">{{ $t('dashboard.portfolio') }}</div>
           <v-spacer />
-          <v-tooltip v-if="!isApex" bottom content-class="custom-tooltip">
+          <v-tooltip v-if="!isApex && !adaOnly" bottom content-class="custom-tooltip">
             <template v-slot:activator="{ on, attrs }">
               <div class="mode-segmented-toggle" v-bind="attrs" v-on="on">
                 <button
@@ -231,7 +231,7 @@ const currencyConfigs: Record<CurrencyType, CurrencyConfig> = {
   },
 };
 
-const { loggedWallet, account } = toRefs(walletStore);
+const { loggedWallet } = toRefs(walletStore);
 
 const hideBalances = computed(() => walletStore.config?.hideBalances || false);
 
@@ -339,6 +339,13 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  // Lock the chart to ADA-only: force ada-only mode + ADA currency, hide the
+  // full/ada toggle and fiat currencies. Used on non-mainnet Cardano
+  // (preprod/preview), where tokens have no market price so fiat is meaningless.
+  adaOnly: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 // Define emits
@@ -356,6 +363,14 @@ const isRefreshing = ref(false);
 const portfolioMode = ref<'full' | 'ada-only'>('full');
 const selectedCurrency = ref<CurrencyType>(CurrencyType.ADA);
 const selectedTimeframe = ref('WEEK');
+
+// Non-mainnet Cardano locks the chart to ADA-only (no fiat, no mode toggle).
+watch(() => props.adaOnly, (locked) => {
+  if (locked) {
+    portfolioMode.value = 'ada-only';
+    selectedCurrency.value = CurrencyType.ADA;
+  }
+}, { immediate: true });
 
 // Chart instances
 let chart: IChartApi | null = null;
@@ -389,6 +404,7 @@ const timeframeCutoffs: Record<string, number> = {
 // --- Portfolio mode persistence ---
 
 const loadPortfolioMode = (): 'full' | 'ada-only' => {
+  if (props.adaOnly) return 'ada-only';
   try {
     const walletId = loggedWallet.value?.id;
     if (!walletId) return 'full';
@@ -411,6 +427,7 @@ const savePortfolioMode = (mode: 'full' | 'ada-only'): void => {
 portfolioMode.value = loadPortfolioMode();
 
 const setPortfolioMode = (mode: 'full' | 'ada-only') => {
+  if (props.adaOnly) return; // locked to ADA-only on non-mainnet Cardano
   if (portfolioMode.value === mode) return;
   console.log(`📊 setPortfolioMode: ${portfolioMode.value} → ${mode}`);
   portfolioMode.value = mode;
@@ -535,6 +552,7 @@ onMounted(() => { portfolioValueTimer = setInterval(syncDisplayedValue, 30_000);
 onBeforeUnmount(() => { if (portfolioValueTimer) clearInterval(portfolioValueTimer); });
 
 const availableCurrencies = computed(() => {
+  if (props.adaOnly) return [CurrencyType.ADA];
   const currencies: CurrencyType[] = [];
 
   if ((props.chartData && props.chartData.length > 0) || props.portfolioValueAda > 0) {

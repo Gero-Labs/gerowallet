@@ -107,6 +107,7 @@
             :ada-only-value-eur="adaBalance * nativePriceUsd * usdToEurRate"
             :loading="portfolioLoading"
             :progressive-loading="true"
+            :ada-only="isCardanoNonMainnet"
             :first-loaded-currency="firstLoadedCurrency"
             :total-realized-pnl="isMainnetCardano ? (pnlSummary?.totalRealizedPnlAda ?? null) : null"
             :total-unrealized-pnl="isMainnetCardano ? (pnlSummary?.totalUnrealizedPnlAda ?? null) : null"
@@ -432,6 +433,13 @@ const isMainnetCardano = computed(() =>
   loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET
 );
 
+// Non-mainnet Cardano (preprod/preview): render an ADA-only portfolio + chart.
+// Testnet tokens have no market price, so fiat valuation and the token
+// portfolio don't apply — the hero chart is locked to ADA.
+const isCardanoNonMainnet = computed(() =>
+  loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network !== Network.MAINNET
+);
+
 type ViewMode = 'holdings' | 'collectibles' | 'market' | 'watchlist' | 'snekfun';
 const activeView = ref<ViewMode>('holdings');
 
@@ -528,7 +536,21 @@ const {
 // Build ADA-only chart data from transaction history (works for all networks)
 const adaOnlyChartData = computed(() => {
   const empty = { adaData: [] as number[][], usdData: [] as number[][], eurData: [] as number[][] };
-  if (!transactions.value || transactions.value.length === 0) return empty;
+  if (!transactions.value || transactions.value.length === 0) {
+    // No synced tx history yet (common right after funding a preprod wallet):
+    // seed a flat line at the current balance so the ADA value + chart still
+    // render instead of collapsing to the "no-data" empty state. Scoped to
+    // non-mainnet Cardano only: on other chains (e.g. Apex) an empty tx list
+    // must stay an honest "no data" state so a real sync stall isn't masked.
+    const bal = adaBalance.value;
+    if (isCardanoNonMainnet.value && bal > 0) {
+      const now = currentTimestamp.value;
+      const flat: number[][] = [[now - 30 * 24 * 60 * 60 * 1000, bal], [now, bal]];
+      const usd = flat.map(([t, v]) => [t, v * nativePriceUsd.value]);
+      return { adaData: flat, usdData: usd, eurData: usd.map(([t, v]) => [t, v * usdToEurRate.value]) };
+    }
+    return empty;
+  }
 
   const graphData: number[][] = [];
   const usdData: number[][] = [];
