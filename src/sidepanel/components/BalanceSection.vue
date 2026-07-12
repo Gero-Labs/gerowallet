@@ -35,7 +35,7 @@
       </template>
     </div>
     <div v-if="isMidnight && showNightBreakdown" class="balance-breakdown t-caption g-num">
-      {{ nightBreakdownText }}
+      {{ hideBalances ? '••••••' : nightBreakdownText }}
     </div>
     <v-btn
       v-if="showBuySell"
