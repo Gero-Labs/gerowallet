@@ -201,7 +201,7 @@ export default {
       }
     },
     {
-      icon: apexPrimeSvg,
+      icon: apexSvg,
       iconColor: 'orange',
       title: 'Apex Prime Mainnet',
       blockchain: Blockchain.APEX_PRIME,
@@ -249,7 +249,7 @@ export default {
       }
     },
     {
-      icon: apexVectorSvg,
+      icon: apexSvg,
       iconColor: 'orange',
       title: 'Apex Vector Mainnet',
       blockchain: Blockchain.APEX_VECTOR,
