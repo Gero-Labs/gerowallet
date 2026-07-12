@@ -1724,6 +1724,23 @@ export class WalletBg {
    * @param prfSecret Raw PRF output bytes (PRF/PassKey wallets)
    * @returns         Array of `{ index, signatureHex }` matching input order
    */
+  /**
+   * Stash a freshly re-derived Midnight viewing key in RAM-only session storage
+   * so shielded sync can resume across service-worker cold starts without the
+   * key ever being persisted on disk. Covers PRF wallets, whose only
+   * credentialed background moment is a send/ceremony (they can't silently
+   * re-derive at unlock). Fire-and-forget: never throws into the signing path.
+   */
+  private cacheMidnightViewingKeyToSession(viewingKey: string | undefined): void {
+    if (!viewingKey) return;
+    void (async () => {
+      try {
+        const { setSessionViewingKey } = await import('@/chains/midnight/midnightViewingKeySession');
+        await setSessionViewingKey(this.id, this.network, viewingKey);
+      } catch { /* non-fatal: session cache is best-effort */ }
+    })();
+  }
+
   async signMidnightSegments(
     segments: Array<{ index: number; role: 'NightExternal' | 'Zswap'; dataHex: string }>,
     password?: string,
@@ -1977,6 +1994,7 @@ export class WalletBg {
       // Cardano BIP-32 derivation path. We don't need Cardano keys for a
       // Midnight transfer — same workaround we use in signMidnightSegments.
       const derived = await deriveMidnightKeys(mnemonic, this.network, 0, { skipCardano: true });
+      this.cacheMidnightViewingKeyToSession(derived.zswapViewingKey);
       let sdkNetworkId: string;
       switch (this.network) {
         case Network.MAINNET: sdkNetworkId = 'mainnet'; break;
@@ -2118,6 +2136,7 @@ export class WalletBg {
       // balanceAndSignMidnightUnshieldedTransfer. Cardano material isn't
       // needed for a shielded send.
       const derived = await deriveMidnightKeys(mnemonic, this.network, 0, { skipCardano: true });
+      this.cacheMidnightViewingKeyToSession(derived.zswapViewingKey);
       let sdkNetworkId: string;
       switch (this.network) {
         case Network.MAINNET: sdkNetworkId = 'mainnet'; break;
