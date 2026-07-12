@@ -181,10 +181,7 @@
                             class="ml-1"
                             style="margin-top: -1px; font-size: 11px;"
                           >mdi-check-decagram</v-icon>
-                          <span class="token-balance">
-                            <template v-if="isShielded">{{ t('midnight.send.shieldedBalanceUnavailable') }}</template>
-                            <template v-else>{{ formattedAvailable }}</template>
-                          </span>
+                          <span class="token-balance">{{ formattedAvailable }}</span>
                         </div>
                         <div class="token-row__right">
                           <v-text-field
@@ -201,7 +198,6 @@
                             :disabled="sending"
                           />
                           <v-btn
-                            v-if="!isShielded"
                             text
                             x-small
                             color="var(--g-accent)"
@@ -212,8 +208,8 @@
                         </div>
                       </div>
                       <div v-if="isShielded" class="token-info">
-                        <v-icon x-small color="warning" class="mr-1">mdi-information-outline</v-icon>
-                        {{ t('midnight.send.shieldedBalanceHint') }}
+                        <v-icon x-small color="var(--g-text-3)" class="mr-1">mdi-information-outline</v-icon>
+                        {{ t('midnight.send.shieldedBalanceNote') }}
                       </div>
                     </div>
                   </div>
@@ -397,7 +393,10 @@ const activeTab = ref(0);
 const isShielded = computed(() => activeTab.value === 1);
 
 const NIGHT_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.NIGHT);
-const available = computed(() => midnightStore.balances?.nightUnshielded ?? 0n);
+const available = computed(() =>
+  isShielded.value
+    ? (midnightStore.balances?.nightShielded ?? 0n)
+    : (midnightStore.balances?.nightUnshielded ?? 0n));
 const formattedAvailable = computed(() => {
   const value = available.value;
   const whole = value / NIGHT_DIVISOR;
@@ -564,25 +563,14 @@ const addressRules = computed(() => {
   ];
 });
 
-const amountRules = computed(() => {
-  if (isShielded.value) {
-    return [
-      (v: string) => !!v || t('midnight.send.amountRequired'),
-      (v: string) => {
-        const n = Number(v);
-        return (Number.isFinite(n) && n > 0) || t('send.amountMustBePositive');
-      },
-    ];
-  }
-  return [
-    (v: string) => !!v || t('midnight.send.amountRequired'),
-    (v: string) => {
-      const n = Number(v);
-      return (Number.isFinite(n) && n > 0) || t('send.amountMustBePositive');
-    },
-    (v: string) => parseAmount(v) <= available.value || t('errors.insufficientBalance'),
-  ];
-});
+const amountRules = computed(() => [
+  (v: string) => !!v || t('midnight.send.amountRequired'),
+  (v: string) => {
+    const n = Number(v);
+    return (Number.isFinite(n) && n > 0) || t('send.amountMustBePositive');
+  },
+  (v: string) => parseAmount(v) <= available.value || t('errors.insufficientBalance'),
+]);
 
 function parseAmount(input: string): bigint {
   if (!input) return 0n;
@@ -1074,7 +1062,7 @@ watch(
 }
 .token-info {
   font-size: 11px;
-  color: var(--g-warning);
+  color: var(--g-text-3);
   padding: 4px 2px 0;
   display: flex;
   align-items: center;
