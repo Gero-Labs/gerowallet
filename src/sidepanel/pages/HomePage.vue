@@ -6,6 +6,7 @@
 
     <!-- Midnight: compact DUST battery replaces the (Cardano-centric) carousel -->
     <MiniDustGauge v-if="isMidnight" />
+    <MiniProofServerWidget v-if="isMidnight" />
     <FeaturedCarousel v-else />
 
     <div class="section-header">
@@ -107,6 +108,7 @@ import BalanceSection from '../components/BalanceSection.vue';
 import QuickActions from '../components/QuickActions.vue';
 import FeaturedCarousel from '../components/FeaturedCarousel.vue';
 import MiniDustGauge from '../components/MiniDustGauge.vue';
+import MiniProofServerWidget from '../components/MiniProofServerWidget.vue';
 import TokenList from '../components/TokenList.vue';
 import BottomSheet from '../components/BottomSheet.vue';
 import SendSheet from '../components/flows/SendSheet.vue';
