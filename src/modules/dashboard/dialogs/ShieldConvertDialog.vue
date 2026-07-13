@@ -965,21 +965,26 @@ watch(
   height: 22px !important;
 }
 
-/* ─── Direction toggle — same visual pattern as ProofServerPage's
-   .ps-mode-card (tokens only, no new hex/radii). ─── */
+/* ─── Direction toggle — stacked full-width rows, not a 2-up grid: at this
+   dialog's 428px width a side-by-side pair leaves each card only ~130px of
+   body for icon + title + "Coming soon" badge, which forced the badge past
+   the card edge into .convert-dialog-content's overflow-x: hidden and hard-
+   clipped it instead of wrapping. Full width gives title + badge + hint room
+   to lay out normally; .sc-mode-title-row still wraps as a backstop for
+   longer translations. ─── */
 .sc-mode-row {
   display: flex;
-  gap: var(--g-s-3);
+  flex-direction: column;
+  gap: var(--g-s-2);
 }
 .sc-mode-tooltip-wrap {
   display: flex;
-  flex: 1;
-  min-width: 0;
+  width: 100%;
 }
 .sc-mode-card {
   display: flex;
   align-items: flex-start;
-  flex: 1;
+  width: 100%;
   min-width: 0;
   gap: var(--g-s-2);
   text-align: left;
@@ -1021,7 +1026,9 @@ watch(
 .sc-mode-title-row {
   display: flex;
   align-items: center;
-  gap: var(--g-s-1);
+  flex-wrap: wrap;
+  row-gap: 4px;
+  column-gap: var(--g-s-1);
 }
 .sc-mode-hint {
   margin-top: 2px;
