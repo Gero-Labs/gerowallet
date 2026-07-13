@@ -253,22 +253,21 @@ export interface RecoverMpcGoogleWalletInput {
   chain: string;
   network: string;
   idToken: string;
-  recoveryBlob: string;
+  /** The memorized recovery password. Never logged, never persisted. */
   recoveryPassword: string;
   newSecret: DeviceShareSecret;
   /** Present when newSecret.kind === 'prf'; persisted so unlock can re-derive. */
   webAuthnCredentialId?: string;
   mpcPrfSaltId?: string;
-  /**
-   * The wallet's xpub, read from the recovery-file envelope. Used as the anchor
-   * to validate the reconstructed key: if the uploaded recovery file belongs to
-   * a different wallet, or the user signed into the wrong Google account, the
-   * reconstructed entropy derives a different xpub and recovery is rejected.
-   */
-  expectedXpub: string;
 }
 
 export interface RecoverMpcGoogleWalletDeps {
+  /**
+   * Fetch the password-encrypted recovery blob + the non-secret xpub anchor for
+   * this Google account from the backend. Throws on 404 ("no recovery on file")
+   * before any local state is written. Replaces the removed recovery-file upload.
+   */
+  fetchRecovery: (idToken: string, chain: string, network: string) => Promise<{ encryptedRecovery: string; publicKey: string }>;
   decryptRecoveryShare: (blob: string, password: string) => Promise<string>;
   getLoginShare: (idToken: string, chain: string, network: string) => Promise<string>;
   /** Reconstruct entropy from the two shares AND validate its xpub === expectedXpub (throws MpcValidationError on mismatch). */
@@ -299,29 +298,34 @@ export interface RecoverMpcGoogleWalletResult {
 }
 
 /**
- * Restore an MPC Google wallet on a fresh device using the encrypted
- * recovery-share backup + Google sign-in.
+ * Restore an MPC Google wallet on a fresh device — MetaMask-style, fileless.
  *
- * v1 decision (Plan D Task 5 OPEN note, resolved for build): reuse the
- * recovery share as the local device factor on the new device instead of
- * re-splitting entropy into a brand-new 3-share set. The login share stays
- * enrolled and unchanged on the backend — no re-enroll/replace endpoint is
- * needed.
+ * There is nothing to keep: the third factor is the memorized recovery
+ * password. The backend serves the password-encrypted recovery blob plus the
+ * non-secret xpub anchor (`fetchRecovery`); the user types the recovery
+ * password to decrypt it locally. Recovery + login (2 of 3) then reconstruct
+ * the entropy, validated against the fetched xpub anchor.
  *
  * A fresh device has no locally-stored xpub, so the reconstructed key can't be
- * trusted blindly: pairing wallet A's recovery file with Google account B would
- * combine A-recovery + B-login into garbage entropy whose per-share checksums
- * still pass, silently cementing a phantom wallet. To prevent that, the
- * recovery-file envelope carries the original wallet's xpub (`expectedXpub`),
- * and we validate the reconstructed key against it — a mismatch throws
+ * trusted blindly: pairing account A's recovery with account B's login would
+ * combine into garbage entropy whose per-share checksums still pass, silently
+ * cementing a phantom wallet. To prevent that, `reconstructAndValidateEntropy`
+ * checks the derived xpub against the anchor — a mismatch throws
  * MpcValidationError and NO wallet is persisted.
+ *
+ * Failure atomicity: `fetchRecovery` (404 → no recovery on file), decrypt
+ * (wrong password), and anchor validation (wrong account) all throw BEFORE any
+ * device share is encrypted or any wallet row is written — retry is clean.
+ * Reuses the recovery share as the new device's local device factor; the login
+ * share stays enrolled and unchanged on the backend.
  */
 export async function recoverMpcGoogleWalletFlow(
   input: RecoverMpcGoogleWalletInput,
   deps: RecoverMpcGoogleWalletDeps,
 ): Promise<RecoverMpcGoogleWalletResult> {
-  const { name, icon, theme, chain, network, idToken, recoveryBlob, recoveryPassword, newSecret, webAuthnCredentialId, mpcPrfSaltId, expectedXpub } = input;
+  const { name, icon, theme, chain, network, idToken, recoveryPassword, newSecret, webAuthnCredentialId, mpcPrfSaltId } = input;
   const {
+    fetchRecovery,
     decryptRecoveryShare,
     getLoginShare,
     reconstructAndValidateEntropy,
@@ -330,14 +334,15 @@ export async function recoverMpcGoogleWalletFlow(
     subFromIdToken: getSub,
   } = deps;
 
-  const recoveryShare = await decryptRecoveryShare(recoveryBlob, recoveryPassword);
+  // Backend serves the encrypted recovery blob + the xpub anchor (404 → no recovery on file).
+  const { encryptedRecovery, publicKey } = await fetchRecovery(idToken, chain, network);
+  const recoveryShare = await decryptRecoveryShare(encryptedRecovery, recoveryPassword);
   const loginShare = await getLoginShare(idToken, chain, network);
-  // Anchor check: reconstruct AND validate the derived xpub === expectedXpub.
+  // Anchor check: reconstruct AND validate the derived xpub === publicKey.
   // Throws MpcValidationError on mismatch (before anything is persisted).
-  await reconstructAndValidateEntropy(recoveryShare, loginShare, expectedXpub);
-  const publicKey = expectedXpub;
+  await reconstructAndValidateEntropy(recoveryShare, loginShare, publicKey);
 
-  // Reuse the recovery share as the new device's local device factor (see decision above).
+  // Reuse the recovery share as the new device's local device factor.
   const encryptedDeviceShare = await encryptDeviceShare(recoveryShare, newSecret);
   const userId = getSub(idToken);
 

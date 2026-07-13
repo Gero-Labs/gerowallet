@@ -1859,12 +1859,9 @@ app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET_OFFLINE, async (request, sendRes
 app.addToOptions(MessageTypes.RECOVER_MPC_GOOGLE_WALLET, async (request, sendResponse) => {
   try {
     // Note: Never log request.data — contains idToken/recoveryPassword/spendingPassword/prfOutputHex
-    const {
-      name, icon, theme, chain, network, idToken,
-      recoveryBlob, recoveryPassword, publicKey: expectedXpub,
-    } = request.data || {};
-    if (!idToken || !recoveryBlob || !recoveryPassword || !expectedXpub) {
-      throw new Error('idToken, recoveryBlob, recoveryPassword and publicKey are required');
+    const { name, icon, theme, chain, network, idToken, recoveryPassword } = request.data || {};
+    if (!idToken || !chain || !network || !recoveryPassword) {
+      throw new Error('idToken, chain, network and recoveryPassword are required');
     }
     const { secret: newSecret, webAuthnCredentialId, mpcPrfSaltId } = buildDeviceShareSecret(request.data);
 
@@ -1875,10 +1872,11 @@ app.addToOptions(MessageTypes.RECOVER_MPC_GOOGLE_WALLET, async (request, sendRes
 
     const { walletId, publicKey } = await recoverMpcGoogleWalletFlow(
       {
-        name, icon, theme, chain, network, idToken, recoveryBlob, recoveryPassword, newSecret,
-        expectedXpub, webAuthnCredentialId, mpcPrfSaltId,
+        name, icon, theme, chain, network, idToken, recoveryPassword, newSecret,
+        webAuthnCredentialId, mpcPrfSaltId,
       },
       {
+        fetchRecovery: (idTok, ch, net) => api.mpc.fetchRecovery(idTok, ch, net),
         decryptRecoveryShare,
         getLoginShare: (idTok, ch, net) => api.mpc.getLoginShare(idTok, ch, net),
         reconstructAndValidateEntropy,
@@ -1895,11 +1893,11 @@ app.addToOptions(MessageTypes.RECOVER_MPC_GOOGLE_WALLET, async (request, sendRes
       sender: SENDER.extension,
     });
   } catch (error) {
-    // Anchor mismatch (wrong recovery file / wrong Google account) surfaces as a
+    // Anchor mismatch (wrong Google account for this recovery) surfaces as a
     // clean message; the raw MpcValidationError is not leaked.
     const { MpcValidationError } = await import('@/shared/utils/mpc');
     const message = error instanceof MpcValidationError
-      ? "This recovery file doesn't match this Google account."
+      ? "This recovery doesn't match this Google account."
       : getErrorMessage(error, 'Failed to recover MPC wallet');
     console.error('Error recovering MPC Google wallet:', message);
     sendResponse({
