@@ -145,9 +145,11 @@ export async function buildAndSignShield(
     import('@midnightntwrk/wallet-sdk-address-format'),
   ]);
   const { ZswapSecretKeys, Transaction } = ledgerMod;
-  const { ShieldedAddress } = addressFormatMod as unknown as {
-    ShieldedAddress: { parse: (s: string) => unknown };
-  };
+  // ShieldedAddress has NO static parse() (verified against the package's
+  // own index.d.ts) — bech32m strings round-trip through MidnightBech32m,
+  // decoded with the SAME networkId string the key manager encoded with
+  // (see midnightKeyManager.ts's ShieldedAddress.codec.encode call).
+  const { MidnightBech32m, ShieldedAddress } = addressFormatMod;
 
   // ── Step 1: Nexus builds the unshielded (public) half ─────────────
   // Swap mode: no payment output, just change back to us — the consumed
@@ -200,7 +202,10 @@ export async function buildAndSignShield(
       [{
         amount: args.amount,
         type: NIGHT_RAW_TOKEN_TYPE,
-        receiverAddress: ShieldedAddress.parse(args.ownShieldedAddress),
+        receiverAddress: ShieldedAddress.codec.decode(
+          args.sdkNetworkId,
+          MidnightBech32m.parse(args.ownShieldedAddress),
+        ),
       }],
     );
     debugLog('🌙 shield-swap: shielded half built (initSwap)');

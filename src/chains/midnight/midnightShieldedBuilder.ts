@@ -160,9 +160,11 @@ export async function buildAndSignShieldedTransfer(
     import('@midnightntwrk/wallet-sdk-address-format'),
   ]);
   const { ZswapSecretKeys } = ledgerMod;
-  const { ShieldedAddress } = addressFormatMod as unknown as {
-    ShieldedAddress: { parse: (s: string) => unknown };
-  };
+  // ShieldedAddress has NO static parse() (verified against the package's
+  // own index.d.ts) — bech32m strings round-trip through MidnightBech32m,
+  // decoded with the SAME networkId string the key manager encoded with
+  // (see midnightKeyManager.ts's ShieldedAddress.codec.encode call).
+  const { MidnightBech32m, ShieldedAddress } = addressFormatMod;
 
   // Derive the full ZswapSecretKeys from the seed. We deliberately re-derive
   // here (rather than have the caller pass the SecretKeys object) so the
@@ -188,7 +190,10 @@ export async function buildAndSignShieldedTransfer(
       return {
         amount: o.amount,
         type: tokenType,
-        receiverAddress: ShieldedAddress.parse(o.receiverAddress),
+        receiverAddress: ShieldedAddress.codec.decode(
+          args.sdkNetworkId,
+          MidnightBech32m.parse(o.receiverAddress),
+        ),
       };
     });
 
