@@ -1,9 +1,12 @@
 /**
- * Local (self-hosted) Midnight proof-server integration.
+ * Wallet-side Midnight proof-server integration.
  *
- * Hand-rolled `ledger.ProvingProvider` for the docker proof server
+ * Hand-rolled `ledger.ProvingProvider` for any HTTP proof server exposing
+ * the NATIVE proof-server API — the self-hosted docker server
  * (`docker run -p 6300:6300 midnightntwrk/proof-server:<tag>
- * midnight-proof-server -v`, default `http://localhost:6300`) plus a
+ * midnight-proof-server -v`, default `http://localhost:6300`) and the
+ * hosted Arkhia zkPaaS gateway (which relays the same API behind
+ * `x-api-key`/`x-api-secret` auth, see midnightZkpaas.ts) — plus a
  * `/health` poller. Deliberately NOT a wrapper around
  * `@midnightntwrk/wallet-sdk-prover-client` — that package's whole HTTP
  * client reduces to two plain fetches (see
@@ -13,17 +16,17 @@
  * section 0 and ground rule 12.
  *
  * Runs in whichever context calls it — the BG service worker
- * (`midnightShieldedBuilder.ts`, local-mode shielded sends; reachable via
+ * (`midnightShieldedBuilder.ts`, local/zkPaaS shielded sends; reachable via
  * the wildcard host_permissions manifest grant, see scripts/manifest.ts)
  * and extension pages (the Settings proof-server status chip, WP-P4;
- * reachable via the prod CSP `connect-src` localhost entries added in
- * WP-P6). Both contexts have `fetch` / `AbortSignal.timeout` natively, so
- * no context-specific branching is needed here.
+ * reachable via the prod CSP `connect-src` localhost + arkhia entries).
+ * Both contexts have `fetch` / `AbortSignal.timeout` natively, so no
+ * context-specific branching is needed here.
  *
  * PRIVACY (ground rule 13): never log request/response BODIES — the
- * preimage and proof bytes carry the tx's witness data even though this
- * server runs on the user's own machine. Durations, byte lengths, and the
- * target path/host are fine.
+ * preimage and proof bytes carry the tx's witness data whether the server
+ * is the user's own machine or a remote TEE. Durations, byte lengths, and
+ * the target path/host are fine. Never log auth header VALUES either.
  */
 
 import * as ledger from '@midnight-ntwrk/ledger-v8';
@@ -40,6 +43,26 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => { setTimeout(resolve, ms); });
 }
 
+/**
+ * Optional per-request extras: `headers` carries gateway auth
+ * (`x-api-key`/`x-api-secret` for Arkhia zkPaaS); absent for the plain
+ * localhost docker server.
+ */
+export interface ProverRequestOptions {
+  headers?: Record<string, string>;
+}
+
+/**
+ * Join `path` onto `baseUrl` PRESERVING the base's own path segments.
+ * `new URL('/prove', base)` would discard them — harmless for the docker
+ * server's root base (`http://localhost:6300`) but wrong for Arkhia's
+ * path-carrying bases (`https://starter.arkhia.io/midnight/zkpaas/mainnet`
+ * or a user-pasted keyed URL ending in the API key segment).
+ */
+function joinProverUrl(baseUrl: string, path: string): URL {
+  return new URL(`${baseUrl.replace(/\/+$/, '')}${path}`);
+}
+
 /** A failed attempt worth retrying: network-level failure, or 502/503/504. */
 class RetryableProverError extends Error {}
 
@@ -49,12 +72,17 @@ class RetryableProverError extends Error {}
  * {@link Error} for anything else (e.g. 400/401/404/500 — retrying those
  * would just fail the same way again).
  */
-async function attemptPost(url: URL, path: string, body: Uint8Array): Promise<Uint8Array> {
+async function attemptPost(
+  url: URL,
+  path: string,
+  body: Uint8Array,
+  options?: ProverRequestOptions,
+): Promise<Uint8Array> {
   let res: Response;
   try {
     res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream' },
+      headers: { ...options?.headers, 'Content-Type': 'application/octet-stream' },
       body,
     });
   } catch (networkErr) {
@@ -81,21 +109,26 @@ async function attemptPost(url: URL, path: string, body: Uint8Array): Promise<Ui
  * without pulling in its Effect dependency (see plan section 0 /
  * `HttpProverClient.js:56-62`). Any other non-200 status fails immediately.
  */
-async function postToProver(baseUrl: string, path: string, body: Uint8Array): Promise<Uint8Array> {
-  const url = new URL(path, baseUrl);
+async function postToProver(
+  baseUrl: string,
+  path: string,
+  body: Uint8Array,
+  options?: ProverRequestOptions,
+): Promise<Uint8Array> {
+  const url = joinProverUrl(baseUrl, path);
   const totalAttempts = RETRY_BACKOFF_MS.length + 1;
   for (let attempt = 1; attempt <= totalAttempts; attempt += 1) {
     if (attempt > 1) await delay(RETRY_BACKOFF_MS[attempt - 2]);
     const startedAt = Date.now();
     try {
-      const bytes = await attemptPost(url, path, body);
-      debugLog(`🌙 local proof server ${path}: 200 OK (${Date.now() - startedAt}ms, ${bytes.length}B)`);
+      const bytes = await attemptPost(url, path, body, options);
+      debugLog(`🌙 proof server ${path}: 200 OK (${Date.now() - startedAt}ms, ${bytes.length}B)`);
       return bytes;
     } catch (err) {
       if (!(err instanceof RetryableProverError) || attempt === totalAttempts) {
         throw err instanceof Error ? err : new Error(String(err));
       }
-      debugLog(`🌙 local proof server ${path}: attempt ${attempt}/${totalAttempts} failed, retrying`, err.message);
+      debugLog(`🌙 proof server ${path}: attempt ${attempt}/${totalAttempts} failed, retrying`, err.message);
     }
   }
   // Unreachable — the loop above always returns or throws.
@@ -103,21 +136,26 @@ async function postToProver(baseUrl: string, path: string, body: Uint8Array): Pr
 }
 
 /**
- * Build a `ledger.ProvingProvider` that talks to a self-hosted Midnight
- * proof server at `baseUrl` (e.g. `http://localhost:6300`) instead of Gero
- * Cloud. Pass straight to `UnprovenTransaction.prove(provider, costModel)`
- * — see `midnightShieldedBuilder.ts`.
+ * Build a `ledger.ProvingProvider` that talks to a native-API Midnight
+ * proof server at `baseUrl` — self-hosted docker
+ * (`http://localhost:6300`) or the Arkhia zkPaaS gateway (pass its auth
+ * via `options.headers`) — instead of Gero Cloud. Pass straight to
+ * `UnprovenTransaction.prove(provider, costModel)` — see
+ * `midnightShieldedBuilder.ts`.
  */
-export function makeLocalProvingProvider(baseUrl: string): ledger.ProvingProvider {
+export function makeLocalProvingProvider(
+  baseUrl: string,
+  options?: ProverRequestOptions,
+): ledger.ProvingProvider {
   return {
     check: async (serializedPreimage, _keyLocation) => {
       const payload = ledger.createCheckPayload(serializedPreimage);
-      const result = await postToProver(baseUrl, '/check', payload);
+      const result = await postToProver(baseUrl, '/check', payload, options);
       return ledger.parseCheckResult(result);
     },
     prove: async (serializedPreimage, _keyLocation, overwriteBindingInput) => {
       const payload = ledger.createProvingPayload(serializedPreimage, overwriteBindingInput);
-      return postToProver(baseUrl, '/prove', payload);
+      return postToProver(baseUrl, '/prove', payload, options);
     },
   };
 }
@@ -127,13 +165,25 @@ export function makeLocalProvingProvider(baseUrl: string): ledger.ProvingProvide
  * timeout, `false` on any error, non-200 status, or timeout. Never throws.
  * Used both for the shielded-send preflight (this WP) and the Settings
  * proof-server status chip poll (WP-P4).
+ *
+ * `options.acceptNotFound` (Arkhia zkPaaS): the gateway relays the native
+ * `/prove`/`/check` endpoints but is not documented to relay `GET /health`
+ * — a 404 there means "gateway reachable, auth accepted, no health route",
+ * which is a healthy-enough signal to let a send proceed. Auth failures
+ * (401/403) and everything else still report unhealthy so a bad API key
+ * blocks BEFORE a long build, not after.
  */
-export async function checkProofServerHealth(baseUrl: string): Promise<boolean> {
+export async function checkProofServerHealth(
+  baseUrl: string,
+  options?: ProverRequestOptions & { acceptNotFound?: boolean },
+): Promise<boolean> {
   try {
-    const res = await fetch(new URL('/health', baseUrl), {
+    const res = await fetch(joinProverUrl(baseUrl, '/health'), {
+      headers: options?.headers,
       signal: AbortSignal.timeout(HEALTH_CHECK_TIMEOUT_MS),
     });
-    return res.status === 200;
+    if (res.status === 200) return true;
+    return !!options?.acceptNotFound && res.status === 404;
   } catch {
     return false;
   }

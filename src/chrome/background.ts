@@ -3733,14 +3733,23 @@ app.addToOptions(
 );
 
 /**
- * Validate the optional `proving` field on BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX
- * requests (WP-P2, local-proof-server mode). This crosses the BG message
- * boundary from browser/options/popup context, so it's checked here even
- * though it originates from our own UI: http(s) scheme only, no embedded
- * credentials (a crafted `http://user:pass@host` URL would otherwise
- * smuggle Basic-Auth into the BG's fetch to the "proof server").
+ * Header names a `proving.headers` request may carry — exactly the Arkhia
+ * zkPaaS auth pair. An allowlist (rather than pass-through) so a crafted
+ * message can't smuggle arbitrary headers (Authorization, Cookie, Host
+ * overrides, ...) into the BG's fetch to the proof server.
  */
-function parseProvingRequest(value: unknown): { url: string } | undefined {
+const PROVING_HEADER_ALLOWLIST = new Set(['x-api-key', 'x-api-secret']);
+
+/**
+ * Validate the optional `proving` field on BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX
+ * requests (WP-P2 local mode; zkPaaS adds `headers`). This crosses the BG
+ * message boundary from browser/options/popup context, so it's checked here
+ * even though it originates from our own UI: http(s) scheme only, no
+ * embedded credentials (a crafted `http://user:pass@host` URL would
+ * otherwise smuggle Basic-Auth into the BG's fetch to the "proof server"),
+ * and only allowlisted auth headers with sane, injection-free values.
+ */
+function parseProvingRequest(value: unknown): { url: string; headers?: Record<string, string> } | undefined {
   if (value === undefined || value === null) return undefined;
   if (typeof value !== 'object') throw new Error('proving must be an object');
   const url = (value as { url?: unknown }).url;
@@ -3759,14 +3768,31 @@ function parseProvingRequest(value: unknown): { url: string } | undefined {
   if (parsed.username || parsed.password) {
     throw new Error('proving.url must not contain credentials');
   }
-  return { url };
+  const rawHeaders = (value as { headers?: unknown }).headers;
+  if (rawHeaders === undefined || rawHeaders === null) return { url };
+  if (typeof rawHeaders !== 'object' || Array.isArray(rawHeaders)) {
+    throw new Error('proving.headers must be an object');
+  }
+  const headers: Record<string, string> = {};
+  for (const [name, headerValue] of Object.entries(rawHeaders as Record<string, unknown>)) {
+    if (!PROVING_HEADER_ALLOWLIST.has(name.toLowerCase())) {
+      throw new Error(`proving.headers: "${name}" is not an allowed header`);
+    }
+    // Value stays out of the error text — it's an API credential.
+    if (typeof headerValue !== 'string' || headerValue.length === 0 || headerValue.length > 512
+      || /[\r\n\0]/.test(headerValue)) {
+      throw new Error(`proving.headers: invalid value for "${name}"`);
+    }
+    headers[name.toLowerCase()] = headerValue;
+  }
+  return Object.keys(headers).length > 0 ? { url, headers } : { url };
 }
 
 /**
  * Midnight: build + sign a shielded NIGHT transfer entirely in BG.
  *
  * Request shape: `{ outputs: [{receiverAddress, amount, tokenType?}], password?,
- * prfSecret?, proving?: { url } }`. Amounts are passed as decimal strings to
+ * prfSecret?, proving?: { url, headers? } }`. Amounts are passed as decimal strings to
  * survive Chrome messaging's BigInt-unfriendly serialization; BG parses back
  * to bigint. `proving` is optional (WP-P2, local proof-server mode) — when
  * present, BG proves the tx itself before returning.
@@ -3844,10 +3870,10 @@ app.addToOptions(
  * conversion (public NIGHT -> private/shielded NIGHT). No recipient — shield
  * always moves value between the wallet's own two addresses.
  *
- * Request shape: `{ amount, password?, prfSecret?, proving?: { url } }`.
+ * Request shape: `{ amount, password?, prfSecret?, proving?: { url, headers? } }`.
  * `amount` is a decimal string (Chrome messaging can't carry BigInt); BG
- * parses back to bigint. `proving` is optional (WP-P2, local proof-server
- * mode), same as BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX above.
+ * parses back to bigint. `proving` is optional (WP-P2 local mode; zkPaaS
+ * adds auth headers), same as BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX above.
  *
  * Response: `{ success: true, signedTxHex, proven }`. Same proven/unproven
  * routing rule as the shielded-transfer handler above (proven=false ->
@@ -3927,6 +3953,41 @@ app.addToOptions(
 );
 
 /**
+ * Shared URL-shape check for proof-server preference fields: http(s) only,
+ * no embedded credentials. Field name (never the value's credentials) goes
+ * into the error text.
+ */
+function validateProofServerUrlField(field: string, value: string): void {
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(value);
+  } catch {
+    throw new Error(`${field} is not a valid URL`);
+  }
+  if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+    throw new Error(`${field} must use http or https`);
+  }
+  if (parsedUrl.username || parsedUrl.password) {
+    throw new Error(`${field} must not contain credentials`);
+  }
+}
+
+/**
+ * Arkhia credential fields: optional strings, bounded, header-injection
+ * free (they end up as header VALUES in the BG's proof-server fetches).
+ * Returns the normalized value ('' when absent). The credential itself is
+ * never echoed into error messages.
+ */
+function validateZkpaasCredential(field: string, value: unknown): string {
+  if (value === undefined || value === null || value === '') return '';
+  if (typeof value !== 'string') throw new Error(`${field} must be a string`);
+  if (value.length > 512 || /[\r\n\0]/.test(value)) {
+    throw new Error(`${field} is not a valid credential`);
+  }
+  return value;
+}
+
+/**
  * Midnight: persist the user's proof-server preference (WP-P4 Settings UI).
  * Browser-side only sets `midnightStore.proofServer` in its own tab's memory
  * (see the store's `broadcastFromBackground` guard) so, like
@@ -3934,36 +3995,49 @@ app.addToOptions(
  * routes the change here to persist + broadcast to every connected browser
  * context.
  *
- * Request shape: `{ mode: 'remote' | 'local', localUrl: string }`. Validated
- * at the message boundary (same posture as `parseProvingRequest` above) even
- * though it currently only originates from our own UI: http(s) scheme only,
- * no embedded credentials.
+ * Request shape: `{ mode: 'remote' | 'local' | 'zkpaas', localUrl: string,
+ * zkpaasUrl?: string, zkpaasApiKey?: string, zkpaasApiSecret?: string }`.
+ * Validated at the message boundary (same posture as `parseProvingRequest`
+ * above) even though it currently only originates from our own UI: http(s)
+ * scheme only, no embedded credentials, bounded credential strings (never
+ * echoed into error text or logs).
  */
 app.addToOptions(
   MessageTypes.SET_MIDNIGHT_PROOF_SERVER,
   async (request, sendResponse) => {
     try {
-      const { mode, localUrl } = request.data || {};
-      if (mode !== 'remote' && mode !== 'local') {
-        throw new Error('mode must be "remote" or "local"');
+      const {
+        mode, localUrl, zkpaasUrl, zkpaasApiKey, zkpaasApiSecret,
+      } = request.data || {};
+      if (mode !== 'remote' && mode !== 'local' && mode !== 'zkpaas') {
+        throw new Error('mode must be "remote", "local" or "zkpaas"');
       }
       if (typeof localUrl !== 'string' || localUrl.length === 0) {
         throw new Error('localUrl is required and must be a non-empty string');
       }
-      let parsedUrl: URL;
-      try {
-        parsedUrl = new URL(localUrl);
-      } catch {
-        throw new Error('localUrl is not a valid URL');
-      }
-      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
-        throw new Error('localUrl must use http or https');
-      }
-      if (parsedUrl.username || parsedUrl.password) {
-        throw new Error('localUrl must not contain credentials');
-      }
-      const { midnightActions } = await import('@/stores/midnightStore');
-      midnightActions.setProofServer({ mode, localUrl });
+      validateProofServerUrlField('localUrl', localUrl);
+      const { midnightStore, midnightActions } = await import('@/stores/midnightStore');
+      // The zkPaaS fields are OPTIONAL per request: absent means "keep the
+      // stored value" (older call sites like the consent dialog's
+      // use-local-instead only send mode+localUrl and must not wipe saved
+      // Arkhia credentials), while an explicit '' means "clear it" ('' is
+      // also the valid "derive the endpoint per network" state for the URL).
+      const current = midnightStore.proofServer;
+      const zkpaasUrlValue = zkpaasUrl === undefined || zkpaasUrl === null
+        ? current.zkpaasUrl : zkpaasUrl;
+      if (typeof zkpaasUrlValue !== 'string') throw new Error('zkpaasUrl must be a string');
+      if (zkpaasUrlValue.length > 0) validateProofServerUrlField('zkpaasUrl', zkpaasUrlValue);
+      const zkpaasApiKeyValue = zkpaasApiKey === undefined || zkpaasApiKey === null
+        ? current.zkpaasApiKey : validateZkpaasCredential('zkpaasApiKey', zkpaasApiKey);
+      const zkpaasApiSecretValue = zkpaasApiSecret === undefined || zkpaasApiSecret === null
+        ? current.zkpaasApiSecret : validateZkpaasCredential('zkpaasApiSecret', zkpaasApiSecret);
+      midnightActions.setProofServer({
+        mode,
+        localUrl,
+        zkpaasUrl: zkpaasUrlValue,
+        zkpaasApiKey: zkpaasApiKeyValue,
+        zkpaasApiSecret: zkpaasApiSecretValue,
+      });
       sendResponse({
         id: request.id,
         data: { success: true },
@@ -4550,7 +4624,11 @@ app.add(MIDNIGHT_METHOD.getConfiguration, async (request, sendResponse) => {
     // server URL remains the least-wrong answer to advertise here (WP-P5:
     // connector `getProvingProvider()` delegation is a separate, later
     // phase). Only report the user's own local proof server once they've
-    // actually opted into local mode (WP-P1/P4).
+    // actually opted into local mode (WP-P1/P4). zkPaaS mode deliberately
+    // ALSO reports the default: the Arkhia endpoint is useless to a dApp
+    // without the user's API key, and a user-pasted override URL may embed
+    // that key as a path segment — advertising it would hand the user's
+    // paid credential to every connected dApp.
     const proverServerUri = midnightStore.proofServer.mode === 'local'
       ? midnightStore.proofServer.localUrl
       : (endpoints.defaultProofServerUrl || undefined);

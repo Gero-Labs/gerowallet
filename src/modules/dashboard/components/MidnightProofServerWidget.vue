@@ -13,7 +13,7 @@
       </router-link>
     </div>
 
-    <!-- Mode switch: the same two choices as the full page's mode cards,
+    <!-- Mode switch: the same three choices as the full page's mode cards,
          compacted into a segmented control. -->
     <div class="ps-widget__toggle" role="group" :aria-label="t('midnight.proofServerPage.title')">
       <button
@@ -28,6 +28,17 @@
       </button>
       <button
         type="button"
+        class="ps-widget__toggle-btn ps-widget__toggle-btn--zkpaas"
+        :class="{ 'ps-widget__toggle-btn--active': proofServerMode === 'zkpaas' }"
+        :disabled="proofServerSaving"
+        @click="proofServerMode = 'zkpaas'"
+      >
+        <v-icon size="14" class="ps-widget__toggle-icon">mdi-cloud-lock-outline</v-icon>
+        {{ t('midnight.proofServerPage.compareZkpaasTitle') }}
+        <span v-if="proofServerMode === 'zkpaas' && healthStatus === 'detected'" class="ps-widget__pulse-dot" />
+      </button>
+      <button
+        type="button"
         class="ps-widget__toggle-btn ps-widget__toggle-btn--local"
         :class="{ 'ps-widget__toggle-btn--active': proofServerMode === 'local' }"
         :disabled="proofServerSaving"
@@ -39,7 +50,8 @@
              so it is a real signal (per the project's motion rule: connection
              pulses are kept, decorative loops are not) rather than a fake
              "always on" indicator. Gero Cloud has no client-side health
-             check to honestly pulse about, so it gets none. -->
+             check to honestly pulse about, so it gets none; local and
+             Arkhia do (both are health-checked from the wallet). -->
         <span v-if="proofServerMode === 'local' && healthStatus === 'detected'" class="ps-widget__pulse-dot" />
       </button>
     </div>
@@ -78,22 +90,23 @@ const {
   provingHistory,
 } = useMidnightProofServer();
 
-// Status/latency only have live meaning in local mode - remote (Gero Cloud)
-// isn't health-checked from the wallet, so showing a fabricated "connected"
-// would overclaim. "Last proof" is a standing history fact and shows
-// regardless of the currently selected mode.
+// Status/latency only have live meaning in the wallet-side modes (local +
+// Arkhia zkPaaS, both health-checked from the wallet) - remote (Gero Cloud)
+// isn't, so showing a fabricated "connected" would overclaim. "Last proof"
+// is a standing history fact and shows regardless of the selected mode.
 const statusValue = computed(() => {
-  if (proofServerMode.value !== 'local') return t('midnight.proofServerPage.compareRemoteTitle');
+  if (proofServerMode.value === 'remote') return t('midnight.proofServerPage.compareRemoteTitle');
   if (healthStatus.value === 'detected') return t('midnight.proofServerPage.statusDetectedShort');
   if (healthStatus.value === 'notDetected') return t('midnight.proofServer.statusNotDetected');
+  if (healthStatus.value === 'notConfigured') return t('midnight.proofServerPage.statusNotConfiguredShort');
   return t('midnight.proofServer.statusChecking');
 });
 const statusClass = computed(() => (
-  proofServerMode.value === 'local' && healthStatus.value === 'detected' ? 'v--ok' : ''
+  proofServerMode.value !== 'remote' && healthStatus.value === 'detected' ? 'v--ok' : ''
 ));
 
 const latencyValue = computed(() => {
-  if (proofServerMode.value !== 'local' || lastCheckLatencyMs.value === null) return '—';
+  if (proofServerMode.value === 'remote' || lastCheckLatencyMs.value === null) return '—';
   return `${lastCheckLatencyMs.value}ms`;
 });
 
@@ -157,8 +170,8 @@ const lastProofValue = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 5px 8px;
+  gap: 5px;
+  padding: 5px 6px;
   border-radius: var(--g-r-control);
   font-size: 12px;
   font-weight: 600;
@@ -172,11 +185,13 @@ const lastProofValue = computed(() => {
   opacity: 0.7;
 }
 
-/* Two colors, one per option, so Cloud and Local read as distinct choices
-   rather than a generic on/off toggle - info-blue for the hosted service,
-   the chain accent for the user's own machine (same accent the full
-   /proof-server page's Local mode card already uses). */
-.ps-widget__toggle-btn--remote.ps-widget__toggle-btn--active {
+/* Two color families across the options so hosted and self-hosted read as
+   distinct kinds of choice, not a generic on/off toggle - info-blue for
+   HOSTED services (Gero Cloud and Arkhia zkPaaS alike), the chain accent
+   for the user's own machine (same accent the full /proof-server page's
+   Local mode card already uses). */
+.ps-widget__toggle-btn--remote.ps-widget__toggle-btn--active,
+.ps-widget__toggle-btn--zkpaas.ps-widget__toggle-btn--active {
   background: color-mix(in srgb, var(--g-info) 16%, var(--g-raised));
   color: var(--g-info);
 }
@@ -211,6 +226,12 @@ const lastProofValue = computed(() => {
   background: var(--g-accent);
   box-shadow: 0 0 6px color-mix(in srgb, var(--g-accent) 70%, transparent);
   animation: ps-connection-pulse 2s ease-in-out infinite;
+}
+
+/* On the Arkhia segment the dot matches that segment's hosted (info) hue. */
+.ps-widget__toggle-btn--zkpaas .ps-widget__pulse-dot {
+  background: var(--g-info);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--g-info) 70%, transparent);
 }
 
 @keyframes ps-connection-pulse {

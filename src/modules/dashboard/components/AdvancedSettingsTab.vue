@@ -305,18 +305,22 @@ const deleteWalletConfirm = async () => {
 // ─── Midnight proof server ─────────────────────────────────────────────────
 //
 // Read-only summary of midnightStore.proofServer - the full mode switcher,
-// local setup guide, and live health check live on their own page
-// (src/modules/midnight/ProofServerPage.vue via useMidnightProofServer, the
-// shared composable). Deliberately NOT invoking that composable here: it
-// starts a 4s health-poll loop whenever mode is 'local', which this
-// glance-and-link summary has no use for.
+// setup guides (local docker + Arkhia zkPaaS), and live health check live
+// on their own page (src/modules/midnight/ProofServerPage.vue via
+// useMidnightProofServer, the shared composable). Deliberately NOT
+// invoking that composable here: it starts a health-poll loop whenever a
+// wallet-side mode is selected, which this glance-and-link summary has no
+// use for.
 
 const { proofServer } = toRefs(midnightStore);
 
-const proofServerModeDisplay = computed(() =>
-  proofServer.value.mode === 'local'
-    ? t('midnight.proofServer.localLabel')
-    : t('midnight.proofServer.remoteLabel'));
+const proofServerModeDisplay = computed(() => {
+  switch (proofServer.value.mode) {
+    case 'local': return t('midnight.proofServer.localLabel');
+    case 'zkpaas': return t('midnight.proofServer.zkpaasLabel');
+    default: return t('midnight.proofServer.remoteLabel');
+  }
+});
 
 // Lifecycle
 onMounted(() => {

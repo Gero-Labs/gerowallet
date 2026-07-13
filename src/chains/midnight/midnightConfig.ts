@@ -37,6 +37,19 @@ export interface MidnightNetworkEndpoints {
    */
   defaultProofServerUrl: string;
   /**
+   * Arkhia zkPaaS proof-server base URL for this network (the Midnight
+   * ecosystem's hosted prover, run by BCW behind the Arkhia gateway inside
+   * Google Confidential Compute). The gateway relays the NATIVE proof-server
+   * API (`/prove`, `/check`) under this base, so the wallet's hand-rolled
+   * ProvingProvider works against it unchanged apart from `x-api-key` /
+   * `x-api-secret` auth headers. Arkhia only distinguishes mainnet vs
+   * testnet, so preview and preprod share the testnet base — proving is
+   * circuit-level (ledger-generation-coupled), not network-specific, so
+   * that sharing is sound. Users can override per device via
+   * `midnightStore.proofServer.zkpaasUrl`.
+   */
+  zkpaasProofServerUrl: string;
+  /**
    * Public Foundation indexer endpoint (HTTP GraphQL). Used by the SDK for
    * one-shot queries when the Nexus proxy is unavailable, or by power users who
    * opt out of the Gero proxy.
@@ -70,12 +83,23 @@ const GERO_SYNC_WS = (typeof import.meta !== 'undefined'
   && import.meta.env
   && import.meta.env['VITE_GERO_SYNC_WS_URL']) || 'wss://sync.gerowallet.io/ws/sync';
 
+/**
+ * Arkhia zkPaaS bases. Path shape comes from the zkPaaS guide's Arkhia
+ * project pages (`.claude/ZkPaaS Guide.pdf`): the per-project endpoint is
+ * `https://starter.arkhia.io/midnight/zkpaas/{mainnet|testnet}/` with the
+ * API key supplied as an `x-api-key` header (or embedded as a trailing
+ * path segment — both are accepted by the gateway).
+ */
+const ARKHIA_ZKPAAS_MAINNET = 'https://starter.arkhia.io/midnight/zkpaas/mainnet';
+const ARKHIA_ZKPAAS_TESTNET = 'https://starter.arkhia.io/midnight/zkpaas/testnet';
+
 const MIDNIGHT_NETWORK_ENDPOINTS: Record<string, MidnightNetworkEndpoints> = {
   [Network.PREVIEW]: {
     network: Network.PREVIEW,
     nexusBaseUrl: NEXUS_BASE,
     geroSyncWsUrl: GERO_SYNC_WS,
     defaultProofServerUrl: 'http://localhost:6300',
+    zkpaasProofServerUrl: ARKHIA_ZKPAAS_TESTNET,
     publicIndexerUrl: 'https://indexer.preview.midnight.network/api/v4/graphql',
     publicIndexerWsUrl: 'wss://indexer.preview.midnight.network/api/v4/graphql/ws',
     publicRpcUrl: 'https://rpc.preview.midnight.network',
@@ -88,6 +112,7 @@ const MIDNIGHT_NETWORK_ENDPOINTS: Record<string, MidnightNetworkEndpoints> = {
     nexusBaseUrl: NEXUS_BASE,
     geroSyncWsUrl: GERO_SYNC_WS,
     defaultProofServerUrl: 'http://localhost:6300',
+    zkpaasProofServerUrl: ARKHIA_ZKPAAS_TESTNET,
     publicIndexerUrl: 'https://indexer.preprod.midnight.network/api/v4/graphql',
     publicIndexerWsUrl: 'wss://indexer.preprod.midnight.network/api/v4/graphql/ws',
     publicRpcUrl: 'https://rpc.preprod.midnight.network',
@@ -100,6 +125,7 @@ const MIDNIGHT_NETWORK_ENDPOINTS: Record<string, MidnightNetworkEndpoints> = {
     nexusBaseUrl: NEXUS_BASE,
     geroSyncWsUrl: GERO_SYNC_WS,
     defaultProofServerUrl: 'http://localhost:6300',
+    zkpaasProofServerUrl: ARKHIA_ZKPAAS_MAINNET,
     publicIndexerUrl: 'https://indexer.mainnet.midnight.network/api/v4/graphql',
     publicIndexerWsUrl: 'wss://indexer.mainnet.midnight.network/api/v4/graphql/ws',
     publicRpcUrl: 'https://rpc.mainnet.midnight.network',

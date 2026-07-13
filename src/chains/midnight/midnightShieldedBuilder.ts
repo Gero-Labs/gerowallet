@@ -79,11 +79,13 @@ export interface BuildAndSignShieldedTransferArgs {
   /** Single-recipient v1; multi-recipient is a follow-up. */
   readonly outputs: readonly BuildAndSignShieldedTransferOutput[];
   /**
-   * When present, prove (and bind) the transfer against a self-hosted proof
+   * When present, prove (and bind) the transfer against a native-API proof
    * server at {@code url} before returning, instead of leaving it unproven
-   * for Gero Cloud. See {@link BuildAndSignShieldedTransferResult.proven}.
+   * for Gero Cloud — self-hosted docker, or Arkhia zkPaaS with its
+   * {@code x-api-key}/{@code x-api-secret} auth in {@code headers}. See
+   * {@link BuildAndSignShieldedTransferResult.proven}.
    */
-  readonly proving?: { readonly url: string };
+  readonly proving?: { readonly url: string; readonly headers?: Record<string, string> };
 }
 
 /** Result of {@link buildAndSignShieldedTransfer}. */
@@ -201,22 +203,24 @@ export async function buildAndSignShieldedTransfer(
     debugLog('🌙 shielded transferTransaction returned');
 
     if (args.proving) {
-      // Local proving: run the ZK prover against the user's own docker
-      // proof server instead of shipping the unproven (witness-carrying)
-      // hex to Gero Cloud. prove() -> bind() is the exact sequence the
-      // Nexus sidecar runs server-side (provingService.ts) — see plan
-      // section 0. Narrow-cast the SDK-returned tx the same way the plain
-      // serialize() path below does.
+      // Wallet-side proving: run the ZK prover against the caller's proof
+      // server (the user's own docker server, or the Arkhia zkPaaS gateway
+      // via auth headers) instead of shipping the unproven
+      // (witness-carrying) hex to Gero Cloud. prove() -> bind() is the
+      // exact sequence the Nexus sidecar runs server-side
+      // (provingService.ts) — see plan section 0. Narrow-cast the
+      // SDK-returned tx the same way the plain serialize() path below does.
       type ProvableTx = {
         prove: (provider: ledger.ProvingProvider, costModel: ledger.CostModel) =>
           Promise<{ bind: () => { serialize: () => Uint8Array } }>;
       };
-      debugLog('🌙 shielded tx: proving locally', { url: args.proving.url });
+      // URL only — never the auth header values (file-header privacy note).
+      debugLog('🌙 shielded tx: proving wallet-side', { url: args.proving.url });
       const proveStartMs = Date.now();
       let proven: { bind: () => { serialize: () => Uint8Array } };
       try {
         const { makeLocalProvingProvider } = await import('@/chains/midnight/midnightLocalProver');
-        const provider = makeLocalProvingProvider(args.proving.url);
+        const provider = makeLocalProvingProvider(args.proving.url, { headers: args.proving.headers });
         proven = await (unprovenTx as unknown as ProvableTx).prove(
           provider, ledgerMod.CostModel.initialCostModel(),
         );
@@ -227,12 +231,12 @@ export async function buildAndSignShieldedTransfer(
         // this is not a substitute for that handling, just a duration carrier.
         const durationMs = Date.now() - proveStartMs;
         const message = err instanceof Error ? err.message : String(err);
-        debugLog(`🌙 shielded tx: local proof failed after ${durationMs}ms`, message);
+        debugLog(`🌙 shielded tx: wallet-side proof failed after ${durationMs}ms`, message);
         throw new LocalProvingError(message, durationMs, { cause: err });
       }
       const boundBytes = proven.bind().serialize();
       const proveDurationMs = Date.now() - proveStartMs;
-      debugLog(`🌙 shielded tx: local proof + bind complete (${proveDurationMs}ms)`);
+      debugLog(`🌙 shielded tx: wallet-side proof + bind complete (${proveDurationMs}ms)`);
       const txHex = Buffer.from(boundBytes).toString('hex');
       debugLog('🌙 shielded tx serialized (proven)', { bytes: boundBytes.length });
       return { txHex, proven: true, proveDurationMs };

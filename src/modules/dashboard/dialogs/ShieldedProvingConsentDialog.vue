@@ -16,13 +16,13 @@
         <p class="body-2 mb-3">{{ t('midnight.consent.intro') }}</p>
 
         <div class="consent-section mb-3">
-          <div class="consent-section-label">{{ t('midnight.consent.whatGeroSees') }}</div>
-          <p class="body-2 mb-0">{{ t('midnight.consent.whatGeroSeesBody') }}</p>
+          <div class="consent-section-label">{{ whatSeesLabel }}</div>
+          <p class="body-2 mb-0">{{ whatSeesBody }}</p>
         </div>
 
         <div class="consent-section mb-3">
-          <div class="consent-section-label">{{ t('midnight.consent.whatWeDoNot') }}</div>
-          <p class="body-2 mb-0">{{ t('midnight.consent.whatWeDoNotBody') }}</p>
+          <div class="consent-section-label">{{ whatWeDoNotLabel }}</div>
+          <p class="body-2 mb-0">{{ whatWeDoNotBody }}</p>
         </div>
 
         <div class="consent-section consent-section-muted mb-4">
@@ -38,7 +38,7 @@
           class="mt-0 mb-3 consent-checkbox"
         >
           <template v-slot:label>
-            <span class="body-2">{{ t('midnight.consent.acknowledge') }}</span>
+            <span class="body-2">{{ acknowledgeLabel }}</span>
           </template>
         </v-checkbox>
 
@@ -50,7 +50,7 @@
           :loading="submitting"
           @click="onAccept"
         >
-          {{ t('midnight.consent.acceptCloud') }}
+          {{ acceptLabel }}
         </v-btn>
 
         <v-btn
@@ -83,7 +83,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, computed, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { Messaging } from '@/chrome/messaging';
@@ -94,14 +94,36 @@ import assets from '@/utils/assets';
 
 interface Props {
   isOpen: boolean;
+  /**
+   * Which remote prover this consent is about. Both record the SAME
+   * device-level consent (it covers remote proving generally) but the copy
+   * must name the actual destination of the witness data: `cloud` = Gero
+   * Cloud (default, unchanged behavior), `zkpaas` = the Arkhia zkPaaS
+   * service — Gero never receives the witness on that path.
+   */
+  provider?: 'cloud' | 'zkpaas';
 }
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), { provider: 'cloud' });
 const emit = defineEmits<{
   (e: 'close'): void;
   (e: 'accepted'): void;
 }>();
 
 const { t } = useTranslation();
+
+const isZkpaas = computed(() => props.provider === 'zkpaas');
+const whatSeesLabel = computed(() => (isZkpaas.value
+  ? t('midnight.consent.zkpaasWhatSees') : t('midnight.consent.whatGeroSees')));
+const whatSeesBody = computed(() => (isZkpaas.value
+  ? t('midnight.consent.zkpaasWhatSeesBody') : t('midnight.consent.whatGeroSeesBody')));
+const whatWeDoNotLabel = computed(() => (isZkpaas.value
+  ? t('midnight.consent.zkpaasWhatThisMeans') : t('midnight.consent.whatWeDoNot')));
+const whatWeDoNotBody = computed(() => (isZkpaas.value
+  ? t('midnight.consent.zkpaasWhatThisMeansBody') : t('midnight.consent.whatWeDoNotBody')));
+const acknowledgeLabel = computed(() => (isZkpaas.value
+  ? t('midnight.consent.zkpaasAcknowledge') : t('midnight.consent.acknowledge')));
+const acceptLabel = computed(() => (isZkpaas.value
+  ? t('midnight.consent.zkpaasAccept') : t('midnight.consent.acceptCloud')));
 
 const acknowledged = ref(false);
 const submitting = ref(false);

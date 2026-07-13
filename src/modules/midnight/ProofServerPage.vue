@@ -22,7 +22,9 @@
           </div>
 
           <template v-else>
-            <!-- Mode selection -->
+            <!-- Mode selection. Short compare titles (not the long
+                 "(default)" labels) so three cards fit one row; the hint
+                 line under each carries the differentiation. -->
             <div class="ps-mode-grid">
               <button
                 type="button"
@@ -34,12 +36,31 @@
                 <div class="ps-mode-icon"><v-icon size="22">mdi-cloud-outline</v-icon></div>
                 <div class="ps-mode-body">
                   <div class="ps-mode-title-row">
-                    <span class="t-body-lg">{{ t('midnight.proofServer.remoteLabel') }}</span>
+                    <span class="t-body-lg">{{ t('midnight.proofServerPage.compareRemoteTitle') }}</span>
                     <span v-if="proofServerMode === 'remote'" class="ps-active-badge">
                       <v-icon size="12">mdi-check</v-icon>{{ t('midnight.proofServerPage.activeBadge') }}
                     </span>
                   </div>
                   <p class="t-caption ps-mode-hint">{{ t('midnight.proofServerPage.remoteCardBody') }}</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                class="ps-mode-card"
+                :class="{ 'ps-mode-card--active': proofServerMode === 'zkpaas' }"
+                :disabled="proofServerSaving"
+                @click="proofServerMode = 'zkpaas'"
+              >
+                <div class="ps-mode-icon"><v-icon size="22">mdi-cloud-lock-outline</v-icon></div>
+                <div class="ps-mode-body">
+                  <div class="ps-mode-title-row">
+                    <span class="t-body-lg">{{ t('midnight.proofServerPage.compareZkpaasTitle') }}</span>
+                    <span v-if="proofServerMode === 'zkpaas'" class="ps-active-badge">
+                      <v-icon size="12">mdi-check</v-icon>{{ t('midnight.proofServerPage.activeBadge') }}
+                    </span>
+                  </div>
+                  <p class="t-caption ps-mode-hint">{{ t('midnight.proofServerPage.zkpaasCardBody') }}</p>
                 </div>
               </button>
 
@@ -53,7 +74,7 @@
                 <div class="ps-mode-icon"><v-icon size="22">mdi-laptop</v-icon></div>
                 <div class="ps-mode-body">
                   <div class="ps-mode-title-row">
-                    <span class="t-body-lg">{{ t('midnight.proofServer.localLabel') }}</span>
+                    <span class="t-body-lg">{{ t('midnight.proofServerPage.compareLocalTitle') }}</span>
                     <span v-if="proofServerMode === 'local'" class="ps-active-badge">
                       <v-icon size="12">mdi-check</v-icon>{{ t('midnight.proofServerPage.activeBadge') }}
                     </span>
@@ -156,13 +177,144 @@
               </v-expansion-panels>
             </div>
 
-            <!-- Recent proving activity: only local proving is instrumented
-                 (remote/cloud proving runs entirely inside the Nexus
-                 sidecar, invisible to the wallet) - see midnightStore.ts
-                 MidnightProvingLogEntry. Its OWN card, visible whenever
-                 there IS history regardless of current mode - it is a
-                 record of what already happened, not a local-mode-only
-                 status (unlike the setup guide above). -->
+            <!-- Arkhia zkPaaS setup guide: same stepped structure as the
+                 local guide so the two setup flows read as one family. -->
+            <div v-if="proofServerMode === 'zkpaas'" class="ps-card">
+              <h2 class="t-heading mb-3">{{ t('midnight.proofServerPage.zkpaasSetupTitle') }}</h2>
+
+              <div class="ps-step">
+                <div class="ps-step-badge">1</div>
+                <div class="ps-step-body">
+                  <div class="ps-step-title-row">
+                    <v-icon size="16" color="var(--g-text-2)">mdi-account-key-outline</v-icon>
+                    <span class="t-body-lg">{{ t('midnight.proofServerPage.zkpaasStep1Title') }}</span>
+                  </div>
+                  <p class="t-body-sm ps-step-hint">{{ t('midnight.proofServerPage.zkpaasStep1Body') }}</p>
+                  <a
+                    class="ps-step-link"
+                    :href="arkhiaDashboardUrl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {{ t('midnight.proofServerPage.zkpaasStep1Link') }}
+                    <v-icon size="13">mdi-open-in-new</v-icon>
+                  </a>
+                </div>
+              </div>
+
+              <div class="ps-step">
+                <div class="ps-step-badge">2</div>
+                <div class="ps-step-body">
+                  <div class="ps-step-title-row">
+                    <span class="t-body-lg">{{ t('midnight.proofServerPage.zkpaasStep2Title') }}</span>
+                  </div>
+                  <!-- Credentials persist on blur, like the local URL field.
+                       Password inputs with a reveal toggle: these are paid
+                       API credentials, not display text. -->
+                  <v-text-field
+                    v-model="zkpaasKeyDraft"
+                    :label="t('midnight.proofServerPage.zkpaasKeyLabel')"
+                    :type="showZkpaasKey ? 'text' : 'password'"
+                    :append-icon="showZkpaasKey ? 'mdi-eye-off' : 'mdi-eye'"
+                    autocomplete="off"
+                    outlined
+                    dense
+                    hide-details="auto"
+                    class="mt-2 proof-server-url-field"
+                    :disabled="proofServerSaving"
+                    @click:append="showZkpaasKey = !showZkpaasKey"
+                    @blur="onZkpaasKeyBlur"
+                  />
+                  <v-text-field
+                    v-model="zkpaasSecretDraft"
+                    :label="t('midnight.proofServerPage.zkpaasSecretLabel')"
+                    :type="showZkpaasSecret ? 'text' : 'password'"
+                    :append-icon="showZkpaasSecret ? 'mdi-eye-off' : 'mdi-eye'"
+                    autocomplete="off"
+                    outlined
+                    dense
+                    hide-details="auto"
+                    class="mt-3 proof-server-url-field"
+                    :disabled="proofServerSaving"
+                    @click:append="showZkpaasSecret = !showZkpaasSecret"
+                    @blur="onZkpaasSecretBlur"
+                  />
+                </div>
+              </div>
+
+              <div class="ps-step ps-step--last">
+                <div class="ps-step-badge">3</div>
+                <div class="ps-step-body">
+                  <div class="ps-step-title-row">
+                    <span class="t-body-lg">{{ t('midnight.proofServerPage.step3Title') }}</span>
+                  </div>
+                  <p class="t-body-sm ps-step-hint">{{ t('midnight.proofServerPage.zkpaasStep3Body') }}</p>
+
+                  <div class="proof-server-status-row">
+                    <div class="status-pill t-caption" :class="`status-pill--${healthStatus}`">
+                      <v-progress-circular
+                        v-if="healthStatus === 'checking'"
+                        indeterminate
+                        size="12"
+                        width="2"
+                        color="var(--g-text-3)"
+                      />
+                      <span v-else class="status-dot" :class="`status-dot--${healthStatus}`"></span>
+                      <span class="status-pill-label">{{ healthStatusLabel }}</span>
+                    </div>
+                    <GButton
+                      tier="secondary"
+                      compact
+                      :loading="testingConnection"
+                      :disabled="!zkpaasConfigured"
+                      @click="testConnection()"
+                    >
+                      {{ t('midnight.proofServer.testConnection') }}
+                    </GButton>
+                  </div>
+                  <p v-if="lastCheckedAt" class="t-caption ps-check-detail">
+                    {{ t('midnight.proofServerPage.checkedAgo', { time: formatRelativeTime(lastCheckedAt) }) }}
+                    <template v-if="lastCheckLatencyMs !== null">
+                      · {{ t('midnight.proofServerPage.latencyMs', { ms: lastCheckLatencyMs }) }}
+                    </template>
+                  </p>
+                </div>
+              </div>
+
+              <v-expansion-panels flat class="ps-advanced">
+                <v-expansion-panel>
+                  <v-expansion-panel-header class="t-caption ps-advanced-header">
+                    {{ t('midnight.proofServerPage.advancedUrl') }}
+                  </v-expansion-panel-header>
+                  <v-expansion-panel-content>
+                    <!-- Empty = automatic: the per-network Arkhia endpoint
+                         shows as the placeholder so "automatic" is a
+                         visible URL, not a mystery. -->
+                    <v-text-field
+                      v-model="zkpaasUrlDraft"
+                      :label="t('midnight.proofServer.urlLabel')"
+                      :placeholder="zkpaasEffectiveUrl"
+                      persistent-placeholder
+                      outlined
+                      dense
+                      hide-details="auto"
+                      class="mt-2 proof-server-url-field"
+                      :error-messages="zkpaasUrlError ? [zkpaasUrlError] : []"
+                      :disabled="proofServerSaving"
+                      @blur="onZkpaasUrlBlur"
+                    />
+                  </v-expansion-panel-content>
+                </v-expansion-panel>
+              </v-expansion-panels>
+            </div>
+
+            <!-- Recent proving activity: only wallet-side proving (local or
+                 zkPaaS) is instrumented (remote/cloud proving runs entirely
+                 inside the Nexus sidecar, invisible to the wallet) - see
+                 midnightStore.ts MidnightProvingLogEntry. Its OWN card,
+                 visible whenever there IS history regardless of current
+                 mode - it is a record of what already happened, not a
+                 mode-specific status (unlike the setup guides above). -->
             <div v-if="provingHistory.length > 0" class="ps-card">
               <h2 class="t-heading mb-2">{{ t('midnight.proofServerPage.recentActivityTitle') }}</h2>
               <div v-for="(entry, i) in provingHistory" :key="i" class="ps-proving-entry">
@@ -197,6 +349,13 @@
                 </div>
                 <div class="ps-compare-item">
                   <div class="ps-compare-header">
+                    <v-icon size="16" color="var(--g-text-3)">mdi-cloud-lock-outline</v-icon>
+                    <span class="t-body-lg">{{ t('midnight.proofServerPage.compareZkpaasTitle') }}</span>
+                  </div>
+                  <p class="t-caption">{{ t('midnight.proofServerPage.compareZkpaasBody') }}</p>
+                </div>
+                <div class="ps-compare-item">
+                  <div class="ps-compare-header">
                     <v-icon size="16" color="var(--g-text-3)">mdi-laptop</v-icon>
                     <span class="t-body-lg">{{ t('midnight.proofServerPage.compareLocalTitle') }}</span>
                   </div>
@@ -223,7 +382,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { toRefs } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { walletStore } from '@/stores/walletStore';
@@ -243,6 +402,16 @@ const {
   localUrlDraft,
   localUrlError,
   onLocalUrlBlur,
+  zkpaasUrlDraft,
+  zkpaasUrlError,
+  onZkpaasUrlBlur,
+  zkpaasKeyDraft,
+  onZkpaasKeyBlur,
+  zkpaasSecretDraft,
+  onZkpaasSecretBlur,
+  zkpaasEffectiveUrl,
+  zkpaasConfigured,
+  arkhiaDashboardUrl,
   dockerRunCommand,
   healthStatus,
   healthStatusLabel,
@@ -253,9 +422,13 @@ const {
   provingHistory,
 } = useMidnightProofServer();
 
+const showZkpaasKey = ref(false);
+const showZkpaasSecret = ref(false);
+
 const faqs = computed(() => ([
   { q: t('midnight.proofServerPage.faq1Q'), a: t('midnight.proofServerPage.faq1A') },
   { q: t('midnight.proofServerPage.faq2Q'), a: t('midnight.proofServerPage.faq2A') },
+  { q: t('midnight.proofServerPage.faq5Q'), a: t('midnight.proofServerPage.faq5A') },
   { q: t('midnight.proofServerPage.faq3Q'), a: t('midnight.proofServerPage.faq3A') },
   { q: t('midnight.proofServerPage.faq4Q'), a: t('midnight.proofServerPage.faq4A') },
 ]));
@@ -315,7 +488,7 @@ const faqs = computed(() => ([
 
 .ps-mode-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: var(--g-s-3);
   margin-bottom: var(--g-s-4);
 }
@@ -504,6 +677,7 @@ const faqs = computed(() => ([
 
 .status-dot--detected { background: var(--g-success); }
 .status-dot--notDetected { background: var(--g-text-3); }
+.status-dot--notConfigured { background: var(--g-text-3); }
 
 .status-pill--detected .status-pill-label { color: var(--g-success); }
 
@@ -578,7 +752,7 @@ const faqs = computed(() => ([
    bordered box here would read as clickable when it isn't. */
 .ps-compare-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: var(--g-s-5);
 }
 

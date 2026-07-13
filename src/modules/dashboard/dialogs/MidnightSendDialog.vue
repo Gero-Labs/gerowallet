@@ -302,7 +302,7 @@
         <div v-if="localProverUnavailable" class="midnight-info-note midnight-prover-fallback mb-2">
           <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-server-network-off</v-icon>
           <div class="midnight-prover-fallback-body">
-            <span>{{ t('midnight.proofServer.notDetectedSend') }}</span>
+            <span>{{ proverFallbackText }}</span>
             <div class="midnight-prover-fallback-actions">
               <v-btn text x-small color="var(--g-accent)" @click="openProofServerSettings">
                 {{ t('midnight.proofServer.openSettings') }}
@@ -351,9 +351,12 @@
       </v-card-actions>
     </BaseDialog>
 
-    <!-- First-time-only consent gate for shielded sends. -->
+    <!-- First-time-only consent gate for shielded sends. `provider` names
+         the actual witness destination the copy must disclose (Gero Cloud
+         vs Arkhia zkPaaS). -->
     <ShieldedProvingConsentDialog
       :is-open="consentDialogOpen"
+      :provider="consentProvider"
       @close="onConsentClose"
       @accepted="onConsentAccepted"
     />
@@ -474,13 +477,13 @@ const errorMessage = ref<string | null>(null);
 type SendStageOrIdle = MidnightSendStage | 'idle';
 const sendStage = ref<SendStageOrIdle>('idle');
 
-// `provingLocal` shares `working`'s rank: the two are mutually exclusive
-// (local-mode shielded sends emit `provingLocal` in place of `working`, see
-// midnight-tx.service's sendShieldedNight) and occupy the same position in
-// every send's stage sequence — authorize → (build →) working-or-provingLocal
-// → submit → done.
+// `provingLocal`/`provingZkpaas` share `working`'s rank: the three are
+// mutually exclusive (wallet-side shielded sends emit a proving stage in
+// place of `working`, see midnight-tx.service's sendShieldedNight) and
+// occupy the same position in every send's stage sequence — authorize →
+// (build →) working-or-proving → submit → done.
 const STAGE_RANK: Record<SendStageOrIdle, number> = {
-  idle: 0, authorizing: 1, building: 2, working: 3, provingLocal: 3, submitting: 4, done: 5,
+  idle: 0, authorizing: 1, building: 2, working: 3, provingLocal: 3, provingZkpaas: 3, submitting: 4, done: 5,
 };
 
 interface TimelineNode {
@@ -502,12 +505,16 @@ const timelineNodes = computed<TimelineNode[]>(() => {
   const syncDone = pct != null && pct >= 100;
   const syncActive = s === 'working' && !syncDone;
   const signActive = s === 'working' && syncDone;
-  // Local-mode shielded sends (WP-P5): the BG round trip is one opaque
-  // proving+binding call with no percent signal, so it gets a single
-  // indeterminate-bar node (staged copy, not a fake percentage — rule 14 in
+  // Wallet-side shielded sends (WP-P5 local; zkPaaS hosted): the BG round
+  // trip is one opaque proving+binding call with no percent signal, so it
+  // gets a single indeterminate-bar node (staged copy, not a fake
+  // percentage — rule 14 in
   // docs/plans/2026-07-13-midnight-proof-server-setting.md section 1) rather
   // than the sync/sign split above, which is specific to DUST-balance sync.
-  const provingLocalActive = s === 'provingLocal';
+  const provingActive = s === 'provingLocal' || s === 'provingZkpaas';
+  const provingLabel = s === 'provingZkpaas'
+    ? t('midnight.send.stageProvingZkpaas')
+    : t('midnight.send.stageProvingLocal');
 
   return [
     {
@@ -522,10 +529,10 @@ const timelineNodes = computed<TimelineNode[]>(() => {
     },
     {
       key: 'sync',
-      label: provingLocalActive ? t('midnight.send.stageProvingLocal') : t('midnight.send.stageSync'),
-      state: rank > 3 || signActive ? 'done' : (syncActive || provingLocalActive) ? 'active' : 'pending',
+      label: provingActive ? provingLabel : t('midnight.send.stageSync'),
+      state: rank > 3 || signActive ? 'done' : (syncActive || provingActive) ? 'active' : 'pending',
       showBar: true,
-      percent: provingLocalActive ? null : (syncActive ? pct : undefined),
+      percent: provingActive ? null : (syncActive ? pct : undefined),
       detail: syncActive ? prog?.detail : undefined,
     },
     {
@@ -558,11 +565,21 @@ const consentDialogOpen = ref(false);
 const pendingCredentials = ref<{ password?: string; prfSecret?: Uint8Array } | null>(null);
 
 // ── Local proof-server routing (WP-P5) ──
-// True while the health preflight for a local-mode shielded send is
-// in-flight — keeps Step 2 visible (no big "sending" overlay) with just the
-// submit button showing a spinner, since the check is quick (~2.5s) and
-// nothing has actually started yet.
+// True while the health preflight for a wallet-side (local or zkPaaS)
+// shielded send is in-flight — keeps Step 2 visible (no big "sending"
+// overlay) with just the submit button showing a spinner, since the check
+// is quick (~2.5s) and nothing has actually started yet.
 const checkingLocalProver = ref(false);
+// Which remote prover the consent dialog is about when it opens — set at
+// each open site (zkpaas for a first zkPaaS send, cloud everywhere else,
+// including the one-off "use Gero Cloud" fallback).
+const consentProvider = ref<'cloud' | 'zkpaas'>('cloud');
+// Fallback-note copy tracks the mode that failed its preflight.
+const proverFallbackText = computed(() => (
+  midnightStore.proofServer.mode === 'zkpaas'
+    ? t('midnight.proofServer.zkpaasNotReachableSend')
+    : t('midnight.proofServer.notDetectedSend')
+));
 // True once a local-mode shielded send's preflight (or, on the rare race
 // where the server drops between preflight and build, the BG call itself)
 // finds the local proof server unreachable. Renders the two-action fallback
@@ -726,37 +743,47 @@ async function routeSend(credentials: { password?: string; prfSecret?: Uint8Arra
     await sendUnshielded(credentials);
     return;
   }
+  const mode = midnightStore.proofServer.mode;
   // Local proof-server mode never needs cloud consent — witness data stays
   // on the user's machine — so it skips the consent dialog entirely and
   // goes straight to a health preflight (WP-P5, plan section "WP-P5 - Consent
-  // dialog + send-flow integration").
-  if (midnightStore.proofServer.mode === 'local') {
-    await routeLocalShielded(credentials);
+  // dialog + send-flow integration"). Arkhia zkPaaS ships the witness to a
+  // third party, so it is consent-gated exactly like Gero Cloud and THEN
+  // preflighted like local.
+  if (mode === 'local') {
+    await routeWalletProvedShielded(credentials);
     return;
   }
   if (hasFreshConsent()) {
+    if (mode === 'zkpaas') {
+      await routeWalletProvedShielded(credentials);
+      return;
+    }
     await sendShielded(credentials);
     return;
   }
   pendingCredentials.value = credentials;
+  consentProvider.value = mode === 'zkpaas' ? 'zkpaas' : 'cloud';
   consentDialogOpen.value = true;
 }
 
 /**
- * Local-mode shielded send routing: preflight the local proof server's
- * `/health` before ever touching the "sending" overlay. A fast, explicit
- * check here (rather than letting sendShieldedNight's own internal preflight
- * surface via a caught error) keeps Step 2 on screen with just a spinner
- * instead of flashing the full progress timeline for a doomed send.
+ * Wallet-side (local or zkPaaS) shielded send routing: preflight the
+ * selected proof server before ever touching the "sending" overlay. A
+ * fast, explicit check here (rather than letting sendShieldedNight's own
+ * internal preflight surface via a caught error) keeps Step 2 on screen
+ * with just a spinner instead of flashing the full progress timeline for a
+ * doomed send. Target resolution lives in the tx service so the two can
+ * never disagree about which URL/auth a send would use.
  */
-async function routeLocalShielded(credentials: { password?: string; prfSecret?: Uint8Array }) {
+async function routeWalletProvedShielded(credentials: { password?: string; prfSecret?: Uint8Array }) {
   errorMessage.value = null;
   localProverUnavailable.value = false;
   checkingLocalProver.value = true;
   try {
-    const { checkProofServerHealth } = await import('@/chains/midnight/midnightLocalProver');
-    const healthy = await checkProofServerHealth(midnightStore.proofServer.localUrl);
-    if (!healthy) {
+    const { checkWalletProvingPreflight } = await import('@/services/midnight-tx.service');
+    const ok = await checkWalletProvingPreflight(loggedWallet.value?.network ?? '');
+    if (!ok) {
       pendingCredentials.value = credentials;
       localProverUnavailable.value = true;
       return;
@@ -793,7 +820,9 @@ function useCloudForThisTransaction() {
     return;
   }
   // pendingCredentials stays set — onConsentAccepted below reads it once the
-  // user accepts the cloud consent dialog.
+  // user accepts the cloud consent dialog. The fallback always goes to Gero
+  // Cloud (even from zkpaas mode), so the consent copy must say Gero Cloud.
+  consentProvider.value = 'cloud';
   consentDialogOpen.value = true;
 }
 
@@ -808,6 +837,13 @@ async function onConsentAccepted() {
   const credentials = pendingCredentials.value;
   pendingCredentials.value = null;
   if (!credentials) return;
+  // A freshly-consented zkPaaS send still needs its preflight; the one-off
+  // "use Gero Cloud" fallback (forceRemoteForNextSend) goes straight to the
+  // remote path instead — sendShielded consumes that flag.
+  if (!forceRemoteForNextSend.value && midnightStore.proofServer.mode === 'zkpaas') {
+    await routeWalletProvedShielded(credentials);
+    return;
+  }
   await sendShielded(credentials);
 }
 
