@@ -103,6 +103,28 @@ export interface BuildAndSignShieldedTransferResult {
    * assuming based on which path they think they took — it's authoritative.
    */
   readonly proven: boolean;
+  /**
+   * Wall-clock time spent in `prove()` + `bind()` against the local proof
+   * server. Only present when {@code proven} is true. Callers use this to
+   * populate {@link MidnightProvingLogEntry} — see {@code walletBg.ts}.
+   */
+  readonly proveDurationMs?: number;
+}
+
+/**
+ * Thrown when local proving (against a self-hosted proof server) fails.
+ * Carries the elapsed time up to the point of failure so the caller can
+ * still record an accurate proving-history entry — `message` is safe to
+ * surface as-is (see {@code postToProver}'s error text, which never
+ * includes the request payload).
+ */
+export class LocalProvingError extends Error {
+  readonly durationMs: number;
+  constructor(message: string, durationMs: number, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'LocalProvingError';
+    this.durationMs = durationMs;
+  }
 }
 
 /**
@@ -186,16 +208,29 @@ export async function buildAndSignShieldedTransfer(
       };
       debugLog('🌙 shielded tx: proving locally', { url: args.proving.url });
       const proveStartMs = Date.now();
-      const { makeLocalProvingProvider } = await import('@/chains/midnight/midnightLocalProver');
-      const provider = makeLocalProvingProvider(args.proving.url);
-      const proven = await (unprovenTx as unknown as ProvableTx).prove(
-        provider, ledgerMod.CostModel.initialCostModel(),
-      );
+      let proven: { bind: () => { serialize: () => Uint8Array } };
+      try {
+        const { makeLocalProvingProvider } = await import('@/chains/midnight/midnightLocalProver');
+        const provider = makeLocalProvingProvider(args.proving.url);
+        proven = await (unprovenTx as unknown as ProvableTx).prove(
+          provider, ledgerMod.CostModel.initialCostModel(),
+        );
+      } catch (err) {
+        // Re-thrown as LocalProvingError so the caller (walletBg.ts) can
+        // record a failed proving-history entry with an accurate duration,
+        // then propagate the same message through its own error handling —
+        // this is not a substitute for that handling, just a duration carrier.
+        const durationMs = Date.now() - proveStartMs;
+        const message = err instanceof Error ? err.message : String(err);
+        debugLog(`🌙 shielded tx: local proof failed after ${durationMs}ms`, message);
+        throw new LocalProvingError(message, durationMs, { cause: err });
+      }
       const boundBytes = proven.bind().serialize();
-      debugLog(`🌙 shielded tx: local proof + bind complete (${Date.now() - proveStartMs}ms)`);
+      const proveDurationMs = Date.now() - proveStartMs;
+      debugLog(`🌙 shielded tx: local proof + bind complete (${proveDurationMs}ms)`);
       const txHex = Buffer.from(boundBytes).toString('hex');
       debugLog('🌙 shielded tx serialized (proven)', { bytes: boundBytes.length });
-      return { txHex, proven: true };
+      return { txHex, proven: true, proveDurationMs };
     }
 
     const signedBytes = (unprovenTx as unknown as { serialize: () => Uint8Array }).serialize();
