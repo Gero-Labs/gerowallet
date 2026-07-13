@@ -192,6 +192,40 @@ export interface BuildMidnightTxResponse {
   segmentsToSign: MidnightSegmentToSign[];
 }
 
+/**
+ * Shield-swap-mode request (WP-SH1, nexus repo): builds ONLY the unshielded
+ * (public) half of a shield conversion — an unproven tx that spends the
+ * sender's own NIGHT UTxOs covering {@code amount} and returns change ONLY
+ * (no payment output; the consumed value is completed by the shielded
+ * output the wallet builds separately via `ShieldedWallet.initSwap` — see
+ * `midnightShieldSwapBuilder.ts`).
+ *
+ * NOTE: at the time this was written, WP-SH1 had not yet shipped on nexus's
+ * `development` branch (verified: `/tx/build-unshielded` still 400s on an
+ * empty `outputs[]`, per `sidecar/src/routes/buildUnshielded.ts`'s
+ * `validate()`). This shape mirrors the plan's documented design
+ * (docs/plans/2026-07-13-midnight-shield-unshield.md section 0 + WP-SH1
+ * description: "add an optional `swapMode?: boolean` flag ... relaxes the
+ * outputs[] required check to allow empty ... still selects UTxOs summing
+ * to >= the requested shield amount"). The `swapMode` flag name and the
+ * dedicated `shieldAmount` field (needed because `outputs[]` carries no
+ * amount when empty) are this wallet's best-effort guess at the wire
+ * contract, NOT a verified fact — reconcile field names against WP-SH1's
+ * actual `BuildUnshieldedReq` once it ships.
+ */
+export interface BuildShieldSwapTxRequest {
+  /** Sender's unshielded `mn_addr_…` address. Nexus uses this to fetch UTxOs. */
+  fromAddress: string;
+  /** Raw signing public key hex — from `UnshieldedKeystore.getPublicKey()`. */
+  publicKeyHex: string;
+  /** Address bytes as hex — from `UnshieldedKeystore.getAddress()`. */
+  addressHex: string;
+  /** Amount of NIGHT (base units, 6 decimals) to move into the shielded pool. */
+  amount: string;
+  /** Time-to-live: epoch ms. */
+  ttlMs: number;
+}
+
 /** Phase 1 + 3: signed (and proven, for shielded) tx submitted to Nexus. */
 export interface SubmitMidnightTxRequest {
   /** Hex-encoded fully-signed tx ready for the Midnight RPC node. */
@@ -534,6 +568,36 @@ export class MidnightApi {
     try {
       const url = nexusMidnightPathFor(this.network, 'tx/build-unshielded');
       const { data, status } = await this.axiosInstance.post<BuildMidnightTxResponse>(url, request);
+      if (status !== 200) throw parseHttpError(data);
+      return data;
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  /**
+   * Shield (public → private), unshielded half (WP-SH1 + WP-SH2): same
+   * route as {@link buildUnshieldedTx} with an empty `outputs[]` and a
+   * `swapMode` flag (see {@link BuildShieldSwapTxRequest}'s doc comment for
+   * why the exact field names are a best-effort mirror of the plan, not a
+   * verified fact). Response is the SAME shape as `buildUnshieldedTx`'s —
+   * confirmed against the nexus route's own doc comment
+   * (`{unprovenTxHex, txHash, segmentsToSign}`), so no separate response
+   * type is declared.
+   */
+  async buildShieldSwapUnshieldedTx(request: BuildShieldSwapTxRequest): Promise<BuildMidnightTxResponse> {
+    try {
+      const url = nexusMidnightPathFor(this.network, 'tx/build-unshielded');
+      const wireBody = {
+        fromAddress: request.fromAddress,
+        publicKeyHex: request.publicKeyHex,
+        addressHex: request.addressHex,
+        outputs: [] as MidnightTxOutput[],
+        swapMode: true,
+        shieldAmount: request.amount,
+        ttlMs: request.ttlMs,
+      };
+      const { data, status } = await this.axiosInstance.post<BuildMidnightTxResponse>(url, wireBody);
       if (status !== 200) throw parseHttpError(data);
       return data;
     } catch (error) {
