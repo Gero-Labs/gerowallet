@@ -4172,6 +4172,7 @@ export default {
   'midnight.send.stageSync': 'Sync DUST ledger',
   'midnight.send.stageSign': 'Sign transaction',
   'midnight.send.stageSubmit': 'Submit',
+  'midnight.send.stageProvingLocal': 'Proving locally...',
   // DApp Connector (@midnight-ntwrk/dapp-connector-api)
   'midnight.connector.viewAddressAndBalance': 'View your Midnight addresses and balances',
   'midnight.connector.futureRequestsNote': 'This site will be able to request signatures and submit transactions for your approval.',

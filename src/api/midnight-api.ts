@@ -593,6 +593,34 @@ export class MidnightApi {
   }
 
   /**
+   * Local proving (WP-P2): submit an ALREADY-PROVEN shielded tx (produced
+   * by the wallet's own local ProvingProvider — see
+   * `chains/midnight/midnightLocalProver.ts`) via Nexus's relay to the
+   * sidecar's /tx/submit-proven (WP-P3). Unlike proveAndSubmitMidnightTx,
+   * the sidecar does NOT re-prove it — `ledger.prove()` throws if called on
+   * an already-proven tx — it just deserializes and submits via the
+   * Midnight RPC node.
+   *
+   * Endpoint: POST /api/midnight/{network}/tx/submit-proven
+   *
+   * Privacy: a proven tx carries no witness data (the proof is
+   * zero-knowledge), so unlike proveAndSubmitMidnightTx this body is safe
+   * to log server-side.
+   */
+  async submitProvenMidnightTx(
+    request: SubmitMidnightTxRequest,
+  ): Promise<SubmitMidnightTxResponse> {
+    try {
+      const url = nexusMidnightPathFor(this.network, 'tx/submit-proven');
+      const { data, status } = await this.axiosInstance.post<SubmitMidnightTxResponse>(url, request);
+      if (status !== 200) throw parseHttpError(data);
+      return data;
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  /**
    * Current DUST account state for a Midnight unshielded address.
    *
    * <p>Returns balance, per-second generation rate, cap, total NIGHT

@@ -14,6 +14,13 @@
 // hex — when shipping to Gero Cloud the user has explicitly consented to
 // us seeing it (see ShieldedProvingConsentDialog in Step 5).
 //
+// Local-proving alternative (WP-P2, 2026-07-13): when the caller supplies
+// `proving: { url }`, step 2 above is replaced by prove+bind against a
+// self-hosted docker proof server BEFORE serializing, so the returned hex
+// is a FinalizedTransaction ready for Nexus's /tx/submit-proven instead of
+// /tx/prove-and-submit — no witness data leaves this machine. See
+// midnightLocalProver.ts and docs/plans/2026-07-13-midnight-proof-server-setting.md.
+//
 // Phase 1 wallet sync model: the SDK is started with the raw seed each send,
 // then sync from scratch until it has the user's notes. Cold-sync from a
 // full chain is slow (~10s-1m on preview). When state-persistence lands
@@ -56,19 +63,52 @@ export interface BuildAndSignShieldedTransferArgs {
   readonly zswapSecretKeySeed: Uint8Array;
   /** Single-recipient v1; multi-recipient is a follow-up. */
   readonly outputs: readonly BuildAndSignShieldedTransferOutput[];
+  /**
+   * When present, prove (and bind) the transfer against a self-hosted proof
+   * server at {@code url} before returning, instead of leaving it unproven
+   * for Gero Cloud. See {@link BuildAndSignShieldedTransferResult.proven}.
+   */
+  readonly proving?: { readonly url: string };
+}
+
+/** Result of {@link buildAndSignShieldedTransfer}. */
+export interface BuildAndSignShieldedTransferResult {
+  /**
+   * Hex-encoded transaction. Its markers depend on {@code proven}:
+   * signed-but-unproven (SignatureEnabled/PreProof/PreBinding) when
+   * {@code proven} is false, or fully finalized
+   * (SignatureEnabled/Proof/Binding) when {@code proven} is true.
+   */
+  readonly txHex: string;
+  /**
+   * {@code true} when {@code args.proving} was supplied and this hex was
+   * proven+bound locally (route callers to Nexus's `/tx/submit-proven`).
+   * {@code false} for the default remote path (route callers to
+   * `/tx/prove-and-submit`). Callers must branch on this rather than
+   * assuming based on which path they think they took — it's authoritative.
+   */
+  readonly proven: boolean;
 }
 
 /**
- * Build a SIGNED-but-UNPROVEN shielded NIGHT transfer.
+ * Build a shielded NIGHT transfer, signed and — depending on
+ * {@code args.proving} — either left unproven for Gero Cloud or proven and
+ * bound locally.
  *
- * The returned hex is the serialized {@code UnprovenTransaction} (markers
- * {@code SignatureEnabled, PreProof, PreBinding}) — sidecar takes this,
- * runs the ZK prover, binds, submits. Caller MUST treat the hex as
- * privacy-sensitive (carries witness data that links notes to spend).
+ * Default (no {@code proving}): returns the serialized
+ * {@code UnprovenTransaction} (markers {@code SignatureEnabled, PreProof,
+ * PreBinding}) — sidecar takes this, runs the ZK prover, binds, submits.
+ * Caller MUST treat the hex as privacy-sensitive (carries witness data that
+ * links notes to spend).
+ *
+ * With {@code args.proving}: proves and binds against the given proof
+ * server before returning, so the hex is a finalized transaction ready for
+ * Nexus's `/tx/submit-proven` (no re-proving, no witness data in that
+ * request). See {@link BuildAndSignShieldedTransferResult}.
  */
 export async function buildAndSignShieldedTransfer(
   args: BuildAndSignShieldedTransferArgs,
-): Promise<string> {
+): Promise<BuildAndSignShieldedTransferResult> {
   debugLog('🌙 midnight shielded tx-builder: starting', {
     network: args.sdkNetworkId,
     outputCount: args.outputs.length,
@@ -209,10 +249,35 @@ export async function buildAndSignShieldedTransfer(
     const unprovenTx = await shieldedWallet.transferTransaction(zswapKeys, sdkOutputs);
     debugLog('🌙 shielded transferTransaction returned');
 
+    if (args.proving) {
+      // Local proving: run the ZK prover against the user's own docker
+      // proof server instead of shipping the unproven (witness-carrying)
+      // hex to Gero Cloud. prove() -> bind() is the exact sequence the
+      // Nexus sidecar runs server-side (provingService.ts) — see plan
+      // section 0. Narrow-cast the SDK-returned tx the same way the plain
+      // serialize() path below does.
+      type ProvableTx = {
+        prove: (provider: ledger.ProvingProvider, costModel: ledger.CostModel) =>
+          Promise<{ bind: () => { serialize: () => Uint8Array } }>;
+      };
+      debugLog('🌙 shielded tx: proving locally', { url: args.proving.url });
+      const proveStartMs = Date.now();
+      const { makeLocalProvingProvider } = await import('@/chains/midnight/midnightLocalProver');
+      const provider = makeLocalProvingProvider(args.proving.url);
+      const proven = await (unprovenTx as unknown as ProvableTx).prove(
+        provider, ledgerMod.CostModel.initialCostModel(),
+      );
+      const boundBytes = proven.bind().serialize();
+      debugLog(`🌙 shielded tx: local proof + bind complete (${Date.now() - proveStartMs}ms)`);
+      const txHex = Buffer.from(boundBytes).toString('hex');
+      debugLog('🌙 shielded tx serialized (proven)', { bytes: boundBytes.length });
+      return { txHex, proven: true };
+    }
+
     const signedBytes = (unprovenTx as unknown as { serialize: () => Uint8Array }).serialize();
     const signedTxHex = Buffer.from(signedBytes).toString('hex');
     debugLog('🌙 shielded tx serialized', { bytes: signedBytes.length });
-    return signedTxHex;
+    return { txHex: signedTxHex, proven: false };
   } finally {
     try { await shieldedWallet?.stop(); } catch { /* swallow */ }
     try { zswapKeys.clear(); } catch { /* swallow */ }

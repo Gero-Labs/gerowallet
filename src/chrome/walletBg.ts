@@ -2086,21 +2086,28 @@ export class WalletBg {
    * builds change, signs with the Zswap secrets, and returns an
    * UnprovenTransaction.
    *
-   * Returns the SIGNED but UNPROVEN tx hex (markers
-   * SignatureEnabled / PreProof / PreBinding), ready for the sidecar's
-   * /tx/prove-and-submit (prove + bind + submit).
+   * Default (no {@code proving}): returns the SIGNED but UNPROVEN tx hex
+   * (markers SignatureEnabled / PreProof / PreBinding), ready for the
+   * sidecar's /tx/prove-and-submit (prove + bind + submit).
    *
-   * Privacy: the returned hex embeds the witness data the prover needs.
-   * Caller (UI) has surfaced consent that we're routing it through Gero
-   * Cloud — see ShieldedProvingConsentDialog. This method itself stays
-   * blind to the consent flag because by the time it's invoked, consent
-   * has already been recorded.
+   * With {@code proving}: proves + binds locally against the given proof
+   * server first, so `signedTxHex` is a finalized tx ready for
+   * /tx/submit-proven instead — no witness data leaves this machine. See
+   * midnightShieldedBuilder.ts and docs/plans/2026-07-13-midnight-proof-server-setting.md.
+   *
+   * Privacy: when `proven` is false the returned hex embeds the witness
+   * data the prover needs. Caller (UI) has surfaced consent that we're
+   * routing it through Gero Cloud — see ShieldedProvingConsentDialog. This
+   * method itself stays blind to the consent flag because by the time it's
+   * invoked, consent has already been recorded. When `proven` is true the
+   * hex carries no witness data (the proof is zero-knowledge).
    */
   async buildAndSignMidnightShieldedTransfer(
     outputs: ReadonlyArray<{ receiverAddress: string; amount: bigint; tokenType?: string }>,
     password?: string,
     prfSecret?: Uint8Array,
-  ): Promise<string> {
+    proving?: { url: string },
+  ): Promise<{ signedTxHex: string; proven: boolean }> {
     if (this.chain !== Blockchain.MIDNIGHT) {
       throw new Error('buildAndSignMidnightShieldedTransfer called on non-Midnight wallet');
     }
@@ -2174,7 +2181,7 @@ export class WalletBg {
       }
 
       try {
-        const signedTxHex = await buildAndSignShieldedTransfer({
+        const built = await buildAndSignShieldedTransfer({
           sdkNetworkId,
           endpoints,
           zswapSecretKeySeed: derived.zswapSecretKey,
@@ -2183,8 +2190,9 @@ export class WalletBg {
             amount: o.amount,
             tokenType: (o.tokenType ?? 'native') as 'native',
           })),
+          proving,
         });
-        return signedTxHex;
+        return { signedTxHex: built.txHex, proven: built.proven };
       } finally {
         // Wipe all derived secrets. The mnemonic itself is cleared in the
         // outer finally.
