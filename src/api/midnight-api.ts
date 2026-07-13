@@ -96,12 +96,19 @@ export interface MidnightNetworkInfoDto {
 
 /**
  * Build-registration-tx request body. Wallet supplies the user's Cardano
- * address + payment-key hash + target Midnight dust address; Nexus replies
- * with the unsigned Cardano CBOR for the wallet to sign via CIP-30.
+ * BASE address + target Midnight dust address; Nexus derives the STAKE key
+ * hash from the address (the datum's `c_wallet` — the credential Midnight's
+ * observation layer keys DUST generation on) and replies with the unsigned
+ * Cardano CBOR. The wallet must witness with BOTH its payment and stake keys
+ * (both are in requiredSigners, so the standard SIGN_TX resolver picks them
+ * up automatically).
  */
 export interface BuildDustRegistrationTxRequest {
   cardanoAddress: string;
-  /** 28-byte hex payment-key hash. */
+  /**
+   * 28-byte hex payment-key hash. Optional cross-check only — Nexus verifies
+   * it against the address's payment credential when present.
+   */
   paymentKeyHashHex: string;
   /** Midnight dust address bytes as hex (≤33 bytes / 66 hex chars). */
   dustAddressHex: string;

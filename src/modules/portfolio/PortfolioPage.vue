@@ -131,6 +131,26 @@
         </v-col>
       </v-row>
 
+      <!-- cNIGHT → DUST banner: this Cardano wallet holds NIGHT that can
+           generate DUST on Midnight. Opens the native registration flow. -->
+      <v-row v-if="showCnightBanner" no-gutters>
+        <v-col cols="12" class="pa-2">
+          <v-card flat class="liquid-glass cnight-banner" @click="cnightDialogOpen = true">
+            <div class="cnight-banner-icon">
+              <v-icon small color="white">mdi-star-four-points</v-icon>
+            </div>
+            <div class="cnight-banner-text">
+              <div class="cnight-banner-title">{{ t('midnight.cnightCardTitle') }}</div>
+              <div class="cnight-banner-sub">{{ t('midnight.cnightCardBody') }}</div>
+            </div>
+            <v-spacer />
+            <v-btn small class="geroButton flex-shrink-0" @click.stop="cnightDialogOpen = true">
+              {{ cnightBannerCta }}
+            </v-btn>
+          </v-card>
+        </v-col>
+      </v-row>
+
       <!-- Filter Chip Bar + Table -->
       <v-row no-gutters>
         <v-col cols="12" class="pa-2">
@@ -329,6 +349,9 @@
 
       <!-- Delegate Dialog -->
       <DelegateDialog :isOpen="isDelegateDialogOpen" :pool="selectedPool" :tx="delegateTxData" @close="closeDelegateDialog" />
+
+      <!-- cNIGHT → DUST registration -->
+      <CnightDustRegistrationDialog :isOpen="cnightDialogOpen" @close="cnightDialogOpen = false" />
     </template>
   </v-layout>
 </template>
@@ -369,6 +392,8 @@ import TokensDialog from '@/modules/assets/dialogs/TokensDialog.vue';
 import SwapDialog from '@/modules/dashboard/dialogs/SwapDialog.vue';
 import WithdrawalDialog from '@/modules/staking/dialogs/WithdrawalDialog.vue';
 import DelegateDialog from '@/modules/staking/dialogs/DelegateDialog.vue';
+import CnightDustRegistrationDialog from '@/modules/dashboard/dialogs/CnightDustRegistrationDialog.vue';
+import { useCnightDustRegistration } from '@/shared/composables/useCnightDustRegistration';
 import snackbar from '@/plugins/snackbar';
 
 const { t } = useTranslation();
@@ -438,6 +463,32 @@ const {
 const isMainnetCardano = computed(() =>
   loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET
 );
+
+// ── cNIGHT → DUST registration (Path B) ──────────────────────────────────────
+
+const cnightDialogOpen = ref(false);
+const {
+  isSupported: cnightSupported,
+  cnightBalance,
+  registrationStatus: cnightStatus,
+  refreshStatus: refreshCnightStatus,
+} = useCnightDustRegistration();
+
+const showCnightBanner = computed(() => cnightSupported.value && cnightBalance.value > 0n);
+
+const cnightBannerCta = computed(() => {
+  switch (cnightStatus.value) {
+    case 'Registered': return t('midnight.statusRegistered');
+    case 'Pending': return t('midnight.statusPending');
+    default: return t('midnight.cnightCardCta');
+  }
+});
+
+// Fetch the registration status once the banner becomes visible so the CTA
+// reflects reality (Registered/Pending wallets see status, not "Set up").
+watch(showCnightBanner, (visible) => {
+  if (visible) refreshCnightStatus();
+}, { immediate: true });
 
 type ViewMode = 'holdings' | 'collectibles' | 'market' | 'watchlist' | 'snekfun';
 const activeView = ref<ViewMode>('holdings');
@@ -1030,7 +1081,45 @@ watch(
   overflow: hidden;
 }
 
+/* ── cNIGHT → DUST banner ─────────────────────────────────────────────────────── */
 
+.cnight-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+
+.cnight-banner-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid var(--g-hairline-2);
+  background: var(--g-overlay);
+}
+
+.cnight-banner-text {
+  min-width: 0;
+}
+
+.cnight-banner-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--g-text-1);
+}
+
+.cnight-banner-sub {
+  font-size: 11px;
+  color: var(--g-text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* ── Holdings table card ──────────────────────────────────────────────────────── */
 
