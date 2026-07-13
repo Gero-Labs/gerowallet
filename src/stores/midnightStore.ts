@@ -35,6 +35,8 @@ import { getContextType } from '@/utils/storageSync';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 import { debugLog } from '@/utils/debug';
+import { getMidnightEndpoints } from '@/chains/midnight/midnightConfig';
+import { Network } from '@/models/types';
 import type {
   MidnightBalances,
   MidnightAddresses,
@@ -148,6 +150,19 @@ export interface MidnightStore {
   shieldedProvingConsent: { version: number; acceptedAt: number } | null;
 
   /**
+   * Where shielded-tx ZK proofs are generated. {@code remote} (default)
+   * proves through Gero Cloud and requires {@code shieldedProvingConsent}
+   * before the first shielded send. {@code local} proves against a
+   * self-hosted docker proof server at {@code localUrl} so witness data
+   * never leaves the machine. Device-level, like {@code shieldedProvingConsent}
+   * above - NOT wiped on wallet switch (see {@code setActive}).
+   */
+  proofServer: {
+    mode: 'remote' | 'local';
+    localUrl: string;
+  };
+
+  /**
    * Identity of the wallet whose balances/utxos/tx-history/cursor are
    * currently loaded — the active unshielded address (`mn_addr_<network>1…`),
    * unique per (wallet, network). Persisted so a cold start can detect that
@@ -216,6 +231,17 @@ const EMPTY_TIP: MidnightChainTip = {
   timestamp: 0,
 };
 
+/**
+ * Default proof-server preference. The URL is seeded from `midnightConfig`
+ * rather than a second hardcoded literal here - all three Midnight networks
+ * currently define the same default (`http://localhost:6300`), so Preview is
+ * picked arbitrarily as the lookup key; the value does not vary by network.
+ */
+const DEFAULT_PROOF_SERVER: MidnightStore['proofServer'] = {
+  mode: 'remote',
+  localUrl: getMidnightEndpoints(Network.PREVIEW)!.defaultProofServerUrl,
+};
+
 export const midnightStore = Vue.observable<MidnightStore>({
   isActive: false,
   lastSync: null,
@@ -232,6 +258,7 @@ export const midnightStore = Vue.observable<MidnightStore>({
   activeWalletKey: null,
   sendProgress: null,
   shieldedSyncAvailable: false,
+  proofServer: { ...DEFAULT_PROOF_SERVER },
 });
 
 // ---------------------------------------------------------------- serializer
@@ -391,6 +418,7 @@ if (context === 'browser') {
     midnightStore.activeWalletKey = typeof stored.activeWalletKey === 'string'
       ? stored.activeWalletKey
       : null;
+    midnightStore.proofServer = hydrateProofServer(stored.proofServer);
   });
 }
 
@@ -407,6 +435,36 @@ function hydrateShieldedProvingConsent(
   const at = (stored as { acceptedAt?: unknown }).acceptedAt;
   if (typeof v !== 'number' || typeof at !== 'number') return null;
   return { version: v, acceptedAt: at };
+}
+
+/**
+ * `localUrl` must be a well-formed http(s) URL - guards against a corrupted
+ * or tampered stored value silently routing proving to an unexpected origin.
+ */
+function isValidProofServerUrl(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length === 0) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Hydrate the proof-server preference from chrome.storage. Each field is
+ * validated independently and falls back to its own default (remote,
+ * localhost:6300) rather than discarding the whole record, so a corrupted
+ * `mode` does not throw away an otherwise-valid custom `localUrl`.
+ */
+function hydrateProofServer(stored: unknown): MidnightStore['proofServer'] {
+  if (!stored || typeof stored !== 'object') return { ...DEFAULT_PROOF_SERVER };
+  const mode = (stored as { mode?: unknown }).mode;
+  const localUrl = (stored as { localUrl?: unknown }).localUrl;
+  return {
+    mode: mode === 'remote' || mode === 'local' ? mode : DEFAULT_PROOF_SERVER.mode,
+    localUrl: isValidProofServerUrl(localUrl) ? localUrl : DEFAULT_PROOF_SERVER.localUrl,
+  };
 }
 
 /**
@@ -433,6 +491,7 @@ function applyUpdates(updates: Partial<MidnightStore>) {
   for (const key of [
     'isActive', 'lastSync', 'networkStatus', 'tip', 'addresses', 'lastMidnightTxId',
     'shieldedProvingConsent', 'activeWalletKey', 'sendProgress', 'shieldedSyncAvailable',
+    'proofServer',
   ] as const) {
     if (key in updates) {
       (midnightStore as any)[key] = updates[key];
@@ -628,6 +687,19 @@ export const midnightActions = {
   clearShieldedProvingConsent() {
     midnightStore.shieldedProvingConsent = null;
     broadcastFromBackground({ shieldedProvingConsent: null }, true);
+  },
+
+  /**
+   * Update the user's proof-server preference (Gero Cloud vs a local
+   * self-hosted docker proof server). Called by the Settings UI's
+   * proof-server section and by the consent dialog's "use a local proof
+   * server instead" shortcut. Persists immediately, like the consent
+   * setters above, so a same-moment send picks up the new mode even across
+   * a background service-worker restart.
+   */
+  setProofServer(next: MidnightStore['proofServer']) {
+    midnightStore.proofServer = next;
+    broadcastFromBackground({ proofServer: next }, true);
   },
 
   /** Network/WS status update (driven by the gero-sync client wrapper). */
