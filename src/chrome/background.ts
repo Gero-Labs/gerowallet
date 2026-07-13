@@ -3871,6 +3871,61 @@ app.addToOptions(
 );
 
 /**
+ * Midnight: persist the user's proof-server preference (WP-P4 Settings UI).
+ * Browser-side only sets `midnightStore.proofServer` in its own tab's memory
+ * (see the store's `broadcastFromBackground` guard) so, like
+ * ACCEPT_MIDNIGHT_SHIELDED_PROVING_CONSENT above, the Settings radio group
+ * routes the change here to persist + broadcast to every connected browser
+ * context.
+ *
+ * Request shape: `{ mode: 'remote' | 'local', localUrl: string }`. Validated
+ * at the message boundary (same posture as `parseProvingRequest` above) even
+ * though it currently only originates from our own UI: http(s) scheme only,
+ * no embedded credentials.
+ */
+app.addToOptions(
+  MessageTypes.SET_MIDNIGHT_PROOF_SERVER,
+  async (request, sendResponse) => {
+    try {
+      const { mode, localUrl } = request.data || {};
+      if (mode !== 'remote' && mode !== 'local') {
+        throw new Error('mode must be "remote" or "local"');
+      }
+      if (typeof localUrl !== 'string' || localUrl.length === 0) {
+        throw new Error('localUrl is required and must be a non-empty string');
+      }
+      let parsedUrl: URL;
+      try {
+        parsedUrl = new URL(localUrl);
+      } catch {
+        throw new Error('localUrl is not a valid URL');
+      }
+      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+        throw new Error('localUrl must use http or https');
+      }
+      if (parsedUrl.username || parsedUrl.password) {
+        throw new Error('localUrl must not contain credentials');
+      }
+      const { midnightActions } = await import('@/stores/midnightStore');
+      midnightActions.setProofServer({ mode, localUrl });
+      sendResponse({
+        id: request.id,
+        data: { success: true },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } catch (error) {
+      sendResponse({
+        id: request.id,
+        data: { success: false, error: getErrorMessage(error) },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  },
+);
+
+/**
  * Midnight: submit a fully-signed (and proven, for shielded) transaction via
  * Nexus's relay endpoint. Nexus calls `PolkadotNodeClient.sendMidnightTransaction`
  * against the Midnight RPC node and bubbles the submission event back here.
