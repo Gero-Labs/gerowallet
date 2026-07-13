@@ -42,6 +42,7 @@ import {
   unlockMpcWalletFlow,
   recoverMpcGoogleWalletFlow,
   storeRecoveryShareFlow,
+  revealMpcSrpFlow,
   subFromIdToken,
   resolveSignPrivateKeyBytes,
   assertMpcActionSupported,
@@ -1953,6 +1954,73 @@ app.addToOptions(MessageTypes.CHECK_MPC_ENROLLMENT, async (request, sendResponse
     sendResponse({
       id: request.id,
       data: { success: false, error: getErrorMessage(error, 'Failed to check enrollment') },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+  return true; // Required for async Chrome message handlers
+});
+
+/**
+ * Reveal the MPC wallet's BIP39 seed phrase (escape hatch) after a device-secret
+ * re-auth, even in an unlocked session. Reconstructs entropy from device+login,
+ * validates the xpub, and returns the mnemonic to the UI EXACTLY ONCE.
+ *
+ * Secret hygiene: never log request.data (idToken / spendingPassword / prfOutputHex)
+ * and never log the mnemonic. The mnemonic is returned only in this response body
+ * for one-time display; it is not persisted or cached anywhere.
+ */
+app.addToOptions(MessageTypes.REVEAL_MPC_SRP, async (request, sendResponse) => {
+  try {
+    const { walletId, idToken } = request.data || {};
+    if (!walletId) throw new Error('walletId is required');
+    // Unlocked-session reveal: a fresh Google idToken OR a login share cached
+    // this session must be present (device secret alone is below threshold).
+    const hasCachedLoginShare = await mpcLoginShareCache.has(walletId);
+    if (!idToken && !hasCachedLoginShare) {
+      throw new Error('MPC session expired — sign in with Google');
+    }
+    const { secret } = buildDeviceShareSecret(request.data);
+
+    const { decryptDeviceShare, reconstructAndValidateEntropy, entropyToMnemonic } = await import('@/shared/utils/mpc');
+    const { getAllWallets } = await import('@/db/gero-db');
+    const { Api } = await import('@/api/api');
+    const api = new Api(undefined, undefined);
+
+    const getLoginShare = idToken
+      ? async (idTok: string, ch: string, net: string): Promise<string> => api.mpc.getLoginShare(idTok, ch, net)
+      : async (): Promise<string> => {
+          const cached = await mpcLoginShareCache.get(walletId);
+          if (!cached) throw new Error('MPC session expired — sign in with Google');
+          return cached;
+        };
+
+    const { mnemonic } = await revealMpcSrpFlow(
+      { walletId, idToken: idToken || '', secret },
+      {
+        getWallet: async (id) => {
+          const wallets = await getAllWallets();
+          return wallets[id];
+        },
+        getLoginShare,
+        decryptDeviceShare,
+        reconstructAndValidateEntropy,
+        entropyToMnemonic,
+      },
+    );
+
+    sendResponse({
+      id: request.id,
+      data: { success: true, mnemonic },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    // getErrorMessage only — never let a share/mnemonic reach the log or response.
+    console.error('Error revealing MPC seed phrase:', getErrorMessage(error, 'reveal failed'));
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error, 'Failed to reveal seed phrase') },
       target: TARGET,
       sender: SENDER.extension,
     });

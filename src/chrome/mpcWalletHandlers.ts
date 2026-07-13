@@ -419,3 +419,74 @@ export async function storeRecoveryShareFlow(
   const encryptedRecovery = await encryptRecoveryShare(recoveryShare, recoveryPassword);
   return storeRecovery(idToken, chain, network, encryptedRecovery, publicKey);
 }
+
+// ---------------------------------------------------------------------------
+// Task 9: reveal SRP (seed phrase) — escape hatch
+// ---------------------------------------------------------------------------
+
+export interface RevealMpcSrpInput {
+  walletId: number;
+  /** Fresh Google idToken (or '' when the handler resolves the login share from
+   *  this session's cache). The backend verifies it before releasing the login share. */
+  idToken: string;
+  /** Device-secret re-auth: password or passkey-PRF output. Required even in an
+   *  unlocked session — revealing the seed is gated on proving device possession. */
+  secret: DeviceShareSecret;
+}
+
+export interface RevealMpcSrpDeps {
+  getWallet: (walletId: number) => Promise<MpcWalletRecord | undefined>;
+  getLoginShare: (idToken: string, chain: string, network: string) => Promise<string>;
+  decryptDeviceShare: (encryptedDeviceShare: string, secret: DeviceShareSecret) => Promise<string>;
+  /** Reconstruct entropy from device+login AND validate its xpub === expectedXpub
+   *  (throws MpcValidationError on mismatch). */
+  reconstructAndValidateEntropy: (
+    deviceShare: string,
+    loginShare: string,
+    expectedXpub: string,
+  ) => Promise<Uint8Array>;
+  entropyToMnemonic: (entropy: Uint8Array) => string;
+}
+
+export interface RevealMpcSrpResult {
+  /** The BIP39 seed phrase. Returned to the UI EXACTLY ONCE for display — never
+   *  persisted, never logged, never echoed into any storage or response body but this. */
+  mnemonic: string;
+}
+
+/**
+ * Reveal the MPC wallet's BIP39 seed phrase (escape hatch). Reconstructs entropy
+ * from the local device share (decrypted under the re-auth device secret) + the
+ * backend login share — exactly the daily-unlock reconstruction — validates it
+ * against the wallet's stored xpub, then derives the mnemonic. Returns it once.
+ *
+ * Secret hygiene: entropy, device/login shares and the mnemonic never leave this
+ * function except as the returned `{ mnemonic }`; nothing here logs. On an
+ * MpcValidationError (shares don't reconstruct to this wallet) a clean error is
+ * thrown and no mnemonic is produced.
+ */
+export async function revealMpcSrpFlow(
+  input: RevealMpcSrpInput,
+  deps: RevealMpcSrpDeps,
+): Promise<RevealMpcSrpResult> {
+  const { walletId, idToken, secret } = input;
+  const { getWallet, getLoginShare, decryptDeviceShare, reconstructAndValidateEntropy, entropyToMnemonic } = deps;
+
+  const wallet = await getWallet(walletId);
+  if (!wallet) {
+    throw new Error('MPC wallet not found');
+  }
+
+  const loginShare = await getLoginShare(idToken, wallet.chain, wallet.network);
+  const deviceShare = await decryptDeviceShare(wallet.mpcDeviceShare, secret);
+
+  try {
+    const entropy = await reconstructAndValidateEntropy(deviceShare, loginShare, wallet.publicKey);
+    return { mnemonic: entropyToMnemonic(entropy) };
+  } catch (err) {
+    if (err instanceof MpcValidationError) {
+      throw new Error('Recovery data mismatch — unable to reveal the seed phrase for this wallet');
+    }
+    throw err;
+  }
+}

@@ -5,6 +5,7 @@ import {
   unlockMpcWalletFlow,
   recoverMpcGoogleWalletFlow,
   storeRecoveryShareFlow,
+  revealMpcSrpFlow,
   subFromIdToken,
   resolveSignPrivateKeyBytes,
   assertMpcActionSupported,
@@ -12,6 +13,7 @@ import {
   type UnlockMpcWalletDeps,
   type RecoverMpcGoogleWalletDeps,
   type StoreRecoveryShareDeps,
+  type RevealMpcSrpDeps,
 } from './mpcWalletHandlers';
 
 // A structurally valid (but not cryptographically real) JWT: header.payload.signature,
@@ -384,6 +386,108 @@ describe('storeRecoveryShareFlow', () => {
     // already-created wallet. The background handler catches this and reports it non-fatally.
     await expect(storeRecoveryShareFlow(baseInput, deps)).rejects.toThrow('recovery upload failed');
     expect(deps.encryptRecoveryShare).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('revealMpcSrpFlow', () => {
+  // A deterministic 32-byte entropy and its BIP39 mnemonic are irrelevant to the
+  // unit under test — the flow delegates entropy→mnemonic to an injected dep — so
+  // we use sentinel values and assert wiring, not bip39 correctness.
+  const KNOWN_ENTROPY = new Uint8Array(32).fill(7);
+  const KNOWN_MNEMONIC = 'abandon abandon ability';
+
+  const wallet = {
+    chain: 'cardano',
+    network: 'mainnet',
+    publicKey: 'xpub-test',
+    mpcDeviceShare: 'enc-device-share',
+    webAuthnCredentialId: 'cred-1',
+    mpcPrfSaltId: 'salt-1',
+  };
+
+  function makeDeps(overrides: Partial<RevealMpcSrpDeps> = {}): RevealMpcSrpDeps {
+    return {
+      getWallet: vi.fn(async () => wallet),
+      getLoginShare: vi.fn(async () => 'gmpc1.02.login'),
+      decryptDeviceShare: vi.fn(async () => 'gmpc1.01.device'),
+      // Returns entropy on success; throws MpcValidationError on xpub mismatch.
+      reconstructAndValidateEntropy: vi.fn(async () => KNOWN_ENTROPY),
+      entropyToMnemonic: vi.fn(() => KNOWN_MNEMONIC),
+      ...overrides,
+    };
+  }
+
+  const secret: DeviceShareSecret = { kind: 'password', password: 'device-secret' };
+  const baseInput = { walletId: 7, idToken: fakeIdToken(), secret };
+
+  it('reconstructs entropy from device+login and returns the mnemonic for known entropy', async () => {
+    const deps = makeDeps();
+    const result = await revealMpcSrpFlow(baseInput, deps);
+
+    expect(deps.getLoginShare).toHaveBeenCalledWith(baseInput.idToken, wallet.chain, wallet.network);
+    expect(deps.decryptDeviceShare).toHaveBeenCalledWith(wallet.mpcDeviceShare, baseInput.secret);
+    expect(deps.reconstructAndValidateEntropy).toHaveBeenCalledWith('gmpc1.01.device', 'gmpc1.02.login', wallet.publicKey);
+    expect(deps.entropyToMnemonic).toHaveBeenCalledWith(KNOWN_ENTROPY);
+    expect(result).toEqual({ mnemonic: KNOWN_MNEMONIC });
+  });
+
+  it('requires the device secret: passes the exact secret through to decryptDeviceShare unchanged', async () => {
+    let seenSecret: DeviceShareSecret | undefined;
+    const deps = makeDeps({
+      decryptDeviceShare: vi.fn(async (_enc: string, sec: DeviceShareSecret) => {
+        seenSecret = sec;
+        return 'gmpc1.01.device';
+      }),
+    });
+    await revealMpcSrpFlow(baseInput, deps);
+    expect(seenSecret).toEqual(secret);
+  });
+
+  it('response omits entropy and any share material — mnemonic is the only key', async () => {
+    const deps = makeDeps();
+    const result = await revealMpcSrpFlow(baseInput, deps);
+
+    expect(Object.keys(result)).toEqual(['mnemonic']);
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain('gmpc1.01.device'); // device share
+    expect(serialized).not.toContain('gmpc1.02.login');  // login share
+    expect(serialized).not.toContain('7,7,7');            // entropy bytes
+  });
+
+  it('never logs the mnemonic or any share material', async () => {
+    const deps = makeDeps();
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await revealMpcSrpFlow(baseInput, deps);
+
+    for (const spy of [logSpy, errSpy, warnSpy]) {
+      for (const call of spy.mock.calls) {
+        const joined = call.join(' ');
+        expect(joined).not.toContain(KNOWN_MNEMONIC);
+        expect(joined).not.toContain('gmpc1.01.device');
+        expect(joined).not.toContain('gmpc1.02.login');
+      }
+    }
+    logSpy.mockRestore();
+    errSpy.mockRestore();
+    warnSpy.mockRestore();
+  });
+
+  it('throws a clean error and returns no mnemonic on MpcValidationError (shares mismatch)', async () => {
+    const deps = makeDeps({
+      reconstructAndValidateEntropy: vi.fn(async () => { throw new MpcValidationError('mismatch'); }),
+    });
+    await expect(revealMpcSrpFlow(baseInput, deps)).rejects.toThrow();
+    expect(deps.entropyToMnemonic).not.toHaveBeenCalled();
+  });
+
+  it('throws if the wallet is not found and never touches crypto', async () => {
+    const deps = makeDeps({ getWallet: vi.fn(async () => undefined) });
+    await expect(revealMpcSrpFlow(baseInput, deps)).rejects.toThrow('MPC wallet not found');
+    expect(deps.decryptDeviceShare).not.toHaveBeenCalled();
+    expect(deps.entropyToMnemonic).not.toHaveBeenCalled();
   });
 });
 
