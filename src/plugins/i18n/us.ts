@@ -4164,8 +4164,8 @@ export default {
   'midnight.send.shieldedBalanceNote': 'Private balance. Updates as shielded sync progresses.',
   'midnight.send.publicTxNote': 'Public transaction: the amount and addresses will be visible on the Midnight indexer.',
   'midnight.send.estimatedNetworkFee': 'Estimated network fee',
-  'midnight.send.dustResetWarning': 'Sending NIGHT restarts DUST generation on the coins you move. Your DUST balance refills to the cap over the next few days; the network fee itself is negligible.',
-  'midnight.send.dustResetShort': 'Sending restarts DUST generation; it refills over the next few days.',
+  'midnight.send.dustResetWarning': 'The network fee is paid in DUST and is negligible. DUST regenerates over time from your registered NIGHT.',
+  'midnight.send.dustResetShort': 'Network fee is paid in DUST; it regenerates over time.',
   'midnight.send.dustLowHint': 'Your DUST is low ({percent}%). Sending restarts generation on the coins you move, so it may take time to refill before your next send.',
   // Send progress timeline stage labels
   'midnight.send.stageAuthorize': 'Authorize',
