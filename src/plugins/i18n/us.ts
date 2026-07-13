@@ -4191,10 +4191,10 @@ export default {
   'midnight.consent.whatWeDoNot': 'What we do not do',
   'midnight.consent.whatWeDoNotBody': 'We do not log or persist the witness data. We do not associate it with your account, IP, or any other identifier beyond what the request itself contains.',
   'midnight.consent.localOption': 'Prefer to run your own proof server?',
-  'midnight.consent.localOptionBody': 'A local Docker proof-server option is on the roadmap. We will surface it here when it ships.',
+  'midnight.consent.localOptionBody': 'Run the official Midnight proof server on your own machine and Gero will prove transactions locally. Your private transaction data never leaves your computer. Set it up under Settings.',
   'midnight.consent.acknowledge': 'I understand Gero\'s servers will see the witness data for each shielded transaction I send, and that anyone able to read it can link my shielded notes to those sends.',
   'midnight.consent.acceptCloud': 'Use Gero Cloud',
-  'midnight.consent.openLocalFaq': 'Local Docker (coming soon)',
+  'midnight.consent.useLocalInstead': 'Use a local proof server instead',
   'midnight.consent.cancel': 'Cancel',
   // Flow diagram labels (DustRegistrationDialog)
   'midnight.flowSign': 'Sign',
@@ -4228,4 +4228,8 @@ export default {
   'midnight.proofServer.statusNotDetected': 'Not detected',
   'midnight.proofServer.statusChecking': 'Checking...',
   'midnight.proofServer.testConnection': 'Test connection',
+  // Send-dialog local-prover fallback (WP-P5)
+  'midnight.proofServer.notDetectedSend': 'Local proof server not detected. Start it, or use Gero Cloud for this transaction.',
+  'midnight.proofServer.useCloudOnce': 'Use Gero Cloud for this transaction',
+  'midnight.proofServer.openSettings': 'Open settings',
 }

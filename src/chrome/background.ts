@@ -4486,14 +4486,24 @@ app.add(MIDNIGHT_METHOD.getConfiguration, async (request, sendResponse) => {
   }
   try {
     const { getMidnightEndpoints } = await import('@/chains/midnight/midnightConfig');
+    const { midnightStore } = await import('@/stores/midnightStore');
     const endpoints = getMidnightEndpoints(wallet.network);
     if (!endpoints) throw new Error(`No Midnight endpoints configured for network ${wallet.network}`);
+    // A dApp has no way to reach Gero's internal cloud prover directly, so
+    // when the user's preference is 'remote' the network's default proof
+    // server URL remains the least-wrong answer to advertise here (WP-P5:
+    // connector `getProvingProvider()` delegation is a separate, later
+    // phase). Only report the user's own local proof server once they've
+    // actually opted into local mode (WP-P1/P4).
+    const proverServerUri = midnightStore.proofServer.mode === 'local'
+      ? midnightStore.proofServer.localUrl
+      : (endpoints.defaultProofServerUrl || undefined);
     sendResponse({
       id: request.id,
       data: {
         indexerUri: endpoints.publicIndexerUrl,
         indexerWsUri: endpoints.publicIndexerWsUrl,
-        proverServerUri: endpoints.defaultProofServerUrl || undefined,
+        proverServerUri,
         substrateNodeUri: endpoints.publicRpcUrl,
         networkId: midnightSdkNetworkId(wallet.network),
       },
