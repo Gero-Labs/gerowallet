@@ -1537,6 +1537,7 @@ export default {
   'navigation.transactionId': 'Transaction ID',
   'navigation.transactionSummary': 'Transaction Summary',
   'navigation.transactions': 'Transactions',
+  'navigation.midnightProofServer': 'Proof Server',
   'navigation.typeYourSpendingPassword': 'Type your spending password',
   'navigation.uploadYourId': 'Upload Your ID',
   'navigation.viewAddressAndBalance': 'View the address and balance of the selected wallet.',
@@ -4252,6 +4253,7 @@ export default {
   // Dedicated Proof Server page + dashboard/mini-Gero widgets
   'midnight.proofServerPage.title': 'Proof server',
   'midnight.proofServerPage.openPage': 'Open',
+  'midnight.proofServerPage.settingsSummary': 'Choose where shielded transaction proofs are generated.',
   'midnight.proofServerPage.subtitle': 'Choose where your shielded transaction proofs are generated.',
   'midnight.proofServerPage.notMidnightTitle': 'Not available',
   'midnight.proofServerPage.notMidnightBody': 'The proof server setting only applies to Midnight wallets. Switch to a Midnight wallet to configure it.',
