@@ -81,6 +81,75 @@
           </v-btn>
         </v-col>
       </v-row>
+
+      <!-- Midnight proof server (WP-P4). Chain-gated like the rest of the
+           Midnight-only surfaces (grep pattern: loggedWallet?.chain ===
+           Blockchain.MIDNIGHT, see MidnightSendDialog.vue). -->
+      <template v-if="loggedWallet?.chain === Blockchain.MIDNIGHT">
+        <h2 class="text-left pt-2 pb-2 t-heading">{{ t('midnight.proofServer.title') }}</h2>
+        <v-radio-group
+          v-model="proofServerMode"
+          hide-details
+          class="proof-server-modes mt-0 mb-2"
+          :disabled="proofServerSaving"
+        >
+          <v-radio value="remote" color="var(--g-accent)" class="mb-2">
+            <template v-slot:label>
+              <div>
+                <div class="t-body-lg">{{ t('midnight.proofServer.remoteLabel') }}</div>
+                <div class="t-caption proof-server-radio-hint">{{ t('midnight.proofServer.remoteHint') }}</div>
+              </div>
+            </template>
+          </v-radio>
+          <v-radio value="local" color="var(--g-accent)">
+            <template v-slot:label>
+              <div>
+                <div class="t-body-lg">{{ t('midnight.proofServer.localLabel') }}</div>
+                <div class="t-caption proof-server-radio-hint">{{ t('midnight.proofServer.localHint') }}</div>
+              </div>
+            </template>
+          </v-radio>
+        </v-radio-group>
+
+        <div v-if="proofServerMode === 'local'" class="proof-server-panel">
+          <div class="t-caption mb-1">{{ t('midnight.proofServer.runCommand') }}</div>
+          <div class="proof-server-command-row">
+            <code class="proof-server-command g-mono">{{ dockerRunCommand }}</code>
+            <CopyButton :value="dockerRunCommand" small />
+          </div>
+          <p class="t-caption proof-server-note mb-0">{{ t('midnight.proofServer.firstRunNote') }}</p>
+
+          <v-text-field
+            v-model="localUrlDraft"
+            :label="t('midnight.proofServer.urlLabel')"
+            outlined
+            dense
+            hide-details="auto"
+            class="mt-3 proof-server-url-field"
+            :error-messages="localUrlError ? [localUrlError] : []"
+            :disabled="proofServerSaving"
+            @blur="onLocalUrlBlur"
+          />
+
+          <div class="proof-server-status-row">
+            <div class="status-pill t-caption" :class="`status-pill--${healthStatus}`">
+              <v-progress-circular
+                v-if="healthStatus === 'checking'"
+                indeterminate
+                size="12"
+                width="2"
+                color="var(--g-text-3)"
+              />
+              <span v-else class="status-dot" :class="`status-dot--${healthStatus}`"></span>
+              <span class="status-pill-label">{{ healthStatusLabel }}</span>
+            </div>
+            <v-btn small outlined color="white" :loading="testingConnection" @click="testConnection">
+              {{ t('midnight.proofServer.testConnection') }}
+            </v-btn>
+          </div>
+        </div>
+      </template>
+
       <h2 class="text-left pb-2" style="color: #ff6464">{{ $t('settings.dangerZone') }}</h2>
       <v-card outlined style="border-color: #ff6464; background-color: transparent!important;">
         <v-card-text>
@@ -127,14 +196,17 @@
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
 const { t } = useTranslation();
-import { ref, computed, watch, onMounted, toRefs, getCurrentInstance } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, toRefs, getCurrentInstance } from 'vue';
 import snackbar from '@/plugins/snackbar';
 import { getTurnOff, setTurnOff } from '@bringweb3/chrome-extension-kit';
 import networks from '@/utils/networks';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
+import CopyButton from '@/shared/components/CopyButton.vue';
 import { walletStore } from '@/stores/walletStore';
+import { midnightStore } from '@/stores/midnightStore';
+import { Blockchain } from '@/models/types';
 import { isFeatureNew, markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
 import GeroStore from '@/stores/geroStore';
 import { setWalletConfiguration } from '@/db/wallet-db';
@@ -147,7 +219,10 @@ const emit = defineEmits(['loading']);
 const { loggedWallet, config } = toRefs(walletStore);
 
 // Access Vue instance for router
-const vmProxy = getCurrentInstance()!.proxy as any;
+const vmProxy = getCurrentInstance()!.proxy as {
+  $router: { push: (path: string) => void };
+  $nextTick: (callback: () => void) => void;
+};
 const router = vmProxy.$router
 
 // Reactive data
@@ -273,6 +348,166 @@ const deleteWalletConfirm = async () => {
   snackbar.fireSuccess(t('settings.walletDeletedSuccess', { name }));
 };
 
+// ─── Midnight proof server (WP-P4) ────────────────────────────────────────
+//
+// Mode (remote/local) + local URL live in midnightStore.proofServer (WP-P1).
+// Browser contexts can't write the store directly — midnightStore's own
+// broadcastFromBackground guard is a no-op outside the background context —
+// so both the mode radio and the URL field round-trip through BG via
+// SET_MIDNIGHT_PROOF_SERVER, mirroring how the shielded-proving consent
+// dialog persists its own setting. See src/stores/midnightStore.ts header
+// comment for the store's broadcast/hydrate contract.
+
+const { proofServer } = toRefs(midnightStore);
+
+/**
+ * Pinned to the 8.x proof-server release that matches the installed
+ * @midnight-ntwrk/ledger-v8 (^8.1.0) — verified against Docker Hub
+ * (midnightntwrk/proof-server tags) on 2026-07-13. Deliberately not
+ * `latest`, which currently tracks the 9.0.0-rc stream (a newer, mismatched
+ * ledger generation) — see
+ * docs/plans/2026-07-13-midnight-proof-server-setting.md section 0.
+ */
+const PROOF_SERVER_DOCKER_TAG = '8.1.0';
+const dockerRunCommand = `docker run -p 6300:6300 midnightntwrk/proof-server:${PROOF_SERVER_DOCKER_TAG} midnight-proof-server -v`;
+
+const proofServerSaving = ref(false);
+
+async function saveProofServer(next: { mode: 'remote' | 'local'; localUrl: string }) {
+  proofServerSaving.value = true;
+  try {
+    const response = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.SET_MIDNIGHT_PROOF_SERVER,
+      data: next,
+    }) as { data: { success: boolean; error?: string } };
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.error || 'Failed to save proof server preference');
+    }
+  } catch (e) {
+    snackbar.setError(e instanceof Error ? e.message : String(e));
+  } finally {
+    proofServerSaving.value = false;
+  }
+}
+
+const proofServerMode = computed<'remote' | 'local'>({
+  get: () => proofServer.value.mode,
+  set: (mode) => {
+    if (mode === proofServer.value.mode) return;
+    void saveProofServer({ mode, localUrl: proofServer.value.localUrl });
+  },
+});
+
+const localUrlDraft = ref(proofServer.value.localUrl);
+const localUrlError = ref('');
+
+// Keep the draft in sync with externally-applied changes (another open tab,
+// or our own save above round-tripping back through the store broadcast).
+watch(() => proofServer.value.localUrl, (next) => {
+  localUrlDraft.value = next;
+});
+
+function validateProofServerUrl(value: string): string {
+  if (!value) return t('midnight.proofServer.urlInvalid');
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return t('midnight.proofServer.urlInvalid');
+    }
+  } catch {
+    return t('midnight.proofServer.urlInvalid');
+  }
+  return '';
+}
+
+async function onLocalUrlBlur() {
+  const value = localUrlDraft.value.trim();
+  const error = validateProofServerUrl(value);
+  localUrlError.value = error;
+  if (error) return;
+  if (value === proofServer.value.localUrl) return;
+  await saveProofServer({ mode: proofServer.value.mode, localUrl: value });
+  if (isLocalSectionVisible.value) startHealthPolling();
+}
+
+// Live status chip: GET {localUrl}/health every 4s while the local panel is
+// visible. Runs in this extension-page context directly (not via BG) —
+// that's what the prod CSP localhost entries (WP-P6) exist for. Reuses
+// checkProofServerHealth from midnightLocalProver.ts (WP-P2) rather than
+// re-implementing the fetch/timeout — dynamic import keeps the ledger-v8
+// dependency out of this component's own chunk until the section is
+// actually visited.
+type ProofServerHealthStatus = 'checking' | 'detected' | 'notDetected';
+const healthStatus = ref<ProofServerHealthStatus>('checking');
+const testingConnection = ref(false);
+let healthPollTimer: ReturnType<typeof setInterval> | null = null;
+let healthCheckInFlight = false;
+
+async function runHealthCheck(url: string) {
+  if (healthCheckInFlight) return;
+  healthCheckInFlight = true;
+  try {
+    const { checkProofServerHealth } = await import('@/chains/midnight/midnightLocalProver');
+    const healthy = await checkProofServerHealth(url);
+    healthStatus.value = healthy ? 'detected' : 'notDetected';
+  } finally {
+    healthCheckInFlight = false;
+  }
+}
+
+function stopHealthPolling() {
+  if (healthPollTimer !== null) {
+    clearInterval(healthPollTimer);
+    healthPollTimer = null;
+  }
+}
+
+function startHealthPolling() {
+  stopHealthPolling();
+  healthStatus.value = 'checking';
+  void runHealthCheck(proofServer.value.localUrl);
+  healthPollTimer = setInterval(() => {
+    void runHealthCheck(proofServer.value.localUrl);
+  }, 4000);
+}
+
+async function testConnection() {
+  testingConnection.value = true;
+  try {
+    await runHealthCheck(proofServer.value.localUrl);
+  } finally {
+    testingConnection.value = false;
+  }
+}
+
+const healthStatusLabel = computed(() => {
+  switch (healthStatus.value) {
+    case 'detected': return t('midnight.proofServer.statusDetected');
+    case 'notDetected': return t('midnight.proofServer.statusNotDetected');
+    default: return t('midnight.proofServer.statusChecking');
+  }
+});
+
+// Gate: only poll while the section is actually on screen (Midnight wallet +
+// local mode selected). No background polling when remote, non-Midnight, or
+// unmounted (Settings dialog closed).
+const isLocalSectionVisible = computed(
+  () => loggedWallet.value?.chain === Blockchain.MIDNIGHT && proofServerMode.value === 'local',
+);
+
+watch(
+  isLocalSectionVisible,
+  (visible) => {
+    if (visible) startHealthPolling();
+    else stopHealthPolling();
+  },
+  { immediate: true },
+);
+
+onUnmounted(() => {
+  stopHealthPolling();
+});
+
 // Lifecycle
 onMounted(() => {
   loadCashbackPopups();
@@ -320,4 +555,78 @@ onMounted(() => {
     transform: rotate(-360deg);
   }
 }
+
+/* ── Midnight proof server (WP-P4) ──────────────────────────────────────── */
+
+.proof-server-radio-hint {
+  margin-top: 2px;
+}
+
+.proof-server-panel {
+  background: var(--g-surface);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-card);
+  padding: 14px 16px;
+  margin-top: 4px;
+  margin-bottom: 8px;
+}
+
+.proof-server-command-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-control);
+  padding: 8px 10px;
+}
+
+.proof-server-command {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.proof-server-note {
+  margin-top: 8px;
+}
+
+.proof-server-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.status-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--g-r-control);
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
+}
+
+.status-pill-label {
+  color: var(--g-text-1);
+  font-weight: 600;
+}
+
+.status-pill--detected {
+  background: var(--g-success-fill);
+  border-color: var(--g-success-line);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-dot--detected { background: var(--g-success); }
+.status-dot--notDetected { background: var(--g-text-3); }
 </style>

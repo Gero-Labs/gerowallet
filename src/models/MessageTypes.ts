@@ -80,6 +80,12 @@ export enum MessageTypes {
   // persist + broadcast to every connected browser context (the user
   // accepting in options should also unlock the popup's send dialog).
   ACCEPT_MIDNIGHT_SHIELDED_PROVING_CONSENT = 'ACCEPT_MIDNIGHT_SHIELDED_PROVING_CONSENT',
+  // Midnight: persist the user's proof-server preference (Gero Cloud vs a
+  // local self-hosted docker proof server). Browser routes the Settings UI's
+  // proof-server section here so BG can persist + broadcast to every
+  // connected browser context, mirroring ACCEPT_MIDNIGHT_SHIELDED_PROVING_CONSENT
+  // above. See midnightStore.setProofServer.
+  SET_MIDNIGHT_PROOF_SERVER = 'SET_MIDNIGHT_PROOF_SERVER',
   // Midnight: submit a fully-signed (and proven, for shielded) transaction via
   // Nexus's /tx/submit relay. Nexus forwards to the Midnight RPC node and
   // returns the txHash + status (Submitted / InBlock / Finalized).

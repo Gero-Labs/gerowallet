@@ -4214,4 +4214,18 @@ export default {
   'midnight.txShield': 'Shielded NIGHT',
   'midnight.txUnshield': 'Unshielded NIGHT',
   'midnight.txContractCall': 'Contract call',
+  // Settings > Advanced: Midnight proof server section (WP-P4)
+  'midnight.proofServer.title': 'Midnight proof server',
+  'midnight.proofServer.remoteLabel': 'Gero Cloud (default)',
+  'midnight.proofServer.remoteHint': 'Proofs are generated on Gero\'s servers. Requires sharing private transaction data for the proving step.',
+  'midnight.proofServer.localLabel': 'Local proof server',
+  'midnight.proofServer.localHint': 'Proofs are generated on your machine. Gero\'s servers never see your private transaction data.',
+  'midnight.proofServer.runCommand': 'Run this in a terminal (Docker required):',
+  'midnight.proofServer.firstRunNote': 'The first start downloads several GB of proving parameters. Keep the terminal open while sending.',
+  'midnight.proofServer.urlLabel': 'Proof server URL',
+  'midnight.proofServer.urlInvalid': 'Enter a valid http or https URL.',
+  'midnight.proofServer.statusDetected': 'Proof server detected',
+  'midnight.proofServer.statusNotDetected': 'Not detected',
+  'midnight.proofServer.statusChecking': 'Checking...',
+  'midnight.proofServer.testConnection': 'Test connection',
 }
