@@ -24,6 +24,7 @@
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { getMidnightApi } from '@/api/midnight-api';
+import { midnightStore } from '@/stores/midnightStore';
 import type {
   BuildMidnightTxRequest,
   MidnightSegmentToSign,
@@ -46,11 +47,17 @@ export interface MidnightSendCredentials {
  * dialog's progress timeline. The `working` stage is the single BG
  * balance+sign round-trip; the dialog splits it into "sync DUST" vs "sign"
  * using the live `midnightStore.sendProgress` percentage the BG broadcasts.
+ *
+ * `provingLocal` is shielded-only (WP-P2): emitted instead of `working`
+ * when `midnightStore.proofServer.mode === 'local'`, since in that mode the
+ * single BG round-trip is dominated by the local ZK-proving step (10-25s+)
+ * rather than the comparatively fast build+sign.
  */
 export type MidnightSendStage =
   | 'authorizing'
   | 'building'
   | 'working'
+  | 'provingLocal'
   | 'submitting'
   | 'done';
 
@@ -238,15 +245,19 @@ export interface ShieldedTransferOutput {
 
 /**
  * BG builds + signs the shielded tx (mnemonic decrypt → ZswapSecretKeys →
- * ShieldedWallet.transferTransaction → signed-but-unproven hex). Caller
- * MUST already hold user consent for sending the witness data through
- * Gero Cloud proving — gate on `midnightStore.shieldedProvingConsent` at
- * the UI layer (Step 5).
+ * ShieldedWallet.transferTransaction). Without `proving`, returns a
+ * signed-but-unproven hex and caller MUST already hold user consent for
+ * sending the witness data through Gero Cloud proving — gate on
+ * `midnightStore.shieldedProvingConsent` at the UI layer (Step 5). With
+ * `proving` (WP-P2 local mode), BG additionally proves + binds against the
+ * given proof server before returning; no cloud consent applies since the
+ * witness data never leaves the machine.
  */
 async function buildAndSignShieldedInBg(
   outputs: ReadonlyArray<ShieldedTransferOutput>,
   credentials: MidnightSendCredentials,
-): Promise<string> {
+  proving?: { url: string },
+): Promise<{ signedTxHex: string; proven: boolean }> {
   const response = await Messaging.sendToBackgroundFromOptions({
     method: MessageTypes.BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX,
     data: {
@@ -257,26 +268,53 @@ async function buildAndSignShieldedInBg(
       })),
       password: credentials.password,
       prfSecret: credentials.prfSecret ? Array.from(credentials.prfSecret) : undefined,
+      proving,
     },
-  }) as { data: { success: boolean; signedTxHex?: string; error?: string } };
+  }) as { data: { success: boolean; signedTxHex?: string; proven?: boolean; error?: string } };
 
   if (!response?.data?.success || !response.data.signedTxHex) {
     throw new Error(response?.data?.error || 'Midnight shielded build/sign failed');
   }
-  return response.data.signedTxHex;
+  return { signedTxHex: response.data.signedTxHex, proven: !!response.data.proven };
 }
 
 /**
- * Two-step shielded NIGHT transfer:
- *   1. buildAndSignShieldedInBg → BG produces signed-but-unproven tx hex.
- *      (The "build" step lives in the wallet because shielded notes are
- *      encrypted to the user's Zswap key — no server can see them.)
- *   2. api.proveAndSubmitMidnightTx → Nexus relays to sidecar
- *      /tx/prove-and-submit which proves + binds + submits.
+ * Thrown by {@link sendShieldedNight} when `proofServer.mode === 'local'`
+ * but the preflight `GET {url}/health` didn't answer 200 within the
+ * timeout. Distinct from a generic `Error` so the send dialog (WP-P5) can
+ * render the two-action fallback ("Open settings" / "Use Gero Cloud for
+ * this transaction") instead of a generic failure toast.
+ */
+export class ProofServerUnreachableError extends Error {
+  constructor(public readonly url: string) {
+    super(`Local proof server not detected at ${url}`);
+    this.name = 'ProofServerUnreachableError';
+  }
+}
+
+/**
+ * Shielded NIGHT transfer, branching on the user's proof-server preference
+ * (`midnightStore.proofServer`, WP-P1):
  *
- * Privacy gate: the caller is responsible for surfacing the consent dialog
- * (Step 5) before invoking. By the time this function runs, the user has
- * already accepted that witness data ships to Gero Cloud for proving.
+ *   Remote (default): unchanged path.
+ *     1. buildAndSignShieldedInBg → BG produces signed-but-unproven tx hex.
+ *        (The "build" step lives in the wallet because shielded notes are
+ *        encrypted to the user's Zswap key — no server can see them.)
+ *     2. api.proveAndSubmitMidnightTx → Nexus relays to sidecar
+ *        /tx/prove-and-submit which proves + binds + submits.
+ *     Privacy gate: the caller is responsible for surfacing the consent
+ *     dialog (Step 5) before invoking. By the time this function runs, the
+ *     user has already accepted that witness data ships to Gero Cloud for
+ *     proving.
+ *
+ *   Local: no cloud consent needed (witness data never leaves the machine).
+ *     1. Preflight the proof server's health; throws
+ *        {@link ProofServerUnreachableError} fast rather than starting a
+ *        send that would only fail after a long build.
+ *     2. buildAndSignShieldedInBg (with `proving`) → BG builds, signs, AND
+ *        proves + binds locally; returns a finalized tx hex.
+ *     3. api.submitProvenMidnightTx → Nexus relays to the sidecar's
+ *        /tx/submit-proven (WP-P3), which submits WITHOUT re-proving.
  */
 export async function sendShieldedNight(
   network: string,
@@ -288,10 +326,33 @@ export async function sendShieldedNight(
   if (outputs.length === 0) {
     throw new Error('sendShieldedNight: at least one output is required');
   }
-  onStage?.('working');
-  const signedTxHex = await buildAndSignShieldedInBg(outputs, credentials);
-  onStage?.('submitting');
   const api = getMidnightApi(network);
+
+  if (midnightStore.proofServer.mode === 'local') {
+    const { localUrl } = midnightStore.proofServer;
+    const { checkProofServerHealth } = await import('@/chains/midnight/midnightLocalProver');
+    const healthy = await checkProofServerHealth(localUrl);
+    if (!healthy) {
+      throw new ProofServerUnreachableError(localUrl);
+    }
+    onStage?.('provingLocal');
+    const { signedTxHex, proven } = await buildAndSignShieldedInBg(outputs, credentials, { url: localUrl });
+    if (!proven) {
+      // Defensive: the BG only skips proving when `proving` is absent from
+      // the request, which it never is on this branch. Should be
+      // unreachable — fail loudly rather than silently submit an unproven
+      // tx to the submit-proven endpoint.
+      throw new Error('Local proving requested but BG returned an unproven tx');
+    }
+    onStage?.('submitting');
+    const result = await api.submitProvenMidnightTx({ signedTxHex, waitFor });
+    onStage?.('done');
+    return result;
+  }
+
+  onStage?.('working');
+  const { signedTxHex } = await buildAndSignShieldedInBg(outputs, credentials);
+  onStage?.('submitting');
   const result = await api.proveAndSubmitMidnightTx({ signedTxHex, waitFor });
   onStage?.('done');
   return result;

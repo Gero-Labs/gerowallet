@@ -3732,15 +3732,49 @@ app.addToOptions(
 );
 
 /**
+ * Validate the optional `proving` field on BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX
+ * requests (WP-P2, local-proof-server mode). This crosses the BG message
+ * boundary from browser/options/popup context, so it's checked here even
+ * though it originates from our own UI: http(s) scheme only, no embedded
+ * credentials (a crafted `http://user:pass@host` URL would otherwise
+ * smuggle Basic-Auth into the BG's fetch to the "proof server").
+ */
+function parseProvingRequest(value: unknown): { url: string } | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'object') throw new Error('proving must be an object');
+  const url = (value as { url?: unknown }).url;
+  if (typeof url !== 'string' || url.length === 0) {
+    throw new Error('proving.url is required and must be a non-empty string');
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error('proving.url is not a valid URL');
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('proving.url must use http or https');
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error('proving.url must not contain credentials');
+  }
+  return { url };
+}
+
+/**
  * Midnight: build + sign a shielded NIGHT transfer entirely in BG.
  *
- * Request shape: `{ outputs: [{receiverAddress, amount, tokenType?}], password?, prfSecret? }`.
- * Amounts are passed as decimal strings to survive Chrome messaging's
- * BigInt-unfriendly serialization; BG parses back to bigint.
+ * Request shape: `{ outputs: [{receiverAddress, amount, tokenType?}], password?,
+ * prfSecret?, proving?: { url } }`. Amounts are passed as decimal strings to
+ * survive Chrome messaging's BigInt-unfriendly serialization; BG parses back
+ * to bigint. `proving` is optional (WP-P2, local proof-server mode) — when
+ * present, BG proves the tx itself before returning.
  *
- * Response: `{ success: true, signedTxHex }` — the SIGNED but UNPROVEN tx
- * hex. UI must hand this to Nexus's /tx/prove-and-submit, NOT to /tx/submit
- * (which expects a fully-finalized tx).
+ * Response: `{ success: true, signedTxHex, proven }`. When `proven` is
+ * false (default, no `proving` in the request), `signedTxHex` is SIGNED but
+ * UNPROVEN — UI must hand it to Nexus's /tx/prove-and-submit, NOT
+ * /tx/submit(-proven). When `proven` is true, `signedTxHex` is a finalized
+ * tx for /tx/submit-proven instead.
  */
 app.addToOptions(
   MessageTypes.BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX,
@@ -3751,7 +3785,7 @@ app.addToOptions(
       if (walletBg.chain !== Blockchain.MIDNIGHT) {
         throw new Error('BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX called on non-Midnight wallet');
       }
-      const { outputs, password, prfSecret } = request.data || {};
+      const { outputs, password, prfSecret, proving } = request.data || {};
       if (!Array.isArray(outputs) || outputs.length === 0) {
         throw new Error('outputs is required (non-empty array)');
       }
@@ -3779,14 +3813,16 @@ app.addToOptions(
         };
       });
       const prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
-      const signedTxHex = await walletBg.buildAndSignMidnightShieldedTransfer(
+      const provingArg = parseProvingRequest(proving);
+      const { signedTxHex, proven } = await walletBg.buildAndSignMidnightShieldedTransfer(
         parsedOutputs,
         password,
         prfBytes,
+        provingArg,
       );
       sendResponse({
         id: request.id,
-        data: { success: true, signedTxHex },
+        data: { success: true, signedTxHex, proven },
         target: TARGET,
         sender: SENDER.extension,
       });

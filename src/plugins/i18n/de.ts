@@ -4069,6 +4069,7 @@ export default {
   'midnight.send.stageSync': 'DUST-Ledger synchronisieren',
   'midnight.send.stageSign': 'Transaktion signieren',
   'midnight.send.stageSubmit': 'Senden',
+  'midnight.send.stageProvingLocal': 'Beweis wird lokal erstellt...',
   // DApp-Connector (@midnight-ntwrk/dapp-connector-api)
   'midnight.connector.viewAddressAndBalance': 'Deine Midnight-Adressen und -Guthaben einsehen',
   'midnight.connector.futureRequestsNote': 'Diese Website kann Signaturen anfragen und Transaktionen zur Genehmigung einreichen.',
