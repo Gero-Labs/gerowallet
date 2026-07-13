@@ -6,6 +6,7 @@ import {
   recoverMpcGoogleWalletFlow,
   storeRecoveryShareFlow,
   revealMpcSrpFlow,
+  setRecoveryPasswordFlow,
   subFromIdToken,
   resolveSignPrivateKeyBytes,
   assertMpcActionSupported,
@@ -14,6 +15,7 @@ import {
   type RecoverMpcGoogleWalletDeps,
   type StoreRecoveryShareDeps,
   type RevealMpcSrpDeps,
+  type SetRecoveryPasswordDeps,
 } from './mpcWalletHandlers';
 
 // A structurally valid (but not cryptographically real) JWT: header.payload.signature,
@@ -535,5 +537,233 @@ describe('assertMpcActionSupported', () => {
     expect(() => assertMpcActionSupported({ encryptionMethod: 'prf' }, 'Bitcoin signing')).not.toThrow();
     expect(() => assertMpcActionSupported(null, 'Bitcoin signing')).not.toThrow();
     expect(() => assertMpcActionSupported(undefined, 'Bitcoin signing')).not.toThrow();
+  });
+});
+
+describe('setRecoveryPasswordFlow', () => {
+  // A DISTINCT fresh split S' — all three shares differ from any prior split,
+  // proving the flow re-splits rather than re-wrapping the old recovery share.
+  const freshSplit = {
+    deviceShare: 'gmpc1.01.deviceNEW',
+    loginShare: 'gmpc1.02.loginNEW',
+    recoveryShare: 'gmpc1.03.recoveryNEW',
+  };
+
+  const wallet = {
+    chain: 'cardano',
+    network: 'mainnet',
+    publicKey: 'xpub-test',
+    mpcDeviceShare: 'enc-device-share-OLD',
+  };
+
+  const secret: DeviceShareSecret = { kind: 'password', password: 'device-pw' };
+
+  function makeDeps(
+    order: string[],
+    overrides: Partial<SetRecoveryPasswordDeps> = {},
+  ): SetRecoveryPasswordDeps {
+    return {
+      getWallet: vi.fn(async () => wallet),
+      getLoginShare: vi.fn(async () => 'gmpc1.02.loginOLD'),
+      decryptDeviceShare: vi.fn(async () => 'gmpc1.01.deviceOLD'),
+      // Reconstructs + validates the CURRENT device+login → entropy of THIS wallet.
+      reconstructAndValidateEntropy: vi.fn(async () => new Uint8Array(32)),
+      createMpcShareSet: vi.fn(async () => freshSplit),
+      encryptDeviceShare: vi.fn(async (share: string) => `encDev(${share})`),
+      encryptRecoveryShare: vi.fn(async (share: string, pw: string) => `encRec(${share},${pw})`),
+      setMpcDeviceShareNext: vi.fn(async (_id: number, v: string | undefined) => {
+        order.push(v === undefined ? 'dropNext' : 'stageNext');
+      }),
+      rotate: vi.fn(async () => { order.push('rotate'); return { rotated: true }; }),
+      promoteMpcDeviceShareNext: vi.fn(async () => { order.push('promote'); }),
+      storeRecovery: vi.fn(async () => { order.push('storeRecovery'); return { stored: true }; }),
+      clearLoginShareCache: vi.fn(async () => { order.push('clearCache'); }),
+      ...overrides,
+    };
+  }
+
+  const baseInput = {
+    walletId: 7,
+    idToken: fakeIdToken(),
+    newRecoveryPassword: 'a-brand-new-strong-password',
+    secret,
+  };
+
+  it('reconstructs from the CURRENT device+login and NEVER asks the old recovery password', async () => {
+    const order: string[] = [];
+    const deps = makeDeps(order);
+    await setRecoveryPasswordFlow(baseInput, deps);
+
+    // Old device share is decrypted with the re-auth device secret …
+    expect(deps.decryptDeviceShare).toHaveBeenCalledWith(wallet.mpcDeviceShare, secret);
+    // … and the login share for THIS wallet's chain/network is fetched.
+    expect(deps.getLoginShare).toHaveBeenCalledWith(baseInput.idToken, wallet.chain, wallet.network);
+    // Entropy comes from device+login only — no old recovery password anywhere.
+    expect(deps.reconstructAndValidateEntropy).toHaveBeenCalledWith(
+      'gmpc1.01.deviceOLD',
+      'gmpc1.02.loginOLD',
+      wallet.publicKey,
+    );
+    // The input carries NO old-password field.
+    expect('oldRecoveryPassword' in baseInput).toBe(false);
+  });
+
+  it('re-splits the same entropy: all three NEW shares come from one fresh split', async () => {
+    const order: string[] = [];
+    const deps = makeDeps(order);
+    await setRecoveryPasswordFlow(baseInput, deps);
+
+    // Fresh split off the reconstructed entropy.
+    expect(deps.createMpcShareSet).toHaveBeenCalledWith(new Uint8Array(32));
+    // Device factor = S'.device (staged as next).
+    expect(deps.encryptDeviceShare).toHaveBeenCalledWith(freshSplit.deviceShare, secret);
+    expect(deps.setMpcDeviceShareNext).toHaveBeenCalledWith(baseInput.walletId, `encDev(${freshSplit.deviceShare})`);
+    // Login factor = S'.login (rotated on the backend).
+    expect(deps.rotate).toHaveBeenCalledWith(baseInput.idToken, wallet.chain, wallet.network, freshSplit.loginShare);
+    // Recovery factor = S'.recovery, encrypted under the NEW password + xpub anchor.
+    expect(deps.encryptRecoveryShare).toHaveBeenCalledWith(freshSplit.recoveryShare, baseInput.newRecoveryPassword);
+    expect(deps.storeRecovery).toHaveBeenCalledWith(
+      baseInput.idToken,
+      wallet.chain,
+      wallet.network,
+      `encRec(${freshSplit.recoveryShare},${baseInput.newRecoveryPassword})`,
+      wallet.publicKey,
+    );
+  });
+
+  it('runs the crash-safe order exactly: stage-next → rotate → promote → store-recovery → clear-cache', async () => {
+    const order: string[] = [];
+    const deps = makeDeps(order);
+    await setRecoveryPasswordFlow(baseInput, deps);
+    expect(order).toEqual(['stageNext', 'rotate', 'promote', 'storeRecovery', 'clearCache']);
+  });
+
+  it('rolls back on backend-rotate failure: drops the staged next, never promotes/stores/clears, stays on old split', async () => {
+    const order: string[] = [];
+    const deps = makeDeps(order, {
+      rotate: vi.fn(async () => { order.push('rotate'); throw new Error('backend 503'); }),
+    });
+
+    await expect(setRecoveryPasswordFlow(baseInput, deps)).rejects.toThrow('backend 503');
+
+    // Staged then dropped; nothing past rotate ran.
+    expect(order).toEqual(['stageNext', 'rotate', 'dropNext']);
+    expect(deps.setMpcDeviceShareNext).toHaveBeenNthCalledWith(1, baseInput.walletId, `encDev(${freshSplit.deviceShare})`);
+    expect(deps.setMpcDeviceShareNext).toHaveBeenNthCalledWith(2, baseInput.walletId, undefined);
+    expect(deps.promoteMpcDeviceShareNext).not.toHaveBeenCalled();
+    expect(deps.storeRecovery).not.toHaveBeenCalled();
+    expect(deps.clearLoginShareCache).not.toHaveBeenCalled();
+  });
+
+  it('stores the recovery blob LAST (only once S\' is fully live)', async () => {
+    const order: string[] = [];
+    const deps = makeDeps(order);
+    await setRecoveryPasswordFlow(baseInput, deps);
+    expect(order.indexOf('storeRecovery')).toBeGreaterThan(order.indexOf('promote'));
+    expect(order.indexOf('storeRecovery')).toBeGreaterThan(order.indexOf('rotate'));
+  });
+
+  it('throws (and writes nothing) if the wallet is not found', async () => {
+    const order: string[] = [];
+    const deps = makeDeps(order, { getWallet: vi.fn(async () => undefined) });
+    await expect(setRecoveryPasswordFlow(baseInput, deps)).rejects.toThrow('MPC wallet not found');
+    expect(deps.setMpcDeviceShareNext).not.toHaveBeenCalled();
+    expect(deps.rotate).not.toHaveBeenCalled();
+  });
+
+  it('never logs the new password, the shares, or the entropy', async () => {
+    const order: string[] = [];
+    const deps = makeDeps(order);
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await setRecoveryPasswordFlow(baseInput, deps);
+
+    for (const spy of [logSpy, errSpy, warnSpy]) {
+      for (const call of spy.mock.calls) {
+        const line = call.join(' ');
+        expect(line).not.toContain(baseInput.newRecoveryPassword);
+        expect(line).not.toContain(freshSplit.deviceShare);
+        expect(line).not.toContain(freshSplit.loginShare);
+        expect(line).not.toContain(freshSplit.recoveryShare);
+      }
+    }
+    logSpy.mockRestore();
+    errSpy.mockRestore();
+    warnSpy.mockRestore();
+  });
+});
+
+describe('unlockMpcWalletFlow — resume-on-unlock (staged deviceShareNext)', () => {
+  const secret: DeviceShareSecret = { kind: 'password', password: 'pw' };
+  const baseInput = { walletId: 7, idToken: fakeIdToken(), secret };
+
+  const walletWithNext = {
+    chain: 'cardano',
+    network: 'mainnet',
+    publicKey: 'xpub-test',
+    mpcDeviceShare: 'enc-device-OLD',
+    mpcDeviceShareNext: 'enc-device-NEXT',
+  };
+
+  it('resumes a crashed re-split: primary device+login fails but next+login succeeds → promotes next, caches bytes', async () => {
+    const bytes = new Uint8Array([4, 5, 6]);
+    const reconstruct = vi.fn(async (encDeviceShare: string) => {
+      // Post-rotate crash state: OLD device + NEW login → xpub mismatch.
+      if (encDeviceShare === walletWithNext.mpcDeviceShare) throw new MpcValidationError('mismatch');
+      // Staged next + NEW login → correct entropy.
+      return bytes;
+    });
+    const deps: UnlockMpcWalletDeps = {
+      getWallet: vi.fn(async () => walletWithNext),
+      getLoginShare: vi.fn(async () => 'gmpc1.02.loginNEW'),
+      reconstructRootKeyBytes: reconstruct,
+      sessionCache: { set: vi.fn() },
+      promoteMpcDeviceShareNext: vi.fn(async () => {}),
+      dropMpcDeviceShareNext: vi.fn(async () => {}),
+    };
+
+    await unlockMpcWalletFlow(baseInput, deps);
+
+    expect(reconstruct).toHaveBeenNthCalledWith(1, walletWithNext.mpcDeviceShare, secret, 'gmpc1.02.loginNEW', walletWithNext.publicKey);
+    expect(reconstruct).toHaveBeenNthCalledWith(2, walletWithNext.mpcDeviceShareNext, secret, 'gmpc1.02.loginNEW', walletWithNext.publicKey);
+    expect(deps.promoteMpcDeviceShareNext).toHaveBeenCalledWith(baseInput.walletId);
+    expect(deps.sessionCache.set).toHaveBeenCalledWith(baseInput.walletId, bytes);
+    expect(deps.dropMpcDeviceShareNext).not.toHaveBeenCalled();
+  });
+
+  it('drops a stale next and rethrows a clean error when neither device nor next reconstructs', async () => {
+    const deps: UnlockMpcWalletDeps = {
+      getWallet: vi.fn(async () => walletWithNext),
+      getLoginShare: vi.fn(async () => 'gmpc1.02.loginX'),
+      reconstructRootKeyBytes: vi.fn(async () => { throw new MpcValidationError('mismatch'); }),
+      sessionCache: { set: vi.fn() },
+      promoteMpcDeviceShareNext: vi.fn(async () => {}),
+      dropMpcDeviceShareNext: vi.fn(async () => {}),
+    };
+
+    await expect(unlockMpcWalletFlow(baseInput, deps)).rejects.toThrow();
+    expect(deps.dropMpcDeviceShareNext).toHaveBeenCalledWith(baseInput.walletId);
+    expect(deps.promoteMpcDeviceShareNext).not.toHaveBeenCalled();
+    expect(deps.sessionCache.set).not.toHaveBeenCalled();
+  });
+
+  it('on a normal unlock with a stale next present, drops the stale next and caches on the primary reconstruct', async () => {
+    const bytes = new Uint8Array([7, 7, 7]);
+    const deps: UnlockMpcWalletDeps = {
+      getWallet: vi.fn(async () => walletWithNext),
+      getLoginShare: vi.fn(async () => 'gmpc1.02.login'),
+      reconstructRootKeyBytes: vi.fn(async () => bytes),
+      sessionCache: { set: vi.fn() },
+      promoteMpcDeviceShareNext: vi.fn(async () => {}),
+      dropMpcDeviceShareNext: vi.fn(async () => {}),
+    };
+
+    await unlockMpcWalletFlow(baseInput, deps);
+
+    expect(deps.dropMpcDeviceShareNext).toHaveBeenCalledWith(baseInput.walletId);
+    expect(deps.promoteMpcDeviceShareNext).not.toHaveBeenCalled();
+    expect(deps.sessionCache.set).toHaveBeenCalledWith(baseInput.walletId, bytes);
   });
 });

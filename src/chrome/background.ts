@@ -43,6 +43,7 @@ import {
   recoverMpcGoogleWalletFlow,
   storeRecoveryShareFlow,
   revealMpcSrpFlow,
+  setRecoveryPasswordFlow,
   subFromIdToken,
   resolveSignPrivateKeyBytes,
   assertMpcActionSupported,
@@ -1715,7 +1716,7 @@ app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET, async (request, sendResponse) =
     const { secret } = buildDeviceShareSecret(request.data);
 
     const { reconstructRootKeyBytes } = await import('@/shared/utils/mpc');
-    const { getAllWallets } = await import('@/db/gero-db');
+    const { getAllWallets, promoteMpcDeviceShareNext, setMpcDeviceShareNext } = await import('@/db/gero-db');
     const { Api } = await import('@/api/api');
     const api = new Api(undefined, undefined);
 
@@ -1747,6 +1748,8 @@ app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET, async (request, sendResponse) =
         getLoginShare,
         reconstructRootKeyBytes,
         sessionCache: mpcSessionCache,
+        promoteMpcDeviceShareNext,
+        dropMpcDeviceShareNext: (id) => setMpcDeviceShareNext(id, undefined),
       },
     );
 
@@ -1904,6 +1907,68 @@ app.addToOptions(MessageTypes.RECOVER_MPC_GOOGLE_WALLET, async (request, sendRes
     sendResponse({
       id: request.id,
       data: { success: false, error: message },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+  return true; // Required for async Chrome message handlers
+});
+
+/**
+ * Set / change the recovery password from an unlocked wallet. NEVER asks for the
+ * old password (MetaMask parity): device + login reconstruct the entropy, then a
+ * crash-safe re-split rotates all three shares and stores a fresh recovery blob
+ * under the new password. Requires device-secret re-auth (secret in request.data).
+ * Never log request.data — it carries idToken / newRecoveryPassword / device secret.
+ */
+app.addToOptions(MessageTypes.SET_RECOVERY_PASSWORD, async (request, sendResponse) => {
+  try {
+    const { walletId, idToken, newRecoveryPassword } = request.data || {};
+    if (!walletId || !idToken || !newRecoveryPassword) {
+      throw new Error('walletId, idToken and newRecoveryPassword are required');
+    }
+    const { secret } = buildDeviceShareSecret(request.data);
+
+    const {
+      decryptDeviceShare,
+      encryptDeviceShare,
+      encryptRecoveryShare,
+      createMpcShareSet,
+      reconstructAndValidateEntropy,
+    } = await import('@/shared/utils/mpc');
+    const { getAllWallets, setMpcDeviceShareNext, promoteMpcDeviceShareNext } = await import('@/db/gero-db');
+    const { Api } = await import('@/api/api');
+    const api = new Api(undefined, undefined);
+
+    await setRecoveryPasswordFlow(
+      { walletId, idToken, newRecoveryPassword, secret },
+      {
+        getWallet: async (id) => (await getAllWallets())[id],
+        getLoginShare: (idTok, ch, net) => api.mpc.getLoginShare(idTok, ch, net),
+        decryptDeviceShare,
+        reconstructAndValidateEntropy,
+        createMpcShareSet,
+        encryptDeviceShare,
+        encryptRecoveryShare,
+        setMpcDeviceShareNext,
+        rotate: (idTok, ch, net, loginShare) => api.mpc.rotate(idTok, ch, net, loginShare),
+        promoteMpcDeviceShareNext,
+        storeRecovery: (idTok, ch, net, blob, pub) => api.mpc.storeRecovery(idTok, ch, net, blob, pub),
+        clearLoginShareCache: (id) => mpcLoginShareCache.clear(id),
+      },
+    );
+
+    sendResponse({
+      id: request.id,
+      data: { success: true },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    console.error('Error setting MPC recovery password:', getErrorMessage(error, 'set recovery password failed'));
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error, 'Failed to set recovery password') },
       target: TARGET,
       sender: SENDER.extension,
     });

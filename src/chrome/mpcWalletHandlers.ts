@@ -182,6 +182,8 @@ export interface MpcWalletRecord {
   network: string;
   publicKey: string;
   mpcDeviceShare: string;
+  /** Staged next-generation device share written by a crash-safe re-split (setRecoveryPasswordFlow). */
+  mpcDeviceShareNext?: string;
   webAuthnCredentialId?: string;
   mpcPrfSaltId?: string;
 }
@@ -202,6 +204,10 @@ export interface UnlockMpcWalletDeps {
     expectedXpub: string,
   ) => Promise<Uint8Array>;
   sessionCache: { set: (walletId: number, bytes: Uint8Array) => void };
+  /** Finish a crashed re-split: make the staged `mpcDeviceShareNext` the primary device share. Optional. */
+  promoteMpcDeviceShareNext?: (walletId: number) => Promise<void>;
+  /** Discard a stale `mpcDeviceShareNext` that no longer reconstructs. Optional. */
+  dropMpcDeviceShareNext?: (walletId: number) => Promise<void>;
 }
 
 /**
@@ -217,7 +223,7 @@ export async function unlockMpcWalletFlow(
   deps: UnlockMpcWalletDeps,
 ): Promise<void> {
   const { walletId, idToken, secret } = input;
-  const { getWallet, getLoginShare, reconstructRootKeyBytes, sessionCache } = deps;
+  const { getWallet, getLoginShare, reconstructRootKeyBytes, sessionCache, promoteMpcDeviceShareNext, dropMpcDeviceShareNext } = deps;
 
   const wallet = await getWallet(walletId);
   if (!wallet) {
@@ -233,12 +239,40 @@ export async function unlockMpcWalletFlow(
       loginShare,
       wallet.publicKey,
     );
+    // Primary device+login reconstructs → a complete split. Any `mpcDeviceShareNext`
+    // still lying around is stale (a re-split that fully finished, or was never
+    // promoted) — drop it so it can't be tried again.
+    if (wallet.mpcDeviceShareNext && dropMpcDeviceShareNext) {
+      await dropMpcDeviceShareNext(walletId);
+    }
     sessionCache.set(walletId, bytes);
-  } catch (err) {
-    if (err instanceof MpcValidationError) {
+  } catch (primaryErr) {
+    // Resume-on-unlock: a re-split (setRecoveryPasswordFlow) that crashed AFTER the
+    // backend login-share rotate but BEFORE the local promote leaves the backend on
+    // S'.login while the device share is still S.device → primary reconstruct fails
+    // the xpub check. If a staged S'.device is present, try IT against the (new)
+    // login share; on success finish the interrupted promote and continue unlocked.
+    if (wallet.mpcDeviceShareNext && promoteMpcDeviceShareNext) {
+      try {
+        const bytes = await reconstructRootKeyBytes(
+          wallet.mpcDeviceShareNext,
+          secret,
+          loginShare,
+          wallet.publicKey,
+        );
+        await promoteMpcDeviceShareNext(walletId);
+        sessionCache.set(walletId, bytes);
+        return;
+      } catch {
+        // The staged next doesn't reconstruct either → dead garbage from a failed
+        // attempt. Drop it and fall through to surface the original error.
+        if (dropMpcDeviceShareNext) await dropMpcDeviceShareNext(walletId);
+      }
+    }
+    if (primaryErr instanceof MpcValidationError) {
       throw new Error('Recovery data mismatch — unable to unlock this wallet with Google');
     }
-    throw err;
+    throw primaryErr;
   }
 }
 
@@ -489,4 +523,118 @@ export async function revealMpcSrpFlow(
     }
     throw err;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Task 10: set / change recovery password (crash-safe re-split)
+// ---------------------------------------------------------------------------
+
+export interface SetRecoveryPasswordInput {
+  walletId: number;
+  idToken: string;
+  /** The NEW recovery password. Load-bearing secret — never logged, never persisted plaintext. */
+  newRecoveryPassword: string;
+  /** Device-secret re-auth (spending password or passkey PRF output) for the unlocked session. */
+  secret: DeviceShareSecret;
+}
+
+export interface SetRecoveryPasswordDeps {
+  getWallet: (walletId: number) => Promise<MpcWalletRecord | undefined>;
+  getLoginShare: (idToken: string, chain: string, network: string) => Promise<string>;
+  /** Decrypt the current at-rest device share under the re-auth secret. */
+  decryptDeviceShare: (envelope: string, secret: DeviceShareSecret) => Promise<string>;
+  /** Reconstruct entropy from device+login AND validate xpub === wallet.publicKey (throws MpcValidationError on mismatch). */
+  reconstructAndValidateEntropy: (deviceShare: string, loginShare: string, expectedXpub: string) => Promise<Uint8Array>;
+  /** Fresh 2-of-3 re-split of the SAME entropy → new device/login/recovery shares. */
+  createMpcShareSet: (entropy: Uint8Array) => Promise<MpcShareSet>;
+  encryptDeviceShare: (deviceShare: string, secret: DeviceShareSecret) => Promise<string>;
+  encryptRecoveryShare: (recoveryShare: string, password: string) => Promise<string>;
+  /** Stage (value=blob) or drop (value=undefined) the next-generation device share. */
+  setMpcDeviceShareNext: (walletId: number, encryptedDeviceShareNext: string | undefined) => Promise<void>;
+  /** Replace the backend login share with the fresh S'.login. */
+  rotate: (idToken: string, chain: string, network: string, loginShare: string) => Promise<{ rotated: boolean }>;
+  /** Promote the staged next device share to primary (device = S'.device, next cleared). */
+  promoteMpcDeviceShareNext: (walletId: number) => Promise<void>;
+  storeRecovery: (idToken: string, chain: string, network: string, encryptedRecovery: string, publicKey: string) => Promise<{ stored: boolean }>;
+  /** Drop the now-stale cached login share so the next unlock fetches S'.login fresh. */
+  clearLoginShareCache: (walletId: number) => Promise<void>;
+}
+
+/**
+ * Set / change the recovery password from an UNLOCKED wallet (MetaMask parity:
+ * NEVER asks for the old recovery password). Because a 2-of-3 recovery share
+ * cannot be cheaply re-wrapped without hand-rolled GF(256) math (D4), this does
+ * a full crash-safe RE-SPLIT of the same entropy and stores a fresh recovery
+ * blob under the new password. Rotating the underlying shares also voids any
+ * previously-leaked recovery blob (doubles as compromise-rotation).
+ *
+ * Crash-safe order — never bricks, never asks the old password:
+ *   1. stage next device share (old still live)
+ *   2. rotate the backend login share to S'.login  (rollback: drop next, stay old split)
+ *   3. promote the staged device share to primary
+ *   4. store the fresh recovery blob (new password) — LAST, only once S' is live
+ *   5. clear the stale cached login share
+ *
+ * Secret hygiene: entropy, shares, and the new password are never logged or
+ * persisted in plaintext.
+ */
+export async function setRecoveryPasswordFlow(
+  input: SetRecoveryPasswordInput,
+  deps: SetRecoveryPasswordDeps,
+): Promise<void> {
+  const { walletId, idToken, newRecoveryPassword, secret } = input;
+  const {
+    getWallet,
+    getLoginShare,
+    decryptDeviceShare,
+    reconstructAndValidateEntropy,
+    createMpcShareSet,
+    encryptDeviceShare,
+    encryptRecoveryShare,
+    setMpcDeviceShareNext,
+    rotate,
+    promoteMpcDeviceShareNext,
+    storeRecovery,
+    clearLoginShareCache,
+  } = deps;
+
+  const wallet = await getWallet(walletId);
+  if (!wallet) {
+    throw new Error('MPC wallet not found');
+  }
+
+  // Reconstruct entropy from the CURRENT device+login under the re-auth secret,
+  // validating the derived key still belongs to this wallet. No old recovery
+  // password is ever involved (MetaMask parity).
+  const loginShare = await getLoginShare(idToken, wallet.chain, wallet.network);
+  const currentDeviceShare = await decryptDeviceShare(wallet.mpcDeviceShare, secret);
+  const entropy = await reconstructAndValidateEntropy(currentDeviceShare, loginShare, wallet.publicKey);
+
+  // Fresh 2-of-3 re-split of the SAME entropy → all three shares rotate.
+  // xpub is unchanged (entropy unchanged), so createMpcGoogleWallet's anchor holds.
+  const next = await createMpcShareSet(entropy);
+  const encryptedNextDeviceShare = await encryptDeviceShare(next.deviceShare, secret);
+
+  // 1. Stage next (old device share still primary).
+  await setMpcDeviceShareNext(walletId, encryptedNextDeviceShare);
+
+  // 2. Rotate the backend login share. On failure roll back: drop the staged
+  //    next and keep the old split intact (never bricks).
+  try {
+    await rotate(idToken, wallet.chain, wallet.network, next.loginShare);
+  } catch (err) {
+    await setMpcDeviceShareNext(walletId, undefined);
+    throw err;
+  }
+
+  // 3. Backend now holds S'.login → promote the staged device share to primary.
+  await promoteMpcDeviceShareNext(walletId);
+
+  // 4. Only now that S' is fully live, store the fresh recovery blob under the
+  //    new password (+ the non-secret xpub anchor). Stored LAST.
+  const recoveryBlob = await encryptRecoveryShare(next.recoveryShare, newRecoveryPassword);
+  await storeRecovery(idToken, wallet.chain, wallet.network, recoveryBlob, wallet.publicKey);
+
+  // 5. The cached login share is now stale (rotated) → clear it.
+  await clearLoginShareCache(walletId);
 }
