@@ -264,7 +264,7 @@
         <div v-if="localProverUnavailable" class="midnight-info-note midnight-prover-fallback mb-2">
           <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-server-network-off</v-icon>
           <div class="midnight-prover-fallback-body">
-            <span>{{ t('midnight.proofServer.notDetectedSend') }}</span>
+            <span>{{ proverFallbackText }}</span>
             <div class="midnight-prover-fallback-actions">
               <v-btn text x-small color="var(--g-accent)" @click="openProofServerSettings">
                 {{ t('midnight.proofServer.openSettings') }}
@@ -311,9 +311,11 @@
 
     <!-- First-time-only consent gate for shielded proving — reused, not
          forked (shield's shielded half proves through the identical
-         ShieldedWallet pipeline as a plain shielded send). -->
+         ShieldedWallet pipeline as a plain shielded send). `provider` names
+         the actual witness destination (Gero Cloud vs Arkhia zkPaaS). -->
     <ShieldedProvingConsentDialog
       :is-open="consentDialogOpen"
+      :provider="consentProvider"
       @close="onConsentClose"
       @accepted="onConsentAccepted"
     />
@@ -406,7 +408,7 @@ type ConvertStageOrIdle = MidnightSendStage | 'idle';
 const convertStage = ref<ConvertStageOrIdle>('idle');
 
 const STAGE_RANK: Record<ConvertStageOrIdle, number> = {
-  idle: 0, authorizing: 1, building: 2, working: 3, provingLocal: 3, submitting: 4, done: 5,
+  idle: 0, authorizing: 1, building: 2, working: 3, provingLocal: 3, provingZkpaas: 3, submitting: 4, done: 5,
 };
 
 interface TimelineNode {
@@ -426,7 +428,10 @@ const timelineNodes = computed<TimelineNode[]>(() => {
   const syncDone = pct != null && pct >= 100;
   const syncActive = s === 'working' && !syncDone;
   const signActive = s === 'working' && syncDone;
-  const provingLocalActive = s === 'provingLocal';
+  const provingActive = s === 'provingLocal' || s === 'provingZkpaas';
+  const provingLabel = s === 'provingZkpaas'
+    ? t('midnight.send.stageProvingZkpaas')
+    : t('midnight.send.stageProvingLocal');
 
   return [
     {
@@ -441,10 +446,10 @@ const timelineNodes = computed<TimelineNode[]>(() => {
     },
     {
       key: 'sync',
-      label: provingLocalActive ? t('midnight.send.stageProvingLocal') : t('midnight.send.stageSync'),
-      state: rank > 3 || signActive ? 'done' : (syncActive || provingLocalActive) ? 'active' : 'pending',
+      label: provingActive ? provingLabel : t('midnight.send.stageSync'),
+      state: rank > 3 || signActive ? 'done' : (syncActive || provingActive) ? 'active' : 'pending',
       showBar: true,
-      percent: provingLocalActive ? null : (syncActive ? pct : undefined),
+      percent: provingActive ? null : (syncActive ? pct : undefined),
       detail: syncActive ? prog?.detail : undefined,
     },
     {
@@ -472,10 +477,21 @@ const isDustLow = computed(() => !!dustBattery.value && dustBattery.value.percen
 const consentDialogOpen = ref(false);
 const pendingCredentials = ref<{ password?: string; prfSecret?: Uint8Array } | null>(null);
 
-// ── Local proof-server routing (mirrors MidnightSendDialog's WP-P5 flow) ──
+// ── Wallet-side proof-server routing (mirrors MidnightSendDialog's WP-P5
+// flow, covering both local docker and Arkhia zkPaaS) ──
 const checkingLocalProver = ref(false);
 const localProverUnavailable = ref(false);
 const forceRemoteForNextSend = ref(false);
+// Which remote prover the consent dialog is about when it opens — set at
+// each open site (zkpaas for a first zkPaaS convert, cloud everywhere else,
+// including the one-off "use Gero Cloud" fallback).
+const consentProvider = ref<'cloud' | 'zkpaas'>('cloud');
+// Fallback-note copy tracks the mode that failed its preflight.
+const proverFallbackText = computed(() => (
+  midnightStore.proofServer.mode === 'zkpaas'
+    ? t('midnight.proofServer.zkpaasNotReachableSend')
+    : t('midnight.proofServer.notDetectedSend')
+));
 
 const passwordRules = [rules.required()];
 
@@ -584,33 +600,41 @@ function onPasskeyError(error: Error) {
 // Shield always proves through the shielded pipeline — same routing rule as
 // MidnightSendDialog's shielded tab (routeSend): local mode skips cloud
 // consent entirely (witness data never leaves the machine) and goes
-// straight to a health preflight; remote mode requires fresh consent first.
+// straight to a health preflight; remote mode requires fresh consent first;
+// Arkhia zkPaaS requires the same consent as remote AND a preflight.
 async function routeConvert(credentials: { password?: string; prfSecret?: Uint8Array }) {
-  if (midnightStore.proofServer.mode === 'local') {
-    await routeLocalConvert(credentials);
+  const mode = midnightStore.proofServer.mode;
+  if (mode === 'local') {
+    await routeWalletProvedConvert(credentials);
     return;
   }
   if (hasFreshConsent()) {
+    if (mode === 'zkpaas') {
+      await routeWalletProvedConvert(credentials);
+      return;
+    }
     await doConvert(credentials);
     return;
   }
   pendingCredentials.value = credentials;
+  consentProvider.value = mode === 'zkpaas' ? 'zkpaas' : 'cloud';
   consentDialogOpen.value = true;
 }
 
 /**
- * Local-mode routing: preflight the local proof server's `/health` before
- * ever touching the "converting" overlay — mirrors
- * MidnightSendDialog.routeLocalShielded exactly.
+ * Wallet-side (local or zkPaaS) routing: preflight the selected proof
+ * server before ever touching the "converting" overlay — mirrors
+ * MidnightSendDialog.routeWalletProvedShielded exactly. Target resolution
+ * lives in the tx service so dialog and send can never disagree.
  */
-async function routeLocalConvert(credentials: { password?: string; prfSecret?: Uint8Array }) {
+async function routeWalletProvedConvert(credentials: { password?: string; prfSecret?: Uint8Array }) {
   errorMessage.value = null;
   localProverUnavailable.value = false;
   checkingLocalProver.value = true;
   try {
-    const { checkProofServerHealth } = await import('@/chains/midnight/midnightLocalProver');
-    const healthy = await checkProofServerHealth(midnightStore.proofServer.localUrl);
-    if (!healthy) {
+    const { checkWalletProvingPreflight } = await import('@/services/midnight-tx.service');
+    const ok = await checkWalletProvingPreflight(loggedWallet.value?.network ?? '');
+    if (!ok) {
       pendingCredentials.value = credentials;
       localProverUnavailable.value = true;
       return;
@@ -640,6 +664,9 @@ function useCloudForThisTransaction() {
     void doConvert(credentials);
     return;
   }
+  // The fallback always goes to Gero Cloud (even from zkpaas mode), so the
+  // consent copy must say Gero Cloud.
+  consentProvider.value = 'cloud';
   consentDialogOpen.value = true;
 }
 
@@ -654,6 +681,13 @@ async function onConsentAccepted() {
   const credentials = pendingCredentials.value;
   pendingCredentials.value = null;
   if (!credentials) return;
+  // A freshly-consented zkPaaS convert still needs its preflight; the
+  // one-off "use Gero Cloud" fallback (forceRemoteForNextSend) goes
+  // straight to the remote path instead — doConvert consumes that flag.
+  if (!forceRemoteForNextSend.value && midnightStore.proofServer.mode === 'zkpaas') {
+    await routeWalletProvedConvert(credentials);
+    return;
+  }
   await doConvert(credentials);
 }
 

@@ -144,10 +144,12 @@ export interface MidnightStore {
   provingOperations: Map<string, MidnightProvingOperation>;
 
   /**
-   * Recent LOCAL proving attempts (success and failure), newest first,
-   * capped at {@link PROVING_HISTORY_LIMIT}. See
+   * Recent WALLET-SIDE proving attempts (success and failure), newest
+   * first, capped at {@link PROVING_HISTORY_LIMIT} — covers both local
+   * docker proving and Arkhia zkPaaS proving (Gero Cloud proving happens
+   * inside the Nexus sidecar, invisible to the wallet). See
    * {@link MidnightProvingLogEntry}. Empty for wallets that have never used
-   * local proving, or on a fresh install.
+   * wallet-side proving, or on a fresh install.
    */
   provingHistory: MidnightProvingLogEntry[];
 
@@ -179,12 +181,22 @@ export interface MidnightStore {
    * proves through Gero Cloud and requires {@code shieldedProvingConsent}
    * before the first shielded send. {@code local} proves against a
    * self-hosted docker proof server at {@code localUrl} so witness data
-   * never leaves the machine. Device-level, like {@code shieldedProvingConsent}
-   * above - NOT wiped on wallet switch (see {@code setActive}).
+   * never leaves the machine. {@code zkpaas} proves against the Midnight
+   * ecosystem's hosted Arkhia zkPaaS (BCW-run, TEE-backed) using the
+   * wallet-side proving path — witness data goes to Arkhia, NOT Gero, so
+   * it is consent-gated like {@code remote} (see midnightZkpaas.ts).
+   * Device-level, like {@code shieldedProvingConsent} above - NOT wiped on
+   * wallet switch (see {@code setActive}).
    */
   proofServer: {
-    mode: 'remote' | 'local';
+    mode: 'remote' | 'local' | 'zkpaas';
     localUrl: string;
+    /** Arkhia endpoint override; '' = derive per network (midnightConfig). */
+    zkpaasUrl: string;
+    /** Arkhia project API key ('' until the user pastes one). */
+    zkpaasApiKey: string;
+    /** Optional Arkhia API secret for hardened (2-layer) projects. */
+    zkpaasApiSecret: string;
   };
 
   /**
@@ -261,10 +273,16 @@ const EMPTY_TIP: MidnightChainTip = {
  * rather than a second hardcoded literal here - all three Midnight networks
  * currently define the same default (`http://localhost:6300`), so Preview is
  * picked arbitrarily as the lookup key; the value does not vary by network.
+ * The zkPaaS fields default empty: the endpoint derives per network at use
+ * time (midnightZkpaas.ts) and the API key only exists once the user
+ * pastes one from their Arkhia dashboard.
  */
 const DEFAULT_PROOF_SERVER: MidnightStore['proofServer'] = {
   mode: 'remote',
   localUrl: getMidnightEndpoints(Network.PREVIEW)!.defaultProofServerUrl,
+  zkpaasUrl: '',
+  zkpaasApiKey: '',
+  zkpaasApiSecret: '',
 };
 
 /** Ring-buffer cap for {@link MidnightStore.provingHistory}. */
@@ -554,10 +572,25 @@ function hydrateProofServer(stored: unknown): MidnightStore['proofServer'] {
   if (!stored || typeof stored !== 'object') return { ...DEFAULT_PROOF_SERVER };
   const mode = (stored as { mode?: unknown }).mode;
   const localUrl = (stored as { localUrl?: unknown }).localUrl;
+  const zkpaasUrl = (stored as { zkpaasUrl?: unknown }).zkpaasUrl;
   return {
-    mode: mode === 'remote' || mode === 'local' ? mode : DEFAULT_PROOF_SERVER.mode,
+    mode: mode === 'remote' || mode === 'local' || mode === 'zkpaas' ? mode : DEFAULT_PROOF_SERVER.mode,
     localUrl: isValidProofServerUrl(localUrl) ? localUrl : DEFAULT_PROOF_SERVER.localUrl,
+    // '' is the valid "derive per network" state, distinct from a corrupted
+    // value — only non-empty overrides must parse as http(s) URLs.
+    zkpaasUrl: zkpaasUrl === '' || isValidProofServerUrl(zkpaasUrl) ? zkpaasUrl as string : '',
+    zkpaasApiKey: hydrateCredentialString((stored as { zkpaasApiKey?: unknown }).zkpaasApiKey),
+    zkpaasApiSecret: hydrateCredentialString((stored as { zkpaasApiSecret?: unknown }).zkpaasApiSecret),
   };
+}
+
+/**
+ * A stored Arkhia credential is any reasonable-length string; anything else
+ * (corruption, absurd length) hydrates to '' = not configured. 512 chars is
+ * far above any real Arkhia key/secret while still bounding storage abuse.
+ */
+function hydrateCredentialString(value: unknown): string {
+  return typeof value === 'string' && value.length <= 512 ? value : '';
 }
 
 /**
@@ -802,12 +835,13 @@ export const midnightActions = {
   },
 
   /**
-   * Record one completed LOCAL proving attempt (success or failure) at the
-   * front of {@link MidnightStore.provingHistory}, capped at
+   * Record one completed WALLET-SIDE proving attempt (success or failure)
+   * — local docker or Arkhia zkPaaS — at the front of
+   * {@link MidnightStore.provingHistory}, capped at
    * {@link PROVING_HISTORY_LIMIT}. Called from `walletBg.ts` right after
-   * `buildAndSignShieldedTransfer` resolves or throws in local-proving mode.
-   * Never pass tx hex or witness data as `error` — see the file-header
-   * privacy note on `midnightLocalProver.ts`.
+   * `buildAndSignShieldedTransfer` resolves or throws in a wallet-side
+   * proving mode. Never pass tx hex or witness data as `error` — see the
+   * file-header privacy note on `midnightLocalProver.ts`.
    */
   recordLocalProvingAttempt(entry: { durationMs: number; success: boolean; error?: string }) {
     bgDurableTouched.provingHistory = true;

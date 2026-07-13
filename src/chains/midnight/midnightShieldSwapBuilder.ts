@@ -111,12 +111,13 @@ export interface BuildAndSignShieldArgs {
   /** Optional live-progress sink for the DUST-ledger sync sub-step — see `SyncDustAndBalanceFeesArgs`. */
   readonly onDustSyncProgress?: (percent: number, detail: string) => void;
   /**
-   * When present, prove (and bind) the conversion against a self-hosted
-   * proof server at {@code url} before returning, instead of leaving it
-   * unproven for Gero Cloud. Same shape and meaning as
+   * When present, prove (and bind) the conversion against a native-API
+   * proof server at {@code url} (self-hosted docker, or Arkhia zkPaaS with
+   * auth {@code headers}) before returning, instead of leaving it unproven
+   * for Gero Cloud. Same shape and meaning as
    * {@link BuildAndSignShieldedTransferArgs.proving}.
    */
-  readonly proving?: { readonly url: string };
+  readonly proving?: { readonly url: string; readonly headers?: Record<string, string> };
 }
 
 /**
@@ -244,23 +245,25 @@ export async function buildAndSignShield(
     );
     debugLog('🌙 shield-swap: unshielded half signed');
 
-    // ── Step 6: prove (local) or leave unproven (cloud) ─────────────
+    // ── Step 6: prove (wallet-side) or leave unproven (cloud) ─────────────
     if (args.proving) {
-      // Local proving: identical prove()->bind() sequence
-      // midnightShieldedBuilder.ts uses for a plain shielded send.
+      // Wallet-side proving (local docker or Arkhia zkPaaS): identical
+      // prove()->bind() sequence midnightShieldedBuilder.ts uses for a
+      // plain shielded send.
       type ProvableTx = {
         prove: (provider: ledger.ProvingProvider, costModel: ledger.CostModel) =>
           Promise<{ bind: () => { serialize: () => Uint8Array } }>;
       };
-      debugLog('🌙 shield-swap: proving locally', { url: args.proving.url });
+      // URL only — never the auth header values.
+      debugLog('🌙 shield-swap: proving wallet-side', { url: args.proving.url });
       const proveStartMs = Date.now();
       const { makeLocalProvingProvider } = await import('@/chains/midnight/midnightLocalProver');
-      const provider = makeLocalProvingProvider(args.proving.url);
+      const provider = makeLocalProvingProvider(args.proving.url, { headers: args.proving.headers });
       const proven = await (signed as unknown as ProvableTx).prove(
         provider, ledgerMod.CostModel.initialCostModel(),
       );
       const boundBytes = proven.bind().serialize();
-      debugLog(`🌙 shield-swap: local proof + bind complete (${Date.now() - proveStartMs}ms)`);
+      debugLog(`🌙 shield-swap: wallet-side proof + bind complete (${Date.now() - proveStartMs}ms)`);
       const txHex = Buffer.from(boundBytes).toString('hex');
       debugLog('🌙 shield-swap: serialized (proven)', { bytes: boundBytes.length });
       return { txHex, proven: true };

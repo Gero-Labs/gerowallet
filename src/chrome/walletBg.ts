@@ -2106,7 +2106,7 @@ export class WalletBg {
     outputs: ReadonlyArray<{ receiverAddress: string; amount: bigint; tokenType?: string }>,
     password?: string,
     prfSecret?: Uint8Array,
-    proving?: { url: string },
+    proving?: { url: string; headers?: Record<string, string> },
   ): Promise<{ signedTxHex: string; proven: boolean }> {
     if (this.chain !== Blockchain.MIDNIGHT) {
       throw new Error('buildAndSignMidnightShieldedTransfer called on non-Midnight wallet');
@@ -2268,7 +2268,7 @@ export class WalletBg {
     amount: bigint,
     password?: string,
     prfSecret?: Uint8Array,
-    proving?: { url: string },
+    proving?: { url: string; headers?: Record<string, string> },
   ): Promise<{ signedTxHex: string; proven: boolean }> {
     if (this.chain !== Blockchain.MIDNIGHT) {
       throw new Error('buildAndSignMidnightShield called on non-Midnight wallet');

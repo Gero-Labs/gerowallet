@@ -27,6 +27,17 @@
       </button>
       <button
         type="button"
+        class="mini-ps__toggle-btn mini-ps__toggle-btn--zkpaas"
+        :class="{ 'mini-ps__toggle-btn--active': proofServerMode === 'zkpaas' }"
+        :disabled="proofServerSaving"
+        @click="proofServerMode = 'zkpaas'"
+      >
+        <v-icon size="12">mdi-cloud-lock-outline</v-icon>
+        {{ t('midnight.proofServerPage.compareZkpaasTitle') }}
+        <span v-if="proofServerMode === 'zkpaas' && healthStatus === 'detected'" class="mini-ps__pulse-dot" />
+      </button>
+      <button
+        type="button"
         class="mini-ps__toggle-btn mini-ps__toggle-btn--local"
         :class="{ 'mini-ps__toggle-btn--active': proofServerMode === 'local' }"
         :disabled="proofServerSaving"
@@ -39,7 +50,7 @@
     </div>
 
     <div class="mini-ps__sub">
-      <span :class="{ 'mini-ps__sub--ok': proofServerMode === 'local' && healthStatus === 'detected' }">
+      <span :class="{ 'mini-ps__sub--ok': proofServerMode !== 'remote' && healthStatus === 'detected' }">
         {{ statusValue }}
       </span>
       <span v-if="latencyValue"> · {{ latencyValue }}</span>
@@ -62,16 +73,18 @@ const {
 } = useMidnightProofServer();
 
 // Same gating logic as the dashboard widget: no fabricated "connected" state
-// for Gero Cloud, since it is never health-checked from the wallet.
+// for Gero Cloud, since it is never health-checked from the wallet. Local
+// and Arkhia zkPaaS are, so both surface live health.
 const statusValue = computed(() => {
-  if (proofServerMode.value !== 'local') return t('midnight.proofServerPage.compareRemoteTitle');
+  if (proofServerMode.value === 'remote') return t('midnight.proofServerPage.compareRemoteTitle');
   if (healthStatus.value === 'detected') return t('midnight.proofServerPage.statusDetectedShort');
   if (healthStatus.value === 'notDetected') return t('midnight.proofServer.statusNotDetected');
+  if (healthStatus.value === 'notConfigured') return t('midnight.proofServerPage.statusNotConfiguredShort');
   return t('midnight.proofServer.statusChecking');
 });
 
 const latencyValue = computed(() => {
-  if (proofServerMode.value !== 'local' || lastCheckLatencyMs.value === null) return '';
+  if (proofServerMode.value === 'remote' || lastCheckLatencyMs.value === null) return '';
   return `${lastCheckLatencyMs.value}ms`;
 });
 
@@ -147,9 +160,11 @@ function openFullPage() {
   opacity: 0.7;
 }
 
-/* Same two-color identity as the dashboard widget: info-blue for the hosted
-   service, the chain accent for the user's own machine. */
-.mini-ps__toggle-btn--remote.mini-ps__toggle-btn--active {
+/* Same color identity as the dashboard widget: info-blue for the hosted
+   services (Gero Cloud + Arkhia zkPaaS), the chain accent for the user's
+   own machine. */
+.mini-ps__toggle-btn--remote.mini-ps__toggle-btn--active,
+.mini-ps__toggle-btn--zkpaas.mini-ps__toggle-btn--active {
   background: color-mix(in srgb, var(--g-info) 16%, var(--g-raised));
   color: var(--g-info);
 }
@@ -172,6 +187,12 @@ function openFullPage() {
   background: var(--g-accent);
   box-shadow: 0 0 5px color-mix(in srgb, var(--g-accent) 70%, transparent);
   animation: mini-ps-connection-pulse 2s ease-in-out infinite;
+}
+
+/* On the Arkhia segment the dot matches that segment's hosted (info) hue. */
+.mini-ps__toggle-btn--zkpaas .mini-ps__pulse-dot {
+  background: var(--g-info);
+  box-shadow: 0 0 5px color-mix(in srgb, var(--g-info) 70%, transparent);
 }
 
 @keyframes mini-ps-connection-pulse {
