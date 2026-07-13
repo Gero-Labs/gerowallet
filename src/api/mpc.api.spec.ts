@@ -34,4 +34,32 @@ describe('Api.mpc', () => {
     });
     expect(share).toBe('gmpc1.02.X.Y');
   });
+
+  it('storeRecovery posts the exact recovery-store body and returns result', async () => {
+    post.mockResolvedValue({ data: { stored: true }, status: 200 });
+    const res = await api.mpc.storeRecovery('idtok', 'cardano', 'mainnet', 'encblob', 'xpubanchor');
+    expect(post).toHaveBeenCalledWith('/api/mpc/recovery/store', {
+      idToken: 'idtok', chain: 'cardano', network: 'mainnet',
+      encryptedRecovery: 'encblob', publicKey: 'xpubanchor',
+    });
+    expect(res).toEqual({ stored: true });
+  });
+
+  it('fetchRecovery posts idToken+chain+network and returns blob+publicKey', async () => {
+    post.mockResolvedValue({ data: { encryptedRecovery: 'encblob', publicKey: 'xpubanchor' }, status: 200 });
+    const res = await api.mpc.fetchRecovery('idtok', 'cardano', 'mainnet');
+    expect(post).toHaveBeenCalledWith('/api/mpc/recovery/fetch', {
+      idToken: 'idtok', chain: 'cardano', network: 'mainnet',
+    });
+    expect(res).toEqual({ encryptedRecovery: 'encblob', publicKey: 'xpubanchor' });
+  });
+
+  it('rotate posts idToken+chain+network+loginShare and returns result', async () => {
+    post.mockResolvedValue({ data: { rotated: true }, status: 200 });
+    const res = await api.mpc.rotate('idtok', 'cardano', 'mainnet', 'gmpc1.02.NEW');
+    expect(post).toHaveBeenCalledWith('/api/mpc/rotate', {
+      idToken: 'idtok', chain: 'cardano', network: 'mainnet', loginShare: 'gmpc1.02.NEW',
+    });
+    expect(res).toEqual({ rotated: true });
+  });
 });

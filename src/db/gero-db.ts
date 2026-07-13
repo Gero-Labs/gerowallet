@@ -610,6 +610,44 @@ export async function setWalletName(walletId: number, name: string): Promise<voi
 }
 
 /**
+ * Persist the (re-encrypted) device share for an MPC wallet.
+ * @param walletId - The wallet ID
+ * @param encryptedDeviceShare - AES-encrypted encoded device share
+ */
+export async function setMpcDeviceShare(walletId: number, encryptedDeviceShare: string): Promise<void> {
+  const db: Dexie = await getDb();
+  await db['wallets'].update(walletId, { mpcDeviceShare: encryptedDeviceShare });
+}
+
+/**
+ * Stage the next device share during a crash-safe re-split.
+ * Pass `undefined` to clear a stale staged share.
+ * @param walletId - The wallet ID
+ * @param encryptedDeviceShareNext - AES-encrypted next device share, or undefined to clear
+ */
+export async function setMpcDeviceShareNext(
+  walletId: number,
+  encryptedDeviceShareNext: string | undefined,
+): Promise<void> {
+  const db: Dexie = await getDb();
+  await db['wallets'].update(walletId, { mpcDeviceShareNext: encryptedDeviceShareNext });
+}
+
+/**
+ * Promote the staged next device share to the live device share and clear the staging slot.
+ * Single atomic update (mpcDeviceShare := mpcDeviceShareNext, mpcDeviceShareNext := undefined).
+ * @param walletId - The wallet ID
+ */
+export async function promoteMpcDeviceShareNext(walletId: number): Promise<void> {
+  const db: Dexie = await getDb();
+  const wallet = await db['wallets'].get(walletId);
+  await db['wallets'].update(walletId, {
+    mpcDeviceShare: wallet?.mpcDeviceShareNext,
+    mpcDeviceShareNext: undefined,
+  });
+}
+
+/**
  * Set wallet icon in the database
  * @param walletId - The wallet ID
  * @param icon - The new wallet icon

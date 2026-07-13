@@ -32,6 +32,7 @@ export interface Wallet {
   publicKey?: string; // Account xpub (bech32)
   userId?: string; // Google `sub` for Google/MPC wallets (NOT email)
   mpcDeviceShare?: string; // AES-encrypted encoded device share (non-indexed)
+  mpcDeviceShareNext?: string; // Staged next device share during crash-safe re-split (non-indexed)
 }
 
 export type NetworkScheme = {

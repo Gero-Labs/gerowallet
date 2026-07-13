@@ -283,5 +283,44 @@ export class Api {
         throw parseHttpError(error);
       }
     },
+    /** Store the client-encrypted recovery blob (+ xpub anchor) after backend verifies the idToken. */
+    storeRecovery: async (
+      idToken: string, chain: string, network: string, encryptedRecovery: string, publicKey: string,
+    ): Promise<{ stored: boolean }> => {
+      try {
+        const { data, status } = await this.axiosInstance.post('/api/mpc/recovery/store',
+          { idToken, chain, network, encryptedRecovery, publicKey });
+        if (status === 200) return data as { stored: boolean };
+        throw parseHttpError(data);
+      } catch (error) {
+        throw parseHttpError(error);
+      }
+    },
+    /** Fetch the client-encrypted recovery blob + xpub anchor; backend verifies the idToken. */
+    fetchRecovery: async (
+      idToken: string, chain: string, network: string,
+    ): Promise<{ encryptedRecovery: string; publicKey: string }> => {
+      try {
+        const { data, status } = await this.axiosInstance.post('/api/mpc/recovery/fetch',
+          { idToken, chain, network });
+        if (status === 200) return data as { encryptedRecovery: string; publicKey: string };
+        throw parseHttpError(data);
+      } catch (error) {
+        throw parseHttpError(error);
+      }
+    },
+    /** Replace the login share (reset/re-split path); backend verifies the idToken. */
+    rotate: async (
+      idToken: string, chain: string, network: string, loginShare: string,
+    ): Promise<{ rotated: boolean }> => {
+      try {
+        const { data, status } = await this.axiosInstance.post('/api/mpc/rotate',
+          { idToken, chain, network, loginShare });
+        if (status === 200) return data as { rotated: boolean };
+        throw parseHttpError(data);
+      } catch (error) {
+        throw parseHttpError(error);
+      }
+    },
   };
 }
