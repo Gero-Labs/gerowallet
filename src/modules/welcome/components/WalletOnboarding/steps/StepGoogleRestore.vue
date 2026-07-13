@@ -36,22 +36,9 @@
         class="mb-2"
       ></v-text-field>
 
-      <!-- Recovery file upload -->
-      <div class="step-section-label mb-2">{{ $t('welcome.uploadRecoveryFile') }}</div>
-      <v-file-input
-        v-model="recoveryFile"
-        dense
-        filled
-        accept=".gmpc"
-        :placeholder="$t('welcome.chooseRecoveryFile')"
-        :label="$t('welcome.chooseRecoveryFile')"
-        prepend-icon=""
-        prepend-inner-icon="mdi-file-upload-outline"
-        :rules="[rules.required()]"
-        class="mb-2"
-      ></v-file-input>
-
-      <!-- Recovery password -->
+      <!-- Recovery password (no file — MetaMask-style fileless restore) -->
+      <div class="step-section-label mb-2">{{ $t('welcome.recoveryPassword') }}</div>
+      <div class="field-hint mb-2">{{ $t('welcome.restoreRecoveryPasswordHint') }}</div>
       <v-text-field
         v-model="recoveryPassword"
         dense
@@ -60,7 +47,7 @@
         :type="showRecovery ? 'text' : 'password'"
         :append-icon="showRecovery ? 'mdi-eye' : 'mdi-eye-off'"
         @click:append="showRecovery = !showRecovery"
-        :rules="[rules.required()]"
+        :rules="[rules.required(), rules.minCharacters(12)]"
         class="mb-2"
       ></v-text-field>
 
@@ -194,7 +181,6 @@ const email = ref(props.prefillEmail ?? '');
 const picture = ref(props.prefillPicture ?? '');
 
 const name = ref(props.prefillName?.trim() || generateWalletName());
-const recoveryFile = ref<File | null>(null);
 const recoveryPassword = ref('');
 const spendingPassword = ref('');
 const confirmSpendingPassword = ref('');
@@ -243,7 +229,7 @@ const secretReady = computed(() => (
 ));
 
 const canRestore = computed(() => (
-  formValid.value && !!email.value && !!recoveryFile.value && secretReady.value && !restoring.value
+  formValid.value && !!email.value && recoveryPassword.value.length >= 12 && secretReady.value && !restoring.value
 ));
 
 const signIn = async (): Promise<void> => {
@@ -288,40 +274,18 @@ const changeAccount = (): void => {
   email.value = '';
 };
 
-const readFileAsText = (file: File): Promise<string> => new Promise((resolve, reject) => {
-  const reader = new FileReader();
-  reader.onload = () => resolve(String(reader.result || ''));
-  reader.onerror = () => reject(reader.error || new Error('Failed to read file'));
-  reader.readAsText(file);
-});
-
 const restore = async (): Promise<void> => {
-  if (!canRestore.value || !recoveryFile.value) return;
+  if (!canRestore.value) return;
   restoring.value = true;
   errorMessage.value = '';
   try {
-    const fileContent = await readFileAsText(recoveryFile.value);
-
-    // Parse the recovery-file envelope: { v, publicKey, recovery }. The publicKey
-    // (xpub) is the anchor the background validates the reconstructed key against.
-    let publicKey: string;
-    let recoveryBlob: string;
-    try {
-      const envelope = JSON.parse(fileContent) as { v?: number; publicKey?: string; recovery?: string };
-      if (!envelope || typeof envelope.publicKey !== 'string' || typeof envelope.recovery !== 'string') {
-        throw new Error('missing fields');
-      }
-      publicKey = envelope.publicKey;
-      recoveryBlob = envelope.recovery;
-    } catch {
-      throw new Error(vmProxy.$t('welcome.invalidRecoveryFile') as string);
-    }
-
     // Prefer the Google profile picture as the restored wallet's icon.
     const walletIcon = picture.value || networks.resolveIconColor(props.network?.blockchain || '', props.network?.network || '');
     const payload = authPayload.value;
 
-    // Note: never log request payload — contains idToken/recoveryPassword/spendingPassword/prfOutputHex
+    // Note: never log request payload — carries idToken/recoveryPassword and the new device secret.
+    // Fileless: the background fetches the recovery blob + xpub anchor from the
+    // backend itself (keyed by the verified Google subject) — no file to parse here.
     const recoverResponse = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.RECOVER_MPC_GOOGLE_WALLET,
       data: {
@@ -331,9 +295,7 @@ const restore = async (): Promise<void> => {
         chain: props.network?.blockchain,
         network: props.network?.network,
         idToken: idToken.value,
-        recoveryBlob,
         recoveryPassword: recoveryPassword.value,
-        publicKey,
         ...authPayloadToWireFields(payload),
       },
     }) as GoogleWalletBgResponse;
@@ -394,6 +356,12 @@ const restore = async (): Promise<void> => {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: white;
+}
+
+.field-hint {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+  line-height: 1.4;
 }
 
 .google-signin-btn {

@@ -99,6 +99,8 @@
         />
         <StepGoogleBackup class="onboarding-step"
           v-else-if="currentStep.key === 'googleBackup'"
+          :network="network"
+          :id-token="googleIdToken"
           :wallet-id="googleWalletId"
           :recovery-share="googleRecoveryShare"
           :public-key="googlePublicKey"

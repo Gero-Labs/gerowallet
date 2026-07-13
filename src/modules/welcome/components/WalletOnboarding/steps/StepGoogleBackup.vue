@@ -4,11 +4,11 @@
     <v-card class="mb-3" outlined style="background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.12);">
       <v-card-text class="pa-3">
         <div class="d-flex align-center mb-2">
-          <v-icon color="primary" size="22" class="mr-2">mdi-file-lock-outline</v-icon>
-          <div class="text-body-2 white--text font-weight-medium">{{ fileName }}</div>
+          <v-icon color="primary" size="22" class="mr-2">mdi-shield-key-outline</v-icon>
+          <div class="text-body-2 white--text font-weight-medium">{{ $t('welcome.recoveryNoFileTitle') }}</div>
         </div>
         <div class="text-body-2 grey--text text--lighten-1">
-          {{ $t('welcome.onboardingDescGoogleBackup') }}
+          {{ $t('welcome.recoveryNoFileBody') }}
         </div>
       </v-card-text>
     </v-card>
@@ -17,12 +17,13 @@
       class="onb-btn"
       block
       depressed
-      :color="downloaded ? 'success' : 'primary'"
-      :loading="downloading"
-      @click="download()"
+      :color="stored ? 'success' : 'primary'"
+      :loading="storing"
+      :disabled="stored"
+      @click="storeRecovery()"
     >
-      <v-icon left small>{{ downloaded ? 'mdi-check' : 'mdi-download' }}</v-icon>
-      {{ downloaded ? $t('welcome.recoveryFileDownloaded') : $t('welcome.downloadRecoveryFile') }}
+      <v-icon left small>{{ stored ? 'mdi-check' : 'mdi-cloud-upload-outline' }}</v-icon>
+      {{ stored ? $t('welcome.recoverySaved') : (errorMessage ? $t('common.retry') : $t('welcome.saveRecovery')) }}
     </v-btn>
 
     <v-alert
@@ -36,23 +37,12 @@
     >
       <span class="text-body-2">{{ errorMessage }}</span>
     </v-alert>
-
-    <v-checkbox
-      v-model="savedAcknowledged"
-      :disabled="!downloaded"
-      hide-details
-      class="mt-4 mb-0"
-    >
-      <template v-slot:label>
-        <span class="text-body-2">{{ $t('welcome.confirmSavedRecoveryFile') }}</span>
-      </template>
-    </v-checkbox>
     </div>
 
     <!-- Navigation -->
     <div class="onboarding-actions d-flex" style="gap: 12px;">
       <v-spacer />
-      <v-btn class="onb-btn" depressed color="primary" :disabled="!canContinue" @click="$emit('next')">
+      <v-btn class="onb-btn" depressed color="primary" :disabled="!stored" @click="$emit('next')">
         {{ $t('common.continue') }}
       </v-btn>
     </div>
@@ -60,59 +50,54 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, getCurrentInstance } from 'vue';
-import { recoveryFileName } from './googleRecoveryFilename';
+import { ref, getCurrentInstance } from 'vue';
+import { Messaging } from '@/chrome/messaging';
+import { MessageTypes } from '@/models/MessageTypes';
+import type { NetworkInfo } from '@/utils/networks';
+import type { GoogleWalletBgResponse } from './googleWalletMessages';
 
-interface Props {
+const props = defineProps<{
+  network: NetworkInfo;
+  idToken: string;
   walletId: number;
-  /** Encrypted download only — never rendered, logged, or persisted by this component. */
+  /** Plaintext recovery share — sent once to the background, which encrypts + uploads. Never rendered/logged/persisted here. */
   recoveryShare: string;
-  /** The wallet's xpub (not secret) — embedded in the file as the restore-time anchor. */
+  /** Wallet xpub (not secret) — the restore-time anchor stored alongside the blob. */
   publicKey: string;
   recoveryPassword: string;
-}
-
-const props = defineProps<Props>();
+}>();
 defineEmits<{ (e: 'next'): void }>();
 
 const vmProxy = getCurrentInstance()!.proxy;
 
-const downloading = ref(false);
-const downloaded = ref(false);
-const savedAcknowledged = ref(false);
+const storing = ref(false);
+const stored = ref(false);
 const errorMessage = ref('');
 
-const fileName = computed(() => recoveryFileName(props.walletId));
-
-const canContinue = computed(() => downloaded.value && savedAcknowledged.value);
-
-function triggerDownload(filename: string, content: string): void {
-  const blob = new Blob([content], { type: 'application/octet-stream' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-const download = async (): Promise<void> => {
-  downloading.value = true;
+const storeRecovery = async (): Promise<void> => {
+  storing.value = true;
   errorMessage.value = '';
   try {
-    const { encryptRecoveryShare } = await import('@/shared/utils/mpc');
-    const recovery = await encryptRecoveryShare(props.recoveryShare, props.recoveryPassword);
-    // Envelope: the encrypted recovery share PLUS the wallet's xpub anchor
-    // (publicKey is not secret; the recovery share stays encrypted). The anchor
-    // lets restore reject a mismatched recovery-file / Google-account pairing.
-    const envelope = JSON.stringify({ v: 1, publicKey: props.publicKey, recovery });
-    triggerDownload(fileName.value, envelope);
-    downloaded.value = true;
+    // Never log request payload — carries idToken/recoveryShare/recoveryPassword.
+    const response = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.STORE_MPC_RECOVERY,
+      data: {
+        idToken: props.idToken,
+        chain: props.network?.blockchain,
+        network: props.network?.network,
+        recoveryShare: props.recoveryShare,
+        recoveryPassword: props.recoveryPassword,
+        publicKey: props.publicKey,
+      },
+    }) as GoogleWalletBgResponse;
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.error || (vmProxy.$t('welcome.recoverySaveFailed') as string));
+    }
+    stored.value = true;
   } catch (error: unknown) {
-    console.error('Failed to prepare recovery file:', error instanceof Error ? error.message : 'unknown error');
-    errorMessage.value = vmProxy.$t('errors.unknownError') as string;
+    errorMessage.value = error instanceof Error ? error.message : (vmProxy.$t('welcome.recoverySaveFailed') as string);
   } finally {
-    downloading.value = false;
+    storing.value = false;
   }
 };
 </script>
@@ -121,21 +106,5 @@ const download = async (): Promise<void> => {
 .onb-btn {
   border-radius: 8px !important;
   box-shadow: none !important;
-}
-
-.mnemonic-note {
-  display: flex;
-  align-items: flex-start;
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.45);
-  line-height: 1.4;
-  padding: 8px 10px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.02);
-}
-
-::v-deep .v-input--checkbox .v-input--selection-controls__ripple {
-  display: none;
 }
 </style>
