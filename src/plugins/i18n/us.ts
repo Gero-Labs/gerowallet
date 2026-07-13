@@ -2800,7 +2800,7 @@ export default {
   'welcome.onboardingSubGoogleBackup': 'Confirm your recovery',
   'welcome.onboardingDescGoogleBackup': 'Recovery = your Google account + this password. Nothing to download.',
   'welcome.onboardingStepGoogleRestore': 'Restore Google Wallet',
-  'welcome.onboardingSubGoogleRestore': 'Google account & recovery file',
+  'welcome.onboardingSubGoogleRestore': 'Google account & recovery password',
   'welcome.onboardingDescGoogleRestore': 'Sign in with Google and enter your recovery password to restore your wallet.',
   'welcome.googleSignInButton': 'Sign in with Google',
   'welcome.googleSignedInAs': 'Signed in as {email}',

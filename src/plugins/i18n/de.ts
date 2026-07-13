@@ -3278,7 +3278,7 @@ export default {
   'welcome.onboardingSubGoogleBackup': 'Bestätigen Sie Ihre Wiederherstellung',
   'welcome.onboardingDescGoogleBackup': 'Wiederherstellung = Ihr Google-Konto + dieses Passwort. Nichts herunterzuladen.',
   'welcome.onboardingStepGoogleRestore': 'Google-Wallet wiederherstellen',
-  'welcome.onboardingSubGoogleRestore': 'Google-Konto & Wiederherstellungsdatei',
+  'welcome.onboardingSubGoogleRestore': 'Google-Konto & Wiederherstellungspasswort',
   'welcome.onboardingDescGoogleRestore': 'Melden Sie sich mit Google an und geben Sie Ihr Wiederherstellungspasswort ein, um Ihre Wallet wiederherzustellen.',
   'welcome.googleSignInButton': 'Mit Google anmelden',
   'welcome.googleSignedInAs': 'Angemeldet als {email}',
