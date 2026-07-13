@@ -34,6 +34,26 @@ describe('recoveryPasswordStrength', () => {
     expect(scoreRecoveryPassword(good).score).toBeGreaterThanOrEqual(2);
   });
 
+  it('accepts exactly 12 chars with two character classes', () => {
+    const exact = 'abcdefghij12'; // 12 chars, lower + digit
+    expect(exact.length).toBe(MIN_RECOVERY_PASSWORD_LENGTH);
+    expect(isAcceptableRecoveryPassword(exact)).toBe(true);
+  });
+
+  it('rejects 11 chars even with mixed character classes', () => {
+    const short = 'abcdefghi12'; // 11 chars, lower + digit
+    expect(short.length).toBe(MIN_RECOVERY_PASSWORD_LENGTH - 1);
+    expect(isAcceptableRecoveryPassword(short)).toBe(false);
+  });
+
+  it('never accepts a single character class, no matter how long (D3 custody gate)', () => {
+    // Regression: length-only signals (>=8, >=16 buckets) used to be able to
+    // reach the acceptance threshold on their own with zero class variety.
+    expect(isAcceptableRecoveryPassword('a'.repeat(16))).toBe(false);
+    expect(isAcceptableRecoveryPassword('a'.repeat(20))).toBe(false);
+    expect(isAcceptableRecoveryPassword('1'.repeat(16))).toBe(false);
+  });
+
   it('scores a long, all-classes password at the top tier', () => {
     expect(scoreRecoveryPassword('Sup3r-Secret-Recovery-Phrase!').score).toBe(4);
   });

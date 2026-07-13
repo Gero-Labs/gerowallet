@@ -33,11 +33,12 @@ export function scoreRecoveryPassword(pw: string): RecoveryPasswordScore {
   if (/\d/.test(password)) variety += 1;
   if (/[^A-Za-z0-9]/.test(password)) variety += 1;
 
-  // Length-only signals are deliberately weak: the >=12 floor is already
-  // enforced separately via `acceptable`, so a single mid threshold here (>=8)
-  // plus a high one (>=16) keeps a long-but-single-class password (e.g. 14
-  // lowercase letters) from reaching the "acceptable" score on length alone —
-  // it needs class variety too.
+  // Length-only signals (>=8, >=16) can still push the numeric `score` to 2
+  // or higher on their own — that's fine, `score` just drives the UI meter.
+  // The `acceptable` gate below is the actual security floor and independently
+  // requires `variety >= 2`, so a long-but-single-class password (e.g. 16 or
+  // 20 lowercase letters, or 16 digits) can score high yet is NEVER
+  // acceptable: length alone must never satisfy the D3 custody gate.
   let raw = 0;
   if (password.length >= 8) raw += 1;
   if (password.length >= 16) raw += 1;
@@ -46,7 +47,8 @@ export function scoreRecoveryPassword(pw: string): RecoveryPasswordScore {
   if (variety >= 4) raw += 1;
 
   const score = Math.min(4, raw) as 0 | 1 | 2 | 3 | 4;
-  const acceptable = password.length >= MIN_RECOVERY_PASSWORD_LENGTH && score >= 2;
+  const acceptable =
+    password.length >= MIN_RECOVERY_PASSWORD_LENGTH && variety >= 2 && score >= 2;
   return { score, labelKey: STRENGTH_LABEL_KEYS[score], acceptable };
 }
 
