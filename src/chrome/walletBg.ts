@@ -2137,7 +2137,8 @@ export class WalletBg {
       const { Network } = await import('@/models/types');
       const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
       const { getMidnightEndpoints } = await import('@/chains/midnight/midnightConfig');
-      const { buildAndSignShieldedTransfer } = await import('@/chains/midnight/midnightShieldedBuilder');
+      const { buildAndSignShieldedTransfer, LocalProvingError } = await import('@/chains/midnight/midnightShieldedBuilder');
+      const { midnightStore } = await import('@/stores/midnightStore');
 
       // skipCardano:true: same BG-bundle pbkdf2 polyfill workaround as
       // balanceAndSignMidnightUnshieldedTransfer. Cardano material isn't
@@ -2181,19 +2182,205 @@ export class WalletBg {
       }
 
       try {
-        const built = await buildAndSignShieldedTransfer({
+        let built: Awaited<ReturnType<typeof buildAndSignShieldedTransfer>>;
+        try {
+          built = await buildAndSignShieldedTransfer({
+            sdkNetworkId,
+            endpoints,
+            zswapSecretKeySeed: derived.zswapSecretKey,
+            outputs: outputs.map((o) => ({
+              receiverAddress: o.receiverAddress,
+              amount: o.amount,
+              tokenType: (o.tokenType ?? 'native') as 'native',
+            })),
+            proving,
+          });
+        } catch (err) {
+          // Only LocalProvingError carries a duration worth recording — any
+          // other failure (signing, sync, network) happened before proving
+          // started, or the remote path was used (no history there; Gero
+          // Cloud proving happens entirely inside the Nexus sidecar, which
+          // this wallet has no visibility into). Record, then rethrow the
+          // SAME error unchanged so existing error handling is unaffected.
+          if (err instanceof LocalProvingError) {
+            midnightStore.recordLocalProvingAttempt({
+              durationMs: err.durationMs,
+              success: false,
+              error: err.message,
+            });
+          }
+          throw err;
+        }
+        if (built.proven && typeof built.proveDurationMs === 'number') {
+          midnightStore.recordLocalProvingAttempt({
+            durationMs: built.proveDurationMs,
+            success: true,
+          });
+        }
+        return { signedTxHex: built.txHex, proven: built.proven };
+      } finally {
+        // Wipe all derived secrets. The mnemonic itself is cleared in the
+        // outer finally.
+        derived.unshieldedSecretKey.fill(0);
+        derived.dustSecretKey.fill(0);
+        derived.zswapSecretKey.fill(0);
+        derived.seed.fill(0);
+      }
+    } finally {
+      mnemonic = '';
+      void mnemonic;
+    }
+  }
+
+  /**
+   * BG-side build + sign of the SHIELD direction of a shield/unshield
+   * conversion: move `amount` of public (unshielded) NIGHT into a brand-new
+   * shielded output at the wallet's OWN shielded address. No recipient
+   * parameter — shield/unshield always moves value between the wallet's own
+   * two addresses, never to a third party (see
+   * docs/plans/2026-07-13-midnight-shield-unshield.md, WP-SH3).
+   *
+   * Mirrors `buildAndSignMidnightShieldedTransfer`'s structure: decrypt the
+   * mnemonic, derive Midnight keys, cross-check the cached Zswap viewing key
+   * (shielded sync must be running against the SAME key this tx's shielded
+   * half signs against), call the WP-SH2 shield-swap builder, wipe secrets
+   * in `finally`.
+   *
+   * Unlike a plain shielded transfer, this ALSO touches Nexus — the
+   * unshielded half spends existing public UTxOs, and coin selection needs
+   * the indexer-backed view only Nexus has (see
+   * midnightShieldSwapBuilder.ts's file header) — so this method also
+   * derives `publicKeyHex`/`addressHex`/the wallet's own unshielded address,
+   * and (like `balanceAndSignMidnightUnshieldedTransfer`) supplies the DUST
+   * secret + registration lower-bound + live sync progress that DUST fee
+   * balancing needs, none of which a plain shielded transfer requires.
+   *
+   * Default (no `proving`): returns the SIGNED but UNPROVEN tx hex, ready
+   * for the sidecar's /tx/prove-and-submit. With `proving`: proves + binds
+   * locally first (same proof-server mode branch as a plain shielded send),
+   * so the hex is finalized for /tx/submit-proven instead.
+   *
+   * Unshield (private -> public) is intentionally NOT implemented here yet
+   * — ground rule 16 of the shield/unshield plan: no real shield has
+   * succeeded on-chain yet, so there is nothing to unshield to test against.
+   */
+  async buildAndSignMidnightShield(
+    amount: bigint,
+    password?: string,
+    prfSecret?: Uint8Array,
+    proving?: { url: string },
+  ): Promise<{ signedTxHex: string; proven: boolean }> {
+    if (this.chain !== Blockchain.MIDNIGHT) {
+      throw new Error('buildAndSignMidnightShield called on non-Midnight wallet');
+    }
+    if (amount <= 0n) {
+      throw new Error('Shield amount must be positive');
+    }
+
+    // Decrypt mnemonic — same pattern as the shielded-transfer path. PRF
+    // wallets need the raw PRF output; password wallets need the password.
+    const { decrypt } = await import('@/shared/utils/crypto');
+    let mnemonic: string;
+    if (this.encryptionMethod === 'prf') {
+      if (!this.prfEncryptedMnemonic) throw new Error('PRF wallet has no encrypted mnemonic');
+      if (!prfSecret) throw new Error('PRF secret is required for PRF wallet signing');
+      if (!this.webAuthnCredentialId) throw new Error('PRF wallet missing credential ID');
+      const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
+      mnemonic = await decryptMnemonicWithPrfOutput(
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.id.toString(),
+      );
+    } else {
+      if (!password) throw new Error('Password is required for password wallet signing');
+      if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
+      mnemonic = decrypt(this.encryptedMnemonic, password);
+    }
+
+    try {
+      const { Network } = await import('@/models/types');
+      const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
+      const { getMidnightEndpoints } = await import('@/chains/midnight/midnightConfig');
+      const { buildAndSignShield } = await import('@/chains/midnight/midnightShieldSwapBuilder');
+      const { midnightActions } = await import('@/stores/midnightStore');
+
+      // skipCardano:true: same BG-bundle pbkdf2 polyfill workaround as
+      // buildAndSignMidnightShieldedTransfer. Cardano material isn't needed
+      // for a shield conversion.
+      const derived = await deriveMidnightKeys(mnemonic, this.network, 0, { skipCardano: true });
+      this.cacheMidnightViewingKeyToSession(derived.zswapViewingKey);
+      let sdkNetworkId: string;
+      switch (this.network) {
+        case Network.MAINNET: sdkNetworkId = 'mainnet'; break;
+        case Network.PREVIEW: sdkNetworkId = 'preview'; break;
+        case Network.PREPROD: sdkNetworkId = 'preprod'; break;
+        case Network.TESTNET: sdkNetworkId = 'testnet'; break;
+        default: throw new Error(`Unsupported Midnight network: ${this.network}`);
+      }
+      const endpoints = getMidnightEndpoints(this.network);
+      if (!endpoints) {
+        throw new Error(`No Midnight endpoints configured for network ${this.network}`);
+      }
+
+      // Sanity check the stored viewing key matches what we just re-derived
+      // — identical rationale to buildAndSignMidnightShieldedTransfer: a
+      // mismatch means shielded sync ran against the wrong key, so the note
+      // set backing the shielded half of this conversion is unsound. Fail
+      // loud rather than build a tx the chain will reject.
+      try {
+        const parsed = this.publicKey ? JSON.parse(this.publicKey) : null;
+        const storedViewingKey = parsed?.zswapViewingKey;
+        if (storedViewingKey && storedViewingKey !== derived.zswapViewingKey) {
+          throw new Error(
+            `Midnight viewing-key mismatch — BG-derived viewing key ` +
+            `(${derived.zswapViewingKey.slice(0, 16)}…) doesn't match the ` +
+            `wallet record's stored viewing key (${storedViewingKey.slice(0, 16)}…). ` +
+            `Sync was running against the wrong key; the local note set is unsound.`,
+          );
+        }
+      } catch (e) {
+        if (e instanceof Error && e.message.startsWith('Midnight viewing-key mismatch')) throw e;
+        // Parse failures fall through — the publicKey JSON may not have the
+        // field yet on legacy wallets. The build will still produce a valid
+        // tx; sync correctness is the user's responsibility on legacy wallets.
+      }
+
+      // Registration lower bound for the DUST snapshot bootstrap — same
+      // reasoning as balanceAndSignMidnightUnshieldedTransfer: the wallet
+      // can't have registered for DUST before it was created. Missing
+      // createdAt → conservative 90-day lookback.
+      const createdMs = this.createdAt ? Date.parse(this.createdAt) : NaN;
+      const dustRegisteredAt = Number.isFinite(createdMs)
+        ? new Date(createdMs)
+        : new Date(Date.now() - 90 * 24 * 3_600_000);
+
+      try {
+        const built = await buildAndSignShield({
           sdkNetworkId,
           endpoints,
+          amount,
+          ownUnshieldedAddress: derived.addresses.unshielded,
+          publicKeyHex: derived.publicKeyHex,
+          addressHex: derived.addressHex,
+          ownShieldedAddress: derived.addresses.shielded,
+          unshieldedSecretKey: derived.unshieldedSecretKey,
           zswapSecretKeySeed: derived.zswapSecretKey,
-          outputs: outputs.map((o) => ({
-            receiverAddress: o.receiverAddress,
-            amount: o.amount,
-            tokenType: (o.tokenType ?? 'native') as 'native',
-          })),
+          dustSecretSeed: derived.dustSecretKey,
+          // 24h TTL — same default window used elsewhere for Nexus-built
+          // Midnight txs (e.g. registerNightForDust's ttlMs default).
+          ttl: new Date(Date.now() + 24 * 60 * 60 * 1000),
+          dustRegisteredAt,
+          // Forward the (long) DUST-ledger sync percentage to the store so a
+          // send dialog's stage timeline can render a real bar — same
+          // mechanism balanceAndSignMidnightUnshieldedTransfer already uses.
+          onDustSyncProgress: (percent, detail) => {
+            midnightActions.setSendProgress({ phase: 'syncingDust', percent, detail });
+          },
           proving,
         });
         return { signedTxHex: built.txHex, proven: built.proven };
       } finally {
+        // Clear the transient progress bar (success or failure) so a stale
+        // percentage can't linger on the next send's opening frame.
+        midnightActions.setSendProgress(null);
         // Wipe all derived secrets. The mnemonic itself is cleared in the
         // outer finally.
         derived.unshieldedSecretKey.fill(0);

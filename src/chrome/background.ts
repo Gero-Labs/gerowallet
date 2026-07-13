@@ -3838,6 +3838,59 @@ app.addToOptions(
 );
 
 /**
+ * Midnight: build + sign the SHIELD direction of a shield/unshield
+ * conversion (public NIGHT -> private/shielded NIGHT). No recipient — shield
+ * always moves value between the wallet's own two addresses.
+ *
+ * Request shape: `{ amount, password?, prfSecret?, proving?: { url } }`.
+ * `amount` is a decimal string (Chrome messaging can't carry BigInt); BG
+ * parses back to bigint. `proving` is optional (WP-P2, local proof-server
+ * mode), same as BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX above.
+ *
+ * Response: `{ success: true, signedTxHex, proven }`. Same proven/unproven
+ * routing rule as the shielded-transfer handler above (proven=false ->
+ * /tx/prove-and-submit, proven=true -> /tx/submit-proven).
+ */
+app.addToOptions(
+  MessageTypes.BUILD_AND_SIGN_MIDNIGHT_SHIELD_TX,
+  async (request, sendResponse) => {
+    try {
+      const walletBg = walletManager.getWallet();
+      if (!walletBg) throw new Error('No wallet logged in');
+      if (walletBg.chain !== Blockchain.MIDNIGHT) {
+        throw new Error('BUILD_AND_SIGN_MIDNIGHT_SHIELD_TX called on non-Midnight wallet');
+      }
+      const { amount, password, prfSecret, proving } = request.data || {};
+      const parsedAmount = typeof amount === 'bigint' ? amount : BigInt(String(amount ?? '0'));
+      if (parsedAmount <= 0n) {
+        throw new Error('amount must be > 0');
+      }
+      const prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
+      const provingArg = parseProvingRequest(proving);
+      const { signedTxHex, proven } = await walletBg.buildAndSignMidnightShield(
+        parsedAmount,
+        password,
+        prfBytes,
+        provingArg,
+      );
+      sendResponse({
+        id: request.id,
+        data: { success: true, signedTxHex, proven },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } catch (error) {
+      sendResponse({
+        id: request.id,
+        data: { success: false, error: getErrorMessage(error) },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  },
+);
+
+/**
  * Midnight: persist the user's consent to ship shielded-tx witness data
  * through Gero Cloud's proving service. BG-side action so the value
  * propagates to every browser context (popup, options, sidepanel) via the

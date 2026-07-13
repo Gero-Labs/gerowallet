@@ -68,6 +68,23 @@ export interface MidnightProvingOperation {
 }
 
 /**
+ * One completed (or failed) LOCAL proving attempt — history, not live
+ * progress (that's {@link MidnightProvingOperation}). Only the local proof
+ * server path is instrumented: remote/cloud proving happens entirely inside
+ * the Nexus sidecar, which this wallet has no visibility into. Newest first,
+ * capped at {@link PROVING_HISTORY_LIMIT} entries. See
+ * `midnightShieldedBuilder.ts`'s `LocalProvingError` for how a failed
+ * attempt's duration is captured.
+ */
+export interface MidnightProvingLogEntry {
+  timestamp: number; // Unix ms
+  durationMs: number;
+  success: boolean;
+  /** Present only when {@code success} is false. Never the tx hex/witness. */
+  error?: string;
+}
+
+/**
  * Live progress of the DUST-ledger sync sub-step of a send, broadcast from
  * the background so the send dialog's stage timeline can show a real bar
  * instead of an indeterminate spinner. `null` when no send is in flight.
@@ -125,6 +142,14 @@ export interface MidnightStore {
    * indicator per entry while the SDK runs `finalizeRecipe`.
    */
   provingOperations: Map<string, MidnightProvingOperation>;
+
+  /**
+   * Recent LOCAL proving attempts (success and failure), newest first,
+   * capped at {@link PROVING_HISTORY_LIMIT}. See
+   * {@link MidnightProvingLogEntry}. Empty for wallets that have never used
+   * local proving, or on a fresh install.
+   */
+  provingHistory: MidnightProvingLogEntry[];
 
   /**
    * Highest indexer transactionId we've successfully applied to the UTxO set.
@@ -242,6 +267,9 @@ const DEFAULT_PROOF_SERVER: MidnightStore['proofServer'] = {
   localUrl: getMidnightEndpoints(Network.PREVIEW)!.defaultProofServerUrl,
 };
 
+/** Ring-buffer cap for {@link MidnightStore.provingHistory}. */
+export const PROVING_HISTORY_LIMIT = 10;
+
 export const midnightStore = Vue.observable<MidnightStore>({
   isActive: false,
   lastSync: null,
@@ -253,6 +281,7 @@ export const midnightStore = Vue.observable<MidnightStore>({
   utxos: [],
   dustState: null,
   provingOperations: new Map(),
+  provingHistory: [],
   lastMidnightTxId: null,
   shieldedProvingConsent: null,
   activeWalletKey: null,
@@ -342,6 +371,19 @@ function hydrateProvingOperations(stored: any): Map<string, MidnightProvingOpera
   return new Map(stored as Array<[string, MidnightProvingOperation]>);
 }
 
+function hydrateProvingHistory(stored: unknown): MidnightProvingLogEntry[] {
+  if (!Array.isArray(stored)) return [];
+  return stored
+    .filter((e): e is Record<string, unknown> => !!e && typeof e === 'object')
+    .map((e) => ({
+      timestamp: typeof e.timestamp === 'number' ? e.timestamp : 0,
+      durationMs: typeof e.durationMs === 'number' ? e.durationMs : 0,
+      success: !!e.success,
+      error: typeof e.error === 'string' ? e.error : undefined,
+    }))
+    .slice(0, PROVING_HISTORY_LIMIT);
+}
+
 function toBig(value: unknown): bigint {
   if (typeof value === 'bigint') return value;
   if (typeof value === 'number') return BigInt(Math.trunc(value));
@@ -372,6 +414,8 @@ if (context === 'browser') {
         (midnightStore as any).dustState = hydrateDustState(val);
       } else if (k === 'provingOperations') {
         (midnightStore as any).provingOperations = hydrateProvingOperations(val);
+      } else if (k === 'provingHistory') {
+        (midnightStore as any).provingHistory = hydrateProvingHistory(val);
       } else if (k in midnightStore) {
         (midnightStore as any)[k] = val;
       }
@@ -411,6 +455,7 @@ if (context === 'browser') {
     midnightStore.transactions = hydrateTransactions(stored.transactions);
     midnightStore.dustState = hydrateDustState(stored.dustState);
     midnightStore.provingOperations = hydrateProvingOperations(stored.provingOperations);
+    midnightStore.provingHistory = hydrateProvingHistory(stored.provingHistory);
     midnightStore.lastMidnightTxId = typeof stored.lastMidnightTxId === 'number'
       ? stored.lastMidnightTxId
       : null;
@@ -486,6 +531,9 @@ function applyUpdates(updates: Partial<MidnightStore>) {
   }
   if (updates.provingOperations) {
     midnightStore.provingOperations = hydrateProvingOperations(updates.provingOperations);
+  }
+  if (updates.provingHistory) {
+    midnightStore.provingHistory = hydrateProvingHistory(updates.provingHistory);
   }
   // Plain-typed fields — copy directly (no BigInt nesting to handle)
   for (const key of [
@@ -700,6 +748,23 @@ export const midnightActions = {
   setProofServer(next: MidnightStore['proofServer']) {
     midnightStore.proofServer = next;
     broadcastFromBackground({ proofServer: next }, true);
+  },
+
+  /**
+   * Record one completed LOCAL proving attempt (success or failure) at the
+   * front of {@link MidnightStore.provingHistory}, capped at
+   * {@link PROVING_HISTORY_LIMIT}. Called from `walletBg.ts` right after
+   * `buildAndSignShieldedTransfer` resolves or throws in local-proving mode.
+   * Never pass tx hex or witness data as `error` — see the file-header
+   * privacy note on `midnightLocalProver.ts`.
+   */
+  recordLocalProvingAttempt(entry: { durationMs: number; success: boolean; error?: string }) {
+    const next = [
+      { timestamp: Date.now(), ...entry },
+      ...midnightStore.provingHistory,
+    ].slice(0, PROVING_HISTORY_LIMIT);
+    midnightStore.provingHistory = next;
+    broadcastFromBackground({ provingHistory: next }, true);
   },
 
   /** Network/WS status update (driven by the gero-sync client wrapper). */

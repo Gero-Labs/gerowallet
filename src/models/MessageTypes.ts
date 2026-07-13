@@ -75,6 +75,16 @@ export enum MessageTypes {
   // to this spend. Caller (UI) must surface the explicit consent for routing
   // it through Gero Cloud proving — see ShieldedProvingConsentDialog.
   BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX = 'BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX',
+  // Midnight: build + sign the SHIELD direction of a shield/unshield
+  // conversion (public NIGHT -> private/shielded NIGHT, always between the
+  // wallet's OWN two addresses — no recipient field). BG merges a
+  // Nexus-built unshielded half (swap mode) with a client-side
+  // ShieldedWallet.initSwap shielded half, balances DUST once against the
+  // combined tx, and returns signed-but-unproven hex by default (or
+  // finalized hex when `proving` is supplied). See
+  // docs/plans/2026-07-13-midnight-shield-unshield.md WP-SH3. Unshield is
+  // not wired yet (ground rule 16 of that plan).
+  BUILD_AND_SIGN_MIDNIGHT_SHIELD_TX = 'BUILD_AND_SIGN_MIDNIGHT_SHIELD_TX',
   // Midnight: record the user's consent to ship shielded-tx witness data to
   // Gero Cloud for proving. Browser routes the consent click here so BG can
   // persist + broadcast to every connected browser context (the user
