@@ -4,6 +4,7 @@
        AVG COST / P&L) so the table reads identically across chains.
        Cells that don't apply to Midnight today render an em-dash, just
        like the Cardano table does for tokens missing market data. -->
+  <div class="midnight-holdings-table-root">
   <v-data-table
     dense
     class="transparent tokens-table market-token-table"
@@ -42,8 +43,20 @@
         <div style="font-family: 'Roboto Mono', monospace; font-size: 12px;">
           {{ item.balanceFormatted }}
         </div>
-        <div v-if="item.breakdownText" class="t-caption g-num" style="margin-top: 2px;">
-          {{ item.breakdownText }}
+        <div v-if="item.breakdownText" class="breakdown-row">
+          <span class="t-caption g-num">{{ item.breakdownText }}</span>
+          <v-tooltip top content-class="custom-tooltip" max-width="220">
+            <template v-slot:activator="{ on, attrs }">
+              <button
+                type="button"
+                class="convert-link-btn"
+                v-bind="attrs"
+                v-on="on"
+                @click="convertDialogOpen = true"
+              >{{ t('midnight.shieldConvert.entryButton') }}</button>
+            </template>
+            <span>{{ t('midnight.shieldConvert.entryButtonTooltip') }}</span>
+          </v-tooltip>
         </div>
       </div>
     </template>
@@ -76,10 +89,18 @@
       <span class="text--secondary" style="font-size: 12px;">{{ item.pnl }}</span>
     </template>
   </v-data-table>
+
+  <!-- Shield/unshield conversion entry point — reused, not a new nav
+       destination (this is a transaction type, not a settings page). -->
+  <ShieldConvertDialog
+    :is-open="convertDialogOpen"
+    @close="convertDialogOpen = false"
+  />
+  </div>
 </template>
 
 <script setup lang="ts">
-import { computed, toRefs, watch } from 'vue';
+import { computed, ref, toRefs, watch } from 'vue';
 import { midnightStore } from '@/stores/midnightStore';
 import { walletStore } from '@/stores/walletStore';
 import { Network } from '@/models/types';
@@ -89,6 +110,9 @@ import { useMidnightLoading } from '@/shared/composables/useMidnightLoading';
 import { useNightFiat } from '@/shared/composables/useNightFiat';
 import { formatPrice, formatUsd, formatSignedChange } from '@/shared/utils/format';
 import midnightLogo from '@/assets/svg/midnight.svg';
+import ShieldConvertDialog from '@/modules/dashboard/dialogs/ShieldConvertDialog.vue';
+
+const convertDialogOpen = ref(false);
 
 const { t } = useTranslation();
 const midnightLoading = useMidnightLoading();
@@ -209,6 +233,32 @@ const rows = computed<MidnightHoldingRow[]>(() => [
 </script>
 
 <style scoped>
+.midnight-holdings-table-root {
+  width: 100%;
+}
+
+.breakdown-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--g-s-2);
+  margin-top: 2px;
+}
+
+.convert-link-btn {
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--g-accent);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+.convert-link-btn:hover {
+  text-decoration: underline;
+}
+
 .tokens-table ::v-deep .v-data-table__wrapper {
   background: transparent;
 }
