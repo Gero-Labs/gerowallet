@@ -134,7 +134,14 @@ Breach now needs **DB + server at-rest key + a crack of the recovery password**.
 | Recover (new device) | Read-only fetches + client reconstruct. Any failure (wrong pw → decrypt fail, 404, xpub-mismatch → reject) writes **no state**; retry. Local wallet + device share written only after reconstruct+validate. |
 | Set / change recovery password (re-split) | Crash-safe staged re-split, order: **1** stage `deviceShareNext` (old kept) → **2** backend `rotate` login → **3** promote device → **4** store recovery' blob (new pw) → **5** clear `mpcLoginShareCache`. Recovery store is **last** (only written once S' is live). **Resume-on-unlock:** device+login mismatch → try `deviceShareNext`+login → promote. Backend-rotate fail → drop `next`, stay on old split. Never bricks. Never asks the old password. |
 
-**Crash-safety field:** new nullable wallet field `mpcDeviceShareNext`. On every MPC unlock: device+login reconstructs → drop any stale `next`; device+login fails but `next`+login succeeds → promote `next`, continue unlocked.
+**Crash-safety field:** new nullable wallet field `mpcDeviceShareNext`. On every MPC unlock, `mpcDeviceShareNext` is **cleared ONLY via a successful promote** — never destructively dropped:
+- device+login reconstructs → return unlocked; **leave `next` untouched** (a leftover stale `next` is harmless — a later re-split overwrites it).
+- device+login fails but `next`+login succeeds → `promoteMpcDeviceShareNext` (which clears `next`), continue unlocked.
+- device+login fails and `next`+login also fails (any error) → fail the unlock cleanly; **do NOT drop `next`**.
+
+> **Correction (2026-07-13, found by T10 review):** an earlier draft said "device+login reconstructs → drop any stale `next`". That is a **permanent-brick bug**: after a crash between step 2 (backend now holds `S'.login`) and step 5, the old `S.login` may still be cached (`chrome.storage.session` survives SW restarts), so device(`S`)+cached-login(`S`) reconstructs successfully and the drop would destroy `S'.device` — the only device share compatible with the live backend `S'.login`. Likewise dropping on a resume decrypt/wrong-password error bricks it. The rule above (clear `next` only via promote) is the corrected, brick-proof semantics. (`setRecoveryPasswordFlow`'s rotate-**failure** rollback still clears the just-staged `next` via `setMpcDeviceShareNext(id, undefined)` — that is safe: that `next` was never promoted and its backend rotate failed, so the old split is fully intact.)
+>
+> `setRecoveryPasswordFlow` also asserts the fresh split re-derives `wallet.publicKey` (`reconstructAndValidateEntropy(S'.device, S'.login, wallet.publicKey)`) **before** any stage/rotate, guarding against a corrupt split rotating the backend to a different key.
 
 **Security-invariant checklist** (all flows):
 - Never log / persist / return: entropy, root key, any plaintext share, recovery password, SRP, idToken, prfOutput. (SRP returned to UI **once** for reveal — shown, not stored/logged.)
