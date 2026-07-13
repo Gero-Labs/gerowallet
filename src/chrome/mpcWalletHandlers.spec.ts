@@ -4,12 +4,14 @@ import {
   createMpcGoogleWalletFlow,
   unlockMpcWalletFlow,
   recoverMpcGoogleWalletFlow,
+  storeRecoveryShareFlow,
   subFromIdToken,
   resolveSignPrivateKeyBytes,
   assertMpcActionSupported,
   type CreateMpcGoogleWalletDeps,
   type UnlockMpcWalletDeps,
   type RecoverMpcGoogleWalletDeps,
+  type StoreRecoveryShareDeps,
 } from './mpcWalletHandlers';
 
 // A structurally valid (but not cryptographically real) JWT: header.payload.signature,
@@ -272,6 +274,85 @@ describe('recoverMpcGoogleWalletFlow', () => {
     const deps = makeDeps({ decryptRecoveryShare: vi.fn(async () => { throw new Error('wrong password'); }) });
     await expect(recoverMpcGoogleWalletFlow(baseInput, deps)).rejects.toThrow('wrong password');
     expect(deps.createMpcGoogleWallet).not.toHaveBeenCalled();
+  });
+});
+
+describe('storeRecoveryShareFlow', () => {
+  const recoveryShare = 'gmpc1.03.recovery';
+  const recoveryPassword = 'a-strong-recovery-passphrase';
+  const blob = 'gmpc-recovery1.encrypted-blob';
+
+  function makeDeps(overrides: Partial<StoreRecoveryShareDeps> = {}): StoreRecoveryShareDeps {
+    return {
+      encryptRecoveryShare: vi.fn(async (share: string, password: string) => `enc-recovery(${share},${password})`),
+      storeRecovery: vi.fn(async () => ({ stored: true })),
+      ...overrides,
+    };
+  }
+
+  const baseInput = {
+    idToken: fakeIdToken(),
+    chain: 'cardano',
+    network: 'mainnet',
+    recoveryShare,
+    recoveryPassword,
+    publicKey: 'xpub-anchor',
+  };
+
+  it('encrypts the recovery share under the recovery password before uploading', async () => {
+    const deps = makeDeps();
+    await storeRecoveryShareFlow(baseInput, deps);
+    expect(deps.encryptRecoveryShare).toHaveBeenCalledWith(recoveryShare, recoveryPassword);
+  });
+
+  it('uploads the encrypted blob with idToken/chain/network and the xpub anchor (never the plaintext share)', async () => {
+    const deps = makeDeps({
+      encryptRecoveryShare: vi.fn(async () => blob),
+    });
+    const result = await storeRecoveryShareFlow(baseInput, deps);
+
+    expect(deps.storeRecovery).toHaveBeenCalledWith(
+      baseInput.idToken,
+      baseInput.chain,
+      baseInput.network,
+      blob,
+      baseInput.publicKey,
+    );
+    // the plaintext recovery share is never handed to the backend
+    const storeArgs = (deps.storeRecovery as unknown as { mock: { calls: unknown[][] } }).mock.calls[0];
+    expect(storeArgs).not.toContain(recoveryShare);
+    expect(result).toEqual({ stored: true });
+  });
+
+  it('never logs the recovery share, password, or encrypted blob', async () => {
+    const deps = makeDeps({ encryptRecoveryShare: vi.fn(async () => blob) });
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await storeRecoveryShareFlow(baseInput, deps);
+
+    for (const spy of [logSpy, errSpy, warnSpy]) {
+      for (const call of spy.mock.calls) {
+        const line = call.join(' ');
+        expect(line).not.toContain(recoveryShare);
+        expect(line).not.toContain(recoveryPassword);
+        expect(line).not.toContain(blob);
+      }
+    }
+    logSpy.mockRestore();
+    errSpy.mockRestore();
+    warnSpy.mockRestore();
+  });
+
+  it('surfaces an upload failure by rejecting, and touches no wallet state (encrypt succeeded, only the upload failed)', async () => {
+    const deps = makeDeps({
+      storeRecovery: vi.fn(async () => { throw new Error('recovery upload failed'); }),
+    });
+    // The flow has no DB/wallet dependency at all: a rejection here cannot corrupt the
+    // already-created wallet. The background handler catches this and reports it non-fatally.
+    await expect(storeRecoveryShareFlow(baseInput, deps)).rejects.toThrow('recovery upload failed');
+    expect(deps.encryptRecoveryShare).toHaveBeenCalledTimes(1);
   });
 });
 

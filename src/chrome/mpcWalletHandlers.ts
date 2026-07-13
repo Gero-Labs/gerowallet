@@ -356,3 +356,61 @@ export async function recoverMpcGoogleWalletFlow(
 
   return { walletId, publicKey };
 }
+
+// ---------------------------------------------------------------------------
+// Task 7: store the recovery share (MetaMask-style: Google account + recovery
+// password, nothing to download)
+// ---------------------------------------------------------------------------
+
+export interface StoreRecoveryShareInput {
+  idToken: string;
+  chain: string;
+  network: string;
+  /** Encoded recovery share (one of the 3 MPC shares). Never logged/persisted locally. */
+  recoveryShare: string;
+  /** User-chosen recovery passphrase (floor 12 chars, enforced in the UI). Never logged. */
+  recoveryPassword: string;
+  /**
+   * The wallet's CIP-1852 xpub. Uploaded alongside the encrypted recovery blob as the
+   * restore-time anchor so a fresh-device restore can validate the reconstructed key
+   * belongs to this wallet+Google account. Not secret.
+   */
+  publicKey: string;
+}
+
+export interface StoreRecoveryShareDeps {
+  encryptRecoveryShare: (encodedShare: string, password: string) => Promise<string>;
+  storeRecovery: (
+    idToken: string,
+    chain: string,
+    network: string,
+    encryptedRecovery: string,
+    publicKey: string,
+  ) => Promise<{ stored: boolean }>;
+}
+
+/**
+ * Encrypt the recovery share under the user's recovery passphrase (Argon2id) and
+ * upload the resulting blob to the backend, keyed by the verified Google subject.
+ * This arms cross-device restore: recovery = Google account + this password, with
+ * nothing for the user to download.
+ *
+ * The recovery passphrase never leaves the device — only the encrypted blob and the
+ * (non-secret) xpub anchor are uploaded. Secret hygiene: neither the plaintext share
+ * nor the passphrase nor the blob is ever logged here.
+ *
+ * This flow deliberately has NO wallet/DB dependency: the wallet is already created and
+ * usable on this device (device + login = 2 of 3). If the upload fails, the caller
+ * (background handler) reports it non-fatally and offers a retry — no local state is
+ * touched, so the wallet cannot be corrupted by an upload error.
+ */
+export async function storeRecoveryShareFlow(
+  input: StoreRecoveryShareInput,
+  deps: StoreRecoveryShareDeps,
+): Promise<{ stored: boolean }> {
+  const { idToken, chain, network, recoveryShare, recoveryPassword, publicKey } = input;
+  const { encryptRecoveryShare, storeRecovery } = deps;
+
+  const encryptedRecovery = await encryptRecoveryShare(recoveryShare, recoveryPassword);
+  return storeRecovery(idToken, chain, network, encryptedRecovery, publicKey);
+}

@@ -41,6 +41,7 @@ import {
   createMpcGoogleWalletFlow,
   unlockMpcWalletFlow,
   recoverMpcGoogleWalletFlow,
+  storeRecoveryShareFlow,
   subFromIdToken,
   resolveSignPrivateKeyBytes,
   assertMpcActionSupported,
@@ -1638,6 +1639,57 @@ app.addToOptions(MessageTypes.CREATE_MPC_GOOGLE_WALLET, async (request, sendResp
     sendResponse({
       id: request.id,
       data: { success: false, error: message },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+  return true; // Required for async Chrome message handlers
+});
+
+/**
+ * Encrypt the recovery share under the user's recovery passphrase and upload it
+ * (+ xpub anchor) to the backend, keyed by the verified Google subject. NON-FATAL:
+ * the wallet is already created and usable on THIS device (device + login = 2 of
+ * 3), so a failed upload only means cross-device restore isn't armed yet — the
+ * onboarding backup step (StepGoogleBackup.vue) surfaces a retry instead of
+ * blocking wallet creation.
+ */
+app.addToOptions(MessageTypes.STORE_MPC_RECOVERY, async (request, sendResponse) => {
+  try {
+    // Note: Never log request.data — contains idToken/recoveryShare/recoveryPassword.
+    const { idToken, chain, network, recoveryShare, recoveryPassword, publicKey } = request.data || {};
+    if (!idToken) throw new Error('idToken is required');
+    if (!recoveryShare) throw new Error('recoveryShare is required');
+    if (!recoveryPassword) throw new Error('recoveryPassword is required');
+    if (!publicKey) throw new Error('publicKey is required');
+
+    const { encryptRecoveryShare } = await import('@/shared/utils/mpc');
+    const { Api } = await import('@/api/api');
+    const api = new Api(undefined, undefined);
+
+    const { stored } = await storeRecoveryShareFlow(
+      { idToken, chain, network, recoveryShare, recoveryPassword, publicKey },
+      {
+        encryptRecoveryShare,
+        storeRecovery: (idTok, ch, net, blob, pub) => api.mpc.storeRecovery(idTok, ch, net, blob, pub),
+      },
+    );
+
+    sendResponse({
+      id: request.id,
+      data: { success: true, stored },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    // NON-FATAL: the wallet is already created and usable on THIS device (device + login
+    // = 2 of 3). A failed recovery upload only means cross-device restore isn't armed yet;
+    // the onboarding backup step surfaces a retry. Log only the message — never the
+    // recovery blob/share/password.
+    console.error('Error storing MPC recovery share:', getErrorMessage(error, 'store recovery failed'));
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error, 'Failed to store recovery backup') },
       target: TARGET,
       sender: SENDER.extension,
     });
