@@ -1766,6 +1766,7 @@ export default {
   'navigation.transactionId': 'Transaktions-ID',
   'navigation.transactionSummary': 'Transaktionsübersicht',
   'navigation.transactions': 'Transaktionen',
+  'navigation.midnightProofServer': 'Proof-Server',
   'navigation.typeYourSpendingPassword': 'Gib dein Ausgabepasswort ein',
   'navigation.uploadYourId': 'Lade deinen Ausweis hoch',
   'navigation.version': 'Version',
@@ -4150,6 +4151,7 @@ export default {
   // Proof-Server-Seite + Dashboard-/Mini-Gero-Widgets
   'midnight.proofServerPage.title': 'Proof-Server',
   'midnight.proofServerPage.openPage': 'Öffnen',
+  'midnight.proofServerPage.settingsSummary': 'Wähle, wo Proofs für geschützte Transaktionen erzeugt werden.',
   'midnight.proofServerPage.subtitle': 'Wähle, wo deine Proofs für geschützte Transaktionen erzeugt werden.',
   'midnight.proofServerPage.notMidnightTitle': 'Nicht verfügbar',
   'midnight.proofServerPage.notMidnightBody': 'Die Proof-Server-Einstellung gilt nur für Midnight-Wallets. Wechsle zu einer Midnight-Wallet, um sie zu konfigurieren.',
