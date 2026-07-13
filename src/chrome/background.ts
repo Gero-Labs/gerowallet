@@ -1808,12 +1808,13 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
             const merged = await mergeWitnessSets(witnessResult.witnesses, witness);
             witnessResult = { witnesses: merged };
             debugLog('🔗 Merged Nexus collateral cosign for', ref);
-          } catch (cosignErr: any) {
-            const status = cosignErr?.response?.status;
+          } catch (cosignErr: unknown) {
+            const err = cosignErr as { response?: { status?: number }; message?: string };
+            const status = err?.response?.status;
             // 404 = ref isn't in the Nexus pool (it's a user-owned UTxO),
             // 400 = adversarial-tx guard tripped — both expected for non-pool refs.
             if (status !== 404 && status !== 400) {
-              debugLog('⚠️ Nexus cosign failed for', ref, status, cosignErr?.message);
+              debugLog('⚠️ Nexus cosign failed for', ref, status, err?.message);
             }
           }
         }
@@ -3827,6 +3828,7 @@ app.addToOptions(
         sender: SENDER.extension,
       });
     } catch (error) {
+      console.error('Error building/signing Midnight shielded transfer:', error);
       sendResponse({
         id: request.id,
         data: { success: false, error: getErrorMessage(error) },
@@ -3880,6 +3882,7 @@ app.addToOptions(
         sender: SENDER.extension,
       });
     } catch (error) {
+      console.error('Error building/signing Midnight shield conversion:', error);
       sendResponse({
         id: request.id,
         data: { success: false, error: getErrorMessage(error) },
