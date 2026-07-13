@@ -96,15 +96,25 @@
         @click:append="showRecovery = !showRecovery"
         :rules="[
           rules.required(),
-          rules.minCharacters(10),
-          rules.oneOrMoreNumbers,
-          rules.containCapital,
-          rules.containLowerCase,
-          rules.containSpecialCharacter,
-          rules.spaceNotAllowed,
+          rules.minCharacters(12),
+          (v) => isAcceptableRecoveryPassword(v) || $t('welcome.recoveryPasswordTooWeak'),
           (v) => passkeyCapable || v !== spendingPassword || $t('welcome.recoveryPasswordMustDiffer')
         ]"
       ></v-text-field>
+
+      <!-- Strength meter: recovery password is the only recovery factor now -->
+      <div v-if="recoveryPassword" class="recovery-strength mb-2">
+        <v-progress-linear
+          :value="(recoveryScore.score / 4) * 100"
+          :color="recoveryStrengthColor"
+          height="4"
+          rounded
+        />
+        <span class="recovery-strength__label" :class="`recovery-strength__label--${recoveryScore.score}`">
+          {{ $t(recoveryScore.labelKey) }}
+        </span>
+      </div>
+
       <v-text-field
         v-model="confirmRecoveryPassword"
         dense
@@ -156,6 +166,7 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { generateWalletName } from '@/shared/utils/walletNameGenerator';
 import networks, { NetworkInfo } from '@/utils/networks';
 import { mpcPasskeyAvailable, enrollMpcPasskey } from '@/shared/utils/mpc/mpcPasskey';
+import { scoreRecoveryPassword, isAcceptableRecoveryPassword } from '@/shared/utils/mpc/recoveryPasswordStrength';
 import { authPayloadToWireFields, type GoogleWalletBgResponse, type GoogleAuthPayload } from './googleWalletMessages';
 
 interface Props {
@@ -193,6 +204,10 @@ const recoveryPassword = ref('');
 const confirmRecoveryPassword = ref('');
 const showSpending = ref(false);
 const showRecovery = ref(false);
+const recoveryScore = computed(() => scoreRecoveryPassword(recoveryPassword.value));
+const recoveryStrengthColor = computed(() => (
+  ['error', 'error', 'warning', 'info', 'success'][recoveryScore.value.score]
+));
 const creating = ref(false);
 const errorMessage = ref('');
 
@@ -295,6 +310,22 @@ const createWallet = async (): Promise<void> => {
   color: rgba(255, 255, 255, 0.45);
   line-height: 1.4;
 }
+
+.recovery-strength {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.recovery-strength__label {
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.recovery-strength__label--0,
+.recovery-strength__label--1 { color: #ff6b6b; }
+.recovery-strength__label--2 { color: #ffb020; }
+.recovery-strength__label--3 { color: #4dabf7; }
+.recovery-strength__label--4 { color: #51cf66; }
 
 .passkey-auth-button {
   text-transform: none;
