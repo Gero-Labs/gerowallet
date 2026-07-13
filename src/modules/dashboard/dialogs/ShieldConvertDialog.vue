@@ -1116,12 +1116,19 @@ watch(
   line-height: 1.2;
   word-break: break-word;
 }
+/* The label wraps to two lines in this 150px column, so the icon anchors to
+   the FIRST text line (flex-start + optical nudge) instead of floating
+   vertically centered against the wrapped block, which read as broken. */
 .scv-summary-direction {
   margin-top: 5px;
   font-size: 11px;
+  line-height: 1.4;
   color: var(--g-text-2);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+}
+.scv-summary-direction .v-icon {
+  margin-top: 2px;
 }
 .scv-summary-dust {
   margin-top: 16px;
