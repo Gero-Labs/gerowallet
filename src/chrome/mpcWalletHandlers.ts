@@ -11,7 +11,7 @@
  * output), device/login/recovery shares, entropy, or key bytes. Catch-handler
  * discipline lives in background.ts; these flows just throw/rethrow.
  */
-import { MpcValidationError } from '@/shared/utils/mpc';
+import { MpcValidationError, RecoveryBackupStoreError } from '@/shared/utils/mpc';
 import type { MpcShareSet, DeviceShareSecret } from '@/shared/utils/mpc';
 import { mpcSessionCache } from '@/chrome/mpcSessionCache';
 
@@ -575,7 +575,13 @@ export interface SetRecoveryPasswordDeps {
  *   1. stage next device share (old still live)
  *   2. rotate the backend login share to S'.login  (rollback: drop next, stay old split)
  *   3. promote the staged device share to primary
- *   4. store the fresh recovery blob (new password) — LAST, only once S' is live
+ *   4. store the fresh recovery blob (new password) — LAST, only once S' is live.
+ *      By this point the wallet is ALREADY on the new split (daily unlock via
+ *      device+login already works) and the OLD recovery password is already
+ *      dead (its share was rotated away in step 2-3). A failure here must not
+ *      read to the caller as "nothing changed". One quiet retry absorbs a
+ *      transient network blip; if it still fails, throws the distinct
+ *      RecoveryBackupStoreError instead of the raw error so the UI can say so.
  *   5. clear the stale cached login share
  *
  * Secret hygiene: entropy, shares, and the new password are never logged or
@@ -642,9 +648,20 @@ export async function setRecoveryPasswordFlow(
   await promoteMpcDeviceShareNext(walletId);
 
   // 4. Only now that S' is fully live, store the fresh recovery blob under the
-  //    new password (+ the non-secret xpub anchor). Stored LAST.
+  //    new password (+ the non-secret xpub anchor). Stored LAST. One quiet retry
+  //    before surfacing a distinct error — see the crash-safe order note above.
   const recoveryBlob = await encryptRecoveryShare(next.recoveryShare, newRecoveryPassword);
-  await storeRecovery(idToken, wallet.chain, wallet.network, recoveryBlob, wallet.publicKey);
+  try {
+    await storeRecovery(idToken, wallet.chain, wallet.network, recoveryBlob, wallet.publicKey);
+  } catch {
+    try {
+      await storeRecovery(idToken, wallet.chain, wallet.network, recoveryBlob, wallet.publicKey);
+    } catch {
+      throw new RecoveryBackupStoreError(
+        'recovery password rotation succeeded but storing the new encrypted backup failed',
+      );
+    }
+  }
 
   // 5. The cached login share is now stale (rotated) → clear it.
   await clearLoginShareCache(walletId);

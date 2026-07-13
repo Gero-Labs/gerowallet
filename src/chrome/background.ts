@@ -1801,64 +1801,6 @@ app.addToOptions(MessageTypes.HAS_MPC_SESSION, async (request, sendResponse) => 
   return true;
 });
 
-/**
- * Server-INDEPENDENT unlock (safety valve): reconstruct from the LOCAL device share
- * + the user's recovery file (device + recovery = 2 of 3), so a lost/unreachable
- * backend can't lock the user out of the funds on this device. No login-share fetch,
- * no Google call. reconstructRootKeyBytes combines any two shares — here we pass the
- * recovery share as the second share instead of the backend login share. Never log
- * the device secret / recovery passphrase / shares.
- */
-app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET_OFFLINE, async (request, sendResponse) => {
-  try {
-    const { walletId, recoveryBlob, recoveryPassword } = request.data || {};
-    if (!walletId || !recoveryBlob || !recoveryPassword) {
-      throw new Error('walletId, recoveryBlob and recoveryPassword are required');
-    }
-    const { secret } = buildDeviceShareSecret(request.data);
-
-    const { reconstructRootKeyBytes, decryptRecoveryShare, MpcValidationError } = await import('@/shared/utils/mpc');
-    const { getAllWallets } = await import('@/db/gero-db');
-
-    const wallet = (await getAllWallets())[walletId];
-    if (!wallet || !wallet.mpcDeviceShare) {
-      throw new Error('MPC wallet not found on this device');
-    }
-
-    const recoveryShare = await decryptRecoveryShare(recoveryBlob, recoveryPassword);
-    try {
-      // device + recovery (recoveryShare passed as the second share); validates xpub.
-      const bytes = await reconstructRootKeyBytes(wallet.mpcDeviceShare, secret, recoveryShare, wallet.publicKey);
-      mpcSessionCache.set(walletId, bytes);
-    } catch (err) {
-      if (err instanceof MpcValidationError) {
-        throw new Error('Recovery data does not match this wallet — check your recovery file and password.');
-      }
-      throw err;
-    }
-
-    // Same as the online path: clear the global lock so the dashboard/side panel
-    // actually leave the locked state after a successful offline reconstruction.
-    WalletStore.setLocked(false);
-
-    sendResponse({
-      id: request.id,
-      data: { success: true },
-      target: TARGET,
-      sender: SENDER.extension,
-    });
-  } catch (error) {
-    console.error('Error unlocking MPC wallet offline:', getErrorMessage(error, 'offline unlock failed'));
-    sendResponse({
-      id: request.id,
-      data: { success: false, error: getErrorMessage(error, 'Failed to unlock offline') },
-      target: TARGET,
-      sender: SENDER.extension,
-    });
-  }
-  return true; // Required for async Chrome message handlers
-});
-
 app.addToOptions(MessageTypes.RECOVER_MPC_GOOGLE_WALLET, async (request, sendResponse) => {
   try {
     // Note: Never log request.data — contains idToken/recoveryPassword/spendingPassword/prfOutputHex
@@ -1964,10 +1906,20 @@ app.addToOptions(MessageTypes.SET_RECOVERY_PASSWORD, async (request, sendRespons
       sender: SENDER.extension,
     });
   } catch (error) {
+    // storeRecovery (the LAST step) failed after rotate+promote already succeeded —
+    // the wallet is already live on the new split, but the new recovery backup wasn't
+    // saved (and the OLD recovery password is now dead too). Flag this distinctly so
+    // the dialog doesn't tell the user "nothing changed" when something did.
+    const { RecoveryBackupStoreError } = await import('@/shared/utils/mpc');
+    const backupNotStored = error instanceof RecoveryBackupStoreError;
     console.error('Error setting MPC recovery password:', getErrorMessage(error, 'set recovery password failed'));
     sendResponse({
       id: request.id,
-      data: { success: false, error: getErrorMessage(error, 'Failed to set recovery password') },
+      data: {
+        success: false,
+        error: getErrorMessage(error, 'Failed to set recovery password'),
+        ...(backupNotStored ? { code: 'recovery_backup_not_stored' } : {}),
+      },
       target: TARGET,
       sender: SENDER.extension,
     });
@@ -1992,24 +1944,21 @@ app.addToOptions(MessageTypes.CHECK_MPC_ENROLLMENT, async (request, sendResponse
     const api = new Api(undefined, undefined);
 
     let enrolled = false;
-    let serverReachable = true;
     try {
       await api.mpc.getLoginShare(idToken, chain, network);
-      enrolled = true; // share returned → enrolled, server up
+      enrolled = true; // share returned → enrolled
     } catch (probeError) {
       const raw = typeof probeError === 'string' ? probeError : getErrorMessage(probeError, '');
       if (raw.includes('"status":404')) {
-        enrolled = false; // no share stored → not enrolled, server up
+        enrolled = false; // no share stored → not enrolled
       } else {
-        // Network error / timeout / 5xx → the backend is unreachable. Report it so the
-        // UI can offer the server-independent (offline) recovery only when relevant.
-        serverReachable = false;
+        throw probeError; // unknown error — don't misreport as "not enrolled"
       }
     }
 
     sendResponse({
       id: request.id,
-      data: { success: true, enrolled, serverReachable },
+      data: { success: true, enrolled },
       target: TARGET,
       sender: SENDER.extension,
     });
