@@ -311,62 +311,73 @@ function normalizeTxHash(hash: string): string {
 
 // ---------------------------------------------------------------- hydration
 
-function hydrateBalances(stored: any): MidnightBalances {
+// Persisted shapes mirror the store's interfaces with BigInts serialized as
+// strings — the casts below give typed field access while toBig() does the
+// actual runtime coercion (same convention as hydrateProvingHistory).
+function hydrateBalances(stored: unknown): MidnightBalances {
   if (!stored || typeof stored !== 'object') return { ...EMPTY_BALANCES };
+  const s = stored as MidnightBalances;
   return {
-    nightShielded: toBig(stored.nightShielded),
-    nightUnshielded: toBig(stored.nightUnshielded),
-    nightRegistered: toBig(stored.nightRegistered),
-    dust: toBig(stored.dust),
-    dustGenerating: toBig(stored.dustGenerating),
+    nightShielded: toBig(s.nightShielded),
+    nightUnshielded: toBig(s.nightUnshielded),
+    nightRegistered: toBig(s.nightRegistered),
+    dust: toBig(s.dust),
+    dustGenerating: toBig(s.dustGenerating),
   };
 }
 
-function hydrateUtxos(stored: any): MidnightUnshieldedUtxo[] {
+function hydrateUtxos(stored: unknown): MidnightUnshieldedUtxo[] {
   if (!Array.isArray(stored)) return [];
-  return stored.map((u: any): MidnightUnshieldedUtxo => ({
-    owner: u.owner ?? '',
-    tokenType: u.tokenType ?? '',
-    value: toBig(u.value),
-    intentHash: u.intentHash ?? '',
-    outputIndex: u.outputIndex ?? 0,
-    ctime: u.ctime,
-    initialNonce: u.initialNonce ?? '',
-    registeredForDustGeneration: !!u.registeredForDustGeneration,
-  }));
+  return stored.map((raw): MidnightUnshieldedUtxo => {
+    const u = (raw ?? {}) as MidnightUnshieldedUtxo;
+    return {
+      owner: u.owner ?? '',
+      tokenType: u.tokenType ?? '',
+      value: toBig(u.value),
+      intentHash: u.intentHash ?? '',
+      outputIndex: u.outputIndex ?? 0,
+      ctime: u.ctime,
+      initialNonce: u.initialNonce ?? '',
+      registeredForDustGeneration: !!u.registeredForDustGeneration,
+    };
+  });
 }
 
-function hydrateTransactions(stored: any): MidnightTransaction[] {
+function hydrateTransactions(stored: unknown): MidnightTransaction[] {
   if (!Array.isArray(stored)) return [];
-  return stored.map((t: any): MidnightTransaction => ({
-    hash: t.hash,
-    type: t.type,
-    token: t.token,
-    amount: toBig(t.amount),
-    counterparty: t.counterparty ?? '',
-    timestamp: t.timestamp ?? 0,
-    status: t.status,
-    fee: toBig(t.fee),
-    blockHeight: t.blockHeight,
-    isShielded: !!t.isShielded,
-    proofTimeMs: t.proofTimeMs,
-    raw: t.raw,
-  }));
+  return stored.map((raw): MidnightTransaction => {
+    const t = (raw ?? {}) as MidnightTransaction;
+    return {
+      hash: t.hash,
+      type: t.type,
+      token: t.token,
+      amount: toBig(t.amount),
+      counterparty: t.counterparty ?? '',
+      timestamp: t.timestamp ?? 0,
+      status: t.status,
+      fee: toBig(t.fee),
+      blockHeight: t.blockHeight,
+      isShielded: !!t.isShielded,
+      proofTimeMs: t.proofTimeMs,
+      raw: t.raw,
+    };
+  });
 }
 
-function hydrateDustState(stored: any): MidnightDustState | null {
+function hydrateDustState(stored: unknown): MidnightDustState | null {
   if (!stored || typeof stored !== 'object') return null;
+  const s = stored as MidnightDustState;
   return {
-    status: stored.status,
-    current: toBig(stored.current),
-    cap: toBig(stored.cap),
-    generationRate: toBig(stored.generationRate),
-    timeRemainingSeconds: stored.timeRemainingSeconds ?? null,
-    registrationStatus: stored.registrationStatus as DustRegistrationStatus,
+    status: s.status,
+    current: toBig(s.current),
+    cap: toBig(s.cap),
+    generationRate: toBig(s.generationRate),
+    timeRemainingSeconds: s.timeRemainingSeconds ?? null,
+    registrationStatus: s.registrationStatus as DustRegistrationStatus,
   };
 }
 
-function hydrateProvingOperations(stored: any): Map<string, MidnightProvingOperation> {
+function hydrateProvingOperations(stored: unknown): Map<string, MidnightProvingOperation> {
   if (!Array.isArray(stored)) return new Map();
   return new Map(stored as Array<[string, MidnightProvingOperation]>);
 }
@@ -403,21 +414,21 @@ if (context === 'browser') {
     // setters fire for every changed property.
     Object.keys(updates as object).forEach((key) => {
       const k = key as keyof MidnightStore;
-      const val = (updates as any)[k];
+      const val = (updates as Record<string, unknown>)[key];
       if (k === 'balances') {
-        (midnightStore as any).balances = hydrateBalances(val);
+        midnightStore.balances = hydrateBalances(val);
       } else if (k === 'utxos') {
-        (midnightStore as any).utxos = hydrateUtxos(val);
+        midnightStore.utxos = hydrateUtxos(val);
       } else if (k === 'transactions') {
-        (midnightStore as any).transactions = hydrateTransactions(val);
+        midnightStore.transactions = hydrateTransactions(val);
       } else if (k === 'dustState') {
-        (midnightStore as any).dustState = hydrateDustState(val);
+        midnightStore.dustState = hydrateDustState(val);
       } else if (k === 'provingOperations') {
-        (midnightStore as any).provingOperations = hydrateProvingOperations(val);
+        midnightStore.provingOperations = hydrateProvingOperations(val);
       } else if (k === 'provingHistory') {
-        (midnightStore as any).provingHistory = hydrateProvingHistory(val);
+        midnightStore.provingHistory = hydrateProvingHistory(val);
       } else if (k in midnightStore) {
-        (midnightStore as any)[k] = val;
+        (midnightStore as unknown as Record<string, unknown>)[key] = val;
       }
     });
   });
@@ -464,6 +475,43 @@ if (context === 'browser') {
       ? stored.activeWalletKey
       : null;
     midnightStore.proofServer = hydrateProofServer(stored.proofServer);
+  });
+}
+
+// ---------------------------------------------------------------- background-context
+
+/**
+ * Boot-race guards for the background hydrate below: a setter that runs
+ * before the async storage read lands must win over the stored copy.
+ */
+const bgDurableTouched = {
+  proofServer: false,
+  shieldedProvingConsent: false,
+  provingHistory: false,
+};
+
+// The background service worker's in-memory store starts at defaults on
+// every SW start (MV3 workers restart constantly), and broadcastFromBackground
+// persists the WHOLE in-memory store — so without a BG-side hydrate, the
+// first write after a restart silently reset every durable preference in
+// chrome.storage (the proof-server mode kept flipping back to Gero Cloud,
+// and the proving consent re-prompted after every reload). Hydrate the
+// durable, user-set fields here. Per-wallet chain state (balances / utxos /
+// transactions) is deliberately left out: sync repopulates it and
+// setActive owns its wipe-on-switch lifecycle.
+if (context === 'background') {
+  chrome.storage.local.get(STORE_NAME, (result) => {
+    const stored = result[STORE_NAME] as Partial<MidnightStore> | undefined;
+    if (!stored) return;
+    if (!bgDurableTouched.proofServer) {
+      midnightStore.proofServer = hydrateProofServer(stored.proofServer);
+    }
+    if (!bgDurableTouched.shieldedProvingConsent) {
+      midnightStore.shieldedProvingConsent = hydrateShieldedProvingConsent(stored.shieldedProvingConsent);
+    }
+    if (!bgDurableTouched.provingHistory) {
+      midnightStore.provingHistory = hydrateProvingHistory(stored.provingHistory);
+    }
   });
 }
 
@@ -542,7 +590,7 @@ function applyUpdates(updates: Partial<MidnightStore>) {
     'proofServer',
   ] as const) {
     if (key in updates) {
-      (midnightStore as any)[key] = updates[key];
+      (midnightStore as unknown as Record<string, unknown>)[key] = updates[key];
     }
   }
 }
@@ -724,6 +772,7 @@ export const midnightActions = {
       version: SHIELDED_PROVING_CONSENT_VERSION,
       acceptedAt: Date.now(),
     };
+    bgDurableTouched.shieldedProvingConsent = true;
     midnightStore.shieldedProvingConsent = consent;
     broadcastFromBackground({ shieldedProvingConsent: consent }, true);
   },
@@ -733,6 +782,7 @@ export const midnightActions = {
    * privacy consent" UI flows. The next shielded send will re-prompt.
    */
   clearShieldedProvingConsent() {
+    bgDurableTouched.shieldedProvingConsent = true;
     midnightStore.shieldedProvingConsent = null;
     broadcastFromBackground({ shieldedProvingConsent: null }, true);
   },
@@ -746,6 +796,7 @@ export const midnightActions = {
    * a background service-worker restart.
    */
   setProofServer(next: MidnightStore['proofServer']) {
+    bgDurableTouched.proofServer = true;
     midnightStore.proofServer = next;
     broadcastFromBackground({ proofServer: next }, true);
   },
@@ -759,6 +810,7 @@ export const midnightActions = {
    * privacy note on `midnightLocalProver.ts`.
    */
   recordLocalProvingAttempt(entry: { durationMs: number; success: boolean; error?: string }) {
+    bgDurableTouched.provingHistory = true;
     const next = [
       { timestamp: Date.now(), ...entry },
       ...midnightStore.provingHistory,
