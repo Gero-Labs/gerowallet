@@ -96,7 +96,7 @@ function buildCSP(dev: boolean): string {
           'ws://*.gerowallet.io',
           'https://fastly.jsdelivr.net/npm/@sec-ant/zxing-wasm@2.1.5/dist/reader/zxing_reader.wasm',
         ]
-      : ['ws://127.0.0.1:*']),
+      : ['ws://127.0.0.1:*', 'http://localhost:6300', 'http://127.0.0.1:6300']),
     // SPO Node Monitor (Cloudflare Tunnel)
     'https://*.trycloudflare.com',
     'data:',
