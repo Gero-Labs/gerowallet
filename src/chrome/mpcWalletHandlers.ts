@@ -206,8 +206,6 @@ export interface UnlockMpcWalletDeps {
   sessionCache: { set: (walletId: number, bytes: Uint8Array) => void };
   /** Finish a crashed re-split: make the staged `mpcDeviceShareNext` the primary device share. Optional. */
   promoteMpcDeviceShareNext?: (walletId: number) => Promise<void>;
-  /** Discard a stale `mpcDeviceShareNext` that no longer reconstructs. Optional. */
-  dropMpcDeviceShareNext?: (walletId: number) => Promise<void>;
 }
 
 /**
@@ -223,7 +221,7 @@ export async function unlockMpcWalletFlow(
   deps: UnlockMpcWalletDeps,
 ): Promise<void> {
   const { walletId, idToken, secret } = input;
-  const { getWallet, getLoginShare, reconstructRootKeyBytes, sessionCache, promoteMpcDeviceShareNext, dropMpcDeviceShareNext } = deps;
+  const { getWallet, getLoginShare, reconstructRootKeyBytes, sessionCache, promoteMpcDeviceShareNext } = deps;
 
   const wallet = await getWallet(walletId);
   if (!wallet) {
@@ -239,13 +237,15 @@ export async function unlockMpcWalletFlow(
       loginShare,
       wallet.publicKey,
     );
-    // Primary device+login reconstructs → a complete split. Any `mpcDeviceShareNext`
-    // still lying around is stale (a re-split that fully finished, or was never
-    // promoted) — drop it so it can't be tried again.
-    if (wallet.mpcDeviceShareNext && dropMpcDeviceShareNext) {
-      await dropMpcDeviceShareNext(walletId);
-    }
+    // Primary device+login reconstructs → unlocked. NEVER touch `mpcDeviceShareNext`
+    // here. A staged next may be the ONLY device share compatible with a rotated
+    // backend login (a re-split that crashed after `rotate` but before `promote`);
+    // if the primary succeeds only because a STALE login share survived in the
+    // session cache, destroying that next would brick the wallet on the next fresh
+    // fetch of S'.login. A leftover next is harmless — the next re-split overwrites
+    // it via `setMpcDeviceShareNext`.
     sessionCache.set(walletId, bytes);
+    return;
   } catch (primaryErr) {
     // Resume-on-unlock: a re-split (setRecoveryPasswordFlow) that crashed AFTER the
     // backend login-share rotate but BEFORE the local promote leaves the backend on
@@ -260,13 +260,16 @@ export async function unlockMpcWalletFlow(
           loginShare,
           wallet.publicKey,
         );
+        // Promote ONLY now that next+login has actually reconstructed.
         await promoteMpcDeviceShareNext(walletId);
         sessionCache.set(walletId, bytes);
         return;
       } catch {
-        // The staged next doesn't reconstruct either → dead garbage from a failed
-        // attempt. Drop it and fall through to surface the original error.
-        if (dropMpcDeviceShareNext) await dropMpcDeviceShareNext(walletId);
+        // The staged next didn't reconstruct with this login share/secret (wrong
+        // spending password, or a genuinely stale next). NEVER drop it — it may be
+        // the only device share compatible with the live backend login. Fall through
+        // to fail the unlock cleanly (same tail as a no-next primary failure); the
+        // caller can retry / fall back to a fresh Google re-fetch.
       }
     }
     if (primaryErr instanceof MpcValidationError) {
@@ -613,6 +616,14 @@ export async function setRecoveryPasswordFlow(
   // Fresh 2-of-3 re-split of the SAME entropy → all three shares rotate.
   // xpub is unchanged (entropy unchanged), so createMpcGoogleWallet's anchor holds.
   const next = await createMpcShareSet(entropy);
+
+  // Corrupt-split guard: PROVE the fresh S' reconstructs to THIS wallet's xpub
+  // BEFORE anything destructive runs (staging, and especially rotating the backend
+  // login share to S'.login). A bad split slipping through here would rotate the
+  // backend to a DIFFERENT key and brick the wallet. Throws MpcValidationError on
+  // mismatch, before step 1.
+  await reconstructAndValidateEntropy(next.deviceShare, next.loginShare, wallet.publicKey);
+
   const encryptedNextDeviceShare = await encryptDeviceShare(next.deviceShare, secret);
 
   // 1. Stage next (old device share still primary).

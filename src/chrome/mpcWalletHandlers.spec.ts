@@ -615,6 +615,8 @@ describe('setRecoveryPasswordFlow', () => {
 
     // Fresh split off the reconstructed entropy.
     expect(deps.createMpcShareSet).toHaveBeenCalledWith(new Uint8Array(32));
+    // Corrupt-split guard: the fresh S' is validated against the wallet xpub before rotate.
+    expect(deps.reconstructAndValidateEntropy).toHaveBeenCalledWith(freshSplit.deviceShare, freshSplit.loginShare, wallet.publicKey);
     // Device factor = S'.device (staged as next).
     expect(deps.encryptDeviceShare).toHaveBeenCalledWith(freshSplit.deviceShare, secret);
     expect(deps.setMpcDeviceShareNext).toHaveBeenCalledWith(baseInput.walletId, `encDev(${freshSplit.deviceShare})`);
@@ -671,6 +673,29 @@ describe('setRecoveryPasswordFlow', () => {
     expect(deps.rotate).not.toHaveBeenCalled();
   });
 
+  it('corrupt-split guard: throws BEFORE any stage/rotate if the fresh split does not re-derive wallet.publicKey', async () => {
+    const order: string[] = [];
+    // 1st reconstructAndValidateEntropy call (current device+login) validates OK;
+    // 2nd call (fresh S'.device + S'.login) → MpcValidationError → corrupt split.
+    let call = 0;
+    const deps = makeDeps(order, {
+      reconstructAndValidateEntropy: vi.fn(async () => {
+        call += 1;
+        if (call === 1) return new Uint8Array(32); // current split validates
+        throw new MpcValidationError('fresh split derives a different key');
+      }),
+    });
+
+    await expect(setRecoveryPasswordFlow(baseInput, deps)).rejects.toBeInstanceOf(MpcValidationError);
+
+    // Guard fired before anything destructive — no stage, no rotate to a bad login share.
+    expect(deps.setMpcDeviceShareNext).not.toHaveBeenCalled();
+    expect(deps.rotate).not.toHaveBeenCalled();
+    expect(deps.promoteMpcDeviceShareNext).not.toHaveBeenCalled();
+    expect(deps.storeRecovery).not.toHaveBeenCalled();
+    expect(order).toEqual([]);
+  });
+
   it('never logs the new password, the shares, or the entropy', async () => {
     const order: string[] = [];
     const deps = makeDeps(order);
@@ -721,7 +746,6 @@ describe('unlockMpcWalletFlow — resume-on-unlock (staged deviceShareNext)', ()
       reconstructRootKeyBytes: reconstruct,
       sessionCache: { set: vi.fn() },
       promoteMpcDeviceShareNext: vi.fn(async () => {}),
-      dropMpcDeviceShareNext: vi.fn(async () => {}),
     };
 
     await unlockMpcWalletFlow(baseInput, deps);
@@ -730,26 +754,14 @@ describe('unlockMpcWalletFlow — resume-on-unlock (staged deviceShareNext)', ()
     expect(reconstruct).toHaveBeenNthCalledWith(2, walletWithNext.mpcDeviceShareNext, secret, 'gmpc1.02.loginNEW', walletWithNext.publicKey);
     expect(deps.promoteMpcDeviceShareNext).toHaveBeenCalledWith(baseInput.walletId);
     expect(deps.sessionCache.set).toHaveBeenCalledWith(baseInput.walletId, bytes);
-    expect(deps.dropMpcDeviceShareNext).not.toHaveBeenCalled();
   });
 
-  it('drops a stale next and rethrows a clean error when neither device nor next reconstructs', async () => {
-    const deps: UnlockMpcWalletDeps = {
-      getWallet: vi.fn(async () => walletWithNext),
-      getLoginShare: vi.fn(async () => 'gmpc1.02.loginX'),
-      reconstructRootKeyBytes: vi.fn(async () => { throw new MpcValidationError('mismatch'); }),
-      sessionCache: { set: vi.fn() },
-      promoteMpcDeviceShareNext: vi.fn(async () => {}),
-      dropMpcDeviceShareNext: vi.fn(async () => {}),
-    };
-
-    await expect(unlockMpcWalletFlow(baseInput, deps)).rejects.toThrow();
-    expect(deps.dropMpcDeviceShareNext).toHaveBeenCalledWith(baseInput.walletId);
-    expect(deps.promoteMpcDeviceShareNext).not.toHaveBeenCalled();
-    expect(deps.sessionCache.set).not.toHaveBeenCalled();
-  });
-
-  it('on a normal unlock with a stale next present, drops the stale next and caches on the primary reconstruct', async () => {
+  it('does NOT drop the staged next when the PRIMARY device+login reconstruct succeeds (brick guard: a stale-cached-login success must not destroy S\'.device)', async () => {
+    // Scenario #1 from the review: primary reconstruct succeeds only because a STALE
+    // login share (S.login) survived in chrome.storage.session. The staged S'.device
+    // is the ONLY device share compatible with the live (rotated) backend login — it
+    // must survive. There is no destructive drop mechanism in the unlock deps at all,
+    // so success simply caches and returns without promoting or touching next.
     const bytes = new Uint8Array([7, 7, 7]);
     const deps: UnlockMpcWalletDeps = {
       getWallet: vi.fn(async () => walletWithNext),
@@ -757,13 +769,48 @@ describe('unlockMpcWalletFlow — resume-on-unlock (staged deviceShareNext)', ()
       reconstructRootKeyBytes: vi.fn(async () => bytes),
       sessionCache: { set: vi.fn() },
       promoteMpcDeviceShareNext: vi.fn(async () => {}),
-      dropMpcDeviceShareNext: vi.fn(async () => {}),
     };
 
     await unlockMpcWalletFlow(baseInput, deps);
 
-    expect(deps.dropMpcDeviceShareNext).toHaveBeenCalledWith(baseInput.walletId);
+    // reconstruct is called ONCE (primary only); next is never tried, never promoted.
+    expect(deps.reconstructRootKeyBytes).toHaveBeenCalledTimes(1);
     expect(deps.promoteMpcDeviceShareNext).not.toHaveBeenCalled();
     expect(deps.sessionCache.set).toHaveBeenCalledWith(baseInput.walletId, bytes);
+  });
+
+  it('does NOT drop the staged next and rethrows a clean error when neither device nor next reconstructs (MpcValidationError)', async () => {
+    const deps: UnlockMpcWalletDeps = {
+      getWallet: vi.fn(async () => walletWithNext),
+      getLoginShare: vi.fn(async () => 'gmpc1.02.loginX'),
+      reconstructRootKeyBytes: vi.fn(async () => { throw new MpcValidationError('mismatch'); }),
+      sessionCache: { set: vi.fn() },
+      promoteMpcDeviceShareNext: vi.fn(async () => {}),
+    };
+
+    await expect(unlockMpcWalletFlow(baseInput, deps)).rejects.toThrow();
+    expect(deps.promoteMpcDeviceShareNext).not.toHaveBeenCalled();
+    expect(deps.sessionCache.set).not.toHaveBeenCalled();
+  });
+
+  it('resume path: next+login throws a non-validation (decrypt) error → next NOT dropped, promote not called, unlock fails cleanly (scenario #2 brick guard)', async () => {
+    // Primary (OLD device + rotated login) → xpub mismatch. Staged next reconstruct
+    // then throws a decrypt error (e.g. wrong spending password). The staged S'.device
+    // must survive so a later correct-secret retry can still promote it.
+    const reconstruct = vi.fn(async (encDeviceShare: string) => {
+      if (encDeviceShare === walletWithNext.mpcDeviceShare) throw new MpcValidationError('mismatch');
+      throw new Error('decrypt failed'); // staged next, wrong device secret
+    });
+    const deps: UnlockMpcWalletDeps = {
+      getWallet: vi.fn(async () => walletWithNext),
+      getLoginShare: vi.fn(async () => 'gmpc1.02.loginNEW'),
+      reconstructRootKeyBytes: reconstruct,
+      sessionCache: { set: vi.fn() },
+      promoteMpcDeviceShareNext: vi.fn(async () => {}),
+    };
+
+    await expect(unlockMpcWalletFlow(baseInput, deps)).rejects.toThrow();
+    expect(deps.promoteMpcDeviceShareNext).not.toHaveBeenCalled();
+    expect(deps.sessionCache.set).not.toHaveBeenCalled();
   });
 });

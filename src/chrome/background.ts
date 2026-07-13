@@ -1716,7 +1716,7 @@ app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET, async (request, sendResponse) =
     const { secret } = buildDeviceShareSecret(request.data);
 
     const { reconstructRootKeyBytes } = await import('@/shared/utils/mpc');
-    const { getAllWallets, promoteMpcDeviceShareNext, setMpcDeviceShareNext } = await import('@/db/gero-db');
+    const { getAllWallets, promoteMpcDeviceShareNext } = await import('@/db/gero-db');
     const { Api } = await import('@/api/api');
     const api = new Api(undefined, undefined);
 
@@ -1749,7 +1749,6 @@ app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET, async (request, sendResponse) =
         reconstructRootKeyBytes,
         sessionCache: mpcSessionCache,
         promoteMpcDeviceShareNext,
-        dropMpcDeviceShareNext: (id) => setMpcDeviceShareNext(id, undefined),
       },
     );
 
