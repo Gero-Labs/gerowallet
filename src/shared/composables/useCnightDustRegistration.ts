@@ -222,57 +222,7 @@ export function useCnightDustRegistration() {
       }
 
       stage.value = 'signing';
-      const signingData: Record<string, unknown> = {
-        txCbor: build.txCbor,
-        partialSign: false,
-        accountIndex: 0,
-        utxos: utxos.value,
-        addresses: keys.value,
-        mergeWitnesses: false,
-      };
-      if (credentials.prfOutput) {
-        // Reuse the single PRF evaluation to decrypt the root-key blob — the
-        // exact byte format the SIGN_TX passkey path already consumes. Falls
-        // back to deriving the root key from the just-decrypted mnemonic for
-        // wallets restored before the prfEncryptedPrivateKey blob existed.
-        if (wallet.prfEncryptedPrivateKey && wallet.webAuthnCredentialId) {
-          const { decryptPrivateKeyWithPrf } = await import('@/shared/utils/webauthn-prf');
-          const pkBytes = await decryptPrivateKeyWithPrf(
-            wallet.prfEncryptedPrivateKey,
-            wallet.webAuthnCredentialId,
-            wallet.id.toString(),
-            credentials.prfOutput,
-          );
-          signingData.privateKeyBytes = Array.from(pkBytes);
-        } else {
-          const { resolvePrivateKey } = await import('@/shared/utils/resolver');
-          const rootKeyHex = resolvePrivateKey(mnemonic).hex();
-          signingData.privateKeyBytes = Array.from(Buffer.from(rootKeyHex, 'hex'));
-        }
-      } else {
-        signingData.password = credentials.password;
-      }
-
-      const signResponse = await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.SIGN_TX,
-        data: signingData,
-      }) as { data: { witnesses?: string; error?: string } };
-      if (!signResponse?.data?.witnesses) {
-        throw new Error(signResponse?.data?.error || 'Transaction signing failed');
-      }
-
-      stage.value = 'submitting';
-      const submitResponse = await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.SUBMIT_TX,
-        data: {
-          txCbor: build.txCbor,
-          witnessHex: signResponse.data.witnesses,
-          utxos: utxos.value,
-        },
-      }) as { data: { txId?: string; error?: string } };
-      if (!submitResponse?.data?.txId) {
-        throw new Error(submitResponse?.data?.error || 'Transaction submission failed');
-      }
+      const txId = await signAndSubmit(build.txCbor, credentials, mnemonic);
 
       stage.value = 'done';
       // Optimistic status flip — the indexer takes ~2.5h to relay, so reflect
@@ -282,12 +232,185 @@ export function useCnightDustRegistration() {
         dustAddress: derived.dust,
         registered: false,
         registrationStatus: 'Pending',
-        registrationUtxoTxHash: submitResponse.data.txId,
+        registrationUtxoTxHash: txId,
       };
-      return { status: 'submitted', txHash: submitResponse.data.txId, dustAddress: derived.dust };
+      return { status: 'submitted', txHash: txId, dustAddress: derived.dust };
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       return { status: 'error', message };
+    } finally {
+      registering.value = false;
+      if (stage.value !== 'done') stage.value = 'idle';
+    }
+  }
+
+  /**
+   * Sign the Nexus-built CBOR (payment + stake witnesses via the standard
+   * SIGN_TX resolver — requiredSigners carries both key hashes) and submit
+   * through the normal Cardano submit flow. Returns the tx id.
+   *
+   * PRF wallets reuse the single PRF evaluation to decrypt the root-key blob
+   * (the exact byte format the SIGN_TX passkey path consumes); wallets
+   * restored before the prfEncryptedPrivateKey blob existed fall back to
+   * deriving the root key from the decrypted mnemonic.
+   */
+  async function signAndSubmit(
+    txCbor: string,
+    credentials: RegisterCredentials,
+    mnemonic?: string,
+  ): Promise<string> {
+    const wallet = loggedWallet.value;
+    if (!wallet) throw new Error('No wallet logged in');
+
+    const signingData: Record<string, unknown> = {
+      txCbor,
+      partialSign: false,
+      accountIndex: 0,
+      utxos: utxos.value,
+      addresses: keys.value,
+      mergeWitnesses: false,
+    };
+    if (credentials.prfOutput) {
+      if (wallet.prfEncryptedPrivateKey && wallet.webAuthnCredentialId) {
+        const { decryptPrivateKeyWithPrf } = await import('@/shared/utils/webauthn-prf');
+        const pkBytes = await decryptPrivateKeyWithPrf(
+          wallet.prfEncryptedPrivateKey,
+          wallet.webAuthnCredentialId,
+          wallet.id.toString(),
+          credentials.prfOutput,
+        );
+        signingData.privateKeyBytes = Array.from(pkBytes);
+      } else {
+        const seed = mnemonic ?? await decryptMnemonic(credentials);
+        const { resolvePrivateKey } = await import('@/shared/utils/resolver');
+        const rootKeyHex = resolvePrivateKey(seed).hex();
+        signingData.privateKeyBytes = Array.from(Buffer.from(rootKeyHex, 'hex'));
+      }
+    } else {
+      signingData.password = credentials.password;
+    }
+
+    const signResponse = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.SIGN_TX,
+      data: signingData,
+    }) as { data: { witnesses?: string; error?: string } };
+    if (!signResponse?.data?.witnesses) {
+      throw new Error(signResponse?.data?.error || 'Transaction signing failed');
+    }
+
+    stage.value = 'submitting';
+    const submitResponse = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.SUBMIT_TX,
+      data: {
+        txCbor,
+        witnessHex: signResponse.data.witnesses,
+        utxos: utxos.value,
+      },
+    }) as { data: { txId?: string; error?: string } };
+    if (!submitResponse?.data?.txId) {
+      throw new Error(submitResponse?.data?.error || 'Transaction submission failed');
+    }
+    return submitResponse.data.txId;
+  }
+
+  /** The registration UTxO outpoint required by the deregister/update builders. */
+  function registrationOutpoint(): { txHash: string; outputIndex: number } {
+    const txHash = status.value?.registrationUtxoTxHash;
+    const outputIndex = status.value?.registrationUtxoOutputIndex;
+    if (!txHash || outputIndex === null || outputIndex === undefined) {
+      throw new Error('Registration UTxO not known yet. Refresh the status and try again.');
+    }
+    return { txHash, outputIndex };
+  }
+
+  /**
+   * Deregister: spend the registration UTxO + burn the mapping NFT. The
+   * accumulated DUST decays to zero after relay. No mnemonic needed on the
+   * password path (SIGN_TX decrypts the stored key itself).
+   */
+  async function deregister(credentials: RegisterCredentials): Promise<CnightRegistrationResult> {
+    const wallet = loggedWallet.value;
+    if (!wallet?.baseAddress || !wallet?.stakeAddress) {
+      return { status: 'error', message: 'Wallet is missing its Cardano addresses' };
+    }
+    registering.value = true;
+    stage.value = 'building';
+    try {
+      const outpoint = registrationOutpoint();
+      const build = await getMidnightApi(network.value).buildDustDeregistrationTx({
+        cardanoAddress: wallet.baseAddress,
+        paymentKeyHashHex: keys.value?.payment?.[0]?.cred,
+        registrationUtxoTxHash: outpoint.txHash,
+        registrationUtxoOutputIndex: outpoint.outputIndex,
+      });
+      if (build.status !== 'complete' || !build.txCbor) {
+        throw new Error(build.note || 'Nexus did not return a complete deregistration transaction');
+      }
+
+      stage.value = 'signing';
+      const txId = await signAndSubmit(build.txCbor, credentials);
+
+      stage.value = 'done';
+      status.value = {
+        cardanoRewardAddress: wallet.stakeAddress,
+        dustAddress: null,
+        registered: false,
+        registrationStatus: 'Unregistered',
+      };
+      return { status: 'submitted', txHash: txId, dustAddress: '' };
+    } catch (e) {
+      return { status: 'error', message: e instanceof Error ? e.message : String(e) };
+    } finally {
+      registering.value = false;
+      if (stage.value !== 'done') stage.value = 'idle';
+    }
+  }
+
+  /**
+   * Point the existing registration at THIS wallet's own Midnight DUST address
+   * (migration from a portal/Lace registration). One tx: spend + re-output
+   * with the replacement datum.
+   */
+  async function migrateDustAddressToOwn(credentials: RegisterCredentials): Promise<CnightRegistrationResult> {
+    const wallet = loggedWallet.value;
+    if (!wallet?.baseAddress || !wallet?.stakeAddress) {
+      return { status: 'error', message: 'Wallet is missing its Cardano addresses' };
+    }
+    registering.value = true;
+    stage.value = 'deriving';
+    try {
+      const outpoint = registrationOutpoint();
+      const mnemonic = await decryptMnemonic(credentials);
+      const { deriveMidnightAddresses, dustAddressToHex } = await import('@/chains/midnight/midnightKeyManager');
+      const derived = await deriveMidnightAddresses(mnemonic, wallet.network);
+      const dustAddressHex = dustAddressToHex(derived.dust);
+
+      stage.value = 'building';
+      const build = await getMidnightApi(network.value).buildDustUpdateTx({
+        cardanoAddress: wallet.baseAddress,
+        paymentKeyHashHex: keys.value?.payment?.[0]?.cred,
+        registrationUtxoTxHash: outpoint.txHash,
+        registrationUtxoOutputIndex: outpoint.outputIndex,
+        dustAddressHex,
+      });
+      if (build.status !== 'complete' || !build.txCbor) {
+        throw new Error(build.note || 'Nexus did not return a complete update transaction');
+      }
+
+      stage.value = 'signing';
+      const txId = await signAndSubmit(build.txCbor, credentials, mnemonic);
+
+      stage.value = 'done';
+      status.value = {
+        cardanoRewardAddress: wallet.stakeAddress,
+        dustAddress: derived.dust,
+        registered: false,
+        registrationStatus: 'Pending',
+        registrationUtxoTxHash: txId,
+      };
+      return { status: 'submitted', txHash: txId, dustAddress: derived.dust };
+    } catch (e) {
+      return { status: 'error', message: e instanceof Error ? e.message : String(e) };
     } finally {
       registering.value = false;
       if (stage.value !== 'done') stage.value = 'idle';
@@ -308,5 +431,7 @@ export function useCnightDustRegistration() {
     portalUrl,
     refreshStatus,
     register,
+    deregister,
+    migrateDustAddressToOwn,
   };
 }

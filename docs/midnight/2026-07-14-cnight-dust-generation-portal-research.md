@@ -89,10 +89,11 @@ Gero's structural advantage over the portal: **the Cardano wallet and the Midnig
 4. **Track:** status chip Pending → Registered via `getDustStatus(stakeAddress)` polling; then reuse the existing DUST gauge/battery for live generation.
 5. **Manage (later):** change DUST address (update tx incl. validator withdrawal auth), deregister (burn), with the "moving NIGHT decays DUST" warnings we already have copy for.
 
-**Build plan:**
-- **Phase 0 (Nexus, blocking):** stake-credential fix per §3 + tests; verify on preview E2E (register → indexer shows Registered → DUST accrues to the mapped address). Optionally add deregister/update builders.
-- **Phase 1 (wallet):** registration flow above, per-stake-credential status in `midnightStore`, wire `DustRegistrationDialog`'s Path B section to the native flow instead of the link-out. Fix the interim mainnet portal link regardless.
-- **Phase 2:** manage flows (update/deregister), multi-account support (batch status is already there, max 50), badges/notifications when unregistered cNIGHT is detected.
+**Build plan — implementation status (2026-07-14):**
+- **Phase 0 (Nexus)** ✅ nexus PR #687: datum keyed to the stake credential (derived server-side), requiredSigners = payment + stake, payment hash optional, script-credential guards.
+- **Phase 1 (wallet)** ✅ committed on `midnight-continued` (31f36f8a): `useCnightDustRegistration` composable (portal-verified cNIGHT policy ids per network), `CnightDustRegistrationDialog`, PortfolioPage banner with status-aware CTA, one-gesture password/PassKey sign via SIGN_TX/SUBMIT_TX, hardware-wallet fallback to the official portal, mainnet portal link fixed.
+- **Phase 2 (both)** ✅ same PR/branch: register/deregister/update all rotate the wallet's cNIGHT UTxOs (portal parity — generation covers the existing balance); Nexus `build-deregistration-tx` (spend + burn) and `build-update-tx` (spend + re-output + validator-reward-account withdrawal auth); wallet manage actions "Stop generating DUST" and "Move DUST destination to this wallet" in the dialog.
+- **Deferred:** mini-gero (sidepanel) parity surface, multi-account sweep (batch status endpoint exists, max 50), unregistered-cNIGHT notification badge, live E2E on preview (needs cNIGHT from the preview faucet/testnet distribution).
 
 ## 6. Open questions
 - Min-ADA locked at the validator UTxO: portal uses a constant (`s.ks`, unresolved from the minified bundle); Nexus computes its own — confirm the value on preview and surface it in the UI copy.

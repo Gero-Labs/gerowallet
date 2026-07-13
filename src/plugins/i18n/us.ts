@@ -4245,6 +4245,12 @@ export default {
   'midnight.cnightCardTitle': 'Your NIGHT can generate DUST',
   'midnight.cnightCardBody': 'Register this wallet once and the NIGHT it holds starts generating DUST, the gas that powers Midnight.',
   'midnight.cnightCardCta': 'Set up',
+  'midnight.cnightStopCta': 'Stop generating DUST',
+  'midnight.cnightStopWarning': 'Deregistering removes the mapping and your accumulated DUST decays to zero over time. You can register again at any time.',
+  'midnight.cnightMigrateCta': 'Move DUST destination to this wallet',
+  'midnight.cnightMigrateInfo': 'Points the existing registration at this wallet\'s own Midnight DUST address. Takes effect after the relay, in about 2.5 hours.',
+  'midnight.cnightDeregistered': 'Deregistration submitted',
+  'midnight.cnightUpdated': 'DUST destination update submitted',
   // DUST battery gauge
   'midnight.dustBattery': 'DUST battery',
   'midnight.dustCharge': 'Charge',
