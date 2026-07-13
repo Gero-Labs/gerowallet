@@ -368,6 +368,97 @@ export async function sendShieldedNight(
   return result;
 }
 
+// ─── Shield conversion (public NIGHT -> private NIGHT) ───────────────────────
+//
+// See docs/plans/2026-07-13-midnight-shield-unshield.md, WP-SH4. Unshield
+// (private -> public) is intentionally NOT wired here yet — ground rule 16
+// of that plan: no real shield has succeeded on-chain yet, so there is
+// nothing to unshield to test against.
+
+/**
+ * BG builds + signs the SHIELD direction of a shield/unshield conversion —
+ * moves `amount` of public NIGHT into a brand-new shielded output at the
+ * wallet's own shielded address (`buildAndSignMidnightShield` in
+ * walletBg.ts / `buildAndSignShield` in midnightShieldSwapBuilder.ts). No
+ * recipient: shield always moves value between the wallet's own two
+ * addresses. Same response shape as {@link buildAndSignShieldedInBg} —
+ * reused rather than forked.
+ */
+async function buildAndSignShieldInBg(
+  amount: bigint,
+  credentials: MidnightSendCredentials,
+  proving?: { url: string },
+): Promise<{ signedTxHex: string; proven: boolean }> {
+  const response = await Messaging.sendToBackgroundFromOptions({
+    method: MessageTypes.BUILD_AND_SIGN_MIDNIGHT_SHIELD_TX,
+    data: {
+      amount: amount.toString(),
+      password: credentials.password,
+      prfSecret: credentials.prfSecret ? Array.from(credentials.prfSecret) : undefined,
+      proving,
+    },
+  }) as { data: { success: boolean; signedTxHex?: string; proven?: boolean; error?: string } };
+
+  if (!response?.data?.success || !response.data.signedTxHex) {
+    throw new Error(response?.data?.error || 'Midnight shield build/sign failed');
+  }
+  return { signedTxHex: response.data.signedTxHex, proven: !!response.data.proven };
+}
+
+/**
+ * Shield conversion (public NIGHT -> private/shielded NIGHT), branching on
+ * the user's proof-server preference exactly like {@link sendShieldedNight}
+ * — shield's shielded half proves through the identical ShieldedWallet
+ * pipeline as a plain shielded send (see midnightShieldSwapBuilder.ts's file
+ * header), so the same local/remote routing, health preflight, and
+ * `ProofServerUnreachableError` fallback apply unchanged. No recipient or
+ * output list: the amount always moves from the wallet's own public address
+ * to its own shielded address.
+ *
+ * `forceRemote` mirrors sendShieldedNight's one-off "use Gero Cloud for this
+ * transaction" fallback (WP-P5) — same meaning, same caller contract.
+ */
+export async function shieldNight(
+  network: string,
+  amount: bigint,
+  credentials: MidnightSendCredentials,
+  waitFor: 'Submitted' | 'InBlock' | 'Finalized' = 'InBlock',
+  onStage?: (stage: MidnightSendStage) => void,
+  forceRemote = false,
+): Promise<SubmitMidnightTxResponse> {
+  if (amount <= 0n) {
+    throw new Error('shieldNight: amount must be positive');
+  }
+  const api = getMidnightApi(network);
+
+  if (!forceRemote && midnightStore.proofServer.mode === 'local') {
+    const { localUrl } = midnightStore.proofServer;
+    const { checkProofServerHealth } = await import('@/chains/midnight/midnightLocalProver');
+    const healthy = await checkProofServerHealth(localUrl);
+    if (!healthy) {
+      throw new ProofServerUnreachableError(localUrl);
+    }
+    onStage?.('provingLocal');
+    const { signedTxHex, proven } = await buildAndSignShieldInBg(amount, credentials, { url: localUrl });
+    if (!proven) {
+      // Defensive: mirrors sendShieldedNight's identical guard — should be
+      // unreachable since `proving` is always set on this branch.
+      throw new Error('Local proving requested but BG returned an unproven tx');
+    }
+    onStage?.('submitting');
+    const result = await api.submitProvenMidnightTx({ signedTxHex, waitFor });
+    onStage?.('done');
+    return result;
+  }
+
+  onStage?.('working');
+  const { signedTxHex } = await buildAndSignShieldInBg(amount, credentials);
+  onStage?.('submitting');
+  const result = await api.proveAndSubmitMidnightTx({ signedTxHex, waitFor });
+  onStage?.('done');
+  return result;
+}
+
 // ─── Path A — NIGHT-for-DUST registration ─────────────────────────────────────
 //
 // Registers the wallet's own NIGHT UTxOs to generate DUST for the wallet's

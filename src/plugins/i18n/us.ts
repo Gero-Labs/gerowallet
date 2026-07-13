@@ -4173,6 +4173,23 @@ export default {
   'midnight.send.stageSign': 'Sign transaction',
   'midnight.send.stageSubmit': 'Submit',
   'midnight.send.stageProvingLocal': 'Proving locally...',
+  // Shield/unshield conversion dialog (WP-SH4). Shield direction only for
+  // now; the toggle still shows "Make public" so the option isn't hidden,
+  // just visibly disabled with a "coming soon" caption + tooltip.
+  'midnight.shieldConvert.title': 'Convert NIGHT',
+  'midnight.shieldConvert.subtitle': 'Move NIGHT between your public and private balance.',
+  'midnight.shieldConvert.stepAmount': 'Amount',
+  'midnight.shieldConvert.makePrivate': 'Make private',
+  'midnight.shieldConvert.makePrivateHint': 'Move public NIGHT into your shielded balance.',
+  'midnight.shieldConvert.makePublic': 'Make public',
+  'midnight.shieldConvert.makePublicHint': 'Move private NIGHT into your public balance.',
+  'midnight.shieldConvert.comingSoon': 'Coming soon',
+  'midnight.shieldConvert.makePublicTooltip': 'Not available yet. Unshielding unlocks once a shield has been verified on-chain.',
+  'midnight.shieldConvert.sourceBalanceLabel': 'Available',
+  'midnight.shieldConvert.signAndConvert': 'Sign and convert',
+  'midnight.shieldConvert.progressToPrivate': 'to your private balance',
+  'midnight.shieldConvert.entryButton': 'Convert',
+  'midnight.shieldConvert.entryButtonTooltip': 'Move NIGHT between your public and private balance.',
   // DApp Connector (@midnight-ntwrk/dapp-connector-api)
   'midnight.connector.viewAddressAndBalance': 'View your Midnight addresses and balances',
   'midnight.connector.futureRequestsNote': 'This site will be able to request signatures and submit transactions for your approval.',

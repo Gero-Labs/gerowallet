@@ -4070,6 +4070,24 @@ export default {
   'midnight.send.stageSign': 'Transaktion signieren',
   'midnight.send.stageSubmit': 'Senden',
   'midnight.send.stageProvingLocal': 'Beweis wird lokal erstellt...',
+  // Umwandlungsdialog Shield/Unshield (WP-SH4). Vorerst nur die Verschleiern-
+  // Richtung; der Umschalter zeigt "Öffentlich machen" trotzdem an, damit die
+  // Option nicht versteckt ist, aber sichtbar deaktiviert mit einem
+  // "Demnächst"-Hinweis + Tooltip.
+  'midnight.shieldConvert.title': 'NIGHT umwandeln',
+  'midnight.shieldConvert.subtitle': 'Bewege NIGHT zwischen deinem öffentlichen und privaten Guthaben.',
+  'midnight.shieldConvert.stepAmount': 'Betrag',
+  'midnight.shieldConvert.makePrivate': 'Privat machen',
+  'midnight.shieldConvert.makePrivateHint': 'Bewege öffentliches NIGHT in dein Shielded-Guthaben.',
+  'midnight.shieldConvert.makePublic': 'Öffentlich machen',
+  'midnight.shieldConvert.makePublicHint': 'Bewege privates NIGHT in dein öffentliches Guthaben.',
+  'midnight.shieldConvert.comingSoon': 'Demnächst',
+  'midnight.shieldConvert.makePublicTooltip': 'Noch nicht verfügbar. Das Entschleiern wird freigeschaltet, sobald eine Verschleierung on-chain bestätigt wurde.',
+  'midnight.shieldConvert.sourceBalanceLabel': 'Verfügbar',
+  'midnight.shieldConvert.signAndConvert': 'Signieren und umwandeln',
+  'midnight.shieldConvert.progressToPrivate': 'in dein privates Guthaben',
+  'midnight.shieldConvert.entryButton': 'Umwandeln',
+  'midnight.shieldConvert.entryButtonTooltip': 'Bewege NIGHT zwischen deinem öffentlichen und privaten Guthaben.',
   // DApp-Connector (@midnight-ntwrk/dapp-connector-api)
   'midnight.connector.viewAddressAndBalance': 'Deine Midnight-Adressen und -Guthaben einsehen',
   'midnight.connector.futureRequestsNote': 'Diese Website kann Signaturen anfragen und Transaktionen zur Genehmigung einreichen.',
