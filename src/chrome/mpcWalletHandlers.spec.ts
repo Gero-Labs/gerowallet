@@ -204,6 +204,8 @@ describe('unlockMpcWalletFlow', () => {
 describe('recoverMpcGoogleWalletFlow', () => {
   function makeDeps(overrides: Partial<RecoverMpcGoogleWalletDeps> = {}): RecoverMpcGoogleWalletDeps {
     return {
+      // Fileless: the encrypted recovery blob + xpub anchor come from the backend, not a file.
+      fetchRecovery: vi.fn(async () => ({ encryptedRecovery: 'gmpc-recovery1.blob', publicKey: 'xpub-anchor' })),
       decryptRecoveryShare: vi.fn(async () => 'gmpc1.03.recovery'),
       getLoginShare: vi.fn(async () => 'gmpc1.02.login'),
       // Validates internally; returns entropy on success, throws MpcValidationError on mismatch.
@@ -224,24 +226,23 @@ describe('recoverMpcGoogleWalletFlow', () => {
     chain: 'cardano',
     network: 'mainnet',
     idToken: fakeIdToken(),
-    recoveryBlob: 'gmpc-recovery1.blob',
     recoveryPassword: 'recovery-pw',
     newSecret,
     webAuthnCredentialId: 'cred-2',
     mpcPrfSaltId: 'salt-2',
-    expectedXpub: 'xpub-anchor',
   };
 
-  it('decrypts the recovery blob, fetches the login share, and validates against the xpub anchor', async () => {
+  it('fetches the recovery blob+xpub from the backend, decrypts it, fetches the login share, and validates against the fetched xpub anchor', async () => {
     const deps = makeDeps();
     await recoverMpcGoogleWalletFlow(baseInput, deps);
 
-    expect(deps.decryptRecoveryShare).toHaveBeenCalledWith(baseInput.recoveryBlob, baseInput.recoveryPassword);
+    expect(deps.fetchRecovery).toHaveBeenCalledWith(baseInput.idToken, baseInput.chain, baseInput.network);
+    expect(deps.decryptRecoveryShare).toHaveBeenCalledWith('gmpc-recovery1.blob', baseInput.recoveryPassword);
     expect(deps.getLoginShare).toHaveBeenCalledWith(baseInput.idToken, baseInput.chain, baseInput.network);
     expect(deps.reconstructAndValidateEntropy).toHaveBeenCalledWith('gmpc1.03.recovery', 'gmpc1.02.login', 'xpub-anchor');
   });
 
-  it('persists the wallet using the validated anchor xpub, the recovery share re-encrypted as the device factor, and the credential/salt ids', async () => {
+  it('persists the wallet using the backend anchor xpub, the recovery share re-encrypted as the device factor, and the credential/salt ids', async () => {
     const deps = makeDeps();
     const result = await recoverMpcGoogleWalletFlow(baseInput, deps);
 
@@ -261,7 +262,7 @@ describe('recoverMpcGoogleWalletFlow', () => {
     expect(result).toEqual({ walletId: 99, publicKey: 'xpub-anchor' });
   });
 
-  it('rejects and does NOT persist when the anchor validation fails (wrong recovery file / Google account)', async () => {
+  it('rejects and does NOT persist when the anchor validation fails (wrong Google account for this recovery)', async () => {
     const deps = makeDeps({
       reconstructAndValidateEntropy: vi.fn(async () => { throw new MpcValidationError('xpub mismatch'); }),
     });
@@ -273,7 +274,37 @@ describe('recoverMpcGoogleWalletFlow', () => {
   it('does not persist a wallet if the recovery password is wrong (decrypt throws)', async () => {
     const deps = makeDeps({ decryptRecoveryShare: vi.fn(async () => { throw new Error('wrong password'); }) });
     await expect(recoverMpcGoogleWalletFlow(baseInput, deps)).rejects.toThrow('wrong password');
+    expect(deps.getLoginShare).not.toHaveBeenCalled();
     expect(deps.createMpcGoogleWallet).not.toHaveBeenCalled();
+  });
+
+  it('propagates a 404 "no recovery on file" and writes NO state (never decrypts, never persists)', async () => {
+    const deps = makeDeps({ fetchRecovery: vi.fn(async () => { throw new Error('not enrolled'); }) });
+    await expect(recoverMpcGoogleWalletFlow(baseInput, deps)).rejects.toThrow('not enrolled');
+    expect(deps.decryptRecoveryShare).not.toHaveBeenCalled();
+    expect(deps.getLoginShare).not.toHaveBeenCalled();
+    expect(deps.createMpcGoogleWallet).not.toHaveBeenCalled();
+  });
+
+  it('never logs the decrypted recovery share, the login share, or the recovery password', async () => {
+    const deps = makeDeps();
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await recoverMpcGoogleWalletFlow(baseInput, deps);
+
+    for (const spy of [logSpy, errSpy, warnSpy]) {
+      for (const call of spy.mock.calls) {
+        const line = call.join(' ');
+        expect(line).not.toContain('gmpc1.03.recovery');
+        expect(line).not.toContain('gmpc1.02.login');
+        expect(line).not.toContain(baseInput.recoveryPassword);
+      }
+    }
+    logSpy.mockRestore();
+    errSpy.mockRestore();
+    warnSpy.mockRestore();
   });
 });
 
