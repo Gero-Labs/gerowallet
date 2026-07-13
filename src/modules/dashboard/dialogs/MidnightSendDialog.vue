@@ -281,7 +281,7 @@
             :wallet-type="loggedWallet?.type"
             :is-prf-wallet="isPrfWallet"
             :is-signed="false"
-            :loading="sending"
+            :loading="sending || checkingLocalProver"
             :password="password"
             @update:password="password = $event"
             :password-label="t('send.spendingPassword')"
@@ -295,6 +295,25 @@
           />
         </div>
 
+        <!-- Local proof server didn't answer its health check (WP-P5): offer
+             the two-action fallback instead of a generic error string. The
+             auth section above stays visible/usable so re-submitting after
+             starting the server just works. -->
+        <div v-if="localProverUnavailable" class="midnight-info-note midnight-prover-fallback mb-2">
+          <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-server-network-off</v-icon>
+          <div class="midnight-prover-fallback-body">
+            <span>{{ t('midnight.proofServer.notDetectedSend') }}</span>
+            <div class="midnight-prover-fallback-actions">
+              <v-btn text x-small color="var(--g-accent)" @click="openProofServerSettings">
+                {{ t('midnight.proofServer.openSettings') }}
+              </v-btn>
+              <v-btn text x-small color="var(--g-accent)" @click="useCloudForThisTransaction">
+                {{ t('midnight.proofServer.useCloudOnce') }}
+              </v-btn>
+            </div>
+          </div>
+        </div>
+
         <div v-if="errorMessage" class="error--text text-caption mb-2 text-center px-3">
           {{ errorMessage }}
         </div>
@@ -305,7 +324,7 @@
             @click="prevStep"
             v-if="currentStep > 1"
             class="mr-2"
-            :disabled="sending"
+            :disabled="sending || checkingLocalProver"
           >
             <v-icon small class="mr-1">mdi-arrow-left</v-icon>{{ t('common.back') }}
           </v-btn>
@@ -325,8 +344,8 @@
             v-else-if="currentStep === 2 && !isPrfWallet"
             class="continue-button"
             @click="submitWithPassword"
-            :disabled="sending"
-            :loading="sending"
+            :disabled="sending || checkingLocalProver"
+            :loading="sending || checkingLocalProver"
           >{{ t('midnight.signAndSend') }}</v-btn>
         </div>
       </v-card-actions>
@@ -354,6 +373,7 @@ import ShieldedProvingConsentDialog from '@/modules/dashboard/dialogs/ShieldedPr
 import QRAddressScannerDialog from '@/modules/dashboard/dialogs/QRAddressScannerDialog.vue';
 import midnightLogo from '@/assets/svg/midnight.svg';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import { settingsNavRequest } from '@/shared/composables/useGlobalSearch';
 import {
   midnightStore,
   SHIELDED_PROVING_CONSENT_VERSION,
@@ -454,8 +474,13 @@ const errorMessage = ref<string | null>(null);
 type SendStageOrIdle = MidnightSendStage | 'idle';
 const sendStage = ref<SendStageOrIdle>('idle');
 
+// `provingLocal` shares `working`'s rank: the two are mutually exclusive
+// (local-mode shielded sends emit `provingLocal` in place of `working`, see
+// midnight-tx.service's sendShieldedNight) and occupy the same position in
+// every send's stage sequence — authorize → (build →) working-or-provingLocal
+// → submit → done.
 const STAGE_RANK: Record<SendStageOrIdle, number> = {
-  idle: 0, authorizing: 1, building: 2, working: 3, submitting: 4, done: 5,
+  idle: 0, authorizing: 1, building: 2, working: 3, provingLocal: 3, submitting: 4, done: 5,
 };
 
 interface TimelineNode {
@@ -477,6 +502,12 @@ const timelineNodes = computed<TimelineNode[]>(() => {
   const syncDone = pct != null && pct >= 100;
   const syncActive = s === 'working' && !syncDone;
   const signActive = s === 'working' && syncDone;
+  // Local-mode shielded sends (WP-P5): the BG round trip is one opaque
+  // proving+binding call with no percent signal, so it gets a single
+  // indeterminate-bar node (staged copy, not a fake percentage — rule 14 in
+  // docs/plans/2026-07-13-midnight-proof-server-setting.md section 1) rather
+  // than the sync/sign split above, which is specific to DUST-balance sync.
+  const provingLocalActive = s === 'provingLocal';
 
   return [
     {
@@ -491,10 +522,10 @@ const timelineNodes = computed<TimelineNode[]>(() => {
     },
     {
       key: 'sync',
-      label: t('midnight.send.stageSync'),
-      state: rank > 3 || signActive ? 'done' : syncActive ? 'active' : 'pending',
+      label: provingLocalActive ? t('midnight.send.stageProvingLocal') : t('midnight.send.stageSync'),
+      state: rank > 3 || signActive ? 'done' : (syncActive || provingLocalActive) ? 'active' : 'pending',
       showBar: true,
-      percent: syncActive ? pct : undefined,
+      percent: provingLocalActive ? null : (syncActive ? pct : undefined),
       detail: syncActive ? prog?.detail : undefined,
     },
     {
@@ -525,6 +556,23 @@ const isDustLow = computed(() => !!dustBattery.value && dustBattery.value.percen
 
 const consentDialogOpen = ref(false);
 const pendingCredentials = ref<{ password?: string; prfSecret?: Uint8Array } | null>(null);
+
+// ── Local proof-server routing (WP-P5) ──
+// True while the health preflight for a local-mode shielded send is
+// in-flight — keeps Step 2 visible (no big "sending" overlay) with just the
+// submit button showing a spinner, since the check is quick (~2.5s) and
+// nothing has actually started yet.
+const checkingLocalProver = ref(false);
+// True once a local-mode shielded send's preflight (or, on the rare race
+// where the server drops between preflight and build, the BG call itself)
+// finds the local proof server unreachable. Renders the two-action fallback
+// in place of a generic error string.
+const localProverUnavailable = ref(false);
+// Set for exactly one send by "Use Gero Cloud for this transaction": routes
+// that single attempt through the remote path without touching the user's
+// stored proofServer.mode. Consumed (reset to false) the moment sendShielded
+// reads it.
+const forceRemoteForNextSend = ref(false);
 
 const passwordRules = [rules.required()];
 
@@ -641,6 +689,7 @@ function nextStep() {
 
 function prevStep() {
   errorMessage.value = null;
+  localProverUnavailable.value = false;
   currentStep.value = 1;
 }
 
@@ -677,6 +726,14 @@ async function routeSend(credentials: { password?: string; prfSecret?: Uint8Arra
     await sendUnshielded(credentials);
     return;
   }
+  // Local proof-server mode never needs cloud consent — witness data stays
+  // on the user's machine — so it skips the consent dialog entirely and
+  // goes straight to a health preflight (WP-P5, plan section "WP-P5 - Consent
+  // dialog + send-flow integration").
+  if (midnightStore.proofServer.mode === 'local') {
+    await routeLocalShielded(credentials);
+    return;
+  }
   if (hasFreshConsent()) {
     await sendShielded(credentials);
     return;
@@ -685,9 +742,65 @@ async function routeSend(credentials: { password?: string; prfSecret?: Uint8Arra
   consentDialogOpen.value = true;
 }
 
+/**
+ * Local-mode shielded send routing: preflight the local proof server's
+ * `/health` before ever touching the "sending" overlay. A fast, explicit
+ * check here (rather than letting sendShieldedNight's own internal preflight
+ * surface via a caught error) keeps Step 2 on screen with just a spinner
+ * instead of flashing the full progress timeline for a doomed send.
+ */
+async function routeLocalShielded(credentials: { password?: string; prfSecret?: Uint8Array }) {
+  errorMessage.value = null;
+  localProverUnavailable.value = false;
+  checkingLocalProver.value = true;
+  try {
+    const { checkProofServerHealth } = await import('@/chains/midnight/midnightLocalProver');
+    const healthy = await checkProofServerHealth(midnightStore.proofServer.localUrl);
+    if (!healthy) {
+      pendingCredentials.value = credentials;
+      localProverUnavailable.value = true;
+      return;
+    }
+  } finally {
+    checkingLocalProver.value = false;
+  }
+  await sendShielded(credentials);
+}
+
+/** "Open settings" fallback action — navigates to Settings > Advanced (the
+ * Midnight proof server section, WP-P4) via the same decoupled channel
+ * GlobalSearch uses, so this dialog doesn't need a direct reference to
+ * SettingsDialog/ContentLayout. */
+function openProofServerSettings() {
+  settingsNavRequest.value = { tab: 'advanced' };
+}
+
+/**
+ * "Use Gero Cloud for this transaction" fallback action — sends this one
+ * shielded transfer via the remote path without changing the user's stored
+ * `proofServer.mode`. Reuses the already-entered credentials from the failed
+ * local attempt (`pendingCredentials`) rather than asking the user to
+ * re-authenticate. Still gated on cloud consent like any other remote send.
+ */
+function useCloudForThisTransaction() {
+  const credentials = pendingCredentials.value;
+  if (!credentials) return;
+  localProverUnavailable.value = false;
+  forceRemoteForNextSend.value = true;
+  if (hasFreshConsent()) {
+    pendingCredentials.value = null;
+    void sendShielded(credentials);
+    return;
+  }
+  // pendingCredentials stays set — onConsentAccepted below reads it once the
+  // user accepts the cloud consent dialog.
+  consentDialogOpen.value = true;
+}
+
 function onConsentClose() {
   consentDialogOpen.value = false;
   pendingCredentials.value = null;
+  forceRemoteForNextSend.value = false;
 }
 
 async function onConsentAccepted() {
@@ -737,6 +850,16 @@ async function sendUnshielded(credentials: { password?: string; prfSecret?: Uint
 async function sendShielded(credentials: { password?: string; prfSecret?: Uint8Array }) {
   const wallet = loggedWallet.value;
   if (!wallet) return;
+  // Consumed here (not left for sendShieldedNight to re-read) so a second,
+  // unrelated shielded send later in the same dialog session never
+  // accidentally inherits a one-off "use cloud" override.
+  const forceRemote = forceRemoteForNextSend.value;
+  forceRemoteForNextSend.value = false;
+  // Every entry point into sendShielded (routeLocalShielded, the direct
+  // fresh-consent path, and onConsentAccepted) should start from a clean
+  // fallback state — otherwise a stale fallback from an earlier local-mode
+  // attempt could resurface next to an unrelated later error.
+  localProverUnavailable.value = false;
   sending.value = true;
   sendStage.value = 'authorizing';
   try {
@@ -750,6 +873,7 @@ async function sendShielded(credentials: { password?: string; prfSecret?: Uint8A
       credentials,
       'InBlock',
       (stage) => { sendStage.value = stage; },
+      forceRemote,
     );
     debugLog('🌙 Midnight shielded tx submitted:', result.txHash, 'status:', result.status);
     void addOptimisticPendingTx(result.txHash, true);
@@ -757,7 +881,19 @@ async function sendShielded(credentials: { password?: string; prfSecret?: Uint8A
     resetForm();
     emit('close');
   } catch (e) {
-    errorMessage.value = e instanceof Error ? e.message : String(e);
+    // Named rather than instanceof-checked: ProofServerUnreachableError is
+    // reached here via a dynamic import, and name-based matching sidesteps
+    // any doubt about identity across that boundary. Thrown by
+    // sendShieldedNight's OWN internal preflight — normally routeLocalShielded
+    // above already caught this before the "sending" overlay ever showed, so
+    // reaching it here means the server dropped in the narrow window between
+    // that preflight and this call. Same fallback either way.
+    if (e instanceof Error && e.name === 'ProofServerUnreachableError') {
+      pendingCredentials.value = credentials;
+      localProverUnavailable.value = true;
+    } else {
+      errorMessage.value = e instanceof Error ? e.message : String(e);
+    }
   } finally {
     sending.value = false;
     sendStage.value = 'idle';
@@ -781,6 +917,12 @@ async function addOptimisticPendingTx(hash: string, shielded = false) {
 // UI closes, so keep the timeline visible until it resolves).
 function onDialogClose() {
   if (sending.value) return;
+  // Abandon any pending local-prover-fallback attempt rather than letting it
+  // resurface stale on next open — matches the existing consent-cancel
+  // behaviour (onConsentClose), which drops pendingCredentials the same way.
+  localProverUnavailable.value = false;
+  pendingCredentials.value = null;
+  forceRemoteForNextSend.value = false;
   emit('close');
 }
 
@@ -790,6 +932,8 @@ function resetForm() {
   password.value = '';
   currentStep.value = 1;
   sendStage.value = 'idle';
+  localProverUnavailable.value = false;
+  forceRemoteForNextSend.value = false;
 }
 
 // Reset to step 1 whenever the dialog re-opens.
@@ -1115,6 +1259,22 @@ watch(
   border: 1px solid var(--g-hairline-2);
   border-radius: var(--g-r-control);
   padding: 8px 10px;
+}
+
+/* Local proof-server fallback (WP-P5) — reuses .midnight-info-note's tone,
+   adds the two-action row underneath the message. */
+.midnight-prover-fallback-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+.midnight-prover-fallback-actions {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 2px;
 }
 
 /* ─── Send-progress timeline (right-side, appears while sending) ─── */

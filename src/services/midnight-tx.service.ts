@@ -315,6 +315,15 @@ export class ProofServerUnreachableError extends Error {
  *        proves + binds locally; returns a finalized tx hex.
  *     3. api.submitProvenMidnightTx → Nexus relays to the sidecar's
  *        /tx/submit-proven (WP-P3), which submits WITHOUT re-proving.
+ *
+ * `forceRemote` (WP-P5): the send dialog's "Use Gero Cloud for this
+ * transaction" fallback — offered when the user's stored preference is
+ * `local` but the local server didn't answer its health check — needs to
+ * send exactly one transaction through the remote path WITHOUT flipping the
+ * stored `proofServer.mode` (that mode toggle is a deliberate, separate user
+ * action in Settings, not an implicit side effect of a one-off fallback).
+ * Callers must still gate this on cloud consent themselves, same as the
+ * default remote path.
  */
 export async function sendShieldedNight(
   network: string,
@@ -322,13 +331,14 @@ export async function sendShieldedNight(
   credentials: MidnightSendCredentials,
   waitFor: 'Submitted' | 'InBlock' | 'Finalized' = 'InBlock',
   onStage?: (stage: MidnightSendStage) => void,
+  forceRemote = false,
 ): Promise<SubmitMidnightTxResponse> {
   if (outputs.length === 0) {
     throw new Error('sendShieldedNight: at least one output is required');
   }
   const api = getMidnightApi(network);
 
-  if (midnightStore.proofServer.mode === 'local') {
+  if (!forceRemote && midnightStore.proofServer.mode === 'local') {
     const { localUrl } = midnightStore.proofServer;
     const { checkProofServerHealth } = await import('@/chains/midnight/midnightLocalProver');
     const healthy = await checkProofServerHealth(localUrl);
