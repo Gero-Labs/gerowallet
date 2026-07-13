@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { MpcValidationError, type DeviceShareSecret } from '@/shared/utils/mpc';
+import { MpcValidationError, RecoveryBackupStoreError, type DeviceShareSecret } from '@/shared/utils/mpc';
 import {
   createMpcGoogleWalletFlow,
   unlockMpcWalletFlow,
@@ -663,6 +663,44 @@ describe('setRecoveryPasswordFlow', () => {
     await setRecoveryPasswordFlow(baseInput, deps);
     expect(order.indexOf('storeRecovery')).toBeGreaterThan(order.indexOf('promote'));
     expect(order.indexOf('storeRecovery')).toBeGreaterThan(order.indexOf('rotate'));
+  });
+
+  it('recovers from a transient storeRecovery failure via one quiet retry', async () => {
+    const order: string[] = [];
+    let attempts = 0;
+    const deps = makeDeps(order, {
+      storeRecovery: vi.fn(async () => {
+        attempts += 1;
+        if (attempts === 1) { order.push('storeRecovery-fail'); throw new Error('transient network error'); }
+        order.push('storeRecovery-ok');
+        return { stored: true };
+      }),
+    });
+
+    await setRecoveryPasswordFlow(baseInput, deps);
+
+    expect(attempts).toBe(2);
+    expect(order).toEqual(['stageNext', 'rotate', 'promote', 'storeRecovery-fail', 'storeRecovery-ok', 'clearCache']);
+  });
+
+  it('throws a distinct RecoveryBackupStoreError (not a generic error) when storeRecovery still fails after the retry — rotate+promote already succeeded, so the wallet is NOT unchanged', async () => {
+    const order: string[] = [];
+    let attempts = 0;
+    const deps = makeDeps(order, {
+      storeRecovery: vi.fn(async () => {
+        attempts += 1;
+        order.push(`storeRecovery-fail-${attempts}`);
+        throw new Error('backend down');
+      }),
+    });
+
+    await expect(setRecoveryPasswordFlow(baseInput, deps)).rejects.toBeInstanceOf(RecoveryBackupStoreError);
+
+    expect(attempts).toBe(2); // tried once, retried once, then gave up
+    expect(order).toEqual(['stageNext', 'rotate', 'promote', 'storeRecovery-fail-1', 'storeRecovery-fail-2']);
+    // The re-split already happened and is already live — clearCache (the step
+    // AFTER storeRecovery) simply never runs; step order/semantics are unchanged.
+    expect(deps.clearLoginShareCache).not.toHaveBeenCalled();
   });
 
   it('throws (and writes nothing) if the wallet is not found', async () => {

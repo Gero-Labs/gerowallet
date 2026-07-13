@@ -63,59 +63,6 @@
         >
           <span class="text-body-2" style="white-space: pre-line;">{{ $t('welcome.googleWalletEnrolledRestore') }}</span>
         </v-alert>
-
-        <!-- Server-independent unlock (device share + recovery file) — shown ONLY when a
-             wallet exists locally AND the backend is unreachable. -->
-        <div v-if="existingWallet && serverReachable === false" class="mpc-offline mt-3">
-          <v-alert color="warning" icon="mdi-cloud-off-outline" outlined dense border="left" class="mpc-info-alert mb-2">
-            <span class="text-body-2">{{ $t('security.mpcOfflineUnlockToggle') }}</span>
-          </v-alert>
-          <div class="mt-2 text-left">
-            <div class="text-caption grey--text mb-2">{{ $t('security.mpcOfflineUnlockHint') }}</div>
-            <v-file-input
-              v-model="offlineFile"
-              accept=".gmpc,application/octet-stream"
-              :label="$t('welcome.uploadRecoveryFile')"
-              dense
-              outlined
-              hide-details
-              prepend-icon=""
-              prepend-inner-icon="mdi-file-upload-outline"
-              class="mb-2"
-            />
-            <v-text-field
-              v-model="offlinePassphrase"
-              :label="$t('welcome.recoveryPassword')"
-              type="password"
-              dense
-              outlined
-              hide-details
-              class="mb-2"
-            />
-            <v-text-field
-              v-if="!existingUsesPasskey"
-              v-model="offlineSpendingPassword"
-              :label="$t('welcome.spendingPassword')"
-              type="password"
-              dense
-              outlined
-              hide-details
-              class="mb-2"
-            />
-            <v-btn
-              block
-              depressed
-              outlined
-              :loading="offlineBusy"
-              :disabled="!offlineFile || !offlinePassphrase || (!existingUsesPasskey && !offlineSpendingPassword)"
-              @click="offlineUnlock()"
-            >
-              <v-icon left small>mdi-cloud-off-outline</v-icon>
-              {{ $t('security.mpcOfflineUnlockAction') }}
-            </v-btn>
-            <div v-if="offlineError" class="text-caption error--text mt-2">{{ offlineError }}</div>
-          </div>
-        </div>
       </template>
     </div>
     </div>
@@ -125,7 +72,7 @@
       <v-btn text @click="$emit('back')">{{ $t('common.back') }}</v-btn>
       <v-spacer />
       <v-btn
-        v-if="existingWallet && serverReachable !== false"
+        v-if="existingWallet"
         class="onb-btn"
         depressed
         color="primary"
@@ -143,7 +90,7 @@
         {{ $t('welcome.restoreThisWallet') }}
       </v-btn>
       <v-btn
-        v-else-if="!existingWallet"
+        v-else
         class="onb-btn"
         depressed
         color="primary"
@@ -167,7 +114,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, getCurrentInstance } from 'vue';
+import { ref, watch, getCurrentInstance } from 'vue';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { google } from '@/utils/assets';
@@ -175,7 +122,6 @@ import { getAllWallets } from '@/db/gero-db';
 import { walletStore } from '@/stores/walletStore';
 import { WalletType, type Wallet } from '@/models/types';
 import type { NetworkInfo } from '@/utils/networks';
-import { evaluateMpcPasskey } from '@/shared/utils/mpc/mpcPasskey';
 import UnlockWalletDialog from '@/modules/dashboard/dialogs/UnlockWalletDialog.vue';
 import type { GoogleWalletBgResponse } from './googleWalletMessages';
 
@@ -205,14 +151,12 @@ const restoreExisting = (): void => {
 };
 
 /** True when this Google account is enrolled on the BACKEND but has no wallet on
- *  this device — the user must restore (recovery file) rather than create. */
+ *  this device — the user must restore rather than create. */
 const enrolledOnBackend = ref(false);
-// null = unknown (assume reachable); false = backend unreachable → offer offline recovery.
-const serverReachable = ref<boolean | null>(null);
 
 async function checkBackendEnrollment(token: string): Promise<void> {
   enrolledOnBackend.value = false;
-  serverReachable.value = null;
+  if (existingWallet.value) return; // a local wallet exists → login path handles it
   const chain = props.network?.blockchain;
   const network = props.network?.network;
   if (!chain || !network) return;
@@ -221,16 +165,10 @@ async function checkBackendEnrollment(token: string): Promise<void> {
       method: MessageTypes.CHECK_MPC_ENROLLMENT,
       data: { idToken: token, chain, network },
     }) as GoogleWalletBgResponse;
-    const data = resp?.data as { success?: boolean; enrolled?: boolean; serverReachable?: boolean } | undefined;
-    if (data?.success) {
-      serverReachable.value = data.serverReachable !== false;
-      // Only relevant for a fresh device (no local wallet).
-      if (!existingWallet.value) enrolledOnBackend.value = data.enrolled === true;
-    } else {
-      serverReachable.value = false;
-    }
+    enrolledOnBackend.value = resp?.data?.success === true
+      && (resp.data as { enrolled?: boolean }).enrolled === true;
   } catch {
-    serverReachable.value = false;
+    enrolledOnBackend.value = false;
   }
 }
 
@@ -307,58 +245,6 @@ const onUnlocked = async (): Promise<void> => {
     console.error('Login after unlock error:', error instanceof Error ? error.message : 'unknown error');
   }
 };
-
-// Server-independent (offline) unlock — device share + recovery file, no backend/Google.
-// Reachable from the Google-wallet log-in screen so a lost/unreachable server can't lock
-// the user out on a device that still has its device share.
-const offlineFile = ref<File | null>(null);
-const offlinePassphrase = ref('');
-const offlineSpendingPassword = ref('');
-const offlineBusy = ref(false);
-const offlineError = ref('');
-const existingUsesPasskey = computed(() =>
-  !!existingWallet.value?.webAuthnCredentialId && !!existingWallet.value?.mpcPrfSaltId);
-
-async function offlineUnlock(): Promise<void> {
-  const w = existingWallet.value;
-  if (!w || !offlineFile.value || !offlinePassphrase.value) return;
-  offlineBusy.value = true;
-  offlineError.value = '';
-  try {
-    let recoveryBlob = '';
-    try {
-      const env = JSON.parse(await offlineFile.value.text());
-      recoveryBlob = typeof env?.recovery === 'string' ? env.recovery : '';
-    } catch {
-      recoveryBlob = '';
-    }
-    if (!recoveryBlob) { offlineError.value = vmProxy.$t('security.unlockFailed') as string; return; }
-
-    // Device secret to decrypt the LOCAL device share: passkey (Touch ID) or spending password.
-    const extra = existingUsesPasskey.value
-      ? {
-          prfOutputHex: await evaluateMpcPasskey(w.webAuthnCredentialId!, w.mpcPrfSaltId!),
-          webAuthnCredentialId: w.webAuthnCredentialId,
-          mpcPrfSaltId: w.mpcPrfSaltId,
-        }
-      : { spendingPassword: offlineSpendingPassword.value };
-
-    const resp = await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.UNLOCK_MPC_WALLET_OFFLINE,
-      data: { walletId: w.id, recoveryBlob, recoveryPassword: offlinePassphrase.value, ...extra },
-    }) as GoogleWalletBgResponse;
-
-    if (!resp?.data?.success) {
-      offlineError.value = resp?.data?.error || (vmProxy.$t('security.unlockFailed') as string);
-      return;
-    }
-    await loginAndNavigate(w);
-  } catch (error) {
-    offlineError.value = error instanceof Error ? error.message : (vmProxy.$t('security.unlockFailed') as string);
-  } finally {
-    offlineBusy.value = false;
-  }
-}
 
 const signIn = async (): Promise<void> => {
   signingIn.value = true;

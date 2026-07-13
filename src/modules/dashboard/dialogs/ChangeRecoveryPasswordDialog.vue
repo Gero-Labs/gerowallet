@@ -213,9 +213,16 @@ async function submit() {
         newRecoveryPassword: newPassword.value,
         ...secretFields,
       },
-    }) as BackgroundResponse<{ success: boolean; error?: string }>;
+    }) as BackgroundResponse<{ success: boolean; error?: string; code?: string }>;
 
-    if (!resp?.data?.success) throw new Error(resp?.data?.error || t('security.mpcRecoveryChangeFailed'));
+    if (!resp?.data?.success) {
+      // Rotation already succeeded here — only saving the new encrypted backup
+      // failed — so this must NOT read like "nothing changed" (see background.ts).
+      if (resp?.data?.code === 'recovery_backup_not_stored') {
+        throw new Error(t('security.mpcRecoveryBackupNotStored'));
+      }
+      throw new Error(resp?.data?.error || t('security.mpcRecoveryChangeFailed'));
+    }
     snackbar.fireSuccess(t('security.mpcRecoveryChangeSuccess'));
     handleClose();
   } catch (e: unknown) {
