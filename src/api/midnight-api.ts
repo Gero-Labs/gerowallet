@@ -123,11 +123,12 @@ export interface BuildDustRegistrationTxResponse {
   validatorScriptHash: string;
   datumCbor: string;
   redeemerCbor: string;
+  /** +1 on register, -1 on deregister, null on update (the NFT moves, nothing mints). */
   mintAsset: {
     policyId: string;
     assetNameHex: string;
     quantity: number;
-  };
+  } | null;
   note?: string;
 }
 
@@ -140,12 +141,58 @@ interface BuildDustRegistrationTxResponseWire {
   validator_script_hash: string;
   datum_cbor: string;
   redeemer_cbor: string;
+  /** Null on the update tx (the NFT moves, nothing mints). */
   mint_asset: {
     policy_id: string;
     asset_name_hex: string;
     quantity: number;
-  };
+  } | null;
   note?: string;
+}
+
+/**
+ * Request body for the deregistration / update endpoints. The registration
+ * UTxO outpoint comes from `getDustStatus` (`registrationUtxoTxHash` /
+ * `registrationUtxoOutputIndex`).
+ */
+export interface BuildDustManageTxRequest {
+  cardanoAddress: string;
+  /** Optional cross-check; derived server-side when absent. */
+  paymentKeyHashHex?: string;
+  registrationUtxoTxHash: string;
+  registrationUtxoOutputIndex: number;
+  /** Update only: replacement Midnight DUST address bytes as hex (≤33 bytes). */
+  dustAddressHex?: string;
+}
+
+function manageWireBody(request: BuildDustManageTxRequest) {
+  return {
+    cardano_address: request.cardanoAddress,
+    payment_key_hash_hex: request.paymentKeyHashHex,
+    registration_utxo_tx_hash: request.registrationUtxoTxHash,
+    registration_utxo_output_index: request.registrationUtxoOutputIndex,
+    dust_address_hex: request.dustAddressHex,
+  };
+}
+
+function convertBuildDustTxResponse(data: BuildDustRegistrationTxResponseWire): BuildDustRegistrationTxResponse {
+  return {
+    status: data.status,
+    txCbor: data.tx_cbor,
+    txHash: data.tx_hash,
+    validatorAddress: data.validator_address,
+    validatorScriptHash: data.validator_script_hash,
+    datumCbor: data.datum_cbor,
+    redeemerCbor: data.redeemer_cbor,
+    mintAsset: data.mint_asset
+      ? {
+          policyId: data.mint_asset.policy_id,
+          assetNameHex: data.mint_asset.asset_name_hex,
+          quantity: data.mint_asset.quantity,
+        }
+      : null,
+    note: data.note,
+  };
 }
 
 // ─── Native send: Build / Sign / Submit  ─────────────────────────────────────
@@ -486,21 +533,47 @@ export class MidnightApi {
       };
       const { data, status } = await this.axiosInstance.post<BuildDustRegistrationTxResponseWire>(url, wireBody);
       if (status !== 200) throw parseHttpError(data);
-      return {
-        status: data.status,
-        txCbor: data.tx_cbor,
-        txHash: data.tx_hash,
-        validatorAddress: data.validator_address,
-        validatorScriptHash: data.validator_script_hash,
-        datumCbor: data.datum_cbor,
-        redeemerCbor: data.redeemer_cbor,
-        mintAsset: {
-          policyId: data.mint_asset.policy_id,
-          assetNameHex: data.mint_asset.asset_name_hex,
-          quantity: data.mint_asset.quantity,
-        },
-        note: data.note,
-      };
+      return convertBuildDustTxResponse(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  /**
+   * Build the unsigned DEREGISTRATION tx: spends the on-chain registration UTxO
+   * (outpoint comes from `getDustStatus`) and burns the mapping NFT. Accumulated
+   * DUST decays to zero after relay. Same sign+submit contract as registration
+   * (payment + stake key witnesses).
+   */
+  async buildDustDeregistrationTx(
+    request: BuildDustManageTxRequest,
+  ): Promise<BuildDustRegistrationTxResponse> {
+    try {
+      const url = nexusMidnightPathFor(this.network, 'dust/build-deregistration-tx');
+      const { data, status } = await this.axiosInstance.post<BuildDustRegistrationTxResponseWire>(
+        url, manageWireBody(request));
+      if (status !== 200) throw parseHttpError(data);
+      return convertBuildDustTxResponse(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  /**
+   * Build the unsigned mapping UPDATE tx: spends the registration UTxO and
+   * re-outputs the NFT with a datum pointing at `dustAddressHex` (script-
+   * authorized withdrawal handled server-side). Used to move the DUST
+   * destination to this wallet's own address.
+   */
+  async buildDustUpdateTx(
+    request: BuildDustManageTxRequest,
+  ): Promise<BuildDustRegistrationTxResponse> {
+    try {
+      const url = nexusMidnightPathFor(this.network, 'dust/build-update-tx');
+      const { data, status } = await this.axiosInstance.post<BuildDustRegistrationTxResponseWire>(
+        url, manageWireBody(request));
+      if (status !== 200) throw parseHttpError(data);
+      return convertBuildDustTxResponse(data);
     } catch (error) {
       throw parseHttpError(error);
     }

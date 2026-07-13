@@ -147,10 +147,69 @@
         </div>
       </template>
 
-      <v-btn v-else block large outlined @click="$emit('close')">
-        <v-icon v-if="registrationStatus === 'Pending'" left>mdi-clock-outline</v-icon>
-        {{ registrationStatus === 'Pending' ? t('common.close') : t('common.done') }}
-      </v-btn>
+      <!-- Registered: manage actions (migrate destination / stop generating). -->
+      <template v-else-if="registrationStatus === 'Registered' && manageMode">
+        <div class="manage-note" :class="{ 'manage-note--warning': manageMode === 'deregister' }">
+          {{ manageMode === 'deregister' ? t('midnight.cnightStopWarning') : t('midnight.cnightMigrateInfo') }}
+        </div>
+
+        <v-text-field
+          v-if="!isPrfWallet"
+          v-model="localPassword"
+          :label="t('wallet.spendingPassword')"
+          type="password"
+          outlined
+          dense
+          :disabled="registering"
+          @keydown.enter="confirmManage"
+          class="mb-2 mt-3"
+        />
+
+        <div v-if="registering" class="stage-line">
+          <v-progress-circular indeterminate size="14" width="2" class="mr-2" color="var(--g-accent)" />
+          <span>{{ stageLabel }}</span>
+        </div>
+        <div v-if="submitError" class="error--text text-caption mb-2">
+          {{ submitError }}
+        </div>
+
+        <v-btn
+          block
+          large
+          :outlined="manageMode === 'deregister'"
+          :class="manageMode === 'migrate' ? 'geroButton' : undefined"
+          :color="manageMode === 'deregister' ? 'error' : undefined"
+          :loading="registering"
+          :disabled="!canConfirm"
+          class="mt-1"
+          @click="confirmManage"
+        >
+          <v-icon left>{{ isPrfWallet ? 'mdi-fingerprint' : (manageMode === 'deregister' ? 'mdi-stop-circle-outline' : 'mdi-swap-horizontal') }}</v-icon>
+          {{ manageMode === 'deregister' ? t('midnight.cnightStopCta') : t('midnight.cnightMigrateCta') }}
+        </v-btn>
+        <div class="text-center mt-2">
+          <v-btn small text :disabled="registering" @click="resetState">
+            {{ t('common.cancel') }}
+          </v-btn>
+        </div>
+      </template>
+
+      <template v-else>
+        <v-btn block large outlined @click="$emit('close')">
+          <v-icon v-if="registrationStatus === 'Pending'" left>mdi-clock-outline</v-icon>
+          {{ registrationStatus === 'Pending' ? t('common.close') : t('common.done') }}
+        </v-btn>
+        <div v-if="registrationStatus === 'Registered' && canSignLocally" class="manage-actions">
+          <v-btn small text color="var(--g-text-2)" :disabled="registering" @click="enterManage('migrate')">
+            <v-icon small left>mdi-swap-horizontal</v-icon>
+            {{ t('midnight.cnightMigrateCta') }}
+          </v-btn>
+          <v-btn small text color="var(--g-text-3)" :disabled="registering" @click="enterManage('deregister')">
+            <v-icon small left>mdi-stop-circle-outline</v-icon>
+            {{ t('midnight.cnightStopCta') }}
+          </v-btn>
+        </div>
+      </template>
     </v-card-actions>
   </BaseDialog>
 </template>
@@ -180,11 +239,15 @@ const {
   portalUrl,
   refreshStatus,
   register,
+  deregister,
+  migrateDustAddressToOwn,
 } = useCnightDustRegistration();
 
 const localPassword = ref('');
 const inSigningPhase = ref(false);
 const submitError = ref<string | null>(null);
+/** Registered-state manage flows: re-point the DUST destination or stop generating. */
+const manageMode = ref<'migrate' | 'deregister' | null>(null);
 
 const isPrfWallet = computed(() => walletStore.loggedWallet?.encryptionMethod === 'prf');
 const isMainnet = computed(() => walletStore.loggedWallet?.network === Network.MAINNET);
@@ -246,6 +309,53 @@ function resetState() {
   inSigningPhase.value = false;
   submitError.value = null;
   localPassword.value = '';
+  manageMode.value = null;
+}
+
+function enterManage(mode: 'migrate' | 'deregister') {
+  submitError.value = null;
+  manageMode.value = mode;
+}
+
+async function confirmManage() {
+  if (!manageMode.value) return;
+  submitError.value = null;
+  const wallet = walletStore.loggedWallet;
+  if (!wallet) return;
+
+  try {
+    let prfOutput: ArrayBuffer | undefined;
+    if (isPrfWallet.value) {
+      if (!wallet.webAuthnCredentialId) {
+        throw new Error('PRF wallet missing credential ID');
+      }
+      const { evaluatePrfForWallet } = await import('@/shared/utils/webauthn-prf');
+      prfOutput = await evaluatePrfForWallet(wallet.webAuthnCredentialId, wallet.id.toString());
+    }
+    const credentials = {
+      password: isPrfWallet.value ? undefined : localPassword.value,
+      prfOutput,
+    };
+
+    const result = manageMode.value === 'deregister'
+      ? await deregister(credentials)
+      : await migrateDustAddressToOwn(credentials);
+
+    if (result.status === 'submitted') {
+      snackbar.fireSuccess(manageMode.value === 'deregister'
+        ? t('midnight.cnightDeregistered')
+        : t('midnight.cnightUpdated'));
+      resetState();
+    } else if (result.message === 'WRONG_PASSWORD') {
+      submitError.value = t('errors.wrongPassword');
+    } else {
+      submitError.value = result.message || t('midnight.dustRegistrationFailed');
+      snackbar.setError(submitError.value);
+    }
+  } catch (e) {
+    submitError.value = e instanceof Error ? e.message : String(e);
+    snackbar.setError(submitError.value);
+  }
 }
 
 function startRegistration() {
@@ -473,5 +583,28 @@ watch(() => props.isOpen, (open) => {
   font-size: 12px;
   color: var(--g-text-2);
   margin-bottom: 8px;
+}
+
+.manage-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.manage-note {
+  font-size: 12px;
+  color: var(--g-text-2);
+  line-height: 1.5;
+  padding: 10px 12px;
+  border-radius: var(--g-r-control);
+  background: var(--g-surface);
+  border: 1px solid var(--g-hairline-2);
+}
+
+.manage-note--warning {
+  background: var(--g-warning-fill);
+  border-color: var(--g-warning-line);
 }
 </style>

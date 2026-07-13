@@ -4143,6 +4143,12 @@ export default {
   'midnight.cnightCardTitle': 'Ihr NIGHT kann DUST generieren',
   'midnight.cnightCardBody': 'Registrieren Sie diese Wallet einmal und das gehaltene NIGHT generiert DUST, das Gas von Midnight.',
   'midnight.cnightCardCta': 'Einrichten',
+  'midnight.cnightStopCta': 'DUST-Generierung stoppen',
+  'midnight.cnightStopWarning': 'Beim Deregistrieren wird die Zuordnung entfernt und Ihr angesammeltes DUST zerfällt mit der Zeit auf null. Sie können sich jederzeit erneut registrieren.',
+  'midnight.cnightMigrateCta': 'DUST-Ziel auf diese Wallet umstellen',
+  'midnight.cnightMigrateInfo': 'Richtet die bestehende Registrierung auf die eigene Midnight-DUST-Adresse dieser Wallet. Wird nach der Übertragung wirksam, in etwa 2,5 Stunden.',
+  'midnight.cnightDeregistered': 'Deregistrierung übermittelt',
+  'midnight.cnightUpdated': 'Aktualisierung des DUST-Ziels übermittelt',
   // DUST-Batterieanzeige
   'midnight.dustBattery': 'DUST-Batterie',
   'midnight.dustCharge': 'Ladung',
