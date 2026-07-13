@@ -57,12 +57,10 @@
 // checkpoint's first shield attempt fails signature validation, re-examine
 // this ordering first.
 //
-// WP-SH1 CAVEAT: at the time this file was written, the nexus `development`
-// branch had not yet shipped WP-SH1 (verified: `/tx/build-unshielded` still
-// 400s on an empty `outputs[]`). The request shape in
-// `MidnightApi.buildShieldSwapUnshieldedTx` (midnight-api.ts) is this
-// wallet's best-effort mirror of the plan's documented design, not a
-// verified wire contract — reconcile field names once WP-SH1 ships.
+// WP-SH1 has shipped on nexus's `development` branch. The request shape in
+// `MidnightApi.buildShieldSwapUnshieldedTx` (midnight-api.ts) uses field
+// names confirmed against a live `swapAmountValidForMode` validation error
+// (`swapMode` + `swapAmount`), not just a guess at the plan's design.
 
 import type * as ledger from '@midnight-ntwrk/ledger-v8';
 import type { MidnightNetworkEndpoints } from '@/chains/midnight/midnightConfig';

@@ -200,18 +200,12 @@ export interface BuildMidnightTxResponse {
  * output the wallet builds separately via `ShieldedWallet.initSwap` — see
  * `midnightShieldSwapBuilder.ts`).
  *
- * NOTE: at the time this was written, WP-SH1 had not yet shipped on nexus's
- * `development` branch (verified: `/tx/build-unshielded` still 400s on an
- * empty `outputs[]`, per `sidecar/src/routes/buildUnshielded.ts`'s
- * `validate()`). This shape mirrors the plan's documented design
- * (docs/plans/2026-07-13-midnight-shield-unshield.md section 0 + WP-SH1
- * description: "add an optional `swapMode?: boolean` flag ... relaxes the
- * outputs[] required check to allow empty ... still selects UTxOs summing
- * to >= the requested shield amount"). The `swapMode` flag name and the
- * dedicated `shieldAmount` field (needed because `outputs[]` carries no
- * amount when empty) are this wallet's best-effort guess at the wire
- * contract, NOT a verified fact — reconcile field names against WP-SH1's
- * actual `BuildUnshieldedReq` once it ships.
+ * WP-SH1 has shipped on nexus's `development` branch. The wire field names
+ * were originally a best-effort guess (see docs/plans/2026-07-13-midnight-
+ * shield-unshield.md section 0); `shieldAmount` turned out wrong and 400'd
+ * with nexus's actual validator name: `swapAmountValidForMode: swapAmount
+ * required (positive integer string) when swapMode is true`. Field names
+ * below are now `swapMode` + `swapAmount`, confirmed against that response.
  */
 export interface BuildShieldSwapTxRequest {
   /** Sender's unshielded `mn_addr_…` address. Nexus uses this to fetch UTxOs. */
@@ -578,12 +572,12 @@ export class MidnightApi {
   /**
    * Shield (public → private), unshielded half (WP-SH1 + WP-SH2): same
    * route as {@link buildUnshieldedTx} with an empty `outputs[]` and a
-   * `swapMode` flag (see {@link BuildShieldSwapTxRequest}'s doc comment for
-   * why the exact field names are a best-effort mirror of the plan, not a
-   * verified fact). Response is the SAME shape as `buildUnshieldedTx`'s —
-   * confirmed against the nexus route's own doc comment
-   * (`{unprovenTxHex, txHash, segmentsToSign}`), so no separate response
-   * type is declared.
+   * `swapMode` flag (see {@link BuildShieldSwapTxRequest}'s doc comment —
+   * field names are now confirmed against nexus's own `swapAmountValidForMode`
+   * validator, not just a guess). Response is the SAME shape as
+   * `buildUnshieldedTx`'s — confirmed against the nexus route's own doc
+   * comment (`{unprovenTxHex, txHash, segmentsToSign}`), so no separate
+   * response type is declared.
    */
   async buildShieldSwapUnshieldedTx(request: BuildShieldSwapTxRequest): Promise<BuildMidnightTxResponse> {
     try {
@@ -594,7 +588,7 @@ export class MidnightApi {
         addressHex: request.addressHex,
         outputs: [] as MidnightTxOutput[],
         swapMode: true,
-        shieldAmount: request.amount,
+        swapAmount: request.amount,
         ttlMs: request.ttlMs,
       };
       const { data, status } = await this.axiosInstance.post<BuildMidnightTxResponse>(url, wireBody);
