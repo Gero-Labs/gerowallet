@@ -427,8 +427,10 @@ async function openRedemptionPortal() {
       // Clipboard write can fail in restricted contexts; not fatal.
     }
   }
+  // The dedicated DUST mapping portal (NOT redeem.midnight.gd, which is the
+  // Glacier Drop claim portal and has no DUST registration flow).
   const portalUrl = isMainnet.value
-    ? 'https://redeem.midnight.gd/'
+    ? 'https://midnight-dust-mainnet.nethermind.io/'
     : 'https://dust.preview.midnight.network/';
   window.open(portalUrl, '_blank', 'noopener,noreferrer');
 }
