@@ -15,12 +15,18 @@
         </v-col>
       </v-row>
 
-      <!-- DUST battery: at-a-glance fee-capacity gauge (the Lace/1AM pattern).
-           Live-ticks via useMidnightDustLive; unregistered state opens the
-           same DUST registration dialog as the header button. -->
+      <!-- DUST battery + Proof Server: two at-a-glance status widgets,
+           50/50. DUST live-ticks via useMidnightDustLive; unregistered state
+           opens the same DUST registration dialog as the header button. The
+           proof-server widget shares its mode/health state with the full
+           /proof-server page via useMidnightProofServer (never a separate
+           copy - see that composable's header comment). -->
       <v-row no-gutters>
-        <v-col cols="12" class="pa-2">
+        <v-col cols="12" sm="6" class="pa-2">
           <MidnightDustGauge @register="dustRegistrationOpen = true" />
+        </v-col>
+        <v-col cols="12" sm="6" class="pa-2">
+          <MidnightProofServerWidget />
         </v-col>
       </v-row>
 
@@ -351,6 +357,7 @@ import EmptyStateHero from '@/modules/dashboard/components/EmptyStateHero.vue';
 import MidnightPortfolioChart from '@/modules/dashboard/components/MidnightPortfolioChart.vue';
 import MidnightTransactionsCard from '@/modules/dashboard/components/MidnightTransactionsCard.vue';
 import MidnightDustGauge from '@/modules/dashboard/components/MidnightDustGauge.vue';
+import MidnightProofServerWidget from '@/modules/dashboard/components/MidnightProofServerWidget.vue';
 import MidnightHoldingsTable from '@/modules/dashboard/components/MidnightHoldingsTable.vue';
 import DustRegistrationDialog from '@/modules/dashboard/dialogs/DustRegistrationDialog.vue';
 import MarketTokenTable from '@/modules/market/components/MarketTokenTable.vue';
