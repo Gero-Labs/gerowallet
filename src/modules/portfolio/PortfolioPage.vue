@@ -40,7 +40,7 @@
             <div class="filter-toolbar d-flex align-center px-3 py-1" style="gap: 6px;">
               <div class="filter-chip-bar d-flex align-center" style="gap: 4px;">
                 <v-chip small class="geroButton flex-shrink-0">
-                  <v-icon x-small class="mr-1" color="black">mdi-wallet-outline</v-icon>
+                  <v-icon x-small class="mr-1" color="var(--g-on-grad)">mdi-wallet-outline</v-icon>
                   {{ $t('portfolio.holdings') }}
                 </v-chip>
                 <v-chip small outlined disabled class="flex-shrink-0">
