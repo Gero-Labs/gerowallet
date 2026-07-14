@@ -92,6 +92,10 @@
             class="mb-2"
             @keydown.enter="confirmAction(source)"
           />
+          <div v-if="working && stageLabel" class="stage-line">
+            <v-progress-circular indeterminate size="14" width="2" class="mr-2" color="var(--g-accent)" />
+            <span>{{ stageLabel }}</span>
+          </div>
           <div v-if="authError" class="error--text text-caption mb-2">{{ authError }}</div>
           <div class="source-auth-actions">
             <v-btn small text :disabled="working" @click="closeAuth">{{ t('common.cancel') }}</v-btn>
@@ -124,7 +128,7 @@ import { walletStore } from '@/stores/walletStore';
 import { geroStore } from '@/stores/geroStore';
 import { Network } from '@/models/types';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { useDustSources, DustSource } from '@/shared/composables/useDustSources';
+import { useDustSources, DustSource, DustSourceStage } from '@/shared/composables/useDustSources';
 import snackbar from '@/plugins/snackbar';
 
 const props = defineProps<{ isOpen: boolean }>();
@@ -145,6 +149,16 @@ const authFor = ref<string | null>(null);
 const authAction = ref<'register' | 'redirect'>('register');
 const authPassword = ref('');
 const authError = ref<string | null>(null);
+const stage = ref<DustSourceStage | null>(null);
+
+const stageLabel = computed(() => {
+  switch (stage.value) {
+    case 'isolating': return t('midnight.dustSourcesStageIsolating');
+    case 'waitingIsolation': return t('midnight.dustSourcesStageWaiting');
+    case 'registering': return t('midnight.dustSourcesStageRegistering');
+    default: return '';
+  }
+});
 
 const isMainnet = computed(() => walletStore.loggedWallet?.network === Network.MAINNET);
 const nightTicker = computed(() => (isMainnet.value ? 'NIGHT' : 'tNIGHT'));
@@ -187,10 +201,13 @@ function closeAuth() {
   authFor.value = null;
   authPassword.value = '';
   authError.value = null;
+  stage.value = null;
 }
 
 async function confirmAction(source: DustSource) {
   authError.value = null;
+  stage.value = null;
+  const onStage = (s: DustSourceStage) => { stage.value = s; };
   try {
     let prfOutput: ArrayBuffer | undefined;
     if (source.encryptionMethod === 'prf') {
@@ -211,19 +228,25 @@ async function confirmAction(source: DustSource) {
     };
 
     const result = authAction.value === 'redirect'
-      ? await redirectSource(source, credentials)
-      : await registerSource(source, credentials);
+      ? await redirectSource(source, credentials, onStage)
+      : await registerSource(source, credentials, onStage);
 
     if (result.status === 'submitted') {
       snackbar.fireSuccess(t('midnight.dustRegistrationSubmitted'));
       closeAuth();
     } else if (result.message === 'WRONG_PASSWORD') {
       authError.value = t('errors.wrongPassword');
+    } else if (result.message === 'ISOLATION_TIMEOUT') {
+      authError.value = t('midnight.dustSourcesIsolationTimeout');
+    } else if (result.message === 'TOKEN_BAG_TOO_LARGE') {
+      authError.value = t('midnight.dustSourcesBagTooLarge');
     } else {
       authError.value = result.message || t('midnight.dustRegistrationFailed');
     }
   } catch (e) {
     authError.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    stage.value = null;
   }
 }
 
@@ -346,6 +369,14 @@ watch(() => props.isOpen, (open) => {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.stage-line {
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  color: var(--g-text-2);
+  margin-bottom: 8px;
 }
 
 .timing-note {

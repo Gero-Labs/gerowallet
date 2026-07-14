@@ -76,6 +76,17 @@ interface SourceCredentials {
 
 const STATUS_BATCH_LIMIT = 50;
 
+/** Conway max tx size. */
+const MAX_TX_BYTES = 16384;
+/** Register/update unsigned CBOR ceiling — leaves headroom for the 2 vkey witnesses (~204 B). */
+const REGISTER_SIZE_THRESHOLD = 16000;
+/** Isolation-confirmation poll: rebuild the register tx every 15s, up to ~6 min. */
+const ISOLATION_POLL_MS = 15_000;
+const ISOLATION_MAX_POLLS = 24;
+
+/** Progress stage for the two-step (isolate → wait → register) flow. */
+export type DustSourceStage = 'registering' | 'isolating' | 'waitingIsolation';
+
 export function useDustSources() {
   const sources = ref<DustSource[]>([]);
   const loading = ref(false);
@@ -254,11 +265,18 @@ export function useDustSources() {
   }
 
   /**
-   * Sign the mapping tx locally with the source's payment + stake keys.
+   * Sign a tx locally with the source's keys at the given CIP-1852 paths.
    * The tx id is recomputed from the CBOR (deserialize) — the witness signs
    * what will actually be submitted, not a server-claimed hash.
+   *
+   * Paths: the mapping tx needs payment [0,0] (inputs) + stake [2,0] (the
+   * validator's extra_signatories check on the datum's c_wallet); a plain
+   * self-send needs only payment [0,0] (an extra witness would inflate the
+   * tx past the fee Nexus estimated for it).
    */
-  async function signWithMnemonic(txCbor: string, mnemonic: string): Promise<string> {
+  async function signWithMnemonic(
+    txCbor: string, mnemonic: string, paths: number[][] = [[0, 0], [2, 0]],
+  ): Promise<string> {
     const [{ deserializeCardanoJsSdkTx }, { Serialization }, { HexBlob }, { resolvePrivateKey }] =
       await Promise.all([
         import('@/chrome/cardanoJsSdkCbor'),
@@ -273,9 +291,7 @@ export function useDustSources() {
     ]);
 
     const signatures = new Map<string, string>();
-    // External payment key [0,0] witnesses the inputs; stake key [2,0] satisfies
-    // the validator's extra_signatories check on the datum's c_wallet.
-    for (const path of [[0, 0], [2, 0]]) {
+    for (const path of paths) {
       const key = accountKey.derive(path);
       const raw = key.toRawKey();
       signatures.set(raw.toPublic().hex(), raw.sign(HexBlob(transaction.id)).hex());
@@ -313,9 +329,109 @@ export function useDustSources() {
     return response.data.txId;
   }
 
+  const cborBytes = (hex: string) => Math.ceil(hex.length / 2);
+  const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+  /**
+   * Build a cNIGHT self-send that isolates all of `source`'s cNIGHT into a
+   * clean single-asset UTxO (Option C). This is a plain multi-asset transfer
+   * (no script), so its change output re-lists the wallet's token bag but the
+   * tx stays well under the 16 KB limit — where the combined register+rotation
+   * tx would not. Reuses Nexus `/api/tx/build`.
+   */
+  async function buildIsolationTx(source: DustSource): Promise<string> {
+    const asset = CNIGHT_ASSETS[network.value];
+    if (!asset) throw new Error('cNIGHT not configured for this network');
+    if (source.nightBalance === null || source.nightBalance <= 0n) {
+      throw new Error('No NIGHT balance to isolate');
+    }
+    const { nexusTxApi } = await import('@/api/nexus-tx-api');
+    // 2 ADA covers min-UTxO for a single-asset output with headroom; it stays
+    // in the source wallet (recovered as change when the register tx rotates
+    // this UTxO). senderAddress = changeAddress = the source's own address.
+    const resp = await nexusTxApi.buildTransferTx({
+      outputs: [{
+        address: source.baseAddress,
+        lovelace: '2000000',
+        assets: [{
+          policyId: asset.policyId,
+          assetName: asset.assetNameHex,
+          quantity: source.nightBalance.toString(),
+        }],
+      }],
+      changeAddress: source.baseAddress,
+      senderAddress: source.baseAddress,
+    }, network.value);
+    if (!resp?.tx_cbor) throw new Error('Nexus did not return an isolation transaction');
+    if (cborBytes(resp.tx_cbor) > MAX_TX_BYTES) {
+      throw new Error('TOKEN_BAG_TOO_LARGE');
+    }
+    return resp.tx_cbor;
+  }
+
+  /**
+   * True once the source holds a cNIGHT UTxO carrying ONLY cNIGHT (no token
+   * bag) — i.e. the isolation tx has confirmed. Waiting on this rather than
+   * "the register tx now fits" avoids a race: right after the heavy UTxO is
+   * spent but before the clean one is indexed, Nexus would build a small
+   * register tx that rotates NOTHING, registering the mapping without
+   * activating the existing NIGHT.
+   */
+  async function cnightIsIsolated(source: DustSource): Promise<boolean> {
+    const asset = CNIGHT_ASSETS[network.value];
+    if (!asset) return false;
+    const unit = asset.policyId + asset.assetNameHex;
+    const isCnight = (a: { unit?: string; policyId?: string; assetName?: string }) =>
+      a.unit === unit || (a.policyId === asset.policyId && (a.assetName ?? '') === asset.assetNameHex);
+    try {
+      const utxos = await getMidnightApi(network.value).getCardanoAssetUtxos(source.baseAddress, unit);
+      return utxos.some((u) => {
+        const assets = u.assets ?? [];
+        const hasNight = assets.some(isCnight);
+        const others = assets.filter((a) => !isCnight(a) && a.unit !== 'lovelace');
+        return hasNight && others.length === 0;
+      });
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Build the register/update tx; if it exceeds the size limit (the source's
+   * cNIGHT sits in a heavy multi-asset UTxO), isolate the cNIGHT first
+   * (Option C), wait for that to confirm, then rebuild — at which point Nexus
+   * rotates only the clean cNIGHT UTxO and the tx fits. Returns the final CBOR.
+   */
+  async function buildFittingTx(
+    source: DustSource, mnemonic: string,
+    buildFn: () => Promise<string>,
+    onStage?: (stage: DustSourceStage) => void,
+  ): Promise<string> {
+    const cbor = await buildFn();
+    if (cborBytes(cbor) <= REGISTER_SIZE_THRESHOLD) return cbor;
+
+    // Too big → isolate the cNIGHT (plain self-send, payment-only witness).
+    onStage?.('isolating');
+    const isoCbor = await buildIsolationTx(source);
+    const isoWit = await signWithMnemonic(isoCbor, mnemonic, [[0, 0]]);
+    await submitViaBackground(isoCbor, isoWit);
+
+    // Wait for the isolation to confirm (clean cNIGHT UTxO present), then
+    // rebuild — now Nexus rotates only that clean UTxO and the tx fits.
+    onStage?.('waitingIsolation');
+    for (let i = 0; i < ISOLATION_MAX_POLLS; i++) {
+      await sleep(ISOLATION_POLL_MS);
+      if (!(await cnightIsIsolated(source))) continue;
+      const rebuilt = await buildFn();
+      if (cborBytes(rebuilt) <= REGISTER_SIZE_THRESHOLD) return rebuilt;
+    }
+    throw new Error('ISOLATION_TIMEOUT');
+  }
+
   /** Register `source`'s NIGHT to generate DUST at THIS Midnight wallet's address. */
   async function registerSource(
     source: DustSource, credentials: SourceCredentials,
+    onStage?: (stage: DustSourceStage) => void,
   ): Promise<DustSourceActionResult> {
     if (!ownDustAddress.value) {
       return { status: 'error', message: 'This wallet has no DUST address yet' };
@@ -326,17 +442,24 @@ export function useDustSources() {
       await assertSeedMatchesSource(mnemonic, source);
 
       const { dustAddressToHex } = await import('@/chains/midnight/midnightKeyManager');
-      const build = await getMidnightApi(network.value).buildDustRegistrationTx({
-        cardanoAddress: source.baseAddress,
-        paymentKeyHashHex: source.paymentKeyHashHex,
-        dustAddressHex: dustAddressToHex(ownDustAddress.value),
-      });
-      if (build.status !== 'complete' || !build.txCbor) {
-        throw new Error(build.note || 'Nexus did not return a complete registration transaction');
-      }
+      const dustAddressHex = dustAddressToHex(ownDustAddress.value);
+      const api = getMidnightApi(network.value);
+      const buildRegister = async () => {
+        const build = await api.buildDustRegistrationTx({
+          cardanoAddress: source.baseAddress,
+          paymentKeyHashHex: source.paymentKeyHashHex,
+          dustAddressHex,
+        });
+        if (build.status !== 'complete' || !build.txCbor) {
+          throw new Error(build.note || 'Nexus did not return a complete registration transaction');
+        }
+        return build.txCbor;
+      };
 
-      const witnessHex = await signWithMnemonic(build.txCbor, mnemonic);
-      const txId = await submitViaBackground(build.txCbor, witnessHex);
+      onStage?.('registering');
+      const txCbor = await buildFittingTx(source, mnemonic, buildRegister, onStage);
+      const witnessHex = await signWithMnemonic(txCbor, mnemonic);
+      const txId = await submitViaBackground(txCbor, witnessHex);
 
       source.status = {
         cardanoRewardAddress: source.stakeAddress,
@@ -357,6 +480,7 @@ export function useDustSources() {
   /** Re-point `source`'s existing registration at THIS wallet's DUST address. */
   async function redirectSource(
     source: DustSource, credentials: SourceCredentials,
+    onStage?: (stage: DustSourceStage) => void,
   ): Promise<DustSourceActionResult> {
     const txHash = source.status?.registrationUtxoTxHash;
     const outputIndex = source.status?.registrationUtxoOutputIndex;
@@ -372,19 +496,26 @@ export function useDustSources() {
       await assertSeedMatchesSource(mnemonic, source);
 
       const { dustAddressToHex } = await import('@/chains/midnight/midnightKeyManager');
-      const build = await getMidnightApi(network.value).buildDustUpdateTx({
-        cardanoAddress: source.baseAddress,
-        paymentKeyHashHex: source.paymentKeyHashHex,
-        registrationUtxoTxHash: txHash,
-        registrationUtxoOutputIndex: outputIndex,
-        dustAddressHex: dustAddressToHex(ownDustAddress.value),
-      });
-      if (build.status !== 'complete' || !build.txCbor) {
-        throw new Error(build.note || 'Nexus did not return a complete update transaction');
-      }
+      const dustAddressHex = dustAddressToHex(ownDustAddress.value);
+      const api = getMidnightApi(network.value);
+      const buildUpdate = async () => {
+        const build = await api.buildDustUpdateTx({
+          cardanoAddress: source.baseAddress,
+          paymentKeyHashHex: source.paymentKeyHashHex,
+          registrationUtxoTxHash: txHash,
+          registrationUtxoOutputIndex: outputIndex,
+          dustAddressHex,
+        });
+        if (build.status !== 'complete' || !build.txCbor) {
+          throw new Error(build.note || 'Nexus did not return a complete update transaction');
+        }
+        return build.txCbor;
+      };
 
-      const witnessHex = await signWithMnemonic(build.txCbor, mnemonic);
-      const txId = await submitViaBackground(build.txCbor, witnessHex);
+      onStage?.('registering');
+      const finalCbor = await buildFittingTx(source, mnemonic, buildUpdate, onStage);
+      const witnessHex = await signWithMnemonic(finalCbor, mnemonic);
+      const txId = await submitViaBackground(finalCbor, witnessHex);
 
       source.status = {
         cardanoRewardAddress: source.stakeAddress,

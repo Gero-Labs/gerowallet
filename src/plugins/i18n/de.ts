@@ -4158,6 +4158,11 @@ export default {
   'midnight.dustSourcesRedirectHere': 'Hierher umleiten',
   'midnight.dustSourcesGeneratingHere': 'Generiert für diese Wallet',
   'midnight.dustSourcesReadOnly': 'Keine lokalen Schlüssel',
+  'midnight.dustSourcesStageRegistering': 'Registrierung wird erstellt…',
+  'midnight.dustSourcesStageIsolating': 'Ihr NIGHT wird vorbereitet (Schritt 1 von 2)…',
+  'midnight.dustSourcesStageWaiting': 'Warten auf Bestätigung, dann Registrierung…',
+  'midnight.dustSourcesIsolationTimeout': 'Ihr NIGHT wird gerade on-chain vorbereitet. Das kann einige Minuten dauern. Öffnen Sie das Fenster erneut und versuchen Sie es in Kürze, um die Registrierung abzuschließen.',
+  'midnight.dustSourcesBagTooLarge': 'Diese Wallet hält zu viele Token in einem UTxO für die automatische Verarbeitung. Verschieben Sie zuerst einige Token in eine andere Wallet und versuchen Sie es erneut.',
   // DUST-Batterieanzeige
   'midnight.dustBattery': 'DUST-Batterie',
   'midnight.dustCharge': 'Ladung',
