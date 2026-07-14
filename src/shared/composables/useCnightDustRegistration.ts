@@ -53,10 +53,15 @@ export const CNIGHT_ASSETS: Record<string, { policyId: string; assetNameHex: str
   },
 };
 
-/** Official portal URLs — fallback CTA when the wallet can't sign locally (hardware wallets). */
+/**
+ * Official portal URLs — fallback CTA when the wallet can't sign locally
+ * (hardware wallets). No preprod instance exists (probed 2026-07-14:
+ * midnight-dust-preprod.nethermind.io unreachable, and the preview portal is
+ * network-wired to preview) — on preprod this wallet flow is the only UI, so
+ * the portal CTA is hidden there.
+ */
 export const DUST_PORTAL_URLS: Record<string, string> = {
   [Network.MAINNET]: 'https://midnight-dust-mainnet.nethermind.io/',
-  [Network.PREPROD]: 'https://dust.preview.midnight.network/',
   [Network.PREVIEW]: 'https://dust.preview.midnight.network/',
 };
 
@@ -132,7 +137,8 @@ export function useCnightDustRegistration() {
     return 'Unknown';
   });
 
-  const portalUrl = computed(() => DUST_PORTAL_URLS[network.value] ?? DUST_PORTAL_URLS[Network.MAINNET]);
+  /** Empty string when no portal exists for this network (preprod) — callers hide the CTA. */
+  const portalUrl = computed(() => DUST_PORTAL_URLS[network.value] ?? '');
 
   async function refreshStatus(): Promise<void> {
     const stakeAddress = loggedWallet.value?.stakeAddress;

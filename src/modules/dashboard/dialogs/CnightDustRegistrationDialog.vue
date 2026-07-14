@@ -68,13 +68,14 @@
     </v-card-text>
 
     <v-card-actions class="px-0 pt-0" style="display: block">
-      <!-- Hardware wallets can't sign locally: hand off to the official portal. -->
+      <!-- Hardware wallets can't sign locally: hand off to the official portal
+           (mainnet/preview only — no preprod portal exists). -->
       <template v-if="!canSignLocally">
         <div class="hardware-notice">
           <v-icon small color="var(--g-text-3)" class="mr-2">mdi-usb-flash-drive-outline</v-icon>
           <span>{{ t('midnight.cnightHardwareNotice') }}</span>
         </div>
-        <v-btn block large outlined class="mt-3" @click="openPortal">
+        <v-btn v-if="portalUrl" block large outlined class="mt-3" @click="openPortal">
           <v-icon left small>mdi-open-in-new</v-icon>
           {{ t('midnight.cnightOpenPortal') }}
         </v-btn>
@@ -139,7 +140,7 @@
           </div>
         </template>
 
-        <div class="text-center mt-3">
+        <div v-if="portalUrl" class="text-center mt-3">
           <v-btn small text color="var(--g-text-2)" @click="openPortal">
             <v-icon small left>mdi-open-in-new</v-icon>
             {{ t('midnight.cnightOpenPortal') }}
