@@ -46,3 +46,11 @@ export class RecoveryBackupStoreError extends MpcError {
     this.name = 'RecoveryBackupStoreError';
   }
 }
+
+/** No recovery blob is stored on the backend for this Google account (fetch 404). */
+export class NoRecoveryBackupError extends MpcError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'NoRecoveryBackupError';
+  }
+}

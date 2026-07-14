@@ -301,6 +301,11 @@ const restore = async (): Promise<void> => {
     }) as GoogleWalletBgResponse;
 
     if (!recoverResponse?.data?.success || recoverResponse.data.walletId == null) {
+      // A missing backend recovery blob (account never backed up / predates the
+      // feature) gets a clear, actionable message instead of the generic error.
+      if (recoverResponse?.data?.code === 'no_recovery_backup') {
+        throw new Error(vmProxy.$t('welcome.noRecoveryBackup') as string);
+      }
       throw new Error(recoverResponse?.data?.error || (vmProxy.$t('errors.unknownError') as string));
     }
 
