@@ -25,15 +25,16 @@
  * server-supplied hash), and submission goes through the standard SUBMIT_TX
  * path, which re-verifies the body hash while merging witnesses.
  *
- * Balances are public reads: Koios `address_assets` (host already in the
- * extension's CSP allowlist); statuses use the existing Nexus batch endpoint.
+ * Balances and statuses are both read through Nexus (asset-filtered address
+ * UTxOs + the DUST status batch endpoint) — the wallet never queries an
+ * explorer directly.
  */
 
 import { computed, ref } from 'vue';
 import { geroStore } from '@/stores/geroStore';
 import { walletStore } from '@/stores/walletStore';
 import { midnightStore } from '@/stores/midnightStore';
-import { Blockchain, CoinTypes, HARDENED, Network, Wallet, WalletTypePurpose } from '@/models/types';
+import { Blockchain, CoinTypes, HARDENED, Wallet, WalletTypePurpose } from '@/models/types';
 import {
   getMidnightApi,
   MidnightDustRegistrationStatusDto,
@@ -72,12 +73,6 @@ interface SourceCredentials {
   /** Pre-evaluated PRF output for the SOURCE wallet's credential. */
   prfOutput?: ArrayBuffer;
 }
-
-const KOIOS_BASES: Record<string, string> = {
-  [Network.MAINNET]: 'https://api.koios.rest/api/v1',
-  [Network.PREPROD]: 'https://preprod.koios.rest/api/v1',
-  [Network.PREVIEW]: 'https://preview.koios.rest/api/v1',
-};
 
 const STATUS_BATCH_LIMIT = 50;
 
@@ -167,33 +162,29 @@ export function useDustSources() {
     return list;
   }
 
-  /** Sum each source's cNIGHT via Koios `address_assets` (public, batched). */
+  /** Sum each source's cNIGHT via Nexus's asset-filtered address-UTxO endpoint. */
   async function loadBalances(list: DustSource[]): Promise<void> {
     const asset = CNIGHT_ASSETS[network.value];
-    const base = KOIOS_BASES[network.value];
-    if (!asset || !base || list.length === 0) return;
-    try {
-      const res = await fetch(`${base}/address_assets`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ _addresses: list.map(s => s.baseAddress) }),
-      });
-      if (!res.ok) throw new Error(`Koios address_assets ${res.status}`);
-      const rows = await res.json() as Array<{
-        address: string; policy_id: string; asset_name: string | null; quantity: string;
-      }>;
-      const byAddress = new Map<string, bigint>();
-      for (const s of list) byAddress.set(s.baseAddress, 0n);
-      for (const r of rows) {
-        if (r.policy_id !== asset.policyId) continue;
-        if ((r.asset_name ?? '') !== asset.assetNameHex) continue;
-        byAddress.set(r.address, (byAddress.get(r.address) ?? 0n) + BigInt(r.quantity));
+    if (!asset || list.length === 0) return;
+    const unit = asset.policyId + asset.assetNameHex;
+    const api = getMidnightApi(network.value);
+    await Promise.all(list.map(async (source) => {
+      try {
+        const utxos = await api.getCardanoAssetUtxos(source.baseAddress, unit);
+        let total = 0n;
+        for (const u of utxos) {
+          for (const a of u.assets ?? []) {
+            const matches = a.unit === unit
+              || (a.policyId === asset.policyId && (a.assetName ?? '') === asset.assetNameHex);
+            if (matches && a.quantity) total += BigInt(a.quantity);
+          }
+        }
+        source.nightBalance = total;
+      } catch (e) {
+        // Leave the balance null — the row renders as unknown rather than zero.
+        debugLog('[DustSources] balance query failed for', source.baseAddress, e);
       }
-      for (const s of list) s.nightBalance = byAddress.get(s.baseAddress) ?? 0n;
-    } catch (e) {
-      debugLog('[DustSources] balance query failed:', e);
-      // Leave balances null — rows render as unknown rather than zero.
-    }
+    }));
   }
 
   async function loadStatuses(list: DustSource[]): Promise<void> {

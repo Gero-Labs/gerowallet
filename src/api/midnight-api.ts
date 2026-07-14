@@ -579,6 +579,34 @@ export class MidnightApi {
     }
   }
 
+  /**
+   * Cardano UTxOs of `address` that hold `assetUnit` (policyId + assetNameHex),
+   * via Nexus's chain-data API on the anchored Cardano network (the device
+   * token carries CARDANO_READ). Used by the DUST sources panel to read
+   * sibling wallets' cNIGHT balances through Nexus — the wallet never talks
+   * to an explorer directly.
+   *
+   * Note: single page of up to 100 UTxOs — plenty for a balance display; a
+   * wallet fragmented across more cNIGHT UTxOs would show a floor, not the
+   * exact total.
+   */
+  async getCardanoAssetUtxos(
+    address: string,
+    assetUnit: string,
+  ): Promise<Array<{ assets?: Array<{ unit?: string; policyId?: string; assetName?: string; quantity?: string }> }>> {
+    try {
+      const endpoints = getMidnightEndpoints(this.network);
+      if (!endpoints) throw new Error(`Unknown Midnight network: ${this.network}`);
+      const url = `${endpoints.nexusBaseUrl}/api/addresses/${encodeURIComponent(address)}`
+        + `/utxos/${assetUnit}?network=cardano-${endpoints.sdkNetworkId}&pageSize=100`;
+      const { data, status } = await this.axiosInstance.get(url);
+      if (status === 200) return data ?? [];
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
   // ---------------------------------------------------------------- Network info
 
   /**
