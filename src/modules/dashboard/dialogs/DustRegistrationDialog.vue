@@ -153,10 +153,14 @@
             {{ t('midnight.registerForDust') }}
           </v-btn>
 
-          <!-- Fallback: external portal (Path B / foundation flow). Kept as a
-               low-prominence option for users who want to use cNIGHT on Cardano
-               instead of native NIGHT registration. -->
-          <div class="text-center mt-3">
+          <!-- Path B: register Cardano-held NIGHT natively (cross-wallet DUST
+               sources panel), with the external portal kept as a low-prominence
+               fallback. -->
+          <v-btn block outlined class="mt-3" @click="sourcesOpen = true">
+            <v-icon left small>mdi-source-branch</v-icon>
+            {{ t('midnight.dustSourcesTitle') }}
+          </v-btn>
+          <div class="text-center mt-2">
             <v-btn small text color="var(--g-text-2)" @click="openRedemptionPortal">
               <v-icon small left>mdi-open-in-new</v-icon>
               {{ t('midnight.openRedemptionPortal') }}
@@ -213,16 +217,22 @@
         <v-icon left>mdi-clock-outline</v-icon>
         {{ t('common.close') }}
       </v-btn>
-      <v-btn
-        v-else
-        block
-        large
-        outlined
-        @click="$emit('close')"
-      >
-        {{ t('common.done') }}
-      </v-btn>
+      <template v-else>
+        <v-btn block large outlined @click="$emit('close')">
+          {{ t('common.done') }}
+        </v-btn>
+        <div class="text-center mt-2">
+          <v-btn small text color="var(--g-text-2)" @click="sourcesOpen = true">
+            <v-icon small left>mdi-source-branch</v-icon>
+            {{ t('midnight.dustSourcesTitle') }}
+          </v-btn>
+        </div>
+      </template>
     </v-card-actions>
+
+    <!-- Cross-wallet DUST sources (Path B): register/redirect Cardano-held
+         NIGHT to generate DUST at this wallet's own DUST address. -->
+    <CnightDustSourcesDialog :isOpen="sourcesOpen" @close="sourcesOpen = false" />
   </BaseDialog>
 </template>
 
@@ -230,6 +240,7 @@
 import { computed, ref, toRefs } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
+import CnightDustSourcesDialog from '@/modules/dashboard/dialogs/CnightDustSourcesDialog.vue';
 import { midnightStore } from '@/stores/midnightStore';
 import { walletStore } from '@/stores/walletStore';
 import { Network } from '@/models/types';
@@ -243,6 +254,8 @@ const emit = defineEmits<{ (e: 'close'): void }>();
 
 const { t } = useTranslation();
 const loading = ref(false);
+/** Cross-wallet DUST sources panel (Path B). */
+const sourcesOpen = ref(false);
 
 // Legacy-wallet upgrade state
 const upgradePassword = ref('');

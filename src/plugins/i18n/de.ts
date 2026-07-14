@@ -4149,6 +4149,15 @@ export default {
   'midnight.cnightMigrateInfo': 'Richtet die bestehende Registrierung auf die eigene Midnight-DUST-Adresse dieser Wallet. Wird nach der Übertragung wirksam, in etwa 2,5 Stunden.',
   'midnight.cnightDeregistered': 'Deregistrierung übermittelt',
   'midnight.cnightUpdated': 'Aktualisierung des DUST-Ziels übermittelt',
+  // Wallet-übergreifendes DUST-Quellen-Panel (Midnight-Wallet-Seite)
+  'midnight.dustSourcesTitle': 'DUST aus Cardano-NIGHT generieren',
+  'midnight.dustSourcesSubtitle': 'NIGHT in Ihren Cardano-Wallets kann DUST für diese Wallet generieren',
+  'midnight.dustSourcesEmpty': 'Keine Cardano-Wallets in diesem Netzwerk gefunden.',
+  'midnight.dustSourcesSameSeed': 'gleicher Seed',
+  'midnight.dustSourcesGenerateHere': 'Hier generieren',
+  'midnight.dustSourcesRedirectHere': 'Hierher umleiten',
+  'midnight.dustSourcesGeneratingHere': 'Generiert für diese Wallet',
+  'midnight.dustSourcesReadOnly': 'Keine lokalen Schlüssel',
   // DUST-Batterieanzeige
   'midnight.dustBattery': 'DUST-Batterie',
   'midnight.dustCharge': 'Ladung',

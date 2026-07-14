@@ -4251,6 +4251,15 @@ export default {
   'midnight.cnightMigrateInfo': 'Points the existing registration at this wallet\'s own Midnight DUST address. Takes effect after the relay, in about 2.5 hours.',
   'midnight.cnightDeregistered': 'Deregistration submitted',
   'midnight.cnightUpdated': 'DUST destination update submitted',
+  // Cross-wallet DUST sources panel (Midnight wallet side)
+  'midnight.dustSourcesTitle': 'Generate DUST from Cardano NIGHT',
+  'midnight.dustSourcesSubtitle': 'NIGHT in your Cardano wallets can generate DUST for this wallet',
+  'midnight.dustSourcesEmpty': 'No Cardano wallets found on this network.',
+  'midnight.dustSourcesSameSeed': 'same seed',
+  'midnight.dustSourcesGenerateHere': 'Generate here',
+  'midnight.dustSourcesRedirectHere': 'Redirect here',
+  'midnight.dustSourcesGeneratingHere': 'Generating to this wallet',
+  'midnight.dustSourcesReadOnly': 'No local keys',
   // DUST battery gauge
   'midnight.dustBattery': 'DUST battery',
   'midnight.dustCharge': 'Charge',
