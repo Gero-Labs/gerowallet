@@ -322,5 +322,19 @@ export class Api {
         throw parseHttpError(error);
       }
     },
+    /** Delete this Google account's login + recovery shares (onboarding "already
+     *  enrolled" reset path); backend verifies the idToken. */
+    deregister: async (
+      idToken: string, chain: string, network: string,
+    ): Promise<{ deregistered: boolean }> => {
+      try {
+        const { data, status } = await this.axiosInstance.post('/api/mpc/deregister',
+          { idToken, chain, network });
+        if (status === 200) return data as { deregistered: boolean };
+        throw parseHttpError(data);
+      } catch (error) {
+        throw parseHttpError(error);
+      }
+    },
   };
 }
