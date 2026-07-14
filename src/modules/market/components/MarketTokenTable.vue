@@ -720,6 +720,11 @@ function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: bool
   height: auto;
   border-bottom: none;
 }
+/* Merge the NIGHT row with the DUST strip below it: drop the row divider
+   Vuetify draws under the expanded row so the two read as a single row. */
+.market-token-table >>> tbody tr:has(+ tr.v-data-table__expanded__content) > td {
+  border-bottom: none !important;
+}
 .market-token-table >>> tr.v-data-table__expanded__content {
   cursor: default;
   box-shadow: none;
