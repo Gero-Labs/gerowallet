@@ -52,7 +52,7 @@
                 :disabled="proofServerSaving"
                 @click="proofServerMode = 'zkpaas'"
               >
-                <div class="ps-mode-icon"><v-icon size="22">mdi-cloud-lock-outline</v-icon></div>
+                <div class="ps-mode-icon"><v-icon size="22">mdi-google-cloud</v-icon></div>
                 <div class="ps-mode-body">
                   <div class="ps-mode-title-row">
                     <span class="t-body-lg">{{ t('midnight.proofServerPage.compareZkpaasTitle') }}</span>
@@ -349,7 +349,7 @@
                 </div>
                 <div class="ps-compare-item">
                   <div class="ps-compare-header">
-                    <v-icon size="16" color="var(--g-text-3)">mdi-cloud-lock-outline</v-icon>
+                    <v-icon size="16" color="var(--g-text-3)">mdi-google-cloud</v-icon>
                     <span class="t-body-lg">{{ t('midnight.proofServerPage.compareZkpaasTitle') }}</span>
                   </div>
                   <p class="t-caption">{{ t('midnight.proofServerPage.compareZkpaasBody') }}</p>
