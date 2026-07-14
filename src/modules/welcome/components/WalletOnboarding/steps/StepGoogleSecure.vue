@@ -158,7 +158,7 @@
           outlined
           small
           :loading="resetting"
-          :disabled="creating"
+          :disabled="creating || resetting"
           @click="resetGoogleAccount()"
         >
           {{ $t('welcome.resetGoogleAccountButton') }}
@@ -345,6 +345,7 @@ const createWallet = async (): Promise<void> => {
  * explicit "Reset this Google account" button click; never called automatically.
  */
 const resetGoogleAccount = async (): Promise<void> => {
+  if (resetting.value) return; // guard: destructive op, ignore concurrent double-clicks
   resetting.value = true;
   resetError.value = '';
   try {
