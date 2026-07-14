@@ -96,7 +96,10 @@ void props;
 .dust-line--row {
   height: 100%;
   min-height: 24px;
-  padding: 0 12px 0 68px;
+  /* No right padding: the close button gets a 36px box flush to the edge, the
+     same span as the table's rightmost watchlist (star) column, so the X lands
+     centered under the stars. */
+  padding: 0 0 0 68px;
   background:
     linear-gradient(90deg,
       rgba(232, 199, 137, 0.13) 0%,
@@ -157,6 +160,13 @@ void props;
   z-index: 1;
   flex-shrink: 0;
   color: var(--g-text-3);
+}
+
+/* Row variant: give the X a 36px box flush to the right edge — the same width
+   and position as the table's watchlist (star) column — so the icon centers
+   under the stars above/below it. */
+.dust-line--row .dust-line-close {
+  width: 36px;
 }
 
 /* Registered/pending read calmer; unregistered nudges with a warmer label. */
