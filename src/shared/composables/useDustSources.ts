@@ -39,7 +39,7 @@ import {
   MidnightDustRegistrationStatusDto,
 } from '@/api/midnight-api';
 import { CNIGHT_ASSETS } from '@/shared/composables/useCnightDustRegistration';
-import { clearDustPending, getDustPending, markDustPending } from '@/shared/composables/useDustPending';
+import { clearDustPending, markDustPending, reconcileDustPending } from '@/shared/composables/useDustPending';
 import { debugLog } from '@/utils/debug';
 
 export interface DustSource {
@@ -218,7 +218,12 @@ export function useDustSources() {
         clearDustPending(source.stakeAddress);
         continue;
       }
-      const pending = getDustPending(source.stakeAddress);
+      // Reconcile first: a submission that never landed on-chain must not keep
+      // the row stuck on "Registration pending" (blocking a real retry).
+      const pending = await reconcileDustPending(
+        source.stakeAddress,
+        (txHash) => api.cardanoTxExists(txHash),
+      );
       if (pending && source.status?.registrationStatus !== 'Pending') {
         source.status = {
           cardanoRewardAddress: source.stakeAddress,

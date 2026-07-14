@@ -91,3 +91,42 @@ export function clearDustPending(stakeAddress: string): void {
     writeAll(all);
   }
 }
+
+/**
+ * Grace period before a pending record is reconciled against the chain. A
+ * freshly-submitted tx needs a moment to be indexed, so we only treat "not
+ * on-chain" as a failed submission once the record is older than this.
+ */
+export const DUST_PENDING_GRACE_MS = 10 * 60 * 1000;
+
+/**
+ * Reconcile the pending record for `stakeAddress` against on-chain reality so a
+ * submission that never landed cannot block re-registration for the full TTL.
+ *
+ * A `registered=false` from the indexer is ambiguous during the ~2.5h relay —
+ * it's the same whether the registration is genuinely relaying or the tx never
+ * confirmed. The distinguisher is whether the submitted tx is actually on-chain.
+ *
+ * `txExists` must resolve `true` (on-chain) / `false` (definitively absent) and
+ * THROW when it cannot determine (network error) — on a throw we keep the record
+ * rather than risk clearing a valid, still-relaying registration. Returns the
+ * surviving record, or null if there was none or it was cleared as phantom.
+ */
+export async function reconcileDustPending(
+  stakeAddress: string,
+  txExists: (txHash: string) => Promise<boolean>,
+): Promise<DustPendingRecord | null> {
+  const rec = getDustPending(stakeAddress);
+  if (!rec) return null;
+  // Too fresh to judge — the tx may just not be indexed yet.
+  if (Date.now() - rec.submittedAt <= DUST_PENDING_GRACE_MS) return rec;
+  try {
+    if (!(await txExists(rec.txHash))) {
+      clearDustPending(stakeAddress);
+      return null;
+    }
+  } catch {
+    // Couldn't confirm; keep the record so a valid registration isn't dropped.
+  }
+  return rec;
+}
