@@ -34,8 +34,8 @@
     <!-- DUST generation strip: rendered directly beneath the NIGHT (cNIGHT)
          holdings row. Half-height, distinct gold band with the dust-battery
          particle animation; X dismisses it (persisted). -->
-    <template v-slot:expanded-item="{ headers }">
-      <td :colspan="headers.length" class="dust-line-cell">
+    <template v-slot:expanded-item>
+      <td :colspan="activeHeaders.length" class="dust-line-cell">
         <DustGenerationLine variant="row" @setup="$emit('dust-setup')" @dismiss="dismissDustLine" />
       </td>
     </template>
