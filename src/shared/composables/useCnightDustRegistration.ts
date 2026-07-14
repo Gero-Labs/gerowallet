@@ -31,7 +31,7 @@ import { Blockchain, Network, Wallet } from '@/models/types';
 import { getMidnightApi, MidnightDustRegistrationStatusDto } from '@/api/midnight-api';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
-import { clearDustPending, getDustPending, markDustPending, DustPendingRecord } from '@/shared/composables/useDustPending';
+import { clearDustPending, getDustPending, markDustPending, reconcileDustPending, DustPendingRecord } from '@/shared/composables/useDustPending';
 import { debugLog } from '@/utils/debug';
 
 /** A place DUST from this wallet's NIGHT can be directed. */
@@ -210,7 +210,12 @@ export function useCnightDustRegistration() {
         clearDustPending(stakeAddress);
         localPending.value = null;
       } else {
-        localPending.value = getDustPending(stakeAddress);
+        // Not Registered: reconcile the local guard against the chain so a
+        // submission that never landed can't block re-registration for 24h.
+        localPending.value = await reconcileDustPending(
+          stakeAddress,
+          (txHash) => getMidnightApi(network.value).cardanoTxExists(txHash),
+        );
       }
     } catch (e) {
       // 404 = the indexer knows nothing about this reward address yet — plain

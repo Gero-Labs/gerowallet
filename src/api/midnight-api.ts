@@ -535,6 +535,25 @@ export class MidnightApi {
   }
 
   /**
+   * Whether a Cardano transaction is on-chain, via Nexus
+   * (`GET /api/transactions/{txHash}/utxos`). Returns `true` when the indexer
+   * knows the tx (HTTP 200) and `false` on a definitive 404 (not on-chain).
+   * Any other status/network failure THROWS, so callers can distinguish
+   * "definitely absent" from "couldn't determine" — used to reconcile the local
+   * DUST-pending guard against a submission that never actually landed.
+   */
+  async cardanoTxExists(txHash: string): Promise<boolean> {
+    const endpoints = getMidnightEndpoints(this.network);
+    if (!endpoints) throw new Error(`Unknown Midnight network: ${this.network}`);
+    const url = `${endpoints.nexusBaseUrl}/api/transactions/${encodeURIComponent(txHash)}/utxos`
+      + `?network=cardano-${endpoints.sdkNetworkId}`;
+    const { status } = await this.axiosInstance.get(url, {
+      validateStatus: (s) => s === 200 || s === 404,
+    });
+    return status === 200;
+  }
+
+  /**
    * Evaluate a Cardano transaction's Plutus scripts via Nexus
    * (`POST /api/transactions/evaluate`) WITHOUT submitting — returns per-redeemer
    * ExUnits or the script/ledger failure. Diagnostic aid for DUST-tx rejections.
