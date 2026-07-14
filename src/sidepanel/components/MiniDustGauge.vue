@@ -25,7 +25,7 @@
         :class="{ 'mini-dust__divider--covered': (n * 100 / 8) <= pct }"
         :style="{ left: (n * 100 / 8) + '%' }"
       />
-      <DustParticleCanvas :active="isCharging" />
+      <DustParticleCanvas :active="isCharging" :fill-pct="pct" />
     </div>
     <div class="mini-dust__sub">
       <span v-if="isRegistered">+{{ rateFmt }} {{ dustTicker }}/s</span>
