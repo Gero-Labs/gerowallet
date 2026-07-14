@@ -4220,7 +4220,7 @@ export default {
   'midnight.consent.zkpaasWhatSees': 'What Arkhia zkPaaS sees',
   'midnight.consent.zkpaasWhatSeesBody': 'For each shielded send you make, Arkhia\'s zkPaaS proving service briefly receives the witness data and uses it to generate a zero-knowledge proof. Gero\'s servers never receive it on this path. Whoever can read the request body for that send can link the spent notes to that transaction.',
   'midnight.consent.zkpaasWhatThisMeans': 'What this means',
-  'midnight.consent.zkpaasWhatThisMeansBody': 'Arkhia runs the prover inside confidential cloud hardware and states that witness data is not stored. Gero cannot verify that for each request, so give this service the same consideration as any remote prover.',
+  'midnight.consent.zkpaasWhatThisMeansBody': 'Arkhia runs the prover inside Google Cloud confidential hardware and states that witness data is not stored. Gero cannot verify that for each request, so give this service the same consideration as any remote prover.',
   'midnight.consent.zkpaasAcknowledge': 'I understand Arkhia\'s servers will see the witness data for each shielded transaction I send, and that anyone able to read it can link my shielded notes to those sends.',
   'midnight.consent.zkpaasAccept': 'Use Arkhia zkPaaS',
   // Flow diagram labels (DustRegistrationDialog)
@@ -4304,7 +4304,7 @@ export default {
   'midnight.proofServerPage.notMidnightBody': 'The proof server setting only applies to Midnight wallets. Switch to a Midnight wallet to configure it.',
   'midnight.proofServerPage.activeBadge': 'Active',
   'midnight.proofServerPage.remoteCardBody': 'No setup required. Proofs are generated on Gero\'s servers.',
-  'midnight.proofServerPage.zkpaasCardBody': 'Hosted proving with an Arkhia API key. Private data is shared with Arkhia, not Gero.',
+  'midnight.proofServerPage.zkpaasCardBody': 'Hosted on Google Cloud confidential hardware. Needs an Arkhia API key; private data goes to Arkhia, not Gero.',
   'midnight.proofServerPage.localCardBody': 'Full privacy. Requires Docker running on this machine.',
   'midnight.proofServerPage.widgetStatus': 'Status',
   'midnight.proofServerPage.widgetLatency': 'Latency',
@@ -4338,7 +4338,7 @@ export default {
   'midnight.proofServerPage.compareRemoteTitle': 'Gero Cloud',
   'midnight.proofServerPage.compareRemoteBody': 'Fast, with no setup. Gero\'s servers generate the proof, which requires sharing the private transaction data needed for that step.',
   'midnight.proofServerPage.compareZkpaasTitle': 'Arkhia',
-  'midnight.proofServerPage.compareZkpaasBody': 'Fast, needs only an API key. Arkhia\'s zkPaaS service generates the proof in confidential cloud hardware and receives the private transaction data instead of Gero.',
+  'midnight.proofServerPage.compareZkpaasBody': 'Fast, needs only an API key. Arkhia\'s zkPaaS service generates the proof inside Google Cloud confidential computing and receives the private transaction data instead of Gero.',
   'midnight.proofServerPage.compareLocalTitle': 'Local',
   'midnight.proofServerPage.compareLocalBody': 'Slower to set up, fully private. Your own machine generates the proof and Gero never sees the private transaction data.',
   'midnight.proofServerPage.faqTitle': 'Frequently asked questions',
@@ -4351,5 +4351,5 @@ export default {
   'midnight.proofServerPage.faq4Q': 'Does this affect unshielded (public) transactions?',
   'midnight.proofServerPage.faq4A': 'No. Only shielded (private) transactions require a proof. Public NIGHT transfers are unaffected by this setting.',
   'midnight.proofServerPage.faq5Q': 'What is Arkhia zkPaaS?',
-  'midnight.proofServerPage.faq5A': 'A hosted proving service for the Midnight ecosystem, operated by Arkhia. It runs the official proof server inside confidential cloud hardware (a trusted execution environment) and needs an API key from the Arkhia dashboard. Like any remote prover it receives your private transaction data for the proving step; unlike Gero Cloud, that data goes to Arkhia rather than Gero.',
+  'midnight.proofServerPage.faq5A': 'A hosted proving service for the Midnight ecosystem, run behind the Arkhia API gateway on Google Cloud confidential computing (a trusted execution environment, so proof data stays encrypted even while in use). It needs an API key from the Arkhia dashboard. Like any remote prover it receives your private transaction data for the proving step; unlike Gero Cloud, that data goes to Arkhia rather than Gero.',
 }

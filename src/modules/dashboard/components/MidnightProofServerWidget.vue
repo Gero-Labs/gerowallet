@@ -33,7 +33,7 @@
         :disabled="proofServerSaving"
         @click="proofServerMode = 'zkpaas'"
       >
-        <v-icon size="14" class="ps-widget__toggle-icon">mdi-cloud-lock-outline</v-icon>
+        <v-icon size="14" class="ps-widget__toggle-icon">mdi-google-cloud</v-icon>
         {{ t('midnight.proofServerPage.compareZkpaasTitle') }}
         <span v-if="proofServerMode === 'zkpaas' && healthStatus === 'detected'" class="ps-widget__pulse-dot" />
       </button>
