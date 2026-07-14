@@ -87,6 +87,29 @@ void props;
   display: flex;
   align-items: center;
   overflow: hidden;
+}
+
+/* Table sub-row: half-height continuation of the NIGHT row above it. No top
+   border (so it reads as attached to NIGHT, not a separate row); the content
+   is indented to sit under the token-name column, and the gold tint fades in
+   from that indent. A neutral divider below matches the table's row lines so
+   SNEK still separates cleanly. */
+.dust-line--row {
+  height: 22px;
+  padding: 0 12px 0 68px;
+  margin-top: -1px;
+  background:
+    linear-gradient(90deg,
+      rgba(232, 199, 137, 0.13) 0%,
+      rgba(232, 199, 137, 0.05) 55%,
+      rgba(232, 199, 137, 0.015) 100%);
+  border-bottom: 1px solid var(--g-hairline-1);
+}
+
+/* Drawer: a bit taller, full-width card band inside the panel. */
+.dust-line--drawer {
+  height: 40px;
+  padding: 0 14px;
   background:
     linear-gradient(90deg,
       rgba(232, 199, 137, 0.10) 0%,
@@ -94,19 +117,6 @@ void props;
       rgba(232, 199, 137, 0.02) 100%);
   border-top: 1px solid rgba(232, 199, 137, 0.18);
   border-bottom: 1px solid rgba(232, 199, 137, 0.18);
-}
-
-/* Table sub-row: half the height of a normal dense row, and clearly its own
-   band rather than a token row. */
-.dust-line--row {
-  height: 22px;
-  padding: 0 12px;
-}
-
-/* Drawer: a bit taller, full-width card band inside the panel. */
-.dust-line--drawer {
-  height: 40px;
-  padding: 0 14px;
   border-radius: var(--g-r-control);
   border: 1px solid rgba(232, 199, 137, 0.22);
 }
