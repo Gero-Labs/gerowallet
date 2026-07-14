@@ -6,7 +6,6 @@
     <DustParticleCanvas class="dust-line-canvas" :active="animate" :fillPct="fillPct" />
 
     <div class="dust-line-body">
-      <v-icon x-small class="dust-line-star mr-1">mdi-star-four-points</v-icon>
       <span class="dust-line-label">{{ label }}</span>
 
       <v-btn
@@ -97,7 +96,6 @@ void props;
 .dust-line--row {
   height: 22px;
   padding: 0 12px 0 68px;
-  margin-top: -1px;
   background:
     linear-gradient(90deg,
       rgba(232, 199, 137, 0.13) 0%,
@@ -132,10 +130,6 @@ void props;
   align-items: center;
   min-width: 0;
   flex: 1 1 auto;
-}
-
-.dust-line-star {
-  color: rgb(255, 226, 160);
 }
 
 .dust-line-label {
