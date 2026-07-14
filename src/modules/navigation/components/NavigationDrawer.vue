@@ -11,16 +11,16 @@
     <!-- Prepend slot -->
     <template #prepend>
       <v-list-item class="text-center">
-        <v-list-item-content class="py-2">
+        <v-list-item-content class="pb-2" style="padding-top: 22px;">
           <v-list-item-title>
             <img
-              :src="isApex ? assets.geroDashboardApex : assets.geroDashboard"
-              width="100"
+              :src="isApex ? assets.geroNoTextApex : isMidnight ? assets.geroNoTextMidnight : assets.geroNoText"
+              width="64"
               alt="logo"
             />
           </v-list-item-title>
           <v-list-item-subtitle>
-            <v-btn color="orange" text plain @click="changeLogRef.setEnabled(true)">
+            <v-btn color="warning" text plain @click="changeLogRef.setEnabled(true)">
               {{ `v${version}` }}<span class="ml-1" v-if="isBeta">(Beta)</span>
               <v-icon small class="ml-1">mdi-lightning-bolt</v-icon>
             </v-btn>
@@ -32,7 +32,7 @@
     <!-- Navigation items -->
     <v-list nav dense>
       <template v-for="(item, index) in items" >
-        <v-subheader class="pt-2 pb-1" v-if="item.header && item.enabled" style="font-weight: 600; height: 18px;" :key="index">
+        <v-subheader class="pt-2 pb-1" v-if="item.header && item.enabled" style="font-weight: 600; height: 18px; margin-top: 6px; margin-bottom: 10px;" :key="index">
           {{ item.header }}
         </v-subheader>
 
@@ -43,13 +43,13 @@
           :disabled="item.soon || item.loading || item.underMaintenance"
           :active-class="themeDark ? (isApex ? 'activePageDark apex' : isBitcoin ? 'activePageDark bitcoin' : 'activePageDark') : (isApex ? 'activePage apex' : isBitcoin ? 'activePage bitcoin' : 'activePage')"
           link
-          class="menuItem"
-          style="height: 40px"
+          :class="['menuItem', { 'nexus-item': item.special }]"
+          style="height: 34px"
           :key="index"
         >
           <v-list-item-avatar tile size="18" :style="item.soon || item.loading || item.underMaintenance ? { filter: 'opacity(0.5)' } : {}">
             <v-badge :value="!!item.notificationDot" dot color="error" overlap bordered>
-              <v-icon v-if="item.icon?.startsWith('mdi-')" size="18" color="white">{{ item.icon }}</v-icon>
+              <v-icon v-if="item.icon?.startsWith('mdi-')" size="18" color="var(--g-text-1)">{{ item.icon }}</v-icon>
               <v-img
                 v-else
                 width="18"
@@ -57,7 +57,7 @@
                 :src="item.icon"
                 :alt="item.title"
                 contain
-                style="filter: invert(98%) sepia(44%) saturate(0%) hue-rotate(18deg) brightness(103%) contrast(103%);"
+                :style="item.special ? undefined : 'filter: invert(98%) sepia(44%) saturate(0%) hue-rotate(18deg) brightness(103%) contrast(103%);'"
               />
             </v-badge>
           </v-list-item-avatar>
@@ -93,15 +93,15 @@
               outlined
               class="px-1"
               x-small
-              color="#FFD700"
+              color="warning"
               style="margin-left: 1px; margin-bottom: 1px; scale: 0.9"
-            ><v-icon color="#FFD700" x-small class="mr-1">mdi-hammer-screwdriver</v-icon> {{ $t('common.maintenance') }}</v-chip>
+            ><v-icon color="warning" x-small class="mr-1">mdi-hammer-screwdriver</v-icon> {{ $t('common.maintenance') }}</v-chip>
           </v-list-item-action>
           <v-list-item-action v-else-if="item.new">
             <v-chip
               v-if="item.new"
               class="my-2 px-2"
-              color="geroButton"
+              color="primary"
               x-small
             >
               {{ $t('common.new') }}
@@ -172,10 +172,10 @@
               <v-icon style="font-size: 12px;">mdi-check</v-icon>
             </v-btn>
           </v-list-item-title>
-          <v-list-item-subtitle class="mb-0" style="font-size: 10px" v-if="account">
+          <v-list-item-subtitle class="mb-0" style="font-size: 11px" v-if="account">
             {{ account.chain }}
           </v-list-item-subtitle>
-          <v-list-item-subtitle style="font-size: 8px" v-if="account">
+          <v-list-item-subtitle style="font-size: 11px" v-if="account">
             {{ account.network }}
           </v-list-item-subtitle>
         </v-list-item-content>
@@ -212,6 +212,7 @@ import { ref, computed, watch, onMounted, nextTick, getCurrentInstance, toRefs }
 import networks from '@/utils/networks'
 import { musicStore } from '@/stores/musicStore'
 import MusicStoreModule from '@/stores/musicStore'
+import { midnightStore } from '@/stores/midnightStore'
 import assts from '@/utils/assets'
 import changeLog from '@/plugins/changeLog'
 import { Cardano } from '@cardano-sdk/core'
@@ -241,6 +242,8 @@ interface NavigationItem {
   notificationDot?: boolean;
   underMaintenance?: boolean;
   loading?: boolean;
+  /** Brand spotlight item (Nexus): colored icon, animated gradient border. */
+  special?: boolean;
 }
 
 type NavigationLinkItem = NavigationItem & { link: string };
@@ -267,6 +270,7 @@ const hasUnlockMethod = ref(false)
 
 const { musicPlaylist, context } = toRefs(musicStore);
 const { loggedWallet, transactions } = toRefs(walletStore);
+const { transactions: midnightTransactions } = toRefs(midnightStore);
 
 const account = computed(() => {
   return loggedWallet.value
@@ -296,6 +300,10 @@ const isApex = computed(() => {
 
 const isBitcoin = computed(() => {
   return loggedWallet.value?.chain === Blockchain.BITCOIN;
+});
+
+const isMidnight = computed(() => {
+  return loggedWallet.value?.chain === Blockchain.MIDNIGHT;
 });
 
 const items = computed((): NavigationItemUnion[] => {
@@ -328,7 +336,8 @@ const items = computed((): NavigationItemUnion[] => {
     },
     { title: t('navigation.copilotFeed'), icon: 'mdi-bell-outline', link: '/copilot-feed', enabled: featureFlagsStore.isCopilotEnabled() },
     { header: t('navigation.financialHub'), enabled: true },
-    { title: t('navigation.transactions'), icon: 'mdi-swap-horizontal', link: '/transactions', enabled: networks.resolveTransactionsSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && transactions.value.length > 0, notificationDot: hasNewFeaturesInPath(['transactions']) },
+    // Midnight tx history lives in midnightStore (walletStore.transactions is Cardano-only).
+    { title: t('navigation.transactions'), icon: 'mdi-swap-horizontal', link: '/transactions', enabled: networks.resolveTransactionsSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && (loggedWallet.value?.chain === Blockchain.MIDNIGHT ? midnightTransactions.value.length > 0 : transactions.value.length > 0), notificationDot: hasNewFeaturesInPath(['transactions']) },
     { title: t('navigation.staking'), icon: assts.coinsStacked, link: '/staking', enabled: isStakingEnabled },
     { title: t('navigation.governance'), icon: assts.governance, link: '/governance', enabled: networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network) },
     { title: t('navigation.poolOperator'), icon: 'mdi-server-network', link: '/pool-operator', enabled: networks.resolveStakingSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && featureFlagsStore.isPoolOperatorEnabled(), new: true },
@@ -391,7 +400,12 @@ const items = computed((): NavigationItemUnion[] => {
     { title: t('navigation.referral'), icon: assts.usersPlus, link: '/referral', enabled: isReferralEnabled },
     // { title: 'zkFiat', icon: assts.zkFiat, link: '/zkFiat', enabled: false },
     { header: t('navigation.media'), enabled: loggedWallet.value?.chain !== Blockchain.BITCOIN && loggedWallet.value?.chain !== Blockchain.APEX_VECTOR },
-    { title: t('navigation.mediaPlayer'), icon: assts.mediaPlayer, link: '/media-player', enabled: loggedWallet.value?.chain !== Blockchain.BITCOIN && loggedWallet.value?.chain !== Blockchain.APEX_VECTOR },
+    // Only show the player when the wallet actually holds playable media —
+    // an empty player is dead weight (and the Media header auto-hides with it).
+    { title: t('navigation.mediaPlayer'), icon: assts.mediaPlayer, link: '/media-player', enabled: loggedWallet.value?.chain !== Blockchain.BITCOIN && loggedWallet.value?.chain !== Blockchain.APEX_VECTOR && (musicPlaylist.value?.length ?? 0) > 0 },
+    { header: t('navigation.developers'), enabled: true },
+    // Nexus infra product spotlight: colored brand logo + animated gradient border.
+    { title: t('navigation.nexus'), icon: assts.nexusLogo, link: '/nexus', enabled: true, special: true },
     // Uncomment to add more items:
     // { header: 'Tools' },
     // { title: 'Airdrop', icon: 'mdi-gift', link: '/airdrop', soon: true },
@@ -400,7 +414,17 @@ const items = computed((): NavigationItemUnion[] => {
     // { header: 'Documentation' },
     // { title: 'Guides', icon: 'mdi-book-open-variant', href: 'https://docs.adabox.io/' },
     // { title: 'Whitepaper', icon: 'mdi-file-certificate-outline', href: 'https://docs.adabox.io/whitepapers/forge-whitepaper' }
-  ].filter(i => i)
+  ].filter(i => i).map((item, i, all) => {
+    // Auto-hide section headers with no enabled children: a header stays
+    // enabled only if at least one non-header item before the next header is
+    // enabled. Keeps chains with sparse feature sets (e.g. Midnight) from
+    // rendering orphaned "Financial hub" / "Media" headings.
+    if (!item.header || !item.enabled) return item;
+    for (let j = i + 1; j < all.length && !all[j].header; j++) {
+      if (all[j].enabled) return item;
+    }
+    return { ...item, enabled: false };
+  })
 })
 
 // Loading state for swap feature flag
@@ -519,7 +543,7 @@ async function submitLogout() {
       method: MessageTypes.LOGOUT,
       data: { },
     });
-    updateVuetifyTheme(false, true);
+    updateVuetifyTheme('Cardano'); // logout resets to the default chain accent
     // Navigate to welcome page after store is cleared
     // Use replace to avoid adding to history, and catch navigation guard redirects
     router.replace('/welcome').catch(err => {
@@ -603,10 +627,22 @@ onUnmounted(() => {
   window.removeEventListener('security-settings-updated', handleSecuritySettingsUpdate)
 })
 </script>
+<style>
+/* Typed registration so the Nexus ring's conic angle interpolates smoothly
+   (an unregistered custom property can't animate — the ring would jump). */
+@property --nx-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+</style>
 <style lang="scss" scoped>
 .menuItem {
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
+  /* Shorter, tighter rows (Vuetify dense defaults to 40px min-height + 8px gap). */
+  min-height: 34px !important;
+  margin-bottom: 4px !important;
 }
 
 .menuItem ::v-deep .v-list-item__avatar {
@@ -621,21 +657,63 @@ onUnmounted(() => {
   overflow: visible !important;
 }
 
+/* ── Nexus spotlight item ─────────────────────────────────────────────
+   A thin conic-gradient ring in the four Nexus logo gradient families
+   (sky / violet / teal / indigo) sweeps around the row — the "AI button"
+   treatment. User-requested brand moment; the ring is masked to 1px so it
+   reads as live energy, not a glow. Reduced motion gets a static ring. */
+.nexus-item {
+  position: relative;
+}
+
+.nexus-item::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: var(--g-r-control);
+  padding: 1px;
+  background: conic-gradient(
+    from var(--nx-angle, 0deg),
+    #4A9ADA, #7B6CDC, #44A8B4, #5F78D0, #4A9ADA
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: nexus-border-wave 4s linear infinite;
+  pointer-events: none;
+}
+
+/* The colored logo must never be recolored by the active-page icon filter. */
+.nexus-item ::v-deep .v-image {
+  filter: none !important;
+}
+
+@keyframes nexus-border-wave {
+  to { --nx-angle: 360deg; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nexus-item::before {
+    animation: none;
+  }
+}
+
 
 /* Active nav item — clean tinted highlight (modern, no gradient) */
 .activePage,
 .activePageDark {
-  color: #00D1FF;
-  background: rgba(0, 209, 255, 0.12);
-  border: 1px solid rgba(0, 209, 255, 0.28);
-  border-radius: 8px;
+  color: var(--g-accent);
+  background: color-mix(in srgb, var(--g-accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--g-accent) 28%, transparent);
+  border-radius: var(--g-r-control);
 
   .v-image {
     filter: brightness(0) saturate(100%) invert(62%) sepia(93%) saturate(1287%) hue-rotate(136deg) brightness(102%) contrast(101%) !important;
   }
 
   .v-icon {
-    color: #00D1FF !important;
+    color: var(--g-accent) !important;
   }
 }
 
@@ -671,7 +749,7 @@ onUnmounted(() => {
 
 .theme--dark.v-list-item {
   &:not(.v-list-item--active):not(.v-list-item--disabled) {
-    color: #FFFFFF !important;
+    color: var(--g-text-1) !important;
   }
 
   &:focus::before {
@@ -690,20 +768,20 @@ onUnmounted(() => {
 .menuItem.v-list-item--link {
   &:before {
     background: transparent;
-    border-radius: 8px;
+    border-radius: var(--g-r-control);
   }
 
   &:not(.activePage):not(.activePageDark):hover {
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--g-hairline-1);
   }
 }
 
 .v-subheader {
-  font-size: 10px;
+  font-size: 11px;
   text-align: left;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.38);
+  color: var(--g-text-3);
   line-height: 12px;
   width: 100%;
   padding-left: 12px;
@@ -728,7 +806,7 @@ onUnmounted(() => {
   }
 
   &:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--g-hairline-1);
 
     .edit-icon {
       opacity: 0.6;
@@ -741,17 +819,17 @@ onUnmounted(() => {
   line-height: 20px;
   height: 20px;
   color: inherit;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--g-hairline-1);
   border: none;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 2px;
+  border-bottom: 1px solid var(--g-hairline-3);
+  border-radius: 4px;
   outline: none;
   padding: 0 4px;
   width: 100%;
   font-family: inherit;
 
   &:focus {
-    border-bottom-color: #00c7f3;
+    border-bottom-color: var(--g-accent);
   }
 }
 </style>

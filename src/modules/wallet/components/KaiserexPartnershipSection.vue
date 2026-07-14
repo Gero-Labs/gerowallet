@@ -87,11 +87,11 @@ const trackBlogClick = () => {
   -webkit-backdrop-filter: blur(12px) brightness(0.2) !important;
   backdrop-filter: blur(12px) !important;
   background: #000000ab !important;
-  border: solid 2px #ffffff44 !important;
-  border-radius: 16px;
+  border: solid 2px var(--g-hairline-3) !important;
+  border-radius: var(--g-r-sheet);
   position: relative;
   overflow: hidden;
-  transition: all 0.3s ease;
+  transition: background-color var(--g-dur-slow) ease, border-color var(--g-dur-slow) ease;
 
   // Top gradient line effect
   &::before {
@@ -101,14 +101,14 @@ const trackBlogClick = () => {
     left: 0;
     right: 0;
     height: 3px;
-    background: linear-gradient(90deg, $primary-cyan 0%, $primary-green 100%);
+    background: linear-gradient(90deg, var(--g-grad-1) 0%, var(--g-grad-2) 100%);
     opacity: 0;
-    transition: opacity 0.3s ease;
+    transition: opacity var(--g-dur-slow) ease;
   }
 
   &:hover {
     background: #000000bb !important;
-    border-color: rgba(0, 199, 243, 0.4) !important;
+    border-color: var(--g-accent) !important;
     -webkit-backdrop-filter: blur(15px) brightness(0.3) !important;
     backdrop-filter: blur(15px) !important;
   }
@@ -143,7 +143,7 @@ const trackBlogClick = () => {
     // Make the logo white using CSS filters
     filter: brightness(0) invert(1);
     opacity: 0.9;
-    transition: opacity 0.3s ease;
+    transition: opacity var(--g-dur-slow) ease;
   }
 
   &:hover .logo-icon {
@@ -154,10 +154,7 @@ const trackBlogClick = () => {
 .partnership-heading {
   @include heading-style($font-size-2xl);
   margin: 0;
-  background: linear-gradient(135deg, #00c7f3 0%, #75e0a7 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--g-accent);
 }
 
 .partnership-subheading {
@@ -183,14 +180,14 @@ const trackBlogClick = () => {
   @include flex-column;
   gap: $spacing-md;
   padding: $spacing-2xl;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  transition: all 0.3s ease;
+  background: var(--g-raised);
+  border-radius: var(--g-r-card);
+  border: 1px solid var(--g-hairline-2);
+  transition: background-color var(--g-dur-slow) ease, border-color var(--g-dur-slow) ease, transform var(--g-dur-slow) ease;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.06);
-    border-color: rgba(0, 199, 243, 0.3);
+    background: var(--g-overlay);
+    border-color: var(--g-accent);
     transform: translateY(-2px);
   }
 }
@@ -215,7 +212,7 @@ const trackBlogClick = () => {
   justify-content: center;
   gap: $spacing-2xl;
   padding-top: $spacing-2xl;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid var(--g-hairline-1);
 
   @include mobile {
     flex-direction: column;
@@ -244,7 +241,7 @@ const trackBlogClick = () => {
 .footer-divider {
   width: 1px;
   height: 40px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--g-hairline-2);
 
   @include mobile {
     display: none;
@@ -268,11 +265,11 @@ const trackBlogClick = () => {
   align-items: center;
   gap: $spacing-sm;
   @include text-style($font-size-sm, $font-weight-medium, $line-height-normal);
-  color: #00c7f3;
+  color: var(--g-accent);
   text-decoration: none;
   padding: $spacing-xs $spacing-md;
   border-radius: $border-radius-md;
-  transition: all 0.2s ease;
+  transition: background-color var(--g-dur-base) ease, gap var(--g-dur-base) ease;
 
   &:hover {
     background: rgba(0, 199, 243, 0.1);
@@ -282,7 +279,7 @@ const trackBlogClick = () => {
   .link-arrow {
     width: 14px;
     height: 14px;
-    transition: transform 0.2s ease;
+    transition: transform var(--g-dur-base) ease;
   }
 
   &:hover .link-arrow {

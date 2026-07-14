@@ -8,6 +8,9 @@ Thumbs.db
 # credential file types explicitly.
 *.p8
 *.mobileprovision
+# Cloudflare token-policy artifacts (accidentally committed once; policy JSON,
+# not a secret, but infra config doesn't belong in the wallet repo).
+.cloudflare_api
 
 # Dependencies
 node_modules/
@@ -59,7 +62,36 @@ graphify-out/
 # Translation utility scripts (temporary)
 scripts/translate-*.js
 scripts/merge-translations.js
+# Catalyst / milestone deliverables (kept local)
+CloseOut_Video_Script.md
+GeroWallet_CloseOut_Report_FINAL.docx
+GeroWallet_CloseOut_Report.docx
+GeroWallet_Technical_Documentation.docx
+Milestone4_Proof_of_Achievement.md
+docs/catalyst/
+email-templates/
 
-# Local planning/spec notes from superpowers skills
-docs/superpowers/
+# Per-developer Claude / superpowers state
+.claude/
 .superpowers/
+
+# Local-only planning / research notes (NOT to be shared)
+docs/session-handoff-market-page.md
+docs/plans/2026-03-09-unified-portfolio-market-page.md
+docs/plans/2026-03-10-portfolio-chart-migration.md
+docs/plans/2026-03-10-token-detail-trading-terminal-impl.md
+docs/plans/2026-03-10-token-detail-trading-terminal.md
+docs/plans/2026-03-10-unified-portfolio-market-design.md
+docs/plans/2026-03-10-unified-portfolio-market-plan.md
+docs/plans/2026-03-11-column-customization-tvl-design.md
+docs/plans/2026-03-11-column-customization-tvl-impl.md
+docs/plans/2026-03-11-pnl-calculation-bug-analysis.md
+docs/plans/2026-03-12-pnl-acquisition-classification.md
+docs/plans/2026-03-12-wallet-ux-research.md
+docs/plans/2026-03-17-multi-chain-market-research.md
+# Superpowers planning/spec notes (whole tree, from either skill set)
+docs/superpowers/
+
+# Local MCP config + worktrees must never be committed
+.mcp.json.local
+.worktrees/

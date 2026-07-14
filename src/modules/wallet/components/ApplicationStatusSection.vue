@@ -121,7 +121,7 @@ defineEmits(['logout']);
   right: $spacing-lg;
   background: rgba(255, 255, 255, 0.05) !important;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  transition: all 0.2s ease;
+  transition: background-color var(--g-dur-base) ease, border-color var(--g-dur-base) ease;
   z-index: 10;
 
   &:hover {
@@ -171,7 +171,7 @@ defineEmits(['logout']);
   max-width: 380px;
   height: auto;
   filter: drop-shadow(0 20px 40px rgba(0, 0, 0, 0.4));
-  transition: transform 0.3s ease;
+  transition: transform var(--g-dur-slow) ease;
 
   &:hover {
     transform: translateY(-4px) scale(1.02);
@@ -239,16 +239,6 @@ defineEmits(['logout']);
   align-items: center;
   justify-content: center;
   color: $primary-cyan;
-  animation: icon-glow 3s ease-in-out infinite;
-}
-
-@keyframes icon-glow {
-  0%, 100% {
-    box-shadow: 0 0 20px rgba($primary-cyan, 0.1);
-  }
-  50% {
-    box-shadow: 0 0 30px rgba($primary-cyan, 0.25);
-  }
 }
 
 // Status Info Styles
@@ -362,7 +352,6 @@ defineEmits(['logout']);
       height: 10px;
       border-radius: 50%;
       background: $primary-cyan;
-      animation: pulse-glow 2s ease-in-out infinite;
     }
   }
 }
@@ -375,19 +364,6 @@ defineEmits(['logout']);
 
   &.completed {
     background: $primary-cyan;
-  }
-}
-
-@keyframes pulse-glow {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-    box-shadow: 0 0 0 0 rgba($primary-cyan, 0.4);
-  }
-  50% {
-    opacity: 0.8;
-    transform: scale(1.1);
-    box-shadow: 0 0 0 8px rgba($primary-cyan, 0);
   }
 }
 
@@ -409,7 +385,7 @@ defineEmits(['logout']);
   color: $primary-cyan;
   text-decoration: none;
   font-weight: $font-weight-medium;
-  transition: all 0.2s ease;
+  transition: color var(--g-dur-base) ease;
 
   &:hover {
     text-decoration: underline;

@@ -275,24 +275,19 @@ onUnmounted(() => {
 .carousel-wrapper {
   position: relative;
   height: 100%;
-  border-radius: 12px;
+  border-radius: var(--g-r-card);
   overflow: hidden;
-  background-color: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  transition: all 0.3s ease;
+  background-color: var(--g-raised);
+  border: 1px solid var(--g-hairline-2);
+  transition: background-color var(--g-dur-slow) ease, border-color var(--g-dur-slow) ease, transform var(--g-dur-slow) ease;
   cursor: pointer;
   max-height: 422px;
 }
 
 .carousel-wrapper:hover {
-  background-color: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(15px);
-  -webkit-backdrop-filter: blur(15px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background-color: var(--g-overlay);
+  border: 1px solid var(--g-hairline-3);
   transform: scale(1.01);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
 
 .carousel-wrapper .v-card__title {
@@ -405,7 +400,7 @@ onUnmounted(() => {
 
 /* Apex specific styles */
 .apex-welcome-background {
-  background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #2a2a2a 100%);
+  background: var(--g-surface);
 }
 
 .apex-carousel-overlay {
@@ -435,8 +430,7 @@ onUnmounted(() => {
 .debit-card-floating {
   width: 200px;
   height: auto;
-  border-radius: 12px;
-  animation: float 5s ease-in-out infinite;
+  border-radius: var(--g-r-card);
 }
 
 .debit-card-glow {
@@ -447,7 +441,7 @@ onUnmounted(() => {
   width: 240px;
   height: 160px;
   background: radial-gradient(circle, rgba(0, 122, 255, 0.2) 0%, rgba(0, 122, 255, 0.1) 30%, transparent 60%);
-  border-radius: 20px;
+  border-radius: var(--g-r-sheet);
   z-index: 1;
   pointer-events: none;
 }
@@ -483,17 +477,7 @@ onUnmounted(() => {
 .cashback-floating {
   width: 180px;
   height: auto;
-  border-radius: 12px;
-  animation: float 3s ease-in-out infinite;
-}
-
-@keyframes float {
-  0%, 100% {
-    transform: translateY(0px);
-  }
-  50% {
-    transform: translateY(-10px);
-  }
+  border-radius: var(--g-r-card);
 }
 
 .cashback-title {

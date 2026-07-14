@@ -50,10 +50,9 @@ function onReRunSetup() {
 
 <style scoped>
 .settings-dialog {
-  background:
-    linear-gradient(180deg, rgba(19, 22, 27, 0.96) 0%, rgba(10, 12, 16, 0.98) 100%);
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--g-overlay);
+  border-radius: var(--g-r-sheet);
+  border: 1px solid var(--g-hairline-2);
   display: flex;
   flex-direction: column;
   max-height: 80vh;
@@ -64,13 +63,13 @@ function onReRunSetup() {
   align-items: center;
   justify-content: space-between;
   padding: 14px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--g-hairline-2);
 }
 
 .settings-dialog__title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--g-text-1);
 }
 
 .settings-dialog__body {

@@ -29,16 +29,6 @@
 .coming-soon-icon {
   font-size: 80px;
   margin-bottom: 32px;
-  animation: float 3s ease-in-out infinite;
-}
-
-@keyframes float {
-  0%, 100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-20px);
-  }
 }
 
 .coming-soon-title {

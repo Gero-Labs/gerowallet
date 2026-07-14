@@ -10,7 +10,7 @@
         </div>
         <div class="card-footer">
           <div class="card-holder">
-            <span class="card-label">{{ $t('card.cardHolder') }}</span>
+            <span class="card-label t-label">{{ $t('card.cardHolder') }}</span>
             <span class="card-value">{{ holderName }}</span>
           </div>
           <div class="card-type-badge">{{ cardType }}</div>
@@ -20,7 +20,7 @@
 
     <!-- Balance -->
     <div class="balance-section">
-      <span class="balance-label">{{ $t('card.balance') }}</span>
+      <span class="balance-label t-label">{{ $t('card.balance') }}</span>
       <div class="balance-row">
         <span class="balance-amount" v-if="!loadingBalance">
           {{ formattedBalance }}
@@ -59,7 +59,7 @@
       </div>
 
       <div v-else-if="recentTransactions.length === 0" class="tx-empty">
-        <v-icon color="#555">mdi-receipt-text-outline</v-icon>
+        <v-icon color="var(--g-text-3)">mdi-receipt-text-outline</v-icon>
         <span>{{ $t('card.noTransactionsYet') }}</span>
       </div>
 
@@ -70,7 +70,7 @@
           class="tx-item"
         >
           <div class="tx-icon-wrap">
-            <v-icon small :color="tx.debit ? '#ff6b6b' : '#4caf50'">
+            <v-icon small :color="tx.debit ? 'error' : 'success'">
               {{ tx.debit ? 'mdi-arrow-up' : 'mdi-arrow-down' }}
             </v-icon>
           </div>
@@ -226,14 +226,13 @@ onMounted(async () => {
   width: 100%;
   aspect-ratio: 1.586;
   max-height: 180px;
-  background: linear-gradient(145deg, #1a2332 0%, #0d1520 50%, #162030 100%);
-  border-radius: 14px;
+  background: var(--g-raised);
+  border-radius: var(--g-r-card);
   padding: 20px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  border: 1px solid color-mix(in srgb, var(--chain-primary) 15%, transparent);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  border: 1px solid color-mix(in srgb, var(--g-accent) 15%, transparent);
   position: relative;
   overflow: hidden;
 }
@@ -245,23 +244,23 @@ onMounted(async () => {
   right: -30%;
   width: 200px;
   height: 200px;
-  background: radial-gradient(circle, color-mix(in srgb, var(--chain-primary) 8%, transparent) 0%, transparent 70%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--g-accent) 8%, transparent) 0%, transparent 70%);
   pointer-events: none;
 }
 
 .card-logo {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 800;
-  color: var(--chain-primary);
+  color: var(--g-accent);
   letter-spacing: 2px;
 }
 
 .card-number {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 500;
-  color: #ccc;
+  color: var(--g-text-2);
   letter-spacing: 2px;
-  font-family: 'Courier New', monospace;
+  font-family: var(--g-font-mono);
 }
 
 .card-footer {
@@ -277,23 +276,21 @@ onMounted(async () => {
 }
 
 .card-label {
-  font-size: 9px;
-  color: #666;
-  text-transform: uppercase;
-  letter-spacing: 1px;
+  font-size: 11px;
+  color: var(--g-text-3);
 }
 
 .card-value {
   font-size: 12px;
-  color: #bbb;
+  color: var(--g-text-2);
   text-transform: uppercase;
 }
 
 .card-type-badge {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
-  color: var(--chain-primary);
-  background: color-mix(in srgb, var(--chain-primary) 12%, transparent);
+  color: var(--g-accent);
+  background: color-mix(in srgb, var(--g-accent) 12%, transparent);
   padding: 3px 8px;
   border-radius: 4px;
   letter-spacing: 1px;
@@ -307,9 +304,7 @@ onMounted(async () => {
 
 .balance-label {
   font-size: 12px;
-  color: #888;
-  text-transform: uppercase;
-  letter-spacing: 1px;
+  color: var(--g-text-3);
 }
 
 .balance-row {
@@ -321,14 +316,14 @@ onMounted(async () => {
 }
 
 .balance-amount {
-  font-size: 28px;
+  font-size: 32px;
   font-weight: 700;
-  color: #fff;
+  color: var(--g-text-1);
 }
 
 .balance-currency {
   font-size: 14px;
-  color: #888;
+  color: var(--g-text-3);
   font-weight: 500;
 }
 
@@ -341,20 +336,20 @@ onMounted(async () => {
 
 .action-btn {
   height: 40px !important;
-  border-radius: 10px !important;
-  background: #1a1a1a !important;
-  border: 1px solid #2a2a2a !important;
+  border-radius: var(--g-r-control) !important;
+  background: var(--g-raised) !important;
+  border: 1px solid var(--g-hairline-2) !important;
   text-transform: none !important;
   font-weight: 600 !important;
   font-size: 13px !important;
   letter-spacing: 0 !important;
-  color: #ccc !important;
+  color: var(--g-text-2) !important;
 }
 
 .action-btn:hover {
-  background: #222 !important;
-  border-color: var(--chain-primary) !important;
-  color: var(--chain-primary) !important;
+  background: var(--g-overlay) !important;
+  border-color: var(--g-accent) !important;
+  color: var(--g-accent) !important;
 }
 
 /* Transactions */
@@ -375,7 +370,7 @@ onMounted(async () => {
 .tx-title {
   font-size: 14px;
   font-weight: 600;
-  color: #fff;
+  color: var(--g-text-1);
 }
 
 .tx-loading {
@@ -391,7 +386,7 @@ onMounted(async () => {
   gap: 8px;
   padding: 24px 0;
   font-size: 13px;
-  color: #555;
+  color: var(--g-text-3);
 }
 
 .tx-list {
@@ -405,15 +400,15 @@ onMounted(async () => {
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  background: #1a1a1a;
-  border-radius: 10px;
+  background: var(--g-raised);
+  border-radius: var(--g-r-control);
 }
 
 .tx-icon-wrap {
   width: 32px;
   height: 32px;
-  border-radius: 8px;
-  background: #222;
+  border-radius: var(--g-r-control);
+  background: var(--g-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -430,7 +425,7 @@ onMounted(async () => {
 
 .tx-name {
   font-size: 13px;
-  color: #ccc;
+  color: var(--g-text-2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -438,7 +433,7 @@ onMounted(async () => {
 
 .tx-date {
   font-size: 11px;
-  color: #666;
+  color: var(--g-text-3);
 }
 
 .tx-amount {
@@ -448,11 +443,11 @@ onMounted(async () => {
 }
 
 .tx-amount.debit {
-  color: #ff6b6b;
+  color: var(--g-error);
 }
 
 .tx-amount.credit {
-  color: #4caf50;
+  color: var(--g-success);
 }
 
 /* Sheet content */
@@ -464,20 +459,20 @@ onMounted(async () => {
 
 .sheet-message {
   font-size: 14px;
-  color: #888;
+  color: var(--g-text-3);
   text-align: center;
   margin: 0;
 }
 
 .full-dashboard-btn {
   height: 44px !important;
-  border-radius: 10px !important;
-  background: linear-gradient(135deg, var(--chain-gradient1) 0%, var(--chain-gradient2) 100%) !important;
+  border-radius: var(--g-r-control) !important;
+  background: linear-gradient(135deg, var(--g-grad-1) 0%, var(--g-grad-2) 100%) !important;
   text-transform: none !important;
   font-weight: 600 !important;
   font-size: 14px !important;
   letter-spacing: 0 !important;
-  color: #0a0a0a !important;
+  color: var(--g-on-grad) !important;
 }
 
 .logout-btn {
@@ -485,10 +480,10 @@ onMounted(async () => {
   text-transform: none !important;
   font-size: 13px !important;
   letter-spacing: 0 !important;
-  color: #888 !important;
+  color: var(--g-text-3) !important;
 }
 
 .logout-btn:hover {
-  color: #ff4d4d !important;
+  color: var(--g-error) !important;
 }
 </style>

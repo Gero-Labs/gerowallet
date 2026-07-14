@@ -12,7 +12,7 @@
                   v-if="!multiSigAmountReached"
                   small
                   outlined
-                  color="#00DFF3"
+                  color="var(--g-accent)"
                   class="mx-2 text-caption text-capitalize"
                   @click="showCreateMultisigDialog = true"
                 >
@@ -24,7 +24,7 @@
                 </v-card-subtitle>
                 <v-btn
                   v-show="Object.keys(getMultiSigWallet).length != 0"
-                  color="#CCC"
+                  color="var(--g-text-2)"
                   outlined
                   class="mx-2 text-caption text-capitalize"
                   @click="showNewMultisigTransaction = true"
@@ -73,7 +73,7 @@
                       <v-col cols="auto">
                         <v-btn
                           v-show="Object.keys(getMultiSigWallet).length != 0"
-                          color="#CCC"
+                          color="var(--g-text-2)"
                           outlined
                           class="text-caption text-capitalize"
                           @click="showFundWallet = true"
@@ -109,7 +109,7 @@
                               <v-list-item-title>
                                 {{ info.title }}
                               </v-list-item-title>
-                              <v-list-item-subtitle style="color: white">
+                              <v-list-item-subtitle style="color: var(--g-text-1)">
                                 {{ filters.toCurrency(info.value, false, 2, '₳', '', true, 2) }}
                               </v-list-item-subtitle>
                             </v-list-item-content>
@@ -134,12 +134,12 @@
                 />
               </v-col>
               <v-col cols="3" class="text-center align-center justify-center">
-                <v-btn outlined color="#CCC" @click="selectDates" class="mt-1 text-caption text-capitalize">
+                <v-btn outlined color="var(--g-text-2)" @click="selectDates" class="mt-1 text-caption text-capitalize">
                   <v-icon small left>mdi-calendar</v-icon>
                   {{ $t('multisig.selectDates') }}
                 </v-btn>
                 &nbsp;
-                <v-btn outlined color="#CCC" @click="applyFilters" class="mt-1 text-caption text-capitalize">
+                <v-btn outlined color="var(--g-text-2)" @click="applyFilters" class="mt-1 text-caption text-capitalize">
                   <v-icon small left>mdi-filter</v-icon>
                   {{ $t('multisig.applyFilters') }}
                 </v-btn>
@@ -160,7 +160,7 @@
                   hide-default-footer
                 >
                   <template v-slot:[`item.id`]="{ item }">
-                    <a style="color: white" class="mr-1">{{ filters.shortenStringWithEllipsis(item.tx_hash, 14) }}</a>
+                    <a style="color: var(--g-text-1)" class="mr-1">{{ filters.shortenStringWithEllipsis(item.tx_hash, 14) }}</a>
                     <CopyButton ref="copyAddress" x-small :value="item.tx_hash" v-if="item.tx_hash"></CopyButton>
                   </template>
                   <template v-slot:[`item.date`]="{ item }">
@@ -173,7 +173,7 @@
                     {{ item.status }}
                   </template>
                   <template v-slot:[`item.actions`]="{ item }">
-                    <v-btn v-if="item.status === String(t('common.pending'))" small outlined color="#CCC" @click="signTransaction(item)">
+                    <v-btn v-if="item.status === String(t('common.pending'))" small outlined color="var(--g-text-2)" @click="signTransaction(item)">
                       <v-icon small left>mdi-check</v-icon>
                       {{ $t('multisig.sign') }}
                     </v-btn>
@@ -416,21 +416,21 @@ onMounted(() => {
 }
 
 .multisig-title {
-  font-size: 28px;
+  font-size: 32px;
   font-weight: 700;
-  color: #f5f5f5;
+  color: var(--g-text-1);
   margin-bottom: 8px;
 }
 
 .multisig-description {
-  color: #94969c;
+  color: var(--g-text-3);
   font-size: 16px;
 }
 
 .multisig-card {
-  background-color: #0c0e12;
-  border-radius: 12px;
-  border: 1px solid #1f242f;
+  background-color: var(--g-surface);
+  border-radius: var(--g-r-card);
+  border: 1px solid var(--g-hairline-2);
 }
 
 .multisig-table {
@@ -444,7 +444,7 @@ onMounted(() => {
 
 .wallet-item {
   padding: 12px 0;
-  border-bottom: 1px solid #1f242f;
+  border-bottom: 1px solid var(--g-hairline-2);
 }
 
 .wallet-item:last-child {
@@ -455,16 +455,16 @@ onMounted(() => {
 .wallet-value {
   font-weight: 600;
   font-size: 16px;
-  color: #f5f5f5;
+  color: var(--g-text-1);
 }
 
 .wallet-details {
   font-size: 14px;
-  color: #94969c;
+  color: var(--g-text-3);
 }
 
 .no-wallets {
-  color: #94969c;
+  color: var(--g-text-3);
   text-align: center;
   padding: 24px 0;
 }

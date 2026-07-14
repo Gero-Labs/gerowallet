@@ -76,7 +76,8 @@ interface Props {
   rules?: any[];
   outlined?: boolean;
   dense?: boolean;
-  hideDetails?: boolean;
+  /** `'auto'` reserves space for a validation error only while one is shown. */
+  hideDetails?: boolean | 'auto';
   disabled?: boolean;
   required?: boolean;
 }
@@ -413,7 +414,7 @@ defineExpose({
   -webkit-tap-highlight-color: transparent;
   /* Enable hardware acceleration for smoother touch */
   will-change: transform;
-  transition: all 0.2s ease;
+  transition: background-color var(--g-dur-base) ease, transform var(--g-dur-base) ease;
   border-radius: 50%;
   /* Make it more tappable */
   touch-action: manipulation;

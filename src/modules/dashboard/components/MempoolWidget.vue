@@ -41,12 +41,11 @@
               :style="{
                 width: fees ? barWidth(fees[rate.key]) + '%' : '0%',
                 background: rate.color,
-                boxShadow: fees ? `0 0 6px ${rate.color}70` : 'none',
               }"
             />
           </div>
           <div class="fee-value-col">
-            <span class="fee-num" :style="{ color: fees ? rate.color : 'rgba(200,210,225,0.25)' }">
+            <span class="fee-num" :style="{ color: fees ? rate.color : 'var(--g-text-3)' }">
               {{ fees ? fees[rate.key] : '—' }}
             </span>
             <span class="fee-unit">s/vB</span>
@@ -92,10 +91,10 @@ const fees = ref<MempoolFeeEstimates | null>(null);
 const mempoolStats = ref<{ count: number; vsize: number; total_fee: number } | null>(null);
 
 const feeRates = [
-  { key: 'fastestFee' as const, label: 'NEXT BLOCK', time: '~10m', color: '#FF3D57' },
-  { key: 'halfHourFee' as const, label: '30 MIN',     time: '~30m', color: '#fb8c00' },
-  { key: 'hourFee' as const,    label: '1 HOUR',      time: '~60m', color: '#00D68F' },
-  { key: 'economyFee' as const, label: 'ECONOMY',     time: '1h+',  color: '#1e88e5' },
+  { key: 'fastestFee' as const, label: 'NEXT BLOCK', time: '~10m', color: 'var(--g-error)' },
+  { key: 'halfHourFee' as const, label: '30 MIN',     time: '~30m', color: 'var(--g-warning)' },
+  { key: 'hourFee' as const,    label: '1 HOUR',      time: '~60m', color: 'var(--g-success)' },
+  { key: 'economyFee' as const, label: 'ECONOMY',     time: '1h+',  color: 'var(--g-info)' },
 ];
 
 // Max fee for proportional bar widths
@@ -149,27 +148,11 @@ onUnmounted(() => {
 .mempool-widget {
   position: relative;
   height: 100%;
-  background: rgba(255, 255, 255, 0.07);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 22px;
+  background: var(--g-surface);
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-sheet);
   overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif;
-  box-shadow:
-    0 2px 8px rgba(0, 0, 0, 0.18),
-    0 16px 48px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.06);
-  transition: box-shadow 0.3s ease;
-}
-
-.mempool-widget:hover {
-  box-shadow:
-    0 4px 16px rgba(0, 0, 0, 0.22),
-    0 24px 60px rgba(0, 0, 0, 0.36),
-    0 0 0 1px rgba(247, 147, 26, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
 .widget-body {
@@ -196,13 +179,12 @@ onUnmounted(() => {
 .widget-icon {
   width: 32px;
   height: 32px;
-  border-radius: 10px;
+  border-radius: var(--g-r-control);
   background: rgba(247, 147, 26, 0.12);
   border: 1px solid rgba(247, 147, 26, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.1);
 }
 
 .header-text {
@@ -212,9 +194,9 @@ onUnmounted(() => {
 }
 
 .widget-title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.92);
+  color: var(--g-text-1);
   letter-spacing: -0.01em;
   line-height: 1;
 }
@@ -222,7 +204,7 @@ onUnmounted(() => {
 .widget-sub {
   font-size: 11px;
   font-weight: 400;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--g-text-2);
   line-height: 1;
 }
 
@@ -268,7 +250,7 @@ onUnmounted(() => {
   padding: 4px 10px;
   background: rgba(247, 147, 26, 0.08);
   border: 1px solid rgba(247, 147, 26, 0.15);
-  border-radius: 20px;
+  border-radius: var(--g-r-pill);
 }
 
 .view-link:hover { color: #F7931A; background: rgba(247, 147, 26, 0.14); }
@@ -290,7 +272,7 @@ onUnmounted(() => {
 .fee-row-label {
   font-size: 11px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.68);
+  color: var(--g-text-2);
   width: 72px;
   flex-shrink: 0;
 }
@@ -298,7 +280,7 @@ onUnmounted(() => {
 .fee-bar-track {
   flex: 1;
   height: 5px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--g-hairline-1);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -327,13 +309,13 @@ onUnmounted(() => {
 }
 
 .fee-unit {
-  font-size: 9px;
-  color: rgba(255, 255, 255, 0.52);
+  font-size: 11px;
+  color: var(--g-text-3);
 }
 
 .fee-time {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+  color: var(--g-text-3);
   width: 30px;
   flex-shrink: 0;
   text-align: right;
@@ -346,7 +328,7 @@ onUnmounted(() => {
   gap: 8px;
   margin-top: 14px;
   padding-top: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  border-top: 1px solid var(--g-hairline-1);
 }
 
 .footer-stat {
@@ -363,7 +345,7 @@ onUnmounted(() => {
 }
 
 .footer-dot--pending {
-  background: #fb8c00;
+  background: var(--g-warning);
   animation: dot-blink 2s ease-in-out infinite;
 }
 
@@ -375,22 +357,22 @@ onUnmounted(() => {
 .footer-val {
   font-size: 12px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.88);
+  color: var(--g-text-1);
   font-variant-numeric: tabular-nums;
 }
 
 .footer-val.btc-color { color: #F7931A; }
 
 .footer-lbl {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 400;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--g-text-3);
 }
 
 .footer-divider {
   width: 1px;
   height: 16px;
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--g-hairline-1);
   flex-shrink: 0;
   margin: 0 2px;
 }

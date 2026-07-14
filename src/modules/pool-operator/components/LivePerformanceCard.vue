@@ -1,14 +1,14 @@
 <template>
   <div class="lp-card liquid-glass">
-    <div class="card-header">
-      <v-icon size="14" color="#2DF0F7" class="mr-1">mdi-chart-bar</v-icon>
+    <div class="card-header t-label">
+      <v-icon size="14" color="var(--g-accent)" class="mr-1">mdi-chart-bar</v-icon>
       <span>{{ $t('poolOperator.livePerformance') }}</span>
     </div>
 
     <div class="lp-list">
       <div class="lp-item">
-        <div class="lp-icon" style="background: rgba(45,240,247,0.1)">
-          <v-icon size="14" color="#2DF0F7">mdi-chart-line</v-icon>
+        <div class="lp-icon" style="background: color-mix(in srgb, var(--g-accent) 10%, transparent)">
+          <v-icon size="14" color="var(--g-accent)">mdi-chart-line</v-icon>
         </div>
         <div class="lp-body">
           <span class="lp-val">{{ formatAdaShort(liveStake) }}</span>
@@ -16,8 +16,8 @@
         </div>
       </div>
       <div class="lp-item">
-        <div class="lp-icon" style="background: rgba(160,120,255,0.1)">
-          <v-icon size="14" color="#A078FF">mdi-account-group</v-icon>
+        <div class="lp-icon" style="background: color-mix(in srgb, var(--g-info) 10%, transparent)">
+          <v-icon size="14" color="var(--g-info)">mdi-account-group</v-icon>
         </div>
         <div class="lp-body">
           <span class="lp-val">{{ delegators?.toLocaleString() || '0' }}</span>
@@ -25,8 +25,8 @@
         </div>
       </div>
       <div class="lp-item">
-        <div class="lp-icon" style="background: rgba(253,176,34,0.1)">
-          <v-icon size="14" color="#FDB022">mdi-cube-outline</v-icon>
+        <div class="lp-icon" style="background: var(--g-warning-fill)">
+          <v-icon size="14" color="warning">mdi-cube-outline</v-icon>
         </div>
         <div class="lp-body">
           <span class="lp-val">{{ blocks?.toLocaleString() || '0' }}</span>
@@ -34,8 +34,8 @@
         </div>
       </div>
       <div class="lp-item">
-        <div class="lp-icon" style="background: rgba(117,224,167,0.1)">
-          <v-icon size="14" color="#75E0A7">mdi-trending-up</v-icon>
+        <div class="lp-icon" style="background: var(--g-success-fill)">
+          <v-icon size="14" color="success">mdi-trending-up</v-icon>
         </div>
         <div class="lp-body">
           <span class="lp-val">{{ ros }}%</span>
@@ -67,8 +67,7 @@ function formatAdaShort(lovelace: any): string {
 .lp-card { padding: 14px; }
 
 .card-header {
-  font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.5);
-  text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--g-text-3);
   display: flex; align-items: center; margin-bottom: 12px;
 }
 
@@ -77,19 +76,19 @@ function formatAdaShort(lovelace: any): string {
 .lp-item { display: flex; align-items: center; gap: 12px; }
 
 .lp-icon {
-  width: 32px; height: 32px; min-width: 32px; border-radius: 8px;
+  width: 32px; height: 32px; min-width: 32px; border-radius: var(--g-r-control);
   display: flex; align-items: center; justify-content: center;
 }
 
 .lp-body { flex: 1; }
 
 .lp-val {
-  font-size: 18px; font-weight: 800; color: rgba(255,255,255,0.95);
+  font-size: 16px; font-weight: 800; color: var(--g-text-1);
   font-variant-numeric: tabular-nums; line-height: 1.2;
 }
 
 .lp-lbl {
-  display: block; font-size: 11px; color: rgba(255,255,255,0.45);
+  display: block; font-size: 11px; color: var(--g-text-3);
   margin-top: 1px;
 }
 </style>

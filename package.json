@@ -31,7 +31,10 @@
     "lint": "eslint --cache .",
     "test": "vitest test",
     "test:e2e": "playwright test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "design:contrast": "node scripts/design/contrast.mjs",
+    "design:audit": "node scripts/design/audit.mjs",
+    "design:check": "node scripts/design/audit.mjs && node scripts/design/contrast.mjs"
   },
   "dependencies": {
     "@babylonlabs-io/btc-staking-ts": "^2.8.6",
@@ -42,7 +45,11 @@
     "@cardano-sdk/hardware-ledger": "^0.16.25",
     "@cardano-sdk/tx-construction": "^0.28.9",
     "@cardano-sdk/web-extension": "^0.39.42",
+    "@contentful/rich-text-html-renderer": "^17.2.2",
+    "@contentful/rich-text-types": "^17.2.7",
     "@emurgo/cardano-message-signing-browser": "^1.1.0",
+    "@fontsource-variable/inter": "^5.2.8",
+    "@fontsource/jetbrains-mono": "^5.2.8",
     "@keystonehq/animated-qr-base": "^0.0.1",
     "@keystonehq/keystone-sdk": "^0.12.3",
     "@ledgerhq/devices": "^8.15.1",
@@ -50,6 +57,14 @@
     "@ledgerhq/hw-transport-web-ble": "^6.34.4",
     "@ledgerhq/hw-transport-webusb": "^6.34.4",
     "@mdi/font": "^7.4.47",
+    "@midnight-ntwrk/dapp-connector-api": "^4.0.1",
+    "@midnight-ntwrk/ledger-v8": "^8.1.0",
+    "@midnightntwrk/wallet-sdk-abstractions": "^2.1.0",
+    "@midnightntwrk/wallet-sdk-address-format": "^3.1.2",
+    "@midnightntwrk/wallet-sdk-dust-wallet": "^4.2.0",
+    "@midnightntwrk/wallet-sdk-hd": "^3.0.3",
+    "@midnightntwrk/wallet-sdk-shielded": "^3.0.2",
+    "@midnightntwrk/wallet-sdk-unshielded-wallet": "^3.1.0",
     "@noble/ciphers": "^2.2.0",
     "@noble/ed25519": "^3.1.0",
     "@noble/hashes": "^2.2.0",
@@ -189,6 +204,6 @@
     "not dead"
   ],
   "gitHooks": {
-    "pre-commit": "eslint --cache --fix"
+    "pre-commit": "eslint --cache --fix && node scripts/design/audit.mjs && node scripts/design/contrast.mjs"
   }
 }

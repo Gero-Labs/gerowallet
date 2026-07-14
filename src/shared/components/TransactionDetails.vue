@@ -5,7 +5,7 @@
         Transaction ID:
         <a
           class="ml-1"
-          :style="isApex ? {color: '#dc753e', alignItems: 'center' } : {color: '#00c7f3', alignItems: 'center'  }"
+          :style="isApex ? {color: '#dc753e', alignItems: 'center' } : {color: 'var(--g-accent)', alignItems: 'center'  }"
           :href="transactionUrl"
           target="_blank"
         >
@@ -26,7 +26,7 @@
       </div>
       <div v-if="transactionInfo['block_hash']">
         Block ID:
-        <a :style="isApex ? {color: '#dc753e' } : {color: '#00c7f3' }" :href="blockUrl" target="_blank">
+        <a :style="isApex ? {color: '#dc753e' } : {color: 'var(--g-accent)' }" :href="blockUrl" target="_blank">
           {{ filters.truncate(transactionInfo['block_hash']) }}</a
         >
         <CopyButton x-small :value="transactionInfo['block_hash']" class="ml-1"></CopyButton>
@@ -35,13 +35,13 @@
         Block Height: <span class="value-text">{{ transactionInfo['block_height']?.toLocaleString('en-US') }}</span>
       </div>
       <div v-if="transactionInfo.body?.fee">
-        Network Fee: <span style="color: #ff8e8e">{{ filters.toCurrency(transactionInfo.body?.fee) }}</span>
+        Network Fee: <span style="color: var(--g-error)">{{ filters.toCurrency(transactionInfo.body?.fee) }}</span>
       </div>
       <div style="align-items: center">
         {{ Number(transactionInfo['ada']) > 0 ? 'Received: ' : 'Sent: ' }}
         <span
           :style="{
-            color: Number(transactionInfo['ada']) > 0 ? (isApex ? '#dc753e' : '#00c7f3') : '#FF8E8E',
+            color: Number(transactionInfo['ada']) > 0 ? (isApex ? '#dc753e' : 'var(--g-accent)') : 'var(--g-error)',
           }"
         >
           <span style="margin-right: 4px">
@@ -58,7 +58,7 @@
               style="margin-bottom: 2px"
               class="mr-1 pl-0"
               :key="`asset_${index}`"
-              :color="Number(transactionInfo['ada']) > 0 ? (isApex ? '#dc753e' : '#00c7f3') : '#FF8E8E'"
+              :color="Number(transactionInfo['ada']) > 0 ? (isApex ? '#dc753e' : 'var(--g-accent)') : 'error'"
             >
               <v-avatar v-if="asset.img" left>
                 <v-img :src="asset.img" :alt="`${asset.name} Logo`" contain>
@@ -96,11 +96,11 @@
       </div>
     </div>
     <v-expansion-panels v-model="panels" multiple class="accordion-container">
-      <v-expansion-panel v-if="transactionInfo['utxo']?.inputs" style="background-color: #1e273ab3">
+      <v-expansion-panel v-if="transactionInfo['utxo']?.inputs" style="background-color: var(--g-raised)">
         <v-expansion-panel-header>
           <div class="header-container">
             <div class="received-arrow-container" :style="receivedArrowStyle">
-              <v-icon color="#333741">mdi-bank-transfer</v-icon>
+              <v-icon color="var(--g-on-grad)">mdi-bank-transfer</v-icon>
             </div>
             <h3>UTxOs</h3>
           </div>
@@ -134,8 +134,8 @@
                       </div>
                     </td>
                     <td class="text-right">
-                      <div style="color: #ff8e8e">
-                        <v-chip pill class="pl-0" outlined color="#FF8E8E" style="margin: 2px !important">
+                      <div style="color: var(--g-error)">
+                        <v-chip pill class="pl-0" outlined color="error" style="margin: 2px !important">
                           <v-avatar left>
                             <v-img
                               :src="networks.resolveCurrencyImage(loggedWallet?.chain, loggedWallet?.network)"
@@ -171,7 +171,7 @@
                           <v-chip
                             pill
                             outlined
-                            color="#FF8E8E"
+                            color="error"
                             class="pl-0"
                             :key="`input_${index}_asset_${assetIndex}`"
                             style="margin: 2px !important"
@@ -226,8 +226,8 @@
                       </div>
                     </td>
                     <td class="text-right">
-                      <div style="color: #00dff3">
-                        <v-chip pill class="pl-0" outlined :color="isApex ? '#dc753e' : '#00c7f3'" style="margin: 2px !important">
+                      <div style="color: var(--g-accent)">
+                        <v-chip pill class="pl-0" outlined :color="isApex ? '#dc753e' : 'var(--g-accent)'" style="margin: 2px !important">
                           <v-avatar left>
                             <v-img
                               :src="networks.resolveCurrencyImage(loggedWallet?.chain, loggedWallet?.network)"
@@ -264,7 +264,7 @@
                             pill
                             class="pl-0"
                             outlined
-                            :color="isApex ? '#dc753e' : '#00c7f3'"
+                            :color="isApex ? '#dc753e' : 'var(--g-accent)'"
                             :key="`output${index}_asset_${assetIndex}`"
                             style="margin: 2px !important"
                           >
@@ -302,11 +302,11 @@
           </v-card>
         </v-expansion-panel-content>
       </v-expansion-panel>
-      <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo?.body?.certificates?.length > 0">
+      <v-expansion-panel style="background-color: var(--g-raised)" v-if="transactionInfo?.body?.certificates?.length > 0">
         <v-expansion-panel-header>
           <div class="header-container">
             <div class="received-arrow-container" :style="receivedArrowStyle">
-              <v-icon color="#333741">mdi-certificate-outline</v-icon>
+              <v-icon color="var(--g-on-grad)">mdi-certificate-outline</v-icon>
             </div>
             <h3>Certificates ({{ transactionInfo?.body?.certificates?.length }})</h3>
           </div>
@@ -415,11 +415,11 @@
           </v-card>
         </v-expansion-panel-content>
       </v-expansion-panel>
-      <v-expansion-panel style="background-color: #1e273ab3" v-if="getMetadata(transactionInfo)">
+      <v-expansion-panel style="background-color: var(--g-raised)" v-if="getMetadata(transactionInfo)">
         <v-expansion-panel-header>
           <div class="header-container">
             <div class="received-arrow-container" :style="receivedArrowStyle">
-              <v-icon color="#333741">mdi-code-block-tags</v-icon>
+              <v-icon color="var(--g-on-grad)">mdi-code-block-tags</v-icon>
             </div>
             <h3>Metadata</h3>
           </div>
@@ -429,17 +429,17 @@
             <v-card-title class="pb-0" style="position: absolute; right: 0">
               <CopyButton :value="getMetadata(transactionInfo)" small></CopyButton>
             </v-card-title>
-            <v-card-text class="text-left pa-2" style="font-size: 12px; font-family: monospace !important">
+            <v-card-text class="text-left pa-2" style="font-size: 12px; font-family: var(--g-font-mono) !important">
               <pre>{{ getMetadata(transactionInfo) }}</pre>
             </v-card-text>
           </v-card>
         </v-expansion-panel-content>
       </v-expansion-panel>
-      <v-expansion-panel style="background-color: #1e273ab3" v-if="getMint(transactionInfo)">
+      <v-expansion-panel style="background-color: var(--g-raised)" v-if="getMint(transactionInfo)">
         <v-expansion-panel-header>
           <div class="header-container">
             <div class="received-arrow-container" :style="receivedArrowStyle">
-              <v-icon color="#333741">mdi-code-block-tags</v-icon>
+              <v-icon color="var(--g-on-grad)">mdi-code-block-tags</v-icon>
             </div>
             <h3>Assets Minted/Burned ({{ getMint(transactionInfo)?.length }})</h3>
           </div>
@@ -489,11 +489,11 @@
           </v-card>
         </v-expansion-panel-content>
       </v-expansion-panel>
-      <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo?.body?.withdrawals?.length > 0">
+      <v-expansion-panel style="background-color: var(--g-raised)" v-if="transactionInfo?.body?.withdrawals?.length > 0">
         <v-expansion-panel-header>
           <div class="header-container">
             <div class="received-arrow-container" :style="receivedArrowStyle">
-              <v-icon color="#333741">mdi-bank-transfer-out</v-icon>
+              <v-icon color="var(--g-on-grad)">mdi-bank-transfer-out</v-icon>
             </div>
             <h3>Withdrawals ({{ transactionInfo?.body?.withdrawals?.length }})</h3>
           </div>
@@ -528,11 +528,11 @@
           </v-card>
         </v-expansion-panel-content>
       </v-expansion-panel>
-      <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo.witness?.redeemers?.length > 0">
+      <v-expansion-panel style="background-color: var(--g-raised)" v-if="transactionInfo.witness?.redeemers?.length > 0">
         <v-expansion-panel-header>
           <div class="header-container">
             <div class="received-arrow-container" :style="receivedArrowStyle">
-              <v-icon color="#333741">mdi-file-sign</v-icon>
+              <v-icon color="var(--g-on-grad)">mdi-file-sign</v-icon>
             </div>
             <h3>Witness</h3>
           </div>
@@ -604,7 +604,7 @@
                         <v-card-title class="pa-1" style="position: absolute; right: 0">
                           <CopyButton :value="getRedeemerDataJson(redeemer.data)" small></CopyButton>
                         </v-card-title>
-                        <v-card-text class="text-left pa-2" style="font-size: 12px; font-family: monospace !important">
+                        <v-card-text class="text-left pa-2" style="font-size: 12px; font-family: var(--g-font-mono) !important">
                           <pre>{{ getRedeemerDataJson(redeemer.data) }}</pre>
                         </v-card-text>
                       </v-card>
@@ -644,7 +644,7 @@
                       <v-card-title class="pa-1" style="position: absolute; right: 0">
                         <CopyButton :value="getScriptDataBytes(script.toCore())" small></CopyButton>
                       </v-card-title>
-                      <v-card-text class="text-left pa-2" style="font-size: 12px; font-family: monospace !important">
+                      <v-card-text class="text-left pa-2" style="font-size: 12px; font-family: var(--g-font-mono) !important">
                         <pre style="white-space: pre-wrap; word-wrap: anywhere; overflow-wrap: anywhere;">{{ filters.truncate(getScriptDataBytes(script.toCore())) }}</pre>
                       </v-card-text>
                     </v-card>
@@ -656,11 +656,11 @@
           </v-card>
         </v-expansion-panel-content>
       </v-expansion-panel>
-      <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo.body?.collaterals">
+      <v-expansion-panel style="background-color: var(--g-raised)" v-if="transactionInfo.body?.collaterals">
         <v-expansion-panel-header>
           <div class="header-container">
             <div class="received-arrow-container" :style="receivedArrowStyle">
-              <v-icon color="#333741">mdi-cash</v-icon>
+              <v-icon color="var(--g-on-grad)">mdi-cash</v-icon>
             </div>
             <h3>Collateral</h3>
           </div>
@@ -716,11 +716,11 @@
           </v-card>
         </v-expansion-panel-content>
       </v-expansion-panel>
-      <v-expansion-panel style="background-color: #1e273ab3" v-if="transactionInfo.body?.referenceInputs">
+      <v-expansion-panel style="background-color: var(--g-raised)" v-if="transactionInfo.body?.referenceInputs">
         <v-expansion-panel-header>
           <div class="header-container">
             <div class="received-arrow-container" :style="receivedArrowStyle">
-              <v-icon color="#333741">mdi-clipboard-list-outline</v-icon>
+              <v-icon color="var(--g-on-grad)">mdi-clipboard-list-outline</v-icon>
             </div>
             <h3>Reference Inputs</h3>
           </div>
@@ -1107,7 +1107,7 @@ const receivedArrowStyle = computed(() => {
   if (isApex.value) {
     return 'background: linear-gradient(to right, #F8A282, #FECB82);';
   }
-  return 'background: linear-gradient(to right, #00c7f3, #00fad5);';
+  return 'background: var(--g-grad);';
 });
 
 const getCertificateType = (certificate: Cardano.Certificate) => {
@@ -1220,11 +1220,11 @@ watch(
 .transaction-info {
   & > div {
     font-size: 13px;
-    color: #cecfd2;
+    color: var(--g-text-2);
   }
 
   .value-text {
-    color: #ffffff;
+    color: var(--g-text-1);
   }
 }
 .accordion-container {
@@ -1240,18 +1240,18 @@ watch(
       display: flex;
       width: 32px;
       height: 32px;
-      border-radius: 8px;
-      background: linear-gradient(to right, #00c7f3, #00fad5);
+      border-radius: var(--g-r-control);
+      background: var(--g-grad);
     }
 
     .sent-arrow-container {
-      background: linear-gradient(to right, #ad24a8, #df2063);
+      background: var(--g-error);
     }
   }
 
   .received-text {
     margin-bottom: 10px;
-    color: #75e0a7;
+    color: var(--g-success);
     &::before {
       content: '+ ';
     }
@@ -1259,7 +1259,7 @@ watch(
 
   .sent-text {
     margin-bottom: 10px;
-    color: rgb(255, 104, 104);
+    color: var(--g-error);
     &::before {
       content: '- ';
     }

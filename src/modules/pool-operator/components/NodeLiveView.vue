@@ -225,7 +225,7 @@ function fmtBytes(bytes: number): string {
 
 <style scoped>
 .glv {
-  font-family: 'Roboto Mono', monospace;
+  font-family: var(--g-font-mono);
   font-size: 11px;
   padding: 10px 12px;
   line-height: 1.6;
@@ -236,46 +236,46 @@ function fmtBytes(bytes: number): string {
   display: flex; align-items: center; gap: 6px;
   flex-wrap: wrap;
   padding: 2px 0;
-  border-bottom: 1px solid rgba(255,255,255,0.03);
+  border-bottom: 1px solid var(--g-hairline-1);
 }
 
 /* Key-value tokens */
 .glv-k {
-  font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.4);
+  font-size: 11px; font-weight: 600; color: var(--g-text-3);
   text-transform: uppercase; letter-spacing: 0.3px;
   min-width: 58px;
 }
 .glv-v {
-  font-weight: 700; color: rgba(255,255,255,0.92);
+  font-weight: 700; color: var(--g-text-1);
   font-variant-numeric: tabular-nums;
 }
-.glv-v-accent { font-weight: 700; color: #2DF0F7; }
-.glv-dim { font-size: 10px; color: rgba(255,255,255,0.35); }
-.glv-hash { font-size: 9px; color: rgba(255,255,255,0.25); }
-.glv-k-in { color: rgba(45,240,247,0.5); }
-.glv-k-out { color: rgba(253,176,34,0.5); }
+.glv-v-accent { font-weight: 700; color: var(--g-accent); }
+.glv-dim { font-size: 11px; color: var(--g-text-3); }
+.glv-hash { font-size: 11px; color: var(--g-text-3); }
+.glv-k-in { color: var(--g-accent); }
+.glv-k-out { color: var(--g-warning); }
 
 /* Section labels (gLiveView style separators) */
 .glv-section-label {
-  font-size: 9px; font-weight: 600; color: rgba(45,240,247,0.4);
+  font-size: 11px; font-weight: 600; color: var(--g-accent);
   letter-spacing: 0.5px; padding: 4px 0 2px;
-  border-top: 1px solid rgba(45,240,247,0.08);
+  border-top: 1px solid var(--g-hairline-1);
   margin-top: 2px;
 }
 
 /* Header */
-.glv-header { padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.06); margin-bottom: 2px; }
-.glv-name { font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.95); }
+.glv-header { padding-bottom: 4px; border-bottom: 1px solid var(--g-hairline-1); margin-bottom: 2px; }
+.glv-name { font-size: 12px; font-weight: 700; color: var(--g-text-1); }
 .glv-tag {
-  font-size: 8px; font-weight: 700; padding: 1px 4px;
-  border-radius: 3px; text-transform: uppercase;
-  background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.45);
+  font-size: 11px; font-weight: 700; padding: 1px 4px;
+  border-radius: 4px; text-transform: uppercase;
+  background: var(--g-hairline-1); color: var(--g-text-3);
 }
 
 /* Epoch bar */
 .glv-epoch-row { gap: 6px; }
-.glv-epoch-bar { flex: 1; height: 3px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden; min-width: 60px; }
-.glv-epoch-fill { height: 100%; background: linear-gradient(90deg, #2DF0F7, #00ffd1); border-radius: 2px; transition: width 1s; }
+.glv-epoch-bar { flex: 1; height: 3px; background: var(--g-hairline-1); border-radius: 4px; overflow: hidden; min-width: 60px; }
+.glv-epoch-fill { height: 100%; background: var(--g-accent); border-radius: 4px; transition: width 1s; }
 
 /* Core metrics grid — 6 columns: key val key val key val */
 .glv-grid {
@@ -283,19 +283,19 @@ function fmtBytes(bytes: number): string {
   grid-template-columns: auto 1fr auto 1fr auto 1fr;
   gap: 1px 8px;
   padding: 4px 0;
-  border-bottom: 1px solid rgba(255,255,255,0.03);
+  border-bottom: 1px solid var(--g-hairline-1);
 }
 
 /* Mini bar (CPU etc) */
-.glv-bar-mini { width: 40px; height: 3px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden; }
-.glv-bar-fill { height: 100%; border-radius: 2px; transition: width 0.6s; }
-.bar-ok { background: #75E0A7; }
-.bar-warn { background: #FDB022; }
-.bar-err { background: #FDA29B; }
+.glv-bar-mini { width: 40px; height: 3px; background: var(--g-hairline-1); border-radius: 4px; overflow: hidden; }
+.glv-bar-fill { height: 100%; border-radius: 4px; transition: width 0.6s; }
+.bar-ok { background: var(--g-success); }
+.bar-warn { background: var(--g-warning); }
+.bar-err { background: var(--g-error); }
 
 /* Value colors */
-.val-ok { color: #75E0A7; }
-.val-warn { color: #FDB022; }
-.val-err { color: #FDA29B; }
-.val-accent { color: #FDB022; }
+.val-ok { color: var(--g-success); }
+.val-warn { color: var(--g-warning); }
+.val-err { color: var(--g-error); }
+.val-accent { color: var(--g-warning); }
 </style>

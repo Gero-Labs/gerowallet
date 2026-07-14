@@ -1,4 +1,4 @@
-import { APIError, BITCOIN_METHOD, METHOD, SENDER, TARGET } from './config';
+import { APIError, BITCOIN_METHOD, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, SENDER, TARGET } from './config';
 import { Cardano } from '@cardano-sdk/core';
 import { EXTENSION_PAGE_ONLY_METHODS, isOwnExtensionPageSender } from './senderTrust';
 
@@ -48,6 +48,31 @@ function responseHasError(response: unknown): boolean {
     'error' in response &&
     Boolean((response as { error?: unknown }).error)
   );
+}
+
+const MIDNIGHT_METHOD_VALUES: Set<string> = new Set(Object.values(MIDNIGHT_METHOD));
+
+/**
+ * The popup/side-panel "port disconnected without returning data" fallback
+ * (user closed the window instead of clicking Decline) needs a DIFFERENT
+ * error shape depending on which connector originated the request:
+ * CIP-30/Bitcoin/WalletConnect callers expect `APIError.Refused`
+ * (`{code:-3, info:...}`); Midnight connector callers expect the
+ * `@midnight-ntwrk/dapp-connector-api` shape
+ * (`{type:'DAppConnectorAPIError', code:'Rejected', reason, message}`) —
+ * without this, a dapp doing spec-correct `error.code === 'Rejected'`
+ * checking would fail to recognize a plain window-close as a normal decline.
+ */
+function popupDisconnectedError(request: Message): unknown {
+  if (request.method && MIDNIGHT_METHOD_VALUES.has(request.method)) {
+    return {
+      type: 'DAppConnectorAPIError',
+      code: MidnightErrorCode.Rejected,
+      reason: 'User closed the approval window',
+      message: 'User closed the approval window',
+    };
+  }
+  return APIError.Refused;
 }
 
 /**
@@ -390,19 +415,20 @@ export const Messaging = {
             resolve({
               target: TARGET,
               sender: SENDER.extension,
-              error: APIError.Refused,
+              error: popupDisconnectedError(request),
             });
             chrome.tabs.onRemoved.removeListener(tabsHandler);
           });
         }
 
-        // Resolve with Refused if the popup port disconnects without returning data
+        // Resolve with a refused/declined error if the popup port disconnects
+        // without returning data (user closed the window).
         port.onDisconnect.addListener(() => {
           cleanup();
           resolve({
             target: TARGET,
             sender: SENDER.extension,
-            error: APIError.Refused,
+            error: popupDisconnectedError(request),
           });
         });
 
@@ -435,11 +461,12 @@ export const Messaging = {
 
         function disconnectHandler() {
           cleanup();
-          // Resolve with user declined error when side panel closes without response
+          // Resolve with a refused/declined error when the side panel closes
+          // without a response.
           resolve({
             target: TARGET,
             sender: SENDER.extension,
-            error: APIError.Refused,
+            error: popupDisconnectedError(request),
             data: undefined
           });
         }
@@ -513,11 +540,30 @@ export const Messaging = {
         return;
       request.origin = window.origin;
       // only allow enable function, before checking for whitelisted
+      // (Midnight's `connect` is the CIP-30 `enable` analog —
+      // MIDNIGHT_METHOD.connect's own handler in background.ts IS the approval
+      // gate, so it must reach background before any origin is whitelisted.)
+      //
+      // Sign requests are fast-pathed too, for a different reason:
+      // chrome.sidePanel.open() requires a user gesture, and gestures don't
+      // survive the extra async round-trip the isWhitelisted pre-check below
+      // does. Sending these straight through keeps the gesture alive long
+      // enough to reach sidePanel.open(); background enforces the whitelist
+      // itself for these methods (see the signTx/signData/MIDNIGHT_METHOD.
+      // signData/BITCOIN_METHOD.signPsbt(s)/signMessage handlers in
+      // background.ts).
       if (
         request.method === METHOD.enable ||
         request.method === METHOD.isEnabled ||
         request.method === BITCOIN_METHOD.enable ||
-        request.method === BITCOIN_METHOD.isEnabled
+        request.method === BITCOIN_METHOD.isEnabled ||
+        request.method === MIDNIGHT_METHOD.connect ||
+        request.method === METHOD.signTx ||
+        request.method === METHOD.signData ||
+        request.method === MIDNIGHT_METHOD.signData ||
+        request.method === BITCOIN_METHOD.signPsbt ||
+        request.method === BITCOIN_METHOD.signPsbts ||
+        request.method === BITCOIN_METHOD.signMessage
       ) {
         Messaging.sendToBackground({
           ...request,

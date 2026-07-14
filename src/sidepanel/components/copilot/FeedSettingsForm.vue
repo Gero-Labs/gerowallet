@@ -23,7 +23,7 @@
 
     <!-- Active categories (what the feed watches today) -->
     <section v-if="!vibeOnly" class="feed-form__section">
-      <p class="feed-form__label">{{ $t('copilot.category.title') }}</p>
+      <p class="feed-form__label t-label">{{ $t('copilot.category.title') }}</p>
       <p class="feed-form__subtitle">{{ $t('copilot.category.subtitle') }}</p>
 
       <div class="cat-row">
@@ -74,13 +74,13 @@
       </div>
 
       <!-- Coming soon: shown so the user knows what's planned, never settable on -->
-      <p class="feed-form__label feed-form__label--muted">{{ $t('copilot.category.comingSoon') }}</p>
+      <p class="feed-form__label feed-form__label--muted t-label">{{ $t('copilot.category.comingSoon') }}</p>
       <div v-for="c in comingSoon" :key="c.key" class="cat-row cat-row--disabled">
         <div class="cat-row__text">
           <span class="cat-row__name">{{ c.label }}</span>
           <span class="cat-row__desc">{{ c.desc }}</span>
         </div>
-        <span class="cat-row__soon">{{ $t('copilot.category.comingSoon') }}</span>
+        <span class="cat-row__soon t-label">{{ $t('copilot.category.comingSoon') }}</span>
       </div>
     </section>
   </div>
@@ -138,22 +138,16 @@ const comingSoon = computed(() => [
 }
 
 .feed-form__label {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.55);
   margin: 4px 0 0;
 }
 
 .feed-form__label--muted {
-  color: rgba(255, 255, 255, 0.35);
   margin-top: 10px;
 }
 
 .feed-form__subtitle {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--g-text-3);
   line-height: 1.5;
   margin: 0;
 }
@@ -171,20 +165,20 @@ const comingSoon = computed(() => [
   gap: 3px;
   text-align: left;
   padding: 12px 14px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.03);
+  border-radius: var(--g-r-card);
+  border: 1px solid var(--g-hairline-2);
+  background: var(--g-hairline-1);
   cursor: pointer;
   transition: border-color 0.18s ease, background 0.18s ease;
 }
 
 .vibe-option:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--g-hairline-1);
 }
 
 .vibe-option--active {
-  border-color: color-mix(in srgb, var(--chain-primary, #5b8def) 45%, transparent);
-  background: color-mix(in srgb, var(--chain-primary, #5b8def) 12%, transparent);
+  border-color: color-mix(in srgb, var(--g-accent) 45%, transparent);
+  background: color-mix(in srgb, var(--g-accent) 12%, transparent);
 }
 
 .vibe-option__head {
@@ -196,16 +190,16 @@ const comingSoon = computed(() => [
 .vibe-option__name {
   font-size: 14px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--g-text-1);
 }
 
 .vibe-option__check {
-  color: var(--chain-primary, #5b8def) !important;
+  color: var(--g-accent) !important;
 }
 
 .vibe-option__desc {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--g-text-3);
   line-height: 1.45;
 }
 
@@ -216,9 +210,9 @@ const comingSoon = computed(() => [
   justify-content: space-between;
   gap: 12px;
   padding: 10px 12px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: var(--g-r-card);
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
 }
 
 .cat-row--disabled {
@@ -234,12 +228,12 @@ const comingSoon = computed(() => [
 .cat-row__name {
   font-size: 13px;
   font-weight: 600;
-  color: #ffffff;
+  color: var(--g-text-1);
 }
 
 .cat-row__desc {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--g-text-3);
   line-height: 1.4;
 }
 
@@ -251,13 +245,8 @@ const comingSoon = computed(() => [
 
 .cat-row__soon {
   flex-shrink: 0;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 999px;
+  border: 1px solid var(--g-hairline-3);
+  border-radius: var(--g-r-pill);
   padding: 2px 8px;
 }
 </style>

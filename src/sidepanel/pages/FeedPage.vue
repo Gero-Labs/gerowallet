@@ -5,26 +5,26 @@
 
     <template v-else>
       <header class="feed-page__head">
-        <h2 class="feed-page__title white--text">{{ $t('copilot.feedTitle') }}</h2>
+        <h2 class="feed-page__title">{{ $t('copilot.feedTitle') }}</h2>
         <div class="feed-page__actions">
           <v-btn icon small @click="settingsOpen = true">
-            <v-icon small color="white">mdi-cog-outline</v-icon>
+            <v-icon small color="var(--g-text-1)">mdi-cog-outline</v-icon>
           </v-btn>
           <v-btn icon small :disabled="feed.busy.value" @click="feed.refresh()">
-            <v-icon small color="white">mdi-refresh</v-icon>
+            <v-icon small color="var(--g-text-1)">mdi-refresh</v-icon>
           </v-btn>
         </div>
       </header>
 
-      <p class="feed-page__disclaimer grey--text">{{ $t('copilot.feed.disclaimer') }}</p>
+      <p class="feed-page__disclaimer">{{ $t('copilot.feed.disclaimer') }}</p>
 
-      <div v-if="items.length === 0" class="feed-page__empty grey--text">
+      <div v-if="items.length === 0" class="feed-page__empty">
         {{ $t('copilot.feed.empty') }}
       </div>
       <ul v-else class="feed-page__list">
         <li v-for="item in items" :key="item.id" class="feed-page__item">
-          <span class="feed-page__time grey--text">{{ formatTime(item.ts) }}</span>
-          <p class="feed-page__text white--text">{{ $t(item.textKey, item.params) }}</p>
+          <span class="feed-page__time">{{ formatTime(item.ts) }}</span>
+          <p class="feed-page__text">{{ $t(item.textKey, item.params) }}</p>
         </li>
       </ul>
     </template>
@@ -85,6 +85,7 @@ export default defineComponent({
   font-size: 16px;
   font-weight: 600;
   margin: 0;
+  color: var(--g-text-1);
 }
 
 .feed-page__actions {
@@ -94,9 +95,10 @@ export default defineComponent({
 }
 
 .feed-page__disclaimer {
-  font-size: 10px;
+  font-size: 11px;
   opacity: 0.5;
   margin: 2px 0 10px;
+  color: var(--g-text-3);
 }
 
 .feed-page__list {
@@ -110,18 +112,20 @@ export default defineComponent({
 
 .feed-page__item {
   padding: 10px 12px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
+  border-radius: var(--g-r-card);
+  background: var(--g-surface);
 }
 
 .feed-page__time {
   font-size: 11px;
   opacity: 0.55;
+  color: var(--g-text-3);
 }
 
 .feed-page__text {
   margin: 2px 0 0;
   font-size: 13px;
+  color: var(--g-text-1);
 }
 
 .feed-page__empty {
@@ -129,5 +133,6 @@ export default defineComponent({
   text-align: center;
   padding: 28px 12px;
   font-size: 13px;
+  color: var(--g-text-3);
 }
 </style>

@@ -612,7 +612,8 @@ export async function encryptPrivateKeyWithPrf(
 export async function decryptPrivateKeyWithPrf(
   encryptedPrivateKey: string,
   credentialId: string,
-  walletId: string
+  walletId: string,
+  providedPrfOutput?: ArrayBuffer,
 ): Promise<Uint8Array> {
   debugLog('[PRF] Decrypting private key for wallet:', walletId);
 
@@ -623,8 +624,12 @@ export async function decryptPrivateKeyWithPrf(
   const iv = encryptedBytes.subarray(0, 12);
   const ciphertext = encryptedBytes.subarray(12);
 
-  // Step 2: Evaluate PRF (requires user authentication)
-  const prfOutput = await evaluatePrfForWallet(credentialId, walletId);
+  // Step 2: Evaluate PRF (requires user authentication), or reuse a pre-
+  // evaluated PRF from the caller. Re-use lets a single user gesture cover
+  // multiple decryptions — e.g. PassKeyAuthButton emitting the raw PRF
+  // alongside the decrypted Cardano private key so a Midnight-side handler
+  // can also decrypt the mnemonic without prompting again.
+  const prfOutput = providedPrfOutput || await evaluatePrfForWallet(credentialId, walletId);
 
   // Step 3: Derive non-extractable encryption key (same derivation as encryption)
   const baseKey = await crypto.subtle.importKey(

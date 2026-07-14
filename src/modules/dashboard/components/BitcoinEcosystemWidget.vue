@@ -107,8 +107,8 @@ const ecosystemItems = [
   background: rgba(255, 255, 255, 0.07);
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 22px;
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-sheet);
   overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif;
   box-shadow:
@@ -150,24 +150,23 @@ const ecosystemItems = [
   height: 32px;
   background: rgba(247, 147, 26, 0.12);
   border: 1px solid rgba(247, 147, 26, 0.2);
-  border-radius: 10px;
+  border-radius: var(--g-r-control);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.1);
 }
 
 .eco-title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.92);
+  color: var(--g-text-1);
   letter-spacing: -0.01em;
 }
 
 .eco-count {
   font-size: 11px;
   font-weight: 400;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--g-text-3);
 }
 
 /* ─── Item Grid ─────────────────────────────────────────────── */
@@ -190,8 +189,8 @@ const ecosystemItems = [
   gap: 8px;
   padding: 10px 10px 10px 12px;
   background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-card);
   text-decoration: none;
   overflow: hidden;
   transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -200,7 +199,7 @@ const ecosystemItems = [
 
 .eco-item:hover {
   background: rgba(255, 255, 255, 0.09);
-  border-color: rgba(255, 255, 255, 0.14);
+  border-color: var(--g-hairline-3);
   transform: translateY(-2px) scale(1.01);
 }
 
@@ -226,9 +225,9 @@ const ecosystemItems = [
   flex-shrink: 0;
   width: 26px;
   height: 26px;
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
   background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--g-hairline-1);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -245,7 +244,7 @@ const ecosystemItems = [
 .item-name {
   font-size: 12px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--g-text-1);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -253,22 +252,22 @@ const ecosystemItems = [
 }
 
 .item-desc {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 400;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--g-text-3);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .item-arrow {
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--g-text-3);
   flex-shrink: 0;
   transition: color 0.2s, transform 0.2s;
 }
 
 .eco-item:hover .item-arrow {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--g-text-3);
   transform: translateX(2px);
 }
 </style>

@@ -4,24 +4,40 @@
       <img :src="geroLogo" alt="Gero" class="gero-logo mb-3" />
       <h2 class="white--text text-h6">{{ $t('miniGero.selectWallet') }}</h2>
     </div>
+    <div v-if="errorMessage" class="wallet-selector-error mb-2">
+      <v-icon size="14" color="error" class="mr-1">mdi-alert-circle-outline</v-icon>
+      <span class="error--text text-caption">{{ errorMessage }}</span>
+    </div>
+
     <div class="wallet-list">
       <div
         v-for="wallet in availableWallets"
         :key="wallet.id"
         class="wallet-item"
-        @click="$emit('select', wallet)"
+        :class="{ 'is-disabled': loadingWalletId !== null && loadingWalletId !== wallet.id }"
+        @click="loadingWalletId === null && $emit('select', wallet)"
       >
         <div class="wallet-icon-wrapper">
           <v-avatar size="36" class="wallet-avatar">
             <v-img :src="assets.resolveIcon(wallet.icon)" />
           </v-avatar>
-          <v-avatar size="16" class="network-badge">
+          <v-avatar v-if="loadingWalletId !== wallet.id" size="16" class="network-badge">
             <v-img contain :src="resolveNetworkIcon(wallet)" />
           </v-avatar>
+          <v-progress-circular
+            v-else
+            size="16"
+            width="2"
+            indeterminate
+            :color="primaryColor"
+            class="network-badge"
+          />
         </div>
         <div class="wallet-info">
           <span class="white--text text-body-2">{{ wallet.name }}</span>
-          <span class="grey--text text-caption">{{ wallet.chain }} - {{ wallet.network }}</span>
+          <span class="grey--text text-caption">
+            {{ loadingWalletId === wallet.id ? $t('miniGero.unlocking') : `${wallet.chain} - ${wallet.network}` }}
+          </span>
         </div>
         <v-img
           v-if="wallet.type === WalletType.Ledger"
@@ -55,7 +71,7 @@
           max-height="18"
           class="hw-icon"
         />
-        <v-icon v-else size="18" color="#888">mdi-chevron-right</v-icon>
+        <v-icon v-else size="18" color="var(--g-text-3)">mdi-chevron-right</v-icon>
       </div>
     </div>
 
@@ -73,8 +89,6 @@
 import { computed, toRefs } from 'vue';
 import { geroStore } from '@/stores/geroStore';
 import { WalletType, Wallet } from '@/models/types';
-import { Messaging } from '@/chrome/messaging';
-import { MessageTypes } from '@/models/MessageTypes';
 import assets from '@/utils/assets';
 import networks from '@/utils/networks';
 import { useChainContext } from '../composables/useChainContext';
@@ -101,20 +115,22 @@ const resolveNetworkIcon = (item: Wallet): string => {
   return network ? network.icon : '';
 };
 
-async function openSetup() {
-  // Logout so both dashboard and mini gero return to wallet selection
-  try {
-    await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.LOGOUT,
-      data: {},
-    });
-  } catch (e) {
-    console.error('Logout before setup error:', e);
-  }
-  chrome.tabs.create({ url: chrome.runtime.getURL('index.html#/welcome') });
+function openSetup() {
+  // addWallet=1 tells the router's /welcome guard to let this tab through
+  // despite the caller already being logged in (router.ts) — no longer logs
+  // out first, which used to kill the current session (and every other open
+  // tab's) just to add a new wallet.
+  chrome.tabs.create({ url: chrome.runtime.getURL('index.html#/welcome?addWallet=1') });
 }
 
-defineProps<{ compact?: boolean }>();
+withDefaults(defineProps<{
+  compact?: boolean;
+  loadingWalletId?: number | null;
+  errorMessage?: string;
+}>(), {
+  loadingWalletId: null,
+  errorMessage: '',
+});
 defineEmits<{
   (e: 'select', wallet: Wallet): void;
 }>();
@@ -154,31 +170,36 @@ defineEmits<{
   align-items: center;
   gap: 12px;
   padding: 12px;
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(24px) saturate(1.4);
-  -webkit-backdrop-filter: blur(24px) saturate(1.4);
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.1),
-    0 2px 8px rgba(0, 0, 0, 0.2);
+  background: var(--g-raised);
+  border-radius: var(--g-r-card);
+  border: 1px solid var(--g-hairline-1);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color var(--g-dur-base) ease, border-color var(--g-dur-base) ease, opacity var(--g-dur-base) ease, transform var(--g-dur-base) ease;
 }
 
 .wallet-item:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.14);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.1),
-    0 4px 16px rgba(0, 0, 0, 0.3);
+  background: var(--g-overlay);
+  border-color: var(--g-hairline-3);
 }
 
 .wallet-item:active {
   transform: scale(0.98);
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--g-raised);
+}
+
+.wallet-item.is-disabled {
+  opacity: 0.45;
+  cursor: default;
+  pointer-events: none;
+}
+
+.wallet-selector-error {
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  background: var(--g-error-fill);
+  border: 1px solid var(--g-error-line);
+  border-radius: var(--g-r-control);
 }
 
 .wallet-icon-wrapper {
@@ -189,7 +210,7 @@ defineEmits<{
 }
 
 .wallet-avatar {
-  border: 1.5px solid rgba(255, 255, 255, 0.1);
+  border: 1.5px solid var(--g-hairline-2);
 }
 
 .network-badge {
@@ -197,7 +218,7 @@ defineEmits<{
   bottom: -2px;
   right: -4px;
   border: 1.5px solid rgba(0, 0, 0, 0.5);
-  background: rgba(20, 20, 20, 0.8);
+  background: var(--g-raised);
 }
 
 .wallet-info {
@@ -216,7 +237,7 @@ defineEmits<{
 .add-wallet-section {
   margin-top: 16px;
   padding-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--g-hairline-1);
 }
 
 .add-wallet-btn {
@@ -224,21 +245,21 @@ defineEmits<{
   align-items: center;
   gap: 10px;
   padding: 12px;
-  background: color-mix(in srgb, var(--chain-primary) 6%, transparent);
-  border: 1px solid color-mix(in srgb, var(--chain-primary) 15%, transparent);
-  border-radius: 10px;
+  background: color-mix(in srgb, var(--g-accent) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--g-accent) 15%, transparent);
+  border-radius: var(--g-r-control);
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background var(--g-dur-base);
   width: 100%;
   text-align: left;
 }
 
 .add-wallet-btn span {
-  color: #ccc;
+  color: var(--g-text-2);
   font-size: 13px;
 }
 
 .add-wallet-btn:hover {
-  background: color-mix(in srgb, var(--chain-primary) 12%, transparent);
+  background: color-mix(in srgb, var(--g-accent) 12%, transparent);
 }
 </style>

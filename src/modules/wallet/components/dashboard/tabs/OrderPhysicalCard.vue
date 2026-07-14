@@ -369,7 +369,7 @@ const placeOrder = async () => {
   border-radius: $border-radius-md;
   background: $background-dark;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: background-color var(--g-dur-slow) ease, border-color var(--g-dur-slow) ease;
 
   &.active {
     background: $background-secondary;

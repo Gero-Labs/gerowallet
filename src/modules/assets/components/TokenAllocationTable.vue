@@ -443,11 +443,11 @@ watch([tokensCount, collectiblesLength, searchTerm], debouncedCheck)
 /* Dynamic responsive tabs styling */
 .responsive-tab {
   min-width: 48px !important;
-  transition: all 0.3s ease !important;
+  transition: color var(--g-dur-slow) ease, background-color var(--g-dur-slow) ease, border-color var(--g-dur-slow) ease, opacity var(--g-dur-slow) ease, transform var(--g-dur-slow) ease, box-shadow var(--g-dur-slow) ease !important;
 }
 
 .tab-icon, .tab-text {
-  transition: opacity 0.3s ease !important;
+  transition: opacity var(--g-dur-slow) ease !important;
 }
 
 /* Fallback for very narrow screens */
@@ -474,7 +474,7 @@ watch([tokensCount, collectiblesLength, searchTerm], debouncedCheck)
 /* Adaptive content container */
 .adaptive-content {
   position: relative;
-  transition: height 0.3s ease;
+  transition: height var(--g-dur-slow) ease;
 }
 
 /* Smooth tab transitions */
@@ -483,18 +483,18 @@ watch([tokensCount, collectiblesLength, searchTerm], debouncedCheck)
 }
 
 .tab-transition .v-tab-item {
-  transition: opacity 0.2s ease-in-out;
+  transition: opacity var(--g-dur-base) ease-in-out;
 }
 
 /* Prevent jarring height changes during tab switch */
 .v-tabs-items {
-  transition: height 0.3s ease;
+  transition: height var(--g-dur-slow) ease;
 }
 
 /* Fade transition for tab content */
 .fade-transition-enter-active,
 .fade-transition-leave-active {
-  transition: opacity 0.2s ease;
+  transition: opacity var(--g-dur-base) ease;
 }
 
 .fade-transition-enter,

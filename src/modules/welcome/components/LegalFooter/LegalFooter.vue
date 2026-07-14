@@ -1,8 +1,8 @@
 <template>
   <div class="footer-legal">
     <GButton
-      color="white"
-      text
+      tier="tertiary"
+      compact
       :ripple="false"
       class="footer-btn"
       href="https://gerowallet.io/legal/privacy/"
@@ -12,8 +12,8 @@
     </GButton>
     <v-divider vertical></v-divider>
     <GButton
-      color="white"
-      text
+      tier="tertiary"
+      compact
       :ripple="false"
       class="footer-btn"
       href="https://gerowallet.io/legal/terms/"
@@ -22,7 +22,7 @@
       {{ $t('navigation.termsOfService') }}
     </GButton>
     <v-divider vertical></v-divider>
-    <GButton color="white" text :ripple="false" class="footer-btn" @click="changeLogDialog = true">
+    <GButton tier="tertiary" compact :ripple="false" class="footer-btn" @click="changeLogDialog = true">
       Change Log ({{ `v${version}` }})
     </GButton>
 
@@ -50,9 +50,17 @@ const version = ref<string>(APP_VERSION);
   padding: 0 20px;
 }
 
+/* Legal links are quiet chrome, not accents. The foreground comes from
+   GButton's --g-btn-fg seam (custom properties resolve on this element, so no
+   specificity contest). The size needs a real rule, qualified up to 0,5,0 so it
+   beats GButton's own 0,4,0 base rule deterministically rather than by
+   stylesheet injection order. 11px is the ramp floor (was 10px). */
 .footer-btn {
   text-transform: none;
-  color: #ffffff;
+  --g-btn-fg: var(--g-text-3);
+}
+.v-btn.footer-btn.g-btn.g-btn--tertiary {
+  font-size: 11px;
 }
 
 /* .footer-btn is forwarded onto GButton's inner v-btn, which doesn't carry this

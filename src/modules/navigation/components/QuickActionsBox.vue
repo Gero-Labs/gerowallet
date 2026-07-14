@@ -1,20 +1,14 @@
 <template>
   <div>
-    <div
-      :class="['quick-actions-container', { 'compact': compact }]"
-      @mousemove="handleMouseMove"
-      @mouseleave="handleMouseLeave"
-    >
+    <div :class="['quick-actions-container', { 'compact': compact }]">
       <div v-if="!isBuyDisabled" class="action-button-wrapper">
         <v-tooltip bottom :disabled="!compact" content-class="custom-tooltip">
           <template v-slot:activator="{ on, attrs }">
             <v-btn
-              ref="buyButton"
               :class="['expandable-button', 'buy-button', { 'icon-only': compact }]"
-              color="#FFF59E1A"
+              color="warning"
               height="28"
               @click="openDialog(dialogs.BUY)"
-              :style="getButtonGlowStyle('buy')"
               v-bind="attrs"
               v-on="on"
             >
@@ -36,12 +30,10 @@
         <v-tooltip bottom :disabled="!compact" content-class="custom-tooltip">
           <template v-slot:activator="{ on, attrs }">
             <v-btn
-              ref="sendButton"
               :class="['expandable-button', 'send-button', { 'icon-only': compact }]"
-              color="#00DFF31A"
+              color="primary"
               height="28"
               @click="openDialog(dialogs.SEND)"
-              :style="getButtonGlowStyle('send')"
               v-bind="attrs"
               v-on="on"
             >
@@ -64,12 +56,10 @@
         <v-tooltip bottom :disabled="!compact" content-class="custom-tooltip">
           <template v-slot:activator="{ on, attrs }">
             <v-btn
-              ref="receiveButton"
               :class="['expandable-button', 'receive-button', { 'icon-only': compact }]"
-              color="#75E0A71A"
+              color="success"
               height="28"
               @click="openDialog(dialogs.RECEIVE)"
-              :style="getButtonGlowStyle('receive')"
               v-bind="attrs"
               v-on="on"
             >
@@ -91,12 +81,10 @@
         <v-tooltip bottom :disabled="!compact" content-class="custom-tooltip">
           <template v-slot:activator="{ on, attrs }">
             <v-btn
-              ref="swapButton"
               :class="['expandable-button', 'swap-button', { 'icon-only': compact }]"
-              color="#FDA29B1A"
+              color="error"
               height="28"
               @click="openDialog(dialogs.SWAP)"
-              :style="getButtonGlowStyle('swap')"
               :disabled="!isSwapEnabledByFeatureFlag"
               :loading="loadingSwap"
               v-bind="attrs"
@@ -123,25 +111,21 @@
         <v-tooltip bottom :disabled="!compact" content-class="custom-tooltip">
           <template v-slot:activator="{ on, attrs }">
             <v-btn
-              ref="perpetualsButton"
               :class="['expandable-button', 'perpetuals-button', { 'icon-only': compact }]"
-              color="#B794F41A"
+              color="info"
               height="28"
               @click="openDialog(dialogs.PERPETUALS)"
-              :style="getButtonGlowStyle('perpetuals')"
               :disabled="priceStore.connectionStatus !== 'connected'"
               :loading="priceStore.connectionStatus === 'connecting'"
               v-bind="attrs"
               v-on="on"
             >
-              <v-avatar tile size="14">
-                <v-img
-                  :src="assets.barChart"
-                  :alt="$t('perpetuals.perpetuals')"
-                  contain
-                  style="filter: invert(66%) sepia(41%) saturate(458%) hue-rotate(226deg) brightness(95%) contrast(96%);"
-                ></v-img>
-              </v-avatar>
+              <span
+                class="qa-mask-icon"
+                :style="{ '--qa-icon': `url(${assets.barChart})` }"
+                role="img"
+                :aria-label="$t('perpetuals.perpetuals')"
+              ></span>
               <span v-if="!compact" class="button-text">{{ $t('perpetuals.perpetuals') }}</span>
               <div v-if="priceStore.connectionStatus !== 'connected'" class="ribbon top-right" aria-hidden="true">
                 <span>{{ $t('common.down') }}</span>
@@ -170,7 +154,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import { toRefs, computed, ref, getCurrentInstance } from 'vue';
+import { toRefs, computed } from 'vue';
 import ReceiveDialog from '@/modules/dashboard/dialogs/ReceiveDialog.vue';
 import SwapDialog from '@/modules/dashboard/dialogs/SwapDialog.vue';
 import SendDialog from '@/modules/dashboard/dialogs/SendDialog.vue';
@@ -185,12 +169,11 @@ import { priceStore } from '@/stores/priceStore';
 import { Blockchain } from '@/models/types';
 import { useQuickActionDialogs } from '@/shared/composables/useQuickActionDialogs';
 
-const props = defineProps<{
+defineProps<{
   compact?: boolean;
 }>();
 
 const { loggedWallet } = toRefs(walletStore);
-const vmProxy = getCurrentInstance()!.proxy as any
 
 const { state: quickActionState, openDialog, closeDialog } = useQuickActionDialogs();
 
@@ -201,16 +184,6 @@ const dialogs = {
   BUY: 'BUY',
   PERPETUALS: 'PERPETUALS',
 };
-
-const mousePosition = ref<{x: number, y: number} | null>(null);
-const buttonGlows = ref<Record<string, any>>({});
-
-// Button refs
-const buyButton = ref(null);
-const sendButton = ref(null);
-const receiveButton = ref(null);
-const swapButton = ref(null);
-const perpetualsButton = ref(null);
 
 const isBitcoin = computed(() => loggedWallet.value?.chain === Blockchain.BITCOIN);
 
@@ -246,102 +219,6 @@ const isPerpetualsDisabled = computed(() => {
   }
   return true;
 })
-
-
-const handleMouseMove = (event: MouseEvent) => {
-  const container = event.currentTarget as HTMLElement;
-  const containerRect = container.getBoundingClientRect();
-
-  mousePosition.value = {
-    x: event.clientX - containerRect.left,
-    y: event.clientY - containerRect.top
-  };
-
-  updateButtonGlows();
-}
-
-const handleMouseLeave = () => {
-  mousePosition.value = null;
-  buttonGlows.value = {};
-}
-
-const updateButtonGlows = () => {
-  if (!mousePosition.value) return;
-
-  const buttons = ['buy', 'send', 'receive', 'swap', 'perpetuals'];
-  const newGlows: Record<string, any> = {};
-
-  buttons.forEach(buttonType => {
-    const buttonRef = (vmProxy?.$refs as any)?.[`${buttonType}Button`];
-    if (buttonRef && buttonRef.$el) {
-      const buttonRect = buttonRef.$el.getBoundingClientRect();
-      const containerRect = buttonRef.$el.closest('.quick-actions-container').getBoundingClientRect();
-
-      // Check if mouse is directly over this button
-      const mouseX = mousePosition.value!.x + containerRect.left;
-      const mouseY = mousePosition.value!.y + containerRect.top;
-
-      const isMouseOverButton = (
-        mouseX >= buttonRect.left &&
-        mouseX <= buttonRect.right &&
-        mouseY >= buttonRect.top &&
-        mouseY <= buttonRect.bottom
-      );
-
-      if (isMouseOverButton) {
-        const buttonCenter = {
-          x: buttonRect.left - containerRect.left + buttonRect.width / 2,
-          y: buttonRect.top - containerRect.top + buttonRect.height / 2
-        };
-
-        const distance = Math.sqrt(
-          Math.pow(mousePosition.value!.x - buttonCenter.x, 2) +
-          Math.pow(mousePosition.value!.y - buttonCenter.y, 2)
-        );
-
-        const angleRad = Math.atan2(
-          mousePosition.value!.y - buttonCenter.y,
-          mousePosition.value!.x - buttonCenter.x
-        );
-
-        newGlows[buttonType] = {
-          intensity: 0.8,
-          angle: angleRad,
-          distance: distance
-        };
-      }
-    }
-  });
-
-  buttonGlows.value = newGlows;
-}
-
-const getButtonGlowStyle = (buttonType: string) => {
-  const glow = buttonGlows.value[buttonType];
-  if (!glow) return {};
-
-  const colors: Record<string, string> = {
-    buy: '#FFF59E',
-    send: '#00DFF3',
-    receive: '#75E0A7',
-    swap: '#FDA29B',
-    perpetuals: '#B794F4'
-  };
-
-  const color = colors[buttonType];
-  const glowIntensity = glow.intensity;
-
-  const offsetX = Math.cos(glow.angle) * 4 * glowIntensity;
-  const offsetY = Math.sin(glow.angle) * 4 * glowIntensity;
-
-  const shadowBlur = 8 + (glowIntensity * 12);
-  const shadowSpread = glowIntensity * 2;
-
-  return {
-    boxShadow: `inset ${offsetX}px ${offsetY}px ${shadowBlur}px ${shadowSpread}px ${color}${Math.round(glowIntensity * 60).toString(16).padStart(2, '0')}`,
-    transition: 'box-shadow 0.1s ease-out'
-  };
-}
 </script>
 <style scoped>
 .quick-actions-container {
@@ -353,9 +230,13 @@ const getButtonGlowStyle = (buttonType: string) => {
   height: 44px;
   min-width: 240px;
   width: max-content;
-  border: 1px solid rgba(128,128,128,0.15);
-  background-color: transparent!important;
-  border-radius: 12px;
+  border: 1px solid var(--g-hairline-3);
+  /* The whole bar is the liquid-glass surface; the buttons inside are flat
+     tints sharing this one frosted panel (was: glass per button). */
+  background-color: rgba(10, 12, 16, 0.55) !important;
+  backdrop-filter: blur(14px) saturate(1.3);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+  border-radius: var(--g-r-card);
   padding: 8px;
   gap: 6px;
   align-items: center;
@@ -385,19 +266,17 @@ const getButtonGlowStyle = (buttonType: string) => {
   min-width: auto !important;
   width: auto !important;
   padding: 0 12px 0 6px !important;
-  border-radius: 6px !important;
+  border-radius: var(--g-r-control) !important;
   display: flex !important;
   justify-content: flex-start !important;
   align-items: center !important;
   position: relative;
-  background: rgba(255, 255, 255, 0.08) !important;
-  backdrop-filter: blur(20px) brightness(1.2) contrast(1.1);
-  border: 0.5px solid rgba(255, 255, 255, 0.25) !important;
-  box-shadow:
-    0 1px 3px rgba(0, 0, 0, 0.12),
-    0 1px 2px rgba(0, 0, 0, 0.08),
-    inset 0 0 1px rgba(255, 255, 255, 0.3);
+  /* Buttons are flat inside the glass bar: a faint color tint + colored label,
+     no per-button frost or border (the container carries the glass now). */
+  background: transparent !important;
+  border: none !important;
   overflow: hidden;
+  transition: background var(--g-dur-fast) ease;
 }
 
 
@@ -436,55 +315,78 @@ const getButtonGlowStyle = (buttonType: string) => {
   filter: none !important;
 }
 
-/* Individual button color adjustments for text and liquid glass effects */
-.buy-button {
-  background: rgba(255, 245, 158, 0.12) !important;
-  border: 0.5px solid rgba(255, 245, 158, 0.4) !important;
+/* Mask-painted icon: exact token color instead of an approximate CSS filter. */
+.qa-mask-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  -webkit-mask: var(--qa-icon) no-repeat center / contain;
+  mask: var(--qa-icon) no-repeat center / contain;
 }
 
-
+/* Per-button color: a faint tint over the shared glass bar (rest) that
+   intensifies on hover, plus the colored label. Prefixed with the container so
+   these reach (0,4,0) in scoped CSS and beat Vuetify's filled
+   `.warning`/`.primary`/etc. override-flagged (0,2,0) rules, which are emitted
+   twice and otherwise win on source order. See project_vuetify_css_cascade. */
+.quick-actions-container .buy-button {
+  background: color-mix(in srgb, var(--g-warning) 12%, transparent) !important;
+}
+.quick-actions-container .buy-button:hover {
+  background: color-mix(in srgb, var(--g-warning) 22%, transparent) !important;
+}
 .buy-button .button-text {
-  color: #FFF59E;
+  color: var(--g-warning);
 }
 
-.send-button {
-  background: rgba(0, 223, 243, 0.12) !important;
-  border: 0.5px solid rgba(0, 223, 243, 0.4) !important;
+.quick-actions-container .send-button {
+  /* Send keeps the Gero brand cyan on every chain (it matches the fixed-cyan
+     send icon filter) — deliberately NOT tied to the chain accent, so it
+     doesn't turn purple on Midnight while its icon stays cyan. */
+  --g-send: #33C7DD;
+  background: color-mix(in srgb, var(--g-send) 12%, transparent) !important;
 }
-
-
+.quick-actions-container .send-button:hover {
+  background: color-mix(in srgb, var(--g-send) 22%, transparent) !important;
+}
 .send-button .button-text {
-  color: #00DFF3;
+  color: var(--g-send);
 }
 
-.receive-button {
-  background: rgba(117, 224, 167, 0.12) !important;
-  border: 0.5px solid rgba(117, 224, 167, 0.4) !important;
+.quick-actions-container .receive-button {
+  background: color-mix(in srgb, var(--g-success) 12%, transparent) !important;
 }
-
-
+.quick-actions-container .receive-button:hover {
+  background: color-mix(in srgb, var(--g-success) 22%, transparent) !important;
+}
 .receive-button .button-text {
-  color: #75E0A7;
+  color: var(--g-success);
 }
 
-.swap-button {
-  background: rgba(253, 162, 155, 0.12) !important;
-  border: 0.5px solid rgba(253, 162, 155, 0.4) !important;
+.quick-actions-container .swap-button {
+  background: color-mix(in srgb, var(--g-error) 12%, transparent) !important;
 }
-
-
+.quick-actions-container .swap-button:hover {
+  background: color-mix(in srgb, var(--g-error) 22%, transparent) !important;
+}
 .swap-button .button-text {
-  color: #FDA29B;
+  color: var(--g-error);
 }
 
-.perpetuals-button {
-  background: rgba(183, 148, 244, 0.12) !important;
-  border: 0.5px solid rgba(183, 148, 244, 0.4) !important;
+.quick-actions-container .perpetuals-button {
+  background: color-mix(in srgb, var(--g-info) 12%, transparent) !important;
 }
-
-
+.quick-actions-container .perpetuals-button:hover {
+  background: color-mix(in srgb, var(--g-info) 22%, transparent) !important;
+}
 .perpetuals-button .button-text {
-  color: #B794F4;
+  color: var(--g-info);
+}
+
+/* Paint the perps bar-chart glyph with the exact label token so icon and text
+   match (the other icons use approximate CSS-filter tints). */
+.perpetuals-button .qa-mask-icon {
+  background-color: var(--g-info);
 }
 
 /* Right corner ribbon "Off" badge */
@@ -504,18 +406,15 @@ const getButtonGlowStyle = (buttonType: string) => {
   display: block;
   width: 40px;
   padding: 2px 0;
-  background-color: #BD1550;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-  color: #fff;
-  font-size: 7px;
+  background-color: var(--g-error);
+  color: var(--g-text-1);
+  font-size: 11px;
   font-weight: 700;
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
-  text-transform: uppercase;
   text-align: center;
   right: -10px;
   top: 3px;
   transform: rotate(45deg);
-  letter-spacing: 0.3px;
   line-height: 1.2;
 }
 
@@ -529,7 +428,7 @@ const getButtonGlowStyle = (buttonType: string) => {
 
   .ribbon span {
     width: 35px;
-    font-size: 6.5px;
+    font-size: 11px;
     right: -8px;
     top: 2.5px;
   }
@@ -545,7 +444,7 @@ const getButtonGlowStyle = (buttonType: string) => {
 
   .ribbon span {
     width: 32px;
-    font-size: 6px;
+    font-size: 11px;
     right: -6px;
     top: 2px;
   }
@@ -559,7 +458,7 @@ const getButtonGlowStyle = (buttonType: string) => {
   z-index: -1;
   border-left: 2px solid transparent;
   border-right: 2px solid transparent;
-  border-top: 2px solid #8B0E3C;
+  border-top: 2px solid color-mix(in srgb, var(--g-error) 65%, var(--g-canvas));
 }
 
 .ribbon span::before {
