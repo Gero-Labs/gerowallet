@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { MpcValidationError, RecoveryBackupStoreError, type DeviceShareSecret } from '@/shared/utils/mpc';
+import { MpcValidationError, RecoveryBackupStoreError, NoRecoveryBackupError, type DeviceShareSecret } from '@/shared/utils/mpc';
 import {
   createMpcGoogleWalletFlow,
   unlockMpcWalletFlow,
@@ -285,6 +285,19 @@ describe('recoverMpcGoogleWalletFlow', () => {
   it('propagates a 404 "no recovery on file" and writes NO state (never decrypts, never persists)', async () => {
     const deps = makeDeps({ fetchRecovery: vi.fn(async () => { throw new Error('not enrolled'); }) });
     await expect(recoverMpcGoogleWalletFlow(baseInput, deps)).rejects.toThrow('not enrolled');
+    expect(deps.decryptRecoveryShare).not.toHaveBeenCalled();
+    expect(deps.getLoginShare).not.toHaveBeenCalled();
+    expect(deps.createMpcGoogleWallet).not.toHaveBeenCalled();
+  });
+
+  it('converts a fetchRecovery 404 (parseHttpError-stringified) to NoRecoveryBackupError, writes NO state', async () => {
+    // parseHttpError stringifies the axios error → a 404 surfaces as a string
+    // containing "status":404. The flow maps that to NoRecoveryBackupError so the
+    // UI can show "no recovery backup found" instead of the raw error.
+    const deps = makeDeps({
+      fetchRecovery: vi.fn(async () => { throw JSON.stringify({ data: { error: 'not enrolled' }, status: 404 }); }),
+    });
+    await expect(recoverMpcGoogleWalletFlow(baseInput, deps)).rejects.toBeInstanceOf(NoRecoveryBackupError);
     expect(deps.decryptRecoveryShare).not.toHaveBeenCalled();
     expect(deps.getLoginShare).not.toHaveBeenCalled();
     expect(deps.createMpcGoogleWallet).not.toHaveBeenCalled();
@@ -640,7 +653,7 @@ describe('setRecoveryPasswordFlow', () => {
     expect(order).toEqual(['stageNext', 'rotate', 'promote', 'storeRecovery', 'clearCache']);
   });
 
-  it('rolls back on backend-rotate failure: drops the staged next, never promotes/stores/clears, stays on old split', async () => {
+  it('rethrows on backend-rotate failure WITHOUT dropping the staged next (resume-on-unlock self-heals), never promotes/stores/clears', async () => {
     const order: string[] = [];
     const deps = makeDeps(order, {
       rotate: vi.fn(async () => { order.push('rotate'); throw new Error('backend 503'); }),
@@ -648,10 +661,14 @@ describe('setRecoveryPasswordFlow', () => {
 
     await expect(setRecoveryPasswordFlow(baseInput, deps)).rejects.toThrow('backend 503');
 
-    // Staged then dropped; nothing past rotate ran.
-    expect(order).toEqual(['stageNext', 'rotate', 'dropNext']);
+    // Staged, rotate threw, then rethrown WITHOUT a destructive drop. A thrown
+    // rotate() does not prove the backend didn't commit, so dropping the staged
+    // next here would brick a possibly-already-rotated wallet. It stays staged;
+    // resume-on-unlock promotes it if the backend did rotate, else it's harmless.
+    expect(order).toEqual(['stageNext', 'rotate']);
+    expect(deps.setMpcDeviceShareNext).toHaveBeenCalledTimes(1);
     expect(deps.setMpcDeviceShareNext).toHaveBeenNthCalledWith(1, baseInput.walletId, `encDev(${freshSplit.deviceShare})`);
-    expect(deps.setMpcDeviceShareNext).toHaveBeenNthCalledWith(2, baseInput.walletId, undefined);
+    expect(deps.setMpcDeviceShareNext).not.toHaveBeenCalledWith(baseInput.walletId, undefined);
     expect(deps.promoteMpcDeviceShareNext).not.toHaveBeenCalled();
     expect(deps.storeRecovery).not.toHaveBeenCalled();
     expect(deps.clearLoginShareCache).not.toHaveBeenCalled();
