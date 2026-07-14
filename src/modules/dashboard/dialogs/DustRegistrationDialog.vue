@@ -35,9 +35,6 @@
       <div class="recipient-card" v-if="dustAddress">
         <div class="recipient-label t-label">{{ t('midnight.dustRecipientAddress') }}</div>
         <div class="recipient-row">
-          <v-avatar size="32" color="amber darken-4" class="mr-3">
-            <v-icon small color="amber lighten-2">mdi-star</v-icon>
-          </v-avatar>
           <div class="recipient-address">
             <div class="recipient-address-text">{{ middleTruncate(dustAddress, 18, 8) }}</div>
             <div class="recipient-network">{{ networkLabel }} · DUST address</div>
