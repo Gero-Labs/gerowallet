@@ -37,8 +37,10 @@
           :class="{ 'battery__divider--covered': (n * 100 / 12) <= pct }"
           :style="{ left: (n * 100 / 12) + '%' }"
         />
-        <!-- Dust particle field — drawn above fill + dividers, purely decorative -->
-        <DustParticleCanvas :active="isCharging" class="battery__dust" />
+        <!-- Two-zone charge animation: dust drifts right-to-left over the
+             empty track and lands on the fill edge; power streaks flow
+             through the charged section. See DustParticleCanvas. -->
+        <DustParticleCanvas :active="isCharging" :fill-pct="pct" class="battery__dust" />
       </div>
       <div class="battery__nub" />
     </div>
