@@ -45,7 +45,7 @@
         </div>
         <div v-if="item.breakdownText" class="breakdown-row">
           <span class="t-caption g-num">{{ item.breakdownText }}</span>
-          <v-tooltip top content-class="custom-tooltip" max-width="220">
+          <v-tooltip v-if="convertEnabled" top content-class="custom-tooltip" max-width="220">
             <template v-slot:activator="{ on, attrs }">
               <button
                 type="button"
@@ -91,8 +91,13 @@
   </v-data-table>
 
   <!-- Shield/unshield conversion entry point — reused, not a new nav
-       destination (this is a transaction type, not a settings page). -->
+       destination (this is a transaction type, not a settings page).
+       Flag-gated DARK (isMidnightConvertEnabled): the shield direction is
+       protocol-blocked at ledger gen 8 (node error 138, see
+       featureFlagsStore.isMidnightConvertEnabled's doc comment). Code kept
+       intact for when Midnight ships a sanctioned conversion path. -->
   <ShieldConvertDialog
+    v-if="convertEnabled"
     :is-open="convertDialogOpen"
     @close="convertDialogOpen = false"
   />
@@ -111,8 +116,10 @@ import { useNightFiat } from '@/shared/composables/useNightFiat';
 import { formatPrice, formatUsd, formatSignedChange } from '@/shared/utils/format';
 import midnightLogo from '@/assets/svg/midnight.svg';
 import ShieldConvertDialog from '@/modules/dashboard/dialogs/ShieldConvertDialog.vue';
+import featureFlagsStore from '@/stores/featureFlagsStore';
 
 const convertDialogOpen = ref(false);
+const convertEnabled = computed(() => featureFlagsStore.isMidnightConvertEnabled());
 
 const { t } = useTranslation();
 const midnightLoading = useMidnightLoading();
