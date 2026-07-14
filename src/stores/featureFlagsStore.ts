@@ -12,6 +12,7 @@ export interface FeatureFlags {
   isNexusUnstakeEnabled: boolean;
   isCrossDeviceSigningEnabled: boolean;
   isCopilotEnabled: boolean;
+  isMidnightConvertEnabled: boolean;
 }
 
 interface FeatureFlagsState {
@@ -32,6 +33,7 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
     isNexusUnstakeEnabled: false,
     isCrossDeviceSigningEnabled: false,
     isCopilotEnabled: false,
+    isMidnightConvertEnabled: false,
   },
   isInitialized: false,
   isLoading: false,
@@ -90,6 +92,7 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isNexusUnstakeEnabled = featureFlagService.getFlag('isNexusUnstakeEnabled', false);
     featureFlagsState.flags.isCrossDeviceSigningEnabled = featureFlagService.getFlag('isCrossDeviceSigningEnabled', false);
     featureFlagsState.flags.isCopilotEnabled = featureFlagService.getFlag('isCopilotEnabled', false);
+    featureFlagsState.flags.isMidnightConvertEnabled = featureFlagService.getFlag('isMidnightConvertEnabled', false);
     persistFlagsForBackground();
   },
 
@@ -128,6 +131,9 @@ export const featureFlagsStore = {
     });
     featureFlagService.onFlagChange('isCopilotEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isCopilotEnabled', newValue);
+    });
+    featureFlagService.onFlagChange('isMidnightConvertEnabled', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'isMidnightConvertEnabled', newValue);
     });
   },
 
@@ -212,6 +218,21 @@ export const featureFlagsStore = {
   },
 
   /**
+   * Check if the Midnight shield/unshield Convert flow is enabled.
+   * Ships DARK (default false): the shield direction is PROTOCOL-blocked at
+   * ledger generation 8 - the balance check never nets Shielded(raw) against
+   * Unshielded(raw), so the hand-rolled two-halves swap deterministically
+   * fails node validation with error 138 BalanceCheckOverspend (verified
+   * against midnight-ledger verify.rs + live on preprod, 2026-07-14). All
+   * the code stays (dialog, builders, BG handlers, nexus swap-mode); flip
+   * this once Midnight ships a sanctioned pool-conversion path (likely
+   * contract-mediated via shielded_mints).
+   */
+  isMidnightConvertEnabled(): boolean {
+    return featureFlagsState.flags.isMidnightConvertEnabled;
+  },
+
+  /**
    * Reset flags (disable all until re-initialized).
    */
   reset(): void {
@@ -226,6 +247,7 @@ export const featureFlagsStore = {
       isNexusUnstakeEnabled: false,
       isCrossDeviceSigningEnabled: false,
       isCopilotEnabled: false,
+      isMidnightConvertEnabled: false,
     });
     featureFlagsState.isInitialized = false;
     featureFlagsState.isLoading = false;
