@@ -22,12 +22,11 @@
  * options context from the source's mnemonic — exactly the two witnesses the
  * mapping-validator tx requires (payment + stake, both in requiredSigners).
  * The tx id is recomputed from the CBOR before signing (never trust a
- * server-supplied hash), and submission goes through the standard SUBMIT_TX
- * path, which re-verifies the body hash while merging witnesses.
+ * server-supplied hash); witnesses are merged locally with a body-hash guard
+ * and the signed tx is submitted through NEXUS (never Blockfrost/Koios).
  *
- * Balances and statuses are both read through Nexus (asset-filtered address
- * UTxOs + the DUST status batch endpoint) — the wallet never queries an
- * explorer directly.
+ * Balances, statuses, tx-building AND submission all go through Nexus — the
+ * wallet never queries or submits to an explorer directly.
  */
 
 import { computed, ref } from 'vue';
@@ -40,8 +39,6 @@ import {
   MidnightDustRegistrationStatusDto,
 } from '@/api/midnight-api';
 import { CNIGHT_ASSETS } from '@/shared/composables/useCnightDustRegistration';
-import { Messaging } from '@/chrome/messaging';
-import { MessageTypes } from '@/models/MessageTypes';
 import { debugLog } from '@/utils/debug';
 
 export interface DustSource {
@@ -318,15 +315,32 @@ export function useDustSources() {
     }
   }
 
-  async function submitViaBackground(txCbor: string, witnessHex: string): Promise<string> {
-    const response = await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.SUBMIT_TX,
-      data: { txCbor, witnessHex, utxos: [] },
-    }) as { data: { txId?: string; error?: string } };
-    if (!response?.data?.txId) {
-      throw new Error(response?.data?.error || 'Transaction submission failed');
+  /**
+   * Merge the locally-produced vkey witnesses into the tx and submit through
+   * NEXUS (never Blockfrost/Koios). The witness merge must not alter the body
+   * bytes — same integrity guard the background SUBMIT_TX path applies — so a
+   * swapped body can't slip in with the witnesses. Nexus returns the node's
+   * real ledger error on rejection.
+   */
+  async function mergeAndSubmit(txCbor: string, witnessHex: string): Promise<string> {
+    const [{ Serialization }, { HexBlob }] = await Promise.all([
+      import('@cardano-sdk/core'),
+      import('@cardano-sdk/util'),
+    ]);
+    const tx = Serialization.Transaction.fromCbor(HexBlob(txCbor));
+    const bodyHashBefore = tx.body().hash();
+    const witnessSet = tx.witnessSet();
+    const incoming = Serialization.TransactionWitnessSet.fromCbor(HexBlob(witnessHex)).toCore();
+    const merged = new Map([
+      ...(witnessSet.toCore().signatures?.entries() ?? []),
+      ...incoming.signatures.entries(),
+    ]);
+    witnessSet.setVkeys(Serialization.CborSet.fromCore([...merged.entries()], Serialization.VkeyWitness.fromCore));
+    tx.setWitnessSet(witnessSet);
+    if (tx.body().hash() !== bodyHashBefore) {
+      throw new Error('Transaction body changed while applying witnesses; refusing to submit');
     }
-    return response.data.txId;
+    return getMidnightApi(network.value).submitCardanoTx(tx.toCbor());
   }
 
   const cborBytes = (hex: string) => Math.ceil(hex.length / 2);
@@ -414,7 +428,7 @@ export function useDustSources() {
     onStage?.('isolating');
     const isoCbor = await buildIsolationTx(source);
     const isoWit = await signWithMnemonic(isoCbor, mnemonic, [[0, 0]]);
-    await submitViaBackground(isoCbor, isoWit);
+    await mergeAndSubmit(isoCbor, isoWit);
 
     // Wait for the isolation to confirm (clean cNIGHT UTxO present), then
     // rebuild — now Nexus rotates only that clean UTxO and the tx fits.
@@ -459,7 +473,7 @@ export function useDustSources() {
       onStage?.('registering');
       const txCbor = await buildFittingTx(source, mnemonic, buildRegister, onStage);
       const witnessHex = await signWithMnemonic(txCbor, mnemonic);
-      const txId = await submitViaBackground(txCbor, witnessHex);
+      const txId = await mergeAndSubmit(txCbor, witnessHex);
 
       source.status = {
         cardanoRewardAddress: source.stakeAddress,
@@ -515,7 +529,7 @@ export function useDustSources() {
       onStage?.('registering');
       const finalCbor = await buildFittingTx(source, mnemonic, buildUpdate, onStage);
       const witnessHex = await signWithMnemonic(finalCbor, mnemonic);
-      const txId = await submitViaBackground(finalCbor, witnessHex);
+      const txId = await mergeAndSubmit(finalCbor, witnessHex);
 
       source.status = {
         cardanoRewardAddress: source.stakeAddress,

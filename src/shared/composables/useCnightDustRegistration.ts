@@ -305,18 +305,26 @@ export function useCnightDustRegistration() {
     }
 
     stage.value = 'submitting';
-    const submitResponse = await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.SUBMIT_TX,
-      data: {
-        txCbor,
-        witnessHex: signResponse.data.witnesses,
-        utxos: utxos.value,
-      },
-    }) as { data: { txId?: string; error?: string } };
-    if (!submitResponse?.data?.txId) {
-      throw new Error(submitResponse?.data?.error || 'Transaction submission failed');
+    // Merge witnesses locally (body-hash guard) and submit through NEXUS —
+    // never Blockfrost/Koios. Nexus surfaces the node's real ledger error.
+    const [{ Serialization }, { HexBlob }] = await Promise.all([
+      import('@cardano-sdk/core'),
+      import('@cardano-sdk/util'),
+    ]);
+    const tx = Serialization.Transaction.fromCbor(HexBlob(txCbor));
+    const bodyHashBefore = tx.body().hash();
+    const witnessSet = tx.witnessSet();
+    const incoming = Serialization.TransactionWitnessSet.fromCbor(HexBlob(signResponse.data.witnesses)).toCore();
+    const merged = new Map([
+      ...(witnessSet.toCore().signatures?.entries() ?? []),
+      ...incoming.signatures.entries(),
+    ]);
+    witnessSet.setVkeys(Serialization.CborSet.fromCore([...merged.entries()], Serialization.VkeyWitness.fromCore));
+    tx.setWitnessSet(witnessSet);
+    if (tx.body().hash() !== bodyHashBefore) {
+      throw new Error('Transaction body changed while applying witnesses; refusing to submit');
     }
-    return submitResponse.data.txId;
+    return getMidnightApi(network.value).submitCardanoTx(tx.toCbor());
   }
 
   /** The registration UTxO outpoint required by the deregister/update builders. */

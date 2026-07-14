@@ -512,11 +512,50 @@ export class MidnightApi {
   }
 
   /**
+   * Submit a fully-signed Cardano transaction through Nexus's own submit
+   * endpoint (`POST /api/transactions/submit`) on the anchored Cardano
+   * network. Nexus owns provider routing internally — the wallet must NOT
+   * submit via Blockfrost/Koios directly. On rejection Nexus returns the
+   * node's actual ledger error in the response body, which parseHttpError
+   * surfaces (unlike the bare 400 from the legacy blockchain-api path).
+   */
+  async submitCardanoTx(signedTxCborHex: string): Promise<string> {
+    try {
+      const endpoints = getMidnightEndpoints(this.network);
+      if (!endpoints) throw new Error(`Unknown Midnight network: ${this.network}`);
+      const url = `${endpoints.nexusBaseUrl}/api/transactions/submit?network=cardano-${endpoints.sdkNetworkId}`;
+      const { data, status } = await this.axiosInstance.post<string>(url, signedTxCborHex, {
+        headers: { 'Content-Type': 'text/plain' },
+      });
+      if (status === 200 && typeof data === 'string') return data.replace(/"/g, '');
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  /**
+   * Evaluate a Cardano transaction's Plutus scripts via Nexus
+   * (`POST /api/transactions/evaluate`) WITHOUT submitting — returns per-redeemer
+   * ExUnits or the script/ledger failure. Diagnostic aid for DUST-tx rejections.
+   */
+  async evaluateCardanoTx(txCborHex: string): Promise<unknown> {
+    try {
+      const endpoints = getMidnightEndpoints(this.network);
+      if (!endpoints) throw new Error(`Unknown Midnight network: ${this.network}`);
+      const url = `${endpoints.nexusBaseUrl}/api/transactions/evaluate?network=cardano-${endpoints.sdkNetworkId}`;
+      const { data } = await this.axiosInstance.post(url, { cbor: txCborHex });
+      return data;
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  /**
    * Build the unsigned Cardano transaction that registers the wallet's DUST
    * address under the Midnight DUST mapping validator. The wallet signs the
-   * returned `txCbor` with the user's Cardano payment key (the same key used
-   * for every other Cardano tx) and submits via the existing Cardano
-   * `submit-tx` endpoint.
+   * returned `txCbor` with its payment + stake keys and submits via Nexus's
+   * Cardano `submit` endpoint (never Blockfrost/Koios).
    *
    * Nexus's request/response use snake_case JSON; we convert at the wire
    * boundary so callers see the camelCase TS shape.
