@@ -338,6 +338,15 @@
                     >{{ $t('transactions.strike') }}</v-chip
                   >
                   <v-chip
+                    v-if="isDustRegistration(item)"
+                    outlined
+                    class="px-1"
+                    x-small
+                    color="rgb(232, 199, 137)"
+                    style="margin-left: 1px; margin-bottom: 1px"
+                    >{{ $t('transactions.dustRegistration') }}</v-chip
+                  >
+                  <v-chip
                     v-if="isDexHunter(item)"
                     outlined
                     class="px-1"
@@ -499,6 +508,7 @@ import stakingStoreActions from '@/stores/stakingStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import debounce from 'lodash/debounce';
 import { isCardanoTx, StoredTransaction } from '@/models/transaction.types';
+import { DUST_MAPPING_VALIDATOR } from '@/shared/composables/useCnightDustRegistration';
 
 const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 
@@ -704,6 +714,7 @@ const transactions = computed<StoredTransaction[]>(() => {
           ('splash'.includes(searchLower) && isSplash(tx)) ||
           ('dexhunter'.includes(searchLower) && isDexHunter(tx)) ||
           ('strike'.includes(searchLower) && isStrike(tx)) ||
+          ('dust'.includes(searchLower) && isDustRegistration(tx)) ||
           ('jpg.store'.includes(searchLower) && isJpgStore(tx)) ||
           ('withdrawal'.includes(searchLower) && isWithdrawal(tx)) ||
           ('stake'.includes(searchLower) && isStakeRegistration(tx)) ||
@@ -1275,6 +1286,19 @@ const isStrike = (item: StoredTransaction): boolean => {
 
   // Only tag as Strike if there's actual platform interaction, not just position NFT transfers
   return hasStrikeAddress || hasStrikeScript || false;
+};
+
+// Detects a cNIGHT→DUST registration: it locks its mapping NFT at the DUST
+// mapping validator, so a registration has an OUTPUT to the validator address.
+// (Deregistration spends that UTxO as an input, so keying on the output keeps
+// this registration-specific.)
+const isDustRegistration = (item: StoredTransaction): boolean => {
+  if (!isCardanoTx(item)) return false;
+  const validator = DUST_MAPPING_VALIDATOR[loggedWallet.value?.network ?? ''];
+  if (!validator) return false;
+  return item.body.outputs?.some((output) => output.address === validator.address)
+    || item.utxo?.outputs?.some((output) => output.address === validator.address)
+    || false;
 };
 
 // Detects historical DexHunter swap transactions (pre-aggregator-embed migration).

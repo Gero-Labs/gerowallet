@@ -396,7 +396,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue';
+import { ref, computed, watch } from 'vue';
 import assets from '@/utils/assets';
 import { useWatchlist } from '@/modules/market/composables/useWatchlist';
 import { useColumnPreferences } from '@/modules/market/composables/useColumnPreferences';
@@ -409,7 +409,6 @@ import { Blockchain } from '@/models/types';
 import networks from '@/utils/networks';
 import DustGenerationLine from '@/modules/dashboard/components/DustGenerationLine.vue';
 import { CNIGHT_ASSETS, DUST_LINE_DISMISS_KEY } from '@/shared/composables/useCnightDustRegistration';
-import { getDustPending } from '@/shared/composables/useDustPending';
 
 const chainLogo = computed(() =>
   networks.resolveCurrencyImage(walletStore.loggedWallet?.chain, walletStore.loggedWallet?.network) || ''
@@ -458,23 +457,11 @@ const cnightUnit = computed(() => {
   return asset ? asset.policyId + asset.assetNameHex : '';
 });
 
-// A registration the user has actually started (local pending guard) must show
-// its status even after the promo was dismissed — dismissal only hides the
-// setup invitation, not a live registration. localStorage is not reactive, so
-// re-read on mount and whenever the wallet changes.
-const dustPendingActive = ref(false);
-function refreshDustPendingActive() {
-  const stake = walletStore.loggedWallet?.stakeAddress ?? '';
-  dustPendingActive.value = !!getDustPending(stake);
-}
-onMounted(refreshDustPendingActive);
-watch(() => walletStore.loggedWallet?.stakeAddress, refreshDustPendingActive);
-
-/** The NIGHT row currently in the table (holdings + Cardano only). */
+/** The NIGHT row currently in the table (holdings + Cardano only). Dismissal
+ *  hides the strip entirely; the registration status still surfaces in the
+ *  token drawer + DUST battery widgets, which aren't dismissable. */
 const dustExpanded = computed<MarketToken[]>(() => {
-  if (!props.showHoldingsColumns) return [];
-  // Dismissal hides only the promo; a pending/active registration still shows.
-  if (dustLineDismissed.value && !dustPendingActive.value) return [];
+  if (!props.showHoldingsColumns || dustLineDismissed.value) return [];
   if (walletStore.loggedWallet?.chain !== Blockchain.CARDANO) return [];
   if (!cnightUnit.value) return [];
   const night = paginatedTokens.value.find((tk) => tk.unit === cnightUnit.value);
