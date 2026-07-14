@@ -3339,6 +3339,7 @@ export default {
   'welcome.restoreThisWallet': 'Diese Wallet wiederherstellen',
   'welcome.googleAlreadyEnrolledTitle': 'Dieses Google-Konto ist bereits registriert',
   'welcome.googleAlreadyEnrolledWarning': 'Dieses Google-Konto hat bereits eine MPC-Wallet. Zurücksetzen? Dadurch werden die Wiederherstellungsdaten der alten Wallet auf dem Server dauerhaft gelöscht und können nicht wiederhergestellt werden — tue dies nur für ein Konto, das du neu erstellst.',
+  'welcome.noRecoveryBackup': 'Für dieses Google-Konto wurde kein Wiederherstellungs-Backup gefunden. Diese Wallet hat keine gespeicherte Wiederherstellung — entsperre sie auf dem ursprünglichen Gerät oder erstelle eine neue Wallet, um eine einzurichten.',
   'welcome.resetGoogleAccountButton': 'Dieses Google-Konto zurücksetzen',
   'welcome.resetGoogleAccountFailed': 'Zurücksetzen des Google-Kontos fehlgeschlagen. Bitte erneut versuchen.',
 

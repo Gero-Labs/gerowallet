@@ -11,7 +11,7 @@
  * output), device/login/recovery shares, entropy, or key bytes. Catch-handler
  * discipline lives in background.ts; these flows just throw/rethrow.
  */
-import { MpcValidationError, RecoveryBackupStoreError } from '@/shared/utils/mpc';
+import { MpcValidationError, RecoveryBackupStoreError, NoRecoveryBackupError } from '@/shared/utils/mpc';
 import type { MpcShareSet, DeviceShareSecret } from '@/shared/utils/mpc';
 import { mpcSessionCache } from '@/chrome/mpcSessionCache';
 
@@ -371,8 +371,21 @@ export async function recoverMpcGoogleWalletFlow(
     subFromIdToken: getSub,
   } = deps;
 
-  // Backend serves the encrypted recovery blob + the xpub anchor (404 → no recovery on file).
-  const { encryptedRecovery, publicKey } = await fetchRecovery(idToken, chain, network);
+  // Backend serves the encrypted recovery blob + the xpub anchor. A 404 means
+  // this Google account has no stored recovery (never backed up / predates the
+  // feature) — surface that as a distinct, clear error rather than a generic one.
+  // parseHttpError stringifies the axios error, so a 404 shows up as "status":404.
+  let encryptedRecovery: string;
+  let publicKey: string;
+  try {
+    ({ encryptedRecovery, publicKey } = await fetchRecovery(idToken, chain, network));
+  } catch (fetchErr) {
+    const asText = typeof fetchErr === 'string' ? fetchErr : (fetchErr instanceof Error ? fetchErr.message : '');
+    if (asText.includes('"status":404')) {
+      throw new NoRecoveryBackupError('No recovery backup found for this Google account');
+    }
+    throw fetchErr;
+  }
   const recoveryShare = await decryptRecoveryShare(encryptedRecovery, recoveryPassword);
   const loginShare = await getLoginShare(idToken, chain, network);
   // Anchor check: reconstruct AND validate the derived xpub === publicKey.

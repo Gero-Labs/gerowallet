@@ -1844,14 +1844,21 @@ app.addToOptions(MessageTypes.RECOVER_MPC_GOOGLE_WALLET, async (request, sendRes
   } catch (error) {
     // Anchor mismatch (wrong Google account for this recovery) surfaces as a
     // clean message; the raw MpcValidationError is not leaked.
-    const { MpcValidationError } = await import('@/shared/utils/mpc');
-    const message = error instanceof MpcValidationError
-      ? "This recovery doesn't match this Google account."
-      : getErrorMessage(error, 'Failed to recover MPC wallet');
+    const { MpcValidationError, NoRecoveryBackupError } = await import('@/shared/utils/mpc');
+    let message: string;
+    let code: string | undefined;
+    if (error instanceof NoRecoveryBackupError) {
+      message = 'No recovery backup found for this Google account';
+      code = 'no_recovery_backup';
+    } else if (error instanceof MpcValidationError) {
+      message = "This recovery doesn't match this Google account.";
+    } else {
+      message = getErrorMessage(error, 'Failed to recover MPC wallet');
+    }
     console.error('Error recovering MPC Google wallet:', message);
     sendResponse({
       id: request.id,
-      data: { success: false, error: message },
+      data: { success: false, error: message, code },
       target: TARGET,
       sender: SENDER.extension,
     });
