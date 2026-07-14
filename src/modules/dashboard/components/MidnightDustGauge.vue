@@ -165,6 +165,9 @@ const timeToFullLabel = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  /* Fill the equal-height row column so it matches the proof-server widget
+     beside it (which already sets height: 100%). */
+  height: 100%;
 }
 
 .dust-gauge__head {
@@ -275,6 +278,9 @@ const timeToFullLabel = computed(() => {
   display: flex;
   justify-content: space-between;
   gap: 8px;
+  /* Pin to the card bottom so this row aligns with the proof-server widget's
+     stats row when the card is stretched to equal height. */
+  margin-top: auto;
 }
 
 .dust-gauge__stat {

@@ -248,6 +248,8 @@ const lastProofValue = computed(() => {
   display: flex;
   justify-content: space-between;
   gap: 8px;
+  /* Pin to the card bottom so the stats row aligns with the DUST battery's. */
+  margin-top: auto;
 }
 
 .ps-widget__stat {
