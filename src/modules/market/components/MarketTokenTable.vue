@@ -667,7 +667,12 @@ function pnlColor(pnl: number): string {
 }
 
 function rowClass(item: MarketToken): string {
-  return item.isNative ? 'native-token-row' : '';
+  const classes: string[] = [];
+  if (item.isNative) classes.push('native-token-row');
+  // The NIGHT row that has the DUST strip expanded beneath it drops its bottom
+  // divider so the two read as one row.
+  if (dustExpanded.value.some((t) => t.unit === item.unit)) classes.push('night-dust-attached');
+  return classes.join(' ');
 }
 
 // Pin native token (ADA) to the top regardless of sort column
@@ -720,9 +725,10 @@ function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: bool
   height: auto;
   border-bottom: none;
 }
-/* Merge the NIGHT row with the DUST strip below it: drop the row divider
-   Vuetify draws under the expanded row so the two read as a single row. */
-.market-token-table >>> tbody tr:has(+ tr.v-data-table__expanded__content) > td {
+/* Merge the NIGHT row with the DUST strip below it: drop the Vuetify row
+   divider on the NIGHT row (tagged via rowClass) so the two read as one row.
+   The override flag is required to beat Vuetify's tr:not(:last-child) td rule. */
+.market-token-table >>> tr.night-dust-attached > td {
   border-bottom: none !important;
 }
 .market-token-table >>> tr.v-data-table__expanded__content {
