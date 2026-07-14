@@ -1,7 +1,7 @@
 <template>
   <v-card
-    outlined
-    class="liquid-glass fill-height d-flex flex-column recent-tx-card"
+    flat
+    class="fill-height d-flex flex-column recent-tx-card"
   >
     <div class="recent-tx-header flex-grow-0">
       <span class="recent-tx-heading">{{ $t('dashboard.recentTransactions') }}</span>
@@ -109,9 +109,18 @@ function formatAmount(tx: StoredTransaction): string {
 </script>
 
 <style scoped lang="scss">
+/* Match the portfolio metrics + chart panels' glass exactly (same rgba/blur)
+   so all three hero cards read as one material. */
 .recent-tx-card {
-  border-radius: 12px;
+  /* !important so the radius wins the Vuetify .v-sheet.v-card tie (CSS emitted
+     twice); without it the card clips at Vuetify's 4px and the corners read
+     tighter than the div-based portfolio panels beside it. */
+  border-radius: var(--g-r-card) !important;
   overflow: hidden;
+  background: rgba(0, 0, 0, 0.4) !important;
+  backdrop-filter: blur(20px) saturate(1.8);
+  -webkit-backdrop-filter: blur(20px) saturate(1.8);
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .recent-tx-header {

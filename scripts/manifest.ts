@@ -63,6 +63,8 @@ function buildCSP(dev: boolean): string {
     'https://api.coingecko.com',
     'https://analytics-snekfun.splash.trade',
     'https://www.googleapis.com',
+    // Contentful blog (Content Delivery API; images are https and covered by img-src)
+    'https://cdn.contentful.com',
     'https://api.handle.me/',
     'https://media.bringweb3.io/',
     'https://api.bringweb3.io/',
@@ -74,6 +76,13 @@ function buildCSP(dev: boolean): string {
     'wss://*.strikefinance.org',
     'https://*.gerowallet.io',
     'wss://*.gerowallet.io',
+    // Midnight — the SDK's UnshieldedWallet/DustWallet/ShieldedWallet sync
+    // connects directly to the Midnight Foundation indexer (HTTP for queries,
+    // WS for subscriptions). Wildcard covers preview/preprod/mainnet plus
+    // any future subdomain the SDK reaches. RPC node URLs land here too
+    // (https://rpc.preview.midnight.network, etc).
+    'https://*.midnight.network',
+    'wss://*.midnight.network',
     // Gero Copilot agent (direct-to-Fluxpoint dev fallback)
     'https://api-v3.fluxpointstudios.com',
     // Dev-only
@@ -96,9 +105,12 @@ function buildCSP(dev: boolean): string {
     ? ["'self'", "'wasm-unsafe-eval'", 'http://localhost:*']
     : ["'self'", "'wasm-unsafe-eval'"];
 
+  // Fonts are self-hosted (@fontsource, bundled by vite), so production needs
+  // nothing but 'self'. Dev keeps localhost because the vite dev server serves
+  // the woff2 files from its own origin.
   const fontSrc = dev
-    ? ["'self'", 'https://fonts.gstatic.com/', 'http://localhost:*']
-    : ["'self'", 'https://fonts.gstatic.com/'];
+    ? ["'self'", 'http://localhost:*']
+    : ["'self'"];
 
   const styleSrc = ['*', "'unsafe-inline'", "'self'", 'blob:'];
 

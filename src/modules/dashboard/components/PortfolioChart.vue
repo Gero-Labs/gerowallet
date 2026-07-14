@@ -7,7 +7,7 @@
         <div class="metrics-header-row">
           <div class="portfolio-label">{{ $t('dashboard.portfolio') }}</div>
           <v-spacer />
-          <v-tooltip v-if="!isApex" bottom content-class="custom-tooltip">
+          <v-tooltip v-if="!isApex && !adaOnly" bottom content-class="custom-tooltip">
             <template v-slot:activator="{ on, attrs }">
               <div class="mode-segmented-toggle" v-bind="attrs" v-on="on">
                 <button
@@ -79,7 +79,7 @@
                     :style="{ color: (totalUnrealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
                     v-on="on"
                   >
-                    {{ hideBalances ? '••••••' : '~' + ((totalUnrealizedPnl || 0) >= 0 ? '+' : '') + formatPnl(totalUnrealizedPnl || 0) + ' \u20B3' }}
+                    {{ hideBalances ? '••••••' : '~' + ((totalUnrealizedPnl || 0) >= 0 ? '+' : '') + formatPnl(totalUnrealizedPnl || 0) + ' ₳' }}
                   </span>
                 </template>
                 <span>{{ $t('market.pnlIncompleteHint') }}</span>
@@ -89,7 +89,7 @@
                 class="pnl-value"
                 :style="{ color: hideBalances ? 'rgba(255,255,255,0.35)' : (totalUnrealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
               >
-                {{ hideBalances ? '••••••' : ((totalUnrealizedPnl || 0) >= 0 ? '+' : '') + formatPnl(totalUnrealizedPnl || 0) + ' \u20B3' }}
+                {{ hideBalances ? '••••••' : ((totalUnrealizedPnl || 0) >= 0 ? '+' : '') + formatPnl(totalUnrealizedPnl || 0) + ' ₳' }}
               </span>
             </div>
             <div class="pnl-item">
@@ -101,7 +101,7 @@
                     :style="{ color: hideBalances ? 'rgba(255,255,255,0.35)' : (totalRealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
                     v-on="on"
                   >
-                    {{ hideBalances ? '••••••' : '~' + ((totalRealizedPnl || 0) >= 0 ? '+' : '') + formatPnl(totalRealizedPnl || 0) + ' \u20B3' }}
+                    {{ hideBalances ? '••••••' : '~' + ((totalRealizedPnl || 0) >= 0 ? '+' : '') + formatPnl(totalRealizedPnl || 0) + ' ₳' }}
                   </span>
                 </template>
                 <span>{{ $t('market.pnlIncompleteHint') }}</span>
@@ -111,7 +111,7 @@
                 class="pnl-value"
                 :style="{ color: hideBalances ? 'rgba(255,255,255,0.35)' : (totalRealizedPnl || 0) >= 0 ? '#47CD89' : '#F97066' }"
               >
-                {{ hideBalances ? '••••••' : ((totalRealizedPnl || 0) >= 0 ? '+' : '') + formatPnl(totalRealizedPnl || 0) + ' \u20B3' }}
+                {{ hideBalances ? '••••••' : ((totalRealizedPnl || 0) >= 0 ? '+' : '') + formatPnl(totalRealizedPnl || 0) + ' ₳' }}
               </span>
             </div>
           </template>
@@ -128,34 +128,6 @@
           </template>
         </div>
 
-        <v-divider class="my-1" style="opacity: 0.15" />
-
-        <!-- Staking Rewards -->
-        <div class="staking-rewards-section">
-          <template v-if="account && account.pool_id">
-            <div
-              class="pnl-item staking-reward-row"
-              :class="{ clickable: hasWithdrawableRewards }"
-              @click="hasWithdrawableRewards && $emit('withdraw-rewards')"
-            >
-              <span class="pnl-label">{{ $t('dashboard.stakingRewards') }}</span>
-              <span
-                class="pnl-value"
-                :style="{ color: hasWithdrawableRewards ? '#47CD89' : 'rgba(255,255,255,0.35)' }"
-              >
-                {{ hideBalances ? '••••••' : (hasWithdrawableRewards ? formatRewards(account.withdrawable_amount) + ' \u20B3' : '—') }}
-              </span>
-            </div>
-          </template>
-          <template v-else>
-            <div class="pnl-item">
-              <span class="pnl-label">{{ $t('dashboard.stakingRewards') }}</span>
-              <a class="stake-gero-link" @click.prevent="$emit('delegate-gero')">
-                {{ $t('dashboard.stakeWithGero') }}
-              </a>
-            </div>
-          </template>
-        </div>
       </div>
     </div>
 
@@ -219,7 +191,7 @@ import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain } from '@/models/types';
-import { themes } from '@/config/themes';
+import { chainAccents, chainKeyFor } from '@/config/themes';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import OdometerCounter from '@/shared/components/OdometerCounter.vue';
 
@@ -259,7 +231,7 @@ const currencyConfigs: Record<CurrencyType, CurrencyConfig> = {
   },
 };
 
-const { loggedWallet, account } = toRefs(walletStore);
+const { loggedWallet } = toRefs(walletStore);
 
 const hideBalances = computed(() => walletStore.config?.hideBalances || false);
 
@@ -276,9 +248,10 @@ const isApex = computed(() => {
   return chain === Blockchain.APEX_PRIME || chain === Blockchain.APEX_VECTOR;
 });
 
+// Follows the chain accent for EVERY chain. The old branching was
+// Apex-vs-Cardano only, so Bitcoin and Midnight drew a Cardano cyan line.
 const chartTheme = computed(() => {
-  const t = isApex.value ? themes.apex : themes.cardano;
-  const hex = t.primary;
+  const hex = chainAccents[chainKeyFor(loggedWallet.value?.chain)].accent;
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
@@ -366,6 +339,13 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  // Lock the chart to ADA-only: force ada-only mode + ADA currency, hide the
+  // full/ada toggle and fiat currencies. Used on non-mainnet Cardano
+  // (preprod/preview), where tokens have no market price so fiat is meaningless.
+  adaOnly: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 // Define emits
@@ -377,22 +357,20 @@ const emit = defineEmits<{
   (e: 'delegate-gero'): void;
 }>();
 
-// Staking rewards
-const hasWithdrawableRewards = computed(() => {
-  return account.value && Number(account.value.withdrawable_amount) > 0;
-});
-
-const formatRewards = (lovelace: string | number) => {
-  const ada = Number(lovelace) / 1_000_000;
-  return ada.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-};
-
 // Refs
 const chartContainerRef = ref<HTMLElement | null>(null);
 const isRefreshing = ref(false);
 const portfolioMode = ref<'full' | 'ada-only'>('full');
 const selectedCurrency = ref<CurrencyType>(CurrencyType.ADA);
 const selectedTimeframe = ref('WEEK');
+
+// Non-mainnet Cardano locks the chart to ADA-only (no fiat, no mode toggle).
+watch(() => props.adaOnly, (locked) => {
+  if (locked) {
+    portfolioMode.value = 'ada-only';
+    selectedCurrency.value = CurrencyType.ADA;
+  }
+}, { immediate: true });
 
 // Chart instances
 let chart: IChartApi | null = null;
@@ -426,6 +404,7 @@ const timeframeCutoffs: Record<string, number> = {
 // --- Portfolio mode persistence ---
 
 const loadPortfolioMode = (): 'full' | 'ada-only' => {
+  if (props.adaOnly) return 'ada-only';
   try {
     const walletId = loggedWallet.value?.id;
     if (!walletId) return 'full';
@@ -448,6 +427,7 @@ const savePortfolioMode = (mode: 'full' | 'ada-only'): void => {
 portfolioMode.value = loadPortfolioMode();
 
 const setPortfolioMode = (mode: 'full' | 'ada-only') => {
+  if (props.adaOnly) return; // locked to ADA-only on non-mainnet Cardano
   if (portfolioMode.value === mode) return;
   console.log(`📊 setPortfolioMode: ${portfolioMode.value} → ${mode}`);
   portfolioMode.value = mode;
@@ -572,6 +552,7 @@ onMounted(() => { portfolioValueTimer = setInterval(syncDisplayedValue, 30_000);
 onBeforeUnmount(() => { if (portfolioValueTimer) clearInterval(portfolioValueTimer); });
 
 const availableCurrencies = computed(() => {
+  if (props.adaOnly) return [CurrencyType.ADA];
   const currencies: CurrencyType[] = [];
 
   if ((props.chartData && props.chartData.length > 0) || props.portfolioValueAda > 0) {
@@ -721,7 +702,7 @@ const initChart = () => {
           color: 'transparent',
         } as SolidColor,
         textColor: 'rgba(255, 255, 255, 0.5)',
-        fontFamily: 'Quicksand, Inter, sans-serif',
+        fontFamily: 'Inter Variable, Inter, sans-serif',
       },
       grid: {
         vertLines: { visible: false },
@@ -1102,7 +1083,10 @@ onBeforeUnmount(() => {
 
 .portfolio-split-root {
   display: flex;
-  gap: 6px;
+  /* Match the dashboard's inter-card rhythm: the metrics panel, the chart and
+     the recent-tx card are three separate bordered cards, so the metrics<->chart
+     gap must equal the chart<->recent-tx gap (two pa-2 cols = 16px). */
+  gap: var(--g-s-4);
   height: 100%;
 }
 
@@ -1135,22 +1119,28 @@ onBeforeUnmount(() => {
   margin-bottom: 2px;
 }
 
+/* Section label on the type-ramp label tier (11px, tracked caps, muted). */
 .portfolio-label {
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 550;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.08em;
+  color: var(--g-text-3);
 }
 
+/* Hero balance: the display-tier number, tabular so digits align as the
+   odometer ticks. Clamps down in the narrow metrics panel (28px floor) and
+   reaches the 36px dashboard hero size on wide viewports. */
 .portfolio-amount {
-  font-size: 1.4rem;
-  font-weight: 600;
-  color: #ffffff;
+  font-size: clamp(28px, 2.5vw, 36px);
+  font-weight: 620;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--g-text-1);
   display: inline-flex;
   align-items: baseline;
   gap: 0.1em;
-  transition: opacity 0.2s ease;
+  transition: opacity var(--g-dur-base) ease;
   margin-bottom: 4px;
 }
 
@@ -1179,7 +1169,7 @@ onBeforeUnmount(() => {
 /* Balance fade transition */
 .balance-fade-enter-active,
 .balance-fade-leave-active {
-  transition: opacity 0.22s ease, filter 0.22s ease;
+  transition: opacity var(--g-dur-base) ease, filter var(--g-dur-base) ease;
 }
 
 .balance-fade-enter,
@@ -1245,32 +1235,6 @@ onBeforeUnmount(() => {
   100% { background-position: -200% 0; }
 }
 
-.staking-reward-row.clickable {
-  cursor: pointer;
-  border-radius: 4px;
-  padding: 2px 4px;
-  margin: -2px -4px;
-  transition: background 0.15s ease;
-}
-
-.staking-reward-row.clickable:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.stake-gero-link {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--v-primary-base, #47CD89);
-  cursor: pointer;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.stake-gero-link:hover {
-  text-decoration: underline;
-  opacity: 0.85;
-}
-
 .mode-segmented-toggle {
   display: flex;
   align-items: center;
@@ -1290,7 +1254,7 @@ onBeforeUnmount(() => {
   padding: 4px 10px;
   border-radius: 6px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: color var(--g-dur-base) ease, background-color var(--g-dur-base) ease;
   line-height: 1.2;
   outline: none;
   white-space: nowrap;
@@ -1351,7 +1315,7 @@ onBeforeUnmount(() => {
   padding: 4px 10px;
   border-radius: 6px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: color var(--g-dur-base) ease, background-color var(--g-dur-base) ease;
   line-height: 1.2;
   outline: none;
   white-space: nowrap;

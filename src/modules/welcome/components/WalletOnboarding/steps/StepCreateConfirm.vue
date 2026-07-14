@@ -242,6 +242,31 @@ const walletCreationStep = async (): Promise<void> => {
 
     const walletIcon = networks.resolveIconColor(props.network?.blockchain || '', props.network?.network || '');
 
+    // For Midnight, pre-derive the 3 role-specific bech32m addresses in this
+    // (options) context. The SDK can't run in the background service worker
+    // (ledger-v8 WASM + effect runtime are too heavy), so we derive here and
+    // hand the addresses to gero-db as a JSON-stringified field. Generate the
+    // mnemonic up-front so derivation and storage see the same one.
+    let preGeneratedMnemonic: string | null = null;
+    let midnightAddresses: {
+      unshielded: string;
+      shielded: string;
+      dust: string;
+      publicKeyHex?: string;
+      addressHex?: string;
+      cardanoXpub?: string;
+      cardanoBaseAddress?: string;
+      cardanoStakeAddress?: string;
+      cardanoPaymentKeyHashHex?: string;
+    } | undefined;
+    if (props.network.blockchain === 'Midnight') {
+      const bip39 = await import('bip39');
+      const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
+      preGeneratedMnemonic = bip39.generateMnemonic(256);
+      const derived = await deriveMidnightKeys(preGeneratedMnemonic, props.network.network);
+      midnightAddresses = derived.addresses;
+    }
+
     if (props.securityMethod === 'prf') {
       // ========================================================================
       // PRF WALLET CREATION (PURE PRF MODE - NO PASSWORD)
@@ -271,13 +296,14 @@ const walletCreationStep = async (): Promise<void> => {
             backupMnemonic: true,
             prfOutput,
             walletId: newWalletId, // CRITICAL: Must match ID used for PRF salt
+            ...(midnightAddresses ? { midnightAddresses } : {}),
           };
 
           wallet = await GeroStore.createNewWallet(
             props.name,
             walletIcon,
             Theme.GERO,
-            null,
+            preGeneratedMnemonic, // null for non-Midnight (gero-db generates inline)
             'temp-password',
             props.network.blockchain,
             props.network.network,
@@ -305,11 +331,12 @@ const walletCreationStep = async (): Promise<void> => {
         props.name,
         walletIcon,
         Theme.GERO,
-        null,
+        preGeneratedMnemonic, // null for non-Midnight (gero-db generates inline)
         password.value,
         props.network.blockchain,
         props.network.network,
-        undefined  // addressType - use default based on chain
+        undefined,  // addressType - use default based on chain
+        midnightAddresses ? { midnightAddresses } : undefined
       );
     }
 

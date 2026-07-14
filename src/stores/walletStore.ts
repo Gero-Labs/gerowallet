@@ -88,7 +88,6 @@ export const walletStore = Vue.observable<WalletStore>({
     currency: 'usd',
     locale: 'us',
     txAutoSubmit: true,
-    useSidePanel: true,
     websiteProtection: true,
     autoWithdrawRewards: false,
   },
@@ -313,13 +312,6 @@ export default {
       return state.config.txAutoSubmit
     }
     return true
-  },
-
-  getUseSidePanel(state) {
-    if (state?.config && 'useSidePanel' in state.config) {
-      return state.config.useSidePanel
-    }
-    return false
   },
 
   hasBackup(): boolean {

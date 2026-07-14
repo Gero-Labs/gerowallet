@@ -403,8 +403,8 @@ function liqClass(row: Row): string {
 
 .pt-skeleton-card {
   height: 120px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.05);
+  border-radius: var(--g-r-card);
+  background: var(--g-hairline-1);
   animation: skeleton-pulse 1.4s ease-in-out infinite;
 }
 
@@ -424,12 +424,12 @@ function liqClass(row: Row): string {
 }
 
 .pt-empty-icon {
-  color: rgba(255, 255, 255, 0.15) !important;
+  color: var(--g-text-3) !important;
 }
 
 .pt-empty-text {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--g-text-3);
   text-align: center;
 }
 
@@ -442,11 +442,9 @@ function liqClass(row: Row): string {
 
 /* ── Card ── */
 .pt-card {
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
@@ -455,11 +453,11 @@ function liqClass(row: Row): string {
 }
 
 .pt-card:hover {
-  border-color: rgba(255, 255, 255, 0.14);
+  border-color: var(--g-hairline-3);
 }
 
 .pt-card--expanded {
-  border-color: rgba(255, 255, 255, 0.18);
+  border-color: var(--g-hairline-3);
 }
 
 /* ── Header row ── */
@@ -473,7 +471,7 @@ function liqClass(row: Row): string {
 }
 
 .pt-card-header:focus-visible {
-  outline: 1px solid rgba(0, 199, 243, 0.5);
+  outline: 1px solid var(--g-accent);
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -481,8 +479,7 @@ function liqClass(row: Row): string {
 .pt-symbol {
   font-size: 13px;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.9);
-  letter-spacing: 0.02em;
+  color: var(--g-text-1);
   flex: 1;
 }
 
@@ -493,7 +490,7 @@ function liqClass(row: Row): string {
 }
 
 .pt-badge {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
   padding: 2px 6px;
@@ -502,27 +499,27 @@ function liqClass(row: Row): string {
 }
 
 .badge--long {
-  background: rgba(38, 250, 176, 0.15);
-  color: #26FAB0;
+  background: var(--g-success-fill);
+  color: var(--g-success);
 }
 
 .badge--short {
-  background: rgba(249, 112, 102, 0.15);
-  color: #F97066;
+  background: var(--g-error-fill);
+  color: var(--g-error);
 }
 
 .badge--leverage {
-  background: color-mix(in srgb, var(--chain-primary) 15%, transparent);
-  color: var(--chain-primary);
+  background: color-mix(in srgb, var(--g-accent) 15%, transparent);
+  color: var(--g-accent);
 }
 
 .badge--margin-mode {
-  background: rgba(255, 255, 255, 0.07);
-  color: rgba(255, 255, 255, 0.5);
+  background: var(--g-hairline-1);
+  color: var(--g-text-3);
 }
 
 .pt-expand-icon {
-  color: rgba(255, 255, 255, 0.4) !important;
+  color: var(--g-text-3) !important;
   transition: transform 0.18s ease;
 }
 
@@ -551,7 +548,7 @@ function liqClass(row: Row): string {
 
 .pt-price-divider {
   width: 1px;
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--g-hairline-1);
   align-self: stretch;
 }
 
@@ -569,19 +566,18 @@ function liqClass(row: Row): string {
 .pt-price-line--accent .pt-price-value {
   font-size: 14px;
   font-weight: 700;
-  letter-spacing: -0.01em;
 }
 
 .pt-price-label {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  color: rgba(255, 255, 255, 0.28);
+  color: var(--g-text-3);
 }
 
 .pt-price-label--hint {
-  text-decoration: underline dotted rgba(255, 255, 255, 0.25);
+  text-decoration: underline dotted var(--g-hairline-3);
   text-underline-offset: 2px;
   cursor: help;
 }
@@ -589,38 +585,38 @@ function liqClass(row: Row): string {
 .pt-price-value {
   font-size: 12px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.78);
+  color: var(--g-text-2);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
 .pt-pct {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   margin-left: 2px;
   opacity: 0.85;
 }
 
 .pt-pct--muted {
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--g-text-3);
   font-weight: 500;
 }
 
 .pnl--positive {
-  color: #26FAB0;
+  color: var(--g-success);
 }
 
 .pnl--negative {
-  color: #F97066;
+  color: var(--g-error);
 }
 
 .liq--warn {
-  color: #FFA726 !important;
+  color: var(--g-warning) !important;
 }
 
 /* ── Summary expansion ── */
 .pt-summary {
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--g-hairline-1);
   padding-top: 8px;
   display: flex;
   flex-direction: column;
@@ -628,11 +624,11 @@ function liqClass(row: Row): string {
 }
 
 .pt-summary-title {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.32);
+  color: var(--g-text-3);
 }
 
 .pt-summary-grid {
@@ -648,17 +644,17 @@ function liqClass(row: Row): string {
 }
 
 .pt-summary-label {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: rgba(255, 255, 255, 0.32);
+  color: var(--g-text-3);
 }
 
 .pt-summary-value {
   font-size: 12px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.78);
+  color: var(--g-text-2);
   font-variant-numeric: tabular-nums;
 }
 
@@ -683,21 +679,19 @@ function liqClass(row: Row): string {
 }
 
 .pt-close-btn {
-  font-size: 10px !important;
+  font-size: 11px !important;
   font-weight: 700 !important;
-  letter-spacing: 0.06em !important;
-  text-transform: uppercase !important;
   height: 26px !important;
   padding: 0 12px !important;
-  border-radius: 6px !important;
-  background: rgba(249, 112, 102, 0.14) !important;
-  color: #F97066 !important;
-  border: 1px solid rgba(249, 112, 102, 0.25) !important;
+  border-radius: var(--g-r-control) !important;
+  background: var(--g-error-fill) !important;
+  color: var(--g-error) !important;
+  border: 1px solid var(--g-error-line) !important;
   transition: background 0.15s ease !important;
 }
 
 .pt-close-btn:hover {
-  background: rgba(249, 112, 102, 0.24) !important;
+  background: color-mix(in srgb, var(--g-error) 24%, transparent) !important;
 }
 
 /* ── Responsive — narrow widths ── */
@@ -709,7 +703,7 @@ function liqClass(row: Row): string {
     gap: 6px;
   }
   .pt-pct {
-    font-size: 9px;
+    font-size: 11px;
   }
 }
 </style>

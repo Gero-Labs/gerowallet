@@ -331,7 +331,7 @@ const onConnected = (payload: ConnectionPayload): void => {
 // If onboarding is abandoned (e.g. back to the wallet list), restore the
 // default theme so a not-yet-created wallet never leaves the app re-themed.
 onUnmounted(() => {
-  updateVuetifyTheme(networks.networks[0].blockchain, true);
+  updateVuetifyTheme(networks.networks[0].blockchain);
 });
 </script>
 <style scoped>

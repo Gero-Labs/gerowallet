@@ -1,7 +1,7 @@
 <template>
   <v-card class="transparent-override" flat style="max-width: 600px; width: 100%; box-shadow: unset!important; background: transparent!important;">
     <template v-if="!hideHeader">
-      <v-card-title class="justify-center px-6" style="color: white; font-size: 32px;">
+      <v-card-title class="justify-center px-6" style="color: var(--g-text-1); font-size: 32px;">
         {{ $t('welcome.welcomeMessage') }}
       </v-card-title>
       <v-card-subtitle class="text-center px-0" style="font-size: 20px">
@@ -21,6 +21,7 @@
           >
             <v-list-item-icon style="height: 40px" class="mr-4">
               <v-badge
+                class="chain-badge"
                 overlap
                 avatar
                 bottom
@@ -446,6 +447,15 @@ const handleLoggedOut = async (): Promise<void> => {
 };
 </script>
 <style scoped>
+/* Chain badge disc: force a dark surface so the transparent white marks
+   (Apex ap3x.svg, Midnight midnight.svg) read on dark. Without this the
+   colorless v-badge falls back to the Vuetify theme primary and paints the
+   disc blue behind the glyph — the "Midnight shows a blue logo" symptom. */
+.chain-badge ::v-deep .v-badge__badge {
+  background: var(--g-raised) !important;
+  border-color: var(--g-hairline-2) !important;
+}
+
 /* Ensure all parent elements are transparent for backdrop-filter to work */
 .transparent-override,
 .transparent-override .v-card__title,
@@ -464,34 +474,18 @@ const handleLoggedOut = async (): Promise<void> => {
 }
 
 .wallet-row {
-  background:
-    linear-gradient(135deg, rgba(19, 22, 27, 0.6) 0%, rgba(19, 22, 27, 0.4) 100%),
-    radial-gradient(circle at 20% 50%, rgba(45, 240, 247, 0.03) 0%, transparent 50%),
-    radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.02) 0%, transparent 50%) !important;
-  backdrop-filter: blur(12px) saturate(1.3) !important;
-  -webkit-backdrop-filter: blur(12px) saturate(1.3) !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  border-radius: 8px !important;
+  background: var(--g-raised) !important;
+  border: 1px solid var(--g-hairline-1) !important;
+  border-radius: var(--g-r-control) !important;
   margin: 4px 0 !important;
-  box-shadow:
-    0 4px 16px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
-  transition: all 0.2s ease !important;
+  transition: background-color var(--g-dur-base) ease, border-color var(--g-dur-base) ease, transform var(--g-dur-base) ease !important;
   position: relative !important;
   overflow: hidden !important;
 }
 
 .wallet-row:hover {
-  background:
-    linear-gradient(135deg, rgba(19, 22, 27, 0.7) 0%, rgba(19, 22, 27, 0.5) 100%),
-    radial-gradient(circle at 20% 50%, rgba(45, 240, 247, 0.05) 0%, transparent 50%),
-    radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.03) 0%, transparent 50%) !important;
-  backdrop-filter: blur(16px) saturate(1.5) !important;
-  -webkit-backdrop-filter: blur(16px) saturate(1.5) !important;
-  border-color: rgba(45, 240, 247, 0.2) !important;
-  box-shadow:
-    0 6px 20px rgba(0, 0, 0, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  background: var(--g-raised) !important;
+  border-color: var(--g-accent) !important;
   transform: translateY(-1px) !important;
 }
 
@@ -502,43 +496,37 @@ const handleLoggedOut = async (): Promise<void> => {
   left: 0;
   right: 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  background: var(--g-hairline-2);
   z-index: 1;
 }
 
 /* Logged in wallet styling (teal/cyan) */
 .wallet-locked {
-  border-color: rgba(0, 199, 243, 0.5) !important;
-  background:
-    linear-gradient(135deg, rgba(0, 199, 243, 0.12) 0%, rgba(19, 22, 27, 0.4) 100%),
-    radial-gradient(circle at 20% 50%, rgba(0, 199, 243, 0.08) 0%, transparent 50%),
-    radial-gradient(circle at 80% 20%, rgba(0, 255, 209, 0.03) 0%, transparent 50%) !important;
+  border-color: var(--g-accent) !important;
+  background: var(--g-raised) !important;
 }
 
 .wallet-locked:hover {
-  border-color: rgba(0, 199, 243, 0.7) !important;
-  background:
-    linear-gradient(135deg, rgba(0, 199, 243, 0.18) 0%, rgba(19, 22, 27, 0.5) 100%),
-    radial-gradient(circle at 20% 50%, rgba(0, 199, 243, 0.12) 0%, transparent 50%),
-    radial-gradient(circle at 80% 20%, rgba(0, 255, 209, 0.05) 0%, transparent 50%) !important;
+  border-color: var(--g-accent) !important;
+  background: var(--g-raised) !important;
 }
 
 /* Fallback for browsers without backdrop-filter support */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .wallet-row {
-    background-color: rgba(19, 22, 27, 0.85) !important;
+    background-color: var(--g-raised) !important;
   }
 
   .wallet-row:hover {
-    background-color: rgba(19, 22, 27, 0.95) !important;
+    background-color: var(--g-raised) !important;
   }
 
   .wallet-locked {
-    background-color: rgba(255, 152, 0, 0.15) !important;
+    background-color: var(--g-warning) !important;
   }
 
   .wallet-locked:hover {
-    background-color: rgba(255, 152, 0, 0.25) !important;
+    background-color: var(--g-warning) !important;
   }
 }
 </style>

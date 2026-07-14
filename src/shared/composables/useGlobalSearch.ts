@@ -84,7 +84,6 @@ const SETTINGS_INDEX: SettingsEntry[] = [
   // Advanced
   { keywords: ['shop earn', 'cashback popups', 'bring', 'shop and earn', 'einkaufen', 'cashback'], tab: 'advanced', titleKey: 'settings.shopEarnPopups', subtitleKey: 'settings.advanced', icon: 'mdi-shopping', requires: 'cashback' },
   { keywords: ['auto submit', 'tx auto submit', 'transaction auto', 'automatisch senden'], tab: 'advanced', titleKey: 'settings.txAutoSubmit', subtitleKey: 'settings.advanced', icon: 'mdi-send-check' },
-  { keywords: ['popup', 'sidepanel', 'side panel', 'display mode', 'prompt', 'anzeigemodus'], tab: 'advanced', titleKey: 'settings.promptDisplayMode', subtitleKey: 'settings.advanced', icon: 'mdi-monitor' },
   { keywords: ['resync', 're-sync', 'sync wallet', 'refresh', 'synchronisieren', 'aktualisieren'], tab: 'advanced', titleKey: 'settings.reSyncWallet', subtitleKey: 'settings.advanced', icon: 'mdi-sync' },
   { keywords: ['delete wallet', 'remove wallet', 'danger', 'wallet löschen', 'entfernen'], tab: 'advanced', titleKey: 'settings.deleteWallet', subtitleKey: 'settings.advanced', icon: 'mdi-delete' },
 ];

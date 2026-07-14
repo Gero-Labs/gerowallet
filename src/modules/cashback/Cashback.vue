@@ -6,16 +6,16 @@
           <v-card-title class="justify-center text-center" style="font-size: 32px">
             {{ $t('cashback.title') }}
           </v-card-title>
-          <v-card-subtitle class="justify-center text-center py-0" style="font-size: 10px">
+          <v-card-subtitle class="justify-center text-center py-0" style="font-size: 11px">
             {{ $t('common.poweredBy') }} <v-btn color="primary" class="px-0 mx-0" :ripple="false" style="min-width: 20px ;text-transform: capitalize; letter-spacing: normal;" text href="https://bringweb3.io/" target="_blank">
             <v-img class="bring-web3-logo" max-height="36" height="36" width="40" :src="assets.bringWhite" contain :alt="$t('cashback.bringLogo')" />
           </v-btn>
           </v-card-subtitle>
-          <v-card-subtitle class="justify-center text-center pt-2" style="font-size: 18px">
+          <v-card-subtitle class="justify-center text-center pt-2" style="font-size: 16px">
             {{ $t('cashback.payAndReceive') }}
           </v-card-subtitle>
           <v-card-subtitle class="justify-center text-center pt-2 pb-8">
-            <v-btn small outlined rounded color="#00DFF3" @click="isHowItWorksDialogOpen = true">
+            <v-btn small outlined rounded color="primary" @click="isHowItWorksDialogOpen = true">
               {{ $t('cashback.howItWorks') }}
             </v-btn>
           </v-card-subtitle>
@@ -33,7 +33,7 @@
                       </v-list-item-title>
                       <v-list-item-subtitle style="display: flex; align-items: center;">
                         <div class="highlight-text">{{ filters.toCurrency(eligible ? (eligible.tokenAmount * 1000000) : 0, false, 2, "", (eligible ? " "+eligible.tokenSymbol : ""), false, 6) }}</div>
-                        <span class="ml-4" style="font-size: 14px; color: #C4C4C4!important;">{{ filters.toCurrency(eligible ? convertFiat(Number(eligible.totalEstimatedUsd)) : 0, false, 2, getCurrencySymbol(), '', false, 0) }}</span>
+                        <span class="ml-4" style="font-size: 14px; color: var(--g-text-2)!important;">{{ filters.toCurrency(eligible ? convertFiat(Number(eligible.totalEstimatedUsd)) : 0, false, 2, getCurrencySymbol(), '', false, 0) }}</span>
                       </v-list-item-subtitle>
                     </v-list-item-content>
                   </v-list-item>
@@ -49,12 +49,12 @@
                       </v-list-item-title>
                       <v-list-item-subtitle style="display: flex; align-items: center;">
                         <div class="secondary-text">{{ filters.toCurrency(pending ? (pending.tokenAmount * 1000000) : 0, false, 2, "", (pending ? " "+pending.tokenSymbol : ""), false, 6) }}</div>
-                        <span class="ml-4" style="font-size: 14px; color: #C4C4C4!important;">{{ filters.toCurrency(pending ? convertFiat(pending.totalEstimatedUsd) : 0, false, 2, getCurrencySymbol(), '', false, 0) }}</span>
+                        <span class="ml-4" style="font-size: 14px; color: var(--g-text-2)!important;">{{ filters.toCurrency(pending ? convertFiat(pending.totalEstimatedUsd) : 0, false, 2, getCurrencySymbol(), '', false, 0) }}</span>
                       </v-list-item-subtitle>
                     </v-list-item-content>
                   </v-list-item>
                 </div>
-                <v-btn elevation="0" height="50" color="#0B141B" @click="isRewardsDialogOpen = true" :disabled="!supported">
+                <v-btn elevation="0" height="50" color="var(--g-surface)" @click="isRewardsDialogOpen = true" :disabled="!supported">
                   <div class="btn-content">
                     <div :class="supported ? 'btn-text' : 'btn-text-disabled'">{{ $t('cashback.viewRewards') }}</div>
                   </div>
@@ -73,7 +73,7 @@
                   </v-skeleton-loader>
                 </v-chip-group>
                 <v-chip-group v-else v-model="selectedCategoryIndex" column active-class="geroButton" >
-                  <v-chip class="ma-1" style="border: 1px solid rgba(51, 55, 65, 0.5); background-color: #141414!important;" v-for="item in categories?.items" :key="item.id">
+                  <v-chip class="ma-1" style="border: 1px solid var(--g-hairline-2); background-color: var(--g-raised)!important;" v-for="item in categories?.items" :key="item.id">
                     {{ item.name }}
                   </v-chip>
                 </v-chip-group>
@@ -97,7 +97,7 @@
                   hide-details
                   hide-no-data
                   hide-selected
-                  style="border-radius: 20px"
+                  style="border-radius: var(--g-r-sheet)"
                   :filter="customAutoCompleteFilter"
                   attach
                 >
@@ -108,8 +108,8 @@
               </v-col>
             </v-row>
             <v-row class="mt-4" v-show="!isLoading">
-              <v-col cols="12" md="3" style="border-radius: 16px" v-for="retailer in deals" :key="retailer.id">
-                <v-card class="pa-4 fill-height" flat style="background-color: #161B26!important; border-radius: 16px; text-align: center;" color="primary" @click.stop="openRetailerDialog(retailer)">
+              <v-col cols="12" md="3" style="border-radius: var(--g-r-sheet)" v-for="retailer in deals" :key="retailer.id">
+                <v-card class="pa-4 fill-height" flat style="background-color: var(--g-raised)!important; border-radius: var(--g-r-sheet); text-align: center;" color="primary" @click.stop="openRetailerDialog(retailer)">
                   <v-avatar :color="retailer.backgroundColor ? retailer.backgroundColor : '#fff'" size="80" v-if="retailer.iconPath && !imageErrors[retailer.id]">
                     <v-img :src="retailer.img" contain style="margin: auto;" eager @error="onImageError(retailer.id)">
                       <template v-slot:placeholder>
@@ -126,18 +126,18 @@
                       </template>
                     </v-img>
                   </v-avatar>
-                  <v-avatar v-else color="#333741" size="80">
+                  <v-avatar v-else color="var(--g-raised)" size="80">
                     <span class="retailer-initials">{{ getInitials(retailer.name) }}</span>
                   </v-avatar>
                   <v-card-title class="justify-center px-0" style="word-break: break-word;">{{retailer.section ?  (retailer.name + " > " + retailer.section) : retailer.name}}</v-card-title>
-                  <v-card-subtitle class="px-0 pb-0" style="word-break: break-word; color: #00DFF3">
-                    <v-chip small :class="Number(retailer.maxCashback) >= 4 ? 'geroButton' : 'transparent'" :style="Number(retailer.maxCashback) >= 4 ? {color: 'black'} : {color:'#00DFF3'}">Up to {{ Number(retailer.maxCashback).toFixed(2) }}{{retailer.cashbackSymbol}} Cashback</v-chip>
+                  <v-card-subtitle class="px-0 pb-0" style="word-break: break-word; color: var(--g-accent)">
+                    <v-chip small :class="Number(retailer.maxCashback) >= 4 ? 'geroButton' : 'transparent'" :style="Number(retailer.maxCashback) >= 4 ? {color: 'var(--g-on-grad)'} : {color:'var(--g-accent)'}">Up to {{ Number(retailer.maxCashback).toFixed(2) }}{{retailer.cashbackSymbol}} Cashback</v-chip>
                   </v-card-subtitle>
                 </v-card>
               </v-col>
             </v-row>
             <v-row class="mt-4" v-show="isLoading && supported">
-              <v-col cols="12" md="3" style="border-radius: 16px" v-for="i in 12" :key="i">
+              <v-col cols="12" md="3" style="border-radius: var(--g-r-sheet)" v-for="i in 12" :key="i">
                 <v-skeleton-loader
                   height="183"
                   type="image"
@@ -342,9 +342,9 @@ watch(
   width: max-content;
   height: 114px;
   padding: 24px;
-  background-color: #161B26;
-  border-radius: 12px;
-  border: 1px solid #333741;
+  background-color: var(--g-raised);
+  border-radius: var(--g-r-card);
+  border: 1px solid var(--g-hairline-3);
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -373,11 +373,11 @@ watch(
 }
 
 .avatar-bg {
-  background: linear-gradient(134deg, rgba(0, 199.26, 243, 0.25) 40%, rgba(0, 255, 209.10, 0.25) 100%);
+  background: var(--g-raised);
 }
 
 .header-text {
-  color: white;
+  color: var(--g-text-1);
   font-size: 24px;
   font-weight: 600;
   line-height: 24px;
@@ -403,10 +403,8 @@ watch(
 
 .highlight-text {
   align-self: stretch;
-  background: linear-gradient(to right, #00c7f3, #00fad5);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  font-size: 26px;
+  color: var(--g-accent);
+  font-size: 24px;
   font-weight: 600;
   line-height: 38px;
   word-wrap: break-word;
@@ -424,7 +422,7 @@ watch(
 .usd-text {
   align-self: stretch;
   text-align: center;
-  color: #A3A3A3;
+  color: var(--g-text-3);
   font-size: 16px;
   font-weight: 600;
   line-height: 38px;
@@ -432,7 +430,7 @@ watch(
 }
 
 .btn-bg {
-  background: linear-gradient(112deg, rgba(255, 255, 255, 0.20) 0%, rgba(203.10, 203.10, 203.10, 0) 100%);
+  background: var(--g-raised);
 }
 
 .btn-content {
@@ -446,10 +444,8 @@ watch(
 .btn-text {
   text-transform: capitalize;
   align-self: stretch;
-  background: linear-gradient(to right, #00c7f3, #00fad5);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  font-size: 15px;
+  color: var(--g-accent);
+  font-size: 14px;
   font-weight: 600;
   line-height: 38px;
   word-wrap: break-word;
@@ -458,11 +454,9 @@ watch(
 .btn-text-disabled {
   text-transform: capitalize;
   align-self: stretch;
-  background: linear-gradient(to right, #00c7f3, #00fad5);
+  color: var(--g-accent);
   filter: grayscale(0.9);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  font-size: 30px;
+  font-size: 32px;
   font-weight: 600;
   line-height: 38px;
   word-wrap: break-word;
@@ -472,8 +466,8 @@ watch(
   width: 48px;
   height: 48px;
   padding: 12px;
-  background: linear-gradient(134deg, rgba(183.73, 183.73, 183.73, 0.25) 40%, rgba(77.03, 77.03, 77.03, 0.25) 100%);
-  border-radius: 9999px;
+  background: var(--g-raised);
+  border-radius: var(--g-r-pill);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -490,8 +484,8 @@ watch(
 
 .secondary-text {
   align-self: stretch;
-  color: #A3A3A3;
-  font-size: 30px;
+  color: var(--g-text-3);
+  font-size: 32px;
   font-weight: 600;
   line-height: 38px;
   word-wrap: break-word;
@@ -500,7 +494,7 @@ watch(
 .usd-secondary-text {
   align-self: stretch;
   text-align: center;
-  color: #737373;
+  color: var(--g-text-3);
   font-size: 16px;
   font-weight: 600;
   line-height: 38px;
@@ -514,7 +508,7 @@ watch(
 .retailer-initials {
   font-size: 24px;
   font-weight: 600;
-  color: #A3A3A3;
+  color: var(--g-text-3);
   user-select: none;
 }
 

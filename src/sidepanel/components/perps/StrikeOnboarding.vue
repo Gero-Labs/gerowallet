@@ -24,36 +24,36 @@
           class="step-row"
           :class="{ 'step-active': activeIndex === i, 'step-done': activeIndex > i }"
         >
-          <v-icon v-if="activeIndex > i" size="14" color="#26FAB0" class="step-icon">mdi-check-circle</v-icon>
+          <v-icon v-if="activeIndex > i" size="14" color="success" class="step-icon">mdi-check-circle</v-icon>
           <v-progress-circular
             v-else-if="activeIndex === i"
             indeterminate
             size="14"
             width="2"
-            color="#00c7f3"
+            color="var(--g-accent)"
             class="step-icon"
           />
-          <v-icon v-else size="14" color="rgba(255,255,255,0.25)" class="step-icon">mdi-circle-outline</v-icon>
+          <v-icon v-else size="14" color="var(--g-text-3)" class="step-icon">mdi-circle-outline</v-icon>
           <span class="step-label">{{ s.label }}</span>
         </div>
       </div>
 
       <!-- Error -->
       <div v-if="error" class="onboarding-error">
-        <v-icon size="14" color="#F97066" class="mr-1">mdi-alert-circle-outline</v-icon>
+        <v-icon size="14" color="error" class="mr-1">mdi-alert-circle-outline</v-icon>
         <span>{{ error }}</span>
       </div>
 
       <!-- Key display (after generation/unlock) -->
       <div v-if="publicKey" class="key-card">
         <div class="key-card-label">
-          <v-icon size="12" color="#26FAB0" class="mr-1">mdi-check-circle</v-icon>
+          <v-icon size="12" color="success" class="mr-1">mdi-check-circle</v-icon>
           {{ $t('perpetuals.keyGenerated') }}
         </div>
         <div class="key-row">
           <span class="key-value">{{ truncatedKey }}</span>
           <v-btn icon x-small class="copy-btn" @click="copyKey()">
-            <v-icon size="14" :color="copied ? '#26FAB0' : 'rgba(255,255,255,0.45)'">
+            <v-icon size="14" :color="copied ? 'success' : 'var(--g-text-3)'">
               {{ copied ? 'mdi-check' : 'mdi-content-copy' }}
             </v-icon>
           </v-btn>
@@ -104,7 +104,7 @@
 
       <template v-else>
         <div class="connected-state">
-          <v-icon size="16" color="#26FAB0" class="mr-2">mdi-check-circle</v-icon>
+          <v-icon size="16" color="success" class="mr-2">mdi-check-circle</v-icon>
           <span class="connected-label">{{ $t('perpetuals.connected') }}</span>
         </div>
         <v-btn
@@ -246,17 +246,10 @@ watch(isConnected, (val) => {
   flex-direction: column;
   align-items: center;
   gap: 16px;
-  background:
-    linear-gradient(180deg, rgba(19, 22, 27, 0.7) 0%, rgba(10, 12, 16, 0.8) 100%),
-    radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--chain-primary) 8%, transparent) 0%, transparent 60%);
-  backdrop-filter: blur(32px) saturate(1.6);
-  -webkit-backdrop-filter: blur(32px) saturate(1.6);
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--g-surface);
+  border-radius: var(--g-r-sheet);
+  border: 1px solid var(--g-hairline-2);
   padding: 28px 20px 24px;
-  box-shadow:
-    0 8px 40px rgba(0, 0, 0, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .onboarding-icon-wrap {
@@ -269,29 +262,28 @@ watch(isConnected, (val) => {
   width: 68px;
   height: 68px;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--chain-primary) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--chain-primary) 25%, transparent);
+  background: color-mix(in srgb, var(--g-accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--g-accent) 25%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 0 24px color-mix(in srgb, var(--chain-primary) 15%, transparent);
 }
 
 .onboarding-icon {
-  color: var(--chain-primary) !important;
+  color: var(--g-accent) !important;
 }
 
 .onboarding-title {
   font-size: 16px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--g-text-1);
   text-align: center;
   letter-spacing: -0.01em;
 }
 
 .onboarding-desc {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--g-text-3);
   text-align: center;
   line-height: 1.55;
 }
@@ -302,9 +294,9 @@ watch(isConnected, (val) => {
   flex-direction: column;
   gap: 6px;
   padding: 10px 12px;
-  border-radius: 10px;
-  background: rgba(0, 199, 243, 0.04);
-  border: 1px solid rgba(0, 199, 243, 0.18);
+  border-radius: var(--g-r-control);
+  background: color-mix(in srgb, var(--g-accent) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--g-accent) 18%, transparent);
 }
 
 .step-row {
@@ -312,54 +304,50 @@ watch(isConnected, (val) => {
   align-items: center;
   gap: 8px;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--g-text-3);
   transition: color 0.2s ease;
 }
 
 .step-row.step-active {
-  color: #ffffff;
+  color: var(--g-text-1);
 }
 
 .step-row.step-done {
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--g-text-2);
 }
 
 .step-icon {
   flex-shrink: 0;
 }
 
-.step-label {
-  letter-spacing: 0.01em;
-}
-
 .onboarding-error {
   display: flex;
   align-items: center;
   padding: 8px 12px;
-  border-radius: 8px;
-  background: rgba(249, 112, 102, 0.1);
-  border: 1px solid rgba(249, 112, 102, 0.25);
+  border-radius: var(--g-r-control);
+  background: var(--g-error-fill);
+  border: 1px solid var(--g-error-line);
   font-size: 11px;
-  color: #F97066;
+  color: var(--g-error);
   width: 100%;
 }
 
 .key-card {
   width: 100%;
-  background: rgba(38, 250, 176, 0.06);
-  border: 1px solid rgba(38, 250, 176, 0.2);
-  border-radius: 10px;
+  background: var(--g-success-fill);
+  border: 1px solid var(--g-success-line);
+  border-radius: var(--g-r-control);
   padding: 10px 12px;
 }
 
 .key-card-label {
   display: flex;
   align-items: center;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #26FAB0;
+  color: var(--g-success);
   margin-bottom: 6px;
 }
 
@@ -372,9 +360,8 @@ watch(isConnected, (val) => {
 
 .key-value {
   font-size: 12px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  color: rgba(255, 255, 255, 0.8);
-  letter-spacing: 0.03em;
+  font-family: var(--g-font-mono);
+  color: var(--g-text-2);
 }
 
 .copy-btn {
@@ -384,19 +371,19 @@ watch(isConnected, (val) => {
 .connect-btn {
   width: 100% !important;
   height: 42px !important;
-  border-radius: 10px !important;
-  background: color-mix(in srgb, var(--chain-primary) 12%, transparent) !important;
-  color: var(--chain-primary) !important;
-  border: 1px solid color-mix(in srgb, var(--chain-primary) 30%, transparent) !important;
+  border-radius: var(--g-r-control) !important;
+  background: color-mix(in srgb, var(--g-accent) 12%, transparent) !important;
+  color: var(--g-accent) !important;
+  border: 1px solid color-mix(in srgb, var(--g-accent) 30%, transparent) !important;
   font-size: 13px !important;
   font-weight: 700 !important;
   text-transform: none !important;
-  letter-spacing: 0.02em !important;
+  letter-spacing: 0 !important;
   transition: background 0.18s ease !important;
 }
 
 .connect-btn:hover:not(.v-btn--disabled) {
-  background: color-mix(in srgb, var(--chain-primary) 20%, transparent) !important;
+  background: color-mix(in srgb, var(--g-accent) 20%, transparent) !important;
 }
 
 .connected-state {
@@ -404,16 +391,16 @@ watch(isConnected, (val) => {
   align-items: center;
   justify-content: center;
   padding: 8px 16px;
-  border-radius: 10px;
-  background: rgba(38, 250, 176, 0.08);
-  border: 1px solid rgba(38, 250, 176, 0.2);
+  border-radius: var(--g-r-control);
+  background: var(--g-success-fill);
+  border: 1px solid var(--g-success-line);
   width: 100%;
 }
 
 .connected-label {
   font-size: 13px;
   font-weight: 700;
-  color: #26FAB0;
+  color: var(--g-success);
 }
 
 .password-field {
@@ -421,36 +408,36 @@ watch(isConnected, (val) => {
 }
 
 .password-field >>> .v-input__slot {
-  background: rgba(255, 255, 255, 0.04) !important;
-  border-radius: 10px !important;
+  background: var(--g-raised) !important;
+  border-radius: var(--g-r-control) !important;
   min-height: 42px;
 }
 
 .password-field >>> fieldset {
-  border-color: rgba(255, 255, 255, 0.12) !important;
+  border-color: var(--g-hairline-2) !important;
 }
 
 .password-field >>> input {
-  color: #ffffff !important;
+  color: var(--g-text-1) !important;
   font-size: 13px !important;
 }
 
 .password-field >>> .v-label {
   font-size: 12px !important;
-  color: rgba(255, 255, 255, 0.5) !important;
+  color: var(--g-text-3) !important;
 }
 
 .disconnect-btn {
   width: 100% !important;
   height: 32px !important;
   font-size: 11px !important;
-  color: rgba(255, 255, 255, 0.5) !important;
+  color: var(--g-text-3) !important;
   text-transform: none !important;
-  letter-spacing: 0.02em !important;
+  letter-spacing: 0 !important;
   margin-top: 4px !important;
 }
 
 .disconnect-btn:hover {
-  color: #F97066 !important;
+  color: var(--g-error) !important;
 }
 </style>

@@ -1,0 +1,29 @@
+// MIRROR of tokens.css. tokens.css is canonical.
+// scripts/design/audit.mjs verifies these stay identical; edit both or fail CI.
+// Prefer var(--g-*) in component styles; use these ONLY where custom
+// properties cannot work (breakpoints, sass arithmetic).
+$g-canvas: #000000;
+$g-surface: #0C0E12;
+$g-raised: #12151B;
+$g-overlay: #1A1E26;
+$g-text-1: #F7F8F9;
+$g-text-2: #B8BCC4;
+$g-text-3: #7A8088;
+$g-accent: #33C7DD;
+$g-error: #F97066;
+$g-success: #47CD89;
+$g-warning: #FDB022;
+$g-info: #7AA7FF;
+$g-r-control: 8px;
+$g-r-card: 12px;
+$g-r-sheet: 16px;
+$g-s-1: 4px;
+$g-s-2: 8px;
+$g-s-3: 12px;
+$g-s-4: 16px;
+$g-s-5: 24px;
+$g-s-6: 32px;
+$g-btn-h: 40px;
+$g-dur-fast: 150ms;
+$g-dur-base: 250ms;
+$g-dur-slow: 350ms;

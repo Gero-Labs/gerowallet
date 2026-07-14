@@ -20,7 +20,7 @@
                   </div>
                 </div>
 
-                <v-divider vertical class="mx-1" style="border-color: rgba(255,255,255,0.1); max-height: 32px" />
+                <v-divider vertical class="mx-1" style="border-color: var(--g-hairline-2); max-height: 32px" />
 
                 <!-- Voting Power -->
                 <div class="d-flex align-center">
@@ -38,11 +38,11 @@
                             <div class="font-weight-medium">{{ vpc.name }}</div>
                             <div style="font-size: 11px; line-height: 1.4; opacity: 0.85">{{ vpc.description }}</div>
                             <div v-if="vpc.assets?.length" class="mt-1">
-                              <span v-for="asset in vpc.assets" :key="asset.id" class="mr-2" style="font-size: 10px">
+                              <span v-for="asset in vpc.assets" :key="asset.id" class="mr-2" style="font-size: 11px">
                                 {{ asset.type }} ({{ asset.weight }}x)
                               </span>
                             </div>
-                            <div v-if="vpc.timeBonusMultiplier > 1" style="font-size: 10px; opacity: 0.7; margin-top: 2px">
+                            <div v-if="vpc.timeBonusMultiplier > 1" style="font-size: 11px; opacity: 0.7; margin-top: 2px">
                               {{ $t('governance.timeBonus') }}: {{ vpc.timeBonusMultiplier }}x {{ $t('governance.after') }} {{ vpc.timeBonusEpochs }} {{ $t('governance.epochs') }}
                             </div>
                           </div>
@@ -55,7 +55,7 @@
                   </div>
                 </div>
 
-                <v-divider vertical class="mx-1" style="border-color: rgba(255,255,255,0.1); max-height: 32px" />
+                <v-divider vertical class="mx-1" style="border-color: var(--g-hairline-2); max-height: 32px" />
 
                 <!-- Stats -->
                 <div class="d-flex align-center">
@@ -77,7 +77,7 @@
                   v-if="!isMember && loggedWallet"
                   small
                   class="geroButton"
-                  style="color: black !important"
+                  style="color: var(--g-on-grad) !important"
                   :loading="joiningDao"
                   @click="showJoinFlow()"
                 >
@@ -104,7 +104,7 @@
 
             </v-card>
 
-            <!-- ═══ GOVERNANCE DETAILS — Collapsible Cards ═══ -->
+            <!-- ═══ GOVERNANCE DETAILS \u2014 Collapsible Cards ═══ -->
             <div class="mb-4">
               <!-- About & How It Works -->
               <v-card flat class="dao-collapsible mb-2" @click="toggleSection('about')">
@@ -235,7 +235,7 @@
                   <div class="dao-collapsible-body px-4 pb-4 pt-2">
                     <div v-for="(step, i) in gettingStarted" :key="i" class="d-flex align-start mb-2">
                       <v-avatar size="20" color="primary" class="mr-2 mt-1 flex-shrink-0">
-                        <span class="white--text" style="font-size: 10px; font-weight: 700">{{ i + 1 }}</span>
+                        <span class="white--text" style="font-size: 11px; font-weight: 700">{{ i + 1 }}</span>
                       </v-avatar>
                       <div>
                         <div class="text-caption font-weight-medium white--text">{{ step.title }}</div>
@@ -245,7 +245,7 @@
                       </div>
                     </div>
 
-                    <v-divider class="my-3" style="border-color: rgba(255,255,255,0.06)" />
+                    <v-divider class="my-3" style="border-color: var(--g-hairline-1)" />
 
                     <div class="text-caption font-weight-medium white--text mb-2">{{ $t('governance.whoCanParticipate') }}</div>
                     <div class="text-caption grey--text text--lighten-1 mb-2" style="line-height: 1.5; white-space: normal; word-break: break-word">
@@ -258,7 +258,7 @@
                       <span class="text-caption white--text" style="white-space: normal; word-break: break-word">{{ req.text }}</span>
                     </div>
 
-                    <v-divider class="my-3" style="border-color: rgba(255,255,255,0.06)" />
+                    <v-divider class="my-3" style="border-color: var(--g-hairline-1)" />
 
                     <div class="text-caption font-weight-medium white--text mb-2">{{ $t('governance.tokenomics') }}</div>
                     <div class="d-flex flex-wrap" style="gap: 6px">
@@ -316,7 +316,7 @@
               <div
                 v-if="workflowWelcomeMessage"
                 class="text-caption grey--text text--lighten-1 mt-2 pt-2"
-                style="border-top: 1px solid rgba(255,255,255,0.06); font-size: 11px !important; line-height: 1.5; white-space: normal; word-break: break-word"
+                style="border-top: 1px solid var(--g-hairline-1); font-size: 11px !important; line-height: 1.5; white-space: normal; word-break: break-word"
                 v-html="workflowWelcomeMessage"
               />
             </v-card>
@@ -336,8 +336,8 @@
           <!-- Stake address -->
           <div class="text-caption grey--text text--lighten-1 mb-1">{{ $t('governance.yourStakeAddress') }}</div>
           <v-card flat class="liquid-glass-subtle pa-2 d-flex align-center">
-            <span class="text-caption white--text flex-grow-1" style="font-family: monospace; font-size: 11px !important; word-break: break-all">
-              {{ loggedWallet?.stakeAddress || '—' }}
+            <span class="text-caption white--text flex-grow-1" style="font-family: var(--g-font-mono); font-size: 11px !important; word-break: break-all">
+              {{ loggedWallet?.stakeAddress || '\u2014' }}
             </span>
             <CopyButton v-if="loggedWallet?.stakeAddress" x-small :value="loggedWallet.stakeAddress" />
           </v-card>
@@ -348,7 +348,7 @@
           <v-btn
             small
             class="geroButton"
-            style="color: black !important"
+            style="color: var(--g-on-grad) !important"
             :loading="joiningDao"
             :disabled="!loggedWallet?.stakeAddress || !meetsRequirements"
             @click="confirmJoinDao()"
@@ -376,7 +376,7 @@ import { walletStore } from '@/stores/walletStore';
 const { t } = useTranslation();
 const { loggedWallet } = toRefs(walletStore);
 
-/** Sanitize HTML — whitelist safe tags only, strip everything else */
+/** Sanitize HTML \u2014 whitelist safe tags only, strip everything else */
 const sanitizeHtml = (html: string): string => {
   const div = document.createElement('div');
   div.innerHTML = html;
@@ -654,7 +654,7 @@ const confirmJoinDao = async (): Promise<void> => {
   }
 };
 
-// ── Lifecycle — Load all data in parallel ──
+// ── Lifecycle \u2014 Load all data in parallel ──
 onMounted(async () => {
   const stakeAddr = loggedWallet.value?.stakeAddress;
 
@@ -676,7 +676,7 @@ onMounted(async () => {
     // 3. Voting power calculations (getVotingPowerCalculations)
     clarityApi.getVotingPowerCalculations().then(async res => {
       votingPowerCalcs.value = Array.isArray(res.data) ? res.data : [];
-      // User voting power (getUserVotingPower) — depends on calculations
+      // User voting power (getUserVotingPower) \u2014 depends on calculations
       if (stakeAddr && res.data?.length > 0) {
         try {
           const vpRes = await clarityApi.getUserVotingPower(stakeAddr, res.data[0].id);
@@ -693,19 +693,14 @@ onMounted(async () => {
 
 <style scoped>
 .dao-theme .dao-table th {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
-  color: rgba(255, 255, 255, 0.5) !important;
+  border-bottom: 1px solid var(--g-hairline-1) !important;
+  color: var(--g-text-3) !important;
 }
 .dao-theme .dao-table td {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
+  border-bottom: 1px solid var(--g-hairline-1) !important;
 }
 .dao-theme .dao-table tr:hover td {
-  background: rgba(255, 255, 255, 0.02) !important;
-}
-
-.geroButton {
-  background: linear-gradient(to right, #00c7f3, #00fad5) !important;
-  color: black !important;
+  background: var(--g-hairline-1) !important;
 }
 
 .cursor-pointer {
@@ -716,26 +711,26 @@ onMounted(async () => {
 <!-- Unscoped for Vuetify child selectors -->
 <style>
 .dao-collapsible {
-  background-color: rgba(0, 0, 0, 0.35) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  border-radius: 12px !important;
+  background-color: var(--g-surface) !important;
+  border: 1px solid var(--g-hairline-2) !important;
+  border-radius: var(--g-r-card) !important;
   cursor: pointer;
 }
 .dao-collapsible-header:hover {
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 12px;
+  background: var(--g-hairline-1);
+  border-radius: var(--g-r-card);
 }
 .dao-collapsible-body {
-  background-color: rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background-color: var(--g-raised);
+  border: 1px solid var(--g-hairline-1);
   border-top: none;
-  border-radius: 0 0 12px 12px;
+  border-radius: 0 0 var(--g-r-card) var(--g-r-card);
   margin-top: -4px;
 }
 
 .dao-html-content p { margin-bottom: 8px; }
 .dao-html-content p:last-child { margin-bottom: 0; }
-.dao-html-content a { color: #00c7f3; text-decoration: none; }
+.dao-html-content a { color: var(--g-accent); text-decoration: none; }
 .dao-html-content a:hover { text-decoration: underline; }
 
 </style>

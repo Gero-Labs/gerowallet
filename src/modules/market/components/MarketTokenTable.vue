@@ -55,14 +55,14 @@
           <v-icon
             v-if="item.isSnekFun"
             class="snek-badge"
-            style="position: absolute; right: -4px; bottom: -4px; font-size: 14px; color: #A3E635; background: #0d0d11; border-radius: 50%;"
+            style="position: absolute; right: -4px; bottom: -4px; font-size: 14px; color: #A3E635; background: var(--g-surface); border-radius: 50%;"
             title="snek.fun"
           >mdi-snake</v-icon>
           <v-icon
             v-else-if="item.verified"
-            color="primary"
+            color="var(--g-accent)"
             class="verified-check"
-            style="position: absolute; right: -3px; bottom: -3px; font-size: 13px; background: #0d0d11; border-radius: 50%;"
+            style="position: absolute; right: -3px; bottom: -3px; font-size: 13px; background: var(--g-surface); border-radius: 50%;"
           >mdi-check-decagram</v-icon>
         </div>
         <v-tooltip top :open-delay="300" content-class="custom-tooltip">
@@ -76,7 +76,7 @@
           x-small label
           color="primary"
           class="ml-1 flex-shrink-0"
-          style="height: 16px; font-size: 9px; padding: 0 4px;"
+          style="height: 16px; font-size: 11px; padding: 0 4px;"
         >
           {{ $t('market.owned') }}
         </v-chip>
@@ -249,8 +249,8 @@
         class="allocation-bar"
         height="14"
         :value="totalAllocation > 0 ? (item.allocation / totalAllocation) * 100 : 0"
-        color="primary"
-        background-color="rgba(255,255,255,0.06)"
+        color="var(--g-accent)"
+        background-color="var(--g-hairline-1)"
         rounded
       >
         <template v-slot:default="{ value }">
@@ -623,8 +623,8 @@ function formatPnl(value: number, decimals = 2): string {
 }
 
 function pnlColor(pnl: number): string {
-  if (pnl === 0) return '#A3A3A3';
-  return pnl > 0 ? '#47CD89' : '#F97066';
+  if (pnl === 0) return 'var(--g-text-3)';
+  return pnl > 0 ? 'var(--g-success)' : 'var(--g-error)';
 }
 
 function rowClass(item: MarketToken): string {
@@ -669,7 +669,7 @@ function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: bool
 }
 
 .market-token-table >>> tbody tr:hover {
-  background: rgba(255, 255, 255, 0.03) !important;
+  background: var(--g-hairline-1) !important;
 }
 
 .market-token-table >>> th {
@@ -686,7 +686,7 @@ function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: bool
 }
 
 .market-token-table >>> tbody tr td {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
+  border-bottom: 1px solid var(--g-hairline-1) !important;
 }
 
 /* Name cell — single-line, compact */
@@ -715,11 +715,11 @@ function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: bool
   pointer-events: none;
 }
 @keyframes market-flash-up {
-  0% { background-color: rgba(38, 194, 129, 0.16); }
+  0% { background-color: var(--g-success-fill); }
   100% { background-color: transparent; }
 }
 @keyframes market-flash-down {
-  0% { background-color: rgba(246, 70, 93, 0.16); }
+  0% { background-color: var(--g-error-fill); }
   100% { background-color: transparent; }
 }
 .market-flash-up { animation: market-flash-up 0.9s ease; }
@@ -734,15 +734,15 @@ function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: bool
 
 /* Allocation progress bar */
 .allocation-bar {
-  border-radius: 10px;
+  border-radius: var(--g-r-control);
   min-width: 60px;
   max-width: 100px;
 }
 
 .allocation-label {
-  font-size: 8px;
-  color: white;
-  font-family: 'Roboto Mono', monospace;
+  font-size: 11px;
+  color: var(--g-text-1);
+  font-family: var(--g-font-mono);
 }
 
 /* Hide columns responsively via class */
@@ -773,7 +773,7 @@ function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: bool
   display: inline-block;
   width: 50px;
   height: 12px;
-  border-radius: 3px;
+  border-radius: 4px;
   background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 75%);
   background-size: 200% 100%;
   animation: pnlShimmer 1.5s infinite;

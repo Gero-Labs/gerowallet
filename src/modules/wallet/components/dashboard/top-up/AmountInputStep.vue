@@ -26,7 +26,7 @@
 
     <!-- Minimum Requirement Notice -->
     <div class="minimum-notice">
-      <v-icon color="#00c7f3" size="16" class="notice-icon">mdi-information</v-icon>
+      <v-icon color="primary" size="16" class="notice-icon">mdi-information</v-icon>
       <span class="notice-text">Minimum top-up amount: 2 ADA</span>
     </div>
 
@@ -53,7 +53,7 @@
 
       <!-- Switch Button -->
       <div class="switch-button">
-        <v-avatar size="32" style="border: 1px solid #00c7f3">
+        <v-avatar size="32" style="border: 1px solid var(--g-accent)">
           <v-icon color="primary" size="20">mdi-arrow-down</v-icon>
         </v-avatar>
       </div>
@@ -271,8 +271,8 @@ watch(
   padding: $spacing-sm $spacing-md;
   align-items: center;
   justify-content: center;
-  background: #0c111d;
-  border: 1px solid #1f242f;
+  background: var(--g-surface);
+  border: 1px solid var(--g-hairline-2);
   border-radius: $border-radius-md;
   width: fit-content;
 }
@@ -285,15 +285,15 @@ watch(
 }
 
 .rate-label {
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 600;
   font-size: 14px;
   line-height: 1.43;
-  color: #cecfd2;
+  color: var(--g-text-2);
 }
 
 .rate-value {
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 600;
   font-size: 14px;
   line-height: 1.43;
@@ -301,7 +301,7 @@ watch(
 }
 
 .rate-equals {
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 600;
   font-size: 14px;
   line-height: 1.43;
@@ -314,26 +314,26 @@ watch(
   gap: $spacing-sm;
   justify-content: center;
   padding: $spacing-sm $spacing-md;
-  background: #0c111d;
-  border: 1px solid #1f242f;
+  background: var(--g-surface);
+  border: 1px solid var(--g-hairline-2);
   border-radius: $border-radius-md;
   width: fit-content;
 }
 
 .balance-label {
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 500;
   font-size: 14px;
   line-height: 1.43;
-  color: #cecfd2;
+  color: var(--g-text-2);
 }
 
 .balance-value {
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 600;
   font-size: 14px;
   line-height: 1.43;
-  color: #75e0a7;
+  color: var(--g-success);
 }
 
 .minimum-notice {
@@ -342,8 +342,8 @@ watch(
   gap: $spacing-sm;
   justify-content: center;
   padding: $spacing-sm $spacing-md;
-  background: rgba(0, 199, 243, 0.1);
-  border: 1px solid rgba(0, 199, 243, 0.3);
+  background: color-mix(in srgb, var(--g-accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--g-accent) 30%, transparent);
   border-radius: $border-radius-md;
   width: fit-content;
 }
@@ -353,11 +353,11 @@ watch(
 }
 
 .notice-text {
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 500;
   font-size: 14px;
   line-height: 1.43;
-  color: #00c7f3;
+  color: var(--g-accent);
 }
 
 .amount-section {
@@ -374,7 +374,7 @@ watch(
   gap: $spacing-lg;
   padding: $spacing-sm $spacing-md;
   background: $background-secondary;
-  border: 1px solid #1f242f;
+  border: 1px solid var(--g-hairline-2);
   border-radius: $border-radius-md;
   width: 100%;
 }
@@ -386,11 +386,11 @@ watch(
 }
 
 .input-label {
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 600;
   font-size: 14px;
   line-height: 1.43;
-  color: #cecfd2;
+  color: var(--g-text-2);
 }
 
 .input-content {
@@ -403,7 +403,7 @@ watch(
 
 .custom-input {
   flex: 1;
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 600;
   font-size: 24px;
   line-height: 1.58;
@@ -441,7 +441,7 @@ watch(
 }
 
 .currency-badge {
-  font-family: Inter;
+  font-family: var(--g-font-ui);
   font-weight: 600;
   font-size: 24px;
   line-height: 1.58;
@@ -458,7 +458,7 @@ watch(
 .switch-icon {
   width: 48px;
   height: 48px;
-  background: linear-gradient(135deg, #00c7f3 0%, #00ffd1 100%);
+  background: var(--g-accent);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -466,7 +466,7 @@ watch(
   box-shadow: none;
 
   &:hover {
-    background: linear-gradient(135deg, #00c7f3 0%, #00ffd1 100%);
+    background: var(--g-accent);
   }
 }
 </style>

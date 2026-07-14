@@ -1114,7 +1114,7 @@ async function confirmPassword() {
 
     if (!verifyResponse.data.success) {
       // Show error tooltip
-      passwordErrorTooltipText.value = verifyResponse.data.error || t('wallet.wrongPassword');
+      passwordErrorTooltipText.value = verifyResponse.data.error || t('errors.wrongPassword');
       passwordErrorTooltipColor.value = 'red';
       passwordErrorTooltipEnabled.value = true;
 
