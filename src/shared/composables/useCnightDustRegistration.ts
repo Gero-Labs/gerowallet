@@ -26,11 +26,23 @@
 
 import { computed, ref, toRefs } from 'vue';
 import { walletStore } from '@/stores/walletStore';
-import { Blockchain, Network } from '@/models/types';
+import { geroStore } from '@/stores/geroStore';
+import { Blockchain, Network, Wallet } from '@/models/types';
 import { getMidnightApi, MidnightDustRegistrationStatusDto } from '@/api/midnight-api';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
+import { clearDustPending, getDustPending, markDustPending, DustPendingRecord } from '@/shared/composables/useDustPending';
 import { debugLog } from '@/utils/debug';
+
+/** A place DUST from this wallet's NIGHT can be directed. */
+export interface DustDestination {
+  /** 'self' = this Cardano wallet's own same-seed Midnight address (derived at
+   *  register time); otherwise an imported Midnight wallet's id. */
+  key: string;
+  label: string;
+  /** Known bech32m DUST address; empty for 'self' until derived. */
+  dustAddress: string;
+}
 
 /**
  * cNIGHT asset identity per Cardano network. Values verified 2026-07-14 from
@@ -133,10 +145,20 @@ export function useCnightDustRegistration() {
     return token?.metadata?.decimals ?? 6;
   });
 
+  // Locally-tracked pending registration (indexer lags ~2.5h). Bumped on
+  // refresh/register so the computed below reacts.
+  const localPending = ref<DustPendingRecord | null>(null);
+
   const registrationStatus = computed<'Unregistered' | 'Pending' | 'Registered' | 'Invalid' | 'Unknown'>(() => {
-    if (statusLoading.value && !status.value) return 'Unknown';
     const s = status.value?.registrationStatus;
-    if (s === 'Registered' || s === 'Pending' || s === 'Invalid') return s;
+    // A confirmed on-chain status always wins over the local pending guard.
+    if (s === 'Registered' || s === 'Invalid') return s;
+    if (s === 'Pending') return 'Pending';
+    // Indexer still says Unregistered (or unknown) but we submitted a
+    // registration that hasn't relayed yet — hold Pending so the UI can't
+    // offer a duplicate registration.
+    if (localPending.value) return 'Pending';
+    if (statusLoading.value && !status.value) return 'Unknown';
     if (status.value) return 'Unregistered';
     return 'Unknown';
   });
@@ -144,12 +166,52 @@ export function useCnightDustRegistration() {
   /** Empty string when no portal exists for this network (preprod) — callers hide the CTA. */
   const portalUrl = computed(() => DUST_PORTAL_URLS[network.value] ?? '');
 
+  // ── DUST destination selection ──────────────────────────────────────────────
+  // Default: this Cardano wallet's own same-seed Midnight address. But the user
+  // may instead direct DUST to a DIFFERENT Midnight wallet already imported in
+  // the extension (e.g. their main Midnight wallet on a different seed).
+
+  /** Imported Midnight wallets on this network, with their DUST address read
+   *  from the record (`publicKey` = JSON {unshielded, shielded, dust}). */
+  const midnightDestinations = computed<DustDestination[]>(() => {
+    const records = Object.values(geroStore.wallets ?? {}) as Array<Wallet & { publicKey?: string }>;
+    const out: DustDestination[] = [];
+    for (const w of records) {
+      if (w.chain !== Blockchain.MIDNIGHT || w.network !== network.value) continue;
+      let dust = '';
+      try {
+        dust = w.publicKey ? (JSON.parse(w.publicKey)?.dust ?? '') : '';
+      } catch {
+        dust = '';
+      }
+      if (dust) out.push({ key: `wallet:${w.id}`, label: w.name, dustAddress: dust });
+    }
+    return out;
+  });
+
+  /** All destination options, 'self' first. */
+  const destinationOptions = computed<DustDestination[]>(() => [
+    { key: 'self', label: loggedWallet.value?.name ?? 'This wallet', dustAddress: '' },
+    ...midnightDestinations.value,
+  ]);
+
+  /** Selected destination key; 'self' = same-seed derive at register time. */
+  const selectedDestinationKey = ref<string>('self');
+
   async function refreshStatus(): Promise<void> {
     const stakeAddress = loggedWallet.value?.stakeAddress;
     if (!isSupported.value || !stakeAddress) return;
     statusLoading.value = true;
     try {
       status.value = await getMidnightApi(network.value).getDustStatus(stakeAddress);
+      // Reconcile the local pending guard: clear it once the indexer confirms
+      // Registered; otherwise surface any un-expired local record.
+      if (status.value?.registrationStatus === 'Registered') {
+        clearDustPending(stakeAddress);
+        localPending.value = null;
+      } else {
+        localPending.value = getDustPending(stakeAddress);
+      }
     } catch (e) {
       // 404 = the indexer knows nothing about this reward address yet — plain
       // unregistered. Other failures leave status null (renders as Unknown).
@@ -161,6 +223,7 @@ export function useCnightDustRegistration() {
         registered: false,
         registrationStatus: 'Unregistered',
       };
+      localPending.value = getDustPending(stakeAddress);
     } finally {
       statusLoading.value = false;
     }
@@ -215,11 +278,14 @@ export function useCnightDustRegistration() {
     try {
       const mnemonic = await decryptMnemonic(credentials);
 
-      // The wallet's own Midnight DUST address — same derivation the Midnight
-      // chain wallet uses (`m/44'/2400'/account'/role/index`, role Dust).
       const { deriveMidnightAddresses, dustAddressToHex } = await import('@/chains/midnight/midnightKeyManager');
-      const derived = await deriveMidnightAddresses(mnemonic, wallet.network);
-      const dustAddressHex = dustAddressToHex(derived.dust);
+      // Destination: a chosen imported Midnight wallet, or (default) this
+      // Cardano wallet's own same-seed Midnight DUST address.
+      const chosen = destinationOptions.value.find((d) => d.key === selectedDestinationKey.value);
+      const destinationBech32 = chosen && chosen.key !== 'self' && chosen.dustAddress
+        ? chosen.dustAddress
+        : (await deriveMidnightAddresses(mnemonic, wallet.network)).dust;
+      const dustAddressHex = dustAddressToHex(destinationBech32);
 
       stage.value = 'building';
       const build = await getMidnightApi(network.value).buildDustRegistrationTx({
@@ -235,16 +301,20 @@ export function useCnightDustRegistration() {
       const txId = await signAndSubmit(build.txCbor, credentials, mnemonic);
 
       stage.value = 'done';
+      // Persist the pending registration so a reopen (before the ~2.5h relay)
+      // shows Pending and cannot submit a duplicate.
+      markDustPending(wallet.stakeAddress, destinationBech32, txId);
+      localPending.value = getDustPending(wallet.stakeAddress);
       // Optimistic status flip — the indexer takes ~2.5h to relay, so reflect
       // Pending immediately rather than waiting for the next poll.
       status.value = {
         cardanoRewardAddress: wallet.stakeAddress,
-        dustAddress: derived.dust,
+        dustAddress: destinationBech32,
         registered: false,
         registrationStatus: 'Pending',
         registrationUtxoTxHash: txId,
       };
-      return { status: 'submitted', txHash: txId, dustAddress: derived.dust };
+      return { status: 'submitted', txHash: txId, dustAddress: destinationBech32 };
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       return { status: 'error', message };
@@ -369,6 +439,8 @@ export function useCnightDustRegistration() {
       const txId = await signAndSubmit(build.txCbor, credentials);
 
       stage.value = 'done';
+      clearDustPending(wallet.stakeAddress);
+      localPending.value = null;
       status.value = {
         cardanoRewardAddress: wallet.stakeAddress,
         dustAddress: null,
@@ -419,6 +491,8 @@ export function useCnightDustRegistration() {
       const txId = await signAndSubmit(build.txCbor, credentials, mnemonic);
 
       stage.value = 'done';
+      markDustPending(wallet.stakeAddress, derived.dust, txId);
+      localPending.value = getDustPending(wallet.stakeAddress);
       status.value = {
         cardanoRewardAddress: wallet.stakeAddress,
         dustAddress: derived.dust,
@@ -447,6 +521,8 @@ export function useCnightDustRegistration() {
     registering,
     stage,
     portalUrl,
+    destinationOptions,
+    selectedDestinationKey,
     refreshStatus,
     register,
     deregister,

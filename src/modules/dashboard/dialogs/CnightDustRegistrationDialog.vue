@@ -26,7 +26,19 @@
         </div>
         <div class="holdings-row">
           <div class="holdings-label t-label">{{ t('midnight.cnightDustDestination') }}</div>
-          <div class="holdings-dest">
+          <!-- Picker when the user has other Midnight wallets imported and can
+               still choose; otherwise the fixed same-seed / registered address. -->
+          <v-select
+            v-if="canPickDestination"
+            v-model="selectedDestinationKey"
+            :items="destinationSelectItems"
+            dense
+            hide-details
+            outlined
+            attach
+            class="holdings-dest-select"
+          />
+          <div v-else class="holdings-dest">
             {{ registeredDustAddress
               ? middleTruncate(registeredDustAddress, 18, 8)
               : t('midnight.cnightDustDestinationOwn') }}
@@ -238,11 +250,29 @@ const {
   registering,
   stage,
   portalUrl,
+  destinationOptions,
+  selectedDestinationKey,
   refreshStatus,
   register,
   deregister,
   migrateDustAddressToOwn,
 } = useCnightDustRegistration();
+
+/** Show the destination picker only when there's a real choice (an imported
+ *  Midnight wallet beyond this wallet's own same-seed address) and we're in a
+ *  registerable state. */
+const canPickDestination = computed(() =>
+  destinationOptions.value.length > 1
+  && (registrationStatus.value === 'Unregistered'
+    || registrationStatus.value === 'Invalid'
+    || registrationStatus.value === 'Unknown'));
+
+const destinationSelectItems = computed(() => destinationOptions.value.map((d) => ({
+  value: d.key,
+  text: d.key === 'self'
+    ? t('midnight.cnightDestSelf', { name: d.label })
+    : `${d.label} · ${middleTruncate(d.dustAddress, 12, 6)}`,
+})));
 
 const localPassword = ref('');
 const inSigningPhase = ref(false);
