@@ -716,11 +716,12 @@ function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: bool
   background: var(--g-hairline-1) !important;
 }
 
-/* DUST line: flush, borderless, half-height cell under the NIGHT row. The
-   td.dust-line-cell selector out-specifies Vuetify's default td padding, so no
-   override flag is needed. The expanded row must not pick up token-row
-   hover/cursor styling. */
-.market-token-table >>> td.dust-line-cell {
+/* DUST line cell: zero padding AND collapse Vuetify's fixed td height (dense
+   ~32px) to the strip's own height — otherwise the 22px strip is vertically
+   centered in a taller cell, leaving dark gaps above/below the gold band. Match
+   Vuetify's .v-data-table__wrapper depth so height:auto wins the specificity
+   tie without an override flag. */
+.market-token-table >>> .v-data-table__wrapper tbody td.dust-line-cell {
   padding: 0;
   height: auto;
   border-bottom: none;
@@ -731,11 +732,16 @@ function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: bool
 .market-token-table >>> tr.night-dust-attached > td {
   border-bottom: none !important;
 }
-.market-token-table >>> tr.v-data-table__expanded__content {
-  cursor: default;
+/* Vuetify boxes the expanded row with an inset top+bottom shadow
+   (.v-data-table>.v-data-table__wrapper tbody tr.v-data-table__expanded__content,
+   specificity 0,3,2) — that shadow is what made the DUST strip read as its own
+   boxed row. Match Vuetify's depth (.v-data-table__wrapper tbody, 0,4,2) to
+   remove it without an override flag. */
+.market-token-table >>> .v-data-table__wrapper tbody tr.v-data-table__expanded__content {
   box-shadow: none;
+  cursor: default;
 }
-.market-token-table >>> tr.v-data-table__expanded__content:hover {
+.market-token-table >>> .v-data-table__wrapper tbody tr.v-data-table__expanded__content:hover {
   background: transparent;
 }
 
