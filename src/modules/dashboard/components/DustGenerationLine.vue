@@ -27,10 +27,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import DustParticleCanvas from '@/shared/components/DustParticleCanvas.vue';
+import { walletStore } from '@/stores/walletStore';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useCnightDustRegistration } from '@/shared/composables/useCnightDustRegistration';
+import { getDustPending } from '@/shared/composables/useDustPending';
+import { debugLog } from '@/utils/debug';
 
 const props = withDefaults(defineProps<{
   /** 'row' = table sub-row (half height); 'drawer' = token detail panel section. */
@@ -45,15 +48,37 @@ defineEmits<{
 const { t } = useTranslation();
 const { registrationStatus, refreshStatus } = useCnightDustRegistration();
 
-// Fetch the real status (and reconcile the local pending guard) on mount so the
-// line reflects Pending/Generating, not just the initial Unknown.
-onMounted(() => { refreshStatus(); });
+// Read the local pending guard directly (synchronous, no network) so the line
+// shows Pending immediately — refreshStatus (below) only upgrades it to
+// Generating once the indexer confirms. Keyed by this wallet's stake address.
+const linePending = ref(false);
+function readLinePending() {
+  const stake = walletStore.loggedWallet?.stakeAddress ?? '';
+  const rec = getDustPending(stake);
+  linePending.value = !!rec;
+  debugLog('[DustLine] pending check', { stake, found: !!rec, status: registrationStatus.value });
+}
+
+onMounted(() => {
+  readLinePending();
+  // Also fetch the real status so a confirmed registration shows Generating.
+  Promise.resolve(refreshStatus()).finally(readLinePending);
+});
+
+/** Registered/Invalid come from the indexer; Pending can come from either the
+ *  indexer or the local guard. */
+const effectiveStatus = computed(() => {
+  const s = registrationStatus.value;
+  if (s === 'Registered' || s === 'Invalid') return s;
+  if (s === 'Pending' || linePending.value) return 'Pending';
+  return s; // Unregistered | Unknown
+});
 
 const canSetUp = computed(() =>
-  registrationStatus.value === 'Unregistered' || registrationStatus.value === 'Unknown');
+  effectiveStatus.value === 'Unregistered' || effectiveStatus.value === 'Unknown');
 
 const statusKey = computed(() => {
-  switch (registrationStatus.value) {
+  switch (effectiveStatus.value) {
     case 'Registered': return 'registered';
     case 'Pending': return 'pending';
     default: return 'unregistered';
@@ -66,7 +91,7 @@ const statusKey = computed(() => {
 // unregistered shows a low fill so dust drifts across a mostly-empty band,
 // inviting setup.
 const fillPct = computed(() => {
-  switch (registrationStatus.value) {
+  switch (effectiveStatus.value) {
     case 'Registered': return 88;
     case 'Pending': return 45;
     default: return 12;
@@ -75,7 +100,7 @@ const fillPct = computed(() => {
 const animate = computed(() => true);
 
 const label = computed(() => {
-  switch (registrationStatus.value) {
+  switch (effectiveStatus.value) {
     case 'Registered': return t('midnight.dustLineGenerating');
     case 'Pending': return t('midnight.dustLinePending');
     default: return t('midnight.dustLinePromo');
