@@ -39,6 +39,7 @@ import {
   MidnightDustRegistrationStatusDto,
 } from '@/api/midnight-api';
 import { CNIGHT_ASSETS } from '@/shared/composables/useCnightDustRegistration';
+import { clearDustPending, getDustPending, markDustPending } from '@/shared/composables/useDustPending';
 import { debugLog } from '@/utils/debug';
 
 export interface DustSource {
@@ -208,6 +209,24 @@ export function useDustSources() {
         }
       } catch (e) {
         debugLog('[DustSources] status batch failed:', e);
+      }
+    }
+    // Overlay the local pending guard: a source we just registered (but the
+    // indexer hasn't relayed yet) shows Pending so its row can't re-register.
+    for (const source of list) {
+      if (source.status?.registrationStatus === 'Registered') {
+        clearDustPending(source.stakeAddress);
+        continue;
+      }
+      const pending = getDustPending(source.stakeAddress);
+      if (pending && source.status?.registrationStatus !== 'Pending') {
+        source.status = {
+          cardanoRewardAddress: source.stakeAddress,
+          dustAddress: pending.dustAddress,
+          registered: false,
+          registrationStatus: 'Pending',
+          registrationUtxoTxHash: pending.txHash,
+        };
       }
     }
   }
@@ -475,6 +494,7 @@ export function useDustSources() {
       const witnessHex = await signWithMnemonic(txCbor, mnemonic);
       const txId = await mergeAndSubmit(txCbor, witnessHex);
 
+      markDustPending(source.stakeAddress, ownDustAddress.value, txId);
       source.status = {
         cardanoRewardAddress: source.stakeAddress,
         dustAddress: ownDustAddress.value,
@@ -531,6 +551,7 @@ export function useDustSources() {
       const witnessHex = await signWithMnemonic(finalCbor, mnemonic);
       const txId = await mergeAndSubmit(finalCbor, witnessHex);
 
+      markDustPending(source.stakeAddress, ownDustAddress.value, txId);
       source.status = {
         cardanoRewardAddress: source.stakeAddress,
         dustAddress: ownDustAddress.value,
