@@ -716,15 +716,16 @@ function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: bool
   background: var(--g-hairline-1) !important;
 }
 
-/* DUST line cell: zero padding AND collapse Vuetify's fixed td height (dense
-   ~32px) to the strip's own height — otherwise the 22px strip is vertically
-   centered in a taller cell, leaving dark gaps above/below the gold band. Match
-   Vuetify's .v-data-table__wrapper depth so height:auto wins the specificity
-   tie without an override flag. */
-.market-token-table >>> .v-data-table__wrapper tbody td.dust-line-cell {
-  padding: 0;
-  height: auto;
-  border-bottom: none;
+/* DUST line cell: Vuetify's dense rule pins td height to 32px, which vertically
+   centers the shorter strip and leaves dark gaps above/below the gold band.
+   Table cells treat `height` as a MINIMUM, so `auto` won't shrink it — pin the
+   cell to the strip's exact height and zero the padding. Forced because the
+   dense selector (.v-data-table--dense>...>td) is deep; specificity alone is
+   fragile here. The strip then fills 100% of the cell, so the gold is flush. */
+.market-token-table >>> td.dust-line-cell {
+  padding: 0 !important;
+  height: 24px !important;
+  border-bottom: none !important;
 }
 /* Merge the NIGHT row with the DUST strip below it: drop the Vuetify row
    divider on the NIGHT row (tagged via rowClass) so the two read as one row.

@@ -94,7 +94,8 @@ void props;
    from that indent. A neutral divider below matches the table's row lines so
    SNEK still separates cleanly. */
 .dust-line--row {
-  height: 22px;
+  height: 100%;
+  min-height: 24px;
   padding: 0 12px 0 68px;
   background:
     linear-gradient(90deg,
