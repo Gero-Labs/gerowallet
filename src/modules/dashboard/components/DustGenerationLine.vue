@@ -162,11 +162,11 @@ void props;
   color: var(--g-text-3);
 }
 
-/* Row variant: give the X a 36px box flush to the right edge — the same width
-   and position as the table's watchlist (star) column — so the icon centers
-   under the stars above/below it. */
+/* Row variant: align the X with the watchlist (star) column. The star btn sits
+   ~18px from the table's right edge; the strip has no right padding, so nudge
+   the X left by that much so its center lands on the star column. */
 .dust-line--row .dust-line-close {
-  width: 36px;
+  margin-right: 6px;
 }
 
 /* Registered/pending read calmer; unregistered nudges with a warmer label. */
