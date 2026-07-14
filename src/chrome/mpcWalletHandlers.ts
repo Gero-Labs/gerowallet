@@ -648,14 +648,17 @@ export async function setRecoveryPasswordFlow(
   // 1. Stage next (old device share still primary).
   await setMpcDeviceShareNext(walletId, encryptedNextDeviceShare);
 
-  // 2. Rotate the backend login share. On failure roll back: drop the staged
-  //    next and keep the old split intact (never bricks).
-  try {
-    await rotate(idToken, wallet.chain, wallet.network, next.loginShare);
-  } catch (err) {
-    await setMpcDeviceShareNext(walletId, undefined);
-    throw err;
-  }
+  // 2. Rotate the backend login share. On failure, rethrow WITHOUT dropping the
+  //    staged next — a thrown error does NOT prove the backend didn't apply the
+  //    rotation (a timeout/dropped response after the backend committed the
+  //    UPDATE also throws). Dropping `next` here would delete the only device
+  //    share (S'.device) compatible with a possibly-already-rotated backend
+  //    login (S'.login) → permanent brick. `mpcDeviceShareNext` is cleared ONLY
+  //    via a successful promote (design invariant). Resume-on-unlock self-heals
+  //    both outcomes: genuine failure → primary S.device+S.login still unlocks
+  //    (stale next is harmless, overwritten by the next re-split); silent success
+  //    → primary fails, resume finds S'.device+S'.login and promotes.
+  await rotate(idToken, wallet.chain, wallet.network, next.loginShare);
 
   // 3. Backend now holds S'.login → promote the staged device share to primary.
   await promoteMpcDeviceShareNext(walletId);
