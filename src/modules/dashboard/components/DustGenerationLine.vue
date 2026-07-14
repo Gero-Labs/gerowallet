@@ -27,7 +27,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onMounted } from 'vue';
 import DustParticleCanvas from '@/shared/components/DustParticleCanvas.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useCnightDustRegistration } from '@/shared/composables/useCnightDustRegistration';
@@ -43,7 +43,11 @@ defineEmits<{
 }>();
 
 const { t } = useTranslation();
-const { registrationStatus } = useCnightDustRegistration();
+const { registrationStatus, refreshStatus } = useCnightDustRegistration();
+
+// Fetch the real status (and reconcile the local pending guard) on mount so the
+// line reflects Pending/Generating, not just the initial Unknown.
+onMounted(() => { refreshStatus(); });
 
 const canSetUp = computed(() =>
   registrationStatus.value === 'Unregistered' || registrationStatus.value === 'Unknown');
@@ -56,14 +60,15 @@ const statusKey = computed(() => {
   }
 });
 
-// The particle field always animates (it reads as "dust accumulating"), but the
-// fill boundary — how much of the strip is "charged" — reflects the state:
-// registered generation fills most of the strip; unregistered shows a low fill
-// so the dust drifts across a mostly-empty band inviting setup.
+// The particle field always animates. The fill boundary sets the character:
+// when GENERATING (registered), a near-full fill makes the "power" streaks
+// dominate the strip (the DUST battery's charged look); Pending sits mid; and
+// unregistered shows a low fill so dust drifts across a mostly-empty band,
+// inviting setup.
 const fillPct = computed(() => {
   switch (registrationStatus.value) {
-    case 'Registered': return 62;
-    case 'Pending': return 30;
+    case 'Registered': return 88;
+    case 'Pending': return 45;
     default: return 12;
   }
 });

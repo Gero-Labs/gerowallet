@@ -4134,6 +4134,7 @@ export default {
   'midnight.cnightDustDestinationOwn': 'Ihre eigene Midnight-DUST-Adresse, abgeleitet aus dieser Wallet',
   'midnight.cnightDestSelf': '{name} (diese Wallet, gleicher Seed)',
   'midnight.cnightIncomingPending': 'DUST-Registrierung von Cardano-NIGHT eingehend',
+  'midnight.dustBatteryPending': 'Registrierung ausstehend',
   'midnight.cnightTimingNote': 'Die Registrierung ist bis auf die Cardano-Netzwerkgebühr kostenlos. Die Übertragung nach Midnight dauert etwa 2,5 Stunden, bis zu 12 Stunden bis DUST anfällt.',
   'midnight.cnightHardwareNotice': 'Hardware-Wallets registrieren sich über das offizielle Midnight-Portal. Verbinden Sie diese Wallet dort, um die DUST-Generierung einzurichten.',
   'midnight.cnightOpenPortal': 'Offizielles DUST-Portal öffnen',
@@ -4163,7 +4164,7 @@ export default {
   // Inline DUST-Generierungszeile (Holdings-Tabelle + Token-Drawer)
   'midnight.dustLinePromo': 'Dieses NIGHT kann DUST generieren',
   'midnight.dustLineGenerating': 'Generiert DUST',
-  'midnight.dustLinePending': 'DUST-Generierung startet',
+  'midnight.dustLinePending': 'DUST-Registrierung ausstehend · ~2,5h',
   'midnight.dustLineSetUp': 'Einrichten',
   'midnight.dustSourcesStageRegistering': 'Registrierung wird erstellt…',
   'midnight.dustSourcesStageIsolating': 'Ihr NIGHT wird vorbereitet (Schritt 1 von 2)…',
