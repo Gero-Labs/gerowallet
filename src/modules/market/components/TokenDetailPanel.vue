@@ -253,7 +253,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, type Ref } from 'vue';
+import { ref, computed, watch, onMounted, type Ref } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useWatchlist } from '@/modules/market/composables/useWatchlist';
 import { useMarketData, type MarketToken, type CandlestickDataPoint } from '@/modules/market/composables/useMarketData';
@@ -274,6 +274,7 @@ import snackbar from '@/plugins/snackbar';
 import networks from '@/utils/networks';
 import DustGenerationLine from '@/modules/dashboard/components/DustGenerationLine.vue';
 import { CNIGHT_ASSETS, DUST_LINE_DISMISS_KEY } from '@/shared/composables/useCnightDustRegistration';
+import { getDustPending } from '@/shared/composables/useDustPending';
 
 const chainLogo = computed(() =>
   networks.resolveCurrencyImage(walletStore.loggedWallet?.chain, walletStore.loggedWallet?.network) || ''
@@ -293,8 +294,16 @@ defineEmits<{
 const dustLineDismissed = ref(
   typeof localStorage !== 'undefined' && localStorage.getItem(DUST_LINE_DISMISS_KEY) === '1',
 );
+// A started registration (local pending guard) shows its status even after the
+// promo was dismissed. localStorage is not reactive, so read on mount.
+const dustPendingActive = ref(false);
+onMounted(() => {
+  const stake = walletStore.loggedWallet?.stakeAddress ?? '';
+  dustPendingActive.value = !!getDustPending(stake);
+});
 const showDustLine = computed(() => {
-  if (dustLineDismissed.value) return false;
+  // Dismissal hides only the promo; a pending/active registration still shows.
+  if (dustLineDismissed.value && !dustPendingActive.value) return false;
   if (walletStore.loggedWallet?.chain !== Blockchain.CARDANO) return false;
   const asset = CNIGHT_ASSETS[walletStore.loggedWallet?.network ?? ''];
   return !!asset && props.token.unit === asset.policyId + asset.assetNameHex;
