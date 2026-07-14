@@ -102,7 +102,7 @@ interface TradeRow extends SwapHistory {
 const ownTxHashes = computed(() => {
   const txs = walletStore.transactions;
   if (!txs?.length) return new Set<string>();
-  return new Set(txs.map((tx: any) => tx.id).filter(Boolean));
+  return new Set(txs.map((tx: { id?: string }) => tx.id).filter(Boolean));
 });
 
 // API returns BUY/SELL from ADA perspective — invert for token perspective
@@ -192,13 +192,17 @@ function formatTime(blockTime: string | number): string {
   }
 }
 
-function formatTradePrice(price: number): string {
+function formatTradePrice(price: number | null | undefined): string {
+  // The swaps API can return a null priceAda for some trades; guard so the
+  // render doesn't throw on .toFixed of null.
+  if (price == null || !Number.isFinite(price)) return '—';
   if (price >= 1) return price.toFixed(4);
   if (price >= 0.01) return price.toFixed(6);
   return price.toFixed(8);
 }
 
-function formatCompact(value: number): string {
+function formatCompact(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return '—';
   if (value >= 1e6) return (value / 1e6).toFixed(1) + 'M';
   if (value >= 1e3) return (value / 1e3).toFixed(1) + 'K';
   if (value >= 1) return value.toFixed(1);
