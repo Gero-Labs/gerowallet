@@ -4260,6 +4260,11 @@ export default {
   'midnight.dustSourcesRedirectHere': 'Redirect here',
   'midnight.dustSourcesGeneratingHere': 'Generating to this wallet',
   'midnight.dustSourcesReadOnly': 'No local keys',
+  // Inline DUST generation line (holdings table row + token drawer)
+  'midnight.dustLinePromo': 'This NIGHT can generate DUST',
+  'midnight.dustLineGenerating': 'Generating DUST',
+  'midnight.dustLinePending': 'DUST generation starting',
+  'midnight.dustLineSetUp': 'Set up',
   'midnight.dustSourcesStageRegistering': 'Building the registration…',
   'midnight.dustSourcesStageIsolating': 'Preparing your NIGHT (step 1 of 2)…',
   'midnight.dustSourcesStageWaiting': 'Waiting for confirmation, then registering…',

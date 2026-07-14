@@ -13,6 +13,7 @@
     :header-props="{ 'sort-icon': 'mdi-menu-up' }"
     :loading="loading"
     :item-class="rowClass"
+    :expanded="dustExpanded"
     @click:row="handleRowClick"
   >
     <!-- Pagination -->
@@ -28,6 +29,15 @@
           ></v-pagination>
         </td>
       </tr>
+    </template>
+
+    <!-- DUST generation strip: rendered directly beneath the NIGHT (cNIGHT)
+         holdings row. Half-height, distinct gold band with the dust-battery
+         particle animation; X dismisses it (persisted). -->
+    <template v-slot:expanded-item="{ headers }">
+      <td :colspan="headers.length" class="dust-line-cell">
+        <DustGenerationLine variant="row" @setup="$emit('dust-setup')" @dismiss="dismissDustLine" />
+      </td>
     </template>
 
     <!-- No data -->
@@ -397,6 +407,8 @@ import { walletStore } from '@/stores/walletStore';
 import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
 import { Blockchain } from '@/models/types';
 import networks from '@/utils/networks';
+import DustGenerationLine from '@/modules/dashboard/components/DustGenerationLine.vue';
+import { CNIGHT_ASSETS, DUST_LINE_DISMISS_KEY } from '@/shared/composables/useCnightDustRegistration';
 
 const chainLogo = computed(() =>
   networks.resolveCurrencyImage(walletStore.loggedWallet?.chain, walletStore.loggedWallet?.network) || ''
@@ -430,7 +442,34 @@ const ownedUnits = computed(() => {
 
 const emit = defineEmits<{
   (e: 'token-click', token: MarketToken): void;
+  (e: 'dust-setup'): void;
 }>();
+
+// ── DUST generation line under the NIGHT (cNIGHT) holdings row ──────────────
+// Only in the holdings view on a Cardano wallet, only for the NIGHT token, and
+// only until the user dismisses it (persisted per install).
+const dustLineDismissed = ref(
+  typeof localStorage !== 'undefined' && localStorage.getItem(DUST_LINE_DISMISS_KEY) === '1',
+);
+
+const cnightUnit = computed(() => {
+  const asset = CNIGHT_ASSETS[walletStore.loggedWallet?.network ?? ''];
+  return asset ? asset.policyId + asset.assetNameHex : '';
+});
+
+/** The NIGHT row currently in the table (holdings + Cardano only). */
+const dustExpanded = computed<MarketToken[]>(() => {
+  if (!props.showHoldingsColumns || dustLineDismissed.value) return [];
+  if (walletStore.loggedWallet?.chain !== Blockchain.CARDANO) return [];
+  if (!cnightUnit.value) return [];
+  const night = paginatedTokens.value.find((tk) => tk.unit === cnightUnit.value);
+  return night ? [night] : [];
+});
+
+function dismissDustLine() {
+  dustLineDismissed.value = true;
+  if (typeof localStorage !== 'undefined') localStorage.setItem(DUST_LINE_DISMISS_KEY, '1');
+}
 
 const { t } = useTranslation();
 const { isWatched, toggleWatchlist } = useWatchlist();
@@ -670,6 +709,23 @@ function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: bool
 
 .market-token-table >>> tbody tr:hover {
   background: var(--g-hairline-1) !important;
+}
+
+/* DUST line: flush, borderless, half-height cell under the NIGHT row. The
+   td.dust-line-cell selector out-specifies Vuetify's default td padding, so no
+   override flag is needed. The expanded row must not pick up token-row
+   hover/cursor styling. */
+.market-token-table >>> td.dust-line-cell {
+  padding: 0;
+  height: auto;
+  border-bottom: none;
+}
+.market-token-table >>> tr.v-data-table__expanded__content {
+  cursor: default;
+  box-shadow: none;
+}
+.market-token-table >>> tr.v-data-table__expanded__content:hover {
+  background: transparent;
 }
 
 .market-token-table >>> th {

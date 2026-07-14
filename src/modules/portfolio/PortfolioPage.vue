@@ -308,6 +308,7 @@
               :loading="isMainnetCardano && marketLoading"
               :pnl-loading="isMainnetCardano && pnlLoading"
               @token-click="openToken"
+              @dust-setup="cnightDialogOpen = true"
             />
 
             <!-- Collectibles: Table view (default) -->
@@ -338,6 +339,7 @@
           :token="selectedToken"
           @close="panelOpen = false"
           @swap="openSwap"
+          @dust-setup="cnightDialogOpen = true"
         />
       </div>
 

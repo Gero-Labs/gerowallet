@@ -4158,6 +4158,11 @@ export default {
   'midnight.dustSourcesRedirectHere': 'Hierher umleiten',
   'midnight.dustSourcesGeneratingHere': 'Generiert für diese Wallet',
   'midnight.dustSourcesReadOnly': 'Keine lokalen Schlüssel',
+  // Inline DUST-Generierungszeile (Holdings-Tabelle + Token-Drawer)
+  'midnight.dustLinePromo': 'Dieses NIGHT kann DUST generieren',
+  'midnight.dustLineGenerating': 'Generiert DUST',
+  'midnight.dustLinePending': 'DUST-Generierung startet',
+  'midnight.dustLineSetUp': 'Einrichten',
   'midnight.dustSourcesStageRegistering': 'Registrierung wird erstellt…',
   'midnight.dustSourcesStageIsolating': 'Ihr NIGHT wird vorbereitet (Schritt 1 von 2)…',
   'midnight.dustSourcesStageWaiting': 'Warten auf Bestätigung, dann Registrierung…',

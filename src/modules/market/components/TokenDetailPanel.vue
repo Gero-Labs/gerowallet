@@ -31,6 +31,15 @@
     <div class="panel-columns">
       <!-- ═══ LEFT COLUMN: Chart + Recent Trades ═══ -->
       <div class="left-col">
+        <!-- DUST generation line: NIGHT (cNIGHT) only, until dismissed. -->
+        <DustGenerationLine
+          v-if="showDustLine"
+          variant="drawer"
+          class="mb-3"
+          @setup="$emit('dust-setup')"
+          @dismiss="dismissDustLine"
+        />
+
         <!-- Price + Currency Toggle -->
         <div class="pb-3">
           <div class="d-flex align-center" style="gap: 8px">
@@ -263,6 +272,8 @@ import { walletStore } from '@/stores/walletStore';
 import { Blockchain } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
 import networks from '@/utils/networks';
+import DustGenerationLine from '@/modules/dashboard/components/DustGenerationLine.vue';
+import { CNIGHT_ASSETS, DUST_LINE_DISMISS_KEY } from '@/shared/composables/useCnightDustRegistration';
 
 const chainLogo = computed(() =>
   networks.resolveCurrencyImage(walletStore.loggedWallet?.chain, walletStore.loggedWallet?.network) || ''
@@ -274,7 +285,24 @@ const props = defineProps<{
 
 defineEmits<{
   (e: 'close'): void;
+  (e: 'dust-setup'): void;
 }>();
+
+// DUST generation line: shown for the NIGHT (cNIGHT) token on a Cardano wallet,
+// until dismissed (shares the dismissal flag with the holdings-table line).
+const dustLineDismissed = ref(
+  typeof localStorage !== 'undefined' && localStorage.getItem(DUST_LINE_DISMISS_KEY) === '1',
+);
+const showDustLine = computed(() => {
+  if (dustLineDismissed.value) return false;
+  if (walletStore.loggedWallet?.chain !== Blockchain.CARDANO) return false;
+  const asset = CNIGHT_ASSETS[walletStore.loggedWallet?.network ?? ''];
+  return !!asset && props.token.unit === asset.policyId + asset.assetNameHex;
+});
+function dismissDustLine() {
+  dustLineDismissed.value = true;
+  if (typeof localStorage !== 'undefined') localStorage.setItem(DUST_LINE_DISMISS_KEY, '1');
+}
 
 const { t } = useTranslation();
 const { isWatched, toggleWatchlist } = useWatchlist();

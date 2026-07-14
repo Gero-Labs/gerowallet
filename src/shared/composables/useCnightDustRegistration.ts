@@ -65,6 +65,10 @@ export const DUST_PORTAL_URLS: Record<string, string> = {
   [Network.PREVIEW]: 'https://dust.preview.midnight.network/',
 };
 
+/** localStorage flag: the user dismissed the inline DUST generation line
+ *  (table row + token drawer share one dismissal). */
+export const DUST_LINE_DISMISS_KEY = 'gero.dustLine.dismissed';
+
 export type CnightRegistrationStage =
   | 'idle'
   | 'deriving'
