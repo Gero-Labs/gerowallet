@@ -57,6 +57,31 @@ export function getDustPending(stakeAddress: string): DustPendingRecord | null {
   return rec;
 }
 
+/**
+ * Pending registrations whose DUST *destination* is `dustAddress` — i.e. a
+ * Cardano wallet was just registered to generate DUST for this Midnight wallet.
+ * Lets the Midnight side show "incoming DUST pending" even though the
+ * registration is bound to a different (Cardano) stake credential. Expired
+ * records are pruned as a side effect.
+ */
+export function getDustPendingForDestination(dustAddress: string): DustPendingRecord[] {
+  if (!dustAddress) return [];
+  const all = readAll();
+  const now = Date.now();
+  const out: DustPendingRecord[] = [];
+  let mutated = false;
+  for (const [stake, rec] of Object.entries(all)) {
+    if (now - rec.submittedAt > TTL_MS) {
+      delete all[stake];
+      mutated = true;
+      continue;
+    }
+    if (rec.dustAddress === dustAddress) out.push(rec);
+  }
+  if (mutated) writeAll(all);
+  return out;
+}
+
 /** Clear the pending record — call once the indexer confirms `Registered`. */
 export function clearDustPending(stakeAddress: string): void {
   if (!stakeAddress) return;
