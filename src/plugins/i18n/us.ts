@@ -4263,6 +4263,7 @@ export default {
   'midnight.dustSourcesGenerateHere': 'Generate here',
   'midnight.dustSourcesRedirectHere': 'Redirect here',
   'midnight.dustSourcesGeneratingHere': 'Generating to this wallet',
+  'midnight.dustRelayEstimate': '~2.5h relay to Midnight',
   'midnight.dustSourcesReadOnly': 'No local keys',
   // Inline DUST generation line (holdings table row + token drawer)
   'midnight.dustLinePromo': 'This NIGHT can generate DUST',

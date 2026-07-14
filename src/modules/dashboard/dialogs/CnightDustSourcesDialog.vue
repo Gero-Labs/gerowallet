@@ -80,6 +80,24 @@
           </div>
         </div>
 
+        <!-- Relay progress for a pending registration: on-chain tx + elapsed. -->
+        <div
+          v-if="source.status?.registrationStatus === 'Pending' && pendingTxHash(source)"
+          class="source-relay"
+        >
+          <a
+            class="relay-tx g-mono"
+            :href="pendingTxUrl(source)"
+            target="_blank"
+            rel="noopener noreferrer"
+            :title="pendingTxHash(source)"
+          >
+            {{ middleTruncate(pendingTxHash(source), 10, 6) }}
+            <v-icon x-small>mdi-open-in-new</v-icon>
+          </a>
+          <span class="relay-time">{{ pendingElapsed(source) }}</span>
+        </div>
+
         <!-- Inline auth gate for the selected row. -->
         <div v-if="authFor === source.key" class="source-auth">
           <v-text-field
@@ -126,9 +144,12 @@ import { computed, ref, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import { walletStore } from '@/stores/walletStore';
 import { geroStore } from '@/stores/geroStore';
-import { Network } from '@/models/types';
+import { Blockchain, Network } from '@/models/types';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useDustSources, DustSource, DustSourceStage } from '@/shared/composables/useDustSources';
+import { getDustPending } from '@/shared/composables/useDustPending';
+import { getExplorerUrl } from '@/shared/utils/explorer';
+import timeAgo from '@/plugins/time';
 import snackbar from '@/plugins/snackbar';
 
 const props = defineProps<{ isOpen: boolean }>();
@@ -172,6 +193,20 @@ function isGeneratingHere(source: DustSource): boolean {
   return source.status?.registrationStatus === 'Registered'
     && !!source.status?.dustAddress
     && source.status.dustAddress === ownDustAddress.value;
+}
+
+// The submitted registration tx for a pending source (indexer field first,
+// falling back to the local guard before the relay confirms).
+function pendingTxHash(source: DustSource): string {
+  return source.status?.registrationUtxoTxHash || getDustPending(source.stakeAddress)?.txHash || '';
+}
+function pendingTxUrl(source: DustSource): string {
+  return getExplorerUrl(Blockchain.CARDANO, pendingTxHash(source), 'tx', walletStore.loggedWallet?.network);
+}
+function pendingElapsed(source: DustSource): string {
+  const rec = getDustPending(source.stakeAddress);
+  const relay = t('midnight.dustRelayEstimate');
+  return rec ? `${timeAgo.format(new Date(rec.submittedAt))} · ${relay}` : relay;
 }
 
 function formatNight(value: bigint): string {
@@ -357,6 +392,33 @@ watch(() => props.isOpen, (open) => {
   color: var(--g-success);
   background: var(--g-success-fill);
   border-color: var(--g-success-line);
+}
+
+.source-relay {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--g-hairline-1);
+  font-size: 11px;
+}
+
+.relay-tx {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--g-text-3);
+  text-decoration: none;
+}
+
+.relay-tx:hover {
+  color: var(--g-accent);
+}
+
+.relay-time {
+  margin-left: auto;
+  color: var(--g-text-3);
 }
 
 .source-auth {
