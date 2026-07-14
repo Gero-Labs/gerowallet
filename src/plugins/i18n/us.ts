@@ -4260,6 +4260,11 @@ export default {
   'midnight.dustSourcesRedirectHere': 'Redirect here',
   'midnight.dustSourcesGeneratingHere': 'Generating to this wallet',
   'midnight.dustSourcesReadOnly': 'No local keys',
+  'midnight.dustSourcesStageRegistering': 'Building the registration…',
+  'midnight.dustSourcesStageIsolating': 'Preparing your NIGHT (step 1 of 2)…',
+  'midnight.dustSourcesStageWaiting': 'Waiting for confirmation, then registering…',
+  'midnight.dustSourcesIsolationTimeout': 'Your NIGHT is being prepared on-chain. This can take a few minutes. Reopen and try again shortly to finish registering.',
+  'midnight.dustSourcesBagTooLarge': 'This wallet holds too many tokens in one UTxO to process automatically. Move some tokens to another wallet first, then try again.',
   // DUST battery gauge
   'midnight.dustBattery': 'DUST battery',
   'midnight.dustCharge': 'Charge',
