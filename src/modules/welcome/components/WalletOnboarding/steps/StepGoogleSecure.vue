@@ -128,7 +128,7 @@
       ></v-text-field>
 
       <v-alert
-        v-if="errorMessage"
+        v-if="errorMessage && !alreadyEnrolled"
         color="error"
         icon="mdi-alert-outline"
         outlined
@@ -137,6 +137,33 @@
         class="mt-3 mb-0"
       >
         <span class="text-body-2">{{ errorMessage }}</span>
+      </v-alert>
+
+      <!-- Confirmation-gated reset: only shown when CREATE_MPC_GOOGLE_WALLET failed
+           with the backend's already-enrolled 409. Requires an explicit click —
+           never auto-resets. -->
+      <v-alert
+        v-if="alreadyEnrolled"
+        color="warning"
+        icon="mdi-alert-outline"
+        outlined
+        dense
+        border="left"
+        class="mt-3 mb-0"
+      >
+        <div class="text-body-2 font-weight-medium mb-1">{{ $t('welcome.googleAlreadyEnrolledTitle') }}</div>
+        <div class="text-body-2 mb-2">{{ $t('welcome.googleAlreadyEnrolledWarning') }}</div>
+        <v-btn
+          color="warning"
+          outlined
+          small
+          :loading="resetting"
+          :disabled="creating"
+          @click="resetGoogleAccount()"
+        >
+          {{ $t('welcome.resetGoogleAccountButton') }}
+        </v-btn>
+        <div v-if="resetError" class="text-body-2 error--text mt-2">{{ resetError }}</div>
       </v-alert>
     </v-form>
     </div>
@@ -147,7 +174,7 @@
       <v-spacer />
       <v-btn
         color="primary"
-        :disabled="!canContinue"
+        :disabled="!canContinue || resetting"
         :loading="creating"
         @click="createWallet()"
       >
@@ -210,6 +237,14 @@ const recoveryStrengthColor = computed(() => (
 ));
 const creating = ref(false);
 const errorMessage = ref('');
+// Confirmation-gated "reset this Google account" flow — surfaced only when
+// CREATE_MPC_GOOGLE_WALLET fails with the backend's already-enrolled 409
+// (`response.data.code === 'already_enrolled'`, set in background.ts's
+// isMpcConflictError check). Never auto-triggered: the user must click
+// "Reset this Google account" explicitly.
+const alreadyEnrolled = ref(false);
+const resetting = ref(false);
+const resetError = ref('');
 
 // Passkey-first: capability is probed once on mount and never re-checked mid-flow,
 // so the form doesn't jump between layouts while the user is typing.
@@ -255,6 +290,8 @@ const createWallet = async (): Promise<void> => {
   if (!canContinue.value) return;
   creating.value = true;
   errorMessage.value = '';
+  alreadyEnrolled.value = false;
+  resetError.value = '';
   try {
     // Prefer the Google profile picture as the wallet icon; fall back to the
     // network-colored default when there is no picture. resolveIcon renders an
@@ -277,6 +314,11 @@ const createWallet = async (): Promise<void> => {
     }) as GoogleWalletBgResponse;
 
     if (!response?.data?.success || response.data.walletId == null || response.data.recoveryShare == null || response.data.publicKey == null) {
+      // Robust detection: key off the background's machine-readable code rather
+      // than string-matching the (possibly localized-in-future) error message.
+      if (response?.data?.code === 'already_enrolled') {
+        alreadyEnrolled.value = true;
+      }
       throw new Error(response?.data?.error || (vmProxy.$t('errors.unknownError') as string));
     }
 
@@ -293,6 +335,42 @@ const createWallet = async (): Promise<void> => {
   } finally {
     creating.value = false;
   }
+};
+
+/**
+ * Explicit, confirmation-gated reset for the "already enrolled" 409: deletes this
+ * Google account's backend login + recovery shares (DEREGISTER_MPC_ACCOUNT), then
+ * automatically retries createWallet() with the same idToken/device-secret the
+ * user already supplied — no re-prompting mid-flow. Only ever invoked from the
+ * explicit "Reset this Google account" button click; never called automatically.
+ */
+const resetGoogleAccount = async (): Promise<void> => {
+  resetting.value = true;
+  resetError.value = '';
+  try {
+    const response = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.DEREGISTER_MPC_ACCOUNT,
+      data: {
+        idToken: props.idToken,
+        chain: props.network?.blockchain,
+        network: props.network?.network,
+      },
+    }) as GoogleWalletBgResponse;
+
+    if (!response?.data?.success || response.data.deregistered !== true) {
+      throw new Error(response?.data?.error || (vmProxy.$t('welcome.resetGoogleAccountFailed') as string));
+    }
+  } catch (error: unknown) {
+    resetError.value = error instanceof Error ? error.message : (vmProxy.$t('welcome.resetGoogleAccountFailed') as string);
+    resetting.value = false;
+    return;
+  }
+  resetting.value = false;
+
+  // Deregister succeeded — clear the gate and retry the create automatically.
+  alreadyEnrolled.value = false;
+  errorMessage.value = '';
+  await createWallet();
 };
 </script>
 

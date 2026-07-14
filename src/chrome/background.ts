@@ -1634,13 +1634,17 @@ app.addToOptions(MessageTypes.CREATE_MPC_GOOGLE_WALLET, async (request, sendResp
       sender: SENDER.extension,
     });
   } catch (error) {
-    const message = isMpcConflictError(error)
+    const alreadyEnrolled = isMpcConflictError(error);
+    const message = alreadyEnrolled
       ? 'This Google account is already enrolled for an MPC wallet.'
       : getErrorMessage(error, 'Failed to create MPC wallet');
     console.error('Error creating MPC Google wallet:', message);
     sendResponse({
       id: request.id,
-      data: { success: false, error: message },
+      // `code: 'already_enrolled'` lets the UI key off a stable machine-readable
+      // signal (rather than string-matching the human-readable `error`) to offer
+      // the "reset this Google account" flow (DEREGISTER_MPC_ACCOUNT) below.
+      data: { success: false, error: message, ...(alreadyEnrolled ? { code: 'already_enrolled' } : {}) },
       target: TARGET,
       sender: SENDER.extension,
     });
@@ -1967,6 +1971,43 @@ app.addToOptions(MessageTypes.CHECK_MPC_ENROLLMENT, async (request, sendResponse
     sendResponse({
       id: request.id,
       data: { success: false, error: getErrorMessage(error, 'Failed to check enrollment') },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+  return true; // Required for async Chrome message handlers
+});
+
+/**
+ * Reset (deregister) this Google account's MPC enrollment on the backend — deletes
+ * the account's stored login + recovery shares so a subsequent CREATE_MPC_GOOGLE_WALLET
+ * for the same account no longer 409s. Onboarding surfaces this ONLY after CREATE_MPC_GOOGLE_WALLET
+ * fails with `code: 'already_enrolled'`, gated behind an explicit user confirmation
+ * (StepGoogleSecure.vue) — never auto-triggered from here.
+ * Never log request.data — contains idToken.
+ */
+app.addToOptions(MessageTypes.DEREGISTER_MPC_ACCOUNT, async (request, sendResponse) => {
+  try {
+    const { idToken, chain, network } = request.data || {};
+    if (!idToken || !chain || !network) {
+      throw new Error('idToken, chain and network are required');
+    }
+    const { Api } = await import('@/api/api');
+    const api = new Api(undefined, undefined);
+
+    const { deregistered } = await api.mpc.deregister(idToken, chain, network);
+
+    sendResponse({
+      id: request.id,
+      data: { success: true, deregistered },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    console.error('Error deregistering MPC account:', getErrorMessage(error, 'deregister failed'));
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error, 'Failed to reset this Google account') },
       target: TARGET,
       sender: SENDER.extension,
     });

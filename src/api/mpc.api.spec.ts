@@ -62,4 +62,18 @@ describe('Api.mpc', () => {
     });
     expect(res).toEqual({ rotated: true });
   });
+
+  it('deregister posts idToken+chain+network and returns result', async () => {
+    post.mockResolvedValue({ data: { deregistered: true }, status: 200 });
+    const res = await api.mpc.deregister('idtok', 'cardano', 'mainnet');
+    expect(post).toHaveBeenCalledWith('/api/mpc/deregister', {
+      idToken: 'idtok', chain: 'cardano', network: 'mainnet',
+    });
+    expect(res).toEqual({ deregistered: true });
+  });
+
+  it('deregister rejects via parseHttpError on a non-200 status', async () => {
+    post.mockResolvedValue({ data: { message: 'not found' }, status: 404 });
+    await expect(api.mpc.deregister('idtok', 'cardano', 'mainnet')).rejects.toBeDefined();
+  });
 });

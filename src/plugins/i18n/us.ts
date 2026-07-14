@@ -2841,6 +2841,11 @@ export default {
   'welcome.logInToThisWallet': 'Log in to this wallet',
   'welcome.googleWalletEnrolledRestore': 'This Google account already has a wallet.\nRestore it on this device with your Google account and recovery password.',
   'welcome.restoreThisWallet': 'Restore this wallet',
+  'welcome.googleAlreadyEnrolledTitle': 'This Google account is already enrolled',
+  'welcome.googleAlreadyEnrolledWarning': 'This Google account already has an MPC wallet. Reset it? This permanently deletes the old wallet\'s backend recovery data and cannot be undone — only do this for an account you are re-creating.',
+  'welcome.resetGoogleAccountButton': 'Reset this Google account',
+  'welcome.resettingGoogleAccount': 'Resetting…',
+  'welcome.resetGoogleAccountFailed': 'Could not reset this Google account. Please try again.',
 
   // Security - Wallet Lock & Unlock
   'security.walletLocked': 'Wallet Locked',
