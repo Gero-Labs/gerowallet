@@ -116,6 +116,12 @@
             <FundingCard @buy="openBuyDialog()" @receive="openReceiveDialog()" />
           </v-col>
         </v-row>
+        <!-- What funding unlocks: staking / cashback / card / perps teasers -->
+        <v-row no-gutters>
+          <v-col cols="12" class="pa-2">
+            <PerkTeasers />
+          </v-col>
+        </v-row>
       </template>
 
       <!-- Portfolio Chart (funded wallets) -->
@@ -387,6 +393,7 @@ import EmptyStateHero from '@/modules/dashboard/components/EmptyStateHero.vue';
 import BackupReminderStrip from '@/shared/components/BackupReminderStrip.vue';
 import AdaPriceHeroCard from '@/modules/portfolio/components/AdaPriceHeroCard.vue';
 import FundingCard from '@/modules/portfolio/components/FundingCard.vue';
+import PerkTeasers from '@/modules/portfolio/components/PerkTeasers.vue';
 import MidnightPortfolioChart from '@/modules/dashboard/components/MidnightPortfolioChart.vue';
 import MidnightTransactionsCard from '@/modules/dashboard/components/MidnightTransactionsCard.vue';
 import MidnightDustGauge from '@/modules/dashboard/components/MidnightDustGauge.vue';
@@ -569,12 +576,7 @@ const isWalletEmpty = computed(() => !account.value || account.value?.controlled
 // Market-first empty state (mainnet Cardano only). isEmptyMainnet drives the
 // hero swap and matches isWalletEmpty's semantics (a not-yet-synced account
 // also renders the empty hero, exactly like the old EmptyStateHero branch).
-// The Market view default additionally requires the synced account row to
-// CONFIRM zero, so a funded wallet that mounts before its account row loads
-// never gets its Holdings tab hijacked.
 const isEmptyMainnet = computed(() => isWalletEmpty.value && isMainnetCardano.value);
-const isConfirmedEmptyMainnet = computed(() =>
-  isMainnetCardano.value && account.value?.controlled_amount === '0');
 
 const isNewUser = computed(() => checkNewUser(transactions.value, account.value));
 const shouldBackup = computed(() => {
@@ -1005,12 +1007,20 @@ watch(
 );
 
 // Empty mainnet wallets land on Market: with nothing to hold yet, the live
-// market IS the page content. Deep links and user chip clicks always win
-// (registered after the ?view= watcher; both guard on the query directly).
-watch(isConfirmedEmptyMainnet, (empty) => {
+// market IS the page content. Optimistic on purpose: a brand-new address has
+// no account row at all, so waiting for a confirmed zero balance never fires
+// (that guard shipped in #786 and left fresh wallets on Holdings). If the
+// account then loads — or fills — with funds, restore the holdings-first
+// default. Deep links and user chip clicks always win.
+let autoDefaulted = false;
+watch(isEmptyMainnet, (empty) => {
   const q = instance?.proxy?.$route?.query;
   if (empty && !viewTouched && !q?.['view'] && !q?.['tab']) {
     activeView.value = 'market';
+    autoDefaulted = true;
+  } else if (!empty && autoDefaulted && !viewTouched && activeView.value === 'market') {
+    activeView.value = 'holdings';
+    autoDefaulted = false;
   }
 }, { immediate: true });
 
