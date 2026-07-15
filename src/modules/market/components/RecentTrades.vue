@@ -69,8 +69,8 @@
           </span>
           <span
             class="trade-type"
-            :style="{ color: tokenSide(trade.type) === 'BUY' ? '#47CD89' : '#F97066' }"
-          >{{ tokenSide(trade.type) === 'BUY' ? $t('market.buy') : $t('market.sell') }}</span>
+            :style="{ color: trade.type === 'BUY' ? '#47CD89' : '#F97066' }"
+          >{{ trade.type === 'BUY' ? $t('market.buy') : $t('market.sell') }}</span>
           <span class="text-right">{{ formatTradePrice(trade.priceAda) }}</span>
           <span class="text-right">{{ formatCompact(trade.volumeAda) }}</span>
         </div>
@@ -105,13 +105,8 @@ const ownTxHashes = computed(() => {
   return new Set(txs.map((tx: { id?: string }) => tx.id).filter(Boolean));
 });
 
-// API returns BUY/SELL from ADA perspective — invert for token perspective
-// API SELL = sold ADA = bought the token → display as BUY
-// API BUY = bought ADA = sold the token → display as SELL
-function tokenSide(apiType: string): 'BUY' | 'SELL' {
-  return apiType === 'SELL' ? 'BUY' : 'SELL';
-}
-
+// Backend `type` is token-perspective (BUY = user bought the token); render as-is.
+// Do NOT invert — see @/modules/market/utils/tradeSide.ts for the ground truth.
 const trades = ref<TradeRow[]>([]);
 const loading = ref(false);
 const autoRefresh = ref(false);
