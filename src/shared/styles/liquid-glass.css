@@ -1,7 +1,11 @@
 /* ============================================================
    Glass canon: glass means "this floats above content".
-   Exactly 3 materials. Static cards must NOT use these classes;
+   Exactly 4 materials. Static cards must NOT use these classes;
    they are solid var(--g-raised) with a hairline border.
+   (Material 4 "panel" is the exception that proves the rule: the
+   in-page hero panels were already glass ad hoc — see PortfolioChart /
+   RecentTransactionsCard — so it names that recipe instead of letting
+   a third copy drift.)
 
    The legacy class names are kept as aliases so ~107 existing
    template usages keep working; sweeps migrate them to the
@@ -77,6 +81,19 @@
   box-shadow: var(--g-shadow-menu) !important;
 }
 
+/* Material 4: panel (in-page hero panels; the visibly see-through one).
+   Same recipe PortfolioChart + RecentTransactionsCard carry locally.
+   Unflagged on purpose: current consumers are plain divs, so the v-card
+   override flags (see specificity note above) aren't needed — add flagged
+   .v-card.glass-panel variants if a v-card ever adopts it. */
+.glass-panel {
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(20px) saturate(1.8);
+  -webkit-backdrop-filter: blur(20px) saturate(1.8);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-card);
+}
+
 /* No-blur fallback: go opaque */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .glass-chrome, .liquid-glass-nav-drawer,
@@ -85,13 +102,15 @@
   .v-card.liquid-glass-dialog { background: rgba(18, 21, 28, 0.98) !important; }
   .glass-popover, .liquid-glass, .liquid-glass-subtle, .liquid-glass-compact,
   .v-card.liquid-glass, .v-card.liquid-glass-subtle, .v-card.liquid-glass-compact { background: rgba(18, 21, 28, 0.98) !important; }
+  /* Unflagged: base .glass-panel is unflagged too, so source order wins. */
+  .glass-panel { background: var(--g-surface); }
 }
 
 /* User preference: no transparency */
 @media (prefers-reduced-transparency: reduce) {
   .glass-chrome, .liquid-glass-nav-drawer,
   .glass-overlay, .liquid-glass-dialog,
-  .glass-popover, .liquid-glass, .liquid-glass-subtle, .liquid-glass-compact,
+  .glass-popover, .liquid-glass, .liquid-glass-subtle, .liquid-glass-compact, .glass-panel,
   .v-navigation-drawer.liquid-glass-nav-drawer,
   .v-card.liquid-glass-dialog,
   .v-card.liquid-glass, .v-card.liquid-glass-subtle, .v-card.liquid-glass-compact {
@@ -105,7 +124,7 @@
 @media (prefers-contrast: more) {
   .glass-chrome, .liquid-glass-nav-drawer,
   .glass-overlay, .liquid-glass-dialog,
-  .glass-popover, .liquid-glass, .liquid-glass-subtle, .liquid-glass-compact,
+  .glass-popover, .liquid-glass, .liquid-glass-subtle, .liquid-glass-compact, .glass-panel,
   .v-navigation-drawer.liquid-glass-nav-drawer,
   .v-card.liquid-glass-dialog,
   .v-card.liquid-glass, .v-card.liquid-glass-subtle, .v-card.liquid-glass-compact {

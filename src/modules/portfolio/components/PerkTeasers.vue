@@ -15,7 +15,7 @@
         v-for="(perk, i) in perks"
         :key="perk.key"
         type="button"
-        :class="['perk-teasers__card', 'liquid-glass', `perk-teasers__card--${perk.key}`]"
+        :class="['perk-teasers__card', 'glass-panel', `perk-teasers__card--${perk.key}`]"
         :style="{ '--pt-d': `${i * 60}ms`, '--pt-loop-d': `${i * 520}ms` }"
         @click="perk.go()"
       >
@@ -137,7 +137,7 @@ const perks = computed(() => {
 .perk-teasers__card--swap { --pt-hue: var(--g-accent); }
 
 /* Surface (glass background/border/radius) comes from the shared
-   .liquid-glass material. The per-perk hue wash lives on a ::before overlay
+   .glass-panel material. The per-perk hue wash lives on a ::before overlay
    so it layers over the glass without fighting its flagged background. */
 .perk-teasers__card {
   appearance: none;

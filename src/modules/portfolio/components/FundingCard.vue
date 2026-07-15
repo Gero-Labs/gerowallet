@@ -1,8 +1,8 @@
 <template>
   <!-- Empty-wallet hero sidekick: sits in the RecentTransactionsCard slot while
-       there is nothing to transact. Shared liquid-glass material (user request
+       there is nothing to transact. Shared glass-panel material (user request
        2026-07-15). A plain div, not v-card, so no Vuetify cascade fight. -->
-  <div class="fill-height d-flex flex-column liquid-glass funding-card">
+  <div class="fill-height d-flex flex-column glass-panel funding-card">
     <h3 class="t-heading">{{ $t('portfolio.fundingTitle') }}</h3>
     <p class="funding-card__sub t-body-sm">{{ $t('portfolio.fundingSub') }}</p>
 
@@ -72,7 +72,7 @@ const copyAddress = async () => {
 </script>
 
 <style scoped>
-/* Surface comes from the shared .liquid-glass material; only layout here. */
+/* Surface comes from the shared .glass-panel material; only layout here. */
 .funding-card {
   padding: var(--g-s-4);
 }
