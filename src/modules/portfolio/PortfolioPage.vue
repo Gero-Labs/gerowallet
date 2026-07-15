@@ -940,6 +940,10 @@ watch(
     if (!newAddress) return;
     if (newAddress !== oldValues?.[0]) {
       currentTimestamp.value = Date.now();
+      // New wallet, new choice: an explicit view pick on the previous wallet
+      // must not suppress the fresh-wallet Market default (the component
+      // persists across wallet switches — same reason lastChartAddress exists).
+      viewTouched = false;
     }
     if (newAddress === lastChartAddress || isApex.value) return;
     if (!(Number(account.value?.controlled_amount) > 0) ||

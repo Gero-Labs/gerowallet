@@ -6,7 +6,7 @@
   <div class="fill-height d-flex flex-column ada-hero">
     <div class="ada-hero__header">
       <div>
-        <span class="t-heading">Cardano</span>
+        <span class="t-heading">{{ $t('assets.cardano') }}</span>
         <span class="ada-hero__ticker g-mono">ADA</span>
       </div>
       <div class="ada-hero__pricing g-num">
@@ -82,7 +82,11 @@ const chartEl = ref<HTMLElement | null>(null);
 let chart: IChartApi | null = null;
 let series: ISeriesApi<'Area'> | null = null;
 let resizeObserver: ResizeObserver | null = null;
+let initRetryTimer: ReturnType<typeof setTimeout> | null = null;
 let requestId = 0;
+// Latest fetched series, buffered so data that arrives while initChart is
+// still retrying (zero-size mount) isn't lost.
+let lastPoints: AreaData<Time>[] | null = null;
 
 const chartTheme = computed(() => {
   const hex = chainAccents[chainKeyFor(loggedWallet.value?.chain)].accent;
@@ -96,7 +100,11 @@ function initChart() {
   if (!chartEl.value || chart) return;
   const width = chartEl.value.clientWidth;
   const height = chartEl.value.clientHeight;
-  if (!width || !height) return;
+  if (!width || !height) {
+    // Mounted before layout settled — retry, same pattern as PortfolioChart.
+    initRetryTimer = setTimeout(() => initChart(), 100);
+    return;
+  }
 
   chart = createChart(chartEl.value, {
     width,
@@ -144,6 +152,12 @@ function initChart() {
     }
   });
   resizeObserver.observe(chartEl.value);
+
+  // Apply data that landed while init was still waiting on layout.
+  if (lastPoints && series) {
+    series.setData(lastPoints);
+    chart.timeScale().fitContent();
+  }
 }
 
 async function loadRange() {
@@ -158,6 +172,7 @@ async function loadRange() {
       .filter(c => c.time >= cutoff && c.close != null)
       .map(c => ({ time: c.time as Time, value: c.close }));
     noData.value = points.length === 0;
+    lastPoints = points;
     if (series) {
       series.setData(points);
       chart?.timeScale().fitContent();
@@ -173,6 +188,8 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  if (initRetryTimer) clearTimeout(initRetryTimer);
+  initRetryTimer = null;
   resizeObserver?.disconnect();
   resizeObserver = null;
   chart?.remove();
