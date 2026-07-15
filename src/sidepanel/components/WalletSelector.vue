@@ -63,6 +63,14 @@
           max-height="18"
           class="hw-icon"
         />
+        <v-img
+          v-else-if="wallet.type === WalletType.Google && wallet.encryptionMethod === 'mpc'"
+          :src="assets.googleSvg"
+          contain
+          max-width="18"
+          max-height="18"
+          class="hw-icon"
+        />
         <v-icon v-else size="18" color="var(--g-text-3)">mdi-chevron-right</v-icon>
       </div>
     </div>
@@ -95,7 +103,10 @@ const { wallets } = toRefs(geroStore);
 const availableWallets = computed(() =>
   (Object.values(wallets.value) as Wallet[])
     .filter((wallet: Wallet) => {
-      return networks.resolveNetwork(wallet?.chain, wallet?.network) && wallet.type != WalletType.Google;
+      // WalletType.Google is overloaded: legacy smart-wallets (hidden here)
+      // vs MPC "Sign in with Google" wallets (real Cardano wallets — must show).
+      return networks.resolveNetwork(wallet?.chain, wallet?.network)
+        && (wallet.type != WalletType.Google || wallet.encryptionMethod === 'mpc');
     })
 );
 
@@ -220,6 +231,7 @@ defineEmits<{
 .hw-icon {
   flex-shrink: 0;
   opacity: 0.7;
+  margin: 8px;
 }
 
 .add-wallet-section {

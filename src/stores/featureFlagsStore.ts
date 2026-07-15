@@ -13,6 +13,7 @@ export interface FeatureFlags {
   isCrossDeviceSigningEnabled: boolean;
   isCopilotEnabled: boolean;
   isMidnightConvertEnabled: boolean;
+  isGoogleWalletEnabled: boolean;
 }
 
 interface FeatureFlagsState {
@@ -34,6 +35,7 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
     isCrossDeviceSigningEnabled: false,
     isCopilotEnabled: false,
     isMidnightConvertEnabled: false,
+    isGoogleWalletEnabled: false,
   },
   isInitialized: false,
   isLoading: false,
@@ -93,6 +95,9 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isCrossDeviceSigningEnabled = featureFlagService.getFlag('isCrossDeviceSigningEnabled', false);
     featureFlagsState.flags.isCopilotEnabled = featureFlagService.getFlag('isCopilotEnabled', false);
     featureFlagsState.flags.isMidnightConvertEnabled = featureFlagService.getFlag('isMidnightConvertEnabled', false);
+    // MPC "Sign in with Google" wallet — ships DARK (default false) until the
+    // recovery/sign flows have been through a security audit (see Plan D).
+    featureFlagsState.flags.isGoogleWalletEnabled = featureFlagService.getFlag('isGoogleWalletEnabled', false);
     persistFlagsForBackground();
   },
 
@@ -134,6 +139,9 @@ export const featureFlagsStore = {
     });
     featureFlagService.onFlagChange('isMidnightConvertEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isMidnightConvertEnabled', newValue);
+    });
+    featureFlagService.onFlagChange('isGoogleWalletEnabled', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'isGoogleWalletEnabled', newValue);
     });
   },
 
@@ -233,6 +241,15 @@ export const featureFlagsStore = {
   },
 
   /**
+   * Check if the MPC "Sign in with Google" wallet (no seed phrase) is enabled.
+   * Ships DARK (default false): the onboarding method card and its routes stay
+   * hidden until this is flipped, and stays testnet-only until audited.
+   */
+  isGoogleWalletEnabled(): boolean {
+    return featureFlagsState.flags.isGoogleWalletEnabled;
+  },
+
+  /**
    * Reset flags (disable all until re-initialized).
    */
   reset(): void {
@@ -248,6 +265,7 @@ export const featureFlagsStore = {
       isCrossDeviceSigningEnabled: false,
       isCopilotEnabled: false,
       isMidnightConvertEnabled: false,
+      isGoogleWalletEnabled: false,
     });
     featureFlagsState.isInitialized = false;
     featureFlagsState.isLoading = false;

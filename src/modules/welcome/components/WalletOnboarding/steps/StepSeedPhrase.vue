@@ -1,5 +1,6 @@
 <template>
   <div class="step-seed-phrase">
+    <div class="step-scroll">
 
     <div class="step-section-label mb-2">{{ $t('welcome.chooseRecoveryPhraseLength') }}</div>
 
@@ -35,6 +36,7 @@
         </v-col>
       </v-row>
     </v-card>
+    </div>
 
     <!-- Navigation buttons -->
     <div class="onboarding-actions d-flex" style="gap: 12px;">

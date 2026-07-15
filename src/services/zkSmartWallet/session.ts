@@ -1,11 +1,11 @@
-import { deserialize, serialize } from '@/services/zkFold/utils/json.utils';
+import { deserialize, serialize } from '@/services/zkSmartWallet/utils/json.utils';
 
 interface SessionI {
   oauth_state: string | null
 }
 
 export class Session {
-  private readonly SESSION_KEY = 'zkfold-smart-wallet'
+  private readonly SESSION_KEY = 'legacy-smart-wallet' // legacy hosted endpoint — unused, retained for reference
 
   public saveState(state: string): void {
     const session = this.getSession()

@@ -2,8 +2,18 @@
   <v-app dark>
     <notifications></notifications>
 
+    <!-- Pre-switch unlock: authenticate the target MPC wallet before switching to
+         it, without logging out the current wallet. -->
+    <LockScreen
+      v-if="pendingSwitchWallet"
+      :key="'preswitch-' + pendingSwitchWallet.id"
+      :target-wallet="pendingSwitchWallet"
+      @switch-unlocked="onSwitchUnlocked"
+      @cancel="pendingSwitchWallet = null"
+    />
+
     <!-- No wallet exists -->
-    <template v-if="!hasWallets">
+    <template v-else-if="!hasWallets">
       <PendingRequestBanner />
       <NoWalletScreen />
     </template>
@@ -79,6 +89,10 @@ useChainContext();
 initDappRequestHub();
 
 const showWalletSwitcher = ref(false);
+// When set, a full-screen pre-switch unlock overlay is shown for this target MPC
+// wallet — we authenticate it (Google + passkey/password) BEFORE switching, so the
+// current wallet stays active until the switch actually completes.
+const pendingSwitchWallet = ref<Wallet | null>(null);
 
 const hasWallets = computed(() => Object.keys(geroStore.wallets || {}).length > 0);
 const hasActiveWallet = computed(() => !!walletStore.loggedWallet);
@@ -108,7 +122,9 @@ watch(() => geroStore.config?.locale, async (newLocale, oldLocale) => {
 const loggingInWalletId = ref<number | null>(null);
 const loginError = ref('');
 
-async function onWalletSelect(wallet: Wallet): Promise<boolean> {
+// Core network login: performs the LOGIN round-trip and surfaces spinner/error
+// feedback. Both the direct-select and switcher paths funnel through here.
+async function doLogin(wallet: Wallet): Promise<boolean> {
   loggingInWalletId.value = wallet.id;
   loginError.value = '';
   try {
@@ -131,13 +147,44 @@ async function onWalletSelect(wallet: Wallet): Promise<boolean> {
   }
 }
 
-// Must await the login and only close the sheet on success — closing it
-// synchronously (as before) tore down this WalletSelector instance, and with
-// it the spinner/error banner just added above, before either could ever be
-// seen from the wallet-switcher path.
+async function onWalletSelect(wallet: Wallet) {
+  // Already the active, unlocked wallet → nothing to do.
+  if (wallet.id === walletStore.loggedWallet?.id && !walletStore.isLocked) {
+    showWalletSwitcher.value = false;
+    return;
+  }
+  // MPC "Sign in with Google" wallets are authenticated BEFORE the switch: show the
+  // pre-switch unlock overlay (Google + passkey/password) which reconstructs the
+  // target's key WITHOUT logging out the current wallet. onSwitchUnlocked then does
+  // the real LOGIN; cancel keeps the current wallet. Non-MPC wallets log in directly.
+  if (wallet.encryptionMethod === 'mpc') {
+    showWalletSwitcher.value = false;
+    pendingSwitchWallet.value = wallet;
+    return;
+  }
+  await doLogin(wallet);
+}
+
+// From the wallet-switcher sheet. MPC and already-active wallets manage the sheet
+// themselves inside onWalletSelect (the MPC path opens the pre-switch overlay). For
+// a normal login we must await it and only close the sheet on success — closing it
+// synchronously tore down this WalletSelector instance, and with it the spinner/error
+// banner, before either could ever be seen from the switcher path.
 async function onWalletSwitch(wallet: Wallet) {
-  const success = await onWalletSelect(wallet);
+  if (
+    wallet.encryptionMethod === 'mpc' ||
+    (wallet.id === walletStore.loggedWallet?.id && !walletStore.isLocked)
+  ) {
+    await onWalletSelect(wallet);
+    return;
+  }
+  const success = await doLogin(wallet);
   if (success) showWalletSwitcher.value = false;
+}
+
+async function onSwitchUnlocked(wallet: Wallet) {
+  pendingSwitchWallet.value = null;
+  await doLogin(wallet);
 }
 
 function openDashboardSettings() {

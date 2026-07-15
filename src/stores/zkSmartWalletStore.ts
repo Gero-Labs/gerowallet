@@ -4,7 +4,7 @@ import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 import { debugLog } from '@/utils/debug';
 
-export interface ZkFoldWalletData {
+export interface ZkSmartWalletWalletData {
   email: string;
   userId: string;
   proofId?: string;
@@ -14,25 +14,25 @@ export interface ZkFoldWalletData {
   createdAt: Date;
 }
 
-export interface ZkFoldStore {
+export interface ZkSmartWalletStore {
   // Map of email to wallet data (for quick lookup)
-  wallets: Record<string, ZkFoldWalletData>;
+  wallets: Record<string, ZkSmartWalletWalletData>;
 }
 
 // Create observable state
-export const zkFoldStore = Vue.observable<ZkFoldStore>({
+export const zkSmartWalletStore = Vue.observable<ZkSmartWalletStore>({
   wallets: {}
 });
 
-const STORE_NAME = 'zkFoldStore';
+const STORE_NAME = 'zkSmartWalletStore';
 const context = getContextType();
 
 // Initialize messaging based on context
 if (context === 'browser') {
 
   // Browser context: Subscribe to updates from background
-  storeMessaging.subscribe(STORE_NAME, (updates: Partial<ZkFoldStore>) => {
-    Object.assign(zkFoldStore, updates);
+  storeMessaging.subscribe(STORE_NAME, (updates: Partial<ZkSmartWalletStore>) => {
+    Object.assign(zkSmartWalletStore, updates);
   });
 
   // Initial hydration from chrome.storage
@@ -50,8 +50,8 @@ if (context === 'browser') {
           }
         });
       }
-      Object.assign(zkFoldStore, stored);
-      debugLog('💾 Hydrated zkFold store from storage');
+      Object.assign(zkSmartWalletStore, stored);
+      debugLog('💾 Hydrated zkSmartWallet store from storage');
     }
   });
 }
@@ -64,10 +64,10 @@ let storageWriteTimeout: ReturnType<typeof setTimeout> | null = null;
  * Per CLAUDE.md: Use debounced writes for non-critical updates (300ms delay),
  * immediate writes only for critical state changes (activation, clear)
  */
-function broadcastFromBackground(updates: Partial<ZkFoldStore>, immediate = false) {
+function broadcastFromBackground(updates: Partial<ZkSmartWalletStore>, immediate = false) {
   if (context === 'background') {
     // Apply updates to local store
-    Object.assign(zkFoldStore, updates);
+    Object.assign(zkSmartWalletStore, updates);
 
     // Broadcast to all connected browser contexts (immediate)
     backgroundStoreMessaging.broadcastUpdate(STORE_NAME, updates);
@@ -79,8 +79,8 @@ function broadcastFromBackground(updates: Partial<ZkFoldStore>, immediate = fals
         clearTimeout(storageWriteTimeout);
         storageWriteTimeout = null;
       }
-      chrome.storage.local.set({ [STORE_NAME]: zkFoldStore });
-      debugLog('💾 zkFold store persisted immediately');
+      chrome.storage.local.set({ [STORE_NAME]: zkSmartWalletStore });
+      debugLog('💾 zkSmartWallet store persisted immediately');
     } else {
       // Debounced storage write for other updates to reduce I/O
       if (storageWriteTimeout) {
@@ -88,53 +88,53 @@ function broadcastFromBackground(updates: Partial<ZkFoldStore>, immediate = fals
       }
 
       storageWriteTimeout = setTimeout(() => {
-        chrome.storage.local.set({ [STORE_NAME]: zkFoldStore });
-        debugLog('💾 zkFold store persisted (debounced)');
+        chrome.storage.local.set({ [STORE_NAME]: zkSmartWalletStore });
+        debugLog('💾 zkSmartWallet store persisted (debounced)');
       }, 300); // 300ms debounce
     }
   }
 }
 
-const ZkFoldStoreModule = {
+const ZkSmartWalletStoreModule = {
   /**
    * Get wallet data by email
    */
-  getWalletByEmail(email: string): ZkFoldWalletData | undefined {
-    return zkFoldStore.wallets[email];
+  getWalletByEmail(email: string): ZkSmartWalletWalletData | undefined {
+    return zkSmartWalletStore.wallets[email];
   },
 
   /**
    * Get wallet data by userId
    */
-  getWalletByUserId(userId: string): ZkFoldWalletData | undefined {
-    return Object.values(zkFoldStore.wallets).find(w => w.userId === userId);
+  getWalletByUserId(userId: string): ZkSmartWalletWalletData | undefined {
+    return Object.values(zkSmartWalletStore.wallets).find(w => w.userId === userId);
   },
 
   /**
    * Store or update wallet data
    */
-  setWalletData(data: ZkFoldWalletData) {
+  setWalletData(data: ZkSmartWalletWalletData) {
     const key = data.email;
-    zkFoldStore.wallets[key] = {
-      ...zkFoldStore.wallets[key],
+    zkSmartWalletStore.wallets[key] = {
+      ...zkSmartWalletStore.wallets[key],
       ...data
     };
 
-    broadcastFromBackground({ wallets: zkFoldStore.wallets });
-    debugLog('✅ Stored zkFold wallet data for:', key);
+    broadcastFromBackground({ wallets: zkSmartWalletStore.wallets });
+    debugLog('✅ Stored zkSmartWallet wallet data for:', key);
   },
 
   /**
    * Update proofId for a wallet
    */
   setProofId(email: string, proofId: string) {
-    if (!zkFoldStore.wallets[email]) {
+    if (!zkSmartWalletStore.wallets[email]) {
       console.warn('Cannot set proofId: wallet not found in store for email:', email);
       return;
     }
 
-    zkFoldStore.wallets[email].proofId = proofId;
-    broadcastFromBackground({ wallets: zkFoldStore.wallets });
+    zkSmartWalletStore.wallets[email].proofId = proofId;
+    broadcastFromBackground({ wallets: zkSmartWalletStore.wallets });
     debugLog('✅ Updated proofId in store for:', email);
   },
 
@@ -142,18 +142,18 @@ const ZkFoldStoreModule = {
    * Mark wallet as activated
    */
   markAsActivated(email: string, walletId?: number) {
-    if (!zkFoldStore.wallets[email]) {
+    if (!zkSmartWalletStore.wallets[email]) {
       console.warn('Cannot mark as activated: wallet not found in store for email:', email);
       return;
     }
 
-    zkFoldStore.wallets[email].isActivated = true;
-    zkFoldStore.wallets[email].activatedAt = new Date();
+    zkSmartWalletStore.wallets[email].isActivated = true;
+    zkSmartWalletStore.wallets[email].activatedAt = new Date();
     if (walletId !== undefined) {
-      zkFoldStore.wallets[email].walletId = walletId;
+      zkSmartWalletStore.wallets[email].walletId = walletId;
     }
 
-    broadcastFromBackground({ wallets: zkFoldStore.wallets }, true); // Critical: activation state
+    broadcastFromBackground({ wallets: zkSmartWalletStore.wallets }, true); // Critical: activation state
     debugLog('✅ Marked wallet as activated in store:', email);
   },
 
@@ -161,16 +161,16 @@ const ZkFoldStoreModule = {
    * Check if wallet is activated
    */
   isWalletActivated(email: string): boolean {
-    return zkFoldStore.wallets[email]?.isActivated || false;
+    return zkSmartWalletStore.wallets[email]?.isActivated || false;
   },
 
   /**
    * Remove wallet data
    */
   removeWallet(email: string) {
-    delete zkFoldStore.wallets[email];
-    broadcastFromBackground({ wallets: zkFoldStore.wallets });
-    debugLog('✅ Removed zkFold wallet data from store for:', email);
+    delete zkSmartWalletStore.wallets[email];
+    broadcastFromBackground({ wallets: zkSmartWalletStore.wallets });
+    debugLog('✅ Removed zkSmartWallet wallet data from store for:', email);
   },
 
   /**
@@ -183,11 +183,11 @@ const ZkFoldStoreModule = {
     }
 
     try {
-      const { getAllZkFoldWallets } = await import('@/db/zkfold-db');
-      const wallets = await getAllZkFoldWallets();
+      const { getAllZkSmartWalletWallets } = await import('@/db/zk-smart-wallet-db');
+      const wallets = await getAllZkSmartWalletWallets();
 
       // Convert array to map
-      const walletsMap: Record<string, ZkFoldWalletData> = {};
+      const walletsMap: Record<string, ZkSmartWalletWalletData> = {};
       wallets.forEach(wallet => {
         walletsMap[wallet.email] = {
           email: wallet.email,
@@ -200,11 +200,11 @@ const ZkFoldStoreModule = {
         };
       });
 
-      zkFoldStore.wallets = walletsMap;
+      zkSmartWalletStore.wallets = walletsMap;
       broadcastFromBackground({ wallets: walletsMap });
-      debugLog('✅ Loaded zkFold wallets from database:', Object.keys(walletsMap).length);
+      debugLog('✅ Loaded zkSmartWallet wallets from database:', Object.keys(walletsMap).length);
     } catch (error) {
-      console.error('Failed to load zkFold wallets from database:', error);
+      console.error('Failed to load zkSmartWallet wallets from database:', error);
     }
   },
 
@@ -212,35 +212,35 @@ const ZkFoldStoreModule = {
    * Clear all wallet data
    */
   async clear() {
-    zkFoldStore.wallets = {};
+    zkSmartWalletStore.wallets = {};
     broadcastFromBackground({ wallets: {} }, true); // Critical: clear operation
 
     if (chrome?.storage?.local) {
       try {
         await chrome.storage.local.remove(STORE_NAME);
-        debugLog('✅ Cleared zkFold store from Chrome storage');
+        debugLog('✅ Cleared zkSmartWallet store from Chrome storage');
       } catch (error) {
-        console.error('Failed to clear zkFold store from Chrome storage:', error);
+        console.error('Failed to clear zkSmartWallet store from Chrome storage:', error);
       }
     }
   },
 
   // Expose the observable state
-  state: zkFoldStore,
+  state: zkSmartWalletStore,
 
   /**
    * Get all wallet data
    */
-  getAllWallets(): ZkFoldWalletData[] {
-    return Object.values(zkFoldStore.wallets);
+  getAllWallets(): ZkSmartWalletWalletData[] {
+    return Object.values(zkSmartWalletStore.wallets);
   },
 
   /**
    * Check if wallet exists by email
    */
   hasWallet(email: string): boolean {
-    return !!zkFoldStore.wallets[email];
+    return !!zkSmartWalletStore.wallets[email];
   }
 };
 
-export default ZkFoldStoreModule;
+export default ZkSmartWalletStoreModule;
