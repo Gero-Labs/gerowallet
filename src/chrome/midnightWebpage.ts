@@ -14,6 +14,7 @@ import type {
   ConnectedAPI,
   Configuration,
   ConnectionStatus,
+  DesiredOutput,
   HistoryEntry,
   Signature,
   SignDataOptions,
@@ -118,8 +119,10 @@ export const midnightGetConnectionStatus = async (): Promise<ConnectionStatus> =
 };
 
 /**
- * `tx` is expected to already be balanced + sealed (proofs, signatures,
- * cryptographic binding) — the connector is a relayer here, not a builder.
+ * Submit `tx` to the network, using the wallet as a relayer. `tx` is expected
+ * to be balanced + signed; GeroWallet proves + binds it server-side on submit
+ * (Nexus `/tx/finalize`), so it accepts the unproven output of `makeTransfer`
+ * as well as an already-sealed tx.
  */
 export const midnightSubmitTransaction = async (tx: string): Promise<void> => {
   const result = (await Messaging.sendToContent({
@@ -137,6 +140,30 @@ export const midnightSignData = async (
     method: MIDNIGHT_METHOD.signData,
     data: { data, options, userGesture: navigator.userActivation?.isActive },
   })) as ContentReply<Signature>;
+  return result.data;
+};
+
+/**
+ * Build a native-NIGHT unshielded transfer to the desired outputs and return
+ * the serialized tx. The returned `tx` is balanced + signed but NOT proven —
+ * GeroWallet proves + binds server-side on submit, so it is only submittable
+ * through GeroWallet's own `submitTransaction`. Phase 2 supports
+ * `kind:'unshielded'` native NIGHT only; shielded/mixed outputs and
+ * `payFees:false` reject with InvalidRequest.
+ */
+export const midnightMakeTransfer = async (
+  desiredOutputs: DesiredOutput[],
+  options?: { payFees?: boolean },
+): Promise<{ tx: string }> => {
+  const result = (await Messaging.sendToContent({
+    method: MIDNIGHT_METHOD.makeTransfer,
+    data: {
+      // Chrome messaging can't carry BigInt — send each value as a decimal string.
+      desiredOutputs: desiredOutputs.map((o) => ({ ...o, value: o.value.toString() })),
+      options,
+      userGesture: navigator.userActivation?.isActive,
+    },
+  })) as ContentReply<{ tx: string }>;
   return result.data;
 };
 

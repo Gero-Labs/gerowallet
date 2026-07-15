@@ -617,6 +617,102 @@
         </template>
       </div>
 
+      <!-- Midnight: Make Transfer (DApp Connector makeTransfer()) -->
+      <div v-else-if="currentRequest.method === 'midnight_makeTransfer'" class="dapp-sign-data">
+        <div class="dapp-identity mb-4">
+          <div class="favicon-wrapper">
+            <img :src="faviconUrl" class="favicon-img" @error="onFaviconError" v-if="!faviconFailed" />
+            <v-icon v-else size="32" :color="primaryColor">mdi-bank-transfer</v-icon>
+          </div>
+          <div class="dapp-domain-info">
+            <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('midnight.connector.transferTitle') }}</h3>
+            <span class="dapp-url"><span class="dapp-sub">{{ splitHost(makeTransferDomain).sub }}</span><b class="dapp-root">{{ splitHost(makeTransferDomain).root }}</b></span>
+          </div>
+        </div>
+
+        <div class="sign-data-message">
+          <div v-for="(o, i) in makeTransferOutputs" :key="i" class="mb-3">
+            <div class="d-flex justify-space-between">
+              <span class="grey--text text-caption mr-2">{{ $t('common.recipientAddress') }}</span>
+              <span class="white--text text-caption" style="word-break: break-all; text-align: right;">{{ o.recipient }}</span>
+            </div>
+            <div class="d-flex justify-space-between mt-1">
+              <span class="grey--text text-caption">{{ $t('common.amount') }}</span>
+              <span class="white--text text-caption font-weight-bold">{{ formatNightBase(o.value) }} {{ nightCurrency }}</span>
+            </div>
+          </div>
+          <div
+            v-if="makeTransferOutputs.length > 1"
+            class="d-flex justify-space-between pt-2"
+            style="border-top: 1px solid var(--g-hairline-1);"
+          >
+            <span class="white--text text-body-2 font-weight-bold">{{ $t('common.total') }}</span>
+            <span class="white--text text-body-2 font-weight-bold">{{ makeTransferTotalDisplay }} {{ nightCurrency }}</span>
+          </div>
+          <div class="d-flex align-start mt-2">
+            <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-eye-outline</v-icon>
+            <span class="grey--text text-caption">{{ $t('midnight.send.publicTxNote') }}</span>
+          </div>
+          <div class="d-flex align-start mt-1">
+            <v-icon size="14" color="warning" class="mr-1">mdi-alert-outline</v-icon>
+            <span class="warning--text text-caption">{{ $t('midnight.send.dustResetWarning') }}</span>
+          </div>
+          <p class="grey--text text-caption mt-2 mb-0">{{ $t('midnight.connector.transferFeesNote') }}</p>
+        </div>
+
+        <template v-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
+          <v-text-field
+            v-model="spendingPassword"
+            :type="showPassword ? 'text' : 'password'"
+            :label="$t('miniGero.spendingPassword')"
+            :append-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+            :error-messages="signError"
+            outlined dense dark
+            class="password-input"
+            @click:append="showPassword = !showPassword"
+            @keyup.enter="signMidnightTransferNormal"
+          />
+          <div class="action-buttons">
+            <v-btn outlined rounded dark @click="rejectMidnightMakeTransfer">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn
+              class="geroButton"
+              rounded
+              depressed
+              :loading="signing"
+              :disabled="!spendingPassword"
+              @click="signMidnightTransferNormal"
+            >
+              {{ $t('miniGero.approve') }}
+            </v-btn>
+          </div>
+        </template>
+
+        <template v-else-if="isPrfWallet">
+          <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('miniGero.passKeyRequired') }}</p>
+          <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
+          <div class="action-buttons">
+            <v-btn outlined rounded dark @click="rejectMidnightMakeTransfer">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn
+              class="geroButton"
+              rounded
+              depressed
+              :loading="signing"
+              @click="signMidnightTransferPrf"
+            >
+              {{ $t('miniGero.approve') }}
+            </v-btn>
+          </div>
+        </template>
+
+        <!-- Midnight has no hardware-wallet signing support — decline only. -->
+        <template v-else>
+          <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('midnight.connector.walletTypeUnsupported') }}</p>
+          <div class="action-buttons">
+            <v-btn outlined rounded dark block @click="rejectMidnightMakeTransfer">{{ $t('miniGero.reject') }}</v-btn>
+          </div>
+        </template>
+      </div>
+
       <!-- WalletConnect: session proposal (pairing) -->
       <div v-else-if="currentRequest.method === 'wcSessionProposal'" class="dapp-connect">
         <div class="dapp-identity mb-4">
@@ -788,6 +884,7 @@ import networks from '@/utils/networks';
 import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import { decodedPayloadHexPreview, decodeSignDataPayload, type MidnightSignDataEncoding } from '@/chrome/midnightSignDataCodec';
 import { MidnightErrorCode } from '@/chrome/config';
+import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { resolveGeroChain } from '@/services/walletConnect/chainUtils';
 
 interface BackgroundResponse<T> { data: T }
@@ -810,22 +907,24 @@ function queuedItemLabel(item: DAppRequest): string {
     signData: 'miniGero.signDataRequest',
     midnight_connect: 'miniGero.connectRequest',
     midnight_signData: 'miniGero.signDataRequest',
+    midnight_makeTransfer: 'miniGero.transferRequest',
     wcSessionProposal: 'miniGero.connectRequest',
   };
   const methodLabel = methodKeys[item.method] ? t(methodKeys[item.method]) : item.method;
-  return `${domain} — ${methodLabel}`;
+  return `${domain} - ${methodLabel}`;
 }
 const { themeColors } = useChainContext();
 const primaryColor = computed(() => themeColors.value.primary);
 
 // Fiat approximation for the tx total — "≈ $5,620" when you meant $56 is
-// instantly visible where "12482.1 ADA" is not. Reuses the already-cached
-// price (networkStore.getAdaPrice(), populated by background sync — no new
-// API call here) and the existing display-currency conversion, so this is
-// pure presentation over data the app already has.
+// instantly visible where "12482.1 ADA" is not. Reads the already-cached
+// price straight off the observable state (populated by background sync — no
+// new API call here; the getAdaPrice() helper lives on the store's default
+// export, not this named state import) and the existing display-currency
+// conversion, so this is pure presentation over data the app already has.
 const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 function formatFiatFromAda(adaAmountStr: string): string | null {
-  const adaPrice = networkStore.getAdaPrice();
+  const adaPrice = networkStore.price?.lastPrice || 0;
   if (!adaPrice) return null; // no price data yet — omit rather than show a stale/zero amount
   const ada = parseFloat(adaAmountStr);
   if (!Number.isFinite(ada)) return null;
@@ -902,6 +1001,73 @@ const signDataDomain = computed(() => {
     return website;
   }
 });
+
+// Active-wallet computeds (WalletStore-backed). Declared HERE (early) rather
+// than lower down because a `watch(loggedWallet)` and several computeds below
+// reference `loggedWallet` — a late declaration is a temporal-dead-zone crash
+// in setup(). (They only read WalletStore.state, so an early position is safe.)
+const walletType = computed(() => WalletStore.state.loggedWallet?.type);
+const isPrfWallet = computed(() => WalletStore.state.loggedWallet?.encryptionMethod === 'prf');
+const loggedWallet = computed(() => WalletStore.state.loggedWallet);
+const keys = computed(() => WalletStore.state.keys);
+const utxos = computed(() => WalletStore.state.utxos);
+const isBT = computed(() => WalletStore.state.loggedWallet?.connectionType === 'bluetooth');
+
+// ── Midnight makeTransfer (DApp Connector) — approval preview ────────────────
+// Phase 2: native-NIGHT unshielded transfers. The desiredOutputs `value`s
+// arrive as base-unit decimal STRINGS (the page bridge stringifies the bigint);
+// display them in NIGHT for the user.
+type ConnectorDesiredOutput = { kind: string; type?: string; value: string; recipient: string };
+
+const makeTransferDomain = computed(() => {
+  const website = currentRequest.value?.payload?.website || '';
+  try {
+    return new URL(website).hostname;
+  } catch {
+    return website;
+  }
+});
+
+const makeTransferOutputs = computed<ConnectorDesiredOutput[]>(() => {
+  const data = currentRequest.value?.payload?.data as { desiredOutputs?: ConnectorDesiredOutput[] } | undefined;
+  return Array.isArray(data?.desiredOutputs) ? (data!.desiredOutputs as ConnectorDesiredOutput[]) : [];
+});
+
+const NIGHT_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.NIGHT);
+// Format base-unit NIGHT (bigint or decimal string) for display. Mirrors
+// MidnightSendDialog.formattedAvailable — a chain-specific unit conversion, not
+// a fork of the canonical price formatters in shared/utils/format.
+function formatNightBase(baseUnits: string | bigint): string {
+  let value: bigint;
+  try {
+    value = typeof baseUnits === 'bigint' ? baseUnits : BigInt(baseUnits);
+  } catch {
+    return '0';
+  }
+  const whole = value / NIGHT_DIVISOR;
+  const remainder = value % NIGHT_DIVISOR;
+  const frac = remainder.toString().padStart(MIDNIGHT_DECIMALS.NIGHT, '0').replace(/0+$/, '');
+  return frac ? `${whole.toLocaleString('en-US')}.${frac}` : whole.toLocaleString('en-US');
+}
+
+const makeTransferTotalDisplay = computed(() => {
+  let total = 0n;
+  for (const o of makeTransferOutputs.value) {
+    try {
+      total += BigInt(o.value);
+    } catch {
+      /* skip unparseable — BG already validated, this is display-only */
+    }
+  }
+  return formatNightBase(total);
+});
+
+// Network-aware ticker — mirror MidnightSendDialog's nightCurrency (mainnet
+// 'NIGHT' vs preview/testnet 'tNIGHT') rather than hardcoding, so the connector
+// approval and the dashboard show the same unit for the same asset.
+const nightCurrency = computed(() =>
+  loggedWallet.value?.network === Network.MAINNET ? 'NIGHT' : 'tNIGHT',
+);
 
 // ── CIP-30 signData preview: strict decode, WYSIWYS ─────────────────────────
 // Mirrors the Midnight signData codec's own rationale exactly: Buffer.from(x,
@@ -1728,6 +1894,7 @@ watch(loggedWallet, (newWallet, oldWallet) => {
   if (newWallet.id === oldWallet.id) return;
   if (currentRequest.value.method === 'midnight_connect') rejectMidnightConnect();
   else if (currentRequest.value.method === 'midnight_signData') rejectMidnightSignData();
+  else if (currentRequest.value.method === 'midnight_makeTransfer') rejectMidnightMakeTransfer();
   else reject('wallet_changed');
 });
 
@@ -1816,12 +1983,10 @@ const keystoneType = ref('');
 const keystoneCbor = ref('');
 const keystoneUseHash = ref(false);
 
-const walletType = computed(() => WalletStore.state.loggedWallet?.type);
-const isPrfWallet = computed(() => WalletStore.state.loggedWallet?.encryptionMethod === 'prf');
-const loggedWallet = computed(() => WalletStore.state.loggedWallet);
-const keys = computed(() => WalletStore.state.keys);
-const utxos = computed(() => WalletStore.state.utxos);
-const isBT = computed(() => WalletStore.state.loggedWallet?.connectionType === 'bluetooth');
+// NOTE: walletType / isPrfWallet / loggedWallet / keys / utxos / isBT are
+// declared EARLY (right after signDataDomain) — a `watch(loggedWallet)` and
+// several computeds above reference them, so declaring them here (late) is a
+// temporal-dead-zone crash in setup(). Do not move them back down.
 
 // Reset state when request changes
 watch(currentRequest, () => {
@@ -2216,6 +2381,8 @@ function onEscapeReject() {
     rejectMidnightConnect();
   } else if (currentRequest.value?.method === 'midnight_signData') {
     rejectMidnightSignData();
+  } else if (currentRequest.value?.method === 'midnight_makeTransfer') {
+    rejectMidnightMakeTransfer();
   } else {
     reject();
   }
@@ -2287,6 +2454,103 @@ async function signMidnightDataPrf() {
   } catch (e: any) {
     console.error('[DApp] Midnight PRF sign data error:', e);
     signError.value = e.message || 'PassKey signing failed';
+  } finally {
+    signing.value = false;
+  }
+}
+
+// ── Midnight makeTransfer (DApp Connector) ─────────────────────────────────
+// Build + DUST-balance + sign (but do NOT submit) the native-NIGHT unshielded
+// transfer, then hand the serialized tx back to the dapp via approve({ tx }).
+// The dapp submits it with submitTransaction, which proves + binds server-side.
+// Reuses the exact dashboard-send path (buildAndSignUnshieldedTransfer) so the
+// tx is built identically to a normal send. The mnemonic is decrypted only in
+// the background; the panel passes credentials and never sees keys.
+function rejectMidnightMakeTransfer() {
+  spendingPassword.value = '';
+  signError.value = '';
+  reject(midnightError(MidnightErrorCode.Rejected, 'User declined the transfer request'));
+}
+
+async function buildMidnightTransferTx(
+  credentials: { password?: string; prfSecret?: Uint8Array },
+): Promise<{ tx: string }> {
+  const wallet = loggedWallet.value;
+  if (!wallet) throw new Error('No wallet logged in');
+  const outputs = makeTransferOutputs.value.map((o) => ({
+    address: o.recipient,
+    amount: o.value, // already base units (decimal string) from the connector
+    token: 'NIGHT' as const,
+  }));
+  const { buildAndSignUnshieldedTransfer } = await import('@/services/midnight-tx.service');
+  return buildAndSignUnshieldedTransfer(
+    wallet.network,
+    { fromAddress: wallet.baseAddress, outputs, ttlMs: Date.now() + 5 * 60_000 },
+    credentials,
+  );
+}
+
+async function signMidnightTransferNormal() {
+  if (!currentRequest.value || !spendingPassword.value) return;
+  // Capture the request identity BEFORE the multi-second build round-trip. If
+  // the request is settled meanwhile (Reject clicked, wallet switched → queue
+  // advances), currentRequest becomes a DIFFERENT request — never deliver this
+  // transfer's signed tx to it.
+  const reqId = currentRequest.value.requestId;
+  signing.value = true;
+  signError.value = '';
+
+  try {
+    const { tx } = await buildMidnightTransferTx({ password: spendingPassword.value });
+    if (currentRequest.value?.requestId !== reqId) return; // request superseded — drop
+    approve({ tx });
+    spendingPassword.value = '';
+  } catch (e) {
+    console.error('[DApp] Midnight makeTransfer error:', e);
+    signError.value = (e as Error)?.message || 'Transfer failed';
+  } finally {
+    signing.value = false;
+  }
+}
+
+async function signMidnightTransferPrf() {
+  if (!currentRequest.value) return;
+  // Capture identity before the PRF popup wait + build (up to ~60s) — see
+  // signMidnightTransferNormal; don't deliver this tx to a superseded request.
+  const reqId = currentRequest.value.requestId;
+  signing.value = true;
+  signError.value = '';
+
+  try {
+    // WebAuthn doesn't reliably work from inside the side panel's own window —
+    // same cross-window popup workaround (mode=rawPrf) as signMidnightDataPrf.
+    const popupUrl = chrome.runtime.getURL('index.html?mode=rawPrf#/passkey-auth');
+    window.open(popupUrl, 'PassKeyAuth', 'width=400,height=500,popup=1');
+
+    const prfBytes = await new Promise<Uint8Array>((resolve, rejectPromise) => {
+      const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
+      const handler = (event: MessageEvent) => {
+        if (event.origin !== extensionOrigin) return;
+        if (event.data.type === 'PASSKEY_AUTH_RESULT') {
+          window.removeEventListener('message', handler);
+          const { success, prfOutput, error } = event.data.payload;
+          if (success && prfOutput) resolve(new Uint8Array(prfOutput));
+          else rejectPromise(new Error(error || 'PassKey authentication failed'));
+        }
+      };
+      window.addEventListener('message', handler);
+      setTimeout(() => {
+        window.removeEventListener('message', handler);
+        rejectPromise(new Error('PassKey authentication timed out'));
+      }, 60000);
+    });
+
+    const { tx } = await buildMidnightTransferTx({ prfSecret: prfBytes });
+    if (currentRequest.value?.requestId !== reqId) return; // request superseded — drop
+    approve({ tx });
+  } catch (e) {
+    console.error('[DApp] Midnight PRF makeTransfer error:', e);
+    signError.value = (e as Error)?.message || 'PassKey signing failed';
   } finally {
     signing.value = false;
   }

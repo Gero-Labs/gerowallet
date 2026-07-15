@@ -96,12 +96,19 @@ export interface MidnightNetworkInfoDto {
 
 /**
  * Build-registration-tx request body. Wallet supplies the user's Cardano
- * address + payment-key hash + target Midnight dust address; Nexus replies
- * with the unsigned Cardano CBOR for the wallet to sign via CIP-30.
+ * BASE address + target Midnight dust address; Nexus derives the STAKE key
+ * hash from the address (the datum's `c_wallet` — the credential Midnight's
+ * observation layer keys DUST generation on) and replies with the unsigned
+ * Cardano CBOR. The wallet must witness with BOTH its payment and stake keys
+ * (both are in requiredSigners, so the standard SIGN_TX resolver picks them
+ * up automatically).
  */
 export interface BuildDustRegistrationTxRequest {
   cardanoAddress: string;
-  /** 28-byte hex payment-key hash. */
+  /**
+   * 28-byte hex payment-key hash. Optional cross-check only — Nexus verifies
+   * it against the address's payment credential when present.
+   */
   paymentKeyHashHex: string;
   /** Midnight dust address bytes as hex (≤33 bytes / 66 hex chars). */
   dustAddressHex: string;
@@ -116,11 +123,12 @@ export interface BuildDustRegistrationTxResponse {
   validatorScriptHash: string;
   datumCbor: string;
   redeemerCbor: string;
+  /** +1 on register, -1 on deregister, null on update (the NFT moves, nothing mints). */
   mintAsset: {
     policyId: string;
     assetNameHex: string;
     quantity: number;
-  };
+  } | null;
   note?: string;
 }
 
@@ -133,12 +141,58 @@ interface BuildDustRegistrationTxResponseWire {
   validator_script_hash: string;
   datum_cbor: string;
   redeemer_cbor: string;
+  /** Null on the update tx (the NFT moves, nothing mints). */
   mint_asset: {
     policy_id: string;
     asset_name_hex: string;
     quantity: number;
-  };
+  } | null;
   note?: string;
+}
+
+/**
+ * Request body for the deregistration / update endpoints. The registration
+ * UTxO outpoint comes from `getDustStatus` (`registrationUtxoTxHash` /
+ * `registrationUtxoOutputIndex`).
+ */
+export interface BuildDustManageTxRequest {
+  cardanoAddress: string;
+  /** Optional cross-check; derived server-side when absent. */
+  paymentKeyHashHex?: string;
+  registrationUtxoTxHash: string;
+  registrationUtxoOutputIndex: number;
+  /** Update only: replacement Midnight DUST address bytes as hex (≤33 bytes). */
+  dustAddressHex?: string;
+}
+
+function manageWireBody(request: BuildDustManageTxRequest) {
+  return {
+    cardano_address: request.cardanoAddress,
+    payment_key_hash_hex: request.paymentKeyHashHex,
+    registration_utxo_tx_hash: request.registrationUtxoTxHash,
+    registration_utxo_output_index: request.registrationUtxoOutputIndex,
+    dust_address_hex: request.dustAddressHex,
+  };
+}
+
+function convertBuildDustTxResponse(data: BuildDustRegistrationTxResponseWire): BuildDustRegistrationTxResponse {
+  return {
+    status: data.status,
+    txCbor: data.tx_cbor,
+    txHash: data.tx_hash,
+    validatorAddress: data.validator_address,
+    validatorScriptHash: data.validator_script_hash,
+    datumCbor: data.datum_cbor,
+    redeemerCbor: data.redeemer_cbor,
+    mintAsset: data.mint_asset
+      ? {
+          policyId: data.mint_asset.policy_id,
+          assetNameHex: data.mint_asset.asset_name_hex,
+          quantity: data.mint_asset.quantity,
+        }
+      : null,
+    note: data.note,
+  };
 }
 
 // ─── Native send: Build / Sign / Submit  ─────────────────────────────────────
@@ -190,6 +244,34 @@ export interface BuildMidnightTxResponse {
   /** SDK-computed tx hash for receipts; final hash may differ if proving rebinds. */
   txHash: string;
   segmentsToSign: MidnightSegmentToSign[];
+}
+
+/**
+ * Shield-swap-mode request (WP-SH1, nexus repo): builds ONLY the unshielded
+ * (public) half of a shield conversion — an unproven tx that spends the
+ * sender's own NIGHT UTxOs covering {@code amount} and returns change ONLY
+ * (no payment output; the consumed value is completed by the shielded
+ * output the wallet builds separately via `ShieldedWallet.initSwap` — see
+ * `midnightShieldSwapBuilder.ts`).
+ *
+ * WP-SH1 has shipped on nexus's `development` branch. The wire field names
+ * were originally a best-effort guess (see docs/plans/2026-07-13-midnight-
+ * shield-unshield.md section 0); `shieldAmount` turned out wrong and 400'd
+ * with nexus's actual validator name: `swapAmountValidForMode: swapAmount
+ * required (positive integer string) when swapMode is true`. Field names
+ * below are now `swapMode` + `swapAmount`, confirmed against that response.
+ */
+export interface BuildShieldSwapTxRequest {
+  /** Sender's unshielded `mn_addr_…` address. Nexus uses this to fetch UTxOs. */
+  fromAddress: string;
+  /** Raw signing public key hex — from `UnshieldedKeystore.getPublicKey()`. */
+  publicKeyHex: string;
+  /** Address bytes as hex — from `UnshieldedKeystore.getAddress()`. */
+  addressHex: string;
+  /** Amount of NIGHT (base units, 6 decimals) to move into the shielded pool. */
+  amount: string;
+  /** Time-to-live: epoch ms. */
+  ttlMs: number;
 }
 
 /** Phase 1 + 3: signed (and proven, for shielded) tx submitted to Nexus. */
@@ -430,11 +512,69 @@ export class MidnightApi {
   }
 
   /**
+   * Submit a fully-signed Cardano transaction through Nexus's own submit
+   * endpoint (`POST /api/transactions/submit`) on the anchored Cardano
+   * network. Nexus owns provider routing internally — the wallet must NOT
+   * submit via Blockfrost/Koios directly. On rejection Nexus returns the
+   * node's actual ledger error in the response body, which parseHttpError
+   * surfaces (unlike the bare 400 from the legacy blockchain-api path).
+   */
+  async submitCardanoTx(signedTxCborHex: string): Promise<string> {
+    try {
+      const endpoints = getMidnightEndpoints(this.network);
+      if (!endpoints) throw new Error(`Unknown Midnight network: ${this.network}`);
+      const url = `${endpoints.nexusBaseUrl}/api/transactions/submit?network=cardano-${endpoints.sdkNetworkId}`;
+      const { data, status } = await this.axiosInstance.post<string>(url, signedTxCborHex, {
+        headers: { 'Content-Type': 'text/plain' },
+      });
+      if (status === 200 && typeof data === 'string') return data.replace(/"/g, '');
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  /**
+   * Whether a Cardano transaction is on-chain, via Nexus
+   * (`GET /api/transactions/{txHash}/utxos`). Returns `true` when the indexer
+   * knows the tx (HTTP 200) and `false` on a definitive 404 (not on-chain).
+   * Any other status/network failure THROWS, so callers can distinguish
+   * "definitely absent" from "couldn't determine" — used to reconcile the local
+   * DUST-pending guard against a submission that never actually landed.
+   */
+  async cardanoTxExists(txHash: string): Promise<boolean> {
+    const endpoints = getMidnightEndpoints(this.network);
+    if (!endpoints) throw new Error(`Unknown Midnight network: ${this.network}`);
+    const url = `${endpoints.nexusBaseUrl}/api/transactions/${encodeURIComponent(txHash)}/utxos`
+      + `?network=cardano-${endpoints.sdkNetworkId}`;
+    const { status } = await this.axiosInstance.get(url, {
+      validateStatus: (s) => s === 200 || s === 404,
+    });
+    return status === 200;
+  }
+
+  /**
+   * Evaluate a Cardano transaction's Plutus scripts via Nexus
+   * (`POST /api/transactions/evaluate`) WITHOUT submitting — returns per-redeemer
+   * ExUnits or the script/ledger failure. Diagnostic aid for DUST-tx rejections.
+   */
+  async evaluateCardanoTx(txCborHex: string): Promise<unknown> {
+    try {
+      const endpoints = getMidnightEndpoints(this.network);
+      if (!endpoints) throw new Error(`Unknown Midnight network: ${this.network}`);
+      const url = `${endpoints.nexusBaseUrl}/api/transactions/evaluate?network=cardano-${endpoints.sdkNetworkId}`;
+      const { data } = await this.axiosInstance.post(url, { cbor: txCborHex });
+      return data;
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  /**
    * Build the unsigned Cardano transaction that registers the wallet's DUST
    * address under the Midnight DUST mapping validator. The wallet signs the
-   * returned `txCbor` with the user's Cardano payment key (the same key used
-   * for every other Cardano tx) and submits via the existing Cardano
-   * `submit-tx` endpoint.
+   * returned `txCbor` with its payment + stake keys and submits via Nexus's
+   * Cardano `submit` endpoint (never Blockfrost/Koios).
    *
    * Nexus's request/response use snake_case JSON; we convert at the wire
    * boundary so callers see the camelCase TS shape.
@@ -451,21 +591,75 @@ export class MidnightApi {
       };
       const { data, status } = await this.axiosInstance.post<BuildDustRegistrationTxResponseWire>(url, wireBody);
       if (status !== 200) throw parseHttpError(data);
-      return {
-        status: data.status,
-        txCbor: data.tx_cbor,
-        txHash: data.tx_hash,
-        validatorAddress: data.validator_address,
-        validatorScriptHash: data.validator_script_hash,
-        datumCbor: data.datum_cbor,
-        redeemerCbor: data.redeemer_cbor,
-        mintAsset: {
-          policyId: data.mint_asset.policy_id,
-          assetNameHex: data.mint_asset.asset_name_hex,
-          quantity: data.mint_asset.quantity,
-        },
-        note: data.note,
-      };
+      return convertBuildDustTxResponse(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  /**
+   * Build the unsigned DEREGISTRATION tx: spends the on-chain registration UTxO
+   * (outpoint comes from `getDustStatus`) and burns the mapping NFT. Accumulated
+   * DUST decays to zero after relay. Same sign+submit contract as registration
+   * (payment + stake key witnesses).
+   */
+  async buildDustDeregistrationTx(
+    request: BuildDustManageTxRequest,
+  ): Promise<BuildDustRegistrationTxResponse> {
+    try {
+      const url = nexusMidnightPathFor(this.network, 'dust/build-deregistration-tx');
+      const { data, status } = await this.axiosInstance.post<BuildDustRegistrationTxResponseWire>(
+        url, manageWireBody(request));
+      if (status !== 200) throw parseHttpError(data);
+      return convertBuildDustTxResponse(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  /**
+   * Build the unsigned mapping UPDATE tx: spends the registration UTxO and
+   * re-outputs the NFT with a datum pointing at `dustAddressHex` (script-
+   * authorized withdrawal handled server-side). Used to move the DUST
+   * destination to this wallet's own address.
+   */
+  async buildDustUpdateTx(
+    request: BuildDustManageTxRequest,
+  ): Promise<BuildDustRegistrationTxResponse> {
+    try {
+      const url = nexusMidnightPathFor(this.network, 'dust/build-update-tx');
+      const { data, status } = await this.axiosInstance.post<BuildDustRegistrationTxResponseWire>(
+        url, manageWireBody(request));
+      if (status !== 200) throw parseHttpError(data);
+      return convertBuildDustTxResponse(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  /**
+   * Cardano UTxOs of `address` that hold `assetUnit` (policyId + assetNameHex),
+   * via Nexus's chain-data API on the anchored Cardano network (the device
+   * token carries CARDANO_READ). Used by the DUST sources panel to read
+   * sibling wallets' cNIGHT balances through Nexus — the wallet never talks
+   * to an explorer directly.
+   *
+   * Note: single page of up to 100 UTxOs — plenty for a balance display; a
+   * wallet fragmented across more cNIGHT UTxOs would show a floor, not the
+   * exact total.
+   */
+  async getCardanoAssetUtxos(
+    address: string,
+    assetUnit: string,
+  ): Promise<Array<{ assets?: Array<{ unit?: string; policyId?: string; assetName?: string; quantity?: string }> }>> {
+    try {
+      const endpoints = getMidnightEndpoints(this.network);
+      if (!endpoints) throw new Error(`Unknown Midnight network: ${this.network}`);
+      const url = `${endpoints.nexusBaseUrl}/api/addresses/${encodeURIComponent(address)}`
+        + `/utxos/${assetUnit}?network=cardano-${endpoints.sdkNetworkId}&pageSize=100`;
+      const { data, status } = await this.axiosInstance.get(url);
+      if (status === 200) return data ?? [];
+      throw parseHttpError(data);
     } catch (error) {
       throw parseHttpError(error);
     }
@@ -542,6 +736,36 @@ export class MidnightApi {
   }
 
   /**
+   * Shield (public → private), unshielded half (WP-SH1 + WP-SH2): same
+   * route as {@link buildUnshieldedTx} with an empty `outputs[]` and a
+   * `swapMode` flag (see {@link BuildShieldSwapTxRequest}'s doc comment —
+   * field names are now confirmed against nexus's own `swapAmountValidForMode`
+   * validator, not just a guess). Response is the SAME shape as
+   * `buildUnshieldedTx`'s — confirmed against the nexus route's own doc
+   * comment (`{unprovenTxHex, txHash, segmentsToSign}`), so no separate
+   * response type is declared.
+   */
+  async buildShieldSwapUnshieldedTx(request: BuildShieldSwapTxRequest): Promise<BuildMidnightTxResponse> {
+    try {
+      const url = nexusMidnightPathFor(this.network, 'tx/build-unshielded');
+      const wireBody = {
+        fromAddress: request.fromAddress,
+        publicKeyHex: request.publicKeyHex,
+        addressHex: request.addressHex,
+        outputs: [] as MidnightTxOutput[],
+        swapMode: true,
+        swapAmount: request.amount,
+        ttlMs: request.ttlMs,
+      };
+      const { data, status } = await this.axiosInstance.post<BuildMidnightTxResponse>(url, wireBody);
+      if (status !== 200) throw parseHttpError(data);
+      return data;
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  /**
    * Phase 1 + 3: submit a fully signed (and proven, for shielded) tx via
    * Nexus's relay. Nexus calls `PolkadotNodeClient.sendMidnightTransaction`
    * against the Midnight RPC node and bubbles the resulting submission event
@@ -584,6 +808,34 @@ export class MidnightApi {
   ): Promise<SubmitMidnightTxResponse> {
     try {
       const url = nexusMidnightPathFor(this.network, 'tx/prove-and-submit');
+      const { data, status } = await this.axiosInstance.post<SubmitMidnightTxResponse>(url, request);
+      if (status !== 200) throw parseHttpError(data);
+      return data;
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  /**
+   * Local proving (WP-P2): submit an ALREADY-PROVEN shielded tx (produced
+   * by the wallet's own local ProvingProvider — see
+   * `chains/midnight/midnightLocalProver.ts`) via Nexus's relay to the
+   * sidecar's /tx/submit-proven (WP-P3). Unlike proveAndSubmitMidnightTx,
+   * the sidecar does NOT re-prove it — `ledger.prove()` throws if called on
+   * an already-proven tx — it just deserializes and submits via the
+   * Midnight RPC node.
+   *
+   * Endpoint: POST /api/midnight/{network}/tx/submit-proven
+   *
+   * Privacy: a proven tx carries no witness data (the proof is
+   * zero-knowledge), so unlike proveAndSubmitMidnightTx this body is safe
+   * to log server-side.
+   */
+  async submitProvenMidnightTx(
+    request: SubmitMidnightTxRequest,
+  ): Promise<SubmitMidnightTxResponse> {
+    try {
+      const url = nexusMidnightPathFor(this.network, 'tx/submit-proven');
       const { data, status } = await this.axiosInstance.post<SubmitMidnightTxResponse>(url, request);
       if (status !== 200) throw parseHttpError(data);
       return data;

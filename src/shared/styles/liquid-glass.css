@@ -16,15 +16,21 @@
    the `.v-card.` variants can go too.
    ============================================================ */
 
+/* Readability pass (design-system, 2026-07-14): every glass material had its
+   opacity + blur raised so small/mono content stays legible over busy pages
+   (dense portfolios, token lists). The two floating materials share one cool
+   tint (18,21,28) that separates the sheet from the black canvas without
+   reading as a colored panel; chrome stays black as the app frame. */
+
 /* Material 1: chrome (nav drawer, app bar when content scrolls under) */
 .glass-chrome,
 .liquid-glass-nav-drawer,
 .v-card.glass-chrome,
 .v-navigation-drawer.liquid-glass-nav-drawer,
 .v-navigation-drawer.glass-chrome {
-  background: rgba(0, 0, 0, 0.66) !important;
-  backdrop-filter: blur(24px) saturate(1.3) !important;
-  -webkit-backdrop-filter: blur(24px) saturate(1.3) !important;
+  background: rgba(0, 0, 0, 0.82) !important;
+  backdrop-filter: blur(30px) saturate(1.3) !important;
+  -webkit-backdrop-filter: blur(30px) saturate(1.3) !important;
   border-right: 1px solid var(--g-hairline-1) !important;
 }
 
@@ -33,9 +39,9 @@
 .liquid-glass-dialog,
 .v-card.glass-overlay,
 .v-card.liquid-glass-dialog {
-  background: rgba(12, 14, 18, 0.88) !important;
-  backdrop-filter: blur(28px) saturate(1.25) !important;
-  -webkit-backdrop-filter: blur(28px) saturate(1.25) !important;
+  background: rgba(18, 21, 28, 0.975) !important;
+  backdrop-filter: blur(44px) saturate(1.3) !important;
+  -webkit-backdrop-filter: blur(44px) saturate(1.3) !important;
   border: 1px solid var(--g-hairline-2) !important;
   border-radius: var(--g-r-sheet) !important;
   box-shadow: var(--g-shadow-sheet) !important;
@@ -63,9 +69,9 @@
 .v-card.liquid-glass,
 .v-card.liquid-glass-subtle,
 .v-card.liquid-glass-compact {
-  background: rgba(18, 21, 27, 0.90) !important;
-  backdrop-filter: blur(14px) saturate(1.2) !important;
-  -webkit-backdrop-filter: blur(14px) saturate(1.2) !important;
+  background: rgba(18, 21, 28, 0.97) !important;
+  backdrop-filter: blur(26px) saturate(1.25) !important;
+  -webkit-backdrop-filter: blur(26px) saturate(1.25) !important;
   border: 1px solid var(--g-hairline-2) !important;
   border-radius: var(--g-r-card) !important;
   box-shadow: var(--g-shadow-menu) !important;
@@ -74,11 +80,11 @@
 /* No-blur fallback: go opaque */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .glass-chrome, .liquid-glass-nav-drawer,
-  .v-navigation-drawer.liquid-glass-nav-drawer { background: rgba(0, 0, 0, 0.92) !important; }
+  .v-navigation-drawer.liquid-glass-nav-drawer { background: rgba(0, 0, 0, 0.96) !important; }
   .glass-overlay, .liquid-glass-dialog,
-  .v-card.liquid-glass-dialog { background: rgba(12, 14, 18, 0.97) !important; }
+  .v-card.liquid-glass-dialog { background: rgba(18, 21, 28, 0.98) !important; }
   .glass-popover, .liquid-glass, .liquid-glass-subtle, .liquid-glass-compact,
-  .v-card.liquid-glass, .v-card.liquid-glass-subtle, .v-card.liquid-glass-compact { background: rgba(18, 21, 27, 0.97) !important; }
+  .v-card.liquid-glass, .v-card.liquid-glass-subtle, .v-card.liquid-glass-compact { background: rgba(18, 21, 28, 0.98) !important; }
 }
 
 /* User preference: no transparency */

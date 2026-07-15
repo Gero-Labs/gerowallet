@@ -89,6 +89,7 @@ export const MIDNIGHT_METHOD = {
   getConnectionStatus: 'midnight_getConnectionStatus',
   submitTransaction: 'midnight_submitTransaction',
   signData: 'midnight_signData',
+  makeTransfer: 'midnight_makeTransfer',
   hintUsage: 'midnight_hintUsage',
 };
 

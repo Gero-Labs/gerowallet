@@ -31,6 +31,34 @@
     <div class="panel-columns">
       <!-- ═══ LEFT COLUMN: Chart + Recent Trades ═══ -->
       <div class="left-col">
+        <!-- DUST generation line: NIGHT (cNIGHT) only, until dismissed. -->
+        <DustGenerationLine
+          v-if="showDustLine"
+          variant="drawer"
+          class="mb-3"
+          @setup="$emit('dust-setup')"
+          @dismiss="dismissDustLine"
+        />
+
+        <!-- DUST registration confirmation: persistent (survives promo dismissal),
+             shows the on-chain registration tx once submitted/confirmed. -->
+        <div v-if="showDustRegInfo" class="dust-reg-info">
+          <span class="dust-reg-chip">{{ $t('midnight.dustRegistrationChip') }}</span>
+          <span class="dust-reg-status" :class="{ 'is-live': dustRegConfirmed }">
+            {{ dustRegConfirmed ? $t('midnight.dustLineGenerating') : $t('midnight.dustRegistrationPending') }}
+          </span>
+          <a
+            class="dust-reg-tx"
+            :href="dustRegTxUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            :title="dustRegTxHash"
+          >
+            {{ shortTx(dustRegTxHash) }}
+            <v-icon x-small>mdi-open-in-new</v-icon>
+          </a>
+        </div>
+
         <!-- Price + Currency Toggle -->
         <div class="pb-3">
           <div class="d-flex align-center" style="gap: 8px">
@@ -244,7 +272,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, type Ref } from 'vue';
+import { ref, computed, watch, onMounted, type Ref } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useWatchlist } from '@/modules/market/composables/useWatchlist';
 import { useMarketData, type MarketToken, type CandlestickDataPoint } from '@/modules/market/composables/useMarketData';
@@ -263,6 +291,10 @@ import { walletStore } from '@/stores/walletStore';
 import { Blockchain } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
 import networks from '@/utils/networks';
+import DustGenerationLine from '@/modules/dashboard/components/DustGenerationLine.vue';
+import { CNIGHT_ASSETS, DUST_LINE_DISMISS_KEY, useCnightDustRegistration } from '@/shared/composables/useCnightDustRegistration';
+import { getDustPending } from '@/shared/composables/useDustPending';
+import { getExplorerUrl } from '@/shared/utils/explorer';
 
 const chainLogo = computed(() =>
   networks.resolveCurrencyImage(walletStore.loggedWallet?.chain, walletStore.loggedWallet?.network) || ''
@@ -274,7 +306,46 @@ const props = defineProps<{
 
 defineEmits<{
   (e: 'close'): void;
+  (e: 'dust-setup'): void;
 }>();
+
+/** Whether this drawer's token is the current network's cNIGHT/NIGHT on a
+ *  Cardano wallet — the only token that can generate DUST. */
+const isNightToken = computed(() => {
+  if (walletStore.loggedWallet?.chain !== Blockchain.CARDANO) return false;
+  const asset = CNIGHT_ASSETS[walletStore.loggedWallet?.network ?? ''];
+  return !!asset && props.token.unit === asset.policyId + asset.assetNameHex;
+});
+
+// The dismissable promo/status strip. Dismissal hides it outright; the
+// registration confirmation below (tx id + chip) is separate and persistent.
+const dustLineDismissed = ref(
+  typeof localStorage !== 'undefined' && localStorage.getItem(DUST_LINE_DISMISS_KEY) === '1',
+);
+const showDustLine = computed(() => isNightToken.value && !dustLineDismissed.value);
+
+// Persistent DUST-registration confirmation: once a registration is submitted
+// (local guard) or confirmed (indexer), surface its tx id + status regardless
+// of whether the promo strip was dismissed.
+const { registrationStatus: dustRegStatus, status: dustStatusDto, refreshStatus: refreshDustStatus } =
+  useCnightDustRegistration();
+onMounted(() => { if (isNightToken.value) void refreshDustStatus(); });
+const dustRegTxHash = computed(() => {
+  const stake = walletStore.loggedWallet?.stakeAddress ?? '';
+  return dustStatusDto.value?.registrationUtxoTxHash || getDustPending(stake)?.txHash || '';
+});
+const showDustRegInfo = computed(() => isNightToken.value && !!dustRegTxHash.value);
+const dustRegConfirmed = computed(() => dustRegStatus.value === 'Registered');
+const dustRegTxUrl = computed(() =>
+  getExplorerUrl(Blockchain.CARDANO, dustRegTxHash.value, 'tx', walletStore.loggedWallet?.network));
+function shortTx(h: string): string {
+  return h.length > 18 ? `${h.slice(0, 10)}…${h.slice(-6)}` : h;
+}
+
+function dismissDustLine() {
+  dustLineDismissed.value = true;
+  if (typeof localStorage !== 'undefined') localStorage.setItem(DUST_LINE_DISMISS_KEY, '1');
+}
 
 const { t } = useTranslation();
 const { isWatched, toggleWatchlist } = useWatchlist();
@@ -572,6 +643,48 @@ watch(selectedCurrency, () => {
   padding: 0 16px 16px;
   border-right: 1px solid var(--g-hairline-1);
   scroll-behavior: smooth;
+}
+
+/* Persistent DUST registration confirmation row (gold, matches the DUST line). */
+.dust-reg-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+
+.dust-reg-chip {
+  padding: 1px 7px;
+  border-radius: var(--g-r-chip);
+  background: rgba(232, 199, 137, 0.14);
+  color: rgb(245, 224, 178);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.dust-reg-status {
+  color: var(--g-text-2);
+}
+
+.dust-reg-status.is-live {
+  color: rgb(245, 224, 178);
+}
+
+.dust-reg-tx {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-family: var(--g-font-mono);
+  color: var(--g-text-3);
+  text-decoration: none;
+}
+
+.dust-reg-tx:hover {
+  color: var(--g-accent);
 }
 
 .right-col {

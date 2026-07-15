@@ -19,15 +19,22 @@
         <span class="status-pill-help">{{ statusHelp }}</span>
       </div>
 
+      <!-- Incoming DUST from a Cardano wallet just registered to this address
+           (bound to a Cardano stake credential, so the status pill above, which
+           tracks this wallet's own DUST account, can't show it). -->
+      <div v-if="incomingCnightPending > 0" class="incoming-pending">
+        <span class="status-dot status-dot--pending"></span>
+        <span>{{ t('midnight.cnightIncomingPending', { count: incomingCnightPending }) }}</span>
+        <v-spacer />
+        <span class="status-pill-help">~2.5h</span>
+      </div>
+
       <!-- Hero card: the DUST recipient address. This is the thing the user is
            registering — give it visual weight. When dust=='' (legacy wallet),
            the same card swaps to an upgrade prompt instead of the address. -->
       <div class="recipient-card" v-if="dustAddress">
         <div class="recipient-label t-label">{{ t('midnight.dustRecipientAddress') }}</div>
         <div class="recipient-row">
-          <v-avatar size="32" color="amber darken-4" class="mr-3">
-            <v-icon small color="amber lighten-2">mdi-star</v-icon>
-          </v-avatar>
           <div class="recipient-address">
             <div class="recipient-address-text">{{ middleTruncate(dustAddress, 18, 8) }}</div>
             <div class="recipient-network">{{ networkLabel }} · DUST address</div>
@@ -153,10 +160,14 @@
             {{ t('midnight.registerForDust') }}
           </v-btn>
 
-          <!-- Fallback: external portal (Path B / foundation flow). Kept as a
-               low-prominence option for users who want to use cNIGHT on Cardano
-               instead of native NIGHT registration. -->
-          <div class="text-center mt-3">
+          <!-- Path B: register Cardano-held NIGHT natively (cross-wallet DUST
+               sources panel), with the external portal kept as a low-prominence
+               fallback. -->
+          <v-btn block outlined class="mt-3" @click="sourcesOpen = true">
+            <v-icon left small>mdi-source-branch</v-icon>
+            {{ t('midnight.dustSourcesTitle') }}
+          </v-btn>
+          <div class="text-center mt-2">
             <v-btn small text color="var(--g-text-2)" @click="openRedemptionPortal">
               <v-icon small left>mdi-open-in-new</v-icon>
               {{ t('midnight.openRedemptionPortal') }}
@@ -213,29 +224,37 @@
         <v-icon left>mdi-clock-outline</v-icon>
         {{ t('common.close') }}
       </v-btn>
-      <v-btn
-        v-else
-        block
-        large
-        outlined
-        @click="$emit('close')"
-      >
-        {{ t('common.done') }}
-      </v-btn>
+      <template v-else>
+        <v-btn block large outlined @click="$emit('close')">
+          {{ t('common.done') }}
+        </v-btn>
+        <div class="text-center mt-2">
+          <v-btn small text color="var(--g-text-2)" @click="sourcesOpen = true">
+            <v-icon small left>mdi-source-branch</v-icon>
+            {{ t('midnight.dustSourcesTitle') }}
+          </v-btn>
+        </div>
+      </template>
     </v-card-actions>
+
+    <!-- Cross-wallet DUST sources (Path B): register/redirect Cardano-held
+         NIGHT to generate DUST at this wallet's own DUST address. -->
+    <CnightDustSourcesDialog :isOpen="sourcesOpen" @close="sourcesOpen = false" />
   </BaseDialog>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, toRefs } from 'vue';
+import { computed, ref, toRefs, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
+import CnightDustSourcesDialog from '@/modules/dashboard/dialogs/CnightDustSourcesDialog.vue';
 import { midnightStore } from '@/stores/midnightStore';
 import { walletStore } from '@/stores/walletStore';
 import { Network } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
+import { getDustPendingForDestination } from '@/shared/composables/useDustPending';
 import snackbar from '@/plugins/snackbar';
 
 const props = defineProps<{ isOpen: boolean }>();
@@ -243,6 +262,8 @@ const emit = defineEmits<{ (e: 'close'): void }>();
 
 const { t } = useTranslation();
 const loading = ref(false);
+/** Cross-wallet DUST sources panel (Path B). */
+const sourcesOpen = ref(false);
 
 // Legacy-wallet upgrade state
 const upgradePassword = ref('');
@@ -266,6 +287,19 @@ const dustCurrency = computed(() => (isMainnet.value ? 'DUST' : 'tDUST'));
 const networkLabel = computed(() => (isMainnet.value ? 'Mainnet' : 'Preview'));
 
 const dustAddress = computed(() => addresses.value?.dust ?? '');
+
+// Incoming cNIGHT registrations targeting THIS wallet's DUST address: a Cardano
+// wallet (possibly a different seed) was just registered to generate DUST here.
+// Bound to the Cardano stake credential, so this wallet's own dustState won't
+// reflect it — surface it from the local pending tracker. Refreshed on open.
+const incomingCnightPending = ref(0);
+function refreshIncomingPending() {
+  incomingCnightPending.value = dustAddress.value
+    ? getDustPendingForDestination(dustAddress.value).length
+    : 0;
+}
+watch(() => props.isOpen, (open) => { if (open) refreshIncomingPending(); }, { immediate: true });
+watch(dustAddress, refreshIncomingPending);
 
 // Live DUST state — polled from Nexus every 5s, extrapolated locally
 // every 1s. Module-scoped singleton so the portfolio + this dialog share
@@ -427,8 +461,10 @@ async function openRedemptionPortal() {
       // Clipboard write can fail in restricted contexts; not fatal.
     }
   }
+  // The dedicated DUST mapping portal (NOT redeem.midnight.gd, which is the
+  // Glacier Drop claim portal and has no DUST registration flow).
   const portalUrl = isMainnet.value
-    ? 'https://redeem.midnight.gd/'
+    ? 'https://midnight-dust-mainnet.nethermind.io/'
     : 'https://dust.preview.midnight.network/';
   window.open(portalUrl, '_blank', 'noopener,noreferrer');
 }
@@ -564,6 +600,23 @@ void props;
   border: 1px solid var(--g-hairline-1);
   margin-bottom: 16px;
   font-size: 12px;
+}
+
+/* Incoming-cNIGHT pending row: sits just under the status pill, warning-tinted
+   like the pending state. */
+.incoming-pending {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--g-r-control);
+  background: var(--g-warning-fill);
+  border: 1px solid var(--g-warning-line);
+  margin-top: -8px;
+  margin-bottom: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--g-text-1);
 }
 
 .status-pill-label {

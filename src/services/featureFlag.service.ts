@@ -15,11 +15,20 @@ type FlagChangeCallback = (newValue: unknown, oldValue: unknown) => void;
 /** How often (ms) to re-poll as a safety net even when SSE looks healthy. */
 const RE_POLL_INTERVAL_MS = 5 * 60 * 1000;
 
-/** Base back-off for SSE reconnect after an error; doubles per consecutive failure. */
-const SSE_RECONNECT_MS = 5000;
+/** Base back-off before the first SSE reconnect after an error; doubles per failure. */
+const SSE_RECONNECT_BASE_MS = 5000;
 
-/** Upper bound for the exponential SSE reconnect back-off. */
-const SSE_RECONNECT_MAX_MS = 60 * 1000;
+/** Ceiling for the exponential reconnect back-off. */
+const SSE_RECONNECT_MAX_MS = 5 * 60 * 1000;
+
+/**
+ * Give up the live stream after this many consecutive failed reconnects and
+ * fall back to the safety re-poll only. A persistently-broken stream endpoint
+ * (e.g. ERR_HTTP2_PROTOCOL_ERROR from a mis-proxied SSE route) otherwise retries
+ * every few seconds forever, spamming the console; flags still stay correct via
+ * the RE_POLL_INTERVAL_MS safety poll. Reset to 0 whenever the stream reopens.
+ */
+const SSE_MAX_RECONNECT_ATTEMPTS = 6;
 
 interface FeatureFlagConfig {
   baseUrl: string;
@@ -141,8 +150,8 @@ class FeatureFlagService {
   async close(): Promise<void> {
     this.closeStream();
     this.cancelReconnect();
-    this.reconnectAttempts = 0;
     this.stopSafetyPoll();
+    this.reconnectAttempts = 0;
     this.flagValues = {};
     this.listeners.clear();
     this.isInitialized = false;
@@ -243,7 +252,10 @@ class FeatureFlagService {
       return;
     }
 
+    // A successful (re)connection clears the back-off so the next outage starts
+    // from the base delay again.
     this.eventSource.onopen = () => {
+      if (this.reconnectAttempts > 0) console.info('🚩 flag stream reconnected');
       this.reconnectAttempts = 0;
     };
 
@@ -264,6 +276,7 @@ class FeatureFlagService {
 
   private scheduleReconnect(): void {
     if (!this.isInitialized) return;
+    if (this.reconnectTimer !== null) return; // one pending reconnect at a time
 
     // Offline: a blind timer would fail (and spam the console) every cycle —
     // wait for the 'online' event instead.
@@ -272,8 +285,24 @@ class FeatureFlagService {
       return;
     }
 
-    const delay = Math.min(SSE_RECONNECT_MS * 2 ** this.reconnectAttempts, SSE_RECONNECT_MAX_MS);
-    this.reconnectAttempts += 1;
+    // Persistent failure: stop retrying and lean on the safety re-poll. Log the
+    // give-up exactly once (the extra increment past the cap gates the message).
+    if (this.reconnectAttempts >= SSE_MAX_RECONNECT_ATTEMPTS) {
+      if (this.reconnectAttempts === SSE_MAX_RECONNECT_ATTEMPTS) {
+        this.reconnectAttempts++;
+        console.warn(
+          `🚩 flag stream failed ${SSE_MAX_RECONNECT_ATTEMPTS}× — giving up on live updates; ` +
+          `flags will still refresh via the ${RE_POLL_INTERVAL_MS / 60000}-min safety poll.`,
+        );
+      }
+      return;
+    }
+
+    // Exponential back-off with jitter, capped: 5s, 10s, 20s, 40s … up to the ceiling.
+    const backoff = Math.min(SSE_RECONNECT_BASE_MS * 2 ** this.reconnectAttempts, SSE_RECONNECT_MAX_MS);
+    const delay = backoff + Math.floor(Math.random() * 1000);
+    this.reconnectAttempts++;
+
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       if (this.isInitialized) this.openStream();
@@ -304,6 +333,10 @@ class FeatureFlagService {
   }
 
   private closeStream(): void {
+    if (this.reconnectTimer !== null) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     if (this.eventSource) {
       try {
         this.eventSource.close();

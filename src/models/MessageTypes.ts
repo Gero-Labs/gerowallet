@@ -85,11 +85,27 @@ export enum MessageTypes {
   // to this spend. Caller (UI) must surface the explicit consent for routing
   // it through Gero Cloud proving — see ShieldedProvingConsentDialog.
   BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX = 'BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX',
+  // Midnight: build + sign the SHIELD direction of a shield/unshield
+  // conversion (public NIGHT -> private/shielded NIGHT, always between the
+  // wallet's OWN two addresses — no recipient field). BG merges a
+  // Nexus-built unshielded half (swap mode) with a client-side
+  // ShieldedWallet.initSwap shielded half, balances DUST once against the
+  // combined tx, and returns signed-but-unproven hex by default (or
+  // finalized hex when `proving` is supplied). See
+  // docs/plans/2026-07-13-midnight-shield-unshield.md WP-SH3. Unshield is
+  // not wired yet (ground rule 16 of that plan).
+  BUILD_AND_SIGN_MIDNIGHT_SHIELD_TX = 'BUILD_AND_SIGN_MIDNIGHT_SHIELD_TX',
   // Midnight: record the user's consent to ship shielded-tx witness data to
   // Gero Cloud for proving. Browser routes the consent click here so BG can
   // persist + broadcast to every connected browser context (the user
   // accepting in options should also unlock the popup's send dialog).
   ACCEPT_MIDNIGHT_SHIELDED_PROVING_CONSENT = 'ACCEPT_MIDNIGHT_SHIELDED_PROVING_CONSENT',
+  // Midnight: persist the user's proof-server preference (Gero Cloud vs a
+  // local self-hosted docker proof server). Browser routes the Settings UI's
+  // proof-server section here so BG can persist + broadcast to every
+  // connected browser context, mirroring ACCEPT_MIDNIGHT_SHIELDED_PROVING_CONSENT
+  // above. See midnightStore.setProofServer.
+  SET_MIDNIGHT_PROOF_SERVER = 'SET_MIDNIGHT_PROOF_SERVER',
   // Midnight: submit a fully-signed (and proven, for shielded) transaction via
   // Nexus's /tx/submit relay. Nexus forwards to the Midnight RPC node and
   // returns the txHash + status (Submitted / InBlock / Finalized).

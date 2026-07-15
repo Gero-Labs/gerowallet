@@ -2328,13 +2328,13 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
             const merged = await mergeWitnessSets(witnessResult.witnesses, witness);
             witnessResult = { witnesses: merged };
             debugLog('🔗 Merged Nexus collateral cosign for', ref);
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- axios-shaped error, status/message accessed defensively below
-          } catch (cosignErr: any) {
-            const status = cosignErr?.response?.status;
+          } catch (cosignErr: unknown) {
+            const err = cosignErr as { response?: { status?: number }; message?: string };
+            const status = err?.response?.status;
             // 404 = ref isn't in the Nexus pool (it's a user-owned UTxO),
             // 400 = adversarial-tx guard tripped — both expected for non-pool refs.
             if (status !== 404 && status !== 400) {
-              debugLog('⚠️ Nexus cosign failed for', ref, status, cosignErr?.message);
+              debugLog('⚠️ Nexus cosign failed for', ref, status, err?.message);
             }
           }
         }
@@ -4274,15 +4274,75 @@ app.addToOptions(
 );
 
 /**
+ * Header names a `proving.headers` request may carry — exactly the Arkhia
+ * zkPaaS auth pair. An allowlist (rather than pass-through) so a crafted
+ * message can't smuggle arbitrary headers (Authorization, Cookie, Host
+ * overrides, ...) into the BG's fetch to the proof server.
+ */
+const PROVING_HEADER_ALLOWLIST = new Set(['x-api-key', 'x-api-secret']);
+
+/**
+ * Validate the optional `proving` field on BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX
+ * requests (WP-P2 local mode; zkPaaS adds `headers`). This crosses the BG
+ * message boundary from browser/options/popup context, so it's checked here
+ * even though it originates from our own UI: http(s) scheme only, no
+ * embedded credentials (a crafted `http://user:pass@host` URL would
+ * otherwise smuggle Basic-Auth into the BG's fetch to the "proof server"),
+ * and only allowlisted auth headers with sane, injection-free values.
+ */
+function parseProvingRequest(value: unknown): { url: string; headers?: Record<string, string> } | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'object') throw new Error('proving must be an object');
+  const url = (value as { url?: unknown }).url;
+  if (typeof url !== 'string' || url.length === 0) {
+    throw new Error('proving.url is required and must be a non-empty string');
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error('proving.url is not a valid URL');
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('proving.url must use http or https');
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error('proving.url must not contain credentials');
+  }
+  const rawHeaders = (value as { headers?: unknown }).headers;
+  if (rawHeaders === undefined || rawHeaders === null) return { url };
+  if (typeof rawHeaders !== 'object' || Array.isArray(rawHeaders)) {
+    throw new Error('proving.headers must be an object');
+  }
+  const headers: Record<string, string> = {};
+  for (const [name, headerValue] of Object.entries(rawHeaders as Record<string, unknown>)) {
+    if (!PROVING_HEADER_ALLOWLIST.has(name.toLowerCase())) {
+      throw new Error(`proving.headers: "${name}" is not an allowed header`);
+    }
+    // Value stays out of the error text — it's an API credential.
+    if (typeof headerValue !== 'string' || headerValue.length === 0 || headerValue.length > 512
+      || /[\r\n\0]/.test(headerValue)) {
+      throw new Error(`proving.headers: invalid value for "${name}"`);
+    }
+    headers[name.toLowerCase()] = headerValue;
+  }
+  return Object.keys(headers).length > 0 ? { url, headers } : { url };
+}
+
+/**
  * Midnight: build + sign a shielded NIGHT transfer entirely in BG.
  *
- * Request shape: `{ outputs: [{receiverAddress, amount, tokenType?}], password?, prfSecret? }`.
- * Amounts are passed as decimal strings to survive Chrome messaging's
- * BigInt-unfriendly serialization; BG parses back to bigint.
+ * Request shape: `{ outputs: [{receiverAddress, amount, tokenType?}], password?,
+ * prfSecret?, proving?: { url, headers? } }`. Amounts are passed as decimal strings to
+ * survive Chrome messaging's BigInt-unfriendly serialization; BG parses back
+ * to bigint. `proving` is optional (WP-P2, local proof-server mode) — when
+ * present, BG proves the tx itself before returning.
  *
- * Response: `{ success: true, signedTxHex }` — the SIGNED but UNPROVEN tx
- * hex. UI must hand this to Nexus's /tx/prove-and-submit, NOT to /tx/submit
- * (which expects a fully-finalized tx).
+ * Response: `{ success: true, signedTxHex, proven }`. When `proven` is
+ * false (default, no `proving` in the request), `signedTxHex` is SIGNED but
+ * UNPROVEN — UI must hand it to Nexus's /tx/prove-and-submit, NOT
+ * /tx/submit(-proven). When `proven` is true, `signedTxHex` is a finalized
+ * tx for /tx/submit-proven instead.
  */
 app.addToOptions(
   MessageTypes.BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX,
@@ -4293,7 +4353,7 @@ app.addToOptions(
       if (walletBg.chain !== Blockchain.MIDNIGHT) {
         throw new Error('BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX called on non-Midnight wallet');
       }
-      const { outputs, password, prfSecret } = request.data || {};
+      const { outputs, password, prfSecret, proving } = request.data || {};
       if (!Array.isArray(outputs) || outputs.length === 0) {
         throw new Error('outputs is required (non-empty array)');
       }
@@ -4321,18 +4381,75 @@ app.addToOptions(
         };
       });
       const prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
-      const signedTxHex = await walletBg.buildAndSignMidnightShieldedTransfer(
+      const provingArg = parseProvingRequest(proving);
+      const { signedTxHex, proven } = await walletBg.buildAndSignMidnightShieldedTransfer(
         parsedOutputs,
         password,
         prfBytes,
+        provingArg,
       );
       sendResponse({
         id: request.id,
-        data: { success: true, signedTxHex },
+        data: { success: true, signedTxHex, proven },
         target: TARGET,
         sender: SENDER.extension,
       });
     } catch (error) {
+      console.error('Error building/signing Midnight shielded transfer:', error);
+      sendResponse({
+        id: request.id,
+        data: { success: false, error: getErrorMessage(error) },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  },
+);
+
+/**
+ * Midnight: build + sign the SHIELD direction of a shield/unshield
+ * conversion (public NIGHT -> private/shielded NIGHT). No recipient — shield
+ * always moves value between the wallet's own two addresses.
+ *
+ * Request shape: `{ amount, password?, prfSecret?, proving?: { url, headers? } }`.
+ * `amount` is a decimal string (Chrome messaging can't carry BigInt); BG
+ * parses back to bigint. `proving` is optional (WP-P2 local mode; zkPaaS
+ * adds auth headers), same as BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX above.
+ *
+ * Response: `{ success: true, signedTxHex, proven }`. Same proven/unproven
+ * routing rule as the shielded-transfer handler above (proven=false ->
+ * /tx/prove-and-submit, proven=true -> /tx/submit-proven).
+ */
+app.addToOptions(
+  MessageTypes.BUILD_AND_SIGN_MIDNIGHT_SHIELD_TX,
+  async (request, sendResponse) => {
+    try {
+      const walletBg = walletManager.getWallet();
+      if (!walletBg) throw new Error('No wallet logged in');
+      if (walletBg.chain !== Blockchain.MIDNIGHT) {
+        throw new Error('BUILD_AND_SIGN_MIDNIGHT_SHIELD_TX called on non-Midnight wallet');
+      }
+      const { amount, password, prfSecret, proving } = request.data || {};
+      const parsedAmount = typeof amount === 'bigint' ? amount : BigInt(String(amount ?? '0'));
+      if (parsedAmount <= 0n) {
+        throw new Error('amount must be > 0');
+      }
+      const prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
+      const provingArg = parseProvingRequest(proving);
+      const { signedTxHex, proven } = await walletBg.buildAndSignMidnightShield(
+        parsedAmount,
+        password,
+        prfBytes,
+        provingArg,
+      );
+      sendResponse({
+        id: request.id,
+        data: { success: true, signedTxHex, proven },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } catch (error) {
+      console.error('Error building/signing Midnight shield conversion:', error);
       sendResponse({
         id: request.id,
         data: { success: false, error: getErrorMessage(error) },
@@ -4359,6 +4476,109 @@ app.addToOptions(
     try {
       const { midnightActions } = await import('@/stores/midnightStore');
       midnightActions.acceptShieldedProvingConsent();
+      sendResponse({
+        id: request.id,
+        data: { success: true },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } catch (error) {
+      sendResponse({
+        id: request.id,
+        data: { success: false, error: getErrorMessage(error) },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  },
+);
+
+/**
+ * Shared URL-shape check for proof-server preference fields: http(s) only,
+ * no embedded credentials. Field name (never the value's credentials) goes
+ * into the error text.
+ */
+function validateProofServerUrlField(field: string, value: string): void {
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(value);
+  } catch {
+    throw new Error(`${field} is not a valid URL`);
+  }
+  if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+    throw new Error(`${field} must use http or https`);
+  }
+  if (parsedUrl.username || parsedUrl.password) {
+    throw new Error(`${field} must not contain credentials`);
+  }
+}
+
+/**
+ * Arkhia credential fields: optional strings, bounded, header-injection
+ * free (they end up as header VALUES in the BG's proof-server fetches).
+ * Returns the normalized value ('' when absent). The credential itself is
+ * never echoed into error messages.
+ */
+function validateZkpaasCredential(field: string, value: unknown): string {
+  if (value === undefined || value === null || value === '') return '';
+  if (typeof value !== 'string') throw new Error(`${field} must be a string`);
+  if (value.length > 512 || /[\r\n\0]/.test(value)) {
+    throw new Error(`${field} is not a valid credential`);
+  }
+  return value;
+}
+
+/**
+ * Midnight: persist the user's proof-server preference (WP-P4 Settings UI).
+ * Browser-side only sets `midnightStore.proofServer` in its own tab's memory
+ * (see the store's `broadcastFromBackground` guard) so, like
+ * ACCEPT_MIDNIGHT_SHIELDED_PROVING_CONSENT above, the Settings radio group
+ * routes the change here to persist + broadcast to every connected browser
+ * context.
+ *
+ * Request shape: `{ mode: 'remote' | 'local' | 'zkpaas', localUrl: string,
+ * zkpaasUrl?: string, zkpaasApiKey?: string, zkpaasApiSecret?: string }`.
+ * Validated at the message boundary (same posture as `parseProvingRequest`
+ * above) even though it currently only originates from our own UI: http(s)
+ * scheme only, no embedded credentials, bounded credential strings (never
+ * echoed into error text or logs).
+ */
+app.addToOptions(
+  MessageTypes.SET_MIDNIGHT_PROOF_SERVER,
+  async (request, sendResponse) => {
+    try {
+      const {
+        mode, localUrl, zkpaasUrl, zkpaasApiKey, zkpaasApiSecret,
+      } = request.data || {};
+      if (mode !== 'remote' && mode !== 'local' && mode !== 'zkpaas') {
+        throw new Error('mode must be "remote", "local" or "zkpaas"');
+      }
+      if (typeof localUrl !== 'string' || localUrl.length === 0) {
+        throw new Error('localUrl is required and must be a non-empty string');
+      }
+      validateProofServerUrlField('localUrl', localUrl);
+      const { midnightStore, midnightActions } = await import('@/stores/midnightStore');
+      // The zkPaaS fields are OPTIONAL per request: absent means "keep the
+      // stored value" (older call sites like the consent dialog's
+      // use-local-instead only send mode+localUrl and must not wipe saved
+      // Arkhia credentials), while an explicit '' means "clear it" ('' is
+      // also the valid "derive the endpoint per network" state for the URL).
+      const current = midnightStore.proofServer;
+      const zkpaasUrlValue = zkpaasUrl === undefined || zkpaasUrl === null
+        ? current.zkpaasUrl : zkpaasUrl;
+      if (typeof zkpaasUrlValue !== 'string') throw new Error('zkpaasUrl must be a string');
+      if (zkpaasUrlValue.length > 0) validateProofServerUrlField('zkpaasUrl', zkpaasUrlValue);
+      const zkpaasApiKeyValue = zkpaasApiKey === undefined || zkpaasApiKey === null
+        ? current.zkpaasApiKey : validateZkpaasCredential('zkpaasApiKey', zkpaasApiKey);
+      const zkpaasApiSecretValue = zkpaasApiSecret === undefined || zkpaasApiSecret === null
+        ? current.zkpaasApiSecret : validateZkpaasCredential('zkpaasApiSecret', zkpaasApiSecret);
+      midnightActions.setProofServer({
+        mode,
+        localUrl,
+        zkpaasUrl: zkpaasUrlValue,
+        zkpaasApiKey: zkpaasApiKeyValue,
+        zkpaasApiSecret: zkpaasApiSecretValue,
+      });
       sendResponse({
         id: request.id,
         data: { success: true },
@@ -4937,14 +5157,28 @@ app.add(MIDNIGHT_METHOD.getConfiguration, async (request, sendResponse) => {
   }
   try {
     const { getMidnightEndpoints } = await import('@/chains/midnight/midnightConfig');
+    const { midnightStore } = await import('@/stores/midnightStore');
     const endpoints = getMidnightEndpoints(wallet.network);
     if (!endpoints) throw new Error(`No Midnight endpoints configured for network ${wallet.network}`);
+    // A dApp has no way to reach Gero's internal cloud prover directly, so
+    // when the user's preference is 'remote' the network's default proof
+    // server URL remains the least-wrong answer to advertise here (WP-P5:
+    // connector `getProvingProvider()` delegation is a separate, later
+    // phase). Only report the user's own local proof server once they've
+    // actually opted into local mode (WP-P1/P4). zkPaaS mode deliberately
+    // ALSO reports the default: the Arkhia endpoint is useless to a dApp
+    // without the user's API key, and a user-pasted override URL may embed
+    // that key as a path segment — advertising it would hand the user's
+    // paid credential to every connected dApp.
+    const proverServerUri = midnightStore.proofServer.mode === 'local'
+      ? midnightStore.proofServer.localUrl
+      : (endpoints.defaultProofServerUrl || undefined);
     sendResponse({
       id: request.id,
       data: {
         indexerUri: endpoints.publicIndexerUrl,
         indexerWsUri: endpoints.publicIndexerWsUrl,
-        proverServerUri: endpoints.defaultProofServerUrl || undefined,
+        proverServerUri,
         substrateNodeUri: endpoints.publicRpcUrl,
         networkId: midnightSdkNetworkId(wallet.network),
       },
@@ -5070,6 +5304,140 @@ app.add(MIDNIGHT_METHOD.hintUsage, (request, sendResponse) => {
   // separate from the sticky-denial tracking on `connect` above) — resolve
   // immediately with void per the spec's required return type.
   sendResponse({ id: request.id, data: undefined, target: TARGET, sender: SENDER.extension });
+});
+
+/** Canonical 32-byte-zero RawTokenType — how the ledger/connector names native
+ * NIGHT (see midnightShieldedBuilder.ts NIGHT_RAW_TOKEN_TYPE). */
+const MIDNIGHT_NATIVE_NIGHT_TOKEN_TYPE =
+  '0000000000000000000000000000000000000000000000000000000000000000';
+
+type MakeTransferRequestData = {
+  desiredOutputs?: Array<{ kind?: string; type?: string; value?: string; recipient?: string }>;
+  options?: { payFees?: boolean };
+};
+
+/**
+ * Validate a connector makeTransfer request BEFORE prompting the user, so an
+ * unsupported/malformed request rejects cleanly without wasting an approval
+ * dialog. Phase 2 scope: native-NIGHT UNSHIELDED outputs only, wallet pays DUST
+ * fees. Mirrors MidnightSendDialog's per-network address-prefix check
+ * (mainnet omits the network segment; others embed it lowercased).
+ */
+function validateMakeTransferInputs(
+  data: MakeTransferRequestData | undefined,
+  network: string,
+): { ok: true } | { ok: false; reason: string } {
+  const desiredOutputs = data?.desiredOutputs;
+  if (!Array.isArray(desiredOutputs) || desiredOutputs.length === 0) {
+    return { ok: false, reason: 'desiredOutputs must be a non-empty array' };
+  }
+  // Cap the output count: the array is walked synchronously in the service
+  // worker and rendered in the approval panel, so an unbounded length is a DoS
+  // vector. A real transfer never needs this many outputs (Nexus/tx-size limits
+  // bite far sooner).
+  if (desiredOutputs.length > 100) {
+    return { ok: false, reason: 'too many outputs (max 100 per transfer)' };
+  }
+  if (data?.options?.payFees === false) {
+    return { ok: false, reason: 'payFees:false is not supported in this version (GeroWallet pays DUST fees; fee delegation is planned)' };
+  }
+  const isMain = network === Network.MAINNET;
+  const prefix = isMain ? 'mn_addr1' : `mn_addr_${network.toLowerCase()}1`;
+  for (const o of desiredOutputs) {
+    if (!o || typeof o !== 'object') {
+      return { ok: false, reason: 'each desiredOutput must be an object' };
+    }
+    if (o.kind !== 'unshielded') {
+      return { ok: false, reason: `only unshielded transfers are supported in this version (got kind='${o.kind}')` };
+    }
+    // Native NIGHT only: the canonical 32-byte-zero RawTokenType, or the empty
+    // 'native' shorthand. Any other hex token type is unsupported (Nexus only
+    // builds native NIGHT today).
+    if (o.type !== undefined && o.type !== '' && o.type !== MIDNIGHT_NATIVE_NIGHT_TOKEN_TYPE) {
+      return { ok: false, reason: 'only native NIGHT transfers are supported in this version' };
+    }
+    // value arrives as a decimal string (the page bridge stringifies the bigint).
+    let value: bigint;
+    try {
+      value = BigInt(o.value as string);
+    } catch {
+      return { ok: false, reason: `invalid amount: ${o.value}` };
+    }
+    if (value <= 0n) {
+      return { ok: false, reason: 'amount must be a positive integer' };
+    }
+    if (typeof o.recipient !== 'string' || !o.recipient.startsWith(prefix)) {
+      return { ok: false, reason: `recipient must be a ${prefix}… unshielded address on the connected network` };
+    }
+  }
+  return { ok: true };
+}
+
+/**
+ * Opens the makeTransfer approval view in the mini-gero side panel (password/
+ * PRF wallets only — Midnight has no hardware-wallet support). Same
+ * side-panel-only routing as signData — no popup fallback.
+ *
+ * Phase 2: native-NIGHT UNSHIELDED transfers only. The panel builds +
+ * DUST-balances + signs (but does NOT submit) via buildAndSignUnshieldedTransfer
+ * and returns `{ tx }`; the dapp submits it via submitTransaction, which
+ * proves + binds server-side. Shielded/mixed outputs and payFees:false reject
+ * with InvalidRequest BEFORE the user is prompted (validateMakeTransferInputs).
+ */
+app.add(MIDNIGHT_METHOD.makeTransfer, (request, sendResponse) => {
+  const { id, origin, send, data } = request;
+  const reply = (opts: ReplyOpts) => {
+    sendResponse({ id, ...opts, target: TARGET, sender: SENDER.extension });
+  };
+  const currentWallet = walletManager.getWallet();
+  if (!currentWallet || currentWallet.chain !== Blockchain.MIDNIGHT) {
+    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected') });
+    return true;
+  }
+  if (walletStore.isLocked) {
+    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'Wallet is locked') });
+    return true;
+  }
+  // Fast-pathed past the content whitelist pre-check (to keep the user gesture
+  // alive for sidePanel.open()), so enforce connect-first here — same as signData.
+  if (!WalletStore.isWhitelisted(origin)) {
+    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'Not connected — call connect() first') });
+    return true;
+  }
+  const tabId = send.tab?.id;
+  if (typeof tabId !== 'number') {
+    reply({ error: midnightApiError(MidnightErrorCode.InternalError, 'No tab context for this request') });
+    return true;
+  }
+  const validation = validateMakeTransferInputs(data as MakeTransferRequestData, currentWallet.network);
+  if (!validation.ok) {
+    reply({ error: midnightApiError(MidnightErrorCode.InvalidRequest, validation.reason) });
+    return true;
+  }
+  const favIconUrl = send.tab?.favIconUrl;
+  const makeTransferPayload = { data, website: origin, favIconUrl };
+
+  const sendToPanel = () =>
+    sendToMiniGero(MIDNIGHT_METHOD.makeTransfer, makeTransferPayload, tabId)
+      .then((response: BackgroundResponse) => reply({ data: response.data })) // response.data === { tx }
+      .catch(err => reply({
+        // Never Rejected on internal/panel failure (only a real user decline
+        // arrives as the panel's own Rejected) — same reasoning as signData.
+        error: parseMidnightMiniGeroError(err, MidnightErrorCode.InternalError, 'Failed to build the transfer'),
+      }));
+
+  if (miniGeroPorts.has(tabId)) {
+    sendToPanel();
+    return true;
+  }
+
+  openSidebar(tabId, 'sidepanel/index.html')
+    .then(() => waitForMiniGeroPort(5000, tabId))
+    .then(() => sendToPanel())
+    .catch(err => reply({
+      error: midnightApiError(MidnightErrorCode.InternalError, `Failed to open the wallet's approval panel: ${getErrorMessage(err)}`),
+    }));
+  return true;
 });
 
 /**

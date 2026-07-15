@@ -35,6 +35,8 @@ import { getContextType } from '@/utils/storageSync';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 import { debugLog } from '@/utils/debug';
+import { getMidnightEndpoints } from '@/chains/midnight/midnightConfig';
+import { Network } from '@/models/types';
 import type {
   MidnightBalances,
   MidnightAddresses,
@@ -63,6 +65,23 @@ export interface MidnightProvingOperation {
   stage: 'preparing' | 'proving' | 'finalizing';
   progress: number; // 0-100
   startTime: number; // Unix ms
+}
+
+/**
+ * One completed (or failed) LOCAL proving attempt — history, not live
+ * progress (that's {@link MidnightProvingOperation}). Only the local proof
+ * server path is instrumented: remote/cloud proving happens entirely inside
+ * the Nexus sidecar, which this wallet has no visibility into. Newest first,
+ * capped at {@link PROVING_HISTORY_LIMIT} entries. See
+ * `midnightShieldedBuilder.ts`'s `LocalProvingError` for how a failed
+ * attempt's duration is captured.
+ */
+export interface MidnightProvingLogEntry {
+  timestamp: number; // Unix ms
+  durationMs: number;
+  success: boolean;
+  /** Present only when {@code success} is false. Never the tx hex/witness. */
+  error?: string;
 }
 
 /**
@@ -125,6 +144,16 @@ export interface MidnightStore {
   provingOperations: Map<string, MidnightProvingOperation>;
 
   /**
+   * Recent WALLET-SIDE proving attempts (success and failure), newest
+   * first, capped at {@link PROVING_HISTORY_LIMIT} — covers both local
+   * docker proving and Arkhia zkPaaS proving (Gero Cloud proving happens
+   * inside the Nexus sidecar, invisible to the wallet). See
+   * {@link MidnightProvingLogEntry}. Empty for wallets that have never used
+   * wallet-side proving, or on a fresh install.
+   */
+  provingHistory: MidnightProvingLogEntry[];
+
+  /**
    * Highest indexer transactionId we've successfully applied to the UTxO set.
    * Persisted across reloads; on WS reconnect the wallet sends this value as
    * the `midnightLastTxId` resume cursor so gero-sync's subscription resumes
@@ -146,6 +175,29 @@ export interface MidnightStore {
    * send. Accepting writes {@code {version, acceptedAt}} here.
    */
   shieldedProvingConsent: { version: number; acceptedAt: number } | null;
+
+  /**
+   * Where shielded-tx ZK proofs are generated. {@code remote} (default)
+   * proves through Gero Cloud and requires {@code shieldedProvingConsent}
+   * before the first shielded send. {@code local} proves against a
+   * self-hosted docker proof server at {@code localUrl} so witness data
+   * never leaves the machine. {@code zkpaas} proves against the Midnight
+   * ecosystem's hosted Arkhia zkPaaS (BCW-run, TEE-backed) using the
+   * wallet-side proving path — witness data goes to Arkhia, NOT Gero, so
+   * it is consent-gated like {@code remote} (see midnightZkpaas.ts).
+   * Device-level, like {@code shieldedProvingConsent} above - NOT wiped on
+   * wallet switch (see {@code setActive}).
+   */
+  proofServer: {
+    mode: 'remote' | 'local' | 'zkpaas';
+    localUrl: string;
+    /** Arkhia endpoint override; '' = derive per network (midnightConfig). */
+    zkpaasUrl: string;
+    /** Arkhia project API key ('' until the user pastes one). */
+    zkpaasApiKey: string;
+    /** Optional Arkhia API secret for hardened (2-layer) projects. */
+    zkpaasApiSecret: string;
+  };
 
   /**
    * Identity of the wallet whose balances/utxos/tx-history/cursor are
@@ -170,6 +222,19 @@ export interface MidnightStore {
    * `null` whenever no send is running.
    */
   sendProgress: MidnightSendProgress | null;
+
+  /**
+   * Whether shielded (Zswap) sync is available for the active wallet — i.e.
+   * the wallet record carries a valid `mn_shield-esk_` viewing key. This is
+   * the ONLY thing browser-context UI is allowed to know about the viewing
+   * key: the raw key itself is a forever-decrypt secret (see
+   * `MidnightAddresses.zswapViewingKey` blast-radius note) and is
+   * deliberately kept OUT of this store, because the store broadcasts to
+   * `chrome.storage.local` which would persist it in plaintext. The
+   * background reads the raw key straight from the wallet record and hands it
+   * to the sync service; the UI only ever needs this boolean.
+   */
+  shieldedSyncAvailable: boolean;
 }
 
 /**
@@ -203,6 +268,26 @@ const EMPTY_TIP: MidnightChainTip = {
   timestamp: 0,
 };
 
+/**
+ * Default proof-server preference. The URL is seeded from `midnightConfig`
+ * rather than a second hardcoded literal here - all three Midnight networks
+ * currently define the same default (`http://localhost:6300`), so Preview is
+ * picked arbitrarily as the lookup key; the value does not vary by network.
+ * The zkPaaS fields default empty: the endpoint derives per network at use
+ * time (midnightZkpaas.ts) and the API key only exists once the user
+ * pastes one from their Arkhia dashboard.
+ */
+const DEFAULT_PROOF_SERVER: MidnightStore['proofServer'] = {
+  mode: 'remote',
+  localUrl: getMidnightEndpoints(Network.PREVIEW)!.defaultProofServerUrl,
+  zkpaasUrl: '',
+  zkpaasApiKey: '',
+  zkpaasApiSecret: '',
+};
+
+/** Ring-buffer cap for {@link MidnightStore.provingHistory}. */
+export const PROVING_HISTORY_LIMIT = 10;
+
 export const midnightStore = Vue.observable<MidnightStore>({
   isActive: false,
   lastSync: null,
@@ -214,10 +299,13 @@ export const midnightStore = Vue.observable<MidnightStore>({
   utxos: [],
   dustState: null,
   provingOperations: new Map(),
+  provingHistory: [],
   lastMidnightTxId: null,
   shieldedProvingConsent: null,
   activeWalletKey: null,
   sendProgress: null,
+  shieldedSyncAvailable: false,
+  proofServer: { ...DEFAULT_PROOF_SERVER },
 });
 
 // ---------------------------------------------------------------- serializer
@@ -241,64 +329,88 @@ function normalizeTxHash(hash: string): string {
 
 // ---------------------------------------------------------------- hydration
 
-function hydrateBalances(stored: any): MidnightBalances {
+// Persisted shapes mirror the store's interfaces with BigInts serialized as
+// strings — the casts below give typed field access while toBig() does the
+// actual runtime coercion (same convention as hydrateProvingHistory).
+function hydrateBalances(stored: unknown): MidnightBalances {
   if (!stored || typeof stored !== 'object') return { ...EMPTY_BALANCES };
+  const s = stored as MidnightBalances;
   return {
-    nightShielded: toBig(stored.nightShielded),
-    nightUnshielded: toBig(stored.nightUnshielded),
-    nightRegistered: toBig(stored.nightRegistered),
-    dust: toBig(stored.dust),
-    dustGenerating: toBig(stored.dustGenerating),
+    nightShielded: toBig(s.nightShielded),
+    nightUnshielded: toBig(s.nightUnshielded),
+    nightRegistered: toBig(s.nightRegistered),
+    dust: toBig(s.dust),
+    dustGenerating: toBig(s.dustGenerating),
   };
 }
 
-function hydrateUtxos(stored: any): MidnightUnshieldedUtxo[] {
+function hydrateUtxos(stored: unknown): MidnightUnshieldedUtxo[] {
   if (!Array.isArray(stored)) return [];
-  return stored.map((u: any): MidnightUnshieldedUtxo => ({
-    owner: u.owner ?? '',
-    tokenType: u.tokenType ?? '',
-    value: toBig(u.value),
-    intentHash: u.intentHash ?? '',
-    outputIndex: u.outputIndex ?? 0,
-    ctime: u.ctime,
-    initialNonce: u.initialNonce ?? '',
-    registeredForDustGeneration: !!u.registeredForDustGeneration,
-  }));
+  return stored.map((raw): MidnightUnshieldedUtxo => {
+    const u = (raw ?? {}) as MidnightUnshieldedUtxo;
+    return {
+      owner: u.owner ?? '',
+      tokenType: u.tokenType ?? '',
+      value: toBig(u.value),
+      intentHash: u.intentHash ?? '',
+      outputIndex: u.outputIndex ?? 0,
+      ctime: u.ctime,
+      initialNonce: u.initialNonce ?? '',
+      registeredForDustGeneration: !!u.registeredForDustGeneration,
+    };
+  });
 }
 
-function hydrateTransactions(stored: any): MidnightTransaction[] {
+function hydrateTransactions(stored: unknown): MidnightTransaction[] {
   if (!Array.isArray(stored)) return [];
-  return stored.map((t: any): MidnightTransaction => ({
-    hash: t.hash,
-    type: t.type,
-    token: t.token,
-    amount: toBig(t.amount),
-    counterparty: t.counterparty ?? '',
-    timestamp: t.timestamp ?? 0,
-    status: t.status,
-    fee: toBig(t.fee),
-    blockHeight: t.blockHeight,
-    isShielded: !!t.isShielded,
-    proofTimeMs: t.proofTimeMs,
-    raw: t.raw,
-  }));
+  return stored.map((raw): MidnightTransaction => {
+    const t = (raw ?? {}) as MidnightTransaction;
+    return {
+      hash: t.hash,
+      type: t.type,
+      token: t.token,
+      amount: toBig(t.amount),
+      counterparty: t.counterparty ?? '',
+      timestamp: t.timestamp ?? 0,
+      status: t.status,
+      fee: toBig(t.fee),
+      blockHeight: t.blockHeight,
+      isShielded: !!t.isShielded,
+      proofTimeMs: t.proofTimeMs,
+      raw: t.raw,
+    };
+  });
 }
 
-function hydrateDustState(stored: any): MidnightDustState | null {
+function hydrateDustState(stored: unknown): MidnightDustState | null {
   if (!stored || typeof stored !== 'object') return null;
+  const s = stored as MidnightDustState;
   return {
-    status: stored.status,
-    current: toBig(stored.current),
-    cap: toBig(stored.cap),
-    generationRate: toBig(stored.generationRate),
-    timeRemainingSeconds: stored.timeRemainingSeconds ?? null,
-    registrationStatus: stored.registrationStatus as DustRegistrationStatus,
+    status: s.status,
+    current: toBig(s.current),
+    cap: toBig(s.cap),
+    generationRate: toBig(s.generationRate),
+    timeRemainingSeconds: s.timeRemainingSeconds ?? null,
+    registrationStatus: s.registrationStatus as DustRegistrationStatus,
   };
 }
 
-function hydrateProvingOperations(stored: any): Map<string, MidnightProvingOperation> {
+function hydrateProvingOperations(stored: unknown): Map<string, MidnightProvingOperation> {
   if (!Array.isArray(stored)) return new Map();
   return new Map(stored as Array<[string, MidnightProvingOperation]>);
+}
+
+function hydrateProvingHistory(stored: unknown): MidnightProvingLogEntry[] {
+  if (!Array.isArray(stored)) return [];
+  return stored
+    .filter((e): e is Record<string, unknown> => !!e && typeof e === 'object')
+    .map((e) => ({
+      timestamp: typeof e.timestamp === 'number' ? e.timestamp : 0,
+      durationMs: typeof e.durationMs === 'number' ? e.durationMs : 0,
+      success: !!e.success,
+      error: typeof e.error === 'string' ? e.error : undefined,
+    }))
+    .slice(0, PROVING_HISTORY_LIMIT);
 }
 
 function toBig(value: unknown): bigint {
@@ -320,38 +432,59 @@ if (context === 'browser') {
     // setters fire for every changed property.
     Object.keys(updates as object).forEach((key) => {
       const k = key as keyof MidnightStore;
-      const val = (updates as any)[k];
+      const val = (updates as Record<string, unknown>)[key];
       if (k === 'balances') {
-        (midnightStore as any).balances = hydrateBalances(val);
+        midnightStore.balances = hydrateBalances(val);
       } else if (k === 'utxos') {
-        (midnightStore as any).utxos = hydrateUtxos(val);
+        midnightStore.utxos = hydrateUtxos(val);
       } else if (k === 'transactions') {
-        (midnightStore as any).transactions = hydrateTransactions(val);
+        midnightStore.transactions = hydrateTransactions(val);
       } else if (k === 'dustState') {
-        (midnightStore as any).dustState = hydrateDustState(val);
+        midnightStore.dustState = hydrateDustState(val);
       } else if (k === 'provingOperations') {
-        (midnightStore as any).provingOperations = hydrateProvingOperations(val);
+        midnightStore.provingOperations = hydrateProvingOperations(val);
+      } else if (k === 'provingHistory') {
+        midnightStore.provingHistory = hydrateProvingHistory(val);
       } else if (k in midnightStore) {
-        (midnightStore as any)[k] = val;
+        (midnightStore as unknown as Record<string, unknown>)[key] = val;
       }
     });
   });
 
   // Hydrate from chrome.storage.local on cold start
   chrome.storage.local.get(STORE_NAME, (result) => {
-    const stored = result[STORE_NAME];
+    // Persisted shape mirrors MidnightStore (BigInts/Maps serialized); every
+    // field below is read defensively with a fallback, so a typed view is
+    // safe and removes the `unknown`-property-access noise this block had.
+    const stored = result[STORE_NAME] as Partial<MidnightStore> | undefined;
     if (!stored) return;
 
     midnightStore.isActive = !!stored.isActive;
     midnightStore.lastSync = stored.lastSync ?? null;
     midnightStore.networkStatus = stored.networkStatus ?? 'disconnected';
     midnightStore.tip = stored.tip ?? { ...EMPTY_TIP };
-    midnightStore.addresses = stored.addresses ?? { ...EMPTY_ADDRESSES };
+    // Defensively strip any zswapViewingKey from a STALE persisted copy: a
+    // wallet that was active before this fix landed still has the plaintext
+    // key in its chrome.storage `addresses`. Derive the boolean from it, then
+    // drop it so the in-memory store never carries the key (even transiently),
+    // and re-persist the scrubbed shape below via setActive on next login.
+    if (stored.addresses && typeof stored.addresses === 'object') {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { zswapViewingKey: _staleVk, ...safeStored } = stored.addresses;
+      midnightStore.addresses = safeStored;
+      midnightStore.shieldedSyncAvailable = typeof stored.shieldedSyncAvailable === 'boolean'
+        ? stored.shieldedSyncAvailable
+        : isValidMidnightViewingKey(stored.addresses.zswapViewingKey);
+    } else {
+      midnightStore.addresses = { ...EMPTY_ADDRESSES };
+      midnightStore.shieldedSyncAvailable = !!stored.shieldedSyncAvailable;
+    }
     midnightStore.balances = hydrateBalances(stored.balances);
     midnightStore.utxos = hydrateUtxos(stored.utxos);
     midnightStore.transactions = hydrateTransactions(stored.transactions);
     midnightStore.dustState = hydrateDustState(stored.dustState);
     midnightStore.provingOperations = hydrateProvingOperations(stored.provingOperations);
+    midnightStore.provingHistory = hydrateProvingHistory(stored.provingHistory);
     midnightStore.lastMidnightTxId = typeof stored.lastMidnightTxId === 'number'
       ? stored.lastMidnightTxId
       : null;
@@ -359,6 +492,44 @@ if (context === 'browser') {
     midnightStore.activeWalletKey = typeof stored.activeWalletKey === 'string'
       ? stored.activeWalletKey
       : null;
+    midnightStore.proofServer = hydrateProofServer(stored.proofServer);
+  });
+}
+
+// ---------------------------------------------------------------- background-context
+
+/**
+ * Boot-race guards for the background hydrate below: a setter that runs
+ * before the async storage read lands must win over the stored copy.
+ */
+const bgDurableTouched = {
+  proofServer: false,
+  shieldedProvingConsent: false,
+  provingHistory: false,
+};
+
+// The background service worker's in-memory store starts at defaults on
+// every SW start (MV3 workers restart constantly), and broadcastFromBackground
+// persists the WHOLE in-memory store — so without a BG-side hydrate, the
+// first write after a restart silently reset every durable preference in
+// chrome.storage (the proof-server mode kept flipping back to Gero Cloud,
+// and the proving consent re-prompted after every reload). Hydrate the
+// durable, user-set fields here. Per-wallet chain state (balances / utxos /
+// transactions) is deliberately left out: sync repopulates it and
+// setActive owns its wipe-on-switch lifecycle.
+if (context === 'background') {
+  chrome.storage.local.get(STORE_NAME, (result) => {
+    const stored = result[STORE_NAME] as Partial<MidnightStore> | undefined;
+    if (!stored) return;
+    if (!bgDurableTouched.proofServer) {
+      midnightStore.proofServer = hydrateProofServer(stored.proofServer);
+    }
+    if (!bgDurableTouched.shieldedProvingConsent) {
+      midnightStore.shieldedProvingConsent = hydrateShieldedProvingConsent(stored.shieldedProvingConsent);
+    }
+    if (!bgDurableTouched.provingHistory) {
+      midnightStore.provingHistory = hydrateProvingHistory(stored.provingHistory);
+    }
   });
 }
 
@@ -375,6 +546,51 @@ function hydrateShieldedProvingConsent(
   const at = (stored as { acceptedAt?: unknown }).acceptedAt;
   if (typeof v !== 'number' || typeof at !== 'number') return null;
   return { version: v, acceptedAt: at };
+}
+
+/**
+ * `localUrl` must be a well-formed http(s) URL - guards against a corrupted
+ * or tampered stored value silently routing proving to an unexpected origin.
+ */
+function isValidProofServerUrl(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length === 0) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Hydrate the proof-server preference from chrome.storage. Each field is
+ * validated independently and falls back to its own default (remote,
+ * localhost:6300) rather than discarding the whole record, so a corrupted
+ * `mode` does not throw away an otherwise-valid custom `localUrl`.
+ */
+function hydrateProofServer(stored: unknown): MidnightStore['proofServer'] {
+  if (!stored || typeof stored !== 'object') return { ...DEFAULT_PROOF_SERVER };
+  const mode = (stored as { mode?: unknown }).mode;
+  const localUrl = (stored as { localUrl?: unknown }).localUrl;
+  const zkpaasUrl = (stored as { zkpaasUrl?: unknown }).zkpaasUrl;
+  return {
+    mode: mode === 'remote' || mode === 'local' || mode === 'zkpaas' ? mode : DEFAULT_PROOF_SERVER.mode,
+    localUrl: isValidProofServerUrl(localUrl) ? localUrl : DEFAULT_PROOF_SERVER.localUrl,
+    // '' is the valid "derive per network" state, distinct from a corrupted
+    // value — only non-empty overrides must parse as http(s) URLs.
+    zkpaasUrl: zkpaasUrl === '' || isValidProofServerUrl(zkpaasUrl) ? zkpaasUrl as string : '',
+    zkpaasApiKey: hydrateCredentialString((stored as { zkpaasApiKey?: unknown }).zkpaasApiKey),
+    zkpaasApiSecret: hydrateCredentialString((stored as { zkpaasApiSecret?: unknown }).zkpaasApiSecret),
+  };
+}
+
+/**
+ * A stored Arkhia credential is any reasonable-length string; anything else
+ * (corruption, absurd length) hydrates to '' = not configured. 512 chars is
+ * far above any real Arkhia key/secret while still bounding storage abuse.
+ */
+function hydrateCredentialString(value: unknown): string {
+  return typeof value === 'string' && value.length <= 512 ? value : '';
 }
 
 /**
@@ -397,13 +613,17 @@ function applyUpdates(updates: Partial<MidnightStore>) {
   if (updates.provingOperations) {
     midnightStore.provingOperations = hydrateProvingOperations(updates.provingOperations);
   }
+  if (updates.provingHistory) {
+    midnightStore.provingHistory = hydrateProvingHistory(updates.provingHistory);
+  }
   // Plain-typed fields — copy directly (no BigInt nesting to handle)
   for (const key of [
     'isActive', 'lastSync', 'networkStatus', 'tip', 'addresses', 'lastMidnightTxId',
-    'shieldedProvingConsent', 'activeWalletKey', 'sendProgress',
+    'shieldedProvingConsent', 'activeWalletKey', 'sendProgress', 'shieldedSyncAvailable',
+    'proofServer',
   ] as const) {
     if (key in updates) {
-      (midnightStore as any)[key] = updates[key];
+      (midnightStore as unknown as Record<string, unknown>)[key] = updates[key];
     }
   }
 }
@@ -455,6 +675,18 @@ function broadcastFromBackground(updates: Partial<MidnightStore>, immediate = fa
 // ---------------------------------------------------------------- actions
 
 /**
+ * A viewing key is usable for shielded sync only in the bech32m `mn_shield-esk_`
+ * form the indexer's `connect(viewingKey)` mutation accepts. Wallets created
+ * before that form landed stored raw-hex / `mn_shield-epk_` and fall back to
+ * unshielded-only. Shared by `setActive` (to publish the boolean) and
+ * `walletManager.initializeWallet` (to decide the sync subscription) so the
+ * two can never disagree on what "shielded available" means.
+ */
+export function isValidMidnightViewingKey(vk: string | undefined | null): boolean {
+  return typeof vk === 'string' && vk.startsWith('mn_shield-esk_');
+}
+
+/**
  * Background-context actions. Browser code should never call these directly —
  * trigger them via Chrome messaging if needed.
  */
@@ -465,10 +697,23 @@ export const midnightActions = {
    * gero-sync events arrive.
    */
   setActive(addresses: MidnightAddresses) {
+    // SECURITY: never let the zswap viewing key (a forever-decrypt secret —
+    // see MidnightAddresses.zswapViewingKey) enter this store. The store
+    // broadcasts to chrome.storage.local, so a copy here would be a plaintext
+    // at-rest copy of the key. Strip it here, at the single chokepoint every
+    // caller (walletManager.initializeWallet, midnight-sync.service.start,
+    // DustRegistrationDialog) passes through, and publish only the boolean
+    // `shieldedSyncAvailable`. The raw key never travels via the store: the
+    // background reads it straight from the wallet record and hands it to the
+    // sync service (walletManager.initializeWallet → midnightSyncService.start).
+    const shieldedSyncAvailable = isValidMidnightViewingKey(addresses.zswapViewingKey);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { zswapViewingKey: _zswapViewingKey, ...safeAddresses } = addresses;
+
     // Identity of the wallet being activated. The unshielded address is
     // unique per (wallet, network), so a change here means we're now looking
     // at a different wallet or network than whatever state was rehydrated.
-    const newKey = addresses.unshielded || null;
+    const newKey = safeAddresses.unshielded || null;
     const prevKey = midnightStore.activeWalletKey;
     const isSwitch = !!prevKey && !!newKey && prevKey !== newKey;
 
@@ -491,16 +736,18 @@ export const midnightActions = {
     }
 
     midnightStore.isActive = true;
-    midnightStore.addresses = addresses;
+    midnightStore.addresses = safeAddresses;
     midnightStore.activeWalletKey = newKey;
     midnightStore.networkStatus = 'connecting';
+    midnightStore.shieldedSyncAvailable = shieldedSyncAvailable;
     broadcastFromBackground(
       isSwitch
         ? {
           isActive: true,
-          addresses,
+          addresses: safeAddresses,
           activeWalletKey: newKey,
           networkStatus: 'connecting',
+          shieldedSyncAvailable,
           lastSync: null,
           tip: { ...EMPTY_TIP },
           balances: { ...EMPTY_BALANCES },
@@ -509,7 +756,7 @@ export const midnightActions = {
           dustState: null,
           lastMidnightTxId: null,
         }
-        : { isActive: true, addresses, activeWalletKey: newKey, networkStatus: 'connecting' },
+        : { isActive: true, addresses: safeAddresses, activeWalletKey: newKey, networkStatus: 'connecting', shieldedSyncAvailable },
       true,
     );
   },
@@ -558,6 +805,7 @@ export const midnightActions = {
       version: SHIELDED_PROVING_CONSENT_VERSION,
       acceptedAt: Date.now(),
     };
+    bgDurableTouched.shieldedProvingConsent = true;
     midnightStore.shieldedProvingConsent = consent;
     broadcastFromBackground({ shieldedProvingConsent: consent }, true);
   },
@@ -567,8 +815,42 @@ export const midnightActions = {
    * privacy consent" UI flows. The next shielded send will re-prompt.
    */
   clearShieldedProvingConsent() {
+    bgDurableTouched.shieldedProvingConsent = true;
     midnightStore.shieldedProvingConsent = null;
     broadcastFromBackground({ shieldedProvingConsent: null }, true);
+  },
+
+  /**
+   * Update the user's proof-server preference (Gero Cloud vs a local
+   * self-hosted docker proof server). Called by the Settings UI's
+   * proof-server section and by the consent dialog's "use a local proof
+   * server instead" shortcut. Persists immediately, like the consent
+   * setters above, so a same-moment send picks up the new mode even across
+   * a background service-worker restart.
+   */
+  setProofServer(next: MidnightStore['proofServer']) {
+    bgDurableTouched.proofServer = true;
+    midnightStore.proofServer = next;
+    broadcastFromBackground({ proofServer: next }, true);
+  },
+
+  /**
+   * Record one completed WALLET-SIDE proving attempt (success or failure)
+   * — local docker or Arkhia zkPaaS — at the front of
+   * {@link MidnightStore.provingHistory}, capped at
+   * {@link PROVING_HISTORY_LIMIT}. Called from `walletBg.ts` right after
+   * `buildAndSignShieldedTransfer` resolves or throws in a wallet-side
+   * proving mode. Never pass tx hex or witness data as `error` — see the
+   * file-header privacy note on `midnightLocalProver.ts`.
+   */
+  recordLocalProvingAttempt(entry: { durationMs: number; success: boolean; error?: string }) {
+    bgDurableTouched.provingHistory = true;
+    const next = [
+      { timestamp: Date.now(), ...entry },
+      ...midnightStore.provingHistory,
+    ].slice(0, PROVING_HISTORY_LIMIT);
+    midnightStore.provingHistory = next;
+    broadcastFromBackground({ provingHistory: next }, true);
   },
 
   /** Network/WS status update (driven by the gero-sync client wrapper). */
