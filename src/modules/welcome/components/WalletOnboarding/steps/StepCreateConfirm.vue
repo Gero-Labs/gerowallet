@@ -1,5 +1,6 @@
 <template>
   <div class="step-create-confirm">
+    <div class="step-scroll">
 
     <!-- ===== PRF PATH ===== -->
     <template v-if="securityMethod === 'prf'">
@@ -148,6 +149,7 @@
         </v-checkbox>
       </v-form>
     </template>
+    </div>
 
     <!-- Navigation buttons -->
     <div class="onboarding-actions d-flex" style="gap: 12px;">

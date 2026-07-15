@@ -56,9 +56,18 @@ const version = ref<string>(APP_VERSION);
    beats GButton's own 0,4,0 base rule deterministically rather than by
    stylesheet injection order. 11px is the ramp floor (was 10px). */
 .footer-btn {
+  text-transform: none;
   --g-btn-fg: var(--g-text-3);
 }
 .v-btn.footer-btn.g-btn.g-btn--tertiary {
+  font-size: 11px;
+}
+
+/* .footer-btn is forwarded onto GButton's inner v-btn, which doesn't carry this
+   component's scope id — so a plain scoped rule never matches. Pierce with
+   ::v-deep and target the button text so the smaller size actually applies. */
+.footer-legal ::v-deep .footer-btn,
+.footer-legal ::v-deep .footer-btn .v-btn__content {
   font-size: 11px;
 }
 </style>

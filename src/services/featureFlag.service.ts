@@ -10,12 +10,12 @@
  * {@link featureFlagService} singleton.
  */
 
-type FlagChangeCallback = (newValue: any, oldValue: any) => void;
+type FlagChangeCallback = (newValue: unknown, oldValue: unknown) => void;
 
 /** How often (ms) to re-poll as a safety net even when SSE looks healthy. */
 const RE_POLL_INTERVAL_MS = 5 * 60 * 1000;
 
-/** Base back-off before the first SSE reconnect after an error. */
+/** Base back-off before the first SSE reconnect after an error; doubles per failure. */
 const SSE_RECONNECT_BASE_MS = 5000;
 
 /** Ceiling for the exponential reconnect back-off. */
@@ -41,7 +41,7 @@ class FeatureFlagService {
   private initializationPromise: Promise<void> | null = null;
 
   /** Last known flag values, keyed by flag key. */
-  private flagValues: Record<string, any> = {};
+  private flagValues: Record<string, unknown> = {};
 
   /** Per-flag change listeners registered via {@link onFlagChange}. */
   private listeners = new Map<string, FlagChangeCallback[]>();
@@ -50,6 +50,7 @@ class FeatureFlagService {
   private rePollTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempts = 0;
+  private onlineListener: (() => void) | null = null;
 
   /**
    * Initialize the feature flag service.
@@ -114,7 +115,7 @@ class FeatureFlagService {
   }
 
   /** Snapshot of all currently-known flag values. */
-  getAllFlags(): Record<string, any> {
+  getAllFlags(): Record<string, unknown> {
     if (!this.isInitialized) {
       return {};
     }
@@ -148,6 +149,7 @@ class FeatureFlagService {
   /** Close any open streams and clear all listeners. */
   async close(): Promise<void> {
     this.closeStream();
+    this.cancelReconnect();
     this.stopSafetyPoll();
     this.reconnectAttempts = 0;
     this.flagValues = {};
@@ -165,7 +167,7 @@ class FeatureFlagService {
     return trimmed;
   }
 
-  private buildContextBody(): Record<string, any> {
+  private buildContextBody(): Record<string, unknown> {
     const cfg = this.config!;
     return {
       userId: cfg.contextKey,
@@ -189,7 +191,7 @@ class FeatureFlagService {
         throw new Error(`HTTP ${res.status} ${res.statusText}`);
       }
 
-      const snapshot = (await res.json()) as Record<string, any>;
+      const snapshot = (await res.json()) as Record<string, unknown>;
       this.applySnapshot(snapshot);
     } finally {
       clearTimeout(timer);
@@ -200,7 +202,7 @@ class FeatureFlagService {
    * Replace the current flag map with {@code next}, firing change callbacks
    * for every key whose value differs from before.
    */
-  private applySnapshot(next: Record<string, any>): void {
+  private applySnapshot(next: Record<string, unknown>): void {
     const previous = this.flagValues;
     const changedKeys = new Set<string>();
 
@@ -235,6 +237,7 @@ class FeatureFlagService {
   private openStream(): void {
     if (!this.config) return;
     this.closeStream();
+    this.cancelReconnect();
 
     const params = new URLSearchParams();
     const cfg = this.config;
@@ -258,7 +261,7 @@ class FeatureFlagService {
 
     this.eventSource.addEventListener('flags', (event: MessageEvent) => {
       try {
-        const snapshot = JSON.parse(event.data) as Record<string, any>;
+        const snapshot = JSON.parse(event.data) as Record<string, unknown>;
         this.applySnapshot(snapshot);
       } catch (e) {
         console.warn('🚩 Failed to parse flag stream message:', e);
@@ -275,6 +278,13 @@ class FeatureFlagService {
     if (!this.isInitialized) return;
     if (this.reconnectTimer !== null) return; // one pending reconnect at a time
 
+    // Offline: a blind timer would fail (and spam the console) every cycle —
+    // wait for the 'online' event instead.
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      this.reconnectWhenOnline();
+      return;
+    }
+
     // Persistent failure: stop retrying and lean on the safety re-poll. Log the
     // give-up exactly once (the extra increment past the cap gates the message).
     if (this.reconnectAttempts >= SSE_MAX_RECONNECT_ATTEMPTS) {
@@ -288,7 +298,7 @@ class FeatureFlagService {
       return;
     }
 
-    // Exponential back-off with jitter, capped: 5s, 10s, 20s, 40s … up to 5 min.
+    // Exponential back-off with jitter, capped: 5s, 10s, 20s, 40s … up to the ceiling.
     const backoff = Math.min(SSE_RECONNECT_BASE_MS * 2 ** this.reconnectAttempts, SSE_RECONNECT_MAX_MS);
     const delay = backoff + Math.floor(Math.random() * 1000);
     this.reconnectAttempts++;
@@ -297,6 +307,29 @@ class FeatureFlagService {
       this.reconnectTimer = null;
       if (this.isInitialized) this.openStream();
     }, delay);
+  }
+
+  private reconnectWhenOnline(): void {
+    if (this.onlineListener) return;
+    this.onlineListener = () => {
+      this.removeOnlineListener();
+      if (this.isInitialized) this.openStream();
+    };
+    globalThis.addEventListener('online', this.onlineListener);
+  }
+
+  private removeOnlineListener(): void {
+    if (!this.onlineListener) return;
+    globalThis.removeEventListener('online', this.onlineListener);
+    this.onlineListener = null;
+  }
+
+  private cancelReconnect(): void {
+    if (this.reconnectTimer !== null) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.removeOnlineListener();
   }
 
   private closeStream(): void {

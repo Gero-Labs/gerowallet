@@ -31,7 +31,7 @@ export const BACKUP_CODES_COUNT = 8;
 /** Length of each backup code */
 export const BACKUP_CODE_LENGTH = 8;
 
-export type UnlockMethod = 'password' | 'pin' | 'pattern' | null;
+export type UnlockMethod = 'password' | 'pin' | 'pattern' | 'passkey' | null;
 
 export interface SecurityConfig {
   unlockMethod: UnlockMethod;

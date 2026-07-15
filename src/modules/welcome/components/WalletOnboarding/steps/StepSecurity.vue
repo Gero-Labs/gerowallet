@@ -1,5 +1,6 @@
 <template>
   <div class="step-security">
+    <div class="step-scroll">
     <v-form ref="nameForm" v-model="nameValid" style="width: 100%;">
 
       <!-- Wallet name field -->
@@ -65,6 +66,7 @@
       </div>
 
     </v-form>
+    </div>
 
     <!-- Navigation buttons -->
     <div class="onboarding-actions d-flex" style="gap: 12px;">
@@ -187,7 +189,7 @@ const handleContinue = (): void => {
   &__sub {
     display: block;
     font-size: 10px;
-    color: rgba(255, 255, 255, 0.3);
+    color: var(--g-text-3);
     line-height: 1.35;
   }
 
@@ -196,7 +198,7 @@ const handleContinue = (): void => {
   }
 
   &--active &__sub {
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--g-text-2);
   }
 }
 

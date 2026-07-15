@@ -2,7 +2,7 @@
  * JSON serialization utilities to handle big integers
  */
 import JSONbig from 'json-bigint'
-import { BigIntWrap } from '@/services/zkFold/types';
+import { BigIntWrap } from '@/services/zkSmartWallet/types';
 
 // Configure JSONbig to handle BigInt values properly
 // storeAsString: false ensures large integers are serialized as numeric values (not quoted strings)

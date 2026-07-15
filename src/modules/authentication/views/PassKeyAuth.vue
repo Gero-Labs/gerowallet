@@ -50,14 +50,17 @@ const error = ref('');
 
 onMounted(async () => {
   try {
-    const wallet = walletStore.loggedWallet;
-    if (!wallet) {
-      throw new Error('No wallet logged in');
-    }
-
-    // Get mode from query parameter ('password' | 'privateKey' | 'rawPrf')
+    // Get mode from query parameter ('password' | 'privateKey' | 'rawPrf' | 'mpcPrf')
     const urlParams = new URLSearchParams(window.location.search);
     const mode = urlParams.get('mode') || 'password'; // Default to password for backwards compatibility
+
+    const wallet = walletStore.loggedWallet;
+    // mpcPrf resolves its target from the `walletId` query param (a pre-switch
+    // unlock runs while a DIFFERENT wallet — or none — is logged in), so it does
+    // not require a logged-in wallet here. Every other mode does.
+    if (!wallet && mode !== 'mpcPrf') {
+      throw new Error('No wallet logged in');
+    }
 
     let resultPayload: any;
 
@@ -93,6 +96,35 @@ onMounted(async () => {
       resultPayload = {
         success: true,
         privateKeyBytes: Array.from(privateKeyBytes) // Convert Uint8Array to regular array for postMessage
+      };
+    } else if (mode === 'mpcPrf') {
+      // MPC "Sign in with Google" wallet: evaluate the passkey PRF for the
+      // wallet's MPC salt and return the RAW PRF output. WebAuthn can't run in a
+      // Chrome side panel, so the side-panel unlock delegates the ceremony to this
+      // popup; the caller combines the output with the Google login share to
+      // reconstruct the key (never logged).
+      // During a PRE-SWITCH unlock the currently logged-in wallet is the OLD one,
+      // so the target wallet's credential/salt are looked up by an explicit
+      // `walletId` query param; without it, fall back to the logged-in wallet.
+      let credentialId = wallet?.webAuthnCredentialId;
+      let saltId = wallet?.mpcPrfSaltId;
+      const targetWalletId = urlParams.get('walletId');
+      if (targetWalletId) {
+        const { getAllWallets } = await import('@/db/gero-db');
+        const target = (await getAllWallets())[Number(targetWalletId)];
+        credentialId = target?.webAuthnCredentialId;
+        saltId = target?.mpcPrfSaltId;
+      }
+      if (!credentialId || !saltId) {
+        throw new Error('MPC passkey not configured');
+      }
+      const { evaluateMpcPasskey } = await import('@/shared/utils/mpc/mpcPasskey');
+      const prfOutputHex = await evaluateMpcPasskey(credentialId, saltId);
+      resultPayload = {
+        success: true,
+        prfOutputHex,
+        webAuthnCredentialId: credentialId,
+        mpcPrfSaltId: saltId,
       };
     } else {
       // Default: Decrypt spending password using PRF

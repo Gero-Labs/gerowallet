@@ -94,7 +94,6 @@ function buildCSP(dev: boolean): string {
     // Dev-only
     ...(dev
       ? [
-          'https://*.zkfold.io',
           'https://guardarian.com/',
           'http://localhost:*',
           'ws://localhost:*',
@@ -132,6 +131,7 @@ function buildCSP(dev: boolean): string {
     'https://www.kaiserex.com/',
     'https://kaiserex.com/',
     'https://forms.zohopublic.eu/',
+    'https://*.bringweb3.io/',
   ];
 
   const mediaSrc = [

@@ -23,11 +23,16 @@ export interface Wallet {
   // PRF Encryption Support (Version 14+)
   encryptedPrivateKey?: string;
   encryptedMnemonic?: string;
-  encryptionMethod?: 'password' | 'prf'; // Encryption method for wallet keys
+  encryptionMethod?: 'password' | 'prf' | 'mpc'; // Encryption method for wallet keys
   prfEncryptedPrivateKey?: string; // Private key encrypted with PRF (hex)
   prfEncryptedMnemonic?: string; // Mnemonic encrypted with PRF (hex)
   webAuthnCredentialId?: string; // WebAuthn credential ID (base64)
+  mpcPrfSaltId?: string; // MPC passkey PRF salt id (stable, non-secret)
   prfSpendingPassword?: string; // Optional spending password hash (PBKDF2-HMAC-SHA512)
+  publicKey?: string; // Account xpub (bech32)
+  userId?: string; // Google `sub` for Google/MPC wallets (NOT email)
+  mpcDeviceShare?: string; // AES-encrypted encoded device share (non-indexed)
+  mpcDeviceShareNext?: string; // Staged next device share during crash-safe re-split (non-indexed)
 }
 
 export type NetworkScheme = {

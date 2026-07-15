@@ -19,6 +19,14 @@
         </div>
 
       </div>
+      <v-img
+        v-if="isMpcGoogleWallet"
+        :src="assets.googleSvg"
+        contain
+        width="14"
+        height="14"
+        class="google-badge mr-1"
+      />
       <v-icon size="14" color="var(--g-text-3)" class="chevron-icon">mdi-chevron-down</v-icon>
     </div>
     <div class="header-right">
@@ -57,6 +65,7 @@
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import WalletStore from '@/stores/walletStore';
+import { WalletType } from '@/models/types';
 import assets from '@/utils/assets';
 import networks from '@/utils/networks';
 import { openFullDashboard as openFullDashboardTab } from '@/shared/utils/openFullDashboard';
@@ -109,6 +118,10 @@ const ADA_HANDLE_POLICY = 'f0ff48bbb7bbe9d59a40f1ce90e9e9d0ff5002ec48f232b49ca0f
 
 const walletName = computed(() => walletStore.loggedWallet?.name || 'Wallet');
 const walletIcon = computed(() => assets.resolveIcon(walletStore.loggedWallet?.icon));
+const isMpcGoogleWallet = computed(() => {
+  const w = walletStore.loggedWallet;
+  return w?.type === WalletType.Google && w?.encryptionMethod === 'mpc';
+});
 const adaHandle = computed(() => {
   const collections = walletStore.collections;
   if (!collections) return '';
