@@ -8,6 +8,7 @@ import { isDev, port, r } from './scripts/utils';
 import packageJson from './package.json';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import copy from 'rollup-plugin-copy';
+import { existsSync, createReadStream } from 'node:fs';
 // import { viteImagemin } from 'vite-plugin-imagemin';
 
 // Absolute POSIX path: sass `@import` does not reliably resolve vite's `@/`
@@ -113,6 +114,27 @@ export const sharedConfig: UserConfig = {
     },
   },
   plugins: [
+    // Dev only: serve the vendored gero-swap widget from src/vendor at the same
+    // /vendor/gero-swap/ path the built extension uses. Production wires these up
+    // via the copy plugin + CSS href-rewrite at writeBundle, which don't run
+    // under `npm run dev` — so without this the <gero-swap> element never loads
+    // and the Swap dialog renders empty (ERR_FILE_NOT_FOUND on gero-swap.js/.css).
+    {
+      name: 'serve-gero-swap-vendor-dev',
+      apply: 'serve',
+      configureServer(server) {
+        server.middlewares.use((req, res, next) => {
+          const url = (req.url ?? '').split('?')[0];
+          if (!url.startsWith('/vendor/gero-swap/')) return next();
+          const rel = url.slice('/vendor/gero-swap/'.length);
+          if (!rel || rel.includes('..')) return next();
+          const filePath = r('src/vendor/gero-swap', rel);
+          if (!existsSync(filePath)) return next();
+          res.setHeader('Content-Type', filePath.endsWith('.css') ? 'text/css' : 'application/javascript');
+          createReadStream(filePath).pipe(res);
+        });
+      },
+    },
     Vue({
       template: {
         compilerOptions: {

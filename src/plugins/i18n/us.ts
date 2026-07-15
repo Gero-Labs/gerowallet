@@ -2386,6 +2386,9 @@ export default {
   'swap.youReceive': 'You Receive',
   'errors.buildTransactionFailed': 'Failed to build transaction',
   'errors.insufficientBalance': 'Insufficient balance',
+  'errors.noCollateral': 'This transaction runs a smart contract, which needs a small ADA-only UTxO for collateral, but all your ADA is bundled with tokens. Send about 6 ADA to your own wallet address to create one, then try again.',
+  'errors.insufficientAdaForTx': 'Not enough ADA to complete this transaction once network fees and the minimum per-output are covered. Add a little more ADA and try again.',
+  'errors.collateralPoolEmpty': 'The shared collateral service is temporarily unavailable. Please try again in a moment.',
   'errors.invalidAddress': 'Invalid address',
   'errors.invalidOrder': 'Invalid order data',
   // The single wrong-password message. Shown as an inline, persistent field
@@ -4205,6 +4208,7 @@ export default {
   'midnight.dustRegistrationSubmitted': 'DUST registration submitted',
   'midnight.dustNeedsNightFirst': 'This wallet holds no NIGHT yet. Receive NIGHT to this wallet first — DUST is generated from your NIGHT.',
   'midnight.dustRegistrationFailed': 'DUST registration failed. Please try again.',
+  'midnight.dustNoCollateral': 'This registration needs a small ADA-only UTxO for network collateral, but all your ADA is bundled with tokens. Send about 6 ADA to your own wallet address to create one, then try again.',
   'midnight.resetSyncCache': 'Reset sync cache',
   'midnight.resetSyncCacheDone': 'Sync cache cleared. Re-syncing from the start.',
   'midnight.resetSyncCacheFailed': 'Could not reset the sync cache. Please try again.',

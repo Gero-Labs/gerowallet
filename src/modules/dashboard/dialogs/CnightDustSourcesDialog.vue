@@ -275,6 +275,8 @@ async function confirmAction(source: DustSource) {
       authError.value = t('midnight.dustSourcesIsolationTimeout');
     } else if (result.message === 'TOKEN_BAG_TOO_LARGE') {
       authError.value = t('midnight.dustSourcesBagTooLarge');
+    } else if (result.message === 'NO_COLLATERAL') {
+      authError.value = t('midnight.dustNoCollateral');
     } else {
       authError.value = result.message || t('midnight.dustRegistrationFailed');
     }

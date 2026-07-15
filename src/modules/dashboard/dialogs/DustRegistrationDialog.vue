@@ -567,6 +567,9 @@ async function confirmRegistration() {
       // open with actionable guidance rather than a scary error toast.
       submitError.value = t('midnight.dustNeedsNightFirst');
       snackbar.setError(submitError.value);
+    } else if (result.message === 'NO_COLLATERAL') {
+      submitError.value = t('midnight.dustNoCollateral');
+      snackbar.setError(submitError.value);
     } else {
       submitError.value = result.message || t('midnight.dustRegistrationFailed');
       snackbar.setError(submitError.value);

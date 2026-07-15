@@ -12,6 +12,7 @@ import { createKeystoneSignRequest, KeystoneSignRequestResponse, parseSignature 
 import networks from '@/utils/networks';
 import rules from '@/utils/rules';
 import snackbar from '@/plugins/snackbar';
+import { friendlyTxError } from '@/shared/utils/txErrors';
 import { useTranslation } from './useTranslation';
 import { UR } from '@keystonehq/keystone-sdk';
 
@@ -189,7 +190,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       return true;
     } catch (e) {
       console.error('Error signing transaction:', e);
-      snackbar.setError(e instanceof Error ? e.message : t('errors.unknownError'));
+      snackbar.setError(e instanceof Error ? friendlyTxError(e) : t('errors.unknownError'));
       return false;
     } finally {
       loading.value = false;
@@ -396,7 +397,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       options.onClose?.();
     } catch (e) {
       console.error('Error submitting transaction:', e);
-      snackbar.setError(e instanceof Error ? e.message : t('errors.unknownError'));
+      snackbar.setError(e instanceof Error ? friendlyTxError(e) : t('errors.unknownError'));
     } finally {
       loading.value = false;
       isSubmit.value = false;

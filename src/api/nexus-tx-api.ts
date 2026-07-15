@@ -138,6 +138,9 @@ nexusTxClient.interceptors.response.use(
   async (error: AxiosError) => {
     const body = error.response?.data as { message?: string } | undefined;
     if (body?.message) {
+      // Pass the raw message through so callers that parse it (SendDialog's
+      // inline ADA-shortage display) still work; friendly mapping happens at the
+      // display layer (useTransactionSigning / DAppOverlay) via friendlyTxError.
       const enriched = new Error(body.message);
       (enriched as Error & { response?: unknown }).response = error.response;
       throw enriched;

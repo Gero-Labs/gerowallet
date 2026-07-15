@@ -379,6 +379,9 @@ async function confirmManage() {
       resetState();
     } else if (result.message === 'WRONG_PASSWORD') {
       submitError.value = t('errors.wrongPassword');
+    } else if (result.message === 'NO_COLLATERAL') {
+      submitError.value = t('midnight.dustNoCollateral');
+      snackbar.setError(submitError.value);
     } else {
       submitError.value = result.message || t('midnight.dustRegistrationFailed');
       snackbar.setError(submitError.value);
@@ -422,6 +425,9 @@ async function confirmRegistration() {
       resetState();
     } else if (result.message === 'WRONG_PASSWORD') {
       submitError.value = t('errors.wrongPassword');
+    } else if (result.message === 'NO_COLLATERAL') {
+      submitError.value = t('midnight.dustNoCollateral');
+      snackbar.setError(submitError.value);
     } else {
       submitError.value = result.message || t('midnight.dustRegistrationFailed');
       snackbar.setError(submitError.value);
