@@ -1,6 +1,6 @@
 <template>
   <v-card
-    :class="['fill-height d-flex flex-column', isBitcoin ? 'tx-glass-card' : 'liquid-glass']"
+    :class="['fill-height d-flex flex-column', isBitcoin ? 'tx-glass-card' : 'glass-panel']"
     :outlined="!isBitcoin"
     :loading="loadingTxs"
   >

@@ -1,5 +1,5 @@
 <template>
-  <div class="ps-widget liquid-glass">
+  <div class="ps-widget glass-panel">
     <!-- Header: label + full-page link (mirrors dust-gauge__head / the
          Recent Transactions "View all" link pattern, tokenized). -->
     <div class="ps-widget__head">
