@@ -3,8 +3,8 @@
     <v-tabs
       v-model="activeTab"
       background-color="transparent"
-      color="#26FAB0"
-      slider-color="#26FAB0"
+      color="success"
+      slider-color="success"
       height="32"
       @change="onTabChange"
     >
@@ -31,10 +31,10 @@
       <!-- Positions -->
       <v-tab-item>
         <div v-if="tabLoading[0]" class="tab-loading">
-          <v-progress-circular indeterminate color="#26FAB0" size="24" />
+          <v-progress-circular indeterminate color="success" size="24" />
         </div>
         <div v-else-if="positions.length === 0" class="empty-state">
-          <v-icon size="32" color="#2b2f36">mdi-chart-line</v-icon>
+          <v-icon size="32" color="var(--g-raised)">mdi-chart-line</v-icon>
           <p class="mt-1">{{ $t('perpetuals.noOpenPositions') }}</p>
         </div>
         <v-data-table
@@ -98,7 +98,7 @@
           </template>
           <template v-slot:[`item.actions`]="{ item }">
             <v-btn
-              x-small text color="#F6465D"
+              x-small text color="error"
               :loading="closingPosition === item.pos.PositionID"
               @click="closePosition(item.pos)"
               class="action-btn"
@@ -157,15 +157,15 @@
       <!-- Open Orders -->
       <v-tab-item>
         <div class="d-flex justify-end pa-1" v-if="openOrders.length > 0">
-          <v-btn x-small text color="#F6465D" :loading="cancellingAll" @click="cancelAllOrdersAction()">
+          <v-btn x-small text color="error" :loading="cancellingAll" @click="cancelAllOrdersAction()">
             {{ $t('perpetuals.cancelAll') }}
           </v-btn>
         </div>
         <div v-if="tabLoading[1]" class="tab-loading">
-          <v-progress-circular indeterminate color="#26FAB0" size="24" />
+          <v-progress-circular indeterminate color="success" size="24" />
         </div>
         <div v-else-if="openOrders.length === 0" class="empty-state">
-          <v-icon size="32" color="#2b2f36">mdi-format-list-bulleted</v-icon>
+          <v-icon size="32" color="var(--g-raised)">mdi-format-list-bulleted</v-icon>
           <p class="mt-1">{{ $t('perpetuals.noOpenOrders') }}</p>
         </div>
         <v-data-table
@@ -183,7 +183,7 @@
             </span>
           </template>
           <template v-slot:[`item.actions`]="{ item }">
-            <v-btn x-small text color="#F6465D" :loading="cancellingOrder === item.ID" @click="cancelOrderAction(item)" class="action-btn">
+            <v-btn x-small text color="error" :loading="cancellingOrder === item.ID" @click="cancelOrderAction(item)" class="action-btn">
               {{ $t('perpetuals.cancel') }}
             </v-btn>
           </template>
@@ -193,10 +193,10 @@
       <!-- Order History -->
       <v-tab-item>
         <div v-if="tabLoading[2]" class="tab-loading">
-          <v-progress-circular indeterminate color="#26FAB0" size="24" />
+          <v-progress-circular indeterminate color="success" size="24" />
         </div>
         <div v-else-if="orderHistory.length === 0" class="empty-state">
-          <v-icon size="32" color="#2b2f36">mdi-history</v-icon>
+          <v-icon size="32" color="var(--g-raised)">mdi-history</v-icon>
           <p class="mt-1">{{ $t('perpetuals.noOrderHistory') }}</p>
         </div>
         <v-data-table
@@ -217,10 +217,10 @@
       <!-- Fill History -->
       <v-tab-item>
         <div v-if="tabLoading[3]" class="tab-loading">
-          <v-progress-circular indeterminate color="#26FAB0" size="24" />
+          <v-progress-circular indeterminate color="success" size="24" />
         </div>
         <div v-else-if="fillHistory.length === 0" class="empty-state">
-          <v-icon size="32" color="#2b2f36">mdi-swap-horizontal</v-icon>
+          <v-icon size="32" color="var(--g-raised)">mdi-swap-horizontal</v-icon>
           <p class="mt-1">{{ $t('perpetuals.noFillHistory') }}</p>
         </div>
         <v-data-table
@@ -246,10 +246,10 @@
       <!-- Funding History -->
       <v-tab-item>
         <div v-if="tabLoading[4]" class="tab-loading">
-          <v-progress-circular indeterminate color="#26FAB0" size="24" />
+          <v-progress-circular indeterminate color="success" size="24" />
         </div>
         <div v-else-if="fundingHistory.length === 0" class="empty-state">
-          <v-icon size="32" color="#2b2f36">mdi-percent</v-icon>
+          <v-icon size="32" color="var(--g-raised)">mdi-percent</v-icon>
           <p class="mt-1">{{ $t('perpetuals.noFundingHistory') }}</p>
         </div>
         <v-data-table
@@ -715,8 +715,8 @@ const fundingHistoryHeaders = [
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  border-top: 1px solid #2b2f36;
-  border-right: 1px solid #2b2f36;
+  border-top: 1px solid var(--g-hairline-2);
+  border-right: 1px solid var(--g-hairline-2);
 }
 
 .positions-area >>> .v-tabs {
@@ -740,11 +740,11 @@ const fundingHistoryHeaders = [
 .tab-text { font-size: 11px; }
 
 .tab-count {
-  background: rgba(38, 250, 176, 0.15);
-  color: #26FAB0;
-  border-radius: 8px;
+  background: var(--g-success-fill);
+  color: var(--g-success);
+  border-radius: var(--g-r-control);
   padding: 0 4px;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 600;
 }
 
@@ -752,8 +752,8 @@ const fundingHistoryHeaders = [
 .perps-table { background: transparent !important; }
 
 .perps-table >>> th {
-  font-size: 10px !important;
-  color: #5e6673 !important;
+  font-size: 11px !important;
+  color: var(--g-text-3) !important;
   white-space: nowrap;
   padding: 4px 8px !important;
   height: 28px !important;
@@ -764,8 +764,8 @@ const fundingHistoryHeaders = [
   white-space: nowrap;
   padding: 2px 8px !important;
   height: 28px !important;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  color: #eaecef;
+  font-family: var(--g-font-mono);
+  color: var(--g-text-1);
 }
 
 /* Stacked entry/mark cell */
@@ -776,19 +776,19 @@ const fundingHistoryHeaders = [
 }
 
 .cell-sub {
-  color: #848e9c;
-  font-size: 10px !important;
+  color: var(--g-text-3);
+  font-size: 11px !important;
 }
 
 .cell-hint {
-  text-decoration: underline dotted rgba(255, 255, 255, 0.18);
+  text-decoration: underline dotted var(--g-hairline-3);
   text-underline-offset: 2px;
   cursor: help;
 }
 
 .liq-distance {
-  color: #848e9c;
-  font-size: 10px;
+  color: var(--g-text-3);
+  font-size: 11px;
   margin-left: 2px;
 }
 
@@ -806,7 +806,7 @@ const fundingHistoryHeaders = [
   align-items: center;
   justify-content: center;
   padding: 24px;
-  color: #5e6673;
+  color: var(--g-text-3);
   font-size: 12px;
   flex: 1;
   min-height: 206px;
@@ -814,7 +814,7 @@ const fundingHistoryHeaders = [
 
 /* Action buttons */
 .action-btn {
-  font-size: 10px !important;
+  font-size: 11px !important;
   text-transform: none !important;
   min-width: auto !important;
   height: 22px !important;
@@ -822,31 +822,31 @@ const fundingHistoryHeaders = [
 }
 
 /* Color utilities */
-.clr-green { color: #26FAB0 !important; }
-.clr-red { color: #F6465D !important; }
-.clr-yellow { color: #F0B90B !important; }
-.clr-orange { color: #FFA726 !important; }
+.clr-green { color: var(--g-success) !important; }
+.clr-red { color: var(--g-error) !important; }
+.clr-yellow { color: var(--g-warning) !important; }
+.clr-orange { color: var(--g-warning) !important; }
 
 .fw-600 { font-weight: 600; }
 
-.font-mono { font-family: 'JetBrains Mono', 'Fira Code', monospace; }
+.font-mono { font-family: var(--g-font-mono); }
 
 .roe-pct {
-  font-size: 10px;
+  font-size: 11px;
   opacity: 0.8;
 }
 
 .form-value {
   font-size: 11px;
   font-weight: 600;
-  color: #eaecef;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  color: var(--g-text-1);
+  font-family: var(--g-font-mono);
 }
 
 /* ── Expanded row ── */
 .expanded-cell {
   padding: 8px 12px !important;
-  background: rgba(255, 255, 255, 0.02) !important;
+  background: var(--g-raised) !important;
   height: auto !important;
 }
 
@@ -857,11 +857,9 @@ const fundingHistoryHeaders = [
 }
 
 .expanded-title {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #5e6673;
+  color: var(--g-text-3);
 }
 
 .expanded-grid {
@@ -877,18 +875,16 @@ const fundingHistoryHeaders = [
 }
 
 .expanded-label {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #5e6673;
+  color: var(--g-text-3);
 }
 
 .expanded-value {
   font-size: 11px;
   font-weight: 600;
-  color: #eaecef;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  color: var(--g-text-1);
+  font-family: var(--g-font-mono);
 }
 
 /* ── Responsive — narrow widths ── */

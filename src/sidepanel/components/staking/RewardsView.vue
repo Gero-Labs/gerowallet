@@ -86,14 +86,14 @@ function formatPool(poolId?: string): string {
   align-items: center;
   gap: 12px;
   padding: 12px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid var(--g-hairline-1);
 }
 
 .reward-icon {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--chain-primary) 16%, transparent);
+  background: color-mix(in srgb, var(--g-accent) 16%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;

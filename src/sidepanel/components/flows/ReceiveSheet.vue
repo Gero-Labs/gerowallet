@@ -115,17 +115,15 @@ function copyAddress() {
 }
 
 .qr-wrapper {
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-radius: 16px;
+  background: var(--g-raised);
+  border-radius: var(--g-r-sheet);
   padding: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--g-hairline-1);
 }
 
 .qr-wrapper canvas {
   display: block;
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
 }
 
 .address-section {
@@ -134,25 +132,23 @@ function copyAddress() {
 }
 
 .address-box {
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-radius: 12px;
+  background: var(--g-raised);
+  border-radius: var(--g-r-card);
   padding: 12px 16px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--g-hairline-1);
   transition: border-color 0.2s;
 }
 
 .address-box:hover {
-  border-color: var(--chain-primary);
+  border-color: var(--g-accent);
 }
 
 .address-text {
-  color: #e0e0e0;
+  color: var(--g-text-2);
   font-size: 12px;
   word-break: break-all;
   line-height: 1.5;

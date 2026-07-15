@@ -1,13 +1,13 @@
 <template>
   <div class="ls-card liquid-glass">
     <div class="card-header">
-      <v-icon size="14" color="white" class="mr-1">mdi-calendar-clock</v-icon>
+      <v-icon size="14" color="var(--g-text-1)" class="mr-1">mdi-calendar-clock</v-icon>
       <span>{{ $t('poolOperator.leaderSchedule') }}</span>
-      <v-progress-circular v-if="loading" indeterminate size="10" width="1" color="#FDB022" class="ml-2" />
+      <v-progress-circular v-if="loading" indeterminate size="10" width="1" color="warning" class="ml-2" />
     </div>
 
     <div v-if="!connected" class="ls-offline">
-      <v-icon small color="rgba(255,255,255,0.3)">mdi-server-off</v-icon>
+      <v-icon small color="var(--g-text-3)">mdi-server-off</v-icon>
       <span>{{ $t('poolOperator.nodeRequiredForSchedule') }}</span>
     </div>
 
@@ -74,7 +74,7 @@
         <div v-if="next && next.slots && next.slots.length" class="ls-slots">
           <div v-for="slot in next.slots" :key="slot.slot" class="ls-slot ls-slot--pending">
             <div class="ls-slot-icon">
-              <v-icon size="10" color="rgba(255,255,255,0.3)">mdi-clock-outline</v-icon>
+              <v-icon size="10" color="var(--g-text-3)">mdi-clock-outline</v-icon>
             </div>
             <div class="ls-slot-info">
               <span class="ls-slot-time">{{ formatSlotTime(slot.timestamp) }}</span>
@@ -113,9 +113,9 @@ function slotClass(slot: any): string {
 }
 
 function slotColor(slot: any): string {
-  if (slot.produced === true) return '#75E0A7';
-  if (slot.produced === false) return '#FDA29B';
-  return '#FDB022';
+  if (slot.produced === true) return 'var(--g-success)';
+  if (slot.produced === false) return 'var(--g-error)';
+  return 'var(--g-warning)';
 }
 
 function slotIcon(slot: any): string {
@@ -158,14 +158,13 @@ function formatSlotTime(timestamp: number): string {
 .ls-card { padding: 14px; }
 
 .card-header {
-  font-size: 11px; font-weight: 600; color: white;
-  text-transform: uppercase; letter-spacing: 0.5px;
+  font-size: 11px; font-weight: 600; color: var(--g-text-1);
   display: flex; align-items: center; margin-bottom: 12px;
 }
 
 .ls-offline {
   display: flex; align-items: center; gap: 8px;
-  font-size: 12px; color: rgba(255,255,255,0.4);
+  font-size: 12px; color: var(--g-text-3);
   padding: 12px 0;
 }
 
@@ -176,27 +175,27 @@ function formatSlotTime(timestamp: number): string {
   display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;
 }
 
-.ls-epoch-label { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.6); }
-.ls-epoch-num { font-size: 11px; color: rgba(255,255,255,0.4); font-variant-numeric: tabular-nums; }
+.ls-epoch-label { font-size: 12px; font-weight: 600; color: var(--g-text-2); }
+.ls-epoch-num { font-size: 11px; color: var(--g-text-3); font-variant-numeric: tabular-nums; }
 
 .ls-epoch-stats { display: flex; gap: 14px; align-items: baseline; }
 .ls-stat { display: flex; align-items: baseline; gap: 3px; }
 
-.ls-val { font-size: 20px; font-weight: 800; color: rgba(255,255,255,0.95); font-variant-numeric: tabular-nums; }
-.ls-ok { color: #75E0A7; }
-.ls-err { color: #FDA29B; }
-.ls-accent { color: #FDB022; }
+.ls-val { font-size: 20px; font-weight: 800; color: var(--g-text-1); font-variant-numeric: tabular-nums; }
+.ls-ok { color: var(--g-success); }
+.ls-err { color: var(--g-error); }
+.ls-accent { color: var(--g-warning); }
 
-.ls-lbl { font-size: 10px; color: rgba(255,255,255,0.4); }
-.ls-empty { font-size: 16px; color: rgba(255,255,255,0.15); padding: 4px 0; }
+.ls-lbl { font-size: 11px; color: var(--g-text-3); }
+.ls-empty { font-size: 16px; color: var(--g-text-3); padding: 4px 0; }
 
-.ls-vdivider { width: 1px; background: rgba(255,255,255,0.06); margin: 0 20px; align-self: stretch; }
+.ls-vdivider { width: 1px; background: var(--g-hairline-1); margin: 0 20px; align-self: stretch; }
 
 /* Slot timeline */
 .ls-slots {
   margin-top: 10px;
   padding-top: 8px;
-  border-top: 1px solid rgba(255,255,255,0.04);
+  border-top: 1px solid var(--g-hairline-1);
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -205,23 +204,23 @@ function formatSlotTime(timestamp: number): string {
 }
 
 .ls-slots::-webkit-scrollbar { width: 3px; }
-.ls-slots::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+.ls-slots::-webkit-scrollbar-thumb { background: var(--g-hairline-2); border-radius: 4px; }
 
 .ls-slot {
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 4px 6px;
-  border-radius: 6px;
+  border-radius: var(--g-r-control);
   background: rgba(255,255,255,0.02);
   transition: background 0.15s;
 }
 
 .ls-slot:hover { background: rgba(255,255,255,0.05); }
 
-.ls-slot--produced { border-left: 2px solid #75E0A7; }
-.ls-slot--missed { border-left: 2px solid #FDA29B; }
-.ls-slot--pending { border-left: 2px solid rgba(253,176,34,0.4); }
+.ls-slot--produced { border-left: 2px solid var(--g-success); }
+.ls-slot--missed { border-left: 2px solid var(--g-error); }
+.ls-slot--pending { border-left: 2px solid var(--g-warning-line); }
 
 .ls-slot-icon { flex-shrink: 0; display: flex; align-items: center; }
 
@@ -231,28 +230,27 @@ function formatSlotTime(timestamp: number): string {
 }
 
 .ls-slot-time {
-  font-family: 'Roboto Mono', monospace;
+  font-family: var(--g-font-mono);
   font-size: 11px;
-  color: rgba(255,255,255,0.7);
+  color: var(--g-text-2);
   white-space: nowrap;
 }
 
 .ls-slot-block {
-  font-family: 'Roboto Mono', monospace;
-  font-size: 10px;
-  color: rgba(255,255,255,0.4);
+  font-family: var(--g-font-mono);
+  font-size: 11px;
+  color: var(--g-text-3);
 }
 
 .ls-slot-status {
-  font-size: 9px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.3px;
+  font-size: 11px; font-weight: 600;
   white-space: nowrap;
   flex-shrink: 0;
 }
 
-.ls-st-produced { color: #75E0A7; }
-.ls-st-missed { color: #FDA29B; }
-.ls-st-pending { color: rgba(253,176,34,0.6); }
+.ls-st-produced { color: var(--g-success); }
+.ls-st-missed { color: var(--g-error); }
+.ls-st-pending { color: var(--g-warning); }
 
 @media (max-width: 500px) {
   .ls-row { flex-direction: column; }

@@ -3,8 +3,8 @@
     <v-form ref="form" v-model="valid">
       <!-- Core Parameters -->
       <div class="form-section">
-        <div class="section-label">
-          <v-icon x-small color="rgba(255,255,255,0.5)" class="mr-1">mdi-tune</v-icon>
+        <div class="section-label t-label">
+          <v-icon x-small color="var(--g-text-3)" class="mr-1">mdi-tune</v-icon>
           {{ $t('poolOperator.coreParameters') }}
         </div>
         <div class="param-grid">
@@ -42,8 +42,8 @@
 
       <!-- Metadata -->
       <div class="form-section">
-        <div class="section-label">
-          <v-icon x-small color="white" class="mr-1">mdi-tag-text-outline</v-icon>
+        <div class="section-label t-label">
+          <v-icon x-small color="var(--g-text-1)" class="mr-1">mdi-tag-text-outline</v-icon>
           {{ $t('poolOperator.poolMetadata') }}
         </div>
         <MetadataEditor v-model="metadata" />
@@ -51,8 +51,8 @@
 
       <!-- Relays -->
       <div class="form-section">
-        <div class="section-label">
-          <v-icon x-small color="rgba(255,255,255,0.5)" class="mr-1">mdi-access-point-network</v-icon>
+        <div class="section-label t-label">
+          <v-icon x-small color="var(--g-text-3)" class="mr-1">mdi-access-point-network</v-icon>
           {{ $t('poolOperator.relays') }}
         </div>
         <RelayEditor v-model="relays" />
@@ -60,10 +60,10 @@
 
       <!-- Submit -->
       <v-btn
-        color="#2DF0F7"
+        color="var(--g-accent)"
         block
         class="mt-2 black--text font-weight-bold"
-        style="border-radius: 10px; text-transform: none; letter-spacing: normal"
+        style="border-radius: var(--g-r-control); text-transform: none; letter-spacing: normal"
         :disabled="!valid"
         :loading="regLoading"
         @click="buildTransaction()"
@@ -72,7 +72,7 @@
         {{ isUpdate ? $t('poolOperator.updatePool') : $t('poolOperator.registerPool') }}
       </v-btn>
       <div v-if="!isUpdate" class="deposit-note">
-        <v-icon x-small color="rgba(255,255,255,0.5)" class="mr-1">mdi-information-outline</v-icon>
+        <v-icon x-small color="var(--g-text-3)" class="mr-1">mdi-information-outline</v-icon>
         {{ $t('poolOperator.depositNote') }}
       </div>
     </v-form>
@@ -166,11 +166,6 @@ function onSigned() {
 }
 
 .section-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: rgba(255,255,255,0.4);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
   margin-bottom: 10px;
   display: flex;
   align-items: center;
@@ -189,14 +184,14 @@ function onSigned() {
 }
 
 .param-hint {
-  font-size: 10px;
-  color: rgba(255,255,255,0.45);
+  font-size: 11px;
+  color: var(--g-text-3);
   margin-top: 6px;
 }
 
 .deposit-note {
   font-size: 11px;
-  color: rgba(255,255,255,0.5);
+  color: var(--g-text-3);
   text-align: center;
   margin-top: 10px;
   display: flex;
@@ -205,16 +200,16 @@ function onSigned() {
 }
 
 .glass-input >>> .v-input__slot {
-  background: rgba(255,255,255,0.04) !important;
-  border-color: rgba(255,255,255,0.08) !important;
+  background: var(--g-raised) !important;
+  border-color: var(--g-hairline-1) !important;
 }
 
 .glass-input >>> .v-input__slot:hover {
-  border-color: rgba(255,255,255,0.15) !important;
+  border-color: var(--g-hairline-3) !important;
 }
 
 .glass-input >>> .v-text-field__suffix {
-  color: rgba(255,255,255,0.5);
+  color: var(--g-text-3);
   font-size: 12px;
 }
 </style>

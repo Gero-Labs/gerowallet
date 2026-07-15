@@ -32,7 +32,7 @@
                 ref="passwordField"
                 :value="spendingPassword"
                 @input="spendingPassword = $event"
-                dense outlined hide-details
+                dense outlined hide-details="auto"
                 :placeholder="$t('navigation.typeYourSpendingPassword')"
                 :label="$t('wallet.spendingPassword')"
                 :rules="[rules.required()]"
@@ -78,7 +78,7 @@
 
             <!-- Decline / Sign -->
             <v-col :cols="isPrfWallet ? 12 : 6">
-              <v-btn block outlined color="red" style="text-transform: capitalize;" @click="decline" :disabled="loading">
+              <v-btn block outlined color="error" style="text-transform: capitalize;" @click="decline" :disabled="loading">
                 {{ $t('common.decline') }}
               </v-btn>
             </v-col>
@@ -144,7 +144,7 @@ import { UR } from '@keystonehq/keystone-sdk';
 
 const { t } = useTranslation();
 const vmProxy = getCurrentInstance()!.proxy;
-const { loggedWallet, config } = toRefs(walletStore);
+const { loggedWallet } = toRefs(walletStore);
 
 const form = ref(null);
 const valid = ref(false);
@@ -385,14 +385,14 @@ const decodePsbt = async (psbtHex: string, options: any) => {
 };
 
 onMounted(async () => {
-  const useSidePanel = config.value?.useSidePanel;
-  if (useSidePanel) {
-    const params = new URLSearchParams(window.location.href);
-    const tabId = Number(params.get('tabId'));
-    controller.value = Messaging.createInternalSidePanelController(tabId);
-  } else {
-    controller.value = Messaging.createInternalController();
-  }
+  // This view is only ever opened inside a standalone popup window (see the
+  // BITCOIN_METHOD.signPsbt(s) popup fallback in background.ts, which always
+  // targets index.html) — never inside the side panel, which renders
+  // DAppOverlay.vue instead. It must always speak the popup port protocol.
+  // It used to branch on the now-retired Prompt Display Mode setting
+  // instead, which connected the wrong port name and hung forever whenever
+  // this fallback view was reached.
+  controller.value = Messaging.createInternalController();
 
   try {
     request.value = await controller.value.requestData();

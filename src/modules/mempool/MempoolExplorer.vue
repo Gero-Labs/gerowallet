@@ -26,12 +26,12 @@
             class="fee-indicator mx-auto mb-2"
             :style="{ background: rate.color + '18', borderColor: rate.color + '40' }"
           >
-            <span class="font-weight-bold" :style="{ color: rate.color, fontSize: '17px' }">
+            <span class="font-weight-bold" :style="{ color: rate.color, fontSize: '16px' }">
               {{ fees ? fees[rate.key] : '—' }}
             </span>
           </div>
           <div class="text-caption font-weight-medium" style="font-size: 11px;">{{ rate.label }}</div>
-          <div class="text-caption text--secondary" style="font-size: 10px; opacity: 0.65;">sat/vB · {{ rate.time }}</div>
+          <div class="text-caption text--secondary" style="font-size: 11px;">sat/vB · {{ rate.time }}</div>
         </v-card>
       </v-col>
     </v-row>
@@ -41,11 +41,11 @@
       <v-col cols="12" sm="4" class="pa-1">
         <v-card outlined class="liquid-glass pa-3 stat-card">
           <div class="d-flex align-center" style="gap: 10px;">
-            <div class="stat-icon-wrapper" style="background: rgba(251,140,0,0.12);">
-              <v-icon size="16" color="#fb8c00">mdi-clock-outline</v-icon>
+            <div class="stat-icon-wrapper" style="background: var(--g-warning-fill);">
+              <v-icon size="16" color="warning">mdi-clock-outline</v-icon>
             </div>
             <div>
-              <div class="text-caption text--secondary" style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;">
+              <div class="t-label text--secondary">
                 {{ $t('mempool.pendingTxs') }}
               </div>
               <div class="text-body-1 font-weight-bold">
@@ -58,11 +58,11 @@
       <v-col cols="12" sm="4" class="pa-1">
         <v-card outlined class="liquid-glass pa-3 stat-card">
           <div class="d-flex align-center" style="gap: 10px;">
-            <div class="stat-icon-wrapper" style="background: rgba(30,136,229,0.12);">
-              <v-icon size="16" color="#1e88e5">mdi-harddisk</v-icon>
+            <div class="stat-icon-wrapper" style="background: color-mix(in srgb, var(--g-info) 12%, transparent);">
+              <v-icon size="16" color="info">mdi-harddisk</v-icon>
             </div>
             <div>
-              <div class="text-caption text--secondary" style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;">
+              <div class="t-label text--secondary">
                 {{ $t('mempool.mempoolSize') }}
               </div>
               <div class="text-body-1 font-weight-bold">
@@ -79,7 +79,7 @@
               <v-icon size="16" color="#F7931A">mdi-bitcoin</v-icon>
             </div>
             <div>
-              <div class="text-caption text--secondary" style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;">
+              <div class="t-label text--secondary">
                 {{ $t('mempool.totalFees') }}
               </div>
               <div class="text-body-1 font-weight-bold">
@@ -120,7 +120,7 @@
           <span>{{ bucket.fee }} sat/vB · {{ formatVsize(bucket.vsize) }}</span>
         </v-tooltip>
       </div>
-      <div class="text-caption text--secondary mt-2 text-center" style="opacity: 0.5;">
+      <div class="text-caption text--secondary mt-2 text-center">
         {{ $t('mempool.feeRateSatVb') }}
       </div>
     </v-card>
@@ -337,7 +337,7 @@ onMounted(() => refresh());
 .page-icon-wrapper {
   width: 42px;
   height: 42px;
-  border-radius: 12px;
+  border-radius: var(--g-r-card);
   background: rgba(247, 147, 26, 0.12);
   display: flex;
   align-items: center;
@@ -346,7 +346,7 @@ onMounted(() => refresh());
 }
 
 .fee-rate-card {
-  border-radius: 10px !important;
+  border-radius: var(--g-r-control) !important;
   transition: transform 0.15s ease;
 }
 
@@ -357,7 +357,7 @@ onMounted(() => refresh());
 .fee-indicator {
   width: 52px;
   height: 52px;
-  border-radius: 10px;
+  border-radius: var(--g-r-control);
   border: 1px solid;
   display: flex;
   align-items: center;
@@ -365,13 +365,13 @@ onMounted(() => refresh());
 }
 
 .stat-card {
-  border-radius: 10px !important;
+  border-radius: var(--g-r-control) !important;
 }
 
 .stat-icon-wrapper {
   width: 34px;
   height: 34px;
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -379,7 +379,7 @@ onMounted(() => refresh());
 }
 
 .block-card {
-  border-radius: 10px !important;
+  border-radius: var(--g-r-control) !important;
   transition: transform 0.15s ease;
 }
 
@@ -390,7 +390,7 @@ onMounted(() => refresh());
 .block-icon-wrapper {
   width: 34px;
   height: 34px;
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
   background: rgba(247, 147, 26, 0.12);
   display: flex;
   align-items: center;
@@ -400,7 +400,7 @@ onMounted(() => refresh());
 
 .tx-result-row {
   padding: 4px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid var(--g-hairline-1);
 }
 
 .fee-histogram {
@@ -423,7 +423,7 @@ onMounted(() => refresh());
 
 .histogram-bar {
   width: 12px;
-  border-radius: 3px 3px 0 0;
+  border-radius: 4px 4px 0 0;
   min-height: 4px;
   transition: height 0.3s ease, opacity 0.15s ease;
   opacity: 0.8;
@@ -434,8 +434,8 @@ onMounted(() => refresh());
 }
 
 .histogram-label {
-  font-size: 8px;
-  color: rgba(255,255,255,0.4);
+  font-size: 11px;
+  color: var(--g-text-3);
   margin-top: 2px;
   transform: rotate(-60deg);
   transform-origin: top left;

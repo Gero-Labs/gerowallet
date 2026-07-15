@@ -1,14 +1,12 @@
 <template>
   <div class="google-btn-container">
     <GButton
+      tier="secondary"
       block
-      outlined
-      color="black"
       class="google-btn"
-      large
       @click="googleLogin"
       :loading="loadingGoogleLogin"
-      :disabled="!props.selectedNetwork?.zkFoldSupport"
+      :disabled="!props.selectedNetwork?.zkSmartWalletSupport"
     >
       <v-avatar size="24" class="mr-2">
         <v-img :src="google" />
@@ -19,7 +17,7 @@
         outlined
         x-small
         class="px-1 ml-2"
-        v-if="!props.selectedNetwork?.zkFoldSupport"
+        v-if="!props.selectedNetwork?.zkSmartWalletSupport"
       >Soon</v-chip>
     </GButton>
 
@@ -129,14 +127,10 @@ const submitLogin = async (walletId: string): Promise<void> => {
 .google-btn-container{
   width: 100%;
 }
+/* Surface, border, radius, case and tracking come from GButton's secondary
+   tier; only the layout and the deliberate de-emphasis stay local. */
 .google-btn {
-  margin-top: 16px;
-  background-color: black;
-  text-transform: none;
-  border-color: #373a41;
-  color: white;
-  letter-spacing: normal;
-  border-radius: 8px;
+  margin-top: var(--g-s-4);
   opacity: 0.7;
 }
 </style>

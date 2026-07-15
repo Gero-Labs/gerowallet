@@ -35,13 +35,13 @@
         <div class="pb-3">
           <div class="d-flex align-center" style="gap: 8px">
             <span class="text-h5 font-weight-bold">{{ displayPrice }}</span>
-            <v-chip
-              x-small
-              :color="token.change24h >= 0 ? '#1b5e20' : '#b71c1c'"
-              :text-color="token.change24h >= 0 ? '#47CD89' : '#F97066'"
+            <span
+              class="g-num"
+              :class="token.change24h >= 0 ? 'delta-up' : 'delta-down'"
+              style="font-size: 13px; font-weight: 550;"
             >
-              {{ token.change24h >= 0 ? '+' : '-' }}{{ formatChange(token.change24h) }}
-            </v-chip>
+              {{ formatSignedChange(token.change24h) }}
+            </span>
           </div>
           <div class="text--secondary text-caption mt-1">{{ secondaryPrice }}</div>
 
@@ -58,7 +58,7 @@
         </div>
 
         <!-- Chart Section -->
-        <div class="pb-2">
+        <div class="pb-2 chart-shell">
           <!-- Timeframe + Indicators bar -->
           <div class="d-flex align-center mb-1" style="gap: 6px">
             <div class="timeframe-bar">
@@ -98,7 +98,7 @@
           </div>
           <template v-else>
             <div v-if="staleDataWarning" class="stale-warning">
-              <v-icon x-small color="rgba(253,176,34,0.7)" class="mr-1">mdi-alert-outline</v-icon>
+              <v-icon x-small color="warning" class="mr-1">mdi-alert-outline</v-icon>
               {{ staleDataWarning }}
             </div>
             <TechnicalAnalysisChart
@@ -142,12 +142,13 @@
         <transition name="tab-fade" mode="out-in">
         <div v-if="rightTab === 'swap'" key="swap">
           <!-- GeroSwapEmbed (Cardano DEX only) -->
-          <GeroSwapEmbed
-            v-if="!isApex && token.unit !== 'lovelace'"
-            :token-out="token.unit"
-            context="dialog"
-            @swap-submitted="onSwapComplete"
-          />
+          <div v-if="!isApex && token.unit !== 'lovelace'" class="swap-shell">
+            <GeroSwapEmbed
+              :token-out="token.unit"
+              context="dialog"
+              @swap-submitted="onSwapComplete"
+            />
+          </div>
           <div v-else class="text-center py-4 text--secondary text-caption">
             {{ $t('market.na') }}
           </div>
@@ -166,11 +167,11 @@
           <!-- Policy ID row -->
           <div v-if="tokenPolicyId" class="policy-row mt-2">
             <div class="d-flex align-center" style="gap: 4px">
-              <v-icon x-small :color="token.policyLocked ? '#47CD89' : '#F97066'">
+              <v-icon x-small :color="token.policyLocked ? 'success' : 'error'">
                 {{ token.policyLocked ? 'mdi-lock' : 'mdi-lock-open-variant' }}
               </v-icon>
               <span class="info-label">{{ $t('market.policy') }}</span>
-              <span class="text-caption" :style="{ color: token.policyLocked ? '#47CD89' : '#F97066' }">
+              <span class="text-caption" :style="{ color: token.policyLocked ? 'var(--g-success)' : 'var(--g-error)' }">
                 {{ token.policyLocked ? $t('market.locked') : $t('market.open') }}
               </span>
             </div>
@@ -182,28 +183,28 @@
 
           <!-- P&L Section (if user holds this token) -->
           <div v-if="tokenPnl" class="pnl-section mt-3">
-            <span class="text-caption text--secondary font-weight-medium d-block mb-1">{{ $t('market.pnl') }}</span>
+            <span class="t-label d-block mb-2">{{ $t('market.pnl') }}</span>
             <v-simple-table dense class="transparent stats-table">
               <tbody>
                 <tr>
-                  <td class="text--secondary" style="width: 40%; font-size: 12px; padding: 4px 8px">{{ $t('market.avgCostBasis') }}</td>
-                  <td class="text-right" style="font-size: 12px; padding: 4px 8px">{{ formatPnlValue(tokenPnl.avgCostBasisAda) }}</td>
+                  <td class="pnl-cell-label">{{ $t('market.avgCostBasis') }}</td>
+                  <td class="text-right pnl-cell-value g-num" style="color: var(--g-text-1)">{{ formatPnlValue(tokenPnl.avgCostBasisAda) }}</td>
                 </tr>
                 <tr>
-                  <td class="text--secondary" style="width: 40%; font-size: 12px; padding: 4px 8px">{{ $t('market.unrealizedPnlDetail') }}</td>
-                  <td class="text-right" :style="{ fontSize: '12px', padding: '4px 8px', color: tokenPnl.unrealizedPnlAda >= 0 ? '#47CD89' : '#F97066' }">
+                  <td class="pnl-cell-label">{{ $t('market.unrealizedPnlDetail') }}</td>
+                  <td class="text-right pnl-cell-value g-num" :style="{ color: tokenPnl.unrealizedPnlAda >= 0 ? 'var(--g-success)' : 'var(--g-error)' }">
                     {{ formatPnlSigned(tokenPnl.unrealizedPnlAda) }}
                   </td>
                 </tr>
                 <tr>
-                  <td class="text--secondary" style="width: 40%; font-size: 12px; padding: 4px 8px">{{ $t('market.realizedPnlDetail') }}</td>
-                  <td class="text-right" :style="{ fontSize: '12px', padding: '4px 8px', color: tokenPnl.realizedPnlAda >= 0 ? '#47CD89' : '#F97066' }">
+                  <td class="pnl-cell-label">{{ $t('market.realizedPnlDetail') }}</td>
+                  <td class="text-right pnl-cell-value g-num" :style="{ color: tokenPnl.realizedPnlAda >= 0 ? 'var(--g-success)' : 'var(--g-error)' }">
                     {{ formatPnlSigned(tokenPnl.realizedPnlAda) }}
                   </td>
                 </tr>
                 <tr>
-                  <td class="text--secondary" style="width: 40%; font-size: 12px; padding: 4px 8px; font-weight: 600">{{ $t('market.totalPnlDetail') }}</td>
-                  <td class="text-right" :style="{ fontSize: '12px', padding: '4px 8px', fontWeight: '600', color: totalPnl >= 0 ? '#47CD89' : '#F97066' }">
+                  <td class="pnl-cell-label pnl-cell-total">{{ $t('market.totalPnlDetail') }}</td>
+                  <td class="text-right pnl-cell-value pnl-cell-total g-num" :style="{ color: totalPnl >= 0 ? 'var(--g-success)' : 'var(--g-error)' }">
                     {{ formatPnlSigned(totalPnl) }}
                   </td>
                 </tr>
@@ -308,7 +309,7 @@ function convertUsd(usdValue: number): number {
 const currencySymbol = computed(() => {
   switch (selectedCurrency.value) {
     case 'NATIVE': return nativeSymbol.value;
-    case 'EUR': return '\u20AC';
+    case 'EUR': return '€';
     case 'USD':
     default: return '$';
   }
@@ -319,7 +320,7 @@ const displayPrice = computed(() => {
   const tok = props.token;
   switch (selectedCurrency.value) {
     case 'NATIVE': return formatPrice(tok.priceAda, nativeSymbol.value);
-    case 'EUR': return formatPrice(tok.price * (usdToEurRate.value || 1), '\u20AC');
+    case 'EUR': return formatPrice(tok.price * (usdToEurRate.value || 1), '€');
     case 'USD':
     default: return formatPrice(tok.price, '$');
   }
@@ -487,7 +488,7 @@ function formatPnlSigned(adaValue: number): string {
   return sign + currencySymbol.value + converted.toFixed(2);
 }
 
-import { formatPriceRaw, formatPrice, formatCompact, formatChange } from '@/modules/market/utils/formatters';
+import { formatPriceRaw, formatPrice, formatCompact, formatSignedChange } from '@/modules/market/utils/formatters';
 
 function openExplorer() {
   const fingerprint = props.token.fingerprint;
@@ -522,17 +523,29 @@ watch(selectedCurrency, () => {
   bottom: 0;
   /* 70% of content area (viewport minus 270px nav drawer) */
   width: calc(70 * (100vw - 270px) / 100);
-  z-index: 10;
-  background: rgba(12, 14, 18, 0.65) !important;
-  backdrop-filter: blur(24px) saturate(1.6);
-  -webkit-backdrop-filter: blur(24px) saturate(1.6);
-  border-left: 1px solid rgba(255, 255, 255, 0.10) !important;
-  border-radius: 0 12px 12px 0;
+  z-index: var(--g-z-sticky);
+  /* Darker surface so the chart / swap / info cards read as RAISED above the
+     drawer frame (they were all the same overlay tone = flat). */
+  background: var(--g-surface) !important;
+  border-left: 1px solid var(--g-hairline-2) !important;
+  border-radius: 0 var(--g-r-card) var(--g-r-card) 0;
   overflow: hidden;
-  box-shadow:
-    inset 1px 0 0 rgba(255, 255, 255, 0.06),
-    -8px 0 32px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--g-shadow-sheet);
   animation: panelSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Raised card wrappers give the chart and the swap widget depth against the
+   darker drawer frame. */
+.chart-shell,
+.swap-shell {
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-card);
+  padding: 10px;
+}
+
+.chart-shell {
+  margin-top: 4px;
 }
 
 @keyframes panelSlideIn {
@@ -557,7 +570,7 @@ watch(selectedCurrency, () => {
   flex: 6;
   overflow-y: auto;
   padding: 0 16px 16px;
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  border-right: 1px solid var(--g-hairline-1);
   scroll-behavior: smooth;
 }
 
@@ -573,7 +586,7 @@ watch(selectedCurrency, () => {
   display: flex;
   align-items: center;
   gap: 1px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--g-hairline-1);
   border-radius: 4px;
   padding: 1px;
 }
@@ -582,40 +595,40 @@ watch(selectedCurrency, () => {
   font-size: 11px;
   font-weight: 500;
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: 4px;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--g-text-3);
   user-select: none;
   transition: color 0.15s, background 0.15s;
 }
 
 .tf-btn:hover {
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--g-text-2);
 }
 
 .tf-btn.active {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.12);
+  color: var(--g-text-1);
+  background: var(--g-hairline-2);
 }
 
 .ind-btn {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   padding: 2px 5px;
-  border-radius: 3px;
+  border-radius: 4px;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--g-text-3);
   user-select: none;
   transition: color 0.15s, background 0.15s;
 }
 
 .ind-btn:hover {
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--g-text-2);
 }
 
 .ind-btn.active {
-  color: #90caf9;
-  background: rgba(144, 202, 249, 0.1);
+  color: var(--g-info);
+  background: var(--g-hairline-2);
 }
 
 /* ═══ Token info grid ═══ */
@@ -628,36 +641,45 @@ watch(selectedCurrency, () => {
 .info-item {
   display: flex;
   flex-direction: column;
-  padding: 6px 8px;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 6px;
-  transition: background 0.2s ease;
+  gap: 2px;
+  padding: 7px 9px;
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
+  transition: border-color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease;
 }
 
 .info-item:hover {
-  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--g-hairline-2);
+  background: var(--g-overlay);
 }
 
+/* Label is the quiet tier; the value is the bright answer. The tone gap is the
+   hierarchy - without it the tile reads as one flat block of mid-grey. */
 .info-label {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.4);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--g-text-3);
 }
 
 .info-value {
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--g-text-1);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ═══ Policy row ═══ */
 .policy-row {
   padding: 6px 8px;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 6px;
+  background: var(--g-hairline-1);
+  border-radius: var(--g-r-control);
 }
 
 .policy-id {
   font-size: 11px;
-  font-family: monospace;
+  font-family: var(--g-font-mono);
   word-break: break-all;
   cursor: pointer;
   opacity: 0.6;
@@ -670,12 +692,31 @@ watch(selectedCurrency, () => {
 
 /* ═══ P&L / Stats ═══ */
 .pnl-section {
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--g-hairline-1);
   padding-top: 12px;
 }
 
+/* Label muted, value bright/tabular - the same tone hierarchy as the info grid.
+   Scoped under .stats-table td so they beat Vuetify's cell padding on
+   specificity alone (no override flag needed). */
+.stats-table td.pnl-cell-label {
+  width: 40%;
+  font-size: 12px;
+  padding: 5px 8px;
+  color: var(--g-text-3);
+}
+.stats-table td.pnl-cell-value {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 5px 8px;
+}
+.stats-table td.pnl-cell-total {
+  font-weight: 700;
+  color: var(--g-text-1);
+}
+
 .stats-table >>> td {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
+  border-bottom: 1px solid var(--g-hairline-1) !important;
 }
 
 .stats-table >>> tr:last-child td {
@@ -734,8 +775,8 @@ watch(selectedCurrency, () => {
   display: flex;
   align-items: center;
   gap: 2px;
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 6px;
+  background: var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   padding: 2px;
   width: fit-content;
 }
@@ -746,23 +787,23 @@ watch(selectedCurrency, () => {
   padding: 3px 10px;
   border-radius: 4px;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--g-text-3);
   user-select: none;
   transition: color 0.15s, background 0.15s;
 }
 
 .currency-pill:hover {
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--g-text-2);
 }
 
 .currency-pill.active {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.12);
+  color: var(--g-text-1);
+  background: var(--g-hairline-2);
 }
 
 .chart-no-data {
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.15);
+  border-radius: var(--g-r-control);
+  border: 1px solid var(--g-hairline-1);
+  background: var(--g-surface);
 }
 </style>

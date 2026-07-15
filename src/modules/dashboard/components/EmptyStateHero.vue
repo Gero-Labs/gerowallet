@@ -1,279 +1,95 @@
 <template>
-  <v-card
-    flat
-    class="empty-state-hero liquid-glass"
-    :style="{
-      minHeight: '400px',
-      position: 'relative',
-      overflow: 'hidden'
-    }"
-  >
+  <div class="es-root">
 
-    <!-- Content container -->
-    <v-card-text class="hero-content">
-      <!-- Welcome message -->
-      <div class="welcome-section">
-        <h1 class="hero-title">
-          {{ isNewUser ? $t('common.welcomeToGeroDashboard') : $t('dashboard.emptyWallet') }}
-        </h1>
+    <!-- Backup: an emphasized ledger annotation. Mono, amber, unmissable. -->
+    <button
+      v-if="shouldBackup && !isBackupComplete"
+      type="button"
+      class="es-backup g-mono es-reveal"
+      style="--es-d: 0ms"
+      @click="$emit('backup-wallet')"
+    >
+      <span class="es-backup__badge">!</span>
+      <span class="es-backup__text">
+        <span class="es-backup__title">{{ $t('dashboard.backupStripTitle') }}</span>
+        <span class="es-backup__body"> · {{ $t('dashboard.backupStripBody') }}</span>
+      </span>
+      <span class="es-backup__cta">{{ $t('dashboard.backupStripCta') }} →</span>
+    </button>
 
-        <p class="hero-subtitle">
-          {{ subtitle }}
-        </p>
+    <!-- ═══ The first page of the ledger ═══ -->
+    <section class="es-reveal" style="--es-d: 60ms">
+      <p class="es-eyebrow g-mono">{{ $t('dashboard.totalBalance') }}</p>
+      <h1 class="es-balance g-num">
+        <span class="es-balance__cur">{{ currencySymbol }}</span><span class="es-balance__zero">0.00</span>
+      </h1>
+      <p class="es-statement">
+        {{ $t('dashboard.emptyStatement') }} <em>{{ $t('dashboard.emptyStatementYet') }}</em>
+      </p>
+      <div class="es-ctas">
+        <v-btn v-if="buySupported" large class="geroButton es-cta" @click="$emit('buy-crypto')">
+          {{ $t('dashboard.buy') }} {{ currencyTicker }}
+        </v-btn>
+        <v-btn large outlined class="es-cta es-cta--ghost" @click="$emit('show-receive')">
+          {{ $t('dashboard.receiveAction') }}
+        </v-btn>
       </div>
+    </section>
 
-      <!-- Backup reminder/status for empty wallets - Full Width -->
-      <div class="backup-section mt-6 backup-container" v-if="shouldBackup || isBackupComplete">
-        <v-card class="backup-card liquid-glass-subtle">
-          <v-card-text class="pa-4 pb-3">
-            <div class="d-flex align-center mb-3">
-              <v-icon
-                :color="isBackupComplete ? 'success' : primaryColor"
-                class="mr-3"
-                size="32"
-              >
-                {{ isBackupComplete ? 'mdi-shield-check-outline' : 'mdi-shield-check' }}
-              </v-icon>
-              <div>
-                <h3 class="backup-title mb-1">
-                  {{ isBackupComplete ? $t('dashboard.walletSecured') : $t('dashboard.secureYourWallet') }}
-                </h3>
-                <p class="backup-subtitle mb-0">
-                  {{ isBackupComplete
-                    ? $t('dashboard.seedPhraseBackedUp')
-                    : $t('dashboard.backupSeedPhrase')
-                  }}
-                </p>
-              </div>
-            </div>
-
-            <!-- Show different content based on backup status -->
-            <template v-if="!isBackupComplete">
-              <v-alert
-                type="error"
-                text
-                class="mb-3 backup-alert"
-              >
-                {{ $t('dashboard.seedPhraseRecoveryWarning') }}
-              </v-alert>
-
-              <div class="text-center">
-                <v-btn
-                  :color="primaryColor"
-                  @click="$emit('backup-wallet')"
-                  class="backup-btn"
-                >
-                  <v-icon left small>mdi-key</v-icon>
-                  {{ $t('dashboard.backupSeed') }}
-                </v-btn>
-                <p class="mt-1 mb-0 text-caption backup-help-text">
-                  {{ $t('dashboard.quickAndSecure') }}
-                </p>
-              </div>
-            </template>
-
-            <!-- Completed state -->
-            <template v-else>
-              <v-alert
-                type="success"
-                text
-                class="mb-0 backup-alert"
-                :icon="false"
-              >
-                {{ $t('dashboard.greatJobProtected') }}
-              </v-alert>
-            </template>
-          </v-card-text>
-        </v-card>
+    <!-- ═══ The index: numbered funding paths, hairline rules, no cards ═══ -->
+    <section class="es-reveal" style="--es-d: 160ms">
+      <p class="es-eyebrow g-mono">{{ $t('dashboard.fundWaysTitle') }}</p>
+      <div class="es-index">
+        <button
+          v-for="(row, idx) in fundingRows"
+          :key="row.key"
+          type="button"
+          class="es-row"
+          @click="row.go()"
+        >
+          <span class="es-row__num g-mono">{{ String(idx + 1).padStart(2, '0') }}</span>
+          <span class="es-row__main">
+            <span class="es-row__title">{{ $t(row.title) }}</span>
+            <span class="es-row__desc">{{ $t(row.desc, { ticker: currencyTicker, blockchain }) }}</span>
+          </span>
+          <span class="es-row__meta">
+            <span v-if="row.tag" class="es-row__tag g-mono">{{ $t(row.tag) }}</span>
+            <span
+              v-if="row.key === 'exchange' && truncatedAddress"
+              class="es-row__addr g-mono"
+              role="button"
+              :title="$t('dashboard.copyAddress')"
+              @click.stop="copyToClipboard"
+            >
+              {{ copiedFeedback ? $t('dashboard.copied') : truncatedAddress }}
+              <v-icon size="12" color="var(--g-text-3)">{{ copiedFeedback ? 'mdi-check' : 'mdi-content-copy' }}</v-icon>
+            </span>
+            <v-icon size="17" class="es-row__arrow">mdi-arrow-right</v-icon>
+          </span>
+        </button>
       </div>
+    </section>
 
+    <!-- ═══ Footnote: what the funds unlock ═══ -->
+    <section v-if="perks.length" class="es-footnote es-reveal" style="--es-d: 260ms">
+      <p class="es-eyebrow g-mono es-footnote__label">{{ $t('dashboard.onceFundedTitle') }}</p>
+      <template v-for="(perk, idx) in perks">
+        <button :key="perk.key" type="button" class="es-footnote__link" @click="perk.go()">
+          <v-icon size="14" color="var(--g-accent)">{{ perk.icon }}</v-icon>
+          {{ $t(perk.title) }}
+        </button>
+        <span v-if="idx < perks.length - 1" :key="`dot-${perk.key}`" class="es-footnote__dot">·</span>
+      </template>
+    </section>
 
-      <!-- Feature cards with spanning background -->
-      <v-row class="mt-8 feature-cards-grid" justify="center">
-        <!-- Card 1: Buy Crypto (only for Cardano) -->
-        <v-col cols="12" sm="6" md="4" lg="2" v-if="networks.resolveBuySupported(loggedWallet?.chain, loggedWallet?.network)">
-          <div class="feature-card-container buy-card-emphasized">
-            <div
-              class="feature-card-background card-1"
-              :style="{
-                backgroundImage: `url(${featureBackgroundImage})`,
-                backgroundSize: cardBackgroundSize,
-                backgroundPosition: '0% center',
-                backgroundRepeat: 'no-repeat'
-              }"
-            ></div>
-            <div class="feature-card-glass" @click="$emit('buy-crypto')">
-              <!-- Ray of light effect -->
-              <div class="light-ray"></div>
-              <div class="feature-card-content">
-                <div class="feature-card-main">
-                  <v-icon size="48" :color="primaryColor" class="mb-3">
-                    mdi-credit-card-plus
-                  </v-icon>
-                  <h3 class="feature-title">{{ t('dashboard.buy') }} {{ currencySymbol }}</h3>
-                  <p class="feature-description">{{ t('dashboard.purchaseWithCreditCard') }}</p>
-                </div>
-                <v-chip small :color="primaryColor" text-color="white">
-                  {{ t('dashboard.instant') }}
-                </v-chip>
-              </div>
-            </div>
-          </div>
-        </v-col>
-
-        <!-- Card 2: Receive -->
-        <v-col cols="12" sm="6" md="4" lg="2">
-          <div class="feature-card-container">
-            <div
-              class="feature-card-background card-2"
-              :style="{
-                backgroundImage: `url(${featureBackgroundImage})`,
-                backgroundSize: cardBackgroundSize,
-                backgroundPosition: isApex ? '0% center' : '20% center',
-                backgroundRepeat: 'no-repeat'
-              }"
-            ></div>
-            <div class="feature-card-glass" @click="$emit('show-receive')">
-              <div class="feature-card-content">
-                <div class="feature-card-main">
-                  <v-icon size="48" :color="primaryColor" class="mb-3">
-                    mdi-qrcode
-                  </v-icon>
-                  <h3 class="feature-title">{{ t('dashboard.receiveAction') }}</h3>
-                  <p class="feature-description">{{ t('dashboard.shareYourAddress') }}</p>
-                </div>
-                <v-chip
-                  v-if="walletAddress"
-                  small
-                  :color="copiedFeedback ? 'success' : primaryColor"
-                  text-color="white"
-                  @click.stop="copyToClipboard"
-                >
-                  <v-icon small left>{{ copiedFeedback ? 'mdi-check' : 'mdi-content-copy' }}</v-icon>
-                  {{ copiedFeedback ? t('dashboard.copied') : t('dashboard.copyAddress') }}
-                </v-chip>
-              </div>
-            </div>
-          </div>
-        </v-col>
-
-        <!-- Card 4: Gero Card (only for Cardano) -->
-        <v-col cols="12" sm="6" md="4" lg="2" v-if="networks.resolveGeroCardSupport(loggedWallet?.chain, loggedWallet?.network)">
-          <div class="feature-card-container">
-            <div
-              class="feature-card-background card-4"
-              :style="{
-                backgroundImage: `url(${featureBackgroundImage})`,
-                backgroundSize: cardBackgroundSize,
-                backgroundPosition: '60% center',
-                backgroundRepeat: 'no-repeat'
-              }"
-            />
-            <div class="feature-card-glass" @click="navigateToCard">
-              <div class="feature-card-content">
-                <div class="feature-card-main">
-                  <v-icon size="48" :color="primaryColor" class="mb-3">
-                    mdi-credit-card
-                  </v-icon>
-                  <h3 class="feature-title">{{ t('dashboard.geroCard') }}</h3>
-                  <p class="feature-description">{{ t('dashboard.topUpWithAda') }}</p>
-                </div>
-                <v-chip small :color="primaryColor" text-color="white">
-                  {{ t('dashboard.orderNow') }}
-                </v-chip>
-              </div>
-            </div>
-          </div>
-        </v-col>
-
-        <!-- Card 4/5: Staking Rewards -->
-        <v-col cols="12" sm="6" md="4" lg="2">
-          <div class="feature-card-container">
-            <div
-              class="feature-card-background card-5"
-              :style="{
-                backgroundImage: `url(${featureBackgroundImage})`,
-                backgroundSize: cardBackgroundSize,
-                backgroundPosition: isApex ? '66% center' : '80% center',
-                backgroundRepeat: 'no-repeat'
-              }"
-            />
-            <div class="feature-card-glass" @click="navigateToStaking">
-              <div class="feature-card-content">
-                <div class="feature-card-main">
-                  <v-icon size="48" :color="primaryColor" class="mb-3">
-                    mdi-cash-clock
-                  </v-icon>
-                  <h3 class="feature-title">{{ t('dashboard.stakingRewards') }}</h3>
-                  <p class="feature-description">{{ t('dashboard.earnRewardsByStakingShort') }}</p>
-                </div>
-                <v-chip small :color="primaryColor" text-color="white">
-                  {{ t('dashboard.exploreStaking') }}
-                </v-chip>
-              </div>
-            </div>
-          </div>
-        </v-col>
-
-        <!-- Card 5/6: Cashback (only for Cardano) -->
-        <v-col cols="12" sm="6" md="4" lg="2" v-if="!isApex">
-          <div class="feature-card-container">
-            <div
-              class="feature-card-background card-6"
-              :style="{
-                backgroundImage: `url(${featureBackgroundImage})`,
-                backgroundSize: cardBackgroundSize,
-                backgroundPosition: '100% center',
-                backgroundRepeat: 'no-repeat'
-              }"
-            ></div>
-            <div class="feature-card-glass" @click="navigateToCashback">
-              <div class="feature-card-content">
-                <div class="feature-card-main">
-                  <v-icon size="48" :color="primaryColor" class="mb-3">
-                    mdi-cash-refund
-                  </v-icon>
-                  <h3 class="feature-title">{{ t('dashboard.cashbackAction') }}</h3>
-                  <p class="feature-description">{{ t('dashboard.earnCashbackOnline') }}</p>
-                </div>
-                <v-chip small :color="primaryColor" text-color="white">
-                  {{ t('dashboard.browseDeals') }}
-                </v-chip>
-              </div>
-            </div>
-          </div>
-        </v-col>
-      </v-row>
-
-    </v-card-text>
-
-    <!-- Animated background elements -->
-    <div class="floating-elements">
-      <div
-        v-for="i in 5"
-        :key="i"
-        class="floating-circle"
-        :style="{
-          width: `${Math.random() * 100 + 50}px`,
-          height: `${Math.random() * 100 + 50}px`,
-          left: `${Math.random() * 100}%`,
-          animationDelay: `${Math.random() * 5}s`,
-          animationDuration: `${15 + Math.random() * 10}s`
-        }"
-      ></div>
-    </div>
-  </v-card>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import { toRefs, ref, getCurrentInstance, computed } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain } from '@/models/types';
-import assets from '@/utils/assets';
 import networks from '@/utils/networks';
-
-const { t } = useTranslation();
 
 const { loggedWallet } = toRefs(walletStore);
 const instance = getCurrentInstance();
@@ -286,461 +102,378 @@ interface Props {
   shouldBackup?: boolean;
 }
 
-const props = withDefaults(defineProps<Props>(), {
+withDefaults(defineProps<Props>(), {
   isNewUser: false,
-  showTutorial: true
+  showTutorial: true,
 });
 
-defineEmits([
+const emit = defineEmits([
   'buy-crypto',
   'show-receive',
   'open-learn',
   'start-tutorial',
   'load-sample-data',
-  'backup-wallet'
+  'backup-wallet',
 ]);
 
 const blockchain = computed(() => loggedWallet.value?.chain || 'Blockchain');
 
-const currencySymbol = computed(() => {
-  return networks.resolveCurrencySymbol(loggedWallet.value?.chain, loggedWallet.value?.network);
-});
+const currencySymbol = computed(() =>
+  networks.resolveCurrencySymbol(loggedWallet.value?.chain, loggedWallet.value?.network));
 
-const isApex = computed(() => {
-  return loggedWallet.value?.chain === Blockchain.APEX_PRIME ||
-         loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
-});
+const currencyTicker = computed(() =>
+  networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network));
 
-const primaryColor = computed(() => {
-  return isApex.value ? '#dc753e' : '#00c7f3';
-});
+const buySupported = computed(() =>
+  networks.resolveBuySupported(loggedWallet.value?.chain, loggedWallet.value?.network));
 
-const cardBackgroundSize = computed(() => {
-  // For Apex: 3 cards spanning, for Cardano: 6 cards spanning
-  return isApex.value ? '300% 100%' : '600% 100%';
-});
-
-// Background image for the feature cards spanning effect
-const featureBackgroundImage = computed(() => {
-  return assets.emptyState;
-});
-
-const subtitle = computed(() => {
-  if (props.isNewUser) {
-    return t('dashboard.letsGetYouStarted', { currency: currencySymbol.value, blockchain: blockchain.value });
+// The numbered index. Rows renumber automatically when buy is unsupported.
+const fundingRows = computed(() => {
+  const rows: { key: string; title: string; desc: string; tag?: string; go: () => void }[] = [];
+  if (buySupported.value) {
+    rows.push({
+      key: 'buy', title: 'dashboard.fundBuyTitle', desc: 'dashboard.fundBuyDesc',
+      tag: 'dashboard.fundBuyBadge', go: () => emit('buy-crypto'),
+    });
   }
-  return t('dashboard.addCurrencyToStart', { currency: currencySymbol.value });
+  rows.push({
+    key: 'exchange', title: 'dashboard.fundExchangeTitle', desc: 'dashboard.fundExchangeDesc',
+    go: () => emit('show-receive'),
+  });
+  rows.push({
+    key: 'wallet', title: 'dashboard.fundWalletTitle', desc: 'dashboard.fundWalletDesc',
+    go: () => emit('show-receive'),
+  });
+  return rows;
+});
+
+// Chain-aware footnote links: each renders only where the feature exists.
+const perks = computed(() => {
+  const chain = loggedWallet.value?.chain;
+  const network = loggedWallet.value?.network;
+  const list: { key: string; icon: string; title: string; go: () => void }[] = [];
+  if (networks.resolveStakingSupport(chain, network)) {
+    list.push({
+      key: 'stake', icon: 'mdi-chart-timeline-variant', title: 'dashboard.perkStakeTitle',
+      go: () => router?.push('/staking'),
+    });
+  }
+  if (networks.resolveGeroCardSupport(chain, network)) {
+    list.push({
+      key: 'card', icon: 'mdi-credit-card-outline', title: 'dashboard.perkSpendTitle',
+      go: () => router?.push('/card'),
+    });
+  }
+  if (chain === Blockchain.CARDANO) {
+    list.push({
+      key: 'cashback', icon: 'mdi-cash-refund', title: 'dashboard.perkCashbackTitle',
+      go: () => router?.push('/cashback'),
+    });
+  }
+  return list;
 });
 
 const walletAddress = computed(() => loggedWallet.value?.baseAddress || '');
 
-// Check if wallet backup is complete
+const truncatedAddress = computed(() => {
+  const a = walletAddress.value;
+  if (!a) return '';
+  return a.length > 16 ? `${a.slice(0, 9)}…${a.slice(-5)}` : a;
+});
+
 const isBackupComplete = computed(() => {
-  // Access config directly from reactive store for better reactivity
   const config = walletStore.config;
   return config && 'backup' in config && config.backup === true;
 });
 
-// Copy functionality
 const copiedFeedback = ref(false);
 
 const copyToClipboard = async () => {
   if (!walletAddress.value) return;
-
   try {
     await navigator.clipboard.writeText(walletAddress.value);
-    copiedFeedback.value = true;
-
-    // Reset feedback after 2 seconds
-    setTimeout(() => {
-      copiedFeedback.value = false;
-    }, 2000);
   } catch (err) {
-    console.error('Failed to copy address:', err);
-    // Fallback for older browsers
     const textArea = document.createElement('textarea');
     textArea.value = walletAddress.value;
     document.body.appendChild(textArea);
     textArea.select();
     document.execCommand('copy');
     document.body.removeChild(textArea);
-
-    copiedFeedback.value = true;
-    setTimeout(() => {
-      copiedFeedback.value = false;
-    }, 2000);
   }
-};
-
-// Navigation functions
-const navigateToCard = () => {
-  if (router) {
-    router.push('/card');
-  }
-};
-
-const navigateToStaking = () => {
-  if (router) {
-    router.push('/staking');
-  }
-};
-
-const navigateToCashback = () => {
-  if (router) {
-    router.push('/cashback');
-  }
+  copiedFeedback.value = true;
+  setTimeout(() => { copiedFeedback.value = false; }, 2000);
 };
 </script>
 
 <style scoped>
-.empty-state-hero {
-  position: relative;
+.es-root {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 40px 24px 60px;
+}
+
+/* Staggered load reveal */
+.es-reveal {
+  animation: es-rise var(--g-dur-slow) var(--g-ease) both;
+  animation-delay: var(--es-d, 0ms);
+}
+
+@keyframes es-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .es-reveal { animation: none; }
+}
+
+/* ── Backup annotation ── */
+.es-backup {
+  appearance: none;
+  font-family: var(--g-font-mono);
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 16px;
+  border-radius: var(--g-r-control);
+  background: color-mix(in srgb, var(--g-warning) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--g-warning) 40%, transparent);
+  font-size: 13px;
+  color: var(--g-warning);
+  letter-spacing: 0.01em;
+  text-align: left;
+  cursor: pointer;
+  margin-bottom: 44px;
+  transition: border-color var(--g-dur-fast) var(--g-ease), background var(--g-dur-fast) var(--g-ease);
+}
+
+.es-backup:hover {
+  border-color: color-mix(in srgb, var(--g-warning) 65%, transparent);
+  background: color-mix(in srgb, var(--g-warning) 14%, transparent);
+}
+
+.es-backup__badge {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--g-warning);
+  color: var(--g-canvas);
   display: flex;
   align-items: center;
   justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+  flex-shrink: 0;
 }
 
-.hero-content {
-  position: relative;
-  z-index: 2;
-  padding: 48px 24px !important;
+.es-backup__text { flex: 1; min-width: 0; }
+
+.es-backup__title {
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.es-backup__body { color: var(--g-text-2); }
+
+.es-backup__cta {
+  white-space: nowrap;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+/* ── Eyebrows (mono ledger labels) ── */
+.es-eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--g-text-3);
+  margin: 0 0 10px;
+}
+
+/* ── The zero ── */
+.es-balance {
+  font-size: 80px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 0.95;
+  color: var(--g-text-1);
+  margin: 0;
+}
+
+.es-balance__cur {
+  background: linear-gradient(115deg, var(--g-grad-1), var(--g-grad-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  margin-right: 14px;
+}
+
+.es-balance__zero { color: var(--g-text-3); }
+
+.es-statement {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--g-text-1);
+  margin: 18px 0 0;
+}
+
+.es-statement em {
+  font-style: normal;
+  color: var(--g-text-3);
+}
+
+.es-ctas {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 28px 0 52px;
+}
+
+.es-cta {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+  min-width: 140px;
+}
+
+.es-cta--ghost {
+  color: var(--g-text-1) !important;
+  border-color: var(--g-hairline-3) !important;
+}
+
+.es-cta--ghost:hover {
+  border-color: var(--g-accent) !important;
+  color: var(--g-accent) !important;
+}
+
+/* ── The index ── */
+.es-index {
+  border-top: 1px solid var(--g-hairline-2);
+  margin-bottom: 40px;
+}
+
+.es-row {
+  appearance: none;
+  font: inherit;
   width: 100%;
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-.welcome-section {
-  text-align: center;
-  margin-bottom: 32px;
-}
-
-.hero-avatar {
-  background: rgba(255, 255, 255, 0.1) !important;
-  backdrop-filter: blur(20px) !important;
-  border: 2px solid rgba(255, 255, 255, 0.2) !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
-}
-
-.hero-title {
-  font-size: 2.5rem !important;
-  font-weight: 600 !important;
-  color: white !important;
-  margin-bottom: 16px !important;
-}
-
-.hero-subtitle {
-  font-size: 1.125rem !important;
-  color: rgba(255, 255, 255, 0.9) !important;
-  max-width: 600px;
-  margin: 0 auto;
-}
-
-.quick-actions-grid {
-  max-width: 1000px;
-  margin: 0 auto;
-}
-
-.action-card {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 20px 4px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--g-hairline-1);
   cursor: pointer;
-  transition: all 0.3s ease !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  min-height: 200px;
+  text-align: left;
+  transition: background var(--g-dur-fast) var(--g-ease);
+}
+
+.es-row:hover { background: var(--g-surface); }
+
+.es-row__num {
+  font-size: 13px;
+  color: var(--g-text-3);
+  width: 26px;
+  flex-shrink: 0;
+  transition: color var(--g-dur-fast) var(--g-ease);
+}
+
+.es-row:hover .es-row__num { color: var(--g-accent); }
+
+.es-row__main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.es-row__title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--g-text-1);
+}
+
+.es-row__desc {
+  font-size: 13px;
+  color: var(--g-text-3);
+  line-height: 1.45;
+}
+
+.es-row__meta {
+  margin-left: auto;
   display: flex;
   align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
 }
 
-.action-card:hover {
-  transform: translateY(-4px);
-  border-color: v-bind(primaryColor) !important;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4) !important;
+.es-row__tag {
+  font-size: 11px;
+  color: var(--g-success);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
-
-.copy-address-chip {
-  backdrop-filter: blur(10px) !important;
-  transition: all 0.2s ease !important;
-  cursor: pointer !important;
+.es-row__addr {
+  font-size: 12px;
+  color: var(--g-text-3);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: color var(--g-dur-fast) var(--g-ease);
 }
 
-.copy-address-chip:hover {
-  transform: scale(1.05) !important;
+.es-row__addr:hover { color: var(--g-accent); }
+
+.es-row__arrow {
+  color: var(--g-text-3) !important;
+  transition: transform var(--g-dur-fast) var(--g-ease), color var(--g-dur-fast) var(--g-ease);
 }
 
-.action-title {
-  font-size: 1.125rem !important;
-  font-weight: 600 !important;
-  color: white !important;
-  margin-bottom: 8px !important;
+.es-row:hover .es-row__arrow {
+  transform: translateX(4px);
+  color: var(--g-accent) !important;
 }
 
-.action-description {
-  font-size: 0.875rem !important;
-  color: rgba(255, 255, 255, 0.8) !important;
-  line-height: 1.4 !important;
+/* ── Footnote ── */
+.es-footnote {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
 }
 
-.liquid-glass-subtle {
-  background-color: rgba(255, 255, 255, 0.05) !important;
-  backdrop-filter: blur(20px) saturate(1.8) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
-}
+.es-footnote__label { margin: 0; }
 
-.tutorial-card {
-  border: 1px solid v-bind(primaryColor) !important;
-}
-
-/* Backup section styles - toned down */
-.backup-card {
-  border: 1px solid rgba(255, 255, 255, 0.2) !important;
-}
-
-.backup-container {
-  max-width: 50%;
-  margin: 0 auto;
-}
-
-.backup-title {
-  font-size: 1.25rem !important;
-  font-weight: 600 !important;
-  color: white !important;
-}
-
-.backup-subtitle {
-  font-size: 0.875rem !important;
-  color: rgba(255, 255, 255, 0.8) !important;
-  line-height: 1.4 !important;
-}
-
-.backup-btn {
-  min-width: 180px !important;
-  font-weight: 500 !important;
-  text-transform: none !important;
-}
-
-.backup-alert {
-  font-size: 0.875rem !important;
-}
-
-.backup-help-text {
-  color: rgba(255, 255, 255, 0.6) !important;
-  font-size: 0.75rem !important;
-}
-
-.sample-data-btn {
-  color: rgba(255, 255, 255, 0.6) !important;
-  text-transform: none !important;
-}
-
-.sample-data-btn:hover {
-  color: rgba(255, 255, 255, 0.9) !important;
-}
-
-/* Floating animation elements */
-.floating-elements {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  overflow: hidden;
-  z-index: 0;
-}
-
-.floating-circle {
-  position: absolute;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
-  animation: float-up 20s linear infinite;
-}
-
-@keyframes float-up {
-  0% {
-    transform: translateY(100vh) scale(0);
-    opacity: 0;
-  }
-  10% {
-    opacity: 0.5;
-  }
-  90% {
-    opacity: 0.5;
-  }
-  100% {
-    transform: translateY(-100vh) scale(1.5);
-    opacity: 0;
-  }
-}
-
-/* Feature cards with spanning background */
-.feature-cards-grid {
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-.feature-card-container {
-  position: relative;
-  border-radius: 12px;
-  overflow: hidden;
-  height: 220px;
-  transition: all 0.3s ease;
-}
-
-.feature-card-container:hover {
-  transform: translateY(-4px);
-}
-
-.feature-card-background {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  border-radius: 12px;
-  z-index: 1;
-}
-
-.feature-card-glass ::v-deep .v-chip {
-  cursor: pointer !important;
-}
-
-.feature-card-glass {
-  position: relative;
-  width: 100%;
-  height: 100%;
+.es-footnote__link {
+  appearance: none;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--g-hairline-2);
+  padding: 0 0 1px;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--g-text-2);
   cursor: pointer;
-  border-radius: 12px;
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
-
-  /* Liquid glass effect */
-  backdrop-filter: blur(20px) saturate(1.8);
-  -webkit-backdrop-filter: blur(20px) saturate(1.8);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  isolation: isolate;
-}
-
-.feature-card-container:hover .feature-card-glass {
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.25);
-}
-
-.feature-card-content {
-  position: relative;
-  z-index: 2;
-  padding: 20px 16px 16px 16px;
-  text-align: center;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
+  display: inline-flex;
   align-items: center;
+  gap: 6px;
+  transition: color var(--g-dur-fast) var(--g-ease), border-color var(--g-dur-fast) var(--g-ease);
 }
 
-.feature-card-main {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  flex-grow: 1;
+.es-footnote__link:hover {
+  color: var(--g-accent);
+  border-color: var(--g-accent);
 }
 
-.feature-card-main .v-icon {
-  margin-bottom: 12px;
-}
+.es-footnote__dot { color: var(--g-text-3); }
 
-.feature-card-main .feature-title {
-  margin-top: 8px;
-  margin-bottom: 8px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-}
+/* ── Responsive ── */
+@media (max-width: 700px) {
+  .es-balance { font-size: 52px; }
 
-.feature-card-main .feature-description {
-  flex-grow: 1;
-  display: flex;
-  align-items: flex-start;
-  margin-bottom: 16px;
-}
-
-.feature-title {
-  font-size: 1rem !important;
-  font-weight: 600 !important;
-  color: white !important;
-  margin-bottom: 8px !important;
-}
-
-.feature-description {
-  font-size: 0.875rem !important;
-  color: rgba(255, 255, 255, 0.8) !important;
-  line-height: 1.4 !important;
-  margin-bottom: 16px !important;
-}
-
-/* Light ray animation for Buy card */
-.buy-card-emphasized .light-ray {
-  position: absolute;
-  top: -50%;
-  left: -150%;
-  width: 150%;
-  height: 200%;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0) 40%,
-    rgba(255, 255, 255, 0.3) 50%,
-    rgba(255, 255, 255, 0) 60%,
-    transparent 100%
-  );
-  transform: rotate(25deg);
-  animation: light-sweep 8s ease-in-out infinite;
-  z-index: 3;
-  pointer-events: none;
-}
-
-@keyframes light-sweep {
-  0% {
-    left: -150%;
-  }
-  15% {
-    left: 150%;
-  }
-  100% {
-    left: 150%;
-  }
-}
-
-/* Enhance the buy card on hover */
-.buy-card-emphasized:hover {
-  transform: translateY(-6px);
-  transition: all 0.3s ease;
-}
-
-.buy-card-emphasized .feature-card-glass {
-  border-color: rgba(255, 255, 255, 0.25);
-  box-shadow: 0 8px 32px rgba(0, 199, 243, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.15);
-}
-
-.buy-card-emphasized:hover .feature-card-glass {
-  box-shadow: 0 12px 40px rgba(0, 199, 243, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.35);
-}
-
-/* Responsive adjustments */
-@media (max-width: 960px) {
-  .hero-title {
-    font-size: 2rem !important;
-  }
-
-  .hero-content {
-    padding: 32px 16px !important;
-  }
-
-  .action-card {
-    min-height: 180px;
-  }
-
-  .feature-card-wrapper {
-    min-height: 180px;
-  }
+  .es-row__addr { display: none; }
 }
 </style>

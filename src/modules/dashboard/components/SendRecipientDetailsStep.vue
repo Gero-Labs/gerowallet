@@ -11,7 +11,7 @@
               :readonly="true"
             ></Select>
           </v-col>
-          <v-col cols="12" style="color: #61646C; min-height: 52px; font-style: italic; align-content: center;" class="py-0 px-2">
+          <v-col cols="12" style="color: var(--g-text-3); min-height: 52px; font-style: italic; align-content: center;" class="py-0 px-2">
           </v-col>
           <v-col cols="4" class="px-2 pt-0">
             <v-menu
@@ -23,22 +23,22 @@
               transition="fade-transition"
             >
               <template v-slot:activator="{ on, attrs }">
-                <v-btn outlined block color="#272930" style="background-color: #0F0F0F;" class="pl-0" v-bind="attrs" v-on="on" @click="saveContact" :disabled="loading || !isValidAddress">
+                <v-btn outlined block color="var(--g-raised)" style="background-color: var(--g-canvas);" class="pl-0" v-bind="attrs" v-on="on" @click="saveContact" :disabled="loading || !isValidAddress">
                   <v-list-item dense class="px-0">
                     <v-avatar size="34" class="mx-0">
-                      <v-icon small color="#00DFF3">
+                      <v-icon small color="var(--g-accent)">
                         {{ contacts && contacts[paymentAddress] != null ? 'mdi-bookmark' : 'mdi-bookmark-plus-outline'}}
                       </v-icon>
                     </v-avatar>
                     <v-list-item-content>
-                      <v-list-item-title style="color: white; font-size: 11px">
+                      <v-list-item-title style="color: var(--g-text-1); font-size: 11px">
                         {{ contacts && contacts[paymentAddress] != null ? $t('wallet.editContact') : $t('wallet.saveContact')}}
                       </v-list-item-title>
                     </v-list-item-content>
                   </v-list-item>
                 </v-btn>
               </template>
-              <v-card outlined style="background: #0c0e12 !important; border: 1px solid rgba(255, 255, 255, 0.15) !important; border-radius: 16px !important; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;">
+              <v-card outlined style="background: var(--g-surface) !important; border: 1px solid var(--g-hairline-3) !important; border-radius: var(--g-r-sheet) !important; box-shadow: var(--g-shadow-menu) !important;">
                 <v-card-title>
                   {{ $t('wallet.contactAdded') }}
                   <v-spacer></v-spacer>
@@ -115,22 +115,22 @@
               transition="fade-transition"
             >
               <template v-slot:activator="{ on, attrs }">
-                <v-btn outlined block color="#272930" style="background-color: #0F0F0F;" class="pl-0" v-bind="attrs" v-on="on" :disabled="contacts && Object.values(contacts)?.length === 0">
+                <v-btn outlined block color="var(--g-raised)" style="background-color: var(--g-canvas);" class="pl-0" v-bind="attrs" v-on="on" :disabled="contacts && Object.values(contacts)?.length === 0">
                   <v-list-item dense class="px-0">
                     <v-avatar size="34" class="mx-0">
-                      <v-icon small color="#00DFF3">
+                      <v-icon small color="var(--g-accent)">
                         mdi-book-open-variant-outline
                       </v-icon>
                     </v-avatar>
                     <v-list-item-content>
-                      <v-list-item-title style="color: white; font-size: 11px">
+                      <v-list-item-title style="color: var(--g-text-1); font-size: 11px">
                         {{ $t('wallet.contacts') }}
                       </v-list-item-title>
                     </v-list-item-content>
                   </v-list-item>
                 </v-btn>
               </template>
-              <v-card outlined style="background: #0c0e12 !important; border: 1px solid rgba(255, 255, 255, 0.15) !important; border-radius: 16px !important; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;">
+              <v-card outlined style="background: var(--g-surface) !important; border: 1px solid var(--g-hairline-3) !important; border-radius: var(--g-r-sheet) !important; box-shadow: var(--g-shadow-menu) !important;">
                 <v-card-title>
                   {{ $t('wallet.contacts') }}
                   <v-spacer></v-spacer>
@@ -158,15 +158,15 @@
             </v-menu>
           </v-col>
           <v-col cols="4" class="px-2 pt-0">
-            <v-btn outlined block color="#272930" style="background-color: #0F0F0F" class="pl-0" @click="qrScanDialog = true">
+            <v-btn outlined block color="var(--g-raised)" style="background-color: var(--g-canvas)" class="pl-0" @click="qrScanDialog = true">
               <v-list-item dense class="px-0">
                 <v-avatar size="34" class="mx-0">
-                  <v-icon small color="#00DFF3">
+                  <v-icon small color="var(--g-accent)">
                     mdi-qrcode
                   </v-icon>
                 </v-avatar>
                 <v-list-item-content>
-                  <v-list-item-title style="color: white; font-size: 11px">
+                  <v-list-item-title style="color: var(--g-text-1); font-size: 11px">
                     {{ $t('wallet.qrScan') }}
                   </v-list-item-title>
                 </v-list-item-content>
@@ -197,14 +197,14 @@
               clearable
             >
               <template v-slot:append>
-                <v-progress-circular color="white" v-if="loading" size="24" indeterminate></v-progress-circular>
-                <v-icon color="#F97066" v-else-if="!loading && resolved === false">
+                <v-progress-circular color="var(--g-text-1)" v-if="loading" size="24" indeterminate></v-progress-circular>
+                <v-icon color="error" v-else-if="!loading && resolved === false">
                   mdi-alert
                 </v-icon>
               </template>
             </v-textarea>
           </v-col>
-          <v-col cols="12" style="color: #61646C; min-height: 96px; font-style: italic; align-content: center;" class="py-0">
+          <v-col cols="12" style="color: var(--g-text-3); min-height: 96px; font-style: italic; align-content: center;" class="py-0">
             <v-alert
               v-if="handleMismatch.show"
               type="warning"
@@ -508,8 +508,8 @@ watch(() => props.sendData.recipientAddress, async (newAddress) => {
   }
 
   .recipient-address > .v-input__control > .v-input__slot {
-    background-color: #292929;
-    border-radius: 6px;
+    background-color: var(--g-raised);
+    border-radius: var(--g-r-control);
     padding: 5px 10px;
 
     & textarea {

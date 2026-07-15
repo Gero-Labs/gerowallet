@@ -2,8 +2,6 @@ import { Blockchain, Network, Provider } from '@/models/types';
 import cardanoBlueLogo from '@/assets/svg/cardano-blue.svg';
 import cardanoSvg from '@/assets/svg/cardano.svg';
 import apexSvg from '@/assets/svg/ap3x.svg';
-import apexPrimeSvg from '@/assets/svg/apex_prime.svg';
-import apexVectorSvg from '@/assets/svg/apex_vector.svg';
 import midnightLogo from '@/assets/svg/midnight.svg';
 import bitcoinLogo from '@/assets/bitcoin-logo.svg';
 
@@ -42,7 +40,7 @@ export interface NetworkInfo {
   transactionSupport: boolean;
   swapSupport: boolean;
   buySupport: boolean;
-  zkFoldSupport: boolean;
+  zkSmartWalletSupport: boolean;
   perpetualsSupport: boolean;
   multiSigSupport: boolean,
   geroCardSupport: boolean;
@@ -92,7 +90,7 @@ export default {
       transactionSupport:true,
       swapSupport: true,
       buySupport: true,
-      zkFoldSupport: false,
+      zkSmartWalletSupport: false,
       perpetualsSupport: true,
       multiSigSupport: false,
       geroCardSupport: true,
@@ -139,7 +137,7 @@ export default {
       transactionSupport:true,
       swapSupport: false,
       buySupport: false,
-      zkFoldSupport: false,
+      zkSmartWalletSupport: false,
       perpetualsSupport: false,
       multiSigSupport: false,
       geroCardSupport: false,
@@ -186,7 +184,7 @@ export default {
       transactionSupport:true,
       swapSupport: false,
       buySupport: false,
-      zkFoldSupport: false,
+      zkSmartWalletSupport: false,
       perpetualsSupport: false,
       multiSigSupport: false,
       geroCardSupport: false,
@@ -201,7 +199,7 @@ export default {
       }
     },
     {
-      icon: apexPrimeSvg,
+      icon: apexSvg,
       iconColor: 'orange',
       title: 'Apex Prime Mainnet',
       blockchain: Blockchain.APEX_PRIME,
@@ -234,7 +232,7 @@ export default {
       transactionSupport:true,
       swapSupport: false,
       buySupport: false,
-      zkFoldSupport: false,
+      zkSmartWalletSupport: false,
       perpetualsSupport: false,
       multiSigSupport: false,
       geroCardSupport: false,
@@ -249,7 +247,7 @@ export default {
       }
     },
     {
-      icon: apexVectorSvg,
+      icon: apexSvg,
       iconColor: 'orange',
       title: 'Apex Vector Mainnet',
       blockchain: Blockchain.APEX_VECTOR,
@@ -283,7 +281,7 @@ export default {
       transactionSupport:true,
       swapSupport: false,
       buySupport: false,
-      zkFoldSupport: false,
+      zkSmartWalletSupport: false,
       perpetualsSupport: false,
       multiSigSupport: false,
       geroCardSupport: false,
@@ -339,7 +337,7 @@ export default {
       transactionSupport: true,
       swapSupport: false,
       buySupport: true,
-      zkFoldSupport: false,
+      zkSmartWalletSupport: false,
       perpetualsSupport: false,
       multiSigSupport: false,
       geroCardSupport: false,
@@ -388,7 +386,7 @@ export default {
       transactionSupport: true,
       swapSupport: false,
       buySupport: false,
-      zkFoldSupport: false,
+      zkSmartWalletSupport: false,
       perpetualsSupport: false,
       multiSigSupport: false,
       geroCardSupport: false,
@@ -403,22 +401,119 @@ export default {
       }
     },
     BITCOIN_REMOVED_2_7 */
-    // Midnight — coming soon
-    ...([
-      { title: 'Midnight Mainnet', network: Network.MAINNET, networkId: 1 },
-      { title: 'Midnight Preview', network: Network.PREVIEW, networkId: 0 },
-      { title: 'Midnight Preprod', network: Network.PREPROD, networkId: 0 },
-    ].map(({ title, network, networkId }) => ({
+    // Midnight Preview (testnet)
+    {
       icon: midnightLogo,
       iconColor: 'grey',
-      title,
+      title: 'Midnight Preview',
       blockchain: Blockchain.MIDNIGHT,
-      network,
-      comingSoon: true,
+      network: Network.PREVIEW,
+      // No hardware wallet support: Midnight ZK proof generation requires the
+      // secret key in cleartext, which Ledger/Trezor cannot expose.
       supportedHardware: false,
-      networkId,
-      currencySymbol: 'tDUST',
-      currencyTicker: 'tDUST',
+      networkId: 0,
+      currencySymbol: 'tNIGHT',
+      currencyTicker: 'tNIGHT',
+      currencyName: 'Midnight Preview',
+      currencyDescription: 'Midnight Preview Network Token',
+      currencyImage: midnightLogo,
+      // Midnight uses Substrate fee model (DUST), not Cardano protocol params.
+      // These fields stay zeroed; Midnight-specific parameters live elsewhere.
+      protocolParams: {
+        min_fee_a: 0,
+        min_fee_b: 0,
+        max_tx_size: 0,
+        min_utxo_value: "0",
+        key_deposit: "0",
+        pool_deposit: "0",
+        max_val_size: 0,
+        price_mem: 0,
+        price_step: 0,
+        coins_per_utxo_size: "0"
+      },
+      geroPool: '',
+      defaultProvider: Provider.UNDEFINED,
+      cashbackSupport: false,
+      stakingSupport: false,
+      governanceSupport: false,
+      daoSupport: false,
+      transactionSupport: true,
+      swapSupport: false,
+      buySupport: false,
+      zkFoldSupport: false,
+      perpetualsSupport: false,
+      multiSigSupport: false,
+      geroCardSupport: false,
+      goMiningSupport: false,
+      babylonSupport: false,
+      ordinalsSupport: false,
+      thorchainSupport: false,
+      mempoolSupport: false,
+      lightningSupport: false,
+      networkParams: {
+        networkMagic: 0  // Midnight uses Substrate; magic bytes don't apply
+      }
+    },
+    // Midnight Preprod (testnet)
+    {
+      icon: midnightLogo,
+      iconColor: 'grey',
+      title: 'Midnight Preprod',
+      blockchain: Blockchain.MIDNIGHT,
+      network: Network.PREPROD,
+      supportedHardware: false,
+      networkId: 0,
+      currencySymbol: 'tNIGHT',
+      currencyTicker: 'tNIGHT',
+      currencyName: 'Midnight Preprod',
+      currencyDescription: 'Midnight Preprod Network Token',
+      currencyImage: midnightLogo,
+      protocolParams: {
+        min_fee_a: 0,
+        min_fee_b: 0,
+        max_tx_size: 0,
+        min_utxo_value: "0",
+        key_deposit: "0",
+        pool_deposit: "0",
+        max_val_size: 0,
+        price_mem: 0,
+        price_step: 0,
+        coins_per_utxo_size: "0"
+      },
+      geroPool: '',
+      defaultProvider: Provider.UNDEFINED,
+      cashbackSupport: false,
+      stakingSupport: false,
+      governanceSupport: false,
+      daoSupport: false,
+      transactionSupport: true,
+      swapSupport: false,
+      buySupport: false,
+      zkFoldSupport: false,
+      perpetualsSupport: false,
+      multiSigSupport: false,
+      geroCardSupport: false,
+      goMiningSupport: false,
+      babylonSupport: false,
+      ordinalsSupport: false,
+      thorchainSupport: false,
+      mempoolSupport: false,
+      lightningSupport: false,
+      networkParams: {
+        networkMagic: 0
+      }
+    },
+    // Midnight Mainnet
+    {
+      icon: midnightLogo,
+      iconColor: 'grey',
+      title: 'Midnight Mainnet',
+      blockchain: Blockchain.MIDNIGHT,
+      network: Network.MAINNET,
+      supportedHardware: false,
+      networkId: 1,
+      currencySymbol: 'NIGHT',
+      currencyTicker: 'NIGHT',
       currencyName: 'Midnight',
       currencyDescription: 'Midnight Native Token',
       currencyImage: midnightLogo,
@@ -440,10 +535,10 @@ export default {
       stakingSupport: false,
       governanceSupport: false,
       daoSupport: false,
-      transactionSupport: false,
+      transactionSupport: true,
       swapSupport: false,
       buySupport: false,
-      zkFoldSupport: false,
+      zkSmartWalletSupport: false,
       perpetualsSupport: false,
       multiSigSupport: false,
       geroCardSupport: false,
@@ -456,7 +551,7 @@ export default {
       networkParams: {
         networkMagic: 0
       }
-    })) as NetworkInfo[]),
+    },
     // Bitcoin — coming soon (HIDE+GATE teaser only: all features off, not selectable)
     {
       icon: bitcoinLogo,
@@ -493,7 +588,7 @@ export default {
       transactionSupport: false,
       swapSupport: false,
       buySupport: false,
-      zkFoldSupport: false,
+      zkSmartWalletSupport: false,
       perpetualsSupport: false,
       multiSigSupport: false,
       geroCardSupport: false,

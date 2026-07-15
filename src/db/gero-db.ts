@@ -185,7 +185,6 @@ export async function createNewWalletDb(walletId: number|string, hasEncryptedMne
       const initialData = [
         { key: 'currency', value: Currency.USD.short },
         { key: 'txAutoSubmit', value: true },
-        { key: 'useSidePanel', value: true },
         { key: 'tokenAllocationSort', value: { by: 'allocation', desc: true } },
         { key: 'hideScamTokens', value: false },
         { key: 'hideUnverifiedTokens', value: false },
@@ -217,6 +216,11 @@ function getDefaultAddressType(chain: string): string {
     case Blockchain.APEX_PRIME:
     case Blockchain.APEX_VECTOR:
       return 'shelley';
+    case Blockchain.MIDNIGHT:
+      // Midnight derives 3 role-specific addresses (Zswap shielded, NightExternal
+      // unshielded, Dust). The wallet manages all three; the addressType field
+      // stores 'unshielded' as the default receive address category.
+      return 'unshielded';
     default:
       return 'unknown';
   }
@@ -256,6 +260,12 @@ export async function createNewWallet(
     backupMnemonic?: boolean;
     prfOutput?: ArrayBuffer; // PRF output from registration (avoids second prompt)
     walletId?: number; // Pre-allocated wallet ID for PRF wallets (must match PRF salt)
+    /**
+     * For Midnight wallets only. Pre-derived bech32m addresses (3 role-specific
+     * ones) computed by the caller in an SDK-aware context. gero-db does not
+     * derive these itself — see the Midnight branch above for why.
+     */
+    midnightAddresses?: { unshielded: string; shielded: string; dust: string };
   }
 ) {
   let isRestore = true;
@@ -273,6 +283,20 @@ export async function createNewWallet(
     const { deriveBitcoinAccountXpub, deriveBitcoinRootKey } = await import('@/chains/bitcoin/bitcoinKeyManager');
     rootKey = deriveBitcoinRootKey(mnemonic);
     publicKey = deriveBitcoinAccountXpub(mnemonic, network, addressType);
+  } else if (chain === Blockchain.MIDNIGHT) {
+    // Midnight key derivation: BIP39 → 64-byte seed. The Midnight SDK
+    // (HDWallet + UnshieldedAddress) is intentionally NOT imported here —
+    // pulling `@midnightntwrk/wallet-sdk-*` into gero-db.ts would drag the
+    // ~10MB ledger-v8 WASM + `effect` runtime into the background service
+    // worker bundle. Instead, callers (CreateWallet.vue, RestoreWallet.vue)
+    // pre-derive the bech32m addresses in the options context and pass them
+    // via `options.midnightAddresses`; gero-db just serializes them onto the
+    // wallet record under `publicKey`.
+    const seed: Uint8Array = bip39.mnemonicToSeedSync(mnemonic);
+    rootKey = { privateKey: seed };
+    publicKey = options?.midnightAddresses
+      ? JSON.stringify(options.midnightAddresses)
+      : JSON.stringify({ unshielded: '', shielded: '', dust: '' });
   } else {
     // Cardano key derivation (existing logic)
     rootKey = resolvePrivateKey(mnemonic);
@@ -331,8 +355,8 @@ export async function createNewWallet(
     try {
       // Step 3: Encrypt private key using PRF output (no additional prompt)
       // Extract key bytes based on chain
-      const keyBytes = chain === Blockchain.BITCOIN
-        ? rootKey.privateKey  // Bitcoin: BIP32 interface has privateKey as Uint8Array
+      const keyBytes = (chain === Blockchain.BITCOIN || chain === Blockchain.MIDNIGHT)
+        ? rootKey.privateKey  // Bitcoin/Midnight: { privateKey: Uint8Array }
         : rootKey.bytes();    // Cardano: Bip32PrivateKey has bytes() method
 
       const prfEncryptedPrivateKey = await encryptPrivateKeyWithPrf(
@@ -404,8 +428,9 @@ export async function createNewWallet(
 
     // Encrypt private key based on chain
     let encryptedPrivateKey: string;
-    if (chain === Blockchain.BITCOIN) {
-      // Bitcoin: Use raw key bytes
+    if (chain === Blockchain.BITCOIN || chain === Blockchain.MIDNIGHT) {
+      // Bitcoin/Midnight: encrypt raw key bytes (Uint8Array). Same double-encrypt
+      // pattern as Cardano's encryptPrivateKey, just without the Bip32PrivateKey wrapper.
       const { encryptWithPassword } = await import('@/shared/utils/crypto');
       const CryptoTS = await import('crypto-ts');
       const keyBytes = rootKey.privateKey;  // Uint8Array
@@ -500,7 +525,7 @@ export async function createNewGoogleWallet(
   crypto.getRandomValues(randomBytes);
   const rootKey: Bip32PrivateKey = Bip32PrivateKey.fromBytes(Buffer.from(randomBytes));
 
-  // Encrypt the root key with password (more secure than zkFold's plaintext storage)
+  // Encrypt the root key with password (more secure than zkSmartWallet's plaintext storage)
   const encryptedPrivateKey: string = encryptPrivateKey(rootKey, password);
 
   // Get the public key for account #0
@@ -535,6 +560,56 @@ export async function createNewGoogleWallet(
   });
 }
 
+/**
+ * Persist a Google "Sign in with Google" MPC wallet: type Google,
+ * encryptionMethod 'mpc', keyed by the Google `sub` (userId) with the
+ * account xpub (publicKey) and the AES-encrypted device share
+ * (mpcDeviceShare, non-indexed). Mirrors createNewWallet's record shape.
+ */
+export async function createMpcGoogleWallet(params: {
+  name: string;
+  icon: string;
+  theme: string;
+  chain: string;
+  network: string;
+  userId: string;
+  publicKey: string;
+  encryptedDeviceShare: string;
+  addressType?: string;
+  webAuthnCredentialId?: string;
+  mpcPrfSaltId?: string;
+}): Promise<number> {
+  const db: Dexie = await getDb();
+  let order = await getLatestWalletByOrder();
+  if (order == null) {
+    order = 1;
+  } else {
+    order++;
+  }
+
+  const walletData = {
+    name: params.name,
+    icon: params.icon,
+    type: WalletType.Google,
+    theme: params.theme,
+    order,
+    publicKey: params.publicKey,
+    passwordLastUpdate: new Date(),
+    chain: params.chain,
+    network: params.network,
+    addressType: params.addressType ?? getDefaultAddressType(params.chain),
+    encryptionMethod: 'mpc' as const,
+    userId: params.userId,
+    mpcDeviceShare: params.encryptedDeviceShare,
+    webAuthnCredentialId: params.webAuthnCredentialId,
+    mpcPrfSaltId: params.mpcPrfSaltId,
+  };
+
+  const walletId = await db['wallets'].add(walletData);
+  await createNewWalletDb(walletId, false, false);
+  return walletId as number;
+}
+
 export async function deleteWallet(walletId: number|string) {
   const db: Dexie = await getDb();
   const walletName = typeof walletId === 'number' ? `wallet-${walletId}` : walletId;
@@ -557,6 +632,44 @@ export async function deleteWallet(walletId: number|string) {
 export async function setWalletName(walletId: number, name: string): Promise<void> {
   const db: Dexie = await getDb();
   await db['wallets'].update(walletId, { name });
+}
+
+/**
+ * Persist the (re-encrypted) device share for an MPC wallet.
+ * @param walletId - The wallet ID
+ * @param encryptedDeviceShare - AES-encrypted encoded device share
+ */
+export async function setMpcDeviceShare(walletId: number, encryptedDeviceShare: string): Promise<void> {
+  const db: Dexie = await getDb();
+  await db['wallets'].update(walletId, { mpcDeviceShare: encryptedDeviceShare });
+}
+
+/**
+ * Stage the next device share during a crash-safe re-split.
+ * Pass `undefined` to clear a stale staged share.
+ * @param walletId - The wallet ID
+ * @param encryptedDeviceShareNext - AES-encrypted next device share, or undefined to clear
+ */
+export async function setMpcDeviceShareNext(
+  walletId: number,
+  encryptedDeviceShareNext: string | undefined,
+): Promise<void> {
+  const db: Dexie = await getDb();
+  await db['wallets'].update(walletId, { mpcDeviceShareNext: encryptedDeviceShareNext });
+}
+
+/**
+ * Promote the staged next device share to the live device share and clear the staging slot.
+ * Single atomic update (mpcDeviceShare := mpcDeviceShareNext, mpcDeviceShareNext := undefined).
+ * @param walletId - The wallet ID
+ */
+export async function promoteMpcDeviceShareNext(walletId: number): Promise<void> {
+  const db: Dexie = await getDb();
+  const wallet = await db['wallets'].get(walletId);
+  await db['wallets'].update(walletId, {
+    mpcDeviceShare: wallet?.mpcDeviceShareNext,
+    mpcDeviceShareNext: undefined,
+  });
 }
 
 /**

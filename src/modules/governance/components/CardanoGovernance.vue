@@ -69,7 +69,7 @@
                         v-model="delegationModel"
                         :label="$t('governance.newDelegation')"
                         outlined
-                        :items="[$t('governance.ownAccount'), $t('governance.geroDRep'), $t('governance.abstain'), $t('governance.noConfidence')]"
+                        :items="[$t('governance.ownAccount'), $t('governance.abstain'), $t('governance.noConfidence')]"
                         dense
                         hide-details
                         :menu-props="{ offsetY: true }"
@@ -83,7 +83,6 @@
                           delegationModel === undefined ||
                           delegateLoading ||
                           delegationModel === $t('governance.ownAccount') ||
-                          delegationModel === $t('governance.geroDRep')||
                           currentDrepTxIsPending
                         "
                         @click="delegate"
@@ -233,8 +232,15 @@
                     >
                       <template v-slot:[`item.name`]="{ item }">
                         <v-list-item dense class="px-0 drep-list-item" two-line>
-                          <v-list-item-avatar rounded size="28">
-                            <v-img v-if="item.image" :src="item.image" contain></v-img>
+                          <v-list-item-avatar rounded size="28" color="var(--g-raised)">
+                            <v-img v-if="item.image" :src="item.image" contain>
+                              <template v-slot:error>
+                                <div class="d-flex align-center justify-center" style="width: 100%; height: 100%">
+                                  <v-icon size="18" color="var(--g-text-3)">mdi-account</v-icon>
+                                </div>
+                              </template>
+                            </v-img>
+                            <v-icon v-else size="18" color="var(--g-text-3)">mdi-account</v-icon>
                           </v-list-item-avatar>
                           <v-list-item-content class="pl-12">
                             <v-list-item-title class="drep-title">
@@ -532,9 +538,6 @@ const delegate = async () => {
       dRep = {
         __typename: 'AlwaysNoConfidence',
       } as Cardano.AlwaysNoConfidence;
-    } else if (delegationModel.value === String(t('governance.geroDRep'))) {
-      delegateLoading.value = false;
-      return; // TODO
     } else if (delegationModel.value === String(t('governance.ownAccount'))) {
       delegateLoading.value = false;
       return; // TODO

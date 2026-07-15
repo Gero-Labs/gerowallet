@@ -315,7 +315,7 @@ function txStatusClass(status: TransactionStatus): string {
 
 /* ── Tabs ── */
 .ht-tabs {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  border-bottom: 1px solid var(--g-hairline-1);
 }
 
 .ht-tab {
@@ -323,13 +323,13 @@ function txStatusClass(status: TransactionStatus): string {
   font-weight: 700 !important;
   letter-spacing: 0.08em !important;
   text-transform: uppercase !important;
-  color: rgba(255, 255, 255, 0.4) !important;
+  color: var(--g-text-3) !important;
   min-width: 0 !important;
   padding: 0 12px !important;
 }
 
 .ht-tab.v-tab--active {
-  color: rgba(255, 255, 255, 0.88) !important;
+  color: var(--g-text-1) !important;
 }
 
 .ht-items {
@@ -353,8 +353,8 @@ function txStatusClass(status: TransactionStatus): string {
 
 .ht-skeleton-row {
   height: 52px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
+  border-radius: var(--g-r-control);
+  background: var(--g-hairline-1);
   animation: skeleton-pulse 1.4s ease-in-out infinite;
 }
 
@@ -371,7 +371,7 @@ function txStatusClass(status: TransactionStatus): string {
   justify-content: center;
   padding: 24px 16px;
   gap: 8px;
-  color: rgba(255, 255, 255, 0.18);
+  color: var(--g-text-3);
   font-size: 12px;
 }
 
@@ -384,9 +384,9 @@ function txStatusClass(status: TransactionStatus): string {
 
 /* ── Rows ── */
 .ht-row {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 8px;
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   padding: 8px 10px;
   display: flex;
   flex-direction: column;
@@ -430,58 +430,58 @@ function txStatusClass(status: TransactionStatus): string {
 .ht-symbol {
   font-size: 12px;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.82);
+  color: var(--g-text-2);
 }
 
 .ht-time {
-  font-size: 9px;
-  color: rgba(255, 255, 255, 0.25);
+  font-size: 11px;
+  color: var(--g-text-3);
   white-space: nowrap;
 }
 
 /* ── Side badge ── */
 .ht-side-badge {
-  font-size: 8.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.05em;
   padding: 1px 5px;
-  border-radius: 3px;
+  border-radius: 4px;
   text-transform: uppercase;
 }
 
 .badge--buy {
-  background: rgba(38, 250, 176, 0.12);
-  color: #26FAB0;
+  background: var(--g-success-fill);
+  color: var(--g-success);
 }
 
 .badge--sell {
-  background: rgba(249, 112, 102, 0.12);
-  color: #F97066;
+  background: var(--g-error-fill);
+  color: var(--g-error);
 }
 
 /* ── Auto-close chip ── */
 .ht-auto-close-chip {
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.06em;
   padding: 1px 5px;
-  border-radius: 3px;
+  border-radius: 4px;
   text-transform: uppercase;
 }
 
 .ac--liquidation {
-  background: rgba(255, 167, 38, 0.2);
-  color: #FFA726;
+  background: var(--g-warning-fill);
+  color: var(--g-warning);
 }
 
 .ac--adl {
-  background: rgba(255, 220, 80, 0.15);
-  color: #FFDC50;
+  background: var(--g-warning-fill);
+  color: var(--g-warning);
 }
 
 .ac--bankrupt {
-  background: rgba(249, 112, 102, 0.2);
-  color: #F97066;
+  background: var(--g-error-fill);
+  color: var(--g-error);
 }
 
 /* ── Detail cells ── */
@@ -496,17 +496,17 @@ function txStatusClass(status: TransactionStatus): string {
 }
 
 .ht-detail-label {
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: rgba(255, 255, 255, 0.22);
+  color: var(--g-text-3);
 }
 
 .ht-detail-value {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.65);
+  color: var(--g-text-2);
   font-variant-numeric: tabular-nums;
 }
 
@@ -516,18 +516,18 @@ function txStatusClass(status: TransactionStatus): string {
   align-items: center;
   justify-content: space-between;
   padding: 8px 10px;
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: var(--g-hairline-1);
+  border-radius: var(--g-r-control);
+  border: 1px solid var(--g-hairline-1);
   margin-bottom: 2px;
 }
 
 .ht-funding-total-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--g-text-3);
 }
 
 .ht-funding-total-value {
@@ -545,17 +545,17 @@ function txStatusClass(status: TransactionStatus): string {
 
 /* ── Asset badge ── */
 .ht-asset-badge {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.4);
-  background: rgba(255, 255, 255, 0.07);
+  color: var(--g-text-3);
+  background: var(--g-hairline-1);
   padding: 1px 5px;
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
 /* ── Tx type badge ── */
 .ht-type-badge {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.05em;
   padding: 2px 6px;
@@ -564,28 +564,28 @@ function txStatusClass(status: TransactionStatus): string {
 }
 
 .tt--deposit {
-  background: rgba(38, 250, 176, 0.12);
-  color: #26FAB0;
+  background: var(--g-success-fill);
+  color: var(--g-success);
 }
 
 .tt--withdraw {
-  background: color-mix(in srgb, var(--chain-primary) 12%, transparent);
-  color: var(--chain-primary);
+  background: color-mix(in srgb, var(--g-accent) 12%, transparent);
+  color: var(--g-accent);
 }
 
 .tt--fee {
-  background: rgba(255, 255, 255, 0.07);
-  color: rgba(255, 255, 255, 0.45);
+  background: var(--g-hairline-1);
+  color: var(--g-text-3);
 }
 
 .tt--pnl {
-  background: rgba(255, 255, 255, 0.07);
-  color: rgba(255, 255, 255, 0.55);
+  background: var(--g-hairline-1);
+  color: var(--g-text-3);
 }
 
 .tt--liquidation {
-  background: rgba(249, 112, 102, 0.15);
-  color: #F97066;
+  background: var(--g-error-fill);
+  color: var(--g-error);
 }
 
 /* ── Tx amount ── */
@@ -597,7 +597,7 @@ function txStatusClass(status: TransactionStatus): string {
 
 /* ── Tx status chip ── */
 .ht-status-chip {
-  font-size: 8.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.05em;
   padding: 1px 5px;
@@ -606,26 +606,26 @@ function txStatusClass(status: TransactionStatus): string {
 }
 
 .st--done {
-  background: rgba(38, 250, 176, 0.1);
-  color: #26FAB0;
+  background: var(--g-success-fill);
+  color: var(--g-success);
 }
 
 .st--pending {
-  background: rgba(255, 167, 38, 0.12);
-  color: #FFA726;
+  background: var(--g-warning-fill);
+  color: var(--g-warning);
 }
 
 .st--failed {
-  background: rgba(249, 112, 102, 0.12);
-  color: #F97066;
+  background: var(--g-error-fill);
+  color: var(--g-error);
 }
 
 /* ── PnL colors (shared) ── */
 .pnl--positive {
-  color: #26FAB0;
+  color: var(--g-success);
 }
 
 .pnl--negative {
-  color: #F97066;
+  color: var(--g-error);
 }
 </style>

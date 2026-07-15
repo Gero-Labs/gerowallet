@@ -2,7 +2,10 @@
   <v-layout>
     <v-row no-gutters>
       <v-col cols="12" class="pa-2">
-        <v-card class="transparent" flat>
+        <!-- Midnight: single clean history list — the Cardano tabs (UTxO set,
+             detail panes) don't map onto Midnight's event model. -->
+        <MidnightTransactionsList v-if="isMidnight" />
+        <v-card v-else class="transparent" flat>
           <v-tabs v-model="activeTab" centered icons-and-text background-color="transparent" class="mb-4">
             <v-tab>
               {{ $t('transactions.history') }} ({{ txCount }})
@@ -68,11 +71,15 @@ import UtxosTable from '@/modules/transactions/components/UtxosTable.vue';
 import UtxoDetail from '@/modules/transactions/components/UtxoDetail.vue';
 import ReportDialog from '@/shared/dialogs/ReportDialog.vue';
 import NotificationDot from '@/shared/components/NotificationDot.vue';
+import MidnightTransactionsList from '@/modules/transactions/components/MidnightTransactionsList.vue';
 import { walletStore } from '@/stores/walletStore';
+import { Blockchain } from '@/models/types';
 import { isFeatureNew, markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
 
 const vmProxy = getCurrentInstance()!.proxy;
 const route = vmProxy.$route;
+
+const isMidnight = computed(() => walletStore.loggedWallet?.chain === Blockchain.MIDNIGHT);
 
 const activeTab = ref(route.query?.tab === 'utxos' ? 1 : 0);
 const isReportDialogOpen = ref(false);

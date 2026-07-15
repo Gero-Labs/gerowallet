@@ -5,6 +5,10 @@ import packageJson from './package.json';
 import rollupTla from 'rollup-plugin-tla';
 import commonjs from '@rollup/plugin-commonjs';
 import wasm from 'vite-plugin-wasm';
+import { readFileSync } from 'fs';
+import { createRequire } from 'module';
+
+const _require = createRequire(import.meta.url);
 
 // Virtual module plugin for CJS packages that break under Rollup's
 // getAugmentedNamespace double-wrapping (CJS→ESM→namespace→wrapper).
@@ -13,10 +17,22 @@ import wasm from 'vite-plugin-wasm';
 // turning functions into plain {} objects at runtime.
 // Must be at top-level Vite plugins with enforce:'pre' so it intercepts
 // BEFORE Vite's built-in resolver maps them to node_modules files.
+// Stub for @effect/platform's swagger-ui module — pulled in transitively by
+// @midnight-ntwrk/wallet-sdk-unshielded-wallet → effect → @effect/platform.
+// The module ships a 100KB+ minified swagger-ui-bundle string that breaks
+// Vite's commonjs resolver during the extension background build. We never
+// render an OpenAPI swagger UI from inside the wallet, so an empty module
+// is functionally equivalent.
+const HTTP_API_SWAGGER_STUB = `
+export const javascript = '';
+export const css = '';
+export const html = () => '';
+`;
+
 const cjsInteropPlugin = {
   name: 'cjs-interop-virtual-modules',
   enforce: 'pre' as const,
-  resolveId(source: string) {
+  resolveId(source: string, importer?: string) {
     const virtuals: Record<string, string> = {
       'gopd': '\0virtual:gopd',
       'gopd/gOPD': '\0virtual:gopd-gOPD',
@@ -25,6 +41,17 @@ const cjsInteropPlugin = {
       'hasown': '\0virtual:hasown',
       'function-bind': '\0virtual:function-bind',
       'has-proto': '\0virtual:has-proto',
+      // bn.js is CJS-only (@polkadot/util from Midnight SDK does `import BN from 'bn.js'`).
+      // Must intercept before Vite's node-resolve maps it to the CJS file, which Rollup
+      // then fails to find a `default` export from.
+      'bn.js': '\0virtual:bn-js-esm',
+      // The `assert` browser polyfill pulls in call-bound/get-intrinsic, which throws
+      // "Function.prototype.apply was called on ServiceWorkerGlobalScope" during init
+      // in service-worker contexts. The polyfill's intrinsic lookup falls back to
+      // globalThis when running in SW. Replace with a minimal local implementation
+      // that doesn't depend on those packages at all.
+      'assert': '\0virtual:assert-stub',
+      'assert/': '\0virtual:assert-stub',
       // pbkdf2 MUST be intercepted at the Vite plugin level (enforce:'pre'),
       // not just in rollupOptions.plugins. Vite's resolver + nodePolyfills (which
       // lists 'pbkdf2') run BEFORE Rollup-stage plugins, so a Rollup-only shim
@@ -32,18 +59,64 @@ const cjsInteropPlugin = {
       // by pbkdf2/browser.js". Resolving it here makes the shim win every time.
       'pbkdf2': '\0virtual:pbkdf2',
     };
-    return virtuals[source] || null;
+    if (virtuals[source]) return virtuals[source];
+
+    // Intercept @effect/platform's bundled UI modules (swagger-ui, scalar
+    // api-reference) — they ship multi-hundred-KB minified strings that break
+    // Vite's commonjs resolver during the extension background build. We never
+    // render these UIs from inside the wallet, so empty stubs are functionally
+    // equivalent. Both relative and absolute import forms are handled.
+    const effectStubMap: Record<string, string> = {
+      './internal/httpApiSwagger.js': '\0virtual:effect-httpApiSwagger',
+      './internal/httpApiSwagger': '\0virtual:effect-httpApiSwagger',
+      './internal/httpApiScalar.js': '\0virtual:effect-httpApiScalar',
+      './internal/httpApiScalar': '\0virtual:effect-httpApiScalar',
+    };
+    if (effectStubMap[source] && importer && importer.includes('@effect/platform')) {
+      return effectStubMap[source];
+    }
+    if (source.endsWith('@effect/platform/dist/esm/internal/httpApiSwagger.js')) {
+      return '\0virtual:effect-httpApiSwagger';
+    }
+    if (source.endsWith('@effect/platform/dist/esm/internal/httpApiScalar.js')) {
+      return '\0virtual:effect-httpApiScalar';
+    }
+    return null;
   },
   load(id: string) {
     switch (id) {
       // pbkdf2: @cardano-sdk/crypto does `import { pbkdf2Sync } from 'pbkdf2'`.
-      // The npm pbkdf2 browser build is CJS (no named ESM exports), so re-export
-      // its members explicitly from the CJS default.
+      // The npm `pbkdf2/browser.js` (crypto-browserify) chains into sha.js, whose
+      // Sha512 instance ends up with an uninitialized `_block` inside the MV3
+      // service worker → `Cannot set properties of undefined (setting 'NaN')` the
+      // first time BIP39 entropy→key derivation runs in the background (the MPC
+      // "Sign in with Google" flow is the first to do so). Back it with the
+      // pure-JS @noble/hashes pbkdf2 instead — no Buffer-pool / sha.js fragility.
+      // Verified byte-identical to node's crypto.pbkdf2Sync for sha512 + sha256.
       case '\0virtual:pbkdf2':
-        return `import pbkdf2Browser from 'pbkdf2/browser.js';
-export const pbkdf2 = pbkdf2Browser.pbkdf2 || pbkdf2Browser;
-export const pbkdf2Sync = pbkdf2Browser.pbkdf2Sync || pbkdf2Browser;
-export default pbkdf2Browser;`;
+        return `import { pbkdf2 as noblePbkdf2 } from '@noble/hashes/pbkdf2.js';
+import { sha256, sha512 } from '@noble/hashes/sha2.js';
+import { Buffer } from 'buffer';
+const HASHES = { sha256, 'sha-256': sha256, sha512, 'sha-512': sha512 };
+function toU8(x) {
+  if (typeof x === 'string') return new TextEncoder().encode(x);
+  if (x && x.buffer) return new Uint8Array(x.buffer.slice(x.byteOffset, x.byteOffset + x.byteLength));
+  return new Uint8Array(x);
+}
+function pickHash(digest) {
+  const h = HASHES[String(digest || 'sha1').toLowerCase()];
+  if (!h) throw new Error('pbkdf2: unsupported digest ' + digest);
+  return h;
+}
+export function pbkdf2Sync(password, salt, iterations, keylen, digest) {
+  return Buffer.from(noblePbkdf2(pickHash(digest), toU8(password), toU8(salt), { c: iterations, dkLen: keylen }));
+}
+export function pbkdf2(password, salt, iterations, keylen, digest, callback) {
+  const cb = typeof digest === 'function' ? digest : callback;
+  const dig = typeof digest === 'function' ? undefined : digest;
+  Promise.resolve().then(() => cb(null, pbkdf2Sync(password, salt, iterations, keylen, dig))).catch((e) => cb(e));
+}
+export default { pbkdf2, pbkdf2Sync };`;
 
       // gopd/gOPD.js: exports Object.getOwnPropertyDescriptor directly
       case '\0virtual:gopd-gOPD':
@@ -74,6 +147,93 @@ export default $dp;`;
         return `var test = { __proto__: null, foo: {} };
 var result = { __proto__: test }.foo === test.foo && !(test instanceof Object);
 export default function hasProto() { return result; };`;
+
+      case '\0virtual:effect-httpApiSwagger':
+      case '\0virtual:effect-httpApiScalar':
+        return HTTP_API_SWAGGER_STUB;
+
+      case '\0virtual:assert-stub':
+        // Minimal `assert` polyfill. The npm `assert` browser package depends
+        // on call-bound → get-intrinsic, which throws in service-worker context
+        // ("Function.prototype.apply was called on ServiceWorkerGlobalScope")
+        // because the intrinsic lookup falls back to globalThis. None of the
+        // Midnight / @polkadot deps use the rich Node assert API at runtime —
+        // they just need `assert(value)` to throw on falsy.
+        return `
+function assert(value, message) {
+  if (!value) throw new (assert.AssertionError)({ message: message || 'Assertion failed', actual: value, expected: true });
+}
+function fail(actual, expected, message) {
+  throw new (assert.AssertionError)({ message: message || ('AssertionError: ' + actual + ' ' + expected), actual: actual, expected: expected });
+}
+assert.AssertionError = class AssertionError extends Error {
+  constructor(opts) {
+    super((opts && opts.message) || 'AssertionError');
+    this.name = 'AssertionError';
+    if (opts) { this.actual = opts.actual; this.expected = opts.expected; this.operator = opts.operator; }
+  }
+};
+assert.ok = assert;
+assert.fail = fail;
+assert.equal = function (a, b, m) { if (a != b) fail(a, b, m); };
+assert.notEqual = function (a, b, m) { if (a == b) fail(a, b, m); };
+assert.strictEqual = function (a, b, m) { if (a !== b) fail(a, b, m); };
+assert.notStrictEqual = function (a, b, m) { if (a === b) fail(a, b, m); };
+assert.deepEqual = function (a, b, m) { try { if (JSON.stringify(a) !== JSON.stringify(b)) fail(a, b, m); } catch (e) { fail(a, b, m); } };
+assert.notDeepEqual = function (a, b, m) { try { if (JSON.stringify(a) === JSON.stringify(b)) fail(a, b, m); } catch (e) { /* ok */ } };
+assert.deepStrictEqual = assert.deepEqual;
+assert.notDeepStrictEqual = assert.notDeepEqual;
+assert.throws = function (fn) { try { fn(); } catch (e) { return; } throw new Error('Did not throw'); };
+assert.doesNotThrow = function (fn) { fn(); };
+assert.ifError = function (err) { if (err) throw err; };
+assert.match = function (s, r, m) { if (!r.test(s)) fail(s, r, m); };
+assert.doesNotMatch = function (s, r, m) { if (r.test(s)) fail(s, r, m); };
+assert.rejects = async function (fn) { try { await (typeof fn === 'function' ? fn() : fn); } catch (e) { return; } throw new Error('Did not reject'); };
+assert.doesNotReject = async function (fn) { await (typeof fn === 'function' ? fn() : fn); };
+export default assert;
+export { assert, fail };
+export const ok = assert.ok;
+export const equal = assert.equal;
+export const notEqual = assert.notEqual;
+export const strictEqual = assert.strictEqual;
+export const notStrictEqual = assert.notStrictEqual;
+export const deepEqual = assert.deepEqual;
+export const notDeepEqual = assert.notDeepEqual;
+export const deepStrictEqual = assert.deepStrictEqual;
+export const notDeepStrictEqual = assert.notDeepStrictEqual;
+export const throws = assert.throws;
+export const doesNotThrow = assert.doesNotThrow;
+export const ifError = assert.ifError;
+export const match = assert.match;
+export const doesNotMatch = assert.doesNotMatch;
+export const rejects = assert.rejects;
+export const doesNotReject = assert.doesNotReject;
+export const AssertionError = assert.AssertionError;
+`;
+
+      case '\0virtual:bn-js-esm': {
+        // bn.js is wrapped in its own IIFE that takes `(module, exports)` as
+        // parameters and calls itself with `(typeof module === 'undefined' ||
+        // module, this)`. `BN` is only defined inside that IIFE scope. We
+        // can't strip the wrapper without breaking lexical scope, so instead
+        // we run the original code inside a wrapper IIFE that supplies
+        // `module`/`exports` locals, then re-export `module.exports` as the
+        // ESM default. Wrapping in an IIFE keeps `module`/`exports` out of
+        // the bundle's module-level scope, where they would otherwise collide
+        // with Rollup's commonjs interop hoisting.
+        // @polkadot/util (Midnight SDK dep) does `import BN from 'bn.js'`.
+        const bnPath = _require.resolve('bn.js');
+        const src = readFileSync(bnPath, 'utf-8');
+        const bnCode =
+          'const _bnExports = (function () {\n' +
+          '  var module = { exports: {} };\n' +
+          '  var exports = module.exports;\n' +
+          src + '\n' +
+          '  return module.exports;\n' +
+          '})();\n' +
+          'export default _bnExports;\n';
+        return { code: bnCode, map: null };
+      }
     }
     return null;
   }

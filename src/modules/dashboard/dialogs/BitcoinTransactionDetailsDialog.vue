@@ -118,7 +118,7 @@
       <div class="io-section" v-if="tx.inputs && tx.inputs.length">
         <div class="io-header">
           <div class="io-icon io-icon--in">
-            <v-icon size="12" color="#FF453A">mdi-arrow-top-right</v-icon>
+            <v-icon size="12" color="error">mdi-arrow-top-right</v-icon>
           </div>
           <span class="io-title">Inputs</span>
           <span class="io-badge">{{ tx.inputs.length }}</span>
@@ -142,7 +142,7 @@
       <div class="io-section" v-if="tx.outputs && tx.outputs.length">
         <div class="io-header">
           <div class="io-icon io-icon--out">
-            <v-icon size="12" color="#30D158">mdi-arrow-bottom-left</v-icon>
+            <v-icon size="12" color="success">mdi-arrow-bottom-left</v-icon>
           </div>
           <span class="io-title">Outputs</span>
           <span class="io-badge">{{ tx.outputs.length }}</span>
@@ -273,18 +273,18 @@ async function copy(text: string, key: string): Promise<void> {
   align-items: center;
   gap: 5px;
   padding: 4px 10px;
-  border-radius: 20px;
+  border-radius: var(--g-r-sheet);
   font-size: 11px;
   font-weight: 600;
 }
 
-.badge--receive { background: rgba(48, 209, 88, 0.16); color: #30D158; border: 1px solid rgba(48, 209, 88, 0.25); }
-.badge--send    { background: rgba(255, 69, 58, 0.16);  color: #FF453A; border: 1px solid rgba(255, 69, 58, 0.25); }
+.badge--receive { background: var(--g-success-fill); color: var(--g-success); border: 1px solid var(--g-success-line); }
+.badge--send    { background: var(--g-error-fill);  color: var(--g-error); border: 1px solid var(--g-error-line); }
 .badge--self    { background: rgba(247, 147, 26, 0.16); color: #F7931A; border: 1px solid rgba(247, 147, 26, 0.25); }
 
 .tx-time {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.48);
+  color: var(--g-text-3);
 }
 
 .conf-pill {
@@ -294,11 +294,11 @@ async function copy(text: string, key: string): Promise<void> {
   font-size: 11px;
   font-weight: 500;
   padding: 3px 9px;
-  border-radius: 20px;
+  border-radius: var(--g-r-sheet);
 }
 
-.conf-pill--confirmed { background: rgba(48, 209, 88, 0.1);  color: #30D158; }
-.conf-pill--pending   { background: rgba(247, 147, 26, 0.12); color: #F7931A; }
+.conf-pill--confirmed { background: var(--g-success-fill);  color: var(--g-success); }
+.conf-pill--pending   { background: var(--g-warning-fill); color: var(--g-warning); }
 
 .conf-dot {
   width: 5px;
@@ -320,7 +320,7 @@ async function copy(text: string, key: string): Promise<void> {
 }
 
 .amount-btc {
-  font-size: 34px;
+  font-size: 32px;
   font-weight: 700;
   letter-spacing: -0.03em;
   line-height: 1;
@@ -328,25 +328,25 @@ async function copy(text: string, key: string): Promise<void> {
 }
 
 .amount-unit {
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 500;
   opacity: 0.65;
   margin-left: 4px;
 }
 
-.amount--receive { color: #30D158; }
-.amount--send    { color: #FF453A; }
+.amount--receive { color: var(--g-success); }
+.amount--send    { color: var(--g-error); }
 
 .amount-sats {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.52);
+  color: var(--g-text-3);
   margin-top: 6px;
   font-variant-numeric: tabular-nums;
 }
 
 .amount-usd {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--g-text-3);
   margin-top: 3px;
 }
 
@@ -359,19 +359,19 @@ async function copy(text: string, key: string): Promise<void> {
 }
 
 .detail-card {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 13px;
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-card);
   padding: 10px 13px;
 }
 
 .detail-card--full { grid-column: 1 / -1; }
 
 .detail-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.04em;
-  color: rgba(255, 255, 255, 0.42);
+  color: var(--g-text-3);
   margin-bottom: 5px;
   text-transform: uppercase;
 }
@@ -379,18 +379,18 @@ async function copy(text: string, key: string): Promise<void> {
 .detail-value {
   font-size: 13px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.88);
+  color: var(--g-text-1);
   display: flex;
   align-items: center;
   gap: 5px;
   flex-wrap: wrap;
 }
 
-.detail-value--mono { font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace; font-size: 11px; font-weight: 400; }
+.detail-value--mono { font-family: var(--g-font-mono); font-size: 11px; font-weight: 400; }
 .detail-value--copyable { flex-wrap: nowrap; }
-.detail-value--green  { color: #30D158; }
-.detail-value--orange { color: #F7931A; }
-.detail-value--red    { color: #FF453A; }
+.detail-value--green  { color: var(--g-success); }
+.detail-value--orange { color: var(--g-warning); }
+.detail-value--red    { color: var(--g-error); }
 
 .mono-text {
   flex: 1;
@@ -398,13 +398,13 @@ async function copy(text: string, key: string): Promise<void> {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: rgba(255, 255, 255, 0.72);
+  color: var(--g-text-2);
 }
 
 .detail-sub {
   font-size: 11px;
   font-weight: 400;
-  color: rgba(255, 255, 255, 0.38);
+  color: var(--g-text-3);
 }
 
 /* ─── Icon buttons ───────────────────────────────────────────── */
@@ -412,43 +412,43 @@ async function copy(text: string, key: string): Promise<void> {
   flex-shrink: 0;
   width: 22px;
   height: 22px;
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--g-r-control);
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-2);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--g-text-3);
   text-decoration: none;
   transition: background 0.15s, color 0.15s;
 }
 
-.icon-btn:hover { background: rgba(255, 255, 255, 0.12); color: rgba(255, 255, 255, 0.9); }
-.icon-btn.copied { background: rgba(48, 209, 88, 0.15); color: #30D158; border-color: rgba(48, 209, 88, 0.3); }
+.icon-btn:hover { background: var(--g-hairline-2); color: var(--g-text-1); }
+.icon-btn.copied { background: var(--g-success-fill); color: var(--g-success); border-color: var(--g-success-line); }
 
 .icon-btn-xs {
   flex-shrink: 0;
   width: 16px;
   height: 16px;
-  border-radius: 5px;
-  background: rgba(255, 255, 255, 0.06);
+  border-radius: var(--g-r-chip);
+  background: var(--g-hairline-1);
   border: none;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.38);
+  color: var(--g-text-3);
   transition: color 0.15s;
 }
 
-.icon-btn-xs:hover { color: rgba(255, 255, 255, 0.75); }
+.icon-btn-xs:hover { color: var(--g-text-2); }
 
 /* ─── Inputs / Outputs ───────────────────────────────────────── */
 .io-section {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 14px;
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-card);
   overflow: hidden;
   margin-bottom: 10px;
 }
@@ -458,35 +458,35 @@ async function copy(text: string, key: string): Promise<void> {
   align-items: center;
   gap: 8px;
   padding: 9px 13px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--g-hairline-1);
 }
 
 .io-icon {
   width: 20px;
   height: 20px;
-  border-radius: 6px;
+  border-radius: var(--g-r-chip);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
 
-.io-icon--in  { background: rgba(255, 69, 58, 0.12); }
-.io-icon--out { background: rgba(48, 209, 88, 0.12); }
+.io-icon--in  { background: var(--g-error-fill); }
+.io-icon--out { background: var(--g-success-fill); }
 
 .io-title {
   font-size: 12px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--g-text-2);
   flex: 1;
 }
 
 .io-badge {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.38);
-  background: rgba(255, 255, 255, 0.07);
+  font-size: 11px;
+  color: var(--g-text-3);
+  background: var(--g-hairline-1);
   padding: 2px 7px;
-  border-radius: 10px;
+  border-radius: var(--g-r-control);
 }
 
 .io-list { padding: 4px 0; }
@@ -497,12 +497,12 @@ async function copy(text: string, key: string): Promise<void> {
   justify-content: space-between;
   gap: 8px;
   padding: 6px 13px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid var(--g-hairline-1);
   transition: background 0.12s;
 }
 
 .io-row:last-child { border-bottom: none; }
-.io-row:hover { background: rgba(255, 255, 255, 0.03); }
+.io-row:hover { background: var(--g-hairline-1); }
 
 .io-addr-wrap {
   display: flex;
@@ -513,9 +513,9 @@ async function copy(text: string, key: string): Promise<void> {
 }
 
 .io-addr {
-  font-size: 10.5px;
-  font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
-  color: rgba(255, 255, 255, 0.6);
+  font-size: 11px;
+  font-family: var(--g-font-mono);
+  color: var(--g-text-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -531,8 +531,8 @@ async function copy(text: string, key: string): Promise<void> {
   white-space: nowrap;
 }
 
-.io-amount--send    { color: #FF453A; }
-.io-amount--receive { color: #30D158; }
+.io-amount--send    { color: var(--g-error); }
+.io-amount--receive { color: var(--g-success); }
 
-.io-unit { font-size: 9px; font-weight: 400; opacity: 0.55; }
+.io-unit { font-size: 11px; font-weight: 400; opacity: 0.55; }
 </style>

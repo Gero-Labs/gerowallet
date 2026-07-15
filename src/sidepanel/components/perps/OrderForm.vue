@@ -28,7 +28,7 @@
     <!-- Leverage + Margin Mode row -->
     <div class="lev-margin-row">
       <button class="lev-badge" @click="leverageDialog = true">
-        <v-icon size="11" class="mr-1" style="color: var(--chain-primary)">mdi-lightning-bolt</v-icon>
+        <v-icon size="11" class="mr-1" style="color: var(--g-accent)">mdi-lightning-bolt</v-icon>
         {{ localLeverage }}x
       </button>
       <span class="margin-mode-label">
@@ -98,14 +98,14 @@
       dense
       hide-details
       class="perp-slider mb-2"
-      :color="side === 'buy' ? '#26FAB0' : '#F97066'"
+      :color="side === 'buy' ? 'success' : 'error'"
       track-color="rgba(255,255,255,0.1)"
       @input="onSliderChange"
     />
 
     <!-- TP/SL Toggle -->
     <div class="tpsl-header" @click="showTpSl = !showTpSl">
-      <span class="tpsl-label">TP / SL</span>
+      <span class="tpsl-label t-label">TP / SL</span>
       <v-icon size="14" class="tpsl-chevron" :class="{ rotated: showTpSl }">
         mdi-chevron-down
       </v-icon>
@@ -154,11 +154,11 @@
     <!-- Margin Info -->
     <div class="margin-info-row">
       <div class="margin-info-item">
-        <span class="mi-label">{{ $t('perpetuals.availableBalance') }}</span>
+        <span class="mi-label t-label">{{ $t('perpetuals.availableBalance') }}</span>
         <span class="mi-value">{{ availableBalance ? parseFloat(availableBalance).toFixed(2) : '—' }} <span class="mi-unit">USD</span></span>
       </div>
       <div class="margin-info-item">
-        <span class="mi-label">{{ $t('perpetuals.collateral') }}</span>
+        <span class="mi-label t-label">{{ $t('perpetuals.collateral') }}</span>
         <span class="mi-value">{{ estimatedMargin }} <span class="mi-unit">USD</span></span>
       </div>
     </div>
@@ -223,7 +223,7 @@
     <!-- Leverage Dialog -->
     <v-dialog v-model="leverageDialog" max-width="300" content-class="perp-dialog">
       <div class="lev-dialog-content">
-        <div class="lev-dialog-title">{{ $t('perpetuals.leverage') }}</div>
+        <div class="lev-dialog-title t-label">{{ $t('perpetuals.leverage') }}</div>
         <div class="lev-value-display">{{ localLeverage }}<span class="lev-x">x</span></div>
         <v-slider
           v-model="localLeverage"
@@ -596,10 +596,10 @@ watch(() => account.value, (acc) => {
 .side-toggle {
   width: 100%;
   display: flex !important;
-  border-radius: 8px !important;
+  border-radius: var(--g-r-control) !important;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.04) !important;
-  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+  background: var(--g-hairline-1) !important;
+  border: 1px solid var(--g-hairline-1) !important;
   margin-bottom: 8px;
   height: 34px !important;
 }
@@ -608,27 +608,26 @@ watch(() => account.value, (acc) => {
   flex: 1 !important;
   height: 34px !important;
   min-width: 0 !important;
-  border-radius: 6px !important;
+  border-radius: var(--g-r-control) !important;
   font-size: 11px !important;
   font-weight: 600 !important;
-  letter-spacing: 0.04em !important;
   text-transform: none !important;
-  color: rgba(255, 255, 255, 0.35) !important;
+  color: var(--g-text-3) !important;
   background: transparent !important;
-  transition: all 0.18s ease !important;
+  transition: color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease !important;
   border: none !important;
 }
 
 .side-btn--buy.active,
 .side-btn--buy.v-btn--active {
-  color: #26FAB0 !important;
-  background: rgba(38, 250, 176, 0.1) !important;
+  color: var(--g-success) !important;
+  background: color-mix(in srgb, var(--g-success) 10%, transparent) !important;
 }
 
 .side-btn--sell.active,
 .side-btn--sell.v-btn--active {
-  color: #F97066 !important;
-  background: rgba(249, 112, 102, 0.1) !important;
+  color: var(--g-error) !important;
+  background: color-mix(in srgb, var(--g-error) 10%, transparent) !important;
 }
 
 /* ── Order Type Chips ── */
@@ -641,21 +640,20 @@ watch(() => account.value, (acc) => {
 
 .ot-chip {
   padding: 3px 9px;
-  border-radius: 5px;
-  font-size: 10px;
+  border-radius: var(--g-r-chip);
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.03em;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.4);
+  border: 1px solid var(--g-hairline-2);
+  background: var(--g-hairline-1);
+  color: var(--g-text-3);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease, border-color var(--g-dur-fast) ease;
 }
 
 .ot-chip--active {
-  border-color: var(--chain-primary);
-  color: var(--chain-primary);
-  background: color-mix(in srgb, var(--chain-primary) 10%, transparent);
+  border-color: var(--g-accent);
+  color: var(--g-accent);
+  background: color-mix(in srgb, var(--g-accent) 10%, transparent);
 }
 
 /* ── Leverage / Margin Mode ── */
@@ -670,43 +668,43 @@ watch(() => account.value, (acc) => {
   display: flex;
   align-items: center;
   padding: 3px 8px;
-  border-radius: 5px;
+  border-radius: var(--g-r-chip);
   font-size: 11px;
   font-weight: 700;
-  color: var(--chain-primary);
-  background: color-mix(in srgb, var(--chain-primary) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--chain-primary) 25%, transparent);
+  color: var(--g-accent);
+  background: color-mix(in srgb, var(--g-accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--g-accent) 25%, transparent);
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background var(--g-dur-fast) ease;
 }
 
 .lev-badge:hover {
-  background: color-mix(in srgb, var(--chain-primary) 18%, transparent);
+  background: color-mix(in srgb, var(--g-accent) 18%, transparent);
 }
 
 .margin-mode-label {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.35);
+  font-size: 11px;
+  color: var(--g-text-3);
   font-weight: 500;
 }
 
 /* ── Inputs ── */
 .perp-input :deep(.v-input__slot) {
-  background: rgba(255, 255, 255, 0.04) !important;
-  border-color: rgba(255, 255, 255, 0.1) !important;
+  background: var(--g-hairline-1) !important;
+  border-color: var(--g-hairline-2) !important;
   min-height: 34px !important;
 }
 
 .perp-input :deep(.v-label) {
   font-size: 11px !important;
-  color: rgba(255, 255, 255, 0.4) !important;
+  color: var(--g-text-3) !important;
 }
 
 .perp-input :deep(input) {
   font-size: 12px !important;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace !important;
-  color: #ffffff !important;
-  caret-color: var(--chain-primary) !important;
+  font-family: var(--g-font-mono) !important;
+  color: var(--g-text-1) !important;
+  caret-color: var(--g-accent) !important;
   padding: 0 8px !important;
 }
 
@@ -716,22 +714,22 @@ watch(() => account.value, (acc) => {
 .perp-input :deep(input[type='number'])::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 
 .perp-input :deep(.v-text-field__suffix) {
-  font-size: 10px !important;
-  color: rgba(255, 255, 255, 0.35) !important;
+  font-size: 11px !important;
+  color: var(--g-text-3) !important;
   font-weight: 600 !important;
   margin-top: 0 !important;
 }
 
 .perp-input :deep(fieldset) {
-  border-color: rgba(255, 255, 255, 0.1) !important;
+  border-color: var(--g-hairline-2) !important;
 }
 
 .perp-input :deep(.v-input__slot:hover fieldset) {
-  border-color: rgba(255, 255, 255, 0.22) !important;
+  border-color: var(--g-hairline-3) !important;
 }
 
 .perp-input :deep(.v-input--is-focused fieldset) {
-  border-color: var(--chain-primary) !important;
+  border-color: var(--g-accent) !important;
 }
 
 /* ── Size % Buttons ── */
@@ -744,22 +742,22 @@ watch(() => account.value, (acc) => {
 .pct-btn {
   flex: 1;
   padding: 2px 0;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.3);
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 3px;
+  color: var(--g-text-3);
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-chip);
   cursor: pointer;
   margin: 0 1px;
-  transition: all 0.12s ease;
+  transition: color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease, border-color var(--g-dur-fast) ease;
 }
 
 .pct-btn--active,
 .pct-btn:hover {
-  color: var(--chain-primary);
-  border-color: color-mix(in srgb, var(--chain-primary) 30%, transparent);
-  background: color-mix(in srgb, var(--chain-primary) 8%, transparent);
+  color: var(--g-accent);
+  border-color: color-mix(in srgb, var(--g-accent) 30%, transparent);
+  background: color-mix(in srgb, var(--g-accent) 8%, transparent);
 }
 
 /* ── Slider ── */
@@ -787,17 +785,9 @@ watch(() => account.value, (acc) => {
   user-select: none;
 }
 
-.tpsl-label {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.45);
-  text-transform: uppercase;
-}
-
 .tpsl-chevron {
-  color: rgba(255, 255, 255, 0.3) !important;
-  transition: transform 0.2s ease;
+  color: var(--g-text-3) !important;
+  transition: transform var(--g-dur-base) ease;
 }
 
 .tpsl-chevron.rotated {
@@ -819,8 +809,8 @@ watch(() => account.value, (acc) => {
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.45);
+  font-size: 11px;
+  color: var(--g-text-3);
   cursor: pointer;
   user-select: none;
 }
@@ -832,17 +822,17 @@ watch(() => account.value, (acc) => {
 .adv-checkmark {
   width: 12px;
   height: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 2px;
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--g-hairline-3);
+  border-radius: var(--g-r-chip);
+  background: var(--g-hairline-1);
   flex-shrink: 0;
   position: relative;
-  transition: all 0.12s ease;
+  transition: background-color var(--g-dur-fast) ease, border-color var(--g-dur-fast) ease;
 }
 
 .adv-checkbox:checked + .adv-checkmark {
-  background: var(--chain-primary);
-  border-color: var(--chain-primary);
+  background: var(--g-accent);
+  border-color: var(--g-accent);
 }
 
 .adv-checkbox:checked + .adv-checkmark::after {
@@ -852,7 +842,7 @@ watch(() => account.value, (acc) => {
   top: 0px;
   width: 6px;
   height: 9px;
-  border: 2px solid #000;
+  border: 2px solid var(--g-on-grad);
   border-top: none;
   border-left: none;
   transform: rotate(45deg) scaleY(0.7);
@@ -863,8 +853,8 @@ watch(() => account.value, (acc) => {
   display: flex;
   justify-content: space-between;
   padding: 6px 2px;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid var(--g-hairline-1);
+  border-bottom: 1px solid var(--g-hairline-1);
   margin-bottom: 8px;
 }
 
@@ -874,64 +864,56 @@ watch(() => account.value, (acc) => {
   gap: 1px;
 }
 
-.mi-label {
-  font-size: 9px;
-  color: rgba(255, 255, 255, 0.3);
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-
 .mi-value {
   font-size: 11px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  color: rgba(255, 255, 255, 0.85);
+  font-family: var(--g-font-mono);
+  color: var(--g-text-1);
   font-weight: 600;
 }
 
 .mi-unit {
-  font-size: 9px;
-  color: rgba(255, 255, 255, 0.35);
+  font-size: 11px;
+  color: var(--g-text-3);
   font-weight: 400;
 }
 
 /* ── Place Order Button ── */
 .place-order-btn {
   height: 38px !important;
-  border-radius: 8px !important;
+  border-radius: var(--g-r-control) !important;
   font-size: 12px !important;
   font-weight: 700 !important;
-  letter-spacing: 0.04em !important;
   text-transform: none !important;
 }
 
 .place-order-btn--buy {
-  background: rgba(38, 250, 176, 0.15) !important;
-  color: #26FAB0 !important;
-  border: 1px solid rgba(38, 250, 176, 0.3) !important;
+  background: color-mix(in srgb, var(--g-success) 15%, transparent) !important;
+  color: var(--g-success) !important;
+  border: 1px solid color-mix(in srgb, var(--g-success) 30%, transparent) !important;
 }
 
 .place-order-btn--buy:not(.v-btn--disabled):hover {
-  background: rgba(38, 250, 176, 0.22) !important;
+  background: color-mix(in srgb, var(--g-success) 22%, transparent) !important;
 }
 
 .place-order-btn--sell {
-  background: rgba(249, 112, 102, 0.15) !important;
-  color: #F97066 !important;
-  border: 1px solid rgba(249, 112, 102, 0.3) !important;
+  background: color-mix(in srgb, var(--g-error) 15%, transparent) !important;
+  color: var(--g-error) !important;
+  border: 1px solid color-mix(in srgb, var(--g-error) 30%, transparent) !important;
 }
 
 .place-order-btn--sell:not(.v-btn--disabled):hover {
-  background: rgba(249, 112, 102, 0.22) !important;
+  background: color-mix(in srgb, var(--g-error) 22%, transparent) !important;
 }
 
 .place-order-btn--connect {
-  background: color-mix(in srgb, var(--chain-primary) 14%, transparent) !important;
-  color: var(--chain-primary) !important;
-  border: 1px solid color-mix(in srgb, var(--chain-primary) 32%, transparent) !important;
+  background: color-mix(in srgb, var(--g-accent) 14%, transparent) !important;
+  color: var(--g-accent) !important;
+  border: 1px solid color-mix(in srgb, var(--g-accent) 32%, transparent) !important;
 }
 
 .place-order-btn--connect:not(.v-btn--disabled):hover {
-  background: color-mix(in srgb, var(--chain-primary) 22%, transparent) !important;
+  background: color-mix(in srgb, var(--g-accent) 22%, transparent) !important;
 }
 
 .place-order-btn.v-btn--disabled {
@@ -940,10 +922,10 @@ watch(() => account.value, (acc) => {
 
 /* ── Leverage Dialog ── */
 :deep(.perp-dialog) {
-  background: #0f1117 !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  border-radius: 12px !important;
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6) !important;
+  background: var(--g-overlay) !important;
+  border: 1px solid var(--g-hairline-2) !important;
+  border-radius: var(--g-r-card) !important;
+  box-shadow: var(--g-shadow-sheet) !important;
 }
 
 .lev-dialog-content {
@@ -951,19 +933,14 @@ watch(() => account.value, (acc) => {
 }
 
 .lev-dialog-title {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.4);
   margin-bottom: 8px;
 }
 
 .lev-value-display {
-  font-size: 40px;
+  font-size: 32px;
   font-weight: 800;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  color: var(--chain-primary);
+  font-family: var(--g-font-mono);
+  color: var(--g-accent);
   line-height: 1;
   margin-bottom: 12px;
 }
@@ -986,28 +963,28 @@ watch(() => account.value, (acc) => {
 
 .lev-preset-btn {
   padding: 4px 8px;
-  border-radius: 5px;
-  font-size: 10px;
+  border-radius: var(--g-r-chip);
+  font-size: 11px;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.35);
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--g-text-3);
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
   cursor: pointer;
-  transition: all 0.12s ease;
+  transition: color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease, border-color var(--g-dur-fast) ease;
 }
 
 .lev-preset-btn.active,
 .lev-preset-btn:hover {
-  color: var(--chain-primary);
-  border-color: color-mix(in srgb, var(--chain-primary) 35%, transparent);
-  background: color-mix(in srgb, var(--chain-primary) 10%, transparent);
+  color: var(--g-accent);
+  border-color: color-mix(in srgb, var(--g-accent) 35%, transparent);
+  background: color-mix(in srgb, var(--g-accent) 10%, transparent);
 }
 
 .lev-confirm-btn {
-  background: color-mix(in srgb, var(--chain-primary) 15%, transparent) !important;
-  color: var(--chain-primary) !important;
-  border: 1px solid color-mix(in srgb, var(--chain-primary) 30%, transparent) !important;
-  border-radius: 8px !important;
+  background: color-mix(in srgb, var(--g-accent) 15%, transparent) !important;
+  color: var(--g-accent) !important;
+  border: 1px solid color-mix(in srgb, var(--g-accent) 30%, transparent) !important;
+  border-radius: var(--g-r-control) !important;
   font-size: 12px !important;
   font-weight: 700 !important;
   text-transform: none !important;
@@ -1017,9 +994,9 @@ watch(() => account.value, (acc) => {
 .estimates-block {
   margin: 4px 0 8px;
   padding: 8px 10px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.025);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--g-r-control);
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1029,19 +1006,18 @@ watch(() => account.value, (acc) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 14px;
 }
 
 .est-label {
-  color: rgba(255, 255, 255, 0.45);
-  letter-spacing: 0.02em;
+  color: var(--g-text-3);
 }
 
 .est-value {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: var(--g-font-mono);
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--g-text-1);
   font-weight: 600;
 }
 
@@ -1051,21 +1027,21 @@ watch(() => account.value, (acc) => {
   gap: 4px;
   margin-top: 2px;
   padding: 4px 6px;
-  border-radius: 4px;
-  background: rgba(246, 190, 66, 0.08);
-  border: 1px solid rgba(246, 190, 66, 0.2);
-  color: #f6be42;
-  font-size: 10px;
+  border-radius: var(--g-r-chip);
+  background: color-mix(in srgb, var(--g-warning) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--g-warning) 20%, transparent);
+  color: var(--g-warning);
+  font-size: 11px;
   line-height: 12px;
 }
 
 .est-warning-icon {
-  color: #f6be42 !important;
+  color: var(--g-warning) !important;
 }
 
 .estimates-fade-enter-active,
 .estimates-fade-leave-active {
-  transition: opacity 0.18s ease, transform 0.18s ease;
+  transition: opacity var(--g-dur-fast) ease, transform var(--g-dur-fast) ease;
 }
 
 .estimates-fade-enter,

@@ -1,5 +1,5 @@
 <template>
-    <BaseDialog :isOpen="isOpen" @close="$emit('close')" :title="$t('multisig.newMultisigTransactionFull')" :loading="txSubmitLoading" :min-height="0"
+    <BaseDialog persistent :width="850" :isOpen="isOpen" @close="$emit('close')" :title="$t('multisig.newMultisigTransactionFull')" :loading="txSubmitLoading" :min-height="0"
                 :subtitle="$t('multisig.multisigRequiresSignatures')">
       <v-card-title style="display: block;" class="py-0">
         <v-stepper v-model="currentStep" flat class="stepper-container" non-linear alt-labels>
@@ -13,7 +13,7 @@
                 <div class="icon-container">
                   <v-icon
                     class="step-icon"
-                    :color="currentStep < index + 1 ? '#00dff3' : '#0f0f0f'"
+                    :color="currentStep < index + 1 ? 'var(--g-accent)' : 'var(--g-canvas)'"
                     size="20"
                   >{{ currentStep > index + 1 ? 'mdi-check' : 'mdi-circle-medium' }}
                   </v-icon
@@ -131,7 +131,7 @@
           <v-tooltip
             v-model="tooltip.enabled"
             top
-            color="red"
+            color="error"
             v-if="loggedWallet?.type === WalletType.Normal"
           >
             <template v-slot:activator="{ }">
@@ -243,7 +243,7 @@ const addresses = computed(() => new Set()); // Placeholder
 const currentStep = ref(1);
 const tooltip = ref<Tooltip>({
   enabled: false,
-  text: t('wallet.wrongSpendingPassword'),
+  text: t('errors.wrongPassword'),
 });
 const txBody = ref<any>(undefined);
 const txData = ref<any>(undefined);
@@ -634,7 +634,7 @@ onMounted(() => {
 }
 
 .continue-button {
-  background: linear-gradient(to right, #00c7f3, #00fad5);
+  background: linear-gradient(to right, var(--g-grad-1), var(--g-grad-2));
   color: black;
 
   &:disabled {
@@ -659,15 +659,15 @@ onMounted(() => {
     width: 150px;
 
     &.active .icon-container {
-      box-shadow: 0 0 0 5px #00dff327;
+      box-shadow: 0 0 0 5px rgba(0, 223, 243, 0.15);
     }
 
     &.next .icon-container {
-      background-color: #292929;
+      background-color: var(--g-raised);
     }
 
     .icon-container {
-      background-color: #00dff3;
+      background-color: var(--g-accent);
       border-radius: 50%;
       display: flex;
       justify-content: center;
@@ -684,7 +684,7 @@ onMounted(() => {
     line-height: 20px;
     text-align: center;
     font-weight: 600;
-    color: #CECFD2;
+    color: var(--g-text-2);
   }
 
   .divider {
@@ -694,10 +694,10 @@ onMounted(() => {
     margin-left: -75px;
     margin-right: -75px;
     margin-top: 16px;
-    background-color: #292929;
+    background-color: var(--g-raised);
 
     &.active-divider {
-      background-color: #00dff3;
+      background-color: var(--g-accent);
     }
   }
 }

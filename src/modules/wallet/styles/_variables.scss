@@ -1,7 +1,7 @@
 // Color Variables
 $primary-cyan: #00c7f3;
 $primary-green: #00ffd1;
-$error-red: #d92d20;
+$error-red: #F97066; // was #d92d20 (~4.0:1, fails AA); canon error token
 $primary-gradient: linear-gradient(135deg, $primary-cyan 0%, $primary-green 100%);
 
 // Tier Colors
@@ -24,8 +24,8 @@ $border-primary: #373a41;
 $border-secondary: #22262f;
 
 // Typography
-$font-family-primary: 'Inter', sans-serif;
-$font-family-secondary: 'Manrope', sans-serif;
+$font-family-primary: 'Inter Variable', 'Inter', sans-serif;
+$font-family-secondary: 'Inter Variable', 'Inter', sans-serif; // was 'Manrope' (never loaded)
 
 $font-size-xs: 12px;
 $font-size-sm: 14px;
@@ -62,10 +62,11 @@ $border-radius-lg: 12px;
 $border-radius-xl: 16px;
 $border-radius-full: 9999px;
 
-// Shadows
-$shadow-sm: 0px 1px 2px 0px rgba(255, 255, 255, 0);
-$shadow-md: 0px 3px 3px -1.5px rgba(255, 255, 255, 0), 0px 8px 8px -4px rgba(255, 255, 255, 0);
-$shadow-lg: 0px 20px 24px -4px rgba(255, 255, 255, 0);
+// Shadows. These were all rgba(255,255,255,0) — fully transparent, so all 12
+// consumer sites rendered no elevation at all. Real dark-theme values now.
+$shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.35);
+$shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
+$shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.55);
 $shadow-button: inset 0px -2px 0px 0px rgba(12, 14, 18, 0.05), inset 0px 0px 0px 1px rgba(12, 14, 18, 0.18);
 
 // Breakpoints

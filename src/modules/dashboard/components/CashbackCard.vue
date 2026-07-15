@@ -18,7 +18,7 @@
 
       <!-- Go Cashback Button -->
       <div class="cashback-button-container">
-        <v-btn elevation="0" height="36" color="#0B141B" @click="navigateToCashback" block>
+        <v-btn elevation="0" height="36" color="var(--g-surface)" @click="navigateToCashback" block>
           <div class="btn-text">{{ $t('cashback.goCashback') }}</div>
         </v-btn>
       </div>

@@ -1,6 +1,11 @@
+import '../shared/styles/tokens.css';
+import '@fontsource-variable/inter';            // family: 'Inter Variable', wght axis 100-900
+import '@fontsource/jetbrains-mono/400.css';    // family: 'JetBrains Mono'
+import '@fontsource/jetbrains-mono/500.css';
 import '@mdi/font/css/materialdesignicons.css';
 import 'vuetify/dist/vuetify.min.css';
 import '../shared/styles/liquid-glass.css';
+import '../shared/styles/baseline.css';
 
 import Vue from 'vue';
 import VueRouter from 'vue-router';
@@ -120,11 +125,15 @@ Promise.all([loadPersistedGero(), hydrateWalletStore()]).then(() => {
       { immediate: true }
     );
 
-    // Redirect to welcome page when wallet is locked
+    // Redirect to welcome page when wallet is locked — except the passkey-auth
+    // popup, which runs the unlock ceremony itself and must stay on its route
+    // while locked (the window opened with #/passkey-auth to authenticate).
     app.$watch(
       () => walletStoreState.isLocked,
       (isLocked) => {
-        if (isLocked && router.currentRoute.path !== '/welcome') {
+        if (isLocked
+          && router.currentRoute.path !== '/welcome'
+          && router.currentRoute.name !== 'passkey-auth') {
           router.push('/welcome');
         }
       }

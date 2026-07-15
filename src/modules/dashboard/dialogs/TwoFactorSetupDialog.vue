@@ -1,5 +1,5 @@
 <template>
-  <BaseDialog
+  <BaseDialog persistent
     :isOpen="value"
     :icon="dialogIcon"
     :title="dialogTitle"
