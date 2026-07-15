@@ -2387,6 +2387,9 @@ export default {
   'swap.youReceive': 'You Receive',
   'errors.buildTransactionFailed': 'Failed to build transaction',
   'errors.insufficientBalance': 'Insufficient balance',
+  'errors.noCollateral': 'This transaction runs a smart contract, which needs a small ADA-only UTxO for collateral, but all your ADA is bundled with tokens. Send about 6 ADA to your own wallet address to create one, then try again.',
+  'errors.insufficientAdaForTx': 'Not enough ADA to complete this transaction once network fees and the minimum per-output are covered. Add a little more ADA and try again.',
+  'errors.collateralPoolEmpty': 'The shared collateral service is temporarily unavailable. Please try again in a moment.',
   'errors.invalidAddress': 'Invalid address',
   'errors.invalidOrder': 'Invalid order data',
   // The single wrong-password message. Shown as an inline, persistent field
