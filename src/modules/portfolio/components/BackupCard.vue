@@ -79,5 +79,8 @@ defineEmits(['backup']);
   /* GButton's sanctioned foreground seam — amber text, no cascade fight. */
   --g-btn-fg: var(--g-warning);
   margin-top: auto;
+  /* Vuetify's .v-btn--block sets flex: 1 0 auto; as a direct child of this
+     column flex card that grows the button to fill the card. Pin it. */
+  flex: 0 0 auto;
 }
 </style>
