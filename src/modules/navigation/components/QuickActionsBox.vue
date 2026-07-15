@@ -1,6 +1,9 @@
 <template>
   <div>
-    <div :class="['quick-actions-container', { 'compact': compact }]">
+    <!-- hideButtons removes the action row but keeps this component mounted:
+         it is the HOST for the quick-action dialogs (Buy/Receive/Swap/Perps),
+         which the empty-state FundingCard and PerkTeasers still open. -->
+    <div v-if="!hideButtons" :class="['quick-actions-container', { 'compact': compact }]">
       <div v-if="!isBuyDisabled" class="action-button-wrapper">
         <v-tooltip bottom :disabled="!compact" content-class="custom-tooltip">
           <template v-slot:activator="{ on, attrs }">
@@ -171,6 +174,7 @@ import { useQuickActionDialogs } from '@/shared/composables/useQuickActionDialog
 
 defineProps<{
   compact?: boolean;
+  hideButtons?: boolean;
 }>();
 
 const { loggedWallet } = toRefs(walletStore);

@@ -3577,6 +3577,8 @@ export default {
   'portfolio.perkSpendHook': 'Gib dein Krypto wie Bargeld aus.',
   'portfolio.perkPerpsTitle': 'Perpetuals handeln',
   'portfolio.perkPerpsHook': 'Long oder Short, direkt aus der Wallet.',
+  'portfolio.perkSwapTitle': 'Token swappen',
+  'portfolio.perkSwapHook': 'ADA in Sekunden in jeden Cardano-Token tauschen.',
   'portfolio.scam': 'BETRUG',
   'portfolio.all': 'Alle',
   'portfolio.trending': 'Im Trend',

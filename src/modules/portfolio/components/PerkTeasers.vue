@@ -1,7 +1,13 @@
 <template>
   <!-- Empty-wallet incentive strip: what a funded wallet unlocks, as tappable
        teasers. Each card renders only where the feature exists (same chain
-       gating as the EmptyStateHero perks footnote). -->
+       gating as the EmptyStateHero perks footnote).
+
+       Deliberate canon deviations, both user-requested for this surface only
+       (2026-07-15): ambient animation loops (long rest phases, desynced per
+       card, killed under prefers-reduced-motion) and one soft per-perk hue
+       wash so the cards read distinct. Don't copy either pattern elsewhere
+       without the same sign-off. -->
   <section v-if="perks.length" class="perk-teasers">
     <p class="perk-teasers__label g-mono">{{ $t('dashboard.onceFundedTitle') }}</p>
     <div class="perk-teasers__grid">
@@ -9,14 +15,13 @@
         v-for="(perk, i) in perks"
         :key="perk.key"
         type="button"
-        class="perk-teasers__card"
-        :style="{ '--pt-d': `${i * 60}ms` }"
+        :class="['perk-teasers__card', 'glass-panel', `perk-teasers__card--${perk.key}`]"
+        :style="{ '--pt-d': `${i * 60}ms`, '--pt-loop-d': `${i * 520}ms` }"
         @click="perk.go()"
       >
-        <!-- Hand-drawn accent SVGs with hover-triggered micro-animation
-             (feedback, not decorative loops — every run is finite and
-             user-initiated). transform-box: fill-box is what lets bars/coins
-             scale around their own box instead of the viewBox origin. -->
+        <!-- Hand-drawn hue-stroked SVGs. transform-box: fill-box is what lets
+             bars/coins scale around their own box instead of the viewBox
+             origin. -->
         <span class="perk-teasers__icon" aria-hidden="true">
           <svg v-if="perk.key === 'stake'" class="pt-svg" viewBox="0 0 24 24">
             <rect class="pt-bar" x="4" y="13" width="3.4" height="7" rx="1" />
@@ -35,6 +40,12 @@
               <rect x="3.5" y="6" width="17" height="12" rx="2" fill="none" />
               <rect class="pt-cc-chip" x="6.5" y="9" width="3.4" height="2.6" rx="0.6" />
               <path d="M6.5 14.8 H13" fill="none" />
+            </g>
+          </svg>
+          <svg v-else-if="perk.key === 'swap'" class="pt-svg" viewBox="0 0 24 24">
+            <g class="pt-swap">
+              <path d="M5 9 H17 M14.4 5.8 L17.8 9 L14.4 12.2" fill="none" />
+              <path d="M19 15 H7 M9.6 11.8 L6.2 15 L9.6 18.2" fill="none" />
             </g>
           </svg>
           <svg v-else class="pt-svg" viewBox="0 0 24 24">
@@ -57,6 +68,7 @@ import { toRefs, computed, getCurrentInstance } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain } from '@/models/types';
 import networks from '@/utils/networks';
+import featureFlagsStore from '@/stores/featureFlagsStore';
 import { useQuickActionDialogs } from '@/shared/composables/useQuickActionDialogs';
 
 const { loggedWallet } = toRefs(walletStore);
@@ -68,6 +80,12 @@ const perks = computed(() => {
   const chain = loggedWallet.value?.chain;
   const network = loggedWallet.value?.network;
   const list: { key: string; title: string; hook: string; go: () => void }[] = [];
+  if (networks.resolveSwapSupport(chain, network) && featureFlagsStore.isSwapEnabled()) {
+    list.push({
+      key: 'swap', title: 'portfolio.perkSwapTitle', hook: 'portfolio.perkSwapHook',
+      go: () => openDialog('SWAP'),
+    });
+  }
   if (networks.resolveStakingSupport(chain, network)) {
     list.push({
       key: 'stake', title: 'dashboard.perkStakeTitle', hook: 'portfolio.perkStakeHook',
@@ -110,27 +128,56 @@ const perks = computed(() => {
   gap: var(--g-s-2);
 }
 
+/* Per-perk hue: soft top-to-bottom wash over the raised surface. Semantic
+   tokens where one fits; the card perk carries the single new violet. */
+.perk-teasers__card--stake { --pt-hue: var(--g-success); }
+.perk-teasers__card--cashback { --pt-hue: var(--g-warning); }
+.perk-teasers__card--card { --pt-hue: #A78BFA; }
+.perk-teasers__card--perps { --pt-hue: var(--g-info); }
+.perk-teasers__card--swap { --pt-hue: var(--g-accent); }
+
+/* Surface (glass background/border/radius) comes from the shared
+   .glass-panel material. The per-perk hue wash lives on a ::before overlay
+   so it layers over the glass without fighting its flagged background. */
 .perk-teasers__card {
   appearance: none;
   font: inherit;
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
   text-align: left;
   padding: var(--g-s-3);
-  background: var(--g-raised);
-  border: 1px solid var(--g-hairline-1);
-  border-radius: var(--g-r-card);
   cursor: pointer;
   animation: pt-rise var(--g-dur-slow) var(--g-ease) both;
   animation-delay: var(--pt-d, 0ms);
-  transition: border-color var(--g-dur-fast) var(--g-ease), background var(--g-dur-fast) var(--g-ease);
 }
 
-.perk-teasers__card:hover,
-.perk-teasers__card:focus-visible {
-  border-color: color-mix(in srgb, var(--g-accent) 45%, transparent);
-  background: color-mix(in srgb, var(--g-accent) 7%, var(--g-overlay));
+.perk-teasers__card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--pt-hue) 14%, transparent),
+    transparent 72%
+  );
+  opacity: 0.75;
+  pointer-events: none;
+  transition: opacity var(--g-dur-fast) var(--g-ease);
+}
+
+.perk-teasers__card:hover::before,
+.perk-teasers__card:focus-visible::before {
+  opacity: 1;
+}
+
+/* Positioned so they paint above the ::before wash (tree order). */
+.perk-teasers__icon,
+.perk-teasers__text,
+.perk-teasers__arrow {
+  position: relative;
 }
 
 @keyframes pt-rise {
@@ -142,19 +189,22 @@ const perks = computed(() => {
   width: 38px;
   height: 38px;
   border-radius: var(--g-r-control);
-  background: color-mix(in srgb, var(--g-accent) 14%, transparent);
+  background: color-mix(in srgb, var(--pt-hue) 14%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
 
-/* ── SVG micro-animations (hover/focus feedback, all finite runs) ── */
+/* ── SVG ambient loops ──
+   Every cycle is mostly rest: the action lives in the first ~20% of a long
+   cycle, and --pt-loop-d desyncs the cards so they never fire in unison.
+   All loops collapse under prefers-reduced-motion below. */
 
 .pt-svg {
   width: 22px;
   height: 22px;
-  stroke: var(--g-accent);
+  stroke: var(--pt-hue);
   stroke-width: 1.8;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -162,115 +212,109 @@ const perks = computed(() => {
 
 /* Staking: bars pop up in a stagger */
 .pt-bar {
-  fill: var(--g-accent);
+  fill: var(--pt-hue);
   stroke: none;
   transform-box: fill-box;
   transform-origin: 50% 100%;
+  animation: pt-bar-pop 3600ms var(--g-ease) var(--pt-loop-d, 0ms) infinite;
 }
 
 .pt-bar:nth-of-type(1) { opacity: 0.5; }
-.pt-bar:nth-of-type(2) { opacity: 0.75; }
-
-.perk-teasers__card:hover .pt-bar,
-.perk-teasers__card:focus-visible .pt-bar {
-  animation: pt-bar-pop var(--g-dur-slow) var(--g-ease) both;
-}
-
-.perk-teasers__card:hover .pt-bar:nth-of-type(2),
-.perk-teasers__card:focus-visible .pt-bar:nth-of-type(2) { animation-delay: 70ms; }
-
-.perk-teasers__card:hover .pt-bar:nth-of-type(3),
-.perk-teasers__card:focus-visible .pt-bar:nth-of-type(3) { animation-delay: 140ms; }
+.pt-bar:nth-of-type(2) { opacity: 0.75; animation-delay: calc(var(--pt-loop-d, 0ms) + 70ms); }
+.pt-bar:nth-of-type(3) { animation-delay: calc(var(--pt-loop-d, 0ms) + 140ms); }
 
 @keyframes pt-bar-pop {
-  0% { transform: scaleY(0.45); }
-  70% { transform: scaleY(1.1); }
+  0% { transform: none; }
+  4% { transform: scaleY(0.45); }
+  14% { transform: scaleY(1.1); }
+  20% { transform: none; }
   100% { transform: none; }
 }
 
-/* Cashback: coin flips once */
+/* Cashback: coin flips once per cycle */
 .pt-coin {
   transform-box: fill-box;
   transform-origin: 50% 50%;
-}
-
-.perk-teasers__card:hover .pt-coin,
-.perk-teasers__card:focus-visible .pt-coin {
-  animation: pt-coin-flip 500ms var(--g-ease) both;
+  animation: pt-coin-flip 3600ms var(--g-ease) var(--pt-loop-d, 0ms) infinite;
 }
 
 @keyframes pt-coin-flip {
   0% { transform: scaleX(1); }
-  50% { transform: scaleX(-0.12); }
+  7% { transform: scaleX(-0.12); }
+  14% { transform: scaleX(1); }
   100% { transform: scaleX(1); }
 }
 
-/* Gero Card: tilts and lifts while hovered, settles back on leave */
+/* Gero Card: brief tilt-and-settle */
 .pt-cc {
   transform-box: fill-box;
   transform-origin: 50% 100%;
-  transition: transform var(--g-dur-base) var(--g-ease);
+  animation: pt-cc-tilt 3600ms var(--g-ease) var(--pt-loop-d, 0ms) infinite;
 }
 
 .pt-cc-chip {
-  fill: var(--g-accent);
+  fill: var(--pt-hue);
   stroke: none;
 }
 
-.perk-teasers__card:hover .pt-cc,
-.perk-teasers__card:focus-visible .pt-cc {
-  transform: rotate(-7deg) translateY(-1px);
+@keyframes pt-cc-tilt {
+  0% { transform: none; }
+  6% { transform: rotate(-7deg) translateY(-1px); }
+  16% { transform: none; }
+  100% { transform: none; }
+}
+
+/* Swap: two half-turns per cycle, so the arrows trade places and back */
+.pt-swap {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  animation: pt-swap-turn 3600ms var(--g-ease) var(--pt-loop-d, 0ms) infinite;
+}
+
+@keyframes pt-swap-turn {
+  0% { transform: rotate(0deg); }
+  10% { transform: rotate(180deg); }
+  50% { transform: rotate(180deg); }
+  60% { transform: rotate(360deg); }
+  100% { transform: rotate(360deg); }
 }
 
 /* Perpetuals: the line redraws itself, then the end dot pops */
 .pt-line {
   stroke-dasharray: 100;
-  stroke-dashoffset: 0;
+  animation: pt-draw 3600ms var(--g-ease) var(--pt-loop-d, 0ms) infinite;
 }
 
 .pt-dot {
-  fill: var(--g-accent);
+  fill: var(--pt-hue);
   stroke: none;
   transform-box: fill-box;
   transform-origin: 50% 50%;
-}
-
-.perk-teasers__card:hover .pt-line,
-.perk-teasers__card:focus-visible .pt-line {
-  animation: pt-draw 600ms var(--g-ease) both;
-}
-
-.perk-teasers__card:hover .pt-dot,
-.perk-teasers__card:focus-visible .pt-dot {
-  animation: pt-dot-pop 300ms var(--g-ease) 380ms both;
+  animation: pt-dot-pop 3600ms var(--g-ease) var(--pt-loop-d, 0ms) infinite;
 }
 
 @keyframes pt-draw {
-  from { stroke-dashoffset: 100; }
-  to { stroke-dashoffset: 0; }
+  0% { stroke-dashoffset: 100; }
+  16% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 0; }
 }
 
 @keyframes pt-dot-pop {
   0% { transform: scale(0); }
-  70% { transform: scale(1.5); }
-  100% { transform: none; }
+  13% { transform: scale(0); }
+  17% { transform: scale(1.5); }
+  21% { transform: scale(1); }
+  100% { transform: scale(1); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .perk-teasers__card { animation: none; }
-
-  /* Same compound selectors as the triggers — a bare class here would lose
-     the specificity tie against the :hover rules above. */
-  .perk-teasers__card:hover .pt-bar,
-  .perk-teasers__card:focus-visible .pt-bar,
-  .perk-teasers__card:hover .pt-coin,
-  .perk-teasers__card:focus-visible .pt-coin,
-  .perk-teasers__card:hover .pt-line,
-  .perk-teasers__card:focus-visible .pt-line,
-  .perk-teasers__card:hover .pt-dot,
-  .perk-teasers__card:focus-visible .pt-dot { animation: none; }
-
-  .pt-cc { transition: none; }
+  .perk-teasers__card,
+  .pt-bar,
+  .pt-coin,
+  .pt-cc,
+  .pt-swap,
+  .pt-line,
+  .pt-dot { animation: none; }
 }
 
 .perk-teasers__text {
@@ -299,8 +343,9 @@ const perks = computed(() => {
   transition: transform var(--g-dur-fast) var(--g-ease), color var(--g-dur-fast) var(--g-ease);
 }
 
-.perk-teasers__card:hover .perk-teasers__arrow {
+.perk-teasers__card:hover .perk-teasers__arrow,
+.perk-teasers__card:focus-visible .perk-teasers__arrow {
   transform: translateX(3px);
-  color: var(--g-accent);
+  color: var(--pt-hue);
 }
 </style>

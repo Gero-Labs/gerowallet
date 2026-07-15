@@ -3277,6 +3277,8 @@ export default {
   'portfolio.perkSpendHook': 'Spend your crypto like cash.',
   'portfolio.perkPerpsTitle': 'Trade perpetuals',
   'portfolio.perkPerpsHook': 'Go long or short without leaving the wallet.',
+  'portfolio.perkSwapTitle': 'Swap tokens',
+  'portfolio.perkSwapHook': 'ADA to any Cardano token in seconds.',
   'portfolio.scam': 'SCAM',
   'portfolio.all': 'All',
   'portfolio.trending': 'Trending',
