@@ -876,12 +876,11 @@ onMounted(() => {
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleOutsideClick);
   if (searchDebounce) clearTimeout(searchDebounce);
+  if (chartRefetchTimer) clearTimeout(chartRefetchTimer);
   chipBarObserver?.disconnect();
 });
 
 // ── Watchers ──────────────────────────────────────────────────────────────────
-
-watch(() => transactions.value?.length, () => { currentTimestamp.value = Date.now(); });
 
 // Portfolio history loads once per address, as soon as BOTH the address and
 // the synced account row are available. On a freshly imported wallet the
@@ -915,6 +914,32 @@ watch(
   },
   { immediate: true }
 );
+
+// New tx in the store: bump the timestamp (drives the tx-derived non-mainnet chart)
+// and, on mainnet, refetch the backend chart history — it's otherwise a one-shot
+// load per address (lastChartAddress above), so a receive would update the header
+// value and holdings but leave the hero chart frozen until a manual refresh. The
+// delay gives the backend indexer time to include the new tx; debounced so a burst
+// of txs lands as one refetch. Skipped while lastChartAddress is null (initial
+// history load hasn't run yet — it will include this tx anyway).
+let chartRefetchTimer: ReturnType<typeof setTimeout> | null = null;
+const CHART_REFETCH_DELAY_MS = 10_000;
+
+watch(() => transactions.value?.length, (len, oldLen) => {
+  currentTimestamp.value = Date.now();
+  if (len === undefined || oldLen === undefined || len === oldLen) return;
+  if (!isMainnetCardano.value || !lastChartAddress) return;
+  if (chartRefetchTimer) clearTimeout(chartRefetchTimer);
+  chartRefetchTimer = setTimeout(() => {
+    chartRefetchTimer = null;
+    const address = loggedWallet.value?.baseAddress;
+    if (address && address === lastChartAddress) {
+      loadForTimeframe(address, currentTimeframe, currentAdaOnly).catch(error => {
+        console.warn('Portfolio chart refetch after new tx failed:', error);
+      });
+    }
+  }, CHART_REFETCH_DELAY_MS);
+});
 
 // Handle /?view= deep-link and nav drawer clicks
 const validViews: ViewMode[] = ['holdings', 'collectibles', 'market', 'watchlist'];
