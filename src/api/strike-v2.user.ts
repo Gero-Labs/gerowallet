@@ -1,17 +1,43 @@
 // Strike Finance v2 API — User Module (account, positions, history)
 
 import { strikeClient } from './strike-v2.client';
+import {
+  normalizeClosedPosition,
+  normalizeFill,
+  normalizeFunding,
+  normalizeOrderHistory,
+  normalizePosition,
+} from './strike-v2.normalize';
 import type {
   AccountResponse,
   BalanceResponse,
   PortfolioSummaryResponse,
   PositionsResponse,
+  PositionWire,
   ClosedPositionsResponse,
   OrderHistoryResult,
   FillHistoryResult,
   FundingHistoryResult,
   TransactionHistoryResult,
 } from './strike-v2.types';
+
+/**
+ * Extract a list payload from a response body that is either a bare array or
+ * an `{ [key]: [...] }` envelope. The live API and the (inconsistent) docs
+ * disagree on envelopes the same way they disagree on field casing, so list
+ * endpoints tolerate both.
+ */
+function listFrom<T>(data: unknown, key: string): T[] {
+  if (Array.isArray(data)) return data as T[];
+  const list = (data as Record<string, unknown> | null | undefined)?.[key];
+  return Array.isArray(list) ? (list as T[]) : [];
+}
+
+/** Server-supplied count when present, else the (normalized) list length. */
+function countFrom(data: unknown, fallback: number): number {
+  const count = (data as Record<string, unknown> | null | undefined)?.['count'];
+  return typeof count === 'number' ? count : fallback;
+}
 
 interface HistoryParams {
   symbol?: string;
@@ -65,7 +91,10 @@ export const strikeUserApi = {
     const { data } = await strikeClient.get('/v2/positions', {
       params: { symbol, vault_id: vaultId },
     });
-    return data;
+    // Live wire is snake_case with NO side field (docs show PascalCase) —
+    // normalize before anything downstream renders or builds close orders.
+    const positions = listFrom<PositionWire>(data, 'positions').map(normalizePosition);
+    return { positions, count: countFrom(data, positions.length) };
   },
 
   async getClosedPositions(params: {
@@ -76,7 +105,8 @@ export const strikeUserApi = {
     vault_id?: string;
   }): Promise<ClosedPositionsResponse> {
     const { data } = await strikeClient.get('/v2/closedPositions', { params });
-    return data;
+    const positions = listFrom<Record<string, unknown>>(data, 'positions').map(normalizeClosedPosition);
+    return { positions, count: countFrom(data, positions.length) };
   },
 
   // ---------------------------------------------------------------------------
@@ -87,21 +117,24 @@ export const strikeUserApi = {
     params: HistoryParams,
   ): Promise<{ orders: OrderHistoryResult[]; count: number }> {
     const { data } = await strikeClient.get('/v2/history/order', { params });
-    return data;
+    const orders = listFrom<Record<string, unknown>>(data, 'orders').map(normalizeOrderHistory);
+    return { orders, count: countFrom(data, orders.length) };
   },
 
   async getFillHistory(
     params: HistoryParams,
   ): Promise<{ fills: FillHistoryResult[]; count: number }> {
     const { data } = await strikeClient.get('/v2/history/fill', { params });
-    return data;
+    const fills = listFrom<Record<string, unknown>>(data, 'fills').map(normalizeFill);
+    return { fills, count: countFrom(data, fills.length) };
   },
 
   async getFundingHistory(
     params: HistoryParams,
   ): Promise<{ funding: FundingHistoryResult[]; count: number }> {
     const { data } = await strikeClient.get('/v2/history/funding', { params });
-    return data;
+    const funding = listFrom<Record<string, unknown>>(data, 'funding').map(normalizeFunding);
+    return { funding, count: countFrom(data, funding.length) };
   },
 
   async getTransactionHistory(

@@ -311,6 +311,46 @@ export interface Position {
   bankruptcy_price: string;
   /** String-encoded decimal */
   liquidation_price: string;
+  /** String-encoded decimal — cumulative funding (live wire only) */
+  accumulated_funding_fees?: string;
+  /** Unix timestamp in milliseconds (live wire only) */
+  create_timestamp?: number;
+  /** Unix timestamp in milliseconds (live wire only) */
+  update_timestamp?: number;
+}
+
+/**
+ * Raw /v2/positions entry as it appears on the wire. The live API returns
+ * snake_case (`id`, `size`, `entry_price`, `iso_balance`) with NO side field —
+ * direction is the sign of `size` — while the published docs show PascalCase
+ * (`PositionID`, `Side`, `Size`, `EntryPrice`). Both shapes are accepted and
+ * folded into the canonical `Position` by strike-v2.normalize.ts.
+ */
+export interface PositionWire {
+  symbol: string;
+  // Documented (PascalCase) shape
+  PositionID?: string | number;
+  Side?: PositionSide;
+  Size?: string;
+  EntryPrice?: string;
+  MarginMode?: MarginMode;
+  Leverage?: number | string;
+  IsolatedMargin?: string;
+  // Live (snake_case) shape
+  id?: string | number;
+  size?: string;
+  entry_price?: string;
+  margin_mode?: MarginMode;
+  leverage?: number | string;
+  iso_balance?: string;
+  // Shared fields (snake_case in both variants)
+  upnl?: string;
+  maintenance_margin?: string;
+  bankruptcy_price?: string;
+  liquidation_price?: string;
+  accumulated_funding_fees?: string;
+  create_timestamp?: number;
+  update_timestamp?: number;
 }
 
 export interface PositionsResponse {
