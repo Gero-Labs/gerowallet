@@ -1,5 +1,5 @@
 <template>
-  <div class="dust-gauge liquid-glass" :class="{ 'is-charging': isCharging, 'is-full': isFull }">
+  <div class="dust-gauge glass-panel" :class="{ 'is-charging': isCharging, 'is-full': isFull }">
     <!-- Header: label + live balance -->
     <div class="dust-gauge__head">
       <div class="dust-gauge__title">

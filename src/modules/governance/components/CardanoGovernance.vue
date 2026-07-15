@@ -10,7 +10,7 @@
                 <v-card
                   outlined
                   flat
-                  class="pa-4 fill-height d-flex flex-column justify-space-evenly liquid-glass delegation-card"
+                  class="pa-4 fill-height d-flex flex-column justify-space-evenly glass-panel delegation-card"
                   style="z-index: 1"
                 >
                   <v-list-item three-line>
@@ -96,8 +96,8 @@
                   <v-sheet
                     v-if="currentCompensationBps && currentDRep && currentDRep.drep_id !== 'drep_always_abstain' && currentDRep.drep_id !== 'drep_always_no_confidence'"
                     rounded="lg"
-                    color="#1a2332"
-                    class="pa-3 mt-3 d-flex align-center"
+                    color="transparent"
+                    class="pa-3 mt-3 d-flex align-center cip149-banner"
                   >
                     <v-icon small color="primary" class="mr-2">mdi-gift-outline</v-icon>
                     <div>
@@ -128,7 +128,7 @@
               </v-col>
               <!-- Right Column -->
               <v-col cols="12" xl="6" lg="6" md="6" class="px-2 pb-4">
-                <v-card outlined flat class="pa-0 fill-height liquid-glass">
+                <v-card outlined flat class="pa-0 fill-height glass-panel">
                   <v-card-title class="text-subtitle-2">
                     <a class="white--text" href="https://gov.tools/" target="_blank">
                       {{ $t('governance.cardanoGovernanceTool') }}<v-icon class="ml-1" small>mdi-open-in-new</v-icon>
@@ -180,7 +180,7 @@
                 </v-card>
               </v-col>
               <v-col cols="12" class="px-2">
-                <v-card outlined flat class="pa-0 fill-height liquid-glass">
+                <v-card outlined flat class="pa-0 fill-height glass-panel">
                   <v-card-title
                     >{{ t('governance.delegatedRepresentatives') }}
                     <v-spacer></v-spacer>
@@ -389,7 +389,19 @@ const drepId = computed(() => keys.value?.drep129[0].address);
 const delegateLoading = ref(false);
 const txData = ref(undefined);
 const isDelegateDialogOpen = ref(false);
-const selectedDRep = ref(undefined);
+type DRepRow = {
+  id: string;
+  name?: string;
+  image?: string;
+  delegators?: number;
+  votes?: number;
+  voting_power?: number;
+  hex?: string;
+  has_script?: boolean;
+  [key: string]: unknown;
+};
+
+const selectedDRep = ref<DRepRow | undefined>(undefined);
 const delegationModel = ref(undefined);
 const xLogo = assets.xSvg;
 const telegramLogo = assets.telegramSvg;
@@ -620,7 +632,7 @@ const isCurrentDRep = (drepId: string) => {
   return currentDRep.value && currentDRep.value.drep_id === drepId;
 };
 
-const drepDelegate = async (row: any) => {
+const drepDelegate = async (row: DRepRow) => {
   // Don't allow re-delegating to the currently delegated DRep
   if (isCurrentDRep(row.id)) return;
 
@@ -806,6 +818,13 @@ onUnmounted(() => {
 }
 .mb-2 {
   margin-bottom: 2px;
+}
+
+/* Nested banner over the glass card: translucent raised tint, not a solid
+   hex fill (nested tiers over glass are tints). */
+.cip149-banner {
+  background: var(--g-hairline-1) !important;
+  border: 1px solid var(--g-hairline-1);
 }
 
 .top-level-search.v-text-field {

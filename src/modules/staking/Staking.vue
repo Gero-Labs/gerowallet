@@ -5,7 +5,7 @@
         <StakingCard></StakingCard>
       </v-col>
       <v-col cols="12" class="pa-2">
-        <v-card flat outlined class="liquid-glass">
+        <v-card flat outlined class="glass-panel">
           <v-card-title class="pa-0">
             <v-list-item two-line>
               <v-list-item-content>
@@ -616,16 +616,22 @@ watch([sortBy, sortDesc], ([newSortBy, newSortDesc]) => {
   }
 });
 
-const poolExtendedInfoCache = new Map<string, any>();
-const poolExtendedInfo = (pool: any) => {
+type PoolExtendedInfo = {
+  info?: { url_png_icon_64x64?: string; url_png_logo?: string; [key: string]: unknown };
+  [key: string]: unknown;
+};
+type PoolRow = { pool_extended_info?: string; pool_id_bech32?: string; pool_id?: string };
+
+const poolExtendedInfoCache = new Map<string, PoolExtendedInfo>();
+const poolExtendedInfo = (pool: PoolRow | null | undefined) => {
   if (pool && pool.pool_extended_info) {
     const key = pool.pool_id_bech32 || pool.pool_id;
     if (key && poolExtendedInfoCache.has(key)) return poolExtendedInfoCache.get(key);
-    const parsed = JSON.parse(pool.pool_extended_info);
+    const parsed: PoolExtendedInfo = JSON.parse(pool.pool_extended_info);
     // Sanitize icon URL — some pools leave the placeholder instruction text
     // ("http(s) url to pool icon; ...") which starts with "http" but 404s, so
     // require a real http(s):// scheme with no spaces.
-    const validUrl = (u: any) => typeof u === 'string' && /^https?:\/\/\S+$/.test(u);
+    const validUrl = (u: unknown) => typeof u === 'string' && /^https?:\/\/\S+$/.test(u);
     if (parsed?.info?.url_png_icon_64x64 && !validUrl(parsed.info.url_png_icon_64x64)) {
       parsed.info.url_png_icon_64x64 = '';
     }
@@ -659,7 +665,9 @@ onBeforeUnmount(() => {
 }
 
 .v-data-table-header {
-  background-color: var(--g-raised);
+  /* Transparent over the glass-panel card; a solid fill would read as an
+     opaque slab on the see-through material. */
+  background-color: transparent;
 }
 
 .v-data-table > .v-data-table__wrapper > table > tbody > tr > td,
@@ -768,8 +776,11 @@ onBeforeUnmount(() => {
 }
 
 /* Pool cards: a raised card with a hairline that lifts to the chain accent on
-   hover. The label/value tone gap is the hierarchy (both were text-1 before). */
+   hover. The label/value tone gap is the hierarchy (both were text-1 before).
+   Translucent fill (not solid cardBackground): these sit INSIDE the glass-panel
+   container, and nested tiers over glass are tints, not opaque slabs. */
 .pool-card {
+  background: var(--g-hairline-1) !important;
   border-radius: var(--g-r-card);
   border: 1px solid var(--g-hairline-1) !important;
   transition: border-color var(--g-dur-fast) ease, transform var(--g-dur-fast) ease,
