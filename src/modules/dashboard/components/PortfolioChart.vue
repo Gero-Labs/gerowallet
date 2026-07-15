@@ -491,10 +491,10 @@ const firstAvailableCurrency = computed(() => {
 });
 
 const globalLoading = computed(() => {
-  // Only show loading spinner when there's no data to show yet
-  if (props.progressiveLoading) {
-    return !hasAnyChartData.value;
-  }
+  // Spinner only while a fetch is in flight AND there's nothing to show yet.
+  // Progressive mode used to treat "no data" alone as "loading", which never
+  // resolved for wallets whose history query returns nothing (e.g. a freshly
+  // imported wallet) — those must fall through to the empty state instead.
   return props.loading && !hasAnyChartData.value;
 });
 

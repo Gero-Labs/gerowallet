@@ -883,28 +883,35 @@ onBeforeUnmount(() => {
 
 watch(() => transactions.value?.length, () => { currentTimestamp.value = Date.now(); });
 
+// Portfolio history loads once per address, as soon as BOTH the address and
+// the synced account row are available. On a freshly imported wallet the
+// account row lands only after the first sync delivers it, so keying this on
+// the address alone evaluated the balance gate too early and never retried
+// (the chart then showed its loading state forever). Watching
+// controlled_amount re-runs the gate when the account arrives;
+// lastChartAddress keeps subsequent balance updates from re-fetching.
+let lastChartAddress: string | null = null;
+
 watch(
-  () => loggedWallet.value?.baseAddress,
-  async (newAddress, oldAddress) => {
-    if (newAddress && newAddress !== oldAddress) {
+  [() => loggedWallet.value?.baseAddress, () => account.value?.controlled_amount],
+  ([newAddress], oldValues) => {
+    if (!newAddress) return;
+    if (newAddress !== oldValues?.[0]) {
       currentTimestamp.value = Date.now();
-      if (!isApex.value) {
-        try {
-          if (account && Number(account.value?.controlled_amount) > 0 &&
-            loggedWallet.value?.chain === Blockchain.CARDANO &&
-            loggedWallet.value?.network === Network.MAINNET) {
-            const settings = getPersistedChartSettings(loggedWallet.value?.id);
-            currentTimeframe = settings.timeframe;
-            currentAdaOnly = settings.adaOnly;
-            loadForTimeframe(newAddress, settings.timeframe, settings.adaOnly).catch(error => {
-              console.warn('Portfolio data loading failed:', error);
-            });
-          }
-        } catch (error) {
-          console.warn('Failed to start portfolio data loading:', error);
-        }
-      }
     }
+    if (newAddress === lastChartAddress || isApex.value) return;
+    if (!(Number(account.value?.controlled_amount) > 0) ||
+      loggedWallet.value?.chain !== Blockchain.CARDANO ||
+      loggedWallet.value?.network !== Network.MAINNET) {
+      return;
+    }
+    lastChartAddress = newAddress;
+    const settings = getPersistedChartSettings(loggedWallet.value?.id);
+    currentTimeframe = settings.timeframe;
+    currentAdaOnly = settings.adaOnly;
+    loadForTimeframe(newAddress, settings.timeframe, settings.adaOnly).catch(error => {
+      console.warn('Portfolio data loading failed:', error);
+    });
   },
   { immediate: true }
 );
