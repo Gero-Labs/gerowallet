@@ -875,6 +875,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { WalletType, Network } from '@/models/types';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import filters from '@/shared/utils/filters';
+import { friendlyTxError } from '@/shared/utils/txErrors';
 import cardanoShieldApi from '@/api/cardano-shield-api';
 import { DappScore, type TxScanResponse } from '@/models/cardano-shield-types';
 import ledgerUtils from '@/shared/utils/ledger';
@@ -2037,7 +2038,7 @@ async function signNormal() {
     spendingPassword.value = '';
   } catch (e: any) {
     console.error('[DApp] Normal sign error:', e);
-    signError.value = e.message || 'Signing failed';
+    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Signing failed';
   } finally {
     signing.value = false;
   }
@@ -2090,7 +2091,7 @@ async function signPrf() {
     approve(witnessResult.data.witnesses);
   } catch (e: any) {
     console.error('[DApp] PRF sign error:', e);
-    signError.value = e.message || 'PassKey signing failed';
+    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'PassKey signing failed';
   } finally {
     signing.value = false;
   }
@@ -2120,7 +2121,7 @@ async function signLedger() {
   } catch (e: any) {
     ledgerUtils.ledgerErrorHandling(e);
     console.error('[DApp] Ledger sign error:', e);
-    signError.value = e?.message || 'Ledger signing failed';
+    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Ledger signing failed';
   } finally {
     signing.value = false;
   }
@@ -2152,7 +2153,7 @@ async function signTrezor() {
     if (e.message?.includes('Failure_ActionCancelled') || e.message?.includes('cancelled')) {
       signError.value = 'Transaction cancelled on Trezor';
     } else {
-      signError.value = e.message || 'Trezor signing failed';
+      signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Trezor signing failed';
     }
   } finally {
     signing.value = false;
@@ -2176,7 +2177,7 @@ function signKeystone() {
     showKeystoneDialog.value = true;
   } catch (e: any) {
     console.error('[DApp] Keystone sign error:', e);
-    signError.value = e?.message || 'Failed to create Keystone sign request';
+    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Failed to create Keystone sign request';
   }
 }
 
@@ -2232,7 +2233,7 @@ async function signDataNormal() {
     spendingPassword.value = '';
   } catch (e: any) {
     console.error('[DApp] Sign data error:', e);
-    signError.value = e.message || 'Signing failed';
+    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Signing failed';
   } finally {
     signing.value = false;
   }
@@ -2303,7 +2304,7 @@ async function signDataPrf() {
     approve(signatureData);
   } catch (e: any) {
     console.error('[DApp] PRF sign data error:', e);
-    signError.value = e.message || 'PassKey signing failed';
+    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'PassKey signing failed';
   } finally {
     signing.value = false;
   }
@@ -2336,7 +2337,7 @@ async function signDataHw() {
     approve(res.data);
   } catch (e: any) {
     console.error('[DApp] HW sign data error:', e);
-    signError.value = e.message || 'Signing failed';
+    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Signing failed';
   } finally {
     signing.value = false;
   }
@@ -2405,7 +2406,7 @@ async function signMidnightDataNormal() {
     spendingPassword.value = '';
   } catch (e: any) {
     console.error('[DApp] Midnight sign data error:', e);
-    signError.value = e.message || 'Signing failed';
+    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Signing failed';
   } finally {
     signing.value = false;
   }
@@ -2453,7 +2454,7 @@ async function signMidnightDataPrf() {
     approve(res.data.signature);
   } catch (e: any) {
     console.error('[DApp] Midnight PRF sign data error:', e);
-    signError.value = e.message || 'PassKey signing failed';
+    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'PassKey signing failed';
   } finally {
     signing.value = false;
   }

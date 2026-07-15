@@ -32,6 +32,7 @@ import { getMidnightApi, MidnightDustRegistrationStatusDto } from '@/api/midnigh
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { clearDustPending, getDustPending, markDustPending, reconcileDustPending, DustPendingRecord } from '@/shared/composables/useDustPending';
+import { isCollateralError } from '@/shared/utils/txErrors';
 import { debugLog } from '@/utils/debug';
 
 /** A place DUST from this wallet's NIGHT can be directed. */
@@ -86,6 +87,18 @@ export const DUST_MAPPING_VALIDATOR: Record<string, { scriptHash: string; addres
     address: 'addr_test1wplxjzranravtp574s2wz00md7vz9rzpucu252je68u9a8qzjheng',
   },
 };
+
+/**
+ * Map a raw Nexus build error to a stable code the dialogs can localize. The
+ * DUST registration is a Plutus tx, so Nexus needs a pure-ADA collateral UTxO;
+ * a wallet whose ADA is all bundled with native tokens gets a bare 400 that
+ * reads as a dead end. Surface it as NO_COLLATERAL so the UI explains the fix
+ * (send ~6 ADA to yourself to mint a clean collateral UTxO) instead of echoing
+ * the raw server string.
+ */
+export function mapDustBuildError(message: string): string {
+  return isCollateralError(message) ? 'NO_COLLATERAL' : message;
+}
 
 /**
  * Official portal URLs — fallback CTA when the wallet can't sign locally
@@ -343,7 +356,7 @@ export function useCnightDustRegistration() {
       };
       return { status: 'submitted', txHash: txId, dustAddress: destinationBech32 };
     } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
+      const message = mapDustBuildError(e instanceof Error ? e.message : String(e));
       return { status: 'error', message };
     } finally {
       registering.value = false;
@@ -476,7 +489,7 @@ export function useCnightDustRegistration() {
       };
       return { status: 'submitted', txHash: txId, dustAddress: '' };
     } catch (e) {
-      return { status: 'error', message: e instanceof Error ? e.message : String(e) };
+      return { status: 'error', message: mapDustBuildError(e instanceof Error ? e.message : String(e)) };
     } finally {
       registering.value = false;
       if (stage.value !== 'done') stage.value = 'idle';
@@ -529,7 +542,7 @@ export function useCnightDustRegistration() {
       };
       return { status: 'submitted', txHash: txId, dustAddress: derived.dust };
     } catch (e) {
-      return { status: 'error', message: e instanceof Error ? e.message : String(e) };
+      return { status: 'error', message: mapDustBuildError(e instanceof Error ? e.message : String(e)) };
     } finally {
       registering.value = false;
       if (stage.value !== 'done') stage.value = 'idle';
