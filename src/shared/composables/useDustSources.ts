@@ -38,7 +38,7 @@ import {
   getMidnightApi,
   MidnightDustRegistrationStatusDto,
 } from '@/api/midnight-api';
-import { CNIGHT_ASSETS } from '@/shared/composables/useCnightDustRegistration';
+import { CNIGHT_ASSETS, mapDustBuildError } from '@/shared/composables/useCnightDustRegistration';
 import { clearDustPending, markDustPending, reconcileDustPending } from '@/shared/composables/useDustPending';
 import { debugLog } from '@/utils/debug';
 
@@ -510,7 +510,7 @@ export function useDustSources() {
       sources.value = [...sources.value];
       return { status: 'submitted', txHash: txId };
     } catch (e) {
-      return { status: 'error', message: e instanceof Error ? e.message : String(e) };
+      return { status: 'error', message: mapDustBuildError(e instanceof Error ? e.message : String(e)) };
     } finally {
       working.value = false;
     }
@@ -567,7 +567,7 @@ export function useDustSources() {
       sources.value = [...sources.value];
       return { status: 'submitted', txHash: txId };
     } catch (e) {
-      return { status: 'error', message: e instanceof Error ? e.message : String(e) };
+      return { status: 'error', message: mapDustBuildError(e instanceof Error ? e.message : String(e)) };
     } finally {
       working.value = false;
     }

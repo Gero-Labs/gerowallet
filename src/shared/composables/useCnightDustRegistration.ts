@@ -88,6 +88,19 @@ export const DUST_MAPPING_VALIDATOR: Record<string, { scriptHash: string; addres
 };
 
 /**
+ * Map a raw Nexus build error to a stable code the dialogs can localize. The
+ * DUST registration is a Plutus tx, so Nexus needs a pure-ADA collateral UTxO;
+ * a wallet whose ADA is all bundled with native tokens gets a bare 400 that
+ * reads as a dead end. Surface it as NO_COLLATERAL so the UI explains the fix
+ * (send ~6 ADA to yourself to mint a clean collateral UTxO) instead of echoing
+ * the raw server string.
+ */
+export function mapDustBuildError(message: string): string {
+  if (/collateral|pure-ada/i.test(message)) return 'NO_COLLATERAL';
+  return message;
+}
+
+/**
  * Official portal URLs — fallback CTA when the wallet can't sign locally
  * (hardware wallets). No preprod instance exists (probed 2026-07-14:
  * midnight-dust-preprod.nethermind.io unreachable, and the preview portal is
@@ -343,7 +356,7 @@ export function useCnightDustRegistration() {
       };
       return { status: 'submitted', txHash: txId, dustAddress: destinationBech32 };
     } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
+      const message = mapDustBuildError(e instanceof Error ? e.message : String(e));
       return { status: 'error', message };
     } finally {
       registering.value = false;

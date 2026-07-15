@@ -4103,6 +4103,7 @@ export default {
   'midnight.dustRegistrationSubmitted': 'DUST-Registrierung übermittelt',
   'midnight.dustNeedsNightFirst': 'Diese Wallet enthält noch kein NIGHT. Erhalte zuerst NIGHT auf diese Wallet — DUST wird aus deinem NIGHT generiert.',
   'midnight.dustRegistrationFailed': 'DUST-Registrierung fehlgeschlagen. Bitte versuche es erneut.',
+  'midnight.dustNoCollateral': 'Diese Registrierung benötigt einen kleinen reinen ADA-UTxO als Netzwerk-Collateral, aber deine gesamte ADA ist mit Tokens gebündelt. Sende etwa 6 ADA an deine eigene Wallet-Adresse, um einen zu erstellen, und versuche es dann erneut.',
   'midnight.resetSyncCache': 'Sync-Cache zurücksetzen',
   'midnight.resetSyncCacheDone': 'Sync-Cache geleert. Synchronisierung startet von vorne.',
   'midnight.resetSyncCacheFailed': 'Sync-Cache konnte nicht zurückgesetzt werden. Bitte versuche es erneut.',
