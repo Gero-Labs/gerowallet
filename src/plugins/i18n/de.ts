@@ -624,8 +624,6 @@ export default {
   'common.comingSoon': 'Demnächst',
   'common.completed': 'Abgeschlossen',
   'common.confirm': 'Bestätigen',
-  // Kanonischer Ort für das Wiederholen-Label der geteilten Feedback-Komponenten.
-  'common.retry': 'Erneut versuchen',
   'common.drop': 'Bild hier ablegen',
   'common.noResults': 'Keine Ergebnisse gefunden',
   'common.connect': 'Verbinden',
@@ -733,7 +731,8 @@ export default {
   'common.remove': 'Entfernen',
   'common.reportSubmittedSuccess': 'Bericht erfolgreich eingereicht!',
   'common.required': 'Erforderlich',
-  'common.retry': 'Wiederholen',
+  // Kanonischer Ort für das Retry-Label der geteilten Feedback-Komponenten.
+  'common.retry': 'Erneut versuchen',
   'common.riskLevel': 'Risikostufe',
   'common.save': 'Speichern',
   'common.search': 'Suchen',

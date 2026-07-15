@@ -614,15 +614,14 @@ export default {
   'common.realTimeAnyMoment': 'Real-time (any moment)',
   'common.receive': 'Receive',
   'common.recipient': 'Recipient',
-  // Canonical home for the retry label used by shared feedback components.
-  // staking.retry and miniGero.retry duplicate this string and get re-pointed
-  // here by a later sweep.
-  'common.retry': 'Retry',
   'common.recipientAddress': 'Recipient Address',
   'common.refresh': 'Refresh',
   'common.remove': 'Remove',
   'common.reportSubmittedSuccess': 'Report Submitted Successfully!',
   'common.required': 'Required',
+  // Canonical home for the retry label used by shared feedback components.
+  // staking.retry and miniGero.retry duplicate this string and get re-pointed
+  // here by a later sweep.
   'common.retry': 'Retry',
   'common.riskLevel': 'Risk Level',
   'common.save': 'Save',
