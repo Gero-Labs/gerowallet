@@ -32,6 +32,7 @@ import { getMidnightApi, MidnightDustRegistrationStatusDto } from '@/api/midnigh
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { clearDustPending, getDustPending, markDustPending, reconcileDustPending, DustPendingRecord } from '@/shared/composables/useDustPending';
+import { isCollateralError } from '@/shared/utils/txErrors';
 import { debugLog } from '@/utils/debug';
 
 /** A place DUST from this wallet's NIGHT can be directed. */
@@ -96,8 +97,7 @@ export const DUST_MAPPING_VALIDATOR: Record<string, { scriptHash: string; addres
  * the raw server string.
  */
 export function mapDustBuildError(message: string): string {
-  if (/collateral|pure-ada/i.test(message)) return 'NO_COLLATERAL';
-  return message;
+  return isCollateralError(message) ? 'NO_COLLATERAL' : message;
 }
 
 /**
@@ -489,7 +489,7 @@ export function useCnightDustRegistration() {
       };
       return { status: 'submitted', txHash: txId, dustAddress: '' };
     } catch (e) {
-      return { status: 'error', message: e instanceof Error ? e.message : String(e) };
+      return { status: 'error', message: mapDustBuildError(e instanceof Error ? e.message : String(e)) };
     } finally {
       registering.value = false;
       if (stage.value !== 'done') stage.value = 'idle';
@@ -542,7 +542,7 @@ export function useCnightDustRegistration() {
       };
       return { status: 'submitted', txHash: txId, dustAddress: derived.dust };
     } catch (e) {
-      return { status: 'error', message: e instanceof Error ? e.message : String(e) };
+      return { status: 'error', message: mapDustBuildError(e instanceof Error ? e.message : String(e)) };
     } finally {
       registering.value = false;
       if (stage.value !== 'done') stage.value = 'idle';

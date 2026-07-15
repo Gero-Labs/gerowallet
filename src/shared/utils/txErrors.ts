@@ -10,11 +10,16 @@
  */
 import i18n from '@/plugins/i18n';
 
-/** True when the error is the user lacking a pure-ADA UTxO for script collateral. */
+/**
+ * True when the error is the user lacking a pure-ADA UTxO for script collateral.
+ * Single source of truth for the pattern — DUST's mapDustBuildError() delegates
+ * here so the two paths can't drift on what counts as a collateral error.
+ */
 export function isCollateralError(message: string): boolean {
   const l = message.toLowerCase();
   // "pool empty" is a Nexus shared-pool infra state, not the user's wallet.
-  return l.includes('collateral') && !l.includes('collateral pool');
+  if (l.includes('collateral pool')) return false;
+  return l.includes('collateral') || l.includes('pure-ada') || l.includes('pure ada');
 }
 
 /** True when the tx can't be covered by the wallet's ADA (fees / min-UTxO / inputs). */
