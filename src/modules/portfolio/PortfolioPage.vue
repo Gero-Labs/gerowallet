@@ -75,8 +75,10 @@
       />
     </template>
 
-    <!-- Empty state for wallets with no tokens -->
-    <template v-else-if="isWalletEmpty">
+    <!-- Empty state for wallets with no tokens. Mainnet Cardano skips this
+         page: it gets the market-first empty mode inside the main view below
+         (spec: docs/superpowers/specs/2026-07-15-market-first-empty-state-design.md). -->
+    <template v-else-if="isWalletEmpty && !isMainnetCardano">
       <v-row no-gutters>
         <v-col cols="12" class="pa-2">
           <EmptyStateHero
@@ -95,8 +97,29 @@
 
     <!-- Main unified portfolio + market view -->
     <template v-else>
-      <!-- Portfolio Chart (always visible) -->
-      <v-row no-gutters class="hero-row">
+      <!-- Empty mainnet wallet: market-first hero. The ADA price chart takes
+           the portfolio chart's slot and the funding CTAs take the
+           transactions slot; the live market below is the page content. -->
+      <template v-if="isEmptyMainnet">
+        <v-row v-if="shouldBackup" no-gutters>
+          <v-col cols="12" class="px-2 pt-2">
+            <BackupReminderStrip @backup="handleBackupWallet()" />
+          </v-col>
+        </v-row>
+        <v-row no-gutters class="hero-row">
+          <v-col cols="12" xl="9" lg="9" md="8" class="pa-2 hero-chart-col">
+            <AdaPriceHeroCard />
+          </v-col>
+          <!-- Unlike RecentTransactionsCard this stays visible on small
+               screens: funding is the one action an empty wallet has. -->
+          <v-col cols="12" xl="3" lg="3" md="4" class="pa-2 hero-tx-col">
+            <FundingCard @buy="openBuyDialog()" @receive="openReceiveDialog()" />
+          </v-col>
+        </v-row>
+      </template>
+
+      <!-- Portfolio Chart (funded wallets) -->
+      <v-row v-else no-gutters class="hero-row">
         <v-col cols="12" xl="9" lg="9" md="8" class="pa-2 hero-chart-col">
           <PortfolioChart
             :chart-data="computeChartData.adaData"
@@ -361,6 +384,9 @@ import { isNewUser as checkNewUser } from '@/modules/dashboard/utils/emptyStateC
 import PortfolioChart from '@/modules/dashboard/components/PortfolioChart.vue';
 import RecentTransactionsCard from '@/modules/dashboard/components/RecentTransactionsCard.vue';
 import EmptyStateHero from '@/modules/dashboard/components/EmptyStateHero.vue';
+import BackupReminderStrip from '@/shared/components/BackupReminderStrip.vue';
+import AdaPriceHeroCard from '@/modules/portfolio/components/AdaPriceHeroCard.vue';
+import FundingCard from '@/modules/portfolio/components/FundingCard.vue';
 import MidnightPortfolioChart from '@/modules/dashboard/components/MidnightPortfolioChart.vue';
 import MidnightTransactionsCard from '@/modules/dashboard/components/MidnightTransactionsCard.vue';
 import MidnightDustGauge from '@/modules/dashboard/components/MidnightDustGauge.vue';
@@ -498,7 +524,12 @@ const compactChips = ref(false);
 const chipBarRef = ref<HTMLElement | null>(null);
 let chipBarObserver: ResizeObserver | null = null;
 
+// Set when the user actively picks a chip; the empty-wallet Market default
+// (watcher near the deep-link handlers) never overrides an explicit choice.
+let viewTouched = false;
+
 function setActiveView(view: ViewMode) {
+  viewTouched = true;
   activeView.value = view;
   // Sync to URL for shareable links and back/forward navigation
   const router = instance?.proxy?.$router;
@@ -534,6 +565,17 @@ watch(searchQuery, (val) => {
 // ── Computed: Empty state & staking ───────────────────────────────────────────
 
 const isWalletEmpty = computed(() => !account.value || account.value?.controlled_amount === '0');
+
+// Market-first empty state (mainnet Cardano only). isEmptyMainnet drives the
+// hero swap and matches isWalletEmpty's semantics (a not-yet-synced account
+// also renders the empty hero, exactly like the old EmptyStateHero branch).
+// The Market view default additionally requires the synced account row to
+// CONFIRM zero, so a funded wallet that mounts before its account row loads
+// never gets its Holdings tab hijacked.
+const isEmptyMainnet = computed(() => isWalletEmpty.value && isMainnetCardano.value);
+const isConfirmedEmptyMainnet = computed(() =>
+  isMainnetCardano.value && account.value?.controlled_amount === '0');
+
 const isNewUser = computed(() => checkNewUser(transactions.value, account.value));
 const shouldBackup = computed(() => {
   const config = walletStore.config;
@@ -897,6 +939,10 @@ watch(
     if (!newAddress) return;
     if (newAddress !== oldValues?.[0]) {
       currentTimestamp.value = Date.now();
+      // New wallet, new choice: an explicit view pick on the previous wallet
+      // must not suppress the fresh-wallet Market default (the component
+      // persists across wallet switches — same reason lastChartAddress exists).
+      viewTouched = false;
     }
     if (newAddress === lastChartAddress || isApex.value) return;
     if (!(Number(account.value?.controlled_amount) > 0) ||
@@ -957,6 +1003,16 @@ watch(
   },
   { immediate: true }
 );
+
+// Empty mainnet wallets land on Market: with nothing to hold yet, the live
+// market IS the page content. Deep links and user chip clicks always win
+// (registered after the ?view= watcher; both guard on the query directly).
+watch(isConfirmedEmptyMainnet, (empty) => {
+  const q = instance?.proxy?.$route?.query;
+  if (empty && !viewTouched && !q?.['view'] && !q?.['tab']) {
+    activeView.value = 'market';
+  }
+}, { immediate: true });
 
 // Cardano unit/policyId validation — only hex characters, reasonable length
 const CARDANO_ID_RE = /^[0-9a-f]{1,120}$/i;
