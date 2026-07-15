@@ -112,9 +112,40 @@ export const DUST_PORTAL_URLS: Record<string, string> = {
   [Network.PREVIEW]: 'https://dust.preview.midnight.network/',
 };
 
-/** localStorage flag: the user dismissed the inline DUST generation line
- *  (table row + token drawer share one dismissal). */
+/**
+ * localStorage record of which wallets have dismissed the inline DUST generation
+ * line. Keyed PER WALLET (stake address) so hiding it on one wallet never
+ * suppresses the DUST opportunity on another wallet that also holds NIGHT. The
+ * table row + token drawer share this dismissal for a given wallet. Value is a
+ * JSON array of stake addresses; the legacy global `'1'` value is ignored (not
+ * an array), so old dismissals cleanly re-surface as per-wallet going forward.
+ */
 export const DUST_LINE_DISMISS_KEY = 'gero.dustLine.dismissed';
+
+function readDismissedStakes(): string[] {
+  if (typeof localStorage === 'undefined') return [];
+  try {
+    const parsed = JSON.parse(localStorage.getItem(DUST_LINE_DISMISS_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Whether this wallet dismissed the DUST line. */
+export function isDustLineDismissed(stakeAddress: string | undefined | null): boolean {
+  return !!stakeAddress && readDismissedStakes().includes(stakeAddress);
+}
+
+/** Dismiss the DUST line for this wallet only. */
+export function dismissDustLineFor(stakeAddress: string | undefined | null): void {
+  if (!stakeAddress || typeof localStorage === 'undefined') return;
+  const set = readDismissedStakes();
+  if (!set.includes(stakeAddress)) {
+    set.push(stakeAddress);
+    localStorage.setItem(DUST_LINE_DISMISS_KEY, JSON.stringify(set));
+  }
+}
 
 export type CnightRegistrationStage =
   | 'idle'

@@ -396,7 +396,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import assets from '@/utils/assets';
 import { useWatchlist } from '@/modules/market/composables/useWatchlist';
 import { useColumnPreferences } from '@/modules/market/composables/useColumnPreferences';
@@ -408,7 +408,7 @@ import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrenc
 import { Blockchain } from '@/models/types';
 import networks from '@/utils/networks';
 import DustGenerationLine from '@/modules/dashboard/components/DustGenerationLine.vue';
-import { CNIGHT_ASSETS, DUST_LINE_DISMISS_KEY } from '@/shared/composables/useCnightDustRegistration';
+import { CNIGHT_ASSETS, isDustLineDismissed, dismissDustLineFor } from '@/shared/composables/useCnightDustRegistration';
 
 const chainLogo = computed(() =>
   networks.resolveCurrencyImage(walletStore.loggedWallet?.chain, walletStore.loggedWallet?.network) || ''
@@ -447,10 +447,15 @@ const emit = defineEmits<{
 
 // ── DUST generation line under the NIGHT (cNIGHT) holdings row ──────────────
 // Only in the holdings view on a Cardano wallet, only for the NIGHT token, and
-// only until the user dismisses it (persisted per install).
-const dustLineDismissed = ref(
-  typeof localStorage !== 'undefined' && localStorage.getItem(DUST_LINE_DISMISS_KEY) === '1',
-);
+// only until the user dismisses it — dismissal is PER WALLET (stake address), so
+// hiding it on one wallet doesn't suppress it on another that also holds NIGHT.
+// localStorage isn't reactive, so re-read on mount and whenever the wallet changes.
+const dustLineDismissed = ref(false);
+function refreshDustDismissed() {
+  dustLineDismissed.value = isDustLineDismissed(walletStore.loggedWallet?.stakeAddress);
+}
+onMounted(refreshDustDismissed);
+watch(() => walletStore.loggedWallet?.stakeAddress, refreshDustDismissed);
 
 const cnightUnit = computed(() => {
   const asset = CNIGHT_ASSETS[walletStore.loggedWallet?.network ?? ''];
@@ -470,7 +475,7 @@ const dustExpanded = computed<MarketToken[]>(() => {
 
 function dismissDustLine() {
   dustLineDismissed.value = true;
-  if (typeof localStorage !== 'undefined') localStorage.setItem(DUST_LINE_DISMISS_KEY, '1');
+  dismissDustLineFor(walletStore.loggedWallet?.stakeAddress);
 }
 
 const { t } = useTranslation();
