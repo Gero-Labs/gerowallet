@@ -81,6 +81,30 @@
           </v-btn>
         </v-col>
       </v-row>
+
+      <!-- Midnight proof server. Full setup/details live on their own page
+           (src/modules/midnight/ProofServerPage.vue, left-nav entry) - this
+           is just an at-a-glance summary + link, chain-gated like the rest
+           of the Midnight-only surfaces (grep pattern: loggedWallet?.chain
+           === Blockchain.MIDNIGHT, see MidnightSendDialog.vue). -->
+      <template v-if="loggedWallet?.chain === Blockchain.MIDNIGHT">
+        <h2 class="text-left pt-2 pb-2 t-heading">{{ t('midnight.proofServer.title') }}</h2>
+        <div class="proof-server-summary">
+          <div class="proof-server-summary-icon">
+            <v-icon size="18" color="var(--g-accent)">mdi-server-security</v-icon>
+          </div>
+          <div class="proof-server-summary-body">
+            <div class="t-body-lg">{{ t('midnight.proofServerPage.settingsSummary') }}</div>
+            <p class="t-caption proof-server-summary-hint mb-0">
+              {{ proofServerModeDisplay }}
+            </p>
+          </div>
+          <v-btn small outlined color="white" @click="router.push('/proof-server')">
+            {{ t('midnight.proofServerPage.openPage') }}
+          </v-btn>
+        </div>
+      </template>
+
       <h2 class="text-left pb-2" style="color: #ff6464">{{ $t('settings.dangerZone') }}</h2>
       <v-card outlined style="border-color: #ff6464; background-color: transparent!important;">
         <v-card-text>
@@ -135,6 +159,8 @@ import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { walletStore } from '@/stores/walletStore';
+import { midnightStore } from '@/stores/midnightStore';
+import { Blockchain } from '@/models/types';
 import { isFeatureNew, markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
 import GeroStore from '@/stores/geroStore';
 import { setWalletConfiguration } from '@/db/wallet-db';
@@ -147,7 +173,10 @@ const emit = defineEmits(['loading']);
 const { loggedWallet, config } = toRefs(walletStore);
 
 // Access Vue instance for router
-const vmProxy = getCurrentInstance()!.proxy as any;
+const vmProxy = getCurrentInstance()!.proxy as {
+  $router: { push: (path: string) => void };
+  $nextTick: (callback: () => void) => void;
+};
 const router = vmProxy.$router
 
 // Reactive data
@@ -273,6 +302,26 @@ const deleteWalletConfirm = async () => {
   snackbar.fireSuccess(t('settings.walletDeletedSuccess', { name }));
 };
 
+// ─── Midnight proof server ─────────────────────────────────────────────────
+//
+// Read-only summary of midnightStore.proofServer - the full mode switcher,
+// setup guides (local docker + Arkhia zkPaaS), and live health check live
+// on their own page (src/modules/midnight/ProofServerPage.vue via
+// useMidnightProofServer, the shared composable). Deliberately NOT
+// invoking that composable here: it starts a health-poll loop whenever a
+// wallet-side mode is selected, which this glance-and-link summary has no
+// use for.
+
+const { proofServer } = toRefs(midnightStore);
+
+const proofServerModeDisplay = computed(() => {
+  switch (proofServer.value.mode) {
+    case 'local': return t('midnight.proofServer.localLabel');
+    case 'zkpaas': return t('midnight.proofServer.zkpaasLabel');
+    default: return t('midnight.proofServer.remoteLabel');
+  }
+});
+
 // Lifecycle
 onMounted(() => {
   loadCashbackPopups();
@@ -319,5 +368,39 @@ onMounted(() => {
   to {
     transform: rotate(-360deg);
   }
+}
+
+/* ── Midnight proof server (at-a-glance summary; full UI on its own page) ── */
+
+.proof-server-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--g-surface);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-card);
+  padding: 12px 14px;
+  margin-top: 4px;
+  margin-bottom: 8px;
+}
+
+.proof-server-summary-icon {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--g-r-control);
+  background: var(--g-raised);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.proof-server-summary-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.proof-server-summary-hint {
+  margin-top: 2px;
 }
 </style>

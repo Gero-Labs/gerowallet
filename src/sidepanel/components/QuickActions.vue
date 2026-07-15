@@ -34,7 +34,7 @@ import { useChainContext } from '../composables/useChainContext';
 import assets from '@/utils/assets';
 
 const { t } = useTranslation();
-const { networkInfo, themeColors, isApex } = useChainContext();
+const { networkInfo } = useChainContext();
 
 const emit = defineEmits<{
   (e: 'action', id: string): void;
@@ -52,21 +52,21 @@ interface QuickAction {
 }
 
 const allActions = computed<QuickAction[]>(() => {
-  const primaryColor = themeColors.value.primary;
-  // For Send icon: use the chain-specific iconFilter (terracotta on Apex, cyan on Cardano)
-  const sendFilter = isApex.value
-    ? 'brightness(0) saturate(100%) invert(52%) sepia(85%) saturate(1100%) hue-rotate(345deg) brightness(108%) contrast(98%)'
-    : 'invert(83%) sepia(48%) saturate(3753%) hue-rotate(133deg) brightness(92%) contrast(108%)';
-
   return [
+    // Fixed tokens for all four actions - the chain accent is deliberately
+    // NOT used here (it previously made Send a mixed purple-circle/cyan-icon
+    // odd one out on Midnight while its three siblings kept stable colors).
+    // Send is neutral white rather than a semantic color: it's the primary
+    // action, and every semantic token is taken by a sibling (success/error/
+    // info) so any reuse would collide on chains that show all four.
     {
       id: 'send',
       svg: assets.sendSvg,
       label: t('dashboard.send'),
-      color: primaryColor,
-      bgColor: `color-mix(in srgb, ${primaryColor} 12%, transparent)`,
-      borderColor: `color-mix(in srgb, ${primaryColor} 40%, transparent)`,
-      filter: sendFilter,
+      color: 'var(--g-text-1)',
+      bgColor: 'color-mix(in srgb, var(--g-text-1) 10%, transparent)',
+      borderColor: 'color-mix(in srgb, var(--g-text-1) 35%, transparent)',
+      filter: 'brightness(0) invert(1)',
       enabled: !!networkInfo.value?.transactionSupport,
     },
     {

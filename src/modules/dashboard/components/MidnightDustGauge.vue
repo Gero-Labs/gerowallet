@@ -7,10 +7,14 @@
           {{ isCharging ? 'mdi-battery-charging-medium' : 'mdi-battery-50' }}
         </v-icon>
         {{ $t('midnight.dustBattery') }}
-        <button v-if="!isRegistered" type="button" class="dust-gauge__cta ml-3" @click="$emit('register')">
+        <button v-if="!isRegistered && !isPending" type="button" class="dust-gauge__cta ml-3" @click="$emit('register')">
           <v-icon x-small left>mdi-shield-star</v-icon>
           {{ $t('midnight.registerForDust') }}
         </button>
+        <span v-else-if="isPending" class="dust-gauge__pending ml-3">
+          <span class="dust-gauge__pending-dot"></span>
+          {{ $t('midnight.dustBatteryPending') }}
+        </span>
       </div>
       <div class="dust-gauge__balance">
         <v-skeleton-loader v-if="midnightLoading" type="text" width="110" />
@@ -37,8 +41,10 @@
           :class="{ 'battery__divider--covered': (n * 100 / 12) <= pct }"
           :style="{ left: (n * 100 / 12) + '%' }"
         />
-        <!-- Dust particle field — drawn above fill + dividers, purely decorative -->
-        <DustParticleCanvas :active="isCharging" class="battery__dust" />
+        <!-- Two-zone charge animation: dust drifts right-to-left over the
+             empty track and lands on the fill edge; power streaks flow
+             through the charged section. See DustParticleCanvas. -->
+        <DustParticleCanvas :active="isCharging" :fill-pct="pct" class="battery__dust" />
       </div>
       <div class="battery__nub" />
     </div>
@@ -63,8 +69,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, toRefs } from 'vue';
+import { computed, onMounted, ref, toRefs, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import { midnightStore } from '@/stores/midnightStore';
+import { getDustPendingForDestination } from '@/shared/composables/useDustPending';
 import { walletStore } from '@/stores/walletStore';
 import { Network } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
@@ -91,6 +99,21 @@ const {
 
 const midnightLoading = useMidnightLoading();
 const isRegistered = computed(() => registrationStatus.value === 'Registered');
+
+// Pending: a cNIGHT registration was submitted that targets this wallet's DUST
+// address but hasn't relayed to Midnight yet (~2.5h), so dustState still reads
+// unregistered. Surface it so the battery shows "pending" instead of a
+// re-registration prompt. localStorage isn't reactive, so refresh on mount and
+// whenever the live status changes.
+const incomingPending = ref(0);
+function refreshPending() {
+  const dust = midnightStore.addresses?.dust ?? '';
+  incomingPending.value = dust ? getDustPendingForDestination(dust).length : 0;
+}
+onMounted(refreshPending);
+watch(registrationStatus, refreshPending);
+const isPending = computed(() => !isRegistered.value
+  && (incomingPending.value > 0 || registrationStatus.value === 'Pending'));
 
 // Percent full (0-100) for the bar width + a11y.
 const pct = computed(() => {
@@ -142,6 +165,9 @@ const timeToFullLabel = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  /* Fill the equal-height row column so it matches the proof-server widget
+     beside it (which already sets height: 100%). */
+  height: 100%;
 }
 
 .dust-gauge__head {
@@ -252,6 +278,9 @@ const timeToFullLabel = computed(() => {
   display: flex;
   justify-content: space-between;
   gap: 8px;
+  /* Pin to the card bottom so this row aligns with the proof-server widget's
+     stats row when the card is stretched to equal height. */
+  margin-top: auto;
 }
 
 .dust-gauge__stat {
@@ -293,6 +322,27 @@ const timeToFullLabel = computed(() => {
 
 .dust-gauge__cta:hover { filter: brightness(1.08); }
 .dust-gauge__cta:active { transform: translateY(1px); }
+
+.dust-gauge__pending {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--g-text-1);
+  background: var(--g-warning-fill);
+  border: 1px solid var(--g-warning-line);
+}
+
+.dust-gauge__pending-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--g-warning);
+  flex-shrink: 0;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .battery__fill { transition: none; }

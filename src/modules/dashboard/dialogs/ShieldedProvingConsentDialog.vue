@@ -16,13 +16,13 @@
         <p class="body-2 mb-3">{{ t('midnight.consent.intro') }}</p>
 
         <div class="consent-section mb-3">
-          <div class="consent-section-label">{{ t('midnight.consent.whatGeroSees') }}</div>
-          <p class="body-2 mb-0">{{ t('midnight.consent.whatGeroSeesBody') }}</p>
+          <div class="consent-section-label">{{ whatSeesLabel }}</div>
+          <p class="body-2 mb-0">{{ whatSeesBody }}</p>
         </div>
 
         <div class="consent-section mb-3">
-          <div class="consent-section-label">{{ t('midnight.consent.whatWeDoNot') }}</div>
-          <p class="body-2 mb-0">{{ t('midnight.consent.whatWeDoNotBody') }}</p>
+          <div class="consent-section-label">{{ whatWeDoNotLabel }}</div>
+          <p class="body-2 mb-0">{{ whatWeDoNotBody }}</p>
         </div>
 
         <div class="consent-section consent-section-muted mb-4">
@@ -38,7 +38,7 @@
           class="mt-0 mb-3 consent-checkbox"
         >
           <template v-slot:label>
-            <span class="body-2">{{ t('midnight.consent.acknowledge') }}</span>
+            <span class="body-2">{{ acknowledgeLabel }}</span>
           </template>
         </v-checkbox>
 
@@ -46,17 +46,28 @@
           color="#00c7f3"
           class="black--text mb-2"
           block
-          :disabled="!acknowledged || submitting"
+          :disabled="!acknowledged || submitting || switchingToLocal"
           :loading="submitting"
           @click="onAccept"
         >
-          {{ t('midnight.consent.acceptCloud') }}
+          {{ acceptLabel }}
         </v-btn>
 
         <v-btn
           outlined
           block
-          :disabled="submitting"
+          :disabled="submitting || switchingToLocal"
+          :loading="switchingToLocal"
+          class="mb-2"
+          @click="onUseLocalInstead"
+        >
+          {{ t('midnight.consent.useLocalInstead') }}
+        </v-btn>
+
+        <v-btn
+          text
+          block
+          :disabled="submitting || switchingToLocal"
           class="mb-2"
           @click="onCancel"
         >
@@ -72,17 +83,27 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, computed, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
+import { midnightStore } from '@/stores/midnightStore';
+import { settingsNavRequest } from '@/shared/composables/useGlobalSearch';
 import assets from '@/utils/assets';
 
 interface Props {
   isOpen: boolean;
+  /**
+   * Which remote prover this consent is about. Both record the SAME
+   * device-level consent (it covers remote proving generally) but the copy
+   * must name the actual destination of the witness data: `cloud` = Gero
+   * Cloud (default, unchanged behavior), `zkpaas` = the Arkhia zkPaaS
+   * service — Gero never receives the witness on that path.
+   */
+  provider?: 'cloud' | 'zkpaas';
 }
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), { provider: 'cloud' });
 const emit = defineEmits<{
   (e: 'close'): void;
   (e: 'accepted'): void;
@@ -90,8 +111,23 @@ const emit = defineEmits<{
 
 const { t } = useTranslation();
 
+const isZkpaas = computed(() => props.provider === 'zkpaas');
+const whatSeesLabel = computed(() => (isZkpaas.value
+  ? t('midnight.consent.zkpaasWhatSees') : t('midnight.consent.whatGeroSees')));
+const whatSeesBody = computed(() => (isZkpaas.value
+  ? t('midnight.consent.zkpaasWhatSeesBody') : t('midnight.consent.whatGeroSeesBody')));
+const whatWeDoNotLabel = computed(() => (isZkpaas.value
+  ? t('midnight.consent.zkpaasWhatThisMeans') : t('midnight.consent.whatWeDoNot')));
+const whatWeDoNotBody = computed(() => (isZkpaas.value
+  ? t('midnight.consent.zkpaasWhatThisMeansBody') : t('midnight.consent.whatWeDoNotBody')));
+const acknowledgeLabel = computed(() => (isZkpaas.value
+  ? t('midnight.consent.zkpaasAcknowledge') : t('midnight.consent.acknowledge')));
+const acceptLabel = computed(() => (isZkpaas.value
+  ? t('midnight.consent.zkpaasAccept') : t('midnight.consent.acceptCloud')));
+
 const acknowledged = ref(false);
 const submitting = ref(false);
+const switchingToLocal = ref(false);
 const errorMessage = ref<string | null>(null);
 
 // Reset checkbox + error state every time the dialog opens. Without this, a
@@ -105,6 +141,7 @@ watch(
       acknowledged.value = false;
       errorMessage.value = null;
       submitting.value = false;
+      switchingToLocal.value = false;
     }
   },
 );
@@ -134,8 +171,39 @@ async function onAccept() {
 }
 
 function onCancel() {
-  if (submitting.value) return;
+  if (submitting.value || switchingToLocal.value) return;
   emit('close');
+}
+
+/**
+ * "Use a local proof server instead" — switches the persisted preference to
+ * local (WP-P1's setter, via the same BG round-trip the Settings radio group
+ * uses, see AdvancedSettingsTab.vue) and sends the user to Settings to finish
+ * setup. Deliberately does NOT emit 'accepted': no cloud consent is recorded
+ * (local proving never sends witness data off the machine, so the cloud
+ * consent this dialog gates doesn't apply), and the pending send is dropped
+ * rather than resumed — the parent's onConsentClose clears the credentials it
+ * was holding. The user re-submits once the local proof server is running.
+ */
+async function onUseLocalInstead() {
+  if (submitting.value || switchingToLocal.value) return;
+  switchingToLocal.value = true;
+  errorMessage.value = null;
+  try {
+    const response = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.SET_MIDNIGHT_PROOF_SERVER,
+      data: { mode: 'local', localUrl: midnightStore.proofServer.localUrl },
+    }) as { data: { success: boolean; error?: string } };
+    if (!response?.data?.success) {
+      throw new Error(response?.data?.error || 'Failed to switch to local proof server');
+    }
+    settingsNavRequest.value = { tab: 'advanced' };
+    emit('close');
+  } catch (e) {
+    errorMessage.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    switchingToLocal.value = false;
+  }
 }
 </script>
 

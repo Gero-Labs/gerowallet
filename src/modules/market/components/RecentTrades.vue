@@ -69,8 +69,8 @@
           </span>
           <span
             class="trade-type"
-            :style="{ color: tokenSide(trade.type) === 'BUY' ? '#47CD89' : '#F97066' }"
-          >{{ tokenSide(trade.type) === 'BUY' ? $t('market.buy') : $t('market.sell') }}</span>
+            :style="{ color: trade.type === 'BUY' ? '#47CD89' : '#F97066' }"
+          >{{ trade.type === 'BUY' ? $t('market.buy') : $t('market.sell') }}</span>
           <span class="text-right">{{ formatTradePrice(trade.priceAda) }}</span>
           <span class="text-right">{{ formatCompact(trade.volumeAda) }}</span>
         </div>
@@ -102,16 +102,11 @@ interface TradeRow extends SwapHistory {
 const ownTxHashes = computed(() => {
   const txs = walletStore.transactions;
   if (!txs?.length) return new Set<string>();
-  return new Set(txs.map((tx: any) => tx.id).filter(Boolean));
+  return new Set(txs.map((tx: { id?: string }) => tx.id).filter(Boolean));
 });
 
-// API returns BUY/SELL from ADA perspective — invert for token perspective
-// API SELL = sold ADA = bought the token → display as BUY
-// API BUY = bought ADA = sold the token → display as SELL
-function tokenSide(apiType: string): 'BUY' | 'SELL' {
-  return apiType === 'SELL' ? 'BUY' : 'SELL';
-}
-
+// Backend `type` is token-perspective (BUY = user bought the token); render as-is.
+// Do NOT invert — see @/modules/market/utils/tradeSide.ts for the ground truth.
 const trades = ref<TradeRow[]>([]);
 const loading = ref(false);
 const autoRefresh = ref(false);
@@ -192,13 +187,17 @@ function formatTime(blockTime: string | number): string {
   }
 }
 
-function formatTradePrice(price: number): string {
+function formatTradePrice(price: number | null | undefined): string {
+  // The swaps API can return a null priceAda for some trades; guard so the
+  // render doesn't throw on .toFixed of null.
+  if (price == null || !Number.isFinite(price)) return '—';
   if (price >= 1) return price.toFixed(4);
   if (price >= 0.01) return price.toFixed(6);
   return price.toFixed(8);
 }
 
-function formatCompact(value: number): string {
+function formatCompact(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return '—';
   if (value >= 1e6) return (value / 1e6).toFixed(1) + 'M';
   if (value >= 1e3) return (value / 1e3).toFixed(1) + 'K';
   if (value >= 1) return value.toFixed(1);

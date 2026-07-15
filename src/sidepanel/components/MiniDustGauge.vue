@@ -25,10 +25,11 @@
         :class="{ 'mini-dust__divider--covered': (n * 100 / 8) <= pct }"
         :style="{ left: (n * 100 / 8) + '%' }"
       />
-      <DustParticleCanvas :active="isCharging" />
+      <DustParticleCanvas :active="isCharging" :fill-pct="pct" />
     </div>
     <div class="mini-dust__sub">
       <span v-if="isRegistered">+{{ rateFmt }} {{ dustTicker }}/s</span>
+      <span v-else-if="isPending" class="mini-dust__pending">{{ $t('midnight.dustBatteryPending') }}</span>
       <span v-else>{{ $t('midnight.statusUnregistered') }}</span>
       <span v-if="isCharging"> · {{ timeToFullLabel }}</span>
     </div>
@@ -36,11 +37,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, toRefs } from 'vue';
+import { computed, onMounted, ref, toRefs, watch } from 'vue';
 import { walletStore } from '@/stores/walletStore';
+import { midnightStore } from '@/stores/midnightStore';
 import { Network } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
+import { getDustPendingForDestination } from '@/shared/composables/useDustPending';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import DustParticleCanvas from '@/shared/components/DustParticleCanvas.vue';
 
@@ -56,6 +59,17 @@ const DUST_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.DUST);
 const { dustBalance, dustGenerating, dustCap, registrationStatus } = useMidnightDustLive();
 
 const isRegistered = computed(() => registrationStatus.value === 'Registered');
+
+// Incoming cNIGHT registration pending (~2.5h relay, not yet in dustState).
+const incomingPending = ref(0);
+function refreshPending() {
+  const dust = midnightStore.addresses?.dust ?? '';
+  incomingPending.value = dust ? getDustPendingForDestination(dust).length : 0;
+}
+onMounted(refreshPending);
+watch(registrationStatus, refreshPending);
+const isPending = computed(() => !isRegistered.value
+  && (incomingPending.value > 0 || registrationStatus.value === 'Pending'));
 const pct = computed(() => {
   if (dustCap.value <= 0n) return 0;
   const p = Number((dustBalance.value * 10000n) / dustCap.value) / 100;
@@ -172,6 +186,10 @@ const timeToFullLabel = computed(() => {
   font-size: 10px;
   color: rgba(255, 255, 255, 0.45);
   font-family: 'Roboto Mono', monospace;
+}
+
+.mini-dust__pending {
+  color: var(--g-warning);
 }
 
 @media (prefers-reduced-motion: reduce) {

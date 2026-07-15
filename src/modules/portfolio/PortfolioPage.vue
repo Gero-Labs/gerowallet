@@ -15,12 +15,18 @@
         </v-col>
       </v-row>
 
-      <!-- DUST battery: at-a-glance fee-capacity gauge (the Lace/1AM pattern).
-           Live-ticks via useMidnightDustLive; unregistered state opens the
-           same DUST registration dialog as the header button. -->
+      <!-- DUST battery + Proof Server: two at-a-glance status widgets,
+           50/50. DUST live-ticks via useMidnightDustLive; unregistered state
+           opens the same DUST registration dialog as the header button. The
+           proof-server widget shares its mode/health state with the full
+           /proof-server page via useMidnightProofServer (never a separate
+           copy - see that composable's header comment). -->
       <v-row no-gutters>
-        <v-col cols="12" class="pa-2">
+        <v-col cols="12" sm="6" class="pa-2">
           <MidnightDustGauge @register="dustRegistrationOpen = true" />
+        </v-col>
+        <v-col cols="12" sm="6" class="pa-2">
+          <MidnightProofServerWidget />
         </v-col>
       </v-row>
 
@@ -34,7 +40,7 @@
             <div class="filter-toolbar d-flex align-center px-3 py-1" style="gap: 6px;">
               <div class="filter-chip-bar d-flex align-center" style="gap: 4px;">
                 <v-chip small class="geroButton flex-shrink-0">
-                  <v-icon x-small class="mr-1" color="black">mdi-wallet-outline</v-icon>
+                  <v-icon x-small class="mr-1" color="var(--g-on-grad)">mdi-wallet-outline</v-icon>
                   {{ $t('portfolio.holdings') }}
                 </v-chip>
                 <v-chip small outlined disabled class="flex-shrink-0">
@@ -125,6 +131,7 @@
           <RecentTransactionsCard />
         </v-col>
       </v-row>
+
 
       <!-- Filter Chip Bar + Table -->
       <v-row no-gutters>
@@ -283,6 +290,7 @@
               :loading="isMainnetCardano && marketLoading"
               :pnl-loading="isMainnetCardano && pnlLoading"
               @token-click="openToken"
+              @dust-setup="cnightDialogOpen = true"
             />
 
             <!-- Collectibles: Table view (default) -->
@@ -313,6 +321,7 @@
           :token="selectedToken"
           @close="panelOpen = false"
           @swap="openSwap"
+          @dust-setup="cnightDialogOpen = true"
         />
       </div>
 
@@ -324,6 +333,9 @@
 
       <!-- Delegate Dialog -->
       <DelegateDialog :isOpen="isDelegateDialogOpen" :pool="selectedPool" :tx="delegateTxData" @close="closeDelegateDialog" />
+
+      <!-- cNIGHT → DUST registration -->
+      <CnightDustRegistrationDialog :isOpen="cnightDialogOpen" @close="cnightDialogOpen = false" />
     </template>
   </v-layout>
 </template>
@@ -352,6 +364,7 @@ import EmptyStateHero from '@/modules/dashboard/components/EmptyStateHero.vue';
 import MidnightPortfolioChart from '@/modules/dashboard/components/MidnightPortfolioChart.vue';
 import MidnightTransactionsCard from '@/modules/dashboard/components/MidnightTransactionsCard.vue';
 import MidnightDustGauge from '@/modules/dashboard/components/MidnightDustGauge.vue';
+import MidnightProofServerWidget from '@/modules/dashboard/components/MidnightProofServerWidget.vue';
 import MidnightHoldingsTable from '@/modules/dashboard/components/MidnightHoldingsTable.vue';
 import DustRegistrationDialog from '@/modules/dashboard/dialogs/DustRegistrationDialog.vue';
 import MarketTokenTable from '@/modules/market/components/MarketTokenTable.vue';
@@ -363,6 +376,7 @@ import TokensDialog from '@/modules/assets/dialogs/TokensDialog.vue';
 import SwapDialog from '@/modules/dashboard/dialogs/SwapDialog.vue';
 import WithdrawalDialog from '@/modules/staking/dialogs/WithdrawalDialog.vue';
 import DelegateDialog from '@/modules/staking/dialogs/DelegateDialog.vue';
+import CnightDustRegistrationDialog from '@/modules/dashboard/dialogs/CnightDustRegistrationDialog.vue';
 import snackbar from '@/plugins/snackbar';
 
 const { t } = useTranslation();
@@ -432,6 +446,12 @@ const {
 const isMainnetCardano = computed(() =>
   loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET
 );
+
+// ── cNIGHT → DUST registration (Path B) ──────────────────────────────────────
+// The inline DUST line under the NIGHT holdings row (and the token drawer) is
+// the entry point now; the standalone banner was removed. Opened via the
+// table/drawer `dust-setup` events.
+const cnightDialogOpen = ref(false);
 
 // Non-mainnet Cardano (preprod/preview): render an ADA-only portfolio + chart.
 // Testnet tokens have no market price, so fiat valuation and the token
@@ -1044,8 +1064,6 @@ watch(
   height: 210px;
   overflow: hidden;
 }
-
-
 
 /* ── Holdings table card ──────────────────────────────────────────────────────── */
 

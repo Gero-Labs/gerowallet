@@ -548,6 +548,18 @@ const displayedPortfolioValue = ref(0);
 let portfolioValueTimer: ReturnType<typeof setInterval> | null = null;
 function syncDisplayedValue() { displayedPortfolioValue.value = activePortfolioValue.value; }
 watch([selectedCurrency, portfolioMode, isReadyToRender], () => syncDisplayedValue(), { immediate: true });
+// The 30s throttle keeps the figure stable against small live-price drift, but it
+// must NOT freeze a stale *initial* snapshot: market token prices arrive a beat
+// after mount, correcting the total from an ADA-only partial (non-native holdings
+// priced at 0 until `allTokens` loads) up to the full holdings value. That is a
+// large one-off jump, not churn — converge on it immediately. Small drift (< 2%)
+// still waits for the timer so the odometer doesn't churn.
+watch(activePortfolioValue, (next) => {
+  const shown = displayedPortfolioValue.value;
+  if (shown <= 0 || Math.abs(next - shown) / Math.abs(shown) > 0.02) {
+    syncDisplayedValue();
+  }
+});
 onMounted(() => { portfolioValueTimer = setInterval(syncDisplayedValue, 30_000); });
 onBeforeUnmount(() => { if (portfolioValueTimer) clearInterval(portfolioValueTimer); });
 

@@ -1,4 +1,5 @@
 import VueRouter, { NavigationGuardNext, Route, RouteRecord } from 'vue-router';
+import { Blockchain } from '@/models/types';
 
 // Critical layouts loaded immediately
 import BlankLayout from '@/modules/navigation/layouts/BlankLayout.vue';
@@ -38,6 +39,7 @@ const BitcoinSignMessage = () => import('@/popup/modules/views/BitcoinSignMessag
 const WCSessionProposal = () => import('@/popup/modules/views/WCSessionProposal.vue');
 const PoolOperator = () => import('@/modules/pool-operator/PoolOperator.vue');
 const NexusPage = () => import('@/modules/nexus/NexusPage.vue');
+const ProofServerPage = () => import('@/modules/midnight/ProofServerPage.vue');
 
 import WalletStore from '@/stores/walletStore';
 import featureFlagsStore from '@/stores/featureFlagsStore';
@@ -114,6 +116,15 @@ const routes = [
     path: '/pool-operator',
     name: 'poolOperator',
     component: PoolOperator,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/proof-server',
+    name: 'proofServer',
+    component: ProofServerPage,
     meta: {
       layout: ContentLayout,
       requiresAuth: true,
@@ -449,6 +460,9 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
       // the live flag (not a hard false) so the maintenance case can turn it ON
       // once gero-sync enables it. Falsy => redirect to '/'.
       copilotFeed: () => featureFlagsStore.isCopilotEnabled(),
+      // Proof server settings only apply to Midnight wallets (shielded-proving
+      // config). Direct-URL visits from a non-Midnight wallet redirect home.
+      proofServer: (c) => c === Blockchain.MIDNIGHT,
     };
     const guard = routeNetworkGuards[to.name];
     if (guard && !guard(chain, network)) {

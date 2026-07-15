@@ -2,7 +2,7 @@ import { ref } from 'vue';
 
 export interface DAppRequest {
   type: 'dapp-request';
-  method: 'enable' | 'signTx' | 'signData' | 'midnight_connect' | 'midnight_signData' | 'btcSignPsbt' | 'btcSignMessage' | 'wcSessionProposal';
+  method: 'enable' | 'signTx' | 'signData' | 'midnight_connect' | 'midnight_signData' | 'midnight_makeTransfer' | 'btcSignPsbt' | 'btcSignMessage' | 'wcSessionProposal';
   requestId: string;
   payload: unknown;
 }
@@ -18,7 +18,7 @@ type DAppResponseData = unknown;
 // metadata — so only the session *proposal* (pairing) needs its own method.
 const VALID_METHODS = new Set([
   'enable', 'signTx', 'signData', 'midnight_connect', 'midnight_signData',
-  'btcSignPsbt', 'btcSignMessage', 'wcSessionProposal',
+  'midnight_makeTransfer', 'btcSignPsbt', 'btcSignMessage', 'wcSessionProposal',
 ]);
 
 const isVisible = ref(false);

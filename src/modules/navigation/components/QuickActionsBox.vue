@@ -272,9 +272,13 @@ const isPerpetualsDisabled = computed(() => {
   align-items: center !important;
   position: relative;
   /* Buttons are flat inside the glass bar: a faint color tint + colored label,
-     no per-button frost or border (the container carries the glass now). */
+     no per-button frost or border (the container carries the glass now).
+     box-shadow:none kills Vuetify's default contained-button elevation, which
+     otherwise draws a raised frame — most visible on the end buttons (Buy/Sell,
+     Perps) and read as "weird borders". */
   background: transparent !important;
   border: none !important;
+  box-shadow: none !important;
   overflow: hidden;
   transition: background var(--g-dur-fast) ease;
 }

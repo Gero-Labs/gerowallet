@@ -181,10 +181,7 @@
                             class="ml-1"
                             style="margin-top: -1px; font-size: 11px;"
                           >mdi-check-decagram</v-icon>
-                          <span class="token-balance">
-                            <template v-if="isShielded">{{ t('midnight.send.shieldedBalanceUnavailable') }}</template>
-                            <template v-else>{{ formattedAvailable }}</template>
-                          </span>
+                          <span class="token-balance">{{ formattedAvailable }}</span>
                         </div>
                         <div class="token-row__right">
                           <v-text-field
@@ -201,7 +198,6 @@
                             :disabled="sending"
                           />
                           <v-btn
-                            v-if="!isShielded"
                             text
                             x-small
                             color="var(--g-accent)"
@@ -212,8 +208,8 @@
                         </div>
                       </div>
                       <div v-if="isShielded" class="token-info">
-                        <v-icon x-small color="warning" class="mr-1">mdi-information-outline</v-icon>
-                        {{ t('midnight.send.shieldedBalanceHint') }}
+                        <v-icon x-small color="var(--g-text-3)" class="mr-1">mdi-information-outline</v-icon>
+                        {{ t('midnight.send.shieldedBalanceNote') }}
                       </div>
                     </div>
                   </div>
@@ -222,7 +218,7 @@
                 <!-- Global total — identical styling to the Cardano step-1 total. -->
                 <div v-if="amount && Number(amount) > 0" class="global-total">
                   <div class="global-total__row global-total__fee-row">
-                    <span class="global-total__fee-label">{{ t('signTx.networkFee') }}</span>
+                    <span class="global-total__fee-label">{{ t('midnight.send.estimatedNetworkFee') }}</span>
                     <span class="global-total__fee">{{ feeEstimateDisplay }} {{ dustCurrency }}</span>
                   </div>
                   <div class="global-total__row global-total__total-row">
@@ -248,7 +244,14 @@
                 :totals="reviewTotals"
                 :unit="nightCurrency"
                 :fee-unit="dustCurrency"
+                :fee-label="t('midnight.send.estimatedNetworkFee')"
               />
+              <!-- Public-chain disclosure: unshielded transfers are indexer-visible.
+                   Informational, not a warning - no error/warning coloring. -->
+              <div v-if="!isShielded" class="midnight-info-note mt-3">
+                <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-eye-outline</v-icon>
+                <span>{{ t('midnight.send.publicTxNote') }}</span>
+              </div>
               <!-- Sending registered NIGHT resets its DUST accrual clock.
                    Suppressed when the low-DUST warning below is showing — it
                    already carries the reset message, so both at once repeats. -->
@@ -278,7 +281,7 @@
             :wallet-type="loggedWallet?.type"
             :is-prf-wallet="isPrfWallet"
             :is-signed="false"
-            :loading="sending"
+            :loading="sending || checkingLocalProver"
             :password="password"
             @update:password="password = $event"
             :password-label="t('send.spendingPassword')"
@@ -292,6 +295,25 @@
           />
         </div>
 
+        <!-- Local proof server didn't answer its health check (WP-P5): offer
+             the two-action fallback instead of a generic error string. The
+             auth section above stays visible/usable so re-submitting after
+             starting the server just works. -->
+        <div v-if="localProverUnavailable" class="midnight-info-note midnight-prover-fallback mb-2">
+          <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-server-network-off</v-icon>
+          <div class="midnight-prover-fallback-body">
+            <span>{{ proverFallbackText }}</span>
+            <div class="midnight-prover-fallback-actions">
+              <v-btn text x-small color="var(--g-accent)" @click="openProofServerSettings">
+                {{ t('midnight.proofServer.openSettings') }}
+              </v-btn>
+              <v-btn text x-small color="var(--g-accent)" @click="useCloudForThisTransaction">
+                {{ t('midnight.proofServer.useCloudOnce') }}
+              </v-btn>
+            </div>
+          </div>
+        </div>
+
         <div v-if="errorMessage" class="error--text text-caption mb-2 text-center px-3">
           {{ errorMessage }}
         </div>
@@ -302,7 +324,7 @@
             @click="prevStep"
             v-if="currentStep > 1"
             class="mr-2"
-            :disabled="sending"
+            :disabled="sending || checkingLocalProver"
           >
             <v-icon small class="mr-1">mdi-arrow-left</v-icon>{{ t('common.back') }}
           </v-btn>
@@ -322,16 +344,19 @@
             v-else-if="currentStep === 2 && !isPrfWallet"
             class="continue-button"
             @click="submitWithPassword"
-            :disabled="sending"
-            :loading="sending"
+            :disabled="sending || checkingLocalProver"
+            :loading="sending || checkingLocalProver"
           >{{ t('midnight.signAndSend') }}</v-btn>
         </div>
       </v-card-actions>
     </BaseDialog>
 
-    <!-- First-time-only consent gate for shielded sends. -->
+    <!-- First-time-only consent gate for shielded sends. `provider` names
+         the actual witness destination the copy must disclose (Gero Cloud
+         vs Arkhia zkPaaS). -->
     <ShieldedProvingConsentDialog
       :is-open="consentDialogOpen"
+      :provider="consentProvider"
       @close="onConsentClose"
       @accepted="onConsentAccepted"
     />
@@ -351,6 +376,7 @@ import ShieldedProvingConsentDialog from '@/modules/dashboard/dialogs/ShieldedPr
 import QRAddressScannerDialog from '@/modules/dashboard/dialogs/QRAddressScannerDialog.vue';
 import midnightLogo from '@/assets/svg/midnight.svg';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import { settingsNavRequest } from '@/shared/composables/useGlobalSearch';
 import {
   midnightStore,
   SHIELDED_PROVING_CONSENT_VERSION,
@@ -387,16 +413,20 @@ const steps = ref([
 const currentStep = ref(1);
 const shakeError = ref(false);
 
-const shieldedAvailable = computed(() => {
-  const vk = midnightStore.addresses?.zswapViewingKey;
-  return typeof vk === 'string' && vk.startsWith('mn_shield-esk_');
-});
+// The raw zswap viewing key is a forever-decrypt secret and is deliberately
+// kept out of midnightStore (see midnightStore.setActive) — the UI only needs
+// to know whether shielded sync is available, which the store publishes as a
+// boolean derived from the same `mn_shield-esk_` validity check.
+const shieldedAvailable = computed(() => midnightStore.shieldedSyncAvailable);
 
 const activeTab = ref(0);
 const isShielded = computed(() => activeTab.value === 1);
 
 const NIGHT_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.NIGHT);
-const available = computed(() => midnightStore.balances?.nightUnshielded ?? 0n);
+const available = computed(() =>
+  isShielded.value
+    ? (midnightStore.balances?.nightShielded ?? 0n)
+    : (midnightStore.balances?.nightUnshielded ?? 0n));
 const formattedAvailable = computed(() => {
   const value = available.value;
   const whole = value / NIGHT_DIVISOR;
@@ -447,8 +477,13 @@ const errorMessage = ref<string | null>(null);
 type SendStageOrIdle = MidnightSendStage | 'idle';
 const sendStage = ref<SendStageOrIdle>('idle');
 
+// `provingLocal`/`provingZkpaas` share `working`'s rank: the three are
+// mutually exclusive (wallet-side shielded sends emit a proving stage in
+// place of `working`, see midnight-tx.service's sendShieldedNight) and
+// occupy the same position in every send's stage sequence — authorize →
+// (build →) working-or-proving → submit → done.
 const STAGE_RANK: Record<SendStageOrIdle, number> = {
-  idle: 0, authorizing: 1, building: 2, working: 3, submitting: 4, done: 5,
+  idle: 0, authorizing: 1, building: 2, working: 3, provingLocal: 3, provingZkpaas: 3, submitting: 4, done: 5,
 };
 
 interface TimelineNode {
@@ -470,6 +505,16 @@ const timelineNodes = computed<TimelineNode[]>(() => {
   const syncDone = pct != null && pct >= 100;
   const syncActive = s === 'working' && !syncDone;
   const signActive = s === 'working' && syncDone;
+  // Wallet-side shielded sends (WP-P5 local; zkPaaS hosted): the BG round
+  // trip is one opaque proving+binding call with no percent signal, so it
+  // gets a single indeterminate-bar node (staged copy, not a fake
+  // percentage — rule 14 in
+  // docs/plans/2026-07-13-midnight-proof-server-setting.md section 1) rather
+  // than the sync/sign split above, which is specific to DUST-balance sync.
+  const provingActive = s === 'provingLocal' || s === 'provingZkpaas';
+  const provingLabel = s === 'provingZkpaas'
+    ? t('midnight.send.stageProvingZkpaas')
+    : t('midnight.send.stageProvingLocal');
 
   return [
     {
@@ -484,10 +529,10 @@ const timelineNodes = computed<TimelineNode[]>(() => {
     },
     {
       key: 'sync',
-      label: t('midnight.send.stageSync'),
-      state: rank > 3 || signActive ? 'done' : syncActive ? 'active' : 'pending',
+      label: provingActive ? provingLabel : t('midnight.send.stageSync'),
+      state: rank > 3 || signActive ? 'done' : (syncActive || provingActive) ? 'active' : 'pending',
       showBar: true,
-      percent: syncActive ? pct : undefined,
+      percent: provingActive ? null : (syncActive ? pct : undefined),
       detail: syncActive ? prog?.detail : undefined,
     },
     {
@@ -518,6 +563,33 @@ const isDustLow = computed(() => !!dustBattery.value && dustBattery.value.percen
 
 const consentDialogOpen = ref(false);
 const pendingCredentials = ref<{ password?: string; prfSecret?: Uint8Array } | null>(null);
+
+// ── Local proof-server routing (WP-P5) ──
+// True while the health preflight for a wallet-side (local or zkPaaS)
+// shielded send is in-flight — keeps Step 2 visible (no big "sending"
+// overlay) with just the submit button showing a spinner, since the check
+// is quick (~2.5s) and nothing has actually started yet.
+const checkingLocalProver = ref(false);
+// Which remote prover the consent dialog is about when it opens — set at
+// each open site (zkpaas for a first zkPaaS send, cloud everywhere else,
+// including the one-off "use Gero Cloud" fallback).
+const consentProvider = ref<'cloud' | 'zkpaas'>('cloud');
+// Fallback-note copy tracks the mode that failed its preflight.
+const proverFallbackText = computed(() => (
+  midnightStore.proofServer.mode === 'zkpaas'
+    ? t('midnight.proofServer.zkpaasNotReachableSend')
+    : t('midnight.proofServer.notDetectedSend')
+));
+// True once a local-mode shielded send's preflight (or, on the rare race
+// where the server drops between preflight and build, the BG call itself)
+// finds the local proof server unreachable. Renders the two-action fallback
+// in place of a generic error string.
+const localProverUnavailable = ref(false);
+// Set for exactly one send by "Use Gero Cloud for this transaction": routes
+// that single attempt through the remote path without touching the user's
+// stored proofServer.mode. Consumed (reset to false) the moment sendShielded
+// reads it.
+const forceRemoteForNextSend = ref(false);
 
 const passwordRules = [rules.required()];
 
@@ -563,25 +635,14 @@ const addressRules = computed(() => {
   ];
 });
 
-const amountRules = computed(() => {
-  if (isShielded.value) {
-    return [
-      (v: string) => !!v || 'Amount required',
-      (v: string) => {
-        const n = Number(v);
-        return (Number.isFinite(n) && n > 0) || 'Must be positive';
-      },
-    ];
-  }
-  return [
-    (v: string) => !!v || 'Amount required',
-    (v: string) => {
-      const n = Number(v);
-      return (Number.isFinite(n) && n > 0) || 'Must be positive';
-    },
-    (v: string) => parseAmount(v) <= available.value || 'Exceeds available balance',
-  ];
-});
+const amountRules = computed(() => [
+  (v: string) => !!v || t('midnight.send.amountRequired'),
+  (v: string) => {
+    const n = Number(v);
+    return (Number.isFinite(n) && n > 0) || t('send.amountMustBePositive');
+  },
+  (v: string) => parseAmount(v) <= available.value || t('errors.insufficientBalance'),
+]);
 
 function parseAmount(input: string): bigint {
   if (!input) return 0n;
@@ -645,6 +706,7 @@ function nextStep() {
 
 function prevStep() {
   errorMessage.value = null;
+  localProverUnavailable.value = false;
   currentStep.value = 1;
 }
 
@@ -681,17 +743,93 @@ async function routeSend(credentials: { password?: string; prfSecret?: Uint8Arra
     await sendUnshielded(credentials);
     return;
   }
+  const mode = midnightStore.proofServer.mode;
+  // Local proof-server mode never needs cloud consent — witness data stays
+  // on the user's machine — so it skips the consent dialog entirely and
+  // goes straight to a health preflight (WP-P5, plan section "WP-P5 - Consent
+  // dialog + send-flow integration"). Arkhia zkPaaS ships the witness to a
+  // third party, so it is consent-gated exactly like Gero Cloud and THEN
+  // preflighted like local.
+  if (mode === 'local') {
+    await routeWalletProvedShielded(credentials);
+    return;
+  }
   if (hasFreshConsent()) {
+    if (mode === 'zkpaas') {
+      await routeWalletProvedShielded(credentials);
+      return;
+    }
     await sendShielded(credentials);
     return;
   }
   pendingCredentials.value = credentials;
+  consentProvider.value = mode === 'zkpaas' ? 'zkpaas' : 'cloud';
+  consentDialogOpen.value = true;
+}
+
+/**
+ * Wallet-side (local or zkPaaS) shielded send routing: preflight the
+ * selected proof server before ever touching the "sending" overlay. A
+ * fast, explicit check here (rather than letting sendShieldedNight's own
+ * internal preflight surface via a caught error) keeps Step 2 on screen
+ * with just a spinner instead of flashing the full progress timeline for a
+ * doomed send. Target resolution lives in the tx service so the two can
+ * never disagree about which URL/auth a send would use.
+ */
+async function routeWalletProvedShielded(credentials: { password?: string; prfSecret?: Uint8Array }) {
+  errorMessage.value = null;
+  localProverUnavailable.value = false;
+  checkingLocalProver.value = true;
+  try {
+    const { checkWalletProvingPreflight } = await import('@/services/midnight-tx.service');
+    const ok = await checkWalletProvingPreflight(loggedWallet.value?.network ?? '');
+    if (!ok) {
+      pendingCredentials.value = credentials;
+      localProverUnavailable.value = true;
+      return;
+    }
+  } finally {
+    checkingLocalProver.value = false;
+  }
+  await sendShielded(credentials);
+}
+
+/** "Open settings" fallback action — navigates to Settings > Advanced (the
+ * Midnight proof server section, WP-P4) via the same decoupled channel
+ * GlobalSearch uses, so this dialog doesn't need a direct reference to
+ * SettingsDialog/ContentLayout. */
+function openProofServerSettings() {
+  settingsNavRequest.value = { tab: 'advanced' };
+}
+
+/**
+ * "Use Gero Cloud for this transaction" fallback action — sends this one
+ * shielded transfer via the remote path without changing the user's stored
+ * `proofServer.mode`. Reuses the already-entered credentials from the failed
+ * local attempt (`pendingCredentials`) rather than asking the user to
+ * re-authenticate. Still gated on cloud consent like any other remote send.
+ */
+function useCloudForThisTransaction() {
+  const credentials = pendingCredentials.value;
+  if (!credentials) return;
+  localProverUnavailable.value = false;
+  forceRemoteForNextSend.value = true;
+  if (hasFreshConsent()) {
+    pendingCredentials.value = null;
+    void sendShielded(credentials);
+    return;
+  }
+  // pendingCredentials stays set — onConsentAccepted below reads it once the
+  // user accepts the cloud consent dialog. The fallback always goes to Gero
+  // Cloud (even from zkpaas mode), so the consent copy must say Gero Cloud.
+  consentProvider.value = 'cloud';
   consentDialogOpen.value = true;
 }
 
 function onConsentClose() {
   consentDialogOpen.value = false;
   pendingCredentials.value = null;
+  forceRemoteForNextSend.value = false;
 }
 
 async function onConsentAccepted() {
@@ -699,6 +837,13 @@ async function onConsentAccepted() {
   const credentials = pendingCredentials.value;
   pendingCredentials.value = null;
   if (!credentials) return;
+  // A freshly-consented zkPaaS send still needs its preflight; the one-off
+  // "use Gero Cloud" fallback (forceRemoteForNextSend) goes straight to the
+  // remote path instead — sendShielded consumes that flag.
+  if (!forceRemoteForNextSend.value && midnightStore.proofServer.mode === 'zkpaas') {
+    await routeWalletProvedShielded(credentials);
+    return;
+  }
   await sendShielded(credentials);
 }
 
@@ -741,6 +886,16 @@ async function sendUnshielded(credentials: { password?: string; prfSecret?: Uint
 async function sendShielded(credentials: { password?: string; prfSecret?: Uint8Array }) {
   const wallet = loggedWallet.value;
   if (!wallet) return;
+  // Consumed here (not left for sendShieldedNight to re-read) so a second,
+  // unrelated shielded send later in the same dialog session never
+  // accidentally inherits a one-off "use cloud" override.
+  const forceRemote = forceRemoteForNextSend.value;
+  forceRemoteForNextSend.value = false;
+  // Every entry point into sendShielded (routeLocalShielded, the direct
+  // fresh-consent path, and onConsentAccepted) should start from a clean
+  // fallback state — otherwise a stale fallback from an earlier local-mode
+  // attempt could resurface next to an unrelated later error.
+  localProverUnavailable.value = false;
   sending.value = true;
   sendStage.value = 'authorizing';
   try {
@@ -754,6 +909,7 @@ async function sendShielded(credentials: { password?: string; prfSecret?: Uint8A
       credentials,
       'InBlock',
       (stage) => { sendStage.value = stage; },
+      forceRemote,
     );
     debugLog('🌙 Midnight shielded tx submitted:', result.txHash, 'status:', result.status);
     void addOptimisticPendingTx(result.txHash, true);
@@ -761,7 +917,19 @@ async function sendShielded(credentials: { password?: string; prfSecret?: Uint8A
     resetForm();
     emit('close');
   } catch (e) {
-    errorMessage.value = e instanceof Error ? e.message : String(e);
+    // Named rather than instanceof-checked: ProofServerUnreachableError is
+    // reached here via a dynamic import, and name-based matching sidesteps
+    // any doubt about identity across that boundary. Thrown by
+    // sendShieldedNight's OWN internal preflight — normally routeLocalShielded
+    // above already caught this before the "sending" overlay ever showed, so
+    // reaching it here means the server dropped in the narrow window between
+    // that preflight and this call. Same fallback either way.
+    if (e instanceof Error && e.name === 'ProofServerUnreachableError') {
+      pendingCredentials.value = credentials;
+      localProverUnavailable.value = true;
+    } else {
+      errorMessage.value = e instanceof Error ? e.message : String(e);
+    }
   } finally {
     sending.value = false;
     sendStage.value = 'idle';
@@ -785,6 +953,12 @@ async function addOptimisticPendingTx(hash: string, shielded = false) {
 // UI closes, so keep the timeline visible until it resolves).
 function onDialogClose() {
   if (sending.value) return;
+  // Abandon any pending local-prover-fallback attempt rather than letting it
+  // resurface stale on next open — matches the existing consent-cancel
+  // behaviour (onConsentClose), which drops pendingCredentials the same way.
+  localProverUnavailable.value = false;
+  pendingCredentials.value = null;
+  forceRemoteForNextSend.value = false;
   emit('close');
 }
 
@@ -794,6 +968,8 @@ function resetForm() {
   password.value = '';
   currentStep.value = 1;
   sendStage.value = 'idle';
+  localProverUnavailable.value = false;
+  forceRemoteForNextSend.value = false;
 }
 
 // Reset to step 1 whenever the dialog re-opens.
@@ -1073,7 +1249,7 @@ watch(
 }
 .token-info {
   font-size: 11px;
-  color: var(--g-warning);
+  color: var(--g-text-3);
   padding: 4px 2px 0;
   display: flex;
   align-items: center;
@@ -1107,6 +1283,34 @@ watch(
   color: var(--g-error);
   background: var(--g-error-fill);
   border-color: var(--g-error-line);
+}
+.midnight-info-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--g-text-2);
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-control);
+  padding: 8px 10px;
+}
+
+/* Local proof-server fallback (WP-P5) — reuses .midnight-info-note's tone,
+   adds the two-action row underneath the message. */
+.midnight-prover-fallback-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+.midnight-prover-fallback-actions {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 2px;
 }
 
 /* ─── Send-progress timeline (right-side, appears while sending) ─── */

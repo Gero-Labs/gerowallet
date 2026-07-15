@@ -6,6 +6,7 @@
 
     <!-- Midnight: compact DUST battery replaces the (Cardano-centric) carousel -->
     <MiniDustGauge v-if="isMidnight" />
+    <MiniProofServerWidget v-if="isMidnight" />
     <FeaturedCarousel v-else />
 
     <div class="section-header">
@@ -21,6 +22,7 @@
 
     <!-- Flow sheets -->
     <SendSheet v-model="showSend" />
+    <MidnightSendSheet v-model="showMidnightSend" />
     <ReceiveSheet v-model="showReceive" />
     <SwapSheet v-model="showSwap" />
     <BuySellSheet v-model="showBuySell" />
@@ -107,9 +109,11 @@ import BalanceSection from '../components/BalanceSection.vue';
 import QuickActions from '../components/QuickActions.vue';
 import FeaturedCarousel from '../components/FeaturedCarousel.vue';
 import MiniDustGauge from '../components/MiniDustGauge.vue';
+import MiniProofServerWidget from '../components/MiniProofServerWidget.vue';
 import TokenList from '../components/TokenList.vue';
 import BottomSheet from '../components/BottomSheet.vue';
 import SendSheet from '../components/flows/SendSheet.vue';
+import MidnightSendSheet from '../components/flows/MidnightSendSheet.vue';
 import ReceiveSheet from '../components/flows/ReceiveSheet.vue';
 import SwapSheet from '../components/flows/SwapSheet.vue';
 import BuySellSheet from '../components/flows/BuySellSheet.vue';
@@ -118,6 +122,7 @@ const { getTokenByUnit } = useMarketData();
 const { adaLovelace } = useAdaLovelace();
 
 const showSend = ref(false);
+const showMidnightSend = ref(false);
 const showReceive = ref(false);
 const showSwap = ref(false);
 const showBuySell = ref(false);
@@ -152,16 +157,16 @@ function handleBuySell() {
 }
 
 function handleAction(id: string) {
-  // Midnight send/receive flows live in the full dashboard (MidnightSendDialog
-  // + 3-address ReceiveDialog); the sidepanel sheets are Cardano tx builders
-  // and would mis-build for Midnight. Open the dashboard instead of breaking.
-  if (walletStore.loggedWallet?.chain === Blockchain.MIDNIGHT && (id === 'send' || id === 'receive')) {
-    window.open(chrome.runtime.getURL('index.html#/'), '_blank');
-    return;
-  }
+  // Midnight send/receive are both native in the sidepanel now: MidnightSendSheet
+  // (unshielded NIGHT only, mirrors MidnightSendDialog.vue) and ReceiveSheet
+  // (Public/Private/DUST address tabs).
   switch (id) {
     case 'send':
-      showSend.value = true;
+      if (isMidnight.value) {
+        showMidnightSend.value = true;
+      } else {
+        showSend.value = true;
+      }
       break;
     case 'receive':
       showReceive.value = true;
