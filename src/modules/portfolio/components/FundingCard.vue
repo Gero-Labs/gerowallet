@@ -1,9 +1,8 @@
 <template>
   <!-- Empty-wallet hero sidekick: sits in the RecentTransactionsCard slot while
-       there is nothing to transact. Solid raised surface per the glass canon
-       (static card, not floating chrome). A plain div, not v-card, so no
-       Vuetify cascade fight and no override flags. -->
-  <div class="fill-height d-flex flex-column funding-card">
+       there is nothing to transact. Shared liquid-glass material (user request
+       2026-07-15). A plain div, not v-card, so no Vuetify cascade fight. -->
+  <div class="fill-height d-flex flex-column liquid-glass funding-card">
     <h3 class="t-heading">{{ $t('portfolio.fundingTitle') }}</h3>
     <p class="funding-card__sub t-body-sm">{{ $t('portfolio.fundingSub') }}</p>
 
@@ -73,10 +72,8 @@ const copyAddress = async () => {
 </script>
 
 <style scoped>
+/* Surface comes from the shared .liquid-glass material; only layout here. */
 .funding-card {
-  border-radius: var(--g-r-card);
-  background: var(--g-raised);
-  border: 1px solid var(--g-hairline-1);
   padding: var(--g-s-4);
 }
 

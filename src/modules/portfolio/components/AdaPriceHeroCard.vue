@@ -1,9 +1,9 @@
 <template>
   <!-- Empty-wallet hero: the asset the user is about to buy, in the exact slot
-       the portfolio chart occupies once they own it. Solid raised surface per
-       the glass canon (static card). A plain div, not v-card, so no Vuetify
-       cascade fight and no override flags. -->
-  <div class="fill-height d-flex flex-column ada-hero">
+       the portfolio chart occupies once they own it. Shared liquid-glass
+       material (user request 2026-07-15), surface styling owned by
+       liquid-glass.css. A plain div, not v-card, so no Vuetify cascade fight. -->
+  <div class="fill-height d-flex flex-column liquid-glass ada-hero">
     <div class="ada-hero__header">
       <div>
         <span class="t-heading">{{ $t('assets.cardano') }}</span>
@@ -245,10 +245,9 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+/* Surface (background/border/radius) comes from the shared .liquid-glass
+   material; only layout lives here. */
 .ada-hero {
-  border-radius: var(--g-r-card);
-  background: var(--g-raised);
-  border: 1px solid var(--g-hairline-1);
   padding: var(--g-s-3) var(--g-s-4);
 }
 

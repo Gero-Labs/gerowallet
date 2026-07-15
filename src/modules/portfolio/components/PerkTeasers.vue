@@ -15,7 +15,7 @@
         v-for="(perk, i) in perks"
         :key="perk.key"
         type="button"
-        :class="['perk-teasers__card', `perk-teasers__card--${perk.key}`]"
+        :class="['perk-teasers__card', 'liquid-glass', `perk-teasers__card--${perk.key}`]"
         :style="{ '--pt-d': `${i * 60}ms`, '--pt-loop-d': `${i * 520}ms` }"
         @click="perk.go()"
       >
@@ -136,35 +136,48 @@ const perks = computed(() => {
 .perk-teasers__card--perps { --pt-hue: var(--g-info); }
 .perk-teasers__card--swap { --pt-hue: var(--g-accent); }
 
+/* Surface (glass background/border/radius) comes from the shared
+   .liquid-glass material. The per-perk hue wash lives on a ::before overlay
+   so it layers over the glass without fighting its flagged background. */
 .perk-teasers__card {
   appearance: none;
   font: inherit;
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
   text-align: left;
   padding: var(--g-s-3);
-  background: linear-gradient(
-    to bottom,
-    color-mix(in srgb, var(--pt-hue) 10%, var(--g-raised)),
-    var(--g-raised) 72%
-  );
-  border: 1px solid color-mix(in srgb, var(--pt-hue) 18%, var(--g-hairline-1));
-  border-radius: var(--g-r-card);
   cursor: pointer;
   animation: pt-rise var(--g-dur-slow) var(--g-ease) both;
   animation-delay: var(--pt-d, 0ms);
-  transition: border-color var(--g-dur-fast) var(--g-ease), background var(--g-dur-fast) var(--g-ease);
 }
 
-.perk-teasers__card:hover,
-.perk-teasers__card:focus-visible {
-  border-color: color-mix(in srgb, var(--pt-hue) 50%, transparent);
+.perk-teasers__card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
   background: linear-gradient(
     to bottom,
-    color-mix(in srgb, var(--pt-hue) 16%, var(--g-raised)),
-    var(--g-raised) 82%
+    color-mix(in srgb, var(--pt-hue) 14%, transparent),
+    transparent 72%
   );
+  opacity: 0.75;
+  pointer-events: none;
+  transition: opacity var(--g-dur-fast) var(--g-ease);
+}
+
+.perk-teasers__card:hover::before,
+.perk-teasers__card:focus-visible::before {
+  opacity: 1;
+}
+
+/* Positioned so they paint above the ::before wash (tree order). */
+.perk-teasers__icon,
+.perk-teasers__text,
+.perk-teasers__arrow {
+  position: relative;
 }
 
 @keyframes pt-rise {
