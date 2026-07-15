@@ -125,11 +125,15 @@ Promise.all([loadPersistedGero(), hydrateWalletStore()]).then(() => {
       { immediate: true }
     );
 
-    // Redirect to welcome page when wallet is locked
+    // Redirect to welcome page when wallet is locked — except the passkey-auth
+    // popup, which runs the unlock ceremony itself and must stay on its route
+    // while locked (the window opened with #/passkey-auth to authenticate).
     app.$watch(
       () => walletStoreState.isLocked,
       (isLocked) => {
-        if (isLocked && router.currentRoute.path !== '/welcome') {
+        if (isLocked
+          && router.currentRoute.path !== '/welcome'
+          && router.currentRoute.name !== 'passkey-auth') {
           router.push('/welcome');
         }
       }

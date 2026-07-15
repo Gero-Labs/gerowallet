@@ -384,8 +384,11 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
     return next();
   }
 
-  if (needsAuth && !isLoggedIn) {
-    // not logged in → send to /welcome (with optional redirect)
+  if (needsAuth && !isLoggedIn && to.name !== 'passkey-auth') {
+    // not logged in → send to /welcome (with optional redirect).
+    // EXCEPT the passkey-auth popup: in a pre-switch/first-login unlock it resolves
+    // its target wallet from the `walletId` query param, so it can run before any
+    // wallet is the active/logged-in one.
     let redirectTo = '/welcome';
     if (to.path !== '/') {
       redirectTo += `?redirect=${encodeURIComponent(to.fullPath)}`;
@@ -405,8 +408,11 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
     // Syncing wallet — stay on welcome until done
     return next({ path: '/welcome' });
   }
-  if (needsAuth && isLocked) {
-    // wallet is locked → send to /welcome to unlock
+  if (needsAuth && isLocked && to.name !== 'passkey-auth') {
+    // wallet is locked → send to /welcome to unlock.
+    // EXCEPT the passkey-auth popup: it IS the unlock ceremony (runs WebAuthn in a
+    // popup window because the side panel can't), so it must render while locked.
+    // It still requires a logged-in wallet via the `needsAuth && !isLoggedIn` check above.
     let redirectTo = '/welcome';
     if (to.path !== '/') {
       redirectTo += `?redirect=${encodeURIComponent(to.fullPath)}`;

@@ -2,12 +2,12 @@ import axios from 'axios';
 import { Cardano } from '@cardano-sdk/core';
 
 const axiosInstance = axios.create({
-  baseURL: import.meta.env['VITE_ZKFOLD_API_URL'] || 'https://wallet-api.zkfold.io',
+  baseURL: import.meta.env['VITE_ZK_SMART_WALLET_API_URL'] || '', // legacy hosted endpoint — unused, retained for reference
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*',
-    ...(import.meta.env['VITE_ZKFOLD_API_KEY'] ? { 'api-key': import.meta.env['VITE_ZKFOLD_API_KEY'] } : {}),
+    ...(import.meta.env['VITE_ZK_SMART_WALLET_API_KEY'] ? { 'api-key': import.meta.env['VITE_ZK_SMART_WALLET_API_KEY'] } : {}),
   },
 });
 

@@ -86,13 +86,37 @@ const cjsInteropPlugin = {
   load(id: string) {
     switch (id) {
       // pbkdf2: @cardano-sdk/crypto does `import { pbkdf2Sync } from 'pbkdf2'`.
-      // The npm pbkdf2 browser build is CJS (no named ESM exports), so re-export
-      // its members explicitly from the CJS default.
+      // The npm `pbkdf2/browser.js` (crypto-browserify) chains into sha.js, whose
+      // Sha512 instance ends up with an uninitialized `_block` inside the MV3
+      // service worker → `Cannot set properties of undefined (setting 'NaN')` the
+      // first time BIP39 entropy→key derivation runs in the background (the MPC
+      // "Sign in with Google" flow is the first to do so). Back it with the
+      // pure-JS @noble/hashes pbkdf2 instead — no Buffer-pool / sha.js fragility.
+      // Verified byte-identical to node's crypto.pbkdf2Sync for sha512 + sha256.
       case '\0virtual:pbkdf2':
-        return `import pbkdf2Browser from 'pbkdf2/browser.js';
-export const pbkdf2 = pbkdf2Browser.pbkdf2 || pbkdf2Browser;
-export const pbkdf2Sync = pbkdf2Browser.pbkdf2Sync || pbkdf2Browser;
-export default pbkdf2Browser;`;
+        return `import { pbkdf2 as noblePbkdf2 } from '@noble/hashes/pbkdf2.js';
+import { sha256, sha512 } from '@noble/hashes/sha2.js';
+import { Buffer } from 'buffer';
+const HASHES = { sha256, 'sha-256': sha256, sha512, 'sha-512': sha512 };
+function toU8(x) {
+  if (typeof x === 'string') return new TextEncoder().encode(x);
+  if (x && x.buffer) return new Uint8Array(x.buffer.slice(x.byteOffset, x.byteOffset + x.byteLength));
+  return new Uint8Array(x);
+}
+function pickHash(digest) {
+  const h = HASHES[String(digest || 'sha1').toLowerCase()];
+  if (!h) throw new Error('pbkdf2: unsupported digest ' + digest);
+  return h;
+}
+export function pbkdf2Sync(password, salt, iterations, keylen, digest) {
+  return Buffer.from(noblePbkdf2(pickHash(digest), toU8(password), toU8(salt), { c: iterations, dkLen: keylen }));
+}
+export function pbkdf2(password, salt, iterations, keylen, digest, callback) {
+  const cb = typeof digest === 'function' ? digest : callback;
+  const dig = typeof digest === 'function' ? undefined : digest;
+  Promise.resolve().then(() => cb(null, pbkdf2Sync(password, salt, iterations, keylen, dig))).catch((e) => cb(e));
+}
+export default { pbkdf2, pbkdf2Sync };`;
 
       // gopd/gOPD.js: exports Object.getOwnPropertyDescriptor directly
       case '\0virtual:gopd-gOPD':

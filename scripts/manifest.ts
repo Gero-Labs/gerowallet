@@ -88,7 +88,6 @@ function buildCSP(dev: boolean): string {
     // Dev-only
     ...(dev
       ? [
-          'https://*.zkfold.io',
           'https://guardarian.com/',
           'http://localhost:*',
           'ws://localhost:*',

@@ -525,7 +525,7 @@ export async function createNewGoogleWallet(
   crypto.getRandomValues(randomBytes);
   const rootKey: Bip32PrivateKey = Bip32PrivateKey.fromBytes(Buffer.from(randomBytes));
 
-  // Encrypt the root key with password (more secure than zkFold's plaintext storage)
+  // Encrypt the root key with password (more secure than zkSmartWallet's plaintext storage)
   const encryptedPrivateKey: string = encryptPrivateKey(rootKey, password);
 
   // Get the public key for account #0
@@ -560,6 +560,56 @@ export async function createNewGoogleWallet(
   });
 }
 
+/**
+ * Persist a Google "Sign in with Google" MPC wallet: type Google,
+ * encryptionMethod 'mpc', keyed by the Google `sub` (userId) with the
+ * account xpub (publicKey) and the AES-encrypted device share
+ * (mpcDeviceShare, non-indexed). Mirrors createNewWallet's record shape.
+ */
+export async function createMpcGoogleWallet(params: {
+  name: string;
+  icon: string;
+  theme: string;
+  chain: string;
+  network: string;
+  userId: string;
+  publicKey: string;
+  encryptedDeviceShare: string;
+  addressType?: string;
+  webAuthnCredentialId?: string;
+  mpcPrfSaltId?: string;
+}): Promise<number> {
+  const db: Dexie = await getDb();
+  let order = await getLatestWalletByOrder();
+  if (order == null) {
+    order = 1;
+  } else {
+    order++;
+  }
+
+  const walletData = {
+    name: params.name,
+    icon: params.icon,
+    type: WalletType.Google,
+    theme: params.theme,
+    order,
+    publicKey: params.publicKey,
+    passwordLastUpdate: new Date(),
+    chain: params.chain,
+    network: params.network,
+    addressType: params.addressType ?? getDefaultAddressType(params.chain),
+    encryptionMethod: 'mpc' as const,
+    userId: params.userId,
+    mpcDeviceShare: params.encryptedDeviceShare,
+    webAuthnCredentialId: params.webAuthnCredentialId,
+    mpcPrfSaltId: params.mpcPrfSaltId,
+  };
+
+  const walletId = await db['wallets'].add(walletData);
+  await createNewWalletDb(walletId, false, false);
+  return walletId as number;
+}
+
 export async function deleteWallet(walletId: number|string) {
   const db: Dexie = await getDb();
   const walletName = typeof walletId === 'number' ? `wallet-${walletId}` : walletId;
@@ -582,6 +632,44 @@ export async function deleteWallet(walletId: number|string) {
 export async function setWalletName(walletId: number, name: string): Promise<void> {
   const db: Dexie = await getDb();
   await db['wallets'].update(walletId, { name });
+}
+
+/**
+ * Persist the (re-encrypted) device share for an MPC wallet.
+ * @param walletId - The wallet ID
+ * @param encryptedDeviceShare - AES-encrypted encoded device share
+ */
+export async function setMpcDeviceShare(walletId: number, encryptedDeviceShare: string): Promise<void> {
+  const db: Dexie = await getDb();
+  await db['wallets'].update(walletId, { mpcDeviceShare: encryptedDeviceShare });
+}
+
+/**
+ * Stage the next device share during a crash-safe re-split.
+ * Pass `undefined` to clear a stale staged share.
+ * @param walletId - The wallet ID
+ * @param encryptedDeviceShareNext - AES-encrypted next device share, or undefined to clear
+ */
+export async function setMpcDeviceShareNext(
+  walletId: number,
+  encryptedDeviceShareNext: string | undefined,
+): Promise<void> {
+  const db: Dexie = await getDb();
+  await db['wallets'].update(walletId, { mpcDeviceShareNext: encryptedDeviceShareNext });
+}
+
+/**
+ * Promote the staged next device share to the live device share and clear the staging slot.
+ * Single atomic update (mpcDeviceShare := mpcDeviceShareNext, mpcDeviceShareNext := undefined).
+ * @param walletId - The wallet ID
+ */
+export async function promoteMpcDeviceShareNext(walletId: number): Promise<void> {
+  const db: Dexie = await getDb();
+  const wallet = await db['wallets'].get(walletId);
+  await db['wallets'].update(walletId, {
+    mpcDeviceShare: wallet?.mpcDeviceShareNext,
+    mpcDeviceShareNext: undefined,
+  });
 }
 
 /**

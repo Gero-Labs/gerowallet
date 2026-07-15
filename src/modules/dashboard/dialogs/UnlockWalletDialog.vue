@@ -18,8 +18,90 @@
 
       <!-- Unlock method content -->
       <div class="unlock-method-wrapper">
+        <!-- MPC "Sign in with Google" wallet -->
+        <div v-if="isMpcWallet" class="text-center unlock-method-content">
+          <template v-if="!googleEmail && !mpcSessionActive">
+            <v-btn
+              class="mpc-google-btn"
+              depressed
+              outlined
+              :loading="signingInGoogle"
+              @click="signInWithGoogle()"
+            >
+              <v-avatar size="18" class="mr-2">
+                <v-img :src="assets.google" contain />
+              </v-avatar>
+              {{ $t('welcome.googleSignInButton') }}
+            </v-btn>
+          </template>
+          <template v-else-if="mpcUsesPasskey">
+            <div v-if="googleEmail" class="mb-3 text-body-2 white--text">{{ $t('welcome.googleSignedInAs', { email: googleEmail }) }}</div>
+            <v-tooltip
+              v-model="tooltip.enabled"
+              top
+              color="red"
+            >
+              <template v-slot:activator="{ }">
+                <v-btn
+                  class="mpc-google-btn"
+                  block
+                  depressed
+                  outlined
+                  :loading="unlocking"
+                  :disabled="!canUnlock"
+                  @click="handleMpcUnlock()"
+                >
+                  <v-icon left small>mdi-fingerprint</v-icon>
+                  {{ $t('security.usePassKey') }}
+                </v-btn>
+              </template>
+              <span>{{ tooltip.text }}</span>
+            </v-tooltip>
+          </template>
+          <template v-else>
+            <div v-if="googleEmail" class="mb-3 text-body-2 white--text">{{ $t('welcome.googleSignedInAs', { email: googleEmail }) }}</div>
+            <v-tooltip
+              v-model="tooltip.enabled"
+              top
+              color="red"
+            >
+              <template v-slot:activator="{ }">
+                <v-text-field
+                  v-model="password"
+                  :label="$t('security.spendingPassword')"
+                  :type="show ? 'text' : 'password'"
+                  :error="passwordError"
+                  outlined
+                  dense
+                  hide-details
+                  :append-icon="show ? 'mdi-eye-off' : 'mdi-eye'"
+                  @click:append="show = !show"
+                  @keydown.enter.stop="handleMpcUnlock()"
+                >
+                  <template v-slot:append-outer>
+                    <v-btn
+                      block
+                      outlined
+                      small
+                      color="primary"
+                      class="ml-2 px-1"
+                      style="height: 40px;"
+                      @click="handleMpcUnlock()"
+                      :loading="unlocking"
+                      :disabled="!canUnlock"
+                    >
+                      <v-icon>mdi-arrow-right</v-icon>
+                    </v-btn>
+                  </template>
+                </v-text-field>
+              </template>
+              <span>{{ tooltip.text }}</span>
+            </v-tooltip>
+          </template>
+        </div>
+
         <!-- PIN Input -->
-        <div v-if="unlockMethod === 'pin'" class="text-center unlock-method-content pin-input-wrapper">
+        <div v-else-if="unlockMethod === 'pin'" class="text-center unlock-method-content pin-input-wrapper">
             <numeric-otp-input
               ref="pinInputRef"
               v-model="pinCode"
@@ -175,7 +257,10 @@
           </div>
       </div>
     </v-card-text>
-    <v-card-actions class="px-6 pb-6 pt-0">
+    <!-- "Logout Instead" only makes sense when a wallet is actually logged in
+         (post-login re-unlock). In the pre-login flow (opened from the wallet
+         picker to sign in) there is nothing to log out of. -->
+    <v-card-actions v-if="walletStore.loggedWallet" class="px-6 pb-6 pt-0">
       <v-btn
         block
         text
@@ -205,6 +290,20 @@ import { verifyPattern } from '@/shared/utils/security';
 import assets from '@/utils/assets';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { getAllWallets } from '@/db/gero-db';
+import { getErrorMessage } from '@/shared/utils/errorHandler';
+import { evaluateMpcPasskey } from '@/shared/utils/mpc/mpcPasskey';
+import snackbar from '@/plugins/snackbar';
+import type { Wallet } from '@/models/types';
+
+/** Shape of the `{ id, data, target, sender }` envelope background handlers reply with. */
+interface BackgroundMessageResponse {
+  data?: {
+    success?: boolean;
+    error?: string;
+    tokens?: { idToken: string; accessToken: string };
+  };
+  error?: string;
+}
 
 const { t } = useTranslation();
 // Define props and emits
@@ -214,6 +313,10 @@ const props = defineProps<{
   preLoginWalletId?: number | null;
   preLoginWalletName?: string | null;
   preLoginWalletIcon?: string | null;
+  // Optional: an already-obtained Google session (from the create sign-in that
+  // detected this enrolled account) so the MPC unlock skips a second sign-in.
+  mpcPrefillIdToken?: string | null;
+  mpcPrefillEmail?: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -247,6 +350,35 @@ const password = ref('');
 const passwordError = ref(false);
 const totpCode = ref('');
 
+// MPC "Sign in with Google" unlock state — never logged (idToken).
+const googleIdToken = ref('');
+const googleEmail = ref('');
+const signingInGoogle = ref(false);
+// MPC passkey material (from the wallet record, not config table) — present only
+// when the wallet was secured with a passkey at creation; undefined for password wallets.
+const mpcWebAuthnCredentialId = ref<string | null>(null);
+const mpcSaltId = ref<string | null>(null);
+// The Google `sub` this MPC wallet belongs to (wallet.userId) — used to reject a
+// sign-in with the wrong Google account before any unlock attempt.
+const mpcExpectedSub = ref<string | null>(null);
+// True when this MPC wallet already has a login share cached in the background
+// this session (unlocked with Google earlier). Then re-unlock needs only the
+// device secret (passkey/spending password) — no repeat Google sign-in.
+const mpcSessionActive = ref(false);
+
+/** Decode a JWT payload's `sub` (not verified — the backend verifies the token;
+ *  this is only to match the signed-in account against the wallet's owner). */
+function subFromToken(token: string): string {
+  try {
+    const seg = token.split('.')[1];
+    if (!seg) return '';
+    const json = atob(seg.replace(/-/g, '+').replace(/_/g, '/'));
+    return (JSON.parse(json) as { sub?: string }).sub || '';
+  } catch {
+    return '';
+  }
+}
+
 const unlocking = ref(false);
 const passKeyLoading = ref(false);
 const configLoaded = ref(false);
@@ -273,10 +405,29 @@ const isPrfWallet = computed(() => {
   return preLoginEncryptionMethod.value === 'prf';
 });
 
+// MPC "Sign in with Google" wallet (Plan D) — reconstruct-at-unlock: Google
+// login share + spending password, no PIN/pattern/PassKey fallback.
+const isMpcWallet = computed(() => {
+  if (walletStore.loggedWallet) {
+    return walletStore.loggedWallet.encryptionMethod === 'mpc';
+  }
+  return preLoginEncryptionMethod.value === 'mpc';
+});
+
+// MPC wallet secured with a passkey (vs. spending password) at creation time.
+const mpcUsesPasskey = computed(() => !!mpcWebAuthnCredentialId.value && !!mpcSaltId.value);
+
 const canUnlock = computed(() => {
   if (unlocking.value || !configLoaded.value) return false;
 
-  if (unlockMethod.value === 'pin') {
+  if (isMpcWallet.value) {
+    // With an active session the login share is cached in the background, so no
+    // Google idToken is required — only the device secret (passkey/password).
+    const hasLoginFactor = mpcSessionActive.value || !!googleIdToken.value;
+    return mpcUsesPasskey.value
+      ? hasLoginFactor
+      : hasLoginFactor && password.value.length > 0;
+  } else if (unlockMethod.value === 'pin') {
     return pinCode.value.length >= 4;
   } else if (unlockMethod.value === 'pattern') {
     return pattern.value.length >= 4;
@@ -287,7 +438,17 @@ const canUnlock = computed(() => {
 });
 
 const unlockDescription = computed(() => {
-  if (unlockMethod.value === 'pin') {
+  if (isMpcWallet.value) {
+    // Active session → device secret only (no Google step in the copy).
+    if (mpcSessionActive.value) {
+      return mpcUsesPasskey.value
+        ? t('welcome.unlockApprovePasskeyOnly')
+        : t('welcome.unlockPasswordOnly');
+    }
+    return mpcUsesPasskey.value
+      ? t('welcome.unlockApprovePasskey')
+      : t('welcome.unlockGoogleWalletDescription');
+  } else if (unlockMethod.value === 'pin') {
     return t('security.enterPinToUnlock');
   } else if (unlockMethod.value === 'pattern') {
     return t('security.drawPatternToUnlock');
@@ -334,10 +495,10 @@ async function loadSecurityConfig() {
     }
 
     // Resolve wallet record for pre-login PRF detection and credential retrieval
-    let preLoginWalletRecord: any = null;
+    let preLoginWalletRecord: Wallet | null = null;
     if (props.preLoginWalletId) {
       const walletsMap = await getAllWallets();
-      preLoginWalletRecord = walletsMap[walletId] || null;
+      preLoginWalletRecord = (walletsMap[walletId] as Wallet) || null;
       preLoginEncryptionMethod.value = preLoginWalletRecord?.encryptionMethod || null;
     }
 
@@ -389,6 +550,31 @@ async function loadSecurityConfig() {
       webAuthnCredentialId.value = credentialIdConfig?.value || null;
     }
 
+    // MPC "Sign in with Google" wallet: passkey credential + PRF salt live on the
+    // wallet record (not config table) — same shape as PRF, different fields.
+    const walletIsMpc = wallet?.encryptionMethod === 'mpc' || preLoginEncryptionMethod.value === 'mpc';
+    if (walletIsMpc) {
+      mpcWebAuthnCredentialId.value = wallet?.webAuthnCredentialId || preLoginWalletRecord?.webAuthnCredentialId || null;
+      mpcSaltId.value = wallet?.mpcPrfSaltId || preLoginWalletRecord?.mpcPrfSaltId || null;
+      mpcExpectedSub.value = wallet?.userId || preLoginWalletRecord?.userId || null;
+      // Reuse a Google session passed in (enrolled-account "Log in") so the user
+      // isn't asked to sign in again; otherwise start clean and show the sign-in button.
+      googleIdToken.value = props.mpcPrefillIdToken || '';
+      googleEmail.value = props.mpcPrefillIdToken ? (props.mpcPrefillEmail || '') : '';
+
+      // If the background still holds this wallet's login share from an earlier
+      // unlock this session, re-unlock can skip Google entirely.
+      try {
+        const sessionResp = await Messaging.sendToBackgroundFromOptions({
+          method: MessageTypes.HAS_MPC_SESSION,
+          data: { walletId },
+        }) as { data?: { hasSession?: boolean } };
+        mpcSessionActive.value = !!sessionResp?.data?.hasSession;
+      } catch {
+        mpcSessionActive.value = false;
+      }
+    }
+
     // Note: PassKey is NOT a standalone unlock method - it's a convenience feature
     // that works alongside PIN, password, or pattern
 
@@ -399,6 +585,9 @@ async function loadSecurityConfig() {
     twoFactorEnabled.value = false;
     passKeyEnabled.value = false;
     webAuthnCredentialId.value = null;
+    mpcWebAuthnCredentialId.value = null;
+    mpcSaltId.value = null;
+    mpcSessionActive.value = false;
     pinLength.value = 6;
     configLoaded.value = true; // Allow interaction even on error (fallback to password)
     configLoadError.value = true;
@@ -453,7 +642,7 @@ async function handlePassKeyAuth() {
 
       // Reset password field validation so it doesn't show red during PassKey unlock
       if (passwordInputRef.value) {
-        (passwordInputRef.value as any).resetValidation();
+        (passwordInputRef.value as { resetValidation: () => void }).resetValidation();
       }
 
       if (twoFactorEnabled.value) {
@@ -464,11 +653,123 @@ async function handlePassKeyAuth() {
     } else {
       showError(t('security.passKeyFailed'));
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('PassKey authentication error:', error);
-    showError(error.message || t('security.passKeyFailed'));
+    showError(getErrorMessage(error, t('security.passKeyFailed')));
   } finally {
     passKeyLoading.value = false;
+  }
+}
+
+async function signInWithGoogle() {
+  signingInGoogle.value = true;
+  try {
+    const response = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.SIGN_WITH_GOOGLE,
+      data: {},
+    }) as BackgroundMessageResponse;
+    if (!response?.data?.success || !response.data.tokens?.idToken || !response.data.tokens?.accessToken) {
+      throw new Error(t('welcome.googleSignInFailed'));
+    }
+    const { accessToken, idToken } = response.data.tokens;
+    const profileResp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!profileResp.ok) {
+      throw new Error(t('welcome.googleSignInFailed'));
+    }
+    const profile = await profileResp.json();
+    if (!profile?.email_verified || !profile?.email) {
+      throw new Error(t('welcome.googleSignInFailed'));
+    }
+    // Reject the WRONG Google account up front: this MPC wallet belongs to a
+    // specific account (wallet.userId == the Google sub). Signing in with any
+    // other account can never unlock it, so fail fast with a clear message
+    // instead of a confusing 'recovery mismatch' after the passkey.
+    if (mpcExpectedSub.value && subFromToken(idToken) !== mpcExpectedSub.value) {
+      throw new Error(t('security.mpcWrongGoogleAccount'));
+    }
+    googleIdToken.value = idToken;
+    googleEmail.value = profile.email;
+  } catch (error: unknown) {
+    // Surface via the global snackbar: in the not-yet-signed-in branch the
+    // tooltip anchor isn't rendered, so showError() would be invisible here.
+    snackbar.setError(getErrorMessage(error, t('welcome.googleSignInFailed')));
+  } finally {
+    signingInGoogle.value = false;
+  }
+}
+
+async function handleMpcUnlock() {
+  if (!canUnlock.value) return;
+
+  unlocking.value = true;
+  errorMessage.value = '';
+
+  try {
+    const walletId = props.preLoginWalletId || walletStore.loggedWallet?.id;
+    if (!walletId) {
+      showError(t('security.unlockFailed'));
+      return;
+    }
+
+    // Re-unlocking via a cached session (no fresh idToken): the MV3 service
+    // worker may have died since the dialog opened, dropping the login share.
+    // Re-verify BEFORE any passkey ceremony so we fall back to Google cleanly
+    // instead of consuming a biometric prompt and dead-ending on an empty cache.
+    if (mpcSessionActive.value && !googleIdToken.value) {
+      let stillActive = false;
+      try {
+        const resp = await Messaging.sendToBackgroundFromOptions({
+          method: MessageTypes.HAS_MPC_SESSION,
+          data: { walletId },
+        }) as { data?: { hasSession?: boolean } };
+        stillActive = !!resp?.data?.hasSession;
+      } catch {
+        stillActive = false;
+      }
+      if (!stillActive) {
+        mpcSessionActive.value = false; // re-show the Google sign-in button
+        showError(t('security.mpcSessionExpired'));
+        return;
+      }
+    }
+
+    // Passkey wallets EVALUATE the existing passkey (triggers Touch ID/biometric
+    // prompt) to re-derive the PRF output; password wallets send the entered
+    // spending password. Never log request.data — contains idToken/spendingPassword/prfOutputHex.
+    const extra = mpcUsesPasskey.value
+      ? {
+          prfOutputHex: await evaluateMpcPasskey(mpcWebAuthnCredentialId.value!, mpcSaltId.value!),
+          webAuthnCredentialId: mpcWebAuthnCredentialId.value,
+          mpcPrfSaltId: mpcSaltId.value,
+        }
+      : { spendingPassword: password.value };
+
+    const response = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.UNLOCK_MPC_WALLET,
+      data: {
+        walletId,
+        idToken: googleIdToken.value,
+        ...extra,
+      },
+    }) as BackgroundMessageResponse;
+
+    if (response?.data?.success) {
+      emit('input', false);
+      emit('unlocked');
+    } else {
+      showError(response?.data?.error || t('security.unlockFailed'));
+      if (!mpcUsesPasskey.value) {
+        password.value = '';
+        passwordError.value = true;
+      }
+    }
+  } catch (error: unknown) {
+    console.error('MPC unlock error:', error);
+    showError(getErrorMessage(error, t('security.unlockFailed')));
+  } finally {
+    unlocking.value = false;
   }
 }
 
@@ -519,7 +820,7 @@ async function handleUnlock(passKeyAuthenticated = false) {
     const isPreLoginUnlock = !!props.preLoginWalletId;
     const messageType = isPreLoginUnlock ? MessageTypes.VERIFY_PRE_LOGIN_UNLOCK : MessageTypes.UNLOCK;
 
-    const response: any = await Messaging.sendToBackgroundFromOptions({
+    const response = await Messaging.sendToBackgroundFromOptions({
       method: messageType,
       data: {
         walletId: props.preLoginWalletId, // Only used for pre-login unlock
@@ -528,9 +829,9 @@ async function handleUnlock(passKeyAuthenticated = false) {
         totpCode: twoFactorEnabled.value ? totpCode.value : undefined,
         password: password.value || undefined
       }
-    });
+    }) as BackgroundMessageResponse;
     debugLog('Unlock response:', response);
-    if (response.data.success) {
+    if (response.data?.success) {
       emit('input', false);
       emit('unlocked');
     } else {
@@ -551,13 +852,13 @@ async function handleUnlock(passKeyAuthenticated = false) {
         passwordError.value = true;
       }
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Unlock error:', error);
     // Show tooltip for unlock errors
     if (unlockMethod.value === 'pin') {
-      pinError.value = error.message || vmProxy.$t('security.unlockFailed');
+      pinError.value = getErrorMessage(error, vmProxy.$t('security.unlockFailed') as string);
     } else {
-      showError(error.message || vmProxy.$t('security.unlockFailed'));
+      showError(getErrorMessage(error, vmProxy.$t('security.unlockFailed') as string));
     }
   } finally {
     unlocking.value = false;
@@ -598,6 +899,11 @@ function resetForm() {
   cachedLockPasswordHash.value = null;
   cachedPatternHash.value = null;
   preLoginEncryptionMethod.value = null;
+  googleIdToken.value = '';
+  googleEmail.value = '';
+  signingInGoogle.value = false;
+  mpcWebAuthnCredentialId.value = null;
+  mpcSaltId.value = null;
   tooltip.value.enabled = false;
   tooltip.value.text = '';
 
@@ -660,6 +966,11 @@ watch(() => props.value, async (newVal) => {
 <style scoped>
 .unlock-dialog {
   border-radius: 16px;
+}
+
+.mpc-google-btn {
+  text-transform: none;
+  border-color: rgba(255, 255, 255, 0.2) !important;
 }
 
 /* Loading overlay during unlock */

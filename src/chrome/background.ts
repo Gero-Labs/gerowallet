@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import Loading from '@/stores/loading';
 import { Messaging } from '@/chrome/messaging';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
@@ -25,6 +26,7 @@ import { signInWithGoogle } from '@/chrome/auth';
 import { loadConfig, loadWallets } from '@/plugins/geroLoader';
 import WalletStore, { hydrateWalletStore, walletStore } from '@/stores/walletStore';
 import { walletManager } from '@/services/walletManager.service';
+import { shouldAutoLock } from '@/services/autoLock';
 import { nexusCollateralApi } from '@/api/nexus-collateral-api';
 import { debugLog } from '@/utils/debug';
 import type { walletConnectService } from '@/services/walletConnect/walletConnect.service';
@@ -33,6 +35,20 @@ import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { HexBlob } from '@cardano-sdk/util';
 import trezor from '@/shared/utils/trezor';
 import type { IUnifiedUtxo } from '@/chains/common/interfaces';
+import { mpcSessionCache } from '@/chrome/mpcSessionCache';
+import { mpcLoginShareCache } from '@/chrome/mpcLoginShareCache';
+import {
+  createMpcGoogleWalletFlow,
+  unlockMpcWalletFlow,
+  recoverMpcGoogleWalletFlow,
+  storeRecoveryShareFlow,
+  revealMpcSrpFlow,
+  setRecoveryPasswordFlow,
+  subFromIdToken,
+  resolveSignPrivateKeyBytes,
+  assertMpcActionSupported,
+} from '@/chrome/mpcWalletHandlers';
+import type { DeviceShareSecret } from '@/shared/utils/mpc';
 
 type WalletConnectServiceInstance = typeof walletConnectService;
 
@@ -66,6 +82,8 @@ loadWallets().then(async () => {
         const db = await getDb(walletStore.loggedWallet.id);
         const configTable = db.table('config');
         const unlockMethodConfig = await configTable.where({ key: 'unlockMethod' }).first();
+        // Clear a stray lock when no unlock method is configured (incl. MPC set to
+        // None) so the user is never trapped on a lock screen they can't dismiss.
         if (!unlockMethodConfig?.value) {
           WalletStore.setLocked(false);
           console.log('🔓 Cleared stale lock — no unlock method configured');
@@ -381,37 +399,22 @@ async function checkAutoLock(): Promise<void> {
     const autoLockConfig = await configTable.where({ key: 'autoLockMinutes' }).first();
     const autoLockMinutes = autoLockConfig?.value || 0;
 
-    // If auto-lock is disabled (0), don't lock
-    if (autoLockMinutes === 0) {
-      return;
-    }
-
-    // Get unlock method - CRITICAL: Don't lock if no unlock method is configured
+    // Lock method: a wallet auto-locks only when one is configured. MPC wallets
+    // set unlockMethod to 'passkey'/'password' when their session lock is enabled
+    // and leave it null for "None" — same rule as Normal wallets, no special case.
     const unlockMethodConfig = await configTable.where({ key: 'unlockMethod' }).first();
-    const unlockMethod = unlockMethodConfig?.value;
+    const hasUnlockMethod = !!unlockMethodConfig?.value;
 
-    // If no unlock method is set, skip auto-lock (user won't be able to unlock!)
-    if (!unlockMethod) {
-      return;
-    }
-
-    // Get last activity timestamp
+    // Last activity: absent means the wallet just logged in and the tracker hasn't
+    // run yet — skip this tick.
     const lastActivityConfig = await configTable.where({ key: 'lastActivityTimestamp' }).first();
-
-    // If lastActivityTimestamp doesn't exist, it means the wallet was just logged in
-    // and the activity tracker hasn't run yet. Skip the check.
     if (!lastActivityConfig || !lastActivityConfig.value) {
       return;
     }
 
-    const lastActivityTimestamp = lastActivityConfig.value;
+    const inactiveMinutes = (Date.now() - lastActivityConfig.value) / (1000 * 60);
 
-    // Calculate time since last activity
-    const now = Date.now();
-    const inactiveMinutes = (now - lastActivityTimestamp) / (1000 * 60);
-
-    // Lock wallet if inactive for longer than configured time
-    if (inactiveMinutes >= autoLockMinutes) {
+    if (shouldAutoLock({ autoLockMinutes, hasUnlockMethod, inactiveMinutes })) {
       await walletManager.lock();
     }
   } catch (error) {
@@ -1466,8 +1469,8 @@ app.addToOptions(MessageTypes.ACTIVATE_GOOGLE_WALLET, async (request, sendRespon
 
     // Import database helpers
     const { getGoogleWalletWithEmail } = await import('../db/gero-db');
-    const { upsertZkFoldWallet, isWalletActivated: checkActivated } = await import('../db/zkfold-db');
-    const { default: ZkFoldStore } = await import('../stores/zkFoldStore');
+    const { upsertZkSmartWalletWallet, isWalletActivated: checkActivated } = await import('../db/zk-smart-wallet-db');
+    const { default: ZkSmartWalletStore } = await import('../stores/zkSmartWalletStore');
 
     // Check if wallet already exists in main database
     const existingWallet = await getGoogleWalletWithEmail(userId);
@@ -1499,11 +1502,11 @@ app.addToOptions(MessageTypes.ACTIVATE_GOOGLE_WALLET, async (request, sendRespon
     const { Bip32PrivateKey, SodiumBip32Ed25519 } = await import('@cardano-sdk/crypto');
     const { WalletTypePurpose, CoinTypes, HARDENED, WalletType } = await import('../models/types');
     const { encryptPrivateKey } = await import('../shared/utils/crypto');
-    const { getKeyId, getMatchingKey, getSignature, stripSignature } = await import('@/services/zkFold/google.api');
-    const { BigIntWrap } = await import('@/services/zkFold/types');
-    const { b64ToBn } = await import('@/services/zkFold/utils/json.utils');
-    const { Prover } = await import('@/services/zkFold/prover');
-    const { Backend } = await import('@/services/zkFold/backend');
+    const { getKeyId, getMatchingKey, getSignature, stripSignature } = await import('@/services/zkSmartWallet/google.api');
+    const { BigIntWrap } = await import('@/services/zkSmartWallet/types');
+    const { b64ToBn } = await import('@/services/zkSmartWallet/utils/json.utils');
+    const { Prover } = await import('@/services/zkSmartWallet/prover');
+    const { Backend } = await import('@/services/zkSmartWallet/backend');
 
     // Generate random 96 bytes for BIP32 Ed25519 key
     const randomBytes = new Uint8Array(96);
@@ -1585,8 +1588,8 @@ app.addToOptions(MessageTypes.ACTIVATE_GOOGLE_WALLET, async (request, sendRespon
     await createNewWalletDb(walletId, false);
     console.log('✅ Wallet database created');
 
-    // Store proofId in zkFold database and store
-    await upsertZkFoldWallet({
+    // Store proofId in zkSmartWallet database and store
+    await upsertZkSmartWalletWallet({
       email: userId,
       userId,
       proofId,
@@ -1594,8 +1597,8 @@ app.addToOptions(MessageTypes.ACTIVATE_GOOGLE_WALLET, async (request, sendRespon
       walletId,
       createdAt: new Date()
     });
-    ZkFoldStore.setProofId(userId, proofId);
-    console.log('✅ ProofId stored in zkFold DB and store');
+    ZkSmartWalletStore.setProofId(userId, proofId);
+    console.log('✅ ProofId stored in zkSmartWallet DB and store');
 
     // Update geroStore
     const { default: GeroStore } = await import('../stores/geroStore');
@@ -1623,18 +1626,18 @@ app.addToOptions(MessageTypes.ACTIVATE_GOOGLE_WALLET, async (request, sendRespon
         const proof = await prover.prove(empi);
         console.log('✅ Proof generated successfully for wallet:', walletId);
 
-        const zkFoldUrl = import.meta.env['VITE_ZKFOLD_API_URL'] || 'https://wallet-api.zkfold.io';
-        const zkFoldApiKey = import.meta.env['VITE_ZKFOLD_API_KEY'] || null;
-        const backend = new Backend(zkFoldUrl, zkFoldApiKey);
+        const zkSmartWalletUrl = import.meta.env['VITE_ZK_SMART_WALLET_API_URL'] || ''; // legacy hosted endpoint — unused, retained for reference
+        const zkSmartWalletApiKey = import.meta.env['VITE_ZK_SMART_WALLET_API_KEY'] || null;
+        const backend = new Backend(zkSmartWalletUrl, zkSmartWalletApiKey);
 
         console.log('🔐 Activating wallet on blockchain...');
         const createWalletResponse = await backend.activateWallet(strippedJwt, paymentKey.toPublic().hash(), proof);
         console.log('✅ Wallet activated successfully on blockchain!', createWalletResponse);
 
-        // Mark as activated in zkFold database and store
-        const { markWalletAsActivated } = await import('../db/zkfold-db');
+        // Mark as activated in zkSmartWallet database and store
+        const { markWalletAsActivated } = await import('../db/zk-smart-wallet-db');
         await markWalletAsActivated(userId, walletId);
-        ZkFoldStore.markAsActivated(userId, walletId);
+        ZkSmartWalletStore.markAsActivated(userId, walletId);
 
         console.log('✅ Background activation completed for wallet:', walletId);
       } catch (error) {
@@ -1654,6 +1657,521 @@ app.addToOptions(MessageTypes.ACTIVATE_GOOGLE_WALLET, async (request, sendRespon
     });
   }
   return true; // Keep message channel open for async response
+});
+
+/**
+ * Detect a backend "already enrolled" (HTTP 409) response without logging the
+ * raw error (which may echo request details). `Api` throws a JSON-stringified
+ * blob (see parseHttpError) rather than an Error instance on HTTP failures.
+ */
+function isMpcConflictError(error: unknown): boolean {
+  const raw = typeof error === 'string' ? error : getErrorMessage(error, '');
+  return raw.includes('"status":409');
+}
+
+/** Build a DeviceShareSecret from a request payload (passkey PRF or password). Never logged. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- request.data payload shape varies per handler (see Message.data in messaging.ts)
+function buildDeviceShareSecret(data: any): { secret: DeviceShareSecret; webAuthnCredentialId?: string; mpcPrfSaltId?: string } {
+  if (data?.prfOutputHex && data?.webAuthnCredentialId && data?.mpcPrfSaltId) {
+    const prfOutput = Uint8Array.from(Buffer.from(data.prfOutputHex, 'hex'));
+    return {
+      secret: { kind: 'prf', prfOutput, credentialId: data.webAuthnCredentialId, saltId: data.mpcPrfSaltId },
+      webAuthnCredentialId: data.webAuthnCredentialId,
+      mpcPrfSaltId: data.mpcPrfSaltId,
+    };
+  }
+  if (data?.spendingPassword) {
+    return { secret: { kind: 'password', password: data.spendingPassword } };
+  }
+  throw new Error('A passkey or spending password is required');
+}
+
+app.addToOptions(MessageTypes.CREATE_MPC_GOOGLE_WALLET, async (request, sendResponse) => {
+  try {
+    // Note: Never log request.data — contains idToken/spendingPassword/prfOutputHex
+    const { name, icon, theme, chain, network, idToken } = request.data || {};
+    if (!idToken) throw new Error('idToken is required');
+    const { secret, webAuthnCredentialId, mpcPrfSaltId } = buildDeviceShareSecret(request.data);
+
+    const { prepareMpcWalletCreation, encryptDeviceShare } = await import('@/shared/utils/mpc');
+    const { createMpcGoogleWallet } = await import('@/db/gero-db');
+    const { Api } = await import('@/api/api');
+    const api = new Api(undefined, undefined);
+
+    const { walletId, recoveryShare, publicKey } = await createMpcGoogleWalletFlow(
+      { name, icon, theme, chain, network, idToken, secret, webAuthnCredentialId, mpcPrfSaltId },
+      {
+        prepareMpcWalletCreation,
+        encryptDeviceShare,
+        enrollLoginShare: (idTok, ch, net, loginShare) => api.mpc.enroll(idTok, ch, net, loginShare),
+        createMpcGoogleWallet,
+        subFromIdToken,
+      },
+    );
+
+    sendResponse({
+      id: request.id,
+      // recoveryShare is returned to the caller for the encrypted-download backup step —
+      // it is never logged or persisted by this handler. publicKey (xpub, not secret)
+      // is embedded in the recovery-file envelope as the restore-time anchor.
+      data: { success: true, walletId, recoveryShare, publicKey },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    const alreadyEnrolled = isMpcConflictError(error);
+    const message = alreadyEnrolled
+      ? 'This Google account is already enrolled for an MPC wallet.'
+      : getErrorMessage(error, 'Failed to create MPC wallet');
+    console.error('Error creating MPC Google wallet:', message);
+    sendResponse({
+      id: request.id,
+      // `code: 'already_enrolled'` lets the UI key off a stable machine-readable
+      // signal (rather than string-matching the human-readable `error`) to offer
+      // the "reset this Google account" flow (DEREGISTER_MPC_ACCOUNT) below.
+      data: { success: false, error: message, ...(alreadyEnrolled ? { code: 'already_enrolled' } : {}) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+  return true; // Required for async Chrome message handlers
+});
+
+/**
+ * Encrypt the recovery share under the user's recovery passphrase and upload it
+ * (+ xpub anchor) to the backend, keyed by the verified Google subject. NON-FATAL:
+ * the wallet is already created and usable on THIS device (device + login = 2 of
+ * 3), so a failed upload only means cross-device restore isn't armed yet — the
+ * onboarding backup step (StepGoogleBackup.vue) surfaces a retry instead of
+ * blocking wallet creation.
+ */
+app.addToOptions(MessageTypes.STORE_MPC_RECOVERY, async (request, sendResponse) => {
+  try {
+    // Note: Never log request.data — contains idToken/recoveryShare/recoveryPassword.
+    const { idToken, chain, network, recoveryShare, recoveryPassword, publicKey } = request.data || {};
+    if (!idToken) throw new Error('idToken is required');
+    if (!recoveryShare) throw new Error('recoveryShare is required');
+    if (!recoveryPassword) throw new Error('recoveryPassword is required');
+    if (!publicKey) throw new Error('publicKey is required');
+
+    const { encryptRecoveryShare } = await import('@/shared/utils/mpc');
+    const { Api } = await import('@/api/api');
+    const api = new Api(undefined, undefined);
+
+    const { stored } = await storeRecoveryShareFlow(
+      { idToken, chain, network, recoveryShare, recoveryPassword, publicKey },
+      {
+        encryptRecoveryShare,
+        storeRecovery: (idTok, ch, net, blob, pub) => api.mpc.storeRecovery(idTok, ch, net, blob, pub),
+      },
+    );
+
+    sendResponse({
+      id: request.id,
+      data: { success: true, stored },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    // NON-FATAL: the wallet is already created and usable on THIS device (device + login
+    // = 2 of 3). A failed recovery upload only means cross-device restore isn't armed yet;
+    // the onboarding backup step surfaces a retry. Log only the message — never the
+    // recovery blob/share/password.
+    console.error('Error storing MPC recovery share:', getErrorMessage(error, 'store recovery failed'));
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error, 'Failed to store recovery backup') },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+  return true; // Required for async Chrome message handlers
+});
+
+app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET, async (request, sendResponse) => {
+  try {
+    // Note: Never log request.data — contains idToken/spendingPassword/prfOutputHex
+    const { walletId, idToken } = request.data || {};
+    if (!walletId) throw new Error('walletId is required');
+    // Two ways in: a fresh Google idToken (first unlock of the session) OR a
+    // login share already cached from an earlier unlock this session (re-unlock
+    // after a lock, no repeat Google sign-in). One of them must be present.
+    const hasCachedLoginShare = await mpcLoginShareCache.has(walletId);
+    if (!idToken && !hasCachedLoginShare) {
+      // No fresh Google token and no cached session (e.g. the service worker
+      // restarted). Surface guidance the UI can show and fall back to Google.
+      throw new Error('MPC session expired — sign in with Google');
+    }
+    const { secret } = buildDeviceShareSecret(request.data);
+
+    const { reconstructRootKeyBytes } = await import('@/shared/utils/mpc');
+    const { getAllWallets, promoteMpcDeviceShareNext } = await import('@/db/gero-db');
+    const { Api } = await import('@/api/api');
+    const api = new Api(undefined, undefined);
+
+    // With an idToken: fetch the login share from the backend. Without one:
+    // reuse the cached share (device + cached-login = 2 of 3, still gated by the
+    // device secret the user just supplied). Never log the share. The freshly
+    // fetched share is cached only AFTER reconstruct+validate succeeds below, so
+    // a wrong device secret / wrong account can never seed the Google-free path.
+    let fetchedLoginShare: string | null = null;
+    const getLoginShare = idToken
+      ? async (idTok: string, ch: string, net: string): Promise<string> => {
+          const share = await api.mpc.getLoginShare(idTok, ch, net);
+          fetchedLoginShare = share;
+          return share;
+        }
+      : async (): Promise<string> => {
+          const cached = await mpcLoginShareCache.get(walletId);
+          if (!cached) throw new Error('MPC session expired — sign in with Google');
+          return cached;
+        };
+
+    await unlockMpcWalletFlow(
+      { walletId, idToken: idToken || '', secret },
+      {
+        getWallet: async (id) => {
+          const wallets = await getAllWallets();
+          return wallets[id];
+        },
+        getLoginShare,
+        reconstructRootKeyBytes,
+        sessionCache: mpcSessionCache,
+        promoteMpcDeviceShareNext,
+      },
+    );
+
+    // Reconstruct+validate passed — only now is it safe to cache the freshly
+    // fetched login share so later re-unlocks this session can skip Google.
+    if (fetchedLoginShare) {
+      await mpcLoginShareCache.set(walletId, fetchedLoginShare);
+    }
+
+    // Flip the global lock the same way walletManager.unlock() does. Without
+    // this, an already-logged-in MPC wallet that was re-locked stays stuck:
+    // the dashboard router guard (needsAuth && isLocked) bounces to /welcome
+    // and the side panel keeps rendering LockScreen (both gate on isLocked).
+    WalletStore.setLocked(false);
+
+    sendResponse({
+      id: request.id,
+      data: { success: true },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    console.error('Error unlocking MPC wallet:', getErrorMessage(error, 'unlock failed'));
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error, 'Failed to unlock MPC wallet') },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+  return true; // Required for async Chrome message handlers
+});
+
+/**
+ * Whether this MPC wallet has a login share cached this session — i.e. it was
+ * unlocked with Google earlier and can be re-unlocked with just the device
+ * secret (passkey/spending password), skipping a repeat Google sign-in. Returns
+ * false after the service worker restarts or the wallet logs out (cache gone),
+ * so the unlock UI falls back to Google. No secrets are returned.
+ */
+app.addToOptions(MessageTypes.HAS_MPC_SESSION, async (request, sendResponse) => {
+  const { walletId } = request.data || {};
+  const hasSession = !!walletId && (await mpcLoginShareCache.has(walletId));
+  sendResponse({
+    id: request.id,
+    data: { success: true, hasSession },
+    target: TARGET,
+    sender: SENDER.extension,
+  });
+  return true;
+});
+
+app.addToOptions(MessageTypes.RECOVER_MPC_GOOGLE_WALLET, async (request, sendResponse) => {
+  try {
+    // Note: Never log request.data — contains idToken/recoveryPassword/spendingPassword/prfOutputHex
+    const { name, icon, theme, chain, network, idToken, recoveryPassword } = request.data || {};
+    if (!idToken || !chain || !network || !recoveryPassword) {
+      throw new Error('idToken, chain, network and recoveryPassword are required');
+    }
+    const { secret: newSecret, webAuthnCredentialId, mpcPrfSaltId } = buildDeviceShareSecret(request.data);
+
+    const { decryptRecoveryShare, reconstructAndValidateEntropy, encryptDeviceShare } = await import('@/shared/utils/mpc');
+    const { createMpcGoogleWallet } = await import('@/db/gero-db');
+    const { Api } = await import('@/api/api');
+    const api = new Api(undefined, undefined);
+
+    const { walletId, publicKey } = await recoverMpcGoogleWalletFlow(
+      {
+        name, icon, theme, chain, network, idToken, recoveryPassword, newSecret,
+        webAuthnCredentialId, mpcPrfSaltId,
+      },
+      {
+        fetchRecovery: (idTok, ch, net) => api.mpc.fetchRecovery(idTok, ch, net),
+        decryptRecoveryShare,
+        getLoginShare: (idTok, ch, net) => api.mpc.getLoginShare(idTok, ch, net),
+        reconstructAndValidateEntropy,
+        encryptDeviceShare,
+        createMpcGoogleWallet,
+        subFromIdToken,
+      },
+    );
+
+    sendResponse({
+      id: request.id,
+      data: { success: true, walletId, publicKey },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    // Anchor mismatch (wrong Google account for this recovery) surfaces as a
+    // clean message; the raw MpcValidationError is not leaked.
+    const { MpcValidationError, NoRecoveryBackupError } = await import('@/shared/utils/mpc');
+    let message: string;
+    let code: string | undefined;
+    if (error instanceof NoRecoveryBackupError) {
+      message = 'No recovery backup found for this Google account';
+      code = 'no_recovery_backup';
+    } else if (error instanceof MpcValidationError) {
+      message = "This recovery doesn't match this Google account.";
+    } else {
+      message = getErrorMessage(error, 'Failed to recover MPC wallet');
+    }
+    console.error('Error recovering MPC Google wallet:', message);
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: message, code },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+  return true; // Required for async Chrome message handlers
+});
+
+/**
+ * Set / change the recovery password from an unlocked wallet. NEVER asks for the
+ * old password (MetaMask parity): device + login reconstruct the entropy, then a
+ * crash-safe re-split rotates all three shares and stores a fresh recovery blob
+ * under the new password. Requires device-secret re-auth (secret in request.data).
+ * Never log request.data — it carries idToken / newRecoveryPassword / device secret.
+ */
+app.addToOptions(MessageTypes.SET_RECOVERY_PASSWORD, async (request, sendResponse) => {
+  try {
+    const { walletId, idToken, newRecoveryPassword } = request.data || {};
+    if (!walletId || !idToken || !newRecoveryPassword) {
+      throw new Error('walletId, idToken and newRecoveryPassword are required');
+    }
+    const { secret } = buildDeviceShareSecret(request.data);
+
+    const {
+      decryptDeviceShare,
+      encryptDeviceShare,
+      encryptRecoveryShare,
+      createMpcShareSet,
+      reconstructAndValidateEntropy,
+    } = await import('@/shared/utils/mpc');
+    const { getAllWallets, setMpcDeviceShareNext, promoteMpcDeviceShareNext } = await import('@/db/gero-db');
+    const { Api } = await import('@/api/api');
+    const api = new Api(undefined, undefined);
+
+    await setRecoveryPasswordFlow(
+      { walletId, idToken, newRecoveryPassword, secret },
+      {
+        getWallet: async (id) => (await getAllWallets())[id],
+        getLoginShare: (idTok, ch, net) => api.mpc.getLoginShare(idTok, ch, net),
+        decryptDeviceShare,
+        reconstructAndValidateEntropy,
+        createMpcShareSet,
+        encryptDeviceShare,
+        encryptRecoveryShare,
+        setMpcDeviceShareNext,
+        rotate: (idTok, ch, net, loginShare) => api.mpc.rotate(idTok, ch, net, loginShare),
+        promoteMpcDeviceShareNext,
+        storeRecovery: (idTok, ch, net, blob, pub) => api.mpc.storeRecovery(idTok, ch, net, blob, pub),
+        clearLoginShareCache: (id) => mpcLoginShareCache.clear(id),
+      },
+    );
+
+    sendResponse({
+      id: request.id,
+      data: { success: true },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    // storeRecovery (the LAST step) failed after rotate+promote already succeeded —
+    // the wallet is already live on the new split, but the new recovery backup wasn't
+    // saved (and the OLD recovery password is now dead too). Flag this distinctly so
+    // the dialog doesn't tell the user "nothing changed" when something did.
+    const { RecoveryBackupStoreError } = await import('@/shared/utils/mpc');
+    const backupNotStored = error instanceof RecoveryBackupStoreError;
+    console.error('Error setting MPC recovery password:', getErrorMessage(error, 'set recovery password failed'));
+    sendResponse({
+      id: request.id,
+      data: {
+        success: false,
+        error: getErrorMessage(error, 'Failed to set recovery password'),
+        ...(backupNotStored ? { code: 'recovery_backup_not_stored' } : {}),
+      },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+  return true; // Required for async Chrome message handlers
+});
+
+/**
+ * Check whether this Google account is already enrolled for an MPC wallet on the
+ * backend (for a fresh device with no local wallet). Probes the login-share
+ * endpoint: a stored share (idempotent retrieval) means enrolled; a 404 means not.
+ * The JWT is verified server-side; the login share is never logged.
+ */
+app.addToOptions(MessageTypes.CHECK_MPC_ENROLLMENT, async (request, sendResponse) => {
+  try {
+    // Note: Never log request.data — contains idToken
+    const { idToken, chain, network } = request.data || {};
+    if (!idToken || !chain || !network) {
+      throw new Error('idToken, chain and network are required');
+    }
+    const { Api } = await import('@/api/api');
+    const api = new Api(undefined, undefined);
+
+    let enrolled = false;
+    try {
+      await api.mpc.getLoginShare(idToken, chain, network);
+      enrolled = true; // share returned → enrolled
+    } catch (probeError) {
+      const raw = typeof probeError === 'string' ? probeError : getErrorMessage(probeError, '');
+      if (raw.includes('"status":404')) {
+        enrolled = false; // no share stored → not enrolled
+      } else {
+        throw probeError; // unknown error — don't misreport as "not enrolled"
+      }
+    }
+
+    sendResponse({
+      id: request.id,
+      data: { success: true, enrolled },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    console.error('Error checking MPC enrollment:', getErrorMessage(error, 'check failed'));
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error, 'Failed to check enrollment') },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+  return true; // Required for async Chrome message handlers
+});
+
+/**
+ * Reset (deregister) this Google account's MPC enrollment on the backend — deletes
+ * the account's stored login + recovery shares so a subsequent CREATE_MPC_GOOGLE_WALLET
+ * for the same account no longer 409s. Onboarding surfaces this ONLY after CREATE_MPC_GOOGLE_WALLET
+ * fails with `code: 'already_enrolled'`, gated behind an explicit user confirmation
+ * (StepGoogleSecure.vue) — never auto-triggered from here.
+ * Never log request.data — contains idToken.
+ */
+app.addToOptions(MessageTypes.DEREGISTER_MPC_ACCOUNT, async (request, sendResponse) => {
+  try {
+    const { idToken, chain, network } = request.data || {};
+    if (!idToken || !chain || !network) {
+      throw new Error('idToken, chain and network are required');
+    }
+    const { Api } = await import('@/api/api');
+    const api = new Api(undefined, undefined);
+
+    const { deregistered } = await api.mpc.deregister(idToken, chain, network);
+
+    sendResponse({
+      id: request.id,
+      data: { success: true, deregistered },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    console.error('Error deregistering MPC account:', getErrorMessage(error, 'deregister failed'));
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error, 'Failed to reset this Google account') },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+  return true; // Required for async Chrome message handlers
+});
+
+/**
+ * Reveal the MPC wallet's BIP39 seed phrase (escape hatch) after a device-secret
+ * re-auth, even in an unlocked session. Reconstructs entropy from device+login,
+ * validates the xpub, and returns the mnemonic to the UI EXACTLY ONCE.
+ *
+ * Secret hygiene: never log request.data (idToken / spendingPassword / prfOutputHex)
+ * and never log the mnemonic. The mnemonic is returned only in this response body
+ * for one-time display; it is not persisted or cached anywhere.
+ */
+app.addToOptions(MessageTypes.REVEAL_MPC_SRP, async (request, sendResponse) => {
+  try {
+    const { walletId, idToken } = request.data || {};
+    if (!walletId) throw new Error('walletId is required');
+    // Unlocked-session reveal: a fresh Google idToken OR a login share cached
+    // this session must be present (device secret alone is below threshold).
+    const hasCachedLoginShare = await mpcLoginShareCache.has(walletId);
+    if (!idToken && !hasCachedLoginShare) {
+      throw new Error('MPC session expired — sign in with Google');
+    }
+    const { secret } = buildDeviceShareSecret(request.data);
+
+    const { decryptDeviceShare, reconstructAndValidateEntropy, entropyToMnemonic } = await import('@/shared/utils/mpc');
+    const { getAllWallets } = await import('@/db/gero-db');
+    const { Api } = await import('@/api/api');
+    const api = new Api(undefined, undefined);
+
+    const getLoginShare = idToken
+      ? async (idTok: string, ch: string, net: string): Promise<string> => api.mpc.getLoginShare(idTok, ch, net)
+      : async (): Promise<string> => {
+          const cached = await mpcLoginShareCache.get(walletId);
+          if (!cached) throw new Error('MPC session expired — sign in with Google');
+          return cached;
+        };
+
+    const { mnemonic } = await revealMpcSrpFlow(
+      { walletId, idToken: idToken || '', secret },
+      {
+        getWallet: async (id) => {
+          const wallets = await getAllWallets();
+          return wallets[id];
+        },
+        getLoginShare,
+        decryptDeviceShare,
+        reconstructAndValidateEntropy,
+        entropyToMnemonic,
+      },
+    );
+
+    sendResponse({
+      id: request.id,
+      data: { success: true, mnemonic },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    // getErrorMessage only — never let a share/mnemonic reach the log or response.
+    console.error('Error revealing MPC seed phrase:', getErrorMessage(error, 'reveal failed'));
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error, 'Failed to reveal seed phrase') },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+  return true; // Required for async Chrome message handlers
 });
 
 app.addToOptions(MessageTypes.VERIFY_SPENDING_PASSWORD, async (request, sendResponse) => {
@@ -1696,9 +2214,10 @@ app.addToOptions(MessageTypes.SIGN_DATA, async (request, sendResponse) => {
     if (walletBg) {
       // Convert privateKeyBytes array back to Uint8Array if passed (PRF wallets).
       // Mirrors the SIGN_TX handler convention (number[] over the wire).
-      const privateKeyBytes = request.data.privateKeyBytes
-        ? new Uint8Array(request.data.privateKeyBytes)
-        : undefined;
+      const privateKeyBytes = resolveSignPrivateKeyBytes(
+        WalletStore.state.loggedWallet,
+        request.data.privateKeyBytes ? new Uint8Array(request.data.privateKeyBytes) : undefined
+      );
 
       const res = await walletBg.signData(
         request.data.address,
@@ -1780,9 +2299,10 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
       }
 
       // Convert privateKeyBytes array back to Uint8Array if passed (PRF wallets)
-      const privateKeyBytes = request.data.privateKeyBytes
-        ? new Uint8Array(request.data.privateKeyBytes)
-        : undefined;
+      const privateKeyBytes = resolveSignPrivateKeyBytes(
+        WalletStore.state.loggedWallet,
+        request.data.privateKeyBytes ? new Uint8Array(request.data.privateKeyBytes) : undefined
+      );
 
       let witnessResult = await walletBg.signTx(
         transaction,
@@ -1808,6 +2328,7 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
             const merged = await mergeWitnessSets(witnessResult.witnesses, witness);
             witnessResult = { witnesses: merged };
             debugLog('🔗 Merged Nexus collateral cosign for', ref);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- axios-shaped error, status/message accessed defensively below
           } catch (cosignErr: any) {
             const status = cosignErr?.response?.status;
             // 404 = ref isn't in the Nexus pool (it's a user-owned UTxO),
@@ -1997,7 +2518,14 @@ app.addToOptions(MessageTypes.SIGN_TX_WITH_POOL_KEYS, async (request, sendRespon
       throw new Error('No transaction data provided');
     }
 
-    const prfSecret = privateKeyBytes ? new Uint8Array(privateKeyBytes) : undefined;
+    // Route through resolveSignPrivateKeyBytes so an MPC Google wallet (SPO
+    // cold-key import permits WalletType.Google) signs with its cached
+    // root-key bytes instead of hitting decrypt(undefined). PRF/password
+    // wallets are unaffected (explicit bytes / undefined pass straight through).
+    const prfSecret = resolveSignPrivateKeyBytes(
+      WalletStore.state.loggedWallet,
+      privateKeyBytes ? new Uint8Array(privateKeyBytes) : undefined
+    );
     const walletWitnesses = await walletBg.signTx(transaction, password, accountIndex || 0, utxos, addresses, prfSecret);
 
     // Step 2: Decrypt cold key from wallet DB and sign with it
@@ -2113,6 +2641,9 @@ app.addToOptions(MessageTypes.SIGN_BITCOIN_TX, async (request, sendResponse) => 
   try {
     const walletBg = walletManager.getWallet();
     if (walletBg && walletBg.chain === Blockchain.BITCOIN) {
+      // Defense-in-depth: MPC wallets are Cardano-only, so chain-gating above
+      // already excludes them, but guard the Bitcoin-specific signer explicitly.
+      assertMpcActionSupported(WalletStore.state.loggedWallet, 'Bitcoin signing');
       const { psbtHex, password, prfSecret } = request.data;
 
       // Sign Bitcoin transaction
@@ -2224,6 +2755,10 @@ app.addToOptions(MessageTypes.SEND_BITCOIN, async (request, sendResponse) => {
       return;
     }
 
+    // Defense-in-depth: MPC wallets are Cardano-only (chain-gated out above);
+    // guard the Bitcoin send path explicitly so MPC never hits decrypt(undefined).
+    assertMpcActionSupported(WalletStore.state.loggedWallet, 'Bitcoin signing');
+
     const { recipientAddress, amount, feeRate, password, privateKeyBytes } = request.data;
 
     // Convert privateKeyBytes array back to Uint8Array if passed (PRF wallets)
@@ -2302,6 +2837,9 @@ app.addToOptions(MessageTypes.BABYLON_STAKE, async (request, sendResponse) => {
       });
       return;
     }
+
+    // Defense-in-depth: MPC wallets are Cardano-only (chain-gated out above).
+    assertMpcActionSupported(WalletStore.state.loggedWallet, 'Bitcoin signing');
 
     const { psbtHex, password, privateKeyBytes } = request.data;
     const prfSecret = privateKeyBytes ? new Uint8Array(privateKeyBytes) : undefined;
@@ -3248,6 +3786,8 @@ app.addToOptions(MessageTypes.BITCOIN_DAPP_SIGN_PSBT, async (request, sendRespon
       sendResponse({ id: request.id, data: { success: false, error: 'Not a Bitcoin wallet' }, target: TARGET, sender: SENDER.extension });
       return;
     }
+    // Defense-in-depth: MPC wallets are Cardano-only (chain-gated out above).
+    assertMpcActionSupported(WalletStore.state.loggedWallet, 'Bitcoin signing');
     const { psbtHex, options, password, privateKeyBytes } = request.data;
     const prfSecret = privateKeyBytes ? new Uint8Array(privateKeyBytes) : undefined;
     const signedHex = await walletBg.signBitcoinDappPsbt(psbtHex, options, password, prfSecret);
@@ -3264,6 +3804,8 @@ app.addToOptions(MessageTypes.BITCOIN_DAPP_SIGN_MESSAGE, async (request, sendRes
       sendResponse({ id: request.id, data: { success: false, error: 'Not a Bitcoin wallet' }, target: TARGET, sender: SENDER.extension });
       return;
     }
+    // Defense-in-depth: MPC wallets are Cardano-only (chain-gated out above).
+    assertMpcActionSupported(WalletStore.state.loggedWallet, 'Bitcoin signing');
     const { message, type, password, privateKeyBytes } = request.data;
     const prfSecret = privateKeyBytes ? new Uint8Array(privateKeyBytes) : undefined;
     const signature = await walletBg.signBitcoinDappMessage(message, type, password, prfSecret);

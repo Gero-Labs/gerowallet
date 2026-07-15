@@ -95,11 +95,14 @@ export class WalletBg {
   baseAddress: string;
   stakeAddress?: string;
   token?: string;
-  // PRF Encryption Support (Version 14+)
-  encryptionMethod?: 'password' | 'prf';
+  // PRF Encryption Support (Version 14+); 'mpc' = Sign-in-with-Google MPC wallet
+  encryptionMethod?: 'password' | 'prf' | 'mpc';
   prfEncryptedPrivateKey?: string;
   prfEncryptedMnemonic?: string;
   webAuthnCredentialId?: string;
+  // MPC passkey PRF salt id — pairs with webAuthnCredentialId so the unlock UI
+  // can tell a passkey MPC wallet from a spending-password one.
+  mpcPrfSaltId?: string;
   prfSpendingPassword?: string;
   /** Wallet record creation time (ISO). Lower bound for Midnight dust-registration age. */
   createdAt?: string;
@@ -124,6 +127,7 @@ export class WalletBg {
     this.prfEncryptedPrivateKey = wallet.prfEncryptedPrivateKey;
     this.prfEncryptedMnemonic = wallet.prfEncryptedMnemonic;
     this.webAuthnCredentialId = wallet.webAuthnCredentialId;
+    this.mpcPrfSaltId = wallet.mpcPrfSaltId;
     this.prfSpendingPassword = wallet.prfSpendingPassword;
     this.addressType = wallet.addressType || 'segwit';  // Version 15+
     this.provider = networks.resolveDefaultProvider(this.chain, this.network);
@@ -156,12 +160,15 @@ export class WalletBg {
         this.baseAddress = '';
       }
       this.stakeAddress = '';
-    } else if (wallet.type === WalletType.Google) {
-      // Google wallet (Cardano)
+    } else if (wallet.type === WalletType.Google && this.encryptionMethod !== 'mpc' && googleBaseAddress) {
+      // Legacy smart-contract Google wallet: address comes from the
+      // contract, not HD derivation. MPC Sign-in-with-Google wallets are also
+      // type===Google but hold a real CIP-1852 xpub, so they fall through to
+      // the normal HD-derivation branch below.
       this.baseAddress = googleBaseAddress
       this.stakeAddress = toStakeAddress(googleBaseAddress, networks.resolveNetworkId(wallet.chain, wallet.network) as Cardano.NetworkId)
     } else {
-      // Normal Cardano wallet
+      // Normal Cardano wallet (and MPC Google wallets — HD-derived from xpub)
       this.baseAddress = getAddress(this.publicKey, this.chain, this.network, 0).toBech32();
       this.stakeAddress = getRewardAddress(this.publicKey, this.chain, this.network).toBech32();
     }
