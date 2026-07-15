@@ -8,9 +8,12 @@ import CashbackPortal from '@/modules/cashback/CashbackPortal.vue';
 </script>
 <style scoped>
 .cashback-root {
+  /* ContentLayout is a natural-flow scroll page, so height:100% collapses to
+     auto and the portal iframe clipped to ~480px, hiding the retailer grid.
+     Pin to the viewport (minus app-bar + padding, matching MediaPlayer) so the
+     flex child iframe gets a real height and the portal scrolls internally. */
   width: 100%;
-  height: 100%;
-  min-height: 480px;
+  min-height: calc(100vh - 80px);
   display: flex;
 }
 </style>
