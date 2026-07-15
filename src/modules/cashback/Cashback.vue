@@ -13,7 +13,9 @@ import CashbackPortal from '@/modules/cashback/CashbackPortal.vue';
      Pin to the viewport (minus app-bar + padding, matching MediaPlayer) so the
      flex child iframe gets a real height and the portal scrolls internally. */
   width: 100%;
-  min-height: calc(100vh - 80px);
+  /* Definite height (not min-height) so the portal's height:100% resolves;
+     with only min-height it fell back to auto and min-height:0 collapsed it. */
+  height: calc(100vh - 80px);
   display: flex;
 }
 </style>
