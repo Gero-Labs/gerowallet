@@ -553,7 +553,9 @@ import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { priceStore } from '@/stores/priceStore';
 import { Cardano, Serialization } from '@cardano-sdk/core';
+import { HexBlob } from '@cardano-sdk/util';
 import { buildCardanoTransaction } from '@/shared/utils/builder';
+import { nexusTxApi, walletUtxosToNexusInputs, txOutToNexusOutput, type BuildTxRequest } from '@/api/nexus-tx-api';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { computeMinimumCoinQuantity } from '@cardano-sdk/tx-construction';
 import { Messaging, BackgroundResponse, VerifyPasswordResponse, SignTxResponse } from '@/chrome/messaging';
@@ -981,18 +983,30 @@ async function buildTransaction() {
       }
     }];
 
-    tx.value = await buildCardanoTransaction({
-      outputs,
-      utxos: utxos.value,
-      epochParams: epochParams.value,
-      changeAddress: loggedWallet.value.baseAddress,
-      tip: tip.value,
-      walletContext: {
-        keys: keys.value,
-        stakeAddress: loggedWallet.value.stakeAddress,
-        accountIndex: 0
-      }
-    });
+    // Nexus migration: build the transfer server-side when the flag is on.
+    if (featureFlagsStore.isNexusSendEnabled()) {
+      const request: BuildTxRequest = {
+        outputs: outputs.map(txOutToNexusOutput),
+        changeAddress: loggedWallet.value.baseAddress,
+        utxos: walletUtxosToNexusInputs(utxos.value as Cardano.Utxo[], walletStore.collateral),
+      };
+      const { tx_cbor } = await nexusTxApi.buildTransferTx(request, loggedWallet.value.network);
+      if (!tx_cbor) throw new Error('Nexus returned an empty transaction CBOR');
+      tx.value = Serialization.Transaction.fromCbor(HexBlob(tx_cbor)).toCore();
+    } else {
+      tx.value = await buildCardanoTransaction({
+        outputs,
+        utxos: utxos.value,
+        epochParams: epochParams.value,
+        changeAddress: loggedWallet.value.baseAddress,
+        tip: tip.value,
+        walletContext: {
+          keys: keys.value,
+          stakeAddress: loggedWallet.value.stakeAddress,
+          accountIndex: 0
+        }
+      });
+    }
 
     txFee.value = tx.value.body.fee;
     txBuilt.value = true;

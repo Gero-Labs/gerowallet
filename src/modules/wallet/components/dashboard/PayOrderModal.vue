@@ -57,6 +57,8 @@ import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { buildCardanoTransaction } from '@/shared/utils/builder';
+import { nexusTxApi, walletUtxosToNexusInputs, txOutToNexusOutput, type BuildTxRequest } from '@/api/nexus-tx-api';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
 
 const { t } = useTranslation();
 const router = useRouter();
@@ -188,15 +190,28 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
       },
     ];
 
-    const tx = await buildCardanoTransaction({
-      outputs,
-      utxos: walletStore.utxos,
-      epochParams: networkStore.epochParams,
-      changeAddress: walletStore.loggedWallet.baseAddress,
-      tip: networkStore.tip,
-    });
-
-    const txCbor = serializeCardanoJsSdkTx(tx);
+    // Nexus migration: build the payment server-side when the flag is on, using the
+    // returned CBOR directly for signing (no client-side serialization round-trip).
+    let txCbor: string;
+    if (featureFlagsStore.isNexusSendEnabled()) {
+      const request: BuildTxRequest = {
+        outputs: outputs.map(txOutToNexusOutput),
+        changeAddress: walletStore.loggedWallet.baseAddress,
+        utxos: walletUtxosToNexusInputs(walletStore.utxos as Cardano.Utxo[], walletStore.collateral),
+      };
+      const { tx_cbor } = await nexusTxApi.buildTransferTx(request, walletStore.loggedWallet.network);
+      if (!tx_cbor) throw new Error('Nexus returned an empty transaction CBOR');
+      txCbor = tx_cbor;
+    } else {
+      const tx = await buildCardanoTransaction({
+        outputs,
+        utxos: walletStore.utxos,
+        epochParams: networkStore.epochParams,
+        changeAddress: walletStore.loggedWallet.baseAddress,
+        tip: networkStore.tip,
+      });
+      txCbor = serializeCardanoJsSdkTx(tx);
+    }
 
     const witnessResult = (await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SIGN_TX,
