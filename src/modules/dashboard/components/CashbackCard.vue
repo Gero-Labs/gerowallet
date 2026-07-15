@@ -1,5 +1,5 @@
 <template>
-  <v-card flat outlined class="fill-height liquid-glass cashback-card cashback-card-with-bg">
+  <v-card flat outlined class="fill-height glass-panel cashback-card cashback-card-with-bg">
     <v-card-title>{{ $t('cashback.title') }}</v-card-title>
     <v-card-text class="pa-0" style="height: calc(100% - 64px); display: flex; flex-direction: column;">
       <div>
@@ -106,18 +106,19 @@ const navigateToCashback = () => {
 }
 
 .cashback-rewards-section {
-  background-color: rgba(0, 0, 0, 0.4) !important;
-  background-image: none !important;
-  backdrop-filter: blur(20px) saturate(1.8) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
-  border-radius: 0 !important;
-  position: relative !important;
-  overflow: hidden !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
-  isolation: isolate !important;
-  padding: 8px 14px !important;
-  margin: 0 0 !important;
-  width: 100% !important;
+  /* Nested tier over the glass-panel card. Keeps its own blur on purpose: it
+     sits over the decorative cardanoBg image and the blur is what keeps the
+     promo copy legible against it. */
+  background-color: var(--g-hairline-1);
+  background-image: none;
+  backdrop-filter: blur(20px) saturate(1.8);
+  -webkit-backdrop-filter: blur(20px) saturate(1.8);
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  padding: 8px 14px;
+  margin: 0;
+  width: 100%;
 }
 
 .cashback-section {

@@ -1,5 +1,5 @@
 <template>
-  <v-card flat class="liquid-glass-compact stat-bar mb-2" v-if="hottest.length && gainers.length && losers.length">
+  <v-card flat class="glass-panel stat-bar mb-2" v-if="hottest.length && gainers.length && losers.length">
     <div class="stat-grid">
       <!-- Hottest column -->
       <div class="stat-col">
@@ -124,10 +124,8 @@ import { formatCompact, formatSignedChange } from '@/modules/market/utils/format
 </script>
 
 <style scoped>
-.stat-bar {
-  border-radius: 8px;
-}
-
+/* Surface (background/border/radius) comes from the shared .glass-panel
+   material; only layout below. */
 .stat-grid {
   display: flex;
   align-items: flex-start;

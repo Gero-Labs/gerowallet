@@ -30,10 +30,10 @@
         </v-col>
       </v-row>
 
-      <!-- Holdings table: same liquid-glass shell + chip bar pattern as Cardano. -->
+      <!-- Holdings table: same glass-panel shell + chip bar pattern as Cardano. -->
       <v-row no-gutters>
         <v-col cols="12" class="pa-2">
-          <v-card flat class="liquid-glass holdings-table-card">
+          <v-card flat class="glass-panel holdings-table-card">
             <!-- Filter chip bar mirrors Cardano. Holdings is the only meaningful
                  view for Midnight today; Collectibles/Market/Watchlist are
                  surfaced as disabled-state chips so the layout stays uniform. -->
@@ -166,7 +166,7 @@
       <!-- Filter Chip Bar + Table -->
       <v-row no-gutters>
         <v-col cols="12" class="pa-2">
-          <v-card flat class="liquid-glass holdings-table-card">
+          <v-card flat class="glass-panel holdings-table-card">
             <!-- Filter chips + search + filter menu — single row -->
             <div class="filter-toolbar d-flex align-center px-3" style="gap: 6px; padding-top: 6px; padding-bottom: 6px;">
               <!-- Category chips (scrollable, collapse to icons at small widths) -->
@@ -1171,7 +1171,10 @@ watch(
 }
 
 .holdings-table-card ::v-deep .v-data-table-header th {
-  background: var(--g-surface);
+  /* Transparent over the glass-panel material: a solid fill here reads as an
+     opaque slab once the card is see-through. Header tier is carried by the
+     tracked-caps text-3 type + hairline divider (headers are not sticky). */
+  background: transparent;
   color: var(--g-text-3) !important;
   text-transform: uppercase;
   letter-spacing: 0.08em;
