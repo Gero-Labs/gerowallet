@@ -10,13 +10,16 @@
  * {@link featureFlagService} singleton.
  */
 
-type FlagChangeCallback = (newValue: any, oldValue: any) => void;
+type FlagChangeCallback = (newValue: unknown, oldValue: unknown) => void;
 
 /** How often (ms) to re-poll as a safety net even when SSE looks healthy. */
 const RE_POLL_INTERVAL_MS = 5 * 60 * 1000;
 
-/** Back-off for SSE reconnect after an error. */
+/** Base back-off for SSE reconnect after an error; doubles per consecutive failure. */
 const SSE_RECONNECT_MS = 5000;
+
+/** Upper bound for the exponential SSE reconnect back-off. */
+const SSE_RECONNECT_MAX_MS = 60 * 1000;
 
 interface FeatureFlagConfig {
   baseUrl: string;
@@ -29,13 +32,16 @@ class FeatureFlagService {
   private initializationPromise: Promise<void> | null = null;
 
   /** Last known flag values, keyed by flag key. */
-  private flagValues: Record<string, any> = {};
+  private flagValues: Record<string, unknown> = {};
 
   /** Per-flag change listeners registered via {@link onFlagChange}. */
   private listeners = new Map<string, FlagChangeCallback[]>();
 
   private eventSource: EventSource | null = null;
   private rePollTimer: ReturnType<typeof setInterval> | null = null;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconnectAttempts = 0;
+  private onlineListener: (() => void) | null = null;
 
   /**
    * Initialize the feature flag service.
@@ -100,7 +106,7 @@ class FeatureFlagService {
   }
 
   /** Snapshot of all currently-known flag values. */
-  getAllFlags(): Record<string, any> {
+  getAllFlags(): Record<string, unknown> {
     if (!this.isInitialized) {
       return {};
     }
@@ -134,6 +140,8 @@ class FeatureFlagService {
   /** Close any open streams and clear all listeners. */
   async close(): Promise<void> {
     this.closeStream();
+    this.cancelReconnect();
+    this.reconnectAttempts = 0;
     this.stopSafetyPoll();
     this.flagValues = {};
     this.listeners.clear();
@@ -150,7 +158,7 @@ class FeatureFlagService {
     return trimmed;
   }
 
-  private buildContextBody(): Record<string, any> {
+  private buildContextBody(): Record<string, unknown> {
     const cfg = this.config!;
     return {
       userId: cfg.contextKey,
@@ -174,7 +182,7 @@ class FeatureFlagService {
         throw new Error(`HTTP ${res.status} ${res.statusText}`);
       }
 
-      const snapshot = (await res.json()) as Record<string, any>;
+      const snapshot = (await res.json()) as Record<string, unknown>;
       this.applySnapshot(snapshot);
     } finally {
       clearTimeout(timer);
@@ -185,7 +193,7 @@ class FeatureFlagService {
    * Replace the current flag map with {@code next}, firing change callbacks
    * for every key whose value differs from before.
    */
-  private applySnapshot(next: Record<string, any>): void {
+  private applySnapshot(next: Record<string, unknown>): void {
     const previous = this.flagValues;
     const changedKeys = new Set<string>();
 
@@ -220,6 +228,7 @@ class FeatureFlagService {
   private openStream(): void {
     if (!this.config) return;
     this.closeStream();
+    this.cancelReconnect();
 
     const params = new URLSearchParams();
     const cfg = this.config;
@@ -234,9 +243,13 @@ class FeatureFlagService {
       return;
     }
 
+    this.eventSource.onopen = () => {
+      this.reconnectAttempts = 0;
+    };
+
     this.eventSource.addEventListener('flags', (event: MessageEvent) => {
       try {
-        const snapshot = JSON.parse(event.data) as Record<string, any>;
+        const snapshot = JSON.parse(event.data) as Record<string, unknown>;
         this.applySnapshot(snapshot);
       } catch (e) {
         console.warn('🚩 Failed to parse flag stream message:', e);
@@ -251,9 +264,43 @@ class FeatureFlagService {
 
   private scheduleReconnect(): void {
     if (!this.isInitialized) return;
-    setTimeout(() => {
+
+    // Offline: a blind timer would fail (and spam the console) every cycle —
+    // wait for the 'online' event instead.
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      this.reconnectWhenOnline();
+      return;
+    }
+
+    const delay = Math.min(SSE_RECONNECT_MS * 2 ** this.reconnectAttempts, SSE_RECONNECT_MAX_MS);
+    this.reconnectAttempts += 1;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
       if (this.isInitialized) this.openStream();
-    }, SSE_RECONNECT_MS);
+    }, delay);
+  }
+
+  private reconnectWhenOnline(): void {
+    if (this.onlineListener) return;
+    this.onlineListener = () => {
+      this.removeOnlineListener();
+      if (this.isInitialized) this.openStream();
+    };
+    globalThis.addEventListener('online', this.onlineListener);
+  }
+
+  private removeOnlineListener(): void {
+    if (!this.onlineListener) return;
+    globalThis.removeEventListener('online', this.onlineListener);
+    this.onlineListener = null;
+  }
+
+  private cancelReconnect(): void {
+    if (this.reconnectTimer !== null) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.removeOnlineListener();
   }
 
   private closeStream(): void {
