@@ -101,13 +101,14 @@
            the portfolio chart's slot and the funding CTAs take the
            transactions slot; the live market below is the page content. -->
       <template v-if="isEmptyMainnet">
-        <v-row v-if="shouldBackup" no-gutters>
-          <v-col cols="12" class="px-2 pt-2">
-            <BackupReminderStrip @backup="handleBackupWallet()" />
-          </v-col>
-        </v-row>
+        <!-- Backup rides in the hero row as a card (not a banner), LEFT of
+             the chart: chart at half width while the reminder is pending,
+             full width after. -->
         <v-row no-gutters class="hero-row">
-          <v-col cols="12" xl="9" lg="9" md="8" class="pa-2 hero-chart-col">
+          <v-col v-if="shouldBackup" cols="12" xl="3" lg="3" md="4" class="pa-2 hero-tx-col">
+            <BackupCard @backup="handleBackupWallet()" />
+          </v-col>
+          <v-col cols="12" :xl="shouldBackup ? 6 : 9" :lg="shouldBackup ? 6 : 9" :md="shouldBackup ? 4 : 8" class="pa-2 hero-chart-col">
             <AdaPriceHeroCard />
           </v-col>
           <!-- Unlike RecentTransactionsCard this stays visible on small
@@ -390,7 +391,7 @@ import { isNewUser as checkNewUser } from '@/modules/dashboard/utils/emptyStateC
 import PortfolioChart from '@/modules/dashboard/components/PortfolioChart.vue';
 import RecentTransactionsCard from '@/modules/dashboard/components/RecentTransactionsCard.vue';
 import EmptyStateHero from '@/modules/dashboard/components/EmptyStateHero.vue';
-import BackupReminderStrip from '@/shared/components/BackupReminderStrip.vue';
+import BackupCard from '@/modules/portfolio/components/BackupCard.vue';
 import AdaPriceHeroCard from '@/modules/portfolio/components/AdaPriceHeroCard.vue';
 import FundingCard from '@/modules/portfolio/components/FundingCard.vue';
 import PerkTeasers from '@/modules/portfolio/components/PerkTeasers.vue';

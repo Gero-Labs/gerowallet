@@ -70,7 +70,7 @@
 
                   <v-spacer />
 
-                  <QuickActionsBox :compact="compactNav" />
+                  <QuickActionsBox :compact="compactNav" :hide-buttons="emptyStateShowing" />
 
                   <v-spacer />
 
@@ -320,6 +320,17 @@ const { tip: midnightTip, networkStatus: midnightNetworkStatus } = toRefs(midnig
 const { musicPlaylist, context } = toRefs(musicStore);
 
 const isMidnight = computed(() => loggedWallet.value?.chain === Blockchain.MIDNIGHT);
+
+// Empty-state home (any chain but Midnight, zero or not-yet-synced balance):
+// hide the header quick-action buttons — Send/Swap/Perps are dead ends
+// without funds and Buy/Receive live in the FundingCard front and center.
+// Mirrors PortfolioPage's isWalletEmpty semantics; Midnight is excluded
+// because its home never renders the empty state (and its balance does not
+// live in account.controlled_amount).
+const emptyStateShowing = computed(() =>
+  currentPage.value?.path === '/' &&
+  loggedWallet.value?.chain !== Blockchain.MIDNIGHT &&
+  (!account.value || account.value?.controlled_amount === '0'));
 
 // Global search
 const { open: openGlobalSearch, handleKeydown: handleSearchKeydown } = useGlobalSearch();
