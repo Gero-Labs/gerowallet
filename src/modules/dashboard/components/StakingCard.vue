@@ -3,7 +3,7 @@
     <v-row no-gutters align="start">
       <!-- ═══ Delegation card ═══ -->
       <v-col cols="12" md="5" class="pa-3">
-        <div class="stk-card">
+        <div class="stk-card glass-panel">
           <!-- Header: identity -->
           <div class="stk-head">
             <div class="stk-avatar">
@@ -93,7 +93,7 @@
 
       <!-- ═══ Rewards history ═══ -->
       <v-col cols="12" md="7" class="pa-3">
-        <div class="stk-card">
+        <div class="stk-card glass-panel">
           <div class="stk-rhead">
             <div class="stk-label">{{ $t('staking.totalEarned') }}</div>
             <div class="stk-rtotal tnum">{{ filters.toCurrency(String(totalEarnedLovelace), false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}</div>
@@ -116,7 +116,6 @@
   </v-card>
 </template>
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import { useUnstake } from '@/shared/composables/useUnstake';
 import { useWithdrawal } from '@/shared/composables/useWithdrawal';
 import { toRefs, computed, ref, watch, onMounted } from 'vue';
@@ -131,8 +130,6 @@ import { walletStore } from '@/stores/walletStore';
 import { loadingState } from '@/stores/loading';
 import stakingStoreActions from '@/stores/stakingStore';
 import { Blockchain } from '@/models/types';
-
-const { t } = useTranslation();
 
 // Use the unstake and withdrawal composables
 const { txData: unstakeTxData, unstakeDialog, unstake, closeUnstakeDialog } = useUnstake();
@@ -178,15 +175,17 @@ const rewardsData = computed(() => {
   return rewards.value;
 });
 
+type RewardRow = { epoch: string | number; amount: string | number };
+
 // { epoch: adaAmount } for the RewardsChart line graph (native hover tooltip).
 const rewardsChartData = computed(() => {
   const obj: Record<string, number> = {};
-  (rewardsData.value || []).slice(-24).forEach((v: any) => {
+  (rewardsData.value || []).slice(-24).forEach((v: RewardRow) => {
     obj[v.epoch] = Number(v.amount) / 1000000;
   });
   return obj;
 });
-const totalEarnedLovelace = computed(() => (rewardsData.value || []).reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0));
+const totalEarnedLovelace = computed(() => (rewardsData.value || []).reduce((s: number, r: RewardRow) => s + (Number(r.amount) || 0), 0));
 
 const resolvePoolIcon = () => {
   const p = currentPool.value;
@@ -232,14 +231,10 @@ void isApex;
   background: transparent !important;
 }
 
-/* Card boxes: raised surface, hairline, subtle top highlight + soft lift so
-   they don't read flat (design language: tiers + hairlines do the elevation). */
+/* Card boxes: surface comes from the shared .glass-panel material (same panel
+   the portfolio hero cards carry); only layout here. */
 .stk-card {
-  background: var(--g-surface);
-  border: 1px solid var(--g-hairline-2);
-  border-radius: var(--g-r-card);
   padding: 14px 16px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045), 0 2px 12px rgba(0, 0, 0, 0.4);
 }
 
 /* ── Header ── */
@@ -333,7 +328,9 @@ void isApex;
 }
 
 .stk-tile {
-  background: var(--g-overlay);
+  /* Translucent raised tier over the glass card (nested tiers are tints,
+     not opaque fills — matches the portfolio chart's control tracks). */
+  background: var(--g-hairline-1);
   border: 1px solid var(--g-hairline-2);
   border-radius: var(--g-r-control);
   padding: 10px 12px;

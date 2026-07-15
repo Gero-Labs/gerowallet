@@ -81,17 +81,25 @@
   box-shadow: var(--g-shadow-menu) !important;
 }
 
-/* Material 4: panel (in-page hero panels; the visibly see-through one).
-   Same recipe PortfolioChart + RecentTransactionsCard carry locally.
-   Unflagged on purpose: current consumers are plain divs, so the v-card
-   override flags (see specificity note above) aren't needed — add flagged
-   .v-card.glass-panel variants if a v-card ever adopts it. */
+/* Material 4: panel (in-page hero panels + table/widget cards; the visibly
+   see-through one). Same recipe PortfolioChart + RecentTransactionsCard used
+   to carry locally. Base rule stays unflagged for plain-div consumers; the
+   flagged .v-card variant below exists because the 2026-07-15 table migration
+   put v-cards on this material (see specificity note above — App.vue's global
+   .v-card background would repaint them solid, and Vuetify's .v-sheet.v-card
+   radius/border would win the tie otherwise). */
 .glass-panel {
   background: rgba(0, 0, 0, 0.4);
   backdrop-filter: blur(20px) saturate(1.8);
   -webkit-backdrop-filter: blur(20px) saturate(1.8);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-card);
+}
+
+.v-card.glass-panel {
+  background: rgba(0, 0, 0, 0.4) !important;
+  border: 1px solid var(--g-hairline-1) !important;
+  border-radius: var(--g-r-card) !important;
 }
 
 /* No-blur fallback: go opaque */
@@ -104,6 +112,7 @@
   .v-card.liquid-glass, .v-card.liquid-glass-subtle, .v-card.liquid-glass-compact { background: rgba(18, 21, 28, 0.98) !important; }
   /* Unflagged: base .glass-panel is unflagged too, so source order wins. */
   .glass-panel { background: var(--g-surface); }
+  .v-card.glass-panel { background: var(--g-surface) !important; }
 }
 
 /* User preference: no transparency */
@@ -113,7 +122,8 @@
   .glass-popover, .liquid-glass, .liquid-glass-subtle, .liquid-glass-compact, .glass-panel,
   .v-navigation-drawer.liquid-glass-nav-drawer,
   .v-card.liquid-glass-dialog,
-  .v-card.liquid-glass, .v-card.liquid-glass-subtle, .v-card.liquid-glass-compact {
+  .v-card.liquid-glass, .v-card.liquid-glass-subtle, .v-card.liquid-glass-compact,
+  .v-card.glass-panel {
     background: var(--g-overlay) !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
@@ -127,7 +137,8 @@
   .glass-popover, .liquid-glass, .liquid-glass-subtle, .liquid-glass-compact, .glass-panel,
   .v-navigation-drawer.liquid-glass-nav-drawer,
   .v-card.liquid-glass-dialog,
-  .v-card.liquid-glass, .v-card.liquid-glass-subtle, .v-card.liquid-glass-compact {
+  .v-card.liquid-glass, .v-card.liquid-glass-subtle, .v-card.liquid-glass-compact,
+  .v-card.glass-panel {
     background: var(--g-overlay) !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;

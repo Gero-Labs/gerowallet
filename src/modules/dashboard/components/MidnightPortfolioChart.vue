@@ -3,7 +3,7 @@
        hero row reads identically across chains. -->
   <div class="portfolio-split-root">
     <!-- Left Panel: Portfolio Metrics (30%) — mirror of Cardano's metrics panel -->
-    <div class="portfolio-metrics-panel">
+    <div class="portfolio-metrics-panel glass-panel">
       <div class="metrics-inner">
         <div class="metrics-header-row">
           <div class="portfolio-label t-label">{{ $t('dashboard.portfolio') }}</div>
@@ -63,7 +63,7 @@
     <!-- Right Panel: Chart (70%). Real `lightweight-charts` AreaSeries fed by
          the running NIGHT balance derived from tx history. Same chart engine
          and visual styling as Cardano's PortfolioChart. -->
-    <div class="portfolio-chart-panel">
+    <div class="portfolio-chart-panel glass-panel">
       <div class="chart-controls-bar">
         <div class="timeframe-pills">
           <button
@@ -402,16 +402,11 @@ function formatNight(value: bigint): string {
   height: 100%;
 }
 
+/* Surface from the shared .glass-panel material (matches Cardano's
+   PortfolioChart hero panels); only layout here. */
 .portfolio-metrics-panel {
   flex: 0 0 30%;
   min-width: 0;
-  /* Match Cardano's PortfolioChart hero panels: liquid glass over the chain
-     background (was opaque var(--g-surface), which broke cross-chain parity). */
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(20px) saturate(1.8);
-  -webkit-backdrop-filter: blur(20px) saturate(1.8);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: var(--g-r-card);
   padding: 6px 10px;
   display: flex;
   flex-direction: column;
@@ -491,16 +486,10 @@ function formatNight(value: bigint): string {
   white-space: nowrap;
 }
 
+/* Surface from the shared .glass-panel material; only layout here. */
 .portfolio-chart-panel {
   flex: 1 1 70%;
   min-width: 0;
-  /* Match Cardano's PortfolioChart hero panels: liquid glass over the chain
-     background (was opaque var(--g-surface), which broke cross-chain parity). */
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(20px) saturate(1.8);
-  -webkit-backdrop-filter: blur(20px) saturate(1.8);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: var(--g-r-card);
   padding: 6px 10px;
   display: flex;
   flex-direction: column;

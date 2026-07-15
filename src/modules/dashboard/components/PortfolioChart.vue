@@ -1,7 +1,7 @@
 <template>
   <div class="portfolio-split-root">
     <!-- Left Panel: Portfolio Metrics (30%) -->
-    <div class="portfolio-metrics-panel">
+    <div class="portfolio-metrics-panel glass-panel">
       <div class="metrics-inner">
         <!-- Header row: label + mode toggle + refresh -->
         <div class="metrics-header-row">
@@ -132,7 +132,7 @@
     </div>
 
     <!-- Right Panel: Chart (70%) -->
-    <div class="portfolio-chart-panel">
+    <div class="portfolio-chart-panel glass-panel">
       <!-- Chart Controls Bar -->
       <div class="chart-controls-bar">
         <div class="timeframe-pills">
@@ -1104,14 +1104,11 @@ onBeforeUnmount(() => {
 
 /* ── Metrics Panel (Left 30%) ─────────────────────────────────────────────────── */
 
+/* Surface comes from the shared .glass-panel material (this panel was the
+   recipe's origin); only layout here. */
 .portfolio-metrics-panel {
   flex: 0 0 30%;
   min-width: 0;
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(20px) saturate(1.8);
-  -webkit-backdrop-filter: blur(20px) saturate(1.8);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
   padding: 6px 10px;
   display: flex;
   flex-direction: column;
@@ -1284,14 +1281,10 @@ onBeforeUnmount(() => {
 
 /* ── Chart Panel (Right 70%) ──────────────────────────────────────────────────── */
 
+/* Surface from the shared .glass-panel material; only layout here. */
 .portfolio-chart-panel {
   flex: 1 1 0%;
   min-width: 0;
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(20px) saturate(1.8);
-  -webkit-backdrop-filter: blur(20px) saturate(1.8);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
   display: flex;
   flex-direction: column;
   position: relative;
