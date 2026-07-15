@@ -425,8 +425,20 @@ export class WalletBg {
       ([key, asset]) => [key, asset['policy_id'] === '' ? asset : resolveAsset(asset)] as const
     );
 
+    // Classify assets into fungible Tokens vs non-fungible Collectibles.
+    // Fungibility, not metadata presence, is the real signal: an NFT has an
+    // on-chain supply of 1, so any asset held in quantity > 1 is fungible and
+    // belongs under Tokens even when it has no off-chain registry metadata
+    // (common for new/community tokens). Only a single-unit asset without
+    // registry metadata is treated as a collectible.
+    const isCollectible = (resolved: { quantity?: string | number; metadata?: unknown }): boolean => {
+      const qty = Number(resolved.quantity);
+      if (Number.isFinite(qty) && qty > 1) return false; // fungible -> Token
+      return !resolved.metadata;
+    };
+
     // Set Tokens
-    const tokens = Object.fromEntries(resolvedAssets.filter(([, resolved]) => Boolean(resolved.metadata)));
+    const tokens = Object.fromEntries(resolvedAssets.filter(([, resolved]) => !isCollectible(resolved)));
 
     WalletStore.setTokens(tokens);
     chrome.alarms.onAlarm.addListener(alarmListener);
@@ -438,7 +450,7 @@ export class WalletBg {
       chrome.alarms.create('refreshDReps', { delayInMinutes: 0, periodInMinutes: 280 });
     }
     // Set Collections
-    const collectibles = Object.fromEntries(resolvedAssets.filter(([, resolved]) => !Boolean(resolved.metadata)));
+    const collectibles = Object.fromEntries(resolvedAssets.filter(([, resolved]) => isCollectible(resolved)));
     if (Object.values(collectibles).length === 0) {
       return;
     }
