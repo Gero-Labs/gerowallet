@@ -365,7 +365,7 @@ const restore = async (): Promise<void> => {
 
 .field-hint {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--g-text-3);
   line-height: 1.4;
 }
 

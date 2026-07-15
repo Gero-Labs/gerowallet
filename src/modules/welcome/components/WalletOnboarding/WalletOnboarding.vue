@@ -377,7 +377,7 @@ onUnmounted(() => {
 
 .dev-switch__label {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--g-text-3);
   white-space: nowrap;
 }
 
