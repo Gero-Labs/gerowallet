@@ -28,7 +28,7 @@
           </div>
           <div class="preview-row">
             <span class="preview-label">{{ $t('perpetuals.estimatedReceived') }}</span>
-            <span class="preview-value highlight">{{ estimatedAda }} <span class="preview-unit">ADA</span></span>
+            <span class="preview-value highlight">~{{ estimatedUsdm }} <span class="preview-unit">USDM</span></span>
           </div>
           <div class="preview-row">
             <span class="preview-label">{{ $t('perpetuals.estimatedDelivery') }}</span>
@@ -120,7 +120,6 @@ const {
   isWithdrawing,
   withdrawStatus,
   withdrawError,
-  usdToAdaRate,
   deliveryMinutes,
   requestQuote,
   signAndSubmit,
@@ -139,10 +138,10 @@ const amountNum = computed(() => {
   return isNaN(n) || n < 0 ? 0 : n;
 });
 
-const estimatedAda = computed(() => {
+// Withdrawals settle 1:1 in USDM (minus the quote fee, known only after quoting).
+const estimatedUsdm = computed(() => {
   if (amountNum.value <= 0) return '0.00';
-  const rate = usdToAdaRate.value ?? 0;
-  return (amountNum.value * rate).toFixed(2);
+  return amountNum.value.toFixed(2);
 });
 
 const canWithdraw = computed(() =>
@@ -159,8 +158,11 @@ function setMax() {
 
 async function handleWithdraw() {
   if (!canWithdraw.value) return;
-  // Reuse account withdraw flow — pass vault_id as destination/ref context
-  await requestQuote(amount.value, 'ADA', '', props.vaultId);
+  // Reuse the account withdraw flow. USDM is the only asset Strike accepts on
+  // Cardano withdrawals. NOTE (latent, pre-existing): the builder withdraw API
+  // has no vault_id — vault withdrawals are a separate /v2/vault/* endpoint
+  // family, so this quote is NOT scoped to props.vaultId.
+  await requestQuote(amount.value, 'USDM');
   const result = await signAndSubmit(password.value);
   if (result) {
     emit('withdrawn');

@@ -1919,7 +1919,9 @@ export default {
 
   // Strike v2 withdraw flow — sheet-specific labels and status copy
   'perps.withdraw.step1Title': 'Enter amount',
-  'perps.withdraw.step1Sub': 'Withdrawals settle as ADA at the live exchange rate.',
+  'perps.withdraw.step1Sub': 'Withdrawals settle as USDM, a Cardano USD stablecoin (1 USDM ≈ $1).',
+  'perps.withdraw.settleAsset': 'Settlement asset',
+  'perps.withdraw.usdmParity': 'USDM (≈ $1.00)',
   'perps.withdraw.step2Title': 'Review & sign',
   'perps.withdraw.step2Sub': 'You\'ll sign the validator message — no on-chain transaction is needed.',
   'perps.withdraw.continue': 'Get Quote',

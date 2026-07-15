@@ -746,7 +746,15 @@ export interface WithdrawQuoteRequest {
 
 export interface WithdrawQuoteResponse {
   withdraw_id: string;
+  /** Hex-encoded on Cardano (2026-07-05 API change) — sign it VERBATIM as the
+   * CIP-30 signData payload; hex-decode only for display. */
   message_to_sign: string;
+  /** Optional user-funded validator min-UTxO tx (hex CBOR, Cardano only).
+   * When present the wallet must sign it and send `signed_tx_cbor` on
+   * POST /v2/withdraw — Strike submits it server-side. */
+  tx_cbor?: string;
+  /** Validator address the min-UTxO tx funds (informational). */
+  validator_address?: string;
 }
 
 export interface StrikeMarketsResponse {

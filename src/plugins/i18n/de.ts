@@ -2161,7 +2161,9 @@ export default {
 
   // Strike v2 Auszahlungs-Flow — Sheet-spezifische Labels und Status-Texte
   'perps.withdraw.step1Title': 'Betrag eingeben',
-  'perps.withdraw.step1Sub': 'Auszahlungen werden zum aktuellen Wechselkurs in ADA abgewickelt.',
+  'perps.withdraw.step1Sub': 'Auszahlungen werden in USDM abgewickelt, einem Cardano-USD-Stablecoin (1 USDM ≈ 1 $).',
+  'perps.withdraw.settleAsset': 'Abwicklungs-Asset',
+  'perps.withdraw.usdmParity': 'USDM (≈ 1,00 $)',
   'perps.withdraw.step2Title': 'Prüfen & signieren',
   'perps.withdraw.step2Sub': 'Du signierst die Validator-Nachricht — keine On-Chain-Transaktion erforderlich.',
   'perps.withdraw.continue': 'Angebot Anfordern',
