@@ -292,7 +292,7 @@ import { Blockchain } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
 import networks from '@/utils/networks';
 import DustGenerationLine from '@/modules/dashboard/components/DustGenerationLine.vue';
-import { CNIGHT_ASSETS, DUST_LINE_DISMISS_KEY, useCnightDustRegistration } from '@/shared/composables/useCnightDustRegistration';
+import { CNIGHT_ASSETS, isDustLineDismissed, dismissDustLineFor, useCnightDustRegistration } from '@/shared/composables/useCnightDustRegistration';
 import { getDustPending } from '@/shared/composables/useDustPending';
 import { getExplorerUrl } from '@/shared/utils/explorer';
 
@@ -317,11 +317,11 @@ const isNightToken = computed(() => {
   return !!asset && props.token.unit === asset.policyId + asset.assetNameHex;
 });
 
-// The dismissable promo/status strip. Dismissal hides it outright; the
-// registration confirmation below (tx id + chip) is separate and persistent.
-const dustLineDismissed = ref(
-  typeof localStorage !== 'undefined' && localStorage.getItem(DUST_LINE_DISMISS_KEY) === '1',
-);
+// The dismissable promo/status strip. Dismissal hides it outright and is PER
+// WALLET (stake address); the registration confirmation below (tx id + chip) is
+// separate and persistent. localStorage isn't reactive — read on mount.
+const dustLineDismissed = ref(false);
+onMounted(() => { dustLineDismissed.value = isDustLineDismissed(walletStore.loggedWallet?.stakeAddress); });
 const showDustLine = computed(() => isNightToken.value && !dustLineDismissed.value);
 
 // Persistent DUST-registration confirmation: once a registration is submitted
@@ -344,7 +344,7 @@ function shortTx(h: string): string {
 
 function dismissDustLine() {
   dustLineDismissed.value = true;
-  if (typeof localStorage !== 'undefined') localStorage.setItem(DUST_LINE_DISMISS_KEY, '1');
+  dismissDustLineFor(walletStore.loggedWallet?.stakeAddress);
 }
 
 const { t } = useTranslation();
