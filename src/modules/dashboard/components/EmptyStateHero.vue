@@ -2,29 +2,18 @@
   <div class="es-root">
 
     <!-- Backup: an emphasized ledger annotation. Mono, amber, unmissable. -->
-    <button
-      v-if="shouldBackup && !isBackupComplete"
-      type="button"
-      class="es-backup g-mono es-reveal"
+    <BackupReminderStrip
+      v-if="shouldBackup"
+      class="es-backup-slot es-reveal"
       style="--es-d: 0ms"
-      @click="$emit('backup-wallet')"
-    >
-      <span class="es-backup__badge">!</span>
-      <span class="es-backup__text">
-        <span class="es-backup__title">{{ $t('dashboard.backupStripTitle') }}</span>
-        <span class="es-backup__body"> · {{ $t('dashboard.backupStripBody') }}</span>
-      </span>
-      <span class="es-backup__cta">{{ $t('dashboard.backupStripCta') }} →</span>
-    </button>
+      @backup="$emit('backup-wallet')"
+    />
 
-    <!-- ═══ The first page of the ledger ═══ -->
+    <!-- ═══ The first page of the ledger: a welcome, not a verdict ═══ -->
     <section class="es-reveal" style="--es-d: 60ms">
-      <p class="es-eyebrow g-mono">{{ $t('dashboard.totalBalance') }}</p>
-      <h1 class="es-balance g-num">
-        <span class="es-balance__cur">{{ currencySymbol }}</span><span class="es-balance__zero">0.00</span>
-      </h1>
-      <p class="es-statement">
-        {{ $t('dashboard.emptyStatement') }} <em>{{ $t('dashboard.emptyStatementYet') }}</em>
+      <h1 class="t-display">{{ $t('dashboard.emptyWelcomeTitle') }}</h1>
+      <p class="es-welcome-sub t-body-lg">
+        {{ $t('dashboard.emptyWelcomeSub', { ticker: currencyTicker }) }}
       </p>
       <div class="es-ctas">
         <v-btn v-if="buySupported" large class="geroButton es-cta" @click="$emit('buy-crypto')">
@@ -90,6 +79,7 @@ import { toRefs, ref, getCurrentInstance, computed } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain } from '@/models/types';
 import networks from '@/utils/networks';
+import BackupReminderStrip from '@/shared/components/BackupReminderStrip.vue';
 
 const { loggedWallet } = toRefs(walletStore);
 const instance = getCurrentInstance();
@@ -117,9 +107,6 @@ const emit = defineEmits([
 ]);
 
 const blockchain = computed(() => loggedWallet.value?.chain || 'Blockchain');
-
-const currencySymbol = computed(() =>
-  networks.resolveCurrencySymbol(loggedWallet.value?.chain, loggedWallet.value?.network));
 
 const currencyTicker = computed(() =>
   networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network));
@@ -181,11 +168,6 @@ const truncatedAddress = computed(() => {
   return a.length > 16 ? `${a.slice(0, 9)}…${a.slice(-5)}` : a;
 });
 
-const isBackupComplete = computed(() => {
-  const config = walletStore.config;
-  return config && 'backup' in config && config.backup === true;
-});
-
 const copiedFeedback = ref(false);
 
 const copyToClipboard = async () => {
@@ -227,60 +209,8 @@ const copyToClipboard = async () => {
   .es-reveal { animation: none; }
 }
 
-/* ── Backup annotation ── */
-.es-backup {
-  appearance: none;
-  font-family: var(--g-font-mono);
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 13px 16px;
-  border-radius: var(--g-r-control);
-  background: color-mix(in srgb, var(--g-warning) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--g-warning) 40%, transparent);
-  font-size: 13px;
-  color: var(--g-warning);
-  letter-spacing: 0.01em;
-  text-align: left;
-  cursor: pointer;
-  margin-bottom: 44px;
-  transition: border-color var(--g-dur-fast) var(--g-ease), background var(--g-dur-fast) var(--g-ease);
-}
-
-.es-backup:hover {
-  border-color: color-mix(in srgb, var(--g-warning) 65%, transparent);
-  background: color-mix(in srgb, var(--g-warning) 14%, transparent);
-}
-
-.es-backup__badge {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: var(--g-warning);
-  color: var(--g-canvas);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 13px;
-  flex-shrink: 0;
-}
-
-.es-backup__text { flex: 1; min-width: 0; }
-
-.es-backup__title {
-  text-transform: uppercase;
-  font-weight: 700;
-}
-
-.es-backup__body { color: var(--g-text-2); }
-
-.es-backup__cta {
-  white-space: nowrap;
-  font-weight: 700;
-  text-transform: uppercase;
-}
+/* ── Backup annotation (shared strip; only spacing lives here) ── */
+.es-backup-slot { margin-bottom: 44px; }
 
 /* ── Eyebrows (mono ledger labels) ── */
 .es-eyebrow {
@@ -291,37 +221,10 @@ const copyToClipboard = async () => {
   margin: 0 0 10px;
 }
 
-/* ── The zero ── */
-.es-balance {
-  font-size: 80px;
-  font-weight: 700;
-  letter-spacing: -0.04em;
-  line-height: 0.95;
-  color: var(--g-text-1);
-  margin: 0;
-}
-
-.es-balance__cur {
-  background: linear-gradient(115deg, var(--g-grad-1), var(--g-grad-2));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  margin-right: 14px;
-}
-
-.es-balance__zero { color: var(--g-text-3); }
-
-.es-statement {
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--g-text-1);
-  margin: 18px 0 0;
-}
-
-.es-statement em {
-  font-style: normal;
-  color: var(--g-text-3);
+/* ── The welcome (type ramp carries size/weight; only rhythm lives here) ── */
+.es-welcome-sub {
+  color: var(--g-text-2);
+  margin: 10px 0 0;
 }
 
 .es-ctas {
@@ -472,8 +375,6 @@ const copyToClipboard = async () => {
 
 /* ── Responsive ── */
 @media (max-width: 700px) {
-  .es-balance { font-size: 52px; }
-
   .es-row__addr { display: none; }
 }
 </style>
