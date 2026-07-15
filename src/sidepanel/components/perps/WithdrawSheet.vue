@@ -56,18 +56,18 @@
           <span class="balance-row__value">${{ formatUsd(maxWithdrawable) }}</span>
         </button>
 
-        <!-- ADA estimate -->
+        <!-- USDM estimate — withdrawals settle 1:1 in USDM, minus the quote fee -->
         <transition name="fade-slide">
           <div v-if="amountNum > 0" class="estimate-card mt-3">
             <div class="estimate-main">
               <span class="estimate-main__label">{{ $t('perpetuals.estimatedReceived') }}</span>
               <span class="estimate-main__value">
-                ~{{ formatAda(estimatedAda) }}<span class="estimate-main__unit">ADA</span>
+                ~{{ formatUsd(amountNum) }}<span class="estimate-main__unit">USDM</span>
               </span>
             </div>
             <div class="estimate-sub">
-              <span>{{ $t('perpetuals.currentAdaPrice') }}</span>
-              <span class="estimate-sub__value">${{ formatPrice(usdPerAda) }}</span>
+              <span>{{ $t('perps.withdraw.settleAsset') }}</span>
+              <span class="estimate-sub__value">{{ $t('perps.withdraw.usdmParity') }}</span>
             </div>
           </div>
         </transition>
@@ -141,7 +141,7 @@
               {{ showFullMessage ? $t('perps.withdraw.collapse') : $t('perps.withdraw.viewFull') }}
             </button>
           </div>
-          <pre class="message-body" :class="{ collapsed: !showFullMessage }">{{ quote?.message_to_sign ?? '' }}</pre>
+          <pre class="message-body" :class="{ collapsed: !showFullMessage }">{{ messagePreview }}</pre>
         </div>
 
         <!-- Spending password (skipped for HW / PRF) -->
@@ -269,7 +269,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
-import { useStrikeWithdraw } from '@/modules/market/composables/useStrikeWithdraw';
+import { useStrikeWithdraw, decodeWithdrawMessageForDisplay } from '@/modules/market/composables/useStrikeWithdraw';
 import { useStrikeAccount } from '@/modules/market/composables/useStrikeAccount';
 import { useStrikeOnboarding } from '@/modules/market/composables/useStrikeOnboarding';
 import { walletStore } from '@/stores/walletStore';
@@ -293,8 +293,6 @@ const {
   quote,
   withdrawStatus,
   withdrawError,
-  usdPerAda,
-  usdToAdaRate,
   requestQuote,
   signAndSubmit,
   resetWithdraw,
@@ -348,7 +346,10 @@ const maxWithdrawable = computed(() => {
   return Number.isFinite(v) ? v : 0;
 });
 
-const estimatedAda = computed(() => amountNum.value * usdToAdaRate.value);
+/** Decoded (human-readable) quote message — Cardano quotes return it hex-encoded. */
+const messagePreview = computed(() =>
+  decodeWithdrawMessageForDisplay(quote.value?.message_to_sign ?? ''),
+);
 
 const showMarginWarning = computed(() => {
   if (!marginRatio.value || amountNum.value <= 0) return false;
@@ -403,10 +404,14 @@ const expiryClass = computed(() => {
 });
 
 const youReceiveLabel = computed(() => {
+  // Withdrawals settle 1:1 in USDM; prefer the quote's exact figure, else
+  // estimate as amount minus the quote fee.
   if (quote.value?.amount_received) {
-    return `${formatAda(parseFloat(quote.value.amount_received))} ADA`;
+    return `${formatUsd(parseFloat(quote.value.amount_received))} USDM`;
   }
-  return `~${formatAda(estimatedAda.value)} ADA`;
+  const fee = parseFloat(quote.value?.fee ?? '0');
+  const net = Math.max(0, amountNum.value - (Number.isFinite(fee) ? fee : 0));
+  return `~${formatUsd(net)} USDM`;
 });
 
 const statusTitle = computed(() => {
@@ -437,16 +442,6 @@ function formatUsd(n: number | null | undefined): string {
   if (!Number.isFinite(v)) return '0.00';
   return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
-function formatAda(n: number | null | undefined): string {
-  const v = typeof n === 'number' ? n : parseFloat(String(n ?? '0'));
-  if (!Number.isFinite(v)) return '0.00';
-  return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-function formatPrice(n: number | null | undefined): string {
-  const v = typeof n === 'number' ? n : parseFloat(String(n ?? '0'));
-  if (!Number.isFinite(v) || v <= 0) return '—';
-  return v.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 5 });
-}
 
 // ── Methods ─────────────────────────────────────────────────────────────────
 function setMax() {
@@ -458,8 +453,9 @@ function setMax() {
 async function requestQuoteClick() {
   quoteError.value = null;
   if (!canQuote.value) return;
-  // No asset arg: Strike defaults to the chain-native asset (ADA). Passing
-  // 'ADA' explicitly is rejected by the backend ("unsupported asset").
+  // No asset arg: requestQuote defaults to USDM — the only asset Strike's
+  // withdraw endpoint accepts on Cardano (everything else, including an
+  // omitted asset, is rejected with "unsupported asset").
   await requestQuote(amountNum.value.toFixed(2));
   if (withdrawStatus.value === 'error') {
     // Capture error and reset to step 1 so user can fix the input.

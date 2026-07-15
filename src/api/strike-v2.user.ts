@@ -170,8 +170,18 @@ export const strikeUserApi = {
     return data;
   },
 
-  async executeWithdraw(withdrawId: string, walletSignature: string): Promise<{ request_id: string; status: string }> {
-    const { data } = await strikeClient.post('/v2/withdraw', { withdraw_id: withdrawId, wallet_signature: walletSignature });
+  async executeWithdraw(
+    withdrawId: string,
+    walletSignature: string,
+    signedTxCbor?: string,
+  ): Promise<{ request_id: string; status: string }> {
+    const { data } = await strikeClient.post('/v2/withdraw', {
+      withdraw_id: withdrawId,
+      wallet_signature: walletSignature,
+      // Present only when the quote included a validator min-UTxO `tx_cbor`
+      // for the wallet to sign — Strike broadcasts it server-side.
+      ...(signedTxCbor ? { signed_tx_cbor: signedTxCbor } : {}),
+    });
     return data;
   },
 
