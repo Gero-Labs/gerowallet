@@ -8,7 +8,7 @@
     <p class="funding-card__sub t-body-sm">{{ $t('portfolio.fundingSub') }}</p>
 
     <div class="funding-card__actions">
-      <GButton v-if="buySupported" tier="primary" compact block @click="$emit('buy')">
+      <GButton v-if="buySupported" tier="primary" block @click="$emit('buy')">
         {{ $t('dashboard.buy') }} {{ currencyTicker }}
       </GButton>
       <GButton tier="secondary" compact block @click="$emit('receive')">
