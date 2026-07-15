@@ -282,10 +282,10 @@ function formatAdaPrice(price: number): string {
 }
 
 .green-text {
-  color: var(--g-success) !important;
+  color: var(--g-success);
 }
 
 .red-text {
-  color: var(--g-error) !important;
+  color: var(--g-error);
 }
 </style>

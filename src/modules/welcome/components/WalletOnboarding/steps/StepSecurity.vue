@@ -189,7 +189,7 @@ const handleContinue = (): void => {
   &__sub {
     display: block;
     font-size: 10px;
-    color: rgba(255, 255, 255, 0.3);
+    color: var(--g-text-3);
     line-height: 1.35;
   }
 
@@ -198,7 +198,7 @@ const handleContinue = (): void => {
   }
 
   &--active &__sub {
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--g-text-2);
   }
 }
 

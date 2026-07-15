@@ -192,7 +192,7 @@ const onContinue = (): void => {
   border: none;
   padding: 0;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--g-text-3);
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 2px;

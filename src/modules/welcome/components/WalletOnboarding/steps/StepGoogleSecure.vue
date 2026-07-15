@@ -386,7 +386,7 @@ const resetGoogleAccount = async (): Promise<void> => {
 
 .field-hint {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--g-text-3);
   line-height: 1.4;
 }
 
@@ -401,10 +401,10 @@ const resetGoogleAccount = async (): Promise<void> => {
   white-space: nowrap;
 }
 .recovery-strength__label--0,
-.recovery-strength__label--1 { color: #ff6b6b; }
-.recovery-strength__label--2 { color: #ffb020; }
-.recovery-strength__label--3 { color: #4dabf7; }
-.recovery-strength__label--4 { color: #51cf66; }
+.recovery-strength__label--1 { color: var(--g-error); }
+.recovery-strength__label--2 { color: var(--g-warning); }
+.recovery-strength__label--3 { color: var(--g-info); }
+.recovery-strength__label--4 { color: var(--g-success); }
 
 .passkey-auth-button {
   text-transform: none;
