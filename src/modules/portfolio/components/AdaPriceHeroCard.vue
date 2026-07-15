@@ -19,6 +19,12 @@
 
     <div class="ada-hero__chart-wrap flex-grow-1">
       <div ref="chartEl" class="ada-hero__chart"></div>
+      <!-- Crosshair tooltip: direct DOM writes from subscribeCrosshairMove for
+           zero-lag tracking (same pattern as PortfolioChart). -->
+      <div ref="tooltipEl" class="ada-hero__tooltip" style="display: none;">
+        <div class="ada-hero__tooltip-date g-mono"></div>
+        <div class="ada-hero__tooltip-value g-num"></div>
+      </div>
       <div v-if="noData" class="ada-hero__no-data t-caption">{{ $t('market.noChartData') }}</div>
     </div>
 
@@ -39,7 +45,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, toRefs } from 'vue';
 import { createChart, AreaSeries } from 'lightweight-charts';
-import type { IChartApi, ISeriesApi, AreaData, Time, SolidColor } from 'lightweight-charts';
+import type { IChartApi, ISeriesApi, AreaData, Time, SolidColor, MouseEventParams } from 'lightweight-charts';
 import { useMarketData } from '@/modules/market/composables/useMarketData';
 import { walletStore } from '@/stores/walletStore';
 import { chainAccents, chainKeyFor } from '@/config/themes';
@@ -79,6 +85,7 @@ function setRange(key: RangeKey) {
 // ── Chart ─────────────────────────────────────────────────────────────────────
 
 const chartEl = ref<HTMLElement | null>(null);
+const tooltipEl = ref<HTMLElement | null>(null);
 let chart: IChartApi | null = null;
 let series: ISeriesApi<'Area'> | null = null;
 let resizeObserver: ResizeObserver | null = null;
@@ -152,6 +159,45 @@ function initChart() {
     }
   });
   resizeObserver.observe(chartEl.value);
+
+  chart.subscribeCrosshairMove((param: MouseEventParams<Time>) => {
+    const el = tooltipEl.value;
+    if (!el || !series) return;
+
+    if (!param.point || !param.time || !param.seriesData || param.seriesData.size === 0) {
+      el.style.display = 'none';
+      return;
+    }
+
+    const data = param.seriesData.get(series) as AreaData<Time> | undefined;
+    if (!data || data.value === undefined) {
+      el.style.display = 'none';
+      return;
+    }
+
+    const timestamp = typeof param.time === 'number' ? param.time * 1000 : 0;
+    if (timestamp > 0) {
+      const date = new Date(timestamp);
+      el.children[0].textContent = date.toLocaleDateString(undefined, {
+        month: 'short', day: 'numeric', year: 'numeric',
+      }) + ' ' + date.toLocaleTimeString(undefined, {
+        hour: '2-digit', minute: '2-digit',
+      });
+    }
+    el.children[1].textContent = formatPrice(data.value as number);
+
+    // Position via transform (GPU composited); flip sides near the right edge.
+    const wrap = chartEl.value;
+    if (wrap) {
+      const tooltipWidth = 132;
+      const tx = param.point.x + 14 + tooltipWidth > wrap.clientWidth
+        ? param.point.x - tooltipWidth - 14
+        : param.point.x + 14;
+      const ty = Math.max(0, Math.min(param.point.y - 20, wrap.clientHeight - 44));
+      el.style.transform = `translate3d(${tx}px, ${ty}px, 0)`;
+      el.style.display = 'block';
+    }
+  });
 
   // Apply data that landed while init was still waiting on layout.
   if (lastPoints && series) {
@@ -252,6 +298,30 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.ada-hero__tooltip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  pointer-events: none;
+  padding: 6px 10px;
+  background: var(--g-overlay);
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-control);
+  white-space: nowrap;
+}
+
+.ada-hero__tooltip-date {
+  font-size: 10px;
+  color: var(--g-text-3);
+}
+
+.ada-hero__tooltip-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--g-text-1);
 }
 
 .ada-hero__ranges {

@@ -91,8 +91,8 @@ const copyAddress = async () => {
   margin-top: auto;
 }
 
-/* Hover sheen on the primary CTA: one finite sweep per hover-in (feedback on
-   the sanctioned gradient slot, not a decorative loop). */
+/* Ambient sheen on the primary CTA: one sweep every ~4s (user-requested loop
+   on this surface, 2026-07-15 — mostly rest, killed under reduced motion). */
 .funding-card__buy {
   position: relative;
   overflow: hidden;
@@ -108,21 +108,17 @@ const copyAddress = async () => {
   background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.22), transparent);
   transform: skewX(-18deg);
   pointer-events: none;
-}
-
-.funding-card__buy:hover::after,
-.funding-card__buy:focus-visible::after {
-  animation: fc-sheen 600ms var(--g-ease) both;
+  animation: fc-sheen 4200ms var(--g-ease) infinite;
 }
 
 @keyframes fc-sheen {
-  from { transform: translateX(0) skewX(-18deg); }
-  to { transform: translateX(420%) skewX(-18deg); }
+  0% { transform: translateX(0) skewX(-18deg); }
+  16% { transform: translateX(420%) skewX(-18deg); }
+  100% { transform: translateX(420%) skewX(-18deg); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .funding-card__buy:hover::after,
-  .funding-card__buy:focus-visible::after { animation: none; }
+  .funding-card__buy::after { animation: none; }
 }
 
 .funding-card__addr {
