@@ -917,13 +917,14 @@ const { themeColors } = useChainContext();
 const primaryColor = computed(() => themeColors.value.primary);
 
 // Fiat approximation for the tx total — "≈ $5,620" when you meant $56 is
-// instantly visible where "12482.1 ADA" is not. Reuses the already-cached
-// price (networkStore.getAdaPrice(), populated by background sync — no new
-// API call here) and the existing display-currency conversion, so this is
-// pure presentation over data the app already has.
+// instantly visible where "12482.1 ADA" is not. Reads the already-cached
+// price straight off the observable state (populated by background sync — no
+// new API call here; the getAdaPrice() helper lives on the store's default
+// export, not this named state import) and the existing display-currency
+// conversion, so this is pure presentation over data the app already has.
 const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 function formatFiatFromAda(adaAmountStr: string): string | null {
-  const adaPrice = networkStore.getAdaPrice();
+  const adaPrice = networkStore.price?.lastPrice || 0;
   if (!adaPrice) return null; // no price data yet — omit rather than show a stale/zero amount
   const ada = parseFloat(adaAmountStr);
   if (!Number.isFinite(ada)) return null;
