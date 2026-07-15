@@ -8,7 +8,7 @@
     <p class="funding-card__sub t-body-sm">{{ $t('portfolio.fundingSub') }}</p>
 
     <div class="funding-card__actions">
-      <GButton v-if="buySupported" tier="primary" block @click="$emit('buy')">
+      <GButton v-if="buySupported" tier="primary" block class="funding-card__buy" @click="$emit('buy')">
         {{ $t('dashboard.buy') }} {{ currencyTicker }}
       </GButton>
       <GButton tier="secondary" compact block @click="$emit('receive')">
@@ -89,6 +89,40 @@ const copyAddress = async () => {
   flex-direction: column;
   gap: var(--g-s-2);
   margin-top: auto;
+}
+
+/* Hover sheen on the primary CTA: one finite sweep per hover-in (feedback on
+   the sanctioned gradient slot, not a decorative loop). */
+.funding-card__buy {
+  position: relative;
+  overflow: hidden;
+}
+
+.funding-card__buy::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -55%;
+  width: 40%;
+  background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+  transform: skewX(-18deg);
+  pointer-events: none;
+}
+
+.funding-card__buy:hover::after,
+.funding-card__buy:focus-visible::after {
+  animation: fc-sheen 600ms var(--g-ease) both;
+}
+
+@keyframes fc-sheen {
+  from { transform: translateX(0) skewX(-18deg); }
+  to { transform: translateX(420%) skewX(-18deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .funding-card__buy:hover::after,
+  .funding-card__buy:focus-visible::after { animation: none; }
 }
 
 .funding-card__addr {
