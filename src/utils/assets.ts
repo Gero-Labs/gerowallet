@@ -107,6 +107,7 @@ import sellAda from '@/modules/dashboard/assets/sell-ada.png'
 import { DappRisk, DappScore } from '@/models/cardano-shield-types';
 import google from '@/assets/svg/google.svg';
 import googleSvg from '@/assets/svg/googleWhite.svg'
+import googleOutlineSvg from '@/assets/svg/googleOutline.svg'
 import cashbackBags from '@/assets/img/cashback.png';
 import cardanoBg from '@/assets/cardanoBg.png';
 import midnightBg from '@/assets/Midnight.webp';
@@ -351,6 +352,7 @@ export default {
   },
   google,
   googleSvg,
+  googleOutlineSvg,
   cashbackBags,
   cardanoBg,
   cashbackBg,

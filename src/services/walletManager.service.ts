@@ -13,7 +13,7 @@ import MusicStore from '@/stores/musicStore';
 import NetworkStore from '@/stores/networkStore';
 import { debugLog } from '@/utils/debug';
 import { Cardano } from '@cardano-sdk/core';
-import zkFoldApi from '@/api/zkFoldApi';
+import zkSmartWalletApi from '@/api/zkSmartWalletApi';
 import { bootstrapCrossDeviceSigning } from '@/services/crossDevice/crossDeviceBootstrap';
 import type { CrossDeviceSigning } from '@/services/crossDevice/crossDeviceSigning.service';
 import {
@@ -43,6 +43,8 @@ import {
   type SigningPolicy,
 } from '@/services/crossDevice/crossDeviceTrust';
 import type { DeviceInfo } from '@/services/crossDevice/protocol';
+import { mpcSessionCache } from '@/chrome/mpcSessionCache';
+import { mpcLoginShareCache } from '@/chrome/mpcLoginShareCache';
 
 /**
  * WalletManager service to handle wallet login/logout and lifecycle management
@@ -105,9 +107,11 @@ export class WalletManager {
     LoadingState.setLoading(true);
 
     try {
-      // Clean up an existing wallet if different
+      // Clean up an existing wallet if different. On a SWITCH, only clear the
+      // outgoing wallet's MPC caches (logout(false)) — the incoming wallet's key
+      // may already be reconstructed (auth-then-switch) and must survive.
       if (this.walletBg && this.currentWalletId !== wallet.id) {
-        await this.logout();
+        await this.logout(false);
       }
 
       // Create a new wallet instance if needed
@@ -144,7 +148,16 @@ export class WalletManager {
           prfEncryptedPrivateKey: walletBg.prfEncryptedPrivateKey,
           prfEncryptedMnemonic: walletBg.prfEncryptedMnemonic,
           webAuthnCredentialId: walletBg.webAuthnCredentialId,
+          mpcPrfSaltId: walletBg.mpcPrfSaltId,
         });
+
+        // MPC wallets: lock when the reconstructed root key isn't cached this
+        // session (see login()), so restore/switch never exposes an MPC wallet
+        // without a fresh unlock (Google + passkey/spending password).
+        if (wallet.encryptionMethod === 'mpc') {
+          WalletStore.setLocked(!mpcSessionCache.get(wallet.id));
+        }
+
         LoadingState.setText('Restoring wallet...');
         // Set currentWalletId BEFORE initializeWallet: it loads THIS wallet's
         // remote-signing settings via loadRemoteSigningSettings(currentWalletId). If the
@@ -189,19 +202,31 @@ export class WalletManager {
     LoadingState.setLoading(true);
 
     try {
-      // Clean up an existing wallet if different
+      // Clean up an existing wallet if different. On a SWITCH, only clear the
+      // outgoing wallet's MPC caches (logout(false)) — the incoming wallet's key
+      // may already be reconstructed (auth-then-switch) and must survive.
       if (this.walletBg && this.currentWalletId !== wallet.id) {
-        await this.logout();
+        await this.logout(false);
       }
 
       // Create a new wallet instance if needed
       if (!this.walletBg || this.currentWalletId !== wallet.id) {
         // Clear wallet store data immediately to prevent cross-wallet contamination
         WalletStore.clearForWalletSwitch();
+        // NOTE: do NOT clear mpcSessionCache / mpcLoginShareCache here. Login runs
+        // right AFTER UNLOCK_MPC_WALLET has populated them for THIS wallet, so
+        // clearing here would wipe the just-established session (breaking signing
+        // and forcing a fresh Google sign-in on the next unlock). Both caches are
+        // keyed by walletId and the OUTGOING wallet is cleared by logout() above
+        // on a switch, so there is no cross-wallet leakage to defend against here.
         TapToolsStore.clear();
         let walletBg: WalletBg
-        if (wallet.type === WalletType.Google) {
-          const smartBaseAddress: Cardano.Address = await zkFoldApi.walletAddress(wallet.userId)
+        if (wallet.type === WalletType.Google && wallet.encryptionMethod !== 'mpc') {
+          // Legacy smart-contract Google wallet: address is fetched from
+          // the contract. MPC Sign-in-with-Google wallets are also type===Google
+          // but are normal HD wallets (real CIP-1852 xpub) — construct them the
+          // same way as Normal wallets (no smart-contract address).
+          const smartBaseAddress: Cardano.Address = await zkSmartWalletApi.walletAddress(wallet.userId)
           walletBg = new WalletBg(wallet, smartBaseAddress.toBech32())
         } else {
           walletBg = new WalletBg(wallet);
@@ -240,7 +265,19 @@ export class WalletManager {
           prfEncryptedPrivateKey: walletBg.prfEncryptedPrivateKey,
           prfEncryptedMnemonic: walletBg.prfEncryptedMnemonic,
           webAuthnCredentialId: walletBg.webAuthnCredentialId,
+          mpcPrfSaltId: walletBg.mpcPrfSaltId,
         });
+
+        // MPC wallets: the reconstructed root key lives only in mpcSessionCache.
+        // If it's absent (e.g. switching to this wallet from the picker, or a fresh
+        // session), LOCK so the unlock flow (Google + passkey/spending password)
+        // runs before any access — otherwise a switch would silently expose the
+        // wallet with no re-authentication. If the key IS present (the options
+        // pre-login unlock reconstructed it before sending LOGIN), stay unlocked.
+        if (wallet.encryptionMethod === 'mpc') {
+          WalletStore.setLocked(!mpcSessionCache.get(wallet.id));
+        }
+
         LoadingState.setText('Initializing wallet...');
 
         // Check if this is a first-time restore (no cached data).
@@ -315,7 +352,7 @@ export class WalletManager {
     console.log('walletBg', walletBg)
     if (walletBg.type === WalletType.Google) {
       // promises.push(
-      //   zkFoldApi.walletAddress(walletBg.userId).then(res => {
+      //   zkSmartWalletApi.walletAddress(walletBg.userId).then(res => {
       //     if (res['status'] !== 200) {
       //       throw new Error('Failed to get address');
       //     }
@@ -459,7 +496,9 @@ export class WalletManager {
     const chain: string = Object.keys(Blockchain).find(key => Blockchain[key] === walletBg.chain);
     const network: string = Object.keys(Network).find(key => Network[key] === walletBg.network);
     let address: string;
-    if (walletBg.isEnterpriseAddress() || walletBg.type === WalletType.Google) {
+    // MPC Google wallets are normal HD wallets — sync on the stake address like
+    // any other wallet. Only legacy Google wallets sync on baseAddress.
+    if (walletBg.isEnterpriseAddress() || (walletBg.type === WalletType.Google && walletBg.encryptionMethod !== 'mpc')) {
       address = walletBg.baseAddress;
     } else {
       address = walletBg.stakeAddress;
@@ -602,9 +641,25 @@ export class WalletManager {
   /**
    * Logout current wallet and cleanup all resources
    */
-  async logout(): Promise<void> {
+  // `clearAllMpcCaches` is true for an explicit logout (wipe every wallet's MPC
+  // session), but the internal logout that `login()` performs on a wallet SWITCH
+  // passes false: the auth-then-switch flow reconstructs the INCOMING wallet's key
+  // into mpcSessionCache BEFORE this runs, so a blanket clearAll would wipe the
+  // target's just-authenticated session and re-lock it. On a switch we only clear
+  // the OUTGOING wallet's caches.
+  async logout(clearAllMpcCaches = true): Promise<void> {
 
     try {
+      // Clear cached MPC root-key bytes and login shares for the logged-out wallet
+      // (or all wallets on an explicit logout) — never survive a logout.
+      if (clearAllMpcCaches) {
+        mpcSessionCache.clearAll();
+        await mpcLoginShareCache.clearAll();
+      } else if (this.currentWalletId !== null) {
+        mpcSessionCache.clear(this.currentWalletId);
+        await mpcLoginShareCache.clear(this.currentWalletId);
+      }
+
       // Clear database cache for the current wallet to prevent data leakage
       if (this.currentWalletId !== null) {
         debugLog('Clearing database cache for wallet:', this.currentWalletId);
@@ -729,6 +784,13 @@ export class WalletManager {
     } catch (error) {
       console.error('Error during wallet logout:', error);
       // Force cleanup even if logout fails
+      if (clearAllMpcCaches) {
+        mpcSessionCache.clearAll();
+        await mpcLoginShareCache.clearAll();
+      } else if (this.currentWalletId !== null) {
+        mpcSessionCache.clear(this.currentWalletId);
+        await mpcLoginShareCache.clear(this.currentWalletId);
+      }
       if (this.currentWalletId !== null) {
         clearDbCache(this.currentWalletId);
       }
@@ -748,6 +810,15 @@ export class WalletManager {
    */
   async lock(): Promise<void> {
     try {
+      // Clear cached MPC root-key bytes — signing an MPC wallet after a lock
+      // requires re-unlock, same as PRF wallets require a fresh WebAuthn prompt.
+      mpcSessionCache.clearAll();
+      // NOTE: deliberately DO NOT clear mpcLoginShareCache here. Keeping the
+      // login share across a lock lets the still-logged-in wallet be re-unlocked
+      // with only the device secret (passkey/spending password) — no repeat
+      // Google sign-in — while re-auth (the passkey/password) is still required.
+      // It is dropped on logout / wallet switch and on browser close (it lives in
+      // chrome.storage.session, which survives service-worker restarts).
       // Set locked state
       WalletStore.setLocked(true);
       // Note: Don't clear auto-lock-check alarm - it continues running to check when wallet is unlocked again

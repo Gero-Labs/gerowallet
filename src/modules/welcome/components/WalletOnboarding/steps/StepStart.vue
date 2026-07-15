@@ -1,5 +1,6 @@
 <template>
   <div class="step-start">
+    <div class="step-scroll">
     <!-- ── Network (two-step: blockchain → network) ────────── -->
     <NetworkSelector :network="localNetwork" :dev-mode="devMode" @change="onNetworkChange" />
 
@@ -49,9 +50,28 @@
           </span>
         </span>
       </button>
+
+      <button
+        v-if="googleWalletVisible"
+        type="button"
+        class="method-card"
+        :class="{ 'method-card--active': selectedMethod === 'google', 'method-card--disabled': !googleWalletSupported }"
+        :disabled="!googleWalletSupported"
+        @click="selectedMethod = 'google'"
+      >
+        <span class="method-card__icon"><span class="method-card__glyph" :style="glyphStyle(googleGlyph)" /></span>
+        <span class="method-card__text">
+          <span class="method-card__title">{{ $t('welcome.googleWalletMethod') }}</span>
+          <span class="method-card__desc">
+            {{ googleWalletSupported ? $t('welcome.googleWalletMethodDescription') : $t('welcome.googleWalletNotSupportedOnNetwork') }}
+          </span>
+        </span>
+      </button>
     </div>
 
-    <!-- Navigation -->
+    </div>
+
+    <!-- Navigation (footer — outside the scroll region above) -->
     <div class="onboarding-actions d-flex" style="gap: 12px;">
       <v-spacer />
       <v-btn class="onb-btn" depressed color="primary" :disabled="!selectedMethod" @click="onContinue()">{{ $t('common.continue') }}</v-btn>
@@ -63,9 +83,11 @@
 import { ref, computed, watch } from 'vue';
 import assets from '@/utils/assets';
 import { NetworkInfo } from '@/utils/networks';
+import { Blockchain } from '@/models/types';
 import NetworkSelector from '@/modules/welcome/components/NetworkSelector.vue';
+import featureFlagsStore from '@/stores/featureFlagsStore';
 
-type Method = 'create' | 'restore' | 'pair';
+type Method = 'create' | 'restore' | 'pair' | 'google' | 'googleRestore';
 
 const props = defineProps<{ network: NetworkInfo; devMode?: boolean }>();
 const emit = defineEmits<{
@@ -81,10 +103,16 @@ watch(() => props.network, (n) => { localNetwork.value = n; });
 const selectedMethod = ref<Method | null>(null);
 const pairSupported = computed(() => !!localNetwork.value?.supportedHardware);
 
+// Google wallet (MPC "Sign in with Google") — ships DARK behind a feature flag
+// until audited, and only reconstructs a Cardano root key today (Plan D).
+const googleWalletVisible = computed(() => featureFlagsStore.isGoogleWalletEnabled());
+const googleWalletSupported = computed(() => localNetwork.value?.blockchain === Blockchain.CARDANO);
+
 // Base icon shapes (recolored per network via CSS mask).
 const walletSvg = assets.walletGeroSvg;
 const keyGeroSvg = assets.keyGeroSvg;
 const pairSvg = assets.pairGeroSvg;
+const googleGlyph = assets.googleOutlineSvg; // outlined Google "G" — masked/tinted to match the other line glyphs
 
 // Method icons take the selected network's accent gradient (lighter -> base),
 // matching the per-network logo gradients.
@@ -110,6 +138,10 @@ const onNetworkChange = (n: NetworkInfo): void => {
   if (selectedMethod.value === 'pair' && !n.supportedHardware) {
     selectedMethod.value = null;
   }
+  // Drop a stale Google wallet choice if the new network isn't Cardano.
+  if ((selectedMethod.value === 'google' || selectedMethod.value === 'googleRestore') && n.blockchain !== Blockchain.CARDANO) {
+    selectedMethod.value = null;
+  }
 };
 
 const onContinue = (): void => {
@@ -118,12 +150,56 @@ const onContinue = (): void => {
 </script>
 
 <style scoped>
+/* Fill the onboarding body and split into a scrollable content region plus a
+   pinned action footer. The scrollbar lives on .step-scroll (content only), so
+   the CONTINUE row sits below/outside it instead of scrolling with the list. */
+.step-start {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.step-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.step-start .onboarding-actions {
+  flex-shrink: 0;
+  margin-top: 0;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
 .step-section-label {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--g-text-2);
+}
+
+.google-restore-link {
+  display: flex;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 12px;
+  color: var(--g-text-3);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.link-btn:hover {
+  color: var(--v-primary-base);
 }
 
 .onb-btn {

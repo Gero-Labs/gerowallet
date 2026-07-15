@@ -79,6 +79,43 @@
           </v-icon>
         </v-list-item-icon>
       </v-list-item>
+
+      <!-- MPC "Sign in with Google": change recovery password -->
+      <v-list-item v-if="isMpcWallet" class="px-2 py-1" @click="changeRecoveryPasswordDialog = true">
+        <v-list-item-avatar class="my-0">
+          <v-icon>mdi-form-textbox-password</v-icon>
+        </v-list-item-avatar>
+        <v-list-item-content class="py-0">
+          <v-list-item-title class="text-left">
+            <h3 style="color: white; font-size: 16px;">{{ $t('security.mpcRecoveryChangeTitle') }}</h3>
+          </v-list-item-title>
+          <v-list-item-subtitle class="text-left">
+            {{ $t('security.mpcRecoveryChangeRowSubtitle') }}
+          </v-list-item-subtitle>
+        </v-list-item-content>
+        <v-list-item-icon class="my-0" style="align-self: center">
+          <v-icon large>mdi-chevron-right</v-icon>
+        </v-list-item-icon>
+      </v-list-item>
+
+      <!-- MPC "Sign in with Google": reveal secret recovery phrase -->
+      <v-list-item v-if="isMpcWallet" class="px-2 py-1" @click="revealRecoveryPhraseDialog = true">
+        <v-list-item-avatar class="my-0">
+          <v-icon>mdi-key-alert-outline</v-icon>
+        </v-list-item-avatar>
+        <v-list-item-content class="py-0">
+          <v-list-item-title class="text-left">
+            <h3 style="color: white; font-size: 16px;">{{ $t('security.mpcRevealTitle') }}</h3>
+          </v-list-item-title>
+          <v-list-item-subtitle class="text-left">
+            {{ $t('security.mpcRevealRowSubtitle') }}
+          </v-list-item-subtitle>
+        </v-list-item-content>
+        <v-list-item-icon class="my-0" style="align-self: center">
+          <v-icon large>mdi-chevron-right</v-icon>
+        </v-list-item-icon>
+      </v-list-item>
+
       <v-list-item class="px-2 py-1" v-if="loggedWallet?.type === WalletType.Normal && !isPrfWallet" @click="changePasswordDialog = true">
         <v-list-item-avatar class="my-0">
           <v-icon>
@@ -122,7 +159,7 @@
             </h3>
           </v-list-item-title>
           <v-list-item-subtitle class="text-left">
-            <template v-if="isPrfWallet">
+            <template v-if="isMpcWallet || isPrfWallet">
               {{ $t('security.unlockMethod') }}: {{ unlockMethodText }} • {{ $t('security.autoLock') }}: {{ autoLockText }}
             </template>
             <template v-else>
@@ -376,6 +413,8 @@
     <BackupWalletDialog :is-open="backupWalletDialog" @close="backupWalletDialog = false" />
     <ChangePasswordDialog :is-open="changePasswordDialog" @close="changePasswordDialog = false" />
     <RemoteSigningDialog :is-open="remoteSigningDialog" @close="remoteSigningDialog = false" />
+    <ChangeRecoveryPasswordDialog :is-open="changeRecoveryPasswordDialog" @close="changeRecoveryPasswordDialog = false" />
+    <RevealRecoveryPhraseDialog :is-open="revealRecoveryPhraseDialog" @close="revealRecoveryPhraseDialog = false" />
 
     <!-- Lock Settings Dialog (Unlock Method + Auto-Lock) -->
     <LockSettingsDialog
@@ -398,6 +437,8 @@ import { ref, computed, onMounted, nextTick, toRefs, watch } from 'vue';
 import BackupWalletDialog from '@/modules/navigation/dialogs/BackupWalletDialog.vue';
 import ChangePasswordDialog from '@/modules/dashboard/dialogs/ChangePasswordDialog.vue';
 import RemoteSigningDialog from '@/modules/dashboard/dialogs/RemoteSigningDialog.vue';
+import ChangeRecoveryPasswordDialog from '@/modules/dashboard/dialogs/ChangeRecoveryPasswordDialog.vue';
+import RevealRecoveryPhraseDialog from '@/modules/dashboard/dialogs/RevealRecoveryPhraseDialog.vue';
 import LockSettingsDialog from '@/modules/dashboard/dialogs/LockSettingsDialog.vue';
 import PinSetupDialog from '@/modules/dashboard/dialogs/PinSetupDialog.vue';
 import PatternSetupDialog from '@/modules/dashboard/dialogs/PatternSetupDialog.vue';
@@ -419,11 +460,14 @@ import { MessageTypes } from '@/models/MessageTypes';
 import rules from '@/utils/rules';
 import NotificationDot from '@/shared/components/NotificationDot.vue';
 import { isFeatureNew } from '@/shared/composables/useFeatureNotifications';
+import { getErrorMessage } from '@/shared/utils/errorHandler';
 
 const { t } = useTranslation();
 const backupWalletDialog = ref<boolean>(false);
 const changePasswordDialog = ref<boolean>(false);
 const remoteSigningDialog = ref<boolean>(false);
+const changeRecoveryPasswordDialog = ref<boolean>(false);
+const revealRecoveryPhraseDialog = ref<boolean>(false);
 // After the verification overlay succeeds, which dialog to open.
 const verificationTarget = ref<'lockSettings' | 'remoteSigning'>('lockSettings');
 const securitySettingsDialog = ref<boolean>(false);
@@ -456,7 +500,7 @@ const webAuthnCredentialId = ref<string | null>(null);
 
 // Template refs for verification inputs
 const verificationPinInput = ref(null);
-const verificationPasswordInput = ref<any>(null);
+const verificationPasswordInput = ref<{ focus: () => void } | null>(null);
 
 const backup = computed(() => config.value?.backup || false);
 const websiteProtection = computed({
@@ -482,6 +526,13 @@ const getUnlockMethodTitle = (method: string | null) => {
 };
 
 const isPrfWallet = computed(() => loggedWallet.value?.encryptionMethod === 'prf');
+
+// MPC "Sign in with Google" wallet: unlock is Google sign-in + the secret
+// chosen at creation, not a local unlock method / config-table passkey. The
+// lock-settings row therefore shows only the auto-lock summary (matching the
+// reduced dialog), not the misleading "Unlock Method: None • PassKey: Not
+// configured" the generic branch would render.
+const isMpcWallet = computed(() => loggedWallet.value?.encryptionMethod === 'mpc');
 
 const canBackup = computed(() => {
   return loggedWallet.value?.type === WalletType.Normal && WalletStore.hasBackup();
@@ -511,6 +562,8 @@ const unlockMethodText = computed(() => {
   }
 
   switch (unlockMethod.value) {
+    case 'passkey':
+      return t('security.passkey');
     case 'password':
       return t('security.spendingPassword');
     case 'pin':
@@ -591,7 +644,7 @@ const verifyAddressOnDevice = async () => {
       await ledger.default.verifyBitcoinAddress(addressType, accountIndex, addressIndex, isChange, true);
     } else if (loggedWallet.value.type === WalletType.Trezor) {
       // Verify address on Trezor
-      const response: any = await Messaging.sendToBackgroundFromOptions({
+      const response = await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.TREZOR,
         data: {
           method: 'verifyBitcoinAddress',
@@ -600,13 +653,13 @@ const verifyAddressOnDevice = async () => {
           addressIndex,
           isChange
         },
-      });
+      }) as BackgroundResponse<VerifyPasswordResponse>;
 
       if (!response.data.success) {
         throw new Error(response.data.error || 'Failed to verify address on Trezor');
       }
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error verifying address:', error);
     // Error handling is done in the hardware wallet utilities
   }
@@ -813,7 +866,7 @@ async function verifyCurrentMethod() {
       verificationInput.value = '';
       verificationPattern.value = [];
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Verification error:', error);
   } finally {
     verifying.value = false;
@@ -858,9 +911,9 @@ async function handleVerificationPassKeyAuth() {
       tooltip.value.text = t('security.passKeyAuthFailed');
       enableToolTip();
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('❌ PassKey verification error:', error);
-    tooltip.value.text = error.message || t('security.passKeyAuthFailed');
+    tooltip.value.text = getErrorMessage(error, t('security.passKeyAuthFailed'));
     enableToolTip();
   } finally {
     passKeyVerifying.value = false;

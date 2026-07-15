@@ -56,14 +56,17 @@
                 {{ item.chain }} - {{item.network}}
               </v-list-item-subtitle>
             </v-list-item-content>
-            <v-list-item-avatar tile size="20" v-if="item.type === WalletType.Ledger">
+            <v-list-item-avatar tile size="20" style="margin: 8px;" v-if="item.type === WalletType.Ledger">
               <v-img :src="assets.ledgerSvg" contain width="18"></v-img>
             </v-list-item-avatar>
-            <v-list-item-avatar tile size="20" v-if="item.type === WalletType.Trezor">
+            <v-list-item-avatar tile size="20" style="margin: 8px;" v-if="item.type === WalletType.Trezor">
               <v-img :src="assets.trezorSvg" contain width="18"></v-img>
             </v-list-item-avatar>
-            <v-list-item-avatar tile size="20" v-if="item.type === WalletType.Keystone">
+            <v-list-item-avatar tile size="20" style="margin: 8px;" v-if="item.type === WalletType.Keystone">
               <v-img :src="assets.keystoneSvg" contain width="18"></v-img>
+            </v-list-item-avatar>
+            <v-list-item-avatar tile size="20" style="margin: 8px;" v-if="item.type === WalletType.Google && item.encryptionMethod === 'mpc'">
+              <v-img :src="assets.googleSvg" contain width="18"></v-img>
             </v-list-item-avatar>
           </v-list-item>
         </v-list-item-group>
@@ -110,7 +113,13 @@ const { wallets } = toRefs(geroStore);
 const availableWallets = computed<Wallet[]>(() => {
   return (Object.values(wallets.value) as Wallet[])
     .filter((wallet: Wallet) => {
-      return networks.resolveNetwork(wallet?.chain, wallet?.network) && wallet.type != WalletType.Google;
+      // Legacy "Google" wallets have their own sign-in button + dialog
+      // (GoogleLogIn.vue) and stay off this list. MPC "Sign in with Google"
+      // wallets (Plan D, `encryptionMethod === 'mpc'`) are also `type: Google`
+      // but behave like any other wallet here — login goes through the normal
+      // pre-login unlock gate below.
+      return networks.resolveNetwork(wallet?.chain, wallet?.network)
+        && (wallet.type != WalletType.Google || wallet.encryptionMethod === 'mpc');
     });
 });
 
@@ -216,7 +225,9 @@ const submitLogin = async (walletId: number): Promise<void> => {
       const configTable = db.table('config');
       const unlockMethodConfig = await configTable.where({ key: 'unlockMethod' }).first();
 
-      if (unlockMethodConfig?.value) {
+      // MPC wallets have no `unlockMethod` config row (reconstruct-at-unlock
+      // always needs Google + spending password) — gate on encryptionMethod too.
+      if (unlockMethodConfig?.value || wallet.encryptionMethod === 'mpc') {
         debugLog('🔐 Wallet has unlock method configured - showing pre-login unlock dialog');
         // Store wallet info for pre-login unlock
         preLoginWalletId.value = wallet.id;

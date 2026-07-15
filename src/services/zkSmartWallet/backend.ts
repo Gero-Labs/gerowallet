@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-import { serialize } from '@/services/zkFold/utils/json.utils';
+import { serialize } from '@/services/zkSmartWallet/utils/json.utils';
 import {
   BalanceResponse,
   BigIntWrap,
@@ -14,7 +14,7 @@ import {
   SubmitTxResult,
   Transaction,
   UTxO,
-} from '@/services/zkFold/types';
+} from '@/services/zkSmartWallet/types';
 import { Cardano } from '@cardano-sdk/core';
 
 /**
@@ -270,14 +270,14 @@ export class Backend {
   }
 
   /**
-   * Request proof generation from zkFold prover (via backend proxy)
-   * The backend handles encryption and forwards to zkFold prover service
+   * Request proof generation from zkSmartWallet prover (via backend proxy)
+   * The backend handles encryption and forwards to zkSmartWallet prover service
    * @async
    * @param {any} proofInput - Proof input containing exponent, modulus, signature, token name
    * @returns {string} Proof ID for polling status
    */
   async requestProof(proofInput: any): Promise<string> {
-    const { data } = await axios.post(`${this.url}/zkfold/prove`, {
+    const { data } = await axios.post(`${this.url}/prove`, { // legacy hosted endpoint — unused, retained for reference
       proofInput: proofInput
     }, this.headers())
 
@@ -291,7 +291,7 @@ export class Backend {
    * @returns {string} Raw JSON string (proof status or proof bytes)
    */
   async getProofStatus(proofId: string): Promise<string> {
-    const { data } = await axios.get(`${this.url}/zkfold/proof-status/${proofId}`, {
+    const { data } = await axios.get(`${this.url}/proof-status/${proofId}`, { // legacy hosted endpoint — unused, retained for reference
       ...this.headers(),
       responseType: 'text'
     })

@@ -1,6 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
 import { deserialize, serialize } from './utils/json.utils';
-import { ProofBytes, ProofInput, BigIntWrap } from '@/services/zkFold/types';
+import { ProofBytes, ProofInput, BigIntWrap } from '@/services/zkSmartWallet/types';
 
 /**
  * A wrapper for interaction with the prover
@@ -45,7 +45,7 @@ export class Prover {
     // Serialize proofInput to handle BigInt values
     const serializedProofInput = serialize(proofInput)
 
-    const { data } = await this.axiosInstance.post(`/api/zkfold/prove`, {
+    const { data } = await this.axiosInstance.post(`/api/prove`, { // legacy hosted endpoint — unused, retained for reference
       proof_input: serializedProofInput
     }, this.headers({ 'Content-Type': 'application/json' }))
 
@@ -61,7 +61,7 @@ export class Prover {
    * @returns {ProofBytes | string} ProofBytes if the proof has finished or 'Pending' otherwise
    */
   public async proofStatus(proofId: string): Promise<ProofBytes | null> {
-    const proverUrl = import.meta.env['VITE_ZKFOLD_PROVER_URL'] || 'https://wallet-prover.zkfold.io';
+    const proverUrl = import.meta.env['VITE_ZK_SMART_WALLET_PROVER_URL'] || ''; // legacy hosted endpoint — unused, retained for reference
     const { data } = await axios.post(`${proverUrl}/v0/proof-status`, proofId,
       // to prevent Axios from parsing the result and messing with numbers
       { ...this.headers({ "Content-Type": "application/json" }), ...{ responseType: 'text' } }
