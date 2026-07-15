@@ -4206,6 +4206,7 @@ export default {
   'midnight.dustRegistrationSubmitted': 'DUST registration submitted',
   'midnight.dustNeedsNightFirst': 'This wallet holds no NIGHT yet. Receive NIGHT to this wallet first — DUST is generated from your NIGHT.',
   'midnight.dustRegistrationFailed': 'DUST registration failed. Please try again.',
+  'midnight.dustNoCollateral': 'This registration needs a small ADA-only UTxO for network collateral, but all your ADA is bundled with tokens. Send about 6 ADA to your own wallet address to create one, then try again.',
   'midnight.resetSyncCache': 'Reset sync cache',
   'midnight.resetSyncCacheDone': 'Sync cache cleared. Re-syncing from the start.',
   'midnight.resetSyncCacheFailed': 'Could not reset the sync cache. Please try again.',
