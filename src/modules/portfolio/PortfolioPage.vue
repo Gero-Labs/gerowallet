@@ -117,10 +117,10 @@
             <FundingCard @buy="openBuyDialog()" @receive="openReceiveDialog()" />
           </v-col>
         </v-row>
-        <!-- What funding unlocks: staking / cashback / card / perps teasers -->
+        <!-- What funding unlocks: swap / staking / cashback / card / perps -->
         <v-row no-gutters>
           <v-col cols="12" class="pa-2">
-            <PerkTeasers />
+            <PerkTeasers @swap="openSwapDialog()" @perps="openDialog('PERPETUALS')" />
           </v-col>
         </v-row>
       </template>
@@ -418,7 +418,7 @@ const instance = getCurrentInstance();
 
 // ── Composables ───────────────────────────────────────────────────────────────
 
-const { openBuyDialog, openReceiveDialog } = useQuickActionDialogs();
+const { openBuyDialog, openReceiveDialog, openSwapDialog, openDialog } = useQuickActionDialogs();
 const {
   allTokens,
   snekTokens,

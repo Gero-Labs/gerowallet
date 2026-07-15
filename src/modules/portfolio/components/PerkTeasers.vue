@@ -69,12 +69,16 @@ import { walletStore } from '@/stores/walletStore';
 import { Blockchain } from '@/models/types';
 import networks from '@/utils/networks';
 import featureFlagsStore from '@/stores/featureFlagsStore';
-import { useQuickActionDialogs } from '@/shared/composables/useQuickActionDialogs';
+
+// Swap/perps flows differ per host (dashboard: quick-action dialogs;
+// mini-gero: bottom sheets / the /perps page), so those two perks emit and
+// the parent wires the action. Route perks navigate directly — the same
+// paths exist in both routers.
+const emit = defineEmits(['swap', 'perps']);
 
 const { loggedWallet } = toRefs(walletStore);
 const instance = getCurrentInstance();
 const router = instance?.proxy?.$router;
-const { openDialog } = useQuickActionDialogs();
 
 const perks = computed(() => {
   const chain = loggedWallet.value?.chain;
@@ -83,7 +87,7 @@ const perks = computed(() => {
   if (networks.resolveSwapSupport(chain, network) && featureFlagsStore.isSwapEnabled()) {
     list.push({
       key: 'swap', title: 'portfolio.perkSwapTitle', hook: 'portfolio.perkSwapHook',
-      go: () => openDialog('SWAP'),
+      go: () => emit('swap'),
     });
   }
   if (networks.resolveStakingSupport(chain, network)) {
@@ -107,7 +111,7 @@ const perks = computed(() => {
   if (networks.resolvePerpetualsSupport(chain, network)) {
     list.push({
       key: 'perps', title: 'portfolio.perkPerpsTitle', hook: 'portfolio.perkPerpsHook',
-      go: () => openDialog('PERPETUALS'),
+      go: () => emit('perps'),
     });
   }
   return list;
