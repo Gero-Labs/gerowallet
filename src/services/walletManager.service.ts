@@ -4,7 +4,6 @@ import WalletStore, { walletStore } from '@/stores/walletStore';
 import networks from '@/utils/networks';
 import { Blockchain, Network, WalletType, Wallet } from '@/models/types';
 import TokenMetadataStore from '@/stores/tokenMetadataStore';
-import BringStore from '@/stores/bringStore';
 import TapToolsStore from '@/stores/tapToolsStore';
 import webSocketService, { type WsSyncMessage } from '@/services/websocket.service';
 import { Mutex, withTimeout } from 'async-mutex';
@@ -567,8 +566,9 @@ export class WalletManager {
         },
         onRollback: async (data: WsSyncMessage) => {
           debugLog('Rollback received:', data);
-          if (data['rollbackToSlot'] !== undefined) {
-            await walletBg.syncService.handleRollback(data['rollbackToSlot'] as number);
+          const rollbackToSlot = data['rollbackToSlot'];
+          if (typeof rollbackToSlot === 'number') {
+            await walletBg.syncService.handleRollback(rollbackToSlot);
           }
         },
         onForceResync: async () => {
@@ -631,9 +631,6 @@ export class WalletManager {
         }
 
         TokenMetadataStore.loadBlacklistPolicies().catch(err => console.warn('Failed to load blacklist policies:', err));
-      }
-      if (networks.resolveCashbackSupport(walletBg.chain, walletBg.network)) {
-        BringStore.loadBringCache(walletBg.baseAddress).catch(err => console.warn('Failed to load Bring cache:', err));
       }
     }, 100); // Small delay to ensure wallet is fully initialized
   }
