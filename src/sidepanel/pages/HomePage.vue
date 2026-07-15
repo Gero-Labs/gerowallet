@@ -146,7 +146,19 @@ const showReceive = ref(false);
 const showSwap = ref(false);
 const showBuySell = ref(false);
 const showTokenDetail = ref(false);
-const selectedToken = ref<any>(null);
+// Token rows emitted by TokenList: wallet token enriched with display fields.
+interface HomeTokenRow {
+  unit?: string;
+  ticker?: string;
+  name?: string;
+  img?: string;
+  price?: number;
+  change?: number | null;
+  quantity?: number | string;
+  decimals?: number;
+}
+
+const selectedToken = ref<HomeTokenRow | null>(null);
 
 const isMidnight = computed(() => walletStore.loggedWallet?.chain === Blockchain.MIDNIGHT);
 
@@ -162,7 +174,7 @@ const isEmptyMainnet = computed(() =>
 const ftCount = computed(() => {
   const tokens = walletStore.tokens;
   if (!tokens) return 0;
-  return Object.values(tokens).filter((t: any) => {
+  return Object.values(tokens).filter((t: { policy_id?: string; isScam?: boolean; verified?: boolean }) => {
     if (t.policy_id === '') return false;
     if (t.isScam) return false;
     if (!t.verified) return false;
@@ -207,7 +219,7 @@ function handleAction(id: string) {
   }
 }
 
-function handleTokenSelect(token: any) {
+function handleTokenSelect(token: HomeTokenRow) {
   selectedToken.value = token;
   showTokenDetail.value = true;
 }
@@ -228,7 +240,7 @@ function formatPrice(price: number): string {
   });
 }
 
-function formatDetailAmount(token: any): string {
+function formatDetailAmount(token: HomeTokenRow): string {
   const decimals = token.decimals ?? 6;
   let amount = Number(token.quantity);
   if (decimals > 0) {
@@ -240,7 +252,7 @@ function formatDetailAmount(token: any): string {
   }) + ' ' + (token.ticker || token.name || '');
 }
 
-function formatDetailValue(token: any): string {
+function formatDetailValue(token: HomeTokenRow): string {
   if (!token.price) return '--';
   const decimals = token.decimals ?? 6;
   let amount = Number(token.quantity);
