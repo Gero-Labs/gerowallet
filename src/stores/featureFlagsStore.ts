@@ -12,7 +12,6 @@ export interface FeatureFlags {
   isNexusUnstakeEnabled: boolean;
   isNexusDelegateEnabled: boolean;
   isNexusVoteDelegationEnabled: boolean;
-  isNexusSendEnabled: boolean;
   isCrossDeviceSigningEnabled: boolean;
   isCopilotEnabled: boolean;
   isMidnightConvertEnabled: boolean;
@@ -37,7 +36,6 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
     isNexusUnstakeEnabled: false,
     isNexusDelegateEnabled: false,
     isNexusVoteDelegationEnabled: false,
-    isNexusSendEnabled: false,
     isCrossDeviceSigningEnabled: false,
     isCopilotEnabled: false,
     isMidnightConvertEnabled: false,
@@ -100,7 +98,6 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isNexusUnstakeEnabled = featureFlagService.getFlag('isNexusUnstakeEnabled', false);
     featureFlagsState.flags.isNexusDelegateEnabled = featureFlagService.getFlag('isNexusDelegateEnabled', false);
     featureFlagsState.flags.isNexusVoteDelegationEnabled = featureFlagService.getFlag('isNexusVoteDelegationEnabled', false);
-    featureFlagsState.flags.isNexusSendEnabled = featureFlagService.getFlag('isNexusSendEnabled', false);
     featureFlagsState.flags.isCrossDeviceSigningEnabled = featureFlagService.getFlag('isCrossDeviceSigningEnabled', false);
     featureFlagsState.flags.isCopilotEnabled = featureFlagService.getFlag('isCopilotEnabled', false);
     featureFlagsState.flags.isMidnightConvertEnabled = featureFlagService.getFlag('isMidnightConvertEnabled', false);
@@ -143,9 +140,6 @@ export const featureFlagsStore = {
     });
     featureFlagService.onFlagChange('isNexusVoteDelegationEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isNexusVoteDelegationEnabled', newValue);
-    });
-    featureFlagService.onFlagChange('isNexusSendEnabled', (newValue) => {
-      Vue.set(featureFlagsState.flags, 'isNexusSendEnabled', newValue);
     });
     featureFlagService.onFlagChange('isCrossDeviceSigningEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isCrossDeviceSigningEnabled', newValue);
@@ -243,15 +237,6 @@ export const featureFlagsStore = {
   },
 
   /**
-   * Check if plain transfers (send / top-up / card order / pay order) should be
-   * built server-side via Nexus (`/api/tx/build`) instead of the client-side
-   * @cardano-sdk builder.
-   */
-  isNexusSendEnabled(): boolean {
-    return featureFlagsState.flags.isNexusSendEnabled;
-  },
-
-  /**
    * Check if the cross-device signing bridge is enabled.
    * Ships DARK (default false): when off, no cross-device relay message is sent
    * and the WebSocket service behaves exactly as before. See
@@ -310,7 +295,6 @@ export const featureFlagsStore = {
       isNexusUnstakeEnabled: false,
       isNexusDelegateEnabled: false,
       isNexusVoteDelegationEnabled: false,
-      isNexusSendEnabled: false,
       isCrossDeviceSigningEnabled: false,
       isCopilotEnabled: false,
       isMidnightConvertEnabled: false,
