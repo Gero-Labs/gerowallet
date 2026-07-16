@@ -338,7 +338,11 @@ import governanceStoreActions from '@/stores/governanceStore';
 import networks from '@/utils/networks';
 import DRepDelegateDialog from '@/modules/governance/dialogs/DRepDelegateDialog.vue';
 import { Cardano, Serialization } from '@cardano-sdk/core';
+import { HexBlob } from '@cardano-sdk/util';
 import { buildCardanoTransaction, extractCip149Compensation } from '@/shared/utils/builder';
+import { nexusTxApi, walletUtxosToNexusInputs } from '@/api/nexus-tx-api';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
+import { WalletType } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
@@ -603,20 +607,38 @@ const delegate = async () => {
       };
     }
 
-    // Use the generic transaction builder with wallet context for accurate fee calculation
-    txData.value = await buildCardanoTransaction({
-      certificates,
-      utxos: utxos.value,
-      epochParams: epochParams.value,
-      changeAddress: keys.value.payment[0].address,
-      tip: tip.value,
-      implicitCoin,
-      walletContext: {
-        keys: keys.value,
+    // Nexus migration: build the vote delegation server-side for software + Ledger.
+    // Trezor keeps the client-side builder (nexus emits combined Conway certs Trezor
+    // cannot sign). Deposit for a first-time registration is folded server-side.
+    if (featureFlagsStore.isNexusVoteDelegationEnabled() && loggedWallet.value?.type !== WalletType.Trezor) {
+      const nexusDrepId = delegationModel.value === String(t('governance.noConfidence'))
+        ? 'drep_always_no_confidence'
+        : 'drep_always_abstain';
+      const { tx_cbor } = await nexusTxApi.buildVoteDelegationTx({
         stakeAddress: loggedWallet.value.stakeAddress,
-        accountIndex: 0
-      }
-    });
+        drepId: nexusDrepId,
+        changeAddress: keys.value.payment[0].address,
+        utxos: walletUtxosToNexusInputs(utxos.value as Cardano.Utxo[], walletStore.collateral),
+        includeStakeRegistration: !account.value?.active,
+      }, loggedWallet.value.network);
+      if (!tx_cbor) throw new Error('Nexus returned an empty transaction CBOR');
+      txData.value = Serialization.Transaction.fromCbor(HexBlob(tx_cbor)).toCore();
+    } else {
+      // Use the generic transaction builder with wallet context for accurate fee calculation
+      txData.value = await buildCardanoTransaction({
+        certificates,
+        utxos: utxos.value,
+        epochParams: epochParams.value,
+        changeAddress: keys.value.payment[0].address,
+        tip: tip.value,
+        implicitCoin,
+        walletContext: {
+          keys: keys.value,
+          stakeAddress: loggedWallet.value.stakeAddress,
+          accountIndex: 0
+        }
+      });
+    }
 
     debugLog('Vote delegation transaction built successfully');
     isDelegateDialogOpen.value = true;
@@ -677,20 +699,36 @@ const drepDelegate = async (row: DRepRow) => {
     }
     certificates.push(certificate);
 
-    // Use the generic transaction builder with wallet context for accurate fee calculation
-    txData.value = await buildCardanoTransaction({
-      certificates,
-      utxos: utxos.value,
-      epochParams: epochParams.value,
-      changeAddress: keys.value.payment[0].address,
-      tip: tip.value,
-      implicitCoin,
-      walletContext: {
-        keys: keys.value,
+    // Nexus migration: build the vote delegation server-side for software + Ledger.
+    // Trezor keeps the client-side builder (nexus emits combined Conway certs Trezor
+    // cannot sign). The bech32 drep_id carries key-hash vs script in its header, so
+    // nexus resolves the credential type without a separate flag.
+    if (featureFlagsStore.isNexusVoteDelegationEnabled() && loggedWallet.value?.type !== WalletType.Trezor) {
+      const { tx_cbor } = await nexusTxApi.buildVoteDelegationTx({
         stakeAddress: loggedWallet.value.stakeAddress,
-        accountIndex: 0
-      }
-    });
+        drepId: selectedDRep.value.id,
+        changeAddress: keys.value.payment[0].address,
+        utxos: walletUtxosToNexusInputs(utxos.value as Cardano.Utxo[], walletStore.collateral),
+        includeStakeRegistration: !account.value?.active,
+      }, loggedWallet.value.network);
+      if (!tx_cbor) throw new Error('Nexus returned an empty transaction CBOR');
+      txData.value = Serialization.Transaction.fromCbor(HexBlob(tx_cbor)).toCore();
+    } else {
+      // Use the generic transaction builder with wallet context for accurate fee calculation
+      txData.value = await buildCardanoTransaction({
+        certificates,
+        utxos: utxos.value,
+        epochParams: epochParams.value,
+        changeAddress: keys.value.payment[0].address,
+        tip: tip.value,
+        implicitCoin,
+        walletContext: {
+          keys: keys.value,
+          stakeAddress: loggedWallet.value.stakeAddress,
+          accountIndex: 0
+        }
+      });
+    }
 
     isDelegateDialogOpen.value = true;
   } catch (error) {

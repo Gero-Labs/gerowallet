@@ -15,6 +15,7 @@
 import axios, { AxiosError } from 'axios';
 import { Cardano } from '@cardano-sdk/core';
 import { Network } from '@/models/types';
+import { filterOutCollateralFromUTxOs } from '@/chrome/serialization';
 
 // ── Request / response types matching nexus's BuildTxRequest / BuildTxResponse ──
 
@@ -122,6 +123,46 @@ export interface BuildStakeRegistrationTxRequest {
   ttl?: number;
 }
 
+/**
+ * Stake-pool delegation build request. Matches nexus `BuildDelegationTxRequest`.
+ * Pool-only (emits a single StakeDelegation cert); set `includeStakeRegistration`
+ * to prepend a stake-key registration (deposit folded server-side). No vote cert —
+ * for the combined pool+vote first-delegation flow use BuildVoteDelegationTxRequest.
+ */
+export interface BuildDelegationTxRequest {
+  stakeAddress: string;
+  poolId: string;
+  changeAddress: string;
+  utxos?: NexusTxInput[];
+  senderAddress?: string;
+  network?: 'MAINNET' | 'PREPROD';
+  includeStakeRegistration?: boolean;
+  ttl?: number;
+}
+
+/**
+ * Vote-delegation build request. Matches nexus `BuildVoteDelegationTxRequest`.
+ * `drepId`: `drep_always_abstain` | `drep_always_no_confidence` | bech32 | hex.
+ * `poolId` present → combined pool+vote (StakeVoteDelegCert / StakeVoteRegDelegCert);
+ * `includeStakeRegistration` → prepend registration, deposit folded server-side.
+ * `compensationBasisPoints` adds the CIP-149 donation metadata.
+ * `certificateEncoding: 'separate'` emits Trezor-signable individual certs — leave
+ * unset (combined) for software/Ledger; Trezor stays on the client builder for now.
+ */
+export interface BuildVoteDelegationTxRequest {
+  stakeAddress: string;
+  drepId: string;
+  changeAddress: string;
+  poolId?: string;
+  utxos?: NexusTxInput[];
+  senderAddress?: string;
+  network?: 'MAINNET' | 'PREPROD';
+  includeStakeRegistration?: boolean;
+  compensationBasisPoints?: number;
+  certificateEncoding?: 'combined' | 'separate';
+  ttl?: number;
+}
+
 // ── Axios client ──
 
 const nexusTxClient = axios.create({
@@ -208,6 +249,64 @@ export function cardanoUtxoToNexusInput(utxo: Cardano.Utxo): NexusTxInput {
   };
 }
 
+/**
+ * Convert a Cardano.TxOut into the nexus TxOutputRequest shape, splitting each
+ * asset `unit` (policyId+assetName concat) into nexus's separate fields. Handles
+ * Map / array / plain-object asset shapes (chrome.storage round-trips flatten
+ * Map → Object). Shared by the send-like flows migrating off the client builder.
+ */
+export function txOutToNexusOutput(out: Cardano.TxOut): NexusTxOutput {
+  const assets: NexusTxAsset[] = [];
+  const rawAssets = out.value.assets as unknown;
+  if (rawAssets) {
+    const pushAsset = (unit: string, quantity: unknown) => {
+      const { policyId, assetName } = splitAssetUnit(unit);
+      assets.push({ policyId, assetName, quantity: String(quantity) });
+    };
+
+    if (rawAssets instanceof Map) {
+      rawAssets.forEach((quantity, unit) => pushAsset(String(unit), quantity));
+    } else if (Array.isArray(rawAssets)) {
+      for (const a of rawAssets as { unit: string; quantity: unknown }[]) {
+        pushAsset(String(a.unit), a.quantity);
+      }
+    } else if (typeof rawAssets === 'object') {
+      for (const [unit, quantity] of Object.entries(rawAssets as Record<string, unknown>)) {
+        pushAsset(unit, quantity);
+      }
+    }
+  }
+
+  return {
+    address: String(out.address),
+    lovelace: String(out.value.coins),
+    assets: assets.length > 0 ? assets : undefined,
+  };
+}
+
+/**
+ * Map wallet UTxOs to nexus inputs, excluding the reserved dApp-collateral UTxO so a
+ * server-built tx doesn't spend it — mirrors buildCardanoTransaction's `excludeCollateral`
+ * default (src/shared/utils/builder.ts). Nexus has no notion of a reserved collateral
+ * UTxO, so the filtering must happen here. Falls back to the unfiltered set when
+ * filtering would leave no inputs (e.g. the collateral UTxO is the only one).
+ *
+ * Pass `excludeCollateral: false` for a flow that must be free to spend the collateral
+ * UTxO (mirrors the builder's `excludeCollateral` param, e.g. CollateralTab's Set-Collateral).
+ */
+export function walletUtxosToNexusInputs(
+  utxos: Cardano.Utxo[],
+  collateral?: Cardano.Utxo | null,
+  excludeCollateral = true
+): NexusTxInput[] {
+  let list = utxos;
+  if (excludeCollateral && collateral) {
+    const filtered = filterOutCollateralFromUTxOs(utxos, collateral);
+    if (filtered.length > 0) list = filtered;
+  }
+  return list.map(cardanoUtxoToNexusInput);
+}
+
 // ── Public API ──
 
 export interface MaxAdaRequest {
@@ -292,6 +391,44 @@ export const nexusTxApi = {
     const url = nexusNetwork
       ? `/api/tx/build/stake-registration?network=${nexusNetwork}`
       : '/api/tx/build/stake-registration';
+    const { data } = await nexusTxClient.post<BuildTxResponse>(url, request);
+    return data;
+  },
+
+  /**
+   * Build an unsigned stake-pool delegation transaction via nexus
+   * (`/api/tx/build/delegation`). Pool-only (StakeDelegation) — use
+   * buildVoteDelegationTx when a vote (DRep) certificate must accompany it
+   * (e.g. first-time delegation that also abstains). Returns CBOR for signing.
+   */
+  async buildDelegationTx(
+    request: BuildDelegationTxRequest,
+    network?: string
+  ): Promise<BuildTxResponse> {
+    const nexusNetwork = toNexusNetwork(network);
+    const url = nexusNetwork
+      ? `/api/tx/build/delegation?network=${nexusNetwork}`
+      : '/api/tx/build/delegation';
+    const { data } = await nexusTxClient.post<BuildTxResponse>(url, request);
+    return data;
+  },
+
+  /**
+   * Build an unsigned vote-delegation transaction via nexus
+   * (`/api/tx/build/vote-delegation`). Server drives the exact Conway cert
+   * (VoteDelegCert / StakeVoteDelegCert / StakeVoteRegDelegCert / VoteRegDelegCert)
+   * from `poolId` + `includeStakeRegistration`; the deposit is folded server-side.
+   * Emits COMBINED certs by default — Trezor cannot sign those, so keep Trezor on
+   * the client builder. Returns CBOR for client signing.
+   */
+  async buildVoteDelegationTx(
+    request: BuildVoteDelegationTxRequest,
+    network?: string
+  ): Promise<BuildTxResponse> {
+    const nexusNetwork = toNexusNetwork(network);
+    const url = nexusNetwork
+      ? `/api/tx/build/vote-delegation?network=${nexusNetwork}`
+      : '/api/tx/build/vote-delegation';
     const { data } = await nexusTxClient.post<BuildTxResponse>(url, request);
     return data;
   },
