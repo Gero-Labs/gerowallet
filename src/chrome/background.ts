@@ -819,10 +819,41 @@ app.add(METHOD.getUtxos, async (request, sendResponse) => {
   }
 });
 
+/**
+ * The Nexus shared-pool collateral is Gero's own ADA, so only TRUSTED dApps may
+ * draw from it. A dApp qualifies only when its origin is BOTH (a) on Gero's
+ * curated allowlist — served by the feature-flag service (`collateralTrustedDapps`)
+ * and mirrored to chrome.storage.local for the background — AND (b) already
+ * connected/whitelisted by the user. Dev convenience: on a non-mainnet network,
+ * localhost origins pass the allowlist half so the preprod test harness works
+ * without touching the remote list (never applies on mainnet).
+ */
+async function isTrustedCollateralDapp(origin?: string): Promise<boolean> {
+  if (!origin) return false;
+  // (b) user must have connected/whitelisted the dApp.
+  if (!WalletStore.isWhitelisted(origin)) return false;
+  // (a) Gero-curated allowlist.
+  try {
+    const stored = await chrome.storage.local.get('featureFlags');
+    const list = (stored?.featureFlags as { collateralTrustedDapps?: unknown })?.collateralTrustedDapps;
+    if (Array.isArray(list) && list.some((e) => typeof e === 'string' && e.length > 0 && origin.indexOf(e) !== -1)) {
+      return true;
+    }
+  } catch (e) {
+    debugLog('[collateral] trusted-dapp allowlist read failed:', e);
+  }
+  // Dev-only fallback: localhost harness on a testnet network (never mainnet).
+  const wallet = WalletStore.state.loggedWallet;
+  const isMainnet = !!wallet && networks.resolveNetworkId(wallet.chain, wallet.network) === 1;
+  const isLocalDev = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+  return !isMainnet && isLocalDev;
+}
+
 app.add(METHOD.getCollateral, async (request, sendResponse) => {
   const storedUtxos = WalletStore.state.utxos;
   try {
-    const utxos: string[] = await getCollateral(request.data.params, storedUtxos as Cardano.Utxo[])
+    const allowNexusFallback = await isTrustedCollateralDapp(request.origin);
+    const utxos: string[] = await getCollateral(request.data.params, storedUtxos as Cardano.Utxo[], { allowNexusFallback })
     sendResponse({
       id: request.id,
       data: utxos,
@@ -3999,7 +4030,10 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
             const wcParams = wcRequest.params || {};
             // getCollateral is async (Pass-2 lends from the Nexus pool); it must
             // be awaited or the dApp receives a serialized pending Promise ({}).
-            const result = await getCollateral(wcParams, storedUtxos);
+            // WalletConnect dApp origins aren't resolved here, so the shared-pool
+            // fallback is disabled for WC in v1 (trusted-dApp gate can't be
+            // evaluated) — WC dApps still get the user's own collateral.
+            const result = await getCollateral(wcParams, storedUtxos, { allowNexusFallback: false });
             await wcService.respondSuccess(topic, id, result);
             return;
           }
