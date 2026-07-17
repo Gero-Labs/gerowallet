@@ -830,13 +830,29 @@ app.add(METHOD.getUtxos, async (request, sendResponse) => {
  */
 async function isTrustedCollateralDapp(origin?: string): Promise<boolean> {
   if (!origin) return false;
+  // Canonicalize to scheme+host+port. A gate on Gero's own ADA must match origins
+  // EXACTLY — never substring/startsWith/endsWith, which "https://app.minswap.org"
+  // would let "https://app.minswap.org.evil.com" (or "…minswap.org#@x") bypass.
+  let reqOrigin: string;
+  try {
+    reqOrigin = new URL(origin).origin;
+  } catch {
+    return false; // unparseable origin → untrusted
+  }
   // (b) user must have connected/whitelisted the dApp.
   if (!WalletStore.isWhitelisted(origin)) return false;
-  // (a) Gero-curated allowlist.
+  // (a) Gero-curated allowlist — entries are full origins, compared by exact equality.
   try {
     const stored = await chrome.storage.local.get('featureFlags');
     const list = (stored?.featureFlags as { collateralTrustedDapps?: unknown })?.collateralTrustedDapps;
-    if (Array.isArray(list) && list.some((e) => typeof e === 'string' && e.length > 0 && origin.indexOf(e) !== -1)) {
+    if (Array.isArray(list) && list.some((e) => {
+      if (typeof e !== 'string' || e.length === 0) return false;
+      try {
+        return new URL(e).origin === reqOrigin;
+      } catch {
+        return false; // malformed allowlist entry → ignore, never match
+      }
+    })) {
       return true;
     }
   } catch (e) {
@@ -845,7 +861,7 @@ async function isTrustedCollateralDapp(origin?: string): Promise<boolean> {
   // Dev-only fallback: localhost harness on a testnet network (never mainnet).
   const wallet = WalletStore.state.loggedWallet;
   const isMainnet = !!wallet && networks.resolveNetworkId(wallet.chain, wallet.network) === 1;
-  const isLocalDev = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+  const isLocalDev = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(reqOrigin);
   return !isMainnet && isLocalDev;
 }
 
