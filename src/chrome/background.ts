@@ -25,7 +25,7 @@ import { getDomain } from 'tldts';
 import { MessageTypes } from '@/models/MessageTypes';
 import { signInWithGoogle } from '@/chrome/auth';
 import { loadConfig, loadWallets } from '@/plugins/geroLoader';
-import WalletStore, { hydrateWalletStore, walletStore } from '@/stores/walletStore';
+import WalletStore, { hydrateWalletStore, matchesDappWhitelistEntry, walletStore } from '@/stores/walletStore';
 import { walletManager } from '@/services/walletManager.service';
 import { shouldAutoLock } from '@/services/autoLock';
 import { nexusCollateralApi } from '@/api/nexus-collateral-api';
@@ -749,7 +749,7 @@ interface WhitelistedEntry {
 
 async function isWhitelisted(origin: string): Promise<boolean> {
   const whitelisted: WhitelistedEntry[] = WalletStore.state.connectedDapps || [];
-  return !!whitelisted.find(el => el.domain && origin.indexOf(String(el.domain)) !== -1);
+  return whitelisted.some(el => el.domain && matchesDappWhitelistEntry(origin, String(el.domain)));
 }
 
 app.add(METHOD.getNetworkId, async (request, sendResponse) => {
