@@ -1,6 +1,9 @@
 <template>
   <div>
-    <div :class="['quick-actions-container', { 'compact': compact }]">
+    <!-- hideButtons removes the action row but keeps this component mounted:
+         it is the HOST for the quick-action dialogs (Buy/Receive/Swap/Perps),
+         which the empty-state FundingCard and PerkTeasers still open. -->
+    <div v-if="!hideButtons" :class="['quick-actions-container', { 'compact': compact }]">
       <div v-if="!isBuyDisabled" class="action-button-wrapper">
         <v-tooltip bottom :disabled="!compact" content-class="custom-tooltip">
           <template v-slot:activator="{ on, attrs }">
@@ -171,6 +174,7 @@ import { useQuickActionDialogs } from '@/shared/composables/useQuickActionDialog
 
 defineProps<{
   compact?: boolean;
+  hideButtons?: boolean;
 }>();
 
 const { loggedWallet } = toRefs(walletStore);
@@ -272,9 +276,13 @@ const isPerpetualsDisabled = computed(() => {
   align-items: center !important;
   position: relative;
   /* Buttons are flat inside the glass bar: a faint color tint + colored label,
-     no per-button frost or border (the container carries the glass now). */
+     no per-button frost or border (the container carries the glass now).
+     box-shadow:none kills Vuetify's default contained-button elevation, which
+     otherwise draws a raised frame — most visible on the end buttons (Buy/Sell,
+     Perps) and read as "weird borders". */
   background: transparent !important;
   border: none !important;
+  box-shadow: none !important;
   overflow: hidden;
   transition: background var(--g-dur-fast) ease;
 }

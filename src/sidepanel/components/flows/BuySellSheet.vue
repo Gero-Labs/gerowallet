@@ -10,7 +10,7 @@
             <div class="choice-label white--text font-weight-bold mt-2">
               {{ $t('wallet.buyADA') }}
             </div>
-            <div class="choice-desc text-caption grey--text mt-1">
+            <div class="choice-desc text-caption mt-1">
               {{ $t('wallet.buyADADescription') }}
             </div>
           </div>
@@ -19,7 +19,7 @@
             <div class="choice-label white--text font-weight-bold mt-2">
               {{ $t('wallet.sellADA') }}
             </div>
-            <div class="choice-desc text-caption grey--text mt-1">
+            <div class="choice-desc text-caption mt-1">
               {{ $t('wallet.sellADADescription') }}
             </div>
           </div>
@@ -214,7 +214,10 @@ watch(() => props.value, (open) => {
   justify-content: center;
   padding: 24px 16px;
   border-radius: var(--g-r-card);
-  background: rgba(255, 255, 255, 0.05);
+  /* Solid raised surface so the white "Buy/Sell ADA" label and description
+     always read at full contrast (was a 5%-white translucent tint that went
+     low-contrast over lighter backdrops). */
+  background: var(--g-raised);
   border: 1px solid var(--g-hairline-1);
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
@@ -237,6 +240,7 @@ watch(() => props.value, (open) => {
 .choice-desc {
   font-size: 11px !important;
   line-height: 1.3;
+  color: var(--g-text-2);
 }
 
 /* ── Step 2: Provider list ── */

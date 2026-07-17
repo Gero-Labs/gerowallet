@@ -19,6 +19,14 @@
 // Shielded txs cannot be split this way (notes are encrypted to the user's
 // Zswap key — only the wallet can see them). When shielded ships, the wallet
 // will own the entire pre-prove pipeline including the build step.
+//
+// `syncDustWalletAndBalanceFees` and `signUnshieldedSegments` (below) are
+// exported as standalone steps — not just inlined in
+// `balanceAndSignUnshieldedTransfer` — so `midnightShieldSwapBuilder.ts`
+// (WP-SH2, 2026-07-13) can reuse the identical DUST-sync and NightExternal-
+// signing pipelines for the unshielded half of a shield/unshield conversion,
+// instead of forking either. See
+// docs/plans/2026-07-13-midnight-shield-unshield.md section 0 and WP-SH2.
 
 import type * as ledger from '@midnight-ntwrk/ledger-v8';
 import type { MidnightNetworkEndpoints } from '@/chains/midnight/midnightConfig';
@@ -57,6 +65,21 @@ export interface BalanceAndSignUnshieldedTransferArgs {
    * caller can drive a real progress bar. Best-effort and throttled by the
    * builder; a throwing callback must not break the send (caller wraps it).
    */
+  readonly onDustSyncProgress?: (percent: number, detail: string) => void;
+}
+
+/**
+ * Sub-args for {@link syncDustWalletAndBalanceFees} — the DUST-secret-scoped
+ * subset of {@link BalanceAndSignUnshieldedTransferArgs} (no unshielded key,
+ * no unproven-tx hex — this function balances fees for whatever tx(s) the
+ * caller passes in).
+ */
+export interface SyncDustAndBalanceFeesArgs {
+  readonly sdkNetworkId: string;
+  readonly endpoints: MidnightNetworkEndpoints;
+  readonly dustSecretSeed: Uint8Array;
+  readonly ttl: Date;
+  readonly dustRegisteredAt?: Date;
   readonly onDustSyncProgress?: (percent: number, detail: string) => void;
 }
 
@@ -111,89 +134,32 @@ async function fetchDustBootstrapSnapshot(
 }
 
 /**
- * DUST-balance + sign the unproven unshielded-NIGHT tx that Nexus built.
- * Returns the SIGNED-but-UNPROVEN tx as a hex string ready for the sidecar's
- * prove+submit step.
+ * Sync the DUST wallet (cold init or warm restore, with stall-restart +
+ * periodic checkpointing) and balance fees for the given transaction(s),
+ * returning ONLY the DUST fee-balancing tx — the caller is responsible for
+ * `.merge()`-ing it into whatever it's paying for (see
+ * {@link balanceAndSignUnshieldedTransfer} for the canonical merge).
+ *
+ * Shared by `balanceAndSignUnshieldedTransfer` (plain unshielded NIGHT
+ * sends) and `midnightShieldSwapBuilder.ts` (shield/unshield conversions,
+ * WP-SH2, 2026-07-13) — both need the identical DUST-ledger sync behavior;
+ * do not fork this logic.
  */
-export async function balanceAndSignUnshieldedTransfer(
-  args: BalanceAndSignUnshieldedTransferArgs,
-): Promise<string> {
-  debugLog('🌙 midnight tx-builder: starting', {
-    network: args.sdkNetworkId,
-    unprovenBytes: args.unprovenTxHex.length / 2,
-  });
-
-  // Dynamic imports keep cold-start cheap if no one's sending NIGHT yet.
-  const [
-    { UnshieldedWallet, createKeystore },
-    { DustWallet },
-    ledgerMod,
-    abstractionsMod,
-  ] = await Promise.all([
-    import('@midnightntwrk/wallet-sdk-unshielded-wallet'),
+export async function syncDustWalletAndBalanceFees(
+  args: SyncDustAndBalanceFeesArgs,
+  txs: ledger.UnprovenTransaction[],
+): Promise<ledger.UnprovenTransaction> {
+  const [{ DustWallet }, ledgerMod] = await Promise.all([
     import('@midnightntwrk/wallet-sdk-dust-wallet'),
     import('@midnight-ntwrk/ledger-v8'),
-    import('@midnightntwrk/wallet-sdk-abstractions'),
   ]);
-  const { LedgerParameters, DustSecretKey, Transaction } = ledgerMod;
-  const { InMemoryTransactionHistoryStorage } = abstractionsMod;
+  const { LedgerParameters, DustSecretKey } = ledgerMod;
 
-  // Tx history schema namespace is re-exported from abstractions as
-  // `export * as TransactionHistoryStorage`. The schema we need is
-  // `TransactionHistoryCommonSchema` on that namespace.
-  const txHistoryNs = (abstractionsMod as unknown as {
-    TransactionHistoryStorage: { TransactionHistoryCommonSchema: unknown };
-  }).TransactionHistoryStorage;
-
-  let unshieldedWallet: Awaited<ReturnType<typeof unshieldedBuilderStart>> | undefined;
   let dustWallet: Awaited<ReturnType<typeof dustBuilderStart>> | undefined;
   let dustSk: ledger.DustSecretKey | undefined;
   let dustSubscription: { unsubscribe: () => void } | undefined;
 
   try {
-    // ── Deserialize Nexus's unproven tx ───────────────────────────
-    // Marker triple is `signature / pre-proof / pre-binding`, NOT
-    // `no-signature/...`. `UnshieldedOffer.new(inputs, outputs, sigs)` always
-    // returns `UnshieldedOffer<SignatureEnabled>` per the SDK type signature
-    // (ledger-v8.d.ts:1970) — the empty `[]` signatures argument doesn't
-    // demote the marker. A `'no-signature'` deserialization here would
-    // misinterpret the bytes and the SDK then rejects on addSignature with
-    // the cryptic "Invalid signature value" string out of the ledger WASM.
-    const TxAny = Transaction as unknown as {
-      deserialize: (s: string, p: string, b: string, raw: Uint8Array) => ledger.UnprovenTransaction;
-    };
-    const unprovenBytes = hexToBytes(args.unprovenTxHex);
-    const unprovenTransfer = TxAny.deserialize(
-      'signature', 'pre-proof', 'pre-binding', unprovenBytes,
-    );
-    debugLog('🌙 unproven tx deserialized', { bytes: unprovenBytes.length });
-
-    // ── UnshieldedWallet — signing only, no sync ──────────────────
-    // signUnprovenTransaction walks the tx's segments directly; it doesn't
-    // read UTxO state. start() is enough; we skip waitForSyncedState.
-    const keystore = createKeystore(args.unshieldedSecretKey, args.sdkNetworkId);
-    const publicKey = {
-      publicKey: keystore.getPublicKey(),
-      addressHex: keystore.getAddress(),
-      address: keystore.getBech32Address().toString(),
-    };
-    const txHistoryStorage = new InMemoryTransactionHistoryStorage(
-      txHistoryNs.TransactionHistoryCommonSchema as ConstructorParameters<
-        typeof InMemoryTransactionHistoryStorage
-      >[0],
-    );
-    const unshieldedBuilder = UnshieldedWallet({
-      networkId: args.sdkNetworkId as Parameters<typeof UnshieldedWallet>[0]['networkId'],
-      indexerClientConnection: {
-        indexerHttpUrl: args.endpoints.publicIndexerUrl,
-        indexerWsUrl: args.endpoints.publicIndexerWsUrl,
-      },
-      txHistoryStorage: txHistoryStorage as unknown as Parameters<
-        typeof UnshieldedWallet
-      >[0]['txHistoryStorage'],
-    });
-    unshieldedWallet = await unshieldedBuilderStart(unshieldedBuilder, publicKey);
-
     // ── DustWallet — must sync; balanceTransactions reads UTxO state ──
     dustSk = DustSecretKey.fromSeed(args.dustSecretSeed);
     debugLog('🌙 dust sync: instrumentation BUILD=v6-stall-restart');
@@ -484,49 +450,158 @@ export async function balanceAndSignUnshieldedTransfer(
     await persistCheckpoint('synced');
 
     // ── Add DUST fee inputs (the step that needs the dust secret) ─
-    // `dust.balanceTransactions` does NOT mutate or wrap the input tx — it
-    // returns a SEPARATE dust-only fee tx with its own intent containing the
-    // DustActions. The caller is responsible for merging that fee tx into the
-    // unshielded transfer; see wallet-sdk-facade/dist/index.js:280-283 for
-    // the canonical pattern:
-    //   feeBalancingTx = dust.balanceTransactions(dustSk, [transferTx], ttl)
-    //   balancedTx     = transferTx.merge(feeBalancingTx)
+    // `dust.balanceTransactions` does NOT mutate or wrap the input tx(s) —
+    // it returns a SEPARATE dust-only fee tx with its own intent containing
+    // the DustActions. The caller is responsible for merging that fee tx
+    // into whatever it's paying for; see wallet-sdk-facade/dist/index.js:
+    // 280-283 for the canonical pattern:
+    //   feeBalancingTx = dust.balanceTransactions(dustSk, [tx], ttl)
+    //   balancedTx     = tx.merge(feeBalancingTx)
     // Without the merge, signUnprovenTransaction signs the fee-only tx (no
     // unshielded inputs in scope), the chain receives an unbalanced tx and
     // rejects with "Invalid signature value" inside the ledger WASM.
-    const feeBalancingTx = await dustWallet.balanceTransactions(
-      dustSk,
-      [unprovenTransfer],
-      args.ttl,
-    );
+    const feeBalancingTx = await dustWallet.balanceTransactions(dustSk, txs, args.ttl);
     debugLog('🌙 dust fee tx built');
-    const mergedTx = (unprovenTransfer as unknown as {
-      merge: (other: ledger.UnprovenTransaction) => ledger.UnprovenTransaction;
-    }).merge(feeBalancingTx as ledger.UnprovenTransaction);
-    debugLog('🌙 transfer + dust fee merged');
-
-    // ── Sign each unshielded input with the NightExternal key ─────
-    const signSegment = (data: Uint8Array): ledger.Signature =>
-      keystore.signData(data);
-    const signedTx = await unshieldedWallet.signUnprovenTransaction(
-      mergedTx,
-      signSegment,
-    );
-    debugLog('🌙 transfer signed');
-
-    const signedBytes = (signedTx as unknown as { serialize: () => Uint8Array }).serialize();
-    const signedTxHex = Buffer.from(signedBytes).toString('hex');
-    debugLog('🌙 transfer serialized', { bytes: signedBytes.length });
-    return signedTxHex;
+    return feeBalancingTx as ledger.UnprovenTransaction;
   } finally {
     try { dustSubscription?.unsubscribe(); } catch { /* swallow */ }
-    try { await unshieldedWallet?.stop(); } catch { /* swallow */ }
     try { await dustWallet?.stop(); } catch { /* swallow */ }
     try { (dustSk as unknown as { clear?: () => void } | undefined)?.clear?.(); } catch { /* swallow */ }
   }
 }
 
-function hexToBytes(hex: string): Uint8Array {
+/**
+ * Sign each unshielded-role segment of `tx` with the sender's NightExternal
+ * key (BIP-340 via `keystore.signData`), returning the signed tx.
+ *
+ * No UTxO sync needed: `signUnprovenTransaction` walks the tx's segments
+ * directly (no UTxO state read) — only `start()` is required to make the
+ * SDK's signing capability available, same as the plain-send path this was
+ * extracted from.
+ *
+ * Shared by `balanceAndSignUnshieldedTransfer` (plain unshielded NIGHT
+ * sends) and `midnightShieldSwapBuilder.ts` (shield/unshield conversions,
+ * WP-SH2, 2026-07-13) — both need the identical NightExternal segment-
+ * signing pipeline; do not fork it.
+ */
+export async function signUnshieldedSegments(
+  sdkNetworkId: string,
+  endpoints: MidnightNetworkEndpoints,
+  unshieldedSecretKey: Uint8Array,
+  tx: ledger.UnprovenTransaction,
+): Promise<ledger.UnprovenTransaction> {
+  const [{ UnshieldedWallet, createKeystore }, abstractionsMod] = await Promise.all([
+    import('@midnightntwrk/wallet-sdk-unshielded-wallet'),
+    import('@midnightntwrk/wallet-sdk-abstractions'),
+  ]);
+
+  // Tx history schema namespace is re-exported from abstractions as
+  // `export * as TransactionHistoryStorage`. The schema we need is
+  // `TransactionHistoryCommonSchema` on that namespace.
+  const { InMemoryTransactionHistoryStorage } = abstractionsMod;
+  const txHistoryNs = (abstractionsMod as unknown as {
+    TransactionHistoryStorage: { TransactionHistoryCommonSchema: unknown };
+  }).TransactionHistoryStorage;
+
+  // signUnprovenTransaction walks the tx's segments directly; it doesn't
+  // read UTxO state. start() is enough; we skip waitForSyncedState.
+  const keystore = createKeystore(unshieldedSecretKey, sdkNetworkId);
+  const publicKey = {
+    publicKey: keystore.getPublicKey(),
+    addressHex: keystore.getAddress(),
+    address: keystore.getBech32Address().toString(),
+  };
+  const txHistoryStorage = new InMemoryTransactionHistoryStorage(
+    txHistoryNs.TransactionHistoryCommonSchema as ConstructorParameters<
+      typeof InMemoryTransactionHistoryStorage
+    >[0],
+  );
+  const unshieldedBuilder = UnshieldedWallet({
+    networkId: sdkNetworkId as Parameters<typeof UnshieldedWallet>[0]['networkId'],
+    indexerClientConnection: {
+      indexerHttpUrl: endpoints.publicIndexerUrl,
+      indexerWsUrl: endpoints.publicIndexerWsUrl,
+    },
+    txHistoryStorage: txHistoryStorage as unknown as Parameters<
+      typeof UnshieldedWallet
+    >[0]['txHistoryStorage'],
+  });
+  const unshieldedWallet = await unshieldedBuilderStart(unshieldedBuilder, publicKey);
+
+  try {
+    const signSegment = (data: Uint8Array): ledger.Signature =>
+      keystore.signData(data);
+    const signedTx = await unshieldedWallet.signUnprovenTransaction(tx, signSegment);
+    debugLog('🌙 unshielded segments signed');
+    return signedTx;
+  } finally {
+    try { await unshieldedWallet.stop(); } catch { /* swallow */ }
+  }
+}
+
+/**
+ * DUST-balance + sign the unproven unshielded-NIGHT tx that Nexus built.
+ * Returns the SIGNED-but-UNPROVEN tx as a hex string ready for the sidecar's
+ * prove+submit step.
+ */
+export async function balanceAndSignUnshieldedTransfer(
+  args: BalanceAndSignUnshieldedTransferArgs,
+): Promise<string> {
+  debugLog('🌙 midnight tx-builder: starting', {
+    network: args.sdkNetworkId,
+    unprovenBytes: args.unprovenTxHex.length / 2,
+  });
+
+  const { Transaction } = await import('@midnight-ntwrk/ledger-v8');
+
+  // ── Deserialize Nexus's unproven tx ───────────────────────────
+  // Marker triple is `signature / pre-proof / pre-binding`, NOT
+  // `no-signature/...`. `UnshieldedOffer.new(inputs, outputs, sigs)` always
+  // returns `UnshieldedOffer<SignatureEnabled>` per the SDK type signature
+  // (ledger-v8.d.ts:1970) — the empty `[]` signatures argument doesn't
+  // demote the marker. A `'no-signature'` deserialization here would
+  // misinterpret the bytes and the SDK then rejects on addSignature with
+  // the cryptic "Invalid signature value" string out of the ledger WASM.
+  const TxAny = Transaction as unknown as {
+    deserialize: (s: string, p: string, b: string, raw: Uint8Array) => ledger.UnprovenTransaction;
+  };
+  const unprovenBytes = hexToBytes(args.unprovenTxHex);
+  const unprovenTransfer = TxAny.deserialize(
+    'signature', 'pre-proof', 'pre-binding', unprovenBytes,
+  );
+  debugLog('🌙 unproven tx deserialized', { bytes: unprovenBytes.length });
+
+  // ── DUST-balance, then merge the fee tx into the transfer ─────
+  const feeBalancingTx = await syncDustWalletAndBalanceFees(
+    {
+      sdkNetworkId: args.sdkNetworkId,
+      endpoints: args.endpoints,
+      dustSecretSeed: args.dustSecretSeed,
+      ttl: args.ttl,
+      dustRegisteredAt: args.dustRegisteredAt,
+      onDustSyncProgress: args.onDustSyncProgress,
+    },
+    [unprovenTransfer],
+  );
+  const mergedTx = (unprovenTransfer as unknown as {
+    merge: (other: ledger.UnprovenTransaction) => ledger.UnprovenTransaction;
+  }).merge(feeBalancingTx);
+  debugLog('🌙 transfer + dust fee merged');
+
+  // ── Sign each unshielded input with the NightExternal key ─────
+  const signedTx = await signUnshieldedSegments(
+    args.sdkNetworkId, args.endpoints, args.unshieldedSecretKey, mergedTx,
+  );
+  debugLog('🌙 transfer signed');
+
+  const signedBytes = (signedTx as unknown as { serialize: () => Uint8Array }).serialize();
+  const signedTxHex = Buffer.from(signedBytes).toString('hex');
+  debugLog('🌙 transfer serialized', { bytes: signedBytes.length });
+  return signedTxHex;
+}
+
+/** Exported so `midnightShieldSwapBuilder.ts` can decode Nexus's shield-swap response the same way, instead of re-declaring an equivalent helper. */
+export function hexToBytes(hex: string): Uint8Array {
   const clean = hex.startsWith('0x') ? hex.slice(2) : hex;
   if (clean.length === 0 || clean.length % 2 !== 0 || !/^[0-9a-fA-F]+$/.test(clean)) {
     throw new Error('unprovenTxHex is not valid hex');

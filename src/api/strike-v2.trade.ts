@@ -1,6 +1,7 @@
 // Strike Finance v2 API — Trade Module (orders, leverage, margin)
 
 import { strikeClient } from './strike-v2.client';
+import { normalizeOrder } from './strike-v2.normalize';
 import type {
   CreateOrderRequest,
   CreateOrderResponse,
@@ -39,7 +40,8 @@ export const strikeTradeApi = {
     const { data } = await strikeClient.get('/v2/order', {
       params: { symbol, order_id: orderId, client_order_id: clientOrderId },
     });
-    return data;
+    // Wire casing drifts from the docs (see strike-v2.normalize.ts).
+    return normalizeOrder(data ?? {});
   },
 
   async cancelOrder(req: CancelOrderRequest): Promise<CancelOrderResponse> {
@@ -56,7 +58,14 @@ export const strikeTradeApi = {
     const { data } = await strikeClient.get('/v2/openOrders', {
       params: { symbol, vault_id: vaultId },
     });
-    return data;
+    // Tolerate both a bare array and the documented { orders, count } envelope,
+    // and normalize each entry (wire casing drifts from the docs).
+    const raw: unknown[] = Array.isArray(data)
+      ? data
+      : Array.isArray(data?.orders) ? data.orders : [];
+    const orders = raw.map((o) => normalizeOrder((o ?? {}) as Record<string, unknown>));
+    const count = typeof data?.count === 'number' ? data.count : orders.length;
+    return { orders, count };
   },
 
   async createStrategyOrder(req: CreateStrategyOrderRequest): Promise<CreateStrategyOrderResponse> {

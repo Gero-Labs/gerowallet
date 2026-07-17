@@ -53,16 +53,22 @@
             <div v-if="!started" key="intro" class="right-panel">
               <div class="welcome-intro">
                 <NoWalletsWelcomeCard />
-                <v-btn
-                  class="geroButton get-started-btn"
-                  rounded
-                  x-large
-                  depressed
-                  @click="started = true"
-                >
-                  {{ $t('welcome.getStarted') }}
-                  <v-icon right>mdi-arrow-right</v-icon>
-                </v-btn>
+                <!-- Positioning lives on the wrapper, not the button: the global
+                     `.v-btn:active { transform: translateY(1px) }` press feedback
+                     would otherwise replace the centering transform on press,
+                     shifting the button out from under the cursor. -->
+                <div class="get-started-btn-wrap">
+                  <v-btn
+                    class="geroButton get-started-btn"
+                    rounded
+                    x-large
+                    depressed
+                    @click="started = true"
+                  >
+                    {{ $t('welcome.getStarted') }}
+                    <v-icon right>mdi-arrow-right</v-icon>
+                  </v-btn>
+                </div>
               </div>
             </div>
 
@@ -196,17 +202,20 @@ const onOnboardingNetwork = (n: NetworkInfo): void => {
   margin: 0 auto;
 }
 
-.get-started-btn {
+.get-started-btn-wrap {
   position: absolute;
   left: 50%;
   bottom: 0;
   transform: translate(-50%, 50%); /* straddle the card's bottom edge */
+  z-index: 5;
+}
+
+.get-started-btn {
   min-width: 176px;
   height: 44px !important;
   font-size: 14px;
   font-weight: 700;
   text-transform: none;
-  z-index: 5;
 }
 
 /* Reveal transition: only the intro fades OUT. The onboarding card mounts fully

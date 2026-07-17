@@ -83,6 +83,12 @@ function buildCSP(dev: boolean): string {
     // (https://rpc.preview.midnight.network, etc).
     'https://*.midnight.network',
     'wss://*.midnight.network',
+    // Arkhia zkPaaS (hosted Midnight proof server) — extension-page health
+    // checks + BG proving fetches. Wildcard covers the starter tier plus any
+    // other plan subdomain a user's project lands on; .network is Arkhia's
+    // staging domain (both appear in the zkPaaS guide's endpoint listings).
+    'https://*.arkhia.io',
+    'https://*.arkhia.network',
     // Gero Copilot agent (direct-to-Fluxpoint dev fallback)
     'https://api-v3.fluxpointstudios.com',
     // Dev-only
@@ -95,7 +101,7 @@ function buildCSP(dev: boolean): string {
           'ws://*.gerowallet.io',
           'https://fastly.jsdelivr.net/npm/@sec-ant/zxing-wasm@2.1.5/dist/reader/zxing_reader.wasm',
         ]
-      : ['ws://127.0.0.1:*']),
+      : ['ws://127.0.0.1:*', 'http://localhost:6300', 'http://127.0.0.1:6300']),
     // SPO Node Monitor (Cloudflare Tunnel)
     'https://*.trycloudflare.com',
     'data:',

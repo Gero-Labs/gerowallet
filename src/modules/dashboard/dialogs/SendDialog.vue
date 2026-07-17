@@ -359,15 +359,18 @@ const {
 
 const tokens = computed(() => {
   if (resolvedAssets.value) {
-    const tokenList = (Object.values(resolvedAssets.value) as (Token & { metadata: { name: string; ticker: string; decimals: number }; img: string })[]).map(token => {
+    const tokenList = (Object.values(resolvedAssets.value) as (Token & { metadata?: { name: string; ticker: string; decimals: number } | null; name?: string; img: string })[]).map(token => {
+      // metadata is null for fungible tokens without registered off-chain
+      // registry metadata (common for new/community tokens). Fall back to the
+      // resolver's top-level name and 0 decimals rather than dereferencing null.
       return {
         ...token,
-        name: token.metadata.name,
-        ticker: token.metadata.ticker,
+        name: token.metadata?.name ?? token.name,
+        ticker: token.metadata?.ticker ?? token.name,
         img: token.img,
         quantity: "0",
         balance: token.quantity,
-        decimals: token.metadata.decimals,
+        decimals: token.metadata?.decimals ?? 0,
         unit: token.unit,
         verified: token.verified
       }

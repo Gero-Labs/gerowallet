@@ -102,6 +102,11 @@ export function useHoldingsValuation() {
         ticker: marketToken?.ticker || token.metadata?.ticker || (isNativeToken ? nativeCurrencyTicker.value : ''),
         img: marketToken?.img || (token as { img?: string }).img || '',
         verified: marketToken?.verified ?? dhToken?.verified ?? isNativeToken,
+        // Graduated snek.fun tokens are unverified but legit — carry the market
+        // flag through so the verified-only filter exempts them and the snek
+        // badge renders (mirrors the market list). Missing here = held snek
+        // tokens silently stripped by verified-only.
+        isSnekFun: marketToken?.isSnekFun ?? false,
         price: priceUsd,
         priceAda,
         priceEur: marketToken?.priceEur ?? 0,

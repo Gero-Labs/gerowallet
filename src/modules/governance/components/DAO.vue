@@ -5,7 +5,7 @@
         <v-card class="transparent" flat>
           <v-card-text class="px-2">
             <!-- ═══ YOUR STATUS BAR ═══ -->
-            <v-card outlined flat class="liquid-glass pa-0 mb-4">
+            <v-card outlined flat class="glass-panel pa-0 mb-4">
               <div class="d-flex align-center flex-wrap pa-3" style="gap: 12px">
                 <!-- Membership Status -->
                 <div class="d-flex align-center">
@@ -93,7 +93,7 @@
 
 
             <!-- ═══ Member Growth + Voting Power ═══ -->
-            <v-card outlined flat class="liquid-glass pa-4 mb-4">
+            <v-card outlined flat class="glass-panel pa-4 mb-4">
                   <div class="d-flex align-center mb-2">
                     <v-icon color="primary" class="mr-2" small>mdi-chart-line</v-icon>
                     <span class="text-subtitle-2 font-weight-semibold white--text">{{ $t('governance.memberGrowth') }}</span>
@@ -107,7 +107,7 @@
             <!-- ═══ GOVERNANCE DETAILS \u2014 Collapsible Cards ═══ -->
             <div class="mb-4">
               <!-- About & How It Works -->
-              <v-card flat class="dao-collapsible mb-2" @click="toggleSection('about')">
+              <v-card flat class="dao-collapsible glass-panel mb-2" @click="toggleSection('about')">
                 <div class="d-flex align-center py-3 px-4 dao-collapsible-header">
                   <v-icon color="primary" class="mr-2" small>mdi-information-outline</v-icon>
                   <span class="text-subtitle-2 font-weight-semibold white--text flex-grow-1">
@@ -118,7 +118,7 @@
               </v-card>
               <v-expand-transition>
                 <div v-show="expandedSections.about">
-                  <div class="dao-collapsible-body px-4 pb-4 pt-2">
+                  <div class="dao-collapsible-body glass-panel px-4 pb-4 pt-2">
                     <div class="text-body-2 grey--text text--lighten-1 mb-4 dao-html-content" style="line-height: 1.6; white-space: normal; word-break: break-word" v-html="daoDescription" />
                     <v-row no-gutters>
                       <v-col v-for="pillar in pillars" :key="pillar.icon" cols="12" sm="6" class="pa-2">
@@ -138,7 +138,7 @@
               </v-expand-transition>
 
               <!-- Governance Mechanics -->
-              <v-card flat class="dao-collapsible mb-2" @click="toggleSection('mechanics')">
+              <v-card flat class="dao-collapsible glass-panel mb-2" @click="toggleSection('mechanics')">
                 <div class="d-flex align-center py-3 px-4 dao-collapsible-header">
                   <v-icon color="primary" class="mr-2" small>mdi-cog-outline</v-icon>
                   <span class="text-subtitle-2 font-weight-semibold white--text flex-grow-1">
@@ -149,7 +149,7 @@
               </v-card>
               <v-expand-transition>
                 <div v-show="expandedSections.mechanics">
-                  <div class="dao-collapsible-body px-4 pb-4 pt-2">
+                  <div class="dao-collapsible-body glass-panel px-4 pb-4 pt-2">
                     <div class="text-caption grey--text text--lighten-1 mb-3" style="line-height: 1.5; white-space: normal; word-break: break-word">
                       {{ $t('governance.mechanicsDescription') }}
                     </div>
@@ -176,7 +176,7 @@
               </v-expand-transition>
 
               <!-- Action Permissions -->
-              <v-card flat class="dao-collapsible mb-2" @click="toggleSection('permissions')">
+              <v-card flat class="dao-collapsible glass-panel mb-2" @click="toggleSection('permissions')">
                 <div class="d-flex align-center py-3 px-4 dao-collapsible-header">
                   <v-icon color="primary" class="mr-2" small>mdi-shield-key</v-icon>
                   <span class="text-subtitle-2 font-weight-semibold white--text flex-grow-1">
@@ -187,7 +187,7 @@
               </v-card>
               <v-expand-transition>
                 <div v-show="expandedSections.permissions">
-                  <div class="dao-collapsible-body px-4 pb-4 pt-2">
+                  <div class="dao-collapsible-body glass-panel px-4 pb-4 pt-2">
                     <v-simple-table dense class="transparent dao-table">
                       <template v-slot:default>
                         <thead>
@@ -221,7 +221,7 @@
               </v-expand-transition>
 
               <!-- Getting Involved & Tokenomics -->
-              <v-card flat class="dao-collapsible mb-2" @click="toggleSection('involved')">
+              <v-card flat class="dao-collapsible glass-panel mb-2" @click="toggleSection('involved')">
                 <div class="d-flex align-center py-3 px-4 dao-collapsible-header">
                   <v-icon color="primary" class="mr-2" small>mdi-rocket-launch</v-icon>
                   <span class="text-subtitle-2 font-weight-semibold white--text flex-grow-1">
@@ -232,7 +232,7 @@
               </v-card>
               <v-expand-transition>
                 <div v-show="expandedSections.involved">
-                  <div class="dao-collapsible-body px-4 pb-4 pt-2">
+                  <div class="dao-collapsible-body glass-panel px-4 pb-4 pt-2">
                     <div v-for="(step, i) in gettingStarted" :key="i" class="d-flex align-start mb-2">
                       <v-avatar size="20" color="primary" class="mr-2 mt-1 flex-shrink-0">
                         <span class="white--text" style="font-size: 11px; font-weight: 700">{{ i + 1 }}</span>
@@ -710,10 +710,9 @@ onMounted(async () => {
 
 <!-- Unscoped for Vuetify child selectors -->
 <style>
+/* Surfaces come from the shared .glass-panel material; only behavior and the
+   header/body join geometry stay local. */
 .dao-collapsible {
-  background-color: var(--g-surface) !important;
-  border: 1px solid var(--g-hairline-2) !important;
-  border-radius: var(--g-r-card) !important;
   cursor: pointer;
 }
 .dao-collapsible-header:hover {
@@ -721,8 +720,6 @@ onMounted(async () => {
   border-radius: var(--g-r-card);
 }
 .dao-collapsible-body {
-  background-color: var(--g-raised);
-  border: 1px solid var(--g-hairline-1);
   border-top: none;
   border-radius: 0 0 var(--g-r-card) var(--g-r-card);
   margin-top: -4px;

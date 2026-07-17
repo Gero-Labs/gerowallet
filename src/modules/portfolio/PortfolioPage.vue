@@ -15,26 +15,32 @@
         </v-col>
       </v-row>
 
-      <!-- DUST battery: at-a-glance fee-capacity gauge (the Lace/1AM pattern).
-           Live-ticks via useMidnightDustLive; unregistered state opens the
-           same DUST registration dialog as the header button. -->
+      <!-- DUST battery + Proof Server: two at-a-glance status widgets,
+           50/50. DUST live-ticks via useMidnightDustLive; unregistered state
+           opens the same DUST registration dialog as the header button. The
+           proof-server widget shares its mode/health state with the full
+           /proof-server page via useMidnightProofServer (never a separate
+           copy - see that composable's header comment). -->
       <v-row no-gutters>
-        <v-col cols="12" class="pa-2">
+        <v-col cols="12" sm="6" class="pa-2">
           <MidnightDustGauge @register="dustRegistrationOpen = true" />
+        </v-col>
+        <v-col cols="12" sm="6" class="pa-2">
+          <MidnightProofServerWidget />
         </v-col>
       </v-row>
 
-      <!-- Holdings table: same liquid-glass shell + chip bar pattern as Cardano. -->
+      <!-- Holdings table: same glass-panel shell + chip bar pattern as Cardano. -->
       <v-row no-gutters>
         <v-col cols="12" class="pa-2">
-          <v-card flat class="liquid-glass holdings-table-card">
+          <v-card flat class="glass-panel holdings-table-card">
             <!-- Filter chip bar mirrors Cardano. Holdings is the only meaningful
                  view for Midnight today; Collectibles/Market/Watchlist are
                  surfaced as disabled-state chips so the layout stays uniform. -->
             <div class="filter-toolbar d-flex align-center px-3 py-1" style="gap: 6px;">
               <div class="filter-chip-bar d-flex align-center" style="gap: 4px;">
                 <v-chip small class="geroButton flex-shrink-0">
-                  <v-icon x-small class="mr-1" color="black">mdi-wallet-outline</v-icon>
+                  <v-icon x-small class="mr-1" color="var(--g-on-grad)">mdi-wallet-outline</v-icon>
                   {{ $t('portfolio.holdings') }}
                 </v-chip>
                 <v-chip small outlined disabled class="flex-shrink-0">
@@ -69,8 +75,10 @@
       />
     </template>
 
-    <!-- Empty state for wallets with no tokens -->
-    <template v-else-if="isWalletEmpty">
+    <!-- Empty state for wallets with no tokens. Mainnet Cardano skips this
+         page: it gets the market-first empty mode inside the main view below
+         (spec: docs/superpowers/specs/2026-07-15-market-first-empty-state-design.md). -->
+    <template v-else-if="isWalletEmpty && !isMainnetCardano">
       <v-row no-gutters>
         <v-col cols="12" class="pa-2">
           <EmptyStateHero
@@ -89,8 +97,36 @@
 
     <!-- Main unified portfolio + market view -->
     <template v-else>
-      <!-- Portfolio Chart (always visible) -->
-      <v-row no-gutters class="hero-row">
+      <!-- Empty mainnet wallet: market-first hero. The ADA price chart takes
+           the portfolio chart's slot and the funding CTAs take the
+           transactions slot; the live market below is the page content. -->
+      <template v-if="isEmptyMainnet">
+        <!-- Backup rides in the hero row as a card (not a banner), LEFT of
+             the chart: chart at half width while the reminder is pending,
+             full width after. -->
+        <v-row no-gutters class="hero-row">
+          <v-col v-if="shouldBackup" cols="12" xl="3" lg="3" md="4" class="pa-2 hero-tx-col">
+            <BackupCard @backup="handleBackupWallet()" />
+          </v-col>
+          <v-col cols="12" :xl="shouldBackup ? 6 : 9" :lg="shouldBackup ? 6 : 9" :md="shouldBackup ? 4 : 8" class="pa-2 hero-chart-col">
+            <AdaPriceHeroCard />
+          </v-col>
+          <!-- Unlike RecentTransactionsCard this stays visible on small
+               screens: funding is the one action an empty wallet has. -->
+          <v-col cols="12" xl="3" lg="3" md="4" class="pa-2 hero-tx-col">
+            <FundingCard @buy="openBuyDialog()" @receive="openReceiveDialog()" />
+          </v-col>
+        </v-row>
+        <!-- What funding unlocks: swap / staking / cashback / card / perps -->
+        <v-row no-gutters>
+          <v-col cols="12" class="pa-2">
+            <PerkTeasers @swap="openSwapDialog()" @perps="openDialog('PERPETUALS')" />
+          </v-col>
+        </v-row>
+      </template>
+
+      <!-- Portfolio Chart (funded wallets) -->
+      <v-row v-else no-gutters class="hero-row">
         <v-col cols="12" xl="9" lg="9" md="8" class="pa-2 hero-chart-col">
           <PortfolioChart
             :chart-data="computeChartData.adaData"
@@ -126,10 +162,11 @@
         </v-col>
       </v-row>
 
+
       <!-- Filter Chip Bar + Table -->
       <v-row no-gutters>
         <v-col cols="12" class="pa-2">
-          <v-card flat class="liquid-glass holdings-table-card">
+          <v-card flat class="glass-panel holdings-table-card">
             <!-- Filter chips + search + filter menu — single row -->
             <div class="filter-toolbar d-flex align-center px-3" style="gap: 6px; padding-top: 6px; padding-bottom: 6px;">
               <!-- Category chips (scrollable, collapse to icons at small widths) -->
@@ -283,6 +320,7 @@
               :loading="isMainnetCardano && marketLoading"
               :pnl-loading="isMainnetCardano && pnlLoading"
               @token-click="openToken"
+              @dust-setup="cnightDialogOpen = true"
             />
 
             <!-- Collectibles: Table view (default) -->
@@ -313,6 +351,7 @@
           :token="selectedToken"
           @close="panelOpen = false"
           @swap="openSwap"
+          @dust-setup="cnightDialogOpen = true"
         />
       </div>
 
@@ -324,6 +363,9 @@
 
       <!-- Delegate Dialog -->
       <DelegateDialog :isOpen="isDelegateDialogOpen" :pool="selectedPool" :tx="delegateTxData" @close="closeDelegateDialog" />
+
+      <!-- cNIGHT → DUST registration -->
+      <CnightDustRegistrationDialog :isOpen="cnightDialogOpen" @close="cnightDialogOpen = false" />
     </template>
   </v-layout>
 </template>
@@ -349,9 +391,14 @@ import { isNewUser as checkNewUser } from '@/modules/dashboard/utils/emptyStateC
 import PortfolioChart from '@/modules/dashboard/components/PortfolioChart.vue';
 import RecentTransactionsCard from '@/modules/dashboard/components/RecentTransactionsCard.vue';
 import EmptyStateHero from '@/modules/dashboard/components/EmptyStateHero.vue';
+import BackupCard from '@/modules/portfolio/components/BackupCard.vue';
+import AdaPriceHeroCard from '@/modules/portfolio/components/AdaPriceHeroCard.vue';
+import FundingCard from '@/modules/portfolio/components/FundingCard.vue';
+import PerkTeasers from '@/modules/portfolio/components/PerkTeasers.vue';
 import MidnightPortfolioChart from '@/modules/dashboard/components/MidnightPortfolioChart.vue';
 import MidnightTransactionsCard from '@/modules/dashboard/components/MidnightTransactionsCard.vue';
 import MidnightDustGauge from '@/modules/dashboard/components/MidnightDustGauge.vue';
+import MidnightProofServerWidget from '@/modules/dashboard/components/MidnightProofServerWidget.vue';
 import MidnightHoldingsTable from '@/modules/dashboard/components/MidnightHoldingsTable.vue';
 import DustRegistrationDialog from '@/modules/dashboard/dialogs/DustRegistrationDialog.vue';
 import MarketTokenTable from '@/modules/market/components/MarketTokenTable.vue';
@@ -363,6 +410,7 @@ import TokensDialog from '@/modules/assets/dialogs/TokensDialog.vue';
 import SwapDialog from '@/modules/dashboard/dialogs/SwapDialog.vue';
 import WithdrawalDialog from '@/modules/staking/dialogs/WithdrawalDialog.vue';
 import DelegateDialog from '@/modules/staking/dialogs/DelegateDialog.vue';
+import CnightDustRegistrationDialog from '@/modules/dashboard/dialogs/CnightDustRegistrationDialog.vue';
 import snackbar from '@/plugins/snackbar';
 
 const { t } = useTranslation();
@@ -370,7 +418,7 @@ const instance = getCurrentInstance();
 
 // ── Composables ───────────────────────────────────────────────────────────────
 
-const { openBuyDialog, openReceiveDialog } = useQuickActionDialogs();
+const { openBuyDialog, openReceiveDialog, openSwapDialog, openDialog } = useQuickActionDialogs();
 const {
   allTokens,
   snekTokens,
@@ -433,6 +481,12 @@ const isMainnetCardano = computed(() =>
   loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET
 );
 
+// ── cNIGHT → DUST registration (Path B) ──────────────────────────────────────
+// The inline DUST line under the NIGHT holdings row (and the token drawer) is
+// the entry point now; the standalone banner was removed. Opened via the
+// table/drawer `dust-setup` events.
+const cnightDialogOpen = ref(false);
+
 // Non-mainnet Cardano (preprod/preview): render an ADA-only portfolio + chart.
 // Testnet tokens have no market price, so fiat valuation and the token
 // portfolio don't apply — the hero chart is locked to ADA.
@@ -478,7 +532,12 @@ const compactChips = ref(false);
 const chipBarRef = ref<HTMLElement | null>(null);
 let chipBarObserver: ResizeObserver | null = null;
 
+// Set when the user actively picks a chip; the empty-wallet Market default
+// (watcher near the deep-link handlers) never overrides an explicit choice.
+let viewTouched = false;
+
 function setActiveView(view: ViewMode) {
+  viewTouched = true;
   activeView.value = view;
   // Sync to URL for shareable links and back/forward navigation
   const router = instance?.proxy?.$router;
@@ -514,6 +573,12 @@ watch(searchQuery, (val) => {
 // ── Computed: Empty state & staking ───────────────────────────────────────────
 
 const isWalletEmpty = computed(() => !account.value || account.value?.controlled_amount === '0');
+
+// Market-first empty state (mainnet Cardano only). isEmptyMainnet drives the
+// hero swap and matches isWalletEmpty's semantics (a not-yet-synced account
+// also renders the empty hero, exactly like the old EmptyStateHero branch).
+const isEmptyMainnet = computed(() => isWalletEmpty.value && isMainnetCardano.value);
+
 const isNewUser = computed(() => checkNewUser(transactions.value, account.value));
 const shouldBackup = computed(() => {
   const config = walletStore.config;
@@ -856,38 +921,74 @@ onMounted(() => {
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleOutsideClick);
   if (searchDebounce) clearTimeout(searchDebounce);
+  if (chartRefetchTimer) clearTimeout(chartRefetchTimer);
   chipBarObserver?.disconnect();
 });
 
 // ── Watchers ──────────────────────────────────────────────────────────────────
 
-watch(() => transactions.value?.length, () => { currentTimestamp.value = Date.now(); });
+// Portfolio history loads once per address, as soon as BOTH the address and
+// the synced account row are available. On a freshly imported wallet the
+// account row lands only after the first sync delivers it, so keying this on
+// the address alone evaluated the balance gate too early and never retried
+// (the chart then showed its loading state forever). Watching
+// controlled_amount re-runs the gate when the account arrives;
+// lastChartAddress keeps subsequent balance updates from re-fetching.
+let lastChartAddress: string | null = null;
 
 watch(
-  () => loggedWallet.value?.baseAddress,
-  async (newAddress, oldAddress) => {
-    if (newAddress && newAddress !== oldAddress) {
+  [() => loggedWallet.value?.baseAddress, () => account.value?.controlled_amount],
+  ([newAddress], oldValues) => {
+    if (!newAddress) return;
+    if (newAddress !== oldValues?.[0]) {
       currentTimestamp.value = Date.now();
-      if (!isApex.value) {
-        try {
-          if (account && Number(account.value?.controlled_amount) > 0 &&
-            loggedWallet.value?.chain === Blockchain.CARDANO &&
-            loggedWallet.value?.network === Network.MAINNET) {
-            const settings = getPersistedChartSettings(loggedWallet.value?.id);
-            currentTimeframe = settings.timeframe;
-            currentAdaOnly = settings.adaOnly;
-            loadForTimeframe(newAddress, settings.timeframe, settings.adaOnly).catch(error => {
-              console.warn('Portfolio data loading failed:', error);
-            });
-          }
-        } catch (error) {
-          console.warn('Failed to start portfolio data loading:', error);
-        }
-      }
+      // New wallet, new choice: an explicit view pick on the previous wallet
+      // must not suppress the fresh-wallet Market default (the component
+      // persists across wallet switches — same reason lastChartAddress exists).
+      viewTouched = false;
     }
+    if (newAddress === lastChartAddress || isApex.value) return;
+    if (!(Number(account.value?.controlled_amount) > 0) ||
+      loggedWallet.value?.chain !== Blockchain.CARDANO ||
+      loggedWallet.value?.network !== Network.MAINNET) {
+      return;
+    }
+    lastChartAddress = newAddress;
+    const settings = getPersistedChartSettings(loggedWallet.value?.id);
+    currentTimeframe = settings.timeframe;
+    currentAdaOnly = settings.adaOnly;
+    loadForTimeframe(newAddress, settings.timeframe, settings.adaOnly).catch(error => {
+      console.warn('Portfolio data loading failed:', error);
+    });
   },
   { immediate: true }
 );
+
+// New tx in the store: bump the timestamp (drives the tx-derived non-mainnet chart)
+// and, on mainnet, refetch the backend chart history — it's otherwise a one-shot
+// load per address (lastChartAddress above), so a receive would update the header
+// value and holdings but leave the hero chart frozen until a manual refresh. The
+// delay gives the backend indexer time to include the new tx; debounced so a burst
+// of txs lands as one refetch. Skipped while lastChartAddress is null (initial
+// history load hasn't run yet — it will include this tx anyway).
+let chartRefetchTimer: ReturnType<typeof setTimeout> | null = null;
+const CHART_REFETCH_DELAY_MS = 10_000;
+
+watch(() => transactions.value?.length, (len, oldLen) => {
+  currentTimestamp.value = Date.now();
+  if (len === undefined || oldLen === undefined || len === oldLen) return;
+  if (!isMainnetCardano.value || !lastChartAddress) return;
+  if (chartRefetchTimer) clearTimeout(chartRefetchTimer);
+  chartRefetchTimer = setTimeout(() => {
+    chartRefetchTimer = null;
+    const address = loggedWallet.value?.baseAddress;
+    if (address && address === lastChartAddress) {
+      loadForTimeframe(address, currentTimeframe, currentAdaOnly).catch(error => {
+        console.warn('Portfolio chart refetch after new tx failed:', error);
+      });
+    }
+  }, CHART_REFETCH_DELAY_MS);
+});
 
 // Handle /?view= deep-link and nav drawer clicks
 const validViews: ViewMode[] = ['holdings', 'collectibles', 'market', 'watchlist'];
@@ -905,6 +1006,24 @@ watch(
   },
   { immediate: true }
 );
+
+// Empty mainnet wallets land on Market: with nothing to hold yet, the live
+// market IS the page content. Optimistic on purpose: a brand-new address has
+// no account row at all, so waiting for a confirmed zero balance never fires
+// (that guard shipped in #786 and left fresh wallets on Holdings). If the
+// account then loads — or fills — with funds, restore the holdings-first
+// default. Deep links and user chip clicks always win.
+let autoDefaulted = false;
+watch(isEmptyMainnet, (empty) => {
+  const q = instance?.proxy?.$route?.query;
+  if (empty && !viewTouched && !q?.['view'] && !q?.['tab']) {
+    activeView.value = 'market';
+    autoDefaulted = true;
+  } else if (!empty && autoDefaulted && !viewTouched && activeView.value === 'market') {
+    activeView.value = 'holdings';
+    autoDefaulted = false;
+  }
+}, { immediate: true });
 
 // Cardano unit/policyId validation — only hex characters, reasonable length
 const CARDANO_ID_RE = /^[0-9a-f]{1,120}$/i;
@@ -1045,8 +1164,6 @@ watch(
   overflow: hidden;
 }
 
-
-
 /* ── Holdings table card ──────────────────────────────────────────────────────── */
 
 .holdings-table-card ::v-deep .v-data-table {
@@ -1054,7 +1171,10 @@ watch(
 }
 
 .holdings-table-card ::v-deep .v-data-table-header th {
-  background: var(--g-surface);
+  /* Transparent over the glass-panel material: a solid fill here reads as an
+     opaque slab once the card is see-through. Header tier is carried by the
+     tracked-caps text-3 type + hairline divider (headers are not sticky). */
+  background: transparent;
   color: var(--g-text-3) !important;
   text-transform: uppercase;
   letter-spacing: 0.08em;

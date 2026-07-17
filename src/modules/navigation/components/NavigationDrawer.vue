@@ -49,7 +49,16 @@
         >
           <v-list-item-avatar tile size="18" :style="item.soon || item.loading || item.underMaintenance ? { filter: 'opacity(0.5)' } : {}">
             <v-badge :value="!!item.notificationDot" dot color="error" overlap bordered>
-              <v-icon v-if="item.icon?.startsWith('mdi-')" size="18" color="var(--g-text-1)">{{ item.icon }}</v-icon>
+              <v-icon v-if="item.icon?.startsWith('mdi-')" size="18" color="var(--g-accent)">{{ item.icon }}</v-icon>
+              <!-- Non-special SVG marks tint to the chain accent via a mask (a
+                   color filter can't resolve an arbitrary themeable hex). -->
+              <span
+                v-else-if="!item.special"
+                class="nav-svg-icon"
+                role="img"
+                :aria-label="item.title"
+                :style="{ maskImage: `url(${item.icon})`, WebkitMaskImage: `url(${item.icon})` }"
+              />
               <v-img
                 v-else
                 width="18"
@@ -57,7 +66,6 @@
                 :src="item.icon"
                 :alt="item.title"
                 contain
-                :style="item.special ? undefined : 'filter: invert(98%) sepia(44%) saturate(0%) hue-rotate(18deg) brightness(103%) contrast(103%);'"
               />
             </v-badge>
           </v-list-item-avatar>
@@ -338,6 +346,7 @@ const items = computed((): NavigationItemUnion[] => {
     { header: t('navigation.financialHub'), enabled: true },
     // Midnight tx history lives in midnightStore (walletStore.transactions is Cardano-only).
     { title: t('navigation.transactions'), icon: 'mdi-swap-horizontal', link: '/transactions', enabled: networks.resolveTransactionsSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && (loggedWallet.value?.chain === Blockchain.MIDNIGHT ? midnightTransactions.value.length > 0 : transactions.value.length > 0), notificationDot: hasNewFeaturesInPath(['transactions']) },
+    { title: t('navigation.midnightProofServer'), icon: 'mdi-server-security', link: '/proof-server', enabled: isMidnight.value },
     { title: t('navigation.staking'), icon: assts.coinsStacked, link: '/staking', enabled: isStakingEnabled },
     { title: t('navigation.governance'), icon: assts.governance, link: '/governance', enabled: networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network) },
     { title: t('navigation.poolOperator'), icon: 'mdi-server-network', link: '/pool-operator', enabled: networks.resolveStakingSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && featureFlagsStore.isPoolOperatorEnabled(), new: true },
@@ -699,6 +708,22 @@ onUnmounted(() => {
   }
 }
 
+
+/* Non-special nav SVG marks — tinted to the chain accent via a mask so they
+   match the accent-colored mdi icons (replaces a hardcoded white filter, and
+   the accent tracks the chain: violet on Midnight, cyan on Cardano, etc.). */
+.nav-svg-icon {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  background-color: var(--g-accent);
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
 
 /* Active nav item — clean tinted highlight (modern, no gradient) */
 .activePage,

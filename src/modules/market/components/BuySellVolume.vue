@@ -59,6 +59,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import marketApi, { type SwapHistory } from '@/api/market-api';
 import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
+import { summarizeBuySell } from '@/modules/market/utils/tradeSide';
 
 const { currencySymbol } = useNativeCurrency();
 
@@ -87,16 +88,13 @@ async function loadTrades() {
   }
 }
 
-// API returns BUY/SELL from ADA perspective — invert for token perspective
-// API SELL = sold ADA = bought the token → token BUY
-// API BUY = bought ADA = sold the token → token SELL
-const buyTrades = computed(() => allTrades.value.filter(t => t.type === 'SELL'));
-const sellTrades = computed(() => allTrades.value.filter(t => t.type === 'BUY'));
-
-const buyVolume = computed(() => buyTrades.value.reduce((sum, t) => sum + t.volumeAda, 0));
-const sellVolume = computed(() => sellTrades.value.reduce((sum, t) => sum + t.volumeAda, 0));
-const buyCount = computed(() => buyTrades.value.length);
-const sellCount = computed(() => sellTrades.value.length);
+// Backend `type` is token-perspective (BUY = user bought the token); render as-is.
+// Aggregation + the "do not invert" rationale live in tradeSide.ts.
+const summary = computed(() => summarizeBuySell(allTrades.value));
+const buyVolume = computed(() => summary.value.buyVolume);
+const sellVolume = computed(() => summary.value.sellVolume);
+const buyCount = computed(() => summary.value.buyCount);
+const sellCount = computed(() => summary.value.sellCount);
 const totalVolume = computed(() => buyVolume.value + sellVolume.value);
 
 const buyPercent = computed(() => totalVolume.value > 0 ? (buyVolume.value / totalVolume.value) * 100 : 50);

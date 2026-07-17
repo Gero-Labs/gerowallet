@@ -13,6 +13,7 @@
     :header-props="{ 'sort-icon': 'mdi-menu-up' }"
     :loading="loading"
     :item-class="rowClass"
+    :expanded="dustExpanded"
     @click:row="handleRowClick"
   >
     <!-- Pagination -->
@@ -28,6 +29,15 @@
           ></v-pagination>
         </td>
       </tr>
+    </template>
+
+    <!-- DUST generation strip: rendered directly beneath the NIGHT (cNIGHT)
+         holdings row. Half-height, distinct gold band with the dust-battery
+         particle animation; X dismisses it (persisted). -->
+    <template v-slot:expanded-item>
+      <td :colspan="activeHeaders.length" class="dust-line-cell">
+        <DustGenerationLine variant="row" @setup="$emit('dust-setup')" @dismiss="dismissDustLine" />
+      </td>
     </template>
 
     <!-- No data -->
@@ -386,7 +396,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import assets from '@/utils/assets';
 import { useWatchlist } from '@/modules/market/composables/useWatchlist';
 import { useColumnPreferences } from '@/modules/market/composables/useColumnPreferences';
@@ -397,6 +407,8 @@ import { walletStore } from '@/stores/walletStore';
 import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
 import { Blockchain } from '@/models/types';
 import networks from '@/utils/networks';
+import DustGenerationLine from '@/modules/dashboard/components/DustGenerationLine.vue';
+import { CNIGHT_ASSETS, isDustLineDismissed, dismissDustLineFor } from '@/shared/composables/useCnightDustRegistration';
 
 const chainLogo = computed(() =>
   networks.resolveCurrencyImage(walletStore.loggedWallet?.chain, walletStore.loggedWallet?.network) || ''
@@ -430,7 +442,41 @@ const ownedUnits = computed(() => {
 
 const emit = defineEmits<{
   (e: 'token-click', token: MarketToken): void;
+  (e: 'dust-setup'): void;
 }>();
+
+// ── DUST generation line under the NIGHT (cNIGHT) holdings row ──────────────
+// Only in the holdings view on a Cardano wallet, only for the NIGHT token, and
+// only until the user dismisses it — dismissal is PER WALLET (stake address), so
+// hiding it on one wallet doesn't suppress it on another that also holds NIGHT.
+// localStorage isn't reactive, so re-read on mount and whenever the wallet changes.
+const dustLineDismissed = ref(false);
+function refreshDustDismissed() {
+  dustLineDismissed.value = isDustLineDismissed(walletStore.loggedWallet?.stakeAddress);
+}
+onMounted(refreshDustDismissed);
+watch(() => walletStore.loggedWallet?.stakeAddress, refreshDustDismissed);
+
+const cnightUnit = computed(() => {
+  const asset = CNIGHT_ASSETS[walletStore.loggedWallet?.network ?? ''];
+  return asset ? asset.policyId + asset.assetNameHex : '';
+});
+
+/** The NIGHT row currently in the table (holdings + Cardano only). Dismissal
+ *  hides the strip entirely; the registration status still surfaces in the
+ *  token drawer + DUST battery widgets, which aren't dismissable. */
+const dustExpanded = computed<MarketToken[]>(() => {
+  if (!props.showHoldingsColumns || dustLineDismissed.value) return [];
+  if (walletStore.loggedWallet?.chain !== Blockchain.CARDANO) return [];
+  if (!cnightUnit.value) return [];
+  const night = paginatedTokens.value.find((tk) => tk.unit === cnightUnit.value);
+  return night ? [night] : [];
+});
+
+function dismissDustLine() {
+  dustLineDismissed.value = true;
+  dismissDustLineFor(walletStore.loggedWallet?.stakeAddress);
+}
 
 const { t } = useTranslation();
 const { isWatched, toggleWatchlist } = useWatchlist();
@@ -628,7 +674,12 @@ function pnlColor(pnl: number): string {
 }
 
 function rowClass(item: MarketToken): string {
-  return item.isNative ? 'native-token-row' : '';
+  const classes: string[] = [];
+  if (item.isNative) classes.push('native-token-row');
+  // The NIGHT row that has the DUST strip expanded beneath it drops its bottom
+  // divider so the two read as one row.
+  if (dustExpanded.value.some((t) => t.unit === item.unit)) classes.push('night-dust-attached');
+  return classes.join(' ');
 }
 
 // Pin native token (ADA) to the top regardless of sort column
@@ -670,6 +721,36 @@ function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: bool
 
 .market-token-table >>> tbody tr:hover {
   background: var(--g-hairline-1) !important;
+}
+
+/* DUST line cell: Vuetify's dense rule pins td height to 32px, which vertically
+   centers the shorter strip and leaves dark gaps above/below the gold band.
+   Table cells treat `height` as a MINIMUM, so `auto` won't shrink it — pin the
+   cell to the strip's exact height and zero the padding. Forced because the
+   dense selector (.v-data-table--dense>...>td) is deep; specificity alone is
+   fragile here. The strip then fills 100% of the cell, so the gold is flush. */
+.market-token-table >>> td.dust-line-cell {
+  padding: 0 !important;
+  height: 24px !important;
+  border-bottom: none !important;
+}
+/* Merge the NIGHT row with the DUST strip below it: drop the Vuetify row
+   divider on the NIGHT row (tagged via rowClass) so the two read as one row.
+   The override flag is required to beat Vuetify's tr:not(:last-child) td rule. */
+.market-token-table >>> tr.night-dust-attached > td {
+  border-bottom: none !important;
+}
+/* Vuetify boxes the expanded row with an inset top+bottom shadow
+   (.v-data-table>.v-data-table__wrapper tbody tr.v-data-table__expanded__content,
+   specificity 0,3,2) — that shadow is what made the DUST strip read as its own
+   boxed row. Match Vuetify's depth (.v-data-table__wrapper tbody, 0,4,2) to
+   remove it without an override flag. */
+.market-token-table >>> .v-data-table__wrapper tbody tr.v-data-table__expanded__content {
+  box-shadow: none;
+  cursor: default;
+}
+.market-token-table >>> .v-data-table__wrapper tbody tr.v-data-table__expanded__content:hover {
+  background: transparent;
 }
 
 .market-token-table >>> th {

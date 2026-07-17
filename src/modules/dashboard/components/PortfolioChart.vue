@@ -1,7 +1,7 @@
 <template>
   <div class="portfolio-split-root">
     <!-- Left Panel: Portfolio Metrics (30%) -->
-    <div class="portfolio-metrics-panel">
+    <div class="portfolio-metrics-panel glass-panel">
       <div class="metrics-inner">
         <!-- Header row: label + mode toggle + refresh -->
         <div class="metrics-header-row">
@@ -132,7 +132,7 @@
     </div>
 
     <!-- Right Panel: Chart (70%) -->
-    <div class="portfolio-chart-panel">
+    <div class="portfolio-chart-panel glass-panel">
       <!-- Chart Controls Bar -->
       <div class="chart-controls-bar">
         <div class="timeframe-pills">
@@ -491,10 +491,10 @@ const firstAvailableCurrency = computed(() => {
 });
 
 const globalLoading = computed(() => {
-  // Only show loading spinner when there's no data to show yet
-  if (props.progressiveLoading) {
-    return !hasAnyChartData.value;
-  }
+  // Spinner only while a fetch is in flight AND there's nothing to show yet.
+  // Progressive mode used to treat "no data" alone as "loading", which never
+  // resolved for wallets whose history query returns nothing (e.g. a freshly
+  // imported wallet) — those must fall through to the empty state instead.
   return props.loading && !hasAnyChartData.value;
 });
 
@@ -548,6 +548,18 @@ const displayedPortfolioValue = ref(0);
 let portfolioValueTimer: ReturnType<typeof setInterval> | null = null;
 function syncDisplayedValue() { displayedPortfolioValue.value = activePortfolioValue.value; }
 watch([selectedCurrency, portfolioMode, isReadyToRender], () => syncDisplayedValue(), { immediate: true });
+// The 30s throttle keeps the figure stable against small live-price drift, but it
+// must NOT freeze a stale *initial* snapshot: market token prices arrive a beat
+// after mount, correcting the total from an ADA-only partial (non-native holdings
+// priced at 0 until `allTokens` loads) up to the full holdings value. That is a
+// large one-off jump, not churn — converge on it immediately. Small drift (< 2%)
+// still waits for the timer so the odometer doesn't churn.
+watch(activePortfolioValue, (next) => {
+  const shown = displayedPortfolioValue.value;
+  if (shown <= 0 || Math.abs(next - shown) / Math.abs(shown) > 0.02) {
+    syncDisplayedValue();
+  }
+});
 onMounted(() => { portfolioValueTimer = setInterval(syncDisplayedValue, 30_000); });
 onBeforeUnmount(() => { if (portfolioValueTimer) clearInterval(portfolioValueTimer); });
 
@@ -1092,14 +1104,11 @@ onBeforeUnmount(() => {
 
 /* ── Metrics Panel (Left 30%) ─────────────────────────────────────────────────── */
 
+/* Surface comes from the shared .glass-panel material (this panel was the
+   recipe's origin); only layout here. */
 .portfolio-metrics-panel {
   flex: 0 0 30%;
   min-width: 0;
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(20px) saturate(1.8);
-  -webkit-backdrop-filter: blur(20px) saturate(1.8);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
   padding: 6px 10px;
   display: flex;
   flex-direction: column;
@@ -1272,14 +1281,10 @@ onBeforeUnmount(() => {
 
 /* ── Chart Panel (Right 70%) ──────────────────────────────────────────────────── */
 
+/* Surface from the shared .glass-panel material; only layout here. */
 .portfolio-chart-panel {
   flex: 1 1 0%;
   min-width: 0;
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(20px) saturate(1.8);
-  -webkit-backdrop-filter: blur(20px) saturate(1.8);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
   display: flex;
   flex-direction: column;
   position: relative;

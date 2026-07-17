@@ -4,6 +4,7 @@
        AVG COST / P&L) so the table reads identically across chains.
        Cells that don't apply to Midnight today render an em-dash, just
        like the Cardano table does for tokens missing market data. -->
+  <div class="midnight-holdings-table-root">
   <v-data-table
     dense
     class="transparent tokens-table market-token-table"
@@ -38,9 +39,26 @@
 
     <template v-slot:[`item.balance`]="{ item }">
       <v-skeleton-loader v-if="midnightLoading" type="text" width="110" style="margin-left: auto" />
-      <span v-else style="font-family: 'Roboto Mono', monospace; font-size: 12px;">
-        {{ item.balanceFormatted }}
-      </span>
+      <div v-else style="text-align: right;">
+        <div style="font-family: 'Roboto Mono', monospace; font-size: 12px;">
+          {{ item.balanceFormatted }}
+        </div>
+        <div v-if="item.breakdownText" class="breakdown-row">
+          <span class="t-caption g-num">{{ item.breakdownText }}</span>
+          <v-tooltip v-if="convertEnabled" top content-class="custom-tooltip" max-width="220">
+            <template v-slot:activator="{ on, attrs }">
+              <button
+                type="button"
+                class="convert-link-btn"
+                v-bind="attrs"
+                v-on="on"
+                @click="convertDialogOpen = true"
+              >{{ t('midnight.shieldConvert.entryButton') }}</button>
+            </template>
+            <span>{{ t('midnight.shieldConvert.entryButtonTooltip') }}</span>
+          </v-tooltip>
+        </div>
+      </div>
     </template>
 
     <template v-slot:[`item.price`]="{ item }">
@@ -52,7 +70,11 @@
     </template>
 
     <template v-slot:[`item.change24h`]="{ item }">
-      <span class="text--secondary" style="font-size: 12px;">{{ item.change24h }}</span>
+      <span
+        class="g-num"
+        :class="item.change24hRaw === null ? 'text--secondary' : (item.change24hRaw >= 0 ? 'delta-up' : 'delta-down')"
+        style="font-size: 12px;"
+      >{{ item.change24h }}</span>
     </template>
 
     <template v-slot:[`item.mcap`]="{ item }">
@@ -67,17 +89,37 @@
       <span class="text--secondary" style="font-size: 12px;">{{ item.pnl }}</span>
     </template>
   </v-data-table>
+
+  <!-- Shield/unshield conversion entry point — reused, not a new nav
+       destination (this is a transaction type, not a settings page).
+       Flag-gated DARK (isMidnightConvertEnabled): the shield direction is
+       protocol-blocked at ledger gen 8 (node error 138, see
+       featureFlagsStore.isMidnightConvertEnabled's doc comment). Code kept
+       intact for when Midnight ships a sanctioned conversion path. -->
+  <ShieldConvertDialog
+    v-if="convertEnabled"
+    :is-open="convertDialogOpen"
+    @close="convertDialogOpen = false"
+  />
+  </div>
 </template>
 
 <script setup lang="ts">
-import { computed, toRefs } from 'vue';
+import { computed, ref, toRefs, watch } from 'vue';
 import { midnightStore } from '@/stores/midnightStore';
 import { walletStore } from '@/stores/walletStore';
 import { Network } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useMidnightLoading } from '@/shared/composables/useMidnightLoading';
+import { useNightFiat } from '@/shared/composables/useNightFiat';
+import { formatPrice, formatUsd, formatSignedChange } from '@/shared/utils/format';
 import midnightLogo from '@/assets/svg/midnight.svg';
+import ShieldConvertDialog from '@/modules/dashboard/dialogs/ShieldConvertDialog.vue';
+import featureFlagsStore from '@/stores/featureFlagsStore';
+
+const convertDialogOpen = ref(false);
+const convertEnabled = computed(() => featureFlagsStore.isMidnightConvertEnabled());
 
 const { t } = useTranslation();
 const midnightLoading = useMidnightLoading();
@@ -87,6 +129,11 @@ const { loggedWallet } = toRefs(walletStore);
 
 const isMainnet = computed(() => loggedWallet.value?.network === Network.MAINNET);
 const nightCurrency = computed(() => (isMainnet.value ? 'NIGHT' : 'tNIGHT'));
+
+// NIGHT fiat price - mainnet only (testnet tNIGHT has no market). Mirrors the
+// sidepanel BalanceSection's usage of the same composable (mirror-dashboard rule).
+const nightFiat = useNightFiat();
+watch(isMainnet, (on) => { if (on) void nightFiat.refresh(); }, { immediate: true });
 
 const NIGHT_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.NIGHT);
 
@@ -119,9 +166,13 @@ interface MidnightHoldingRow {
   ticker: string;
   name: string;
   balanceFormatted: string;
+  /** "Public X / Private Y" caption; empty string hides the row. */
+  breakdownText: string;
   price: string;
   value: string;
   change24h: string;
+  /** Raw 24h change for delta-up/delta-down coloring; null when no price data. */
+  change24hRaw: number | null;
   mcap: string;
   avgCost: string;
   pnl: string;
@@ -140,6 +191,27 @@ const totalNight = computed<bigint>(() =>
   (balances.value.nightShielded ?? 0n),
 );
 
+// Public/private breakdown caption. Only shown once the wallet has a
+// viewing key (shieldedSyncAvailable) or already holds shielded NIGHT -
+// wallets without a viewing key would otherwise see a meaningless "Private 0".
+const showBreakdown = computed(() =>
+  midnightStore.shieldedSyncAvailable || (balances.value.nightShielded ?? 0n) > 0n);
+
+const breakdownText = computed<string>(() => {
+  if (!showBreakdown.value) return '';
+  const pub = formatBigDecimal(balances.value.nightUnshielded ?? 0n, NIGHT_DIVISOR, 2);
+  const priv = formatBigDecimal(balances.value.nightShielded ?? 0n, NIGHT_DIVISOR, 2);
+  return `${t('midnight.common.public')} ${pub} / ${t('midnight.common.private')} ${priv}`;
+});
+
+// NIGHT has a market on mainnet only; testnet tNIGHT keeps the placeholders.
+const hasNightPrice = computed(() => isMainnet.value && nightFiat.hasPrice.value);
+
+const nightValueUsd = computed<number>(() => {
+  if (!hasNightPrice.value || !nightFiat.usd.value) return 0;
+  return Number(totalNight.value) / Number(NIGHT_DIVISOR) * nightFiat.usd.value;
+});
+
 // tDUST is deliberately NOT a table row — the dedicated DUST battery panel
 // above owns the live DUST display (it's a fee resource, not a holding).
 const rows = computed<MidnightHoldingRow[]>(() => [
@@ -147,9 +219,13 @@ const rows = computed<MidnightHoldingRow[]>(() => [
     ticker: nightCurrency.value,
     name: 'Midnight Native Token',
     balanceFormatted: `${formatBigDecimal(totalNight.value, NIGHT_DIVISOR, 2)} ${nightCurrency.value}`,
-    price: '—',
-    value: '—',
-    change24h: '—',
+    breakdownText: breakdownText.value,
+    price: hasNightPrice.value && nightFiat.usd.value ? formatPrice(nightFiat.usd.value) : '—',
+    value: hasNightPrice.value ? formatUsd(nightValueUsd.value) : '—',
+    change24h: hasNightPrice.value && nightFiat.change24h.value !== null
+      ? formatSignedChange(nightFiat.change24h.value)
+      : '—',
+    change24hRaw: hasNightPrice.value ? nightFiat.change24h.value : null,
     mcap: '—',
     avgCost: '—',
     pnl: '—',
@@ -164,6 +240,32 @@ const rows = computed<MidnightHoldingRow[]>(() => [
 </script>
 
 <style scoped>
+.midnight-holdings-table-root {
+  width: 100%;
+}
+
+.breakdown-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--g-s-2);
+  margin-top: 2px;
+}
+
+.convert-link-btn {
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--g-accent);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+.convert-link-btn:hover {
+  text-decoration: underline;
+}
+
 .tokens-table ::v-deep .v-data-table__wrapper {
   background: transparent;
 }

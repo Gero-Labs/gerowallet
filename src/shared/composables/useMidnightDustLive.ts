@@ -101,7 +101,11 @@ export function useMidnightDustLive(): MidnightDustLive {
   );
 
   const dustBalance = computed<bigint>(() => {
-    if (polledAsOfMs.value === 0) return 0n;
+    // No successful poll yet — fall back to the gero-sync snapshot the
+    // registration dialog already trusts, so the gauge never reads 0 while the
+    // wallet is actually generating (the Nexus dust poll can silently 404 on
+    // auth-token expiry — see catch above).
+    if (polledAsOfMs.value === 0) return midnightStore.dustState?.current ?? 0n;
     const elapsedMs = Math.max(0, nowTickMs.value - polledAsOfMs.value);
     const extra = (polledGenerating.value * BigInt(elapsedMs)) / 1000n;
     let live = polledBalance.value + extra;
@@ -109,12 +113,15 @@ export function useMidnightDustLive(): MidnightDustLive {
     return live;
   });
 
+  // When the poll hasn't produced data, mirror the dialog and fall back to the
+  // WS snapshot (midnightStore.dustState / .balances) rather than showing zeros.
+  const polled = () => polledAsOfMs.value !== 0;
   return {
     dustBalance,
-    dustGenerating: computed(() => polledGenerating.value),
-    dustCap: computed(() => polledCap.value),
-    nightRegistered: computed(() => polledNightRegistered.value),
-    registrationStatus: computed(() => polledRegistrationStatus.value),
-    hasData: computed(() => polledAsOfMs.value !== 0),
+    dustGenerating: computed(() => (polled() ? polledGenerating.value : (midnightStore.balances?.dustGenerating ?? 0n))),
+    dustCap: computed(() => (polled() ? polledCap.value : (midnightStore.dustState?.cap ?? 0n))),
+    nightRegistered: computed(() => (polled() ? polledNightRegistered.value : (midnightStore.balances?.nightRegistered ?? 0n))),
+    registrationStatus: computed(() => (polled() ? polledRegistrationStatus.value : (midnightStore.dustState?.registrationStatus ?? 'Unregistered'))),
+    hasData: computed(() => polledAsOfMs.value !== 0 || midnightStore.dustState != null),
   };
 }

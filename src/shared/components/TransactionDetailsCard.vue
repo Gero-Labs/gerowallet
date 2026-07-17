@@ -132,7 +132,7 @@
         <span class="tx-sum-value g-num">{{ totals.totalSendingAda }} {{ unit }}</span>
       </div>
       <div class="tx-summary-row">
-        <span class="tx-sum-label">{{ t('signTx.networkFee') }}</span>
+        <span class="tx-sum-label">{{ resolvedFeeLabel }}</span>
         <span class="tx-sum-value g-num">{{ totals.feeAda }} {{ resolvedFeeUnit }}</span>
       </div>
       <div v-if="totals.withdrawalAda" class="tx-summary-row">
@@ -219,13 +219,23 @@ const props = withDefaults(defineProps<{
    * in DUST while amounts are in NIGHT, so it passes a distinct feeUnit.
    */
   feeUnit?: string;
+  /**
+   * Label for the network-fee row. Defaults to the Cardano `signTx.networkFee`
+   * copy so every existing caller is unchanged; Midnight passes an "estimated"
+   * label since the real DUST fee is only known post-auth.
+   */
+  feeLabel?: string;
 }>(), {
   unit: '₳',
   feeUnit: undefined,
+  feeLabel: undefined,
 });
 
 /** Fee unit falls back to the amount unit when the caller doesn't split them. */
 const resolvedFeeUnit = computed(() => props.feeUnit ?? props.unit);
+
+/** Fee label falls back to the Cardano copy when the caller doesn't override it. */
+const resolvedFeeLabel = computed(() => props.feeLabel ?? t('signTx.networkFee'));
 
 function iconForKind(kind: TxOutputKind): string {
   if (kind === 'external') return 'mdi-arrow-top-right';
