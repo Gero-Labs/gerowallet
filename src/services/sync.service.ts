@@ -325,6 +325,17 @@ export class SyncService {
       if (promises.length > 0) {
         await Promise.all(promises);
       }
+      // Fallback for unregistered stake addresses: gero-sync sends `account: null`
+      // (Nexus /account/info has no row until the stake key is registered), so
+      // `controlled_amount` would otherwise never reflect freshly-received funds and
+      // the dashboard stays on the empty "Add tADA" state. Recompute it from the
+      // just-applied UTxO set. Registered wallets always receive a real `account`
+      // and skip this. Gate on the wallet's OWN chain (always known) rather than a
+      // `chain` field on the payload — CATCH_UP_COMPLETE rebuilds its message without
+      // one, so keying off syncObject.chain would silently never fire there.
+      if (!syncObject.account && this.walletBg?.chain === Blockchain.CARDANO) {
+        await this.reconcileControlledAmountFromUtxos();
+      }
       debugLog('setSync', syncObject);
       if (syncObject.block) {
         NetworkStore.setTip({
@@ -336,6 +347,35 @@ export class SyncService {
           epoch_slot: syncObject.block.epoch_slot || 0,
         });
       }
+    }
+  }
+
+  /**
+   * Recompute `controlled_amount` from the applied UTxO set and merge it into the
+   * stored account. Used when a SYNC push omits `account` (unregistered stake), so
+   * balance + empty-state reflect on-chain funds immediately instead of waiting for
+   * delegation. Preserves rewards/withdrawable/pool/drep from the previous account.
+   */
+  private async reconcileControlledAmountFromUtxos(): Promise<void> {
+    try {
+      const utxos = (WalletStore.state.utxos || []) as Cardano.Utxo[];
+      let sum = 0n;
+      for (const u of utxos) {
+        const coins = u?.[1]?.value?.coins;
+        if (coins != null) sum += BigInt(coins);
+      }
+      const controlled = sum.toString();
+      const prev = (await this.walletBg.getAccountInfo()) || {};
+      if (prev.controlled_amount === controlled) return; // no change — skip a redundant write
+      await this.walletBg.setAccountInfo({
+        ...prev,
+        controlled_amount: controlled,
+        rewards_sum: prev.rewards_sum ?? '0',
+        withdrawable_amount: prev.withdrawable_amount ?? '0',
+      });
+      debugLog('🧮 Recomputed controlled_amount from UTxOs (push account was null):', controlled);
+    } catch (e) {
+      debugLog('reconcileControlledAmountFromUtxos failed:', e);
     }
   }
 
