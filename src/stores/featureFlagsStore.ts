@@ -16,6 +16,18 @@ export interface FeatureFlags {
   isCopilotEnabled: boolean;
   isMidnightConvertEnabled: boolean;
   isGoogleWalletEnabled: boolean;
+  /**
+   * Origins allowed to draw from the Nexus shared-pool collateral. A dApp must be
+   * on this Gero-curated list AND already connected by the user before the wallet
+   * will lend a pool UTxO to it (see background `isTrustedCollateralDapp`). Served
+   * by gero-sync so the trust set can change without a client release. Empty = no
+   * dApp gets pool collateral.
+   *
+   * Entries MUST be full origins (scheme+host+port), e.g. "https://app.minswap.org".
+   * They are compared by EXACT origin equality — never substring — so a bare host
+   * or a trailing-path entry will not match. Malformed entries are ignored.
+   */
+  collateralTrustedDapps: string[];
 }
 
 interface FeatureFlagsState {
@@ -40,6 +52,7 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
     isCopilotEnabled: false,
     isMidnightConvertEnabled: false,
     isGoogleWalletEnabled: false,
+    collateralTrustedDapps: [],
   },
   isInitialized: false,
   isLoading: false,
@@ -104,6 +117,7 @@ export const featureFlagsStore = {
     // MPC "Sign in with Google" wallet — ships DARK (default false) until the
     // recovery/sign flows have been through a security audit (see Plan D).
     featureFlagsState.flags.isGoogleWalletEnabled = featureFlagService.getFlag('isGoogleWalletEnabled', false);
+    featureFlagsState.flags.collateralTrustedDapps = featureFlagService.getFlag<string[]>('collateralTrustedDapps', []);
     persistFlagsForBackground();
   },
 
@@ -154,6 +168,11 @@ export const featureFlagsStore = {
     });
     featureFlagService.onFlagChange('isGoogleWalletEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isGoogleWalletEnabled', newValue);
+    });
+    featureFlagService.onFlagChange('collateralTrustedDapps', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'collateralTrustedDapps', Array.isArray(newValue) ? newValue : []);
+      // Mirror the live change so the background collateral gate picks it up.
+      persistFlagsForBackground();
     });
   },
 
@@ -299,6 +318,7 @@ export const featureFlagsStore = {
       isCopilotEnabled: false,
       isMidnightConvertEnabled: false,
       isGoogleWalletEnabled: false,
+      collateralTrustedDapps: [],
     });
     featureFlagsState.isInitialized = false;
     featureFlagsState.isLoading = false;

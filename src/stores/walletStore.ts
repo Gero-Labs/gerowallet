@@ -15,6 +15,31 @@ interface WhitelistedEntry {
 }
 
 /**
+ * Exact origin/host match for the connected-dApp whitelist. Entries store the
+ * dApp's full origin (scheme+host+port) captured at connect time. Compare by
+ * canonicalized-origin equality — NEVER substring, which would let
+ * `https://app.trusted.com.evil.com` match an entry for `https://app.trusted.com`
+ * and bypass the connect/sign consent gate. Falls back to exact host equality for
+ * any legacy entry stored as a bare hostname.
+ */
+export function matchesDappWhitelistEntry(origin: string, entryDomain: string): boolean {
+  if (!origin || !entryDomain) return false;
+  let reqUrl: URL;
+  try {
+    reqUrl = new URL(origin);
+  } catch {
+    return false;
+  }
+  try {
+    return new URL(entryDomain).origin === reqUrl.origin;
+  } catch {
+    // Legacy entry stored as a bare hostname → exact host match (case-insensitive).
+    const host = entryDomain.toLowerCase();
+    return host === reqUrl.host.toLowerCase() || host === reqUrl.hostname.toLowerCase();
+  }
+}
+
+/**
  * Clear only wallet-specific Chrome alarms
  * Preserves system alarms like 'auto-lock-check' and 'clearProcessedDomains'
  */
@@ -412,7 +437,7 @@ export default {
   isWhitelisted(origin: string): boolean {
     if (!walletStore.connectedDapps || !Array.isArray(walletStore.connectedDapps)) return false;
     const whitelisted = walletStore.connectedDapps as WhitelistedEntry[]
-    return !!whitelisted.find(el => el.domain && origin.indexOf(String(el.domain)) !== -1);
+    return whitelisted.some(el => el.domain && matchesDappWhitelistEntry(origin, String(el.domain)));
   },
 
   logout() {

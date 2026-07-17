@@ -460,7 +460,11 @@ const getFilterAmount = (amount: string): bigint => {
 
 export async function getCollateral(
   { amount = new Serialization.Value(MAX_COLLATERAL_AMOUNT).toCbor() }: { amount?: string } = {},
-  storedUtxos: Cardano.Utxo[]
+  storedUtxos: Cardano.Utxo[],
+  // The Nexus shared-pool fallback is only offered to trusted dApps (Gero
+  // allowlist ∧ user-connected). The caller (background) resolves trust from the
+  // request origin and passes it here; default false = never lend from the pool.
+  opts: { allowNexusFallback?: boolean } = {},
 ): Promise<string[]> {
   if (!storedUtxos || !Array.isArray(storedUtxos)) {
     const error = APIError.InvalidRequest;
@@ -510,26 +514,32 @@ export async function getCollateral(
     return selected.map((utxo) => Serialization.TransactionUnspentOutput.fromCore(utxo).toCbor());
   }
 
-  // Pass 2 — Nexus shared-pool fallback. The wallet has no own pure-ADA UTxO
-  // big enough for collateral, so ask Nexus to lend one of the pool UTxOs at
-  // its enterprise address. The returned ref points to a real on-chain UTxO
-  // we don't control; on signTx the background detects the pool address and
-  // calls /api/collateral/cosign for the witness.
-  try {
-    const lent = await nexusCollateralApi.lend();
-    const utxoCbor = buildNexusUtxoCbor(lent);
-    // Remember this ref so SIGN_TX knows it must be co-signed by Nexus (and can
-    // surface a co-sign failure rather than returning an unsubmittable witness).
-    markNexusLent(`${lent.txHash}#${lent.outputIndex}`);
-    return [utxoCbor];
-  } catch (lendErr) {
-    debugLog('[getCollateral] Nexus lend fallback failed:', lendErr);
-    const error = APIError.Refused;
-    error.info = pureAdaUtxos.length === 0
-      ? 'No pure ADA UTXOs available for collateral.'
-      : 'not enough coins in configured collateral UTxOs';
-    throw error;
+  // Pass 2 — Nexus shared-pool fallback, TRUSTED dApps only. The wallet has no
+  // own pure-ADA UTxO big enough for collateral, so ask Nexus to lend one of the
+  // pool UTxOs at its enterprise address. The returned ref points to a real
+  // on-chain UTxO we don't control; on signTx the background detects the pool
+  // address and calls /api/collateral/cosign for the witness. Skipped entirely
+  // for untrusted dApps — they see the same "no collateral" result as before the
+  // pool existed.
+  if (opts.allowNexusFallback) {
+    try {
+      const lent = await nexusCollateralApi.lend();
+      const utxoCbor = buildNexusUtxoCbor(lent);
+      // Remember this ref so SIGN_TX knows it must be co-signed by Nexus (and can
+      // surface a co-sign failure rather than returning an unsubmittable witness).
+      markNexusLent(`${lent.txHash}#${lent.outputIndex}`);
+      return [utxoCbor];
+    } catch (lendErr) {
+      debugLog('[getCollateral] Nexus lend fallback failed:', lendErr);
+    }
   }
+
+  // No collateral available (untrusted dApp, or the lend/build failed).
+  const error = APIError.Refused;
+  error.info = pureAdaUtxos.length === 0
+    ? 'No pure ADA UTXOs available for collateral.'
+    : 'not enough coins in configured collateral UTxOs';
+  throw error;
 }
 
 /**
