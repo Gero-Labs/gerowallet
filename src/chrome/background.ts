@@ -15,6 +15,7 @@ import {
   getUnusedAddresses,
   getUsedAddresses,
   getUtxos,
+  isRecentNexusLent,
   submitTx,
   urlScan,
 } from '@/chrome/serialization';
@@ -2323,6 +2324,7 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
       if (txCborForCosign && transaction?.body?.collaterals?.length) {
         for (const c of transaction.body.collaterals) {
           const ref = `${c.txId}#${c.index}`;
+          const weLentThisRef = isRecentNexusLent(ref);
           try {
             const { witness } = await nexusCollateralApi.cosign(txCborForCosign, ref);
             const merged = await mergeWitnessSets(witnessResult.witnesses, witness);
@@ -2331,8 +2333,16 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
           } catch (cosignErr: unknown) {
             const err = cosignErr as { response?: { status?: number }; message?: string };
             const status = err?.response?.status;
-            // 404 = ref isn't in the Nexus pool (it's a user-owned UTxO),
-            // 400 = adversarial-tx guard tripped — both expected for non-pool refs.
+            if (weLentThisRef) {
+              // We handed this UTxO to the dApp from the Nexus pool, so the tx
+              // CANNOT be submitted without the hot wallet's witness. Surface the
+              // failure instead of returning an under-signed witness that would
+              // fail opaquely at the node.
+              debugLog('⛔ Nexus cosign failed for lent ref', ref, status, err?.message);
+              throw new Error(getErrorMessage(cosignErr) || 'Collateral co-signing failed');
+            }
+            // Otherwise the ref is a user-owned UTxO we never lent: 404 (not in
+            // pool) / 400 (adversarial-tx guard) are expected — swallow them.
             if (status !== 404 && status !== 400) {
               debugLog('⚠️ Nexus cosign failed for', ref, status, err?.message);
             }
@@ -3987,7 +3997,9 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
           case 'cardano_getCollateral': {
             const storedUtxos = WalletStore.state.utxos as Cardano.Utxo[];
             const wcParams = wcRequest.params || {};
-            const result = getCollateral(wcParams, storedUtxos);
+            // getCollateral is async (Pass-2 lends from the Nexus pool); it must
+            // be awaited or the dApp receives a serialized pending Promise ({}).
+            const result = await getCollateral(wcParams, storedUtxos);
             await wcService.respondSuccess(topic, id, result);
             return;
           }
