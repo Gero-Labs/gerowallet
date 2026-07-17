@@ -858,11 +858,14 @@ async function isTrustedCollateralDapp(origin?: string): Promise<boolean> {
   } catch (e) {
     debugLog('[collateral] trusted-dapp allowlist read failed:', e);
   }
-  // Dev-only fallback: localhost harness on a testnet network (never mainnet).
+  // Dev-only fallback: localhost harness on an EXPLICIT non-mainnet network.
+  // Require a logged-in wallet whose network resolves to a known testnet id — a
+  // null/unknown wallet must NOT enable the bypass (fail closed).
   const wallet = WalletStore.state.loggedWallet;
-  const isMainnet = !!wallet && networks.resolveNetworkId(wallet.chain, wallet.network) === 1;
+  const netId = wallet ? networks.resolveNetworkId(wallet.chain, wallet.network) : undefined;
+  const isNonMainnet = typeof netId === 'number' && netId !== 1;
   const isLocalDev = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(reqOrigin);
-  return !isMainnet && isLocalDev;
+  return isNonMainnet && isLocalDev;
 }
 
 app.add(METHOD.getCollateral, async (request, sendResponse) => {
