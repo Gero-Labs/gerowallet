@@ -330,8 +330,10 @@ export class SyncService {
       // `controlled_amount` would otherwise never reflect freshly-received funds and
       // the dashboard stays on the empty "Add tADA" state. Recompute it from the
       // just-applied UTxO set. Registered wallets always receive a real `account`
-      // and skip this. Cardano-only (Midnight/Bitcoin balances use other semantics).
-      if (!syncObject.account && syncObject.chain === 'CARDANO') {
+      // and skip this. Gate on the wallet's OWN chain (always known) rather than a
+      // `chain` field on the payload — CATCH_UP_COMPLETE rebuilds its message without
+      // one, so keying off syncObject.chain would silently never fire there.
+      if (!syncObject.account && this.walletBg?.chain === Blockchain.CARDANO) {
         await this.reconcileControlledAmountFromUtxos();
       }
       debugLog('setSync', syncObject);
