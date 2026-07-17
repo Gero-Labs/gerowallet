@@ -22,6 +22,10 @@ export interface FeatureFlags {
    * will lend a pool UTxO to it (see background `isTrustedCollateralDapp`). Served
    * by gero-sync so the trust set can change without a client release. Empty = no
    * dApp gets pool collateral.
+   *
+   * Entries MUST be full origins (scheme+host+port), e.g. "https://app.minswap.org".
+   * They are compared by EXACT origin equality — never substring — so a bare host
+   * or a trailing-path entry will not match. Malformed entries are ignored.
    */
   collateralTrustedDapps: string[];
 }
