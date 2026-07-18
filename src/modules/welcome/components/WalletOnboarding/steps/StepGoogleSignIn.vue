@@ -118,9 +118,9 @@ import { ref, watch, getCurrentInstance } from 'vue';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { google } from '@/utils/assets';
-import { getAllWallets } from '@/db/gero-db';
+import { findMpcGoogleWallet } from '@/db/gero-db';
 import { walletStore } from '@/stores/walletStore';
-import { WalletType, type Wallet } from '@/models/types';
+import type { Wallet } from '@/models/types';
 import type { NetworkInfo } from '@/utils/networks';
 import UnlockWalletDialog from '@/modules/dashboard/dialogs/UnlockWalletDialog.vue';
 import type { GoogleWalletBgResponse } from './googleWalletMessages';
@@ -179,9 +179,12 @@ const email = ref('');
 const picture = ref('');
 const displayName = ref('');
 
-/** An MPC wallet already on THIS device for the signed-in Google account (matched
- *  by the JWT `sub` === wallet.userId). If present, the user should log in rather
- *  than create a duplicate (the backend would reject enroll with a 409 anyway).
+/** An MPC wallet already on THIS device for the signed-in Google account ON THIS
+ *  NETWORK (matched by JWT `sub` === wallet.userId AND chain+network). If present,
+ *  the user should log in rather than create a duplicate (the backend would reject
+ *  a same-network enroll with a 409 anyway). The match is network-scoped because the
+ *  backend enrolls per `(sub, chain, network)`, so the SAME account can hold a
+ *  separate wallet on each network (e.g. Cardano mainnet AND preprod).
  *  DB-backed (queried on sign-in) so it doesn't depend on the store being hydrated. */
 const existingWallet = ref<Wallet | null>(null);
 
@@ -189,11 +192,11 @@ async function findExistingWallet(token: string): Promise<void> {
   existingWallet.value = null;
   const sub = subFromToken(token);
   if (!sub) return;
+  const chain = props.network?.blockchain;
+  const network = props.network?.network;
+  if (!chain || !network) return;
   try {
-    const all = await getAllWallets();
-    existingWallet.value = (Object.values(all) as Wallet[]).find(
-      (w) => w.type === WalletType.Google && w.encryptionMethod === 'mpc' && w.userId === sub,
-    ) || null;
+    existingWallet.value = await findMpcGoogleWallet(sub, chain, network);
   } catch {
     existingWallet.value = null;
   }

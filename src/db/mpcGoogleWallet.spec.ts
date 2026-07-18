@@ -9,7 +9,7 @@
 // be; the assertion set (fields written) matches the plan's intent.
 import 'fake-indexeddb/auto';
 import { describe, it, expect } from 'vitest';
-import { createMpcGoogleWallet, getAllWallets } from '@/db/gero-db';
+import { createMpcGoogleWallet, getAllWallets, findMpcGoogleWallet } from '@/db/gero-db';
 import { WalletType } from '@/models/types';
 
 describe('createMpcGoogleWallet', () => {
@@ -30,5 +30,34 @@ describe('createMpcGoogleWallet', () => {
     expect(rec.mpcDeviceShare).toBe('enc-blob');
     expect(rec.webAuthnCredentialId).toBe('cred-1');
     expect(rec.mpcPrfSaltId).toBe('salt-1');
+  });
+});
+
+describe('findMpcGoogleWallet', () => {
+  const base = {
+    name: 'W', icon: 'i', theme: 't', chain: 'cardano',
+    publicKey: 'xpub', encryptedDeviceShare: 'enc',
+  };
+
+  it('scopes the match to chain+network so one Google account can hold a wallet per network', async () => {
+    await createMpcGoogleWallet({ ...base, network: 'mainnet', userId: 'sub-x' });
+
+    // Same account, DIFFERENT network → no existing wallet, so create must be allowed.
+    expect(await findMpcGoogleWallet('sub-x', 'cardano', 'preprod')).toBeNull();
+
+    // Same account, SAME network → found (still blocks a same-network duplicate).
+    const mainnet = await findMpcGoogleWallet('sub-x', 'cardano', 'mainnet');
+    expect(mainnet?.userId).toBe('sub-x');
+    expect(mainnet?.network).toBe('mainnet');
+
+    // Once the preprod wallet exists too, each network resolves to its own record.
+    await createMpcGoogleWallet({ ...base, network: 'preprod', userId: 'sub-x' });
+    expect((await findMpcGoogleWallet('sub-x', 'cardano', 'preprod'))?.network).toBe('preprod');
+    expect((await findMpcGoogleWallet('sub-x', 'cardano', 'mainnet'))?.network).toBe('mainnet');
+  });
+
+  it('does not match a different account or a non-mpc wallet', async () => {
+    await createMpcGoogleWallet({ ...base, network: 'mainnet', userId: 'sub-a' });
+    expect(await findMpcGoogleWallet('sub-b', 'cardano', 'mainnet')).toBeNull();
   });
 });
