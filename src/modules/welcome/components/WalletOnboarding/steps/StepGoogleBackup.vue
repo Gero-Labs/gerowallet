@@ -19,11 +19,13 @@
       depressed
       :color="stored ? 'success' : 'primary'"
       :loading="storing"
-      :disabled="stored"
+      :disabled="stored || storing"
       @click="storeRecovery()"
     >
       <v-icon left small>{{ stored ? 'mdi-check' : 'mdi-cloud-upload-outline' }}</v-icon>
-      {{ stored ? $t('welcome.recoverySaved') : (errorMessage ? $t('common.retry') : $t('welcome.saveRecovery')) }}
+      {{ stored
+        ? $t('welcome.recoverySaved')
+        : (errorMessage ? $t('common.retry') : $t('welcome.savingRecovery')) }}
     </v-btn>
 
     <v-alert
@@ -75,6 +77,12 @@ const stored = ref(false);
 const errorMessage = ref('');
 
 const storeRecovery = async (): Promise<void> => {
+  // Re-entrancy guard: this is auto-fired once on load and the button is also
+  // clickable as a Retry, so bail if an upload is already in flight — two concurrent
+  // calls would
+  // race on storing/stored/errorMessage and a late failure could stomp a prior
+  // success back into an error state.
+  if (storing.value) return;
   storing.value = true;
   errorMessage.value = '';
   try {
@@ -100,6 +108,14 @@ const storeRecovery = async (): Promise<void> => {
     storing.value = false;
   }
 };
+
+// Recovery upload needs no user input (the recovery password, share and xpub anchor
+// were all collected in the prior step), so arm it automatically. Kicked off here in
+// setup (not onMounted) so `storing` flips true synchronously before the first paint —
+// no flash of an idle CTA. The button stays as a live status + a Retry affordance if
+// the upload fails; Continue remains gated on `stored` so onboarding can't proceed
+// with recovery un-armed.
+storeRecovery();
 </script>
 
 <style scoped>
