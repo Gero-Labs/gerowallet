@@ -9,7 +9,7 @@
 // be; the assertion set (fields written) matches the plan's intent.
 import 'fake-indexeddb/auto';
 import { describe, it, expect } from 'vitest';
-import { createMpcGoogleWallet, getAllWallets, findMpcGoogleWallet } from '@/db/gero-db';
+import { createMpcGoogleWallet, getAllWallets, findMpcGoogleWallet, getDb } from '@/db/gero-db';
 import { WalletType } from '@/models/types';
 
 describe('createMpcGoogleWallet', () => {
@@ -56,8 +56,20 @@ describe('findMpcGoogleWallet', () => {
     expect((await findMpcGoogleWallet('sub-x', 'cardano', 'mainnet'))?.network).toBe('mainnet');
   });
 
-  it('does not match a different account or a non-mpc wallet', async () => {
+  it('does not match a different account', async () => {
     await createMpcGoogleWallet({ ...base, network: 'mainnet', userId: 'sub-a' });
     expect(await findMpcGoogleWallet('sub-b', 'cardano', 'mainnet')).toBeNull();
+  });
+
+  it('does not match a non-mpc wallet on the same account+network', async () => {
+    // A non-MPC Google record sharing the same sub/chain/network must be ignored:
+    // the guard only offers "log in instead" for an actual MPC Google wallet.
+    const db = await getDb();
+    await db['wallets'].add({
+      name: 'legacy', icon: 'i', type: WalletType.Google, theme: 't', order: 1,
+      chain: 'cardano', network: 'mainnet', userId: 'sub-legacy',
+      encryptionMethod: 'password',
+    });
+    expect(await findMpcGoogleWallet('sub-legacy', 'cardano', 'mainnet')).toBeNull();
   });
 });
