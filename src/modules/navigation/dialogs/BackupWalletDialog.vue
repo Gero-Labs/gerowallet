@@ -309,7 +309,7 @@ const valid2 = computed(() => {
   return seedPhraseToConfirm.value && seedPhraseToConfirm.value.indexOf("") === -1 && bip39.validateMnemonic(seedToStr())
 })
 
-const isNextToFill = (index): boolean => {
+const isNextToFill = (index: number): boolean => {
   return index === seedPhraseToConfirm.value.indexOf("")
 }
 
@@ -361,14 +361,14 @@ const vmProxy = getCurrentInstance()!.proxy as unknown as {
 }
 
 const backupWalletStep1 = (): void => {
-  if (vmProxy.$refs.form2.validate()) {
+  if (vmProxy.$refs['form2'].validate()) {
     step.value = 2
     seedPhrase.value = bip39.generateMnemonic(256).split(' ');
   }
 }
 
 const backupWalletStep2 = (): void => {
-  if (vmProxy.$refs.form.validate()) {
+  if (vmProxy.$refs['form'].validate()) {
     // Set backup status using walletStore setBackup function
     WalletStore.setBackup(true);
     emit('close')
@@ -420,7 +420,7 @@ const randomReplace = (array: string[], count: number) => {
 }
 
 const decryptMnemonic = async (): Promise<void> => {
-  if (vmProxy.$refs.formUnlock.validate()) {
+  if (vmProxy.$refs['formUnlock'].validate()) {
     try {
       const decryptedMnemonic = decrypt(loggedWallet.value.encryptedMnemonic, password.value)
       if (!bip39.validateMnemonic(decryptedMnemonic)) {
@@ -487,9 +487,9 @@ watch(() => props.isOpen, (val) => {
     resetDialog()
   } else {
     nextTick(() => {
-      vmProxy.$refs.formUnlock.resetValidation()
-      vmProxy.$refs.form.resetValidation()
-      vmProxy.$refs.form2.resetValidation()
+      vmProxy.$refs['formUnlock'].resetValidation()
+      vmProxy.$refs['form'].resetValidation()
+      vmProxy.$refs['form2'].resetValidation()
     })
   }
 })
@@ -503,8 +503,8 @@ const back = (): void => {
   password.value = ''
   step.value = 1
   nextTick(() => {
-    vmProxy.$refs.formUnlock.resetValidation()
-    vmProxy.$refs.form2.resetValidation()
+    vmProxy.$refs['formUnlock'].resetValidation()
+    vmProxy.$refs['form2'].resetValidation()
   })
 }
 
