@@ -313,11 +313,11 @@ const isNextToFill = (index: number): boolean => {
   return index === seedPhraseToConfirm.value.indexOf("")
 }
 
-const removeWord = async (item, index: number): Promise<void> => {
+const removeWord = async (item: SeedWord, index: number): Promise<void> => {
   seedPhraseToConfirm.value[index] = ''
   item.state = false
   const found = seedPhraseReplaced.value.find(value => value.word === item.word)
-  found.state = true
+  if (found) found.state = true
 }
 
 const fillNext = async (index: number): Promise<void> => {
