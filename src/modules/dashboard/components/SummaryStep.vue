@@ -16,6 +16,7 @@
 import { toRefs, computed, ref } from 'vue';
 import { DappScore } from '@/models/cardano-shield-types';
 import { walletStore } from '@/stores/walletStore';
+import { Blockchain, Network } from '@/models/types';
 import cardanoShieldApi from '@/api/cardano-shield-api';
 import { Cardano } from '@cardano-sdk/core';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
@@ -185,9 +186,19 @@ const getCborHex = (): string => {
 
 async function scanTx(txData: Cardano.Tx) {
   risks.value.score = undefined;
-  loading.value = true;
   tx.value = txData;
 
+  // Cardano Shield only covers Cardano MAINNET. On any other chain/network the
+  // scan endpoint has no data and just times out (5s) — skip it and report
+  // unknown risk so the summary isn't gated on a doomed request.
+  const w = loggedWallet.value;
+  if (w?.chain !== Blockchain.CARDANO || w?.network !== Network.MAINNET) {
+    risks.value = { addressRisk: 'unknown' };
+    loading.value = false;
+    return;
+  }
+
+  loading.value = true;
   const cborHex = getCborHex();
   const toAddress = primaryRecipientAddress.value;
   const scanWithTimeout = Promise.race([
