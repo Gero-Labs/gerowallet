@@ -8,6 +8,7 @@
     @close="$emit('close')"
     scrollable
     max-width="850"
+    :width="598"
     :min-height="0"
     :persistent="persistent"
     icon="mdi-key"
@@ -69,18 +70,21 @@
         <v-stepper-items>
           <v-stepper-content step="1" style="text-align: -webkit-center;" class="pa-0">
             <v-form ref="form2" v-model="valid">
-              <v-card flat class="transparent" style="max-width: 534px; min-height: 500px;">
-                <v-card-text class="pa-0">
+              <v-card flat class="transparent" style="max-width: 556px; min-height: 500px;">
+                <v-card-text class="pa-0 text-left">
                   <v-alert
-                    color="primary"
+                    color="error"
                     dense
                     outlined
-                    type="info"
+                    type="error"
                     prominent
                     border="left"
                   >
-                    Write down or copy these words in the following order.<br>You will need
-                    these to back up and restore your wallet.
+                    <ul>
+                      <li>Write down or copy these words in the following order.</li>
+                      <li>You will need these to back up and restore your wallet.</li>
+                      <li>{{ $t('wallet.saveSeedPhraseSafe') }}</li>
+                    </ul>
                   </v-alert>
                   <v-hover v-slot="{ hover }">
                     <v-card flat outlined class="mb-4"
@@ -152,15 +156,6 @@
                       </v-overlay>
                     </v-card>
                   </v-hover>
-                  <v-alert
-                    dense
-                    type="error"
-                    prominent
-                    border="left"
-                    class="text-left"
-                  >
-                    {{ $t('wallet.saveSeedPhraseSafe') }}
-                  </v-alert>
                   <v-checkbox
                     class="mt-0"
                     hide-details
