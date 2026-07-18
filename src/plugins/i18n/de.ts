@@ -1786,9 +1786,7 @@ export default {
   'navigation.websiteMayStealFunds': 'Diese Website könnte versuchen, mein Geld zu stehlen, indem sie falsche oder irreführende Informationen präsentiert.',
   'navigation.whatsNew': 'Was ist neu?',
   'navigation.whatsNewSubtitle': 'Bleiben Sie mit den neuesten Funktionen und Updates auf dem Laufenden',
-  'navigation.writeDescriptionHere': 'Schreiben Sie hier Ihre Beschreibung...',
-  'navigation.writeDownWords': 'Schreiben Sie diese Wörter in der folgenden Reihenfolge auf oder kopieren Sie sie. Sie werden sie benötigen',
-  'navigation.writeEvidenceHere': 'Schreiben Sie hier Ihren Nachweis...',
+  'navigation.writeDescriptionHere': 'Schreiben Sie hier Ihre Beschreibung...',  'navigation.writeEvidenceHere': 'Schreiben Sie hier Ihren Nachweis...',
   // deprecated: ersetzt durch errors.wrongPassword (bleibt als Platzhalter erhalten)
   'navigation.wrongPassword': 'Falsches Passwort',
   'navigation.youreGiving': 'Sie geben',
@@ -3203,9 +3201,7 @@ export default {
   'wallet.walletBackedUp': 'Wallet gesichert',
   'wallet.walletIcon': 'Wallet-Symbol',
   'wallet.walletName': 'Wallet-Name',
-  'wallet.welcomeBack': 'Willkommen zurück',
-  'wallet.writeDownWords': 'Schreibe diese Wörter in der folgenden Reihenfolge auf oder kopiere sie. Du wirst sie benötigen',
-  'wallet.writeSeedPhrase': 'Schreibe deine Wiederherstellungsphrase auf',
+  'wallet.welcomeBack': 'Willkommen zurück',  'wallet.writeSeedPhrase': 'Schreibe deine Wiederherstellungsphrase auf',
   // deprecated: ersetzt durch errors.wrongPassword (bleibt als Platzhalter erhalten)
   'wallet.wrongPassword': 'Falsches Passwort',
   // deprecated: ersetzt durch errors.wrongPassword (bleibt als Platzhalter erhalten)

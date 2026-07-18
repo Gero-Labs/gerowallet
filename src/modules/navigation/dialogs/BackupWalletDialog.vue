@@ -271,12 +271,15 @@ const valid = ref<boolean>(false);
 const validUnlock = ref<boolean>(false);
 const loading = ref<boolean>(false);
 const seedPhrase = ref<string[]>(bip39.generateMnemonic(256).split(' '));
-const seedPhraseToConfirm = ref<any[]>([]);
-const seedPhraseReplaced = ref<any[]>([]);
+// A shuffled seed word in the confirm grid: `state` false once the user has placed it.
+type SeedWord = { word: string; state: boolean };
+// Confirm slots hold either an empty-string placeholder or a placed SeedWord.
+const seedPhraseToConfirm = ref<Array<string | SeedWord>>([]);
+const seedPhraseReplaced = ref<SeedWord[]>([]);
 const overlay = ref<boolean>(true);
 const recoverSeedChecked = ref<boolean>(false);
 const password = ref<string>('');
-const passwordField = ref<any>(null);
+const passwordField = ref<{ showError: (msg: string) => void } | null>(null);
 const decryptingWithPassKey = ref<boolean>(false);
 const backup = computed(() => config.value?.backup || false);
 
@@ -324,10 +327,10 @@ const fillNext = async (index: number): Promise<void> => {
 }
 
 const reset = async (): Promise<void> => {
-  seedPhraseToConfirm.value = seedPhraseToConfirm.value.map((value: any) => {
+  seedPhraseToConfirm.value = seedPhraseToConfirm.value.map((value) => {
     if (typeof value === 'object') {
       const found = seedPhraseReplaced.value.find(val => val.word === value.word)
-      found.state = true
+      if (found) found.state = true
       return ''
     }
     return value
@@ -352,7 +355,10 @@ const backupWallet = async (): Promise<void> => {
   }
 }
 
-const vmProxy = getCurrentInstance()!.proxy as any
+const vmProxy = getCurrentInstance()!.proxy as unknown as {
+  $refs: Record<string, { validate: () => boolean; resetValidation: () => void }>;
+  $snackbar?: { setError: (msg: string) => void };
+}
 
 const backupWalletStep1 = (): void => {
   if (vmProxy.$refs.form2.validate()) {
@@ -461,14 +467,15 @@ const decryptMnemonicWithPassKey = async (): Promise<void> => {
     overlay.value = false;
 
     console.log('✅ Mnemonic decrypted successfully');
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('❌ PassKey mnemonic decryption failed:', e);
 
     // Show user-friendly error
-    if (e.message?.includes('User cancelled')) {
+    const message = e instanceof Error ? e.message : '';
+    if (message.includes('User cancelled')) {
       console.log('User cancelled PassKey authentication');
     } else {
-      vmProxy.$snackbar?.setError(e.message || t('common.decryptionFailed'));
+      vmProxy.$snackbar?.setError(message || t('common.decryptionFailed'));
     }
   } finally {
     decryptingWithPassKey.value = false;
