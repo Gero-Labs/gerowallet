@@ -19,7 +19,7 @@
       depressed
       :color="stored ? 'success' : 'primary'"
       :loading="storing"
-      :disabled="stored"
+      :disabled="stored || storing"
       @click="storeRecovery()"
     >
       <v-icon left small>{{ stored ? 'mdi-check' : 'mdi-cloud-upload-outline' }}</v-icon>
@@ -52,7 +52,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, getCurrentInstance } from 'vue';
+import { ref, getCurrentInstance } from 'vue';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import type { NetworkInfo } from '@/utils/networks';
@@ -72,13 +72,17 @@ defineEmits<{ (e: 'next'): void }>();
 
 const vmProxy = getCurrentInstance()!.proxy;
 
-// Initialised to `true` so the very first paint shows the saving state (no flash
-// of an idle "Save" CTA before onMounted fires the upload).
-const storing = ref(true);
+const storing = ref(false);
 const stored = ref(false);
 const errorMessage = ref('');
 
 const storeRecovery = async (): Promise<void> => {
+  // Re-entrancy guard: this is auto-fired once on load and the button is also
+  // clickable as a Retry, so bail if an upload is already in flight — two concurrent
+  // calls would
+  // race on storing/stored/errorMessage and a late failure could stomp a prior
+  // success back into an error state.
+  if (storing.value) return;
   storing.value = true;
   errorMessage.value = '';
   try {
@@ -106,12 +110,12 @@ const storeRecovery = async (): Promise<void> => {
 };
 
 // Recovery upload needs no user input (the recovery password, share and xpub anchor
-// were all collected in the prior step), so arm it automatically on mount. The button
-// stays as a live status + a Retry affordance if the upload fails; Continue remains
-// gated on `stored` so onboarding can't proceed with recovery un-armed.
-onMounted(() => {
-  storeRecovery();
-});
+// were all collected in the prior step), so arm it automatically. Kicked off here in
+// setup (not onMounted) so `storing` flips true synchronously before the first paint —
+// no flash of an idle CTA. The button stays as a live status + a Retry affordance if
+// the upload fails; Continue remains gated on `stored` so onboarding can't proceed
+// with recovery un-armed.
+storeRecovery();
 </script>
 
 <style scoped>
