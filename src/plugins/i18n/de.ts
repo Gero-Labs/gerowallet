@@ -3137,6 +3137,8 @@ export default {
   'wallet.contactName': 'Name',
   'wallet.unnamed': 'Unbenannt',
   'wallet.saveSeedPhraseSafe': 'Speichere die Wiederherstellungsphrase an einem sicheren Ort und teile sie niemals mit jemandem.',
+  'wallet.backupWriteDownOrder': 'Schreibe diese Wörter in der angegebenen Reihenfolge auf oder kopiere sie.',
+  'wallet.backupNeededToRestore': 'Du benötigst sie, um deine Wallet zu sichern und wiederherzustellen.',
   'wallet.scanAddressQR': 'Adress-QR-Code scannen',
   'wallet.scanQRCode': 'QR-Code scannen',
   'wallet.scanQRWithKeystone': 'Bitte scannen Sie den QR-Code mit Ihrem Keystone-Gerät.',

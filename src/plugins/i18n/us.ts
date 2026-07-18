@@ -2649,6 +2649,8 @@ export default {
   'wallet.contactName': 'Name',
   'wallet.unnamed': 'Unnamed',
   'wallet.saveSeedPhraseSafe': 'Save the seed phrase somewhere safe and never share it with anyone.',
+  'wallet.backupWriteDownOrder': 'Write down or copy these words in the following order.',
+  'wallet.backupNeededToRestore': 'You will need these to back up and restore your wallet.',
   'wallet.scanAddressQR': 'Scan Address QR Code',
   'wallet.scanQRWithKeystone': 'Please scan the QR code with your Keystone device.',
   'wallet.scanQRCode': 'Scan QR Code',

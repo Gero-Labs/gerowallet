@@ -81,8 +81,8 @@
                     border="left"
                   >
                     <ul>
-                      <li>Write down or copy these words in the following order.</li>
-                      <li>You will need these to back up and restore your wallet.</li>
+                      <li>{{ $t('wallet.backupWriteDownOrder') }}</li>
+                      <li>{{ $t('wallet.backupNeededToRestore') }}</li>
                       <li>{{ $t('wallet.saveSeedPhraseSafe') }}</li>
                     </ul>
                   </v-alert>
