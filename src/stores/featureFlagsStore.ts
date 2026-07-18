@@ -216,8 +216,7 @@ export const featureFlagsStore = {
    * Check if Pool Operator dashboard is enabled
    */
   isPoolOperatorEnabled(): boolean {
-    // Hard-pinned off for 2.7 (HIDE+GATE). Ignores remote LaunchDarkly flag.
-    return false;
+    return featureFlagsState.flags.isPoolOperatorEnabled;
   },
 
   /**

@@ -452,10 +452,11 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
       thorchain: (c, n) => networks.resolveThorchainSupport(c, n),
       mempool: (c, n) => networks.resolveMempoolSupport(c, n),
       lightning: (c, n) => networks.resolveLightningSupport(c, n),
-      // Pool Operator — hard-gated off for 2.7. Unconditional guard closes the
-      // cold-refresh window before feature flags initialize (maintenance check
-      // at the bottom only fires once flags are initialized).
-      poolOperator: () => false,
+      // Pool Operator — gated by staking support + the isPoolOperatorEnabled flag,
+      // matching the NavigationDrawer item's own `enabled` condition. Returns the
+      // live values (not a hard false) so gero-sync can turn it on without a release;
+      // falsy => redirect to '/'. (Same pattern as copilotFeed below.)
+      poolOperator: (c, n) => networks.resolveStakingSupport(c, n) && featureFlagsStore.isPoolOperatorEnabled(),
       // Copilot feed — closes the cold-refresh window before flags init. Returns
       // the live flag (not a hard false) so the maintenance case can turn it ON
       // once gero-sync enables it. Falsy => redirect to '/'.
