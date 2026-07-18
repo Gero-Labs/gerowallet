@@ -274,7 +274,11 @@ export async function createNewWallet(
     mnemonic = bip39.generateMnemonic(256);
   }
 
-  // Derive keys based on chain
+  // Derive keys based on chain. Holds one of three incompatible key shapes
+  // depending on `chain` (Bitcoin HDKey / Midnight { privateKey } / Cardano
+  // Bip32PrivateKey), disambiguated by the runtime `chain` guards at every read
+  // site below — a static union would force a cast at each of those sites.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let rootKey: any;
   let publicKey: string;
 
@@ -608,6 +612,35 @@ export async function createMpcGoogleWallet(params: {
   const walletId = await db['wallets'].add(walletData);
   await createNewWalletDb(walletId, false, false);
   return walletId as number;
+}
+
+/**
+ * Find the MPC "Sign in with Google" wallet on THIS device for a given Google
+ * account ON A SPECIFIC NETWORK. The match is scoped to `chain` + `network` (not
+ * the account alone): the backend enrolls the login share per `(sub, chain, network)`,
+ * so one Google account can legitimately hold an independent wallet on each network
+ * (e.g. a Cardano mainnet wallet AND a Cardano preprod wallet). Onboarding uses this
+ * to offer "log in" instead of "create" only when a wallet already exists for the
+ * SAME account on the SAME network.
+ *
+ * @param userId - the Google `sub` (from the id token payload)
+ * @param chain - the target chain (e.g. Blockchain.CARDANO)
+ * @param network - the target network (e.g. 'mainnet' | 'preprod')
+ * @returns the matching wallet record, or null when none exists for this account+network
+ */
+export async function findMpcGoogleWallet(
+  userId: string,
+  chain: string,
+  network: string,
+): Promise<Wallet | null> {
+  const db: Dexie = await getDb();
+  const candidates = await db['wallets'].where('userId').equals(userId).toArray();
+  return (candidates as Wallet[]).find(
+    (w) => w.type === WalletType.Google
+      && w.encryptionMethod === 'mpc'
+      && w.chain === chain
+      && w.network === network,
+  ) || null;
 }
 
 export async function deleteWallet(walletId: number|string) {
