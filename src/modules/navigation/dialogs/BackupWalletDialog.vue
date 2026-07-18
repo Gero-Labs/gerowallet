@@ -8,6 +8,7 @@
     @close="$emit('close')"
     scrollable
     max-width="850"
+    :width="598"
     :min-height="0"
     :persistent="persistent"
     icon="mdi-key"
@@ -69,18 +70,21 @@
         <v-stepper-items>
           <v-stepper-content step="1" style="text-align: -webkit-center;" class="pa-0">
             <v-form ref="form2" v-model="valid">
-              <v-card flat class="transparent" style="max-width: 534px; min-height: 500px;">
-                <v-card-text class="pa-0">
+              <v-card flat class="transparent" style="max-width: 556px; min-height: 500px;">
+                <v-card-text class="pa-0 text-left">
                   <v-alert
-                    color="primary"
+                    color="error"
                     dense
                     outlined
-                    type="info"
+                    type="error"
                     prominent
                     border="left"
                   >
-                    Write down or copy these words in the following order.<br>You will need
-                    these to back up and restore your wallet.
+                    <ul>
+                      <li>{{ $t('wallet.backupWriteDownOrder') }}</li>
+                      <li>{{ $t('wallet.backupNeededToRestore') }}</li>
+                      <li>{{ $t('wallet.saveSeedPhraseSafe') }}</li>
+                    </ul>
                   </v-alert>
                   <v-hover v-slot="{ hover }">
                     <v-card flat outlined class="mb-4"
@@ -152,15 +156,6 @@
                       </v-overlay>
                     </v-card>
                   </v-hover>
-                  <v-alert
-                    dense
-                    type="error"
-                    prominent
-                    border="left"
-                    class="text-left"
-                  >
-                    {{ $t('wallet.saveSeedPhraseSafe') }}
-                  </v-alert>
                   <v-checkbox
                     class="mt-0"
                     hide-details
@@ -176,7 +171,7 @@
 
           <v-stepper-content step="2" style="text-align: -webkit-center;" class="pa-0">
             <v-form ref="form" v-model="valid2" style="padding-top: 12px; padding-bottom: 12px">
-              <v-card flat class="transparent d-flex row fill-height" style="max-width: 534px; min-height: 500px;">
+              <v-card flat class="transparent d-flex row fill-height" style="max-width: 556px; min-height: 500px;">
                 <v-card-text class="px-0 d-flex row justify-space-around mt-2">
                   <v-card-text class="pa-0">
                     <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Please click on each word in the correct order.</h2>
@@ -276,12 +271,15 @@ const valid = ref<boolean>(false);
 const validUnlock = ref<boolean>(false);
 const loading = ref<boolean>(false);
 const seedPhrase = ref<string[]>(bip39.generateMnemonic(256).split(' '));
-const seedPhraseToConfirm = ref<any[]>([]);
-const seedPhraseReplaced = ref<any[]>([]);
+// A shuffled seed word in the confirm grid: `state` false once the user has placed it.
+type SeedWord = { word: string; state: boolean };
+// Confirm slots hold either an empty-string placeholder or a placed SeedWord.
+const seedPhraseToConfirm = ref<Array<string | SeedWord>>([]);
+const seedPhraseReplaced = ref<SeedWord[]>([]);
 const overlay = ref<boolean>(true);
 const recoverSeedChecked = ref<boolean>(false);
 const password = ref<string>('');
-const passwordField = ref<any>(null);
+const passwordField = ref<{ showError: (msg: string) => void } | null>(null);
 const decryptingWithPassKey = ref<boolean>(false);
 const backup = computed(() => config.value?.backup || false);
 
@@ -311,15 +309,15 @@ const valid2 = computed(() => {
   return seedPhraseToConfirm.value && seedPhraseToConfirm.value.indexOf("") === -1 && bip39.validateMnemonic(seedToStr())
 })
 
-const isNextToFill = (index): boolean => {
+const isNextToFill = (index: number): boolean => {
   return index === seedPhraseToConfirm.value.indexOf("")
 }
 
-const removeWord = async (item, index: number): Promise<void> => {
+const removeWord = async (item: SeedWord, index: number): Promise<void> => {
   seedPhraseToConfirm.value[index] = ''
   item.state = false
   const found = seedPhraseReplaced.value.find(value => value.word === item.word)
-  found.state = true
+  if (found) found.state = true
 }
 
 const fillNext = async (index: number): Promise<void> => {
@@ -329,10 +327,10 @@ const fillNext = async (index: number): Promise<void> => {
 }
 
 const reset = async (): Promise<void> => {
-  seedPhraseToConfirm.value = seedPhraseToConfirm.value.map((value: any) => {
+  seedPhraseToConfirm.value = seedPhraseToConfirm.value.map((value) => {
     if (typeof value === 'object') {
       const found = seedPhraseReplaced.value.find(val => val.word === value.word)
-      found.state = true
+      if (found) found.state = true
       return ''
     }
     return value
@@ -357,17 +355,20 @@ const backupWallet = async (): Promise<void> => {
   }
 }
 
-const vmProxy = getCurrentInstance()!.proxy as any
+const vmProxy = getCurrentInstance()!.proxy as unknown as {
+  $refs: Record<string, { validate: () => boolean; resetValidation: () => void }>;
+  $snackbar?: { setError: (msg: string) => void };
+}
 
 const backupWalletStep1 = (): void => {
-  if (vmProxy.$refs.form2.validate()) {
+  if (vmProxy.$refs['form2'].validate()) {
     step.value = 2
     seedPhrase.value = bip39.generateMnemonic(256).split(' ');
   }
 }
 
 const backupWalletStep2 = (): void => {
-  if (vmProxy.$refs.form.validate()) {
+  if (vmProxy.$refs['form'].validate()) {
     // Set backup status using walletStore setBackup function
     WalletStore.setBackup(true);
     emit('close')
@@ -419,7 +420,7 @@ const randomReplace = (array: string[], count: number) => {
 }
 
 const decryptMnemonic = async (): Promise<void> => {
-  if (vmProxy.$refs.formUnlock.validate()) {
+  if (vmProxy.$refs['formUnlock'].validate()) {
     try {
       const decryptedMnemonic = decrypt(loggedWallet.value.encryptedMnemonic, password.value)
       if (!bip39.validateMnemonic(decryptedMnemonic)) {
@@ -466,14 +467,15 @@ const decryptMnemonicWithPassKey = async (): Promise<void> => {
     overlay.value = false;
 
     console.log('✅ Mnemonic decrypted successfully');
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('❌ PassKey mnemonic decryption failed:', e);
 
     // Show user-friendly error
-    if (e.message?.includes('User cancelled')) {
+    const message = e instanceof Error ? e.message : '';
+    if (message.includes('User cancelled')) {
       console.log('User cancelled PassKey authentication');
     } else {
-      vmProxy.$snackbar?.setError(e.message || t('common.decryptionFailed'));
+      vmProxy.$snackbar?.setError(message || t('common.decryptionFailed'));
     }
   } finally {
     decryptingWithPassKey.value = false;
@@ -485,9 +487,9 @@ watch(() => props.isOpen, (val) => {
     resetDialog()
   } else {
     nextTick(() => {
-      vmProxy.$refs.formUnlock.resetValidation()
-      vmProxy.$refs.form.resetValidation()
-      vmProxy.$refs.form2.resetValidation()
+      vmProxy.$refs['formUnlock'].resetValidation()
+      vmProxy.$refs['form'].resetValidation()
+      vmProxy.$refs['form2'].resetValidation()
     })
   }
 })
@@ -501,8 +503,8 @@ const back = (): void => {
   password.value = ''
   step.value = 1
   nextTick(() => {
-    vmProxy.$refs.formUnlock.resetValidation()
-    vmProxy.$refs.form2.resetValidation()
+    vmProxy.$refs['formUnlock'].resetValidation()
+    vmProxy.$refs['form2'].resetValidation()
   })
 }
 
