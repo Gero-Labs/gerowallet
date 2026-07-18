@@ -479,7 +479,11 @@ defineExpose({ cardTotalAmounts });
      it through as a light-grey wash. Solid --g-surface blocks that; the inner
      input/token rows (--g-raised) still read as raised insets. */
   background-color: var(--g-surface) !important;
-  border: 1px solid var(--g-hairline-1) !important;
+  /* No static hairline: the solid --g-surface (vs the glass dialog) already
+     delineates the card, and the inner outlined address field carried a second,
+     parallel border — the outer one just doubled up. Keep a transparent border
+     so the expanded-state accent highlight below still has something to color. */
+  border: 1px solid transparent !important;
   border-radius: var(--g-r-card) !important;
   transition: border-color 0.2s ease;
 }
