@@ -2901,7 +2901,7 @@ export default {
   'welcome.recoveryPasswordMustDiffer': 'Recovery password must be different from your spending password',
   'welcome.recoveryNoFileTitle': 'No file to download',
   'welcome.recoveryNoFileBody': 'Your recovery is your Google account plus this password. There is nothing to download — sign in with Google on any device and enter this password to restore.',
-  'welcome.saveRecovery': 'Save recovery',
+  'welcome.savingRecovery': 'Saving recovery…',
   'welcome.recoverySaved': 'Recovery saved',
   'welcome.recoverySaveFailed': 'Could not save your recovery. Please try again.',
   'welcome.recoveryPasswordTooWeak': 'Choose a stronger recovery password (at least 12 characters).',

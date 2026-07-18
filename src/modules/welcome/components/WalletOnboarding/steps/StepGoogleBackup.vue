@@ -23,7 +23,9 @@
       @click="storeRecovery()"
     >
       <v-icon left small>{{ stored ? 'mdi-check' : 'mdi-cloud-upload-outline' }}</v-icon>
-      {{ stored ? $t('welcome.recoverySaved') : (errorMessage ? $t('common.retry') : $t('welcome.saveRecovery')) }}
+      {{ stored
+        ? $t('welcome.recoverySaved')
+        : (errorMessage ? $t('common.retry') : $t('welcome.savingRecovery')) }}
     </v-btn>
 
     <v-alert
@@ -50,7 +52,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, getCurrentInstance } from 'vue';
+import { ref, onMounted, getCurrentInstance } from 'vue';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import type { NetworkInfo } from '@/utils/networks';
@@ -70,7 +72,9 @@ defineEmits<{ (e: 'next'): void }>();
 
 const vmProxy = getCurrentInstance()!.proxy;
 
-const storing = ref(false);
+// Initialised to `true` so the very first paint shows the saving state (no flash
+// of an idle "Save" CTA before onMounted fires the upload).
+const storing = ref(true);
 const stored = ref(false);
 const errorMessage = ref('');
 
@@ -100,6 +104,14 @@ const storeRecovery = async (): Promise<void> => {
     storing.value = false;
   }
 };
+
+// Recovery upload needs no user input (the recovery password, share and xpub anchor
+// were all collected in the prior step), so arm it automatically on mount. The button
+// stays as a live status + a Retry affordance if the upload fails; Continue remains
+// gated on `stored` so onboarding can't proceed with recovery un-armed.
+onMounted(() => {
+  storeRecovery();
+});
 </script>
 
 <style scoped>
