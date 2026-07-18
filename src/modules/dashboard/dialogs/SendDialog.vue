@@ -1272,7 +1272,10 @@ onMounted(() => {
   margin-bottom: 4px;
 }
 
-.global-total__total-row {
+/* Separator + its breathing room only when there ARE rows above Total (fee /
+   withdrawal are v-if). On the Recipients step those are hidden, so both the
+   border and the top padding would otherwise be orphaned above Total. */
+.global-total__total-row:not(:first-child) {
   padding-top: 6px;
   border-top: 1px solid var(--g-hairline-1);
 }
