@@ -1787,7 +1787,6 @@ export default {
   'navigation.whatsNew': 'Was ist neu?',
   'navigation.whatsNewSubtitle': 'Bleiben Sie mit den neuesten Funktionen und Updates auf dem Laufenden',
   'navigation.writeDescriptionHere': 'Schreiben Sie hier Ihre Beschreibung...',
-  'navigation.writeDownWords': 'Schreiben Sie diese Wörter in der folgenden Reihenfolge auf oder kopieren Sie sie. Sie werden sie benötigen',
   'navigation.writeEvidenceHere': 'Schreiben Sie hier Ihren Nachweis...',
   // deprecated: ersetzt durch errors.wrongPassword (bleibt als Platzhalter erhalten)
   'navigation.wrongPassword': 'Falsches Passwort',
@@ -3137,6 +3136,8 @@ export default {
   'wallet.contactName': 'Name',
   'wallet.unnamed': 'Unbenannt',
   'wallet.saveSeedPhraseSafe': 'Speichere die Wiederherstellungsphrase an einem sicheren Ort und teile sie niemals mit jemandem.',
+  'wallet.backupWriteDownOrder': 'Schreibe diese Wörter in der angegebenen Reihenfolge auf oder kopiere sie.',
+  'wallet.backupNeededToRestore': 'Du benötigst sie, um deine Wallet zu sichern und wiederherzustellen.',
   'wallet.scanAddressQR': 'Adress-QR-Code scannen',
   'wallet.scanQRCode': 'QR-Code scannen',
   'wallet.scanQRWithKeystone': 'Bitte scannen Sie den QR-Code mit Ihrem Keystone-Gerät.',
@@ -3202,7 +3203,6 @@ export default {
   'wallet.walletIcon': 'Wallet-Symbol',
   'wallet.walletName': 'Wallet-Name',
   'wallet.welcomeBack': 'Willkommen zurück',
-  'wallet.writeDownWords': 'Schreibe diese Wörter in der folgenden Reihenfolge auf oder kopiere sie. Du wirst sie benötigen',
   'wallet.writeSeedPhrase': 'Schreibe deine Wiederherstellungsphrase auf',
   // deprecated: ersetzt durch errors.wrongPassword (bleibt als Platzhalter erhalten)
   'wallet.wrongPassword': 'Falsches Passwort',

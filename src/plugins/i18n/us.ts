@@ -1566,7 +1566,6 @@ export default {
   'navigation.privacyPolicy': 'Privacy Policy',
   'navigation.version': 'Version',
   'navigation.writeDescriptionHere': 'Write your description here...',
-  'navigation.writeDownWords': 'Write down or copy these words in the following order. You will need',
   'navigation.writeEvidenceHere': 'Write your evidence here...',
   // deprecated: superseded by errors.wrongPassword (kept as a tombstone; deleting i18n keys is riskier than leaving them)
   'navigation.wrongPassword': 'Wrong Password',
@@ -2649,6 +2648,8 @@ export default {
   'wallet.contactName': 'Name',
   'wallet.unnamed': 'Unnamed',
   'wallet.saveSeedPhraseSafe': 'Save the seed phrase somewhere safe and never share it with anyone.',
+  'wallet.backupWriteDownOrder': 'Write down or copy these words in the following order.',
+  'wallet.backupNeededToRestore': 'You will need these to back up and restore your wallet.',
   'wallet.scanAddressQR': 'Scan Address QR Code',
   'wallet.scanQRWithKeystone': 'Please scan the QR code with your Keystone device.',
   'wallet.scanQRCode': 'Scan QR Code',
@@ -2711,7 +2712,6 @@ export default {
   'wallet.walletIcon': 'Wallet Icon',
   'wallet.walletName': 'Wallet Name',
   'wallet.welcomeBack': 'Welcome Back',
-  'wallet.writeDownWords': 'Write down or copy these words in the following order. You will need',
   'wallet.writeSeedPhrase': 'Write down your recovery phrase',
   // deprecated: superseded by errors.wrongPassword (kept as a tombstone; deleting i18n keys is riskier than leaving them)
   'wallet.wrongPassword': 'Wrong password',
