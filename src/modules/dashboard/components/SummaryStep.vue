@@ -143,10 +143,6 @@ const withdrawalRow = computed<TxDetailsWithdrawal | null>(() => {
 const totals = computed<TxDetailsTotals>(() => {
   const fee = tx.value?.body?.fee ? BigInt(tx.value.body.fee) : 0n;
   const net = totalSendingLovelace.value + fee - withdrawnRewardsLovelace.value;
-  // TEMP diagnostic — remove once the self-send fix is confirmed live.
-  console.log('[SummaryStep][self-send-fix] kinds:', outputRows.value.map((r) => r.kind),
-    'isInternal:', isInternalTransfer.value,
-    'totalSending:', totalSendingLovelace.value.toString());
   return {
     totalSendingAda: formatAda(totalSendingLovelace.value),
     feeAda: feeAda.value,
