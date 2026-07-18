@@ -50,6 +50,7 @@
   import networks from '@/utils/networks';
   import cardanoShieldApi from '@/api/cardano-shield-api';
   import { DappRisk } from '@/models/cardano-shield-types';
+  import { Blockchain, Network } from '@/models/types';
   import type { TxData, Risks } from '@/modules/multisig/types/MultiSigTypes';
 
   interface SendData {
@@ -163,8 +164,18 @@
 
   const scanTx = async (txData: Transaction) => {
     risks.value.score = undefined;
-    loading.value = true;
     tx.value = txData;
+
+    // Cardano Shield only covers Cardano MAINNET — skip off-mainnet, where the
+    // scan endpoint has no data and just times out after 5s.
+    const w = loggedWallet.value;
+    if (w?.chain !== Blockchain.CARDANO || w?.network !== Network.MAINNET) {
+      risks.value = { addressRisk: DappRisk.unknown };
+      loading.value = false;
+      return;
+    }
+
+    loading.value = true;
 
     // Make Cardano Shield scan non-blocking with 5-second timeout
     // Don't block the UI if the scan is slow or fails
