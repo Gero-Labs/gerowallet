@@ -3396,7 +3396,7 @@ export default {
   'welcome.recoveryPasswordMustDiffer': 'Das Wiederherstellungspasswort muss sich von Ihrem Ausgabepasswort unterscheiden',
   'welcome.recoveryNoFileTitle': 'Keine Datei zum Herunterladen',
   'welcome.recoveryNoFileBody': 'Ihre Wiederherstellung besteht aus Ihrem Google-Konto und diesem Passwort. Es gibt nichts herunterzuladen — melden Sie sich auf einem beliebigen Gerät mit Google an und geben Sie dieses Passwort ein, um wiederherzustellen.',
-  'welcome.saveRecovery': 'Wiederherstellung speichern',
+  'welcome.savingRecovery': 'Wiederherstellung wird gespeichert…',
   'welcome.recoverySaved': 'Wiederherstellung gespeichert',
   'welcome.recoverySaveFailed': 'Wiederherstellung konnte nicht gespeichert werden. Bitte erneut versuchen.',
   'welcome.recoveryPasswordTooWeak': 'Wählen Sie ein stärkeres Wiederherstellungspasswort (mindestens 12 Zeichen).',
