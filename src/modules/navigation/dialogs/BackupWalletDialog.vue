@@ -171,7 +171,7 @@
 
           <v-stepper-content step="2" style="text-align: -webkit-center;" class="pa-0">
             <v-form ref="form" v-model="valid2" style="padding-top: 12px; padding-bottom: 12px">
-              <v-card flat class="transparent d-flex row fill-height" style="max-width: 534px; min-height: 500px;">
+              <v-card flat class="transparent d-flex row fill-height" style="max-width: 556px; min-height: 500px;">
                 <v-card-text class="px-0 d-flex row justify-space-around mt-2">
                   <v-card-text class="pa-0">
                     <h2 class="text-left px-0 pt-0 pb-1 white--text" style="width: 100%">Please click on each word in the correct order.</h2>
