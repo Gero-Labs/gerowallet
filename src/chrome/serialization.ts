@@ -14,6 +14,7 @@ import { HexBlob } from '@cardano-sdk/util';
 import { bech32, bech32m, Decoded } from 'bech32';
 import { Buffer } from 'buffer';
 import { nexusCollateralApi } from '@/api/nexus-collateral-api';
+import { toNexusNetwork } from '@/api/nexus-tx-api';
 import { debugLog } from '@/utils/debug';
 import WalletStore from '@/stores/walletStore';
 
@@ -523,7 +524,9 @@ export async function getCollateral(
   // pool existed.
   if (opts.allowNexusFallback) {
     try {
-      const lent = await nexusCollateralApi.lend();
+      const lent = await nexusCollateralApi.lend(
+        toNexusNetwork(WalletStore.state.loggedWallet?.network),
+      );
       const utxoCbor = buildNexusUtxoCbor(lent);
       // Remember this ref so SIGN_TX knows it must be co-signed by Nexus (and can
       // surface a co-sign failure rather than returning an unsubmittable witness).
