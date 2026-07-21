@@ -29,6 +29,7 @@ import WalletStore, { hydrateWalletStore, matchesDappWhitelistEntry, walletStore
 import { walletManager } from '@/services/walletManager.service';
 import { shouldAutoLock } from '@/services/autoLock';
 import { nexusCollateralApi } from '@/api/nexus-collateral-api';
+import { toNexusNetwork } from '@/api/nexus-tx-api';
 import { debugLog } from '@/utils/debug';
 import type { walletConnectService } from '@/services/walletConnect/walletConnect.service';
 import { Cardano, Serialization } from '@cardano-sdk/core';
@@ -2372,11 +2373,14 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
       // that succeed.
       const txCborForCosign: string | undefined = request.data.txCbor;
       if (txCborForCosign && transaction?.body?.collaterals?.length) {
+        // Route the cosign to the wallet's network so Nexus uses that network's hot
+        // wallet key/pool (one Nexus serves preprod / preview / mainnet).
+        const cosignNetwork = toNexusNetwork(WalletStore.state.loggedWallet?.network);
         for (const c of transaction.body.collaterals) {
           const ref = `${c.txId}#${c.index}`;
           const weLentThisRef = isRecentNexusLent(ref);
           try {
-            const { witness } = await nexusCollateralApi.cosign(txCborForCosign, ref);
+            const { witness } = await nexusCollateralApi.cosign(txCborForCosign, ref, cosignNetwork);
             const merged = await mergeWitnessSets(witnessResult.witnesses, witness);
             witnessResult = { witnesses: merged };
             debugLog('🔗 Merged Nexus collateral cosign for', ref);
