@@ -18,6 +18,12 @@
 import axios from 'axios';
 
 /**
+ * Chain-prefixed nexus network slug (the `network` query-param format its endpoints
+ * expect). Produce it from the wallet's typed network via {@code toNexusNetwork}.
+ */
+export type NexusNetworkSlug = 'cardano-mainnet' | 'cardano-preprod' | 'cardano-preview';
+
+/**
  * Raw chain fields returned by the backend. The client builds the CIP-30
  * {@code TransactionUnspentOutput} CBOR locally so we can keep the API
  * version-decoupled from the wallet's serialization library.
@@ -62,8 +68,10 @@ export const nexusCollateralApi = {
    * UTxO exists on-chain. The same UTxO may be returned to multiple callers — that's
    * intentional, see the module-level note on collateral semantics.
    */
-  async lend(): Promise<LendResponse> {
-    const { data } = await client.post<LendResponse>('/api/collateral/lend');
+  async lend(network?: NexusNetworkSlug): Promise<LendResponse> {
+    const { data } = await client.post<LendResponse>('/api/collateral/lend', undefined, {
+      params: network ? { network } : undefined,
+    });
     return data;
   },
 
@@ -72,9 +80,9 @@ export const nexusCollateralApi = {
    * (Nexus caches the address UTxO query) — safe to use as a periodic health
    * check on the cached collateral entry.
    */
-  async status(utxoRef: string): Promise<StatusResponse> {
+  async status(utxoRef: string, network?: NexusNetworkSlug): Promise<StatusResponse> {
     const { data } = await client.get<StatusResponse>('/api/collateral/status', {
-      params: { utxoRef },
+      params: network ? { utxoRef, network } : { utxoRef },
     });
     return data;
   },
@@ -84,10 +92,12 @@ export const nexusCollateralApi = {
    * Backend rejects with 400 if the ref is in regular inputs (adversarial-tx
    * guard) or 404 if the ref is no longer on-chain.
    */
-  async cosign(txCbor: string, utxoRef: string): Promise<CosignResponse> {
+  async cosign(txCbor: string, utxoRef: string, network?: NexusNetworkSlug): Promise<CosignResponse> {
     const { data } = await client.post<CosignResponse>('/api/collateral/cosign', {
       txCbor,
       utxoRef,
+    }, {
+      params: network ? { network } : undefined,
     });
     return data;
   },
