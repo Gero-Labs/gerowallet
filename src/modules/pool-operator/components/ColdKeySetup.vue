@@ -87,7 +87,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { poolOperatorStore } from '@/stores/poolOperatorStore';
 import { walletStore } from '@/stores/walletStore';
@@ -102,6 +102,17 @@ const coldKeyImported = ref(false);
 const vrfKeyFile = ref<File | null>(null);
 const vrfKeyHash = ref<string | null>(null);
 const poolId = ref<string | null>(null);
+
+// Resume for a returning user who imported the cold key but left before the
+// VRF step: hydrate from the store so the VRF import section shows directly
+// (the cold key was already persisted, so we don't re-prompt for it).
+onMounted(() => {
+  if (poolOperatorStore.coldKeySource !== 'none' && poolOperatorStore.poolId) {
+    coldKeyImported.value = true;
+    poolId.value = poolOperatorStore.poolId;
+    vrfKeyHash.value = poolOperatorStore.vrfKeyHash;
+  }
+});
 
 async function onColdKeyImported(result: { coldKeyHash: string; poolId: string }) {
   coldKeyImported.value = true;
@@ -125,13 +136,26 @@ async function parseVrfKey() {
     } else {
       keyHex = cborHex;
     }
-    vrfKeyHash.value = keyHex;
-    poolOperatorStore.vrfKeyHash = keyHex;
+
+    // The pool cert stores the VRF *key hash* (blake2b-256 of the raw VRF
+    // verification key), NOT the raw vkey — same as `cardano-cli` computes
+    // from --vrf-verification-key-file. The SDK serializer writes this value
+    // verbatim, so we must hash here or the pool registers with a wrong VRF
+    // keyhash and stops making blocks.
+    const rawVkey = new Uint8Array(keyHex.match(/.{1,2}/g)!.map((b) => parseInt(b, 16)));
+    const blake2b = (await import('blake2b')).default;
+    const keyHashBytes = blake2b(32).update(rawVkey).digest();
+    const keyHashHex = Array.from(keyHashBytes as Uint8Array)
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+
+    vrfKeyHash.value = keyHashHex;
+    poolOperatorStore.vrfKeyHash = keyHashHex;
 
     const walletId = walletStore.loggedWallet?.id;
     if (walletId) {
       const { setWalletConfiguration } = await import('@/db/wallet-db');
-      await setWalletConfiguration(walletId, 'spo_vrfKeyHash', keyHex);
+      await setWalletConfiguration(walletId, 'spo_vrfKeyHash', keyHashHex);
     }
   } catch (e) {
     snackbar.setError(t('poolOperator.invalidVrfKeyFile'));

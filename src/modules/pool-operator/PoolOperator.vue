@@ -240,7 +240,7 @@ import PeersCard from './components/PeersCard.vue';
 import NodeLiveView from './components/NodeLiveView.vue';
 
 const { t } = useTranslation();
-const { coldKeySource, isRegistered, isRetiring, retirementEpoch, registeredParams, nodes, poolId } = toRefs(poolOperatorStore);
+const { coldKeySource, vrfKeyHash, isRegistered, isRetiring, retirementEpoch, registeredParams, nodes, poolId } = toRefs(poolOperatorStore);
 const { loggedWallet } = toRefs(walletStore);
 const loaded = ref(false);
 const showUpdateDialog = ref(false);
@@ -280,7 +280,11 @@ const kesRotateError = ref('');
 const kesRotateSteps = ref<string[]>([]);
 const kesRotateSuccess = ref(false);
 
-const coldKeyConfigured = computed(() => coldKeySource.value !== 'none');
+// Setup is only complete once BOTH the cold key AND the VRF key are imported.
+// The cold key persists coldKeySource='imported' immediately, so gating on it
+// alone would strand a user who left before importing the VRF key — the VRF
+// import UI lives only in the setup screen.
+const coldKeyConfigured = computed(() => coldKeySource.value !== 'none' && !!vrfKeyHash.value);
 const allNodes = computed(() => nodes.value);
 const bpNode = computed(() => nodes.value.find(n => n.type === 'bp' && n.connected));
 
