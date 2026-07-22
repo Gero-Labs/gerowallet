@@ -40,132 +40,28 @@
       <p class="get-started-desc">{{ $t('poolOperator.readyToStartDesc') }}</p>
     </div>
 
-    <div class="import-cta c-cyan" @click="showImportDialog = true">
+    <div class="import-cta c-cyan" @click="showWizard = true">
       <div class="feature-tile"><v-icon size="26" color="var(--g-accent)">mdi-file-key-outline</v-icon></div>
       <div class="import-cta-body">
-        <h4 class="import-cta-title">{{ $t('poolOperator.importColdKey') }}</h4>
+        <h4 class="import-cta-title">{{ $t('poolOperator.beginSetup') }}</h4>
         <p class="import-cta-desc">{{ $t('poolOperator.importColdKeyDescription') }}</p>
       </div>
       <v-icon color="var(--g-accent)">mdi-chevron-right</v-icon>
     </div>
 
-    <!-- VRF Key Import (shown after cold key is set) -->
-    <div v-if="coldKeyImported" class="mt-6">
-      <v-divider class="mb-4" />
-      <h4>{{ $t('poolOperator.importVrfKey') }}</h4>
-      <p class="text-caption grey--text">{{ $t('poolOperator.importVrfKeyDescription') }}</p>
-      <v-file-input
-        v-model="vrfKeyFile"
-        :label="$t('poolOperator.vrfKeyFile')"
-        accept=".vkey,.json"
-        outlined
-        dense
-        prepend-icon="mdi-file-certificate-outline"
-        class="mt-2"
-        @change="parseVrfKey"
-      />
-      <div v-if="vrfKeyHash" class="mt-2">
-        <div class="text-caption grey--text">{{ $t('poolOperator.vrfKeyHash') }}</div>
-        <div class="monospace-text text-body-2 mt-1">{{ vrfKeyHash }}</div>
-      </div>
-      <div v-if="poolId" class="mt-4">
-        <v-alert type="success" dense outlined>
-          {{ $t('poolOperator.poolIdDerived') }}: <strong class="monospace-text">{{ poolId }}</strong>
-        </v-alert>
-        <v-btn color="primary" block class="mt-4" @click="finishSetup">
-          {{ $t('poolOperator.completeSetup') }}
-        </v-btn>
-      </div>
-    </div>
-
-    <!-- Import Cold Key Dialog -->
-    <ImportColdKeyDialog
-      v-model="showImportDialog"
-      @imported="onColdKeyImported"
-    />
+    <SetupWizardDialog v-model="showWizard" @configured="onConfigured" />
   </v-card>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
-import { useTranslation } from '@/shared/composables/useTranslation';
-import { poolOperatorStore } from '@/stores/poolOperatorStore';
-import { walletStore } from '@/stores/walletStore';
-import ImportColdKeyDialog from '../dialogs/ImportColdKeyDialog.vue';
-import snackbar from '@/plugins/snackbar';
+import { ref } from 'vue';
+import SetupWizardDialog from '../dialogs/SetupWizardDialog.vue';
 
-const { t } = useTranslation();
 const emit = defineEmits(['configured']);
+const showWizard = ref(false);
 
-const showImportDialog = ref(false);
-const coldKeyImported = ref(false);
-const vrfKeyFile = ref<File | null>(null);
-const vrfKeyHash = ref<string | null>(null);
-const poolId = ref<string | null>(null);
-
-// Resume for a returning user who imported the cold key but left before the
-// VRF step: hydrate from the store so the VRF import section shows directly
-// (the cold key was already persisted, so we don't re-prompt for it).
-onMounted(() => {
-  if (poolOperatorStore.coldKeySource !== 'none' && poolOperatorStore.poolId) {
-    coldKeyImported.value = true;
-    poolId.value = poolOperatorStore.poolId;
-    vrfKeyHash.value = poolOperatorStore.vrfKeyHash;
-  }
-});
-
-async function onColdKeyImported(result: { coldKeyHash: string; poolId: string }) {
-  coldKeyImported.value = true;
-  poolId.value = result.poolId;
-  poolOperatorStore.coldKeyHash = result.coldKeyHash;
-  poolOperatorStore.poolId = result.poolId;
-}
-
-async function parseVrfKey() {
-  if (!vrfKeyFile.value) return;
-  try {
-    const text = await vrfKeyFile.value.text();
-    const envelope = JSON.parse(text);
-    if (!envelope.cborHex) {
-      throw new Error('Invalid VRF key file format');
-    }
-    const cborHex = envelope.cborHex;
-    let keyHex: string;
-    if (cborHex.startsWith('5820')) {
-      keyHex = cborHex.slice(4);
-    } else {
-      keyHex = cborHex;
-    }
-
-    // The pool cert stores the VRF *key hash* (blake2b-256 of the raw VRF
-    // verification key), NOT the raw vkey — same as `cardano-cli` computes
-    // from --vrf-verification-key-file. The SDK serializer writes this value
-    // verbatim, so we must hash here or the pool registers with a wrong VRF
-    // keyhash and stops making blocks.
-    const rawVkey = new Uint8Array(keyHex.match(/.{1,2}/g)!.map((b) => parseInt(b, 16)));
-    const blake2b = (await import('blake2b')).default;
-    const keyHashBytes = blake2b(32).update(rawVkey).digest();
-    const keyHashHex = Array.from(keyHashBytes as Uint8Array)
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
-
-    vrfKeyHash.value = keyHashHex;
-    poolOperatorStore.vrfKeyHash = keyHashHex;
-
-    const walletId = walletStore.loggedWallet?.id;
-    if (walletId) {
-      const { setWalletConfiguration } = await import('@/db/wallet-db');
-      await setWalletConfiguration(walletId, 'spo_vrfKeyHash', keyHashHex);
-    }
-  } catch (e) {
-    snackbar.setError(t('poolOperator.invalidVrfKeyFile'));
-    vrfKeyHash.value = null;
-  }
-}
-
-function finishSetup() {
-  if (!vrfKeyHash.value || !poolId.value) return;
-  poolOperatorStore.coldKeySource = poolOperatorStore.coldKeySource || 'imported';
+function onConfigured() {
+  showWizard.value = false;
   emit('configured');
 }
 </script>
