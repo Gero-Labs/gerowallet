@@ -40,6 +40,21 @@ describe('useVrfImport', () => {
     await expect(parseVrfFile(file)).rejects.toThrow('invalidVrfKeyFile');
   });
 
+  it('parseVrfFile rejects non-hex cborHex', async () => {
+    const { parseVrfFile } = useVrfImport();
+    const file = new File(
+      [JSON.stringify({ type: 'x', cborHex: '5820' + 'zz'.repeat(32) })],
+      'bad.vkey',
+    );
+    await expect(parseVrfFile(file)).rejects.toThrow('invalidVrfKeyFile');
+  });
+
+  it('parseVrfFile rejects too-short cborHex', async () => {
+    const { parseVrfFile } = useVrfImport();
+    const file = new File([JSON.stringify({ type: 'x', cborHex: '5820' })], 'bad.vkey');
+    await expect(parseVrfFile(file)).rejects.toThrow('invalidVrfKeyFile');
+  });
+
   it('fetchVrfFromChain returns vrf_key_hash on hit', async () => {
     vi.mocked(blockchainApi.getPoolById).mockResolvedValue({ vrf_key_hash: EXPECT_HASH });
     const { fetchVrfFromChain } = useVrfImport();

@@ -14,6 +14,7 @@ import { walletStore } from '@/stores/walletStore';
 export function useVrfImport() {
   async function hashVrfVkey(cborHex: string): Promise<string> {
     const keyHex = cborHex.startsWith('5820') ? cborHex.slice(4) : cborHex;
+    if (!/^[0-9a-f]{64}$/i.test(keyHex)) throw new Error('invalidVrfKeyFile');
     const rawVkey = new Uint8Array(keyHex.match(/.{1,2}/g)!.map((b) => parseInt(b, 16)));
     const blake2b = (await import('blake2b')).default;
     const digest = blake2b(32).update(rawVkey).digest();
