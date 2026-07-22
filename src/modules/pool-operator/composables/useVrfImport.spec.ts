@@ -61,6 +61,12 @@ describe('useVrfImport', () => {
     expect(await fetchVrfFromChain('pool1', 'Cardano', 'Mainnet')).toBe(EXPECT_HASH);
   });
 
+  it('fetchVrfFromChain returns null when vrf_key_hash is malformed', async () => {
+    vi.mocked(blockchainApi.getPoolById).mockResolvedValue({ vrf_key_hash: 'vrf_vk1abcdef' });
+    const { fetchVrfFromChain } = useVrfImport();
+    expect(await fetchVrfFromChain('pool1', 'Cardano', 'Mainnet')).toBeNull();
+  });
+
   it('fetchVrfFromChain returns null when field absent', async () => {
     vi.mocked(blockchainApi.getPoolById).mockResolvedValue({});
     const { fetchVrfFromChain } = useVrfImport();

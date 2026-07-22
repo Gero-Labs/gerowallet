@@ -95,6 +95,8 @@ async function onFile() {
   rawKeyBytes.value = null;
   error.value = '';
   usePassword.value = false;
+  password.value = '';
+  passwordConfirm.value = '';
   if (!file.value) return;
   try {
     const { type, rawKeyBytes: bytes } = parseColdKey(await file.value.text());

@@ -4038,8 +4038,6 @@ export default {
   'poolOperator.wizardStepVrf': 'VRF key',
   'poolOperator.wizardStepConfirm': 'Confirm',
   'poolOperator.beginSetup': 'Begin Setup',
-  'poolOperator.wizardNext': 'Continue',
-  'poolOperator.wizardBack': 'Back',
   'poolOperator.vrfFoundOnChain': 'VRF key found on-chain',
   'poolOperator.useThisVrfKey': 'Use this VRF key',
   'poolOperator.rotatingVrfKey': 'Rotating your VRF key? Upload a new one',

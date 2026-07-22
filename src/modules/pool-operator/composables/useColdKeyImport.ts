@@ -3,7 +3,6 @@ import { poolOperatorStore } from '@/stores/poolOperatorStore';
 import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
-import { WalletType } from '@/models/types';
 
 /**
  * Cold-key import for pool setup.
@@ -111,5 +110,5 @@ export function useColdKeyImport() {
     return { coldKeyHash, poolId: poolIdBech32 };
   }
 
-  return { parseColdKey, derivePoolId, importWithPassKey, importWithPassword, WalletType };
+  return { parseColdKey, derivePoolId, importWithPassKey, importWithPassword };
 }

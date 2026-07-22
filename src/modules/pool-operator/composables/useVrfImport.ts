@@ -42,7 +42,8 @@ export function useVrfImport() {
   ): Promise<string | null> {
     try {
       const data = await blockchainApi.getPoolById(poolId, chain, network);
-      return data?.vrf_key_hash ?? null;
+      const hash = data?.vrf_key_hash;
+      return hash && /^[0-9a-f]{64}$/i.test(hash) ? hash : null;
     } catch {
       return null;
     }
