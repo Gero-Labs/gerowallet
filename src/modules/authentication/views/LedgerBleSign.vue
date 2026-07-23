@@ -47,16 +47,17 @@
 
 <script setup lang="ts">
 /**
- * Ledger Bluetooth signing tab.
+ * Ledger Bluetooth signing window.
  *
- * Chromium anchors the Web Bluetooth device chooser to a normal tabbed browser
- * window. Anywhere without that chrome — the side panel, and a `popup=1`
- * window — `requestDevice()` rejects immediately with "User cancelled the
+ * Chromium anchors the Web Bluetooth device chooser to a browser window's
+ * toolbar. Anywhere without one — the side panel, and a `popup=1` window —
+ * `requestDevice()` rejects immediately with "User cancelled the
  * requestDevice() chooser" and no dialog is ever drawn. Verified by hand on
- * macOS: the same call renders the chooser in a normal tab and fails silently
- * in both of the others. So BLE signing runs HERE, in a tab, and reports back.
+ * macOS: the same call renders the chooser in a normal browser window and fails
+ * silently in both of the others. So BLE signing runs HERE, in a small
+ * `type: 'normal'` window opened by the side panel, and reports back.
  *
- * Protocol (chrome.runtime messaging — a created tab has no window.opener):
+ * Protocol (chrome.runtime messaging — this window has no window.opener):
  *   tab → panel  LEDGER_BLE_READY   → answered with { txCbor }
  *   tab → panel  LEDGER_BLE_RESULT  { success, witnessCbor? , error?, cancelled? }
  *
@@ -99,7 +100,9 @@ function reportToPanel(payload: Record<string, unknown>) {
 }
 
 async function closeSelf() {
-  // A tab opened via chrome.tabs.create cannot close itself with window.close().
+  // window.close() only works for a window script opened via window.open, which
+  // this is not. Removing the tab takes the whole signing window with it, since
+  // it is the only tab in it.
   const self = await chrome.tabs.getCurrent();
   if (self?.id !== undefined) chrome.tabs.remove(self.id);
 }
