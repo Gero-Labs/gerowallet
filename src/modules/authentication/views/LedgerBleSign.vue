@@ -159,6 +159,10 @@ async function startSigning() {
     setTimeout(() => { void closeSelf(); }, 300);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : '';
+    // Raw transport errors carry bundle paths and line numbers — the previous
+    // build rendered a localhost:3303/@fs/... path straight into the UI. Keep
+    // the detail in the console and show the user something actionable.
+    console.error('[LedgerBleSign] signing failed:', e);
     // The Ledger transport reports a closed chooser as TransportOpenUserCancelled;
     // treat it as a cancel so the side panel can re-offer signing rather than
     // showing it as a failure.
@@ -168,7 +172,7 @@ async function startSigning() {
     // blaming the user for a dialog they may never have seen.
     error.value = cancelled
       ? t('wallet.ledgerBleSignCancelledHint')
-      : (message || t('wallet.ledgerBleSignFailed'));
+      : t('wallet.ledgerBleSignFailed');
     status.value = '';
     signing.value = false;
     // Deliberately NOT reported to the panel. Failure here is usually something
