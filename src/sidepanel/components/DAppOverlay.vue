@@ -2124,6 +2124,91 @@ async function signPrf() {
   }
 }
 
+/**
+ * Run the Bluetooth leg of Ledger signing in a popup window and return the
+ * witness set it produces.
+ *
+ * Chrome does not present the Web Bluetooth device chooser inside a side panel:
+ * `requestDevice()` rejects immediately with "User cancelled the requestDevice()
+ * chooser" and no dialog is ever drawn. WebUSB's chooser does render here, which
+ * is why only the BLE path needs the detour. Same workaround the PassKey flow
+ * already uses for WebAuthn (signPrf, above).
+ *
+ * The popup announces itself with LEDGER_BLE_READY, we hand it the transaction,
+ * and it posts back LEDGER_BLE_RESULT. Only the transaction and the finished
+ * witness set cross the boundary — key material never leaves the device — and
+ * both directions are pinned to the extension origin.
+ */
+async function signLedgerViaBlePopup(txCbor: string): Promise<string> {
+  const popupUrl = chrome.runtime.getURL('index.html#/ledger-ble-sign');
+  const popup = window.open(popupUrl, 'LedgerBleSign', 'width=420,height=560,popup=1');
+  if (!popup) throw new Error(t('wallet.ledgerBleSignPopupBlocked'));
+
+  const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
+
+  return new Promise<string>((resolve, rejectPromise) => {
+    const cleanup = () => {
+      window.removeEventListener('message', handler);
+      clearTimeout(timer);
+      clearInterval(watchdog);
+    };
+
+    // The route watchdog below must not run before the popup has actually
+    // navigated to its route — a freshly opened window is still about:blank,
+    // and an empty hash would read as "routed away" and cancel instantly.
+    let sawReady = false;
+
+    const handler = (event: MessageEvent) => {
+      // Pin to the extension origin AND to this exact window: origin alone would
+      // accept a message from any other extension page that happens to be open.
+      if (event.origin !== extensionOrigin || event.source !== popup) return;
+
+      if (event.data?.type === 'LEDGER_BLE_READY') {
+        sawReady = true;
+        popup.postMessage({ type: 'LEDGER_BLE_REQUEST', payload: { txCbor } }, extensionOrigin);
+        return;
+      }
+
+      if (event.data?.type === 'LEDGER_BLE_RESULT') {
+        cleanup();
+        const { success, witnessCbor, error, cancelled } = event.data.payload || {};
+        if (success && witnessCbor) resolve(witnessCbor);
+        else if (cancelled) rejectPromise(new Error(error || t('wallet.ledgerBleSignCancelled')));
+        else rejectPromise(new Error(error || t('wallet.ledgerBleSignFailed')));
+      }
+    };
+
+    // Generous: the user has to pick the device in the chooser and then confirm
+    // the whole transaction on the Ledger's screen.
+    const timer = setTimeout(() => {
+      cleanup();
+      rejectPromise(new Error(t('wallet.ledgerBleSignTimeout')));
+    }, 180000);
+
+    // The popup can stop being a signing surface without ever posting a result:
+    // closed abruptly (beforeunload is not guaranteed), or routed away by the
+    // auth guard if the wallet locks. Both are same-origin, so watch its hash
+    // directly rather than making the user sit out the 3-minute timeout.
+    const watchdog = setInterval(() => {
+      let goneFromRoute = false;
+      if (sawReady && !popup.closed) {
+        try {
+          goneFromRoute = !popup.location.hash.includes('ledger-ble-sign');
+        } catch {
+          // Cross-origin read — treat as still alive rather than guessing.
+          return;
+        }
+      }
+      if (popup.closed || goneFromRoute) {
+        cleanup();
+        rejectPromise(new Error(t('wallet.ledgerBleSignCancelled')));
+      }
+    }, 1000);
+
+    window.addEventListener('message', handler);
+  });
+}
+
 // ── Ledger wallet signing ──
 async function signLedger() {
   if (!currentRequest.value || !loggedWallet.value) return;
@@ -2132,13 +2217,19 @@ async function signLedger() {
 
   try {
     const txCbor = getTxCbor();
+
+    if (isBT.value) {
+      approve(await signLedgerViaBlePopup(txCbor));
+      return;
+    }
+
     const tx: Cardano.Tx = deserializeCardanoJsSdkTx(txCbor);
 
     const signatures: Cardano.Signatures = await ledgerUtils.txToLedger(
       tx,
       keys.value,
       utxos.value,
-      !isBT.value,
+      true, // WebUSB — the BLE path returned above via the popup
       networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network),
       txCbor,
     );

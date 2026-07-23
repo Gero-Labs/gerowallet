@@ -28,6 +28,7 @@ const BlogPost = () => import('@/modules/blog/BlogPost.vue');
 // const MultiSig = () => import('@/modules/multisig/views/MultiSig.vue'); // Disabled - under maintenance
 const Card = () => import('@/modules/wallet/GeroCard.vue');
 const PassKeyAuth = () => import('@/modules/authentication/views/PassKeyAuth.vue');
+const LedgerBleSign = () => import('@/modules/authentication/views/LedgerBleSign.vue');
 const GoMining = () => import('@/modules/gomining/GoMining.vue');
 const BabylonStaking = () => import('@/modules/babylon/BabylonStaking.vue');
 const Ordinals = () => import('@/modules/ordinals/Ordinals.vue');
@@ -278,6 +279,18 @@ const routes = [
     },
   },
   {
+    // Popup window that runs the Web Bluetooth chooser for Ledger signing —
+    // Chrome will not present that chooser inside a side panel. Opened by
+    // DAppOverlay.signLedger; see LedgerBleSign.vue for the message protocol.
+    path: '/ledger-ble-sign',
+    name: 'ledger-ble-sign',
+    component: LedgerBleSign,
+    meta: {
+      layout: BlankLayout,
+      requiresAuth: true,
+    },
+  },
+  {
     path: '/gomining',
     name: 'gomining',
     component: GoMining,
@@ -415,8 +428,12 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
     // already logged in, NOT locked, NOT syncing → don't show welcome again
     return next({ path: '/' });
   }
-  if (needsAuth && isSyncing) {
-    // Syncing wallet — stay on welcome until done
+  if (needsAuth && isSyncing && to.name !== 'ledger-ble-sign') {
+    // Syncing wallet — stay on welcome until done.
+    // EXCEPT the ledger-ble-sign popup: its transaction is already built and
+    // handed over by the opener, so a background sync is irrelevant to it, and
+    // bouncing the route would leave the side panel waiting on a result that
+    // can never arrive.
     return next({ path: '/welcome' });
   }
   if (needsAuth && isLocked && to.name !== 'passkey-auth') {
