@@ -4100,6 +4100,16 @@ export default {
   'poolOperator.myRelays': 'Meine Relays',
   'poolOperator.direction': 'Richtung',
   'poolOperator.noPeersInFilter': 'Keine Peers für den aktuellen Filter',
+  'poolOperator.ledgerFundStep': 'Ein temporärer Gebührenschlüssel wird von Ihrem Ledger finanziert',
+  'poolOperator.ledgerConfirmFund': 'Bestätigen Sie die Finanzierungstransaktion auf Ihrem Ledger',
+  'poolOperator.ledgerSignUpdate': 'Bestätigen Sie das Pool-Update auf Ihrem Ledger - prüfen Sie Pledge, Cost, Margin und VRF auf dem Gerät',
+  'poolOperator.ledgerReviewTx': 'Überprüfen Sie die zusammengesetzte Transaktion und übermitteln Sie sie anschließend',
+  'poolOperator.ledgerSweep': 'Die verbleibenden Gebührenmittel werden an Ihren Ledger zurücküberwiesen',
+  'poolOperator.ledgerSubmit': 'Pool-Update übermitteln',
+  'poolOperator.ledgerStrandedTitle': 'Temporäre Gebührenmittel noch nicht zurückgeführt',
+  'poolOperator.ledgerStrandedBody': 'Ein kleiner ADA-Betrag befindet sich auf einem temporären Schlüssel und kann nur wiederhergestellt werden, solange dieses Fenster geöffnet bleibt. Versuchen Sie den Rückübertrag erneut, bevor Sie schließen.',
+  'poolOperator.ledgerRetrySweep': 'Rückübertrag erneut versuchen',
+  'poolOperator.ledgerCloseAnyway': 'Trotzdem schließen (Mittel können unwiederbringlich werden)',
 
   // Midnight DUST-Registrierung
   'midnight.registerForDust': 'Für DUST-Generierung registrieren',
