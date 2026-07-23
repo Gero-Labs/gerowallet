@@ -436,11 +436,16 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
     // can never arrive.
     return next({ path: '/welcome' });
   }
-  if (needsAuth && isLocked && to.name !== 'passkey-auth') {
+  if (needsAuth && isLocked && to.name !== 'passkey-auth' && to.name !== 'ledger-ble-sign') {
     // wallet is locked → send to /welcome to unlock.
     // EXCEPT the passkey-auth popup: it IS the unlock ceremony (runs WebAuthn in a
     // popup window because the side panel can't), so it must render while locked.
     // It still requires a logged-in wallet via the `needsAuth && !isLoggedIn` check above.
+    // EXCEPT ledger-ble-sign for a different reason: the wallet can auto-lock in the
+    // moment between the side panel opening that window and the window resolving its
+    // route. Redirecting is an in-app next(), so the window stays open showing
+    // /welcome — nothing closes it, so tabs.onRemoved never fires, and the side panel
+    // waits out its whole timeout for a result that can never come.
     let redirectTo = '/welcome';
     if (to.path !== '/') {
       redirectTo += `?redirect=${encodeURIComponent(to.fullPath)}`;

@@ -177,9 +177,15 @@ async function startSigning() {
     // The transport reports both a genuinely dismissed chooser and a chooser
     // that never appeared as "user cancelled", so say what to check rather than
     // blaming the user for a dialog they may never have seen.
+    //
+    // Otherwise defer to the shared classifier every other txToLedger caller
+    // uses, so a locked device or a closed Cardano app says so instead of a flat
+    // "try again". Unrecognized failures still get generic copy — that branch is
+    // where raw transport errors live, and those carry bundle paths.
+    const classified = ledgerUtils.classifyLedgerError(e);
     error.value = cancelled
       ? t('wallet.ledgerBleSignCancelledHint')
-      : t('wallet.ledgerBleSignFailed');
+      : (classified.recognized ? classified.message : t('wallet.ledgerBleSignFailed'));
     status.value = '';
     // ledger.ts leaves its last step label behind; clear it so a retry does not
     // start out showing the stage that just failed.
