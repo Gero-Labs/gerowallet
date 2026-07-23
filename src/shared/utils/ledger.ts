@@ -214,10 +214,18 @@ export default {
     await this.ensureLedgerVersion(ledger);
 
     hardwareLoading.setText(i18n.t('wallet.ledgerInitializingSigning') as string);
+    // `deviceConnection` is what makes the agent adopt the transport opened
+    // above. Without it, createWithDevice falls through to
+    // establishDeviceConnection, which opens its OWN WebUSB transport for
+    // CommunicationType.Web — there is no BLE communication type. Over
+    // Bluetooth that discarded the connected device and then died on
+    // "SecurityError: ... requestDevice ... permission request" for want of a
+    // user gesture; over USB it merely prompted the user with a second chooser.
     const ledgerKeyAgent: LedgerKeyAgent = await LedgerKeyAgent.createWithDevice({
       chainId: ledgerTxTransformerContext.chainId,
       accountIndex: ledgerTxTransformerContext.accountIndex,
-      communicationType: CommunicationType.Web
+      communicationType: CommunicationType.Web,
+      deviceConnection: await LedgerKeyAgent.createDeviceConnection(transport),
     }, {
       bip32Ed25519: await Crypto.SodiumBip32Ed25519.create(),
       logger: console
@@ -262,7 +270,12 @@ export default {
 
     hardwareLoading.setText(i18n.t('wallet.ledgerInitializingSigning') as string);
     const ledgerKeyAgent: LedgerKeyAgent = await LedgerKeyAgent.createWithDevice(
-      { chainId: Cardano.ChainIds.Mainnet, accountIndex: 0, communicationType: CommunicationType.Web },
+      {
+        chainId: Cardano.ChainIds.Mainnet,
+        accountIndex: 0,
+        communicationType: CommunicationType.Web,
+        deviceConnection: await LedgerKeyAgent.createDeviceConnection(transport),
+      },
       { bip32Ed25519: await Crypto.SodiumBip32Ed25519.create(), logger: console },
     );
 
@@ -288,7 +301,8 @@ export default {
     const ledgerKeyAgent: LedgerKeyAgent = await LedgerKeyAgent.createWithDevice({
       chainId: chainId,
       accountIndex: accountIndex,
-      communicationType: CommunicationType.Web
+      communicationType: CommunicationType.Web,
+      deviceConnection: await LedgerKeyAgent.createDeviceConnection(transport),
     }, {
       bip32Ed25519: await Crypto.SodiumBip32Ed25519.create(),
       logger: console
