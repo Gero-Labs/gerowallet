@@ -235,7 +235,7 @@ import {
   getPayAndReceiveTokens,
 } from '@/shared/utils/builder';
 import networks from '@/utils/networks';
-import { Blockchain, coin_type, purpose, WalletType } from '@/models/types';
+import { Blockchain, coin_type, purpose, WalletType, Network } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
 import cardanoShieldApi from '@/api/cardano-shield-api';
 import CopyButton from '@/shared/components/CopyButton.vue';
@@ -822,6 +822,17 @@ const init = async () => {
     loading.value = true;
     tx.value = deserializeCardanoJsSdkTx(txCbor);
     const queryParams = route.query;
+
+    // Cardano Shield only covers Cardano MAINNET. On preprod/testnet or any
+    // non-Cardano chain the scan endpoint has no data and just times out — skip
+    // it and report unknown risk so the UI shows N/A (mirrors dashboard
+    // SummaryStep + DAppOverlay gate, PR 805).
+    const w = loggedWallet.value;
+    if (w?.chain !== Blockchain.CARDANO || w?.network !== Network.MAINNET) {
+      risks.value = { addressRisk: 'unknown', score: 'unknown' };
+      loading.value = false;
+      return;
+    }
 
     // Make Cardano Shield scan non-blocking with 5-second timeout
     // Don't block the UI if the scan is slow or fails

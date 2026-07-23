@@ -28,6 +28,7 @@ const BlogPost = () => import('@/modules/blog/BlogPost.vue');
 // const MultiSig = () => import('@/modules/multisig/views/MultiSig.vue'); // Disabled - under maintenance
 const Card = () => import('@/modules/wallet/GeroCard.vue');
 const PassKeyAuth = () => import('@/modules/authentication/views/PassKeyAuth.vue');
+const LedgerBleSign = () => import('@/modules/authentication/views/LedgerBleSign.vue');
 const GoMining = () => import('@/modules/gomining/GoMining.vue');
 const BabylonStaking = () => import('@/modules/babylon/BabylonStaking.vue');
 const Ordinals = () => import('@/modules/ordinals/Ordinals.vue');
@@ -278,6 +279,18 @@ const routes = [
     },
   },
   {
+    // Popup window that runs the Web Bluetooth chooser for Ledger signing —
+    // Chrome will not present that chooser inside a side panel. Opened by
+    // DAppOverlay.signLedger; see LedgerBleSign.vue for the message protocol.
+    path: '/ledger-ble-sign',
+    name: 'ledger-ble-sign',
+    component: LedgerBleSign,
+    meta: {
+      layout: BlankLayout,
+      requiresAuth: true,
+    },
+  },
+  {
     path: '/gomining',
     name: 'gomining',
     component: GoMining,
@@ -415,15 +428,24 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
     // already logged in, NOT locked, NOT syncing → don't show welcome again
     return next({ path: '/' });
   }
-  if (needsAuth && isSyncing) {
-    // Syncing wallet — stay on welcome until done
+  if (needsAuth && isSyncing && to.name !== 'ledger-ble-sign') {
+    // Syncing wallet — stay on welcome until done.
+    // EXCEPT the ledger-ble-sign popup: its transaction is already built and
+    // handed over by the opener, so a background sync is irrelevant to it, and
+    // bouncing the route would leave the side panel waiting on a result that
+    // can never arrive.
     return next({ path: '/welcome' });
   }
-  if (needsAuth && isLocked && to.name !== 'passkey-auth') {
+  if (needsAuth && isLocked && to.name !== 'passkey-auth' && to.name !== 'ledger-ble-sign') {
     // wallet is locked → send to /welcome to unlock.
     // EXCEPT the passkey-auth popup: it IS the unlock ceremony (runs WebAuthn in a
     // popup window because the side panel can't), so it must render while locked.
     // It still requires a logged-in wallet via the `needsAuth && !isLoggedIn` check above.
+    // EXCEPT ledger-ble-sign for a different reason: the wallet can auto-lock in the
+    // moment between the side panel opening that window and the window resolving its
+    // route. Redirecting is an in-app next(), so the window stays open showing
+    // /welcome — nothing closes it, so tabs.onRemoved never fires, and the side panel
+    // waits out its whole timeout for a result that can never come.
     let redirectTo = '/welcome';
     if (to.path !== '/') {
       redirectTo += `?redirect=${encodeURIComponent(to.fullPath)}`;

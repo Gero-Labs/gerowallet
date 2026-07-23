@@ -84,9 +84,9 @@ export default {
         publicKey: ledgerKeys[0].publicKeyHex,
       }];
       return { productName, version, hwPublicKey, keys, btSupported };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.log('[LEDGER] Error initializing Ledger:', error);
-      snackbar.setError(error.message);
+      snackbar.setError(error instanceof Error ? error.message : String(error));
       this.usbDevice = undefined;
     }
     return this.usbDevice;
@@ -214,10 +214,18 @@ export default {
     await this.ensureLedgerVersion(ledger);
 
     hardwareLoading.setText(i18n.t('wallet.ledgerInitializingSigning') as string);
+    // `deviceConnection` is what makes the agent adopt the transport opened
+    // above. Without it, createWithDevice falls through to
+    // establishDeviceConnection, which opens its OWN WebUSB transport for
+    // CommunicationType.Web — there is no BLE communication type. Over
+    // Bluetooth that discarded the connected device and then died on
+    // "SecurityError: ... requestDevice ... permission request" for want of a
+    // user gesture; over USB it merely prompted the user with a second chooser.
     const ledgerKeyAgent: LedgerKeyAgent = await LedgerKeyAgent.createWithDevice({
       chainId: ledgerTxTransformerContext.chainId,
       accountIndex: ledgerTxTransformerContext.accountIndex,
-      communicationType: CommunicationType.Web
+      communicationType: CommunicationType.Web,
+      deviceConnection: await LedgerKeyAgent.createDeviceConnection(transport),
     }, {
       bip32Ed25519: await Crypto.SodiumBip32Ed25519.create(),
       logger: console
@@ -231,11 +239,59 @@ export default {
     hardwareLoading.setLoading(false);
     return res;
   },
+  /**
+   * Produce the pool-OWNER witness on the Ledger (POOL_REGISTRATION_AS_OWNER).
+   * The tx's fee input/change belong to a software hot key (third-party from the
+   * device), so the device is asked to witness ONLY its stake (owner) key — it
+   * refuses payment inputs in this mode by protocol. knownAddresses includes the
+   * stake path (via createKnownAddressesFromKeys) so the owner reward account
+   * resolves to DEVICE_OWNED; the hot-key input is intentionally absent from
+   * txInKeyPathMap so its path stays null (owner-mode requirement).
+   *
+   * TODO(device-e2e): confirmed against a real device in Task 7. If the SDK
+   * rejects an input with no path entry at all (rather than a null path) for
+   * owner mode, `txInKeyPathMap` may need the hot input present with an
+   * explicit third-party/no-path marker instead of being omitted — adjust here.
+   */
+  async poolOwnerWitness(
+    tx: Cardano.Tx, keys: Keys, utxos: Cardano.Utxo[], isUsb: boolean, network: NetworkInfo,
+  ): Promise<Cardano.Signatures> {
+    const deserializedTx: Serialization.Transaction = Serialization.Transaction.fromCore(tx);
+    const knownAddresses: GroupedAddress[] = this.createKnownAddressesFromKeys(keys, network);
+    // Owner mode: do NOT map the hot-key inputs to device paths.
+    const txInKeyPathMap = {};
+
+    hardwareLoading.setText(i18n.t('wallet.ledgerConnectingDevice') as string);
+    const transport: Transport = isUsb ? await this.connectViaUSB() : await this.connectViaBT();
+    const ledger: Ada = new Ada(transport);
+
+    hardwareLoading.setText(i18n.t('wallet.ledgerVerifyingApp') as string);
+    await this.ensureLedgerVersion(ledger);
+
+    hardwareLoading.setText(i18n.t('wallet.ledgerInitializingSigning') as string);
+    const ledgerKeyAgent: LedgerKeyAgent = await LedgerKeyAgent.createWithDevice(
+      {
+        chainId: Cardano.ChainIds.Mainnet,
+        accountIndex: 0,
+        communicationType: CommunicationType.Web,
+        deviceConnection: await LedgerKeyAgent.createDeviceConnection(transport),
+      },
+      { bip32Ed25519: await Crypto.SodiumBip32Ed25519.create(), logger: console },
+    );
+
+    hardwareLoading.setText(i18n.t('wallet.ledgerPleaseConfirmDevice') as string);
+    const res: Cardano.Signatures = await ledgerKeyAgent.signTransaction(deserializedTx.body(), {
+      knownAddresses,
+      txInKeyPathMap,
+    });
+    hardwareLoading.setLoading(false);
+    return res;
+  },
   async ensureLedgerVersion(ledger: Ada) {
     const version: GetVersionResponse = await ledger.getVersion();
     if (!version) throw new Error(i18n.t('wallet.ledgerAppClosed') as string);
   },
-  async signData(address: string, payload: string, network: any, accountIndex: number, isUsb: boolean, knownAddresses?: GroupedAddress[]): Promise<{signatureHex: string; signingPublicKeyHex: string; addressFieldHex: string}> {
+  async signData(address: string, payload: string, network: NetworkInfo, accountIndex: number, isUsb: boolean, knownAddresses?: GroupedAddress[]): Promise<{signatureHex: string; signingPublicKeyHex: string; addressFieldHex: string}> {
     const transport: Transport = isUsb ? await this.connectViaUSB() : await this.connectViaBT();
     const ledger: Ada = new Ada(transport);
     await this.ensureLedgerVersion(ledger);
@@ -245,7 +301,8 @@ export default {
     const ledgerKeyAgent: LedgerKeyAgent = await LedgerKeyAgent.createWithDevice({
       chainId: chainId,
       accountIndex: accountIndex,
-      communicationType: CommunicationType.Web
+      communicationType: CommunicationType.Web,
+      deviceConnection: await LedgerKeyAgent.createDeviceConnection(transport),
     }, {
       bip32Ed25519: await Crypto.SodiumBip32Ed25519.create(),
       logger: console
@@ -430,52 +487,68 @@ export default {
       }
     };
   },
-  ledgerErrorHandling(e: any) {
+  /**
+   * Map a Ledger failure to the message a user can act on.
+   *
+   * `recognized` says whether the mapping actually identified the failure.
+   * Callers rendering into a page should fall back to their own copy when it is
+   * false: the unrecognized branch is where raw transport errors live, and those
+   * carry bundle paths and line numbers that must not reach the UI.
+   */
+  classifyLedgerError(e: unknown): { message: string; recognized: boolean } {
+    const rawMessage = (e as { message?: unknown } | null | undefined)?.message;
+    const message = typeof rawMessage === 'string' ? rawMessage : undefined;
+    const t = (key: string) => i18n.t(key) as string;
+
     if (e instanceof DeviceStatusError) {
-      const error: DeviceStatusError = e;
-      switch (error.code) {
+      switch (e.code) {
         case 0x5515:
         case 0x6E11:
-          snackbar.setError(i18n.t('wallet.ledgerDeviceLockedError') as string);
-          break;
+          return { message: t('wallet.ledgerDeviceLockedError'), recognized: true };
         case 0x6E01:
-          snackbar.setError(i18n.t('wallet.ledgerOpenCardanoApp') as string);
-          break;
+          return { message: t('wallet.ledgerOpenCardanoApp'), recognized: true };
         case 0x6E00:
-          snackbar.setError(i18n.t('wallet.ledgerInvalidState') as string);
-          break;
+          return { message: t('wallet.ledgerInvalidState'), recognized: true };
         case 0x6E04:
-          snackbar.setError(i18n.t('wallet.ledgerAppVersionNotSupported') as string);
-          break;
+          return { message: t('wallet.ledgerAppVersionNotSupported'), recognized: true };
         case 0x6E10:
-          snackbar.setError(i18n.t('wallet.ledgerInvalidStateRestart') as string);
-          break;
+          return { message: t('wallet.ledgerInvalidStateRestart'), recognized: true };
         case 0x6982:
-          snackbar.setError(i18n.t('wallet.ledgerSecurityNotSatisfied') as string);
-          break;
+          return { message: t('wallet.ledgerSecurityNotSatisfied'), recognized: true };
         case 0x6985:
-          snackbar.setError(i18n.t('wallet.ledgerTransactionRejected') as string);
-          break;
+          return { message: t('wallet.ledgerTransactionRejected'), recognized: true };
         case 0x6A80:
-          snackbar.setError(i18n.t('wallet.ledgerInvalidData') as string);
-          break;
-        default:
-          // Keep error details for debugging while providing user-friendly message
-          const errorCode = error.code ? ` (Error code: 0x${error.code.toString(16).toUpperCase()})` : '';
-          snackbar.setError(`${i18n.t('common.error')}${errorCode}. ${i18n.t('wallet.ledgerConnectionError')}`);
+          return { message: t('wallet.ledgerInvalidData'), recognized: true };
+        default: {
+          // Keep the status code for debugging while providing user-friendly copy
+          const errorCode = e.code ? ` (Error code: 0x${e.code.toString(16).toUpperCase()})` : '';
+          return { message: `${t('common.error')}${errorCode}. ${t('wallet.ledgerConnectionError')}`, recognized: true };
+        }
       }
-    } else if (e?.message?.includes('NetworkError') || e?.message?.includes('Unable to reset the device')) {
-      snackbar.setError(i18n.t('wallet.ledgerConnectionError') as string);
-    } else if (e?.message?.includes('No device selected') || e?.message?.includes('device not found')) {
-      snackbar.setError(i18n.t('wallet.ledgerNoDevice') as string);
-    } else if (e?.message?.includes('Failed to Retrieve Cardano App Version')) {
-      snackbar.setError(i18n.t('wallet.ledgerCannotConnectApp') as string);
-    } else {
-      console.error('Error signing with Ledger:', e);
-      // Keep error details for debugging
-      const errorMessage = e instanceof Error ? e.message : i18n.t('wallet.ledgerSigningFailed') as string;
-      snackbar.setError(`${errorMessage}. ${i18n.t('common.pleaseTryAgain')}`);
     }
+    if (message?.includes('NetworkError') || message?.includes('Unable to reset the device')) {
+      return { message: t('wallet.ledgerConnectionError'), recognized: true };
+    }
+    if (message?.includes('No device selected') || message?.includes('device not found')) {
+      return { message: t('wallet.ledgerNoDevice'), recognized: true };
+    }
+    if (message?.includes('Failed to Retrieve Cardano App Version')) {
+      return { message: t('wallet.ledgerCannotConnectApp'), recognized: true };
+    }
+    // txToLedger also throws already-localized strings of its own — an app that
+    // is closed, a version that could not be read. Pass those through; the
+    // caller decides whether an unrecognized message is safe to render.
+    return { message: message || t('wallet.ledgerSigningFailed'), recognized: false };
+  },
+
+  ledgerErrorHandling(e: unknown) {
+    const { message, recognized } = this.classifyLedgerError(e);
+    if (recognized) {
+      snackbar.setError(message);
+      return;
+    }
+    console.error('Error signing with Ledger:', e);
+    snackbar.setError(`${message}. ${i18n.t('common.pleaseTryAgain')}`);
   },
 
   // ============================================================================
@@ -547,9 +620,9 @@ export default {
       const xpub = await btc.getWalletXpub({ path, xpubVersion: 0x0488B21E });
 
       return { productName, version, xpub, btSupported };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.log('[LEDGER] Error initializing Bitcoin Ledger:', error);
-      snackbar.setError(error.message);
+      snackbar.setError(error instanceof Error ? error.message : String(error));
       this.usbDevice = undefined;
       throw error;
     }
@@ -608,7 +681,7 @@ export default {
       });
 
       return result.bitcoinAddress;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[LEDGER] Error getting Bitcoin address:', error);
       throw error;
     }
@@ -617,15 +690,15 @@ export default {
   /**
    * Sign Bitcoin transaction (PSBT) with Ledger
    * @param psbtHex - Unsigned PSBT in hex format
-   * @param addressType - Bitcoin address type
-   * @param accountIndex - Account index
+   * @param _addressType - Bitcoin address type (unused: PSBT already encodes the paths to sign)
+   * @param _accountIndex - Account index (unused: PSBT already encodes the paths to sign)
    * @param isUsb - Use USB or Bluetooth
    * @returns Signed PSBT in hex format
    */
   async signBitcoinTransaction(
     psbtHex: string,
-    addressType: string = 'segwit',
-    accountIndex: number = 0,
+    _addressType: string = 'segwit',
+    _accountIndex: number = 0,
     isUsb: boolean = true
   ): Promise<string> {
     try {
@@ -640,7 +713,7 @@ export default {
 
       hardwareLoading.setLoading(false);
       return signedPsbt;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[LEDGER] Error signing Bitcoin transaction:', error);
       hardwareLoading.setLoading(false);
       throw error;
@@ -667,7 +740,7 @@ export default {
       await this.getBitcoinAddress(addressType, accountIndex, addressIndex, isChange, true, isUsb);
       hardwareLoading.setLoading(false);
       snackbar.fireSuccess(i18n.t('wallet.ledgerAddressVerified') as string);
-    } catch (error: any) {
+    } catch (error: unknown) {
       hardwareLoading.setLoading(false);
       throw error;
     }

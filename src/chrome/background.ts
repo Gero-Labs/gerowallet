@@ -2572,7 +2572,7 @@ app.addToOptions(MessageTypes.SIGN_TX_WITH_POOL_KEYS, async (request, sendRespon
       return;
     }
 
-    const { txCbor, password, accountIndex, utxos, addresses, privateKeyBytes } = request.data;
+    const { txCbor, password, accountIndex, utxos, addresses, privateKeyBytes, coldKeyOnly } = request.data;
 
     // Step 1: Sign with wallet keys (payment + stake) using existing signTx
     let transaction;
@@ -2582,15 +2582,21 @@ app.addToOptions(MessageTypes.SIGN_TX_WITH_POOL_KEYS, async (request, sendRespon
       throw new Error('No transaction data provided');
     }
 
-    // Route through resolveSignPrivateKeyBytes so an MPC Google wallet (SPO
-    // cold-key import permits WalletType.Google) signs with its cached
-    // root-key bytes instead of hitting decrypt(undefined). PRF/password
-    // wallets are unaffected (explicit bytes / undefined pass straight through).
-    const prfSecret = resolveSignPrivateKeyBytes(
-      WalletStore.state.loggedWallet,
-      privateKeyBytes ? new Uint8Array(privateKeyBytes) : undefined
-    );
-    const walletWitnesses = await walletBg.signTx(transaction, password, accountIndex || 0, utxos, addresses, prfSecret);
+    // Skip wallet-key signing for Ledger wallets (coldKeyOnly): there are no
+    // decryptable software payment/stake keys — the Ledger owner witness is
+    // produced in the popup context, and only the cold-key witness is built here.
+    let walletWitnesses: { witnesses: string } | undefined;
+    if (!coldKeyOnly) {
+      // Route through resolveSignPrivateKeyBytes so an MPC Google wallet (SPO
+      // cold-key import permits WalletType.Google) signs with its cached
+      // root-key bytes instead of hitting decrypt(undefined). PRF/password
+      // wallets are unaffected (explicit bytes / undefined pass straight through).
+      const prfSecret = resolveSignPrivateKeyBytes(
+        WalletStore.state.loggedWallet,
+        privateKeyBytes ? new Uint8Array(privateKeyBytes) : undefined
+      );
+      walletWitnesses = await walletBg.signTx(transaction, password, accountIndex || 0, utxos, addresses, prfSecret);
+    }
 
     // Step 2: Decrypt cold key from wallet DB and sign with it
     const { getDb } = await import('@/db/wallet-db');
@@ -2629,11 +2635,13 @@ app.addToOptions(MessageTypes.SIGN_TX_WITH_POOL_KEYS, async (request, sendRespon
     const { ed25519 } = await import('@noble/curves/ed25519');
     const { Serialization } = await import('@cardano-sdk/core');
 
-    // Get the transaction body hash (what we sign)
+    // Get the transaction body hash (what we sign). `TransactionBody.hash()` is
+    // the SDK's own blake2b-256 tx-body hash (the same value SUBMIT_TX's
+    // integrity guard compares) — using it directly here fixes a bug where the
+    // previous manual blake2b call fed `toCbor()`'s hex STRING into a library
+    // that asserts `instanceof Uint8Array`, throwing before ever signing.
     const txBody = Serialization.TransactionBody.fromCore(transaction.body);
-    const blake2b = (await import('blake2b')).default;
-    const txBodyCbor = txBody.toCbor() as unknown as Uint8Array;
-    const txBodyHash = blake2b(32).update(txBodyCbor).digest();
+    const txBodyHash = Buffer.from(txBody.hash(), 'hex');
 
     // Sign with the cold key
     const coldKeySignature = ed25519.sign(txBodyHash, new Uint8Array(coldKeyBytes));
@@ -2646,7 +2654,7 @@ app.addToOptions(MessageTypes.SIGN_TX_WITH_POOL_KEYS, async (request, sendRespon
     sendResponse({
       id: request.id,
       data: {
-        witnesses: walletWitnesses.witnesses || walletWitnesses,
+        witnesses: coldKeyOnly ? undefined : (walletWitnesses.witnesses || walletWitnesses),
         coldKeyWitness: {
           vkey: coldPubKeyHex,
           signature: coldSigHex,

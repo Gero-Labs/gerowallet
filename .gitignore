@@ -95,3 +95,5 @@ docs/superpowers/
 # Local MCP config + worktrees must never be committed
 .mcp.json.local
 .worktrees/
+.playwright-mcp
+.midnight-expert
