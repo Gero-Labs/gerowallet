@@ -2572,7 +2572,7 @@ app.addToOptions(MessageTypes.SIGN_TX_WITH_POOL_KEYS, async (request, sendRespon
       return;
     }
 
-    const { txCbor, password, accountIndex, utxos, addresses, privateKeyBytes } = request.data;
+    const { txCbor, password, accountIndex, utxos, addresses, privateKeyBytes, coldKeyOnly } = request.data;
 
     // Step 1: Sign with wallet keys (payment + stake) using existing signTx
     let transaction;
@@ -2582,15 +2582,21 @@ app.addToOptions(MessageTypes.SIGN_TX_WITH_POOL_KEYS, async (request, sendRespon
       throw new Error('No transaction data provided');
     }
 
-    // Route through resolveSignPrivateKeyBytes so an MPC Google wallet (SPO
-    // cold-key import permits WalletType.Google) signs with its cached
-    // root-key bytes instead of hitting decrypt(undefined). PRF/password
-    // wallets are unaffected (explicit bytes / undefined pass straight through).
-    const prfSecret = resolveSignPrivateKeyBytes(
-      WalletStore.state.loggedWallet,
-      privateKeyBytes ? new Uint8Array(privateKeyBytes) : undefined
-    );
-    const walletWitnesses = await walletBg.signTx(transaction, password, accountIndex || 0, utxos, addresses, prfSecret);
+    // Skip wallet-key signing for Ledger wallets (coldKeyOnly): there are no
+    // decryptable software payment/stake keys — the Ledger owner witness is
+    // produced in the popup context, and only the cold-key witness is built here.
+    let walletWitnesses: { witnesses: string } | undefined;
+    if (!coldKeyOnly) {
+      // Route through resolveSignPrivateKeyBytes so an MPC Google wallet (SPO
+      // cold-key import permits WalletType.Google) signs with its cached
+      // root-key bytes instead of hitting decrypt(undefined). PRF/password
+      // wallets are unaffected (explicit bytes / undefined pass straight through).
+      const prfSecret = resolveSignPrivateKeyBytes(
+        WalletStore.state.loggedWallet,
+        privateKeyBytes ? new Uint8Array(privateKeyBytes) : undefined
+      );
+      walletWitnesses = await walletBg.signTx(transaction, password, accountIndex || 0, utxos, addresses, prfSecret);
+    }
 
     // Step 2: Decrypt cold key from wallet DB and sign with it
     const { getDb } = await import('@/db/wallet-db');
@@ -2646,7 +2652,7 @@ app.addToOptions(MessageTypes.SIGN_TX_WITH_POOL_KEYS, async (request, sendRespon
     sendResponse({
       id: request.id,
       data: {
-        witnesses: walletWitnesses.witnesses || walletWitnesses,
+        witnesses: coldKeyOnly ? undefined : (walletWitnesses.witnesses || walletWitnesses),
         coldKeyWitness: {
           vkey: coldPubKeyHex,
           signature: coldSigHex,
