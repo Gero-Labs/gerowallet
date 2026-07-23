@@ -95,10 +95,24 @@
               <div class="monospace-text text-caption ledger-review-tx">{{ signing.assembledTx.value }}</div>
             </div>
 
+            <!-- Password-encrypted cold keys still need the password to produce
+                 the operator witness; PRF cold keys unlock via PassKey and skip
+                 this. Gated on the cold key's own encryption, not the wallet. -->
+            <v-text-field
+              v-if="signing.phase.value === 'idle' && coldKeyNeedsPassword"
+              v-model="signing.spendingPassword.value"
+              :label="$t('poolOperator.coldKeyPassword')"
+              type="password"
+              outlined
+              dense
+              hide-details
+              class="mb-4"
+            />
             <v-btn
               v-if="signing.phase.value === 'idle'"
               color="primary"
               block
+              :disabled="coldKeyNeedsPassword && !signing.spendingPassword.value"
               :loading="signing.loading.value"
               @click="handleSign"
             >
@@ -184,6 +198,12 @@ const signing = usePoolSigning({
 });
 
 const isLedger = computed(() => walletStore.loggedWallet?.type === WalletType.Ledger);
+
+// The Ledger flow must collect a spending password when the imported cold key
+// is password-encrypted. `background.ts` decrypts by password whenever the
+// stored method isn't 'prf' (and 'password' is its default when unset), so
+// mirror that here: only PRF cold keys skip the prompt.
+const coldKeyNeedsPassword = computed(() => isLedger.value && poolOperatorStore.coldKeyEncryption !== 'prf');
 
 // Ordered so a step's status can be derived from where the current phase
 // falls relative to it: earlier group -> done, own group -> active, later -> pending.
