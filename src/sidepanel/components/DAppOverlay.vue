@@ -251,8 +251,21 @@
         <!-- Ledger wallet -->
         <template v-else-if="walletType === WalletType.Ledger">
           <div class="hw-notice pa-3 mb-3">
-            <v-icon :color="primaryColor" class="mb-2">mdi-usb</v-icon>
+            <v-icon :color="primaryColor" class="mb-2">{{ isBT ? 'mdi-bluetooth' : 'mdi-usb' }}</v-icon>
             <p class="white--text text-body-2 text-center">{{ $t('miniGero.connectLedger') }}</p>
+            <!-- Transport picker. Nano X over BLE never shows up in the WebUSB
+                 chooser, so without this the user is stuck on "No device selected". -->
+            <div v-if="loggedWallet?.btSupported" class="hw-transport-toggle">
+              <ToggleSwitch
+                :text-left="$t('wallet.usb')"
+                icon-left="mdi-usb"
+                :text-right="$t('wallet.bluetooth')"
+                icon-right="mdi-bluetooth"
+                :value="isBT"
+                :disabled="signing"
+                @input="isBT = $event"
+              />
+            </div>
           </div>
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
         </template>
@@ -859,6 +872,7 @@
 import { ref, computed, watch, onBeforeUnmount } from 'vue';
 import { getDomain } from 'tldts';
 import { Cardano, Serialization } from '@cardano-sdk/core';
+import { HexBlob } from '@cardano-sdk/util';
 import { useDAppOverlay, type DAppRequest } from '../composables/useDAppOverlay';
 import { useChainContext } from '../composables/useChainContext';
 import BottomSheet from './BottomSheet.vue';
@@ -883,6 +897,7 @@ import { createKeystoneSignRequest, KeystoneSignRequestResponse, parseSignature 
 import { UR } from '@keystonehq/keystone-sdk';
 import networks from '@/utils/networks';
 import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
+import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { decodedPayloadHexPreview, decodeSignDataPayload, type MidnightSignDataEncoding } from '@/chrome/midnightSignDataCodec';
 import { MidnightErrorCode } from '@/chrome/config';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
@@ -1012,7 +1027,12 @@ const isPrfWallet = computed(() => WalletStore.state.loggedWallet?.encryptionMet
 const loggedWallet = computed(() => WalletStore.state.loggedWallet);
 const keys = computed(() => WalletStore.state.keys);
 const utxos = computed(() => WalletStore.state.utxos);
-const isBT = computed(() => WalletStore.state.loggedWallet?.connectionType === 'bluetooth');
+// Ledger transport picker (false = WebUSB, true = WebBLE). User-selected, not
+// derived: `connectionType` was never persisted on the wallet record, so the old
+// computed was always false and every side-panel Ledger sign forced WebUSB —
+// a Bluetooth-paired Nano X is absent from the USB chooser, so signing died on
+// "requestDevice ... No device selected". Only offered when `btSupported`.
+const isBT = ref(false);
 
 // ── Midnight makeTransfer (DApp Connector) — approval preview ────────────────
 // Phase 2: native-NIGHT unshielded transfers. The desiredOutputs `value`s
@@ -2043,7 +2063,7 @@ async function signNormal() {
     if (witnessResult.data.error) throw new Error(witnessResult.data.error);
     approve(witnessResult.data.witnesses);
     spendingPassword.value = '';
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('[DApp] Normal sign error:', e);
     signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Signing failed';
   } finally {
@@ -2096,7 +2116,7 @@ async function signPrf() {
 
     if (witnessResult.data.error) throw new Error(witnessResult.data.error);
     approve(witnessResult.data.witnesses);
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('[DApp] PRF sign error:', e);
     signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'PassKey signing failed';
   } finally {
@@ -2125,7 +2145,7 @@ async function signLedger() {
 
     const witnessSet = Serialization.TransactionWitnessSet.fromCore({ signatures });
     approve(witnessSet.toCbor());
-  } catch (e: any) {
+  } catch (e: unknown) {
     ledgerUtils.ledgerErrorHandling(e);
     console.error('[DApp] Ledger sign error:', e);
     signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Ledger signing failed';
@@ -2155,9 +2175,10 @@ async function signTrezor() {
     const signatures: Cardano.Signatures = new Map(signaturesArray);
     const witnessSet = Serialization.TransactionWitnessSet.fromCore({ signatures });
     approve(witnessSet.toCbor());
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('[DApp] Trezor sign error:', e);
-    if (e.message?.includes('Failure_ActionCancelled') || e.message?.includes('cancelled')) {
+    const message = e instanceof Error ? e.message : '';
+    if (message.includes('Failure_ActionCancelled') || message.includes('cancelled')) {
       signError.value = 'Transaction cancelled on Trezor';
     } else {
       signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Trezor signing failed';
@@ -2174,7 +2195,7 @@ function signKeystone() {
 
   try {
     const txCbor = getTxCbor();
-    const txSerialized = Serialization.Transaction.fromCbor(txCbor as any);
+    const txSerialized = Serialization.Transaction.fromCbor(HexBlob(txCbor));
     const signRequestResponse: KeystoneSignRequestResponse = createKeystoneSignRequest(
       txSerialized, loggedWallet.value, utxos.value, keys.value
     );
@@ -2182,7 +2203,7 @@ function signKeystone() {
     keystoneCbor.value = signRequestResponse.ur.cbor.toString('hex');
     keystoneUseHash.value = signRequestResponse.useHash;
     showKeystoneDialog.value = true;
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('[DApp] Keystone sign error:', e);
     signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Failed to create Keystone sign request';
   }
@@ -2196,9 +2217,9 @@ async function onKeystoneScan(ur: UR) {
     }
     showKeystoneDialog.value = false;
     approve(signature.witnessSet);
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('[DApp] Keystone scan error:', e);
-    signError.value = e?.message || 'Keystone QR scan error';
+    signError.value = (e instanceof Error ? e.message : '') || 'Keystone QR scan error';
     showKeystoneDialog.value = false;
   }
 }
@@ -2238,7 +2259,7 @@ async function signDataNormal() {
 
     approve(res.data);
     spendingPassword.value = '';
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('[DApp] Sign data error:', e);
     signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Signing failed';
   } finally {
@@ -2309,7 +2330,7 @@ async function signDataPrf() {
 
     const signatureData = buildSignatureAndCoseKey(addressBytes, payload, signingKey);
     approve(signatureData);
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('[DApp] PRF sign data error:', e);
     signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'PassKey signing failed';
   } finally {
@@ -2342,7 +2363,7 @@ async function signDataHw() {
     }
 
     approve(res.data);
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('[DApp] HW sign data error:', e);
     signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Signing failed';
   } finally {
@@ -2411,7 +2432,7 @@ async function signMidnightDataNormal() {
     if (!res?.data?.success) throw new Error(res?.data?.error || 'Failed to sign data');
     approve(res.data.signature);
     spendingPassword.value = '';
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('[DApp] Midnight sign data error:', e);
     signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Signing failed';
   } finally {
@@ -2459,7 +2480,7 @@ async function signMidnightDataPrf() {
 
     if (!res?.data?.success) throw new Error(res?.data?.error || 'Failed to sign data');
     approve(res.data.signature);
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('[DApp] Midnight PRF sign data error:', e);
     signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'PassKey signing failed';
   } finally {
@@ -3015,6 +3036,15 @@ function approveWcSession() {
   align-items: center;
   background: color-mix(in srgb, var(--chain-primary) 8%, transparent);
   border-radius: 8px;
+  width: 100%;
+}
+
+/* Ledger USB/BT picker sits under the connect notice, hairline-separated so it
+   reads as a control rather than part of the instruction copy. */
+.hw-transport-toggle {
+  margin-top: var(--g-s-2);
+  padding-top: var(--g-s-2);
+  border-top: 1px solid var(--g-hairline-1);
   width: 100%;
 }
 
