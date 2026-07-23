@@ -26,15 +26,15 @@
             {{ $t('wallet.ledgerBleSignAction') }}
           </v-btn>
 
-          <v-progress-circular
-            v-else
-            indeterminate
-            color="primary"
-            size="44"
-            class="mt-2"
-          />
+          <template v-else>
+            <v-progress-circular indeterminate color="primary" size="44" class="mt-2" />
 
-          <p v-if="status" class="t-caption text--secondary mt-4">{{ status }}</p>
+            <!-- ledger.ts publishes a step label for each stage of the signing
+                 run; several of those stages are the device waiting on a button
+                 press, so showing them is what tells the user to look at it. -->
+            <p class="t-body-sm white--text mt-4 mb-0">{{ hardware.text || status }}</p>
+            <p class="t-caption text--secondary mt-2">{{ $t('wallet.ledgerCheckDeviceScreen') }}</p>
+          </template>
 
           <v-alert v-if="error" type="error" text class="mt-4 text-left">
             {{ error }}
@@ -69,15 +69,22 @@
  * the BLE call is fired from an explicit button click here rather than
  * automatically on mount.
  */
-import { ref, onMounted } from 'vue';
+import { ref, reactive, onMounted } from 'vue';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import WalletStore from '@/stores/walletStore';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import ledgerUtils from '@/shared/utils/ledger';
+import hardwareLoading from '@/plugins/hardwareLoading';
 import networks from '@/utils/networks';
 import { useTranslation } from '@/shared/composables/useTranslation';
 
 const { t } = useTranslation();
+
+// hardwareLoading is a plain singleton that ledger.ts writes step labels into.
+// reactive() converts it in place (Vue 2.7 observes the object itself), so the
+// writes from ledger.ts drive this template — the device is often sitting on a
+// confirmation prompt and the window has to say which one.
+const hardware = reactive(hardwareLoading);
 
 const ready = ref(false);
 const signing = ref(false);
@@ -174,6 +181,9 @@ async function startSigning() {
       ? t('wallet.ledgerBleSignCancelledHint')
       : t('wallet.ledgerBleSignFailed');
     status.value = '';
+    // ledger.ts leaves its last step label behind; clear it so a retry does not
+    // start out showing the stage that just failed.
+    hardware.setText('');
     signing.value = false;
     // Deliberately NOT reported to the panel. Failure here is usually something
     // the user can fix on the spot — quit Ledger Live, unlock the device, open
