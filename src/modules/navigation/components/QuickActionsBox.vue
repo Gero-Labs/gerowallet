@@ -249,9 +249,9 @@ const isPerpetualsDisabled = computed(() => {
 }
 
 .quick-actions-container.compact {
-  padding: 0;
+  padding: 8px;
   gap: 4px;
-  border: none;
+  border: 1px solid var(--g-hairline-3);
   min-width: unset;
 }
 
