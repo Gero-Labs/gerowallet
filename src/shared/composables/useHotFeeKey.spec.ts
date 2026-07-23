@@ -42,4 +42,12 @@ describe('useHotFeeKey', () => {
     expect(hk.hasKey.value).toBe(false);
     expect(() => hk.signBodyHash('ab'.repeat(32))).toThrow();
   });
+
+  it('reset does not mutate the caller-supplied seed', async () => {
+    const seed = new Uint8Array(32).fill(9);
+    const hk = useHotFeeKey(1);
+    await hk.generate(seed);
+    hk.reset();
+    expect(seed.every((b) => b === 9)).toBe(true);
+  });
 });
