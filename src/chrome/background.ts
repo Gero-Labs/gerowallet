@@ -2635,11 +2635,13 @@ app.addToOptions(MessageTypes.SIGN_TX_WITH_POOL_KEYS, async (request, sendRespon
     const { ed25519 } = await import('@noble/curves/ed25519');
     const { Serialization } = await import('@cardano-sdk/core');
 
-    // Get the transaction body hash (what we sign)
+    // Get the transaction body hash (what we sign). `TransactionBody.hash()` is
+    // the SDK's own blake2b-256 tx-body hash (the same value SUBMIT_TX's
+    // integrity guard compares) — using it directly here fixes a bug where the
+    // previous manual blake2b call fed `toCbor()`'s hex STRING into a library
+    // that asserts `instanceof Uint8Array`, throwing before ever signing.
     const txBody = Serialization.TransactionBody.fromCore(transaction.body);
-    const blake2b = (await import('blake2b')).default;
-    const txBodyCbor = txBody.toCbor() as unknown as Uint8Array;
-    const txBodyHash = blake2b(32).update(txBodyCbor).digest();
+    const txBodyHash = Buffer.from(txBody.hash(), 'hex');
 
     // Sign with the cold key
     const coldKeySignature = ed25519.sign(txBodyHash, new Uint8Array(coldKeyBytes));
