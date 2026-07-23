@@ -2577,6 +2577,8 @@ export default {
   'wallet.ledgerBleSignHint': 'Unlock your Ledger and open the Cardano app, then pick your device from the list.',
   'wallet.ledgerBleSignAction': 'Connect over Bluetooth',
   'wallet.ledgerBleSignCancelled': 'Bluetooth signing was cancelled.',
+  'wallet.ledgerBleSignCancelledHint': 'No Ledger was selected. Check that your Ledger is unlocked with the Cardano app open, and that Ledger Live is closed — it holds the Bluetooth connection exclusively.',
+  'wallet.ledgerBleUnavailable': 'Bluetooth is unavailable. Turn Bluetooth on, and allow Chrome to use it under System Settings → Privacy & Security → Bluetooth.',
   'wallet.ledgerBleSignFailed': 'Could not sign over Bluetooth. Please try again.',
   'wallet.ledgerBleSignTimeout': 'Bluetooth signing timed out. Please try again.',
   'wallet.ledgerBleSignPopupBlocked': 'Allow pop-ups for this extension to sign over Bluetooth.',
