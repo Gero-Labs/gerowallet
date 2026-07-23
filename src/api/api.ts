@@ -136,6 +136,17 @@ export class Api {
   }
 
   async submitTx(body: string): Promise<any> {
+    // Preview submits via Nexus → ogmios (self-hosted node). The legacy backend has no
+    // cardano-preview provider block, so its Blockfrost path times out. Mainnet/preprod
+    // keep the existing Blockfrost-backed legacy path (already working).
+    if (this.network === 'PREVIEW') {
+      const { data } = await axios.post(
+        `${import.meta.env['VITE_NEXUS_URL']}/api/transactions/submit?network=cardano-preview`,
+        body,
+        { headers: { 'Content-Type': 'text/plain' } }
+      );
+      return data;
+    }
     const { data } = await this.axiosInstance.post(
       `/api/transactions/submit-tx?chain=${this.chain}&network=${this.network}&provider=BLOCKFROST`,
       body

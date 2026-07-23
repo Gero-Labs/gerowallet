@@ -27,28 +27,93 @@
 
         <!-- Signing Section -->
         <div v-if="!signing.isSubmit.value">
-          <!-- Password input for normal wallets -->
-          <v-text-field
-            v-if="!signing.isPrfWallet.value"
-            v-model="signing.spendingPassword.value"
-            :label="$t('wallet.spendingPassword')"
-            type="password"
-            outlined
-            dense
-            hide-details
-            class="mb-4"
-            @keydown.enter="handleSign"
-          />
+          <!-- Password / PRF flow for software wallets -->
+          <div v-if="!isLedger">
+            <v-text-field
+              v-if="!signing.isPrfWallet.value"
+              v-model="signing.spendingPassword.value"
+              :label="$t('wallet.spendingPassword')"
+              type="password"
+              outlined
+              dense
+              hide-details
+              class="mb-4"
+              @keydown.enter="handleSign"
+            />
 
-          <v-btn
-            color="primary"
-            block
-            :disabled="!signing.isPrfWallet.value && !signing.spendingPassword.value"
-            :loading="signing.loading.value"
-            @click="handleSign"
-          >
-            {{ $t('common.confirm') }}
-          </v-btn>
+            <v-btn
+              color="primary"
+              block
+              :disabled="!signing.isPrfWallet.value && !signing.spendingPassword.value"
+              :loading="signing.loading.value"
+              @click="handleSign"
+            >
+              {{ $t('common.confirm') }}
+            </v-btn>
+          </div>
+
+          <!-- Ledger flow: no password prompt — a stepped, device-driven orchestration -->
+          <div v-else class="ledger-flow">
+            <p v-if="signing.phase.value === 'idle'" class="ledger-flow-intro">
+              {{ $t('poolOperator.ledgerSignUpdate') }}
+            </p>
+
+            <div v-if="signing.phase.value !== 'idle'" class="ledger-steps">
+              <div
+                v-for="step in ledgerSteps"
+                :key="step.key"
+                class="ledger-step"
+                :class="`is-${step.status}`"
+              >
+                <v-progress-circular
+                  v-if="step.status === 'active'"
+                  indeterminate
+                  size="16"
+                  width="2"
+                  color="warning"
+                />
+                <v-icon v-else size="18" :color="step.status === 'done' ? 'success' : undefined">
+                  {{ step.status === 'done' ? 'mdi-check-circle' : 'mdi-circle-outline' }}
+                </v-icon>
+                <span class="ledger-step-label">{{ $t(step.labelKey) }}</span>
+              </div>
+            </div>
+
+            <!-- Device-prompt hints at the two Ledger tap points -->
+            <div v-if="signing.phase.value === 'funding'" class="ledger-hint">
+              <v-icon size="18" color="warning">mdi-usb-flash-drive-outline</v-icon>
+              <span>{{ $t('poolOperator.ledgerConfirmFund') }}</span>
+            </div>
+            <div v-if="signing.phase.value === 'signingOwner'" class="ledger-hint">
+              <v-icon size="18" color="warning">mdi-shield-key-outline</v-icon>
+              <span>{{ $t('poolOperator.ledgerSignUpdate') }}</span>
+            </div>
+
+            <!-- Review the assembled tx before the explicit submit -->
+            <div v-if="signing.phase.value === 'readyToSubmit'" class="ledger-review">
+              <div class="ledger-review-label">{{ $t('poolOperator.ledgerReviewTx') }}</div>
+              <div class="monospace-text text-caption ledger-review-tx">{{ signing.assembledTx.value }}</div>
+            </div>
+
+            <v-btn
+              v-if="signing.phase.value === 'idle'"
+              color="primary"
+              block
+              :loading="signing.loading.value"
+              @click="handleSign"
+            >
+              {{ $t('common.confirm') }}
+            </v-btn>
+            <v-btn
+              v-else-if="signing.phase.value === 'readyToSubmit'"
+              color="primary"
+              block
+              :loading="signing.loading.value"
+              @click="submitLedgerTx"
+            >
+              {{ $t('poolOperator.ledgerSubmit') }}
+            </v-btn>
+          </div>
         </div>
 
         <!-- Success -->
@@ -59,6 +124,30 @@
             {{ $t('common.close') }}
           </v-btn>
         </div>
+
+        <!-- Stranded hot-key funds: can surface after a failed sweep, whether or not
+             the pool update itself succeeded — so this sits outside the isSubmit split
+             and gates both close paths above via `close()`. -->
+        <div v-if="signing.strandedFunds.value" class="ledger-stranded mt-4">
+          <v-icon size="20" color="error">mdi-alert-circle-outline</v-icon>
+          <div class="ledger-stranded-body">
+            <div class="ledger-stranded-title">{{ $t('poolOperator.ledgerStrandedTitle') }}</div>
+            <div class="ledger-stranded-text">{{ $t('poolOperator.ledgerStrandedBody') }}</div>
+            <div class="ledger-stranded-actions">
+              <v-btn text small color="error" :loading="signing.loading.value" @click="retrySweep">
+                {{ $t('poolOperator.ledgerRetrySweep') }}
+              </v-btn>
+              <template v-if="confirmForceClose">
+                <v-btn text small @click="confirmForceClose = false">
+                  {{ $t('common.cancel') }}
+                </v-btn>
+                <v-btn text small color="error" @click="close">
+                  {{ $t('poolOperator.ledgerCloseAnyway') }}
+                </v-btn>
+              </template>
+            </div>
+          </div>
+        </div>
       </v-card-text>
     </v-card>
   </v-dialog>
@@ -68,7 +157,9 @@
 import { ref, computed, watch, toRef } from 'vue';
 import { Cardano } from '@cardano-sdk/core';
 import { poolOperatorStore } from '@/stores/poolOperatorStore';
-import { usePoolSigning } from '@/shared/composables/usePoolSigning';
+import { walletStore } from '@/stores/walletStore';
+import { WalletType } from '@/models/types';
+import { usePoolSigning, type PoolSigningPhase } from '@/shared/composables/usePoolSigning';
 
 const props = defineProps<{
   value: boolean;
@@ -92,18 +183,160 @@ const signing = usePoolSigning({
   },
 });
 
+const isLedger = computed(() => walletStore.loggedWallet?.type === WalletType.Ledger);
+
+// Ordered so a step's status can be derived from where the current phase
+// falls relative to it: earlier group -> done, own group -> active, later -> pending.
+const phaseOrder: PoolSigningPhase[] = [
+  'idle', 'funding', 'awaitingFund', 'signingOwner', 'signingCold',
+  'assembling', 'readyToSubmit', 'submitting', 'sweeping', 'done',
+];
+
+function stepStatus(phases: PoolSigningPhase[]): 'pending' | 'active' | 'done' {
+  const current = signing.phase.value;
+  if (phases.includes(current)) return 'active';
+  const currentIdx = phaseOrder.indexOf(current);
+  const lastIdx = Math.max(...phases.map((p) => phaseOrder.indexOf(p)));
+  return currentIdx > lastIdx ? 'done' : 'pending';
+}
+
+const ledgerSteps = computed(() => [
+  { key: 'fund', labelKey: 'poolOperator.ledgerFundStep', status: stepStatus(['funding', 'awaitingFund']) },
+  { key: 'sign', labelKey: 'poolOperator.ledgerSignUpdate', status: stepStatus(['signingOwner', 'signingCold', 'assembling']) },
+  { key: 'review', labelKey: 'poolOperator.ledgerReviewTx', status: stepStatus(['readyToSubmit']) },
+  { key: 'submit', labelKey: 'poolOperator.ledgerSubmit', status: stepStatus(['submitting']) },
+  { key: 'sweep', labelKey: 'poolOperator.ledgerSweep', status: stepStatus(['sweeping', 'done']) },
+]);
+
 const formatFee = computed(() => {
   if (!props.tx?.body?.fee) return '0';
   return (Number(props.tx.body.fee) / 1_000_000).toFixed(6);
+});
+
+// Set when the user has already tried to close once while funds were stranded
+// on the ephemeral hot key — asks for an explicit second confirmation rather
+// than closing (and losing the in-memory key) silently.
+const confirmForceClose = ref(false);
+watch(() => signing.strandedFunds.value, (v) => {
+  if (!v) confirmForceClose.value = false;
 });
 
 async function handleSign() {
   await signing.handleSign();
 }
 
-function close() {
-  signing.resetState();
+async function submitLedgerTx() {
+  await signing.submitLedgerTx();
+}
+
+async function retrySweep() {
+  await signing.retrySweep();
+}
+
+async function close() {
+  if (signing.strandedFunds.value && !confirmForceClose.value) {
+    confirmForceClose.value = true;
+    return;
+  }
+  await signing.resetState();
+  confirmForceClose.value = false;
   dialog.value = false;
   emit('close');
 }
 </script>
+
+<style scoped>
+.ledger-flow-intro {
+  font-size: 13px;
+  color: var(--g-text-2);
+  margin-bottom: var(--g-s-4);
+}
+
+.ledger-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-2);
+  margin-bottom: var(--g-s-4);
+}
+
+.ledger-step {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-2);
+  font-size: 13px;
+  color: var(--g-text-3);
+}
+
+.ledger-step.is-active {
+  color: var(--g-text-1);
+}
+
+.ledger-step.is-done {
+  color: var(--g-text-2);
+}
+
+.ledger-step-label {
+  line-height: 1.3;
+}
+
+.ledger-hint {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-2);
+  padding: var(--g-s-3);
+  margin-bottom: var(--g-s-4);
+  background: var(--g-warning-fill);
+  border: 1px solid var(--g-warning-line);
+  border-radius: var(--g-r-control);
+  font-size: 12px;
+  color: var(--g-text-2);
+}
+
+.ledger-review-label {
+  font-size: 12px;
+  color: var(--g-text-2);
+  margin-bottom: var(--g-s-2);
+}
+
+.ledger-review-tx {
+  display: block;
+  max-height: 120px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  padding: var(--g-s-3);
+  margin-bottom: var(--g-s-4);
+  background: var(--g-surface);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
+}
+
+.ledger-stranded {
+  display: flex;
+  gap: var(--g-s-3);
+  padding: var(--g-s-3);
+  background: var(--g-error-fill);
+  border: 1px solid var(--g-error-line);
+  border-radius: var(--g-r-control);
+}
+
+.ledger-stranded-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--g-text-1);
+  margin-bottom: var(--g-s-1);
+}
+
+.ledger-stranded-text {
+  font-size: 12px;
+  color: var(--g-text-2);
+  line-height: 1.5;
+}
+
+.ledger-stranded-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-2);
+  margin-top: var(--g-s-2);
+  flex-wrap: wrap;
+}
+</style>

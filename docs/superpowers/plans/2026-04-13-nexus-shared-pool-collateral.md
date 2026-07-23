@@ -2,6 +2,41 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+---
+
+## ✅ STATUS — updated 2026-07-16: CODE SHIPPED, feature gated OFF in prod
+
+**All code is implemented and merged to `development` across all three repos.** What remains is operational rollout (fund pool, provision secret, flip kill switch), not coding. The task-by-task body below is retained as historical record but the **client and Nexus architecture shipped in a simpler, revised form** — read this banner first; where it conflicts with the body, this banner wins. See the rollout runbook: `docs/superpowers/plans/2026-07-16-collateral-rollout-runbook.md`.
+
+### What shipped where
+
+| Repo                   | State                                                         | Notes                                                                                          |
+|------------------------|---------------------------------------------------------------|------------------------------------------------------------------------------------------------|
+| `gerowallet` (client)  | Merged to `development`                                       | `4fac8df2` cosign + `d1f8779c` route via gero-backend proxy + `aee78e62` drop `/v1`            |
+| `gero-backend` (proxy) | Merged to `development` (auto-deploys prod)                   | `NexusController` forwards `/api/collateral/{lend,status,cosign}` with server-side `X-Api-Key` |
+| `nexus` (backend)      | Merged to `development` (`#177`), prod k8s wired (`55090018`) | Single GKE cluster; push to `development`/`main` auto-deploys `nexus.gerowallet.io`            |
+
+### Architecture divergences from the body below (the body is superseded on these points)
+
+1. **No client-side cache/service/store/UI.** `nexusCollateralService.ts`, `walletStore.nexusCollateral`, the CollateralTab "Gero-provided" state, and the i18n keys were **not built** (Tasks 2 partial, 3, 5, 8, 9). Instead `getCollateral()` in `serialization.ts` is now **async** and lends on-demand: Pass 1 uses the user's own pure-ADA UTxOs, Pass 2 calls `nexusCollateralApi.lend()` and builds the CBOR locally (`buildNexusUtxoCbor`). Simpler, no persistence, no periodic `/status` polling.
+2. **No Nexus DB pool table.** The Flyway `V19` migration, `CollateralPoolUtxo` entity, repository, `CollateralPoolInitService`, and `CollateralPoolMonitor` (Tasks A3–A6) were **not built**. `CollateralService.eligibleUtxos()` reads pool state **directly on-chain** each call (UTxOs at the hot-wallet address with exactly `amountLovelace` and no assets), backed by the address facade's existing 10-min cache.
+3. **Auth is the gero-backend proxy, not a client device-JWT.** The client sends no auth header. `gero-backend`'s `NexusController` injects `X-Api-Key` (`NexusApiKeyResolver.keyFor(null)` → default key). Nexus's `CollateralController` still guards with `@PreAuthorize("@securityExpressions.canWriteCardano()")` — satisfied by the proxy key, identical to the already-live `/api/tx/build`.
+4. **Signing key is a 24-word mnemonic, not raw skey hex.** `CollateralSigningService` derives a `cardano-client-lib` `Account` from `COLLATERAL_HOT_WALLET_MNEMONIC` and **refuses to sign** unless the derived enterprise address equals `COLLATERAL_HOT_WALLET_ADDRESS` (config-mismatch fail-safe). It filters the signed witness set down to only the hot-wallet vkey witness.
+5. **Endpoint base is `/api/collateral`, not `/v1/collateral`.**
+
+### What blocks go-live (prod `nexus/k8s/prod/deployment.yml`)
+
+```
+COLLATERAL_KILL_SWITCH = "true"      # feature OFF
+COLLATERAL_NETWORK     = "PREPROD"   # not mainnet
+collateral-hot-wallet-* = placeholder secret (addr_test1..., "your-24-word-mnemonic")
+```
+Plus: the hot-wallet enterprise address must be **funded** with ~20 × 5 ADA pure-ADA UTxOs or `/lend` returns `503 Collateral pool empty`.
+
+> ⚠️ **Go-live config trap** (confirm in runbook): `CollateralSigningService.init()` selects the network with `"MAINNET".equalsIgnoreCase(network) ? mainnet : preprod`. Set `COLLATERAL_NETWORK` to exactly **`MAINNET`** for mainnet — `CARDANO_MAINNET`/kebab forms make the signer derive a **preprod** address, which mismatches the configured address and **silently self-disables** the signer (→ 503). `CollateralService.resolveNetwork()` is more lenient than `init()`, so the two can disagree.
+
+---
+
 **Goal:** Eliminate the "I need 5 spare ADA to use any dApp" onboarding blocker by sharing a small fixed pool of 5 ADA UTxOs across all users. Each wallet caches a pool UTxO reference in its local DB; `getCollateral()` returns it instantly with no network call; Nexus co-signs only when a dApp actually uses the collateral.
 
 **Architecture:** Nexus maintains a fixed pool of ~20 UTxOs at a single enterprise address controlled by its hot wallet payment key. Because collateral inputs are only referenced (not consumed) in the success path, multiple users can reference the same UTxO simultaneously. On wallet login, the client lends one from the pool and persists the reference in `wallet-db`. On subsequent dApp interactions, `getCollateral()` returns from cache — zero network calls. On `signTx`, if the transaction's `collateralInputs` include the cached Nexus UTxO, the background calls `/v1/collateral/cosign` and merges both witnesses before returning to the dApp. Periodic sync ticks validate the cached UTxO is still on-chain; if consumed (rare, Phase 2 failure elsewhere), the cache is refreshed.
@@ -41,17 +76,17 @@ Collateral is a **write-path, signing-coordinator** feature. Nexus is the only e
 
 ## Decisions (Resolved)
 
-| # | Decision | Resolution |
-|---|----------|-----------|
-| D1 | Backend | **Nexus** — existing infra, no new service |
-| D2 | URL / env var | Same `VITE_NEXUS_URL` — CSP already allows `*.gerowallet.io` |
-| D3 | Pool size | **~20 UTxOs × 5 ADA = 100 ADA** total hot wallet funding (not per user — shared across all users) |
-| D4 | Key management | Whatever Nexus already uses for server-side secrets |
-| D5 | dApp allowlist | **Open** — Nexus verifies `utxoRef` is only in `collateralInputs`, never in `inputs` |
-| D6 | Rate limiting | Device JWT rate limits `/lend` to once per minute per device |
-| D7 | Kill switch | Nexus config flag. Client degrades gracefully to "Set Collateral" manual flow |
-| D8 | Address type | **Enterprise address** (payment key only, no staking) — simpler, not tied to any user's stake |
-| D9 | UTxO sharing | Many users can reference the same pool UTxO simultaneously (collateral is only consumed on Phase 2 failure, which is extremely rare) |
+| #  | Decision       | Resolution                                                                                                                           |
+|----|----------------|--------------------------------------------------------------------------------------------------------------------------------------|
+| D1 | Backend        | **Nexus** — existing infra, no new service                                                                                           |
+| D2 | URL / env var  | Same `VITE_NEXUS_URL` — CSP already allows `*.gerowallet.io`                                                                         |
+| D3 | Pool size      | **~20 UTxOs × 5 ADA = 100 ADA** total hot wallet funding (not per user — shared across all users)                                    |
+| D4 | Key management | Whatever Nexus already uses for server-side secrets                                                                                  |
+| D5 | dApp allowlist | **Open** — Nexus verifies `utxoRef` is only in `collateralInputs`, never in `inputs`                                                 |
+| D6 | Rate limiting  | Device JWT rate limits `/lend` to once per minute per device                                                                         |
+| D7 | Kill switch    | Nexus config flag. Client degrades gracefully to "Set Collateral" manual flow                                                        |
+| D8 | Address type   | **Enterprise address** (payment key only, no staking) — simpler, not tied to any user's stake                                        |
+| D9 | UTxO sharing   | Many users can reference the same pool UTxO simultaneously (collateral is only consumed on Phase 2 failure, which is extremely rare) |
 
 ---
 
@@ -75,13 +110,13 @@ This means multiple users can safely reference the same UTxO at the same time. I
 
 ### Client architecture summary
 
-| Flow | Nexus call? | Performance |
-|------|-------------|-------------|
-| Wallet login (no cache) | `POST /lend` | Once per wallet lifetime |
-| Wallet login (cached) | `GET /status?ref=...` | Lightweight validation |
-| Regular sync tick (every ~60s) | `GET /status?ref=...` | Background only |
-| dApp `getCollateral()` | **None** — served from cache | Instant |
-| dApp `signTx` with Nexus collateral | `POST /cosign` | Unavoidable (Nexus holds key) |
+| Flow                                | Nexus call?                  | Performance                   |
+|-------------------------------------|------------------------------|-------------------------------|
+| Wallet login (no cache)             | `POST /lend`                 | Once per wallet lifetime      |
+| Wallet login (cached)               | `GET /status?ref=...`        | Lightweight validation        |
+| Regular sync tick (every ~60s)      | `GET /status?ref=...`        | Background only               |
+| dApp `getCollateral()`              | **None** — served from cache | Instant                       |
+| dApp `signTx` with Nexus collateral | `POST /cosign`               | Unavoidable (Nexus holds key) |
 
 ### Persistence
 
@@ -106,13 +141,13 @@ Current code at `serialization.ts:424-475` filters `storedUtxos` for pure-ADA UT
 
 ### Failure modes
 
-| Scenario | Behavior |
-|----------|----------|
-| Nexus down on login, no cache | Fall back to existing "no collateral" state; manual "Set Collateral" still works |
-| Nexus down on login, cache exists | Use cache optimistically; will work if UTxO still valid on-chain |
-| Cached UTxO consumed mid-session (rare) | `cosign` returns 404 → client clears cache, fetches fresh UTxO. Current dApp tx fails (UTxO baked into already-signed tx); user retries with fresh UTxO |
-| Pool exhausted | `/lend` returns 503 → client treats as no Nexus collateral |
-| Cosign returns 400 (UTxO in inputs, not just collateralInputs) | dApp tx rejected before signing — this is an adversarial dApp. Return error to UI. |
+| Scenario                                                       | Behavior                                                                                                                                                |
+|----------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Nexus down on login, no cache                                  | Fall back to existing "no collateral" state; manual "Set Collateral" still works                                                                        |
+| Nexus down on login, cache exists                              | Use cache optimistically; will work if UTxO still valid on-chain                                                                                        |
+| Cached UTxO consumed mid-session (rare)                        | `cosign` returns 404 → client clears cache, fetches fresh UTxO. Current dApp tx fails (UTxO baked into already-signed tx); user retries with fresh UTxO |
+| Pool exhausted                                                 | `/lend` returns 503 → client treats as no Nexus collateral                                                                                              |
+| Cosign returns 400 (UTxO in inputs, not just collateralInputs) | dApp tx rejected before signing — this is an adversarial dApp. Return error to UI.                                                                      |
 
 ---
 
@@ -120,23 +155,23 @@ Current code at `serialization.ts:424-475` filters `storedUtxos` for pure-ADA UT
 
 ### Nexus Backend (`../nexus`)
 
-| File | Action | Responsibility |
-|------|--------|---------------|
-| `src/main/java/io/gerowallet/config/properties/CollateralProperties.java` | **Create** | Hot wallet + pool config binding |
-| `src/main/java/io/gerowallet/entity/CollateralPoolUtxo.java` | **Create** | JPA entity for pool UTxOs |
-| `src/main/java/io/gerowallet/repository/CollateralPoolUtxoRepository.java` | **Create** | Spring Data JPA repo |
-| `src/main/java/io/gerowallet/service/collateral/CollateralSigningService.java` | **Create** | Ed25519 + blake2b signing with hot wallet key |
-| `src/main/java/io/gerowallet/service/collateral/CollateralPoolInitService.java` | **Create** | Startup reconcile of DB ↔ chain |
-| `src/main/java/io/gerowallet/service/collateral/CollateralPoolMonitor.java` | **Create** | @Scheduled 5-min reconcile tick |
-| `src/main/java/io/gerowallet/service/collateral/CollateralService.java` | **Create** | lend / status / cosign business logic + security checks |
-| `src/main/java/io/gerowallet/facade/CollateralFacade.java` | **Create** | Thin facade (codebase convention) |
-| `src/main/java/io/gerowallet/model/collateral/*.java` | **Create** | Request/response DTOs |
-| `src/main/java/io/gerowallet/controller/collateral/CollateralController.java` | **Create** | REST endpoints |
-| `src/main/resources/db/migration/V19__create_collateral_pool.sql` | **Create** | Flyway migration |
-| `src/main/resources/application.yml` | **Modify** | Bind `app.collateral.*` properties |
-| `.env` | **Modify** | Hot wallet secrets |
-| `src/main/java/io/gerowallet/NexusApplication.java` | **Modify** | `@EnableAsync` + `@EnableScheduling` |
-| `src/test/java/io/gerowallet/service/collateral/CollateralServiceTest.java` | **Create** | Unit tests |
+| File                                                                            | Action     | Responsibility                                          |
+|---------------------------------------------------------------------------------|------------|---------------------------------------------------------|
+| `src/main/java/io/gerowallet/config/properties/CollateralProperties.java`       | **Create** | Hot wallet + pool config binding                        |
+| `src/main/java/io/gerowallet/entity/CollateralPoolUtxo.java`                    | **Create** | JPA entity for pool UTxOs                               |
+| `src/main/java/io/gerowallet/repository/CollateralPoolUtxoRepository.java`      | **Create** | Spring Data JPA repo                                    |
+| `src/main/java/io/gerowallet/service/collateral/CollateralSigningService.java`  | **Create** | Ed25519 + blake2b signing with hot wallet key           |
+| `src/main/java/io/gerowallet/service/collateral/CollateralPoolInitService.java` | **Create** | Startup reconcile of DB ↔ chain                         |
+| `src/main/java/io/gerowallet/service/collateral/CollateralPoolMonitor.java`     | **Create** | @Scheduled 5-min reconcile tick                         |
+| `src/main/java/io/gerowallet/service/collateral/CollateralService.java`         | **Create** | lend / status / cosign business logic + security checks |
+| `src/main/java/io/gerowallet/facade/CollateralFacade.java`                      | **Create** | Thin facade (codebase convention)                       |
+| `src/main/java/io/gerowallet/model/collateral/*.java`                           | **Create** | Request/response DTOs                                   |
+| `src/main/java/io/gerowallet/controller/collateral/CollateralController.java`   | **Create** | REST endpoints                                          |
+| `src/main/resources/db/migration/V19__create_collateral_pool.sql`               | **Create** | Flyway migration                                        |
+| `src/main/resources/application.yml`                                            | **Modify** | Bind `app.collateral.*` properties                      |
+| `.env`                                                                          | **Modify** | Hot wallet secrets                                      |
+| `src/main/java/io/gerowallet/NexusApplication.java`                             | **Modify** | `@EnableAsync` + `@EnableScheduling`                    |
+| `src/test/java/io/gerowallet/service/collateral/CollateralServiceTest.java`     | **Create** | Unit tests                                              |
 
 ### Client (Chrome Extension — this plan)
 

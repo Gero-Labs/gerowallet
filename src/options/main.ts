@@ -125,15 +125,18 @@ Promise.all([loadPersistedGero(), hydrateWalletStore()]).then(() => {
       { immediate: true }
     );
 
-    // Redirect to welcome page when wallet is locked — except the passkey-auth
-    // popup, which runs the unlock ceremony itself and must stay on its route
-    // while locked (the window opened with #/passkey-auth to authenticate).
+    // Redirect to welcome page when wallet is locked — except the two signing
+    // popups. passkey-auth runs the unlock ceremony itself and must stay on its
+    // route while locked. ledger-ble-sign must stay too: navigating it away
+    // leaves no beforeunload, so the side panel that opened it would wait out
+    // its full timeout instead of seeing a cancellation.
     app.$watch(
       () => walletStoreState.isLocked,
       (isLocked) => {
         if (isLocked
           && router.currentRoute.path !== '/welcome'
-          && router.currentRoute.name !== 'passkey-auth') {
+          && router.currentRoute.name !== 'passkey-auth'
+          && router.currentRoute.name !== 'ledger-ble-sign') {
           router.push('/welcome');
         }
       }
