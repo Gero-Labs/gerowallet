@@ -22,6 +22,10 @@ export interface PoolOperatorState {
   coldKeySource: 'none' | 'imported' | 'ledger';
   coldKeyHash: string | null;
   vrfKeyHash: string | null;
+  // How the imported cold key is encrypted at rest ('prf' | 'password'). The
+  // Ledger signing flow needs this to decide whether to prompt for a password
+  // (PRF cold keys unlock via PassKey; password cold keys need the password).
+  coldKeyEncryption: 'prf' | 'password' | null;
 
   // Pool state (fetched from chain)
   poolId: string | null;
@@ -46,6 +50,7 @@ export const poolOperatorStore: PoolOperatorState = Vue.observable({
   coldKeySource: 'none' as 'none' | 'imported' | 'ledger',
   coldKeyHash: null,
   vrfKeyHash: null,
+  coldKeyEncryption: null,
 
   poolId: null,
   isRegistered: false,
@@ -75,12 +80,14 @@ export async function loadPoolOperatorConfig(walletId: number): Promise<void> {
     const coldKeyHash = await config.where({ key: 'spo_coldKeyHash' }).first();
     const vrfKeyHash = await config.where({ key: 'spo_vrfKeyHash' }).first();
     const poolId = await config.where({ key: 'spo_poolId' }).first();
+    const coldKeyEncryption = await config.where({ key: 'spo_coldKeyEncryption' }).first();
     const nodesEntry = await config.where({ key: 'spo_nodes' }).first();
 
     poolOperatorStore.coldKeySource = coldKeySource?.value || 'none';
     poolOperatorStore.coldKeyHash = coldKeyHash?.value || null;
     poolOperatorStore.vrfKeyHash = vrfKeyHash?.value || null;
     poolOperatorStore.poolId = poolId?.value || null;
+    poolOperatorStore.coldKeyEncryption = coldKeyEncryption?.value || null;
 
     // Load nodes
     if (nodesEntry?.value) {

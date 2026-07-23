@@ -385,6 +385,26 @@ export function usePoolSigning(options: {
       const isUsb = true; // BT toggle lives on the dialog (Task 6); default to USB here.
       const network = networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network);
 
+      // Re-entry guard: a previous run may have funded a hot key that was
+      // never swept (e.g. cold-sign failed after tx1 landed). Regenerating now
+      // would wipe that key (generate() zeroes the old one) and permanently
+      // strand the real ADA already on the old hot address. Recover it first.
+      if (funded.value && !swept.value) {
+        const recovered = await doSweep();
+        if (!recovered) {
+          markStranded();
+          loading.value = false;
+          throw new Error(t('poolOperator.ledgerStrandedBody'));
+        }
+        // Recovered: clear the spent key + flags so we start the retry clean.
+        hotFeeKey.reset();
+        funded.value = false;
+        swept.value = false;
+        strandedFunds.value = null;
+        fundTxId.value = null;
+        hotFundsUtxo = null;
+      }
+
       // --- Tx 1: fund the ephemeral hot key from the Ledger (ordinary mode) ---
       phase.value = 'funding';
       const { enterpriseAddress: hotAddress } = await hotFeeKey.generate();
