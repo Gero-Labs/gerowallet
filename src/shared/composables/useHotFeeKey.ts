@@ -16,7 +16,8 @@ export function useHotFeeKey(networkId: 0 | 1) {
   const hasKey = ref(false);
 
   async function generate(seedOverride?: Uint8Array) {
-    const seed = seedOverride ?? crypto.getRandomValues(new Uint8Array(32));
+    if (priv.value) priv.value.fill(0);
+    const seed = seedOverride ? Uint8Array.from(seedOverride) : crypto.getRandomValues(new Uint8Array(32));
     priv.value = seed;
     hasKey.value = true;
     const pub = ed25519.getPublicKey(seed);
