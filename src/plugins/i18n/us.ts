@@ -4201,6 +4201,16 @@ export default {
   'poolOperator.myRelays': 'My Relays',
   'poolOperator.direction': 'Direction',
   'poolOperator.noPeersInFilter': 'No peers match the current filter',
+  'poolOperator.ledgerFundStep': 'Funding a temporary fee key from your Ledger',
+  'poolOperator.ledgerConfirmFund': 'Confirm the funding transaction on your Ledger',
+  'poolOperator.ledgerSignUpdate': 'Confirm the pool update on your Ledger — verify the pledge, cost, margin and VRF shown on the device',
+  'poolOperator.ledgerReviewTx': 'Review the assembled transaction, then submit',
+  'poolOperator.ledgerSweep': 'Returning the leftover fee funds to your Ledger',
+  'poolOperator.ledgerSubmit': 'Submit pool update',
+  'poolOperator.ledgerStrandedTitle': 'Temporary fee funds not yet returned',
+  'poolOperator.ledgerStrandedBody': 'A small amount of ADA is on a temporary key and can only be recovered while this window stays open. Retry the sweep before closing.',
+  'poolOperator.ledgerRetrySweep': 'Retry sweep',
+  'poolOperator.ledgerCloseAnyway': 'Close anyway (funds may become unrecoverable)',
 
   // Midnight DUST registration. The flow combines a Cardano CIP-30 mapping
   // tx (signed via Gero's Cardano wallet or the official portal) with the
