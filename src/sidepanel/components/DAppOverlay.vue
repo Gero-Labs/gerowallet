@@ -872,7 +872,7 @@ import WalletStore from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { WalletType, Network } from '@/models/types';
+import { WalletType, Network, Blockchain } from '@/models/types';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import filters from '@/shared/utils/filters';
 import { friendlyTxError } from '@/shared/utils/txErrors';
@@ -1936,6 +1936,13 @@ watch(
     if (!req || req.method !== 'signTx') return;
     const txCbor = req.payload?.tx;
     if (!txCbor) return;
+
+    // Cardano Shield only covers Cardano MAINNET. On preprod/testnet — or any
+    // non-Cardano chain — the scan endpoint has no data and just times out, and
+    // the "Unverified" badge is misleading noise. Skip the scan and leave txRisk
+    // null so no badge shows (mirrors dashboard SummaryStep gate, PR 805).
+    const w = WalletStore.state.loggedWallet;
+    if (w?.chain !== Blockchain.CARDANO || w?.network !== Network.MAINNET) return;
 
     // Use the first non-own recipient if any (for external txs), otherwise own address
     // (for internal/self transfers — Cardano Shield can still scan the URL/CBOR)
