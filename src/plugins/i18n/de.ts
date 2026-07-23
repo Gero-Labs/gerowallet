@@ -3056,6 +3056,8 @@ export default {
   'wallet.ledgerBleSignHint': 'Entsperren Sie Ihren Ledger und öffnen Sie die Cardano-App, dann wählen Sie Ihr Gerät aus der Liste.',
   'wallet.ledgerBleSignAction': 'Per Bluetooth verbinden',
   'wallet.ledgerBleSignCancelled': 'Signieren per Bluetooth wurde abgebrochen.',
+  'wallet.ledgerBleSignCancelledHint': 'Es wurde kein Ledger ausgewählt. Stellen Sie sicher, dass Ihr Ledger entsperrt und die Cardano-App geöffnet ist und dass Ledger Live geschlossen ist — es belegt die Bluetooth-Verbindung exklusiv.',
+  'wallet.ledgerBleUnavailable': 'Bluetooth ist nicht verfügbar. Schalten Sie Bluetooth ein und erlauben Sie Chrome die Nutzung unter Systemeinstellungen → Datenschutz & Sicherheit → Bluetooth.',
   'wallet.ledgerBleSignFailed': 'Signieren per Bluetooth fehlgeschlagen. Bitte versuchen Sie es erneut.',
   'wallet.ledgerBleSignTimeout': 'Zeitüberschreitung beim Signieren per Bluetooth. Bitte versuchen Sie es erneut.',
   'wallet.ledgerBleSignPopupBlocked': 'Erlauben Sie Pop-ups für diese Erweiterung, um per Bluetooth zu signieren.',

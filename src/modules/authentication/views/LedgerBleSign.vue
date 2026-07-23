@@ -10,13 +10,17 @@
           <h2 class="t-heading mb-2">{{ $t('wallet.ledgerBleSignTitle') }}</h2>
           <p class="t-body-sm text--secondary mb-6">{{ $t('wallet.ledgerBleSignHint') }}</p>
 
+          <v-alert v-if="bleUnavailable" type="warning" text class="mb-4 text-left">
+            {{ $t('wallet.ledgerBleUnavailable') }}
+          </v-alert>
+
           <v-btn
             v-if="!signing"
             block
             rounded
             depressed
             class="geroButton black--text font-weight-bold"
-            :disabled="!ready"
+            :disabled="!ready || bleUnavailable"
             @click="startSigning()"
           >
             {{ $t('wallet.ledgerBleSignAction') }}
@@ -79,6 +83,7 @@ const ready = ref(false);
 const signing = ref(false);
 const status = ref('');
 const error = ref('');
+const bleUnavailable = ref(false);
 
 const txCbor = ref('');
 const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
@@ -107,6 +112,27 @@ function onOpenerMessage(event: MessageEvent) {
   ready.value = true;
 }
 
+/**
+ * Ask the browser whether a Bluetooth radio is actually usable before opening
+ * the chooser.
+ *
+ * `TransportWebBLE.isSupported()` only checks that `navigator.bluetooth` exists,
+ * so it reports true even when the OS has denied Chrome access to the adapter or
+ * the radio is off. In that state `requestDevice()` rejects with the generic
+ * "User cancelled the requestDevice() chooser" and the user is told they
+ * cancelled something they never saw. Distinguish the two up front.
+ */
+async function checkBluetoothAvailable(): Promise<boolean> {
+  const ble = (navigator as Navigator & { bluetooth?: { getAvailability?: () => Promise<boolean> } }).bluetooth;
+  if (!ble) return false;
+  if (typeof ble.getAvailability !== 'function') return true; // can't tell — let the chooser try
+  try {
+    return await ble.getAvailability();
+  } catch {
+    return true; // availability probe failed, not the adapter — don't block on it
+  }
+}
+
 async function startSigning() {
   if (!ready.value || signing.value) return;
   signing.value = true;
@@ -115,6 +141,10 @@ async function startSigning() {
   try {
     const wallet = WalletStore.state.loggedWallet;
     if (!wallet) throw new Error(t('wallet.ledgerBleSignNoWallet'));
+
+    if (!(await checkBluetoothAvailable())) {
+      throw new Error(t('wallet.ledgerBleUnavailable'));
+    }
 
     status.value = t('wallet.ledgerConnectingDevice');
     const tx: Cardano.Tx = deserializeCardanoJsSdkTx(txCbor.value);
@@ -138,7 +168,12 @@ async function startSigning() {
     // treat it as a cancel so the side panel can re-offer signing rather than
     // showing it as a failure.
     const cancelled = message.includes('cancel');
-    error.value = message || t('wallet.ledgerBleSignFailed');
+    // The transport reports both a genuinely dismissed chooser and a chooser
+    // that never appeared as "user cancelled", so say what to check rather than
+    // blaming the user for a dialog they may never have seen.
+    error.value = cancelled
+      ? t('wallet.ledgerBleSignCancelledHint')
+      : (message || t('wallet.ledgerBleSignFailed'));
     status.value = '';
     signing.value = false;
     postToOpener({ success: false, cancelled, error: error.value });
@@ -148,13 +183,18 @@ async function startSigning() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   window.addEventListener('message', onOpenerMessage);
   if (window.opener) {
     window.opener.postMessage({ type: 'LEDGER_BLE_READY' }, extensionOrigin);
   } else {
     error.value = t('wallet.ledgerBleSignNoOpener');
   }
+
+  // Surface an unusable radio immediately rather than after a click that can
+  // only fail — this is the difference between "Bluetooth is off / Chrome is
+  // not allowed to use it" and a chooser the user actually dismissed.
+  bleUnavailable.value = !(await checkBluetoothAvailable());
 });
 
 onBeforeUnmount(() => {
