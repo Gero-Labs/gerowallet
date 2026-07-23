@@ -228,6 +228,13 @@ export function usePoolSigning(options: {
   // sweep helpers below need it.
   let hotAddressState: string | null = null;
   let hotFundsUtxo: Cardano.Utxo | null = null;
+  // Captured when tx2 (the pool update) lands but the follow-up sweep fails.
+  // `options.onSuccess` — which drives the parent to close the dialog via its
+  // v-model watcher, bypassing the dialog's own guarded `close()` — must NOT
+  // fire while funds are stranded. Instead the txId is held here until a
+  // later `retrySweep()` actually clears `strandedFunds`, at which point the
+  // deferred `onSuccess` finally runs.
+  let pendingSuccessTxId: string | null = null;
 
   const isPrfWallet = computed(() => loggedWallet.value?.encryptionMethod === 'prf');
   const isLedgerColdKey = computed(() => poolOperatorStore.coldKeySource === 'ledger');
@@ -244,7 +251,16 @@ export function usePoolSigning(options: {
   const hotFeeKey = useHotFeeKey(hotFeeKeyNetworkId.value);
 
   // Address the hot key's leftover funds get swept back to on completion/abort.
-  const hotFeeKeySweepAddress = computed(() => keys.value?.payment?.[0]?.address || loggedWallet.value?.stakeAddress || '');
+  // Must be a payment (enterprise/base) address — a reward (stake1…) address
+  // cannot receive a tx output, so there is no safe fallback: fail loudly
+  // instead of building a sweep tx that would only fail on submission.
+  const hotFeeKeySweepAddress = computed(() => {
+    const address = keys.value?.payment?.[0]?.address;
+    if (!address) {
+      throw new Error('No payment address available to sweep the temporary fee funds to');
+    }
+    return address;
+  });
 
   /**
    * Sweep whatever the hot key currently holds (`hotFundsUtxo`) back to the
@@ -325,6 +341,14 @@ export function usePoolSigning(options: {
         strandedFunds.value = null;
         funded.value = false;
         fundTxId.value = null;
+        // The pool update already succeeded (tx2 landed) and was waiting on
+        // this sweep before the dialog could report success upstream — now
+        // that the sweep has actually cleared, fire the deferred onSuccess.
+        if (pendingSuccessTxId) {
+          const deferredTxId = pendingSuccessTxId;
+          pendingSuccessTxId = null;
+          if (options.onSuccess) options.onSuccess(deferredTxId);
+        }
       } else {
         markStranded();
       }
@@ -560,9 +584,20 @@ export function usePoolSigning(options: {
       }
 
       phase.value = 'done';
+      // The pool update (tx2) landed either way, so reflect that in the UI
+      // regardless of whether the leftover-sweep succeeded.
       isSubmit.value = true;
       snackbar.fireSuccess(t(options.successMessageKey));
-      if (options.onSuccess && txId) options.onSuccess(txId);
+      if (strandedFunds.value) {
+        // Sweep failed — funds are stranded on the hot key. Do NOT call
+        // onSuccess yet: that would let the parent close the dialog via its
+        // v-model watcher and bypass the guarded close() that shows the
+        // Retry-sweep UI, silently losing the hot-key funds. Defer onSuccess
+        // until a later retrySweep() actually clears strandedFunds.
+        pendingSuccessTxId = txId || null;
+      } else if (options.onSuccess && txId) {
+        options.onSuccess(txId);
+      }
     } catch (e: unknown) {
       console.error('Error submitting Ledger pool-update transaction:', e);
       snackbar.setError(getErrorMessage(e, t('errors.unknownError') as string));
@@ -695,6 +730,7 @@ export function usePoolSigning(options: {
       fundTxId.value = null;
       hotFundsUtxo = null;
       hotAddressState = null;
+      pendingSuccessTxId = null;
     } else {
       markStranded();
     }
