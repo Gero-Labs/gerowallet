@@ -2125,26 +2125,38 @@ async function signPrf() {
 }
 
 /**
- * Run the Bluetooth leg of Ledger signing in a browser tab and return the
- * witness set it produces.
+ * Run the Bluetooth leg of Ledger signing in its own small browser window and
+ * return the witness set it produces.
  *
- * Chromium anchors the Web Bluetooth device chooser to a normal tabbed browser
- * window. In the side panel — and in a `popup=1` window — `requestDevice()`
- * rejects immediately with "User cancelled the requestDevice() chooser" and no
- * dialog is ever drawn. Verified by hand on macOS: the identical call renders
- * the chooser in a normal tab and fails silently in both of the others. WebUSB's
+ * Chromium anchors the Web Bluetooth device chooser to a browser window's
+ * toolbar. Where there is no toolbar the request is reported as cancelled and
+ * no dialog is ever drawn — verified by hand on macOS across three surfaces:
+ *
+ *   side panel               no chooser
+ *   window.open(popup=1)     no chooser
+ *   normal browser window    chooser renders
+ *
+ * So this uses `type: 'normal'` — the window type that works — merely sized
+ * down to feel like a dialog rather than taking over a tab. `type: 'popup'`
+ * would look tidier still and would fail exactly as `popup=1` did. WebUSB's
  * chooser is unaffected, which is why only the BLE path needs this detour.
  *
- * The tab asks for the transaction with LEDGER_BLE_READY and reports back with
- * LEDGER_BLE_RESULT. Only the transaction and the finished witness set cross
- * that boundary — key material never leaves the device. Every message is
+ * The window asks for the transaction with LEDGER_BLE_READY and reports back
+ * with LEDGER_BLE_RESULT. Only the transaction and the finished witness set
+ * cross that boundary — key material never leaves the device. Every message is
  * checked to come from an extension page (not a content script on some web
  * page) and from this exact tab.
  */
-async function signLedgerViaBleTab(txCbor: string): Promise<string> {
+async function signLedgerViaBleWindow(txCbor: string): Promise<string> {
   const url = chrome.runtime.getURL('index.html#/ledger-ble-sign');
-  const tab = await chrome.tabs.create({ url, active: true });
-  const tabId = tab.id;
+  const win = await chrome.windows.create({
+    url,
+    type: 'normal', // MUST stay 'normal': 'popup' has no toolbar for the chooser to anchor to
+    width: 460,
+    height: 680,
+    focused: true,
+  });
+  const tabId = win?.tabs?.[0]?.id;
   if (tabId === undefined) throw new Error(t('wallet.ledgerBleSignFailed'));
 
   const extensionBase = chrome.runtime.getURL('');
@@ -2180,9 +2192,10 @@ async function signLedgerViaBleTab(txCbor: string): Promise<string> {
       }
     };
 
-    // Closing the tab is how the user cancels — the tab deliberately keeps
-    // itself open after a recoverable failure so they can fix the device state
-    // and retry without a fresh round trip.
+    // Closing the window is how the user cancels — it deliberately stays open
+    // after a recoverable failure so they can fix the device state and retry
+    // without a fresh round trip. tabs.onRemoved covers closing the window too,
+    // since its only tab goes with it.
     const onTabClosed = (closedId: number) => {
       if (closedId !== tabId) return;
       cleanup();
@@ -2212,7 +2225,7 @@ async function signLedger() {
     const txCbor = getTxCbor();
 
     if (isBT.value) {
-      approve(await signLedgerViaBleTab(txCbor));
+      approve(await signLedgerViaBleWindow(txCbor));
       return;
     }
 
