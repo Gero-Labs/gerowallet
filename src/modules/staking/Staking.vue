@@ -175,13 +175,13 @@
                 </v-list-item>
               </template>
               <template v-slot:[`item.live_delegators`]="{ item }">
-                {{ item.live_delegators.toLocaleString('en-US') }}
+                {{ (item.live_delegators ?? 0).toLocaleString('en-US') }}
               </template>
               <template v-slot:[`item.ros`]="{ item }">
-                {{ item.ros.toLocaleString('en-US', { maximumFractionDigits: 2 }) }}
+                {{ (item.ros ?? 0).toLocaleString('en-US', { maximumFractionDigits: 2 }) }}
               </template>
               <template v-slot:[`item.block_count`]="{ item }">
-                {{ item.block_count.toLocaleString('en-US') }}
+                {{ (item.block_count ?? 0).toLocaleString('en-US') }}
               </template>
               <template v-slot:[`item.live_saturation`]="{ item }">
                 <v-progress-linear
@@ -381,7 +381,7 @@
                             :value="pool.live_saturation"
                             :color="filters.getColor(pool.live_saturation)"
                           >
-                            <span>{{ pool.live_saturation + '%' }}</span>
+                            <span>{{ (pool.live_saturation ?? 0) + '%' }}</span>
                           </v-progress-linear>
                         </v-col>
                       </v-row>
@@ -407,7 +407,7 @@
                           <span class="pool-card-label">ROS</span>
                         </v-col>
                         <v-col cols="7">
-                          <span class="pool-card-value">{{ pool.ros.toFixed(2) + '%' }}</span>
+                          <span class="pool-card-value">{{ (pool.ros ?? 0).toFixed(2) + '%' }}</span>
                         </v-col>
                       </v-row>
                       <v-row no-gutters>
