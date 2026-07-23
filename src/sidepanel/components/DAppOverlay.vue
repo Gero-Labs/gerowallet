@@ -2125,87 +2125,80 @@ async function signPrf() {
 }
 
 /**
- * Run the Bluetooth leg of Ledger signing in a popup window and return the
+ * Run the Bluetooth leg of Ledger signing in a browser tab and return the
  * witness set it produces.
  *
- * Chrome does not present the Web Bluetooth device chooser inside a side panel:
- * `requestDevice()` rejects immediately with "User cancelled the requestDevice()
- * chooser" and no dialog is ever drawn. WebUSB's chooser does render here, which
- * is why only the BLE path needs the detour. Same workaround the PassKey flow
- * already uses for WebAuthn (signPrf, above).
+ * Chromium anchors the Web Bluetooth device chooser to a normal tabbed browser
+ * window. In the side panel — and in a `popup=1` window — `requestDevice()`
+ * rejects immediately with "User cancelled the requestDevice() chooser" and no
+ * dialog is ever drawn. Verified by hand on macOS: the identical call renders
+ * the chooser in a normal tab and fails silently in both of the others. WebUSB's
+ * chooser is unaffected, which is why only the BLE path needs this detour.
  *
- * The popup announces itself with LEDGER_BLE_READY, we hand it the transaction,
- * and it posts back LEDGER_BLE_RESULT. Only the transaction and the finished
- * witness set cross the boundary — key material never leaves the device — and
- * both directions are pinned to the extension origin.
+ * The tab asks for the transaction with LEDGER_BLE_READY and reports back with
+ * LEDGER_BLE_RESULT. Only the transaction and the finished witness set cross
+ * that boundary — key material never leaves the device. Every message is
+ * checked to come from an extension page (not a content script on some web
+ * page) and from this exact tab.
  */
-async function signLedgerViaBlePopup(txCbor: string): Promise<string> {
-  const popupUrl = chrome.runtime.getURL('index.html#/ledger-ble-sign');
-  const popup = window.open(popupUrl, 'LedgerBleSign', 'width=420,height=560,popup=1');
-  if (!popup) throw new Error(t('wallet.ledgerBleSignPopupBlocked'));
+async function signLedgerViaBleTab(txCbor: string): Promise<string> {
+  const url = chrome.runtime.getURL('index.html#/ledger-ble-sign');
+  const tab = await chrome.tabs.create({ url, active: true });
+  const tabId = tab.id;
+  if (tabId === undefined) throw new Error(t('wallet.ledgerBleSignFailed'));
 
-  const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
+  const extensionBase = chrome.runtime.getURL('');
 
   return new Promise<string>((resolve, rejectPromise) => {
     const cleanup = () => {
-      window.removeEventListener('message', handler);
+      chrome.runtime.onMessage.removeListener(onMessage);
+      chrome.tabs.onRemoved.removeListener(onTabClosed);
       clearTimeout(timer);
-      clearInterval(watchdog);
     };
 
-    // The route watchdog below must not run before the popup has actually
-    // navigated to its route — a freshly opened window is still about:blank,
-    // and an empty hash would read as "routed away" and cancel instantly.
-    let sawReady = false;
+    const onMessage = (
+      msg: { type?: string; payload?: Record<string, unknown> },
+      sender: chrome.runtime.MessageSender,
+      sendResponse: (response?: unknown) => void,
+    ) => {
+      // A content script running in any web page can also reach this listener
+      // and would carry our own extension id, so identity is established by the
+      // sender being an extension page AND being the tab we just opened.
+      if (!sender.url?.startsWith(extensionBase) || sender.tab?.id !== tabId) return;
 
-    const handler = (event: MessageEvent) => {
-      // Pin to the extension origin AND to this exact window: origin alone would
-      // accept a message from any other extension page that happens to be open.
-      if (event.origin !== extensionOrigin || event.source !== popup) return;
-
-      if (event.data?.type === 'LEDGER_BLE_READY') {
-        sawReady = true;
-        popup.postMessage({ type: 'LEDGER_BLE_REQUEST', payload: { txCbor } }, extensionOrigin);
+      if (msg?.type === 'LEDGER_BLE_READY') {
+        sendResponse({ txCbor });
         return;
       }
 
-      if (event.data?.type === 'LEDGER_BLE_RESULT') {
+      if (msg?.type === 'LEDGER_BLE_RESULT') {
         cleanup();
-        const { success, witnessCbor, error, cancelled } = event.data.payload || {};
-        if (success && witnessCbor) resolve(witnessCbor);
-        else if (cancelled) rejectPromise(new Error(error || t('wallet.ledgerBleSignCancelled')));
-        else rejectPromise(new Error(error || t('wallet.ledgerBleSignFailed')));
+        const { success, witnessCbor, error, cancelled } = msg.payload || {};
+        if (success && typeof witnessCbor === 'string') resolve(witnessCbor);
+        else if (cancelled) rejectPromise(new Error(String(error || t('wallet.ledgerBleSignCancelled'))));
+        else rejectPromise(new Error(String(error || t('wallet.ledgerBleSignFailed'))));
       }
     };
 
-    // Generous: the user has to pick the device in the chooser and then confirm
-    // the whole transaction on the Ledger's screen.
+    // Closing the tab is how the user cancels — the tab deliberately keeps
+    // itself open after a recoverable failure so they can fix the device state
+    // and retry without a fresh round trip.
+    const onTabClosed = (closedId: number) => {
+      if (closedId !== tabId) return;
+      cleanup();
+      rejectPromise(new Error(t('wallet.ledgerBleSignCancelled')));
+    };
+
+    // Only a backstop against a permanently pending promise: closing the tab is
+    // the real cancel signal, and the user may spend a while quitting Ledger
+    // Live or re-pairing before they get a successful run.
     const timer = setTimeout(() => {
       cleanup();
       rejectPromise(new Error(t('wallet.ledgerBleSignTimeout')));
-    }, 180000);
+    }, 600000);
 
-    // The popup can stop being a signing surface without ever posting a result:
-    // closed abruptly (beforeunload is not guaranteed), or routed away by the
-    // auth guard if the wallet locks. Both are same-origin, so watch its hash
-    // directly rather than making the user sit out the 3-minute timeout.
-    const watchdog = setInterval(() => {
-      let goneFromRoute = false;
-      if (sawReady && !popup.closed) {
-        try {
-          goneFromRoute = !popup.location.hash.includes('ledger-ble-sign');
-        } catch {
-          // Cross-origin read — treat as still alive rather than guessing.
-          return;
-        }
-      }
-      if (popup.closed || goneFromRoute) {
-        cleanup();
-        rejectPromise(new Error(t('wallet.ledgerBleSignCancelled')));
-      }
-    }, 1000);
-
-    window.addEventListener('message', handler);
+    chrome.runtime.onMessage.addListener(onMessage);
+    chrome.tabs.onRemoved.addListener(onTabClosed);
   });
 }
 
@@ -2219,7 +2212,7 @@ async function signLedger() {
     const txCbor = getTxCbor();
 
     if (isBT.value) {
-      approve(await signLedgerViaBlePopup(txCbor));
+      approve(await signLedgerViaBleTab(txCbor));
       return;
     }
 
