@@ -487,54 +487,68 @@ export default {
       }
     };
   },
-  ledgerErrorHandling(e: unknown) {
+  /**
+   * Map a Ledger failure to the message a user can act on.
+   *
+   * `recognized` says whether the mapping actually identified the failure.
+   * Callers rendering into a page should fall back to their own copy when it is
+   * false: the unrecognized branch is where raw transport errors live, and those
+   * carry bundle paths and line numbers that must not reach the UI.
+   */
+  classifyLedgerError(e: unknown): { message: string; recognized: boolean } {
     const rawMessage = (e as { message?: unknown } | null | undefined)?.message;
     const message = typeof rawMessage === 'string' ? rawMessage : undefined;
+    const t = (key: string) => i18n.t(key) as string;
+
     if (e instanceof DeviceStatusError) {
-      const error: DeviceStatusError = e;
-      switch (error.code) {
+      switch (e.code) {
         case 0x5515:
         case 0x6E11:
-          snackbar.setError(i18n.t('wallet.ledgerDeviceLockedError') as string);
-          break;
+          return { message: t('wallet.ledgerDeviceLockedError'), recognized: true };
         case 0x6E01:
-          snackbar.setError(i18n.t('wallet.ledgerOpenCardanoApp') as string);
-          break;
+          return { message: t('wallet.ledgerOpenCardanoApp'), recognized: true };
         case 0x6E00:
-          snackbar.setError(i18n.t('wallet.ledgerInvalidState') as string);
-          break;
+          return { message: t('wallet.ledgerInvalidState'), recognized: true };
         case 0x6E04:
-          snackbar.setError(i18n.t('wallet.ledgerAppVersionNotSupported') as string);
-          break;
+          return { message: t('wallet.ledgerAppVersionNotSupported'), recognized: true };
         case 0x6E10:
-          snackbar.setError(i18n.t('wallet.ledgerInvalidStateRestart') as string);
-          break;
+          return { message: t('wallet.ledgerInvalidStateRestart'), recognized: true };
         case 0x6982:
-          snackbar.setError(i18n.t('wallet.ledgerSecurityNotSatisfied') as string);
-          break;
+          return { message: t('wallet.ledgerSecurityNotSatisfied'), recognized: true };
         case 0x6985:
-          snackbar.setError(i18n.t('wallet.ledgerTransactionRejected') as string);
-          break;
+          return { message: t('wallet.ledgerTransactionRejected'), recognized: true };
         case 0x6A80:
-          snackbar.setError(i18n.t('wallet.ledgerInvalidData') as string);
-          break;
-        default:
-          // Keep error details for debugging while providing user-friendly message
-          const errorCode = error.code ? ` (Error code: 0x${error.code.toString(16).toUpperCase()})` : '';
-          snackbar.setError(`${i18n.t('common.error')}${errorCode}. ${i18n.t('wallet.ledgerConnectionError')}`);
+          return { message: t('wallet.ledgerInvalidData'), recognized: true };
+        default: {
+          // Keep the status code for debugging while providing user-friendly copy
+          const errorCode = e.code ? ` (Error code: 0x${e.code.toString(16).toUpperCase()})` : '';
+          return { message: `${t('common.error')}${errorCode}. ${t('wallet.ledgerConnectionError')}`, recognized: true };
+        }
       }
-    } else if (message?.includes('NetworkError') || message?.includes('Unable to reset the device')) {
-      snackbar.setError(i18n.t('wallet.ledgerConnectionError') as string);
-    } else if (message?.includes('No device selected') || message?.includes('device not found')) {
-      snackbar.setError(i18n.t('wallet.ledgerNoDevice') as string);
-    } else if (message?.includes('Failed to Retrieve Cardano App Version')) {
-      snackbar.setError(i18n.t('wallet.ledgerCannotConnectApp') as string);
-    } else {
-      console.error('Error signing with Ledger:', e);
-      // Keep error details for debugging
-      const errorMessage = e instanceof Error ? e.message : i18n.t('wallet.ledgerSigningFailed') as string;
-      snackbar.setError(`${errorMessage}. ${i18n.t('common.pleaseTryAgain')}`);
     }
+    if (message?.includes('NetworkError') || message?.includes('Unable to reset the device')) {
+      return { message: t('wallet.ledgerConnectionError'), recognized: true };
+    }
+    if (message?.includes('No device selected') || message?.includes('device not found')) {
+      return { message: t('wallet.ledgerNoDevice'), recognized: true };
+    }
+    if (message?.includes('Failed to Retrieve Cardano App Version')) {
+      return { message: t('wallet.ledgerCannotConnectApp'), recognized: true };
+    }
+    // txToLedger also throws already-localized strings of its own — an app that
+    // is closed, a version that could not be read. Pass those through; the
+    // caller decides whether an unrecognized message is safe to render.
+    return { message: message || t('wallet.ledgerSigningFailed'), recognized: false };
+  },
+
+  ledgerErrorHandling(e: unknown) {
+    const { message, recognized } = this.classifyLedgerError(e);
+    if (recognized) {
+      snackbar.setError(message);
+      return;
+    }
+    console.error('Error signing with Ledger:', e);
+    snackbar.setError(`${message}. ${i18n.t('common.pleaseTryAgain')}`);
   },
 
   // ============================================================================
