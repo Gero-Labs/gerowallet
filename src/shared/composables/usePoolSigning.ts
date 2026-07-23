@@ -212,6 +212,23 @@ export function usePoolSigning(options: {
   const assembledTx = ref<string | null>(null);
   const fundTxId = ref<string | null>(null);
 
+  // Fund/sweep tracking for the ephemeral hot key. `funded` flips true once
+  // tx1 (the Ledger → hot key fund tx) is submitted, i.e. real ADA may be
+  // sitting on the hot address. `swept` flips true only once a sweep tx has
+  // itself been submitted successfully. The hot key must NEVER be reset while
+  // `funded && !swept` — that would strand the funds permanently (the key is
+  // never persisted and cannot be re-derived). `strandedFunds` is set when a
+  // sweep attempt fails so the dialog can surface it and offer `retrySweep()`.
+  const funded = ref(false);
+  const swept = ref(false);
+  const strandedFunds = ref<{ address: string; fundTxId: string } | null>(null);
+  // Internal (non-reactive) bookkeeping: the UTxO that currently holds the hot
+  // key's funds. Starts as tx1's own output; once tx2 (the pool-update tx)
+  // lands, its change output becomes the new holder. Not exposed — only the
+  // sweep helpers below need it.
+  let hotAddressState: string | null = null;
+  let hotFundsUtxo: Cardano.Utxo | null = null;
+
   const isPrfWallet = computed(() => loggedWallet.value?.encryptionMethod === 'prf');
   const isLedgerColdKey = computed(() => poolOperatorStore.coldKeySource === 'ledger');
   // The gate for THIS flow: the wallet itself is a Ledger (owner mode, software
@@ -230,24 +247,89 @@ export function usePoolSigning(options: {
   const hotFeeKeySweepAddress = computed(() => keys.value?.payment?.[0]?.address || loggedWallet.value?.stakeAddress || '');
 
   /**
-   * Best-effort abort guard: if the dialog is closed after the fund tx (tx1)
-   * landed but before the pool-update tx (tx2) was ever submitted, the hot key
-   * still holds real ADA on-chain. We cannot safely reconstruct "how much" —
-   * that requires querying the fund tx's own output (no arbitrary-address UTxO
-   * lookup exists client-side in this codebase; see the TODO(infra) in
-   * `runLedgerFlow`) — and re-deriving/re-signing a sweep here has no
-   * safe-to-call sync entry point from `resetState`. So this path only ever
-   * drops the (never-persisted) key material; it does NOT attempt an on-chain
-   * sweep. The funds remain fully recoverable manually (the fund tx id is
-   * logged) — flagged as a concern in the Task 5 report, not silently ignored.
+   * Sweep whatever the hot key currently holds (`hotFundsUtxo`) back to the
+   * wallet's own address. Shared by the success-path sweep (tx3, from
+   * `submitLedgerTx`) and the abort/retry recovery sweep (from `resetState` /
+   * `retrySweep`). Never throws — returns false on any failure so callers can
+   * decide it is NOT safe to drop the hot key yet.
    */
-  const sweepHotKeyIfNeeded = (): void => {
-    if (hotFeeKey.hasKey.value && fundTxId.value) {
-      console.warn(
-        '[usePoolSigning] Ledger flow aborted with an unswept hot key. ' +
-        `Funds sent to it in tx ${fundTxId.value} were NOT automatically recovered. ` +
-        'Re-run the update to reuse a fresh hot key, or sweep the ephemeral address manually.',
+  const doSweep = async (): Promise<boolean> => {
+    if (!hotFundsUtxo || !epochParams.value || !tip.value) return false;
+    try {
+      const sweepTx = buildHotKeyTx(
+        hotFundsUtxo,
+        hotFeeKeySweepAddress.value,
+        undefined,
+        SWEEP_WITNESS_COUNT,
+        epochParams.value,
+        tip.value,
       );
+      const sweepBodyHashHex = Serialization.TransactionBody.fromCore(sweepTx.body).hash() as unknown as string;
+      const sweepFeeWitness = hotFeeKey.signBodyHash(sweepBodyHashHex);
+      const sweepSignatures: Cardano.Signatures = new Map([
+        [sweepFeeWitness.vkey as unknown as Cardano.Ed25519PublicKeyHex, sweepFeeWitness.signature as unknown as Cardano.Ed25519SignatureHex],
+      ]);
+      const sweepWitnessSet = Serialization.TransactionWitnessSet.fromCore({ signatures: sweepSignatures });
+      const sweepResult = (await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.SUBMIT_TX,
+        data: {
+          txCbor: serializeCardanoJsSdkTx(sweepTx),
+          witnessHex: sweepWitnessSet.toCbor(),
+          utxos: [],
+        },
+      })) as { data: { error?: string } };
+      if (sweepResult.data.error) {
+        debugLog('[usePoolSigning] sweep failed:', sweepResult.data.error);
+        return false;
+      }
+      swept.value = true;
+      hotFundsUtxo = null;
+      return true;
+    } catch (sweepError) {
+      debugLog('[usePoolSigning] sweep step threw:', sweepError);
+      return false;
+    }
+  };
+
+  /**
+   * Record that the hot key still holds funds after a failed sweep attempt.
+   * The key is deliberately KEPT LIVE in memory (never reset here) so
+   * `retrySweep()` can try again later in this session. These funds are
+   * recoverable ONLY while the key is held this session — once it is dropped
+   * (or the browser/extension session ends) they are permanently unrecoverable:
+   * the key is never persisted and cannot be re-derived from the wallet seed.
+   */
+  const markStranded = (): void => {
+    if (hotAddressState && fundTxId.value) {
+      strandedFunds.value = { address: hotAddressState, fundTxId: fundTxId.value };
+    }
+    console.warn(
+      '[usePoolSigning] Hot fee key still holds funds after a failed sweep attempt. ' +
+      'Keeping the key in memory for this session so retrySweep() can try again. ' +
+      'These funds are recoverable ONLY while this session keeps the key in memory — ' +
+      'they are NOT recoverable via the fund tx id once the key is dropped or the session ends.',
+    );
+  };
+
+  /**
+   * UI-triggered retry of the recovery sweep after a previous attempt left
+   * `strandedFunds` set. No-op if there is nothing actually stranded.
+   */
+  const retrySweep = async (): Promise<void> => {
+    if (!funded.value || swept.value || !hotFundsUtxo) return;
+    loading.value = true;
+    try {
+      const ok = await doSweep();
+      if (ok) {
+        hotFeeKey.reset();
+        strandedFunds.value = null;
+        funded.value = false;
+        fundTxId.value = null;
+      } else {
+        markStranded();
+      }
+    } finally {
+      loading.value = false;
     }
   };
 
@@ -282,6 +364,7 @@ export function usePoolSigning(options: {
       // --- Tx 1: fund the ephemeral hot key from the Ledger (ordinary mode) ---
       phase.value = 'funding';
       const { enterpriseAddress: hotAddress } = await hotFeeKey.generate();
+      hotAddressState = hotAddress;
 
       const fundAmount = computeHotKeyFundAmount(certificate, hotAddress, epochParams.value, tip.value);
 
@@ -329,6 +412,11 @@ export function usePoolSigning(options: {
         { txId: Cardano.TransactionId(fundTxId.value), index: hotOutputIndex, address: hotAddress as Cardano.PaymentAddress },
         fundTx.body.outputs[hotOutputIndex],
       ];
+      // Real ADA now sits on the hot address — from this point the hot key
+      // must never be reset without a confirmed sweep (see `resetState`/
+      // `doSweep`/`retrySweep`).
+      funded.value = true;
+      hotFundsUtxo = hotUtxo;
 
       // --- await confirmation ---
       // TODO(infra): this is a fixed wait, not a real confirmation poll — there
@@ -383,12 +471,22 @@ export function usePoolSigning(options: {
         loggedWallet.value.chain,
         loggedWallet.value.network,
       );
-      const expectedVrf = (pool?.vrf_key_hash as string | undefined) || (certificate.poolParameters.vrf as unknown as string);
+      // This is a hard safety gate: the VRF check only means something if
+      // `expectedVrf` comes from the chain. If the on-chain value can't be
+      // fetched, we must NOT fall back to the certificate's own VRF — that
+      // would compare the cert to itself and always pass, silently defeating
+      // the guard against a wrong/rotated VRF key.
+      const onChainVrf = pool?.vrf_key_hash as string | undefined;
+      if (!onChainVrf) {
+        throw new Error(
+          "Could not fetch the pool's on-chain VRF key hash to verify the update — aborting for safety.",
+        );
+      }
       const validation = validateAssembledUpdate({
         witnessCount: signatures.size,
         expectedWitnessCount: POOL_UPDATE_WITNESS_COUNT,
         vrf: certificate.poolParameters.vrf as unknown as string,
-        expectedVrf,
+        expectedVrf: onChainVrf,
         owners: certificate.poolParameters.owners as unknown as string[],
         expectedOwners: [loggedWallet.value.stakeAddress || ''],
       });
@@ -433,42 +531,34 @@ export function usePoolSigning(options: {
 
       const txId = result.data.txId || '';
 
-      // --- Tx 3: sweep the hot key's change back to the Ledger (no tap) ---
+      // --- Tx 3: sweep the hot key's change back to the wallet (no tap) ---
       phase.value = 'sweeping';
-      try {
-        if (fundTxId.value) {
-          // `buildHotKeyTx` always emits exactly one output (its change/
-          // destination output), so the hot key's leftover is always index 0.
-          const tx2Body = Serialization.Transaction.fromCbor(HexBlob(txCbor.value)).body().toCore();
-          const hotChangeOutput = tx2Body.outputs[0];
-          const hotChangeUtxo: Cardano.Utxo = [
-            { txId: Cardano.TransactionId(txId), index: 0, address: hotChangeOutput.address },
-            hotChangeOutput,
-          ];
-          const sweepTx = buildHotKeyTx(hotChangeUtxo, hotFeeKeySweepAddress.value, undefined, SWEEP_WITNESS_COUNT, epochParams.value!, tip.value!);
-          const sweepBodyHashHex = Serialization.TransactionBody.fromCore(sweepTx.body).hash() as unknown as string;
-          const sweepFeeWitness = hotFeeKey.signBodyHash(sweepBodyHashHex);
-          const sweepSignatures: Cardano.Signatures = new Map([
-            [sweepFeeWitness.vkey as unknown as Cardano.Ed25519PublicKeyHex, sweepFeeWitness.signature as unknown as Cardano.Ed25519SignatureHex],
-          ]);
-          const sweepWitnessSet = Serialization.TransactionWitnessSet.fromCore({ signatures: sweepSignatures });
-          const sweepResult = (await Messaging.sendToBackgroundFromOptions({
-            method: MessageTypes.SUBMIT_TX,
-            data: {
-              txCbor: serializeCardanoJsSdkTx(sweepTx),
-              witnessHex: sweepWitnessSet.toCbor(),
-              utxos: [],
-            },
-          })) as { data: { error?: string } };
-          if (sweepResult.data.error) {
-            debugLog('[usePoolSigning] sweep failed (non-fatal, hot key funds remain recoverable manually):', sweepResult.data.error);
-          }
+      if (fundTxId.value) {
+        // `buildHotKeyTx` always emits exactly one output (its change/
+        // destination output), so the hot key's leftover after tx2 is always
+        // index 0. tx2's change output is now what the hot key holds — tx1's
+        // output was just consumed as tx2's input.
+        const tx2Body = Serialization.Transaction.fromCbor(HexBlob(txCbor.value)).body().toCore();
+        const hotChangeOutput = tx2Body.outputs[0];
+        hotFundsUtxo = [
+          { txId: Cardano.TransactionId(txId), index: 0, address: hotChangeOutput.address },
+          hotChangeOutput,
+        ];
+
+        const sweptOk = await doSweep();
+        if (sweptOk) {
+          hotFeeKey.reset();
+          funded.value = false;
+          strandedFunds.value = null;
+          fundTxId.value = null;
+        } else {
+          // The pool update itself succeeded (tx2 already landed) — only the
+          // leftover-sweep failed. Do NOT reset the hot key: keep it live so
+          // `retrySweep()` can recover the change within this session.
+          markStranded();
         }
-      } catch (sweepError) {
-        debugLog('[usePoolSigning] sweep step threw (non-fatal):', sweepError);
       }
 
-      hotFeeKey.reset();
       phase.value = 'done';
       isSubmit.value = true;
       snackbar.fireSuccess(t(options.successMessageKey));
@@ -585,8 +675,30 @@ export function usePoolSigning(options: {
     }
   };
 
-  const resetState = () => {
-    sweepHotKeyIfNeeded();
+  /**
+   * Dialog close/abort. If the hot key was never funded, or a sweep already
+   * confirmed, it's safe to drop it immediately. Otherwise real ADA may still
+   * be sitting on the hot address: attempt a sweep first and only reset the
+   * key if that sweep actually lands. On failure, keep the key live and leave
+   * `strandedFunds`/`retrySweep()` in place for the dialog to surface.
+   */
+  const resetState = async (): Promise<void> => {
+    let safeToRetireKey = !funded.value || swept.value;
+    if (!safeToRetireKey) {
+      safeToRetireKey = await doSweep();
+    }
+    if (safeToRetireKey) {
+      hotFeeKey.reset();
+      strandedFunds.value = null;
+      funded.value = false;
+      swept.value = false;
+      fundTxId.value = null;
+      hotFundsUtxo = null;
+      hotAddressState = null;
+    } else {
+      markStranded();
+    }
+
     spendingPassword.value = '';
     txCbor.value = '';
     txWitnesses.value = null;
@@ -596,8 +708,6 @@ export function usePoolSigning(options: {
     loading.value = false;
     phase.value = 'idle';
     assembledTx.value = null;
-    fundTxId.value = null;
-    hotFeeKey.reset();
   };
 
   return {
@@ -612,11 +722,15 @@ export function usePoolSigning(options: {
     phase,
     assembledTx,
     privateKeyBytes,
+    funded,
+    swept,
+    strandedFunds,
     signTx,
     submitTx,
     runLedgerFlow,
     submitLedgerTx,
     handleSign,
     resetState,
+    retrySweep,
   };
 }
