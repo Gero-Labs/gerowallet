@@ -449,6 +449,5 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
   padding: 12px 16px 16px;
   border-top: 1px solid var(--g-hairline-1);
-  background: var(--g-surface);
 }
 </style>
