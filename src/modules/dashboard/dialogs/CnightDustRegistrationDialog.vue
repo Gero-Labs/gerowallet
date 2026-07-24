@@ -93,7 +93,103 @@
         </v-btn>
       </template>
 
-      <template v-else-if="registrationStatus === 'Unregistered' || registrationStatus === 'Invalid' || registrationStatus === 'Unknown'">
+      <!-- Duplicated: consolidation panel. Midnight allows exactly one live
+           registration UTxO per stake credential — DUST generation is paused
+           for the whole set until it's back down to one. Register CTA never
+           renders here. -->
+      <template v-else-if="showConsolidationPanel">
+        <div class="duplicate-banner">
+          <v-icon small color="var(--g-error)" class="mr-2">mdi-alert-outline</v-icon>
+          <span>{{ t('midnight.cnightDuplicateBanner') }}</span>
+        </div>
+
+        <div class="replicate-list">
+          <div
+            v-for="reg in registrations"
+            :key="`${reg.txHash}-${reg.outputIndex}`"
+            class="replicate-row"
+            :class="{ 'replicate-row--primary': isPrimary(reg) }"
+          >
+            <div class="replicate-info">
+              <div class="replicate-tx">
+                {{ middleTruncate(reg.txHash, 8, 6) }}#{{ reg.outputIndex }}
+                <span v-if="isPrimary(reg)" class="replicate-badge">{{ t('midnight.cnightPrimaryBadge') }}</span>
+              </div>
+              <div class="replicate-dust">{{ middleTruncate(reg.dustAddressHex, 10, 6) }}</div>
+            </div>
+            <v-btn
+              v-if="!isPrimary(reg)"
+              small
+              outlined
+              color="error"
+              :loading="isRemoving(reg)"
+              :disabled="registering"
+              @click="startRemove(reg)"
+            >
+              {{ t('common.remove') }}
+            </v-btn>
+          </div>
+        </div>
+
+        <template v-if="activeRemove">
+          <v-text-field
+            v-if="!isPrfWallet"
+            v-model="localPassword"
+            :label="t('wallet.spendingPassword')"
+            type="password"
+            outlined
+            dense
+            :disabled="registering"
+            @keydown.enter="confirmRemove"
+            class="mb-2 mt-3"
+          />
+
+          <div v-if="registering" class="stage-line">
+            <v-progress-circular indeterminate size="14" width="2" class="mr-2" color="var(--g-accent)" />
+            <span>{{ stageLabel }}</span>
+          </div>
+          <div v-if="submitError" class="error--text text-caption mb-2">
+            {{ submitError }}
+          </div>
+
+          <v-btn
+            block
+            large
+            outlined
+            color="error"
+            :loading="registering"
+            :disabled="!canConfirm"
+            @click="confirmRemove"
+          >
+            <v-icon left>{{ isPrfWallet ? 'mdi-fingerprint' : 'mdi-trash-can-outline' }}</v-icon>
+            {{ isPrfWallet ? t('midnight.authorizeWithPasskey') : t('common.remove') }}
+          </v-btn>
+          <div class="text-center mt-2">
+            <v-btn small text :disabled="registering" @click="cancelRemove">
+              {{ t('common.cancel') }}
+            </v-btn>
+          </div>
+        </template>
+
+        <div v-else class="text-center mt-3">
+          <v-btn small text color="var(--g-text-2)" @click="$emit('close')">
+            {{ t('common.close') }}
+          </v-btn>
+        </div>
+      </template>
+
+      <!-- Invalid with no live registrations found (residual/legacy state,
+           since >=1 live registration now resolves to Pending/Duplicated
+           above): offer a refresh instead of a dead-end Register loop. -->
+      <template v-else-if="registrationStatus === 'Invalid'">
+        <div class="invalid-hint">{{ t('midnight.cnightInvalidHint') }}</div>
+        <v-btn block outlined class="mt-3" :loading="statusLoading" @click="refreshStatus">
+          <v-icon left small>mdi-refresh</v-icon>
+          {{ t('common.refresh') }}
+        </v-btn>
+      </template>
+
+      <template v-else-if="registrationStatus === 'Unregistered' || registrationStatus === 'Unknown'">
         <!-- Stage 1: primary CTA. PRF wallets jump straight to the PassKey gesture. -->
         <template v-if="!inSigningPhase">
           <v-btn
@@ -232,6 +328,7 @@ import { computed, ref, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import { walletStore } from '@/stores/walletStore';
 import { Network } from '@/models/types';
+import { DustRegistrationUtxoDto } from '@/api/midnight-api';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useCnightDustRegistration } from '@/shared/composables/useCnightDustRegistration';
 import snackbar from '@/plugins/snackbar';
@@ -246,7 +343,10 @@ const {
   cnightBalance,
   cnightDecimals,
   status,
+  statusLoading,
   registrationStatus,
+  registrations,
+  primaryRegistration,
   registering,
   stage,
   portalUrl,
@@ -255,6 +355,7 @@ const {
   refreshStatus,
   register,
   deregister,
+  deregisterOutpoint,
   migrateDustAddressToOwn,
 } = useCnightDustRegistration();
 
@@ -263,9 +364,14 @@ const {
  *  registerable state. */
 const canPickDestination = computed(() =>
   destinationOptions.value.length > 1
-  && (registrationStatus.value === 'Unregistered'
-    || registrationStatus.value === 'Invalid'
-    || registrationStatus.value === 'Unknown'));
+  && (registrationStatus.value === 'Unregistered' || registrationStatus.value === 'Unknown'));
+
+/** Only Duplicated shows the panel. `registrationStatus`'s derivation checks
+ *  registrations.length > 1 (Duplicated) and === 1 (Pending) before it ever
+ *  considers the server's 'Invalid' field, so 'Invalid' can only reach here
+ *  with an empty registrations list — there is no "Invalid with registrations
+ *  to consolidate" case today (see the Invalid branch below instead). */
+const showConsolidationPanel = computed(() => registrationStatus.value === 'Duplicated');
 
 const destinationSelectItems = computed(() => destinationOptions.value.map((d) => ({
   value: d.key,
@@ -279,6 +385,9 @@ const inSigningPhase = ref(false);
 const submitError = ref<string | null>(null);
 /** Registered-state manage flows: re-point the DUST destination or stop generating. */
 const manageMode = ref<'migrate' | 'deregister' | null>(null);
+/** Duplicated-state consolidation: the non-primary registration currently
+ *  targeted for removal (drives the inline password gate + per-row spinner). */
+const activeRemove = ref<{ txHash: string; outputIndex: number } | null>(null);
 
 const isPrfWallet = computed(() => walletStore.loggedWallet?.encryptionMethod === 'prf');
 const isMainnet = computed(() => walletStore.loggedWallet?.network === Network.MAINNET);
@@ -300,6 +409,7 @@ const statusKey = computed(() => {
     case 'Registered': return 'registered';
     case 'Pending': return 'pending';
     case 'Invalid': return 'invalid';
+    case 'Duplicated': return 'duplicated';
     default: return 'unregistered';
   }
 });
@@ -309,11 +419,16 @@ const statusLabel = computed(() => {
     case 'Registered': return t('midnight.statusRegistered');
     case 'Pending': return t('midnight.statusPending');
     case 'Invalid': return t('midnight.statusInvalid');
+    case 'Duplicated': return t('midnight.statusDuplicated');
     default: return t('midnight.statusUnregistered');
   }
 });
 
-const statusHelp = computed(() => (registrationStatus.value === 'Pending' ? t('midnight.relayFewHours') : ''));
+const statusHelp = computed(() => {
+  if (registrationStatus.value === 'Pending') return t('midnight.relayFewHours');
+  if (registrationStatus.value === 'Duplicated') return t('midnight.cnightDuplicateCount', { count: registrations.value.length });
+  return '';
+});
 
 const stageLabel = computed(() => {
   switch (stage.value) {
@@ -341,11 +456,85 @@ function resetState() {
   submitError.value = null;
   localPassword.value = '';
   manageMode.value = null;
+  activeRemove.value = null;
 }
 
 function enterManage(mode: 'migrate' | 'deregister') {
   submitError.value = null;
   manageMode.value = mode;
+}
+
+function isPrimary(reg: DustRegistrationUtxoDto): boolean {
+  const primary = primaryRegistration.value;
+  return !!primary && primary.txHash === reg.txHash && primary.outputIndex === reg.outputIndex;
+}
+
+function isRemoving(reg: DustRegistrationUtxoDto): boolean {
+  return registering.value
+    && !!activeRemove.value
+    && activeRemove.value.txHash === reg.txHash
+    && activeRemove.value.outputIndex === reg.outputIndex;
+}
+
+function startRemove(reg: DustRegistrationUtxoDto) {
+  submitError.value = null;
+  activeRemove.value = { txHash: reg.txHash, outputIndex: reg.outputIndex };
+  if (isPrfWallet.value) {
+    confirmRemove();
+  }
+}
+
+function cancelRemove() {
+  activeRemove.value = null;
+  submitError.value = null;
+  localPassword.value = '';
+}
+
+async function confirmRemove() {
+  if (!activeRemove.value) return;
+  submitError.value = null;
+  const wallet = walletStore.loggedWallet;
+  if (!wallet) return;
+  const { txHash, outputIndex } = activeRemove.value;
+
+  try {
+    let prfOutput: ArrayBuffer | undefined;
+    if (isPrfWallet.value) {
+      if (!wallet.webAuthnCredentialId) {
+        throw new Error('PRF wallet missing credential ID');
+      }
+      const { evaluatePrfForWallet } = await import('@/shared/utils/webauthn-prf');
+      prfOutput = await evaluatePrfForWallet(wallet.webAuthnCredentialId, wallet.id.toString());
+    }
+    const credentials = {
+      password: isPrfWallet.value ? undefined : localPassword.value,
+      prfOutput,
+    };
+
+    const result = await deregisterOutpoint(credentials, txHash, outputIndex);
+    if (result.status === 'submitted') {
+      snackbar.fireSuccess(t('midnight.cnightReplicateRemoved'));
+      cancelRemove();
+      await refreshStatus();
+    } else if (result.status === 'already_registered') {
+      // Not expected from a deregistration call, but the result type is
+      // shared with register() — treat like a submitted removal (refresh
+      // and let the derived status re-render) rather than erroring.
+      cancelRemove();
+      await refreshStatus();
+    } else if (result.message === 'WRONG_PASSWORD') {
+      submitError.value = t('errors.wrongPassword');
+    } else if (result.message === 'NO_COLLATERAL') {
+      submitError.value = t('midnight.dustNoCollateral');
+      snackbar.setError(submitError.value);
+    } else {
+      submitError.value = result.message || t('midnight.dustRegistrationFailed');
+      snackbar.setError(submitError.value);
+    }
+  } catch (e) {
+    submitError.value = e instanceof Error ? e.message : String(e);
+    snackbar.setError(submitError.value);
+  }
 }
 
 async function confirmManage() {
@@ -377,6 +566,11 @@ async function confirmManage() {
         ? t('midnight.cnightDeregistered')
         : t('midnight.cnightUpdated'));
       resetState();
+    } else if (result.status === 'already_registered') {
+      // Not expected from deregister/migrate, but the result type is shared
+      // with register() — refresh and let the derived status re-render.
+      resetState();
+      await refreshStatus();
     } else if (result.message === 'WRONG_PASSWORD') {
       submitError.value = t('errors.wrongPassword');
     } else if (result.message === 'NO_COLLATERAL') {
@@ -422,6 +616,11 @@ async function confirmRegistration() {
 
     if (result.status === 'submitted') {
       snackbar.fireSuccess(t('midnight.dustRegistrationSubmitted'));
+      resetState();
+    } else if (result.status === 'already_registered') {
+      // Nexus refused: a live registration already exists. The composable
+      // already adopted the server's list, so `registrationStatus` re-derives
+      // as Pending/Duplicated on its own — no error toast, just settle.
       resetState();
     } else if (result.message === 'WRONG_PASSWORD') {
       submitError.value = t('errors.wrongPassword');
@@ -490,6 +689,7 @@ watch(() => props.isOpen, (open) => {
 .status-dot--pending { background: var(--g-warning); }
 .status-dot--registered { background: var(--g-success); }
 .status-dot--invalid { background: var(--g-error); }
+.status-dot--duplicated { background: var(--g-error); }
 
 .status-pill--pending {
   background: var(--g-warning-fill);
@@ -500,6 +700,10 @@ watch(() => props.isOpen, (open) => {
   border-color: var(--g-success-line);
 }
 .status-pill--invalid {
+  background: var(--g-error-fill);
+  border-color: var(--g-error-line);
+}
+.status-pill--duplicated {
   background: var(--g-error-fill);
   border-color: var(--g-error-line);
 }
@@ -643,5 +847,88 @@ watch(() => props.isOpen, (open) => {
 .manage-note--warning {
   background: var(--g-warning-fill);
   border-color: var(--g-warning-line);
+}
+
+/* ── Duplicate-registration consolidation panel ──────────────────────────────
+   Midnight allows exactly one live registration UTxO per stake credential;
+   more than one pauses DUST generation for the whole set. Reuses the error/
+   success tokens already established above (invalid pill / registered pill)
+   rather than introducing new colors. */
+
+.duplicate-banner {
+  display: flex;
+  align-items: flex-start;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--g-text-1);
+  line-height: 1.5;
+  padding: 10px 12px;
+  border-radius: var(--g-r-control);
+  background: var(--g-error-fill);
+  border: 1px solid var(--g-error-line);
+  margin-bottom: 12px;
+}
+
+.replicate-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.replicate-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--g-r-control);
+  background: var(--g-surface);
+  border: 1px solid var(--g-hairline-2);
+}
+
+.replicate-row--primary {
+  border-color: var(--g-success-line);
+  background: var(--g-success-fill);
+}
+
+.replicate-info {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.replicate-tx {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--g-font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--g-text-1);
+}
+
+.replicate-badge {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--g-success);
+  padding: 1px 6px;
+  border-radius: var(--g-r-chip);
+  background: var(--g-success-fill);
+  border: 1px solid var(--g-success-line);
+}
+
+.replicate-dust {
+  font-family: var(--g-font-mono);
+  font-size: 11px;
+  color: var(--g-text-3);
+  margin-top: 2px;
+}
+
+.invalid-hint {
+  font-size: 12px;
+  color: var(--g-text-2);
+  line-height: 1.5;
+  text-align: center;
+  padding: 8px 0;
 }
 </style>

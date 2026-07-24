@@ -4161,6 +4161,8 @@ export default {
   'midnight.statusRegisteredHelp': 'Ihr registriertes NIGHT generiert DUST.',
   'midnight.statusInvalid': 'Registrierung ungültig',
   'midnight.statusInvalidHelp': 'Aktualisieren Sie Ihre DUST-Adresse - die aktuelle Zuordnung ist nicht mehr gültig.',
+  'midnight.statusDuplicated': 'Doppelte Registrierungen',
+  'midnight.cnightDuplicateCount': '{count} aktive Registrierungen',
   // Legacy-Wallet-Upgrade
   'midnight.upgradeAddressesNotice': 'Diese Wallet wurde vor der Unterstützung der DUST-Adressableitung erstellt. Geben Sie Ihr Spending-Passwort ein, um Ihre DUST-Adresse abzuleiten.',
   'midnight.upgradeAddressesNoticePrf': 'Diese Wallet wurde vor der Unterstützung der DUST-Adressableitung erstellt. Autorisieren Sie mit Ihrem PassKey, um Ihre DUST-Adresse abzuleiten.',
@@ -4293,6 +4295,13 @@ export default {
   'midnight.cnightMigrateInfo': 'Richtet die bestehende Registrierung auf die eigene Midnight-DUST-Adresse dieser Wallet. Wird nach der Übertragung wirksam, meist innerhalb weniger Stunden.',
   'midnight.cnightDeregistered': 'Deregistrierung übermittelt',
   'midnight.cnightUpdated': 'Aktualisierung des DUST-Ziels übermittelt',
+  // Erkennung + Konsolidierung doppelter Registrierungen (pro Stake-Credential
+  // ist genau eine aktive Registrierung gültig; mehr als eine pausiert die
+  // DUST-Generierung für den gesamten Satz, bis die Duplikate entfernt sind)
+  'midnight.cnightDuplicateBanner': 'Mehrere Registrierungen gefunden. Die DUST-Generierung ist pausiert, bis die Duplikate entfernt wurden.',
+  'midnight.cnightPrimaryBadge': 'Primär',
+  'midnight.cnightReplicateRemoved': 'Entfernung übermittelt',
+  'midnight.cnightInvalidHint': 'Registrierung konnte nicht on-chain verifiziert werden. Aktualisieren Sie, um erneut zu prüfen.',
   // Wallet-übergreifendes DUST-Quellen-Panel (Midnight-Wallet-Seite)
   'midnight.dustSourcesTitle': 'DUST aus Cardano-NIGHT generieren',
   'midnight.dustSourcesSubtitle': 'NIGHT in Ihren Cardano-Wallets kann DUST für diese Wallet generieren',
