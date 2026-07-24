@@ -4302,6 +4302,7 @@ export default {
   'midnight.dustSourcesRedirectHere': 'Hierher umleiten',
   'midnight.dustSourcesGeneratingHere': 'Generiert für diese Wallet',
   'midnight.dustRelayEstimate': 'Relay zu Midnight (einige Stunden)',
+  'midnight.relayFewHours': 'einige Stunden',
   'midnight.dustSourcesReadOnly': 'Keine lokalen Schlüssel',
   // Inline DUST-Generierungszeile (Holdings-Tabelle + Token-Drawer)
   'midnight.dustLinePromo': 'Dieses NIGHT kann DUST generieren',
