@@ -93,10 +93,10 @@
         </v-btn>
       </template>
 
-      <!-- Duplicated (or Invalid with live registrations found): consolidation
-           panel. Midnight allows exactly one live registration UTxO per stake
-           credential — DUST generation is paused for the whole set until it's
-           back down to one. Register CTA never renders here. -->
+      <!-- Duplicated: consolidation panel. Midnight allows exactly one live
+           registration UTxO per stake credential — DUST generation is paused
+           for the whole set until it's back down to one. Register CTA never
+           renders here. -->
       <template v-else-if="showConsolidationPanel">
         <div class="duplicate-banner">
           <v-icon small color="var(--g-error)" class="mr-2">mdi-alert-outline</v-icon>
@@ -366,12 +366,12 @@ const canPickDestination = computed(() =>
   destinationOptions.value.length > 1
   && (registrationStatus.value === 'Unregistered' || registrationStatus.value === 'Unknown'));
 
-/** Duplicated always shows the panel; Invalid only falls back to it when the
- *  registrations lookup actually found something to consolidate (residual
- *  case — Invalid otherwise resolves via the count-based checks before it). */
-const showConsolidationPanel = computed(() =>
-  registrationStatus.value === 'Duplicated'
-  || (registrationStatus.value === 'Invalid' && registrations.value.length > 0));
+/** Only Duplicated shows the panel. `registrationStatus`'s derivation checks
+ *  registrations.length > 1 (Duplicated) and === 1 (Pending) before it ever
+ *  considers the server's 'Invalid' field, so 'Invalid' can only reach here
+ *  with an empty registrations list — there is no "Invalid with registrations
+ *  to consolidate" case today (see the Invalid branch below instead). */
+const showConsolidationPanel = computed(() => registrationStatus.value === 'Duplicated');
 
 const destinationSelectItems = computed(() => destinationOptions.value.map((d) => ({
   value: d.key,
