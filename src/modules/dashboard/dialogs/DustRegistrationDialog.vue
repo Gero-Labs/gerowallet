@@ -26,7 +26,7 @@
         <span class="status-dot status-dot--pending"></span>
         <span>{{ t('midnight.cnightIncomingPending', { count: incomingCnightPending }) }}</span>
         <v-spacer />
-        <span class="status-pill-help">~2.5h</span>
+        <span class="status-pill-help">{{ t('midnight.relayFewHours') }}</span>
       </div>
 
       <!-- Hero card: the DUST recipient address. This is the thing the user is
@@ -103,7 +103,7 @@
         </div>
         <div class="flow-arrow">
           <v-icon small color="var(--g-text-3)">mdi-arrow-right</v-icon>
-          <span class="flow-arrow-label t-label">~2.5h</span>
+          <span class="flow-arrow-label t-label">{{ t('midnight.relayFewHours') }}</span>
         </div>
         <div class="flow-stop">
           <div class="flow-stop-icon flow-stop-icon--midnight">
@@ -284,7 +284,7 @@ const DUST_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.DUST);
 const isMainnet = computed(() => loggedWallet.value?.network === Network.MAINNET);
 const nightCurrency = computed(() => (isMainnet.value ? 'NIGHT' : 'tNIGHT'));
 const dustCurrency = computed(() => (isMainnet.value ? 'DUST' : 'tDUST'));
-const networkLabel = computed(() => (isMainnet.value ? 'Mainnet' : 'Preview'));
+const networkLabel = computed(() => loggedWallet.value?.network ?? Network.MAINNET);
 
 const dustAddress = computed(() => addresses.value?.dust ?? '');
 
@@ -355,7 +355,7 @@ const statusLabel = computed(() => {
 const statusHelp = computed(() => {
   switch (registrationStatus.value) {
     case 'Registered': return '';
-    case 'Pending': return '~2.5h';
+    case 'Pending': return t('midnight.relayFewHours');
     case 'Invalid': return '';
     default: return '';
   }
