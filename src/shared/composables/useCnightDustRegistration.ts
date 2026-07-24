@@ -176,6 +176,24 @@ interface RegisterCredentials {
   prfOutput?: ArrayBuffer;
 }
 
+/**
+ * Session-level tombstone for registration UTxOs we've just deregistered.
+ * `dust/registrations` reads confirmed chain state, so a just-submitted
+ * deregistration can still list its spent outpoint for ~20-90s until the tx
+ * clears the mempool — without this, `refreshStatus()` would immediately
+ * overwrite the optimistic local filter and the just-removed row would
+ * reappear clickable, letting a second click build a tx spending an
+ * already-spent UTxO. Module-level (not composable-level) so it survives the
+ * dialog component being unmounted/remounted between the removal and the
+ * next refresh. Self-clears: once an outpoint drops out of the server's live
+ * list on its own, its tombstone entry is deleted too (see `refreshRegistrations`).
+ */
+const removedOutpoints = new Set<string>();
+
+function outpointKey(txHash: string, outputIndex: number): string {
+  return `${txHash}#${outputIndex}`;
+}
+
 export function useCnightDustRegistration() {
   const { loggedWallet, tokens, keys, utxos } = toRefs(walletStore);
 
@@ -331,7 +349,17 @@ export function useCnightDustRegistration() {
    */
   async function refreshRegistrations(stakeAddress: string): Promise<void> {
     try {
-      registrations.value = await getMidnightApi(network.value).getDustRegistrations(stakeAddress);
+      const fetched = await getMidnightApi(network.value).getDustRegistrations(stakeAddress);
+      // Self-heal: once the server confirms an outpoint is actually gone
+      // (the deregistration tx cleared the mempool), drop its tombstone.
+      for (const key of removedOutpoints) {
+        if (!fetched.some((r) => outpointKey(r.txHash, r.outputIndex) === key)) {
+          removedOutpoints.delete(key);
+        }
+      }
+      // Filter tombstoned outpoints out BEFORE assigning, so a mempool-lagged
+      // server response can't resurrect a row we just removed.
+      registrations.value = fetched.filter((r) => !removedOutpoints.has(outpointKey(r.txHash, r.outputIndex)));
     } catch (e) {
       // Reviewed residual: if consolidation happened in ANOTHER session (or
       // via the official portal) and every fetch in THIS session keeps
@@ -482,8 +510,11 @@ export function useCnightDustRegistration() {
         // Nexus refused: a live registration already exists. Adopt the
         // server's list so `registrationStatus` re-derives as Pending (one)
         // or Duplicated (more than one) instead of the caller showing a raw
-        // error toast.
-        registrations.value = e.registrations;
+        // error toast. Filter against the tombstone too — the same mempool
+        // lag that affects `refreshRegistrations()` can affect this list.
+        registrations.value = e.registrations.filter(
+          (r) => !removedOutpoints.has(outpointKey(r.txHash, r.outputIndex)),
+        );
         return { status: 'already_registered' };
       }
       const message = mapDustBuildError(e instanceof Error ? e.message : String(e));
@@ -660,6 +691,9 @@ export function useCnightDustRegistration() {
       const txId = await signAndSubmit(build.txCbor, credentials);
 
       stage.value = 'done';
+      // Tombstone the outpoint so a mempool-lagged `refreshStatus()` call
+      // right after this can't resurrect it (see `removedOutpoints` above).
+      removedOutpoints.add(outpointKey(txHash, outputIndex));
       // Drop the removed outpoint locally so the panel updates immediately;
       // the caller still re-runs refreshStatus() to reconcile against the
       // indexer once the removal relays.

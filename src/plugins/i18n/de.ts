@@ -4300,7 +4300,7 @@ export default {
   // DUST-Generierung für den gesamten Satz, bis die Duplikate entfernt sind)
   'midnight.cnightDuplicateBanner': 'Mehrere Registrierungen gefunden. Die DUST-Generierung ist pausiert, bis die Duplikate entfernt wurden.',
   'midnight.cnightPrimaryBadge': 'Primär',
-  'midnight.cnightReplicateRemoved': 'Registrierung entfernt',
+  'midnight.cnightReplicateRemoved': 'Entfernung übermittelt',
   'midnight.cnightInvalidHint': 'Registrierung konnte nicht on-chain verifiziert werden. Aktualisieren Sie, um erneut zu prüfen.',
   // Wallet-übergreifendes DUST-Quellen-Panel (Midnight-Wallet-Seite)
   'midnight.dustSourcesTitle': 'DUST aus Cardano-NIGHT generieren',
