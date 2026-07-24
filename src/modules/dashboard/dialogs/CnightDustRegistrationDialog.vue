@@ -66,7 +66,7 @@
         </div>
         <div class="flow-arrow">
           <v-icon small color="var(--g-text-3)">mdi-arrow-right</v-icon>
-          <span class="flow-arrow-label t-label">~2.5h</span>
+          <span class="flow-arrow-label t-label">{{ t('midnight.relayFewHours') }}</span>
         </div>
         <div class="flow-stop">
           <div class="flow-stop-icon flow-stop-icon--midnight">
@@ -313,7 +313,7 @@ const statusLabel = computed(() => {
   }
 });
 
-const statusHelp = computed(() => (registrationStatus.value === 'Pending' ? '~2.5h' : ''));
+const statusHelp = computed(() => (registrationStatus.value === 'Pending' ? t('midnight.relayFewHours') : ''));
 
 const stageLabel = computed(() => {
   switch (stage.value) {
