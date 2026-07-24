@@ -185,13 +185,40 @@ interface RegisterCredentials {
  * reappear clickable, letting a second click build a tx spending an
  * already-spent UTxO. Module-level (not composable-level) so it survives the
  * dialog component being unmounted/remounted between the removal and the
- * next refresh. Self-clears: once an outpoint drops out of the server's live
- * list on its own, its tombstone entry is deleted too (see `refreshRegistrations`).
+ * next refresh. Self-clears the normal way: once an outpoint drops out of the
+ * server's live list on its own, its tombstone entry is deleted too (see
+ * `refreshRegistrations`).
+ *
+ * Value is the tombstone's added-at timestamp (ms) rather than a bare
+ * membership flag, because a *successful submit* doesn't guarantee on-chain
+ * inclusion — the tx can still be evicted from the mempool or dropped by a
+ * rollback under congestion. Without an expiry, a dropped removal would
+ * latch the outpoint out of `registrations` for the rest of the extension
+ * session: the user would see a false 'Pending'/lower count while on-chain
+ * reality is still Duplicated, with no way to see or fix it short of a
+ * restart. TTL is 12 minutes — ~10x the normal 20-90s mempool window — so a
+ * healthy removal never expires prematurely, but a genuinely dropped one
+ * resurfaces the row within a bounded window. Letting it expire is safe: if
+ * the row honestly reappears and the user retries, two competing spends of
+ * the same UTxO can't both land — the loser just fails harmlessly.
  */
-const removedOutpoints = new Set<string>();
+const removedOutpoints = new Map<string, number>();
+const REMOVED_OUTPOINT_TTL_MS = 12 * 60 * 1000;
 
 function outpointKey(txHash: string, outputIndex: number): string {
   return `${txHash}#${outputIndex}`;
+}
+
+/** True while `key`'s tombstone is still within its TTL; lazily deletes (and
+ *  reports false for) an expired entry so it stops suppressing the row. */
+function isOutpointTombstoned(key: string): boolean {
+  const addedAt = removedOutpoints.get(key);
+  if (addedAt === undefined) return false;
+  if (Date.now() - addedAt > REMOVED_OUTPOINT_TTL_MS) {
+    removedOutpoints.delete(key);
+    return false;
+  }
+  return true;
 }
 
 export function useCnightDustRegistration() {
@@ -351,15 +378,18 @@ export function useCnightDustRegistration() {
     try {
       const fetched = await getMidnightApi(network.value).getDustRegistrations(stakeAddress);
       // Self-heal: once the server confirms an outpoint is actually gone
-      // (the deregistration tx cleared the mempool), drop its tombstone.
-      for (const key of removedOutpoints) {
+      // (the deregistration tx cleared the mempool), drop its tombstone. TTL
+      // expiry (below, via `isOutpointTombstoned`) covers the drop/rollback
+      // case where the server never stops reporting the outpoint.
+      for (const key of [...removedOutpoints.keys()]) {
         if (!fetched.some((r) => outpointKey(r.txHash, r.outputIndex) === key)) {
           removedOutpoints.delete(key);
         }
       }
-      // Filter tombstoned outpoints out BEFORE assigning, so a mempool-lagged
-      // server response can't resurrect a row we just removed.
-      registrations.value = fetched.filter((r) => !removedOutpoints.has(outpointKey(r.txHash, r.outputIndex)));
+      // Filter tombstoned (and not-yet-expired) outpoints out BEFORE
+      // assigning, so a mempool-lagged server response can't resurrect a row
+      // we just removed.
+      registrations.value = fetched.filter((r) => !isOutpointTombstoned(outpointKey(r.txHash, r.outputIndex)));
     } catch (e) {
       // Reviewed residual: if consolidation happened in ANOTHER session (or
       // via the official portal) and every fetch in THIS session keeps
@@ -510,10 +540,11 @@ export function useCnightDustRegistration() {
         // Nexus refused: a live registration already exists. Adopt the
         // server's list so `registrationStatus` re-derives as Pending (one)
         // or Duplicated (more than one) instead of the caller showing a raw
-        // error toast. Filter against the tombstone too — the same mempool
-        // lag that affects `refreshRegistrations()` can affect this list.
+        // error toast. Filter against the (TTL-aware) tombstone too — the
+        // same mempool lag that affects `refreshRegistrations()` can affect
+        // this list.
         registrations.value = e.registrations.filter(
-          (r) => !removedOutpoints.has(outpointKey(r.txHash, r.outputIndex)),
+          (r) => !isOutpointTombstoned(outpointKey(r.txHash, r.outputIndex)),
         );
         return { status: 'already_registered' };
       }
@@ -691,9 +722,10 @@ export function useCnightDustRegistration() {
       const txId = await signAndSubmit(build.txCbor, credentials);
 
       stage.value = 'done';
-      // Tombstone the outpoint so a mempool-lagged `refreshStatus()` call
-      // right after this can't resurrect it (see `removedOutpoints` above).
-      removedOutpoints.add(outpointKey(txHash, outputIndex));
+      // Tombstone the outpoint (with a TTL) so a mempool-lagged
+      // `refreshStatus()` call right after this can't resurrect it — see
+      // `removedOutpoints` above for why it expires rather than latching.
+      removedOutpoints.set(outpointKey(txHash, outputIndex), Date.now());
       // Drop the removed outpoint locally so the panel updates immediately;
       // the caller still re-runs refreshStatus() to reconcile against the
       // indexer once the removal relays.
