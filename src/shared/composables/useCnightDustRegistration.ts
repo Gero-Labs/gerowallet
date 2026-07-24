@@ -28,7 +28,12 @@ import { computed, ref, toRefs } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { geroStore } from '@/stores/geroStore';
 import { Blockchain, Network, Wallet } from '@/models/types';
-import { getMidnightApi, MidnightDustRegistrationStatusDto } from '@/api/midnight-api';
+import {
+  DustAlreadyRegisteredError,
+  DustRegistrationUtxoDto,
+  getMidnightApi,
+  MidnightDustRegistrationStatusDto,
+} from '@/api/midnight-api';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { clearDustPending, getDustPending, markDustPending, reconcileDustPending, DustPendingRecord } from '@/shared/composables/useDustPending';
@@ -157,6 +162,11 @@ export type CnightRegistrationStage =
 
 export type CnightRegistrationResult =
   | { status: 'submitted'; txHash: string; dustAddress: string }
+  /** A live registration already exists server-side (409 `already_registered`).
+   *  `registrations` on the composable has already been updated — the caller
+   *  should just close/reset and let `registrationStatus` re-derive as
+   *  Pending/Duplicated instead of showing an error. */
+  | { status: 'already_registered' }
   | { status: 'error'; message: string };
 
 interface RegisterCredentials {
@@ -215,10 +225,59 @@ export function useCnightDustRegistration() {
   // refresh/register so the computed below reacts.
   const localPending = ref<DustPendingRecord | null>(null);
 
-  const registrationStatus = computed<'Unregistered' | 'Pending' | 'Registered' | 'Invalid' | 'Unknown'>(() => {
+  // Live registration UTxOs for this stake credential (Nexus `dust/registrations`).
+  // Midnight allows exactly ONE live registration per stake credential — more
+  // than one invalidates the whole set. This is the source of truth for
+  // duplicate detection; `status` alone can't distinguish "unregistered" from
+  // "invalidated by a duplicate" (both read `registered:false`).
+  const registrations = ref<DustRegistrationUtxoDto[]>([]);
+
+  // Best-effort cache of THIS wallet's own derived DUST address hex. Deriving
+  // it requires the decrypted mnemonic (a password/PassKey gesture), so it's
+  // only known once `register()` or `migrateDustAddressToOwn()` has actually
+  // run in this session — never prompted for proactively just to label a row.
+  const ownDustAddressHex = ref<string>('');
+
+  /** The registration that is THIS wallet's own (matched by derived DUST
+   *  address when known); falls back to the first registration in list order. */
+  const primaryRegistration = computed<DustRegistrationUtxoDto | null>(() => {
+    if (registrations.value.length === 0) return null;
+    if (ownDustAddressHex.value) {
+      const match = registrations.value.find(
+        (r) => r.dustAddressHex.toLowerCase() === ownDustAddressHex.value.toLowerCase(),
+      );
+      if (match) return match;
+    }
+    return registrations.value[0];
+  });
+
+  /** Every live registration that is NOT the primary — candidates for removal. */
+  const replicates = computed<DustRegistrationUtxoDto[]>(() => {
+    const primary = primaryRegistration.value;
+    if (!primary) return [];
+    return registrations.value.filter(
+      (r) => !(r.txHash === primary.txHash && r.outputIndex === primary.outputIndex),
+    );
+  });
+
+  const registrationStatus = computed<'Unregistered' | 'Pending' | 'Registered' | 'Invalid' | 'Duplicated' | 'Unknown'>(() => {
+    // Duplicated wins over every other signal (including the local pending
+    // guard and a stale 'Registered' status field): the protocol invalidates
+    // the whole set the moment a second live registration UTxO exists, and
+    // the Register CTA must stay hidden until it's back down to one.
+    if (registrations.value.length > 1) return 'Duplicated';
+
     const s = status.value?.registrationStatus;
-    // A confirmed on-chain status always wins over the local pending guard.
-    if (s === 'Registered' || s === 'Invalid') return s;
+    if (s === 'Registered') return 'Registered';
+
+    // Exactly one live registration UTxO: the mapping is valid even if the
+    // indexer hasn't relayed `registered:true` yet (~2.5h window) or the
+    // registration was made outside Gero (e.g. the official portal, which
+    // never leaves a local pending record) — never offer Register while a
+    // live registration exists.
+    if (registrations.value.length === 1) return 'Pending';
+
+    if (s === 'Invalid') return 'Invalid';
     if (s === 'Pending') return 'Pending';
     // Indexer still says Unregistered (or unknown) but we submitted a
     // registration that hasn't relayed yet — hold Pending so the UI can't
@@ -264,20 +323,38 @@ export function useCnightDustRegistration() {
   /** Selected destination key; 'self' = same-seed derive at register time. */
   const selectedDestinationKey = ref<string>('self');
 
+  /**
+   * Refresh the live registrations list. Resilient to failure (e.g. an older
+   * Nexus deployment that doesn't have this endpoint yet, or a transient
+   * network error): keeps the previous list rather than resetting to empty,
+   * so a blip can't regress a known Duplicated state back to Unregistered.
+   */
+  async function refreshRegistrations(stakeAddress: string): Promise<void> {
+    try {
+      registrations.value = await getMidnightApi(network.value).getDustRegistrations(stakeAddress);
+    } catch (e) {
+      debugLog('[cNIGHT DUST] registrations fetch failed:', e instanceof Error ? e.message : String(e));
+    }
+  }
+
   async function refreshStatus(): Promise<void> {
     const stakeAddress = loggedWallet.value?.stakeAddress;
     if (!isSupported.value || !stakeAddress) return;
     statusLoading.value = true;
     try {
       status.value = await getMidnightApi(network.value).getDustStatus(stakeAddress);
+      await refreshRegistrations(stakeAddress);
       // Reconcile the local pending guard: clear it once the indexer confirms
-      // Registered; otherwise surface any un-expired local record.
-      if (status.value?.registrationStatus === 'Registered') {
+      // Registered (and there's at most one live registration — a stale
+      // 'Registered' alongside a known duplicate shouldn't clear the guard);
+      // otherwise surface any un-expired local record.
+      if (status.value?.registrationStatus === 'Registered' && registrations.value.length <= 1) {
         clearDustPending(stakeAddress);
         localPending.value = null;
       } else {
-        // Not Registered: reconcile the local guard against the chain so a
-        // submission that never landed can't block re-registration for 24h.
+        // Not (cleanly) Registered: reconcile the local guard against the
+        // chain so a submission that never landed can't block re-registration
+        // for 24h.
         localPending.value = await reconcileDustPending(
           stakeAddress,
           (txHash) => getMidnightApi(network.value).cardanoTxExists(txHash),
@@ -294,6 +371,7 @@ export function useCnightDustRegistration() {
         registered: false,
         registrationStatus: 'Unregistered',
       };
+      await refreshRegistrations(stakeAddress);
       localPending.value = getDustPending(stakeAddress);
     } finally {
       statusLoading.value = false;
@@ -353,10 +431,15 @@ export function useCnightDustRegistration() {
       // Destination: a chosen imported Midnight wallet, or (default) this
       // Cardano wallet's own same-seed Midnight DUST address.
       const chosen = destinationOptions.value.find((d) => d.key === selectedDestinationKey.value);
+      const usingSelfDestination = !chosen || chosen.key === 'self' || !chosen.dustAddress;
       const destinationBech32 = chosen && chosen.key !== 'self' && chosen.dustAddress
         ? chosen.dustAddress
         : (await deriveMidnightAddresses(mnemonic, wallet.network)).dust;
       const dustAddressHex = dustAddressToHex(destinationBech32);
+      // Cache this wallet's own derived DUST address hex — the only reliable
+      // way to identify "primary" in a Duplicated state without a fresh
+      // credentialed derivation (see `primaryRegistration`).
+      if (usingSelfDestination) ownDustAddressHex.value = dustAddressHex;
 
       stage.value = 'building';
       const build = await getMidnightApi(network.value).buildDustRegistrationTx({
@@ -387,6 +470,14 @@ export function useCnightDustRegistration() {
       };
       return { status: 'submitted', txHash: txId, dustAddress: destinationBech32 };
     } catch (e) {
+      if (e instanceof DustAlreadyRegisteredError) {
+        // Nexus refused: a live registration already exists. Adopt the
+        // server's list so `registrationStatus` re-derives as Pending (one)
+        // or Duplicated (more than one) instead of the caller showing a raw
+        // error toast.
+        registrations.value = e.registrations;
+        return { status: 'already_registered' };
+      }
       const message = mapDustBuildError(e instanceof Error ? e.message : String(e));
       return { status: 'error', message };
     } finally {
@@ -528,6 +619,59 @@ export function useCnightDustRegistration() {
   }
 
   /**
+   * Deregister a SPECIFIC registration UTxO by outpoint — the parameterized
+   * variant of `deregister()` the Duplicated-state consolidation panel uses to
+   * remove a non-primary replicate. Same build/sign/submit path; the caller
+   * supplies the outpoint directly instead of relying on `registrationOutpoint()`
+   * (which reads the single indexer-reported outpoint — null/ambiguous once
+   * more than one registration exists).
+   */
+  async function deregisterOutpoint(
+    credentials: RegisterCredentials,
+    txHash: string,
+    outputIndex: number,
+  ): Promise<CnightRegistrationResult> {
+    const wallet = loggedWallet.value;
+    if (!wallet?.baseAddress || !wallet?.stakeAddress) {
+      return { status: 'error', message: 'Wallet is missing its Cardano addresses' };
+    }
+    registering.value = true;
+    stage.value = 'building';
+    try {
+      const build = await getMidnightApi(network.value).buildDustDeregistrationTx({
+        cardanoAddress: wallet.baseAddress,
+        paymentKeyHashHex: keys.value?.payment?.[0]?.cred,
+        registrationUtxoTxHash: txHash,
+        registrationUtxoOutputIndex: outputIndex,
+      });
+      if (build.status !== 'complete' || !build.txCbor) {
+        throw new Error(build.note || 'Nexus did not return a complete deregistration transaction');
+      }
+
+      stage.value = 'signing';
+      const txId = await signAndSubmit(build.txCbor, credentials);
+
+      stage.value = 'done';
+      // Drop the removed outpoint locally so the panel updates immediately;
+      // the caller still re-runs refreshStatus() to reconcile against the
+      // indexer once the removal relays.
+      registrations.value = registrations.value.filter(
+        (r) => !(r.txHash === txHash && r.outputIndex === outputIndex),
+      );
+      if (registrations.value.length <= 1) {
+        clearDustPending(wallet.stakeAddress);
+        localPending.value = null;
+      }
+      return { status: 'submitted', txHash: txId, dustAddress: '' };
+    } catch (e) {
+      return { status: 'error', message: mapDustBuildError(e instanceof Error ? e.message : String(e)) };
+    } finally {
+      registering.value = false;
+      if (stage.value !== 'done') stage.value = 'idle';
+    }
+  }
+
+  /**
    * Point the existing registration at THIS wallet's own Midnight DUST address
    * (migration from a portal/Lace registration). One tx: spend + re-output
    * with the replacement datum.
@@ -545,6 +689,9 @@ export function useCnightDustRegistration() {
       const { deriveMidnightAddresses, dustAddressToHex } = await import('@/chains/midnight/midnightKeyManager');
       const derived = await deriveMidnightAddresses(mnemonic, wallet.network);
       const dustAddressHex = dustAddressToHex(derived.dust);
+      // This flow always derives THIS wallet's own address — cache it for
+      // primary-marking the same way `register()` does.
+      ownDustAddressHex.value = dustAddressHex;
 
       stage.value = 'building';
       const build = await getMidnightApi(network.value).buildDustUpdateTx({
@@ -589,6 +736,9 @@ export function useCnightDustRegistration() {
     status,
     statusLoading,
     registrationStatus,
+    registrations,
+    replicates,
+    primaryRegistration,
     registering,
     stage,
     portalUrl,
@@ -597,6 +747,7 @@ export function useCnightDustRegistration() {
     refreshStatus,
     register,
     deregister,
+    deregisterOutpoint,
     migrateDustAddressToOwn,
   };
 }
