@@ -284,7 +284,7 @@ const DUST_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.DUST);
 const isMainnet = computed(() => loggedWallet.value?.network === Network.MAINNET);
 const nightCurrency = computed(() => (isMainnet.value ? 'NIGHT' : 'tNIGHT'));
 const dustCurrency = computed(() => (isMainnet.value ? 'DUST' : 'tDUST'));
-const networkLabel = computed(() => (isMainnet.value ? 'Mainnet' : 'Preview'));
+const networkLabel = computed(() => loggedWallet.value?.network ?? Network.MAINNET);
 
 const dustAddress = computed(() => addresses.value?.dust ?? '');
 
