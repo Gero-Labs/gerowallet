@@ -101,7 +101,7 @@
                   </v-list-item-avatar>
                   <v-list-item-content class="py-1">
                     <v-list-item-title class="pool-name-title"
-                      >{{ `[${item.ticker}] ${item.name ? item.name : ''}` }}
+                      >{{ item.ticker ? `[${item.ticker}] ${item.name ? item.name : ''}` : (item.pool_id_bech32 ? `${item.pool_id_bech32.slice(0, 10)}…${item.pool_id_bech32.slice(-6)}` : 'Unknown Pool') }}
                       <div class="ml-1">
                         <v-btn icon x-small v-if="item?.homepage" @click.stop="" :href="item?.homepage" target="_blank">
                           <v-icon small> mdi-web </v-icon>
@@ -289,7 +289,7 @@
                     <v-list-item v-if="pool">
                       <v-list-item-content class="pb-0">
                         <v-list-item-title>
-                          {{ `[${pool.ticker}] ${pool.name ? pool.name : ''}` }}
+                          {{ pool.ticker ? `[${pool.ticker}] ${pool.name ? pool.name : ''}` : (pool.pool_id_bech32 ? `${pool.pool_id_bech32.slice(0, 10)}…${pool.pool_id_bech32.slice(-6)}` : 'Unknown Pool') }}
                         </v-list-item-title>
                         <v-list-item-subtitle>
                           <v-btn
