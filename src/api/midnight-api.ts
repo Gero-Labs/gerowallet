@@ -71,6 +71,53 @@ export interface MidnightDustRegistrationStatusDto {
 }
 
 /**
+ * A single live DUST registration UTxO for a stake credential, from Nexus's
+ * `GET dust/registrations`. Midnight's pairing rule allows exactly ONE live
+ * registration per stake credential — more than one invalidates the whole
+ * set (the indexer reports `registered:false`, indistinguishable from
+ * unregistered via `/dust/status` alone). This endpoint is the only way to
+ * see the actual count and enumerate the duplicates for consolidation.
+ */
+export interface DustRegistrationUtxoDto {
+  txHash: string;
+  outputIndex: number;
+  dustAddressHex: string;
+  lovelace: string;
+}
+
+/** Wire-shape (snake_case) of a single registration UTxO entry. */
+interface DustRegistrationUtxoWire {
+  tx_hash: string;
+  output_index: number;
+  dust_address_hex: string;
+  lovelace: string;
+}
+
+function convertRegistrationUtxo(wire: DustRegistrationUtxoWire): DustRegistrationUtxoDto {
+  return {
+    txHash: wire.tx_hash,
+    outputIndex: wire.output_index,
+    dustAddressHex: wire.dust_address_hex,
+    lovelace: wire.lovelace,
+  };
+}
+
+/**
+ * Thrown by `buildDustRegistrationTx` when Nexus responds 409 `already_registered`
+ * — a live registration UTxO already exists for this stake credential. Carries
+ * the live registrations Nexus found so callers can flip straight into the
+ * duplicate-consolidation UI instead of surfacing a raw error.
+ */
+export class DustAlreadyRegisteredError extends Error {
+  readonly registrations: DustRegistrationUtxoDto[];
+  constructor(registrations: DustRegistrationUtxoDto[]) {
+    super('A live DUST registration already exists for this wallet.');
+    this.name = 'DustAlreadyRegisteredError';
+    this.registrations = registrations;
+  }
+}
+
+/**
  * Tx-utxos response (Midnight-shaped, distinct from Cardano TxIO).
  */
 export interface MidnightTransactionUtxosDto {
@@ -492,6 +539,24 @@ export class MidnightApi {
   }
 
   /**
+   * Live registration UTxOs for a stake credential — the source of truth for
+   * duplicate detection. Empty array when there are none. A transient
+   * failure here should NOT be treated as "no registrations" by callers;
+   * see `useCnightDustRegistration`'s resilient wrapper.
+   */
+  async getDustRegistrations(cardanoRewardAddress: string): Promise<DustRegistrationUtxoDto[]> {
+    try {
+      const url = nexusMidnightPathFor(this.network, 'dust/registrations') +
+        `?cardanoRewardAddress=${encodeURIComponent(cardanoRewardAddress)}`;
+      const { data, status } = await this.axiosInstance.get<{ registrations: DustRegistrationUtxoWire[] }>(url);
+      if (status === 200) return (data.registrations ?? []).map(convertRegistrationUtxo);
+      throw parseHttpError(data);
+    } catch (error) {
+      throw parseHttpError(error);
+    }
+  }
+
+  /**
    * Batch DUST registration status. Nexus enforces a max of 50 addresses per call.
    */
   async getDustStatusBatch(cardanoRewardAddresses: string[]): Promise<MidnightDustRegistrationStatusDto[]> {
@@ -593,6 +658,16 @@ export class MidnightApi {
       if (status !== 200) throw parseHttpError(data);
       return convertBuildDustTxResponse(data);
     } catch (error) {
+      // Nexus refuses to build a second registration when a live one already
+      // exists (Midnight allows exactly one per stake credential). Surface a
+      // typed error carrying the live registrations so the UI can flip into
+      // the duplicate-consolidation state instead of a raw error toast.
+      if (axios.isAxiosError(error) && error.response?.status === 409) {
+        const body = error.response.data as { error?: string; registrations?: DustRegistrationUtxoWire[] };
+        if (body?.error === 'already_registered') {
+          throw new DustAlreadyRegisteredError((body.registrations ?? []).map(convertRegistrationUtxo));
+        }
+      }
       throw parseHttpError(error);
     }
   }

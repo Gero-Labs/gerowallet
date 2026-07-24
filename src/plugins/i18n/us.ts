@@ -4264,6 +4264,8 @@ export default {
   'midnight.statusRegisteredHelp': 'Your registered NIGHT is generating DUST.',
   'midnight.statusInvalid': 'Registration invalid',
   'midnight.statusInvalidHelp': 'Update your DUST address - the current mapping is no longer valid.',
+  'midnight.statusDuplicated': 'Duplicate registrations',
+  'midnight.cnightDuplicateCount': '{count} live registrations',
   // Legacy-wallet upgrade prompt
   'midnight.upgradeAddressesNotice': 'This wallet was created before DUST address derivation was supported. Enter your spending password to derive your DUST address.',
   'midnight.upgradeAddressesNoticePrf': 'This wallet was created before DUST address derivation was supported. Authorize with your PassKey to derive your DUST address.',
@@ -4395,6 +4397,13 @@ export default {
   'midnight.cnightMigrateInfo': 'Points the existing registration at this wallet\'s own Midnight DUST address. Takes effect after the relay, usually within a few hours.',
   'midnight.cnightDeregistered': 'Deregistration submitted',
   'midnight.cnightUpdated': 'DUST destination update submitted',
+  // Duplicate-registration detection + consolidation (exactly one live
+  // registration is valid per stake credential; more than one pauses DUST
+  // generation for the whole set until the duplicates are removed)
+  'midnight.cnightDuplicateBanner': 'Multiple registrations found. DUST generation is paused until the duplicates are removed.',
+  'midnight.cnightPrimaryBadge': 'Primary',
+  'midnight.cnightReplicateRemoved': 'Removal submitted',
+  'midnight.cnightInvalidHint': 'Could not verify this registration on-chain. Refresh to check again.',
   // Cross-wallet DUST sources panel (Midnight wallet side)
   'midnight.dustSourcesTitle': 'Generate DUST from Cardano NIGHT',
   'midnight.dustSourcesSubtitle': 'NIGHT in your Cardano wallets can generate DUST for this wallet',
