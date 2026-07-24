@@ -333,6 +333,14 @@ export function useCnightDustRegistration() {
     try {
       registrations.value = await getMidnightApi(network.value).getDustRegistrations(stakeAddress);
     } catch (e) {
+      // Reviewed residual: if consolidation happened in ANOTHER session (or
+      // via the official portal) and every fetch in THIS session keeps
+      // failing, we'd keep showing a stale Duplicated state past the point
+      // it's actually resolved. Accepted because (a) any single successful
+      // refresh self-heals immediately, and (b) in-wallet removals already
+      // filter the local list optimistically in `deregisterOutpoint()`, so
+      // the stale case only bites a read-only view in a persistently broken
+      // network state, not an action the user takes here.
       debugLog('[cNIGHT DUST] registrations fetch failed:', e instanceof Error ? e.message : String(e));
     }
   }

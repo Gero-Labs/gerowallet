@@ -123,7 +123,7 @@
               outlined
               color="error"
               :loading="isRemoving(reg)"
-              :disabled="registering && !isRemoving(reg)"
+              :disabled="registering"
               @click="startRemove(reg)"
             >
               {{ t('common.remove') }}
