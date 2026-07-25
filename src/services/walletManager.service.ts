@@ -487,8 +487,10 @@ export class WalletManager {
 
       LoadingState.setText('Loading wallet data...');
 
-      // Load holdings from cached UTxOs and keys immediately — no need to wait for transactions or gero-sync
-      await Promise.all([walletBg.loadCachedUtxos(), walletBg.loadCachedKeys()]);
+      // Load holdings from cached UTxOs, keys and account immediately — no need to wait for
+      // transactions or gero-sync. The cached account keeps the balance/empty-state showing the
+      // last-known value on login instead of flashing empty until the first sync.
+      await Promise.all([walletBg.loadCachedUtxos(), walletBg.loadCachedKeys(), walletBg.loadCachedAccount()]);
 
       promises.push(
         walletBg.loadConfig(),
