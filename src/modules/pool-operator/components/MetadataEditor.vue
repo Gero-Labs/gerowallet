@@ -24,12 +24,13 @@
       v-model="jsonContent"
       :label="$t('poolOperator.metadataJson')"
       :hint="$t('poolOperator.metadataJsonHint')"
+      :loading="fetching"
       outlined
       dense
+      readonly
       rows="4"
       persistent-hint
-      class="mt-2"
-      @input="computeHash"
+      class="mt-2 g-mono"
     />
 
     <div v-if="hash" class="mt-2">
@@ -44,7 +45,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 
 const { t } = useTranslation();
@@ -63,28 +64,56 @@ const jsonContent = ref('');
 const jsonError = ref('');
 const fetching = ref(false);
 
+let fetchTimer: ReturnType<typeof setTimeout> | undefined;
+
 function onUrlChange() {
+  // The JSON pane mirrors whatever the URL resolves to (read-only), so a URL
+  // edit invalidates the shown JSON + hash until the new URL is fetched.
+  jsonContent.value = '';
   hash.value = '';
+  jsonError.value = '';
   emitUpdate();
+  clearTimeout(fetchTimer);
+  if (url.value) fetchTimer = setTimeout(fetchAndHash, 600);
 }
+
+// Auto-resolve the pre-filled URL (e.g. an existing pool's metadata) on open so
+// the JSON pane shows the resolved document without a manual fetch.
+onMounted(() => {
+  if (url.value) fetchAndHash();
+});
 
 async function fetchAndHash() {
   if (!url.value) return;
   fetching.value = true;
+  jsonError.value = '';
   try {
     const response = await fetch(url.value);
-    jsonContent.value = await response.text();
-    await computeHash();
-  } catch (e) {
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    // Pretty-print so the read-only pane is legible; the hash is computed over
+    // the raw fetched bytes (below), not this reformatted view.
+    const raw = await response.text();
+    try {
+      jsonContent.value = JSON.stringify(JSON.parse(raw), null, 2);
+    } catch {
+      jsonContent.value = raw;
+    }
+    await computeHash(raw);
+  } catch {
+    jsonContent.value = '';
+    hash.value = '';
     jsonError.value = t('poolOperator.fetchMetadataFailed');
+    emitUpdate();
   } finally {
     fetching.value = false;
   }
 }
 
-async function computeHash() {
+async function computeHash(raw: string) {
+  // Hash the EXACT fetched bytes - the on-chain hash must match the hosted
+  // document byte-for-byte, not the pretty-printed pane above.
   jsonError.value = '';
-  if (!jsonContent.value.trim()) {
+  if (!raw.trim()) {
     hash.value = '';
     emitUpdate();
     return;
@@ -92,13 +121,13 @@ async function computeHash() {
 
   try {
     // Validate JSON structure
-    const parsed = JSON.parse(jsonContent.value);
+    const parsed = JSON.parse(raw);
     if (!parsed.name || !parsed.ticker || !parsed.description || !parsed.homepage) {
       jsonError.value = t('poolOperator.metadataRequiredFields');
     }
 
     // Check size limit (512 bytes)
-    const bytes = new TextEncoder().encode(jsonContent.value);
+    const bytes = new TextEncoder().encode(raw);
     if (bytes.length > 512) {
       jsonError.value = t('poolOperator.metadataTooLarge', { size: bytes.length });
     }
@@ -108,7 +137,7 @@ async function computeHash() {
     const hashBytes = blake2b(32).update(bytes).digest();
     hash.value = Array.from(hashBytes as Uint8Array).map(b => b.toString(16).padStart(2, '0')).join('');
     emitUpdate();
-  } catch (e: any) {
+  } catch {
     if (!jsonError.value) {
       jsonError.value = t('poolOperator.invalidJson');
     }
