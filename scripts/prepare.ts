@@ -32,6 +32,21 @@ async function copyDevAssets() {
       console.warn('Failed to copy notification assets:', error)
     }
   }
+
+  // Copy the vendored gero-swap widget (js + css) so the dev stub's absolute
+  // /vendor/gero-swap/* hrefs resolve against the extension. The prod build's
+  // viteStaticCopy (vite.config.mts) copies only gero-swap.js — the css is
+  // emitted to assets/ with its href rewritten there — but the dev stub keeps
+  // the /vendor href untouched, so without the css here it 404s.
+  const geroSwapVendor = r('src/vendor/gero-swap')
+  if (await fs.pathExists(geroSwapVendor)) {
+    try {
+      await fs.copy(geroSwapVendor, r('extension/vendor/gero-swap'), { overwrite: true })
+      log('PRE', 'copied gero-swap vendor')
+    } catch (error) {
+      console.warn('Failed to copy gero-swap vendor:', error)
+    }
+  }
 }
 
 /**
