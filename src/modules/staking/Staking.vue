@@ -92,8 +92,7 @@
                 <v-list-item three-line style="min-height: 68px" class="px-0">
                   <v-list-item-avatar size="24" style="place-self: center; margin-right: 8px !important">
                     <v-img
-                      :src="poolExtendedInfo(item).info.url_png_icon_64x64"
-                      v-if="poolExtendedInfo(item)?.info?.url_png_icon_64x64"
+                      :src="poolIcon(item)"
                       alt=""
                       @error="assets.fallbackImage"
                       eager
@@ -287,6 +286,9 @@
                   @click="delegate(pool)"
                 >
                     <v-list-item v-if="pool">
+                      <v-list-item-avatar size="32" class="mr-3 align-self-center">
+                        <v-img :src="poolIcon(pool)" alt="" @error="assets.fallbackImage" eager></v-img>
+                      </v-list-item-avatar>
                       <v-list-item-content class="pb-0">
                         <v-list-item-title>
                           {{ pool.ticker ? `[${pool.ticker}] ${pool.name ? pool.name : ''}` : (pool.pool_id_bech32 ? `${pool.pool_id_bech32.slice(0, 10)}…${pool.pool_id_bech32.slice(-6)}` : 'Unknown Pool') }}
@@ -642,6 +644,52 @@ const poolExtendedInfo = (pool: PoolRow | null | undefined) => {
     return parsed;
   }
   return undefined;
+};
+
+// Deterministic blockies-style identicon (inline SVG data URI) used when a pool
+// has no published extended-metadata logo — preview/testnet pools almost never
+// publish one. Inline data URI keeps it CSP-safe inside the extension.
+const identiconCache = new Map<string, string>();
+const poolIdenticon = (seedStr: string): string => {
+  const cached = identiconCache.get(seedStr);
+  if (cached) return cached;
+  let h = 2166136261;
+  for (let i = 0; i < seedStr.length; i++) {
+    h ^= seedStr.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  let seed = h >>> 0;
+  const rand = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+  const hue = Math.floor(rand() * 360);
+  const fg = `hsl(${hue},62%,58%)`;
+  const bg = `hsl(${(hue + 200) % 360},22%,16%)`;
+  const n = 5;
+  let rects = '';
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < Math.ceil(n / 2); x++) {
+      if (rand() > 0.5) {
+        rects += `<rect x="${x}" y="${y}" width="1" height="1"/>`;
+        const mx = n - 1 - x;
+        if (mx !== x) rects += `<rect x="${mx}" y="${y}" width="1" height="1"/>`;
+      }
+    }
+  }
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 5 5"><rect width="5" height="5" fill="${bg}"/><g fill="${fg}">${rects}</g></svg>`;
+  const uri = `data:image/svg+xml;base64,${btoa(svg)}`;
+  identiconCache.set(seedStr, uri);
+  return uri;
+};
+
+// Avatar src for a pool: its published extended-metadata icon when present,
+// otherwise a deterministic identicon derived from the pool id.
+const poolIcon = (pool: PoolRow | null | undefined): string => {
+  const ext = poolExtendedInfo(pool)?.info?.url_png_icon_64x64;
+  if (ext) return ext;
+  const seed = pool?.pool_id_bech32 || pool?.pool_id || '';
+  return seed ? poolIdenticon(seed) : '';
 };
 
 onMounted(() => {
