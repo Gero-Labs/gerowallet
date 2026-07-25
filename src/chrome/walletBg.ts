@@ -369,6 +369,27 @@ export class WalletBg {
   }
 
   /**
+   * Hydrate the persisted account into the store on login so the balance and
+   * empty-state reflect the last-known state immediately, instead of flashing
+   * the empty "Add tADA" state until the first network SYNC arrives (which then
+   * refines it with rewards/withdrawable). Fast — no server needed.
+   */
+  public async loadCachedAccount() {
+    try {
+      const acc = await this.getAccountInfo();
+      if (!acc || acc.controlled_amount == null) return;
+      debugLog(`👤 Loading persisted account from DB (controlled=${acc.controlled_amount})`);
+      WalletStore.setAccount(acc);
+      // Synthesize the lovelace balance token when no UTxOs are cached yet
+      // (setAccountInfo skips the synth once UTxOs exist, so this is a no-op
+      // when loadCachedUtxos has already populated them).
+      await this.setAccountInfo(acc);
+    } catch (e) {
+      debugLog('Failed to load cached account:', e);
+    }
+  }
+
+  /**
    * Dexie subscription callback — kept for Bitcoin wallets only.
    * Cardano UTxOs come from server via applyUtxos().
    */
