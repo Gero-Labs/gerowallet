@@ -4073,7 +4073,7 @@ export default {
   'poolOperator.metadataUrl': 'Metadata URL',
   'poolOperator.metadataUrlHint': 'URL where your pool metadata JSON is hosted (max 64 characters)',
   'poolOperator.metadataJson': 'Metadata JSON',
-  'poolOperator.metadataJsonHint': 'Paste your metadata JSON or fetch from URL to compute hash',
+  'poolOperator.metadataJsonHint': 'Resolved from your metadata URL (read-only) - the hash is computed from the fetched document',
   'poolOperator.metadataHash': 'Metadata Hash (Blake2b-256)',
   'poolOperator.metadataRequiredFields': 'Metadata must contain: name, ticker, description, homepage',
   'poolOperator.metadataTooLarge': 'Metadata exceeds 512 bytes ({size} bytes)',

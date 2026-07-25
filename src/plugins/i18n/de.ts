@@ -3972,7 +3972,7 @@ export default {
   'poolOperator.metadataUrl': 'Metadaten-URL',
   'poolOperator.metadataUrlHint': 'URL, unter der Ihre Pool-Metadaten-JSON gehostet wird (max. 64 Zeichen)',
   'poolOperator.metadataJson': 'Metadaten-JSON',
-  'poolOperator.metadataJsonHint': 'Fügen Sie Ihre Metadaten-JSON ein oder rufen Sie sie von der URL ab, um den Hash zu berechnen',
+  'poolOperator.metadataJsonHint': 'Aus Ihrer Metadaten-URL aufgelöst (schreibgeschützt) - der Hash wird aus dem abgerufenen Dokument berechnet',
   'poolOperator.metadataHash': 'Metadaten-Hash (Blake2b-256)',
   'poolOperator.metadataRequiredFields': 'Metadaten müssen enthalten: name, ticker, description, homepage',
   'poolOperator.metadataTooLarge': 'Metadaten überschreiten 512 Bytes ({size} Bytes)',
