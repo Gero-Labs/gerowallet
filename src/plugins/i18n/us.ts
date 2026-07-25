@@ -4076,7 +4076,6 @@ export default {
   'poolOperator.metadataJsonHint': 'Resolved from your metadata URL (read-only) - the hash is computed from the fetched document',
   'poolOperator.metadataHash': 'Metadata Hash (Blake2b-256)',
   'poolOperator.metadataHashHint': 'Blake2b-256 hash of the metadata JSON hosted at the URL',
-  'poolOperator.metadataHashInvalid': 'Must be a 64-character hex hash',
   'poolOperator.metadataRequiredFields': 'Metadata must contain: name, ticker, description, homepage',
   'poolOperator.metadataTooLarge': 'Metadata exceeds 512 bytes ({size} bytes)',
   'poolOperator.invalidJson': 'Invalid JSON format',
