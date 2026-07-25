@@ -285,7 +285,14 @@ export class SyncService {
   async setSync(syncObject) {
     if (syncObject && (syncObject.success || syncObject.type === 'SYNC')) {
       const promises: any[] = [];
-      if (syncObject.account) {
+      // gero-sync sends a zero-filled account object (controlled_amount "0", not
+      // `null`) for undelegated/unregistered stake. Applying it blanks a funded
+      // wallet's balance until the next reconcile. Treat a 0-controlled account the
+      // same as a null one: skip it and recompute controlled_amount from the applied
+      // UTxOs below, which reflects the real on-chain funds.
+      const accountIsEmpty =
+        !syncObject.account || Number(syncObject.account.controlled_amount ?? 0) === 0;
+      if (syncObject.account && !accountIsEmpty) {
         promises.push(this.walletBg.setAccountInfo(syncObject.account));
       }
       if (syncObject.assets) {
@@ -325,15 +332,15 @@ export class SyncService {
       if (promises.length > 0) {
         await Promise.all(promises);
       }
-      // Fallback for unregistered stake addresses: gero-sync sends `account: null`
-      // (Nexus /account/info has no row until the stake key is registered), so
-      // `controlled_amount` would otherwise never reflect freshly-received funds and
-      // the dashboard stays on the empty "Add tADA" state. Recompute it from the
-      // just-applied UTxO set. Registered wallets always receive a real `account`
-      // and skip this. Gate on the wallet's OWN chain (always known) rather than a
-      // `chain` field on the payload — CATCH_UP_COMPLETE rebuilds its message without
-      // one, so keying off syncObject.chain would silently never fire there.
-      if (!syncObject.account && this.walletBg?.chain === Blockchain.CARDANO) {
+      // Fallback for unregistered stake addresses: gero-sync sends either `account:
+      // null` OR a zero-filled account object (controlled_amount "0") until the stake
+      // key is registered, so `controlled_amount` would otherwise never reflect
+      // freshly-received funds and the dashboard stays on the empty "Add tADA" state.
+      // Recompute it from the just-applied UTxO set. Registered wallets receive a real
+      // non-zero `account` and skip this. Gate on the wallet's OWN chain (always known)
+      // rather than a `chain` field on the payload — CATCH_UP_COMPLETE rebuilds its
+      // message without one, so keying off syncObject.chain would silently never fire.
+      if (accountIsEmpty && this.walletBg?.chain === Blockchain.CARDANO) {
         await this.reconcileControlledAmountFromUtxos();
       }
       debugLog('setSync', syncObject);
