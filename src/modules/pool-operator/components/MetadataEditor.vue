@@ -17,13 +17,12 @@
     <v-text-field
       v-model="hash"
       :label="$t('poolOperator.metadataHash')"
-      :rules="[(v) => !v || /^[0-9a-f]{64}$/i.test(v) || $t('poolOperator.metadataHashInvalid')]"
       :hint="$t('poolOperator.metadataHashHint')"
+      readonly
       outlined
       dense
       persistent-hint
       class="mt-3 g-mono"
-      @input="emitUpdate"
     />
   </div>
 </template>
