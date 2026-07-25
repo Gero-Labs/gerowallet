@@ -13,7 +13,7 @@
         >
         <CopyButton x-small :value="transactionInfo['id']" class="ml-1 mt-1" />
         <v-spacer />
-        <v-btn color="error" x-small outlined @click="isReportDialogOpen = true">{{ $t('navigation.reportTransaction')}}</v-btn>
+        <v-btn v-if="isCardanoMainnet" color="error" x-small outlined @click="isReportDialogOpen = true">{{ $t('navigation.reportTransaction')}}</v-btn>
       </div>
       <div>
         Time: <span class="value-text">{{ new Date(transactionInfo['tx_timestamp'] * 1000)?.toLocaleString() }}</span>
@@ -826,6 +826,12 @@ const isApex = computed(() => {
   return loggedWallet.value?.chain === Blockchain.APEX_PRIME ||
     loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
 });
+
+// Report Transaction routes to Cardano Shield's scam/fraud registry, which only
+// covers Cardano mainnet — hide it on testnets and non-Cardano chains.
+const isCardanoMainnet = computed(() =>
+  loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET
+);
 
 // Pre-compute DRep IDs per certificate to avoid repeated serialization in template.
 // Indices align with the unfiltered certificates v-for in the template (transactionInfo.body.certificates).
