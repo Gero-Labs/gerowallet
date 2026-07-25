@@ -178,6 +178,8 @@ onMounted(() => {
 .detail-card {
   width: 60%;
   max-height: calc(-163px + 100vh) !important;
+  overflow-y: auto;
+  overflow-x: hidden;
   position: sticky;
   top: 0;
 }
