@@ -1,52 +1,31 @@
 <template>
+  <!-- Fileless MPC recovery: nothing for the user to save. This step exists only to
+       upload the encrypted recovery share, so it shows a brief spinner and auto-advances
+       on success (no dead "Recovery saved / Continue" click). It only becomes interactive
+       if the upload fails, offering a retry — onboarding stays gated on a successful upload. -->
   <div class="step-google-backup">
-    <div class="step-scroll">
-    <v-card class="mb-3" outlined style="background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.12);">
-      <v-card-text class="pa-3">
-        <div class="d-flex align-center mb-2">
-          <v-icon color="primary" size="22" class="mr-2">mdi-shield-key-outline</v-icon>
-          <div class="text-body-2 white--text font-weight-medium">{{ $t('welcome.recoveryNoFileTitle') }}</div>
-        </div>
-        <div class="text-body-2 grey--text text--lighten-1">
-          {{ $t('welcome.recoveryNoFileBody') }}
-        </div>
-      </v-card-text>
-    </v-card>
-
-    <v-btn
-      class="onb-btn"
-      block
-      depressed
-      :color="stored ? 'success' : 'primary'"
-      :loading="storing"
-      :disabled="stored || storing"
-      @click="storeRecovery()"
-    >
-      <v-icon left small>{{ stored ? 'mdi-check' : 'mdi-cloud-upload-outline' }}</v-icon>
-      {{ stored
-        ? $t('welcome.recoverySaved')
-        : (errorMessage ? $t('common.retry') : $t('welcome.savingRecovery')) }}
-    </v-btn>
-
-    <v-alert
-      v-if="errorMessage"
-      color="error"
-      icon="mdi-alert-outline"
-      outlined
-      dense
-      border="left"
-      class="mt-3 mb-0"
-    >
-      <span class="text-body-2">{{ errorMessage }}</span>
-    </v-alert>
-    </div>
-
-    <!-- Navigation -->
-    <div class="onboarding-actions d-flex" style="gap: 12px;">
-      <v-spacer />
-      <v-btn class="onb-btn" depressed color="primary" :disabled="!stored" @click="$emit('next')">
-        {{ $t('common.continue') }}
-      </v-btn>
+    <div class="step-scroll d-flex flex-column align-center justify-center text-center" style="min-height: 180px;">
+      <template v-if="!errorMessage">
+        <v-progress-circular indeterminate color="primary" size="34" width="3" class="mb-3" />
+        <div class="text-body-2 grey--text text--lighten-1">{{ $t('welcome.savingRecovery') }}</div>
+      </template>
+      <template v-else>
+        <v-alert
+          color="error"
+          icon="mdi-alert-outline"
+          outlined
+          dense
+          border="left"
+          class="mb-3"
+          style="width: 100%;"
+        >
+          <span class="text-body-2">{{ errorMessage }}</span>
+        </v-alert>
+        <v-btn class="onb-btn" depressed color="primary" :loading="storing" @click="storeRecovery()">
+          <v-icon left small>mdi-refresh</v-icon>
+          {{ $t('common.retry') }}
+        </v-btn>
+      </template>
     </div>
   </div>
 </template>
@@ -68,7 +47,7 @@ const props = defineProps<{
   publicKey: string;
   recoveryPassword: string;
 }>();
-defineEmits<{ (e: 'next'): void }>();
+const emit = defineEmits<{ (e: 'next'): void }>();
 
 const vmProxy = getCurrentInstance()!.proxy;
 
@@ -77,11 +56,9 @@ const stored = ref(false);
 const errorMessage = ref('');
 
 const storeRecovery = async (): Promise<void> => {
-  // Re-entrancy guard: this is auto-fired once on load and the button is also
-  // clickable as a Retry, so bail if an upload is already in flight — two concurrent
-  // calls would
-  // race on storing/stored/errorMessage and a late failure could stomp a prior
-  // success back into an error state.
+  // Re-entrancy guard: auto-fired once on load, and the Retry button can fire it
+  // again — bail if an upload is already in flight so two concurrent calls don't race
+  // on storing/stored/errorMessage and stomp a prior success back into an error.
   if (storing.value) return;
   storing.value = true;
   errorMessage.value = '';
@@ -102,6 +79,10 @@ const storeRecovery = async (): Promise<void> => {
       throw new Error(response?.data?.error || (vmProxy.$t('welcome.recoverySaveFailed') as string));
     }
     stored.value = true;
+    // Fileless recovery is armed — nothing for the user to confirm here, so skip
+    // straight to the next step. Onboarding stays gated on this success (a failure
+    // leaves us on the retry state instead of advancing).
+    emit('next');
   } catch (error: unknown) {
     errorMessage.value = error instanceof Error ? error.message : (vmProxy.$t('welcome.recoverySaveFailed') as string);
   } finally {
@@ -109,12 +90,9 @@ const storeRecovery = async (): Promise<void> => {
   }
 };
 
-// Recovery upload needs no user input (the recovery password, share and xpub anchor
-// were all collected in the prior step), so arm it automatically. Kicked off here in
-// setup (not onMounted) so `storing` flips true synchronously before the first paint —
-// no flash of an idle CTA. The button stays as a live status + a Retry affordance if
-// the upload fails; Continue remains gated on `stored` so onboarding can't proceed
-// with recovery un-armed.
+// No user input needed (password, share and xpub anchor were collected earlier), so
+// arm the upload automatically. Kicked off in setup so `storing` is true before first
+// paint — the user sees a spinner, then auto-advances once the share is uploaded.
 storeRecovery();
 </script>
 
