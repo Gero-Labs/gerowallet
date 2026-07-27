@@ -211,6 +211,10 @@ chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false });
 // Mini-gero DApp channel — per-tab port routing
 // Port name format: "mini-gero-dapp-channel" or "mini-gero-dapp-channel:${tabId}"
 const miniGeroPorts = new Map<number, chrome.runtime.Port>();
+// Synthetic key generator for panels that connect without a resolvable tab id
+// (opened manually / pinned). Decrements so keys stay negative and never collide
+// with real chrome tab ids.
+let syntheticPortSeq = -1;
 
 // requestId → pending entry. `payload`/`method` are kept so a request can be
 // RE-DELIVERED when a panel port (re)connects: closing the panel, locking it,
@@ -248,13 +252,16 @@ chrome.runtime.onConnect.addListener((port) => {
     try { port.disconnect(); } catch { /* noop */ }
     return;
   }
-  // Extract tab ID from port name (e.g. "mini-gero-dapp-channel:123")
+  // Extract tab ID from port name (e.g. "mini-gero-dapp-channel:123").
   const parts = port.name.split(':');
-  const tabId = parts.length > 1 ? parseInt(parts[1], 10) : NaN;
-  if (isNaN(tabId)) {
-    console.warn('[DApp] mini-gero port connected without tab ID, ignoring');
-    return;
-  }
+  const parsed = parts.length > 1 ? parseInt(parts[1], 10) : NaN;
+  // A panel opened without a tab context (manually / pinned) can't resolve its
+  // tab id and connects with an empty one. Register it anyway under a synthetic
+  // negative key so tab-agnostic routing (miniGeroPorts.size / any-panel
+  // fallback in the sign handlers) still finds it — we only lose the exact-tab
+  // match, which the fallback already covers. Negative keys never collide with
+  // real chrome tab ids.
+  const tabId = isNaN(parsed) ? syntheticPortSeq-- : parsed;
 
   const oldPort = miniGeroPorts.get(tabId);
   if (oldPort) {
@@ -340,6 +347,12 @@ function sendToMiniGero(method: string, payload: unknown, tabId?: number): Promi
  * Wait for the mini-gero side panel to connect its DApp channel port for a specific tab.
  * Resolves once the port for `tabId` is set, rejects after `timeoutMs`.
  */
+// How long a dApp signTx waits for the side-panel drawer to connect. Long enough
+// to sit through a lock screen while the user signs in (matches the enable/login
+// 5-min cap) — the port connects instantly once the panel is unlocked, so this
+// only matters while locked. Prevents falling back to a welcome popup that can't sign.
+const SIGN_TX_PORT_WAIT_MS = 5 * 60 * 1000;
+
 function waitForMiniGeroPort(timeoutMs = 5000, tabId?: number): Promise<void> {
   const hasPort = () => typeof tabId === 'number' ? miniGeroPorts.has(tabId) : miniGeroPorts.size > 0;
   if (hasPort()) return Promise.resolve();
@@ -1073,7 +1086,12 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
   const tabId = request.send?.tab?.id;
 
   const handleMiniGeroSignTx = () => {
-    return sendToMiniGero('signTx', signTxPayload, tabId)
+    // Prefer this tab's panel port, but fall back to any open panel. The panel
+    // registers its port under whatever tab was active when it connected (see
+    // dappRequestHub.resolveTabId), which isn't always the dApp's tab — with a
+    // single side panel open, routing to it is correct and beats hanging.
+    const deliverTabId = typeof tabId === 'number' && miniGeroPorts.has(tabId) ? tabId : undefined;
+    return sendToMiniGero('signTx', signTxPayload, deliverTabId)
       .then((response) => signTxReply({ data: response.data }));
   };
 
@@ -1112,25 +1130,44 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
       return signTxReply({ error: APIError.InternalError });
     }
 
-    // Phase 1: open the side panel and wait for the mini-gero port. Failures
-    // here mean the user can't see the prompt at all, so we fall back to the
-    // popup window. Phase 2 sends the request via the connected port —
-    // errors there (incl. the user clicking Reject) are real responses and
-    // must be relayed back to the dApp without spawning a second prompt.
+    // Phase 1: open the side panel. If the panel itself can't open (e.g. the
+    // user disabled the side panel), the popup window is the only way to show
+    // the prompt at all — fall back to it.
     try {
       await openSidebar(tabId, 'sidepanel/index.html');
-      await waitForMiniGeroPort(5000, tabId);
     } catch {
       return openPopupForSignTx();
     }
 
+    // Phase 2: wait for the mini-gero port. When the wallet is LOCKED the panel
+    // shows its lock screen and never registers the port until the user signs
+    // in, so wait through the unlock (5 min cap, mirroring the enable/login
+    // wait) instead of racing a 5s timeout into a useless welcome popup that
+    // can't sign anyway. Already-unlocked is the common case — the port
+    // connects in well under a second, so the long cap only bites while locked.
+    try {
+      // Wait for ANY panel port, not this tab's specifically — the panel may
+      // register under a different active-tab id, and handleMiniGeroSignTx
+      // falls back to whatever panel is open.
+      await waitForMiniGeroPort(SIGN_TX_PORT_WAIT_MS);
+    } catch {
+      // Panel opened but no port ever connected (user never unlocked, or
+      // closed the panel). Fail the request cleanly rather than spawning a
+      // second, unusable window on top of the panel.
+      return signTxReply({ error: APIError.Refused });
+    }
+
+    // Phase 3: deliver via the connected port. Errors here (incl. the user
+    // clicking Reject) are real responses relayed back to the dApp.
     handleMiniGeroSignTx().catch((err: unknown) => {
       signTxReply({ error: errorMessage(err) || APIError.InternalError });
     });
   };
 
-  // Primary: route through mini-gero side panel drawer
-  if (typeof tabId === 'number' && miniGeroPorts.has(tabId)) {
+  // Primary: route through the mini-gero side panel drawer if ANY panel is open
+  // (handleMiniGeroSignTx prefers this tab's port, falls back to any). Only open
+  // a fresh panel when none is connected at all.
+  if (miniGeroPorts.size > 0) {
     handleMiniGeroSignTx()
       .catch((err: unknown) => {
         signTxReply({ error: errorMessage(err) || APIError.InternalError });

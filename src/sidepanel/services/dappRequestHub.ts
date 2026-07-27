@@ -25,6 +25,9 @@ const isVisible = ref(false);
 const currentRequest = ref<DAppRequest | null>(null);
 const requestQueue = ref<DAppRequest[]>([]);
 const connectionLost = ref(false);
+// True only while DAppOverlay is mounted (wallet unlocked + active). Gates
+// whether a delivered request may be shown or must stay queued — see promoteNext.
+let overlayReady = false;
 
 let port: chrome.runtime.Port | null = null;
 let retryCount = 0;
@@ -72,12 +75,13 @@ function connect() {
     }
     if (seenRequestIds.has(message.requestId)) return; // re-delivery dedupe
     seenRequestIds.add(message.requestId);
-    if (currentRequest.value) {
-      requestQueue.value.push(message);
-    } else {
-      currentRequest.value = message;
-      isVisible.value = true;
-    }
+    // Always enqueue, then let promoteNext() decide whether it can be shown.
+    // It only becomes the visible currentRequest when the overlay is actually
+    // mounted (wallet unlocked) — a request delivered while locked stays queued
+    // instead of occupying currentRequest invisibly and blocking everything
+    // behind it (see setOverlayReady).
+    requestQueue.value.push(message);
+    promoteNext();
   });
 
   port.onDisconnect.addListener(() => {
@@ -135,10 +139,33 @@ function respond(requestId: string, data: DAppResponseData, error: string | null
   if (delivered) seenRequestIds.delete(requestId);
   currentRequest.value = null;
   isVisible.value = false;
-  if (requestQueue.value.length > 0) {
-    const next = requestQueue.value.shift()!;
+  promoteNext();
+}
+
+// Pull the next queued request into view — but only when the overlay is mounted
+// (wallet unlocked) so it can actually be shown and acted on, and only when
+// nothing is already displayed. No-op otherwise; the request stays queued.
+function promoteNext() {
+  if (!overlayReady || currentRequest.value) return;
+  const next = requestQueue.value.shift();
+  if (next) {
     currentRequest.value = next;
     isVisible.value = true;
+  }
+}
+
+// Driven by DAppOverlay's mount lifecycle (it renders only when the wallet is
+// unlocked + active). While the overlay is gone, a delivered request must not
+// sit as an invisible currentRequest blocking the queue: park the current one
+// back at the front so it re-shows when the overlay remounts on unlock.
+function setOverlayReady(ready: boolean) {
+  overlayReady = ready;
+  if (ready) {
+    promoteNext();
+  } else if (currentRequest.value) {
+    requestQueue.value.unshift(currentRequest.value);
+    currentRequest.value = null;
+    isVisible.value = false;
   }
 }
 
@@ -185,6 +212,7 @@ export const hub = {
   rejectQueued,
   rejectAll,
   respond,
+  setOverlayReady,
   // test hook: force an immediate reconnect (bypasses the backoff timer)
   async _reconnectNow() {
     if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }

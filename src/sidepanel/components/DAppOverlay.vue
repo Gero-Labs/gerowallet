@@ -230,7 +230,7 @@
         <!-- Normal wallet: password input -->
         <template v-if="walletType === WalletType.Normal || walletType === WalletType.Google">
           <v-text-field
-            v-if="!isPrfWallet"
+            v-if="!isPrfWallet && !isMpcWallet"
             v-model="spendingPassword"
             :type="showPassword ? 'text' : 'password'"
             :label="$t('miniGero.spendingPassword')"
@@ -241,6 +241,11 @@
             @click:append="showPassword = !showPassword"
             @keyup.enter="signNormal"
           />
+          <!-- MPC (Google) wallet: nothing to enter — signs with the session-cached
+               key, so no password field and no instruction (just the Sign button). -->
+          <template v-else-if="isMpcWallet">
+            <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
+          </template>
           <!-- PRF wallet: PassKey authentication -->
           <template v-else>
             <p class="grey--text text-body-2 text-center mb-2">{{ $t('miniGero.passKeyRequired') }}</p>
@@ -327,7 +332,7 @@
         </div>
 
         <!-- Normal wallet: password input -->
-        <template v-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
+        <template v-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet && !isMpcWallet">
           <v-text-field
             v-model="spendingPassword"
             :type="showPassword ? 'text' : 'password'"
@@ -342,6 +347,17 @@
           <div class="action-buttons">
             <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
             <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="!spendingPassword || signDataDecodeError" @click="signDataNormal">
+              {{ $t('miniGero.sign') }}
+            </v-btn>
+          </div>
+        </template>
+
+        <!-- MPC (Google) wallet: nothing to enter — signs with the session-cached key. -->
+        <template v-else-if="isMpcWallet">
+          <p v-if="signError" class="error--text text-caption text-center mb-2 mt-3">{{ signError }}</p>
+          <div class="action-buttons">
+            <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="!!signDataDecodeError" @click="signDataNormal">
               {{ $t('miniGero.sign') }}
             </v-btn>
           </div>
@@ -798,7 +814,7 @@
             <v-btn
               v-if="!isPrfWallet"
               class="geroButton" rounded depressed :loading="signing"
-              :disabled="!spendingPassword || signTxBlocked" @click="signNormal"
+              :disabled="(!spendingPassword && !isMpcWallet) || signTxBlocked" @click="signNormal"
             >{{ $t('miniGero.sign') }}</v-btn>
             <v-btn
               v-else
@@ -869,7 +885,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onBeforeUnmount } from 'vue';
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { getDomain } from 'tldts';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
@@ -906,7 +922,15 @@ import { resolveGeroChain } from '@/services/walletConnect/chainUtils';
 interface BackgroundResponse<T> { data: T }
 interface SignTxResponse { success: boolean; error?: string; signatures?: Array<[string, string]> }
 
-const { isVisible, currentRequest, requestQueue, approve, reject, rejectQueued, rejectAll } = useDAppOverlay();
+const { isVisible, currentRequest, requestQueue, approve, reject, rejectQueued, rejectAll, setOverlayReady } = useDAppOverlay();
+
+// This overlay renders only when the wallet is unlocked + active (v-if in
+// App.vue). Tell the hub when we're actually able to show a request, so a
+// request delivered while locked stays queued instead of occupying the (then
+// invisible) currentRequest and blocking everything behind it. Re-promotes the
+// parked request on remount (unlock).
+onMounted(() => setOverlayReady(true));
+onBeforeUnmount(() => setOverlayReady(false));
 const { t } = useTranslation();
 
 // Domain + method label for a queued (not-yet-shown) request, for the queue
@@ -1024,6 +1048,12 @@ const signDataDomain = computed(() => {
 // in setup(). (They only read WalletStore.state, so an early position is safe.)
 const walletType = computed(() => WalletStore.state.loggedWallet?.type);
 const isPrfWallet = computed(() => WalletStore.state.loggedWallet?.encryptionMethod === 'prf');
+// MPC (Sign-in-with-Google) wallets are WalletType.Google but sign with a root key
+// login already reconstructed (Shamir 2-of-3) and cached for the session — no spending
+// password at sign time (the background resolves it from the MPC session cache via
+// resolveSignPrivateKeyBytes). Mirrors useTransactionSigning's send-flow handling; the
+// dApp-sign panes must NOT show the password field for these (see PR 829).
+const isMpcWallet = computed(() => WalletStore.state.loggedWallet?.encryptionMethod === 'mpc');
 const loggedWallet = computed(() => WalletStore.state.loggedWallet);
 const keys = computed(() => WalletStore.state.keys);
 const utxos = computed(() => WalletStore.state.utxos);
@@ -2040,8 +2070,11 @@ function getTxCbor(): string {
 }
 
 // ── Normal wallet: password signing ──
+// MPC (Google) wallets reach here too — they carry no spending password (the
+// background resolves the session-cached key), so only require one for non-MPC.
 async function signNormal() {
-  if (!currentRequest.value || !spendingPassword.value) return;
+  if (!currentRequest.value) return;
+  if (!isMpcWallet.value && !spendingPassword.value) return;
   signing.value = true;
   signError.value = '';
 
@@ -2328,7 +2361,9 @@ function onKeystoneError(error: string) {
 
 // ── Sign Data: Normal wallet (password) ──
 async function signDataNormal() {
-  if (!currentRequest.value || !spendingPassword.value) return;
+  // MPC (Google) wallets reach here with no spending password (session-cached key).
+  if (!currentRequest.value) return;
+  if (!isMpcWallet.value && !spendingPassword.value) return;
   signing.value = true;
   signError.value = '';
 
