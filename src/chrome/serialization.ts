@@ -484,27 +484,42 @@ export async function getCollateral(
     }
   }
 
-  // Pass 1: try to satisfy from the user's own pure-ADA UTxOs.
-  // Cardano.Utxo is [TxIn, TxOut] where TxOut.value = { coins: bigint, assets?: Map }
-  // Sort largest-first so we reach filterAmount with the fewest inputs and stay
-  // within maxCollateralInputs (a single UTxO is preferred when one suffices).
-  const pureAdaUtxos = storedUtxos
-    .filter((utxo) => {
-      const txOut = utxo[1];
-      return !txOut.value.assets || txOut.value.assets.size === 0;
-    })
+  // Pass 1: satisfy from the user's own pure-ADA UTxOs.
+  // Cardano.Utxo is [TxIn, TxOut] where TxOut.value = { coins: bigint, assets?: Map }.
+  // Collateral is forfeited WHOLE on a phase-2 (script) validation failure — CIP-40
+  // collateral_return caps the loss only if the dApp sets it — so we minimize the
+  // amount put at risk: prefer the SMALLEST single UTxO that alone covers the
+  // requirement (one input, least value exposed). Only if no single UTxO covers it
+  // do we combine the largest few to reach the amount within maxCollateralInputs.
+  const pureAdaUtxos = storedUtxos.filter((utxo) => {
+    const txOut = utxo[1];
+    return !txOut.value.assets || txOut.value.assets.size === 0;
+  });
+
+  // Smallest single pure-ADA UTxO that alone covers filterAmount → safest + 1 input.
+  const singleSufficient = pureAdaUtxos
+    .filter((utxo) => BigInt(utxo[1].value.coins) >= filterAmount)
     .sort((a, b) => {
       const av = BigInt(a[1].value.coins);
       const bv = BigInt(b[1].value.coins);
-      return av < bv ? 1 : av > bv ? -1 : 0;
+      return av < bv ? -1 : av > bv ? 1 : 0;
     });
+  if (singleSufficient.length > 0) {
+    return [Serialization.TransactionUnspentOutput.fromCore(singleSufficient[0]).toCbor()];
+  }
 
+  // No single UTxO covers it — combine the largest pure-ADA UTxOs so we reach the
+  // amount with the fewest inputs (staying within maxCollateralInputs). If even the
+  // largest few fall short, fall through to the Nexus single-UTxO fallback rather
+  // than handing the dApp an oversized set the node would reject.
+  const largestFirst = [...pureAdaUtxos].sort((a, b) => {
+    const av = BigInt(a[1].value.coins);
+    const bv = BigInt(b[1].value.coins);
+    return av < bv ? 1 : av > bv ? -1 : 0;
+  });
   const selected: Cardano.Utxo[] = [];
   let totalCoins = 0n;
-  for (const utxo of pureAdaUtxos) {
-    // Never return more than maxCollateralInputs; if the largest few don't cover
-    // the amount, fall through to the Nexus single-UTxO fallback instead of
-    // handing the dApp an oversized set the node would reject.
+  for (const utxo of largestFirst) {
     if (selected.length >= MAX_COLLATERAL_INPUTS) break;
     selected.push(utxo);
     totalCoins += BigInt(utxo[1].value.coins);

@@ -1,5 +1,5 @@
 <template>
-  <v-card class="transparent-override" flat style="max-width: 600px; width: 100%; box-shadow: unset!important; background: transparent!important;">
+  <v-card class="transparent-override" flat style="max-width: 600px; width: 100%; box-shadow: unset!important; background: transparent!important; display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0;">
     <template v-if="!hideHeader">
       <v-card-title class="justify-center px-6" style="color: var(--g-text-1); font-size: 32px;">
         {{ $t('welcome.welcomeMessage') }}
@@ -8,7 +8,7 @@
         {{ $t('welcome.chooseAWallet') }}
       </v-card-subtitle>
     </template>
-    <v-card-text class="px-2 pa-0 mt-4" style="max-height: 600px; overflow-y: auto; background: transparent!important;">
+    <v-card-text class="px-2 pa-0 mt-4" style="flex: 1 1 auto; min-height: 0; overflow-y: auto; background: transparent!important;">
       <v-list nav dense class="pa-0 wallet-list" style="min-height: 51px;">
         <v-list-item-group v-model="selectedWallet" color="primary">
           <v-list-item

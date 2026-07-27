@@ -85,6 +85,10 @@ const logo = computed(() => {
 
 .welcome-content {
   flex: 1;
+  /* Without min-height:0 this flex item grows to its content height (the full
+     wallet list), so the list child never gets a bounded height to scroll in.
+     This is the load-bearing line for the list's internal scroll. */
+  min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -120,6 +124,13 @@ const logo = computed(() => {
 
 .wallet-list-block {
   width: 100%;
+  /* Fill the space between the heading and the footer and let the list scroll
+     inside it, instead of a fixed height that overflows the page on shorter
+     viewports (min-height:0 lets a flex child actually shrink + scroll). */
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .logo-container .logo {
