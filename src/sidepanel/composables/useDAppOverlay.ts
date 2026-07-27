@@ -16,5 +16,6 @@ export function useDAppOverlay() {
     reject: hub.reject,
     rejectQueued: hub.rejectQueued,
     rejectAll: hub.rejectAll,
+    setOverlayReady: hub.setOverlayReady,
   };
 }
