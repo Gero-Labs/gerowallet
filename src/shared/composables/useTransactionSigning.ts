@@ -90,6 +90,12 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
            (!!loggedWallet.value?.prfEncryptedPrivateKey && !!loggedWallet.value?.webAuthnCredentialId);
   });
 
+  // MPC (Sign-in-with-Google) wallets sign with a root key that login already
+  // reconstructed (Shamir 2-of-3) and cached for the session — no spending password
+  // at sign time; the background resolves the key from the MPC session cache
+  // (resolveSignPrivateKeyBytes). Treated like PRF for the password step below.
+  const isMpcWallet = computed(() => loggedWallet.value?.encryptionMethod === 'mpc');
+
   // Bluetooth support detection for Ledger/Trezor
   const isBTSupported = computed(() => {
     return (loggedWallet.value?.type === WalletType.Ledger || loggedWallet.value?.type === WalletType.Trezor) &&
@@ -143,8 +149,10 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
         throw new Error(t('common.noTransactionToSign'));
       }
 
-      // For password-based wallets, verify password via background message
-      if (!isPrfWallet.value) {
+      // For password-based wallets, verify password via background message.
+      // PRF + MPC skip this: PRF pre-decrypts the key, MPC uses the session-cached
+      // reconstructed key — neither needs (or shows) a spending password.
+      if (!isPrfWallet.value && !isMpcWallet.value) {
         const passwordVerification = (await Messaging.sendToBackgroundFromOptions({
           method: MessageTypes.VERIFY_SPENDING_PASSWORD,
           data: { password: spendingPassword.value },
@@ -453,7 +461,10 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       // since they all funnel through handleSign.
       snackbar.setError(t('crossDevice.settings.policyRequireHint'));
     } else {
-      if (loggedWallet.value?.type === WalletType.Normal) {
+      // MPC (Sign-in-with-Google) wallets are WalletType.Google but sign locally
+      // like a Normal wallet — via the session-cached reconstructed key. Without
+      // this branch, clicking Sign on an MPC wallet fell through and did nothing.
+      if (loggedWallet.value?.type === WalletType.Normal || loggedWallet.value?.type === WalletType.Google) {
         if (!formRef || formRef.validate()) {
           const isValid = await signTx();
           if (!isValid) return;
