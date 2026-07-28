@@ -461,7 +461,7 @@ const { selectedPool, txData: delegateTxData, isDelegateDialogOpen, delegateToGe
 
 // ── Store refs ────────────────────────────────────────────────────────────────
 
-const { loggedWallet, transactions, account, collections } = toRefs(walletStore);
+const { loggedWallet, transactions, account, collections, bitcoinBalance } = toRefs(walletStore);
 
 // ── Portfolio Data ────────────────────────────────────────────────────────────
 
@@ -572,7 +572,15 @@ watch(searchQuery, (val) => {
 
 // ── Computed: Empty state & staking ───────────────────────────────────────────
 
-const isWalletEmpty = computed(() => !account.value || account.value?.controlled_amount === '0');
+const isWalletEmpty = computed(() => {
+  // Bitcoin balance lives in walletStore.bitcoinBalance (derived from UTxOs), NOT in
+  // account.controlled_amount — so the Cardano-shaped check always reads "empty" for a
+  // funded BTC wallet. Gate BTC on its own balance instead.
+  if (loggedWallet.value?.chain === Blockchain.BITCOIN) {
+    return !(bitcoinBalance.value && BigInt(bitcoinBalance.value.total ?? 0) > 0n);
+  }
+  return !account.value || account.value?.controlled_amount === '0';
+});
 
 // Market-first empty state (mainnet Cardano only). isEmptyMainnet drives the
 // hero swap and matches isWalletEmpty's semantics (a not-yet-synced account
