@@ -176,8 +176,18 @@ async function fetchAllTokens(silent = false): Promise<void> {
       };
     }
 
-    // Apex wallets don't have market API token listings — only show native token
-    const allPrices = isApex ? [] : await marketApi.getAllPrices();
+    // Full token list is best-effort. Apex has no listing; for Cardano the
+    // /api/market/prices aggregate is large and slow (7-15s) — a timeout or error
+    // here must NOT blank the native token or trip the whole fetch. Degrade to
+    // native-only; the next poll refills the list. (Native price is fetched above.)
+    let allPrices: Awaited<ReturnType<typeof marketApi.getAllPrices>> = [];
+    if (!isApex) {
+      try {
+        allPrices = await marketApi.getAllPrices();
+      } catch (e) {
+        console.debug('Market: token list unavailable (prices endpoint slow/unreachable)', e);
+      }
+    }
 
     // 7D sparklines (best-effort — failure must not block the table)
     let sparklineMap: Record<string, number[]> = {};
