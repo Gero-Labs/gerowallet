@@ -120,7 +120,7 @@
                     </template>
 
                     <div class="network-tooltip-content">
-                      <div><strong>{{ t('navigation.network') }}:</strong> {{ loggedWallet?.network }}</div>
+                      <div><strong>{{ t('navigation.network') }}:</strong> {{ networkDisplay }}</div>
                       <div><strong>{{ t('navigation.lastSync') }}:</strong> {{ lastSyncTimestamp }}</div>
                       <template v-if="isMidnight">
                         <div><strong>Block:</strong> {{ midnightTip?.height || 'N/A' }}</div>
@@ -325,6 +325,12 @@ const { musicPlaylist, context } = toRefs(musicStore);
 
 const isMidnight = computed(() => loggedWallet.value?.chain === Blockchain.MIDNIGHT);
 const isBitcoin = computed(() => loggedWallet.value?.chain === Blockchain.BITCOIN);
+// Bitcoin testnet is specifically testnet4 (backend electrs-testnet4) — show the
+// variant so it matches the onboarding pill / balance card, not a bare "Testnet".
+const networkDisplay = computed(() => {
+  const n = loggedWallet.value?.network;
+  return isBitcoin.value && n === 'Testnet' ? 'Testnet4' : n;
+});
 // Height off the height-only BTC tip (no epoch/slot). undefined until the first
 // tip arrives from gero-sync.
 const btcTipHeight = computed(() => {
