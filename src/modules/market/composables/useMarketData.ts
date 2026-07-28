@@ -80,6 +80,11 @@ const error: Ref<string | null> = ref(null);
 
 let initialized = false;
 let refreshInterval: ReturnType<typeof setInterval> | null = null;
+// Monotonic id for in-flight fetchAllTokens calls. Polls are fire-and-forget on a
+// 15s interval while getAllPrices can now take up to 30s, so calls can overlap and
+// resolve out of order — this lets a call bail out of writing shared refs if a newer
+// fetch has already started ("last requested wins", not "last resolved wins").
+let fetchSeq = 0;
 
 // Module-level EUR rate for Apex price conversion
 const { usdToEurRate: _usdToEurRate, loadExchangeRate: _loadExchangeRate } = useCurrencyConverter();
@@ -146,6 +151,15 @@ function enrichWithStores(apiToken: TokenPriceResponse, sparklineMap?: Record<st
 // --- Fetch all tokens ---
 
 async function fetchAllTokens(silent = false): Promise<void> {
+  // Bitcoin renders its own dashboard (BitcoinPriceChart + bitcoinBalance) and never
+  // consumes the Cardano market feed — so don't poll the ADA price / token list /
+  // sparklines / snek.fun for a BTC wallet (was firing ~every 15s for nothing).
+  if (walletStore.loggedWallet?.chain === Blockchain.BITCOIN) {
+    if (!silent) loading.value = false;
+    return;
+  }
+  const seq = ++fetchSeq;
+  const isStale = () => seq !== fetchSeq; // a newer fetch superseded this one
   if (!silent) loading.value = true;
   error.value = null;
 
@@ -176,8 +190,18 @@ async function fetchAllTokens(silent = false): Promise<void> {
       };
     }
 
-    // Apex wallets don't have market API token listings — only show native token
-    const allPrices = isApex ? [] : await marketApi.getAllPrices();
+    // Full token list is best-effort. Apex has no listing; for Cardano the
+    // /api/market/prices aggregate is large and slow (7-15s) — a timeout or error
+    // here must NOT blank the native token or trip the whole fetch. Degrade to
+    // native-only; the next poll refills the list. (Native price is fetched above.)
+    let allPrices: Awaited<ReturnType<typeof marketApi.getAllPrices>> = [];
+    if (!isApex) {
+      try {
+        allPrices = await marketApi.getAllPrices();
+      } catch (e) {
+        console.debug('Market: token list unavailable (prices endpoint slow/unreachable)', e);
+      }
+    }
 
     // 7D sparklines (best-effort — failure must not block the table)
     let sparklineMap: Record<string, number[]> = {};
@@ -227,6 +251,10 @@ async function fetchAllTokens(silent = false): Promise<void> {
       isNative: true,
     };
 
+    // A newer fetch started while this one was awaiting — drop these results so we
+    // don't clobber fresher data with a slow, stale response.
+    if (isStale()) return;
+
     // Remove any existing lovelace entry, then prepend native token
     const filtered = tokens.filter(t => t.unit !== 'lovelace');
     allTokens.value = [nativeToken, ...filtered];
@@ -259,10 +287,14 @@ async function fetchAllTokens(silent = false): Promise<void> {
       volume24h: nativePrice.volume24h,
     };
   } catch (e: any) {
-    console.error('Market: Failed to fetch tokens', e);
-    error.value = e?.message || 'Failed to load market data';
+    // Don't let a stale/superseded call surface its error over a newer fetch.
+    if (!isStale()) {
+      console.error('Market: Failed to fetch tokens', e);
+      error.value = e?.message || 'Failed to load market data';
+    }
   } finally {
-    loading.value = false;
+    // Only the latest in-flight call owns the loading flag.
+    if (!isStale()) loading.value = false;
   }
 }
 
