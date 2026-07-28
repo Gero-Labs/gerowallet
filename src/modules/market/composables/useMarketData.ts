@@ -151,6 +151,13 @@ function enrichWithStores(apiToken: TokenPriceResponse, sparklineMap?: Record<st
 // --- Fetch all tokens ---
 
 async function fetchAllTokens(silent = false): Promise<void> {
+  // Bitcoin renders its own dashboard (BitcoinPriceChart + bitcoinBalance) and never
+  // consumes the Cardano market feed — so don't poll the ADA price / token list /
+  // sparklines / snek.fun for a BTC wallet (was firing ~every 15s for nothing).
+  if (walletStore.loggedWallet?.chain === Blockchain.BITCOIN) {
+    if (!silent) loading.value = false;
+    return;
+  }
   const seq = ++fetchSeq;
   const isStale = () => seq !== fetchSeq; // a newer fetch superseded this one
   if (!silent) loading.value = true;
