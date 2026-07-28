@@ -427,23 +427,28 @@ export class SyncService {
     // 3) Tip — height-only BitcoinTip. `time` stored in ms for consistency with the
     //    Cardano tip.time convention (no BTC consumer reads it yet).
     if (payload.block && typeof payload.block.height === 'number') {
-      const tip: BitcoinTip = {
-        chain: 'BITCOIN',
-        height: payload.block.height,
-        hash: payload.block.hash || '',
-        time: payload.block.time ? payload.block.time * 1000 : 0,
-      };
-      NetworkStore.setTip(tip);
+      // Only update the DISPLAY tip when the block carries a real timestamp. SYNC_CHECK_OK /
+      // catch-up carry the chain tip with `time`; the realtime tx-push carries a height-only
+      // block (the tx's own block, no time/hash). Applying the latter would blank "Last Sync"
+      // (time → 0 → N/A) and overwrite the good tip — so keep the last good tip in that case.
+      if (payload.block.time) {
+        const tip: BitcoinTip = {
+          chain: 'BITCOIN',
+          height: payload.block.height,
+          hash: payload.block.hash || '',
+          time: payload.block.time * 1000,
+        };
+        NetworkStore.setTip(tip);
+      }
 
-      // Persist the height checkpoint so reconnects resume from here and rollbacks
-      // can rewind it. Post Phase-5 cutover the Esplora poller no longer runs when
-      // WS is on, so the WS apply owns this write. Only advance (never regress) —
-      // a rollback lowers it via handleBitcoinRollback, not here.
+      // Persist the height checkpoint (monotonic) regardless of whether a timestamp was
+      // present, so reconnects resume from here and rollbacks can rewind it. Post Phase-5
+      // cutover the Esplora poller no longer runs when WS is on, so the WS apply owns this.
       const syncInfo = await this.walletBg.getLastSyncInfo();
       const currentHeight = syncInfo && typeof syncInfo.height === 'number' ? syncInfo.height : 0;
       if (payload.block.height > currentHeight) {
         const db = await this.walletBg.getDb();
-        await db.table('sync').put({ ...(syncInfo || {}), id: 1, height: payload.block.height, hash: tip.hash });
+        await db.table('sync').put({ ...(syncInfo || {}), id: 1, height: payload.block.height, hash: payload.block.hash || '' });
       }
     }
 
