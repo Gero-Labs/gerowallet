@@ -55,6 +55,8 @@ import { computed, watch } from 'vue';
 import networks, { NetworkInfo } from '@/utils/networks';
 import { updateVuetifyTheme } from '@/plugins/vuetify';
 import { chainAccents, chainKeyFor } from '@/config/themes';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
+import { Blockchain } from '@/models/types';
 
 interface Family {
   name: string;
@@ -97,7 +99,13 @@ const currentIsTestnet = computed<boolean>(() => !!props.network && props.networ
 // Without dev mode a chain is only pickable if it has a live mainnet (a chain
 // like Bitcoin that's testnet-only is hidden from regular users). With dev mode
 // any chain that has at least one live network is pickable.
-const isFamilySelectable = (fam: Family): boolean => (props.devMode ? !fam.comingSoon : famHasLiveMainnet(fam));
+const isFamilySelectable = (fam: Family): boolean => {
+  // Bitcoin is gated behind the isBitcoinEnabled flag (gero-sync). While off it
+  // stays a disabled "Soon" tile regardless of its net defs — this is the release
+  // gate that replaces the old hardcoded hide in networks.ts.
+  if (fam.name === Blockchain.BITCOIN && !featureFlagsStore.isBitcoinEnabled()) return false;
+  return props.devMode ? !fam.comingSoon : famHasLiveMainnet(fam);
+};
 
 // Per-network accent for the active tile ring, from the single accent source.
 // The old hardcoded map carried the retired Apex Prime/Vector one-offs and had
