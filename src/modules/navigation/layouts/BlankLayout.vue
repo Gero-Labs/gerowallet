@@ -9,6 +9,6 @@
 </script>
 <style>
 .transition {
-  transition: all 1s ease-in-out!important;
+  transition: color var(--g-dur-slow) ease-in-out, background-color var(--g-dur-slow) ease-in-out, border-color var(--g-dur-slow) ease-in-out, opacity var(--g-dur-slow) ease-in-out, transform var(--g-dur-slow) ease-in-out, box-shadow var(--g-dur-slow) ease-in-out !important;
 }
 </style>

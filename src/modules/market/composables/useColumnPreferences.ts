@@ -20,29 +20,30 @@ export interface ColumnPreferences {
   totalPnl: boolean;
 }
 
-// Bumped to _v2 so the richer, website-matching default column set applies for
-// everyone (old saved prefs under the v1 key are ignored). Users can still
-// hide columns via the column picker.
-const STORAGE_KEY = 'gero_market_columns_v2';
+// Bumped to _v3 so the leaner default column set applies for everyone (old
+// saved prefs under the v1/v2 keys are ignored). Users can still add columns
+// back via the column picker.
+const STORAGE_KEY = 'gero_market_columns_v3';
 
-// Default column set mirrors the market-data website table
-// (cardano-market-data MarketTable.tsx): price, 1h/24h/7d/30d, sparkline,
-// vol 24h/7d, TXN, Makers, Liquidity (tvl), Market Cap, Supply.
+// Default visible data columns: 24H, 7D, LAST 7D (sparkline), VOLUME, MCAP,
+// ALLOCATION, P&L. Everything else is off by default (users opt in via the
+// picker). Core columns #/TOKEN/PRICE (and BALANCE/VALUE in holdings) are
+// locked-on separately in MarketTokenTable.
 const DEFAULTS: ColumnPreferences = {
-  change1h: true,
+  change1h: false,
   change24h: true,
   change7d: true,
-  change30d: true,
+  change30d: false,
   volume24h: true,
-  volume7d: true,
-  txnCount24h: true,
-  makerCount24h: true,
-  totalSupply: true,
+  volume7d: false,
+  txnCount24h: false,
+  makerCount24h: false,
+  totalSupply: false,
   sparkline: true,
   mcap: true,
-  tvl: true,
-  allocation: false,
-  avgCostBasis: true,
+  tvl: false,
+  allocation: true,
+  avgCostBasis: false,
   totalPnl: true,
 };
 

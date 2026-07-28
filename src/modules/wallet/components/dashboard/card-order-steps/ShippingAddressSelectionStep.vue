@@ -289,7 +289,7 @@ defineExpose({
     padding: $spacing-md;
     border-radius: $border-radius-md;
     border: 1px solid $border-primary;
-    transition: all 0.3s ease;
+    transition: border-color var(--g-dur-slow) ease, background-color var(--g-dur-slow) ease, opacity var(--g-dur-slow) ease;
 
     &:not(:last-child) {
       margin-right: $spacing-lg !important;

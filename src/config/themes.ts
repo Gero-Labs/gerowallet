@@ -1,46 +1,72 @@
-export const themes = {
-  cardano: {
-    primary: '#00c7f3',
-    secondary: '#00ffd1',
-    accent: '#2f9cac',
-    light: '#00DFF3',
-    dark: '#00BAAD',
-    darker: '#155B75',
-    muted: '#009DAB',
-    bright: '#00D1FF',
-    gradient1: '#00dff3',
-    gradient2: '#00fad5'
-  },
-  // Shifted toward deeper terracotta/red-orange to distinguish from Bitcoin's golden orange
-  apex: {
-    primary: '#d45d2b',
-    secondary: '#f08050',
-    accent: '#c05025',
-    light: '#e8793a',
-    dark: '#b04420',
-    darker: '#8b3215',
-    muted: '#b5633a',
-    bright: '#e86b38',
-    gradient1: '#e06030',
-    gradient2: '#f08040'
-  },
-  // Bitcoin — authentic brand orange (#F7931A) with a warm golden-amber palette
-  bitcoin: {
-    primary: '#F7931A',
-    secondary: '#FFB84D',
-    accent: '#E8820C',
-    light: '#FFAD33',
-    dark: '#D97706',
-    darker: '#92400E',
-    muted: '#B45309',
-    bright: '#FCD34D',
-    gradient1: '#F7931A',
-    gradient2: '#F59E0B'
+// Chain accent palettes: a chain switch changes ONLY these slots.
+// Surfaces, text tones and semantic colors live in tokens.css and never
+// change per chain.
+export type ChainKey = 'cardano' | 'bitcoin' | 'apex' | 'midnight';
+
+export interface ChainAccent {
+  /** Flat accent: links, icons, active tab text, focus ring */
+  accent: string;
+  /** Gradient stops: primary CTA, active nav indicator, chain dot, header hairline */
+  gradient1: string;
+  gradient2: string;
+  /** Text/icon color ON the gradient CTA. Omit to inherit the global
+   *  --g-on-grad (#06181B). Midnight overrides it to bright white because its
+   *  CTA gradient is dark (black -> purple), not light. */
+  onGrad?: string;
+}
+
+export const chainAccents: Record<ChainKey, ChainAccent> = {
+  cardano: { accent: '#33C7DD', gradient1: '#00DFF3', gradient2: '#00FAD5' },
+  bitcoin: { accent: '#F7931A', gradient1: '#F7931A', gradient2: '#FFB84D' },
+  apex: { accent: '#E06030', gradient1: '#E06030', gradient2: '#F08040' },
+  // Midnight: black-and-white base with a moonlit-purple accent. Bright violet
+  // for flat use (icons/links/active); a DARK black->purple gradient for CTAs
+  // with BRIGHT WHITE text (onGrad) — never a light button with dark text.
+  midnight: { accent: '#A78BFA', gradient1: '#2E1065', gradient2: '#7C3AED', onGrad: '#FFFFFF' },
+};
+
+/** Blockchain display-string -> ChainKey (walletStore.loggedWallet.chain values) */
+export function chainKeyFor(chain: string | undefined | null): ChainKey {
+  switch (chain) {
+    case 'Bitcoin':
+      return 'bitcoin';
+    case 'Apex Fusion Prime':
+    case 'Apex Fusion Vector':
+      return 'apex';
+    case 'Midnight':
+      return 'midnight';
+    default:
+      return 'cardano';
   }
 }
 
-export const iconFilters = {
-  cardano: 'brightness(0) saturate(100%) invert(62%) sepia(93%) saturate(1287%) hue-rotate(136deg) brightness(102%) contrast(101%)',
-  apex: 'brightness(0) saturate(100%) invert(52%) sepia(85%) saturate(1100%) hue-rotate(345deg) brightness(108%) contrast(98%)',
-  bitcoin: 'brightness(0) saturate(100%) invert(63%) sepia(88%) saturate(2100%) hue-rotate(8deg) brightness(104%) contrast(103%)'
-}
+// ---- Legacy shape kept for the transition (consumers: useChainContext
+// themeColors bindings, PortfolioChart, ContentLayout). Values re-pointed
+// to the accent system so every consumer converges on the same colors.
+// Sweeps replace `themes.X.primary` reads with `var(--g-accent)`; delete
+// this block when `rg "from '@/config/themes'"` shows only vuetify.ts +
+// useChainAccent.ts remaining.
+const legacy = (a: ChainAccent) => ({
+  primary: a.accent,
+  secondary: a.gradient2,
+  accent: a.accent,
+  light: a.gradient1,
+  dark: a.accent,
+  darker: a.accent,
+  muted: a.accent,
+  bright: a.gradient1,
+  gradient1: a.gradient1,
+  gradient2: a.gradient2,
+});
+
+export const themes = {
+  cardano: legacy(chainAccents.cardano),
+  apex: legacy(chainAccents.apex),
+  bitcoin: legacy(chainAccents.bitcoin),
+  midnight: legacy(chainAccents.midnight),
+};
+
+// iconFilters is DELETED, not rewritten: its only writer (--icon-filter in
+// ContentLayout) had zero var() readers, and the plan's direction is
+// currentColor icons. If this rewrite breaks an import, that import site was
+// consuming dead code; remove it.

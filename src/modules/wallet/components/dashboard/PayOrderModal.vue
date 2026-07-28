@@ -53,10 +53,8 @@ import snackbar from '@/plugins/snackbar';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { Cardano } from '@cardano-sdk/core';
-import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { walletStore } from '@/stores/walletStore';
-import { networkStore } from '@/stores/networkStore';
-import { buildCardanoTransaction } from '@/shared/utils/builder';
+import { nexusTxApi, walletUtxosToNexusInputs, txOutToNexusOutput, type BuildTxRequest } from '@/api/nexus-tx-api';
 
 const { t } = useTranslation();
 const router = useRouter();
@@ -188,15 +186,14 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
       },
     ];
 
-    const tx = await buildCardanoTransaction({
-      outputs,
-      utxos: walletStore.utxos,
-      epochParams: networkStore.epochParams,
+    // Build the payment server-side via Nexus (unconditional), signing the returned CBOR directly.
+    const request: BuildTxRequest = {
+      outputs: outputs.map(txOutToNexusOutput),
       changeAddress: walletStore.loggedWallet.baseAddress,
-      tip: networkStore.tip,
-    });
-
-    const txCbor = serializeCardanoJsSdkTx(tx);
+      utxos: walletUtxosToNexusInputs(walletStore.utxos as Cardano.Utxo[], walletStore.collateral),
+    };
+    const { tx_cbor: txCbor } = await nexusTxApi.buildTransferTx(request, walletStore.loggedWallet.network);
+    if (!txCbor) throw new Error('Nexus returned an empty transaction CBOR');
 
     const witnessResult = (await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SIGN_TX,

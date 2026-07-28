@@ -122,7 +122,7 @@ const label = computed(() => {
   width: inherit;
   position: absolute;
   text-align: center;
-  font-family: Quicksand,serif;
+  font-family: var(--g-font-ui);
   line-height: 36px;
   font-weight: 400;
   font-size: 24px;

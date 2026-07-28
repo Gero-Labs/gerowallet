@@ -311,6 +311,46 @@ export interface Position {
   bankruptcy_price: string;
   /** String-encoded decimal */
   liquidation_price: string;
+  /** String-encoded decimal — cumulative funding (live wire only) */
+  accumulated_funding_fees?: string;
+  /** Unix timestamp in milliseconds (live wire only) */
+  create_timestamp?: number;
+  /** Unix timestamp in milliseconds (live wire only) */
+  update_timestamp?: number;
+}
+
+/**
+ * Raw /v2/positions entry as it appears on the wire. The live API returns
+ * snake_case (`id`, `size`, `entry_price`, `iso_balance`) with NO side field —
+ * direction is the sign of `size` — while the published docs show PascalCase
+ * (`PositionID`, `Side`, `Size`, `EntryPrice`). Both shapes are accepted and
+ * folded into the canonical `Position` by strike-v2.normalize.ts.
+ */
+export interface PositionWire {
+  symbol: string;
+  // Documented (PascalCase) shape
+  PositionID?: string | number;
+  Side?: PositionSide;
+  Size?: string;
+  EntryPrice?: string;
+  MarginMode?: MarginMode;
+  Leverage?: number | string;
+  IsolatedMargin?: string;
+  // Live (snake_case) shape
+  id?: string | number;
+  size?: string;
+  entry_price?: string;
+  margin_mode?: MarginMode;
+  leverage?: number | string;
+  iso_balance?: string;
+  // Shared fields (snake_case in both variants)
+  upnl?: string;
+  maintenance_margin?: string;
+  bankruptcy_price?: string;
+  liquidation_price?: string;
+  accumulated_funding_fees?: string;
+  create_timestamp?: number;
+  update_timestamp?: number;
 }
 
 export interface PositionsResponse {
@@ -706,7 +746,15 @@ export interface WithdrawQuoteRequest {
 
 export interface WithdrawQuoteResponse {
   withdraw_id: string;
+  /** Hex-encoded on Cardano (2026-07-05 API change) — sign it VERBATIM as the
+   * CIP-30 signData payload; hex-decode only for display. */
   message_to_sign: string;
+  /** Optional user-funded validator min-UTxO tx (hex CBOR, Cardano only).
+   * When present the wallet must sign it and send `signed_tx_cbor` on
+   * POST /v2/withdraw — Strike submits it server-side. */
+  tx_cbor?: string;
+  /** Validator address the min-UTxO tx funds (informational). */
+  validator_address?: string;
 }
 
 export interface StrikeMarketsResponse {

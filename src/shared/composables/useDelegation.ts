@@ -1,10 +1,13 @@
 import { ref, toRefs } from 'vue';
-import { Cardano } from '@cardano-sdk/core';
+import { Cardano, Serialization } from '@cardano-sdk/core';
+import { HexBlob } from '@cardano-sdk/util';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import stakingStore from '@/stores/stakingStore';
 import { buildCardanoTransaction } from '@/shared/utils/builder';
+import { nexusTxApi, walletUtxosToNexusInputs } from '@/api/nexus-tx-api';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import snackbar from '@/plugins/snackbar';
 import networks from '@/utils/networks';
 import { WalletType } from '@/models/types';
@@ -59,6 +62,40 @@ export function useDelegation() {
         throw new Error(t('errors.networkError'));
       }
 
+      // Trezor can't sign the combined Conway certs (StakeVoteDelegCert /
+      // StakeVoteRegDelegCert) that nexus emits, so it always uses the client-side
+      // @cardano-sdk builder below (separate certs). Software + Ledger use nexus.
+      const isTrezorWallet = loggedWallet.value?.type === WalletType.Trezor;
+
+      // Nexus migration: build the delegation server-side for software + Ledger.
+      if (featureFlagsStore.isNexusDelegateEnabled() && !isTrezorWallet) {
+        const isRegistered = !!account.value?.active;
+        const hasDrep = !!account.value?.drep_id;
+        const poolId = Cardano.PoolId(selectedPool.value.pool_id_bech32);
+        const nexusReq = {
+          stakeAddress: loggedWallet.value.stakeAddress,
+          changeAddress: keys.value.payment[0].address,
+          utxos: walletUtxosToNexusInputs(utxos.value as Cardano.Utxo[], walletStore.collateral),
+        };
+        const { tx_cbor } = isRegistered && hasDrep
+          // Already registered with a DRep → pool-only stake delegation.
+          ? await nexusTxApi.buildDelegationTx(
+              { ...nexusReq, poolId },
+              loggedWallet.value.network
+            )
+          // First delegation (register the stake key when inactive) → combined pool +
+          // abstain vote, matching the client's StakeVoteRegistrationDelegation /
+          // StakeVoteDelegation. Deposit is folded server-side.
+          : await nexusTxApi.buildVoteDelegationTx(
+              { ...nexusReq, poolId, drepId: 'drep_always_abstain', includeStakeRegistration: !isRegistered },
+              loggedWallet.value.network
+            );
+        if (!tx_cbor) throw new Error('Nexus returned an empty transaction CBOR');
+        txData.value = Serialization.Transaction.fromCbor(HexBlob(tx_cbor)).toCore();
+        isDelegateDialogOpen.value = true;
+        return;
+      }
+
       const certificates: Cardano.Certificate[] = [];
 
       // Create stake credential from the key hash
@@ -73,10 +110,6 @@ export function useDelegation() {
       const stakeKeyDepositLovelace = BigInt(epochParams.value.stakeKeyDeposit);
 
       let implicitCoin = BigInt(0);
-
-      // Check if this is a Trezor wallet - Trezor doesn't support combined Conway certificates
-      // We need to use separate certificates for registration, delegation, and vote delegation
-      const isTrezorWallet = loggedWallet.value?.type === WalletType.Trezor;
 
       if (!account.value?.active) {
         // Need to register a stake key first, then delegate

@@ -3,7 +3,7 @@
     <!-- Page Header -->
     <div class="d-flex align-center mb-4" style="gap: 12px;">
       <div class="page-icon-wrapper">
-        <v-icon color="#00D5BD" size="22">mdi-swap-horizontal-bold</v-icon>
+        <v-icon color="var(--g-accent)" size="22">mdi-swap-horizontal-bold</v-icon>
       </div>
       <div>
         <div class="text-h6 font-weight-bold">{{ $t('thorchain.title') }}</div>
@@ -12,13 +12,13 @@
     </div>
 
     <!-- Swap Card -->
-    <v-card outlined class="liquid-glass swap-card mb-3" style="border-radius: 16px !important;">
+    <v-card outlined class="liquid-glass swap-card mb-3" style="border-radius: var(--g-r-sheet) !important;">
       <div class="pa-4">
 
         <!-- FROM section -->
         <div class="swap-section mb-1">
           <div class="d-flex justify-space-between align-center mb-2">
-            <span class="section-label">{{ $t('thorchain.from') }}</span>
+            <span class="t-label">{{ $t('thorchain.from') }}</span>
           </div>
           <div class="swap-input-row d-flex align-center" style="gap: 8px;">
             <v-select
@@ -70,14 +70,14 @@
         <!-- Swap direction button -->
         <div class="swap-arrow-wrapper">
           <v-btn icon small class="swap-arrow-btn" @click="swapAssets">
-            <v-icon color="#00D5BD" size="18">mdi-swap-vertical</v-icon>
+            <v-icon color="var(--g-accent)" size="18">mdi-swap-vertical</v-icon>
           </v-btn>
         </div>
 
         <!-- TO section -->
         <div class="swap-section mb-4">
           <div class="d-flex justify-space-between align-center mb-2">
-            <span class="section-label">{{ $t('thorchain.to') }}</span>
+            <span class="t-label">{{ $t('thorchain.to') }}</span>
             <span v-if="quote && !quoteLoading" class="text-caption success--text font-weight-medium">
               ≈ {{ expectedOut }} {{ toAsset.split('.')[1] }}
             </span>
@@ -129,7 +129,7 @@
 
         <!-- Destination address -->
         <div class="mb-4">
-          <div class="section-label mb-2">{{ $t('thorchain.destinationAddress') }}</div>
+          <div class="t-label mb-2">{{ $t('thorchain.destinationAddress') }}</div>
           <v-text-field
             v-model="destinationAddress"
             outlined
@@ -153,7 +153,7 @@
                 x-small
                 :color="quote.fees.slippage_bps > 100 ? 'warning' : 'success'"
                 outlined
-                style="height: 18px; font-size: 10px;"
+                style="height: 18px; font-size: 11px;"
               >
                 {{ (quote.fees.slippage_bps / 100).toFixed(2) }}%
               </v-chip>
@@ -172,7 +172,7 @@
             <v-divider class="my-2" style="opacity: 0.1;" />
             <div class="d-flex justify-space-between align-center">
               <span class="text-caption font-weight-bold">{{ $t('thorchain.youReceive') }}</span>
-              <span class="font-weight-bold success--text" style="font-size: 15px;">
+              <span class="font-weight-bold success--text" style="font-size: 14px;">
                 {{ expectedOut }} {{ toAsset.split('.')[1] }}
               </span>
             </div>
@@ -180,22 +180,22 @@
         </transition>
 
         <!-- Warnings & errors -->
-        <v-alert v-if="quote?.warning" type="warning" outlined dense class="text-caption mb-3" style="border-radius: 8px !important;">
+        <v-alert v-if="quote?.warning" type="warning" outlined dense class="text-caption mb-3" style="border-radius: var(--g-r-control) !important;">
           {{ quote.warning }}
         </v-alert>
-        <v-alert v-if="quoteError" type="error" outlined dense class="text-caption mb-3" style="border-radius: 8px !important;">
+        <v-alert v-if="quoteError" type="error" outlined dense class="text-caption mb-3" style="border-radius: var(--g-r-control) !important;">
           {{ quoteError }}
         </v-alert>
 
         <!-- Action button -->
         <v-btn
-          color="#00D5BD"
+          color="var(--g-accent)"
           dark
           block
           large
           :disabled="!isValid || !quote"
           @click="initiateSwap"
-          style="border-radius: 10px !important;"
+          style="border-radius: var(--g-r-control) !important;"
         >
           <v-icon left>mdi-swap-horizontal</v-icon>
           {{ $t('thorchain.initiateSwap') }}
@@ -204,32 +204,32 @@
     </v-card>
 
     <!-- Info note -->
-    <v-alert type="info" outlined dense class="text-caption mb-3" style="border-radius: 10px !important;">
+    <v-alert type="info" outlined dense class="text-caption mb-3" style="border-radius: var(--g-r-control) !important;">
       {{ $t('thorchain.infoNote') }}
     </v-alert>
 
     <!-- How it works -->
-    <v-card outlined class="liquid-glass" style="border-radius: 12px !important;">
+    <v-card outlined class="liquid-glass" style="border-radius: var(--g-r-card) !important;">
       <v-expansion-panels flat>
         <v-expansion-panel style="background: transparent !important;">
           <v-expansion-panel-header class="font-weight-medium" style="font-size: 13px;">
             <div class="d-flex align-center" style="gap: 8px;">
-              <v-icon small color="#00D5BD">mdi-information-outline</v-icon>
+              <v-icon small color="var(--g-accent)">mdi-information-outline</v-icon>
               {{ $t('thorchain.howItWorks') }}
             </div>
           </v-expansion-panel-header>
           <v-expansion-panel-content>
             <v-timeline dense clipped>
-              <v-timeline-item x-small color="#00D5BD" fill-dot>
+              <v-timeline-item x-small color="var(--g-accent)" fill-dot>
                 <span class="text-caption">{{ $t('thorchain.step1') }}</span>
               </v-timeline-item>
-              <v-timeline-item x-small color="#00D5BD" fill-dot>
+              <v-timeline-item x-small color="var(--g-accent)" fill-dot>
                 <span class="text-caption">{{ $t('thorchain.step2') }}</span>
               </v-timeline-item>
-              <v-timeline-item x-small color="#00D5BD" fill-dot>
+              <v-timeline-item x-small color="var(--g-accent)" fill-dot>
                 <span class="text-caption">{{ $t('thorchain.step3') }}</span>
               </v-timeline-item>
-              <v-timeline-item x-small color="#00D5BD" fill-dot>
+              <v-timeline-item x-small color="var(--g-accent)" fill-dot>
                 <span class="text-caption">{{ $t('thorchain.step4') }}</span>
               </v-timeline-item>
             </v-timeline>
@@ -240,20 +240,20 @@
 
     <!-- Confirm dialog -->
     <v-dialog v-model="confirmDialog" max-width="420">
-      <v-card class="liquid-glass" v-if="quote" style="border-radius: 16px !important;">
+      <v-card class="liquid-glass" v-if="quote" style="border-radius: var(--g-r-sheet) !important;">
         <div class="d-flex align-center pa-4 pb-2">
-          <v-icon color="#00D5BD" class="mr-2">mdi-swap-horizontal-bold</v-icon>
+          <v-icon color="var(--g-accent)" class="mr-2">mdi-swap-horizontal-bold</v-icon>
           <span class="text-subtitle-1 font-weight-bold">{{ $t('thorchain.confirmSwap') }}</span>
         </div>
         <v-divider style="opacity: 0.12;" />
         <div class="pa-4">
-          <v-alert type="warning" outlined dense class="text-caption mb-4" style="border-radius: 8px !important;">
+          <v-alert type="warning" outlined dense class="text-caption mb-4" style="border-radius: var(--g-r-control) !important;">
             {{ $t('thorchain.sendExactAmount') }}
           </v-alert>
 
           <div class="confirm-row d-flex justify-space-between align-start py-2">
             <span class="text-caption text--secondary">{{ $t('thorchain.sendTo') }}</span>
-            <span class="text-caption font-weight-medium text-right" style="font-family: monospace; max-width: 200px; word-break: break-all;">
+            <span class="text-caption font-weight-medium text-right" style="font-family: var(--g-font-mono); max-width: 200px; word-break: break-all;">
               {{ quote.inbound_address }}
             </span>
           </div>
@@ -265,7 +265,7 @@
           <v-divider style="opacity: 0.08;" />
           <div class="confirm-row d-flex justify-space-between align-start py-2">
             <span class="text-caption text--secondary">{{ $t('thorchain.memo') }}</span>
-            <span class="text-caption text-right" style="font-family: monospace; max-width: 200px; word-break: break-all; opacity: 0.7;">
+            <span class="text-caption text-right" style="font-family: var(--g-font-mono); max-width: 200px; word-break: break-all; opacity: 0.7;">
               {{ quote.memo }}
             </span>
           </div>
@@ -273,7 +273,7 @@
         <v-card-actions class="pb-4 px-4">
           <v-btn outlined @click="confirmDialog = false">{{ $t('common.cancel') }}</v-btn>
           <v-spacer />
-          <v-btn color="#00D5BD" dark @click="executeSwap">
+          <v-btn color="var(--g-accent)" dark @click="executeSwap">
             {{ $t('thorchain.confirmSwap') }}
           </v-btn>
         </v-card-actions>
@@ -378,8 +378,8 @@ function executeSwap() {
 .page-icon-wrapper {
   width: 42px;
   height: 42px;
-  border-radius: 12px;
-  background: rgba(0, 213, 189, 0.1);
+  border-radius: var(--g-r-card);
+  background: color-mix(in srgb, var(--g-accent) 10%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -387,15 +387,7 @@ function executeSwap() {
 }
 
 .swap-card {
-  border-color: rgba(0, 213, 189, 0.2) !important;
-}
-
-.section-label {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  opacity: 0.6;
+  border-color: color-mix(in srgb, var(--g-accent) 20%, transparent) !important;
 }
 
 .asset-select {
@@ -406,7 +398,7 @@ function executeSwap() {
 .asset-icon {
   width: 22px;
   height: 22px;
-  border-radius: 6px;
+  border-radius: var(--g-r-chip);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -418,7 +410,7 @@ function executeSwap() {
 }
 
 .output-field :deep(input) {
-  color: rgba(var(--v-success-base), 1);
+  color: var(--g-success);
   font-weight: 600;
 }
 
@@ -432,23 +424,23 @@ function executeSwap() {
 }
 
 .swap-arrow-btn {
-  background: rgba(0, 213, 189, 0.1) !important;
-  border: 1px solid rgba(0, 213, 189, 0.3) !important;
+  background: color-mix(in srgb, var(--g-accent) 10%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--g-accent) 30%, transparent) !important;
   transition: background 0.2s ease, transform 0.2s ease !important;
 }
 
 .swap-arrow-btn:hover {
-  background: rgba(0, 213, 189, 0.2) !important;
+  background: color-mix(in srgb, var(--g-accent) 20%, transparent) !important;
   transform: rotate(180deg);
 }
 
 .quote-details {
-  background: rgba(0, 213, 189, 0.05);
-  border: 1px solid rgba(0, 213, 189, 0.15);
+  background: color-mix(in srgb, var(--g-accent) 5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--g-accent) 15%, transparent);
 }
 
 .quote-row {
-  border-bottom: 1px solid rgba(255,255,255,0.04);
+  border-bottom: 1px solid var(--g-hairline-1);
 }
 
 .quote-row:last-child {

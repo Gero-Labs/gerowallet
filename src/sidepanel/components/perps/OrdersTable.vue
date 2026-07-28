@@ -305,11 +305,11 @@ function twapStatusClass(status: TwapStatus): string {
 }
 
 .ot-title {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--g-text-3);
   display: flex;
   align-items: center;
   gap: 5px;
@@ -319,20 +319,20 @@ function twapStatusClass(status: TwapStatus): string {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: color-mix(in srgb, var(--chain-primary) 20%, transparent);
-  color: var(--chain-primary);
-  font-size: 9px;
+  background: color-mix(in srgb, var(--g-accent) 20%, transparent);
+  color: var(--g-accent);
+  font-size: 11px;
   font-weight: 800;
   min-width: 16px;
   height: 16px;
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
   padding: 0 4px;
 }
 
 .ot-cancel-all {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
-  color: #F97066;
+  color: var(--g-error);
   background: none;
   border: none;
   cursor: pointer;
@@ -354,8 +354,8 @@ function twapStatusClass(status: TwapStatus): string {
 
 .ot-skeleton-card {
   height: 96px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.05);
+  border-radius: var(--g-r-control);
+  background: var(--g-hairline-1);
   animation: skeleton-pulse 1.4s ease-in-out infinite;
 }
 
@@ -375,12 +375,12 @@ function twapStatusClass(status: TwapStatus): string {
 }
 
 .ot-empty-icon {
-  color: rgba(255, 255, 255, 0.15) !important;
+  color: var(--g-text-3) !important;
 }
 
 .ot-empty-text {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.28);
+  color: var(--g-text-3);
 }
 
 /* ── List ── */
@@ -392,9 +392,9 @@ function twapStatusClass(status: TwapStatus): string {
 
 /* ── Card ── */
 .ot-card {
-  background: rgba(255, 255, 255, 0.035);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 10px;
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   padding: 9px 11px;
   display: flex;
   flex-direction: column;
@@ -417,12 +417,12 @@ function twapStatusClass(status: TwapStatus): string {
 .ot-symbol {
   font-size: 12px;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--g-text-1);
   margin-left: 2px;
 }
 
 .ot-badge {
-  font-size: 8.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.05em;
   padding: 2px 5px;
@@ -431,40 +431,40 @@ function twapStatusClass(status: TwapStatus): string {
 }
 
 .type--market {
-  background: color-mix(in srgb, var(--chain-primary) 12%, transparent);
-  color: var(--chain-primary);
+  background: color-mix(in srgb, var(--g-accent) 12%, transparent);
+  color: var(--g-accent);
 }
 
 .type--limit {
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.6);
+  background: var(--g-hairline-1);
+  color: var(--g-text-2);
 }
 
 .type--stop {
-  background: rgba(255, 167, 38, 0.12);
-  color: #FFA726;
+  background: var(--g-warning-fill);
+  color: var(--g-warning);
 }
 
 .type--tp {
-  background: rgba(38, 250, 176, 0.1);
-  color: #26FAB0;
+  background: var(--g-success-fill);
+  color: var(--g-success);
 }
 
 .badge--buy {
-  background: rgba(38, 250, 176, 0.12);
-  color: #26FAB0;
+  background: var(--g-success-fill);
+  color: var(--g-success);
 }
 
 .badge--sell {
-  background: rgba(249, 112, 102, 0.12);
-  color: #F97066;
+  background: var(--g-error-fill);
+  color: var(--g-error);
 }
 
 .ot-cancel-btn {
   background: none;
   border: none;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--g-text-3);
   padding: 2px;
   border-radius: 4px;
   display: flex;
@@ -473,8 +473,8 @@ function twapStatusClass(status: TwapStatus): string {
 }
 
 .ot-cancel-btn:hover {
-  color: #F97066;
-  background: rgba(249, 112, 102, 0.1);
+  color: var(--g-error);
+  background: var(--g-error-fill);
 }
 
 /* ── Fields row ── */
@@ -498,31 +498,31 @@ function twapStatusClass(status: TwapStatus): string {
 }
 
 .ot-field-label {
-  font-size: 8.5px;
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: rgba(255, 255, 255, 0.25);
+  color: var(--g-text-3);
 }
 
 .ot-field-value {
   font-size: 11px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--g-text-2);
   font-variant-numeric: tabular-nums;
 }
 
 /* ── Fill progress ── */
 .ot-fill-track {
   height: 2px;
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--g-hairline-1);
   border-radius: 1px;
   overflow: hidden;
 }
 
 .ot-fill-bar {
   height: 100%;
-  background: var(--chain-primary);
+  background: var(--g-accent);
   border-radius: 1px;
   transition: width 0.3s ease;
 }
@@ -534,7 +534,7 @@ function twapStatusClass(status: TwapStatus): string {
 }
 
 .ot-status-chip {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
   padding: 2px 7px;
@@ -543,30 +543,30 @@ function twapStatusClass(status: TwapStatus): string {
 }
 
 .status--open {
-  background: color-mix(in srgb, var(--chain-primary) 12%, transparent);
-  color: var(--chain-primary);
+  background: color-mix(in srgb, var(--g-accent) 12%, transparent);
+  color: var(--g-accent);
 }
 
 .status--pending {
-  background: rgba(255, 167, 38, 0.12);
-  color: #FFA726;
+  background: var(--g-warning-fill);
+  color: var(--g-warning);
 }
 
 .status--filled {
-  background: rgba(38, 250, 176, 0.12);
-  color: #26FAB0;
+  background: var(--g-success-fill);
+  color: var(--g-success);
 }
 
 .status--canceled {
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.35);
+  background: var(--g-hairline-1);
+  color: var(--g-text-3);
 }
 
 /* ── TWAP section ── */
 .ot-twap-section {
   margin-top: 14px;
   padding-top: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--g-hairline-1);
   display: flex;
   flex-direction: column;
   gap: 8px;

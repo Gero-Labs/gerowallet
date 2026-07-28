@@ -59,6 +59,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import marketApi, { type SwapHistory } from '@/api/market-api';
 import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
+import { summarizeBuySell } from '@/modules/market/utils/tradeSide';
 
 const { currencySymbol } = useNativeCurrency();
 
@@ -87,16 +88,13 @@ async function loadTrades() {
   }
 }
 
-// API returns BUY/SELL from ADA perspective — invert for token perspective
-// API SELL = sold ADA = bought the token → token BUY
-// API BUY = bought ADA = sold the token → token SELL
-const buyTrades = computed(() => allTrades.value.filter(t => t.type === 'SELL'));
-const sellTrades = computed(() => allTrades.value.filter(t => t.type === 'BUY'));
-
-const buyVolume = computed(() => buyTrades.value.reduce((sum, t) => sum + t.volumeAda, 0));
-const sellVolume = computed(() => sellTrades.value.reduce((sum, t) => sum + t.volumeAda, 0));
-const buyCount = computed(() => buyTrades.value.length);
-const sellCount = computed(() => sellTrades.value.length);
+// Backend `type` is token-perspective (BUY = user bought the token); render as-is.
+// Aggregation + the "do not invert" rationale live in tradeSide.ts.
+const summary = computed(() => summarizeBuySell(allTrades.value));
+const buyVolume = computed(() => summary.value.buyVolume);
+const sellVolume = computed(() => summary.value.sellVolume);
+const buyCount = computed(() => summary.value.buyCount);
+const sellCount = computed(() => summary.value.sellCount);
 const totalVolume = computed(() => buyVolume.value + sellVolume.value);
 
 const buyPercent = computed(() => totalVolume.value > 0 ? (buyVolume.value / totalVolume.value) * 100 : 50);
@@ -125,8 +123,8 @@ onBeforeUnmount(() => stopRefresh());
 
 <style scoped>
 .buy-sell-volume {
-  border: 1px solid rgba(255,255,255,0.06);
-  border-radius: 8px;
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   padding: 12px;
 }
 
@@ -138,15 +136,15 @@ onBeforeUnmount(() => stopRefresh());
   height: 8px;
   border-radius: 4px;
   overflow: hidden;
-  background: rgba(255,255,255,0.04);
+  background: var(--g-hairline-1);
 }
 .buy-bar {
-  background: linear-gradient(90deg, #26FAB0, #47CD89);
+  background: var(--g-success);
   transition: width 0.4s ease;
   min-width: 2px;
 }
 .sell-bar {
-  background: linear-gradient(90deg, #F97066, #FF5252);
+  background: var(--g-error);
   transition: width 0.4s ease;
   min-width: 2px;
 }
@@ -155,12 +153,12 @@ onBeforeUnmount(() => stopRefresh());
   display: flex;
   justify-content: space-between;
   margin-top: 4px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
-  font-family: 'Roboto Mono', monospace;
+  font-family: var(--g-font-mono);
 }
-.buy-label { color: #47CD89; }
-.sell-label { color: #F97066; }
+.buy-label { color: var(--g-success); }
+.sell-label { color: var(--g-error); }
 
 /* Volume stats */
 .volume-stats {
@@ -180,21 +178,21 @@ onBeforeUnmount(() => stopRefresh());
   border-radius: 50%;
   flex-shrink: 0;
 }
-.buy-dot { background: #47CD89; }
-.sell-dot { background: #F97066; }
+.buy-dot { background: var(--g-success); }
+.sell-dot { background: var(--g-error); }
 .stat-label {
-  color: rgba(255,255,255,0.5);
-  font-size: 10px;
+  color: var(--g-text-3);
+  font-size: 11px;
   text-transform: uppercase;
 }
 .stat-value {
-  color: rgba(255,255,255,0.9);
-  font-family: 'Roboto Mono', monospace;
+  color: var(--g-text-1);
+  font-family: var(--g-font-mono);
   font-weight: 500;
 }
 .stat-count {
-  color: rgba(255,255,255,0.3);
-  font-size: 10px;
+  color: var(--g-text-3);
+  font-size: 11px;
 }
 
 </style>

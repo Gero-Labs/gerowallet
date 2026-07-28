@@ -103,7 +103,7 @@ const emit = defineEmits(['primary-action', 'secondary-action']);
 const primaryColor = computed(() => {
   const isApex = loggedWallet.value?.chain === Blockchain.APEX_PRIME || 
                  loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
-  return isApex ? '#dc753e' : '#00c7f3';
+  return isApex ? '#dc753e' : 'var(--g-accent)';
 });
 </script>
 
@@ -116,7 +116,7 @@ const primaryColor = computed(() => {
 /* Simple transparent card - minimal overrides */
 .empty-state-mini.simple-transparent-card {
   background-color: rgba(0, 0, 0, 0.6) !important;
-  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  border: 1px solid var(--g-hairline-3) !important;
 }
 
 /* Disable any pseudo-elements that might cause visual effects */
@@ -128,17 +128,17 @@ const primaryColor = computed(() => {
 /* Clickable card styles */
 .empty-state-mini.clickable-card {
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: transform var(--g-dur-slow) ease, box-shadow var(--g-dur-slow) ease;
 }
 
 .empty-state-mini.clickable-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--g-shadow-menu);
 }
 
 .empty-state-icon {
   opacity: 0.8;
-  transition: all 0.3s ease;
+  transition: opacity var(--g-dur-slow) ease, transform var(--g-dur-slow) ease;
 }
 
 .empty-state-mini:hover .empty-state-icon {
@@ -149,48 +149,22 @@ const primaryColor = computed(() => {
 .empty-state-title {
   font-size: 1.25rem !important;
   font-weight: 600 !important;
-  color: white !important;
+  color: var(--g-text-1) !important;
 }
 
 .empty-state-description {
   font-size: 0.875rem !important;
-  color: rgba(255, 255, 255, 0.8) !important;
+  color: var(--g-text-2) !important;
   max-width: 300px;
   line-height: 1.5 !important;
 }
 
 .secondary-action-btn {
-  color: rgba(255, 255, 255, 0.7) !important;
+  color: var(--g-text-2) !important;
   text-transform: none !important;
 }
 
 .secondary-action-btn:hover {
-  color: rgba(255, 255, 255, 0.9) !important;
-}
-
-/* Add subtle animation */
-.empty-state-mini::before {
-  content: '';
-  position: absolute;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  background: radial-gradient(
-    circle,
-    rgba(255, 255, 255, 0.05) 0%,
-    transparent 70%
-  );
-  animation: rotate-gradient 20s linear infinite;
-  pointer-events: none;
-}
-
-@keyframes rotate-gradient {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
+  color: var(--g-text-1) !important;
 }
 </style>

@@ -13,6 +13,7 @@
     :header-props="{ 'sort-icon': 'mdi-menu-up' }"
     :loading="loading"
     :item-class="rowClass"
+    :expanded="dustExpanded"
     @click:row="handleRowClick"
   >
     <!-- Pagination -->
@@ -28,6 +29,15 @@
           ></v-pagination>
         </td>
       </tr>
+    </template>
+
+    <!-- DUST generation strip: rendered directly beneath the NIGHT (cNIGHT)
+         holdings row. Half-height, distinct gold band with the dust-battery
+         particle animation; X dismisses it (persisted). -->
+    <template v-slot:expanded-item>
+      <td :colspan="activeHeaders.length" class="dust-line-cell">
+        <DustGenerationLine variant="row" @setup="$emit('dust-setup')" @dismiss="dismissDustLine" />
+      </td>
     </template>
 
     <!-- No data -->
@@ -55,14 +65,14 @@
           <v-icon
             v-if="item.isSnekFun"
             class="snek-badge"
-            style="position: absolute; right: -4px; bottom: -4px; font-size: 14px; color: #A3E635; background: #0d0d11; border-radius: 50%;"
+            style="position: absolute; right: -4px; bottom: -4px; font-size: 14px; color: #A3E635; background: var(--g-surface); border-radius: 50%;"
             title="snek.fun"
           >mdi-snake</v-icon>
           <v-icon
             v-else-if="item.verified"
-            color="primary"
+            color="var(--g-accent)"
             class="verified-check"
-            style="position: absolute; right: -3px; bottom: -3px; font-size: 13px; background: #0d0d11; border-radius: 50%;"
+            style="position: absolute; right: -3px; bottom: -3px; font-size: 13px; background: var(--g-surface); border-radius: 50%;"
           >mdi-check-decagram</v-icon>
         </div>
         <v-tooltip top :open-delay="300" content-class="custom-tooltip">
@@ -76,7 +86,7 @@
           x-small label
           color="primary"
           class="ml-1 flex-shrink-0"
-          style="height: 16px; font-size: 9px; padding: 0 4px;"
+          style="height: 16px; font-size: 11px; padding: 0 4px;"
         >
           {{ $t('market.owned') }}
         </v-chip>
@@ -249,8 +259,8 @@
         class="allocation-bar"
         height="14"
         :value="totalAllocation > 0 ? (item.allocation / totalAllocation) * 100 : 0"
-        color="primary"
-        background-color="rgba(255,255,255,0.06)"
+        color="var(--g-accent)"
+        background-color="var(--g-hairline-1)"
         rounded
       >
         <template v-slot:default="{ value }">
@@ -386,7 +396,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import assets from '@/utils/assets';
 import { useWatchlist } from '@/modules/market/composables/useWatchlist';
 import { useColumnPreferences } from '@/modules/market/composables/useColumnPreferences';
@@ -397,6 +407,8 @@ import { walletStore } from '@/stores/walletStore';
 import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
 import { Blockchain } from '@/models/types';
 import networks from '@/utils/networks';
+import DustGenerationLine from '@/modules/dashboard/components/DustGenerationLine.vue';
+import { CNIGHT_ASSETS, isDustLineDismissed, dismissDustLineFor } from '@/shared/composables/useCnightDustRegistration';
 
 const chainLogo = computed(() =>
   networks.resolveCurrencyImage(walletStore.loggedWallet?.chain, walletStore.loggedWallet?.network) || ''
@@ -430,7 +442,41 @@ const ownedUnits = computed(() => {
 
 const emit = defineEmits<{
   (e: 'token-click', token: MarketToken): void;
+  (e: 'dust-setup'): void;
 }>();
+
+// ── DUST generation line under the NIGHT (cNIGHT) holdings row ──────────────
+// Only in the holdings view on a Cardano wallet, only for the NIGHT token, and
+// only until the user dismisses it — dismissal is PER WALLET (stake address), so
+// hiding it on one wallet doesn't suppress it on another that also holds NIGHT.
+// localStorage isn't reactive, so re-read on mount and whenever the wallet changes.
+const dustLineDismissed = ref(false);
+function refreshDustDismissed() {
+  dustLineDismissed.value = isDustLineDismissed(walletStore.loggedWallet?.stakeAddress);
+}
+onMounted(refreshDustDismissed);
+watch(() => walletStore.loggedWallet?.stakeAddress, refreshDustDismissed);
+
+const cnightUnit = computed(() => {
+  const asset = CNIGHT_ASSETS[walletStore.loggedWallet?.network ?? ''];
+  return asset ? asset.policyId + asset.assetNameHex : '';
+});
+
+/** The NIGHT row currently in the table (holdings + Cardano only). Dismissal
+ *  hides the strip entirely; the registration status still surfaces in the
+ *  token drawer + DUST battery widgets, which aren't dismissable. */
+const dustExpanded = computed<MarketToken[]>(() => {
+  if (!props.showHoldingsColumns || dustLineDismissed.value) return [];
+  if (walletStore.loggedWallet?.chain !== Blockchain.CARDANO) return [];
+  if (!cnightUnit.value) return [];
+  const night = paginatedTokens.value.find((tk) => tk.unit === cnightUnit.value);
+  return night ? [night] : [];
+});
+
+function dismissDustLine() {
+  dustLineDismissed.value = true;
+  dismissDustLineFor(walletStore.loggedWallet?.stakeAddress);
+}
 
 const { t } = useTranslation();
 const { isWatched, toggleWatchlist } = useWatchlist();
@@ -623,12 +669,17 @@ function formatPnl(value: number, decimals = 2): string {
 }
 
 function pnlColor(pnl: number): string {
-  if (pnl === 0) return '#A3A3A3';
-  return pnl > 0 ? '#47CD89' : '#F97066';
+  if (pnl === 0) return 'var(--g-text-3)';
+  return pnl > 0 ? 'var(--g-success)' : 'var(--g-error)';
 }
 
 function rowClass(item: MarketToken): string {
-  return item.isNative ? 'native-token-row' : '';
+  const classes: string[] = [];
+  if (item.isNative) classes.push('native-token-row');
+  // The NIGHT row that has the DUST strip expanded beneath it drops its bottom
+  // divider so the two read as one row.
+  if (dustExpanded.value.some((t) => t.unit === item.unit)) classes.push('night-dust-attached');
+  return classes.join(' ');
 }
 
 // Pin native token (ADA) to the top regardless of sort column
@@ -669,7 +720,37 @@ function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: bool
 }
 
 .market-token-table >>> tbody tr:hover {
-  background: rgba(255, 255, 255, 0.03) !important;
+  background: var(--g-hairline-1) !important;
+}
+
+/* DUST line cell: Vuetify's dense rule pins td height to 32px, which vertically
+   centers the shorter strip and leaves dark gaps above/below the gold band.
+   Table cells treat `height` as a MINIMUM, so `auto` won't shrink it — pin the
+   cell to the strip's exact height and zero the padding. Forced because the
+   dense selector (.v-data-table--dense>...>td) is deep; specificity alone is
+   fragile here. The strip then fills 100% of the cell, so the gold is flush. */
+.market-token-table >>> td.dust-line-cell {
+  padding: 0 !important;
+  height: 24px !important;
+  border-bottom: none !important;
+}
+/* Merge the NIGHT row with the DUST strip below it: drop the Vuetify row
+   divider on the NIGHT row (tagged via rowClass) so the two read as one row.
+   The override flag is required to beat Vuetify's tr:not(:last-child) td rule. */
+.market-token-table >>> tr.night-dust-attached > td {
+  border-bottom: none !important;
+}
+/* Vuetify boxes the expanded row with an inset top+bottom shadow
+   (.v-data-table>.v-data-table__wrapper tbody tr.v-data-table__expanded__content,
+   specificity 0,3,2) — that shadow is what made the DUST strip read as its own
+   boxed row. Match Vuetify's depth (.v-data-table__wrapper tbody, 0,4,2) to
+   remove it without an override flag. */
+.market-token-table >>> .v-data-table__wrapper tbody tr.v-data-table__expanded__content {
+  box-shadow: none;
+  cursor: default;
+}
+.market-token-table >>> .v-data-table__wrapper tbody tr.v-data-table__expanded__content:hover {
+  background: transparent;
 }
 
 .market-token-table >>> th {
@@ -686,7 +767,7 @@ function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: bool
 }
 
 .market-token-table >>> tbody tr td {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
+  border-bottom: 1px solid var(--g-hairline-1) !important;
 }
 
 /* Name cell — single-line, compact */
@@ -715,11 +796,11 @@ function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: bool
   pointer-events: none;
 }
 @keyframes market-flash-up {
-  0% { background-color: rgba(38, 194, 129, 0.16); }
+  0% { background-color: var(--g-success-fill); }
   100% { background-color: transparent; }
 }
 @keyframes market-flash-down {
-  0% { background-color: rgba(246, 70, 93, 0.16); }
+  0% { background-color: var(--g-error-fill); }
   100% { background-color: transparent; }
 }
 .market-flash-up { animation: market-flash-up 0.9s ease; }
@@ -734,15 +815,15 @@ function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: bool
 
 /* Allocation progress bar */
 .allocation-bar {
-  border-radius: 10px;
+  border-radius: var(--g-r-control);
   min-width: 60px;
   max-width: 100px;
 }
 
 .allocation-label {
-  font-size: 8px;
-  color: white;
-  font-family: 'Roboto Mono', monospace;
+  font-size: 11px;
+  color: var(--g-text-1);
+  font-family: var(--g-font-mono);
 }
 
 /* Hide columns responsively via class */
@@ -773,7 +854,7 @@ function customSort(items: MarketToken[], sortByArr: string[], sortDescArr: bool
   display: inline-block;
   width: 50px;
   height: 12px;
-  border-radius: 3px;
+  border-radius: 4px;
   background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 75%);
   background-size: 200% 100%;
   animation: pnlShimmer 1.5s infinite;

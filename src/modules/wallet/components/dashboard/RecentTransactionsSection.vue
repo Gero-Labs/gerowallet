@@ -532,7 +532,7 @@ const handlePageChange = (page: number) => {
       min-width: 40px;
       height: 40px;
       border-radius: 50%;
-      transition: all 0.2s ease;
+      transition: color var(--g-dur-base) ease, background-color var(--g-dur-base) ease, opacity var(--g-dur-base) ease;
 
       &:hover {
         background: lighten($background-card, 2%);

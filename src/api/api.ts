@@ -136,6 +136,17 @@ export class Api {
   }
 
   async submitTx(body: string): Promise<any> {
+    // Preview submits via Nexus → ogmios (self-hosted node). The legacy backend has no
+    // cardano-preview provider block, so its Blockfrost path times out. Mainnet/preprod
+    // keep the existing Blockfrost-backed legacy path (already working).
+    if (this.network === 'PREVIEW') {
+      const { data } = await axios.post(
+        `${import.meta.env['VITE_NEXUS_URL']}/api/transactions/submit?network=cardano-preview`,
+        body,
+        { headers: { 'Content-Type': 'text/plain' } }
+      );
+      return data;
+    }
     const { data } = await this.axiosInstance.post(
       `/api/transactions/submit-tx?chain=${this.chain}&network=${this.network}&provider=BLOCKFROST`,
       body
@@ -257,6 +268,84 @@ export class Api {
           throw parseHttpError(error);
         }
       },
+    },
+  };
+
+  mpc = {
+    /** Store the login share after backend verifies the Google idToken (Plan B /enroll). */
+    enroll: async (idToken: string, chain: string, network: string, loginShare: string): Promise<{ stored: boolean }> => {
+      try {
+        const { data, status } = await this.axiosInstance.post('/api/mpc/enroll',
+          { idToken, chain, network, loginShare });
+        if (status === 200) return data as { stored: boolean };
+        throw parseHttpError(data);
+      } catch (error) {
+        throw parseHttpError(error);
+      }
+    },
+    /** Retrieve the login share; backend verifies the Google idToken (Plan B /login-share). */
+    getLoginShare: async (idToken: string, chain: string, network: string): Promise<string> => {
+      try {
+        const { data, status } = await this.axiosInstance.post('/api/mpc/login-share',
+          { idToken, chain, network });
+        if (status === 200) return (data as { loginShare: string }).loginShare;
+        throw parseHttpError(data);
+      } catch (error) {
+        throw parseHttpError(error);
+      }
+    },
+    /** Store the client-encrypted recovery blob (+ xpub anchor) after backend verifies the idToken. */
+    storeRecovery: async (
+      idToken: string, chain: string, network: string, encryptedRecovery: string, publicKey: string,
+    ): Promise<{ stored: boolean }> => {
+      try {
+        const { data, status } = await this.axiosInstance.post('/api/mpc/recovery/store',
+          { idToken, chain, network, encryptedRecovery, publicKey });
+        if (status === 200) return data as { stored: boolean };
+        throw parseHttpError(data);
+      } catch (error) {
+        throw parseHttpError(error);
+      }
+    },
+    /** Fetch the client-encrypted recovery blob + xpub anchor; backend verifies the idToken. */
+    fetchRecovery: async (
+      idToken: string, chain: string, network: string,
+    ): Promise<{ encryptedRecovery: string; publicKey: string }> => {
+      try {
+        const { data, status } = await this.axiosInstance.post('/api/mpc/recovery/fetch',
+          { idToken, chain, network });
+        if (status === 200) return data as { encryptedRecovery: string; publicKey: string };
+        throw parseHttpError(data);
+      } catch (error) {
+        throw parseHttpError(error);
+      }
+    },
+    /** Replace the login share (reset/re-split path); backend verifies the idToken. */
+    rotate: async (
+      idToken: string, chain: string, network: string, loginShare: string,
+    ): Promise<{ rotated: boolean }> => {
+      try {
+        const { data, status } = await this.axiosInstance.post('/api/mpc/rotate',
+          { idToken, chain, network, loginShare });
+        if (status === 200) return data as { rotated: boolean };
+        throw parseHttpError(data);
+      } catch (error) {
+        throw parseHttpError(error);
+      }
+    },
+    /** Delete this Google account's login + recovery shares (onboarding "already
+     *  enrolled" reset path); backend verifies the idToken. */
+    deregister: async (
+      idToken: string, chain: string, network: string,
+    ): Promise<{ deregistered: boolean }> => {
+      try {
+        const { data, status } = await this.axiosInstance.post('/api/mpc/deregister',
+          { idToken, chain, network });
+        if (status === 200) return data as { deregistered: boolean };
+        throw parseHttpError(data);
+      } catch (error) {
+        throw parseHttpError(error);
+      }
     },
   };
 }

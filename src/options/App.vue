@@ -31,7 +31,7 @@
         :timeout="snackbarPlugin.timeout"
         :color="snackbarPlugin.color"
         bottom
-        style="font-family: 'Inter', 'Quicksand','Geologica','Noto Sans Hebrew', 'Open Sans', sans-serif;"
+        style="font-family: var(--g-font-ui);"
         transition="scroll-y-transition"
     >
       {{ snackbarPlugin.text }}
@@ -49,6 +49,12 @@ import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import AgentDock from '@/sidepanel/components/AgentDock.vue';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
+import { useChainAccent } from '@/shared/composables/useChainAccent';
+
+// Bootstrap the single chain-accent writer at the dashboard root. It lives here
+// rather than in ContentLayout because ContentLayout unmounts on the welcome
+// route, which would strand the module-level latch as a permanent no-op.
+useChainAccent();
 
 const { loading, isRestoring, text, progress } = toRefs(loadingState);
 const geroConfig = toRefs(geroStore).config;
@@ -124,7 +130,7 @@ watch(() => geroConfig.value?.locale, async (newLocale, oldLocale) => {
   background-color: var(--v-cardBackground-base) !important;
 }
 .v-dialog__content--active {
-  -webkit-backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
 }
 .v-carousel__controls {
@@ -212,15 +218,6 @@ watch(() => geroConfig.value?.locale, async (newLocale, oldLocale) => {
 
 .v-select.v-text-field input {
   cursor: pointer!important;
-}
-
-.glow-bar {
-  animation: glow-pulse 3s ease-in-out infinite;
-}
-
-@keyframes glow-pulse {
-  0%, 100% { filter: drop-shadow(0 0 4px rgba(22, 217, 243, 0.3)) drop-shadow(0 0 8px rgba(22, 217, 243, 0.15)); }
-  50% { filter: drop-shadow(0 0 8px rgba(22, 217, 243, 0.6)) drop-shadow(0 0 16px rgba(22, 217, 243, 0.35)); }
 }
 
 .glow-bar,

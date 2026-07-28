@@ -1,4 +1,5 @@
 import VueRouter, { NavigationGuardNext, Route, RouteRecord } from 'vue-router';
+import { Blockchain } from '@/models/types';
 
 // Critical layouts loaded immediately
 import BlankLayout from '@/modules/navigation/layouts/BlankLayout.vue';
@@ -23,9 +24,11 @@ const Governance = () => import('@/modules/governance/Governance.vue');
 const WarningPopUp = () => import('@/popup/modules/views/WarningPopUp.vue');
 const Transactions = () => import('@/modules/transactions/Transactions.vue');
 const Blog = () => import('@/modules/blog/Blog.vue');
+const BlogPost = () => import('@/modules/blog/BlogPost.vue');
 // const MultiSig = () => import('@/modules/multisig/views/MultiSig.vue'); // Disabled - under maintenance
 const Card = () => import('@/modules/wallet/GeroCard.vue');
 const PassKeyAuth = () => import('@/modules/authentication/views/PassKeyAuth.vue');
+const LedgerBleSign = () => import('@/modules/authentication/views/LedgerBleSign.vue');
 const GoMining = () => import('@/modules/gomining/GoMining.vue');
 const BabylonStaking = () => import('@/modules/babylon/BabylonStaking.vue');
 const Ordinals = () => import('@/modules/ordinals/Ordinals.vue');
@@ -36,6 +39,8 @@ const BitcoinSignPsbt = () => import('@/popup/modules/views/BitcoinSignPsbt.vue'
 const BitcoinSignMessage = () => import('@/popup/modules/views/BitcoinSignMessage.vue');
 const WCSessionProposal = () => import('@/popup/modules/views/WCSessionProposal.vue');
 const PoolOperator = () => import('@/modules/pool-operator/PoolOperator.vue');
+const NexusPage = () => import('@/modules/nexus/NexusPage.vue');
+const ProofServerPage = () => import('@/modules/midnight/ProofServerPage.vue');
 
 import WalletStore from '@/stores/walletStore';
 import featureFlagsStore from '@/stores/featureFlagsStore';
@@ -82,6 +87,15 @@ const routes = [
     },
   },
   {
+    path: '/nexus',
+    name: 'nexus',
+    component: NexusPage,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
     path: '/cashback',
     name: 'cashback',
     component: Cashback,
@@ -109,6 +123,15 @@ const routes = [
     },
   },
   {
+    path: '/proof-server',
+    name: 'proofServer',
+    component: ProofServerPage,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
     path: '/media-player',
     name: 'mediaPlayer',
     component: MediaPlayer,
@@ -121,6 +144,16 @@ const routes = [
     path: '/blog',
     name: 'blog',
     component: Blog,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/blog/:slug',
+    name: 'blog-post',
+    component: BlogPost,
+    props: true,
     meta: {
       layout: ContentLayout,
       requiresAuth: true,
@@ -246,6 +279,18 @@ const routes = [
     },
   },
   {
+    // Popup window that runs the Web Bluetooth chooser for Ledger signing —
+    // Chrome will not present that chooser inside a side panel. Opened by
+    // DAppOverlay.signLedger; see LedgerBleSign.vue for the message protocol.
+    path: '/ledger-ble-sign',
+    name: 'ledger-ble-sign',
+    component: LedgerBleSign,
+    meta: {
+      layout: BlankLayout,
+      requiresAuth: true,
+    },
+  },
+  {
     path: '/gomining',
     name: 'gomining',
     component: GoMining,
@@ -363,24 +408,44 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
     return next();
   }
 
-  if (needsAuth && !isLoggedIn) {
-    // not logged in → send to /welcome (with optional redirect)
+  if (needsAuth && !isLoggedIn && to.name !== 'passkey-auth') {
+    // not logged in → send to /welcome (with optional redirect).
+    // EXCEPT the passkey-auth popup: in a pre-switch/first-login unlock it resolves
+    // its target wallet from the `walletId` query param, so it can run before any
+    // wallet is the active/logged-in one.
     let redirectTo = '/welcome';
     if (to.path !== '/') {
       redirectTo += `?redirect=${encodeURIComponent(to.fullPath)}`;
     }
     return next({ path: redirectTo });
   }
-  if (isWelcome && isLoggedIn && !isLocked && !isSyncing) {
+  // ?addWallet=1 is the escape hatch for "Enter Setup" (WalletSelector.vue):
+  // adding a wallet from an already-logged-in session used to force a global
+  // logout first purely to get past this guard, which killed the caller's
+  // active session (and every other open tab's) as collateral damage. This
+  // lets the new tab reach /welcome without touching anyone else's state.
+  if (isWelcome && isLoggedIn && !isLocked && !isSyncing && to.query['addWallet'] !== '1') {
     // already logged in, NOT locked, NOT syncing → don't show welcome again
     return next({ path: '/' });
   }
-  if (needsAuth && isSyncing) {
-    // Syncing wallet — stay on welcome until done
+  if (needsAuth && isSyncing && to.name !== 'ledger-ble-sign') {
+    // Syncing wallet — stay on welcome until done.
+    // EXCEPT the ledger-ble-sign popup: its transaction is already built and
+    // handed over by the opener, so a background sync is irrelevant to it, and
+    // bouncing the route would leave the side panel waiting on a result that
+    // can never arrive.
     return next({ path: '/welcome' });
   }
-  if (needsAuth && isLocked) {
-    // wallet is locked → send to /welcome to unlock
+  if (needsAuth && isLocked && to.name !== 'passkey-auth' && to.name !== 'ledger-ble-sign') {
+    // wallet is locked → send to /welcome to unlock.
+    // EXCEPT the passkey-auth popup: it IS the unlock ceremony (runs WebAuthn in a
+    // popup window because the side panel can't), so it must render while locked.
+    // It still requires a logged-in wallet via the `needsAuth && !isLoggedIn` check above.
+    // EXCEPT ledger-ble-sign for a different reason: the wallet can auto-lock in the
+    // moment between the side panel opening that window and the window resolving its
+    // route. Redirecting is an in-app next(), so the window stays open showing
+    // /welcome — nothing closes it, so tabs.onRemoved never fires, and the side panel
+    // waits out its whole timeout for a result that can never come.
     let redirectTo = '/welcome';
     if (to.path !== '/') {
       redirectTo += `?redirect=${encodeURIComponent(to.fullPath)}`;
@@ -409,14 +474,18 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
       thorchain: (c, n) => networks.resolveThorchainSupport(c, n),
       mempool: (c, n) => networks.resolveMempoolSupport(c, n),
       lightning: (c, n) => networks.resolveLightningSupport(c, n),
-      // Pool Operator — hard-gated off for 2.7. Unconditional guard closes the
-      // cold-refresh window before feature flags initialize (maintenance check
-      // at the bottom only fires once flags are initialized).
-      poolOperator: () => false,
+      // Pool Operator — gated by staking support + the isPoolOperatorEnabled flag,
+      // matching the NavigationDrawer item's own `enabled` condition. Returns the
+      // live values (not a hard false) so gero-sync can turn it on without a release;
+      // falsy => redirect to '/'. (Same pattern as copilotFeed below.)
+      poolOperator: (c, n) => networks.resolveStakingSupport(c, n) && featureFlagsStore.isPoolOperatorEnabled(),
       // Copilot feed — closes the cold-refresh window before flags init. Returns
       // the live flag (not a hard false) so the maintenance case can turn it ON
       // once gero-sync enables it. Falsy => redirect to '/'.
       copilotFeed: () => featureFlagsStore.isCopilotEnabled(),
+      // Proof server settings only apply to Midnight wallets (shielded-proving
+      // config). Direct-URL visits from a non-Midnight wallet redirect home.
+      proofServer: (c) => c === Blockchain.MIDNIGHT,
     };
     const guard = routeNetworkGuards[to.name];
     if (guard && !guard(chain, network)) {

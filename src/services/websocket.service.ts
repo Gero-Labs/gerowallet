@@ -1,6 +1,7 @@
 import { debugLog } from '@/utils/debug';
 import LoadingState from '@/stores/loading';
 import FIFOCache from 'tiny-fifo-cache';
+import { midnightStore } from '@/stores/midnightStore';
 
 interface WsSyncBlock {
   hash: string;
@@ -66,6 +67,15 @@ class WebSocketService {
   private chain: string | null = null;
   private network: string | null = null;
   private lastSyncedBlock: number = 0;
+  private midnightLastTxId: number | null = null;
+  /**
+   * Midnight shielded-only: hex-encoded Zswap viewing key. Sent on every
+   * SUBSCRIBE so gero-sync can open the indexer's shielded-tx subscription
+   * on this wallet's behalf. NEVER LOGGED — only "set"/"unset" via a derived
+   * boolean. See {@link openConnection} log line.
+   */
+  private midnightShieldedViewingKey: string | null = null;
+  private midnightShieldedLastIndex: number | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private syncCheckTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectAttempt: number = 0;
@@ -96,7 +106,43 @@ class WebSocketService {
     // BTC subscription identity: the derived watched address set. Cardano leaves
     // this unset and keeps sending `credentials`. Only the BITCOIN branch of the
     // SUBSCRIBE payload reads it (CONTRACT-btc-wire.md).
-    addresses?: string[]
+    addresses?: string[],
+    /**
+     * Midnight-only resume cursor — wallet's highest applied indexer txId.
+     * gero-sync seeds its per-address `lastTxIds` from this so the
+     * subscription opens at (cursor+1). Null = no persisted state → full
+     * history replay. Reconnects re-use the latest value so we don't
+     * re-pay replay cost on every dropped WS.
+     */
+    midnightLastTxId?: number | null,
+    /**
+     * Midnight shielded-only: opt-in to gero-sync's shielded-tx subscription
+     * by supplying the wallet's Zswap viewing key (hex). When non-null,
+     * gero-sync opens an indexer session via `mutation connect(viewingKey)`
+     * and forwards shielded events to this WS. Null = unshielded-only sync
+     * (current default until the shielded SDK derivation lands).
+     *
+     * Held in-memory here for the WS session, but sourced from the wallet
+     * record's `publicKey` JSON (walletManager.initializeWallet), which stores
+     * it in PLAINTEXT at rest — currently in several extension-local on-disk
+     * copies (the IndexedDB wallet record, plus the chrome.storage.local
+     * geroStore/walletStore snapshots). All of those share one trust domain
+     * (anyone who can read the extension's on-disk profile can read any of
+     * them), so the real hardening is getting the key OFF plaintext disk
+     * entirely — encrypted-at-rest or memory-only chrome.storage.session,
+     * populated at credentialed unlock — NOT shuffling plaintext copies
+     * around. Tracked as Phase 2 (needs a UX decision: shielded sync is
+     * unavailable after a browser restart until first unlock). Blast radius:
+     * anyone who reads this string can decrypt every incoming shielded note
+     * for this wallet, forever (cannot spend).
+     */
+    midnightShieldedViewingKey?: string | null,
+    /**
+     * Midnight shielded-only: resume cursor for the shielded-tx subscription
+     * (mirrors {@code midnightLastTxId} for the shielded side). Null =
+     * full replay from genesis.
+     */
+    midnightShieldedLastIndex?: number | null,
   ): void {
     this.close();
     this.chain = chain;
@@ -106,6 +152,9 @@ class WebSocketService {
     this.handlers = handlers;
     this.credentials = credentials || null;
     this.addresses = addresses || null;
+    this.midnightLastTxId = midnightLastTxId ?? null;
+    this.midnightShieldedViewingKey = midnightShieldedViewingKey ?? null;
+    this.midnightShieldedLastIndex = midnightShieldedLastIndex ?? null;
     this.intentionallyClosed = false;
     this.reconnectAttempt = 0;
     this.openConnection();
@@ -133,7 +182,20 @@ class WebSocketService {
       LoadingState.setText('');
       this.reconnectAttempt = 0;
 
-      debugLog(`📤 SUBSCRIBE: chain=${this.chain} network=${this.network} address=${this.stakeAddress} lastSyncedBlock=${this.lastSyncedBlock}`);
+      // Re-read the Midnight resume cursor at every connect attempt. The
+      // wallet's `applyUtxoDeltas` may have advanced `lastMidnightTxId` since
+      // the last SUBSCRIBE (auto-reconnect after a transient WS drop, network
+      // hiccup, BG SW wake-up). Stale cursor = needless replay on every drop.
+      let liveMidnightCursor: number | null = this.midnightLastTxId;
+      if (this.chain === 'MIDNIGHT') {
+        const live = (midnightStore as { lastMidnightTxId?: number | null }).lastMidnightTxId;
+        if (typeof live === 'number' && live >= 0) liveMidnightCursor = live;
+      }
+      // Privacy: log only that a shielded viewing key is in play, never the
+      // value itself. The hex bytes de-anonymize the user's incoming notes.
+      const shieldedRequested = this.midnightShieldedViewingKey != null
+        && this.midnightShieldedViewingKey.length > 0;
+      debugLog(`📤 SUBSCRIBE: chain=${this.chain} network=${this.network} address=${this.stakeAddress} lastSyncedBlock=${this.lastSyncedBlock} midnightLastTxId=${liveMidnightCursor} shieldedRequested=${shieldedRequested} midnightShieldedLastIndex=${this.midnightShieldedLastIndex}`);
       if (this.chain === 'BITCOIN') {
         // BTC subscribes with the explicit derived address set + snake_case
         // progress unit (block height). No `credentials` (no stake fan-out).
@@ -156,6 +218,15 @@ class WebSocketService {
           lastSyncedBlock: this.lastSyncedBlock,
           credentials: this.credentials,
           platform: 'extension',
+          // Midnight-only: included regardless of chain so server can ignore on
+          // non-Midnight chains. Null = no persisted cursor (gero-sync full
+          // replay).
+          midnightLastTxId: liveMidnightCursor,
+          // Midnight shielded-only: pair of fields that opt this WS session
+          // into gero-sync's shielded-tx subscription. Both null → unshielded-
+          // only sync (today's default).
+          midnightShieldedViewingKey: this.midnightShieldedViewingKey,
+          midnightShieldedLastIndex: this.midnightShieldedLastIndex,
         });
       }
 
@@ -397,6 +468,14 @@ class WebSocketService {
     if (expandedCredentials) {
       this.credentials = expandedCredentials;
     }
+    // Live-read the Midnight cursor for resubscribe too — same reason as the
+    // initial connect path: store may have advanced since the last SUBSCRIBE.
+    // Only consumed by the non-BTC send below; the BITCOIN branch returns first.
+    let liveMidnightCursor: number | null = this.midnightLastTxId;
+    if (this.chain === 'MIDNIGHT') {
+      const live = (midnightStore as { lastMidnightTxId?: number | null }).lastMidnightTxId;
+      if (typeof live === 'number' && live >= 0) liveMidnightCursor = live;
+    }
     this.lastSyncedBlock = lastSyncedBlock;
 
     if (this.chain === 'BITCOIN') {
@@ -425,6 +504,11 @@ class WebSocketService {
       lastSyncedBlock,
       credentials: this.credentials,
       platform: 'extension',
+      // Mirror the connect-path payload so a force-resync doesn't accidentally
+      // strip Midnight-only resume cursors and re-trigger full replay.
+      midnightLastTxId: liveMidnightCursor,
+      midnightShieldedViewingKey: this.midnightShieldedViewingKey,
+      midnightShieldedLastIndex: this.midnightShieldedLastIndex,
     });
   }
 
@@ -483,6 +567,15 @@ class WebSocketService {
     this.network = null;
     this.catchingUp = false;
     this.pendingTxBatches = [];
+    // Flush the block-hash dedup cache on teardown. Without this, block hashes
+    // from the previous wallet/session linger and cause a re-delivered SYNC
+    // replay to be dropped as "duplicate" — e.g. switch away from a Midnight
+    // wallet and back: the store is wiped and gero-sync replays the history,
+    // but the stale cache skips every block, leaving the balance/tx-list/graph
+    // empty. close() is only called on a full teardown (wallet switch / logout
+    // / connect), NOT on transient auto-reconnect (scheduleReconnect →
+    // openConnection), so in-session duplicate-tip dedup is unaffected.
+    this.tipCache.flush();
   }
 
   updateLastSyncedBlock(block: number): void {

@@ -185,11 +185,11 @@ const handleComplete = () => {
   font-family: $font-family-primary;
   font-size: $font-size-sm;
   color: $text-muted;
-  transition: all 0.3s ease;
+  transition: color var(--g-dur-slow) ease;
 
   .v-icon {
     color: $text-muted;
-    transition: all 0.3s ease;
+    transition: color var(--g-dur-slow) ease;
   }
 
   &.active {

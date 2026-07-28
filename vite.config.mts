@@ -8,7 +8,21 @@ import { isDev, port, r } from './scripts/utils';
 import packageJson from './package.json';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import copy from 'rollup-plugin-copy';
+import { existsSync, createReadStream } from 'node:fs';
 // import { viteImagemin } from 'vite-plugin-imagemin';
+
+// Absolute POSIX path: sass `@import` does not reliably resolve vite's `@/`
+// alias on Windows (r() yields backslashes), so we hand it a literal path.
+const tokensScss = r('src/shared/styles/_tokens.scss').replace(/\\/g, '/');
+
+// Silence dart-sass deprecation noise coming out of node_modules (Vuetify 2's
+// styles are written against the pre-3.0 API). All six IDs are valid on the
+// installed sass 1.101; `mixed-decls` is deliberately omitted because it is now
+// obsolete and silencing it emits its own warning.
+const sassQuiet = {
+  quietDeps: true,
+  silenceDeprecations: ['legacy-js-api', 'import', 'global-builtin', 'slash-div', 'color-functions', 'if-function'],
+};
 
 export const sharedConfig: UserConfig = {
   root: r('src'),
@@ -55,6 +69,24 @@ export const sharedConfig: UserConfig = {
     },
     extensions: ['.js', '.json', '.jsx', '.mjs', '.ts', '.tsx', '.vue'],
   },
+  css: {
+    preprocessorOptions: {
+      scss: {
+        // Every `<style lang="scss">` block sees the token mirror. tokens.css
+        // is canonical; these sass vars exist only for compile-time contexts
+        // (breakpoints, sass math) where custom properties cannot work.
+        additionalData: `@import "${tokensScss}";\n`,
+        ...sassQuiet,
+      },
+      // Vuetify's own styles are INDENTED-syntax `.sass`, which dart-sass
+      // compiles through this key rather than `scss`. Without it, every build
+      // and every `npm run dev` prints thousands of `global-builtin` / `import`
+      // / `legacy-js-api` deprecation warnings from node_modules. No
+      // additionalData here: the token mirror is scss syntax and would not
+      // parse as indented sass.
+      sass: { ...sassQuiet },
+    },
+  },
   define: {
     // Note: 'global' is handled by nodePolyfills plugin below
     // Don't define it here to avoid conflicts that create spurious window/window imports
@@ -63,7 +95,46 @@ export const sharedConfig: UserConfig = {
     'APP_VERSION': JSON.stringify(packageJson.version),
     'process.env.NODE_ENV': JSON.stringify(isDev ? 'development' : 'production'),
   },
+  css: {
+    preprocessorOptions: {
+      // Vuetify 2.7's bundled .sass/.scss use legacy Sass syntax (global
+      // map-get, @import, / division) that Dart Sass now deprecates, flooding
+      // the dev console with thousands of warnings from node_modules. quietDeps
+      // silences deprecation warnings originating in dependencies (ours still
+      // surface); silenceDeprecations covers the remaining categories + the
+      // legacy-JS-API notice on Sass versions that honor it.
+      scss: {
+        quietDeps: true,
+        silenceDeprecations: ['legacy-js-api', 'import', 'global-builtin', 'slash-div', 'if-function', 'color-functions'],
+      },
+      sass: {
+        quietDeps: true,
+        silenceDeprecations: ['legacy-js-api', 'import', 'global-builtin', 'slash-div', 'if-function', 'color-functions'],
+      },
+    },
+  },
   plugins: [
+    // Dev only: serve the vendored gero-swap widget from src/vendor at the same
+    // /vendor/gero-swap/ path the built extension uses. Production wires these up
+    // via the copy plugin + CSS href-rewrite at writeBundle, which don't run
+    // under `npm run dev` — so without this the <gero-swap> element never loads
+    // and the Swap dialog renders empty (ERR_FILE_NOT_FOUND on gero-swap.js/.css).
+    {
+      name: 'serve-gero-swap-vendor-dev',
+      apply: 'serve',
+      configureServer(server) {
+        server.middlewares.use((req, res, next) => {
+          const url = (req.url ?? '').split('?')[0];
+          if (!url.startsWith('/vendor/gero-swap/')) return next();
+          const rel = url.slice('/vendor/gero-swap/'.length);
+          if (!rel || rel.includes('..')) return next();
+          const filePath = r('src/vendor/gero-swap', rel);
+          if (!existsSync(filePath)) return next();
+          res.setHeader('Content-Type', filePath.endsWith('.css') ? 'text/css' : 'application/javascript');
+          createReadStream(filePath).pipe(res);
+        });
+      },
+    },
     Vue({
       template: {
         compilerOptions: {
@@ -119,6 +190,12 @@ export const sharedConfig: UserConfig = {
       'bip39',
       'blake2b',
       'crypto-ts',
+      // Pre-bundle the node-polyfill shims so the dev server doesn't discover
+      // them lazily on the first route that needs them (e.g. Gero Card) and
+      // trigger a mid-session re-optimize + full page reload.
+      'vite-plugin-node-polyfills/shims/process',
+      'vite-plugin-node-polyfills/shims/global',
+      'vite-plugin-node-polyfills/shims/buffer',
     ],
     exclude: ['vue-demi', 'cbor'],
     esbuildOptions: {
@@ -268,6 +345,15 @@ export default defineConfig(({ command }) => {
           assetFileNames: 'assets/[name][extname]',
           compact: false, // Disable for faster builds
           minifyInternalExports: false, // Disable for faster builds
+          // Pull the network layer into clearly-named chunks so DevTools XHR
+          // stacks read "vendor-axios" / "market-api" instead of attributing
+          // requests to whatever unrelated module a shared chunk was named after
+          // (e.g. activityTracker.service.js).
+          manualChunks(id: string) {
+            if (id.includes('node_modules/axios')) return 'vendor-axios';
+            if (id.includes('/api/market-api')) return 'market-api';
+            return undefined;
+          },
         },
         plugins: [
           copy({
@@ -278,6 +364,17 @@ export default defineConfig(({ command }) => {
               {
                 src: 'src/assets/!(emptyState|welcome|cashbackcarousel|cardanoBg|apex|bg-dapp).*',
                 dest: 'extension/assets'
+              },
+              // Only the JS loader (+ README) belongs in the runtime vendor dir — the CSS is
+              // NOT loaded from here at runtime. It's a Vite build INPUT (see the <link
+              // media="all"> comment in src/options/index.html / src/sidepanel/index.html):
+              // Vite emits it as extension/assets/gero-swap.css and rewrites the href to
+              // point there. Copying it into extension/vendor/gero-swap too would just be a
+              // ~196KB dead duplicate that nothing ever loads.
+              {
+                src: ['src/vendor/gero-swap/gero-swap.js', 'src/vendor/gero-swap/README.md'],
+                dest: 'extension/vendor/gero-swap',
+                flatten: true,
               },
             ],
             hook: 'writeBundle',

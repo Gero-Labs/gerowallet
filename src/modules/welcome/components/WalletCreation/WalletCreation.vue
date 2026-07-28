@@ -68,9 +68,8 @@ const logo = computed(() => {
   position: relative;
   backdrop-filter: blur(20px) saturate(1.5);
   -webkit-backdrop-filter: blur(20px) saturate(1.5);
-  border-right: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), inset -1px 0 0 rgba(45, 240, 247, 0.08),
-    4px 0 24px rgba(0, 0, 0, 0.4);
+  border-right: 1px solid var(--g-hairline-3);
+  box-shadow: inset 0 1px 0 var(--g-hairline-2), 4px 0 24px rgba(0, 0, 0, 0.4);
 }
 
 .welcome-glass-panel::before {
@@ -80,25 +79,16 @@ const logo = computed(() => {
   right: 0;
   bottom: 0;
   width: 1px;
-  background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  background: linear-gradient(180deg, transparent, var(--g-hairline-2), transparent);
   z-index: 1;
-}
-
-.welcome-glass-panel::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: radial-gradient(600px circle at 50% 0%, rgba(45, 240, 247, 0.05), transparent 50%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, transparent 50%);
-  pointer-events: none;
-  z-index: 0;
 }
 
 .welcome-content {
   flex: 1;
+  /* Without min-height:0 this flex item grows to its content height (the full
+     wallet list), so the list child never gets a bounded height to scroll in.
+     This is the load-bearing line for the list's internal scroll. */
+  min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -120,24 +110,31 @@ const logo = computed(() => {
 }
 
 .welcome-title {
-  font-size: 30px;
+  font-size: 32px;
   font-weight: 700;
-  color: #fff;
+  color: var(--g-text-1);
   line-height: 1.2;
 }
 
 .welcome-subtitle {
-  font-size: 17px;
-  color: #94979c;
+  font-size: 16px;
+  color: var(--g-text-3);
   margin-top: 4px;
 }
 
 .wallet-list-block {
   width: 100%;
+  /* Fill the space between the heading and the footer and let the list scroll
+     inside it, instead of a fixed height that overflows the page on shorter
+     viewports (min-height:0 lets a flex child actually shrink + scroll). */
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .logo-container .logo {
-  transition: all 0.3s ease;
+  transition: color var(--g-dur-slow) ease, background-color var(--g-dur-slow) ease, border-color var(--g-dur-slow) ease, opacity var(--g-dur-slow) ease, transform var(--g-dur-slow) ease, box-shadow var(--g-dur-slow) ease;
 }
 
 .text-container {
@@ -157,7 +154,7 @@ const logo = computed(() => {
 }
 
 .title {
-  font-size: 36px !important;
+  font-size: 32px !important;
   white-space: normal;
   margin-bottom: 20px;
   line-height: 1.2 !important;
@@ -167,20 +164,18 @@ const logo = computed(() => {
 
 .title-regular {
   font-weight: 400 !important;
-  font-size: 36px !important;
+  font-size: 32px !important;
   line-height: 1.2 !important;
-  letter-spacing: 1.32px;
 }
 
 .title-gradient {
   font-weight: 700 !important;
-  font-size: 36px !important;
+  font-size: 32px !important;
   line-height: 1.2 !important;
-  letter-spacing: 1.32px;
 }
 
 .description {
-  color: #94979c;
+  color: var(--g-text-3);
   font-size: 16px;
   white-space: nowrap;
   margin-bottom: 20px;
@@ -189,14 +184,14 @@ const logo = computed(() => {
 .create-btn {
   margin-top: 12px;
   letter-spacing: normal;
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
   text-transform: none;
 }
 
 .footer-left {
   padding: 12px 20px;
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+  color: var(--g-text-2);
   position: relative;
   z-index: 2;
 }
@@ -215,12 +210,12 @@ const logo = computed(() => {
 
 @media (max-width: 900px) {
   .title {
-    font-size: 28px !important;
+    font-size: 32px !important;
   }
 
   .title-regular,
   .title-gradient {
-    font-size: 28px !important;
+    font-size: 32px !important;
   }
 }
 </style>

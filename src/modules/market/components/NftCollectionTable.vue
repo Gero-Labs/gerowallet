@@ -43,11 +43,11 @@
           <v-list-item-content>
             <v-list-item-title style="font-size: 13px">
               <span class="font-weight-bold">{{ item.name }}</span>
-              <v-chip v-if="item.isScam" x-small color="error" class="ml-1" style="height: 16px; font-size: 9px; padding: 0 4px;">
+              <v-chip v-if="item.isScam" x-small color="error" class="ml-1" style="height: 16px; font-size: 11px; padding: 0 4px;">
                 {{ $t('portfolio.scam') }}
               </v-chip>
             </v-list-item-title>
-            <v-list-item-subtitle class="d-flex align-center" style="font-size: 10px; opacity: 0.5">
+            <v-list-item-subtitle class="d-flex align-center" style="font-size: 11px; opacity: 0.5">
               {{ filters.truncate(item.policyId) }}
               <CopyButton :value="item.policyId" x-small class="ml-1" />
             </v-list-item-subtitle>
@@ -64,10 +64,10 @@
       <template v-slot:[`item.floorPriceLovelace`]="{ item }">
         <v-list-item v-if="item.floorPriceLovelace != null" two-line class="px-0" style="min-height: unset">
           <v-list-item-content class="pa-0">
-            <v-list-item-title style="font-size: 13px; margin-bottom: 0; color: #00c7f3;">
+            <v-list-item-title style="font-size: 13px; margin-bottom: 0; color: var(--g-accent);">
               {{ formatAda(item.floorPriceLovelace) }} &#8371;
             </v-list-item-title>
-            <v-list-item-subtitle v-if="item.floorValueLovelace != null" style="font-size: 10px; opacity: 0.5">
+            <v-list-item-subtitle v-if="item.floorValueLovelace != null" style="font-size: 11px; opacity: 0.5">
               {{ formatCompact(item.floorValueLovelace / 1_000_000) }} &#8371; {{ $t('portfolio.total') }}
             </v-list-item-subtitle>
           </v-list-item-content>
@@ -84,7 +84,7 @@
             </v-list-item-title>
             <v-list-item-subtitle
               v-if="item.floorPriceLovelace != null && item.floorPriceLovelace > 0"
-              style="font-size: 10px"
+              style="font-size: 11px"
               :style="{ color: lastSaleVsFloorColor(item) }"
             >
               {{ lastSaleVsFloor(item) }}
@@ -198,8 +198,8 @@ function lastSaleVsFloor(item: NftCollectionDisplay): string {
 function lastSaleVsFloorColor(item: NftCollectionDisplay): string {
   if (!item.lastSalePriceLovelace || !item.floorPriceLovelace || item.floorPriceLovelace === 0) return '';
   const diff = item.lastSalePriceLovelace - item.floorPriceLovelace;
-  if (Math.abs(diff / item.floorPriceLovelace) < 0.01) return 'rgba(255,255,255,0.4)';
-  return diff > 0 ? '#47CD89' : '#F97066';
+  if (Math.abs(diff / item.floorPriceLovelace) < 0.01) return 'var(--g-text-3)';
+  return diff > 0 ? 'var(--g-success)' : 'var(--g-error)';
 }
 </script>
 
@@ -213,13 +213,11 @@ function lastSaleVsFloorColor(item: NftCollectionDisplay): string {
 }
 
 .nft-collection-table >>> tbody tr:hover {
-  background: rgba(255, 255, 255, 0.03) !important;
+  background: var(--g-hairline-1) !important;
 }
 
 .nft-collection-table >>> th {
   font-size: 11px !important;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
   white-space: nowrap;
 }
 

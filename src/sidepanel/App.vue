@@ -2,17 +2,37 @@
   <v-app dark>
     <notifications></notifications>
 
-    <!-- No wallet exists -->
-    <NoWalletScreen v-if="!hasWallets" />
-
-    <!-- Wallet selection needed -->
-    <WalletSelector
-      v-else-if="!hasActiveWallet"
-      @select="onWalletSelect"
+    <!-- Pre-switch unlock: authenticate the target MPC wallet before switching to
+         it, without logging out the current wallet. -->
+    <LockScreen
+      v-if="pendingSwitchWallet"
+      :key="'preswitch-' + pendingSwitchWallet.id"
+      :target-wallet="pendingSwitchWallet"
+      @switch-unlocked="onSwitchUnlocked"
+      @cancel="pendingSwitchWallet = null"
     />
 
+    <!-- No wallet exists -->
+    <template v-else-if="!hasWallets">
+      <PendingRequestBanner />
+      <NoWalletScreen />
+    </template>
+
+    <!-- Wallet selection needed -->
+    <template v-else-if="!hasActiveWallet">
+      <PendingRequestBanner />
+      <WalletSelector
+        :loading-wallet-id="loggingInWalletId"
+        :error-message="loginError"
+        @select="onWalletSelect"
+      />
+    </template>
+
     <!-- Wallet locked -->
-    <LockScreen v-else-if="isLocked" />
+    <template v-else-if="isLocked">
+      <PendingRequestBanner />
+      <LockScreen />
+    </template>
 
     <!-- Logged in — show main UI -->
     <template v-else>
@@ -20,13 +40,20 @@
         @wallet-switch="showWalletSwitcher = true"
         @settings="openDashboardSettings"
       />
-      <DAppOverlay />
       <AgentDock v-if="isCopilotEnabled" />
     </template>
 
+    <!-- Approval overlay: rendered whenever a signable session exists, above AgentDock -->
+    <DAppOverlay v-if="hasActiveWallet && !isLocked" />
+
     <!-- Wallet switcher bottom sheet (available from header) -->
     <BottomSheet v-model="showWalletSwitcher" :title="t('miniGero.selectWallet')" height="60%">
-      <WalletSelector compact @select="onWalletSwitch" />
+      <WalletSelector
+        compact
+        :loading-wallet-id="loggingInWalletId"
+        :error-message="loginError"
+        @select="onWalletSwitch"
+      />
     </BottomSheet>
 
   </v-app>
@@ -42,7 +69,9 @@ import NoWalletScreen from './components/NoWalletScreen.vue';
 import WalletSelector from './components/WalletSelector.vue';
 import LockScreen from './components/LockScreen.vue';
 import DAppOverlay from './components/DAppOverlay.vue';
+import PendingRequestBanner from './components/PendingRequestBanner.vue';
 import BottomSheet from './components/BottomSheet.vue';
+import { initDappRequestHub } from './services/dappRequestHub';
 import AgentDock from '@/sidepanel/components/AgentDock.vue';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { useTranslation } from '@/shared/composables/useTranslation';
@@ -55,7 +84,15 @@ const { t } = useTranslation();
 // Other components that call useChainContext() reuse the singleton CSS-variable watcher.
 useChainContext();
 
+// Panel-lifetime dApp port: must outlive lock/logout so requests park instead
+// of being rejected when the overlay unmounts.
+initDappRequestHub();
+
 const showWalletSwitcher = ref(false);
+// When set, a full-screen pre-switch unlock overlay is shown for this target MPC
+// wallet — we authenticate it (Google + passkey/password) BEFORE switching, so the
+// current wallet stays active until the switch actually completes.
+const pendingSwitchWallet = ref<Wallet | null>(null);
 
 const hasWallets = computed(() => Object.keys(geroStore.wallets || {}).length > 0);
 const hasActiveWallet = computed(() => !!walletStore.loggedWallet);
@@ -78,7 +115,18 @@ watch(() => geroStore.config?.locale, async (newLocale, oldLocale) => {
   }
 }, { immediate: true, deep: true });
 
-async function onWalletSelect(wallet: Wallet) {
+// Login was the single most-repeated moment in the panel with zero feedback
+// — tapping a wallet did nothing visible until the whole screen swapped out
+// from under the logged-in branch (or never did, on failure, with only a
+// console.error). Per-row spinner + a real error message close that gap.
+const loggingInWalletId = ref<number | null>(null);
+const loginError = ref('');
+
+// Core network login: performs the LOGIN round-trip and surfaces spinner/error
+// feedback. Both the direct-select and switcher paths funnel through here.
+async function doLogin(wallet: Wallet): Promise<boolean> {
+  loggingInWalletId.value = wallet.id;
+  loginError.value = '';
   try {
     const response = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.LOGIN,
@@ -86,15 +134,57 @@ async function onWalletSelect(wallet: Wallet) {
     });
     if (!response['data'].success) {
       console.error('Login failed:', response['data'].error);
+      loginError.value = t('miniGero.loginFailed');
+      return false;
     }
+    return true;
   } catch (e) {
     console.error('Login error:', e);
+    loginError.value = t('miniGero.loginFailed');
+    return false;
+  } finally {
+    loggingInWalletId.value = null;
   }
 }
 
-function onWalletSwitch(wallet: Wallet) {
-  showWalletSwitcher.value = false;
-  onWalletSelect(wallet);
+async function onWalletSelect(wallet: Wallet) {
+  // Already the active, unlocked wallet → nothing to do.
+  if (wallet.id === walletStore.loggedWallet?.id && !walletStore.isLocked) {
+    showWalletSwitcher.value = false;
+    return;
+  }
+  // MPC "Sign in with Google" wallets are authenticated BEFORE the switch: show the
+  // pre-switch unlock overlay (Google + passkey/password) which reconstructs the
+  // target's key WITHOUT logging out the current wallet. onSwitchUnlocked then does
+  // the real LOGIN; cancel keeps the current wallet. Non-MPC wallets log in directly.
+  if (wallet.encryptionMethod === 'mpc') {
+    showWalletSwitcher.value = false;
+    pendingSwitchWallet.value = wallet;
+    return;
+  }
+  await doLogin(wallet);
+}
+
+// From the wallet-switcher sheet. MPC and already-active wallets manage the sheet
+// themselves inside onWalletSelect (the MPC path opens the pre-switch overlay). For
+// a normal login we must await it and only close the sheet on success — closing it
+// synchronously tore down this WalletSelector instance, and with it the spinner/error
+// banner, before either could ever be seen from the switcher path.
+async function onWalletSwitch(wallet: Wallet) {
+  if (
+    wallet.encryptionMethod === 'mpc' ||
+    (wallet.id === walletStore.loggedWallet?.id && !walletStore.isLocked)
+  ) {
+    await onWalletSelect(wallet);
+    return;
+  }
+  const success = await doLogin(wallet);
+  if (success) showWalletSwitcher.value = false;
+}
+
+async function onSwitchUnlocked(wallet: Wallet) {
+  pendingSwitchWallet.value = null;
+  await doLogin(wallet);
 }
 
 function openDashboardSettings() {
@@ -120,12 +210,10 @@ function openDashboardSettings() {
 </script>
 <style>
 .custom-tooltip {
-  background-color: rgba(0, 0, 0, 0.4) !important;
-  backdrop-filter: blur(20px) saturate(1.8) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  border-radius: 12px !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  background-color: var(--g-overlay) !important;
+  border: 1px solid var(--g-hairline-3) !important;
+  border-radius: var(--g-r-card) !important;
+  box-shadow: var(--g-shadow-menu) !important;
   isolation: isolate !important;
   padding: 12px 16px !important;
   max-width: 300px !important;

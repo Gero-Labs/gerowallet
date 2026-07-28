@@ -45,7 +45,7 @@
                     x-small
                     outlined
                     class="px-1 ml-1"
-                    color="warning"
+                    color="orange"
                   >{{ $t('transactions.collateral') }}</v-chip>
                 </v-list-item-subtitle>
               </v-list-item-content>

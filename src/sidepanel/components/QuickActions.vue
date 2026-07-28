@@ -34,7 +34,7 @@ import { useChainContext } from '../composables/useChainContext';
 import assets from '@/utils/assets';
 
 const { t } = useTranslation();
-const { networkInfo, themeColors, isApex } = useChainContext();
+const { networkInfo } = useChainContext();
 
 const emit = defineEmits<{
   (e: 'action', id: string): void;
@@ -52,30 +52,30 @@ interface QuickAction {
 }
 
 const allActions = computed<QuickAction[]>(() => {
-  const primaryColor = themeColors.value.primary;
-  // For Send icon: use the chain-specific iconFilter (terracotta on Apex, cyan on Cardano)
-  const sendFilter = isApex.value
-    ? 'brightness(0) saturate(100%) invert(52%) sepia(85%) saturate(1100%) hue-rotate(345deg) brightness(108%) contrast(98%)'
-    : 'invert(83%) sepia(48%) saturate(3753%) hue-rotate(133deg) brightness(92%) contrast(108%)';
-
   return [
+    // Fixed tokens for all four actions - the chain accent is deliberately
+    // NOT used here (it previously made Send a mixed purple-circle/cyan-icon
+    // odd one out on Midnight while its three siblings kept stable colors).
+    // Send is neutral white rather than a semantic color: it's the primary
+    // action, and every semantic token is taken by a sibling (success/error/
+    // info) so any reuse would collide on chains that show all four.
     {
       id: 'send',
       svg: assets.sendSvg,
       label: t('dashboard.send'),
-      color: primaryColor,
-      bgColor: `color-mix(in srgb, ${primaryColor} 12%, transparent)`,
-      borderColor: `color-mix(in srgb, ${primaryColor} 40%, transparent)`,
-      filter: sendFilter,
+      color: 'var(--g-text-1)',
+      bgColor: 'color-mix(in srgb, var(--g-text-1) 10%, transparent)',
+      borderColor: 'color-mix(in srgb, var(--g-text-1) 35%, transparent)',
+      filter: 'brightness(0) invert(1)',
       enabled: !!networkInfo.value?.transactionSupport,
     },
     {
       id: 'receive',
       svg: assets.qrCodeSvg,
       label: t('dashboard.receive'),
-      color: '#75E0A7',
-      bgColor: 'rgba(117, 224, 167, 0.12)',
-      borderColor: 'rgba(117, 224, 167, 0.4)',
+      color: 'var(--g-success)',
+      bgColor: 'color-mix(in srgb, var(--g-success) 12%, transparent)',
+      borderColor: 'color-mix(in srgb, var(--g-success) 40%, transparent)',
       filter: 'invert(83%) sepia(16%) saturate(992%) hue-rotate(92deg) brightness(94%) contrast(92%)',
       enabled: !!networkInfo.value?.transactionSupport,
     },
@@ -83,9 +83,9 @@ const allActions = computed<QuickAction[]>(() => {
       id: 'swap',
       svg: assets.swapSvg,
       label: t('swap.swap'),
-      color: '#FDA29B',
-      bgColor: 'rgba(253, 162, 155, 0.12)',
-      borderColor: 'rgba(253, 162, 155, 0.4)',
+      color: 'var(--g-error)',
+      bgColor: 'color-mix(in srgb, var(--g-error) 12%, transparent)',
+      borderColor: 'color-mix(in srgb, var(--g-error) 40%, transparent)',
       filter: 'invert(62%) sepia(76%) saturate(306%) hue-rotate(314deg) brightness(105%) contrast(98%)',
       enabled: !!networkInfo.value?.swapSupport,
     },
@@ -93,9 +93,9 @@ const allActions = computed<QuickAction[]>(() => {
       id: 'perps',
       svg: assets.barChart,
       label: t('miniGero.perps'),
-      color: '#B794F4',
-      bgColor: 'rgba(183, 148, 244, 0.12)',
-      borderColor: 'rgba(183, 148, 244, 0.4)',
+      color: 'var(--g-info)',
+      bgColor: 'color-mix(in srgb, var(--g-info) 12%, transparent)',
+      borderColor: 'color-mix(in srgb, var(--g-info) 40%, transparent)',
       filter: 'invert(66%) sepia(41%) saturate(458%) hue-rotate(226deg) brightness(95%) contrast(96%)',
       enabled: !!networkInfo.value?.perpetualsSupport,
     },
@@ -143,17 +143,14 @@ function handleAction(id: string) {
   justify-content: center;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
   border: 1px solid;
-  backdrop-filter: blur(12px);
 }
 
 .action-btn:hover .action-icon {
-  box-shadow: 0 0 12px rgba(255, 255, 255, 0.1);
   transform: scale(1.05);
 }
 
 .action-label {
   font-size: 11px !important;
   font-weight: 500;
-  letter-spacing: 0.3px;
 }
 </style>

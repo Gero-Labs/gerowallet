@@ -157,9 +157,9 @@ import LoadingStep from './top-up/LoadingStep.vue';
 import SuccessStep from './top-up/SuccessStep.vue';
 import cardStore from '@/stores/modules/card';
 import { walletStore } from '@/stores/walletStore';
-import { networkStore } from '@/stores/networkStore';
-import { buildCardanoTransaction } from '@/shared/utils/builder';
-import { Cardano } from '@cardano-sdk/core';
+import { Cardano, Serialization } from '@cardano-sdk/core';
+import { HexBlob } from '@cardano-sdk/util';
+import { nexusTxApi, walletUtxosToNexusInputs, txOutToNexusOutput, type BuildTxRequest } from '@/api/nexus-tx-api';
 import snackbar from '@/plugins/snackbar';
 import { WalletType } from '@/models/types';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
@@ -338,19 +338,15 @@ const buildTx = async () => {
       },
     ];
 
-    // Build transaction with wallet context for accurate fee calculation
-    tx.value = await buildCardanoTransaction({
-      outputs,
-      utxos: walletStore.utxos,
-      epochParams: networkStore.epochParams,
+    // Build the transfer server-side via Nexus (unconditional for all send flows).
+    const request: BuildTxRequest = {
+      outputs: outputs.map(txOutToNexusOutput),
       changeAddress: walletStore.loggedWallet.baseAddress,
-      tip: networkStore.tip,
-      walletContext: {
-        keys: walletStore.keys,
-        stakeAddress: walletStore.loggedWallet.stakeAddress,
-        accountIndex: 0
-      }
-    });
+      utxos: walletUtxosToNexusInputs(walletStore.utxos as Cardano.Utxo[], walletStore.collateral),
+    };
+    const { tx_cbor } = await nexusTxApi.buildTransferTx(request, walletStore.loggedWallet.network);
+    if (!tx_cbor) throw new Error('Nexus returned an empty transaction CBOR');
+    tx.value = Serialization.Transaction.fromCbor(HexBlob(tx_cbor)).toCore();
 
     console.log('✅ Transaction built successfully');
     return true;

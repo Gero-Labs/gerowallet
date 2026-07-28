@@ -84,7 +84,7 @@
 
             <!-- Loading -->
             <div v-if="loading && filteredVaults.length === 0" class="text-center py-8">
-              <v-progress-circular indeterminate color="#00c7f3" size="28" width="2" />
+              <v-progress-circular indeterminate color="var(--g-accent)" size="28" width="2" />
               <div class="grey--text text-caption mt-2">{{ $t('vaults.loadingVaults') }}</div>
             </div>
 
@@ -93,9 +93,9 @@
               v-else-if="!loading && filteredVaults.length === 0 && (searchQuery || activeFilter !== 'all')"
               class="dialog-empty-state"
             >
-              <v-icon size="36" color="rgba(255,255,255,0.08)">mdi-safe-square-outline</v-icon>
+              <v-icon size="36" color="var(--g-text-3)">mdi-safe-square-outline</v-icon>
               <div class="text-body-2 grey--text mt-2 text-center">{{ $t('vaults.noVaultsFound') }}</div>
-              <v-btn x-small text color="#00c7f3" class="mt-2" @click="clearFilters()">
+              <v-btn x-small text color="var(--g-accent)" class="mt-2" @click="clearFilters()">
                 {{ $t('vaults.clearFilters') }}
               </v-btn>
             </div>
@@ -105,7 +105,7 @@
               v-else-if="!loading && vaults.length === 0"
               class="dialog-empty-state"
             >
-              <v-icon size="36" color="rgba(255,255,255,0.08)">mdi-safe-square-outline</v-icon>
+              <v-icon size="36" color="var(--g-text-3)">mdi-safe-square-outline</v-icon>
               <div class="text-body-2 grey--text mt-2 text-center">{{ $t('vaults.noVaultsAvailable') }}</div>
             </div>
 
@@ -119,7 +119,7 @@
                 @select="selectVault(vault.id)"
               />
               <div v-if="hasMore" class="text-center mt-3">
-                <v-btn x-small text color="#00c7f3" :loading="loading" @click="loadMore()">
+                <v-btn x-small text color="var(--g-accent)" :loading="loading" @click="loadMore()">
                   {{ $t('common.loadMore') }}
                 </v-btn>
               </div>
@@ -132,8 +132,8 @@
 
             <!-- No vault selected placeholder -->
             <div v-if="!selectedVaultId" class="detail-placeholder">
-              <v-icon size="56" color="rgba(255,255,255,0.06)">mdi-safe-square-outline</v-icon>
-              <div class="text-body-2 mt-3" style="color: rgba(255,255,255,0.25);">
+              <v-icon size="56" color="var(--g-text-3)">mdi-safe-square-outline</v-icon>
+              <div class="text-body-2 mt-3" style="color: var(--g-text-3);">
                 {{ $t('vaults.selectAVault') }}
               </div>
             </div>
@@ -143,7 +143,7 @@
 
               <!-- Loading state -->
               <div v-if="loadingDetail" class="detail-loading">
-                <v-progress-circular indeterminate size="28" width="2" color="#00c7f3" />
+                <v-progress-circular indeterminate size="28" width="2" color="var(--g-accent)" />
               </div>
 
               <template v-else-if="detailVault">
@@ -160,14 +160,14 @@
                       >
                         {{ $t(`vaults.status.${detailVault.status}`) }}
                       </v-chip>
-                      <v-icon v-if="detailVault.is_verified" size="16" color="#00c7f3" class="ml-1">
+                      <v-icon v-if="detailVault.is_verified" size="16" color="var(--g-accent)" class="ml-1">
                         mdi-check-decagram
                       </v-icon>
                     </div>
                   </div>
                   <p class="detail-description">{{ detailVault.description }}</p>
                   <div class="detail-leader-row">
-                    <v-icon size="11" color="rgba(255,255,255,0.3)" class="mr-1">mdi-account-outline</v-icon>
+                    <v-icon size="11" color="var(--g-text-3)" class="mr-1">mdi-account-outline</v-icon>
                     <span class="detail-leader-addr">{{ truncateAddr(detailVault.leader_account_id) }}</span>
                   </div>
                 </div>
@@ -269,7 +269,7 @@
 
               <!-- Error state -->
               <div v-else class="detail-error">
-                <v-icon size="24" color="rgba(249,112,102,0.5)">mdi-alert-circle-outline</v-icon>
+                <v-icon size="24" color="error">mdi-alert-circle-outline</v-icon>
                 <span class="detail-error__text">{{ $t('vaults.loadError') }}</span>
               </div>
 
@@ -540,28 +540,26 @@ function truncateAddr(addr: string): string {
 
 <style scoped>
 .vaults-dialog {
-  background: rgba(10, 12, 16, 0.97) !important;
+  background: var(--g-canvas) !important;
   overflow: hidden;
 }
 
 /* ── Toolbar ── */
 .vaults-dialog-toolbar {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--g-hairline-1);
   z-index: 5;
 }
 
 .vaults-dialog-title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--g-text-1);
   letter-spacing: -0.01em;
 }
 
 .vaults-dialog-search {
-  background: rgba(255, 255, 255, 0.03) !important;
-  border-radius: 10px !important;
+  background: var(--g-raised) !important;
+  border-radius: var(--g-r-control) !important;
 }
 
 /* ── Body ── */
@@ -574,9 +572,9 @@ function truncateAddr(addr: string): string {
 .vaults-list-col {
   height: 100%;
   overflow-y: auto;
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  border-right: 1px solid var(--g-hairline-1);
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+  scrollbar-color: var(--g-hairline-2) transparent;
 }
 
 /* ── Right column ── */
@@ -584,16 +582,16 @@ function truncateAddr(addr: string): string {
   height: 100%;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+  scrollbar-color: var(--g-hairline-2) transparent;
 }
 
 /* ── Section label ── */
 .dialog-section-label {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--g-text-3);
 }
 
 /* ── Summary card ── */
@@ -602,7 +600,7 @@ function truncateAddr(addr: string): string {
   align-items: center;
   background: rgba(0, 199, 243, 0.04);
   border: 1px solid rgba(0, 199, 243, 0.12);
-  border-radius: 12px;
+  border-radius: var(--g-r-card);
   padding: 12px 16px;
 }
 
@@ -622,21 +620,21 @@ function truncateAddr(addr: string): string {
 }
 
 .dialog-summary-label {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--g-text-3);
 }
 
 .dialog-summary-value {
-  font-size: 15px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 14px;
+  font-family: var(--g-font-mono);
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--g-text-1);
 }
 
-.dialog-summary-value--cyan { color: #00c7f3; }
+.dialog-summary-value--cyan { color: var(--g-accent); }
 
 /* ── Filters ── */
 .dialog-filters-row {
@@ -654,21 +652,21 @@ function truncateAddr(addr: string): string {
 
 .dialog-filter-chip {
   padding: 3px 10px;
-  border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--g-r-pill);
+  border: 1px solid var(--g-hairline-2);
   background: transparent;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--g-text-3);
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease, border-color var(--g-dur-fast) ease;
   white-space: nowrap;
 }
 
 .dialog-filter-chip--active {
   background: rgba(0, 199, 243, 0.12);
   border-color: rgba(0, 199, 243, 0.3);
-  color: #00c7f3;
+  color: var(--g-accent);
   font-weight: 600;
 }
 
@@ -727,7 +725,7 @@ function truncateAddr(addr: string): string {
 
 .detail-error__text {
   font-size: 12px;
-  color: rgba(249, 112, 102, 0.7);
+  color: var(--g-error);
 }
 
 /* Detail header */
@@ -739,9 +737,9 @@ function truncateAddr(addr: string): string {
 }
 
 .detail-vault-name {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 800;
-  color: #ffffff;
+  color: var(--g-text-1);
   letter-spacing: -0.01em;
 }
 
@@ -751,7 +749,7 @@ function truncateAddr(addr: string): string {
 }
 
 .detail-status-chip {
-  font-size: 9px !important;
+  font-size: 11px !important;
   font-weight: 700 !important;
   letter-spacing: 0.05em !important;
   text-transform: uppercase !important;
@@ -759,26 +757,26 @@ function truncateAddr(addr: string): string {
 }
 
 .detail-status-chip--active {
-  background: rgba(38, 250, 176, 0.12) !important;
-  color: #26FAB0 !important;
-  border: 1px solid rgba(38, 250, 176, 0.25) !important;
+  background: var(--g-success-fill) !important;
+  color: var(--g-success) !important;
+  border: 1px solid var(--g-success-line) !important;
 }
 
 .detail-status-chip--paused {
-  background: rgba(255, 167, 38, 0.12) !important;
-  color: #FFA726 !important;
-  border: 1px solid rgba(255, 167, 38, 0.25) !important;
+  background: var(--g-warning-fill) !important;
+  color: var(--g-warning) !important;
+  border: 1px solid var(--g-warning-line) !important;
 }
 
 .detail-status-chip--closed {
-  background: rgba(249, 112, 102, 0.1) !important;
-  color: #F97066 !important;
-  border: 1px solid rgba(249, 112, 102, 0.22) !important;
+  background: var(--g-error-fill) !important;
+  color: var(--g-error) !important;
+  border: 1px solid var(--g-error-line) !important;
 }
 
 .detail-description {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--g-text-3);
   line-height: 1.6;
   margin: 0 0 6px;
 }
@@ -789,9 +787,9 @@ function truncateAddr(addr: string): string {
 }
 
 .detail-leader-addr {
-  font-size: 10px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  color: rgba(255, 255, 255, 0.3);
+  font-size: 11px;
+  font-family: var(--g-font-mono);
+  color: var(--g-text-3);
 }
 
 /* Performance Grid */
@@ -802,9 +800,9 @@ function truncateAddr(addr: string): string {
 }
 
 .detail-perf-cell {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 8px;
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   padding: 8px 10px;
   display: flex;
   flex-direction: column;
@@ -812,27 +810,27 @@ function truncateAddr(addr: string): string {
 }
 
 .detail-perf-label {
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.28);
+  color: var(--g-text-3);
 }
 
 .detail-perf-value {
   font-size: 13px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: var(--g-font-mono);
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--g-text-1);
 }
 
-.detail-perf-value--cyan { color: #00c7f3; }
-.detail-perf-value--red  { color: #F97066; }
+.detail-perf-value--cyan { color: var(--g-accent); }
+.detail-perf-value--red  { color: var(--g-error); }
 
 /* Position card */
 .detail-position-card {
   background: rgba(0, 199, 243, 0.04);
   border: 1px solid rgba(0, 199, 243, 0.12);
-  border-radius: 10px;
+  border-radius: var(--g-r-control);
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
@@ -847,17 +845,17 @@ function truncateAddr(addr: string): string {
 
 .detail-pos-label {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--g-text-3);
 }
 
 .detail-pos-value {
   font-size: 12px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: var(--g-font-mono);
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--g-text-2);
 }
 
-.detail-pos-value--cyan { color: #00c7f3; }
+.detail-pos-value--cyan { color: var(--g-accent); }
 
 /* Depositors */
 .detail-depositors {
@@ -871,24 +869,24 @@ function truncateAddr(addr: string): string {
   align-items: center;
   gap: 8px;
   padding: 7px 10px;
-  background: rgba(255, 255, 255, 0.02);
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--g-raised);
+  border-radius: var(--g-r-control);
+  border: 1px solid var(--g-hairline-1);
 }
 
 .detail-depositor-rank {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.25);
+  color: var(--g-text-3);
   width: 14px;
   text-align: center;
   flex-shrink: 0;
 }
 
 .detail-depositor-addr {
-  font-size: 10px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+  font-family: var(--g-font-mono);
+  color: var(--g-text-3);
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -905,19 +903,19 @@ function truncateAddr(addr: string): string {
 
 .detail-depositor-equity {
   font-size: 11px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: var(--g-font-mono);
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--g-text-2);
 }
 
 .detail-depositor-share {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.3);
+  font-size: 11px;
+  color: var(--g-text-3);
 }
 
 .detail-depositor-pnl {
-  font-size: 10px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  font-family: var(--g-font-mono);
   font-weight: 600;
 }
 
@@ -931,7 +929,7 @@ function truncateAddr(addr: string): string {
 .detail-btn {
   flex: 1;
   height: 42px !important;
-  border-radius: 10px !important;
+  border-radius: var(--g-r-control) !important;
   font-size: 13px !important;
   font-weight: 700 !important;
   text-transform: none !important;
@@ -940,7 +938,7 @@ function truncateAddr(addr: string): string {
 
 .detail-btn--deposit {
   background: rgba(0, 199, 243, 0.12) !important;
-  color: #00c7f3 !important;
+  color: var(--g-accent) !important;
   border: 1px solid rgba(0, 199, 243, 0.3) !important;
 }
 
@@ -949,16 +947,16 @@ function truncateAddr(addr: string): string {
 }
 
 .detail-btn--withdraw {
-  background: rgba(255, 255, 255, 0.05) !important;
-  color: rgba(255, 255, 255, 0.6) !important;
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  background: var(--g-raised) !important;
+  color: var(--g-text-2) !important;
+  border: 1px solid var(--g-hairline-2) !important;
 }
 
 .detail-btn--withdraw:hover {
-  background: rgba(255, 255, 255, 0.09) !important;
+  background: var(--g-overlay) !important;
 }
 
 /* Color utilities */
-.color--green { color: #26FAB0; }
-.color--red   { color: #F97066; }
+.color--green { color: var(--g-success); }
+.color--red   { color: var(--g-error); }
 </style>

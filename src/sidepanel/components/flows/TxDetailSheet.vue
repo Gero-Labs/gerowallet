@@ -3,7 +3,7 @@
     <div v-if="tx" class="tx-detail">
       <!-- Amount -->
       <div class="tx-amount-section">
-        <v-icon :color="isReceive ? primaryColor : '#ff8e8e'" size="36">
+        <v-icon :color="isReceive ? primaryColor : 'error'" size="36">
           {{ isReceive ? 'mdi-arrow-bottom-left' : 'mdi-arrow-top-right' }}
         </v-icon>
         <div class="tx-amount" :class="isReceive ? 'accent--text' : 'error--text'">
@@ -20,7 +20,7 @@
           <span class="detail-label">{{ $t('miniGero.txId') }}</span>
           <span class="detail-value clickable" @click="copyToClipboard(tx.id)">
             {{ truncate(tx.id) }}
-            <v-icon x-small color="#888" class="ml-1">mdi-content-copy</v-icon>
+            <v-icon x-small color="var(--g-text-3)" class="ml-1">mdi-content-copy</v-icon>
           </span>
         </div>
 
@@ -188,17 +188,17 @@ function openExplorer() {
 }
 
 .tx-amount {
-  font-size: 28px;
+  font-size: 32px;
   font-weight: 700;
   margin-top: 8px;
 }
 
 .accent--text {
-  color: var(--chain-primary) !important;
+  color: var(--g-accent) !important;
 }
 
 .error--text {
-  color: #ff8e8e !important;
+  color: var(--g-error) !important;
 }
 
 .tx-status {
@@ -206,11 +206,9 @@ function openExplorer() {
 }
 
 .tx-details-list {
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-card);
   padding: 12px 16px;
 }
 
@@ -219,7 +217,7 @@ function openExplorer() {
   justify-content: space-between;
   align-items: center;
   padding: 8px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--g-hairline-1);
 }
 
 .detail-row:last-child {
@@ -227,12 +225,12 @@ function openExplorer() {
 }
 
 .detail-label {
-  color: #888;
+  color: var(--g-text-3);
   font-size: 13px;
 }
 
 .detail-value {
-  color: #e0e0e0;
+  color: var(--g-text-1);
   font-size: 13px;
   text-align: right;
 }
@@ -242,20 +240,18 @@ function openExplorer() {
 }
 
 .detail-value.clickable:hover {
-  color: var(--chain-primary);
+  color: var(--g-accent);
 }
 
 .fee-text {
-  color: #ff8e8e;
+  color: var(--g-error);
 }
 
 .tx-assets-section {
   margin-top: 16px;
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-card);
   padding: 12px 16px;
 }
 
@@ -263,7 +259,7 @@ function openExplorer() {
   display: flex;
   align-items: center;
   padding: 6px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--g-hairline-1);
 }
 
 .asset-chip:last-child {

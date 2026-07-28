@@ -1,7 +1,8 @@
+import { Buffer } from 'buffer';
 import Loading from '@/stores/loading';
 import { Messaging } from '@/chrome/messaging';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
-import { APIError, BITCOIN_METHOD, METHOD, POPUP, SENDER, TARGET, TxSendError } from '@/chrome/config';
+import { APIError, BITCOIN_METHOD, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, POPUP, SENDER, TARGET, TxSendError } from '@/chrome/config';
 import { bringInitBackground } from '@bringweb3/chrome-extension-kit';
 import {
   focusOrCreatePopup,
@@ -14,18 +15,21 @@ import {
   getUnusedAddresses,
   getUsedAddresses,
   getUtxos,
+  isRecentNexusLent,
   submitTx,
   urlScan,
 } from '@/chrome/serialization';
-import { Blockchain, coin_type, ERROR, purpose } from '@/models/types';
+import { Blockchain, coin_type, ERROR, Network, purpose } from '@/models/types';
 import networks from '@/utils/networks';
 import { getDomain } from 'tldts';
 import { MessageTypes } from '@/models/MessageTypes';
 import { signInWithGoogle } from '@/chrome/auth';
 import { loadConfig, loadWallets } from '@/plugins/geroLoader';
-import WalletStore, { hydrateWalletStore, walletStore } from '@/stores/walletStore';
+import WalletStore, { hydrateWalletStore, matchesDappWhitelistEntry, walletStore } from '@/stores/walletStore';
 import { walletManager } from '@/services/walletManager.service';
+import { shouldAutoLock } from '@/services/autoLock';
 import { nexusCollateralApi } from '@/api/nexus-collateral-api';
+import { toNexusNetwork } from '@/api/nexus-tx-api';
 import { debugLog } from '@/utils/debug';
 import type { walletConnectService } from '@/services/walletConnect/walletConnect.service';
 import { Cardano, Serialization } from '@cardano-sdk/core';
@@ -33,6 +37,20 @@ import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { HexBlob } from '@cardano-sdk/util';
 import trezor from '@/shared/utils/trezor';
 import type { IUnifiedUtxo } from '@/chains/common/interfaces';
+import { mpcSessionCache } from '@/chrome/mpcSessionCache';
+import { mpcLoginShareCache } from '@/chrome/mpcLoginShareCache';
+import {
+  createMpcGoogleWalletFlow,
+  unlockMpcWalletFlow,
+  recoverMpcGoogleWalletFlow,
+  storeRecoveryShareFlow,
+  revealMpcSrpFlow,
+  setRecoveryPasswordFlow,
+  subFromIdToken,
+  resolveSignPrivateKeyBytes,
+  assertMpcActionSupported,
+} from '@/chrome/mpcWalletHandlers';
+import type { DeviceShareSecret } from '@/shared/utils/mpc';
 
 type WalletConnectServiceInstance = typeof walletConnectService;
 
@@ -66,6 +84,8 @@ loadWallets().then(async () => {
         const db = await getDb(walletStore.loggedWallet.id);
         const configTable = db.table('config');
         const unlockMethodConfig = await configTable.where({ key: 'unlockMethod' }).first();
+        // Clear a stray lock when no unlock method is configured (incl. MPC set to
+        // None) so the user is never trapped on a lock screen they can't dismiss.
         if (!unlockMethodConfig?.value) {
           WalletStore.setLocked(false);
           console.log('🔓 Cleared stale lock — no unlock method configured');
@@ -162,14 +182,19 @@ export async function openSidebar(tabId: number, path: string) {
   if (typeof tabId !== 'number') {
     return null;
   }
-  // Append tabId so the side panel can identify which tab it belongs to
-  const separator = path.includes('?') ? '&' : '?';
-  const fullPath = `${path}${separator}tabId=${tabId}`;
-  chrome.sidePanel.setOptions({
+  // If this tab's panel is already connected, do NOT rewrite its path:
+  // setOptions with a new path reloads the panel document and destroys
+  // whatever the user was doing (half-filled send form, running flow).
+  if (!miniGeroPorts.has(tabId)) {
+    // Append tabId so the side panel can identify which tab it belongs to
+    const separator = path.includes('?') ? '&' : '?';
+    const fullPath = `${path}${separator}tabId=${tabId}`;
+    chrome.sidePanel.setOptions({
       tabId,
       path: fullPath,
       enabled: true
-  })
+    });
+  }
   try {
     await chrome.sidePanel.open({ tabId });
   } catch (e) {
@@ -186,79 +211,135 @@ chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false });
 // Mini-gero DApp channel — per-tab port routing
 // Port name format: "mini-gero-dapp-channel" or "mini-gero-dapp-channel:${tabId}"
 const miniGeroPorts = new Map<number, chrome.runtime.Port>();
-// requestId → { resolver, tabId } so port-disconnect handlers can reject the
-// requests sent through that specific tab's port (closing the side panel via
-// the X button must register as a user reject, not silently hang).
-const pendingDAppRequests = new Map<string, { resolve: DAppRequestResolver; tabId: number }>();
+// Synthetic key generator for panels that connect without a resolvable tab id
+// (opened manually / pinned). Decrements so keys stay negative and never collide
+// with real chrome tab ids.
+let syntheticPortSeq = -1;
 
-chrome.runtime.onConnect.addListener((port) => {
-  if (port.name.startsWith('mini-gero-dapp-channel')) {
-    // Extract tab ID from port name (e.g. "mini-gero-dapp-channel:123")
-    const parts = port.name.split(':');
-    const tabId = parts.length > 1 ? parseInt(parts[1], 10) : NaN;
-    if (isNaN(tabId)) {
-      console.warn('[DApp] mini-gero port connected without tab ID, ignoring');
+// requestId → pending entry. `payload`/`method` are kept so a request can be
+// RE-DELIVERED when a panel port (re)connects: closing the panel, locking it,
+// or switching tabs PARKS requests instead of rejecting them. Only an explicit
+// user response (approve/reject) or a NACK settles the dApp's promise.
+// `walletId` snapshots the wallet the request was issued against so a mid-
+// request wallet switch cannot silently have the NEW wallet's keys answer it.
+type PendingDAppEntry = {
+  resolve: DAppRequestResolver;
+  tabId: number;
+  method: string;
+  payload: unknown;
+  walletId?: string;
+};
+const pendingDAppRequests = new Map<string, PendingDAppEntry>();
+
+function redeliverParkedRequests(tabId: number, port: chrome.runtime.Port) {
+  for (const [requestId, entry] of pendingDAppRequests.entries()) {
+    const matchesTab = entry.tabId === tabId || Number.isNaN(entry.tabId);
+    if (!matchesTab) continue;
+    try {
+      port.postMessage({ type: 'dapp-request', method: entry.method, requestId, payload: entry.payload });
+    } catch {
+      // Port died mid-loop; the next connect will retry.
       return;
     }
-
-    // Reject pending requests from old port for this tab
-    const oldPort = miniGeroPorts.get(tabId);
-    if (oldPort) {
-      try { oldPort.disconnect(); } catch { /* already disconnected */ }
-    }
-    miniGeroPorts.set(tabId, port);
-
-    port.onMessage.addListener((message) => {
-      if (message.type === 'dapp-response' && message.requestId) {
-        const entry = pendingDAppRequests.get(message.requestId);
-        if (entry) {
-          entry.resolve(message);
-          pendingDAppRequests.delete(message.requestId);
-        }
-      }
-    });
-
-    port.onDisconnect.addListener(() => {
-      if (miniGeroPorts.get(tabId) === port) {
-        miniGeroPorts.delete(tabId);
-      }
-      // Closing the side panel (X button) disconnects the port. Treat that as
-      // a user reject for any in-flight request so the dApp gets a real
-      // response instead of hanging forever waiting on a sign that won't come.
-      for (const [requestId, entry] of pendingDAppRequests.entries()) {
-        if (entry.tabId === tabId) {
-          entry.resolve({ error: APIError.Refused.info || 'User rejected' });
-          pendingDAppRequests.delete(requestId);
-        }
-      }
-    });
   }
+}
+
+chrome.runtime.onConnect.addListener((port) => {
+  if (!port.name.startsWith('mini-gero-dapp-channel')) return;
+  // Only our own extension pages may register an approval surface.
+  if (port.sender?.id !== chrome.runtime.id) {
+    console.warn('[DApp] rejected foreign mini-gero port from', port.sender?.id);
+    try { port.disconnect(); } catch { /* noop */ }
+    return;
+  }
+  // Extract tab ID from port name (e.g. "mini-gero-dapp-channel:123").
+  const parts = port.name.split(':');
+  const parsed = parts.length > 1 ? parseInt(parts[1], 10) : NaN;
+  // A panel opened without a tab context (manually / pinned) can't resolve its
+  // tab id and connects with an empty one. Register it anyway under a synthetic
+  // negative key so tab-agnostic routing (miniGeroPorts.size / any-panel
+  // fallback in the sign handlers) still finds it — we only lose the exact-tab
+  // match, which the fallback already covers. Negative keys never collide with
+  // real chrome tab ids.
+  const tabId = isNaN(parsed) ? syntheticPortSeq-- : parsed;
+
+  const oldPort = miniGeroPorts.get(tabId);
+  if (oldPort) {
+    try { oldPort.disconnect(); } catch { /* already disconnected */ }
+  }
+  miniGeroPorts.set(tabId, port);
+
+  port.onMessage.addListener((message) => {
+    if (!message?.requestId) return;
+    const entry = pendingDAppRequests.get(message.requestId);
+    if (!entry) return;
+    if (message.type === 'dapp-response') {
+      // Wallet-switch guard: if the active wallet changed since the request
+      // was issued, an approval must not be honored silently.
+      const activeWalletId = (WalletStore.state.loggedWallet as { id?: string } | null)?.id;
+      if (entry.walletId && message.error == null && activeWalletId !== entry.walletId) {
+        entry.resolve({ error: 'wallet_changed_during_request' });
+      } else {
+        entry.resolve(message);
+      }
+      pendingDAppRequests.delete(message.requestId);
+    } else if (message.type === 'dapp-nack') {
+      entry.resolve({ error: String(message.error || 'unsupported_method') });
+      pendingDAppRequests.delete(message.requestId);
+    }
+  });
+
+  port.onDisconnect.addListener(() => {
+    if (miniGeroPorts.get(tabId) === port) {
+      miniGeroPorts.delete(tabId);
+    }
+    // PARK, do not reject: closing the panel, locking it, or switching tabs
+    // must not answer a pending dApp request on the user's behalf. Pending
+    // entries stay in the map and are re-delivered once a panel port
+    // reconnects (see redeliverParkedRequests below); only an explicit user
+    // action (approve/reject) or a NACK settles them.
+  });
+
+  // Re-deliver anything parked for this tab (and tabless requests).
+  redeliverParkedRequests(tabId, port);
 });
 
 function sendToMiniGero(method: string, payload: unknown, tabId?: number): Promise<BackgroundResponse> {
-  // Find the correct port: prefer exact tab, fall back to any connected port
-  const port = (typeof tabId === 'number' && miniGeroPorts.get(tabId)) || miniGeroPorts.values().next().value;
-  if (!port) return Promise.reject(new Error('mini-gero not connected'));
-  // Resolve the tabId we're actually sending through so the disconnect handler
-  // can reject this request if the side panel closes before responding.
-  const sendingTabId = (typeof tabId === 'number' ? tabId : NaN);
+  // Exact-port routing for tab-originated requests: rendering tab A's
+  // approval in tab B's panel is a trust bug, so a tab with no connected port
+  // does NOT fall back to some other tab's panel. Tabless requests (no
+  // tabId — WalletConnect relay events, which are never tied to a browser
+  // tab) use any connected panel instead: whichever panel the user has open
+  // is the only one that could possibly show it, and there is no tab to open
+  // one on if none is connected — callers must check miniGeroPorts.size > 0
+  // themselves and fall back to a popup when it's empty.
+  const port = typeof tabId === 'number'
+    ? miniGeroPorts.get(tabId)
+    : miniGeroPorts.values().next().value;
+  const sendingTabId = typeof tabId === 'number' ? tabId : NaN;
   return new Promise((resolve, reject) => {
     const requestId = crypto.randomUUID();
-    // No timeout — user interaction can take as long as needed.
-    // Cleanup happens via port disconnect or explicit user response.
+    // No timeout — user interaction can take as long as needed. Requests are
+    // parked across disconnects and settled only by an explicit response/NACK.
     pendingDAppRequests.set(requestId, {
       tabId: sendingTabId,
+      method,
+      payload,
+      walletId: (WalletStore.state.loggedWallet as { id?: string } | null)?.id,
       resolve: (response) => {
         if (response.error) reject(new Error(String(response.error)));
         else resolve(response);
       },
     });
-    port.postMessage({
-      type: 'dapp-request',
-      method,
-      requestId,
-      payload,
-    });
+    if (port) {
+      try {
+        port.postMessage({ type: 'dapp-request', method, requestId, payload });
+      } catch {
+        // Port died between lookup and post: the entry stays parked and will
+        // be re-delivered on the next connect.
+      }
+    }
+    // No port: stays parked; openSidebar + the panel's own connect handles delivery.
   });
 }
 
@@ -266,6 +347,12 @@ function sendToMiniGero(method: string, payload: unknown, tabId?: number): Promi
  * Wait for the mini-gero side panel to connect its DApp channel port for a specific tab.
  * Resolves once the port for `tabId` is set, rejects after `timeoutMs`.
  */
+// How long a dApp signTx waits for the side-panel drawer to connect. Long enough
+// to sit through a lock screen while the user signs in (matches the enable/login
+// 5-min cap) — the port connects instantly once the panel is unlocked, so this
+// only matters while locked. Prevents falling back to a welcome popup that can't sign.
+const SIGN_TX_PORT_WAIT_MS = 5 * 60 * 1000;
+
 function waitForMiniGeroPort(timeoutMs = 5000, tabId?: number): Promise<void> {
   const hasPort = () => typeof tabId === 'number' ? miniGeroPorts.has(tabId) : miniGeroPorts.size > 0;
   if (hasPort()) return Promise.resolve();
@@ -327,37 +414,22 @@ async function checkAutoLock(): Promise<void> {
     const autoLockConfig = await configTable.where({ key: 'autoLockMinutes' }).first();
     const autoLockMinutes = autoLockConfig?.value || 0;
 
-    // If auto-lock is disabled (0), don't lock
-    if (autoLockMinutes === 0) {
-      return;
-    }
-
-    // Get unlock method - CRITICAL: Don't lock if no unlock method is configured
+    // Lock method: a wallet auto-locks only when one is configured. MPC wallets
+    // set unlockMethod to 'passkey'/'password' when their session lock is enabled
+    // and leave it null for "None" — same rule as Normal wallets, no special case.
     const unlockMethodConfig = await configTable.where({ key: 'unlockMethod' }).first();
-    const unlockMethod = unlockMethodConfig?.value;
+    const hasUnlockMethod = !!unlockMethodConfig?.value;
 
-    // If no unlock method is set, skip auto-lock (user won't be able to unlock!)
-    if (!unlockMethod) {
-      return;
-    }
-
-    // Get last activity timestamp
+    // Last activity: absent means the wallet just logged in and the tracker hasn't
+    // run yet — skip this tick.
     const lastActivityConfig = await configTable.where({ key: 'lastActivityTimestamp' }).first();
-
-    // If lastActivityTimestamp doesn't exist, it means the wallet was just logged in
-    // and the activity tracker hasn't run yet. Skip the check.
     if (!lastActivityConfig || !lastActivityConfig.value) {
       return;
     }
 
-    const lastActivityTimestamp = lastActivityConfig.value;
+    const inactiveMinutes = (Date.now() - lastActivityConfig.value) / (1000 * 60);
 
-    // Calculate time since last activity
-    const now = Date.now();
-    const inactiveMinutes = (now - lastActivityTimestamp) / (1000 * 60);
-
-    // Lock wallet if inactive for longer than configured time
-    if (inactiveMinutes >= autoLockMinutes) {
+    if (shouldAutoLock({ autoLockMinutes, hasUnlockMethod, inactiveMinutes })) {
       await walletManager.lock();
     }
   } catch (error) {
@@ -497,15 +569,6 @@ app.add(METHOD.enable, (request, sendResponse) => {
     });
   };
 
-
-  const currentWallet = walletManager.getWallet();
-  if (!currentWallet) {
-    return reply({ error: APIError.AccountNotSet });
-  }
-  if (WalletStore.isWhitelisted(origin)) {
-    return reply({ data: true });
-  }
-
   const favIconUrl = send.tab?.favIconUrl;
   const enablePayload = { ...request.data, website: origin, favIconUrl };
 
@@ -513,7 +576,10 @@ app.add(METHOD.enable, (request, sendResponse) => {
     return sendToMiniGero('enable', enablePayload, tabId)
       .then(async (response) => {
         if (response.data === true) {
-          await WalletStore.addConnectedDapp(currentWallet.id, origin);
+          // Read the wallet fresh: a cold-start request may have logged a
+          // wallet in between the initial check and this resolution.
+          const walletNow = walletManager.getWallet();
+          if (walletNow) await WalletStore.addConnectedDapp(walletNow.id, origin);
         }
         reply({ data: response.data });
       });
@@ -543,15 +609,52 @@ app.add(METHOD.enable, (request, sendResponse) => {
       });
   };
 
-  // Primary: route through mini-gero side panel drawer
-  if (typeof tabId === 'number' && miniGeroPorts.has(tabId)) {
-    handleMiniGeroEnable()
-      .catch((err: unknown) => {
-        reply({ error: errorMessage(err) || APIError.InternalError });
-      });
-  } else {
-    openSidePanelAndSend();
+  const routeEnable = () => {
+    if (WalletStore.isWhitelisted(origin)) {
+      return reply({ data: true });
+    }
+    // Primary: route through mini-gero side panel drawer
+    if (typeof tabId === 'number' && miniGeroPorts.has(tabId)) {
+      handleMiniGeroEnable()
+        .catch((err: unknown) => {
+          reply({ error: errorMessage(err) || APIError.InternalError });
+        });
+    } else {
+      openSidePanelAndSend();
+    }
+  };
+
+  const currentWallet = walletManager.getWallet();
+  if (!currentWallet) {
+    // Cold start: open the panel so the user can log in, then continue the
+    // enable flow. Mirrors the popupLogin machinery (login wait, 5 min cap)
+    // instead of returning AccountNotSet before any UI ever opens.
+    if (typeof tabId !== 'number') {
+      return reply({ error: APIError.AccountNotSet });
+    }
+    openSidebar(tabId, 'sidepanel/index.html')
+      .then(() => new Promise<boolean>((resolve) => {
+        const LOGIN_TIMEOUT_MS = 5 * 60 * 1000;
+        const started = Date.now();
+        const interval = setInterval(() => {
+          if (WalletStore.state.loggedWallet) {
+            clearInterval(interval);
+            resolve(true);
+          } else if (Date.now() - started >= LOGIN_TIMEOUT_MS) {
+            clearInterval(interval);
+            resolve(false);
+          }
+        }, 250);
+      }))
+      .then((loggedIn) => {
+        if (!loggedIn) return reply({ error: APIError.Refused });
+        routeEnable();
+      })
+      .catch(() => reply({ error: APIError.InternalError }));
+    return true;
   }
+
+  routeEnable();
 
   // IMPORTANT: Return true so that Chrome knows we'll call sendResponse asynchronously
   return true;
@@ -660,7 +763,7 @@ interface WhitelistedEntry {
 
 async function isWhitelisted(origin: string): Promise<boolean> {
   const whitelisted: WhitelistedEntry[] = WalletStore.state.connectedDapps || [];
-  return !!whitelisted.find(el => el.domain && origin.indexOf(String(el.domain)) !== -1);
+  return whitelisted.some(el => el.domain && matchesDappWhitelistEntry(origin, String(el.domain)));
 }
 
 app.add(METHOD.getNetworkId, async (request, sendResponse) => {
@@ -730,10 +833,60 @@ app.add(METHOD.getUtxos, async (request, sendResponse) => {
   }
 });
 
+/**
+ * The Nexus shared-pool collateral is Gero's own ADA, so only TRUSTED dApps may
+ * draw from it. A dApp qualifies only when its origin is BOTH (a) on Gero's
+ * curated allowlist — served by the feature-flag service (`collateralTrustedDapps`)
+ * and mirrored to chrome.storage.local for the background — AND (b) already
+ * connected/whitelisted by the user. Dev convenience: on a non-mainnet network,
+ * localhost origins pass the allowlist half so the preprod test harness works
+ * without touching the remote list (never applies on mainnet).
+ */
+async function isTrustedCollateralDapp(origin?: string): Promise<boolean> {
+  if (!origin) return false;
+  // Canonicalize to scheme+host+port. A gate on Gero's own ADA must match origins
+  // EXACTLY — never substring/startsWith/endsWith, which "https://app.minswap.org"
+  // would let "https://app.minswap.org.evil.com" (or "…minswap.org#@x") bypass.
+  let reqOrigin: string;
+  try {
+    reqOrigin = new URL(origin).origin;
+  } catch {
+    return false; // unparseable origin → untrusted
+  }
+  // (b) user must have connected/whitelisted the dApp.
+  if (!WalletStore.isWhitelisted(origin)) return false;
+  // (a) Gero-curated allowlist — entries are full origins, compared by exact equality.
+  try {
+    const stored = await chrome.storage.local.get('featureFlags');
+    const list = (stored?.featureFlags as { collateralTrustedDapps?: unknown })?.collateralTrustedDapps;
+    if (Array.isArray(list) && list.some((e) => {
+      if (typeof e !== 'string' || e.length === 0) return false;
+      try {
+        return new URL(e).origin === reqOrigin;
+      } catch {
+        return false; // malformed allowlist entry → ignore, never match
+      }
+    })) {
+      return true;
+    }
+  } catch (e) {
+    debugLog('[collateral] trusted-dapp allowlist read failed:', e);
+  }
+  // Dev-only fallback: localhost harness on an EXPLICIT non-mainnet network.
+  // Require a logged-in wallet whose network resolves to a known testnet id — a
+  // null/unknown wallet must NOT enable the bypass (fail closed).
+  const wallet = WalletStore.state.loggedWallet;
+  const netId = wallet ? networks.resolveNetworkId(wallet.chain, wallet.network) : undefined;
+  const isNonMainnet = typeof netId === 'number' && netId !== 1;
+  const isLocalDev = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(reqOrigin);
+  return isNonMainnet && isLocalDev;
+}
+
 app.add(METHOD.getCollateral, async (request, sendResponse) => {
   const storedUtxos = WalletStore.state.utxos;
   try {
-    const utxos: string[] = await getCollateral(request.data.params, storedUtxos as Cardano.Utxo[])
+    const allowNexusFallback = await isTrustedCollateralDapp(request.origin);
+    const utxos: string[] = await getCollateral(request.data.params, storedUtxos as Cardano.Utxo[], { allowNexusFallback })
     sendResponse({
       id: request.id,
       data: utxos,
@@ -873,6 +1026,12 @@ app.add(METHOD.signData, (request, sendResponse) => {
   const signDataReply = (opts: ReplyOpts) => {
     sendResponse({ id: request.id, ...opts, target: TARGET, sender: SENDER.extension });
   };
+  // The content relay now fast-paths sign requests straight to background
+  // (see messaging.ts) so the user gesture survives to sidePanel.open();
+  // enforce the whitelist here instead of in that pre-check round-trip.
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    return signDataReply({ error: APIError.Refused });
+  }
 
   const signDataPayload = { ...request.data, website: request.origin, favIconUrl: request.send?.tab?.favIconUrl };
   const tabId = request.send?.tab?.id;
@@ -918,12 +1077,21 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
   const signTxReply = (opts: ReplyOpts) => {
     sendResponse({ id: request.id, ...opts, target: TARGET, sender: SENDER.extension });
   };
+  // Same fast-path/whitelist split as signData above.
+  if (!WalletStore.isWhitelisted(request.data?.origin || request.origin)) {
+    return signTxReply({ error: APIError.Refused });
+  }
 
   const signTxPayload = { ...request.data, website: request.data?.origin || request.origin, favIconUrl: request.send?.tab?.favIconUrl };
   const tabId = request.send?.tab?.id;
 
   const handleMiniGeroSignTx = () => {
-    return sendToMiniGero('signTx', signTxPayload, tabId)
+    // Prefer this tab's panel port, but fall back to any open panel. The panel
+    // registers its port under whatever tab was active when it connected (see
+    // dappRequestHub.resolveTabId), which isn't always the dApp's tab — with a
+    // single side panel open, routing to it is correct and beats hanging.
+    const deliverTabId = typeof tabId === 'number' && miniGeroPorts.has(tabId) ? tabId : undefined;
+    return sendToMiniGero('signTx', signTxPayload, deliverTabId)
       .then((response) => signTxReply({ data: response.data }));
   };
 
@@ -962,35 +1130,44 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
       return signTxReply({ error: APIError.InternalError });
     }
 
-    // Phase 1: open the side panel and wait for the mini-gero port. Failures
-    // here mean the user can't see the prompt at all, so we fall back to the
-    // popup window. Phase 2 sends the request via the connected port —
-    // errors there (incl. the user clicking Reject) are real responses and
-    // must be relayed back to the dApp without spawning a second prompt.
+    // Phase 1: open the side panel. If the panel itself can't open (e.g. the
+    // user disabled the side panel), the popup window is the only way to show
+    // the prompt at all — fall back to it.
     try {
       await openSidebar(tabId, 'sidepanel/index.html');
-      await waitForMiniGeroPort(5000, tabId);
     } catch {
       return openPopupForSignTx();
     }
 
+    // Phase 2: wait for the mini-gero port. When the wallet is LOCKED the panel
+    // shows its lock screen and never registers the port until the user signs
+    // in, so wait through the unlock (5 min cap, mirroring the enable/login
+    // wait) instead of racing a 5s timeout into a useless welcome popup that
+    // can't sign anyway. Already-unlocked is the common case — the port
+    // connects in well under a second, so the long cap only bites while locked.
+    try {
+      // Wait for ANY panel port, not this tab's specifically — the panel may
+      // register under a different active-tab id, and handleMiniGeroSignTx
+      // falls back to whatever panel is open.
+      await waitForMiniGeroPort(SIGN_TX_PORT_WAIT_MS);
+    } catch {
+      // Panel opened but no port ever connected (user never unlocked, or
+      // closed the panel). Fail the request cleanly rather than spawning a
+      // second, unusable window on top of the panel.
+      return signTxReply({ error: APIError.Refused });
+    }
+
+    // Phase 3: deliver via the connected port. Errors here (incl. the user
+    // clicking Reject) are real responses relayed back to the dApp.
     handleMiniGeroSignTx().catch((err: unknown) => {
       signTxReply({ error: errorMessage(err) || APIError.InternalError });
     });
   };
 
-  // Honor the user's "Prompt Display Mode" preference (Settings → Advanced).
-  // useSidePanel === false means the user picked Popup, so skip the side panel
-  // entirely instead of opening it and forcing a Reject before falling through.
-  const useSidePanel = WalletStore.state.config?.useSidePanel !== false;
-
-  if (!useSidePanel) {
-    openPopupForSignTx();
-    return;
-  }
-
-  // Primary: route through mini-gero side panel drawer
-  if (typeof tabId === 'number' && miniGeroPorts.has(tabId)) {
+  // Primary: route through the mini-gero side panel drawer if ANY panel is open
+  // (handleMiniGeroSignTx prefers this tab's port, falls back to any). Only open
+  // a fresh panel when none is connected at all.
+  if (miniGeroPorts.size > 0) {
     handleMiniGeroSignTx()
       .catch((err: unknown) => {
         signTxReply({ error: errorMessage(err) || APIError.InternalError });
@@ -1381,8 +1558,8 @@ app.addToOptions(MessageTypes.ACTIVATE_GOOGLE_WALLET, async (request, sendRespon
 
     // Import database helpers
     const { getGoogleWalletWithEmail } = await import('../db/gero-db');
-    const { upsertZkFoldWallet, isWalletActivated: checkActivated } = await import('../db/zkfold-db');
-    const { default: ZkFoldStore } = await import('../stores/zkFoldStore');
+    const { upsertZkSmartWalletWallet, isWalletActivated: checkActivated } = await import('../db/zk-smart-wallet-db');
+    const { default: ZkSmartWalletStore } = await import('../stores/zkSmartWalletStore');
 
     // Check if wallet already exists in main database
     const existingWallet = await getGoogleWalletWithEmail(userId);
@@ -1414,11 +1591,11 @@ app.addToOptions(MessageTypes.ACTIVATE_GOOGLE_WALLET, async (request, sendRespon
     const { Bip32PrivateKey, SodiumBip32Ed25519 } = await import('@cardano-sdk/crypto');
     const { WalletTypePurpose, CoinTypes, HARDENED, WalletType } = await import('../models/types');
     const { encryptPrivateKey } = await import('../shared/utils/crypto');
-    const { getKeyId, getMatchingKey, getSignature, stripSignature } = await import('@/services/zkFold/google.api');
-    const { BigIntWrap } = await import('@/services/zkFold/types');
-    const { b64ToBn } = await import('@/services/zkFold/utils/json.utils');
-    const { Prover } = await import('@/services/zkFold/prover');
-    const { Backend } = await import('@/services/zkFold/backend');
+    const { getKeyId, getMatchingKey, getSignature, stripSignature } = await import('@/services/zkSmartWallet/google.api');
+    const { BigIntWrap } = await import('@/services/zkSmartWallet/types');
+    const { b64ToBn } = await import('@/services/zkSmartWallet/utils/json.utils');
+    const { Prover } = await import('@/services/zkSmartWallet/prover');
+    const { Backend } = await import('@/services/zkSmartWallet/backend');
 
     // Generate random 96 bytes for BIP32 Ed25519 key
     const randomBytes = new Uint8Array(96);
@@ -1500,8 +1677,8 @@ app.addToOptions(MessageTypes.ACTIVATE_GOOGLE_WALLET, async (request, sendRespon
     await createNewWalletDb(walletId, false);
     console.log('✅ Wallet database created');
 
-    // Store proofId in zkFold database and store
-    await upsertZkFoldWallet({
+    // Store proofId in zkSmartWallet database and store
+    await upsertZkSmartWalletWallet({
       email: userId,
       userId,
       proofId,
@@ -1509,8 +1686,8 @@ app.addToOptions(MessageTypes.ACTIVATE_GOOGLE_WALLET, async (request, sendRespon
       walletId,
       createdAt: new Date()
     });
-    ZkFoldStore.setProofId(userId, proofId);
-    console.log('✅ ProofId stored in zkFold DB and store');
+    ZkSmartWalletStore.setProofId(userId, proofId);
+    console.log('✅ ProofId stored in zkSmartWallet DB and store');
 
     // Update geroStore
     const { default: GeroStore } = await import('../stores/geroStore');
@@ -1538,18 +1715,18 @@ app.addToOptions(MessageTypes.ACTIVATE_GOOGLE_WALLET, async (request, sendRespon
         const proof = await prover.prove(empi);
         console.log('✅ Proof generated successfully for wallet:', walletId);
 
-        const zkFoldUrl = import.meta.env['VITE_ZKFOLD_API_URL'] || 'https://wallet-api.zkfold.io';
-        const zkFoldApiKey = import.meta.env['VITE_ZKFOLD_API_KEY'] || null;
-        const backend = new Backend(zkFoldUrl, zkFoldApiKey);
+        const zkSmartWalletUrl = import.meta.env['VITE_ZK_SMART_WALLET_API_URL'] || ''; // legacy hosted endpoint — unused, retained for reference
+        const zkSmartWalletApiKey = import.meta.env['VITE_ZK_SMART_WALLET_API_KEY'] || null;
+        const backend = new Backend(zkSmartWalletUrl, zkSmartWalletApiKey);
 
         console.log('🔐 Activating wallet on blockchain...');
         const createWalletResponse = await backend.activateWallet(strippedJwt, paymentKey.toPublic().hash(), proof);
         console.log('✅ Wallet activated successfully on blockchain!', createWalletResponse);
 
-        // Mark as activated in zkFold database and store
-        const { markWalletAsActivated } = await import('../db/zkfold-db');
+        // Mark as activated in zkSmartWallet database and store
+        const { markWalletAsActivated } = await import('../db/zk-smart-wallet-db');
         await markWalletAsActivated(userId, walletId);
-        ZkFoldStore.markAsActivated(userId, walletId);
+        ZkSmartWalletStore.markAsActivated(userId, walletId);
 
         console.log('✅ Background activation completed for wallet:', walletId);
       } catch (error) {
@@ -1569,6 +1746,521 @@ app.addToOptions(MessageTypes.ACTIVATE_GOOGLE_WALLET, async (request, sendRespon
     });
   }
   return true; // Keep message channel open for async response
+});
+
+/**
+ * Detect a backend "already enrolled" (HTTP 409) response without logging the
+ * raw error (which may echo request details). `Api` throws a JSON-stringified
+ * blob (see parseHttpError) rather than an Error instance on HTTP failures.
+ */
+function isMpcConflictError(error: unknown): boolean {
+  const raw = typeof error === 'string' ? error : getErrorMessage(error, '');
+  return raw.includes('"status":409');
+}
+
+/** Build a DeviceShareSecret from a request payload (passkey PRF or password). Never logged. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- request.data payload shape varies per handler (see Message.data in messaging.ts)
+function buildDeviceShareSecret(data: any): { secret: DeviceShareSecret; webAuthnCredentialId?: string; mpcPrfSaltId?: string } {
+  if (data?.prfOutputHex && data?.webAuthnCredentialId && data?.mpcPrfSaltId) {
+    const prfOutput = Uint8Array.from(Buffer.from(data.prfOutputHex, 'hex'));
+    return {
+      secret: { kind: 'prf', prfOutput, credentialId: data.webAuthnCredentialId, saltId: data.mpcPrfSaltId },
+      webAuthnCredentialId: data.webAuthnCredentialId,
+      mpcPrfSaltId: data.mpcPrfSaltId,
+    };
+  }
+  if (data?.spendingPassword) {
+    return { secret: { kind: 'password', password: data.spendingPassword } };
+  }
+  throw new Error('A passkey or spending password is required');
+}
+
+app.addToOptions(MessageTypes.CREATE_MPC_GOOGLE_WALLET, async (request, sendResponse) => {
+  try {
+    // Note: Never log request.data — contains idToken/spendingPassword/prfOutputHex
+    const { name, icon, theme, chain, network, idToken } = request.data || {};
+    if (!idToken) throw new Error('idToken is required');
+    const { secret, webAuthnCredentialId, mpcPrfSaltId } = buildDeviceShareSecret(request.data);
+
+    const { prepareMpcWalletCreation, encryptDeviceShare } = await import('@/shared/utils/mpc');
+    const { createMpcGoogleWallet } = await import('@/db/gero-db');
+    const { Api } = await import('@/api/api');
+    const api = new Api(undefined, undefined);
+
+    const { walletId, recoveryShare, publicKey } = await createMpcGoogleWalletFlow(
+      { name, icon, theme, chain, network, idToken, secret, webAuthnCredentialId, mpcPrfSaltId },
+      {
+        prepareMpcWalletCreation,
+        encryptDeviceShare,
+        enrollLoginShare: (idTok, ch, net, loginShare) => api.mpc.enroll(idTok, ch, net, loginShare),
+        createMpcGoogleWallet,
+        subFromIdToken,
+      },
+    );
+
+    sendResponse({
+      id: request.id,
+      // recoveryShare is returned to the caller for the encrypted-download backup step —
+      // it is never logged or persisted by this handler. publicKey (xpub, not secret)
+      // is embedded in the recovery-file envelope as the restore-time anchor.
+      data: { success: true, walletId, recoveryShare, publicKey },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    const alreadyEnrolled = isMpcConflictError(error);
+    const message = alreadyEnrolled
+      ? 'This Google account is already enrolled for an MPC wallet.'
+      : getErrorMessage(error, 'Failed to create MPC wallet');
+    console.error('Error creating MPC Google wallet:', message);
+    sendResponse({
+      id: request.id,
+      // `code: 'already_enrolled'` lets the UI key off a stable machine-readable
+      // signal (rather than string-matching the human-readable `error`) to offer
+      // the "reset this Google account" flow (DEREGISTER_MPC_ACCOUNT) below.
+      data: { success: false, error: message, ...(alreadyEnrolled ? { code: 'already_enrolled' } : {}) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+  return true; // Required for async Chrome message handlers
+});
+
+/**
+ * Encrypt the recovery share under the user's recovery passphrase and upload it
+ * (+ xpub anchor) to the backend, keyed by the verified Google subject. NON-FATAL:
+ * the wallet is already created and usable on THIS device (device + login = 2 of
+ * 3), so a failed upload only means cross-device restore isn't armed yet — the
+ * onboarding backup step (StepGoogleBackup.vue) surfaces a retry instead of
+ * blocking wallet creation.
+ */
+app.addToOptions(MessageTypes.STORE_MPC_RECOVERY, async (request, sendResponse) => {
+  try {
+    // Note: Never log request.data — contains idToken/recoveryShare/recoveryPassword.
+    const { idToken, chain, network, recoveryShare, recoveryPassword, publicKey } = request.data || {};
+    if (!idToken) throw new Error('idToken is required');
+    if (!recoveryShare) throw new Error('recoveryShare is required');
+    if (!recoveryPassword) throw new Error('recoveryPassword is required');
+    if (!publicKey) throw new Error('publicKey is required');
+
+    const { encryptRecoveryShare } = await import('@/shared/utils/mpc');
+    const { Api } = await import('@/api/api');
+    const api = new Api(undefined, undefined);
+
+    const { stored } = await storeRecoveryShareFlow(
+      { idToken, chain, network, recoveryShare, recoveryPassword, publicKey },
+      {
+        encryptRecoveryShare,
+        storeRecovery: (idTok, ch, net, blob, pub) => api.mpc.storeRecovery(idTok, ch, net, blob, pub),
+      },
+    );
+
+    sendResponse({
+      id: request.id,
+      data: { success: true, stored },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    // NON-FATAL: the wallet is already created and usable on THIS device (device + login
+    // = 2 of 3). A failed recovery upload only means cross-device restore isn't armed yet;
+    // the onboarding backup step surfaces a retry. Log only the message — never the
+    // recovery blob/share/password.
+    console.error('Error storing MPC recovery share:', getErrorMessage(error, 'store recovery failed'));
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error, 'Failed to store recovery backup') },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+  return true; // Required for async Chrome message handlers
+});
+
+app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET, async (request, sendResponse) => {
+  try {
+    // Note: Never log request.data — contains idToken/spendingPassword/prfOutputHex
+    const { walletId, idToken } = request.data || {};
+    if (!walletId) throw new Error('walletId is required');
+    // Two ways in: a fresh Google idToken (first unlock of the session) OR a
+    // login share already cached from an earlier unlock this session (re-unlock
+    // after a lock, no repeat Google sign-in). One of them must be present.
+    const hasCachedLoginShare = await mpcLoginShareCache.has(walletId);
+    if (!idToken && !hasCachedLoginShare) {
+      // No fresh Google token and no cached session (e.g. the service worker
+      // restarted). Surface guidance the UI can show and fall back to Google.
+      throw new Error('MPC session expired — sign in with Google');
+    }
+    const { secret } = buildDeviceShareSecret(request.data);
+
+    const { reconstructRootKeyBytes } = await import('@/shared/utils/mpc');
+    const { getAllWallets, promoteMpcDeviceShareNext } = await import('@/db/gero-db');
+    const { Api } = await import('@/api/api');
+    const api = new Api(undefined, undefined);
+
+    // With an idToken: fetch the login share from the backend. Without one:
+    // reuse the cached share (device + cached-login = 2 of 3, still gated by the
+    // device secret the user just supplied). Never log the share. The freshly
+    // fetched share is cached only AFTER reconstruct+validate succeeds below, so
+    // a wrong device secret / wrong account can never seed the Google-free path.
+    let fetchedLoginShare: string | null = null;
+    const getLoginShare = idToken
+      ? async (idTok: string, ch: string, net: string): Promise<string> => {
+          const share = await api.mpc.getLoginShare(idTok, ch, net);
+          fetchedLoginShare = share;
+          return share;
+        }
+      : async (): Promise<string> => {
+          const cached = await mpcLoginShareCache.get(walletId);
+          if (!cached) throw new Error('MPC session expired — sign in with Google');
+          return cached;
+        };
+
+    await unlockMpcWalletFlow(
+      { walletId, idToken: idToken || '', secret },
+      {
+        getWallet: async (id) => {
+          const wallets = await getAllWallets();
+          return wallets[id];
+        },
+        getLoginShare,
+        reconstructRootKeyBytes,
+        sessionCache: mpcSessionCache,
+        promoteMpcDeviceShareNext,
+      },
+    );
+
+    // Reconstruct+validate passed — only now is it safe to cache the freshly
+    // fetched login share so later re-unlocks this session can skip Google.
+    if (fetchedLoginShare) {
+      await mpcLoginShareCache.set(walletId, fetchedLoginShare);
+    }
+
+    // Flip the global lock the same way walletManager.unlock() does. Without
+    // this, an already-logged-in MPC wallet that was re-locked stays stuck:
+    // the dashboard router guard (needsAuth && isLocked) bounces to /welcome
+    // and the side panel keeps rendering LockScreen (both gate on isLocked).
+    WalletStore.setLocked(false);
+
+    sendResponse({
+      id: request.id,
+      data: { success: true },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    console.error('Error unlocking MPC wallet:', getErrorMessage(error, 'unlock failed'));
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error, 'Failed to unlock MPC wallet') },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+  return true; // Required for async Chrome message handlers
+});
+
+/**
+ * Whether this MPC wallet has a login share cached this session — i.e. it was
+ * unlocked with Google earlier and can be re-unlocked with just the device
+ * secret (passkey/spending password), skipping a repeat Google sign-in. Returns
+ * false after the service worker restarts or the wallet logs out (cache gone),
+ * so the unlock UI falls back to Google. No secrets are returned.
+ */
+app.addToOptions(MessageTypes.HAS_MPC_SESSION, async (request, sendResponse) => {
+  const { walletId } = request.data || {};
+  const hasSession = !!walletId && (await mpcLoginShareCache.has(walletId));
+  sendResponse({
+    id: request.id,
+    data: { success: true, hasSession },
+    target: TARGET,
+    sender: SENDER.extension,
+  });
+  return true;
+});
+
+app.addToOptions(MessageTypes.RECOVER_MPC_GOOGLE_WALLET, async (request, sendResponse) => {
+  try {
+    // Note: Never log request.data — contains idToken/recoveryPassword/spendingPassword/prfOutputHex
+    const { name, icon, theme, chain, network, idToken, recoveryPassword } = request.data || {};
+    if (!idToken || !chain || !network || !recoveryPassword) {
+      throw new Error('idToken, chain, network and recoveryPassword are required');
+    }
+    const { secret: newSecret, webAuthnCredentialId, mpcPrfSaltId } = buildDeviceShareSecret(request.data);
+
+    const { decryptRecoveryShare, reconstructAndValidateEntropy, encryptDeviceShare } = await import('@/shared/utils/mpc');
+    const { createMpcGoogleWallet } = await import('@/db/gero-db');
+    const { Api } = await import('@/api/api');
+    const api = new Api(undefined, undefined);
+
+    const { walletId, publicKey } = await recoverMpcGoogleWalletFlow(
+      {
+        name, icon, theme, chain, network, idToken, recoveryPassword, newSecret,
+        webAuthnCredentialId, mpcPrfSaltId,
+      },
+      {
+        fetchRecovery: (idTok, ch, net) => api.mpc.fetchRecovery(idTok, ch, net),
+        decryptRecoveryShare,
+        getLoginShare: (idTok, ch, net) => api.mpc.getLoginShare(idTok, ch, net),
+        reconstructAndValidateEntropy,
+        encryptDeviceShare,
+        createMpcGoogleWallet,
+        subFromIdToken,
+      },
+    );
+
+    sendResponse({
+      id: request.id,
+      data: { success: true, walletId, publicKey },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    // Anchor mismatch (wrong Google account for this recovery) surfaces as a
+    // clean message; the raw MpcValidationError is not leaked.
+    const { MpcValidationError, NoRecoveryBackupError } = await import('@/shared/utils/mpc');
+    let message: string;
+    let code: string | undefined;
+    if (error instanceof NoRecoveryBackupError) {
+      message = 'No recovery backup found for this Google account';
+      code = 'no_recovery_backup';
+    } else if (error instanceof MpcValidationError) {
+      message = "This recovery doesn't match this Google account.";
+    } else {
+      message = getErrorMessage(error, 'Failed to recover MPC wallet');
+    }
+    console.error('Error recovering MPC Google wallet:', message);
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: message, code },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+  return true; // Required for async Chrome message handlers
+});
+
+/**
+ * Set / change the recovery password from an unlocked wallet. NEVER asks for the
+ * old password (MetaMask parity): device + login reconstruct the entropy, then a
+ * crash-safe re-split rotates all three shares and stores a fresh recovery blob
+ * under the new password. Requires device-secret re-auth (secret in request.data).
+ * Never log request.data — it carries idToken / newRecoveryPassword / device secret.
+ */
+app.addToOptions(MessageTypes.SET_RECOVERY_PASSWORD, async (request, sendResponse) => {
+  try {
+    const { walletId, idToken, newRecoveryPassword } = request.data || {};
+    if (!walletId || !idToken || !newRecoveryPassword) {
+      throw new Error('walletId, idToken and newRecoveryPassword are required');
+    }
+    const { secret } = buildDeviceShareSecret(request.data);
+
+    const {
+      decryptDeviceShare,
+      encryptDeviceShare,
+      encryptRecoveryShare,
+      createMpcShareSet,
+      reconstructAndValidateEntropy,
+    } = await import('@/shared/utils/mpc');
+    const { getAllWallets, setMpcDeviceShareNext, promoteMpcDeviceShareNext } = await import('@/db/gero-db');
+    const { Api } = await import('@/api/api');
+    const api = new Api(undefined, undefined);
+
+    await setRecoveryPasswordFlow(
+      { walletId, idToken, newRecoveryPassword, secret },
+      {
+        getWallet: async (id) => (await getAllWallets())[id],
+        getLoginShare: (idTok, ch, net) => api.mpc.getLoginShare(idTok, ch, net),
+        decryptDeviceShare,
+        reconstructAndValidateEntropy,
+        createMpcShareSet,
+        encryptDeviceShare,
+        encryptRecoveryShare,
+        setMpcDeviceShareNext,
+        rotate: (idTok, ch, net, loginShare) => api.mpc.rotate(idTok, ch, net, loginShare),
+        promoteMpcDeviceShareNext,
+        storeRecovery: (idTok, ch, net, blob, pub) => api.mpc.storeRecovery(idTok, ch, net, blob, pub),
+        clearLoginShareCache: (id) => mpcLoginShareCache.clear(id),
+      },
+    );
+
+    sendResponse({
+      id: request.id,
+      data: { success: true },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    // storeRecovery (the LAST step) failed after rotate+promote already succeeded —
+    // the wallet is already live on the new split, but the new recovery backup wasn't
+    // saved (and the OLD recovery password is now dead too). Flag this distinctly so
+    // the dialog doesn't tell the user "nothing changed" when something did.
+    const { RecoveryBackupStoreError } = await import('@/shared/utils/mpc');
+    const backupNotStored = error instanceof RecoveryBackupStoreError;
+    console.error('Error setting MPC recovery password:', getErrorMessage(error, 'set recovery password failed'));
+    sendResponse({
+      id: request.id,
+      data: {
+        success: false,
+        error: getErrorMessage(error, 'Failed to set recovery password'),
+        ...(backupNotStored ? { code: 'recovery_backup_not_stored' } : {}),
+      },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+  return true; // Required for async Chrome message handlers
+});
+
+/**
+ * Check whether this Google account is already enrolled for an MPC wallet on the
+ * backend (for a fresh device with no local wallet). Probes the login-share
+ * endpoint: a stored share (idempotent retrieval) means enrolled; a 404 means not.
+ * The JWT is verified server-side; the login share is never logged.
+ */
+app.addToOptions(MessageTypes.CHECK_MPC_ENROLLMENT, async (request, sendResponse) => {
+  try {
+    // Note: Never log request.data — contains idToken
+    const { idToken, chain, network } = request.data || {};
+    if (!idToken || !chain || !network) {
+      throw new Error('idToken, chain and network are required');
+    }
+    const { Api } = await import('@/api/api');
+    const api = new Api(undefined, undefined);
+
+    let enrolled = false;
+    try {
+      await api.mpc.getLoginShare(idToken, chain, network);
+      enrolled = true; // share returned → enrolled
+    } catch (probeError) {
+      const raw = typeof probeError === 'string' ? probeError : getErrorMessage(probeError, '');
+      if (raw.includes('"status":404')) {
+        enrolled = false; // no share stored → not enrolled
+      } else {
+        throw probeError; // unknown error — don't misreport as "not enrolled"
+      }
+    }
+
+    sendResponse({
+      id: request.id,
+      data: { success: true, enrolled },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    console.error('Error checking MPC enrollment:', getErrorMessage(error, 'check failed'));
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error, 'Failed to check enrollment') },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+  return true; // Required for async Chrome message handlers
+});
+
+/**
+ * Reset (deregister) this Google account's MPC enrollment on the backend — deletes
+ * the account's stored login + recovery shares so a subsequent CREATE_MPC_GOOGLE_WALLET
+ * for the same account no longer 409s. Onboarding surfaces this ONLY after CREATE_MPC_GOOGLE_WALLET
+ * fails with `code: 'already_enrolled'`, gated behind an explicit user confirmation
+ * (StepGoogleSecure.vue) — never auto-triggered from here.
+ * Never log request.data — contains idToken.
+ */
+app.addToOptions(MessageTypes.DEREGISTER_MPC_ACCOUNT, async (request, sendResponse) => {
+  try {
+    const { idToken, chain, network } = request.data || {};
+    if (!idToken || !chain || !network) {
+      throw new Error('idToken, chain and network are required');
+    }
+    const { Api } = await import('@/api/api');
+    const api = new Api(undefined, undefined);
+
+    const { deregistered } = await api.mpc.deregister(idToken, chain, network);
+
+    sendResponse({
+      id: request.id,
+      data: { success: true, deregistered },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    console.error('Error deregistering MPC account:', getErrorMessage(error, 'deregister failed'));
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error, 'Failed to reset this Google account') },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+  return true; // Required for async Chrome message handlers
+});
+
+/**
+ * Reveal the MPC wallet's BIP39 seed phrase (escape hatch) after a device-secret
+ * re-auth, even in an unlocked session. Reconstructs entropy from device+login,
+ * validates the xpub, and returns the mnemonic to the UI EXACTLY ONCE.
+ *
+ * Secret hygiene: never log request.data (idToken / spendingPassword / prfOutputHex)
+ * and never log the mnemonic. The mnemonic is returned only in this response body
+ * for one-time display; it is not persisted or cached anywhere.
+ */
+app.addToOptions(MessageTypes.REVEAL_MPC_SRP, async (request, sendResponse) => {
+  try {
+    const { walletId, idToken } = request.data || {};
+    if (!walletId) throw new Error('walletId is required');
+    // Unlocked-session reveal: a fresh Google idToken OR a login share cached
+    // this session must be present (device secret alone is below threshold).
+    const hasCachedLoginShare = await mpcLoginShareCache.has(walletId);
+    if (!idToken && !hasCachedLoginShare) {
+      throw new Error('MPC session expired — sign in with Google');
+    }
+    const { secret } = buildDeviceShareSecret(request.data);
+
+    const { decryptDeviceShare, reconstructAndValidateEntropy, entropyToMnemonic } = await import('@/shared/utils/mpc');
+    const { getAllWallets } = await import('@/db/gero-db');
+    const { Api } = await import('@/api/api');
+    const api = new Api(undefined, undefined);
+
+    const getLoginShare = idToken
+      ? async (idTok: string, ch: string, net: string): Promise<string> => api.mpc.getLoginShare(idTok, ch, net)
+      : async (): Promise<string> => {
+          const cached = await mpcLoginShareCache.get(walletId);
+          if (!cached) throw new Error('MPC session expired — sign in with Google');
+          return cached;
+        };
+
+    const { mnemonic } = await revealMpcSrpFlow(
+      { walletId, idToken: idToken || '', secret },
+      {
+        getWallet: async (id) => {
+          const wallets = await getAllWallets();
+          return wallets[id];
+        },
+        getLoginShare,
+        decryptDeviceShare,
+        reconstructAndValidateEntropy,
+        entropyToMnemonic,
+      },
+    );
+
+    sendResponse({
+      id: request.id,
+      data: { success: true, mnemonic },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    // getErrorMessage only — never let a share/mnemonic reach the log or response.
+    console.error('Error revealing MPC seed phrase:', getErrorMessage(error, 'reveal failed'));
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error, 'Failed to reveal seed phrase') },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+  return true; // Required for async Chrome message handlers
 });
 
 app.addToOptions(MessageTypes.VERIFY_SPENDING_PASSWORD, async (request, sendResponse) => {
@@ -1611,9 +2303,10 @@ app.addToOptions(MessageTypes.SIGN_DATA, async (request, sendResponse) => {
     if (walletBg) {
       // Convert privateKeyBytes array back to Uint8Array if passed (PRF wallets).
       // Mirrors the SIGN_TX handler convention (number[] over the wire).
-      const privateKeyBytes = request.data.privateKeyBytes
-        ? new Uint8Array(request.data.privateKeyBytes)
-        : undefined;
+      const privateKeyBytes = resolveSignPrivateKeyBytes(
+        WalletStore.state.loggedWallet,
+        request.data.privateKeyBytes ? new Uint8Array(request.data.privateKeyBytes) : undefined
+      );
 
       const res = await walletBg.signData(
         request.data.address,
@@ -1695,9 +2388,10 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
       }
 
       // Convert privateKeyBytes array back to Uint8Array if passed (PRF wallets)
-      const privateKeyBytes = request.data.privateKeyBytes
-        ? new Uint8Array(request.data.privateKeyBytes)
-        : undefined;
+      const privateKeyBytes = resolveSignPrivateKeyBytes(
+        WalletStore.state.loggedWallet,
+        request.data.privateKeyBytes ? new Uint8Array(request.data.privateKeyBytes) : undefined
+      );
 
       let witnessResult = await walletBg.signTx(
         transaction,
@@ -1716,19 +2410,32 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
       // that succeed.
       const txCborForCosign: string | undefined = request.data.txCbor;
       if (txCborForCosign && transaction?.body?.collaterals?.length) {
+        // Route the cosign to the wallet's network so Nexus uses that network's hot
+        // wallet key/pool (one Nexus serves preprod / preview / mainnet).
+        const cosignNetwork = toNexusNetwork(WalletStore.state.loggedWallet?.network);
         for (const c of transaction.body.collaterals) {
           const ref = `${c.txId}#${c.index}`;
+          const weLentThisRef = isRecentNexusLent(ref);
           try {
-            const { witness } = await nexusCollateralApi.cosign(txCborForCosign, ref);
+            const { witness } = await nexusCollateralApi.cosign(txCborForCosign, ref, cosignNetwork);
             const merged = await mergeWitnessSets(witnessResult.witnesses, witness);
             witnessResult = { witnesses: merged };
             debugLog('🔗 Merged Nexus collateral cosign for', ref);
-          } catch (cosignErr: any) {
-            const status = cosignErr?.response?.status;
-            // 404 = ref isn't in the Nexus pool (it's a user-owned UTxO),
-            // 400 = adversarial-tx guard tripped — both expected for non-pool refs.
+          } catch (cosignErr: unknown) {
+            const err = cosignErr as { response?: { status?: number }; message?: string };
+            const status = err?.response?.status;
+            if (weLentThisRef) {
+              // We handed this UTxO to the dApp from the Nexus pool, so the tx
+              // CANNOT be submitted without the hot wallet's witness. Surface the
+              // failure instead of returning an under-signed witness that would
+              // fail opaquely at the node.
+              debugLog('⛔ Nexus cosign failed for lent ref', ref, status, err?.message);
+              throw new Error(getErrorMessage(cosignErr) || 'Collateral co-signing failed');
+            }
+            // Otherwise the ref is a user-owned UTxO we never lent: 404 (not in
+            // pool) / 400 (adversarial-tx guard) are expected — swallow them.
             if (status !== 404 && status !== 400) {
-              debugLog('⚠️ Nexus cosign failed for', ref, status, cosignErr?.message);
+              debugLog('⚠️ Nexus cosign failed for', ref, status, err?.message);
             }
           }
         }
@@ -1902,7 +2609,7 @@ app.addToOptions(MessageTypes.SIGN_TX_WITH_POOL_KEYS, async (request, sendRespon
       return;
     }
 
-    const { txCbor, password, accountIndex, utxos, addresses, privateKeyBytes } = request.data;
+    const { txCbor, password, accountIndex, utxos, addresses, privateKeyBytes, coldKeyOnly } = request.data;
 
     // Step 1: Sign with wallet keys (payment + stake) using existing signTx
     let transaction;
@@ -1912,8 +2619,21 @@ app.addToOptions(MessageTypes.SIGN_TX_WITH_POOL_KEYS, async (request, sendRespon
       throw new Error('No transaction data provided');
     }
 
-    const prfSecret = privateKeyBytes ? new Uint8Array(privateKeyBytes) : undefined;
-    const walletWitnesses = await walletBg.signTx(transaction, password, accountIndex || 0, utxos, addresses, prfSecret);
+    // Skip wallet-key signing for Ledger wallets (coldKeyOnly): there are no
+    // decryptable software payment/stake keys — the Ledger owner witness is
+    // produced in the popup context, and only the cold-key witness is built here.
+    let walletWitnesses: { witnesses: string } | undefined;
+    if (!coldKeyOnly) {
+      // Route through resolveSignPrivateKeyBytes so an MPC Google wallet (SPO
+      // cold-key import permits WalletType.Google) signs with its cached
+      // root-key bytes instead of hitting decrypt(undefined). PRF/password
+      // wallets are unaffected (explicit bytes / undefined pass straight through).
+      const prfSecret = resolveSignPrivateKeyBytes(
+        WalletStore.state.loggedWallet,
+        privateKeyBytes ? new Uint8Array(privateKeyBytes) : undefined
+      );
+      walletWitnesses = await walletBg.signTx(transaction, password, accountIndex || 0, utxos, addresses, prfSecret);
+    }
 
     // Step 2: Decrypt cold key from wallet DB and sign with it
     const { getDb } = await import('@/db/wallet-db');
@@ -1952,11 +2672,13 @@ app.addToOptions(MessageTypes.SIGN_TX_WITH_POOL_KEYS, async (request, sendRespon
     const { ed25519 } = await import('@noble/curves/ed25519');
     const { Serialization } = await import('@cardano-sdk/core');
 
-    // Get the transaction body hash (what we sign)
+    // Get the transaction body hash (what we sign). `TransactionBody.hash()` is
+    // the SDK's own blake2b-256 tx-body hash (the same value SUBMIT_TX's
+    // integrity guard compares) — using it directly here fixes a bug where the
+    // previous manual blake2b call fed `toCbor()`'s hex STRING into a library
+    // that asserts `instanceof Uint8Array`, throwing before ever signing.
     const txBody = Serialization.TransactionBody.fromCore(transaction.body);
-    const blake2b = (await import('blake2b')).default;
-    const txBodyCbor = txBody.toCbor() as unknown as Uint8Array;
-    const txBodyHash = blake2b(32).update(txBodyCbor).digest();
+    const txBodyHash = Buffer.from(txBody.hash(), 'hex');
 
     // Sign with the cold key
     const coldKeySignature = ed25519.sign(txBodyHash, new Uint8Array(coldKeyBytes));
@@ -1969,7 +2691,7 @@ app.addToOptions(MessageTypes.SIGN_TX_WITH_POOL_KEYS, async (request, sendRespon
     sendResponse({
       id: request.id,
       data: {
-        witnesses: walletWitnesses.witnesses || walletWitnesses,
+        witnesses: coldKeyOnly ? undefined : (walletWitnesses.witnesses || walletWitnesses),
         coldKeyWitness: {
           vkey: coldPubKeyHex,
           signature: coldSigHex,
@@ -2028,6 +2750,9 @@ app.addToOptions(MessageTypes.SIGN_BITCOIN_TX, async (request, sendResponse) => 
   try {
     const walletBg = walletManager.getWallet();
     if (walletBg && walletBg.chain === Blockchain.BITCOIN) {
+      // Defense-in-depth: MPC wallets are Cardano-only, so chain-gating above
+      // already excludes them, but guard the Bitcoin-specific signer explicitly.
+      assertMpcActionSupported(WalletStore.state.loggedWallet, 'Bitcoin signing');
       const { psbtHex, password, prfSecret } = request.data;
 
       // Sign Bitcoin transaction
@@ -2142,6 +2867,10 @@ app.addToOptions(MessageTypes.SEND_BITCOIN, async (request, sendResponse) => {
       return;
     }
 
+    // Defense-in-depth: MPC wallets are Cardano-only (chain-gated out above);
+    // guard the Bitcoin send path explicitly so MPC never hits decrypt(undefined).
+    assertMpcActionSupported(WalletStore.state.loggedWallet, 'Bitcoin signing');
+
     const { recipientAddress, amount, feeRate, password, privateKeyBytes } = request.data;
 
     // Convert privateKeyBytes array back to Uint8Array if passed (PRF wallets)
@@ -2220,6 +2949,9 @@ app.addToOptions(MessageTypes.BABYLON_STAKE, async (request, sendResponse) => {
       });
       return;
     }
+
+    // Defense-in-depth: MPC wallets are Cardano-only (chain-gated out above).
+    assertMpcActionSupported(WalletStore.state.loggedWallet, 'Bitcoin signing');
 
     const { psbtHex, password, privateKeyBytes } = request.data;
     const prfSecret = privateKeyBytes ? new Uint8Array(privateKeyBytes) : undefined;
@@ -2941,20 +3673,49 @@ app.add(BITCOIN_METHOD.signPsbt, (request, sendResponse) => {
     return sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
   }
 
-  const popupURL = chrome.runtime.getURL(
-    `index.html#/${POPUP.bitcoinSignPsbt}?website=${encodeURIComponent(request.origin)}`
-  );
-  focusOrCreatePopup(popupURL, 470, 600)
-    .then(tab => Messaging.sendToPopupInternal(tab.id, request))
-    .then((response: BackgroundResponse) => {
-      if (response.data !== undefined) {
-        sendResponse({ id: request.id, data: response.data, target: TARGET, sender: SENDER.extension });
-      } else {
-        sendResponse({ id: request.id, error: response.error ?? APIError.InternalError, target: TARGET, sender: SENDER.extension });
-      }
-    })
-    .catch(err => sendResponse({ id: request.id, error: err, target: TARGET, sender: SENDER.extension }));
+  // Same fast-path/whitelist split and primary(mini-gero port)/fallback(popup)
+  // shape as METHOD.signTx above.
+  const signPsbtReply = (opts: ReplyOpts) => {
+    sendResponse({ id: request.id, ...opts, target: TARGET, sender: SENDER.extension });
+  };
+  const btcSignPsbtPayload = { ...request.data, website: request.origin, favIconUrl: request.send?.tab?.favIconUrl };
+  const tabId = request.send?.tab?.id;
 
+  const handleMiniGeroSignPsbt = () => {
+    return sendToMiniGero('btcSignPsbt', btcSignPsbtPayload, tabId)
+      .then((response) => signPsbtReply({ data: response.data }));
+  };
+
+  const openPopupForSignPsbt = () => {
+    const popupURL = chrome.runtime.getURL(
+      `index.html#/${POPUP.bitcoinSignPsbt}?website=${encodeURIComponent(request.origin)}`
+    );
+    return focusOrCreatePopup(popupURL, 470, 600)
+      .then(tab => Messaging.sendToPopupInternal(tab.id, request))
+      .then((response: BackgroundResponse) => {
+        if (response.data !== undefined) signPsbtReply({ data: response.data });
+        else signPsbtReply({ error: response.error ?? APIError.InternalError });
+      })
+      .catch((e) => signPsbtReply({ error: e }));
+  };
+
+  const openSidePanelForSignPsbt = () => {
+    if (typeof tabId !== 'number') {
+      return signPsbtReply({ error: APIError.InternalError });
+    }
+    return openSidebar(tabId, 'sidepanel/index.html')
+      .then(() => waitForMiniGeroPort(5000, tabId))
+      .then(() => handleMiniGeroSignPsbt())
+      .catch(() => openPopupForSignPsbt());
+  };
+
+  if (typeof tabId === 'number' && miniGeroPorts.has(tabId)) {
+    handleMiniGeroSignPsbt().catch((err: unknown) => {
+      signPsbtReply({ error: errorMessage(err) || APIError.InternalError });
+    });
+  } else {
+    openSidePanelForSignPsbt();
+  }
   return true;
 });
 
@@ -2968,17 +3729,52 @@ app.add(BITCOIN_METHOD.signPsbts, async (request, sendResponse) => {
   }
 
   const { psbtHexs, options } = request.data;
-  const signedHexs: string[] = [];
-  try {
-    for (const psbtHex of psbtHexs) {
-      const singleRequest = { ...request, data: { psbtHex, options } };
+  const tabId = request.send?.tab?.id;
+  const favIconUrl = request.send?.tab?.favIconUrl;
+
+  // Signs one PSBT in the batch via the mini-gero port (primary), an
+  // auto-opened side panel (secondary), or a standalone popup (fallback, when
+  // no panel connects) — same primary/fallback shape as the singular
+  // signPsbt handler above, extracted here since this handler drives it once
+  // per PSBT in a sequential loop (matching the popup-only version's original
+  // one-popup-per-PSBT behavior).
+  const signOne = async (psbtHex: string): Promise<string> => {
+    const singleRequest = { ...request, data: { psbtHex, options } };
+
+    const viaPopup = async (): Promise<string> => {
       const popupURL = chrome.runtime.getURL(
         `index.html#/${POPUP.bitcoinSignPsbt}?website=${encodeURIComponent(request.origin)}`
       );
       const tab = await focusOrCreatePopup(popupURL, 470, 600);
       const response = await Messaging.sendToPopupInternal(tab.id, singleRequest) as BackgroundResponse;
-      if (response.error) throw response.error;
-      signedHexs.push(response.data as string);
+      if (response.data !== undefined) return response.data as string;
+      throw response.error ?? APIError.InternalError;
+    };
+
+    const viaMiniGero = async (): Promise<string> => {
+      try {
+        const response = await sendToMiniGero('btcSignPsbt', { psbtHex, options, website: request.origin, favIconUrl }, tabId);
+        return response.data as string;
+      } catch (err) {
+        throw errorMessage(err) || APIError.InternalError;
+      }
+    };
+
+    if (typeof tabId === 'number' && miniGeroPorts.has(tabId)) return viaMiniGero();
+    if (typeof tabId !== 'number') throw APIError.InternalError;
+    try {
+      await openSidebar(tabId, 'sidepanel/index.html');
+      await waitForMiniGeroPort(5000, tabId);
+    } catch {
+      return viaPopup();
+    }
+    return viaMiniGero();
+  };
+
+  const signedHexs: string[] = [];
+  try {
+    for (const psbtHex of psbtHexs) {
+      signedHexs.push(await signOne(psbtHex));
     }
     sendResponse({ id: request.id, data: signedHexs, target: TARGET, sender: SENDER.extension });
   } catch (err) {
@@ -2996,20 +3792,47 @@ app.add(BITCOIN_METHOD.signMessage, (request, sendResponse) => {
     return sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
   }
 
-  const popupURL = chrome.runtime.getURL(
-    `index.html#/${POPUP.bitcoinSignMessage}?website=${encodeURIComponent(request.origin)}`
-  );
-  focusOrCreatePopup(popupURL, 470, 600)
-    .then(tab => Messaging.sendToPopupInternal(tab.id, request))
-    .then((response: BackgroundResponse) => {
-      if (response.data !== undefined) {
-        sendResponse({ id: request.id, data: response.data, target: TARGET, sender: SENDER.extension });
-      } else {
-        sendResponse({ id: request.id, error: response.error ?? APIError.InternalError, target: TARGET, sender: SENDER.extension });
-      }
-    })
-    .catch(err => sendResponse({ id: request.id, error: err, target: TARGET, sender: SENDER.extension }));
+  const signMessageReply = (opts: ReplyOpts) => {
+    sendResponse({ id: request.id, ...opts, target: TARGET, sender: SENDER.extension });
+  };
+  const btcSignMessagePayload = { ...request.data, website: request.origin, favIconUrl: request.send?.tab?.favIconUrl };
+  const tabId = request.send?.tab?.id;
 
+  const handleMiniGeroSignMessage = () => {
+    return sendToMiniGero('btcSignMessage', btcSignMessagePayload, tabId)
+      .then((response) => signMessageReply({ data: response.data }));
+  };
+
+  const openPopupForSignMessage = () => {
+    const popupURL = chrome.runtime.getURL(
+      `index.html#/${POPUP.bitcoinSignMessage}?website=${encodeURIComponent(request.origin)}`
+    );
+    return focusOrCreatePopup(popupURL, 470, 600)
+      .then(tab => Messaging.sendToPopupInternal(tab.id, request))
+      .then((response: BackgroundResponse) => {
+        if (response.data !== undefined) signMessageReply({ data: response.data });
+        else signMessageReply({ error: response.error ?? APIError.InternalError });
+      })
+      .catch((e) => signMessageReply({ error: e }));
+  };
+
+  const openSidePanelForSignMessage = () => {
+    if (typeof tabId !== 'number') {
+      return signMessageReply({ error: APIError.InternalError });
+    }
+    return openSidebar(tabId, 'sidepanel/index.html')
+      .then(() => waitForMiniGeroPort(5000, tabId))
+      .then(() => handleMiniGeroSignMessage())
+      .catch(() => openPopupForSignMessage());
+  };
+
+  if (typeof tabId === 'number' && miniGeroPorts.has(tabId)) {
+    handleMiniGeroSignMessage().catch((err: unknown) => {
+      signMessageReply({ error: errorMessage(err) || APIError.InternalError });
+    });
+  } else {
+    openSidePanelForSignMessage();
+  }
   return true;
 });
 
@@ -3075,6 +3898,8 @@ app.addToOptions(MessageTypes.BITCOIN_DAPP_SIGN_PSBT, async (request, sendRespon
       sendResponse({ id: request.id, data: { success: false, error: 'Not a Bitcoin wallet' }, target: TARGET, sender: SENDER.extension });
       return;
     }
+    // Defense-in-depth: MPC wallets are Cardano-only (chain-gated out above).
+    assertMpcActionSupported(WalletStore.state.loggedWallet, 'Bitcoin signing');
     const { psbtHex, options, password, privateKeyBytes } = request.data;
     const prfSecret = privateKeyBytes ? new Uint8Array(privateKeyBytes) : undefined;
     const signedHex = await walletBg.signBitcoinDappPsbt(psbtHex, options, password, prfSecret);
@@ -3091,6 +3916,8 @@ app.addToOptions(MessageTypes.BITCOIN_DAPP_SIGN_MESSAGE, async (request, sendRes
       sendResponse({ id: request.id, data: { success: false, error: 'Not a Bitcoin wallet' }, target: TARGET, sender: SENDER.extension });
       return;
     }
+    // Defense-in-depth: MPC wallets are Cardano-only (chain-gated out above).
+    assertMpcActionSupported(WalletStore.state.loggedWallet, 'Bitcoin signing');
     const { message, type, password, privateKeyBytes } = request.data;
     const prfSecret = privateKeyBytes ? new Uint8Array(privateKeyBytes) : undefined;
     const signature = await walletBg.signBitcoinDappMessage(message, type, password, prfSecret);
@@ -3122,15 +3949,49 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
   // Sync store on init
   updateStore().catch(() => {});
 
-  // ---- Session Proposal → open approval popup ----
+  // ---- Session Proposal → mini-gero panel (if one's open) or approval popup ----
   wcService.onSessionProposal = async (proposal) => {
     try {
       const proposalData = proposal.params;
-      const popupURL = chrome.runtime.getURL(`index.html#/${POPUP.wcSessionProposal}`);
-      const tab = await focusOrCreatePopup(popupURL, 470, 600);
-      const response = await Messaging.sendToPopupInternal(tab.id, { data: proposalData }) as { data?: { approved?: boolean } };
+      const peerUrl = proposalData?.proposer?.metadata?.url || '';
 
-      if (response?.data?.approved) {
+      // Blacklist check: WC pairing had no equivalent of the tab-navigation
+      // blacklist scan (handleBlacklisted above) — a malicious dApp's WC
+      // metadata was never checked, unlike a malicious website's URL.
+      if (peerUrl) {
+        try {
+          const websiteProtectionEnabled = walletStore.config?.websiteProtection !== undefined
+            ? walletStore.config.websiteProtection : true;
+          if (websiteProtectionEnabled) {
+            const scanResponse = await urlScan(peerUrl);
+            const verdict = await scanResponse.json();
+            if (verdict === 'blacklist') {
+              await wcService.rejectSession(proposalData.id, 'Website flagged as malicious');
+              return;
+            }
+          }
+        } catch {
+          // Scan failure must not block legitimate pairing — fail open, same
+          // as handleBlacklisted's catch-all for tab navigation.
+        }
+      }
+
+      let approved = false;
+      if (miniGeroPorts.size > 0) {
+        try {
+          const response = await sendToMiniGero('wcSessionProposal', { ...proposalData, website: peerUrl || 'WalletConnect' }, undefined);
+          approved = !!(response.data as { approved?: boolean } | undefined)?.approved;
+        } catch {
+          approved = false; // explicit reject, NACK, or wallet-changed guard
+        }
+      } else {
+        const popupURL = chrome.runtime.getURL(`index.html#/${POPUP.wcSessionProposal}`);
+        const tab = await focusOrCreatePopup(popupURL, 470, 600);
+        const popupResponse = await Messaging.sendToPopupInternal(tab.id, { data: proposalData }) as { data?: { approved?: boolean } };
+        approved = !!popupResponse?.data?.approved;
+      }
+
+      if (approved) {
         // Build accounts from current wallet
         const loggedWallet = WalletStore.state.loggedWallet;
         if (!loggedWallet) {
@@ -3155,6 +4016,46 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
       try { await wcService.rejectSession(proposal.params.id, 'Internal error'); } catch {}
     }
   };
+
+  // Routes one WC session-request (signing) through the mini-gero panel if
+  // one's connected, reusing the SAME port methods (signTx/signData/
+  // btcSignPsbt/btcSignMessage) an injected dApp's request would use — same
+  // rendering, different origin metadata — falling back to the existing
+  // popup fallback (fakeRequest + focusOrCreatePopup) when no panel is open,
+  // since a tabless relay event can never open one itself.
+  async function routeWcSigningRequest(
+    portMethod: 'signTx' | 'signData' | 'btcSignPsbt' | 'btcSignMessage',
+    data: Record<string, unknown>,
+    topic: string,
+    id: number,
+    popupRoute: string,
+    popupSize: [number, number],
+  ): Promise<void> {
+    const session = wcService.getSessionForTopic(topic) as { peer?: { metadata?: { url?: string; icons?: string[] } } } | null;
+    const peerMeta = session?.peer?.metadata;
+    const payload = { ...data, website: peerMeta?.url || 'WalletConnect', favIconUrl: peerMeta?.icons?.[0] };
+
+    if (miniGeroPorts.size > 0) {
+      try {
+        const response = await sendToMiniGero(portMethod, payload, undefined);
+        await wcService.respondSuccess(topic, id, response.data);
+      } catch (err) {
+        await wcService.respondError(topic, id, 4001, errorMessage(err) || 'User rejected');
+      }
+      return;
+    }
+
+    const fakeRequest = { id: `wc-${id}`, data: payload, origin: 'WalletConnect', send: { tab: { id: -1 } } };
+    const popupURL = chrome.runtime.getURL(`index.html#/${popupRoute}?website=${encodeURIComponent('WalletConnect')}`);
+    const tab = await focusOrCreatePopup(popupURL, popupSize[0], popupSize[1]);
+    const response = await Messaging.sendToPopupInternal(tab.id, fakeRequest) as BackgroundResponse;
+    if (response.data !== undefined) {
+      await wcService.respondSuccess(topic, id, response.data);
+    } else {
+      const errInfo = (response.error as { info?: string } | undefined)?.info;
+      await wcService.respondError(topic, id, 4001, errInfo || 'User rejected');
+    }
+  }
 
   // ---- Session Request → route to appropriate handler ----
   wcService.onSessionRequest = async (event) => {
@@ -3198,7 +4099,12 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
           case 'cardano_getCollateral': {
             const storedUtxos = WalletStore.state.utxos as Cardano.Utxo[];
             const wcParams = wcRequest.params || {};
-            const result = getCollateral(wcParams, storedUtxos);
+            // getCollateral is async (Pass-2 lends from the Nexus pool); it must
+            // be awaited or the dApp receives a serialized pending Promise ({}).
+            // WalletConnect dApp origins aren't resolved here, so the shared-pool
+            // fallback is disabled for WC in v1 (trusted-dApp gate can't be
+            // evaluated) — WC dApps still get the user's own collateral.
+            const result = await getCollateral(wcParams, storedUtxos, { allowNexusFallback: false });
             await wcService.respondSuccess(topic, id, result);
             return;
           }
@@ -3232,44 +4138,21 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
             return;
           }
           case 'cardano_signTx': {
-            // Open SignTx popup — reuse existing pattern
             const wcParams = wcRequest.params || {};
-            const fakeRequest = {
-              id: `wc-${id}`,
-              data: { tx: wcParams.tx || wcParams, partialSign: wcParams.partialSign, origin: 'WalletConnect' },
-              origin: 'WalletConnect',
-              send: { tab: { id: -1 } },
-            };
-            const popupURL = chrome.runtime.getURL(
-              `index.html#/${POPUP.signTx}?website=${encodeURIComponent('WalletConnect')}`
+            await routeWcSigningRequest(
+              'signTx',
+              { tx: wcParams.tx || wcParams, partialSign: wcParams.partialSign, origin: 'WalletConnect' },
+              topic, id, POPUP.signTx, [470, 852],
             );
-            const tab = await focusOrCreatePopup(popupURL, 470, 852);
-            const response = await Messaging.sendToPopupInternal(tab.id, fakeRequest) as BackgroundResponse;
-            if (response.data) {
-              await wcService.respondSuccess(topic, id, response.data);
-            } else {
-              await wcService.respondError(topic, id, 4001, (response.error as { info?: string } | undefined)?.info || 'User rejected');
-            }
             return;
           }
           case 'cardano_signData': {
             const wcParams = wcRequest.params || {};
-            const fakeRequest = {
-              id: `wc-${id}`,
-              data: { address: wcParams.addr || wcParams.address, payload: wcParams.payload, origin: 'WalletConnect' },
-              origin: 'WalletConnect',
-              send: { tab: { id: -1 } },
-            };
-            const popupURL = chrome.runtime.getURL(
-              `index.html#/${POPUP.dappSignData}?website=${encodeURIComponent('WalletConnect')}`
+            await routeWcSigningRequest(
+              'signData',
+              { address: wcParams.addr || wcParams.address, payload: wcParams.payload, origin: 'WalletConnect' },
+              topic, id, POPUP.dappSignData, [470, 600],
             );
-            const tab = await focusOrCreatePopup(popupURL, 470, 600);
-            const response = await Messaging.sendToPopupInternal(tab.id, fakeRequest) as BackgroundResponse;
-            if (response.data) {
-              await wcService.respondSuccess(topic, id, response.data);
-            } else {
-              await wcService.respondError(topic, id, 4001, (response.error as { info?: string } | undefined)?.info || 'User rejected');
-            }
             return;
           }
         }
@@ -3285,42 +4168,20 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
           }
           case 'signPsbt': {
             const wcParams = wcRequest.params || {};
-            const fakeRequest = {
-              id: `wc-${id}`,
-              data: { psbtHex: wcParams.psbt || wcParams.psbtHex, options: wcParams.signInputs },
-              origin: 'WalletConnect',
-              send: { tab: { id: -1 } },
-            };
-            const popupURL = chrome.runtime.getURL(
-              `index.html#/${POPUP.bitcoinSignPsbt}?website=${encodeURIComponent('WalletConnect')}`
+            await routeWcSigningRequest(
+              'btcSignPsbt',
+              { psbtHex: wcParams.psbt || wcParams.psbtHex, options: wcParams.signInputs },
+              topic, id, POPUP.bitcoinSignPsbt, [470, 600],
             );
-            const tab = await focusOrCreatePopup(popupURL, 470, 600);
-            const response = await Messaging.sendToPopupInternal(tab.id, fakeRequest) as BackgroundResponse;
-            if (response.data !== undefined) {
-              await wcService.respondSuccess(topic, id, response.data);
-            } else {
-              await wcService.respondError(topic, id, 4001, 'User rejected');
-            }
             return;
           }
           case 'signMessage': {
             const wcParams = wcRequest.params || {};
-            const fakeRequest = {
-              id: `wc-${id}`,
-              data: { message: wcParams.message, type: wcParams.type || 'ecdsa' },
-              origin: 'WalletConnect',
-              send: { tab: { id: -1 } },
-            };
-            const popupURL = chrome.runtime.getURL(
-              `index.html#/${POPUP.bitcoinSignMessage}?website=${encodeURIComponent('WalletConnect')}`
+            await routeWcSigningRequest(
+              'btcSignMessage',
+              { message: wcParams.message, type: wcParams.type || 'ecdsa' },
+              topic, id, POPUP.bitcoinSignMessage, [470, 600],
             );
-            const tab = await focusOrCreatePopup(popupURL, 470, 600);
-            const response = await Messaging.sendToPopupInternal(tab.id, fakeRequest) as BackgroundResponse;
-            if (response.data !== undefined) {
-              await wcService.respondSuccess(topic, id, response.data);
-            } else {
-              await wcService.respondError(topic, id, 4001, 'User rejected');
-            }
             return;
           }
         }
@@ -3393,6 +4254,1357 @@ app.addToOptions(MessageTypes.WC_GET_SESSIONS, async (request, sendResponse) => 
     sendResponse({ id: request.id, data: { success: true, sessions }, target: TARGET, sender: SENDER.extension });
   } catch (error) {
     sendResponse({ id: request.id, data: { success: false, error: getErrorMessage(error) }, target: TARGET, sender: SENDER.extension });
+  }
+});
+
+/**
+ * Persist a re-derived Midnight publicKey JSON for an existing Midnight wallet.
+ * The browser context runs the SDK derivation (ledger-v8 WASM doesn't run in
+ * service workers), then ships the resulting `{ unshielded, shielded, dust }`
+ * JSON here so the BG can update the wallet record + propagate to walletStore.
+ *
+ * The expected request shape: `{ walletId: number; publicKey: string }`.
+ * Caller is responsible for having already verified the user's password (the
+ * derivation requires decrypting the mnemonic — if that succeeds the password
+ * was valid, no separate VERIFY_SPENDING_PASSWORD call is needed).
+ */
+app.addToOptions(MessageTypes.UPDATE_MIDNIGHT_PUBLIC_KEY, async (request, sendResponse) => {
+  try {
+    const { walletId, publicKey } = request.data || {};
+    if (typeof walletId !== 'number' || typeof publicKey !== 'string' || !publicKey) {
+      throw new Error('walletId and publicKey are required');
+    }
+    const { getDb } = await import('@/db/gero-db');
+    const db = await getDb();
+    await db['wallets'].update(walletId, { publicKey });
+
+    // Refresh the live walletBg if this is the currently logged-in wallet so
+    // subsequent code paths (sync, signing) see the new addresses without
+    // requiring a re-login.
+    const walletBg = walletManager.getWallet();
+    if (walletBg && walletBg.id === walletId) {
+      walletBg.publicKey = publicKey;
+      try {
+        const parsed = JSON.parse(publicKey);
+        if (parsed && typeof parsed === 'object' && parsed.unshielded) {
+          walletBg.baseAddress = parsed.unshielded;
+        }
+      } catch { /* publicKey shape mismatch — DB still updated; next login will pick up. */ }
+      WalletStore.setLoggedWallet({ ...walletBg });
+    }
+
+    sendResponse({
+      id: request.id,
+      data: { success: true },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+/**
+ * Midnight: sign a list of intent-hash segments with the user's role-derived
+ * key. Used by the Midnight send pipeline (see `services/midnight-tx.service`).
+ * Mnemonic decryption + signing happen entirely inside `walletBg.signMidnightSegments`;
+ * this handler is a thin transport.
+ *
+ * Request shape: `{ segments: MidnightSegmentToSign[]; password?: string;
+ *                   prfSecret?: number[] /* serialized Uint8Array * / }`.
+ */
+app.addToOptions(MessageTypes.SIGN_MIDNIGHT_SEGMENTS, async (request, sendResponse) => {
+  try {
+    const walletBg = walletManager.getWallet();
+    if (!walletBg) throw new Error('No wallet logged in');
+    const { segments, password, prfSecret } = request.data || {};
+    if (!Array.isArray(segments)) throw new Error('segments[] is required');
+    const prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
+    const signatures = await walletBg.signMidnightSegments(segments, password, prfBytes);
+    sendResponse({
+      id: request.id,
+      data: { success: true, signatures },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+/**
+ * Midnight: DUST-balance + sign the unproven unshielded NIGHT-transfer tx
+ * Nexus built. Returns the signed-but-unproven tx hex. Sidecar's /tx/finalize
+ * handles ZK proving + binding + submission.
+ *
+ * Request shape: `{ unprovenTxHex: string, ttlMs: number,
+ *                   password?: string, prfSecret?: number[] }`.
+ */
+app.addToOptions(
+  MessageTypes.BALANCE_AND_SIGN_MIDNIGHT_UNSHIELDED_TX,
+  async (request, sendResponse) => {
+    try {
+      const walletBg = walletManager.getWallet();
+      if (!walletBg) throw new Error('No wallet logged in');
+      if (walletBg.chain !== Blockchain.MIDNIGHT) {
+        throw new Error('BALANCE_AND_SIGN_MIDNIGHT_UNSHIELDED_TX called on non-Midnight wallet');
+      }
+      const { unprovenTxHex, ttlMs, password, prfSecret } = request.data || {};
+      if (typeof unprovenTxHex !== 'string' || unprovenTxHex.length === 0) {
+        throw new Error('unprovenTxHex is required');
+      }
+      if (typeof ttlMs !== 'number' || !Number.isFinite(ttlMs)) {
+        throw new Error('ttlMs is required (epoch millis)');
+      }
+      const prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
+      const signedTxHex = await walletBg.balanceAndSignMidnightUnshieldedTransfer(
+        unprovenTxHex,
+        ttlMs,
+        password,
+        prfBytes,
+      );
+      sendResponse({
+        id: request.id,
+        data: { success: true, signedTxHex },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } catch (error) {
+      sendResponse({
+        id: request.id,
+        data: { success: false, error: getErrorMessage(error) },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  },
+);
+
+/**
+ * Header names a `proving.headers` request may carry — exactly the Arkhia
+ * zkPaaS auth pair. An allowlist (rather than pass-through) so a crafted
+ * message can't smuggle arbitrary headers (Authorization, Cookie, Host
+ * overrides, ...) into the BG's fetch to the proof server.
+ */
+const PROVING_HEADER_ALLOWLIST = new Set(['x-api-key', 'x-api-secret']);
+
+/**
+ * Validate the optional `proving` field on BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX
+ * requests (WP-P2 local mode; zkPaaS adds `headers`). This crosses the BG
+ * message boundary from browser/options/popup context, so it's checked here
+ * even though it originates from our own UI: http(s) scheme only, no
+ * embedded credentials (a crafted `http://user:pass@host` URL would
+ * otherwise smuggle Basic-Auth into the BG's fetch to the "proof server"),
+ * and only allowlisted auth headers with sane, injection-free values.
+ */
+function parseProvingRequest(value: unknown): { url: string; headers?: Record<string, string> } | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'object') throw new Error('proving must be an object');
+  const url = (value as { url?: unknown }).url;
+  if (typeof url !== 'string' || url.length === 0) {
+    throw new Error('proving.url is required and must be a non-empty string');
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error('proving.url is not a valid URL');
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('proving.url must use http or https');
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error('proving.url must not contain credentials');
+  }
+  const rawHeaders = (value as { headers?: unknown }).headers;
+  if (rawHeaders === undefined || rawHeaders === null) return { url };
+  if (typeof rawHeaders !== 'object' || Array.isArray(rawHeaders)) {
+    throw new Error('proving.headers must be an object');
+  }
+  const headers: Record<string, string> = {};
+  for (const [name, headerValue] of Object.entries(rawHeaders as Record<string, unknown>)) {
+    if (!PROVING_HEADER_ALLOWLIST.has(name.toLowerCase())) {
+      throw new Error(`proving.headers: "${name}" is not an allowed header`);
+    }
+    // Value stays out of the error text — it's an API credential.
+    if (typeof headerValue !== 'string' || headerValue.length === 0 || headerValue.length > 512
+      || /[\r\n\0]/.test(headerValue)) {
+      throw new Error(`proving.headers: invalid value for "${name}"`);
+    }
+    headers[name.toLowerCase()] = headerValue;
+  }
+  return Object.keys(headers).length > 0 ? { url, headers } : { url };
+}
+
+/**
+ * Midnight: build + sign a shielded NIGHT transfer entirely in BG.
+ *
+ * Request shape: `{ outputs: [{receiverAddress, amount, tokenType?}], password?,
+ * prfSecret?, proving?: { url, headers? } }`. Amounts are passed as decimal strings to
+ * survive Chrome messaging's BigInt-unfriendly serialization; BG parses back
+ * to bigint. `proving` is optional (WP-P2, local proof-server mode) — when
+ * present, BG proves the tx itself before returning.
+ *
+ * Response: `{ success: true, signedTxHex, proven }`. When `proven` is
+ * false (default, no `proving` in the request), `signedTxHex` is SIGNED but
+ * UNPROVEN — UI must hand it to Nexus's /tx/prove-and-submit, NOT
+ * /tx/submit(-proven). When `proven` is true, `signedTxHex` is a finalized
+ * tx for /tx/submit-proven instead.
+ */
+app.addToOptions(
+  MessageTypes.BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX,
+  async (request, sendResponse) => {
+    try {
+      const walletBg = walletManager.getWallet();
+      if (!walletBg) throw new Error('No wallet logged in');
+      if (walletBg.chain !== Blockchain.MIDNIGHT) {
+        throw new Error('BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX called on non-Midnight wallet');
+      }
+      const { outputs, password, prfSecret, proving } = request.data || {};
+      if (!Array.isArray(outputs) || outputs.length === 0) {
+        throw new Error('outputs is required (non-empty array)');
+      }
+      // Outputs come over the wire with amount as a string (BigInt isn't JSON-
+      // serializable). Parse back to bigint here before handing off to the BG
+      // builder. Fail loudly on a bad amount rather than passing 0 onward.
+      const parsedOutputs = outputs.map((o: unknown, idx: number) => {
+        if (!o || typeof o !== 'object') {
+          throw new Error(`outputs[${idx}] is not an object`);
+        }
+        const obj = o as { receiverAddress?: string; amount?: string | number; tokenType?: string };
+        if (typeof obj.receiverAddress !== 'string' || obj.receiverAddress.length === 0) {
+          throw new Error(`outputs[${idx}].receiverAddress is required`);
+        }
+        const amount = typeof obj.amount === 'bigint'
+          ? obj.amount
+          : BigInt(String(obj.amount ?? '0'));
+        if (amount <= 0n) {
+          throw new Error(`outputs[${idx}].amount must be > 0`);
+        }
+        return {
+          receiverAddress: obj.receiverAddress,
+          amount,
+          tokenType: obj.tokenType,
+        };
+      });
+      const prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
+      const provingArg = parseProvingRequest(proving);
+      const { signedTxHex, proven } = await walletBg.buildAndSignMidnightShieldedTransfer(
+        parsedOutputs,
+        password,
+        prfBytes,
+        provingArg,
+      );
+      sendResponse({
+        id: request.id,
+        data: { success: true, signedTxHex, proven },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } catch (error) {
+      console.error('Error building/signing Midnight shielded transfer:', error);
+      sendResponse({
+        id: request.id,
+        data: { success: false, error: getErrorMessage(error) },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  },
+);
+
+/**
+ * Midnight: build + sign the SHIELD direction of a shield/unshield
+ * conversion (public NIGHT -> private/shielded NIGHT). No recipient — shield
+ * always moves value between the wallet's own two addresses.
+ *
+ * Request shape: `{ amount, password?, prfSecret?, proving?: { url, headers? } }`.
+ * `amount` is a decimal string (Chrome messaging can't carry BigInt); BG
+ * parses back to bigint. `proving` is optional (WP-P2 local mode; zkPaaS
+ * adds auth headers), same as BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX above.
+ *
+ * Response: `{ success: true, signedTxHex, proven }`. Same proven/unproven
+ * routing rule as the shielded-transfer handler above (proven=false ->
+ * /tx/prove-and-submit, proven=true -> /tx/submit-proven).
+ */
+app.addToOptions(
+  MessageTypes.BUILD_AND_SIGN_MIDNIGHT_SHIELD_TX,
+  async (request, sendResponse) => {
+    try {
+      const walletBg = walletManager.getWallet();
+      if (!walletBg) throw new Error('No wallet logged in');
+      if (walletBg.chain !== Blockchain.MIDNIGHT) {
+        throw new Error('BUILD_AND_SIGN_MIDNIGHT_SHIELD_TX called on non-Midnight wallet');
+      }
+      const { amount, password, prfSecret, proving } = request.data || {};
+      const parsedAmount = typeof amount === 'bigint' ? amount : BigInt(String(amount ?? '0'));
+      if (parsedAmount <= 0n) {
+        throw new Error('amount must be > 0');
+      }
+      const prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
+      const provingArg = parseProvingRequest(proving);
+      const { signedTxHex, proven } = await walletBg.buildAndSignMidnightShield(
+        parsedAmount,
+        password,
+        prfBytes,
+        provingArg,
+      );
+      sendResponse({
+        id: request.id,
+        data: { success: true, signedTxHex, proven },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } catch (error) {
+      console.error('Error building/signing Midnight shield conversion:', error);
+      sendResponse({
+        id: request.id,
+        data: { success: false, error: getErrorMessage(error) },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  },
+);
+
+/**
+ * Midnight: persist the user's consent to ship shielded-tx witness data
+ * through Gero Cloud's proving service. BG-side action so the value
+ * propagates to every browser context (popup, options, sidepanel) via the
+ * standard midnightStore broadcast — the user shouldn't need to re-consent
+ * just because they accepted in options and then opened the popup.
+ *
+ * Body shape: `{}` (no params — current SHIELDED_PROVING_CONSENT_VERSION
+ * is fixed in code; future bumps invalidate the recorded acceptance).
+ */
+app.addToOptions(
+  MessageTypes.ACCEPT_MIDNIGHT_SHIELDED_PROVING_CONSENT,
+  async (request, sendResponse) => {
+    try {
+      const { midnightActions } = await import('@/stores/midnightStore');
+      midnightActions.acceptShieldedProvingConsent();
+      sendResponse({
+        id: request.id,
+        data: { success: true },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } catch (error) {
+      sendResponse({
+        id: request.id,
+        data: { success: false, error: getErrorMessage(error) },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  },
+);
+
+/**
+ * Shared URL-shape check for proof-server preference fields: http(s) only,
+ * no embedded credentials. Field name (never the value's credentials) goes
+ * into the error text.
+ */
+function validateProofServerUrlField(field: string, value: string): void {
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(value);
+  } catch {
+    throw new Error(`${field} is not a valid URL`);
+  }
+  if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+    throw new Error(`${field} must use http or https`);
+  }
+  if (parsedUrl.username || parsedUrl.password) {
+    throw new Error(`${field} must not contain credentials`);
+  }
+}
+
+/**
+ * Arkhia credential fields: optional strings, bounded, header-injection
+ * free (they end up as header VALUES in the BG's proof-server fetches).
+ * Returns the normalized value ('' when absent). The credential itself is
+ * never echoed into error messages.
+ */
+function validateZkpaasCredential(field: string, value: unknown): string {
+  if (value === undefined || value === null || value === '') return '';
+  if (typeof value !== 'string') throw new Error(`${field} must be a string`);
+  if (value.length > 512 || /[\r\n\0]/.test(value)) {
+    throw new Error(`${field} is not a valid credential`);
+  }
+  return value;
+}
+
+/**
+ * Midnight: persist the user's proof-server preference (WP-P4 Settings UI).
+ * Browser-side only sets `midnightStore.proofServer` in its own tab's memory
+ * (see the store's `broadcastFromBackground` guard) so, like
+ * ACCEPT_MIDNIGHT_SHIELDED_PROVING_CONSENT above, the Settings radio group
+ * routes the change here to persist + broadcast to every connected browser
+ * context.
+ *
+ * Request shape: `{ mode: 'remote' | 'local' | 'zkpaas', localUrl: string,
+ * zkpaasUrl?: string, zkpaasApiKey?: string, zkpaasApiSecret?: string }`.
+ * Validated at the message boundary (same posture as `parseProvingRequest`
+ * above) even though it currently only originates from our own UI: http(s)
+ * scheme only, no embedded credentials, bounded credential strings (never
+ * echoed into error text or logs).
+ */
+app.addToOptions(
+  MessageTypes.SET_MIDNIGHT_PROOF_SERVER,
+  async (request, sendResponse) => {
+    try {
+      const {
+        mode, localUrl, zkpaasUrl, zkpaasApiKey, zkpaasApiSecret,
+      } = request.data || {};
+      if (mode !== 'remote' && mode !== 'local' && mode !== 'zkpaas') {
+        throw new Error('mode must be "remote", "local" or "zkpaas"');
+      }
+      if (typeof localUrl !== 'string' || localUrl.length === 0) {
+        throw new Error('localUrl is required and must be a non-empty string');
+      }
+      validateProofServerUrlField('localUrl', localUrl);
+      const { midnightStore, midnightActions } = await import('@/stores/midnightStore');
+      // The zkPaaS fields are OPTIONAL per request: absent means "keep the
+      // stored value" (older call sites like the consent dialog's
+      // use-local-instead only send mode+localUrl and must not wipe saved
+      // Arkhia credentials), while an explicit '' means "clear it" ('' is
+      // also the valid "derive the endpoint per network" state for the URL).
+      const current = midnightStore.proofServer;
+      const zkpaasUrlValue = zkpaasUrl === undefined || zkpaasUrl === null
+        ? current.zkpaasUrl : zkpaasUrl;
+      if (typeof zkpaasUrlValue !== 'string') throw new Error('zkpaasUrl must be a string');
+      if (zkpaasUrlValue.length > 0) validateProofServerUrlField('zkpaasUrl', zkpaasUrlValue);
+      const zkpaasApiKeyValue = zkpaasApiKey === undefined || zkpaasApiKey === null
+        ? current.zkpaasApiKey : validateZkpaasCredential('zkpaasApiKey', zkpaasApiKey);
+      const zkpaasApiSecretValue = zkpaasApiSecret === undefined || zkpaasApiSecret === null
+        ? current.zkpaasApiSecret : validateZkpaasCredential('zkpaasApiSecret', zkpaasApiSecret);
+      midnightActions.setProofServer({
+        mode,
+        localUrl,
+        zkpaasUrl: zkpaasUrlValue,
+        zkpaasApiKey: zkpaasApiKeyValue,
+        zkpaasApiSecret: zkpaasApiSecretValue,
+      });
+      sendResponse({
+        id: request.id,
+        data: { success: true },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    } catch (error) {
+      sendResponse({
+        id: request.id,
+        data: { success: false, error: getErrorMessage(error) },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+    }
+  },
+);
+
+/**
+ * Midnight: submit a fully-signed (and proven, for shielded) transaction via
+ * Nexus's relay endpoint. Nexus calls `PolkadotNodeClient.sendMidnightTransaction`
+ * against the Midnight RPC node and bubbles the submission event back here.
+ *
+ * Request shape: `{ signedTxHex: string; waitFor?: 'Submitted'|'InBlock'|'Finalized' }`.
+ */
+app.addToOptions(MessageTypes.SUBMIT_MIDNIGHT_TX, async (request, sendResponse) => {
+  try {
+    const walletBg = walletManager.getWallet();
+    if (!walletBg) throw new Error('No wallet logged in');
+    if (walletBg.chain !== Blockchain.MIDNIGHT) {
+      throw new Error('SUBMIT_MIDNIGHT_TX called on non-Midnight wallet');
+    }
+    const { signedTxHex, waitFor } = request.data || {};
+    if (typeof signedTxHex !== 'string' || !signedTxHex) {
+      throw new Error('signedTxHex is required');
+    }
+    const { getMidnightApi } = await import('@/api/midnight-api');
+    const api = getMidnightApi(walletBg.network);
+    const result = await api.submitMidnightTx({ signedTxHex, waitFor });
+    sendResponse({
+      id: request.id,
+      data: { success: true, result },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+/**
+ * Midnight: get the publicKeyHex + addressHex the Nexus sidecar needs for
+ * seedless wallet construction. Fast path if already persisted; slow path
+ * decrypts the mnemonic once and persists for next time.
+ *
+ * Request shape: `{ password?: string; prfSecret?: number[] }`.
+ */
+app.addToOptions(MessageTypes.GET_MIDNIGHT_WALLET_KEYS, async (request, sendResponse) => {
+  try {
+    const walletBg = walletManager.getWallet();
+    if (!walletBg) throw new Error('No wallet logged in');
+    const { password, prfSecret } = request.data || {};
+    const prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
+    const keys = await walletBg.getMidnightWalletKeys(password, prfBytes);
+    sendResponse({
+      id: request.id,
+      data: { success: true, ...keys },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+/**
+ * Midnight: sign + submit the Cardano-side DUST registration tx. Same wallet
+ * mnemonic that derives Midnight HD keys also derives the CIP-1852 Cardano
+ * payment key. Request shape: `{ txCborHex: string; password?: string;
+ * prfSecret?: number[] }`. Returns `{ txHash }` on success.
+ */
+app.addToOptions(MessageTypes.SIGN_AND_SUBMIT_DUST_REGISTRATION_TX, async (request, sendResponse) => {
+  try {
+    const walletBg = walletManager.getWallet();
+    if (!walletBg) throw new Error('No wallet logged in');
+    const { txCborHex, password, prfSecret } = request.data || {};
+    if (!txCborHex) throw new Error('txCborHex is required');
+    const prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
+    const { txHash } = await walletBg.signAndSubmitDustRegistrationTx(txCborHex, password, prfBytes);
+    sendResponse({
+      id: request.id,
+      data: { success: true, txHash },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+/**
+ * Midnight: force a full re-sync from block 0. Clears the gero-sync WS cursor +
+ * store snapshot and the persisted SDK wallet-state blobs, then resubscribes
+ * from genesis. User-triggered recovery for a stuck/stale local view. The WS
+ * and the sync service live in BG, so this must run here. No params.
+ */
+app.addToOptions(MessageTypes.RESYNC_MIDNIGHT, async (request, sendResponse) => {
+  try {
+    const walletBg = walletManager.getWallet();
+    if (!walletBg) throw new Error('No wallet logged in');
+    if (walletBg.chain !== Blockchain.MIDNIGHT) {
+      throw new Error('RESYNC_MIDNIGHT called on non-Midnight wallet');
+    }
+    const { default: midnightSyncService } = await import('@/services/midnight-sync.service');
+    if (!midnightSyncService.isActive()) {
+      throw new Error('Midnight sync service is not active');
+    }
+    midnightSyncService.forceResync();
+    sendResponse({
+      id: request.id,
+      data: { success: true },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+/**
+ * Midnight: optimistically insert a just-submitted tx as `pending` so the send
+ * appears in history immediately. gero-sync's confirmed entry (same hash)
+ * replaces it via `applyTransaction`'s hash dedup once indexed.
+ *
+ * Request shape: `{ hash, amount (decimal string), counterparty?, isShielded? }`.
+ * Amount is a string because Chrome messaging can't carry BigInt.
+ */
+app.addToOptions(MessageTypes.ADD_MIDNIGHT_PENDING_TX, async (request, sendResponse) => {
+  try {
+    const walletBg = walletManager.getWallet();
+    if (!walletBg) throw new Error('No wallet logged in');
+    if (walletBg.chain !== Blockchain.MIDNIGHT) {
+      throw new Error('ADD_MIDNIGHT_PENDING_TX called on non-Midnight wallet');
+    }
+    const { hash, amount, counterparty, isShielded } = request.data || {};
+    if (typeof hash !== 'string' || !hash) throw new Error('hash is required');
+    const { midnightActions } = await import('@/stores/midnightStore');
+    let amountBig = 0n;
+    try { amountBig = BigInt(amount ?? '0'); } catch { amountBig = 0n; }
+    midnightActions.applyTransaction({
+      hash,
+      type: 'send',
+      token: 'NIGHT',
+      amount: amountBig,
+      counterparty: typeof counterparty === 'string' ? counterparty : '',
+      timestamp: Date.now(),
+      status: 'pending',
+      fee: 0n,
+      isShielded: !!isShielded,
+    });
+    sendResponse({
+      id: request.id,
+      data: { success: true },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════════
+// Midnight DApp Connector (@midnight-ntwrk/dapp-connector-api v4.0.1)
+//
+// Phase 1: discovery + connect + all read getters + signData +
+// submitTransaction. See docs/midnight/2026-07-09-midnight-dapp-connector-plan.md
+// for the full spec-vs-shipped-package verification this is grounded in
+// (several details here diverge from the SPECIFICATION.md prose because the
+// prose is measurably stale against the actual published 4.0.1 types).
+//
+// Registered via `app.add` (webpage-facing, sender:'webpage') — mirrors the
+// CIP-30 METHOD.* handlers above, NOT the internal MessageTypes handlers.
+// Every method except `connect` reaches here only after content.ts's relay
+// (messaging.ts createProxyController) has already confirmed the origin is
+// whitelisted. `WalletStore.connectedDapps` is loaded from the ACTIVE
+// wallet's own per-wallet IndexedDB (`wallet-{id}`), so a Midnight wallet's
+// whitelist is naturally disjoint from any Cardano wallet's approvals for
+// the same origin — no extra chain-scoping code needed.
+// ═════════════════════════════════════════════════════════════════════════
+
+function midnightApiError(code: string, reason: string) {
+  return { type: 'DAppConnectorAPIError', code, reason, message: reason };
+}
+
+/**
+ * `sendToMiniGero`'s resolver rejects with `new Error(String(response.error))`
+ * — the mini-gero port protocol only carries a plain string, not a structured
+ * object. The side panel's Midnight branches (DAppOverlay.vue) JSON-encode a
+ * DAppConnectorAPIError into that string so the rich {code, reason} shape
+ * survives the round trip; decode it back here, with a safe fallback for any
+ * other rejection shape (timeouts, non-Midnight panel-closed strings, etc).
+ */
+function parseMidnightMiniGeroError(
+  err: unknown,
+  fallbackCode: string,
+  fallbackReason: string,
+): { type: string; code: string; reason: string; message: string } {
+  const message = err instanceof Error ? err.message : String(err);
+  try {
+    const parsed = JSON.parse(message);
+    if (parsed && typeof parsed === 'object' && parsed.type === 'DAppConnectorAPIError') {
+      return parsed;
+    }
+  } catch { /* not a JSON-encoded Midnight error — synthesize below */ }
+  return midnightApiError(fallbackCode, message || fallbackReason);
+}
+
+/**
+ * Per-tab record of Midnight connector methods the user has explicitly
+ * declined THIS session — implements the spec's Rejected-vs-PermissionRejected
+ * distinction (SPECIFICATION.md §Permissions / §Errors): `Rejected` is
+ * one-time, `PermissionRejected` "persists for the session (until the
+ * browser window/tab with the DApp page is closed)". Without this, a dapp
+ * could re-prompt the user for the same approval indefinitely after an
+ * explicit decline (a "prompt bombing" consent-fatigue pattern).
+ *
+ * Scoped per-tab (not per-origin) so it naturally bounds itself: the user's
+ * escape hatch is reloading the dapp's page, which gets a fresh tab-relative
+ * state. Cleared via chrome.tabs.onRemoved — a single module-level listener,
+ * not one per request, to avoid a listener leak across many declines.
+ */
+const midnightDeclinedMethodsByTab = new Map<number, Set<string>>();
+chrome.tabs?.onRemoved?.addListener((tabId) => {
+  midnightDeclinedMethodsByTab.delete(tabId);
+});
+
+function hasMidnightPermissionDenial(tabId: number | undefined, method: string): boolean {
+  return typeof tabId === 'number' && !!midnightDeclinedMethodsByTab.get(tabId)?.has(method);
+}
+
+function recordMidnightPermissionDenial(tabId: number | undefined, method: string): void {
+  if (typeof tabId !== 'number') return;
+  const existing = midnightDeclinedMethodsByTab.get(tabId);
+  if (existing) existing.add(method);
+  else midnightDeclinedMethodsByTab.set(tabId, new Set([method]));
+}
+
+/**
+ * Gero `Network` enum → Midnight SDK's lowercase networkId string. The same
+ * mapping is duplicated at every other Midnight SDK call site in this
+ * codebase (signMidnightSegments, balanceAndSignUnshieldedTransfer, ...) —
+ * kept local here rather than centralized, matching that established pattern.
+ */
+function midnightSdkNetworkId(network: string): string {
+  switch (network) {
+    case Network.MAINNET: return 'mainnet';
+    case Network.PREVIEW: return 'preview';
+    case Network.PREPROD: return 'preprod';
+    case Network.TESTNET: return 'testnet';
+    default: throw new Error(`Unsupported Midnight network: ${network}`);
+  }
+}
+
+/**
+ * Chain + wallet-presence + unlocked guard shared by every MIDNIGHT_METHOD.*
+ * read/submit handler. `connect` and `signData` don't use this — they need to
+ * report WHY there's no connectable wallet via a popup/reply rather than a
+ * bare null.
+ *
+ * The lock check matters even for an already-whitelisted origin: locking the
+ * wallet (walletManager.lock()) only flips walletStore.isLocked — it does NOT
+ * clear the in-memory walletBg instance or midnightStore, so without this
+ * check a previously-approved dapp could keep reading real addresses,
+ * balances, and tx history from a wallet the USER believes is locked. Matches
+ * the plan doc's explicit "no capability leakage when locked" requirement.
+ */
+function requireMidnightWallet(): ReturnType<typeof walletManager.getWallet> | null {
+  if (walletStore.isLocked) return null;
+  const wallet = walletManager.getWallet();
+  if (!wallet || wallet.chain !== Blockchain.MIDNIGHT) return null;
+  return wallet;
+}
+
+/**
+ * Approve/open a Midnight dapp connection. Routes EXCLUSIVELY through the
+ * mini-gero side panel (same `sendToMiniGero`/`miniGeroPorts`/`openSidebar`/
+ * `waitForMiniGeroPort` mechanism as CIP-30's `enable`, background.ts:488) —
+ * deliberately NO popup fallback: if the side panel can't be opened/
+ * connected, the request fails outright rather than degrading to a
+ * standalone popup window. One extra guard `enable` doesn't need: verifying
+ * the ACTIVE wallet is actually a Midnight wallet, since `window.midnight` is
+ * installed regardless of which chain is logged in.
+ */
+app.add(MIDNIGHT_METHOD.connect, (request, sendResponse) => {
+  const { id, origin, send, data } = request;
+  const networkId = (data as { networkId?: string } | undefined)?.networkId;
+  const reply = (opts: ReplyOpts) => {
+    sendResponse({ id, ...opts, target: TARGET, sender: SENDER.extension });
+  };
+
+  const currentWallet = walletManager.getWallet();
+  if (!currentWallet || currentWallet.chain !== Blockchain.MIDNIGHT) {
+    reply({ error: midnightApiError(MidnightErrorCode.InternalError, 'No Midnight wallet is currently active') });
+    return true;
+  }
+  // A locked wallet must not connect (or silently stay connected — see
+  // requireMidnightWallet's doc comment for why an already-whitelisted origin
+  // is still a risk here): report Disconnected rather than proceeding.
+  if (walletStore.isLocked) {
+    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'Wallet is locked') });
+    return true;
+  }
+  // The connector spec only formally standardizes 'mainnet' as a well-known
+  // network id (SPECIFICATION.md §Initial API point 13) — non-mainnet ids
+  // aren't governed by a canonical registry across dapps/wallets. But our
+  // own SDK networkId vocabulary ('mainnet'/'preview'/'preprod'/'testnet',
+  // via midnightSdkNetworkId) is exactly what a Gero-aware dapp — or any
+  // dapp using the same SDK convention — would send. Reject on ANY mismatch
+  // against the active wallet's actual network, not just a mainnet-specific
+  // special case: silently accepting e.g. a 'preview' request while the
+  // wallet is on 'preprod' would connect the dapp to the wrong chain without
+  // it ever knowing. Better to over-reject an unusual-but-valid networkId
+  // string than to silently cross-connect networks.
+  if (networkId && networkId !== midnightSdkNetworkId(currentWallet.network)) {
+    reply({ error: midnightApiError(MidnightErrorCode.InvalidRequest, `Wallet is on ${currentWallet.network}, not ${networkId}`) });
+    return true;
+  }
+
+  if (WalletStore.isWhitelisted(origin)) {
+    reply({ data: true });
+    return true;
+  }
+
+  const tabId = send.tab?.id;
+  if (hasMidnightPermissionDenial(tabId, MIDNIGHT_METHOD.connect)) {
+    reply({ error: midnightApiError(MidnightErrorCode.PermissionRejected, 'User already declined this connection request this session') });
+    return true;
+  }
+  if (typeof tabId !== 'number') {
+    reply({ error: midnightApiError(MidnightErrorCode.InternalError, 'No tab context for this request') });
+    return true;
+  }
+
+  const favIconUrl = send.tab?.favIconUrl;
+  const connectPayload = { website: origin, favIconUrl };
+
+  const sendToPanel = () =>
+    sendToMiniGero(MIDNIGHT_METHOD.connect, connectPayload, tabId)
+      .then(async (response: BackgroundResponse) => {
+        if (response.data === true) {
+          await WalletStore.addConnectedDapp(currentWallet.id, origin);
+        }
+        reply({ data: response.data });
+      })
+      .catch(err => {
+        // Fallback code is deliberately NOT Rejected: Rejected must only ever
+        // come from a genuinely-parsed JSON round-trip of the panel's own
+        // explicit rejectMidnightConnect() (see midnightError() in
+        // DAppOverlay.vue) — sticky-denial below keys off exactly that. An
+        // unparseable/unexpected rejection (a bug, a future refactor that
+        // makes sendToMiniGero reject with a plain Error) must NOT be able
+        // to masquerade as a user decision just because Rejected happened to
+        // be convenient as a fallback value.
+        const midnightErr = parseMidnightMiniGeroError(err, MidnightErrorCode.InternalError, 'Failed to complete the connection request');
+        if (midnightErr.code === MidnightErrorCode.Rejected) {
+          recordMidnightPermissionDenial(tabId, MIDNIGHT_METHOD.connect);
+        }
+        reply({ error: midnightErr });
+      });
+
+  // Primary: the panel is already open and listening for this tab.
+  if (miniGeroPorts.has(tabId)) {
+    sendToPanel();
+    return true;
+  }
+
+  // Open the panel and wait for it to connect. No popup fallback.
+  openSidebar(tabId, 'sidepanel/index.html')
+    .then(() => waitForMiniGeroPort(5000, tabId))
+    .then(() => sendToPanel())
+    .catch(err => reply({
+      error: midnightApiError(MidnightErrorCode.InternalError, `Failed to open the wallet's approval panel: ${getErrorMessage(err)}`),
+    }));
+
+  return true; // async
+});
+
+app.add(MIDNIGHT_METHOD.getUnshieldedAddress, async (request, sendResponse) => {
+  const { midnightStore } = await import('@/stores/midnightStore');
+  const wallet = requireMidnightWallet();
+  if (!wallet || !midnightStore.addresses.unshielded) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
+  sendResponse({
+    id: request.id,
+    data: { unshieldedAddress: midnightStore.addresses.unshielded },
+    target: TARGET,
+    sender: SENDER.extension,
+  });
+});
+
+app.add(MIDNIGHT_METHOD.getDustAddress, async (request, sendResponse) => {
+  const { midnightStore } = await import('@/stores/midnightStore');
+  const wallet = requireMidnightWallet();
+  if (!wallet || !midnightStore.addresses.dust) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
+  sendResponse({
+    id: request.id,
+    data: { dustAddress: midnightStore.addresses.dust },
+    target: TARGET,
+    sender: SENDER.extension,
+  });
+});
+
+/**
+ * The shielded address bech32m string is a PUBLIC, reversible encoding of the
+ * coin + encryption public keys (wallet-sdk-address-format's ShieldedAddress
+ * class). Decoding it back needs no mnemonic decrypt / no auth prompt — see
+ * build plan doc §3 for the verification.
+ */
+app.add(MIDNIGHT_METHOD.getShieldedAddresses, async (request, sendResponse) => {
+  const { midnightStore } = await import('@/stores/midnightStore');
+  const wallet = requireMidnightWallet();
+  const shieldedAddress = midnightStore.addresses.shielded;
+  if (!wallet || !shieldedAddress) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
+  try {
+    const { ShieldedAddress, MidnightBech32m } = await import('@midnightntwrk/wallet-sdk-address-format');
+    const decoded = ShieldedAddress.codec.decode(
+      midnightSdkNetworkId(wallet.network),
+      MidnightBech32m.parse(shieldedAddress),
+    );
+    sendResponse({
+      id: request.id,
+      data: {
+        shieldedAddress,
+        shieldedCoinPublicKey: decoded.coinPublicKeyString(),
+        shieldedEncryptionPublicKey: decoded.encryptionPublicKeyString(),
+      },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.InternalError, getErrorMessage(error)), target: TARGET, sender: SENDER.extension });
+  }
+});
+
+app.add(MIDNIGHT_METHOD.getUnshieldedBalances, async (request, sendResponse) => {
+  const { midnightStore } = await import('@/stores/midnightStore');
+  const { NIGHT_TOKEN_TYPE_NULL } = await import('@/services/midnight-sync.service');
+  const wallet = requireMidnightWallet();
+  if (!wallet) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
+  // midnightStore.utxos only ever carries NIGHT-type outputs today (the sync
+  // layer filters non-native tokenTypes out — see midnight-sync.service.ts's
+  // isNightOutput), so this record has at most one key. Normalize an empty
+  // tokenType (Gero's internal "native NIGHT" convention) to the canonical
+  // 32-byte-zero hex a dapp checking nativeToken().raw would expect.
+  let night = 0n;
+  for (const u of midnightStore.utxos) {
+    const tt = u.tokenType ?? '';
+    if (tt === '' || tt === NIGHT_TOKEN_TYPE_NULL) night += u.value;
+  }
+  sendResponse({
+    id: request.id,
+    data: night > 0n ? { [NIGHT_TOKEN_TYPE_NULL]: night.toString() } : {},
+    target: TARGET,
+    sender: SENDER.extension,
+  });
+});
+
+app.add(MIDNIGHT_METHOD.getShieldedBalances, async (request, sendResponse) => {
+  const { midnightStore } = await import('@/stores/midnightStore');
+  const { NIGHT_TOKEN_TYPE_NULL } = await import('@/services/midnight-sync.service');
+  const wallet = requireMidnightWallet();
+  if (!wallet) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
+  // Gero only tracks native shielded NIGHT as a scalar today (no per-token
+  // breakdown from a ShieldedWallet state yet — Phase 1 known limitation,
+  // see build plan doc §3 "small gap" note).
+  const night = midnightStore.balances.nightShielded;
+  sendResponse({
+    id: request.id,
+    data: night > 0n ? { [NIGHT_TOKEN_TYPE_NULL]: night.toString() } : {},
+    target: TARGET,
+    sender: SENDER.extension,
+  });
+});
+
+app.add(MIDNIGHT_METHOD.getDustBalance, async (request, sendResponse) => {
+  const { midnightStore } = await import('@/stores/midnightStore');
+  const wallet = requireMidnightWallet();
+  if (!wallet) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
+  const dustState = midnightStore.dustState;
+  if (!dustState) {
+    // Don't guess: reporting {cap:0,balance:0} would read as "you have zero
+    // DUST" when the truth is "not loaded yet" — force the dapp to retry.
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.InternalError, 'DUST state not yet loaded'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
+  sendResponse({
+    id: request.id,
+    data: { cap: dustState.cap.toString(), balance: dustState.current.toString() },
+    target: TARGET,
+    sender: SENDER.extension,
+  });
+});
+
+app.add(MIDNIGHT_METHOD.getTxHistory, async (request, sendResponse) => {
+  const { midnightStore } = await import('@/stores/midnightStore');
+  const wallet = requireMidnightWallet();
+  if (!wallet) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
+  const { pageNumber, pageSize } = (request.data as { pageNumber?: number; pageSize?: number } | undefined) ?? {};
+  const size = typeof pageSize === 'number' && pageSize > 0 ? pageSize : 20;
+  const page = typeof pageNumber === 'number' && pageNumber >= 0 ? pageNumber : 0;
+  const slice = midnightStore.transactions.slice(page * size, page * size + size);
+  // Gero tracks confirmed/pending/failed; the connector's TxStatus distinguishes
+  // finalized/confirmed/pending/discarded with per-segment executionStatus we
+  // don't track yet (D8 in the July 2026 audit) — map to the closest fit with
+  // an empty executionStatus placeholder rather than inventing data.
+  const entries = slice.map(tx => ({
+    txHash: tx.hash,
+    txStatus: tx.status === 'pending'
+      ? { status: 'pending' as const }
+      : tx.status === 'failed'
+        ? { status: 'discarded' as const }
+        : { status: 'confirmed' as const, executionStatus: {} },
+  }));
+  sendResponse({ id: request.id, data: entries, target: TARGET, sender: SENDER.extension });
+});
+
+app.add(MIDNIGHT_METHOD.getConfiguration, async (request, sendResponse) => {
+  const wallet = requireMidnightWallet();
+  if (!wallet) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
+  try {
+    const { getMidnightEndpoints } = await import('@/chains/midnight/midnightConfig');
+    const { midnightStore } = await import('@/stores/midnightStore');
+    const endpoints = getMidnightEndpoints(wallet.network);
+    if (!endpoints) throw new Error(`No Midnight endpoints configured for network ${wallet.network}`);
+    // A dApp has no way to reach Gero's internal cloud prover directly, so
+    // when the user's preference is 'remote' the network's default proof
+    // server URL remains the least-wrong answer to advertise here (WP-P5:
+    // connector `getProvingProvider()` delegation is a separate, later
+    // phase). Only report the user's own local proof server once they've
+    // actually opted into local mode (WP-P1/P4). zkPaaS mode deliberately
+    // ALSO reports the default: the Arkhia endpoint is useless to a dApp
+    // without the user's API key, and a user-pasted override URL may embed
+    // that key as a path segment — advertising it would hand the user's
+    // paid credential to every connected dApp.
+    const proverServerUri = midnightStore.proofServer.mode === 'local'
+      ? midnightStore.proofServer.localUrl
+      : (endpoints.defaultProofServerUrl || undefined);
+    sendResponse({
+      id: request.id,
+      data: {
+        indexerUri: endpoints.publicIndexerUrl,
+        indexerWsUri: endpoints.publicIndexerWsUrl,
+        proverServerUri,
+        substrateNodeUri: endpoints.publicRpcUrl,
+        networkId: midnightSdkNetworkId(wallet.network),
+      },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.InternalError, getErrorMessage(error)), target: TARGET, sender: SENDER.extension });
+  }
+});
+
+app.add(MIDNIGHT_METHOD.getConnectionStatus, async (request, sendResponse) => {
+  const wallet = requireMidnightWallet();
+  if (!wallet) {
+    sendResponse({ id: request.id, data: { status: 'disconnected' }, target: TARGET, sender: SENDER.extension });
+    return;
+  }
+  sendResponse({
+    id: request.id,
+    data: { status: 'connected', networkId: midnightSdkNetworkId(wallet.network) },
+    target: TARGET,
+    sender: SENDER.extension,
+  });
+});
+
+/**
+ * Relay a balanced + sealed (proofs, signatures, cryptographically bound) tx
+ * to the network. The connector is a submit-only relayer here, mirroring
+ * midnight-tx.service's submitSignedTx — no build/balance/sign happens.
+ */
+app.add(MIDNIGHT_METHOD.submitTransaction, async (request, sendResponse) => {
+  const wallet = requireMidnightWallet();
+  if (!wallet) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
+  const tx = (request.data as { tx?: string } | undefined)?.tx;
+  if (typeof tx !== 'string' || !tx) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.InvalidRequest, 'tx is required'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
+  try {
+    const { getMidnightApi } = await import('@/api/midnight-api');
+    const api = getMidnightApi(wallet.network);
+    await api.submitMidnightTx({ signedTxHex: tx, waitFor: 'Submitted' });
+    sendResponse({ id: request.id, data: undefined, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.InvalidRequest, getErrorMessage(error)), target: TARGET, sender: SENDER.extension });
+  }
+});
+
+/**
+ * Opens the sign-data approval view in the mini-gero side panel (password/PRF
+ * wallets only — Midnight has no hardware-wallet support, see the July 2026
+ * gap analysis). Same side-panel-only routing as `connect` above — no popup
+ * fallback. The panel itself calls MessageTypes.SIGN_MIDNIGHT_CONNECTOR_DATA
+ * once the user authenticates; see walletBg.signMidnightConnectorData for the
+ * actual signing + mandatory prefix logic.
+ */
+app.add(MIDNIGHT_METHOD.signData, (request, sendResponse) => {
+  const { id, origin, send, data } = request;
+  const reply = (opts: ReplyOpts) => {
+    sendResponse({ id, ...opts, target: TARGET, sender: SENDER.extension });
+  };
+  const currentWallet = walletManager.getWallet();
+  if (!currentWallet || currentWallet.chain !== Blockchain.MIDNIGHT) {
+    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected') });
+    return true;
+  }
+  if (walletStore.isLocked) {
+    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'Wallet is locked') });
+    return true;
+  }
+  // Same fast-path/whitelist split as Cardano's signTx/signData: the content
+  // relay now sends this straight through (see messaging.ts) so the user
+  // gesture survives to sidePanel.open(); enforce the connect-first
+  // requirement here instead of in that pre-check round-trip.
+  if (!WalletStore.isWhitelisted(origin)) {
+    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'Not connected — call connect() first') });
+    return true;
+  }
+  const tabId = send.tab?.id;
+  if (typeof tabId !== 'number') {
+    reply({ error: midnightApiError(MidnightErrorCode.InternalError, 'No tab context for this request') });
+    return true;
+  }
+  // Unlike `connect` (above), signData does NOT use the sticky-denial
+  // tracker: each call carries materially different data (a login challenge,
+  // an attestation, ...), so blocking every FUTURE signData request because
+  // the user declined one unrelated one would be a functionality regression,
+  // not a security improvement. `connect` is coherent to sticky-deny because
+  // it's always the same idempotent action; signData isn't.
+  const favIconUrl = send.tab?.favIconUrl;
+  const signDataPayload = { data, website: origin, favIconUrl };
+
+  const sendToPanel = () =>
+    sendToMiniGero(MIDNIGHT_METHOD.signData, signDataPayload, tabId)
+      .then((response: BackgroundResponse) => reply({ data: response.data }))
+      .catch(err => reply({
+        // Same reasoning as connect's catch above: the fallback must not be
+        // Rejected, or a dapp branching on error.code === 'Rejected' would
+        // be told "the user declined" for e.g. a panel-closed/internal
+        // failure that was never an actual decision.
+        error: parseMidnightMiniGeroError(err, MidnightErrorCode.InternalError, 'Failed to complete the signing request'),
+      }));
+
+  if (miniGeroPorts.has(tabId)) {
+    sendToPanel();
+    return true;
+  }
+
+  openSidebar(tabId, 'sidepanel/index.html')
+    .then(() => waitForMiniGeroPort(5000, tabId))
+    .then(() => sendToPanel())
+    .catch(err => reply({
+      error: midnightApiError(MidnightErrorCode.InternalError, `Failed to open the wallet's approval panel: ${getErrorMessage(err)}`),
+    }));
+  return true;
+});
+
+app.add(MIDNIGHT_METHOD.hintUsage, (request, sendResponse) => {
+  // No usage-hinted permission pre-prompting implemented yet (Phase 1 scope,
+  // separate from the sticky-denial tracking on `connect` above) — resolve
+  // immediately with void per the spec's required return type.
+  sendResponse({ id: request.id, data: undefined, target: TARGET, sender: SENDER.extension });
+});
+
+/** Canonical 32-byte-zero RawTokenType — how the ledger/connector names native
+ * NIGHT (see midnightShieldedBuilder.ts NIGHT_RAW_TOKEN_TYPE). */
+const MIDNIGHT_NATIVE_NIGHT_TOKEN_TYPE =
+  '0000000000000000000000000000000000000000000000000000000000000000';
+
+type MakeTransferRequestData = {
+  desiredOutputs?: Array<{ kind?: string; type?: string; value?: string; recipient?: string }>;
+  options?: { payFees?: boolean };
+};
+
+/**
+ * Validate a connector makeTransfer request BEFORE prompting the user, so an
+ * unsupported/malformed request rejects cleanly without wasting an approval
+ * dialog. Phase 2 scope: native-NIGHT UNSHIELDED outputs only, wallet pays DUST
+ * fees. Mirrors MidnightSendDialog's per-network address-prefix check
+ * (mainnet omits the network segment; others embed it lowercased).
+ */
+function validateMakeTransferInputs(
+  data: MakeTransferRequestData | undefined,
+  network: string,
+): { ok: true } | { ok: false; reason: string } {
+  const desiredOutputs = data?.desiredOutputs;
+  if (!Array.isArray(desiredOutputs) || desiredOutputs.length === 0) {
+    return { ok: false, reason: 'desiredOutputs must be a non-empty array' };
+  }
+  // Cap the output count: the array is walked synchronously in the service
+  // worker and rendered in the approval panel, so an unbounded length is a DoS
+  // vector. A real transfer never needs this many outputs (Nexus/tx-size limits
+  // bite far sooner).
+  if (desiredOutputs.length > 100) {
+    return { ok: false, reason: 'too many outputs (max 100 per transfer)' };
+  }
+  if (data?.options?.payFees === false) {
+    return { ok: false, reason: 'payFees:false is not supported in this version (GeroWallet pays DUST fees; fee delegation is planned)' };
+  }
+  const isMain = network === Network.MAINNET;
+  const prefix = isMain ? 'mn_addr1' : `mn_addr_${network.toLowerCase()}1`;
+  for (const o of desiredOutputs) {
+    if (!o || typeof o !== 'object') {
+      return { ok: false, reason: 'each desiredOutput must be an object' };
+    }
+    if (o.kind !== 'unshielded') {
+      return { ok: false, reason: `only unshielded transfers are supported in this version (got kind='${o.kind}')` };
+    }
+    // Native NIGHT only: the canonical 32-byte-zero RawTokenType, or the empty
+    // 'native' shorthand. Any other hex token type is unsupported (Nexus only
+    // builds native NIGHT today).
+    if (o.type !== undefined && o.type !== '' && o.type !== MIDNIGHT_NATIVE_NIGHT_TOKEN_TYPE) {
+      return { ok: false, reason: 'only native NIGHT transfers are supported in this version' };
+    }
+    // value arrives as a decimal string (the page bridge stringifies the bigint).
+    let value: bigint;
+    try {
+      value = BigInt(o.value as string);
+    } catch {
+      return { ok: false, reason: `invalid amount: ${o.value}` };
+    }
+    if (value <= 0n) {
+      return { ok: false, reason: 'amount must be a positive integer' };
+    }
+    if (typeof o.recipient !== 'string' || !o.recipient.startsWith(prefix)) {
+      return { ok: false, reason: `recipient must be a ${prefix}… unshielded address on the connected network` };
+    }
+  }
+  return { ok: true };
+}
+
+/**
+ * Opens the makeTransfer approval view in the mini-gero side panel (password/
+ * PRF wallets only — Midnight has no hardware-wallet support). Same
+ * side-panel-only routing as signData — no popup fallback.
+ *
+ * Phase 2: native-NIGHT UNSHIELDED transfers only. The panel builds +
+ * DUST-balances + signs (but does NOT submit) via buildAndSignUnshieldedTransfer
+ * and returns `{ tx }`; the dapp submits it via submitTransaction, which
+ * proves + binds server-side. Shielded/mixed outputs and payFees:false reject
+ * with InvalidRequest BEFORE the user is prompted (validateMakeTransferInputs).
+ */
+app.add(MIDNIGHT_METHOD.makeTransfer, (request, sendResponse) => {
+  const { id, origin, send, data } = request;
+  const reply = (opts: ReplyOpts) => {
+    sendResponse({ id, ...opts, target: TARGET, sender: SENDER.extension });
+  };
+  const currentWallet = walletManager.getWallet();
+  if (!currentWallet || currentWallet.chain !== Blockchain.MIDNIGHT) {
+    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected') });
+    return true;
+  }
+  if (walletStore.isLocked) {
+    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'Wallet is locked') });
+    return true;
+  }
+  // Fast-pathed past the content whitelist pre-check (to keep the user gesture
+  // alive for sidePanel.open()), so enforce connect-first here — same as signData.
+  if (!WalletStore.isWhitelisted(origin)) {
+    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'Not connected — call connect() first') });
+    return true;
+  }
+  const tabId = send.tab?.id;
+  if (typeof tabId !== 'number') {
+    reply({ error: midnightApiError(MidnightErrorCode.InternalError, 'No tab context for this request') });
+    return true;
+  }
+  const validation = validateMakeTransferInputs(data as MakeTransferRequestData, currentWallet.network);
+  if (!validation.ok) {
+    reply({ error: midnightApiError(MidnightErrorCode.InvalidRequest, validation.reason) });
+    return true;
+  }
+  const favIconUrl = send.tab?.favIconUrl;
+  const makeTransferPayload = { data, website: origin, favIconUrl };
+
+  const sendToPanel = () =>
+    sendToMiniGero(MIDNIGHT_METHOD.makeTransfer, makeTransferPayload, tabId)
+      .then((response: BackgroundResponse) => reply({ data: response.data })) // response.data === { tx }
+      .catch(err => reply({
+        // Never Rejected on internal/panel failure (only a real user decline
+        // arrives as the panel's own Rejected) — same reasoning as signData.
+        error: parseMidnightMiniGeroError(err, MidnightErrorCode.InternalError, 'Failed to build the transfer'),
+      }));
+
+  if (miniGeroPorts.has(tabId)) {
+    sendToPanel();
+    return true;
+  }
+
+  openSidebar(tabId, 'sidepanel/index.html')
+    .then(() => waitForMiniGeroPort(5000, tabId))
+    .then(() => sendToPanel())
+    .catch(err => reply({
+      error: midnightApiError(MidnightErrorCode.InternalError, `Failed to open the wallet's approval panel: ${getErrorMessage(err)}`),
+    }));
+  return true;
+});
+
+/**
+ * Options-context (side-panel bundle): called by DAppOverlay.vue's Midnight
+ * signData branch once the user has approved + authenticated. See
+ * walletBg.signMidnightConnectorData for the midnight_signed_message: prefix
+ * + BIP-340 signing logic.
+ *
+ * Request shape: `{ data: string, options: SignDataOptions, password?, prfSecret? }`.
+ */
+app.addToOptions(MessageTypes.SIGN_MIDNIGHT_CONNECTOR_DATA, async (request, sendResponse) => {
+  try {
+    const walletBg = walletManager.getWallet();
+    if (!walletBg) throw new Error('No wallet logged in');
+    if (walletBg.chain !== Blockchain.MIDNIGHT) {
+      throw new Error('SIGN_MIDNIGHT_CONNECTOR_DATA called on non-Midnight wallet');
+    }
+    const { data, options, password, prfSecret } = request.data || {};
+    if (typeof data !== 'string' || !data) throw new Error('data is required');
+    const encoding = options?.encoding;
+    if (encoding !== 'hex' && encoding !== 'base64' && encoding !== 'text') {
+      throw new Error(`Unsupported encoding: ${encoding}`);
+    }
+    if (options?.keyType !== 'unshielded') {
+      throw new Error(`Unsupported keyType: ${options?.keyType} — only 'unshielded' is implemented`);
+    }
+    // Strict decode — shared with the approval popup's preview (see
+    // midnightSignDataCodec.ts) so what the user is shown can never diverge
+    // from what actually gets signed. Buffer.from(str,'hex'|'base64') is
+    // LENIENT (silently truncates/skips invalid characters instead of
+    // throwing), which would let a malicious dapp show a long deceptive
+    // string while only a short, attacker-chosen prefix is actually signed.
+    const { decodeSignDataPayload } = await import('@/chrome/midnightSignDataCodec');
+    const dataBytes = decodeSignDataPayload(data, encoding);
+
+    const prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
+    const result = await walletBg.signMidnightConnectorData(new Uint8Array(dataBytes), password, prfBytes);
+    sendResponse({
+      id: request.id,
+      data: { success: true, signature: { data: result.dataHex, signature: result.signatureHex, verifyingKey: result.verifyingKeyHex } },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
   }
 });
 

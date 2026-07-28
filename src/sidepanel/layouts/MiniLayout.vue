@@ -3,7 +3,8 @@
     <!-- Wavy background image (same as dashboard) -->
     <div
       class="mini-bg"
-      :style="{ backgroundImage: `url(${cardanoBg})` }"
+      :class="{ 'mini-bg--midnight': isMidnight }"
+      :style="{ backgroundImage: `url(${bgImage})` }"
     ></div>
 
     <main class="mini-content">
@@ -20,13 +21,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useRoute } from 'vue-router/composables';
 import MiniHeader from '../components/MiniHeader.vue';
 import BottomNav from '../components/BottomNav.vue';
 import assets from '@/utils/assets';
+import { useChainContext } from '../composables/useChainContext';
 
-const cardanoBg = assets.cardanoBg;
+const { isMidnight } = useChainContext();
+// Midnight gets its own night-sky backdrop; everything else keeps the
+// Cardano waves (Apex reuses them too, matching current behavior).
+const bgImage = computed(() => (isMidnight.value ? assets.midnightBg : assets.cardanoBg));
 
 // Tab order for directional slide
 const tabOrder: Record<string, number> = {
@@ -63,7 +68,7 @@ watch(() => route.path, (to) => {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: #000;
+  background: var(--g-canvas);
   overflow: hidden;
   position: relative;
 }
@@ -87,6 +92,37 @@ watch(() => route.path, (to) => {
 
 .mini-bg[style*='url('] {
   opacity: 1;
+}
+
+/* Midnight starfield: render naturally — the flip/squash transform above is
+   art-direction for the Cardano waves and distorts the night sky. Same
+   fade-to-black mask as the dashboard's midnight-background-dashboard, tuned
+   to start darkening at the DUST battery (~1/3 down) so the token list and
+   nav sit on near-black instead of fighting the stars. */
+.mini-bg--midnight {
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transform: none;
+  background-position: center;
+  filter: brightness(0.6);
+  mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 1) 8%,
+    rgba(0, 0, 0, 0.5) 18%,
+    rgba(0, 0, 0, 0.15) 30%,
+    rgba(0, 0, 0, 0) 42%
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 1) 8%,
+    rgba(0, 0, 0, 0.5) 18%,
+    rgba(0, 0, 0, 0.15) 30%,
+    rgba(0, 0, 0, 0) 42%
+  );
 }
 
 .mini-content {

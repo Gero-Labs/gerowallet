@@ -24,7 +24,7 @@
         :class="{ 'background-active': selectedNetwork?.blockchain?.includes('Bitcoin') }"
       />
       <img
-        :src="assets.midnightBg"
+        :src="assets.midnightLoginBg"
         class="welcome-background-image"
         :class="{ 'background-active': selectedNetwork?.blockchain?.includes('Midnight') }"
       />
@@ -53,16 +53,22 @@
             <div v-if="!started" key="intro" class="right-panel">
               <div class="welcome-intro">
                 <NoWalletsWelcomeCard />
-                <v-btn
-                  class="geroButton get-started-btn"
-                  rounded
-                  x-large
-                  depressed
-                  @click="started = true"
-                >
-                  {{ $t('welcome.getStarted') }}
-                  <v-icon right>mdi-arrow-right</v-icon>
-                </v-btn>
+                <!-- Positioning lives on the wrapper, not the button: the global
+                     `.v-btn:active { transform: translateY(1px) }` press feedback
+                     would otherwise replace the centering transform on press,
+                     shifting the button out from under the cursor. -->
+                <div class="get-started-btn-wrap">
+                  <v-btn
+                    class="geroButton get-started-btn"
+                    rounded
+                    x-large
+                    depressed
+                    @click="started = true"
+                  >
+                    {{ $t('welcome.getStarted') }}
+                    <v-icon right>mdi-arrow-right</v-icon>
+                  </v-btn>
+                </div>
               </div>
             </div>
 
@@ -149,8 +155,7 @@ const onOnboardingNetwork = (n: NetworkInfo): void => {
   top: 0;
   right: 0;
   z-index: 100;
-  backdrop-filter: blur(10px);
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
   padding: 4px 8px;
 }
 
@@ -197,18 +202,20 @@ const onOnboardingNetwork = (n: NetworkInfo): void => {
   margin: 0 auto;
 }
 
-.get-started-btn {
+.get-started-btn-wrap {
   position: absolute;
   left: 50%;
   bottom: 0;
   transform: translate(-50%, 50%); /* straddle the card's bottom edge */
+  z-index: 5;
+}
+
+.get-started-btn {
   min-width: 176px;
   height: 44px !important;
   font-size: 14px;
   font-weight: 700;
-  letter-spacing: 0.3px;
   text-transform: none;
-  z-index: 5;
 }
 
 /* Reveal transition: only the intro fades OUT. The onboarding card mounts fully
@@ -225,7 +232,7 @@ const onOnboardingNetwork = (n: NetworkInfo): void => {
 /* Fallback for browsers without backdrop-filter support */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .welcome-glass-panel {
-    background-color: rgba(19, 22, 27, 0.95);
+    background-color: var(--g-raised);
   }
 }
 

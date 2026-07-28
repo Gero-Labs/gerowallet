@@ -125,8 +125,8 @@ function formatDuration(openedAt: string, closedAt: string): string {
 
 .cp-skeleton-card {
   height: 88px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.05);
+  border-radius: var(--g-r-control);
+  background: var(--g-hairline-1);
   animation: skeleton-pulse 1.4s ease-in-out infinite;
 }
 
@@ -146,12 +146,12 @@ function formatDuration(openedAt: string, closedAt: string): string {
 }
 
 .cp-empty-icon {
-  color: rgba(255, 255, 255, 0.15) !important;
+  color: var(--g-text-3) !important;
 }
 
 .cp-empty-text {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--g-text-3);
 }
 
 /* ── List ── */
@@ -163,9 +163,9 @@ function formatDuration(openedAt: string, closedAt: string): string {
 
 /* ── Card ── */
 .cp-card {
-  background: rgba(255, 255, 255, 0.035);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 10px;
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   padding: 9px 11px;
   display: flex;
   flex-direction: column;
@@ -182,7 +182,7 @@ function formatDuration(openedAt: string, closedAt: string): string {
 .cp-symbol {
   font-size: 12px;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--g-text-1);
   flex: 1;
 }
 
@@ -192,7 +192,7 @@ function formatDuration(openedAt: string, closedAt: string): string {
 }
 
 .cp-badge {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.05em;
   padding: 1px 5px;
@@ -201,18 +201,18 @@ function formatDuration(openedAt: string, closedAt: string): string {
 }
 
 .badge--long {
-  background: rgba(38, 250, 176, 0.15);
-  color: #26FAB0;
+  background: var(--g-success-fill);
+  color: var(--g-success);
 }
 
 .badge--short {
-  background: rgba(249, 112, 102, 0.15);
-  color: #F97066;
+  background: var(--g-error-fill);
+  color: var(--g-error);
 }
 
 .badge--leverage {
-  background: color-mix(in srgb, var(--chain-primary) 12%, transparent);
-  color: var(--chain-primary);
+  background: color-mix(in srgb, var(--g-accent) 12%, transparent);
+  color: var(--g-accent);
 }
 
 /* ── Prices ── */
@@ -234,22 +234,22 @@ function formatDuration(openedAt: string, closedAt: string): string {
 }
 
 .cp-price-label {
-  font-size: 8.5px;
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  color: rgba(255, 255, 255, 0.25);
+  color: var(--g-text-3);
 }
 
 .cp-price-value {
   font-size: 11px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.65);
+  color: var(--g-text-2);
   font-variant-numeric: tabular-nums;
 }
 
 .cp-arrow {
-  color: rgba(255, 255, 255, 0.2) !important;
+  color: var(--g-text-3) !important;
   flex-shrink: 0;
 }
 
@@ -258,7 +258,7 @@ function formatDuration(openedAt: string, closedAt: string): string {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid var(--g-hairline-1);
   padding-top: 6px;
 }
 
@@ -269,11 +269,11 @@ function formatDuration(openedAt: string, closedAt: string): string {
 }
 
 .cp-pnl-label {
-  font-size: 8.5px;
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  color: rgba(255, 255, 255, 0.25);
+  color: var(--g-text-3);
 }
 
 .cp-pnl-value {
@@ -283,22 +283,22 @@ function formatDuration(openedAt: string, closedAt: string): string {
 }
 
 .pnl--positive {
-  color: #26FAB0;
+  color: var(--g-success);
 }
 
 .pnl--negative {
-  color: #F97066;
+  color: var(--g-error);
 }
 
 .cp-duration {
   display: flex;
   align-items: center;
   gap: 3px;
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.3);
+  font-size: 11px;
+  color: var(--g-text-3);
 }
 
 .cp-duration-icon {
-  color: rgba(255, 255, 255, 0.2) !important;
+  color: var(--g-text-3) !important;
 }
 </style>

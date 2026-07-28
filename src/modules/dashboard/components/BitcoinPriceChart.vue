@@ -178,8 +178,8 @@ onUnmounted(() => {
   background: rgba(255, 255, 255, 0.07);
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 22px;
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-sheet);
   overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif;
   box-shadow:
@@ -243,7 +243,7 @@ onUnmounted(() => {
   font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.04em;
-  color: rgba(255, 255, 255, 0.62);
+  color: var(--g-text-2);
 }
 
 .price-main-row {
@@ -253,21 +253,21 @@ onUnmounted(() => {
 }
 
 .price-value {
-  font-size: 28px;
+  font-size: 32px;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.95);
+  color: var(--g-text-1);
   letter-spacing: -0.025em;
   line-height: 1;
   transition: color 0.4s ease;
 }
 
 .price-value.flash-up {
-  color: #30D158;
+  color: var(--g-success);
   text-shadow: 0 0 20px rgba(48, 209, 88, 0.4);
 }
 
 .price-value.flash-down {
-  color: #FF453A;
+  color: var(--g-error);
   text-shadow: 0 0 20px rgba(255, 69, 58, 0.4);
 }
 
@@ -277,21 +277,21 @@ onUnmounted(() => {
   align-items: center;
   gap: 4px;
   padding: 5px 10px;
-  border-radius: 20px;
+  border-radius: var(--g-r-pill);
   font-size: 12px;
   font-weight: 600;
 }
 
 .change-badge--up {
-  background: rgba(48, 209, 88, 0.16);
-  color: #30D158;
-  border: 1px solid rgba(48, 209, 88, 0.22);
+  background: var(--g-success-fill);
+  color: var(--g-success);
+  border: 1px solid var(--g-success-line);
 }
 
 .change-badge--down {
-  background: rgba(255, 69, 58, 0.16);
-  color: #FF453A;
-  border: 1px solid rgba(255, 69, 58, 0.22);
+  background: var(--g-error-fill);
+  color: var(--g-error);
+  border: 1px solid var(--g-error-line);
 }
 
 /* ─── Price Label Row ──────────────────────────────────────── */
@@ -300,14 +300,14 @@ onUnmounted(() => {
   align-items: center;
   gap: 5px;
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.58);
+  color: var(--g-text-3);
 }
 
 .live-indicator {
   display: flex;
   align-items: center;
   gap: 4px;
-  color: #30D158;
+  color: var(--g-success);
   font-weight: 600;
 }
 
@@ -316,7 +316,7 @@ onUnmounted(() => {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #30D158;
+  background: var(--g-success);
   animation: dot-blink 2s ease-in-out infinite;
 }
 
@@ -333,8 +333,8 @@ onUnmounted(() => {
   align-items: center;
   gap: 0;
   background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 14px;
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-card);
   overflow: hidden;
 }
 
@@ -346,30 +346,30 @@ onUnmounted(() => {
 .stat-divider {
   width: 1px;
   height: 30px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--g-hairline-1);
 }
 
 .stat-cell-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.03em;
-  color: rgba(255, 255, 255, 0.58);
+  color: var(--g-text-3);
   margin-bottom: 4px;
 }
 
 .stat-cell-value {
   font-size: 13px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--g-text-1);
   letter-spacing: -0.01em;
 }
 
-.stat-cell-value--high { color: #30D158; }
-.stat-cell-value--low  { color: #FF453A; }
+.stat-cell-value--high { color: var(--g-success); }
+.stat-cell-value--low  { color: var(--g-error); }
 
 /* ─── Chart ────────────────────────────────────────────────── */
 .chart-wrapper {
-  border-radius: 0 0 21px 21px;
+  border-radius: 0 0 var(--g-r-sheet) var(--g-r-sheet);
   overflow: hidden;
   position: relative;
 }

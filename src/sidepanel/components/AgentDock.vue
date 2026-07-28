@@ -3,12 +3,13 @@
   <div class="agent-dock">
     <button
       class="agent-dock__fab"
-      :class="{ 'is-open': dock.isOpen.value }"
+      :class="{ 'is-open': dock.isOpen.value, 'is-hidden': isAnySheetOpen }"
       :aria-label="dock.isOpen.value ? $t('copilot.close') : $t('copilot.open')"
+      :tabindex="isAnySheetOpen ? -1 : 0"
       @click="dock.toggle()"
     >
-      <v-icon v-if="!dock.isOpen.value" size="22" color="#00DFF3">mdi-robot-outline</v-icon>
-      <v-icon v-else size="22" color="#00DFF3">mdi-close</v-icon>
+      <v-icon v-if="!dock.isOpen.value" size="22" color="var(--g-accent)">mdi-robot-outline</v-icon>
+      <v-icon v-else size="22" color="var(--g-accent)">mdi-close</v-icon>
     </button>
 
     <transition name="dock-panel">
@@ -25,7 +26,7 @@
             :aria-label="$t('copilot.close')"
             @click="dock.close()"
           >
-            <v-icon size="18" color="rgba(232,237,245,0.60)">mdi-close</v-icon>
+            <v-icon size="18" color="var(--g-text-2)">mdi-close</v-icon>
           </button>
         </header>
 
@@ -107,7 +108,7 @@
             :aria-label="$t('copilot.send')"
             @click="submit()"
           >
-            <v-icon size="16" color="#0A0C16">mdi-send</v-icon>
+            <v-icon size="16" color="var(--g-on-grad)">mdi-send</v-icon>
           </button>
         </footer>
         <p class="agent-dock__disclaimer">{{ $t('copilot.disclaimer') }}</p>
@@ -120,6 +121,7 @@
 import { defineComponent, nextTick, ref, watch } from 'vue';
 import { agentDock } from '@/sidepanel/composables/useAgentDock';
 import { renderMarkdown } from '@/services/agent/renderMarkdown';
+import { useSheetVisibility } from '@/sidepanel/composables/useSheetVisibility';
 import ChartCard from '@/sidepanel/components/agent/ChartCard.vue';
 import SwapCard from '@/sidepanel/components/agent/SwapCard.vue';
 import StakingCard from '@/sidepanel/components/agent/StakingCard.vue';
@@ -132,6 +134,15 @@ export default defineComponent({
     const draft = ref('');
     const dock = agentDock;
     const scroll = ref<HTMLElement | null>(null);
+    const { isAnySheetOpen } = useSheetVisibility();
+
+    // Nothing may compete for attention while the user is mid-flow —
+    // signing above all. Close the chat panel the instant a sheet opens
+    // (the FAB itself just fades out via the is-hidden class below), and
+    // reopening it is one tap away once the sheet closes.
+    watch(isAnySheetOpen, (open) => {
+      if (open && dock.isOpen.value) dock.close();
+    });
 
     async function submit(): Promise<void> {
       const text = draft.value;
@@ -154,37 +165,37 @@ export default defineComponent({
       },
     );
 
-    return { draft, dock, submit, quickSend, scroll, renderMarkdown };
+    return { draft, dock, submit, quickSend, scroll, renderMarkdown, isAnySheetOpen };
   },
 });
 </script>
 
 <style scoped>
 .agent-dock {
-  --surface: rgba(10, 12, 22, 0.92);
-  --surface-border: rgba(0, 199, 243, 0.22);
-  --text-primary: #e8edf5;
-  --text-muted: rgba(232, 237, 245, 0.5);
-  --text-placeholder: rgba(232, 237, 245, 0.38);
-  --accent: #00dff3;
-  --accent-08: rgba(0, 223, 243, 0.08);
-  --accent-12: rgba(0, 223, 243, 0.12);
-  --accent-14: rgba(0, 223, 243, 0.14);
-  --accent-18: rgba(0, 223, 243, 0.18);
-  --accent-30: rgba(0, 223, 243, 0.3);
-  --accent-35: rgba(0, 223, 243, 0.35);
-  --accent-60: rgba(0, 223, 243, 0.6);
-  --accent-80: rgba(0, 223, 243, 0.8);
-  --user-bubble-bg: rgba(0, 223, 243, 0.14);
-  --asst-bubble-bg: rgba(255, 255, 255, 0.05);
-  --asst-bubble-border: rgba(255, 255, 255, 0.08);
-  --input-bg: rgba(255, 255, 255, 0.07);
-  --input-border: rgba(255, 255, 255, 0.12);
-  --divider: rgba(255, 255, 255, 0.07);
-  --panel-shadow: 0 8px 40px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 0, 0, 0.4);
-  --fab-bg: rgba(10, 12, 22, 0.96);
-  --fab-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-  --gradient-send: linear-gradient(135deg, #00c7f3 0%, #00ffd1 100%);
+  --surface: var(--g-overlay);
+  --surface-border: color-mix(in srgb, var(--g-accent) 22%, transparent);
+  --text-primary: var(--g-text-1);
+  --text-muted: var(--g-text-3);
+  --text-placeholder: var(--g-text-3);
+  --accent: var(--g-accent);
+  --accent-08: color-mix(in srgb, var(--g-accent) 8%, transparent);
+  --accent-12: color-mix(in srgb, var(--g-accent) 12%, transparent);
+  --accent-14: color-mix(in srgb, var(--g-accent) 14%, transparent);
+  --accent-18: color-mix(in srgb, var(--g-accent) 18%, transparent);
+  --accent-30: color-mix(in srgb, var(--g-accent) 30%, transparent);
+  --accent-35: color-mix(in srgb, var(--g-accent) 35%, transparent);
+  --accent-60: color-mix(in srgb, var(--g-accent) 60%, transparent);
+  --accent-80: color-mix(in srgb, var(--g-accent) 80%, transparent);
+  --user-bubble-bg: color-mix(in srgb, var(--g-accent) 14%, transparent);
+  --asst-bubble-bg: var(--g-hairline-1);
+  --asst-bubble-border: var(--g-hairline-1);
+  --input-bg: var(--g-hairline-1);
+  --input-border: var(--g-hairline-2);
+  --divider: var(--g-hairline-1);
+  --panel-shadow: var(--g-shadow-menu);
+  --fab-bg: var(--g-overlay);
+  --fab-shadow: var(--g-shadow-menu);
+  --gradient-send: var(--g-grad);
 }
 
 /* ── FAB ──────────────────────────────────────────────────────────────── */
@@ -192,7 +203,7 @@ export default defineComponent({
   position: fixed;
   bottom: 80px;
   right: 16px;
-  z-index: 1001;
+  z-index: var(--g-z-dock);
   width: 48px;
   height: 48px;
   display: flex;
@@ -203,27 +214,24 @@ export default defineComponent({
   background: var(--fab-bg);
   border: 1.5px solid var(--accent-35);
   box-shadow: var(--fab-shadow);
-  animation: fab-pulse 4s ease-in-out infinite;
   transition: box-shadow 150ms ease, border-color 150ms ease;
 }
 
 .agent-dock__fab:hover {
-  box-shadow: var(--fab-shadow), 0 0 0 3px rgba(0, 223, 243, 0.2);
+  box-shadow: var(--fab-shadow), 0 0 0 3px color-mix(in srgb, var(--g-accent) 20%, transparent);
 }
 
 .agent-dock__fab.is-open {
   border: 1.5px solid var(--accent-80);
-  animation-play-state: paused;
 }
 
-@keyframes fab-pulse {
-  0%,
-  100% {
-    box-shadow: var(--fab-shadow), 0 0 0 0 rgba(0, 223, 243, 0.3);
-  }
-  50% {
-    box-shadow: var(--fab-shadow), 0 0 0 8px rgba(0, 223, 243, 0);
-  }
+/* Nothing may compete for attention while the user reviews a sheet — most of
+   all a signing request. Faded rather than unmounted so it resumes exactly
+   where it was the instant the sheet closes. */
+.agent-dock__fab.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms ease;
 }
 
 /* ── Panel ────────────────────────────────────────────────────────────── */
@@ -231,45 +239,16 @@ export default defineComponent({
   position: fixed;
   bottom: 140px;
   right: 16px;
-  z-index: 1000;
+  z-index: var(--g-z-dock);
   width: 320px;
   max-height: 60vh;
   display: flex;
   flex-direction: column;
-  border-radius: 16px;
+  border-radius: var(--g-r-sheet);
   overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--surface-border);
   box-shadow: var(--panel-shadow);
-  backdrop-filter: blur(24px) saturate(140%);
-}
-
-.agent-dock__panel::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  z-index: 0;
-  background: radial-gradient(
-    ellipse 280px 200px at 50% -10%,
-    rgba(0, 199, 243, 0.16) 0%,
-    rgba(138, 43, 226, 0.08) 55%,
-    transparent 100%
-  );
-  animation: aurora-drift 8s ease-in-out infinite;
-}
-
-@keyframes aurora-drift {
-  0%,
-  100% {
-    opacity: 1;
-    transform: translateX(0);
-  }
-  50% {
-    opacity: 0.72;
-    transform: translateX(4px);
-  }
 }
 
 .agent-dock__head,
@@ -287,7 +266,7 @@ export default defineComponent({
   align-items: center;
   justify-content: space-between;
   padding: 12px 14px;
-  background: rgba(0, 199, 243, 0.06);
+  background: color-mix(in srgb, var(--g-accent) 6%, transparent);
   border-bottom: 1px solid var(--divider);
 }
 
@@ -299,12 +278,12 @@ export default defineComponent({
 .agent-dock__title {
   font-size: 14px;
   font-weight: 600;
-  color: #ffffff;
+  color: var(--g-text-1);
 }
 
 .agent-dock__status {
   font-size: 11px;
-  color: rgba(0, 223, 243, 0.85);
+  color: var(--g-accent);
 }
 
 .agent-dock__close {
@@ -315,13 +294,13 @@ export default defineComponent({
   justify-content: center;
   background: transparent;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--g-r-control);
   cursor: pointer;
   transition: color 150ms ease;
 }
 
 .agent-dock__close:hover :deep(.v-icon) {
-  color: #ffffff !important;
+  color: var(--g-text-1) !important;
 }
 
 /* ── Messages ─────────────────────────────────────────────────────────── */
@@ -373,10 +352,10 @@ export default defineComponent({
   margin-right: 6px;
   margin-top: 2px;
   border-radius: 50%;
-  background: rgba(0, 223, 243, 0.15);
-  border: 1px solid rgba(0, 223, 243, 0.3);
-  color: #00dff3;
-  font-size: 10px;
+  background: color-mix(in srgb, var(--g-accent) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--g-accent) 30%, transparent);
+  color: var(--g-accent);
+  font-size: 11px;
   font-weight: 700;
   line-height: 14px;
   text-align: center;
@@ -389,9 +368,9 @@ export default defineComponent({
 .agent-dock__msg.user .agent-dock__bubble {
   background: var(--user-bubble-bg);
   border: 1px solid var(--accent-35);
-  border-radius: 18px 18px 4px 18px;
+  border-radius: var(--g-r-sheet) var(--g-r-sheet) var(--g-r-chip) var(--g-r-sheet);
   padding: 9px 13px;
-  font-size: 13.5px;
+  font-size: 14px;
   line-height: 1.5;
   color: var(--text-primary);
 }
@@ -399,9 +378,9 @@ export default defineComponent({
 .agent-dock__msg.assistant .agent-dock__bubble {
   background: var(--asst-bubble-bg);
   border: 1px solid var(--asst-bubble-border);
-  border-radius: 4px 18px 18px 18px;
+  border-radius: var(--g-r-chip) var(--g-r-sheet) var(--g-r-sheet) var(--g-r-sheet);
   padding: 10px 14px;
-  font-size: 13.5px;
+  font-size: 14px;
   line-height: 1.6;
   color: var(--text-primary);
 }
@@ -428,7 +407,7 @@ export default defineComponent({
 
 .agent-dock__md :deep(strong) {
   font-weight: 700;
-  color: #ffffff;
+  color: var(--g-text-1);
 }
 
 .agent-dock__md :deep(ul),
@@ -451,12 +430,12 @@ export default defineComponent({
 }
 
 .agent-dock__md :deep(code) {
-  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-family: var(--g-font-mono);
   font-size: 12px;
   background: var(--accent-12);
-  color: #7fe9f5;
+  color: var(--g-accent);
   padding: 1px 5px;
-  border-radius: 5px;
+  border-radius: var(--g-r-chip);
   word-break: break-all;
 }
 
@@ -468,7 +447,7 @@ export default defineComponent({
 
 .agent-dock__md :deep(.md-h) {
   font-weight: 700;
-  color: #ffffff;
+  color: var(--g-text-1);
   margin: 8px 0 4px;
 }
 
@@ -477,7 +456,7 @@ export default defineComponent({
 }
 
 .agent-dock__md :deep(.md-h1) {
-  font-size: 15px;
+  font-size: 16px;
 }
 
 .agent-dock__md :deep(.md-h2) {
@@ -485,12 +464,12 @@ export default defineComponent({
 }
 
 .agent-dock__md :deep(.md-h3) {
-  font-size: 13.5px;
+  font-size: 13px;
 }
 
 .agent-dock__card {
   margin-top: 8px;
-  border-top: 1px solid rgba(0, 199, 243, 0.12);
+  border-top: 1px solid color-mix(in srgb, var(--g-accent) 12%, transparent);
   padding-top: 8px;
 }
 
@@ -501,7 +480,7 @@ export default defineComponent({
   justify-content: center;
   background: var(--asst-bubble-bg);
   border: 1px solid var(--asst-bubble-border);
-  border-radius: 4px 18px 18px 18px;
+  border-radius: var(--g-r-chip) var(--g-r-sheet) var(--g-r-sheet) var(--g-r-sheet);
   padding: 10px 14px;
 }
 
@@ -509,7 +488,7 @@ export default defineComponent({
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: #00dff3;
+  background: var(--g-accent);
   display: inline-block;
   margin: 0 2px;
   animation: dot-pulse 1.1s ease-in-out infinite;
@@ -562,7 +541,7 @@ export default defineComponent({
   border: 1px solid var(--accent-30);
   font-size: 16px;
   font-weight: 700;
-  color: #00dff3;
+  color: var(--g-accent);
   line-height: 32px;
   text-align: center;
 }
@@ -577,7 +556,7 @@ export default defineComponent({
 
 .agent-dock__empty-sub {
   font-size: 12px;
-  color: rgba(232, 237, 245, 0.6);
+  color: var(--g-text-2);
   margin: 0;
   text-align: center;
 }
@@ -593,12 +572,12 @@ export default defineComponent({
 .chip {
   height: 28px;
   padding: 0 10px;
-  border-radius: 14px;
+  border-radius: var(--g-r-pill);
   background: var(--accent-08);
   border: 1px solid var(--accent-30);
   font-size: 11px;
   font-weight: 500;
-  color: rgba(0, 223, 243, 0.9);
+  color: var(--g-accent);
   cursor: pointer;
   transition: background 120ms ease;
 }
@@ -622,7 +601,7 @@ export default defineComponent({
   flex: 1;
   background: var(--input-bg);
   border: 1px solid var(--input-border);
-  border-radius: 10px;
+  border-radius: var(--g-r-control);
   padding: 8px 12px;
   font-size: 13px;
   color: var(--text-primary);
@@ -637,7 +616,7 @@ export default defineComponent({
 
 .agent-dock__input input:focus {
   border-color: var(--accent-60);
-  box-shadow: 0 0 0 2px rgba(0, 223, 243, 0.15);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--g-accent) 15%, transparent);
 }
 
 .agent-dock__send {
@@ -647,7 +626,7 @@ export default defineComponent({
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
   border: none;
   cursor: pointer;
   background: var(--gradient-send);
@@ -660,13 +639,13 @@ export default defineComponent({
 }
 
 .agent-dock__send:hover:not(:disabled) {
-  box-shadow: 0 0 0 3px rgba(0, 223, 243, 0.25);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--g-accent) 25%, transparent);
 }
 
 /* ── Disclaimer ───────────────────────────────────────────────────────── */
 .agent-dock__disclaimer {
   flex-shrink: 0;
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--text-muted);
   padding: 4px 14px 10px;
   margin: 0;

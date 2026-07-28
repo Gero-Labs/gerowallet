@@ -27,7 +27,7 @@
                     small
                     @click="setMax"
                     :ripple="false"
-                    color="#00DFF3"
+                    color="primary"
                     class="px-0 mx-0"
                     v-if="maxButtonEnabled"
                     style="justify-content: right; height: 14px"
@@ -62,7 +62,7 @@
             <v-list-item two-line class="px-0" style="flex-basis: min-content; text-align: left">
               <v-list-item-content class="py-0">
                 <v-list-item-title class="ma-0" style="height: 32px">
-                  <span v-if="tokenLock" style="font-size: 18px">
+                  <span v-if="tokenLock" style="font-size: 16px">
                     <v-badge
                       overlap
                       avatar
@@ -91,7 +91,7 @@
                     text
                     plain
                     :ripple="false"
-                    style="font-size: 18px; letter-spacing: normal; height: 32px"
+                    style="font-size: 16px; letter-spacing: normal; height: 32px"
                     class="pa-0"
                     @click="selectTokenDialog = true"
                   >
@@ -143,7 +143,7 @@
                     :is-quantity="false"
                   />
                 </v-list-item-title>
-                <v-list-item-subtitle class="light-text" v-if="adaShortage !== 0" style="color: #f97066 !important">
+                <v-list-item-subtitle class="light-text" v-if="adaShortage !== 0" style="color: var(--g-error) !important">
                   Insufficient Funds
                   <!--                  Shortage: {{ adaShortage | toCurrency(false, 3, '', ' '+selectedToken.ticker, true, 0) }}-->
                 </v-list-item-subtitle>
@@ -155,7 +155,7 @@
                     minimum > 0 &&
                     minimum > Number(selectedToken.quantity)
                   "
-                  style="color: #f97066 !important"
+                  style="color: var(--g-error) !important"
                 >
                   <v-btn
                     class="pa-0"
@@ -174,12 +174,12 @@
                   class="light-text"
                   :style="{
                     alignContent: 'end',
-                    color: priceImpact > 3 ? '#FEC84B!important' : '',
+                    color: priceImpact > 3 ? 'var(--g-warning)!important' : '',
                   }"
                   v-else
                 >
                   {{ getCurrencySymbol() }}{{ convertFiat(tokenPricePerUnit).toFixed(4)
-                  }}<v-icon x-small style="margin-bottom: 1px; margin-left: 1px" v-if="priceImpact > 3" color="#FEC84B"
+                  }}<v-icon x-small style="margin-bottom: 1px; margin-left: 1px" v-if="priceImpact > 3" color="warning"
                     >mdi-alert-rhombus-outline</v-icon
                   >
                 </v-list-item-subtitle>
@@ -188,14 +188,14 @@
           </v-card-text>
         </v-card>
         <v-btn icon small @click="removeTokenSelector" v-if="index !== 0" class="ml-1">
-          <v-icon small color="#00DFF3">mdi-minus-box-outline</v-icon>
+          <v-icon small color="primary">mdi-minus-box-outline</v-icon>
         </v-btn>
       </div>
     </v-card-text>
     <v-card-actions class="px-0" v-if="bottomTitle">
       <span v-if="title" :style="{ color: titleColor }">{{ title }}</span>
       <v-spacer></v-spacer>
-      <span style="color: #667085">Balance: {{ balance }}</span>
+      <span style="color: var(--g-text-3)">Balance: {{ balance }}</span>
     </v-card-actions>
     <SelectTokenDialog
       v-model="selectedToken"
@@ -217,7 +217,7 @@ import rules from '@/utils/rules';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { priceStore } from '@/stores/priceStore';
-import { dexHunterStore } from '@/stores/dexHunterStore';
+import { tokenMetadataStore } from '@/stores/tokenMetadataStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import { useMarketData } from '@/modules/market/composables/useMarketData';
 
@@ -317,8 +317,8 @@ function getTokenPriceInUsd(token: any): number {
 
   // For other tokens: get price from DexHunter (in ADA), convert to USD
   const unit = token.unit;
-  if (unit && dexHunterStore.dexHunterTokens[unit]) {
-    const priceInAda = dexHunterStore.dexHunterTokens[unit].price || 0;
+  if (unit && tokenMetadataStore.tokens[unit]) {
+    const priceInAda = tokenMetadataStore.tokens[unit].price || 0;
     const adaPriceUsd = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
     return priceInAda * adaPriceUsd;
   }
@@ -453,13 +453,12 @@ function handleImageError(event) {
 <style scoped>
 .card-container {
   width: 100%;
-  border-radius: 10px !important;
-  border-color: #00dff3 !important;
-  box-shadow: 0 0 0 5px #00dff32a !important;
+  border-radius: var(--g-r-control) !important;
+  border-color: var(--g-accent) !important;
 }
 
 .light-text {
-  color: #61646c !important;
+  color: var(--g-text-3) !important;
   height: 21px;
 }
 
@@ -468,7 +467,7 @@ function handleImageError(event) {
 }
 
 .large-input >>> input {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 500;
   padding: 0;
 }

@@ -63,6 +63,8 @@ function buildCSP(dev: boolean): string {
     'https://api.coingecko.com',
     'https://analytics-snekfun.splash.trade',
     'https://www.googleapis.com',
+    // Contentful blog (Content Delivery API; images are https and covered by img-src)
+    'https://cdn.contentful.com',
     'https://api.handle.me/',
     'https://media.bringweb3.io/',
     'https://api.bringweb3.io/',
@@ -74,12 +76,24 @@ function buildCSP(dev: boolean): string {
     'wss://*.strikefinance.org',
     'https://*.gerowallet.io',
     'wss://*.gerowallet.io',
+    // Midnight — the SDK's UnshieldedWallet/DustWallet/ShieldedWallet sync
+    // connects directly to the Midnight Foundation indexer (HTTP for queries,
+    // WS for subscriptions). Wildcard covers preview/preprod/mainnet plus
+    // any future subdomain the SDK reaches. RPC node URLs land here too
+    // (https://rpc.preview.midnight.network, etc).
+    'https://*.midnight.network',
+    'wss://*.midnight.network',
+    // Arkhia zkPaaS (hosted Midnight proof server) — extension-page health
+    // checks + BG proving fetches. Wildcard covers the starter tier plus any
+    // other plan subdomain a user's project lands on; .network is Arkhia's
+    // staging domain (both appear in the zkPaaS guide's endpoint listings).
+    'https://*.arkhia.io',
+    'https://*.arkhia.network',
     // Gero Copilot agent (direct-to-Fluxpoint dev fallback)
     'https://api-v3.fluxpointstudios.com',
     // Dev-only
     ...(dev
       ? [
-          'https://*.zkfold.io',
           'https://guardarian.com/',
           'http://localhost:*',
           'ws://localhost:*',
@@ -87,7 +101,7 @@ function buildCSP(dev: boolean): string {
           'ws://*.gerowallet.io',
           'https://fastly.jsdelivr.net/npm/@sec-ant/zxing-wasm@2.1.5/dist/reader/zxing_reader.wasm',
         ]
-      : ['ws://127.0.0.1:*']),
+      : ['ws://127.0.0.1:*', 'http://localhost:6300', 'http://127.0.0.1:6300']),
     // SPO Node Monitor (Cloudflare Tunnel)
     'https://*.trycloudflare.com',
     'data:',
@@ -97,9 +111,12 @@ function buildCSP(dev: boolean): string {
     ? ["'self'", "'wasm-unsafe-eval'", 'http://localhost:*']
     : ["'self'", "'wasm-unsafe-eval'"];
 
+  // Fonts are self-hosted (@fontsource, bundled by vite), so production needs
+  // nothing but 'self'. Dev keeps localhost because the vite dev server serves
+  // the woff2 files from its own origin.
   const fontSrc = dev
-    ? ["'self'", 'https://fonts.gstatic.com/', 'http://localhost:*']
-    : ["'self'", 'https://fonts.gstatic.com/'];
+    ? ["'self'", 'http://localhost:*']
+    : ["'self'"];
 
   const styleSrc = ['*', "'unsafe-inline'", "'self'", 'blob:'];
 
@@ -114,6 +131,7 @@ function buildCSP(dev: boolean): string {
     'https://www.kaiserex.com/',
     'https://kaiserex.com/',
     'https://forms.zohopublic.eu/',
+    'https://*.bringweb3.io/',
   ];
 
   const mediaSrc = [

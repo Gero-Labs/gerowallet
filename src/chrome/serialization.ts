@@ -14,9 +14,41 @@ import { HexBlob } from '@cardano-sdk/util';
 import { bech32, bech32m, Decoded } from 'bech32';
 import { Buffer } from 'buffer';
 import { nexusCollateralApi } from '@/api/nexus-collateral-api';
+import { toNexusNetwork } from '@/api/nexus-tx-api';
 import { debugLog } from '@/utils/debug';
+import WalletStore from '@/stores/walletStore';
 
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
+
+/** Cardano protocol `maxCollateralInputs` (mainnet). A collateral set larger
+ * than this is rejected by the node at phase-1 validation. */
+const MAX_COLLATERAL_INPUTS = 3;
+
+/**
+ * Short-lived record of collateral UTxO refs the wallet lent from the Nexus
+ * shared pool (Pass-2 of {@link getCollateral}). The SIGN_TX handler consults
+ * {@link isRecentNexusLent} so that a genuine co-sign failure on a ref WE lent
+ * is surfaced to the dApp instead of being swallowed and returned as an
+ * under-signed witness that only fails opaquely at the node.
+ */
+const NEXUS_LENT_TTL_MS = 10 * 60 * 1000;
+const nexusLentRefs = new Map<string, number>();
+
+/** Remember a `txHash#index` ref we just lent from the Nexus pool. */
+export function markNexusLent(utxoRef: string): void {
+  nexusLentRefs.set(utxoRef, Date.now());
+}
+
+/** True if `utxoRef` was lent from the Nexus pool within the TTL window. */
+export function isRecentNexusLent(utxoRef: string): boolean {
+  const at = nexusLentRefs.get(utxoRef);
+  if (at === undefined) return false;
+  if (Date.now() - at > NEXUS_LENT_TTL_MS) {
+    nexusLentRefs.delete(utxoRef);
+    return false;
+  }
+  return true;
+}
 
 export function jsonToPlutusData(jsonObj): Serialization.PlutusData {
   function parsePlutusData(data): Serialization.PlutusData {
@@ -429,7 +461,11 @@ const getFilterAmount = (amount: string): bigint => {
 
 export async function getCollateral(
   { amount = new Serialization.Value(MAX_COLLATERAL_AMOUNT).toCbor() }: { amount?: string } = {},
-  storedUtxos: Cardano.Utxo[]
+  storedUtxos: Cardano.Utxo[],
+  // The Nexus shared-pool fallback is only offered to trusted dApps (Gero
+  // allowlist ∧ user-connected). The caller (background) resolves trust from the
+  // request origin and passes it here; default false = never lend from the pool.
+  opts: { allowNexusFallback?: boolean } = {},
 ): Promise<string[]> {
   if (!storedUtxos || !Array.isArray(storedUtxos)) {
     const error = APIError.InvalidRequest;
@@ -448,16 +484,43 @@ export async function getCollateral(
     }
   }
 
-  // Pass 1: try to satisfy from the user's own pure-ADA UTxOs.
-  // Cardano.Utxo is [TxIn, TxOut] where TxOut.value = { coins: bigint, assets?: Map }
+  // Pass 1: satisfy from the user's own pure-ADA UTxOs.
+  // Cardano.Utxo is [TxIn, TxOut] where TxOut.value = { coins: bigint, assets?: Map }.
+  // Collateral is forfeited WHOLE on a phase-2 (script) validation failure — CIP-40
+  // collateral_return caps the loss only if the dApp sets it — so we minimize the
+  // amount put at risk: prefer the SMALLEST single UTxO that alone covers the
+  // requirement (one input, least value exposed). Only if no single UTxO covers it
+  // do we combine the largest few to reach the amount within maxCollateralInputs.
   const pureAdaUtxos = storedUtxos.filter((utxo) => {
     const txOut = utxo[1];
     return !txOut.value.assets || txOut.value.assets.size === 0;
   });
 
+  // Smallest single pure-ADA UTxO that alone covers filterAmount → safest + 1 input.
+  const singleSufficient = pureAdaUtxos
+    .filter((utxo) => BigInt(utxo[1].value.coins) >= filterAmount)
+    .sort((a, b) => {
+      const av = BigInt(a[1].value.coins);
+      const bv = BigInt(b[1].value.coins);
+      return av < bv ? -1 : av > bv ? 1 : 0;
+    });
+  if (singleSufficient.length > 0) {
+    return [Serialization.TransactionUnspentOutput.fromCore(singleSufficient[0]).toCbor()];
+  }
+
+  // No single UTxO covers it — combine the largest pure-ADA UTxOs so we reach the
+  // amount with the fewest inputs (staying within maxCollateralInputs). If even the
+  // largest few fall short, fall through to the Nexus single-UTxO fallback rather
+  // than handing the dApp an oversized set the node would reject.
+  const largestFirst = [...pureAdaUtxos].sort((a, b) => {
+    const av = BigInt(a[1].value.coins);
+    const bv = BigInt(b[1].value.coins);
+    return av < bv ? 1 : av > bv ? -1 : 0;
+  });
   const selected: Cardano.Utxo[] = [];
   let totalCoins = 0n;
-  for (const utxo of pureAdaUtxos) {
+  for (const utxo of largestFirst) {
+    if (selected.length >= MAX_COLLATERAL_INPUTS) break;
     selected.push(utxo);
     totalCoins += BigInt(utxo[1].value.coins);
     if (totalCoins >= filterAmount) break;
@@ -467,23 +530,34 @@ export async function getCollateral(
     return selected.map((utxo) => Serialization.TransactionUnspentOutput.fromCore(utxo).toCbor());
   }
 
-  // Pass 2 — Nexus shared-pool fallback. The wallet has no own pure-ADA UTxO
-  // big enough for collateral, so ask Nexus to lend one of the pool UTxOs at
-  // its enterprise address. The returned ref points to a real on-chain UTxO
-  // we don't control; on signTx the background detects the pool address and
-  // calls /api/collateral/cosign for the witness.
-  try {
-    const lent = await nexusCollateralApi.lend();
-    const utxoCbor = buildNexusUtxoCbor(lent);
-    return [utxoCbor];
-  } catch (lendErr) {
-    debugLog('[getCollateral] Nexus lend fallback failed:', lendErr);
-    const error = APIError.Refused;
-    error.info = pureAdaUtxos.length === 0
-      ? 'No pure ADA UTXOs available for collateral.'
-      : 'not enough coins in configured collateral UTxOs';
-    throw error;
+  // Pass 2 — Nexus shared-pool fallback, TRUSTED dApps only. The wallet has no
+  // own pure-ADA UTxO big enough for collateral, so ask Nexus to lend one of the
+  // pool UTxOs at its enterprise address. The returned ref points to a real
+  // on-chain UTxO we don't control; on signTx the background detects the pool
+  // address and calls /api/collateral/cosign for the witness. Skipped entirely
+  // for untrusted dApps — they see the same "no collateral" result as before the
+  // pool existed.
+  if (opts.allowNexusFallback) {
+    try {
+      const lent = await nexusCollateralApi.lend(
+        toNexusNetwork(WalletStore.state.loggedWallet?.network),
+      );
+      const utxoCbor = buildNexusUtxoCbor(lent);
+      // Remember this ref so SIGN_TX knows it must be co-signed by Nexus (and can
+      // surface a co-sign failure rather than returning an unsubmittable witness).
+      markNexusLent(`${lent.txHash}#${lent.outputIndex}`);
+      return [utxoCbor];
+    } catch (lendErr) {
+      debugLog('[getCollateral] Nexus lend fallback failed:', lendErr);
+    }
   }
+
+  // No collateral available (untrusted dApp, or the lend/build failed).
+  const error = APIError.Refused;
+  error.info = pureAdaUtxos.length === 0
+    ? 'No pure ADA UTXOs available for collateral.'
+    : 'not enough coins in configured collateral UTxOs';
+  throw error;
 }
 
 /**
@@ -493,6 +567,19 @@ export async function getCollateral(
  * site can return the same kind of value used elsewhere in this file.
  */
 function buildNexusUtxoCbor(lent: { txHash: string; outputIndex: number; address: string; lovelace: string }): string {
+  // Defence-in-depth: the lent UTxO's network is decided server-side by Nexus
+  // (COLLATERAL_NETWORK). If it ever disagrees with the wallet's connected
+  // network, a mixed-network tx would be built and rejected by the node — and a
+  // cosign witness would be produced for the wrong chain. Refuse instead.
+  const loggedWallet = WalletStore.state.loggedWallet;
+  const walletNetworkId = networks.resolveNetworkId(loggedWallet?.chain, loggedWallet?.network);
+  // Cardano bech32: mainnet HRP is `addr`, testnets are `addr_test`.
+  const lentIsMainnet = lent.address.startsWith('addr1');
+  if (typeof walletNetworkId === 'number' && lentIsMainnet !== (walletNetworkId === 1)) {
+    throw new Error(
+      `Nexus collateral network mismatch: lent address ${lent.address.slice(0, 12)}… does not match wallet network ${loggedWallet?.network}`,
+    );
+  }
   const address = Cardano.PaymentAddress(lent.address);
   const utxo: Cardano.Utxo = [
     {
