@@ -80,11 +80,14 @@
          also mis-handle its UTxO shape). Empty BTC wallets fall through to the shared
          empty hero below via isWalletEmpty. -->
     <template v-else-if="isBitcoin && !isWalletEmpty">
-      <v-row no-gutters class="hero-row">
-        <v-col cols="12" md="5" class="pa-2 hero-tx-col">
+      <!-- No fixed-height hero cols here (the Cardano .hero-*-col clamp to 210px and the
+           taller BTC price chart would overflow into the ecosystem row). Let the cards
+           size to content; .hero-row's align-items:stretch keeps the two equal height. -->
+      <v-row no-gutters class="hero-row btc-hero-row">
+        <v-col cols="12" md="5" class="pa-2">
           <BitcoinBalanceCard />
         </v-col>
-        <v-col cols="12" md="7" class="pa-2 hero-chart-col">
+        <v-col cols="12" md="7" class="pa-2">
           <BitcoinPriceChart />
         </v-col>
       </v-row>
