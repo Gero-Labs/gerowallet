@@ -465,15 +465,17 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
       market: (c, n) => networks.resolveSwapSupport(c, n),
       transactions: (c, n) => networks.resolveTransactionsSupport(c, n),
       card: (c, n) => networks.resolveGeroCardSupport(c, n),
-      // Bitcoin-dependent routes — all return false after the chain-registry
-      // master gate (networks.ts) removes the Bitcoin entries. Closes the
-      // direct-URL gap so #/thorchain etc. redirect to '/'.
-      gomining: (c, n) => networks.resolveGoMiningSupport(c, n),
-      babylon: (c, n) => networks.resolveBabylonSupport(c, n),
-      ordinals: (c, n) => networks.resolveOrdinalsSupport(c, n),
-      thorchain: (c, n) => networks.resolveThorchainSupport(c, n),
-      mempool: (c, n) => networks.resolveMempoolSupport(c, n),
-      lightning: (c, n) => networks.resolveLightningSupport(c, n),
+      // Bitcoin-dependent routes — gated by both the chain's own support flag AND the
+      // isBitcoinEnabled feature flag. The flag is the master gate for Bitcoin (it replaced
+      // removing the networks.ts entries): with it OFF these must redirect to '/' even for an
+      // existing BTC wallet created while it was ON, closing the direct-URL gap for
+      // #/thorchain etc. (Same AND-the-flag pattern as poolOperator below.)
+      gomining: (c, n) => networks.resolveGoMiningSupport(c, n) && featureFlagsStore.isBitcoinEnabled(),
+      babylon: (c, n) => networks.resolveBabylonSupport(c, n) && featureFlagsStore.isBitcoinEnabled(),
+      ordinals: (c, n) => networks.resolveOrdinalsSupport(c, n) && featureFlagsStore.isBitcoinEnabled(),
+      thorchain: (c, n) => networks.resolveThorchainSupport(c, n) && featureFlagsStore.isBitcoinEnabled(),
+      mempool: (c, n) => networks.resolveMempoolSupport(c, n) && featureFlagsStore.isBitcoinEnabled(),
+      lightning: (c, n) => networks.resolveLightningSupport(c, n) && featureFlagsStore.isBitcoinEnabled(),
       // Pool Operator — gated by staking support + the isPoolOperatorEnabled flag,
       // matching the NavigationDrawer item's own `enabled` condition. Returns the
       // live values (not a hard false) so gero-sync can turn it on without a release;
