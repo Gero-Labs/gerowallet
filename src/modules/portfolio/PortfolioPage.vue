@@ -75,6 +75,26 @@
       />
     </template>
 
+    <!-- Bitcoin: dedicated funded dashboard (balance card + price chart + ecosystem
+         widget) — BTC has its own view, not the Cardano holdings table (which would
+         also mis-handle its UTxO shape). Empty BTC wallets fall through to the shared
+         empty hero below via isWalletEmpty. -->
+    <template v-else-if="isBitcoin && !isWalletEmpty">
+      <v-row no-gutters class="hero-row">
+        <v-col cols="12" md="5" class="pa-2 hero-tx-col">
+          <BitcoinBalanceCard />
+        </v-col>
+        <v-col cols="12" md="7" class="pa-2 hero-chart-col">
+          <BitcoinPriceChart />
+        </v-col>
+      </v-row>
+      <v-row no-gutters>
+        <v-col cols="12" class="pa-2">
+          <BitcoinEcosystemWidget />
+        </v-col>
+      </v-row>
+    </template>
+
     <!-- Empty state for wallets with no tokens. Mainnet Cardano skips this
          page: it gets the market-first empty mode inside the main view below
          (spec: docs/superpowers/specs/2026-07-15-market-first-empty-state-design.md). -->
@@ -400,6 +420,9 @@ import MidnightTransactionsCard from '@/modules/dashboard/components/MidnightTra
 import MidnightDustGauge from '@/modules/dashboard/components/MidnightDustGauge.vue';
 import MidnightProofServerWidget from '@/modules/dashboard/components/MidnightProofServerWidget.vue';
 import MidnightHoldingsTable from '@/modules/dashboard/components/MidnightHoldingsTable.vue';
+import BitcoinBalanceCard from '@/modules/dashboard/components/BitcoinBalanceCard.vue';
+import BitcoinPriceChart from '@/modules/dashboard/components/BitcoinPriceChart.vue';
+import BitcoinEcosystemWidget from '@/modules/dashboard/components/BitcoinEcosystemWidget.vue';
 import DustRegistrationDialog from '@/modules/dashboard/dialogs/DustRegistrationDialog.vue';
 import MarketTokenTable from '@/modules/market/components/MarketTokenTable.vue';
 import MarketStatBar from '@/modules/market/components/MarketStatBar.vue';
@@ -477,6 +500,7 @@ const {
 
 // ── UI State ──────────────────────────────────────────────────────────────────
 
+const isBitcoin = computed(() => loggedWallet.value?.chain === Blockchain.BITCOIN);
 const isMainnetCardano = computed(() =>
   loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET
 );
