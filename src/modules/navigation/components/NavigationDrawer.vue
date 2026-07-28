@@ -184,7 +184,7 @@
             {{ account.chain }}
           </v-list-item-subtitle>
           <v-list-item-subtitle style="font-size: 11px" v-if="account">
-            {{ account.network }}
+            {{ accountNetworkLabel }}
           </v-list-item-subtitle>
         </v-list-item-content>
 
@@ -282,6 +282,13 @@ const { transactions: midnightTransactions } = toRefs(midnightStore);
 
 const account = computed(() => {
   return loggedWallet.value
+})
+
+// BTC testnet is testnet4 (backend electrs-testnet4) — show the variant in the
+// wallet card, matching the onboarding pill / balance card / status tooltip.
+const accountNetworkLabel = computed(() => {
+  const n = account.value?.network;
+  return account.value?.chain === Blockchain.BITCOIN && n === 'Testnet' ? 'Testnet4' : n;
 })
 
 const avatar = computed(() => {
