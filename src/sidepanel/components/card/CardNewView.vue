@@ -111,15 +111,15 @@ async function handleLogout() {
 }
 
 .new-title {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 700;
-  color: #fff;
+  color: var(--g-text-1);
   margin: 0;
 }
 
 .new-subtitle {
   font-size: 13px;
-  color: #888;
+  color: var(--g-text-3);
   margin: 0;
 }
 
@@ -128,9 +128,9 @@ async function handleLogout() {
   flex-direction: column;
   gap: 12px;
   padding: 16px;
-  background: #1a1a1a;
-  border-radius: 12px;
-  border: 1px solid #2a2a2a;
+  background: var(--g-raised);
+  border-radius: var(--g-r-card);
+  border: 1px solid var(--g-hairline-2);
 }
 
 .step {
@@ -143,8 +143,8 @@ async function handleLogout() {
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--chain-primary) 15%, transparent);
-  color: var(--chain-primary);
+  background: color-mix(in srgb, var(--g-accent) 15%, transparent);
+  color: var(--g-accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -155,7 +155,7 @@ async function handleLogout() {
 
 .step-text {
   font-size: 13px;
-  color: #ccc;
+  color: var(--g-text-2);
   line-height: 1.3;
 }
 
@@ -171,12 +171,12 @@ async function handleLogout() {
   align-items: center;
   gap: 8px;
   padding: 14px 10px;
-  background: #1a1a1a;
-  border-radius: 10px;
-  border: 1px solid #2a2a2a;
+  background: var(--g-raised);
+  border-radius: var(--g-r-control);
+  border: 1px solid var(--g-hairline-2);
   text-align: center;
   font-size: 12px;
-  color: #ccc;
+  color: var(--g-text-2);
 }
 
 .cta-section {
@@ -189,13 +189,13 @@ async function handleLogout() {
 
 .order-btn {
   height: 44px !important;
-  border-radius: 10px !important;
-  background: linear-gradient(135deg, var(--chain-gradient1) 0%, var(--chain-gradient2) 100%) !important;
+  border-radius: var(--g-r-control) !important;
+  background: linear-gradient(135deg, var(--g-grad-1) 0%, var(--g-grad-2) 100%) !important;
   text-transform: none !important;
   font-weight: 600 !important;
   font-size: 14px !important;
   letter-spacing: 0 !important;
-  color: #0a0a0a !important;
+  color: var(--g-on-grad) !important;
 }
 
 .logout-btn {
@@ -203,10 +203,10 @@ async function handleLogout() {
   text-transform: none !important;
   font-size: 13px !important;
   letter-spacing: 0 !important;
-  color: #888 !important;
+  color: var(--g-text-3) !important;
 }
 
 .logout-btn:hover {
-  color: #ff4d4d !important;
+  color: var(--g-error) !important;
 }
 </style>

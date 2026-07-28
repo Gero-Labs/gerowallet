@@ -49,7 +49,9 @@ onMounted(async () => {
 
         // Then animate to actual value
         setTimeout(() => {
-          odometerInstance.update(props.value);
+          if (odometerInstance) {
+            odometerInstance.update(props.value);
+          }
         }, 50);
       }
     });

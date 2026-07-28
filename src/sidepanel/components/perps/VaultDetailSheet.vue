@@ -32,7 +32,7 @@
           </div>
           <p class="vds-description">{{ vault.description }}</p>
           <div class="vds-leader-row">
-            <v-icon size="11" color="rgba(255,255,255,0.3)" class="mr-1">mdi-account-outline</v-icon>
+            <v-icon size="11" color="var(--g-text-3)" class="mr-1">mdi-account-outline</v-icon>
             <span class="vds-leader-addr">{{ truncateAddr(vault.leader_account_id) }}</span>
           </div>
         </div>
@@ -141,7 +141,7 @@
 
       <!-- ── Error State ── -->
       <div v-else class="vds-error">
-        <v-icon size="24" color="rgba(249,112,102,0.5)">mdi-alert-circle-outline</v-icon>
+        <v-icon size="24" color="error">mdi-alert-circle-outline</v-icon>
         <span class="vds-error__text">{{ $t('vaults.loadError') }}</span>
       </div>
 
@@ -306,7 +306,7 @@ function truncateAddr(addr: string): string {
 
 .vds-error__text {
   font-size: 12px;
-  color: rgba(249, 112, 102, 0.7);
+  color: var(--g-error);
 }
 
 /* ── Header ── */
@@ -324,7 +324,7 @@ function truncateAddr(addr: string): string {
 .vds-vault-name {
   font-size: 16px;
   font-weight: 800;
-  color: #ffffff;
+  color: var(--g-text-1);
   letter-spacing: -0.01em;
 }
 
@@ -334,7 +334,7 @@ function truncateAddr(addr: string): string {
 }
 
 .vds-status-chip {
-  font-size: 9px !important;
+  font-size: 11px !important;
   font-weight: 700 !important;
   letter-spacing: 0.05em !important;
   text-transform: uppercase !important;
@@ -342,26 +342,26 @@ function truncateAddr(addr: string): string {
 }
 
 .vds-status-chip--active {
-  background: rgba(38, 250, 176, 0.12) !important;
-  color: #26FAB0 !important;
-  border: 1px solid rgba(38, 250, 176, 0.25) !important;
+  background: var(--g-success-fill) !important;
+  color: var(--g-success) !important;
+  border: 1px solid var(--g-success-line) !important;
 }
 
 .vds-status-chip--paused {
-  background: rgba(255, 167, 38, 0.12) !important;
-  color: #FFA726 !important;
-  border: 1px solid rgba(255, 167, 38, 0.25) !important;
+  background: var(--g-warning-fill) !important;
+  color: var(--g-warning) !important;
+  border: 1px solid var(--g-warning-line) !important;
 }
 
 .vds-status-chip--closed {
-  background: rgba(249, 112, 102, 0.1) !important;
-  color: #F97066 !important;
-  border: 1px solid rgba(249, 112, 102, 0.22) !important;
+  background: var(--g-error-fill) !important;
+  color: var(--g-error) !important;
+  border: 1px solid var(--g-error-line) !important;
 }
 
 .vds-description {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--g-text-3);
   line-height: 1.6;
   margin: 0 0 6px;
   overflow: hidden;
@@ -376,18 +376,18 @@ function truncateAddr(addr: string): string {
 }
 
 .vds-leader-addr {
-  font-size: 10px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  color: rgba(255, 255, 255, 0.3);
+  font-size: 11px;
+  font-family: var(--g-font-mono);
+  color: var(--g-text-3);
 }
 
 /* ── Section Label ── */
 .vds-section-label {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--g-text-3);
   margin-bottom: 8px;
   margin-top: 14px;
 }
@@ -400,9 +400,9 @@ function truncateAddr(addr: string): string {
 }
 
 .vds-perf-cell {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 8px;
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
   padding: 8px 10px;
   display: flex;
   flex-direction: column;
@@ -410,27 +410,27 @@ function truncateAddr(addr: string): string {
 }
 
 .vds-perf-cell__label {
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.28);
+  color: var(--g-text-3);
 }
 
 .vds-perf-cell__value {
   font-size: 13px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: var(--g-font-mono);
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--g-text-1);
 }
 
-.vds-perf-cell__value--cyan { color: var(--chain-primary); }
-.vds-perf-cell__value--red  { color: #F97066; }
+.vds-perf-cell__value--cyan { color: var(--g-accent); }
+.vds-perf-cell__value--red  { color: var(--g-error); }
 
 /* ── Position Card ── */
 .vds-position-card {
-  background: color-mix(in srgb, var(--chain-primary) 4%, transparent);
-  border: 1px solid color-mix(in srgb, var(--chain-primary) 12%, transparent);
-  border-radius: 10px;
+  background: color-mix(in srgb, var(--g-accent) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--g-accent) 12%, transparent);
+  border-radius: var(--g-r-control);
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
@@ -445,17 +445,17 @@ function truncateAddr(addr: string): string {
 
 .vds-pos-label {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--g-text-3);
 }
 
 .vds-pos-value {
   font-size: 12px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: var(--g-font-mono);
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--g-text-2);
 }
 
-.vds-pos-value--cyan { color: var(--chain-primary); }
+.vds-pos-value--cyan { color: var(--g-accent); }
 
 /* ── Depositors ── */
 .vds-depositors {
@@ -469,24 +469,24 @@ function truncateAddr(addr: string): string {
   align-items: center;
   gap: 8px;
   padding: 7px 10px;
-  background: rgba(255, 255, 255, 0.02);
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--g-hairline-1);
+  border-radius: var(--g-r-control);
+  border: 1px solid var(--g-hairline-1);
 }
 
 .vds-depositor-rank {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.25);
+  color: var(--g-text-3);
   width: 14px;
   text-align: center;
   flex-shrink: 0;
 }
 
 .vds-depositor-addr {
-  font-size: 10px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+  font-family: var(--g-font-mono);
+  color: var(--g-text-3);
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -503,19 +503,19 @@ function truncateAddr(addr: string): string {
 
 .vds-depositor-equity {
   font-size: 11px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: var(--g-font-mono);
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--g-text-2);
 }
 
 .vds-depositor-share {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.3);
+  font-size: 11px;
+  color: var(--g-text-3);
 }
 
 .vds-depositor-pnl {
-  font-size: 10px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  font-family: var(--g-font-mono);
   font-weight: 600;
 }
 
@@ -529,7 +529,7 @@ function truncateAddr(addr: string): string {
 .vds-btn {
   flex: 1;
   height: 42px !important;
-  border-radius: 10px !important;
+  border-radius: var(--g-r-control) !important;
   font-size: 13px !important;
   font-weight: 700 !important;
   text-transform: none !important;
@@ -537,28 +537,28 @@ function truncateAddr(addr: string): string {
 }
 
 .vds-btn--deposit {
-  background: color-mix(in srgb, var(--chain-primary) 12%, transparent) !important;
-  color: var(--chain-primary) !important;
-  border: 1px solid color-mix(in srgb, var(--chain-primary) 30%, transparent) !important;
+  background: color-mix(in srgb, var(--g-accent) 12%, transparent) !important;
+  color: var(--g-accent) !important;
+  border: 1px solid color-mix(in srgb, var(--g-accent) 30%, transparent) !important;
 }
 
 .vds-btn--deposit:hover {
-  background: color-mix(in srgb, var(--chain-primary) 20%, transparent) !important;
+  background: color-mix(in srgb, var(--g-accent) 20%, transparent) !important;
 }
 
 .vds-btn--withdraw {
-  background: rgba(255, 255, 255, 0.05) !important;
-  color: rgba(255, 255, 255, 0.6) !important;
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  background: var(--g-hairline-1) !important;
+  color: var(--g-text-2) !important;
+  border: 1px solid var(--g-hairline-2) !important;
 }
 
 .vds-btn--withdraw:hover {
-  background: rgba(255, 255, 255, 0.09) !important;
+  background: var(--g-hairline-2) !important;
 }
 
 /* ── Color Utilities ── */
-.color--green { color: #26FAB0; }
-.color--red   { color: #F97066; }
+.color--green { color: var(--g-success); }
+.color--red   { color: var(--g-error); }
 
 .mt-3 { margin-top: 12px; }
 </style>

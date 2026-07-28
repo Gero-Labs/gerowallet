@@ -1,5 +1,5 @@
 <template>
-  <BaseDialog
+  <BaseDialog persistent :width="850"
     :isOpen="isOpen"
     @close="$emit('close')"
     :title="t('staking.delegateYourStake')"

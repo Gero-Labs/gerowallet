@@ -49,7 +49,7 @@
                 spellcheck="false"
               />
               <button class="input-icon-btn" @click="pasteAddress" type="button" :title="t('common.paste') || 'Paste'">
-                <v-icon size="15" color="rgba(255,255,255,0.5)">mdi-content-paste</v-icon>
+                <v-icon size="15" color="var(--g-text-3)">mdi-content-paste</v-icon>
               </button>
             </div>
             <span v-if="addressError" class="field-error-msg">{{ addressError }}</span>
@@ -135,7 +135,7 @@
           </div>
 
           <div v-if="totalAmount > availableBalance" class="inline-error mt-3">
-            <v-icon size="14" color="#ef4444" class="mr-1">mdi-alert-circle</v-icon>
+            <v-icon size="14" color="error" class="mr-1">mdi-alert-circle</v-icon>
             {{ $t('send.insufficientBalance') }}
           </div>
         </div>
@@ -156,7 +156,7 @@
             </div>
 
             <div class="confirm-flow-icon">
-              <v-icon size="16" color="rgba(255,255,255,0.3)">mdi-arrow-down-thin</v-icon>
+              <v-icon size="16" color="var(--g-text-3)">mdi-arrow-down-thin</v-icon>
             </div>
 
             <div class="confirm-to-label">{{ $t('send.to') }}</div>
@@ -181,7 +181,7 @@
               <!-- Not yet authenticated -->
               <div v-if="!privateKeyBytes" key="prf-auth" class="prf-auth-block">
                 <div class="prf-hint">
-                  <v-icon size="13" color="rgba(255,255,255,0.35)" class="mr-1">mdi-shield-key-outline</v-icon>
+                  <v-icon size="13" color="var(--g-text-3)" class="mr-1">mdi-shield-key-outline</v-icon>
                   {{ $t('security.passKeyAuthRequired') || 'Authenticate with your PassKey to sign' }}
                 </div>
                 <button class="prf-auth-btn" @click="authenticateWithPassKey" type="button">
@@ -191,7 +191,7 @@
               </div>
               <!-- Authenticated -->
               <div v-else key="prf-done" class="prf-authed-strip">
-                <v-icon size="14" color="#22c55e" class="mr-2">mdi-check-circle</v-icon>
+                <v-icon size="14" color="success" class="mr-2">mdi-check-circle</v-icon>
                 <span>{{ $t('security.passKeyAuthenticated') || 'PassKey authenticated' }}</span>
                 <button class="prf-reauth-btn" @click="privateKeyBytes = null" type="button">
                   <v-icon size="12">mdi-refresh</v-icon>
@@ -212,7 +212,7 @@
                 @keyup.enter="confirmSend"
               />
               <button class="input-icon-btn" @click="showPassword = !showPassword" type="button">
-                <v-icon size="15" color="rgba(255,255,255,0.5)">
+                <v-icon size="15" color="var(--g-text-3)">
                   {{ showPassword ? 'mdi-eye-off' : 'mdi-eye' }}
                 </v-icon>
               </button>
@@ -221,7 +221,7 @@
 
           <!-- Hardware wallet -->
           <div v-else class="hw-notice mt-4">
-            <v-icon size="14" color="#F7931A" class="mr-1">mdi-usb-flash-drive</v-icon>
+            <v-icon size="14" color="var(--g-accent)" class="mr-1">mdi-usb-flash-drive</v-icon>
             {{ $t('send.hardwareWalletInstructions') }}
           </div>
 
@@ -269,7 +269,7 @@
           @click="confirmSend"
           type="button"
         >
-          <v-progress-circular v-if="loading" indeterminate :size="14" :width="2" color="white" class="mr-2" />
+          <v-progress-circular v-if="loading" indeterminate :size="14" :width="2" color="var(--g-text-1)" class="mr-2" />
           <v-icon v-else size="14" class="mr-1">mdi-send</v-icon>
           {{ $t('send.send') }}
         </button>
@@ -555,14 +555,13 @@ watch(() => props.value, (val) => { if (val) updateFeeEstimate(); });
 .step-bar {
   flex: 1;
   height: 3px;
-  border-radius: 2px;
-  background: rgba(255, 255, 255, 0.10);
+  border-radius: var(--g-r-chip);
+  background: var(--g-hairline-2);
   transition: background 0.3s ease;
 }
 
 .step-bar.is-active {
-  background: #F7931A;
-  box-shadow: 0 0 6px rgba(247, 147, 26, 0.5);
+  background: var(--g-accent);
 }
 
 .step-bar.is-done {
@@ -576,16 +575,16 @@ watch(() => props.value, (val) => { if (val) updateFeeEstimate(); });
 
 .step-label {
   flex: 1;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.30);
+  color: var(--g-text-3);
   transition: color 0.3s ease;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
 }
 
-.step-label.is-active { color: #F7931A; }
+.step-label.is-active { color: var(--g-accent); }
 .step-label.is-done   { color: rgba(247, 147, 26, 0.55); }
 
 /* ── Step body transition ──────────────────────────────── */
@@ -606,7 +605,7 @@ watch(() => props.value, (val) => { if (val) updateFeeEstimate(); });
   font-weight: 500;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--g-text-3);
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
 }
 
@@ -614,20 +613,20 @@ watch(() => props.value, (val) => { if (val) updateFeeEstimate(); });
 .glass-input-wrap {
   display: flex;
   align-items: center;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  border-radius: 11px;
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-card);
   overflow: hidden;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .glass-input-wrap:focus-within {
-  border-color: rgba(247, 147, 26, 0.5);
+  border-color: var(--g-accent);
   box-shadow: 0 0 0 3px rgba(247, 147, 26, 0.08);
 }
 
-.glass-input-wrap.is-error { border-color: rgba(239, 68, 68, 0.6); }
-.glass-input-wrap.is-valid { border-color: rgba(34, 197, 94, 0.35); }
+.glass-input-wrap.is-error { border-color: var(--g-error); }
+.glass-input-wrap.is-valid { border-color: var(--g-success); }
 
 .glass-input {
   flex: 1;
@@ -636,17 +635,16 @@ watch(() => props.value, (val) => { if (val) updateFeeEstimate(); });
   outline: none;
   padding: 11px 14px;
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.88);
+  color: var(--g-text-1);
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
   min-width: 0;
 }
 
-.glass-input::placeholder { color: rgba(255, 255, 255, 0.22); }
+.glass-input::placeholder { color: var(--g-text-3); }
 
 .monospace-input {
-  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Courier New', monospace !important;
+  font-family: var(--g-font-mono) !important;
   font-size: 12px !important;
-  letter-spacing: 0.02em;
 }
 
 .input-icon-btn {
@@ -658,36 +656,36 @@ watch(() => props.value, (val) => { if (val) updateFeeEstimate(); });
   cursor: pointer;
   display: flex;
   align-items: center;
-  border-left: 1px solid rgba(255, 255, 255, 0.07);
+  border-left: 1px solid var(--g-hairline-1);
   transition: background 0.15s ease;
 }
 
-.input-icon-btn:hover { background: rgba(255, 255, 255, 0.06); }
+.input-icon-btn:hover { background: var(--g-hairline-1); }
 
 /* ── Amount input ──────────────────────────────────────── */
 .amount-wrap {
   display: flex;
   align-items: center;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  border-radius: 11px;
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-card);
   overflow: hidden;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .amount-wrap:focus-within {
-  border-color: rgba(247, 147, 26, 0.5);
+  border-color: var(--g-accent);
   box-shadow: 0 0 0 3px rgba(247, 147, 26, 0.08);
 }
 
-.amount-wrap.is-error { border-color: rgba(239, 68, 68, 0.6); }
+.amount-wrap.is-error { border-color: var(--g-error); }
 
 .btc-badge {
   padding: 0 14px;
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 700;
   color: #F7931A;
-  border-right: 1px solid rgba(255, 255, 255, 0.07);
+  border-right: 1px solid var(--g-hairline-1);
   height: 48px;
   display: flex;
   align-items: center;
@@ -702,15 +700,15 @@ watch(() => props.value, (val) => { if (val) updateFeeEstimate(); });
   outline: none;
   padding: 0 14px;
   height: 48px;
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 300;
-  color: rgba(255, 255, 255, 0.92);
+  color: var(--g-text-1);
   letter-spacing: -0.02em;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
   min-width: 0;
 }
 
-.amount-input::placeholder { color: rgba(255, 255, 255, 0.18); }
+.amount-input::placeholder { color: var(--g-text-3); }
 
 /* hide number arrows */
 .amount-input::-webkit-outer-spin-button,
@@ -722,11 +720,11 @@ watch(() => props.value, (val) => { if (val) updateFeeEstimate(); });
   padding: 3px 10px;
   background: rgba(247, 147, 26, 0.15);
   border: 1px solid rgba(247, 147, 26, 0.3);
-  border-radius: 20px;
-  font-size: 10px;
+  border-radius: var(--g-r-pill);
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
-  color: #F7931A;
+  color: var(--g-accent);
   cursor: pointer;
   transition: background 0.15s ease;
   font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
@@ -742,7 +740,7 @@ watch(() => props.value, (val) => { if (val) updateFeeEstimate(); });
 
 .sats-hint {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--g-text-3);
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
 }
 
@@ -760,18 +758,18 @@ watch(() => props.value, (val) => { if (val) updateFeeEstimate(); });
   padding: 8px 12px;
   background: rgba(247, 147, 26, 0.06);
   border: 1px solid rgba(247, 147, 26, 0.14);
-  border-radius: 9px;
+  border-radius: var(--g-r-control);
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
 }
 
-.balance-key { font-size: 11px; color: rgba(255, 255, 255, 0.45); }
-.balance-val { font-size: 12px; font-weight: 600; color: rgba(255, 255, 255, 0.82); margin-left: 2px; }
-.balance-sats { font-size: 10px; color: rgba(255, 255, 255, 0.30); }
+.balance-key { font-size: 11px; color: var(--g-text-3); }
+.balance-val { font-size: 12px; font-weight: 600; color: var(--g-text-2); margin-left: 2px; }
+.balance-sats { font-size: 11px; color: var(--g-text-3); }
 
 /* ── Errors ────────────────────────────────────────────── */
 .field-error-msg {
   font-size: 11px;
-  color: #f87171;
+  color: var(--g-error);
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
 }
 
@@ -785,22 +783,22 @@ watch(() => props.value, (val) => { if (val) updateFeeEstimate(); });
 .fee-card {
   position: relative;
   padding: 14px 12px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 13px;
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-card);
   cursor: pointer;
   transition: border-color 0.2s ease, background 0.2s ease, transform 0.15s ease;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
 }
 
 .fee-card:hover {
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--g-hairline-2);
   transform: translateY(-1px);
 }
 
 .fee-card.is-selected {
   background: rgba(247, 147, 26, 0.08);
-  border-color: rgba(247, 147, 26, 0.45);
+  border-color: var(--g-accent);
   box-shadow: 0 0 0 3px rgba(247, 147, 26, 0.07), inset 0 1px 0 rgba(247, 147, 26, 0.15);
 }
 
@@ -816,10 +814,10 @@ watch(() => props.value, (val) => { if (val) updateFeeEstimate(); });
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.60);
+  color: var(--g-text-2);
 }
 
-.fee-card.is-selected .fee-tier-name { color: #F7931A; }
+.fee-card.is-selected .fee-tier-name { color: var(--g-accent); }
 
 .speed-dots { display: flex; gap: 3px; align-items: center; }
 
@@ -827,42 +825,42 @@ watch(() => props.value, (val) => { if (val) updateFeeEstimate(); });
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--g-hairline-3);
   transition: background 0.2s ease;
 }
 
-.speed-dot.lit { background: rgba(255, 255, 255, 0.45); }
-.fee-card.is-selected .speed-dot.lit { background: #F7931A; }
+.speed-dot.lit { background: var(--g-text-3); }
+.fee-card.is-selected .speed-dot.lit { background: var(--g-accent); }
 
 .fee-rate-val {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.88);
+  color: var(--g-text-1);
   letter-spacing: -0.02em;
   line-height: 1;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
 }
 
-.fee-rate-unit { font-size: 10px; font-weight: 400; color: rgba(255, 255, 255, 0.35); }
+.fee-rate-unit { font-size: 11px; font-weight: 400; color: var(--g-text-3); }
 
 .fee-time-hint {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.35);
+  font-size: 11px;
+  color: var(--g-text-3);
   margin-top: 3px;
 }
 
 .fee-cost-line {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.45);
+  font-size: 11px;
+  color: var(--g-text-3);
   margin-top: 6px;
-  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-family: var(--g-font-mono);
 }
 
 /* ── Transaction summary ───────────────────────────────── */
 .tx-summary {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 11px;
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-card);
   padding: 14px 16px;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
 }
@@ -872,40 +870,40 @@ watch(() => props.value, (val) => { if (val) updateFeeEstimate(); });
   justify-content: space-between;
   align-items: center;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--g-text-3);
   padding: 4px 0;
 }
 
 .summary-divider {
   height: 1px;
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--g-hairline-1);
   margin: 6px 0;
 }
 
 .summary-total {
   font-size: 13px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.88);
+  color: var(--g-text-1);
 }
 
 .summary-total .mono { color: #F7931A; }
 
-.mono { font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; }
-.muted { color: rgba(255, 255, 255, 0.35); }
+.mono { font-family: var(--g-font-mono); }
+.muted { color: var(--g-text-3); }
 
 .inline-error {
   display: flex;
   align-items: center;
   font-size: 12px;
-  color: #f87171;
+  color: var(--g-error);
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
 }
 
 /* ── Confirm panel ─────────────────────────────────────── */
 .confirm-panel {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-card);
   padding: 20px 20px 16px;
   text-align: center;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
@@ -928,15 +926,15 @@ watch(() => props.value, (val) => { if (val) updateFeeEstimate(); });
 .confirm-amount-val {
   font-size: 32px;
   font-weight: 300;
-  color: rgba(255, 255, 255, 0.92);
+  color: var(--g-text-1);
   letter-spacing: -0.04em;
   font-variant-numeric: tabular-nums;
-  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-family: var(--g-font-mono);
 }
 
 .confirm-usd-equiv {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.42);
+  color: var(--g-text-3);
   margin-top: 4px;
 }
 
@@ -946,19 +944,19 @@ watch(() => props.value, (val) => { if (val) updateFeeEstimate(); });
 }
 
 .confirm-to-label {
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.30);
+  color: var(--g-text-3);
   margin-bottom: 4px;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
 }
 
 .confirm-address {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.65);
+  color: var(--g-text-2);
   word-break: break-all;
-  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-family: var(--g-font-mono);
 }
 
 .confirm-meta-grid {
@@ -980,25 +978,25 @@ watch(() => props.value, (val) => { if (val) updateFeeEstimate(); });
 .confirm-meta-sep {
   width: 1px;
   height: 28px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--g-hairline-1);
 }
 
 .confirm-meta-key {
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.30);
+  color: var(--g-text-3);
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
 }
 
 .confirm-meta-val {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.65);
-  font-family: 'SF Mono', 'Fira Code', monospace;
+  color: var(--g-text-2);
+  font-family: var(--g-font-mono);
 }
 
 .confirm-meta-val.strong {
-  color: rgba(255, 255, 255, 0.88);
+  color: var(--g-text-1);
   font-weight: 600;
 }
 
@@ -1013,7 +1011,7 @@ watch(() => props.value, (val) => { if (val) updateFeeEstimate(); });
   display: flex;
   align-items: center;
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.40);
+  color: var(--g-text-3);
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
 }
 
@@ -1021,11 +1019,11 @@ watch(() => props.value, (val) => { if (val) updateFeeEstimate(); });
   display: flex;
   align-items: center;
   padding: 10px 14px;
-  background: rgba(34, 197, 94, 0.07);
-  border: 1px solid rgba(34, 197, 94, 0.22);
-  border-radius: 10px;
+  background: var(--g-success-fill);
+  border: 1px solid var(--g-success-line);
+  border-radius: var(--g-r-control);
   font-size: 12px;
-  color: #86efac;
+  color: var(--g-success);
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
   gap: 4px;
 }
@@ -1034,18 +1032,18 @@ watch(() => props.value, (val) => { if (val) updateFeeEstimate(); });
   margin-left: auto;
   padding: 2px 6px;
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 6px;
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-control);
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.40);
+  color: var(--g-text-3);
   transition: color 0.15s ease, border-color 0.15s ease;
   display: flex;
   align-items: center;
 }
 
 .prf-reauth-btn:hover {
-  color: rgba(255, 255, 255, 0.70);
-  border-color: rgba(255, 255, 255, 0.25);
+  color: var(--g-text-2);
+  border-color: var(--g-hairline-3);
 }
 
 .prf-auth-btn {
@@ -1053,9 +1051,9 @@ watch(() => props.value, (val) => { if (val) updateFeeEstimate(); });
   padding: 11px 16px;
   background: rgba(247, 147, 26, 0.12);
   border: 1px solid rgba(247, 147, 26, 0.30);
-  border-radius: 10px;
+  border-radius: var(--g-r-control);
   cursor: pointer;
-  color: #F7931A;
+  color: var(--g-accent);
   font-size: 13px;
   font-weight: 500;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
@@ -1077,9 +1075,9 @@ watch(() => props.value, (val) => { if (val) updateFeeEstimate(); });
   padding: 10px 14px;
   background: rgba(247, 147, 26, 0.06);
   border: 1px solid rgba(247, 147, 26, 0.18);
-  border-radius: 10px;
+  border-radius: var(--g-r-control);
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.60);
+  color: var(--g-text-2);
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
 }
 
@@ -1088,27 +1086,27 @@ watch(() => props.value, (val) => { if (val) updateFeeEstimate(); });
   display: flex;
   align-items: center;
   padding: 10px 14px;
-  border-radius: 10px;
+  border-radius: var(--g-r-control);
   font-size: 12px;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
 }
 
 .tx-status.success {
-  background: rgba(34, 197, 94, 0.08);
-  border: 1px solid rgba(34, 197, 94, 0.25);
-  color: #86efac;
+  background: var(--g-success-fill);
+  border: 1px solid var(--g-success-line);
+  color: var(--g-success);
 }
 
 .tx-status.error {
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.25);
-  color: #fca5a5;
+  background: var(--g-error-fill);
+  border: 1px solid var(--g-error-line);
+  color: var(--g-error);
 }
 
 .tx-status.info {
   background: rgba(96, 165, 250, 0.08);
   border: 1px solid rgba(96, 165, 250, 0.20);
-  color: #93c5fd;
+  color: var(--g-info);
 }
 
 /* ── Navigation row ────────────────────────────────────── */
@@ -1124,20 +1122,20 @@ watch(() => props.value, (val) => { if (val) updateFeeEstimate(); });
   align-items: center;
   padding: 8px 14px;
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 20px;
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-pill);
   font-size: 12px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--g-text-3);
   cursor: pointer;
   transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
 }
 
 .back-btn:hover {
-  border-color: rgba(255, 255, 255, 0.25);
-  color: rgba(255, 255, 255, 0.80);
-  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--g-hairline-3);
+  color: var(--g-text-2);
+  background: var(--g-hairline-1);
 }
 
 .next-btn,
@@ -1145,24 +1143,21 @@ watch(() => props.value, (val) => { if (val) updateFeeEstimate(); });
   display: inline-flex;
   align-items: center;
   padding: 9px 22px;
-  background: linear-gradient(135deg, #F7931A, #e8820e);
+  background: var(--g-grad);
   border: none;
-  border-radius: 20px;
+  border-radius: var(--g-r-pill);
   font-size: 13px;
   font-weight: 600;
-  color: rgba(0, 0, 0, 0.88);
+  color: var(--g-on-grad);
   cursor: pointer;
   transition: opacity 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
-  box-shadow: 0 2px 12px rgba(247, 147, 26, 0.30);
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
-  letter-spacing: -0.01em;
 }
 
 .next-btn:hover:not(:disabled),
 .send-btn:hover:not(:disabled) {
   opacity: 0.92;
   transform: translateY(-1px);
-  box-shadow: 0 4px 18px rgba(247, 147, 26, 0.40);
 }
 
 .next-btn.is-disabled,

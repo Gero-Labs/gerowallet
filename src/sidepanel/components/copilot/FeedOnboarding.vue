@@ -33,7 +33,7 @@
 
         <div v-else class="onboarding-done">
           <div class="onboarding-done__ring">
-            <v-icon size="34" color="#26FAB0">mdi-check</v-icon>
+            <v-icon size="34" color="success">mdi-check</v-icon>
           </div>
         </div>
       </div>
@@ -124,17 +124,10 @@ const stepSubtitle = computed(() => {
   flex-direction: column;
   align-items: center;
   gap: 14px;
-  background:
-    linear-gradient(180deg, rgba(19, 22, 27, 0.7) 0%, rgba(10, 12, 16, 0.8) 100%),
-    radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--chain-primary, #5b8def) 8%, transparent) 0%, transparent 60%);
-  backdrop-filter: blur(32px) saturate(1.6);
-  -webkit-backdrop-filter: blur(32px) saturate(1.6);
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--g-surface);
+  border-radius: var(--g-r-sheet);
+  border: 1px solid var(--g-hairline-2);
   padding: 26px 20px 20px;
-  box-shadow:
-    0 8px 40px rgba(0, 0, 0, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .onboarding-icon-wrap {
@@ -147,29 +140,28 @@ const stepSubtitle = computed(() => {
   width: 64px;
   height: 64px;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--chain-primary, #5b8def) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--chain-primary, #5b8def) 25%, transparent);
+  background: color-mix(in srgb, var(--g-accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--g-accent) 25%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 0 24px color-mix(in srgb, var(--chain-primary, #5b8def) 15%, transparent);
 }
 
 .onboarding-icon {
-  color: var(--chain-primary, #5b8def) !important;
+  color: var(--g-accent) !important;
 }
 
 .onboarding-title {
   font-size: 16px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--g-text-1);
   text-align: center;
   letter-spacing: -0.01em;
 }
 
 .onboarding-desc {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--g-text-3);
   text-align: center;
   line-height: 1.55;
 }
@@ -190,8 +182,8 @@ const stepSubtitle = computed(() => {
   width: 64px;
   height: 64px;
   border-radius: 50%;
-  background: rgba(38, 250, 176, 0.08);
-  border: 1px solid rgba(38, 250, 176, 0.25);
+  background: var(--g-success-fill);
+  border: 1px solid var(--g-success-line);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -209,12 +201,12 @@ const stepSubtitle = computed(() => {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.25);
+  background: var(--g-hairline-3);
   transition: background 0.2s ease, transform 0.2s ease;
 }
 
 .wizard-dot--active {
-  background: var(--chain-primary, #5b8def);
+  background: var(--g-accent);
   transform: scale(1.25);
 }
 
@@ -230,35 +222,32 @@ const stepSubtitle = computed(() => {
 .connect-btn {
   height: 40px !important;
   min-width: 120px !important;
-  border-radius: 10px !important;
-  background: color-mix(in srgb, var(--chain-primary, #5b8def) 14%, transparent) !important;
-  color: var(--chain-primary, #5b8def) !important;
-  border: 1px solid color-mix(in srgb, var(--chain-primary, #5b8def) 32%, transparent) !important;
+  border-radius: var(--g-r-control) !important;
+  background: color-mix(in srgb, var(--g-accent) 14%, transparent) !important;
+  color: var(--g-accent) !important;
+  border: 1px solid color-mix(in srgb, var(--g-accent) 32%, transparent) !important;
   font-size: 13px !important;
   font-weight: 700 !important;
   text-transform: none !important;
-  letter-spacing: 0.02em !important;
 }
 
 .connect-btn:hover {
-  background: color-mix(in srgb, var(--chain-primary, #5b8def) 22%, transparent) !important;
+  background: color-mix(in srgb, var(--g-accent) 22%, transparent) !important;
 }
 
 .wizard-back {
-  color: rgba(255, 255, 255, 0.6) !important;
+  color: var(--g-text-2) !important;
   text-transform: none !important;
-  letter-spacing: 0.02em !important;
 }
 
 .wizard-skip {
-  color: rgba(255, 255, 255, 0.4) !important;
+  color: var(--g-text-3) !important;
   text-transform: none !important;
-  letter-spacing: 0.02em !important;
 }
 
 .wizard-disclaimer {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.4);
+  font-size: 11px;
+  color: var(--g-text-3);
   text-align: center;
   margin: 2px 0 0;
 }

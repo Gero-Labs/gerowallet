@@ -8,7 +8,7 @@
           <v-tooltip bottom>
             <template v-slot:activator="{ on, attrs }">
               <v-icon class="ml-1" small color="#C4C4C4" v-bind="attrs" v-on="on">
-                mdi-information-outlƒine
+                mdi-information-outline
               </v-icon>
             </template>
             <div>
@@ -48,7 +48,7 @@
                 @input="spendingPassword = $event"
                 outlined
                 dense
-                hide-details
+                hide-details="auto"
                 :placeholder="t('navigation.typeYourSpendingPassword')"
                 :rules="[rules.required()]"
                 required
@@ -109,7 +109,7 @@
               </v-alert>
             </v-col>
             <v-col :cols="isPrfWallet ? 12 : 6">
-              <v-btn block outlined color="red" class="capitalize" @click="decline" :disabled="txSignLoading">
+              <v-btn block outlined color="error" class="capitalize" @click="decline" :disabled="txSignLoading">
                 {{ $t('wallet.decline') }}
               </v-btn>
             </v-col>
@@ -235,7 +235,7 @@ import {
   getPayAndReceiveTokens,
 } from '@/shared/utils/builder';
 import networks from '@/utils/networks';
-import { Blockchain, coin_type, purpose, WalletType } from '@/models/types';
+import { Blockchain, coin_type, purpose, WalletType, Network } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
 import cardanoShieldApi from '@/api/cardano-shield-api';
 import CopyButton from '@/shared/components/CopyButton.vue';
@@ -273,7 +273,6 @@ const controller = ref<any>(null);
 const witnesses = ref<any>(undefined);
 const form = ref<any>(null);
 const popupHeader = ref<any>(null);
-const tabId = ref<number>();
 // Keystone state
 const keystoneOverlay = ref(false);
 const keystoneScan = ref(false);
@@ -287,10 +286,6 @@ const addresses = computed(() => {
 
 const txAutoSubmit = computed(() => {
   return config.value?.txAutoSubmit;
-});
-
-const useSidePanel = computed(() => {
-  return config.value?.useSidePanel;
 });
 
 // Check if wallet uses PRF encryption (PassKey)
@@ -828,6 +823,17 @@ const init = async () => {
     tx.value = deserializeCardanoJsSdkTx(txCbor);
     const queryParams = route.query;
 
+    // Cardano Shield only covers Cardano MAINNET. On preprod/testnet or any
+    // non-Cardano chain the scan endpoint has no data and just times out — skip
+    // it and report unknown risk so the UI shows N/A (mirrors dashboard
+    // SummaryStep + DAppOverlay gate, PR 805).
+    const w = loggedWallet.value;
+    if (w?.chain !== Blockchain.CARDANO || w?.network !== Network.MAINNET) {
+      risks.value = { addressRisk: 'unknown', score: 'unknown' };
+      loading.value = false;
+      return;
+    }
+
     // Make Cardano Shield scan non-blocking with 5-second timeout
     // Don't block the UI if the scan is slow or fails
     const scanWithTimeout = Promise.race([
@@ -859,13 +865,13 @@ const init = async () => {
 };
 
 onMounted(async () => {
-  if (useSidePanel.value) {
-    const params = new URLSearchParams(window.location.href);
-    tabId.value = Number(params.get("tabId"));
-    controller.value = Messaging.createInternalSidePanelController(tabId.value);
-  } else {
-    controller.value = Messaging.createInternalController();
-  }
+  // This view is only ever opened inside a standalone popup window (see
+  // openPopupForSignTx in background.ts, which always targets index.html) —
+  // never inside the side panel, which renders DAppOverlay.vue instead. It
+  // must always speak the popup port protocol. It used to branch on the
+  // now-retired Prompt Display Mode setting instead, which connected the
+  // wrong port name and hung forever whenever this fallback view was reached.
+  controller.value = Messaging.createInternalController();
 
   await init();
 

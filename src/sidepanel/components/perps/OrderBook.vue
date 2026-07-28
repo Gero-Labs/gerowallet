@@ -200,7 +200,7 @@ watch([bestAsk, bestBid], () => {
 .order-book {
   display: flex;
   flex-direction: column;
-  font-family: 'JetBrains Mono', 'Fira Code', 'Roboto Mono', monospace;
+  font-family: var(--g-font-mono);
   background: transparent;
   user-select: none;
 }
@@ -214,28 +214,28 @@ watch([bestAsk, bestBid], () => {
 }
 
 .ob-title {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--g-text-3);
 }
 
 .ob-spread-badge {
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .spread-label {
-  color: rgba(255, 255, 255, 0.25);
+  color: var(--g-text-3);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
 .spread-value {
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--g-text-3);
   font-weight: 600;
 }
 
@@ -244,8 +244,8 @@ watch([bestAsk, bestBid], () => {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   padding: 2px 10px 3px;
-  font-size: 8.5px;
-  color: rgba(255, 255, 255, 0.2);
+  font-size: 11px;
+  color: var(--g-text-3);
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
@@ -275,7 +275,7 @@ watch([bestAsk, bestBid], () => {
 }
 
 .ob-row:hover {
-  background: rgba(255, 255, 255, 0.04) !important;
+  background: var(--g-hairline-1) !important;
 }
 
 /* Depth bar fills */
@@ -290,11 +290,11 @@ watch([bestAsk, bestBid], () => {
 }
 
 .ob-row-fill--ask {
-  background: #F97066;
+  background: var(--g-error);
 }
 
 .ob-row-fill--bid {
-  background: #26FAB0;
+  background: var(--g-success);
 }
 
 /* Price */
@@ -306,25 +306,25 @@ watch([bestAsk, bestBid], () => {
 }
 
 .ob-price--ask {
-  color: #F97066;
+  color: var(--g-error);
 }
 
 .ob-price--bid {
-  color: #26FAB0;
+  color: var(--g-success);
 }
 
 /* Qty / Total */
 .ob-qty,
 .ob-total {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.55);
+  font-size: 11px;
+  color: var(--g-text-3);
   text-align: right;
   position: relative;
   z-index: 1;
 }
 
 .ob-total {
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--g-text-3);
 }
 
 /* ── Mid Price Row ── */
@@ -333,8 +333,8 @@ watch([bestAsk, bestBid], () => {
   align-items: center;
   justify-content: space-between;
   padding: 5px 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid var(--g-hairline-1);
+  border-bottom: 1px solid var(--g-hairline-1);
   margin: 1px 0;
 }
 
@@ -344,16 +344,16 @@ watch([bestAsk, bestBid], () => {
   gap: 3px;
   font-size: 13px;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--g-text-2);
   transition: color 0.2s ease;
 }
 
 .ob-mid-price.mid-up {
-  color: #26FAB0;
+  color: var(--g-success);
 }
 
 .ob-mid-price.mid-down {
-  color: #F97066;
+  color: var(--g-error);
 }
 
 .mid-icon {
@@ -362,11 +362,11 @@ watch([bestAsk, bestBid], () => {
 }
 
 .ob-spread-inline {
-  font-size: 9px;
-  color: rgba(255, 255, 255, 0.3);
+  font-size: 11px;
+  color: var(--g-text-3);
 }
 
 .spread-pct {
-  color: rgba(255, 255, 255, 0.18);
+  color: var(--g-text-3);
 }
 </style>

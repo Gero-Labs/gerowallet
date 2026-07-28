@@ -1,6 +1,11 @@
+import '../shared/styles/tokens.css';
+import '@fontsource-variable/inter';            // family: 'Inter Variable', wght axis 100-900
+import '@fontsource/jetbrains-mono/400.css';    // family: 'JetBrains Mono'
+import '@fontsource/jetbrains-mono/500.css';
 import '@mdi/font/css/materialdesignicons.css';
 import 'vuetify/dist/vuetify.min.css';
 import '../shared/styles/liquid-glass.css';
+import '../shared/styles/baseline.css';
 
 import Vue from 'vue';
 import VueRouter from 'vue-router';
@@ -64,6 +69,7 @@ Promise.all([loadPersistedGero(), hydrateWalletStore()]).then(() => {
   });
 
   Vue.config.productionTip = false;
+  Vue.config.ignoredElements = [...(Vue.config.ignoredElements || []), 'gero-swap'];
   Vue.use(FlagIcon);
   Vue.use(VueShowdown, {
     flavor: 'github',
@@ -119,11 +125,18 @@ Promise.all([loadPersistedGero(), hydrateWalletStore()]).then(() => {
       { immediate: true }
     );
 
-    // Redirect to welcome page when wallet is locked
+    // Redirect to welcome page when wallet is locked — except the two signing
+    // popups. passkey-auth runs the unlock ceremony itself and must stay on its
+    // route while locked. ledger-ble-sign must stay too: navigating it away
+    // leaves no beforeunload, so the side panel that opened it would wait out
+    // its full timeout instead of seeing a cancellation.
     app.$watch(
       () => walletStoreState.isLocked,
       (isLocked) => {
-        if (isLocked && router.currentRoute.path !== '/welcome') {
+        if (isLocked
+          && router.currentRoute.path !== '/welcome'
+          && router.currentRoute.name !== 'passkey-auth'
+          && router.currentRoute.name !== 'ledger-ble-sign') {
           router.push('/welcome');
         }
       }

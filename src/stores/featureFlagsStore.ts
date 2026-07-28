@@ -10,12 +10,28 @@ export interface FeatureFlags {
   isPoolOperatorEnabled: boolean;
   isNexusWithdrawalEnabled: boolean;
   isNexusUnstakeEnabled: boolean;
+  isNexusDelegateEnabled: boolean;
+  isNexusVoteDelegationEnabled: boolean;
   isCrossDeviceSigningEnabled: boolean;
   isCopilotEnabled: boolean;
   // Routes Bitcoin sync through gero-sync (WS push). Default ON as of the Phase-5
   // cutover; acts as a remote KILL-SWITCH — set false to fall back to the Esplora
   // poller if the WS path misbehaves in prod. See walletManager.isBitcoinGeroSyncEnabled.
   isBitcoinGeroSyncEnabled: boolean;
+  isMidnightConvertEnabled: boolean;
+  isGoogleWalletEnabled: boolean;
+  /**
+   * Origins allowed to draw from the Nexus shared-pool collateral. A dApp must be
+   * on this Gero-curated list AND already connected by the user before the wallet
+   * will lend a pool UTxO to it (see background `isTrustedCollateralDapp`). Served
+   * by gero-sync so the trust set can change without a client release. Empty = no
+   * dApp gets pool collateral.
+   *
+   * Entries MUST be full origins (scheme+host+port), e.g. "https://app.minswap.org".
+   * They are compared by EXACT origin equality — never substring — so a bare host
+   * or a trailing-path entry will not match. Malformed entries are ignored.
+   */
+  collateralTrustedDapps: string[];
 }
 
 interface FeatureFlagsState {
@@ -34,9 +50,14 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
     isPoolOperatorEnabled: false,
     isNexusWithdrawalEnabled: false,
     isNexusUnstakeEnabled: false,
+    isNexusDelegateEnabled: false,
+    isNexusVoteDelegationEnabled: false,
     isCrossDeviceSigningEnabled: false,
     isCopilotEnabled: false,
     isBitcoinGeroSyncEnabled: true, // Phase-5 cutover: WS default; kill-switch to false = poller
+    isMidnightConvertEnabled: false,
+    isGoogleWalletEnabled: false,
+    collateralTrustedDapps: [],
   },
   isInitialized: false,
   isLoading: false,
@@ -93,9 +114,16 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isPoolOperatorEnabled = featureFlagService.getFlag('isPoolOperatorEnabled', false);
     featureFlagsState.flags.isNexusWithdrawalEnabled = featureFlagService.getFlag('isNexusWithdrawalEnabled', false);
     featureFlagsState.flags.isNexusUnstakeEnabled = featureFlagService.getFlag('isNexusUnstakeEnabled', false);
+    featureFlagsState.flags.isNexusDelegateEnabled = featureFlagService.getFlag('isNexusDelegateEnabled', false);
+    featureFlagsState.flags.isNexusVoteDelegationEnabled = featureFlagService.getFlag('isNexusVoteDelegationEnabled', false);
     featureFlagsState.flags.isCrossDeviceSigningEnabled = featureFlagService.getFlag('isCrossDeviceSigningEnabled', false);
     featureFlagsState.flags.isCopilotEnabled = featureFlagService.getFlag('isCopilotEnabled', false);
     featureFlagsState.flags.isBitcoinGeroSyncEnabled = featureFlagService.getFlag('isBitcoinGeroSyncEnabled', true);
+    featureFlagsState.flags.isMidnightConvertEnabled = featureFlagService.getFlag('isMidnightConvertEnabled', false);
+    // MPC "Sign in with Google" wallet — ships DARK (default false) until the
+    // recovery/sign flows have been through a security audit (see Plan D).
+    featureFlagsState.flags.isGoogleWalletEnabled = featureFlagService.getFlag('isGoogleWalletEnabled', false);
+    featureFlagsState.flags.collateralTrustedDapps = featureFlagService.getFlag<string[]>('collateralTrustedDapps', []);
     persistFlagsForBackground();
   },
 
@@ -127,6 +155,12 @@ export const featureFlagsStore = {
     featureFlagService.onFlagChange('isNexusUnstakeEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isNexusUnstakeEnabled', newValue);
     });
+    featureFlagService.onFlagChange('isNexusDelegateEnabled', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'isNexusDelegateEnabled', newValue);
+    });
+    featureFlagService.onFlagChange('isNexusVoteDelegationEnabled', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'isNexusVoteDelegationEnabled', newValue);
+    });
     featureFlagService.onFlagChange('isCrossDeviceSigningEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isCrossDeviceSigningEnabled', newValue);
       // Mirror the live flip so the background picks it up on next login.
@@ -138,6 +172,17 @@ export const featureFlagsStore = {
     featureFlagService.onFlagChange('isBitcoinGeroSyncEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isBitcoinGeroSyncEnabled', newValue);
       // Mirror the live flip so the background picks it up on next login.
+      persistFlagsForBackground();
+    });
+    featureFlagService.onFlagChange('isMidnightConvertEnabled', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'isMidnightConvertEnabled', newValue);
+    });
+    featureFlagService.onFlagChange('isGoogleWalletEnabled', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'isGoogleWalletEnabled', newValue);
+    });
+    featureFlagService.onFlagChange('collateralTrustedDapps', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'collateralTrustedDapps', Array.isArray(newValue) ? newValue : []);
+      // Mirror the live change so the background collateral gate picks it up.
       persistFlagsForBackground();
     });
   },
@@ -182,8 +227,7 @@ export const featureFlagsStore = {
    * Check if Pool Operator dashboard is enabled
    */
   isPoolOperatorEnabled(): boolean {
-    // Hard-pinned off for 2.7 (HIDE+GATE). Ignores remote LaunchDarkly flag.
-    return false;
+    return featureFlagsState.flags.isPoolOperatorEnabled;
   },
 
   /**
@@ -200,6 +244,25 @@ export const featureFlagsStore = {
    */
   isNexusUnstakeEnabled(): boolean {
     return featureFlagsState.flags.isNexusUnstakeEnabled;
+  },
+
+  /**
+   * Check if stake-pool delegation should be built server-side via Nexus
+   * (`/api/tx/build/delegation` + `/api/tx/build/vote-delegation`) instead of the
+   * client-side @cardano-sdk builder. Software + Ledger only — Trezor stays on the
+   * client builder (nexus emits combined Conway certs Trezor cannot sign).
+   */
+  isNexusDelegateEnabled(): boolean {
+    return featureFlagsState.flags.isNexusDelegateEnabled;
+  },
+
+  /**
+   * Check if governance vote (DRep) delegation should be built server-side via Nexus
+   * (`/api/tx/build/vote-delegation`) instead of the client-side @cardano-sdk builder.
+   * Software + Ledger only — Trezor stays on the client builder.
+   */
+  isNexusVoteDelegationEnabled(): boolean {
+    return featureFlagsState.flags.isNexusVoteDelegationEnabled;
   },
 
   /**
@@ -223,6 +286,30 @@ export const featureFlagsStore = {
   },
 
   /**
+   * Check if the Midnight shield/unshield Convert flow is enabled.
+   * Ships DARK (default false): the shield direction is PROTOCOL-blocked at
+   * ledger generation 8 - the balance check never nets Shielded(raw) against
+   * Unshielded(raw), so the hand-rolled two-halves swap deterministically
+   * fails node validation with error 138 BalanceCheckOverspend (verified
+   * against midnight-ledger verify.rs + live on preprod, 2026-07-14). All
+   * the code stays (dialog, builders, BG handlers, nexus swap-mode); flip
+   * this once Midnight ships a sanctioned pool-conversion path (likely
+   * contract-mediated via shielded_mints).
+   */
+  isMidnightConvertEnabled(): boolean {
+    return featureFlagsState.flags.isMidnightConvertEnabled;
+  },
+
+  /**
+   * Check if the MPC "Sign in with Google" wallet (no seed phrase) is enabled.
+   * Ships DARK (default false): the onboarding method card and its routes stay
+   * hidden until this is flipped, and stays testnet-only until audited.
+   */
+  isGoogleWalletEnabled(): boolean {
+    return featureFlagsState.flags.isGoogleWalletEnabled;
+  },
+
+  /**
    * Reset flags (disable all until re-initialized).
    */
   reset(): void {
@@ -235,9 +322,14 @@ export const featureFlagsStore = {
       isPoolOperatorEnabled: false,
       isNexusWithdrawalEnabled: false,
       isNexusUnstakeEnabled: false,
+      isNexusDelegateEnabled: false,
+      isNexusVoteDelegationEnabled: false,
       isCrossDeviceSigningEnabled: false,
       isCopilotEnabled: false,
       isBitcoinGeroSyncEnabled: true, // matches the documented default (WS on); kill-switch is explicit false
+      isMidnightConvertEnabled: false,
+      isGoogleWalletEnabled: false,
+      collateralTrustedDapps: [],
     });
     featureFlagsState.isInitialized = false;
     featureFlagsState.isLoading = false;

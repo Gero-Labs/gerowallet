@@ -23,7 +23,7 @@
             <div class="promo-title text-subtitle-2 white--text font-weight-bold">
               {{ $t('miniGero.geroCardPromo') }}
             </div>
-            <div class="promo-subtitle text-caption" style="color: rgba(255,255,255,0.6);">
+            <div class="promo-subtitle text-caption" style="color: var(--g-text-2);">
               {{ $t('miniGero.geroCardPromoSubtitle') }}
             </div>
           </div>
@@ -48,7 +48,7 @@
             <div class="promo-title text-subtitle-2 white--text font-weight-bold cashback-title-text">
               {{ $t('miniGero.cashback') }}
             </div>
-            <div class="promo-subtitle text-caption" style="color: rgba(255,255,255,0.6);">
+            <div class="promo-subtitle text-caption" style="color: var(--g-text-2);">
               {{ $t('miniGero.cashbackPoweredBy') }}
             </div>
           </div>
@@ -241,7 +241,7 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
   width: 100%;
   min-height: 96px;
-  border-radius: 14px;
+  border-radius: var(--g-r-card);
   padding: 16px;
   display: flex;
   align-items: center;
@@ -274,11 +274,11 @@ onBeforeUnmount(() => {
 
 /* ── Apple Intelligence Glow ── */
 
-/* Rotating prismatic border — Gero Card (cyan/teal palette) */
+/* Edge glow container — Gero Card */
 .ai-glow {
   position: absolute;
   inset: 0;
-  border-radius: 14px;
+  border-radius: var(--g-r-card);
   pointer-events: none;
   z-index: 1;
   overflow: hidden;
@@ -288,16 +288,6 @@ onBeforeUnmount(() => {
   content: '';
   position: absolute;
   inset: -60%;
-  background: conic-gradient(
-    from var(--glow-angle, 0deg),
-    rgba(0, 199, 243, 0.4),
-    rgba(0, 255, 209, 0.3),
-    rgba(100, 220, 255, 0.15),
-    rgba(0, 180, 230, 0.35),
-    rgba(0, 255, 200, 0.25),
-    rgba(0, 199, 243, 0.4)
-  );
-  animation: ai-rotate 5s linear infinite;
   filter: blur(20px);
 }
 
@@ -311,50 +301,13 @@ onBeforeUnmount(() => {
   padding: 3px;
 }
 
-/* Breathing pulse overlay */
+/* Pulse overlay */
 .ai-glow-pulse {
   position: absolute;
   inset: 0;
-  border-radius: 14px;
-  box-shadow:
-    inset 0 0 30px rgba(0, 230, 220, 0.15),
-    inset 0 -10px 30px rgba(0, 255, 200, 0.1),
-    0 0 20px rgba(0, 199, 243, 0.08);
+  border-radius: var(--g-r-card);
   pointer-events: none;
   z-index: 1;
-  animation: glow-breathe 4s ease-in-out infinite;
-}
-
-/* Cashback glow variant — warm green/gold palette */
-.ai-glow--cashback::before {
-  background: conic-gradient(
-    from var(--glow-angle, 0deg),
-    rgba(71, 205, 137, 0.4),
-    rgba(255, 200, 50, 0.3),
-    rgba(100, 220, 140, 0.15),
-    rgba(50, 180, 100, 0.35),
-    rgba(255, 220, 80, 0.2),
-    rgba(71, 205, 137, 0.4)
-  );
-}
-
-/* cashback uses same mask approach — no override needed */
-
-.ai-glow-pulse--cashback {
-  box-shadow:
-    inset 0 0 30px rgba(71, 205, 137, 0.15),
-    inset 0 -10px 30px rgba(255, 200, 50, 0.08),
-    0 0 20px rgba(71, 205, 137, 0.08);
-}
-
-@keyframes ai-rotate {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-@keyframes glow-breathe {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 1; }
 }
 
 /* ── Card variants ── */
@@ -416,7 +369,7 @@ onBeforeUnmount(() => {
 .promo-card-image img {
   width: 100%;
   height: auto;
-  border-radius: 6px;
+  border-radius: var(--g-r-control);
 }
 
 .cashback-card-img {
@@ -425,7 +378,7 @@ onBeforeUnmount(() => {
 }
 
 .cashback-card-img img {
-  border-radius: 10px;
+  border-radius: var(--g-r-control);
 }
 
 /* ── Progress dots ── */
@@ -440,7 +393,7 @@ onBeforeUnmount(() => {
   width: 24px;
   height: 3px;
   border-radius: 2px;
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--g-hairline-2);
   overflow: hidden;
   cursor: pointer;
   transition: width 0.2s ease;
@@ -450,13 +403,13 @@ onBeforeUnmount(() => {
   height: 100%;
   width: 0;
   border-radius: 2px;
-  background: rgba(255, 255, 255, 0.25);
+  background: var(--g-hairline-3);
   transition: width 0.15s ease;
 }
 
 .dot-fill.active {
   width: 100%;
-  background: rgba(0, 199, 243, 0.7);
+  background: var(--g-accent);
 }
 
 .dot-fill.filling {

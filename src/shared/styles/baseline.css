@@ -1,0 +1,175 @@
+/* ============================================================
+   Gero baseline. Loaded AFTER vuetify css in every entry.
+   Retires Material-2014 defaults and provides the type ramp.
+   ============================================================ */
+
+/* ---- App chrome ---- */
+html { background: var(--g-canvas); }
+html .v-application {
+  font-family: var(--g-font-ui) !important;
+  color: var(--g-text-1);
+}
+
+/* Vuetify pins Roboto, with the override flag, on every typography
+   helper at (0,2,0), and ships BOTH the legacy unprefixed names and the modern
+   `text-`-prefixed ones. This app uses the modern ones heavily (text-caption in
+   70 files, text-body-2 in 41). Roboto is not bundled, so any helper we miss
+   falls back to system sans.
+   The `html` prefix is load-bearing, not decoration. Vuetify's CSS is emitted
+   TWICE -- once from vuetify.min.css and again from the per-component
+   `vuetify/lib` sass that VuetifyResolver pulls in -- and the second copy lands
+   AFTER baseline.css in the bundle. A tying (0,2,0) rule would therefore lose on
+   source order, which is exactly what happened before this prefix existed
+   (verified in a browser against the built stylesheet). `html ...` is (0,2,1)
+   and wins regardless of order. */
+html .v-application .text-h1, html .v-application .text-h2, html .v-application .text-h3,
+html .v-application .text-h4, html .v-application .text-h5, html .v-application .text-h6,
+html .v-application .text-subtitle-1, html .v-application .text-subtitle-2,
+html .v-application .text-body-1, html .v-application .text-body-2,
+html .v-application .text-caption, html .v-application .text-overline,
+html .v-application .text-button,
+html .v-application .subtitle-1, html .v-application .subtitle-2,
+html .v-application .body-1, html .v-application .body-2,
+html .v-application .caption, html .v-application .overline,
+html .v-application .headline,
+html .v-application .display-1, html .v-application .display-2,
+html .v-application .display-3, html .v-application .display-4 {
+  font-family: var(--g-font-ui) !important;
+}
+
+/* ---- Buttons: sentence case, no tracking, press on pointer-down ----
+   Radius is scoped: Vuetify's .v-btn--round/.v-btn--fab (circles) and
+   .v-btn--tile are only specificity 0,1,0 and would LOSE to an unscoped
+   0,2,0 override, squaring every icon button in the app. */
+.v-application .v-btn {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+  transition: color var(--g-dur-fast) ease-out,
+              border-color var(--g-dur-fast) ease-out,
+              background-color var(--g-dur-fast) ease-out,
+              filter var(--g-dur-fast) ease-out;
+}
+.v-application .v-btn:not(.v-btn--round):not(.v-btn--fab):not(.v-btn--tile) {
+  border-radius: var(--g-r-control);
+}
+.v-application .v-btn:active {
+  transform: translateY(1px);
+  filter: brightness(0.96);
+}
+
+/* Primary CTA: the ONLY gradient on a screen. One definition,
+   replaces the copies that lived in two index.html files and two SFCs.
+
+   Specificity, spelled out, because it is easy to get wrong:
+   Vuetify's enabled rule `.theme--dark.v-btn.v-btn--has-bg` is (0,3,0) with NO
+   override flag, so (0,4,0) beats it cleanly and no flag is needed here. */
+.v-application .theme--dark.v-btn.geroButton {
+  background: linear-gradient(90deg, var(--g-grad-1), var(--g-grad-2));
+  color: var(--g-on-grad);
+  font-weight: 600;
+  border-radius: var(--g-r-control);
+}
+/* Fallback for the rare non-v-btn use of the class. */
+.geroButton {
+  background: linear-gradient(90deg, var(--g-grad-1), var(--g-grad-2));
+  color: var(--g-on-grad);
+  font-weight: 600;
+  border-radius: var(--g-r-control);
+}
+/* Disabled is different: Vuetify's
+   `.theme--dark.v-btn.v-btn--disabled.v-btn--has-bg` (0,4,0) and
+   `.theme--dark.v-btn.v-btn--disabled` (0,3,0) BOTH carry an override flag.
+   A flag always beats a non-flagged declaration whatever the specificity, and
+   between two flagged declarations specificity decides -- so this rule must be
+   flagged AND reach (0,5,0), or the disabled CTA renders Vuetify's translucent
+   grey instead of the raised surface. */
+.v-application .theme--dark.v-btn.geroButton.v-btn--disabled,
+.v-application .theme--dark.v-btn.geroButton:disabled {
+  background: var(--g-raised) !important;
+  color: var(--g-text-3) !important;
+}
+
+/* ---- Skeleton: the one sanctioned shimmer (1.4s). Reduced-motion is handled
+   by the global block at the bottom of this file, so no per-use override. ---- */
+.g-skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--g-surface);
+  border-radius: var(--g-r-control);
+}
+.g-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.06), transparent);
+  animation: g-skeleton-shimmer 1.4s infinite;
+}
+@keyframes g-skeleton-shimmer { 100% { transform: translateX(100%); } }
+
+/* ---- Type ramp. Weight via the Inter Variable axis. ---- */
+.t-display { font-size: 32px; font-weight: 620; letter-spacing: -0.02em; color: var(--g-text-1); }
+.t-title   { font-size: 24px; font-weight: 620; letter-spacing: -0.02em; color: var(--g-text-1); }
+.t-heading { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; color: var(--g-text-1); }
+.t-body-lg { font-size: 16px; font-weight: 500; color: var(--g-text-1); }
+.t-body    { font-size: 14px; font-weight: 400; color: var(--g-text-2); }
+.t-body-sm { font-size: 13px; font-weight: 400; color: var(--g-text-2); }
+.t-caption { font-size: 12px; font-weight: 400; color: var(--g-text-3); }
+.t-label   {
+  font-size: 11px; font-weight: 550; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--g-text-3);
+}
+
+/* Numbers: always tabular */
+.g-num { font-variant-numeric: tabular-nums; }
+/* Addresses/hashes: one mono face, chunked in the markup in groups of four */
+.g-mono {
+  font-family: var(--g-font-mono);
+  font-size: 12.5px;
+  color: var(--g-text-2);
+  word-break: break-all;
+  line-height: 1.7;
+}
+.g-mono b, .g-mono .emph { color: var(--g-text-1); font-weight: 500; }
+
+/* ---- Focus: visible ring, never removed ---- */
+:where(a, button, [role='button'], .v-btn, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--g-accent);
+  outline-offset: 2px;
+}
+
+/* ---- The house dialog transition: fade + a 2% scale, once.
+   v-dialog renders a plain <transition name="...">, so these are Vue 2's
+   enter/leave class names. ---- */
+.g-dialog-transition-enter-active,
+.g-dialog-transition-leave-active {
+  transition: opacity var(--g-dur-base) var(--g-ease),
+              transform var(--g-dur-base) var(--g-ease);
+}
+.g-dialog-transition-enter,
+.g-dialog-transition-leave-to {
+  opacity: 0;
+  transform: scale(0.98);
+}
+
+/* ---- Delta colors: colored text + glyph, never chips ---- */
+.delta-up { color: var(--g-success); }
+.delta-down { color: var(--g-error); }
+
+/* ---- Scrollbars: one recipe for both entries ---- */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--g-hairline-3); border-radius: var(--g-r-pill); }
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.22); }
+
+/* ---- Reduced motion: everything collapses to a 150ms crossfade ---- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: var(--g-dur-fast) !important;
+    transition-property: opacity, color, background-color, border-color !important;
+    scroll-behavior: auto !important;
+  }
+}

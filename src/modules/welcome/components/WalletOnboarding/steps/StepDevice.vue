@@ -1,5 +1,6 @@
 <template>
   <div class="step-device">
+    <div class="step-scroll">
     <div class="step-section-label mb-2">{{ $t('welcome.hardwareWalletType') }}</div>
     <div class="hw-list">
       <button
@@ -21,6 +22,7 @@
         </span>
         <v-icon class="hw-card__check" size="20">{{ localWalletType === item.name ? 'mdi-check-circle' : 'mdi-circle-outline' }}</v-icon>
       </button>
+    </div>
     </div>
 
     <!-- Navigation buttons -->

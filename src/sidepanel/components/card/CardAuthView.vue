@@ -116,14 +116,14 @@ function handleRegister() {
 .promo-title {
   font-size: 20px;
   font-weight: 700;
-  color: #fff;
+  color: var(--g-text-1);
   margin: 0;
   line-height: 1.2;
 }
 
 .promo-subtitle {
   font-size: 13px;
-  color: #888;
+  color: var(--g-text-3);
   margin: 0;
 }
 
@@ -133,9 +133,9 @@ function handleRegister() {
   gap: 10px;
   width: 100%;
   padding: 16px;
-  background: #1a1a1a;
-  border-radius: 12px;
-  border: 1px solid #2a2a2a;
+  background: var(--g-raised);
+  border-radius: var(--g-r-card);
+  border: 1px solid var(--g-hairline-3);
 }
 
 .feature-item {
@@ -143,7 +143,7 @@ function handleRegister() {
   align-items: center;
   gap: 10px;
   font-size: 13px;
-  color: #ccc;
+  color: var(--g-text-2);
 }
 
 .auth-actions {
@@ -157,33 +157,33 @@ function handleRegister() {
 
 .login-btn {
   height: 44px !important;
-  border-radius: 10px !important;
-  background: linear-gradient(135deg, var(--chain-gradient1) 0%, var(--chain-gradient2) 100%) !important;
+  border-radius: var(--g-r-control) !important;
+  background: linear-gradient(135deg, var(--g-grad-1) 0%, var(--g-grad-2) 100%) !important;
   text-transform: none !important;
   font-weight: 600 !important;
   font-size: 14px !important;
   letter-spacing: 0 !important;
-  color: #0a0a0a !important;
+  color: var(--g-on-grad) !important;
 }
 
 .btn-text-gradient {
-  color: #0a0a0a;
+  color: var(--g-on-grad);
   font-weight: 600;
 }
 
 .register-btn {
   height: 44px !important;
-  border-radius: 10px !important;
-  border-color: #333 !important;
+  border-radius: var(--g-r-control) !important;
+  border-color: var(--g-hairline-3) !important;
   text-transform: none !important;
   font-weight: 600 !important;
   font-size: 14px !important;
   letter-spacing: 0 !important;
-  color: var(--chain-primary) !important;
+  color: var(--g-accent) !important;
 }
 
 .register-btn:hover {
-  border-color: var(--chain-primary) !important;
-  background: color-mix(in srgb, var(--chain-primary) 8%, transparent) !important;
+  border-color: var(--g-accent) !important;
+  background: color-mix(in srgb, var(--g-accent) 8%, transparent) !important;
 }
 </style>

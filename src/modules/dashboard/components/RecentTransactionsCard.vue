@@ -1,7 +1,7 @@
 <template>
   <v-card
-    outlined
-    class="liquid-glass fill-height d-flex flex-column recent-tx-card"
+    flat
+    class="fill-height d-flex flex-column glass-panel recent-tx-card"
   >
     <div class="recent-tx-header flex-grow-0">
       <span class="recent-tx-heading">{{ $t('dashboard.recentTransactions') }}</span>
@@ -109,8 +109,9 @@ function formatAmount(tx: StoredTransaction): string {
 </script>
 
 <style scoped lang="scss">
+/* Surface comes from the shared .glass-panel material (v-card flags included),
+   so all three hero cards read as one material. */
 .recent-tx-card {
-  border-radius: 12px;
   overflow: hidden;
 }
 

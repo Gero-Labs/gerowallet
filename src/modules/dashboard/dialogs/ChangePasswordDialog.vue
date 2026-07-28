@@ -146,7 +146,7 @@ const updateSpendingPassword = async (): Promise<void> => {
       snackbar.fireSuccess(t('dashboard.spendingPasswordChanged'))
       emit('close')
     } catch (e) {
-      passwordField.value?.showError(t('common.wrongPassword'));
+      passwordField.value?.showError(t('errors.wrongPassword'));
     }
   }
 }

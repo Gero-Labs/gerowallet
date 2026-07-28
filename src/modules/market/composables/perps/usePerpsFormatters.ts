@@ -59,8 +59,12 @@ export function usePerpsFormatters() {
    */
   function formatTime(val: number | string | undefined): string {
     if (!val) return '—';
-    const ts = typeof val === 'number' ? val : Date.parse(val);
-    if (isNaN(ts)) return String(val);
+    // Accept epoch-ms numbers, epoch-ms numeric strings (normalized history
+    // rows carry these), and ISO date strings.
+    const ts = typeof val === 'number'
+      ? val
+      : /^\d+$/.test(val) ? Number(val) : Date.parse(val);
+    if (isNaN(ts) || ts <= 0) return '—';
     return new Date(ts).toLocaleString();
   }
 

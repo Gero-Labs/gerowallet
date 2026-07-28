@@ -3,8 +3,7 @@ import LoadingState from '@/stores/loading';
 import WalletStore, { walletStore } from '@/stores/walletStore';
 import networks from '@/utils/networks';
 import { Blockchain, Network, WalletType, Wallet } from '@/models/types';
-import DexHunterStore from '@/stores/dexHunterStore';
-import BringStore from '@/stores/bringStore';
+import TokenMetadataStore from '@/stores/tokenMetadataStore';
 import TapToolsStore from '@/stores/tapToolsStore';
 import webSocketService, { type WsSyncMessage } from '@/services/websocket.service';
 import { Mutex, withTimeout } from 'async-mutex';
@@ -13,7 +12,7 @@ import MusicStore from '@/stores/musicStore';
 import NetworkStore from '@/stores/networkStore';
 import { debugLog } from '@/utils/debug';
 import { Cardano } from '@cardano-sdk/core';
-import zkFoldApi from '@/api/zkFoldApi';
+import zkSmartWalletApi from '@/api/zkSmartWalletApi';
 import { bootstrapCrossDeviceSigning } from '@/services/crossDevice/crossDeviceBootstrap';
 import type { CrossDeviceSigning } from '@/services/crossDevice/crossDeviceSigning.service';
 import {
@@ -43,6 +42,8 @@ import {
   type SigningPolicy,
 } from '@/services/crossDevice/crossDeviceTrust';
 import type { DeviceInfo } from '@/services/crossDevice/protocol';
+import { mpcSessionCache } from '@/chrome/mpcSessionCache';
+import { mpcLoginShareCache } from '@/chrome/mpcLoginShareCache';
 
 /**
  * WalletManager service to handle wallet login/logout and lifecycle management
@@ -105,9 +106,11 @@ export class WalletManager {
     LoadingState.setLoading(true);
 
     try {
-      // Clean up an existing wallet if different
+      // Clean up an existing wallet if different. On a SWITCH, only clear the
+      // outgoing wallet's MPC caches (logout(false)) — the incoming wallet's key
+      // may already be reconstructed (auth-then-switch) and must survive.
       if (this.walletBg && this.currentWalletId !== wallet.id) {
-        await this.logout();
+        await this.logout(false);
       }
 
       // Create a new wallet instance if needed
@@ -144,7 +147,16 @@ export class WalletManager {
           prfEncryptedPrivateKey: walletBg.prfEncryptedPrivateKey,
           prfEncryptedMnemonic: walletBg.prfEncryptedMnemonic,
           webAuthnCredentialId: walletBg.webAuthnCredentialId,
+          mpcPrfSaltId: walletBg.mpcPrfSaltId,
         });
+
+        // MPC wallets: lock when the reconstructed root key isn't cached this
+        // session (see login()), so restore/switch never exposes an MPC wallet
+        // without a fresh unlock (Google + passkey/spending password).
+        if (wallet.encryptionMethod === 'mpc') {
+          WalletStore.setLocked(!mpcSessionCache.get(wallet.id));
+        }
+
         LoadingState.setText('Restoring wallet...');
         // Set currentWalletId BEFORE initializeWallet: it loads THIS wallet's
         // remote-signing settings via loadRemoteSigningSettings(currentWalletId). If the
@@ -189,19 +201,31 @@ export class WalletManager {
     LoadingState.setLoading(true);
 
     try {
-      // Clean up an existing wallet if different
+      // Clean up an existing wallet if different. On a SWITCH, only clear the
+      // outgoing wallet's MPC caches (logout(false)) — the incoming wallet's key
+      // may already be reconstructed (auth-then-switch) and must survive.
       if (this.walletBg && this.currentWalletId !== wallet.id) {
-        await this.logout();
+        await this.logout(false);
       }
 
       // Create a new wallet instance if needed
       if (!this.walletBg || this.currentWalletId !== wallet.id) {
         // Clear wallet store data immediately to prevent cross-wallet contamination
         WalletStore.clearForWalletSwitch();
+        // NOTE: do NOT clear mpcSessionCache / mpcLoginShareCache here. Login runs
+        // right AFTER UNLOCK_MPC_WALLET has populated them for THIS wallet, so
+        // clearing here would wipe the just-established session (breaking signing
+        // and forcing a fresh Google sign-in on the next unlock). Both caches are
+        // keyed by walletId and the OUTGOING wallet is cleared by logout() above
+        // on a switch, so there is no cross-wallet leakage to defend against here.
         TapToolsStore.clear();
         let walletBg: WalletBg
-        if (wallet.type === WalletType.Google) {
-          const smartBaseAddress: Cardano.Address = await zkFoldApi.walletAddress(wallet.userId)
+        if (wallet.type === WalletType.Google && wallet.encryptionMethod !== 'mpc') {
+          // Legacy smart-contract Google wallet: address is fetched from
+          // the contract. MPC Sign-in-with-Google wallets are also type===Google
+          // but are normal HD wallets (real CIP-1852 xpub) — construct them the
+          // same way as Normal wallets (no smart-contract address).
+          const smartBaseAddress: Cardano.Address = await zkSmartWalletApi.walletAddress(wallet.userId)
           walletBg = new WalletBg(wallet, smartBaseAddress.toBech32())
         } else {
           walletBg = new WalletBg(wallet);
@@ -240,19 +264,36 @@ export class WalletManager {
           prfEncryptedPrivateKey: walletBg.prfEncryptedPrivateKey,
           prfEncryptedMnemonic: walletBg.prfEncryptedMnemonic,
           webAuthnCredentialId: walletBg.webAuthnCredentialId,
+          mpcPrfSaltId: walletBg.mpcPrfSaltId,
         });
+
+        // MPC wallets: the reconstructed root key lives only in mpcSessionCache.
+        // If it's absent (e.g. switching to this wallet from the picker, or a fresh
+        // session), LOCK so the unlock flow (Google + passkey/spending password)
+        // runs before any access — otherwise a switch would silently expose the
+        // wallet with no re-authentication. If the key IS present (the options
+        // pre-login unlock reconstructed it before sending LOGIN), stay unlocked.
+        if (wallet.encryptionMethod === 'mpc') {
+          WalletStore.setLocked(!mpcSessionCache.get(wallet.id));
+        }
+
         LoadingState.setText('Initializing wallet...');
 
-        // Check if this is a first-time restore (no cached data). getLastSyncInfo() is
-        // chain-agnostic (reads the wallet's own sync table). BTC needs it too when it
-        // syncs via gero-sync (Phase-5 default): connect() returns before data arrives,
-        // so we must block login on the WS catch-up like Cardano — otherwise the
-        // dashboard flashes a zero balance until the async onSync lands. BTC on the
-        // poller fallback (kill-switch off) seeds synchronously in initializeWallet and
-        // has no WS catch-up to await, so keep it out of the waitForSync path.
+        // Check if this is a first-time restore (no cached data).
+        // - Cardano uses its own sync table (getLastSyncInfo).
+        // - Midnight doesn't use the Cardano sync table → skip.
+        // - BTC needs it only when syncing via gero-sync (Phase-5 default):
+        //   connect() returns before data arrives, so we must block login on the
+        //   WS catch-up like Cardano — otherwise the dashboard flashes a zero
+        //   balance until the async onSync lands. BTC on the poller fallback
+        //   (kill-switch off) seeds synchronously in initializeWallet and has no
+        //   WS catch-up to await, so keep it out of the waitForSync path.
         const btcWsForRestore =
           walletBg.chain === Blockchain.BITCOIN && (await this.isBitcoinGeroSyncEnabled());
-        const useSyncInfo = walletBg.chain !== Blockchain.BITCOIN || btcWsForRestore;
+        const useSyncInfo =
+          (walletBg.chain !== Blockchain.BITCOIN &&
+            walletBg.chain !== Blockchain.MIDNIGHT) ||
+          btcWsForRestore;
         const lastSyncInfo = useSyncInfo ? await walletBg.getLastSyncInfo() : {};
         const isFirstRestore = !lastSyncInfo;
 
@@ -320,7 +361,7 @@ export class WalletManager {
     console.log('walletBg', walletBg)
     if (walletBg.type === WalletType.Google) {
       // promises.push(
-      //   zkFoldApi.walletAddress(walletBg.userId).then(res => {
+      //   zkSmartWalletApi.walletAddress(walletBg.userId).then(res => {
       //     if (res['status'] !== 200) {
       //       throw new Error('Failed to get address');
       //     }
@@ -357,6 +398,94 @@ export class WalletManager {
         walletBg.loadContacts(),
         walletBg.loadConnectedDapps()
       );
+    } else if (walletBg.chain === Blockchain.MIDNIGHT) {
+      // Midnight wallet initialization. Cardano-specific (genesis, epoch params,
+      // assets, rewards) is skipped — Midnight runs through a separate
+      // SDK + indexer. Addresses were derived at wallet creation/restore
+      // and stored on the wallet record; here we hydrate midnightStore and
+      // open the gero-sync WebSocket against the unshielded address.
+      debugLog('🌙 Initializing Midnight wallet');
+      LoadingState.setText('Loading Midnight wallet...');
+
+      // Hydrate midnightStore with the persisted addresses so the dashboard
+      // (MidnightHoldingsTable, ReceiveDialog) can render immediately.
+      const { midnightActions, isValidMidnightViewingKey } = await import('@/stores/midnightStore');
+      let addresses: {
+        unshielded: string;
+        shielded: string;
+        dust: string;
+        publicKeyHex?: string;
+        addressHex?: string;
+        zswapViewingKey?: string;
+        cardanoXpub?: string;
+        cardanoBaseAddress?: string;
+        cardanoStakeAddress?: string;
+        cardanoPaymentKeyHashHex?: string;
+      } = { unshielded: '', shielded: '', dust: '' };
+      try {
+        const parsed = walletBg.publicKey ? JSON.parse(walletBg.publicKey) : null;
+        if (parsed && typeof parsed === 'object') {
+          addresses = {
+            unshielded: parsed.unshielded ?? '',
+            shielded: parsed.shielded ?? '',
+            dust: parsed.dust ?? '',
+            publicKeyHex: parsed.publicKeyHex,
+            addressHex: parsed.addressHex,
+            zswapViewingKey: parsed.zswapViewingKey,
+            cardanoXpub: parsed.cardanoXpub,
+            cardanoBaseAddress: parsed.cardanoBaseAddress,
+            cardanoStakeAddress: parsed.cardanoStakeAddress,
+            cardanoPaymentKeyHashHex: parsed.cardanoPaymentKeyHashHex,
+          };
+        }
+      } catch (e) {
+        debugLog('🌙 Failed to parse Midnight addresses from wallet record:', e);
+      }
+      midnightActions.setActive(addresses);
+
+      // Open the gero-sync WebSocket bridge for this Midnight wallet. The
+      // service translates SYNC / CATCH_UP_COMPLETE / ROLLBACK / FORCE_RESYNC
+      // into midnightStore actions. Skip if the address derivation failed.
+      if (addresses.unshielded) {
+        const { default: midnightSyncService } = await import('@/services/midnight-sync.service');
+        // Opt into shielded sync only if the wallet record carries a viewing
+        // key in the form the indexer's connect(viewingKey) mutation accepts:
+        // bech32m with HRP `mn_shield-esk_` (see the a3f76f1f fix). Wallets
+        // created before that fix stored the raw-hex or `mn_shield-epk_` form,
+        // which the indexer rejects with "cannot bech32m-decode viewing key" —
+        // enabling shielded sync for those just spams the indexer with failing
+        // connect() calls every reconcile. Gate on the correct prefix so legacy
+        // wallets fall back to unshielded-only cleanly. They regain shielded
+        // sync once their viewing key is re-derived (recreate the wallet, or
+        // the future in-place viewing-key heal).
+        // Privacy: log only the boolean/validity, never the key itself.
+        // Source the raw key from RAM-only chrome.storage.session first (it is
+        // re-derived at each credentialed unlock/send, see
+        // midnightViewingKeySession), falling back to the wallet record's
+        // persisted copy for wallets not yet re-derived this browser session.
+        // It never travels via midnightStore (setActive strips it).
+        const { getSessionViewingKey } = await import('@/chains/midnight/midnightViewingKeySession');
+        const sessionVk = await getSessionViewingKey(walletBg.id, walletBg.network);
+        const vk = sessionVk ?? addresses.zswapViewingKey;
+        const vkIsValid = isValidMidnightViewingKey(vk);
+        const shielded = vkIsValid
+          ? { viewingKey: vk, lastIndex: null }
+          : undefined;
+        if (shielded) {
+          debugLog('🌙 Midnight sync: starting with shielded subscription enabled');
+        } else if (vk) {
+          debugLog('🌙 Midnight sync: viewing key is legacy form (not mn_shield-esk_) — shielded sync disabled until re-derivation; unshielded-only for now');
+        }
+        midnightSyncService.start(walletBg.network, addresses, 0, shielded);
+      } else {
+        debugLog('🌙 Skipping gero-sync subscribe: no unshielded address on wallet record');
+      }
+
+      promises.push(
+        walletBg.loadConfig(),
+        walletBg.loadContacts(),
+        walletBg.loadConnectedDapps()
+      );
     } else {
       // Cardano wallet initialization (existing logic)
       walletBg.loadGenesis();
@@ -375,8 +504,10 @@ export class WalletManager {
 
       LoadingState.setText('Loading wallet data...');
 
-      // Load holdings from cached UTxOs and keys immediately — no need to wait for transactions or gero-sync
-      await Promise.all([walletBg.loadCachedUtxos(), walletBg.loadCachedKeys()]);
+      // Load holdings from cached UTxOs, keys and account immediately — no need to wait for
+      // transactions or gero-sync. The cached account keeps the balance/empty-state showing the
+      // last-known value on login instead of flashing empty until the first sync.
+      await Promise.all([walletBg.loadCachedUtxos(), walletBg.loadCachedKeys(), walletBg.loadCachedAccount()]);
 
       promises.push(
         walletBg.loadConfig(),
@@ -390,14 +521,18 @@ export class WalletManager {
     const chain: string = Object.keys(Blockchain).find(key => Blockchain[key] === walletBg.chain);
     const network: string = Object.keys(Network).find(key => Network[key] === walletBg.network);
     let address: string;
-    if (walletBg.isEnterpriseAddress() || walletBg.type === WalletType.Google) {
+    // MPC Google wallets are normal HD wallets — sync on the stake address like
+    // any other wallet. Only legacy Google wallets sync on baseAddress.
+    if (walletBg.isEnterpriseAddress() || (walletBg.type === WalletType.Google && walletBg.encryptionMethod !== 'mpc')) {
       address = walletBg.baseAddress;
     } else {
       address = walletBg.stakeAddress;
     }
 
     // --- WebSocket sync (replaces Ably) ---
-    if (walletBg.chain !== Blockchain.BITCOIN) {
+    // Midnight uses its own bridge (midnightSyncService) — wired separately
+    // once the SDK can produce the unshielded address required to subscribe.
+    if (walletBg.chain !== Blockchain.BITCOIN && walletBg.chain !== Blockchain.MIDNIGHT) {
       const lastSyncInfo = await walletBg.getLastSyncInfo();
       const lastSyncedBlock = lastSyncInfo?.height || 0;
       const credentials = walletBg.derivePaymentCredentials();
@@ -457,8 +592,9 @@ export class WalletManager {
         },
         onRollback: async (data: WsSyncMessage) => {
           debugLog('Rollback received:', data);
-          if (data['rollbackToSlot'] !== undefined) {
-            await walletBg.syncService.handleRollback(data['rollbackToSlot'] as number);
+          const rollbackToSlot = data['rollbackToSlot'];
+          if (typeof rollbackToSlot === 'number') {
+            await walletBg.syncService.handleRollback(rollbackToSlot);
           }
         },
         onForceResync: async () => {
@@ -557,9 +693,14 @@ export class WalletManager {
         btcAddressSet.addresses
       );
     } else {
-      // BTC with the kill-switch off: no WS, the Esplora poller (seeded above +
-      // periodic sync below) is the sync source.
-      debugLog('🔶 [BTC] gero-sync kill-switch off — using Esplora poller');
+      // Reached by Midnight (its own sync path) and by BTC with the gero-sync
+      // kill-switch off (the Esplora poller — seeded above + periodic sync below —
+      // is the sync source). Neither uses the Cardano gero-sync WS.
+      if (walletBg.chain === Blockchain.BITCOIN) {
+        debugLog('🔶 [BTC] gero-sync kill-switch off — using Esplora poller');
+      } else {
+        debugLog(`Skipping Cardano gero-sync WebSocket for ${walletBg.chain} wallet`);
+      }
     }
 
     // Wait for all initialization promises to complete
@@ -581,7 +722,7 @@ export class WalletManager {
     setTimeout(async () => {
       if (networks.resolveSwapSupport(walletBg.chain, walletBg.network)) {
         // Load DexHunter tokens first - this provides verification status
-        await DexHunterStore.loadTokens().catch(err => console.warn('Failed to load DexHunter tokens:', err));
+        await TokenMetadataStore.loadTokens().catch(err => console.warn('Failed to load DexHunter tokens:', err));
 
         // Re-resolve assets after DexHunter tokens are loaded to update verified status
         const utxos = walletStore.utxos;
@@ -589,10 +730,7 @@ export class WalletManager {
           walletBg.setAssets(utxos as Cardano.Utxo[]);
         }
 
-        DexHunterStore.loadBlacklistPolicies().catch(err => console.warn('Failed to load blacklist policies:', err));
-      }
-      if (networks.resolveCashbackSupport(walletBg.chain, walletBg.network)) {
-        BringStore.loadBringCache(walletBg.baseAddress).catch(err => console.warn('Failed to load Bring cache:', err));
+        TokenMetadataStore.loadBlacklistPolicies().catch(err => console.warn('Failed to load blacklist policies:', err));
       }
     }, 100); // Small delay to ensure wallet is fully initialized
   }
@@ -600,9 +738,25 @@ export class WalletManager {
   /**
    * Logout current wallet and cleanup all resources
    */
-  async logout(): Promise<void> {
+  // `clearAllMpcCaches` is true for an explicit logout (wipe every wallet's MPC
+  // session), but the internal logout that `login()` performs on a wallet SWITCH
+  // passes false: the auth-then-switch flow reconstructs the INCOMING wallet's key
+  // into mpcSessionCache BEFORE this runs, so a blanket clearAll would wipe the
+  // target's just-authenticated session and re-lock it. On a switch we only clear
+  // the OUTGOING wallet's caches.
+  async logout(clearAllMpcCaches = true): Promise<void> {
 
     try {
+      // Clear cached MPC root-key bytes and login shares for the logged-out wallet
+      // (or all wallets on an explicit logout) — never survive a logout.
+      if (clearAllMpcCaches) {
+        mpcSessionCache.clearAll();
+        await mpcLoginShareCache.clearAll();
+      } else if (this.currentWalletId !== null) {
+        mpcSessionCache.clear(this.currentWalletId);
+        await mpcLoginShareCache.clear(this.currentWalletId);
+      }
+
       // Clear database cache for the current wallet to prevent data leakage
       if (this.currentWalletId !== null) {
         debugLog('Clearing database cache for wallet:', this.currentWalletId);
@@ -622,6 +776,17 @@ export class WalletManager {
         console.log('WebSocket service closed successfully');
       } catch (wsError) {
         console.warn('Failed to cleanup WebSocket service during logout:', wsError);
+      }
+
+      // Stop the Midnight sync bridge if it was active. This shuts down its
+      // gero-sync subscription and clears midnightStore.
+      try {
+        const { default: midnightSyncService } = await import('@/services/midnight-sync.service');
+        if (midnightSyncService.isActive()) {
+          midnightSyncService.stop();
+        }
+      } catch (midnightError) {
+        console.warn('Failed to stop midnight sync during logout:', midnightError);
       }
 
       // Tear down the cross-device signing bridge (no-op when the flag is off).
@@ -658,8 +823,11 @@ export class WalletManager {
       // Clear Chrome storage
       if (chrome?.storage) {
         try {
+          const { clearSessionViewingKey } = await import('@/chains/midnight/midnightViewingKeySession');
           await Promise.all([
             chrome.storage.local.remove('loggedWallet'),
+            // Drop any RAM-only Midnight viewing keys for the signed-out user.
+            clearSessionViewingKey(),
           ]);
         } catch (storageError) {
           console.warn('Failed to clear Chrome storage during logout:', storageError);
@@ -716,6 +884,13 @@ export class WalletManager {
     } catch (error) {
       console.error('Error during wallet logout:', error);
       // Force cleanup even if logout fails
+      if (clearAllMpcCaches) {
+        mpcSessionCache.clearAll();
+        await mpcLoginShareCache.clearAll();
+      } else if (this.currentWalletId !== null) {
+        mpcSessionCache.clear(this.currentWalletId);
+        await mpcLoginShareCache.clear(this.currentWalletId);
+      }
       if (this.currentWalletId !== null) {
         clearDbCache(this.currentWalletId);
       }
@@ -735,6 +910,15 @@ export class WalletManager {
    */
   async lock(): Promise<void> {
     try {
+      // Clear cached MPC root-key bytes — signing an MPC wallet after a lock
+      // requires re-unlock, same as PRF wallets require a fresh WebAuthn prompt.
+      mpcSessionCache.clearAll();
+      // NOTE: deliberately DO NOT clear mpcLoginShareCache here. Keeping the
+      // login share across a lock lets the still-logged-in wallet be re-unlocked
+      // with only the device secret (passkey/spending password) — no repeat
+      // Google sign-in — while re-auth (the passkey/password) is still required.
+      // It is dropped on logout / wallet switch and on browser close (it lives in
+      // chrome.storage.session, which survives service-worker restarts).
       // Set locked state
       WalletStore.setLocked(true);
       // Note: Don't clear auto-lock-check alarm - it continues running to check when wallet is unlocked again
@@ -919,7 +1103,60 @@ export class WalletManager {
       }
     }
 
+    // Credentialed moment: re-derive the Midnight viewing key into RAM-only
+    // session storage so shielded sync can resume without persisting the key on
+    // disk. Only Normal password wallets qualify — their `unlockCredential` IS
+    // the mnemonic-encrypting spending password. PRF wallets arrive
+    // browser-verified (no usable secret here) and PIN/pattern don't decrypt the
+    // mnemonic, so those repopulate at the next Midnight send instead.
+    // Fire-and-forget: must never block or fail unlock.
+    if (!browserVerified && unlockMethod === 'password' && encryptionMethod !== 'prf') {
+      void this.cacheMidnightViewingKeyToSession(walletId, unlockCredential as string);
+    }
+
     return true;
+  }
+
+  /**
+   * Re-derive the Midnight zswap viewing key from the wallet's mnemonic and
+   * stash it in RAM-only chrome.storage.session for this browser session, so
+   * shielded sync survives service-worker cold starts without the key ever
+   * touching disk. Self-gates on Midnight + Normal-password wallets and fully
+   * swallows errors so it can never break the unlock path that calls it.
+   */
+  private async cacheMidnightViewingKeyToSession(walletId: number, password: string): Promise<void> {
+    try {
+      // Resolve encrypted mnemonic + network: prefer the live walletBg
+      // (post-login unlock), fall back to the DB record (pre-login).
+      let encryptedMnemonic: string | undefined;
+      let network: string | undefined;
+      let chain: string | undefined;
+      if (this.walletBg?.id === walletId) {
+        encryptedMnemonic = this.walletBg.encryptedMnemonic;
+        network = this.walletBg.network;
+        chain = this.walletBg.chain;
+      } else {
+        const { getAllWallets } = await import('@/db/gero-db');
+        const record = (await getAllWallets())[walletId];
+        encryptedMnemonic = record?.encryptedMnemonic;
+        network = record?.network;
+        chain = record?.chain;
+      }
+      if (chain !== Blockchain.MIDNIGHT || !encryptedMnemonic || !network) return;
+
+      const { decrypt } = await import('@/shared/utils/crypto');
+      const mnemonic = decrypt(encryptedMnemonic, password);
+      // skipCardano: avoid the BG-bundle pbkdf2 polyfill path that
+      // deriveCardanoMaterial hits (see walletBg.buildAndSignMidnightShieldedTransfer).
+      // Only the viewing key is consumed.
+      const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
+      const derived = await deriveMidnightKeys(mnemonic, network, 0, { skipCardano: true });
+      const { setSessionViewingKey } = await import('@/chains/midnight/midnightViewingKeySession');
+      await setSessionViewingKey(walletId, network, derived.zswapViewingKey);
+      debugLog('🌙 Midnight viewing key cached to session at unlock');
+    } catch (e) {
+      debugLog('🌙 cacheMidnightViewingKeyToSession failed (non-fatal):', (e as Error)?.message);
+    }
   }
 
   /**

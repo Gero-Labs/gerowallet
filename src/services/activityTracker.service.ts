@@ -16,10 +16,8 @@ import { walletStore } from '@/stores/walletStore';
 class ActivityTrackerService {
   private isTracking = false;
   private debounceTimeout: number | null = null;
-  private visibilityIntervalId: number | null = null;
   private lastUpdate = 0;
   private readonly UPDATE_INTERVAL = 10000; // Update every 10 seconds max
-  private readonly VISIBILITY_UPDATE_INTERVAL = 30000; // Update every 30 seconds when tab is visible
 
   /**
    * Start tracking user activity
@@ -41,11 +39,6 @@ class ActivityTrackerService {
 
     // Listen for tab visibility changes
     document.addEventListener('visibilitychange', this.handleVisibilityChange);
-
-    // Start visibility-based updates if tab is currently visible
-    if (!document.hidden) {
-      this.startVisibilityUpdates();
-    }
   }
 
   /**
@@ -71,9 +64,6 @@ class ActivityTrackerService {
       clearTimeout(this.debounceTimeout);
       this.debounceTimeout = null;
     }
-
-    // Stop visibility-based updates
-    this.stopVisibilityUpdates();
   }
 
   /**
@@ -105,17 +95,14 @@ class ActivityTrackerService {
   private handleVisibilityChange = (): void => {
     if (!this.isTracking) return;
 
-    if (document.hidden) {
-      // Tab is hidden - stop periodic updates
-      this.stopVisibilityUpdates();
-    } else {
-      // Tab is visible - check if wallet should be locked immediately
-      // (in case the lock time passed while tab was closed)
+    if (!document.hidden) {
+      // Tab became visible again — that IS a user interaction, so record it,
+      // and ask the background to lock immediately if the timeout already
+      // elapsed while the tab was hidden. We do NOT run a periodic keep-alive
+      // while visible: merely having a tab open is not activity, so an idle
+      // (but visible) wallet must still auto-lock on inactivity.
       this.checkAutoLockImmediate();
-
-      // Then start periodic updates and update activity timestamp
       this.updateLastActivity();
-      this.startVisibilityUpdates();
     }
   };
 
@@ -136,31 +123,6 @@ class ActivityTrackerService {
       });
     } catch (error) {
       console.error('❌ Failed to trigger auto-lock check:', error);
-    }
-  }
-
-  /**
-   * Start periodic activity updates while tab is visible
-   */
-  private startVisibilityUpdates(): void {
-    // Clear any existing interval first
-    this.stopVisibilityUpdates();
-
-    // Update periodically while tab is visible
-    this.visibilityIntervalId = window.setInterval(() => {
-      if (!document.hidden && this.isTracking) {
-        this.updateLastActivity();
-      }
-    }, this.VISIBILITY_UPDATE_INTERVAL);
-  }
-
-  /**
-   * Stop periodic activity updates
-   */
-  private stopVisibilityUpdates(): void {
-    if (this.visibilityIntervalId) {
-      clearInterval(this.visibilityIntervalId);
-      this.visibilityIntervalId = null;
     }
   }
 

@@ -17,10 +17,10 @@
           <v-img :src="displayAvatar" />
         </v-avatar>
         <div class="ml-4">
-          <div style="font-size: 14px; font-weight: 600; color: #f5f5f6; line-height: 1.3;">
+          <div style="font-size: 14px; font-weight: 600; color: var(--g-text-1); line-height: 1.3;">
             {{ loggedWallet?.name }}
           </div>
-          <div style="font-size: 11px; color: #94969c; margin-top: 2px;">
+          <div style="font-size: 11px; color: var(--g-text-3); margin-top: 2px;">
             {{ hasSelection ? t('settings.newPictureSelected') : t('settings.currentPicture') }}
           </div>
         </div>
@@ -72,7 +72,7 @@
             <v-img :src="previewImage" />
           </v-avatar>
           <div class="drop-zone-change-hint mt-3">
-            <v-icon x-small color="white" class="mr-1">mdi-swap-horizontal</v-icon>
+            <v-icon x-small color="var(--g-text-1)" class="mr-1">mdi-swap-horizontal</v-icon>
             {{ $t('settings.clickToChange') }}
           </div>
         </div>
@@ -80,18 +80,18 @@
         <!-- Empty state -->
         <div v-else class="drop-zone-empty">
           <div class="drop-zone-icon-ring">
-            <v-icon size="34" :color="isDragging ? '#00c7f3' : '#666'">
+            <v-icon size="34" :color="isDragging ? 'var(--g-accent)' : 'var(--g-text-3)'">
               {{ isDragging ? 'mdi-tray-arrow-down' : 'mdi-cloud-upload-outline' }}
             </v-icon>
           </div>
           <div class="drop-zone-text mt-4">
-            <span v-if="isDragging" style="color: #00c7f3;">{{ $t('common.drop') }}</span>
+            <span v-if="isDragging" style="color: var(--g-accent);">{{ $t('common.drop') }}</span>
             <template v-else>
-              <span style="color: #00c7f3; font-weight: 500;">{{ $t('settings.clickToUpload') }}</span>
-              <span style="color: #94969c;"> {{ $t('settings.orDragAndDrop') }}</span>
+              <span style="color: var(--g-accent); font-weight: 500;">{{ $t('settings.clickToUpload') }}</span>
+              <span style="color: var(--g-text-3);"> {{ $t('settings.orDragAndDrop') }}</span>
             </template>
           </div>
-          <div class="drop-zone-formats">PNG · JPG · GIF · SVG</div>
+          <div class="drop-zone-formats t-label">PNG · JPG · GIF · SVG</div>
         </div>
       </div>
 
@@ -123,15 +123,15 @@
         <!-- ─── Collections list (level 1) ─── -->
         <template v-if="!openCollectionId">
           <div v-if="collectionList.length === 0" class="nft-empty-state">
-            <v-icon size="40" color="#333">mdi-image-off-outline</v-icon>
-            <div style="color: #94969c; font-size: 13px; margin-top: 8px;">
+            <v-icon size="40" color="var(--g-text-3)">mdi-image-off-outline</v-icon>
+            <div style="color: var(--g-text-3); font-size: 13px; margin-top: 8px;">
               {{ $t('settings.noNFTsFound') }}
             </div>
           </div>
 
           <div v-else-if="filteredCollections.length === 0" class="nft-empty-state">
-            <v-icon size="40" color="#333">mdi-magnify-close</v-icon>
-            <div style="color: #94969c; font-size: 13px; margin-top: 8px;">
+            <v-icon size="40" color="var(--g-text-3)">mdi-magnify-close</v-icon>
+            <div style="color: var(--g-text-3); font-size: 13px; margin-top: 8px;">
               {{ $t('common.noResults') }}
             </div>
           </div>
@@ -151,7 +151,7 @@
                 <div class="collection-name">{{ col.name }}</div>
                 <div class="collection-count">{{ col.itemCount }} {{ col.itemCount === 1 ? 'item' : 'items' }}</div>
               </div>
-              <v-icon small color="#555" class="collection-arrow">mdi-chevron-right</v-icon>
+              <v-icon small color="var(--g-text-3)" class="collection-arrow">mdi-chevron-right</v-icon>
             </div>
           </div>
         </template>
@@ -159,8 +159,8 @@
         <!-- ─── NFT items grid (level 2) ─── -->
         <template v-if="openCollectionId">
           <div v-if="filteredCollectionItems.length === 0" class="nft-empty-state">
-            <v-icon size="40" color="#333">mdi-magnify-close</v-icon>
-            <div style="color: #94969c; font-size: 13px; margin-top: 8px;">
+            <v-icon size="40" color="var(--g-text-3)">mdi-magnify-close</v-icon>
+            <div style="color: var(--g-text-3); font-size: 13px; margin-top: 8px;">
               {{ $t('common.noResults') }}
             </div>
           </div>
@@ -179,8 +179,8 @@
                 class="nft-grid-img"
               >
                 <template #placeholder>
-                  <div class="d-flex align-center justify-center" style="height: 100%; background: rgba(255,255,255,0.03);">
-                    <v-progress-circular indeterminate size="18" width="2" color="#333" />
+                  <div class="d-flex align-center justify-center" style="height: 100%; background: var(--g-hairline-1);">
+                    <v-progress-circular indeterminate size="18" width="2" color="var(--g-text-3)" />
                   </div>
                 </template>
               </v-img>
@@ -188,7 +188,7 @@
               <transition name="fade">
                 <v-avatar
                   v-if="selectedNft === item.unit"
-                  color="#00c7f3"
+                  color="var(--g-accent)"
                   size="18"
                   class="nft-check"
                 >
@@ -423,9 +423,9 @@ defineExpose({ open });
 .tab-toggle {
   display: flex;
   width: 100%;
-  border-radius: 8px !important;
+  border-radius: var(--g-r-control) !important;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--g-hairline-1);
 }
 
 .tab-btn {
@@ -439,21 +439,20 @@ defineExpose({ open });
 /* ── Current preview bar ── */
 .current-preview {
   padding: 14px 16px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--g-r-card);
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-1);
 }
 
 .current-avatar {
-  border: 2px solid rgba(0, 199, 243, 0.35);
-  box-shadow: 0 0 0 4px rgba(0, 199, 243, 0.06);
+  border: 2px solid var(--g-accent);
 }
 
 .confirm-btn {
   text-transform: none !important;
   letter-spacing: 0 !important;
   font-weight: 600 !important;
-  border-radius: 8px !important;
+  border-radius: var(--g-r-control) !important;
 }
 
 /* ── Tab content wrapper ── */
@@ -477,34 +476,34 @@ defineExpose({ open });
   }
 
   &::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--g-hairline-2);
     border-radius: 4px;
   }
 }
 
 /* ── Drop zone ── */
 .drop-zone {
-  border: 2px dashed rgba(255, 255, 255, 0.1);
-  border-radius: 14px;
+  border: 2px dashed var(--g-hairline-2);
+  border-radius: var(--g-r-card);
   padding: 24px 20px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: border-color var(--g-dur-base) ease, background-color var(--g-dur-base) ease;
   text-align: center;
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.015);
+  background: var(--g-hairline-1);
 }
 
 .drop-zone:hover {
-  border-color: rgba(0, 199, 243, 0.3);
-  background: rgba(0, 199, 243, 0.02);
+  border-color: var(--g-accent);
+  background: var(--g-hairline-1);
 }
 
 .drop-zone-active {
-  border-color: #00c7f3 !important;
-  background: rgba(0, 199, 243, 0.06) !important;
+  border-color: var(--g-accent) !important;
+  background: var(--g-hairline-1) !important;
   border-style: solid;
 }
 
@@ -520,14 +519,14 @@ defineExpose({ open });
 
 .drop-zone-change-hint {
   font-size: 11px;
-  color: #94969c;
+  color: var(--g-text-3);
   display: flex;
   align-items: center;
-  transition: color 0.15s;
+  transition: color var(--g-dur-fast);
 }
 
 .drop-zone:hover .drop-zone-change-hint {
-  color: #00c7f3;
+  color: var(--g-accent);
 }
 
 .drop-zone-empty {
@@ -541,18 +540,18 @@ defineExpose({ open });
   width: 64px;
   height: 64px;
   border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.08);
+  border: 2px solid var(--g-hairline-1);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.02);
-  transition: border-color 0.2s, background 0.2s;
+  background: var(--g-hairline-1);
+  transition: border-color var(--g-dur-base), background var(--g-dur-base);
 }
 
 .drop-zone:hover .drop-zone-icon-ring,
 .drop-zone-active .drop-zone-icon-ring {
-  border-color: rgba(0, 199, 243, 0.2);
-  background: rgba(0, 199, 243, 0.04);
+  border-color: var(--g-accent);
+  background: var(--g-hairline-1);
 }
 
 .drop-zone-text {
@@ -561,12 +560,9 @@ defineExpose({ open });
 }
 
 .drop-zone-formats {
-  font-size: 10px;
   font-weight: 500;
-  color: #666;
+  color: var(--g-text-3);
   margin-top: 10px;
-  letter-spacing: 1px;
-  text-transform: uppercase;
 }
 
 /* ── Breadcrumb ── */
@@ -579,17 +575,17 @@ defineExpose({ open });
 .breadcrumb-name {
   font-size: 13px;
   font-weight: 600;
-  color: #f5f5f6;
+  color: var(--g-text-1);
 }
 
 .breadcrumb-count {
   font-size: 12px;
-  color: #666;
+  color: var(--g-text-3);
 }
 
 /* ── NFT search ── */
 .nft-search ::v-deep .v-input__slot {
-  border-radius: 8px !important;
+  border-radius: var(--g-r-control) !important;
 }
 
 /* ── NFT empty state ── */
@@ -611,7 +607,7 @@ defineExpose({ open });
   }
 
   &::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--g-hairline-2);
     border-radius: 4px;
   }
 }
@@ -620,21 +616,21 @@ defineExpose({ open });
   display: flex;
   align-items: center;
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background var(--g-dur-fast);
   gap: 12px;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--g-hairline-1);
 
     .collection-arrow {
-      color: #f5f5f6 !important;
+      color: var(--g-text-1) !important;
     }
   }
 
   &:active {
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--g-hairline-1);
   }
 
   & + & {
@@ -644,7 +640,7 @@ defineExpose({ open });
 
 .collection-thumb {
   flex-shrink: 0;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--g-hairline-1);
 }
 
 .collection-info {
@@ -655,7 +651,7 @@ defineExpose({ open });
 .collection-name {
   font-size: 13px;
   font-weight: 600;
-  color: #f5f5f6;
+  color: var(--g-text-1);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -663,12 +659,12 @@ defineExpose({ open });
 
 .collection-count {
   font-size: 11px;
-  color: #666;
+  color: var(--g-text-3);
 }
 
 .collection-arrow {
   flex-shrink: 0;
-  transition: color 0.15s;
+  transition: color var(--g-dur-fast);
 }
 
 /* ── NFT grid (level 2) ── */
@@ -683,7 +679,7 @@ defineExpose({ open });
   }
 
   &::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--g-hairline-2);
     border-radius: 4px;
   }
 }
@@ -691,15 +687,15 @@ defineExpose({ open });
 .nft-grid-item {
   position: relative;
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: var(--g-r-control);
   overflow: hidden;
   border: 2px solid transparent;
-  transition: border-color 0.15s, transform 0.15s;
+  transition: border-color var(--g-dur-fast), transform var(--g-dur-fast);
   aspect-ratio: 1;
 }
 
 .nft-grid-item:hover {
-  border-color: rgba(255, 255, 255, 0.15);
+  border-color: var(--g-hairline-3);
   transform: scale(1.02);
 }
 
@@ -708,14 +704,13 @@ defineExpose({ open });
 }
 
 .nft-selected {
-  border-color: #00c7f3 !important;
-  box-shadow: 0 0 0 1px rgba(0, 199, 243, 0.3);
+  border-color: var(--g-accent) !important;
 }
 
 .nft-grid-img {
   width: 100%;
   height: 100%;
-  border-radius: 6px;
+  border-radius: var(--g-r-control);
 }
 
 .nft-name {
@@ -723,12 +718,12 @@ defineExpose({ open });
   bottom: 0;
   left: 0;
   right: 0;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 600;
   text-align: center;
   padding: 12px 6px 4px;
   background: linear-gradient(transparent, rgba(0, 0, 0, 0.85));
-  color: white;
+  color: var(--g-text-1);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -744,7 +739,7 @@ defineExpose({ open });
 /* ── Transitions ── */
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.15s;
+  transition: opacity var(--g-dur-fast);
 }
 
 .fade-enter,
