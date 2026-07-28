@@ -102,12 +102,12 @@ const copied = ref(false);
 
 const baseAddress = computed(() => loggedWallet.value?.baseAddress ?? '');
 
-// Network subtitle. Testnet is specifically testnet3 (backend Esplora =
-// blockstream.info/testnet), matching the onboarding label — so show "Testnet3",
+// Network subtitle. Testnet is specifically testnet4 (backend Esplora =
+// mempool.space/testnet4), matching the onboarding label — so show "Testnet4",
 // not a bare "Testnet", and never a hardcoded "Mainnet".
 const networkLabel = computed(() => {
   const n = loggedWallet.value?.network;
-  return n === 'Testnet' ? 'Testnet3' : (n || 'Mainnet');
+  return n === 'Testnet' ? 'Testnet4' : (n || 'Mainnet');
 });
 
 const availableBalance = computed<bigint>(() =>
