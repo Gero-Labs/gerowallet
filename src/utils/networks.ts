@@ -295,12 +295,12 @@ export default {
         networkMagic: 764824073  // Apex Vector cardano-node shelley/byron genesis (RequiresNoMagic)
       }
     },
-    // Bitcoin networks removed for 2.7 (HIDE+GATE master switch).
-    // Removing the Bitcoin entries makes every resolve*Support() helper
-    // (gomining/babylon/ordinals/thorchain/mempool/lightning) return false,
-    // which cascades to nav, dialogs, dApp surfaces, and route guards.
-    // Bitcoin code remains in-repo; only user access is severed here.
-    /* BITCOIN_REMOVED_2_7
+    // Bitcoin visibility is gated by the isBitcoinEnabled feature flag (gero-sync),
+    // enforced in NetworkSelector.isFamilySelectable — NOT by removing the entries.
+    // With the flag OFF the Bitcoin family renders as a disabled "Soon" tile and no
+    // wallet can be created, so BTC stays hidden from onboarding; flip the flag to
+    // reveal it without a client release. (Replaces the old BITCOIN_REMOVED_2_7
+    // comment-out; mainnet stays comingSoon until validated — testnet is live.)
     // Bitcoin Mainnet
     {
       icon: bitcoinLogo,
@@ -351,11 +351,15 @@ export default {
         networkMagic: 0xF9BEB4D9  // Bitcoin mainnet magic bytes
       }
     },
-    // Bitcoin Testnet
+    // Bitcoin Testnet. Display title says "Testnet4" (the onboarding pill strips the
+    // "Bitcoin " prefix → "Testnet4") so users pick a matching faucet — the backend
+    // testnet Esplora is mempool.space/testnet4. `network` stays TESTNET (drives
+    // subscribe/Esplora selection); only the label is variant-specific. Keep this in
+    // sync with gero-sync's bitcoin.testnet.esplora-url if the testnet source moves.
     {
       icon: bitcoinLogo,
       iconColor: 'yellow',
-      title: 'Bitcoin Testnet',
+      title: 'Bitcoin Testnet4',
       blockchain: Blockchain.BITCOIN,
       network: Network.TESTNET,
       supportedHardware: true,
@@ -400,7 +404,6 @@ export default {
         networkMagic: 0x0709110B  // Bitcoin testnet magic bytes
       }
     },
-    BITCOIN_REMOVED_2_7 */
     // Midnight Preview (testnet)
     {
       icon: midnightLogo,
@@ -552,56 +555,6 @@ export default {
         networkMagic: 0
       }
     },
-    // Bitcoin — coming soon (HIDE+GATE teaser only: all features off, not selectable)
-    {
-      icon: bitcoinLogo,
-      iconColor: 'orange',
-      title: 'Bitcoin Mainnet',
-      blockchain: Blockchain.BITCOIN,
-      network: Network.MAINNET,
-      comingSoon: true,
-      supportedHardware: false,
-      networkId: 1,
-      currencySymbol: 'BTC',
-      currencyTicker: 'BTC',
-      currencyName: 'Bitcoin',
-      currencyDescription: 'Bitcoin',
-      currencyImage: bitcoinLogo,
-      protocolParams: {
-        min_fee_a: 0,
-        min_fee_b: 0,
-        max_tx_size: 0,
-        min_utxo_value: "0",
-        key_deposit: "0",
-        pool_deposit: "0",
-        max_val_size: 0,
-        price_mem: 0,
-        price_step: 0,
-        coins_per_utxo_size: "0"
-      },
-      geroPool: '',
-      defaultProvider: Provider.UNDEFINED,
-      cashbackSupport: false,
-      stakingSupport: false,
-      governanceSupport: false,
-      daoSupport: false,
-      transactionSupport: false,
-      swapSupport: false,
-      buySupport: false,
-      zkSmartWalletSupport: false,
-      perpetualsSupport: false,
-      multiSigSupport: false,
-      geroCardSupport: false,
-      goMiningSupport: false,
-      babylonSupport: false,
-      ordinalsSupport: false,
-      thorchainSupport: false,
-      mempoolSupport: false,
-      lightningSupport: false,
-      networkParams: {
-        networkMagic: 0
-      }
-    } as NetworkInfo,
   ]  as NetworkInfo[],
   resolveNetwork(chain: string, network: string): NetworkInfo {
     return this.networks.find(element => element.blockchain === chain && element.network === network);
