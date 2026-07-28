@@ -315,7 +315,7 @@ const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true');
 const vmProxy = getCurrentInstance()!.proxy;
 const currentPage = computed(() => vmProxy.$route);
 const { isSyncing, connected, connecting } = toRefs(loadingState);
-const { loggedWallet, account, config } = toRefs(walletStore);
+const { loggedWallet, account, config, bitcoinBalance } = toRefs(walletStore);
 const { config: geroConfig } = toRefs(geroStore);
 const { tip } = toRefs(networkStore);
 // Midnight uses its own store — `networkStore.tip` is Cardano-shaped (epoch/slot)
@@ -338,10 +338,16 @@ const btcTipHeight = computed(() => {
 // Mirrors PortfolioPage's isWalletEmpty semantics; Midnight is excluded
 // because its home never renders the empty state (and its balance does not
 // live in account.controlled_amount).
-const emptyStateShowing = computed(() =>
-  currentPage.value?.path === '/' &&
-  loggedWallet.value?.chain !== Blockchain.MIDNIGHT &&
-  (!account.value || account.value?.controlled_amount === '0'));
+const emptyStateShowing = computed(() => {
+  if (currentPage.value?.path !== '/' || loggedWallet.value?.chain === Blockchain.MIDNIGHT) {
+    return false;
+  }
+  // BTC balance lives in bitcoinBalance (UTxO-derived), not account.controlled_amount.
+  if (loggedWallet.value?.chain === Blockchain.BITCOIN) {
+    return !(bitcoinBalance.value && BigInt(bitcoinBalance.value.total ?? 0) > 0n);
+  }
+  return !account.value || account.value?.controlled_amount === '0';
+});
 
 // Global search
 const { open: openGlobalSearch, handleKeydown: handleSearchKeydown } = useGlobalSearch();
