@@ -136,7 +136,7 @@ function broadcastFromBackground(updates: Partial<StoreType>) {
 ## Feature Flags
 - Self-hosted flag service (gero-sync): `src/services/featureFlag.service.ts` + `src/stores/featureFlagsStore.ts`
 - Backend URL: `VITE_FLAGS_BASE_URL` (see `.env.*`)
-- Flags: `isSwapEnabled`, `isGeroCardEnabled`, `isBlogEnabled`, `isGoMiningEnabled`, `isPoolOperatorEnabled`, `isPhysicalCardOrderingEnabled`
+- Flags: `isSwapEnabled`, `isGeroCardEnabled`, `isBlogEnabled`, `isGoMiningEnabled`, `isPoolOperatorEnabled`, `isPhysicalCardOrderingEnabled`, `isBitcoinEnabled` (master visibility gate for the Bitcoin chain: onboarding tile + BTC route guards + BTC nav items)
 - Route gating: `isRouteUnderMaintenance()` in router.ts
 - Nav hiding: check flag in NavigationDrawer.vue menu items
 
