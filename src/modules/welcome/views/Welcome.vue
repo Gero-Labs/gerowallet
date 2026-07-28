@@ -41,7 +41,7 @@
       <div class="welcome-left-column">
         <WalletCreation
           :selectedNetwork="selectedNetwork"
-          @network-change="onOnboardingNetwork"
+          @network-change="onWalletListNetwork"
         />
       </div>
 
@@ -109,6 +109,14 @@ watch(devMode, (val) => {
 
 const onOnboardingNetwork = (n: NetworkInfo): void => {
   selectedNetwork.value = n;
+};
+
+// The left wallet list previews a chain's theme on hover (nice on the intro hero).
+// But once Get Started is open the user is explicitly choosing a chain/network in
+// the dialog — hovering a wallet must NOT hijack that choice or the theme/logo.
+// So wallet-list-driven network changes only apply before onboarding starts.
+const onWalletListNetwork = (n: NetworkInfo): void => {
+  if (!started.value) selectedNetwork.value = n;
 };
 </script>
 <style scoped>

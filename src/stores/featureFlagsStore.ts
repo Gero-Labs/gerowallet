@@ -7,6 +7,10 @@ export interface FeatureFlags {
   isBlogEnabled: boolean;
   isPhysicalCardOrderingEnabled: boolean;
   isGoMiningEnabled: boolean;
+  // Master visibility gate for the Bitcoin chain in onboarding. Default OFF: Bitcoin
+  // is hidden (shown as a "Soon" teaser) until flipped ON via gero-sync — this
+  // replaces the hardcoded BITCOIN_REMOVED_2_7 comment-out in networks.ts.
+  isBitcoinEnabled: boolean;
   isPoolOperatorEnabled: boolean;
   isNexusWithdrawalEnabled: boolean;
   isNexusUnstakeEnabled: boolean;
@@ -47,6 +51,7 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
     isBlogEnabled: false,
     isPhysicalCardOrderingEnabled: false,
     isGoMiningEnabled: false,
+    isBitcoinEnabled: false,
     isPoolOperatorEnabled: false,
     isNexusWithdrawalEnabled: false,
     isNexusUnstakeEnabled: false,
@@ -111,6 +116,7 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isBlogEnabled = featureFlagService.getFlag('isBlogEnabled', false);
     featureFlagsState.flags.isPhysicalCardOrderingEnabled = featureFlagService.getFlag('isPhysicalCardOrderingEnabled', false);
     featureFlagsState.flags.isGoMiningEnabled = featureFlagService.getFlag('isGoMiningEnabled', false);
+    featureFlagsState.flags.isBitcoinEnabled = featureFlagService.getFlag('isBitcoinEnabled', false);
     featureFlagsState.flags.isPoolOperatorEnabled = featureFlagService.getFlag('isPoolOperatorEnabled', false);
     featureFlagsState.flags.isNexusWithdrawalEnabled = featureFlagService.getFlag('isNexusWithdrawalEnabled', false);
     featureFlagsState.flags.isNexusUnstakeEnabled = featureFlagService.getFlag('isNexusUnstakeEnabled', false);
@@ -145,6 +151,9 @@ export const featureFlagsStore = {
     });
     featureFlagService.onFlagChange('isGoMiningEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isGoMiningEnabled', newValue);
+    });
+    featureFlagService.onFlagChange('isBitcoinEnabled', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'isBitcoinEnabled', newValue);
     });
     featureFlagService.onFlagChange('isPoolOperatorEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isPoolOperatorEnabled', newValue);
@@ -221,6 +230,15 @@ export const featureFlagsStore = {
   isGoMiningEnabled(): boolean {
     // Hard-pinned off for 2.7 (HIDE+GATE). Ignores remote LaunchDarkly flag.
     return false;
+  },
+
+  /**
+   * Whether the Bitcoin chain is visible/selectable in onboarding. Driven by the
+   * gero-sync `isBitcoinEnabled` flag (default off). Replaces the hardcoded
+   * BITCOIN_REMOVED_2_7 hide so BTC can be turned on without a client release.
+   */
+  isBitcoinEnabled(): boolean {
+    return featureFlagsState.flags.isBitcoinEnabled;
   },
 
   /**
@@ -319,6 +337,7 @@ export const featureFlagsStore = {
       isBlogEnabled: false,
       isPhysicalCardOrderingEnabled: false,
       isGoMiningEnabled: false,
+      isBitcoinEnabled: false,
       isPoolOperatorEnabled: false,
       isNexusWithdrawalEnabled: false,
       isNexusUnstakeEnabled: false,
