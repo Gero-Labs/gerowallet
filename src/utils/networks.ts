@@ -351,15 +351,15 @@ export default {
         networkMagic: 0xF9BEB4D9  // Bitcoin mainnet magic bytes
       }
     },
-    // Bitcoin Testnet. Display title says "Testnet3" (the onboarding pill strips the
-    // "Bitcoin " prefix → "Testnet3") so users pick a matching faucet — the backend
-    // testnet Esplora is blockstream.info/testnet = testnet3. `network` stays TESTNET
-    // (drives subscribe/Esplora selection); only the label is variant-specific. If the
-    // backend testnet Esplora is ever repointed (e.g. testnet4), update this label too.
+    // Bitcoin Testnet. Display title says "Testnet4" (the onboarding pill strips the
+    // "Bitcoin " prefix → "Testnet4") so users pick a matching faucet — the backend
+    // testnet Esplora is mempool.space/testnet4. `network` stays TESTNET (drives
+    // subscribe/Esplora selection); only the label is variant-specific. Keep this in
+    // sync with gero-sync's bitcoin.testnet.esplora-url if the testnet source moves.
     {
       icon: bitcoinLogo,
       iconColor: 'yellow',
-      title: 'Bitcoin Testnet3',
+      title: 'Bitcoin Testnet4',
       blockchain: Blockchain.BITCOIN,
       network: Network.TESTNET,
       supportedHardware: true,
