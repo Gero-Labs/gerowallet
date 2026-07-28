@@ -208,7 +208,10 @@ export default {
   // ── Market Service ──────────────────────────────────────────────────────────
 
   async getAllPrices(): Promise<TokenPriceResponse[]> {
-    const { data } = await axiosInstance.get('/api/market/prices');
+    // Full token list is a large aggregate (~6MB) that regularly takes 7-15s server-side,
+    // right at the shared 15s axios cap — which intermittently tripped a spurious timeout.
+    // Give this one call more headroom (the balance/native-price path uses fast endpoints).
+    const { data } = await axiosInstance.get('/api/market/prices', { timeout: 30000 });
     return data;
   },
 
