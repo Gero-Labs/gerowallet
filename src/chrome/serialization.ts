@@ -356,7 +356,13 @@ export function getUtxos(
 
 export function getBalance(utxos: Cardano.Utxo[], collateral: Cardano.Utxo): Serialization.Value {
   let accumulatedValue: Serialization.Value = new Serialization.Value(BigInt(0));
-  if (utxos && collateral) {
+  // Cardano-only: a Cardano UTxO is a [txIn, txOut] pair. Bitcoin (and other non-Cardano)
+  // UTxOs are object-shaped, so guard before dereferencing utxo[0]/utxo[1] — otherwise a
+  // BTC utxo set reaches here (e.g. via the shared holdings valuation) and throws
+  // "Cannot read properties of undefined (reading 'value')". BTC balance lives in
+  // walletStore.bitcoinBalance, not this Cardano value accumulator.
+  utxos = (utxos || []).filter((utxo: Cardano.Utxo) => Array.isArray(utxo) && utxo.length === 2);
+  if (utxos.length && collateral) {
     utxos = utxos.filter((utxo: Cardano.Utxo) => !(utxo[0].txId === collateral[0].txId && utxo[0].index === collateral[0].index))
   }
   utxos.forEach((utxo: Cardano.Utxo) => {
