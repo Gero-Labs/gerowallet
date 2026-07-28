@@ -9,7 +9,7 @@
           </div>
           <div class="header-labels">
             <span class="chain-name">Bitcoin</span>
-            <span class="chain-sub">Mainnet · Wallet</span>
+            <span class="chain-sub">{{ networkLabel }} · Wallet</span>
           </div>
         </div>
         <div class="header-actions">
@@ -101,6 +101,14 @@ const refreshing = ref(false);
 const copied = ref(false);
 
 const baseAddress = computed(() => loggedWallet.value?.baseAddress ?? '');
+
+// Network subtitle. Testnet is specifically testnet4 (backend Esplora =
+// mempool.space/testnet4), matching the onboarding label — so show "Testnet4",
+// not a bare "Testnet", and never a hardcoded "Mainnet".
+const networkLabel = computed(() => {
+  const n = loggedWallet.value?.network;
+  return n === 'Testnet' ? 'Testnet4' : (n || 'Mainnet');
+});
 
 const availableBalance = computed<bigint>(() =>
   bitcoinBalance.value?.available ?? BigInt(0)

@@ -2,7 +2,7 @@ import { ref, toRefs } from 'vue';
 import { Cardano } from '@cardano-sdk/core';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { walletStore } from '@/stores/walletStore';
-import { networkStore } from '@/stores/networkStore';
+import { networkStore, isBitcoinTip } from '@/stores/networkStore';
 import { poolOperatorStore } from '@/stores/poolOperatorStore';
 import { buildCardanoTransaction } from '@/shared/utils/builder';
 import snackbar from '@/plugins/snackbar';
@@ -38,7 +38,9 @@ export function usePoolRetirement() {
       if (!epochParams.value) throw new Error(t('errors.networkError'));
       if (!poolOperatorStore.poolId) throw new Error(t('poolOperator.setupColdKeyFirst'));
 
-      const currentEpoch = tip.value?.epoch || 0;
+      // Pool retirement is Cardano-only; a height-only BTC tip has no epoch.
+      const currentTip = tip.value;
+      const currentEpoch = currentTip && !isBitcoinTip(currentTip) ? (currentTip.epoch || 0) : 0;
       const eMax = epochParams.value.poolRetirementEpochBound || 18;
 
       // Validate epoch constraints

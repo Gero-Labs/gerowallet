@@ -10,8 +10,18 @@ import { parseHttpError } from '@/shared/utils/parser';
 import { WalletBg } from '@/chrome/walletBg';
 import { debugLog } from '@/utils/debug';
 import blockchainApi from '@/api/blockchain-api';
-import webSocketService from '@/services/websocket.service';
-import WalletStore from '@/stores/walletStore';
+import webSocketService, { type WsSyncMessage } from '@/services/websocket.service';
+import WalletStore, { walletStore } from '@/stores/walletStore';
+import type { BitcoinTip } from '@/stores/networkStore';
+import {
+  convertBtcUtxos,
+  convertBtcTransactions,
+  mergeBtcTransactions,
+  type BtcTx,
+  type BtcUtxo,
+  type BtcAccount,
+} from '@/chains/bitcoin/bitcoinWireSync';
+import type { UnifiedTransaction } from '@/chains/bitcoin/bitcoinTransactionParser';
 
 /**
  * SyncService handles all wallet synchronization operations
@@ -354,6 +364,153 @@ export class SyncService {
           epoch_slot: syncObject.block.epoch_slot || 0,
         });
       }
+    }
+  }
+
+  /**
+   * Apply a gero-sync Bitcoin WS payload to the wallet stores (Phase 3).
+   *
+   * BTC analog of {@link setSync} — a SEPARATE method so the Cardano path stays
+   * byte-identical. Runs ONLY for BTC wallets (guarded) and is wired from the BTC
+   * onSync handler in walletManager. Post Phase-5 cutover this is the DEFAULT BTC
+   * sync path (kill-switch `isBitcoinGeroSyncEnabled`=false falls back to the
+   * poller). Produces the SAME internal shapes the poller feeds `WalletStore`, so
+   * the UI renders WS-fed data identically:
+   *   - transactions → convertBtcTransactions + mergeBtcTransactions → setTransactions
+   *   - utxos        → convertBtcUtxos → setUtxos (recomputes bitcoinBalance, poller path)
+   *   - tip          → NetworkStore.setTip({ chain:'BITCOIN', height, hash, time })
+   *
+   * Catch-up batching is handled upstream by websocket.service (it accumulates
+   * SYNC batches during catch-up and delivers ONE combined payload on
+   * CATCH_UP_COMPLETE, re-tagged `type:'SYNC'`); SYNC_CHECK_OK is likewise
+   * re-tagged. So this method always sees a single already-combined payload and
+   * merges it into the in-memory set — pending→confirmed upgrades by txid, and
+   * existing txs are never dropped on a partial real-time batch.
+   *
+   * Note on balance/account: the confirmed/total balance is derived from the full
+   * UTxO set via setUtxos (identical to the poller). The raw `BtcAccount` is NOT
+   * written to `walletStore.account` — that slot is the Cardano AccountInfo shape,
+   * and writing a BtcAccount there would corrupt Cardano-shared consumers. It is
+   * only logged here; the contract guarantees `utxos` is the full current set, so
+   * the UTxO-derived balance already matches `account.balance`.
+   *
+   * @param payload - WS SYNC-family message (SYNC / CATCH_UP_COMPLETE / SYNC_CHECK_OK).
+   */
+  async applyBitcoinSync(payload: WsSyncMessage): Promise<void> {
+    if (this.walletBg?.chain !== Blockchain.BITCOIN) {
+      return;
+    }
+    if (!payload || (payload.type !== 'SYNC' && payload['success'] !== true)) {
+      return;
+    }
+
+    const tipHeight = typeof payload.block?.height === 'number' ? payload.block.height : undefined;
+    const account = payload['account'] as BtcAccount | undefined;
+
+    // 1) Transactions — convert + merge (pending→confirmed by txid; keep history).
+    if (Array.isArray(payload['transactions'])) {
+      const converted = convertBtcTransactions(payload['transactions'] as BtcTx[], tipHeight);
+      const merged = mergeBtcTransactions(
+        walletStore.transactions as UnifiedTransaction[],
+        converted,
+      );
+      WalletStore.setTransactions(merged);
+    }
+
+    // 2) UTxOs — full current set per contract; replace + recompute bitcoinBalance
+    //    through the same setUtxos path the poller uses (calculateBitcoinBalance).
+    if (Array.isArray(payload['utxos'])) {
+      const convertedUtxos = convertBtcUtxos(payload['utxos'] as BtcUtxo[]);
+      await WalletStore.setUtxos(convertedUtxos);
+    }
+
+    // 3) Tip — height-only BitcoinTip. `time` stored in ms for consistency with the
+    //    Cardano tip.time convention (no BTC consumer reads it yet).
+    if (payload.block && typeof payload.block.height === 'number') {
+      // Only update the DISPLAY tip when the block carries a real timestamp. SYNC_CHECK_OK /
+      // catch-up carry the chain tip with `time`; the realtime tx-push carries a height-only
+      // block (the tx's own block, no time/hash). Applying the latter would blank "Last Sync"
+      // (time → 0 → N/A) and overwrite the good tip — so keep the last good tip in that case.
+      if (payload.block.time) {
+        const tip: BitcoinTip = {
+          chain: 'BITCOIN',
+          height: payload.block.height,
+          hash: payload.block.hash || '',
+          time: payload.block.time * 1000,
+        };
+        NetworkStore.setTip(tip);
+      }
+
+      // Persist the height checkpoint (monotonic) regardless of whether a timestamp was
+      // present, so reconnects resume from here and rollbacks can rewind it. Post Phase-5
+      // cutover the Esplora poller no longer runs when WS is on, so the WS apply owns this.
+      const syncInfo = await this.walletBg.getLastSyncInfo();
+      const currentHeight = syncInfo && typeof syncInfo.height === 'number' ? syncInfo.height : 0;
+      if (payload.block.height > currentHeight) {
+        const db = await this.walletBg.getDb();
+        await db.table('sync').put({ ...(syncInfo || {}), id: 1, height: payload.block.height, hash: payload.block.hash || '' });
+      }
+    }
+
+    debugLog('🔶 [BTC gero-sync] applyBitcoinSync applied', {
+      txs: Array.isArray(payload['transactions']) ? (payload['transactions'] as unknown[]).length : 0,
+      utxos: Array.isArray(payload['utxos']) ? (payload['utxos'] as unknown[]).length : 0,
+      block: payload.block?.height,
+      account: account
+        ? {
+            balance: account.balance,
+            unconfirmed: account.unconfirmed_balance,
+            tx_count: account.tx_count,
+          }
+        : undefined,
+    });
+  }
+
+  /**
+   * Handle a Bitcoin reorg (Phase 4). BTC transactions live in-memory only (no DB
+   * `transactions` table), so drop confirmed txs above the rollback height and keep
+   * pending (mempool) txs. Reset the persisted height checkpoint so a later reconnect
+   * resumes from the fork point; gero-sync re-pushes the new canonical chain via SYNC.
+   */
+  async handleBitcoinRollback(rollbackToHeight: number): Promise<void> {
+    if (this.walletBg?.chain !== Blockchain.BITCOIN) return;
+    if (typeof rollbackToHeight !== 'number') return;
+    debugLog(`🔶 [BTC gero-sync] rollback to height ${rollbackToHeight}`);
+
+    const current = (walletStore.transactions as UnifiedTransaction[]) || [];
+    const kept = current.filter((tx) => {
+      if (!tx) return false; // drop malformed
+      if (tx.pending || tx.block_height == null) return true; // keep mempool/pending
+      return tx.block_height <= rollbackToHeight; // keep at/below the rollback point
+    });
+    if (kept.length !== current.length) {
+      WalletStore.setTransactions(kept);
+      debugLog(`🔶 [BTC gero-sync] dropped ${current.length - kept.length} tx(s) above height ${rollbackToHeight}`);
+    }
+
+    // Reset the persisted checkpoint (mirror Cardano handleRollback's direct sync-table write).
+    const syncInfo = await this.walletBg.getLastSyncInfo();
+    if (syncInfo && typeof syncInfo.height === 'number' && syncInfo.height > rollbackToHeight) {
+      const db = await this.walletBg.getDb();
+      await db.table('sync').put({ ...syncInfo, id: 1, height: rollbackToHeight });
+      debugLog(`🔶 [BTC gero-sync] reset checkpoint to height ${rollbackToHeight}`);
+    }
+  }
+
+  /**
+   * Full BTC re-sync (Phase 4), triggered by FORCE_RESYNC (a reorg deeper than the
+   * server's window). Clear in-memory transactions and reset the checkpoint to 0; the
+   * caller resubscribes from 0 so gero-sync replays the wallet. UTxOs are replaced
+   * wholesale by the ensuing catch-up, so they need no explicit clear.
+   */
+  async handleBitcoinForceResync(): Promise<void> {
+    if (this.walletBg?.chain !== Blockchain.BITCOIN) return;
+    debugLog('🔶 [BTC gero-sync] force resync — clearing in-memory transactions');
+    WalletStore.setTransactions([]);
+    const syncInfo = await this.walletBg.getLastSyncInfo();
+    if (syncInfo) {
+      const db = await this.walletBg.getDb();
+      await db.table('sync').put({ ...syncInfo, id: 1, height: 0 });
     }
   }
 

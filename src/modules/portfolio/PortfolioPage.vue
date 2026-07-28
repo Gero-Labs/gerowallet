@@ -75,6 +75,29 @@
       />
     </template>
 
+    <!-- Bitcoin: dedicated funded dashboard (balance card + price chart + ecosystem
+         widget) — BTC has its own view, not the Cardano holdings table (which would
+         also mis-handle its UTxO shape). Empty BTC wallets fall through to the shared
+         empty hero below via isWalletEmpty. -->
+    <template v-else-if="isBitcoin && !isWalletEmpty">
+      <!-- No fixed-height hero cols here (the Cardano .hero-*-col clamp to 210px and the
+           taller BTC price chart would overflow into the ecosystem row). Let the cards
+           size to content; .hero-row's align-items:stretch keeps the two equal height. -->
+      <v-row no-gutters class="hero-row btc-hero-row">
+        <v-col cols="12" md="5" class="pa-2">
+          <BitcoinBalanceCard />
+        </v-col>
+        <v-col cols="12" md="7" class="pa-2">
+          <BitcoinPriceChart />
+        </v-col>
+      </v-row>
+      <v-row no-gutters>
+        <v-col cols="12" class="pa-2">
+          <BitcoinEcosystemWidget />
+        </v-col>
+      </v-row>
+    </template>
+
     <!-- Empty state for wallets with no tokens. Mainnet Cardano skips this
          page: it gets the market-first empty mode inside the main view below
          (spec: docs/superpowers/specs/2026-07-15-market-first-empty-state-design.md). -->
@@ -400,6 +423,9 @@ import MidnightTransactionsCard from '@/modules/dashboard/components/MidnightTra
 import MidnightDustGauge from '@/modules/dashboard/components/MidnightDustGauge.vue';
 import MidnightProofServerWidget from '@/modules/dashboard/components/MidnightProofServerWidget.vue';
 import MidnightHoldingsTable from '@/modules/dashboard/components/MidnightHoldingsTable.vue';
+import BitcoinBalanceCard from '@/modules/dashboard/components/BitcoinBalanceCard.vue';
+import BitcoinPriceChart from '@/modules/dashboard/components/BitcoinPriceChart.vue';
+import BitcoinEcosystemWidget from '@/modules/dashboard/components/BitcoinEcosystemWidget.vue';
 import DustRegistrationDialog from '@/modules/dashboard/dialogs/DustRegistrationDialog.vue';
 import MarketTokenTable from '@/modules/market/components/MarketTokenTable.vue';
 import MarketStatBar from '@/modules/market/components/MarketStatBar.vue';
@@ -461,7 +487,7 @@ const { selectedPool, txData: delegateTxData, isDelegateDialogOpen, delegateToGe
 
 // ── Store refs ────────────────────────────────────────────────────────────────
 
-const { loggedWallet, transactions, account, collections } = toRefs(walletStore);
+const { loggedWallet, transactions, account, collections, bitcoinBalance } = toRefs(walletStore);
 
 // ── Portfolio Data ────────────────────────────────────────────────────────────
 
@@ -477,6 +503,7 @@ const {
 
 // ── UI State ──────────────────────────────────────────────────────────────────
 
+const isBitcoin = computed(() => loggedWallet.value?.chain === Blockchain.BITCOIN);
 const isMainnetCardano = computed(() =>
   loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET
 );
@@ -572,7 +599,15 @@ watch(searchQuery, (val) => {
 
 // ── Computed: Empty state & staking ───────────────────────────────────────────
 
-const isWalletEmpty = computed(() => !account.value || account.value?.controlled_amount === '0');
+const isWalletEmpty = computed(() => {
+  // Bitcoin balance lives in walletStore.bitcoinBalance (derived from UTxOs), NOT in
+  // account.controlled_amount — so the Cardano-shaped check always reads "empty" for a
+  // funded BTC wallet. Gate BTC on its own balance instead.
+  if (loggedWallet.value?.chain === Blockchain.BITCOIN) {
+    return !(bitcoinBalance.value && BigInt(bitcoinBalance.value.total ?? 0) > 0n);
+  }
+  return !account.value || account.value?.controlled_amount === '0';
+});
 
 // Market-first empty state (mainnet Cardano only). isEmptyMainnet drives the
 // hero swap and matches isWalletEmpty's semantics (a not-yet-synced account

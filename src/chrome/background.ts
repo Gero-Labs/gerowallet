@@ -2830,8 +2830,11 @@ app.addToOptions(MessageTypes.SYNC_BITCOIN, async (request, sendResponse) => {
       return;
     }
 
-    // Sync UTXOs and transactions
-    await walletBg.syncBitcoinWalletComplete();
+    // Route through walletManager so the refresh uses the active sync path: a
+    // gero-sync WS resubscribe (applied under tipMutex) when enabled, or the Esplora
+    // one-shot fetch only in kill-switch mode. Prevents a manual refresh from racing
+    // the WS apply or making a direct 3rd-party call when WS is the source.
+    await walletManager.refreshBitcoin();
 
     sendResponse({
       id: request.id,

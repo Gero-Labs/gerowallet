@@ -899,7 +899,7 @@ import TransactionDetailsCard, {
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import WalletStore from '@/stores/walletStore';
-import { networkStore } from '@/stores/networkStore';
+import { networkStore, isBitcoinTip } from '@/stores/networkStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { WalletType, Network, Blockchain } from '@/models/types';
@@ -1880,8 +1880,10 @@ const ttlDisplay = computed<{ relative: string | null; expired: boolean }>(() =>
   const ttlSlot = signTxSummary.value?.ttlSlot;
   if (ttlSlot == null) return { relative: null, expired: false };
 
-  const tipSlot = networkStore.tip?.slot;
-  const tipTimeMs = networkStore.tip?.time;
+  // TTL projection is Cardano-only (slot-based). A BTC tip has no slot.
+  const tip = networkStore.tip;
+  const tipSlot = tip && !isBitcoinTip(tip) ? tip.slot : undefined;
+  const tipTimeMs = tip?.time;
   if (tipSlot == null || tipTimeMs == null) return { relative: null, expired: false };
 
   const elapsedSeconds = Math.max(0, Math.floor((nowMs.value - Number(tipTimeMs)) / 1000));

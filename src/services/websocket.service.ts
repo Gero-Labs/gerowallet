@@ -60,6 +60,10 @@ class WebSocketService {
   private handlers: WsHandlers = {};
   private stakeAddress: string | null = null;
   private credentials: string[] | null = null;
+  // BTC-only: explicit watched address set sent in place of Cardano `credentials`
+  // (CONTRACT-btc-wire.md). Null for Cardano, so the Cardano SUBSCRIBE payload is
+  // unaffected. See openConnection() for the chain-branched SUBSCRIBE.
+  private addresses: string[] | null = null;
   private chain: string | null = null;
   private network: string | null = null;
   private lastSyncedBlock: number = 0;
@@ -99,6 +103,10 @@ class WebSocketService {
     lastSyncedBlock: number,
     handlers: WsHandlers,
     credentials?: string[],
+    // BTC subscription identity: the derived watched address set. Cardano leaves
+    // this unset and keeps sending `credentials`. Only the BITCOIN branch of the
+    // SUBSCRIBE payload reads it (CONTRACT-btc-wire.md).
+    addresses?: string[],
     /**
      * Midnight-only resume cursor — wallet's highest applied indexer txId.
      * gero-sync seeds its per-address `lastTxIds` from this so the
@@ -143,6 +151,7 @@ class WebSocketService {
     this.lastSyncedBlock = lastSyncedBlock;
     this.handlers = handlers;
     this.credentials = credentials || null;
+    this.addresses = addresses || null;
     this.midnightLastTxId = midnightLastTxId ?? null;
     this.midnightShieldedViewingKey = midnightShieldedViewingKey ?? null;
     this.midnightShieldedLastIndex = midnightShieldedLastIndex ?? null;
@@ -187,24 +196,39 @@ class WebSocketService {
       const shieldedRequested = this.midnightShieldedViewingKey != null
         && this.midnightShieldedViewingKey.length > 0;
       debugLog(`📤 SUBSCRIBE: chain=${this.chain} network=${this.network} address=${this.stakeAddress} lastSyncedBlock=${this.lastSyncedBlock} midnightLastTxId=${liveMidnightCursor} shieldedRequested=${shieldedRequested} midnightShieldedLastIndex=${this.midnightShieldedLastIndex}`);
-      this.send({
-        type: 'SUBSCRIBE',
-        chain: this.chain,
-        network: this.network,
-        address: this.stakeAddress,
-        lastSyncedBlock: this.lastSyncedBlock,
-        credentials: this.credentials,
-        platform: 'extension',
-        // Midnight-only: included regardless of chain so server can ignore on
-        // non-Midnight chains. Null = no persisted cursor (gero-sync full
-        // replay).
-        midnightLastTxId: liveMidnightCursor,
-        // Midnight shielded-only: pair of fields that opt this WS session
-        // into gero-sync's shielded-tx subscription. Both null → unshielded-
-        // only sync (today's default).
-        midnightShieldedViewingKey: this.midnightShieldedViewingKey,
-        midnightShieldedLastIndex: this.midnightShieldedLastIndex,
-      });
+      if (this.chain === 'BITCOIN') {
+        // BTC subscribes with the explicit derived address set + snake_case
+        // progress unit (block height). No `credentials` (no stake fan-out).
+        // Kept in a separate branch so the Cardano payload below is byte-identical.
+        this.send({
+          type: 'SUBSCRIBE',
+          chain: this.chain,
+          network: this.network,
+          address: this.stakeAddress, // anchor = segwit external idx 0
+          addresses: this.addresses,
+          last_synced_block: this.lastSyncedBlock,
+          platform: 'extension',
+        });
+      } else {
+        this.send({
+          type: 'SUBSCRIBE',
+          chain: this.chain,
+          network: this.network,
+          address: this.stakeAddress,
+          lastSyncedBlock: this.lastSyncedBlock,
+          credentials: this.credentials,
+          platform: 'extension',
+          // Midnight-only: included regardless of chain so server can ignore on
+          // non-Midnight chains. Null = no persisted cursor (gero-sync full
+          // replay).
+          midnightLastTxId: liveMidnightCursor,
+          // Midnight shielded-only: pair of fields that opt this WS session
+          // into gero-sync's shielded-tx subscription. Both null → unshielded-
+          // only sync (today's default).
+          midnightShieldedViewingKey: this.midnightShieldedViewingKey,
+          midnightShieldedLastIndex: this.midnightShieldedLastIndex,
+        });
+      }
 
       // Socket is OPEN and SUBSCRIBE has been queued on this ordered stream. Let
       // subscribers (e.g. cross-device DEVICE_REGISTER) send now, after SUBSCRIBE.
@@ -393,11 +417,21 @@ class WebSocketService {
   private startSyncCheck(): void {
     this.stopSyncCheck();
     this.syncCheckTimer = setInterval(() => {
-      this.send({
-        type: 'SYNC_CHECK',
-        address: this.stakeAddress,
-        lastSyncedBlock: this.lastSyncedBlock,
-      });
+      if (this.chain === 'BITCOIN') {
+        // BTC keep-alive carries chain + snake_case height (CONTRACT-btc-wire.md).
+        this.send({
+          type: 'SYNC_CHECK',
+          chain: this.chain,
+          address: this.stakeAddress,
+          last_synced_block: this.lastSyncedBlock,
+        });
+      } else {
+        this.send({
+          type: 'SYNC_CHECK',
+          address: this.stakeAddress,
+          lastSyncedBlock: this.lastSyncedBlock,
+        });
+      }
     }, this.SYNC_CHECK_INTERVAL);
   }
 
@@ -436,15 +470,32 @@ class WebSocketService {
     }
     // Live-read the Midnight cursor for resubscribe too — same reason as the
     // initial connect path: store may have advanced since the last SUBSCRIBE.
+    // Only consumed by the non-BTC send below; the BITCOIN branch returns first.
     let liveMidnightCursor: number | null = this.midnightLastTxId;
     if (this.chain === 'MIDNIGHT') {
       const live = (midnightStore as { lastMidnightTxId?: number | null }).lastMidnightTxId;
       if (typeof live === 'number' && live >= 0) liveMidnightCursor = live;
     }
-    const shieldedRequested = this.midnightShieldedViewingKey != null
-      && this.midnightShieldedViewingKey.length > 0;
-    debugLog(`🔄 Resubscribing with lastSyncedBlock=${lastSyncedBlock} credentials=${this.credentials?.length || 0} shieldedRequested=${shieldedRequested}`);
     this.lastSyncedBlock = lastSyncedBlock;
+
+    if (this.chain === 'BITCOIN') {
+      // BTC re-subscribe must mirror the BITCOIN branch of the initial SUBSCRIBE
+      // (snake_case, address-set, no credentials) — the Cardano payload below
+      // would be rejected. Used by FORCE_RESYNC and (future) gap-limit growth.
+      debugLog(`🔄 Resubscribing BTC lastSyncedBlock=${lastSyncedBlock} addresses=${this.addresses?.length || 0}`);
+      this.send({
+        type: 'SUBSCRIBE',
+        chain: this.chain,
+        network: this.network,
+        address: this.stakeAddress, // anchor = segwit external idx 0
+        addresses: this.addresses,
+        last_synced_block: lastSyncedBlock,
+        platform: 'extension',
+      });
+      return;
+    }
+
+    debugLog(`🔄 Resubscribing with lastSyncedBlock=${lastSyncedBlock} credentials=${this.credentials?.length || 0}`);
     this.send({
       type: 'SUBSCRIBE',
       chain: this.chain,

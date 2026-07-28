@@ -40,9 +40,14 @@ import {
   toStakeAddress,
 } from '@/chrome/serialization';
 import { decryptWithPassword, decrypt } from '@/shared/utils/crypto';
-import { deriveBitcoinAddress } from '@/chains/bitcoin/bitcoinKeyManager';
+import {
+  deriveBitcoinAddress,
+  deriveBitcoinAddressSetFromXpubs,
+  type BitcoinAddressSet,
+  type BitcoinAddressTypeName,
+} from '@/chains/bitcoin/bitcoinKeyManager';
 import WalletStore from '@/stores/walletStore';
-import NetworkStore from '@/stores/networkStore';
+import NetworkStore, { isBitcoinTip } from '@/stores/networkStore';
 import {
   analyzeTransactionForSignatures,
   findCollectionDescription,
@@ -241,7 +246,8 @@ export class WalletBg {
   }
 
   public async getEpochProtocolIfNotExists(epoch: number) {
-    if (NetworkStore.state.tip?.epoch == epoch) {
+    const tip = NetworkStore.state.tip;
+    if (tip && !isBitcoinTip(tip) && tip.epoch == epoch) {
       return null
     }
     return epoch;
@@ -1089,6 +1095,26 @@ export class WalletBg {
    * Fetch Bitcoin UTXOs from the Bitcoin API
    * @returns Promise<IUnifiedUtxo[]> Array of unified UTXOs
    */
+  /**
+   * Build the gero-sync subscription identity for this Bitcoin wallet
+   * (CONTRACT-btc-wire.md). Returns the anchor (segwit external idx 0), the
+   * union of watched addresses, and a reverse derivation map.
+   *
+   * Uses the stored account xpub (`this.publicKey`, of type `this.addressType`),
+   * which is the identity available in the background without decrypting the
+   * mnemonic. The full three-type union (legacy + segwit + taproot) requires the
+   * other purposes' xpubs — see `deriveBitcoinAddressSet(mnemonic, ...)` in
+   * bitcoinKeyManager for the mnemonic-derived, contract-complete union; wiring
+   * that at unlock time is a later phase.
+   */
+  deriveBitcoinAddressSet(): BitcoinAddressSet {
+    const addressType = (this.addressType || 'segwit') as BitcoinAddressTypeName;
+    return deriveBitcoinAddressSetFromXpubs(
+      { [addressType]: this.publicKey },
+      this.network
+    );
+  }
+
   async fetchBitcoinUtxos(): Promise<any[]> {
     const { BitcoinApi } = await import('@/api/bitcoin-api');
     const { parseBitcoinUtxos } = await import('@/chains/bitcoin/bitcoinUtxoManager');

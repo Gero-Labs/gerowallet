@@ -280,11 +280,21 @@ export class WalletManager {
         LoadingState.setText('Initializing wallet...');
 
         // Check if this is a first-time restore (no cached data).
-        // Bitcoin and Midnight don't use the Cardano sync table.
-        const isCardanoChain =
-          walletBg.chain !== Blockchain.BITCOIN &&
-          walletBg.chain !== Blockchain.MIDNIGHT;
-        const lastSyncInfo = isCardanoChain ? await walletBg.getLastSyncInfo() : {};
+        // - Cardano uses its own sync table (getLastSyncInfo).
+        // - Midnight doesn't use the Cardano sync table → skip.
+        // - BTC needs it only when syncing via gero-sync (Phase-5 default):
+        //   connect() returns before data arrives, so we must block login on the
+        //   WS catch-up like Cardano — otherwise the dashboard flashes a zero
+        //   balance until the async onSync lands. BTC on the poller fallback
+        //   (kill-switch off) seeds synchronously in initializeWallet and has no
+        //   WS catch-up to await, so keep it out of the waitForSync path.
+        const btcWsForRestore =
+          walletBg.chain === Blockchain.BITCOIN && (await this.isBitcoinGeroSyncEnabled());
+        const useSyncInfo =
+          (walletBg.chain !== Blockchain.BITCOIN &&
+            walletBg.chain !== Blockchain.MIDNIGHT) ||
+          btcWsForRestore;
+        const lastSyncInfo = useSyncInfo ? await walletBg.getLastSyncInfo() : {};
         const isFirstRestore = !lastSyncInfo;
 
         // If first restore, prepare sync promise BEFORE connecting WebSocket (avoids race)
@@ -362,18 +372,25 @@ export class WalletManager {
 
     LoadingState.setText('Loading blockchain data...');
 
+    // Phase-5 cutover: BTC syncs via gero-sync WS by default. The Esplora poller is
+    // the kill-switch fallback (flag explicitly false). Resolve once and reuse for
+    // init seeding, the WS connect, and the periodic-sync guard below.
+    const btcWsEnabled =
+      walletBg.chain === Blockchain.BITCOIN && (await this.isBitcoinGeroSyncEnabled());
+
     // Chain-specific initialization
     if (walletBg.chain === Blockchain.BITCOIN) {
       // Bitcoin wallet initialization
-      debugLog('🔶 Initializing Bitcoin wallet');
+      debugLog(`🔶 Initializing Bitcoin wallet (gero-sync WS: ${btcWsEnabled ? 'on' : 'off — poller fallback'})`);
       LoadingState.setText('Loading Bitcoin wallet...');
 
-      // Fetch Bitcoin UTXOs and update store
-      await walletBg.syncBitcoinWallet();
-
-      // Fetch Bitcoin transaction history
-      LoadingState.setText('Loading Bitcoin transactions...');
-      await walletBg.syncBitcoinTransactions();
+      if (!btcWsEnabled) {
+        // Fallback only: seed the store from the Esplora poller. When WS is enabled
+        // (default) the gero-sync catch-up loads UTxOs/txs after connect() below.
+        await walletBg.syncBitcoinWallet();
+        LoadingState.setText('Loading Bitcoin transactions...');
+        await walletBg.syncBitcoinTransactions();
+      }
 
       // Load wallet-specific data
       promises.push(
@@ -609,8 +626,81 @@ export class WalletManager {
           debugLog('Force resync complete');
         },
       }, credentials);
+    } else if (btcWsEnabled) {
+      // ── Bitcoin via gero-sync (Phase 5: default path) ────────────────────────
+      // BTC rides the SAME WS state machine Cardano uses, subscribing with the
+      // derived address set instead of a stake address. Catch-up loads UTxOs/txs
+      // (applyBitcoinSync), reorgs are handled by handleBitcoinRollback, and the
+      // Esplora poller does NOT run in this mode. Flip the kill-switch
+      // (isBitcoinGeroSyncEnabled=false) to fall back to the poller.
+      const btcAddressSet = walletBg.deriveBitcoinAddressSet();
+      let btcLastSyncedHeight = 0;
+      try {
+        const lastSyncInfo = await walletBg.getLastSyncInfo();
+        if (lastSyncInfo && !Array.isArray(lastSyncInfo)) {
+          btcLastSyncedHeight = (lastSyncInfo as { height?: number }).height || 0;
+        }
+      } catch {
+        btcLastSyncedHeight = 0;
+      }
+      debugLog(
+        `🔶 [BTC gero-sync] connecting dual-run: anchor=${btcAddressSet.anchor} ` +
+        `addresses=${btcAddressSet.addresses.length} lastSyncedHeight=${btcLastSyncedHeight}`
+      );
+      webSocketService.connect(
+        chain,
+        network,
+        btcAddressSet.anchor,
+        btcLastSyncedHeight,
+        {
+          onSync: async (data: WsSyncMessage) => {
+            // Phase 3: apply transactions/utxos/tip to WalletStore via the BTC
+            // analog of setSync. Serialized under tipMutex (same as Cardano) so
+            // concurrent SYNC/SYNC_CHECK_OK applies don't race on setUtxos.
+            // websocket.service already re-tags CATCH_UP_COMPLETE / SYNC_CHECK_OK
+            // to type:'SYNC' and combines catch-up batches upstream.
+            await this.tipMutex.runExclusive(async () => {
+              await walletBg.syncService.applyBitcoinSync(data);
+            });
+          },
+          onRollback: async (data: WsSyncMessage) => {
+            // Phase 4: height-based BTC rollback. Serialized under tipMutex so it can't
+            // race a concurrent SYNC apply. `rollback_to_height` is snake_case (BTC-specific).
+            debugLog('🔶 [BTC gero-sync] ROLLBACK received:', { height: data['rollback_to_height'] });
+            if (data['rollback_to_height'] !== undefined) {
+              await this.tipMutex.runExclusive(async () => {
+                await walletBg.syncService.handleBitcoinRollback(data['rollback_to_height'] as number);
+              });
+            }
+          },
+          onForceResync: async () => {
+            // Phase 4: deep reorg (beyond the server's window). Clear in-memory state,
+            // reset the checkpoint to 0, and resubscribe from scratch (BTC branch of
+            // resubscribe re-sends the address set).
+            debugLog('🔶 [BTC gero-sync] FORCE_RESYNC — clearing and resubscribing');
+            webSocketService.pauseSyncCheck();
+            try {
+              await walletBg.syncService.handleBitcoinForceResync();
+              const syncPromise = webSocketService.waitForSync();
+              webSocketService.resubscribe(0);
+              await syncPromise;
+            } finally {
+              webSocketService.resumeSyncCheck();
+            }
+          },
+        },
+        undefined, // no Cardano credentials for BTC
+        btcAddressSet.addresses
+      );
     } else {
-      debugLog(`Skipping Cardano gero-sync WebSocket for ${walletBg.chain} wallet`);
+      // Reached by Midnight (its own sync path) and by BTC with the gero-sync
+      // kill-switch off (the Esplora poller — seeded above + periodic sync below —
+      // is the sync source). Neither uses the Cardano gero-sync WS.
+      if (walletBg.chain === Blockchain.BITCOIN) {
+        debugLog('🔶 [BTC] gero-sync kill-switch off — using Esplora poller');
+      } else {
+        debugLog(`Skipping Cardano gero-sync WebSocket for ${walletBg.chain} wallet`);
+      }
     }
 
     // Wait for all initialization promises to complete
@@ -619,9 +709,10 @@ export class WalletManager {
 
     LoadingState.setText('Wallet initialization complete');
 
-    // Start periodic sync for Bitcoin wallets
-    if (walletBg.chain === Blockchain.BITCOIN) {
-      debugLog('🔄 Starting Bitcoin periodic sync...');
+    // Start the Esplora periodic poll ONLY in kill-switch mode. With WS enabled
+    // (default) gero-sync pushes updates, so the poller stays off.
+    if (walletBg.chain === Blockchain.BITCOIN && !btcWsEnabled) {
+      debugLog('🔄 Starting Bitcoin periodic sync (poller fallback)...');
       walletBg.startBitcoinPeriodicSync();
     }
 
@@ -1545,6 +1636,66 @@ export class WalletManager {
       return flags['isCrossDeviceSigningEnabled'] === true;
     } catch {
       return false;
+    }
+  }
+
+  /**
+   * Read isBitcoinGeroSyncEnabled from chrome.storage.local (same mirror path as
+   * isCrossDeviceSigningEnabled). Phase-5 cutover: BTC uses the gero-sync WS path
+   * by DEFAULT — this returns true unless the flag is explicitly set to false
+   * (the remote kill-switch that falls back to the Esplora poller). Also returns
+   * true when storage is empty/unreadable, so a fresh wallet uses WS immediately.
+   */
+  private async isBitcoinGeroSyncEnabled(): Promise<boolean> {
+    try {
+      if (typeof chrome === 'undefined' || !chrome.storage?.local) {
+        return true;
+      }
+      const flags = await new Promise<Record<string, unknown>>((resolve) => {
+        chrome.storage.local.get('featureFlags', (result) => {
+          resolve((result?.['featureFlags'] as Record<string, unknown>) ?? {});
+        });
+      });
+      return flags['isBitcoinGeroSyncEnabled'] !== false; // default ON; only explicit false = poller
+    } catch {
+      return true;
+    }
+  }
+
+  /**
+   * Manual Bitcoin refresh (pull-to-refresh). Routes through the SAME path the wallet
+   * is syncing on, so a refresh can't race the WS apply or leak a direct 3rd-party call:
+   * - WS on (default): resubscribe from the current height. The server replies with a
+   *   catch-up delta + current UTxOs/account/tip, applied via onSync under tipMutex.
+   * - Kill-switch off: the Esplora one-shot fetch (poller fallback).
+   */
+  async refreshBitcoin(): Promise<void> {
+    if (!this.walletBg || this.walletBg.chain !== Blockchain.BITCOIN) {
+      return;
+    }
+    if (await this.isBitcoinGeroSyncEnabled()) {
+      let height = 0;
+      try {
+        const info = await this.walletBg.getLastSyncInfo();
+        if (info && typeof (info as { height?: number }).height === 'number') {
+          height = (info as { height: number }).height;
+        }
+      } catch {
+        height = 0;
+      }
+      // Await the catch-up the resubscribe triggers (mirrors the onForceResync
+      // handlers) so the caller's refresh spinner reflects real completion and a
+      // server error/timeout surfaces. waitForSync has its own safety timeout.
+      webSocketService.pauseSyncCheck();
+      try {
+        const syncPromise = webSocketService.waitForSync();
+        webSocketService.resubscribe(height);
+        await syncPromise;
+      } finally {
+        webSocketService.resumeSyncCheck();
+      }
+    } else {
+      await this.walletBg.syncBitcoinWalletComplete();
     }
   }
 

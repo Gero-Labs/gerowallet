@@ -14,6 +14,10 @@ export interface FeatureFlags {
   isNexusVoteDelegationEnabled: boolean;
   isCrossDeviceSigningEnabled: boolean;
   isCopilotEnabled: boolean;
+  // Routes Bitcoin sync through gero-sync (WS push). Default ON as of the Phase-5
+  // cutover; acts as a remote KILL-SWITCH — set false to fall back to the Esplora
+  // poller if the WS path misbehaves in prod. See walletManager.isBitcoinGeroSyncEnabled.
+  isBitcoinGeroSyncEnabled: boolean;
   isMidnightConvertEnabled: boolean;
   isGoogleWalletEnabled: boolean;
   /**
@@ -50,6 +54,7 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
     isNexusVoteDelegationEnabled: false,
     isCrossDeviceSigningEnabled: false,
     isCopilotEnabled: false,
+    isBitcoinGeroSyncEnabled: true, // Phase-5 cutover: WS default; kill-switch to false = poller
     isMidnightConvertEnabled: false,
     isGoogleWalletEnabled: false,
     collateralTrustedDapps: [],
@@ -113,6 +118,7 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isNexusVoteDelegationEnabled = featureFlagService.getFlag('isNexusVoteDelegationEnabled', false);
     featureFlagsState.flags.isCrossDeviceSigningEnabled = featureFlagService.getFlag('isCrossDeviceSigningEnabled', false);
     featureFlagsState.flags.isCopilotEnabled = featureFlagService.getFlag('isCopilotEnabled', false);
+    featureFlagsState.flags.isBitcoinGeroSyncEnabled = featureFlagService.getFlag('isBitcoinGeroSyncEnabled', true);
     featureFlagsState.flags.isMidnightConvertEnabled = featureFlagService.getFlag('isMidnightConvertEnabled', false);
     // MPC "Sign in with Google" wallet — ships DARK (default false) until the
     // recovery/sign flows have been through a security audit (see Plan D).
@@ -162,6 +168,11 @@ export const featureFlagsStore = {
     });
     featureFlagService.onFlagChange('isCopilotEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isCopilotEnabled', newValue);
+    });
+    featureFlagService.onFlagChange('isBitcoinGeroSyncEnabled', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'isBitcoinGeroSyncEnabled', newValue);
+      // Mirror the live flip so the background picks it up on next login.
+      persistFlagsForBackground();
     });
     featureFlagService.onFlagChange('isMidnightConvertEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isMidnightConvertEnabled', newValue);
@@ -315,6 +326,7 @@ export const featureFlagsStore = {
       isNexusVoteDelegationEnabled: false,
       isCrossDeviceSigningEnabled: false,
       isCopilotEnabled: false,
+      isBitcoinGeroSyncEnabled: true, // matches the documented default (WS on); kill-switch is explicit false
       isMidnightConvertEnabled: false,
       isGoogleWalletEnabled: false,
       collateralTrustedDapps: [],

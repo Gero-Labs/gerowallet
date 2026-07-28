@@ -87,7 +87,7 @@
                     <template v-slot:activator="{ on, attrs }">
                       <div
                         style="display: flex; align-items: center; gap: 4px"
-                        :style="{ minWidth: (compactNav || isMidnight) ? '20px' : '60px' }"
+                        :style="{ minWidth: (compactNav || isMidnight || isBitcoin) ? '20px' : '60px' }"
                         v-bind="attrs"
                         v-on="on"
                       >
@@ -101,10 +101,10 @@
 
                         <!-- Small progress bar (hidden in compact mode).
                              Cardano: epoch-slot percentage as a definite value.
-                             Midnight: no epoch concept, so no bar at all —
+                             Midnight/Bitcoin: no epoch concept, so no bar at all —
                              the connection icon already carries the status. -->
                         <v-progress-linear
-                          v-if="!compactNav && !isMidnight"
+                          v-if="!compactNav && !isMidnight && !isBitcoin"
                           class="epoch-progress-liquid-glass"
                           height="8"
                           :buffer-value="isMidnight ? 100 : epochSlotPercentage"
@@ -120,10 +120,14 @@
                     </template>
 
                     <div class="network-tooltip-content">
-                      <div><strong>{{ t('navigation.network') }}:</strong> {{ loggedWallet?.network }}</div>
+                      <div><strong>{{ t('navigation.network') }}:</strong> {{ networkDisplay }}</div>
                       <div><strong>{{ t('navigation.lastSync') }}:</strong> {{ lastSyncTimestamp }}</div>
                       <template v-if="isMidnight">
                         <div><strong>Block:</strong> {{ midnightTip?.height || 'N/A' }}</div>
+                      </template>
+                      <template v-else-if="isBitcoin">
+                        <!-- Bitcoin has no epoch — show block height instead. -->
+                        <div><strong>Block:</strong> {{ btcTipHeight ?? 'N/A' }}</div>
                       </template>
                       <template v-else>
                         <div><strong>{{ t('navigation.epoch') }}:</strong> {{ tip?.epoch || 'N/A' }}</div>
@@ -297,7 +301,7 @@ import { walletStore } from '@/stores/walletStore';
 import WalletStore from '@/stores/walletStore';
 import { poolOperatorStore } from '@/stores/poolOperatorStore';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
-import { networkStore } from '@/stores/networkStore';
+import { networkStore, isBitcoinTip } from '@/stores/networkStore';
 import { midnightStore } from '@/stores/midnightStore';
 import { setConfiguration } from '@/db/gero-db';
 import { geroStore } from '@/stores/geroStore';
@@ -311,7 +315,7 @@ const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true');
 const vmProxy = getCurrentInstance()!.proxy;
 const currentPage = computed(() => vmProxy.$route);
 const { isSyncing, connected, connecting } = toRefs(loadingState);
-const { loggedWallet, account, config } = toRefs(walletStore);
+const { loggedWallet, account, config, bitcoinBalance } = toRefs(walletStore);
 const { config: geroConfig } = toRefs(geroStore);
 const { tip } = toRefs(networkStore);
 // Midnight uses its own store — `networkStore.tip` is Cardano-shaped (epoch/slot)
@@ -320,6 +324,19 @@ const { tip: midnightTip, networkStatus: midnightNetworkStatus } = toRefs(midnig
 const { musicPlaylist, context } = toRefs(musicStore);
 
 const isMidnight = computed(() => loggedWallet.value?.chain === Blockchain.MIDNIGHT);
+const isBitcoin = computed(() => loggedWallet.value?.chain === Blockchain.BITCOIN);
+// Bitcoin testnet is specifically testnet4 (backend electrs-testnet4) — show the
+// variant so it matches the onboarding pill / balance card, not a bare "Testnet".
+const networkDisplay = computed(() => {
+  const n = loggedWallet.value?.network;
+  return isBitcoin.value && n === 'Testnet' ? 'Testnet4' : n;
+});
+// Height off the height-only BTC tip (no epoch/slot). undefined until the first
+// tip arrives from gero-sync.
+const btcTipHeight = computed(() => {
+  const t = tip.value;
+  return t && isBitcoinTip(t) ? t.height : undefined;
+});
 
 // Empty-state home (any chain but Midnight, zero or not-yet-synced balance):
 // hide the header quick-action buttons — Send/Swap/Perps are dead ends
@@ -327,10 +344,16 @@ const isMidnight = computed(() => loggedWallet.value?.chain === Blockchain.MIDNI
 // Mirrors PortfolioPage's isWalletEmpty semantics; Midnight is excluded
 // because its home never renders the empty state (and its balance does not
 // live in account.controlled_amount).
-const emptyStateShowing = computed(() =>
-  currentPage.value?.path === '/' &&
-  loggedWallet.value?.chain !== Blockchain.MIDNIGHT &&
-  (!account.value || account.value?.controlled_amount === '0'));
+const emptyStateShowing = computed(() => {
+  if (currentPage.value?.path !== '/' || loggedWallet.value?.chain === Blockchain.MIDNIGHT) {
+    return false;
+  }
+  // BTC balance lives in bitcoinBalance (UTxO-derived), not account.controlled_amount.
+  if (loggedWallet.value?.chain === Blockchain.BITCOIN) {
+    return !(bitcoinBalance.value && BigInt(bitcoinBalance.value.total ?? 0) > 0n);
+  }
+  return !account.value || account.value?.controlled_amount === '0';
+});
 
 // Global search
 const { open: openGlobalSearch, handleKeydown: handleSearchKeydown } = useGlobalSearch();
@@ -401,7 +424,9 @@ const kesWarningVisible = computed(() => {
 const epochSlotPercentage = computed(() => {
   // Midnight has no epoch concept — show 0 (the progress bar will render flat).
   if (isMidnight.value) return 0;
-  return tip.value ? (tip.value.epoch_slot / 432000) * 100 : 0;
+  // epoch_slot is Cardano-only; a height-only BTC tip has no epoch progress bar.
+  const t = tip.value;
+  return t && !isBitcoinTip(t) ? (t.epoch_slot / 432000) * 100 : 0;
 });
 
 // Format last sync as timestamp (e.g., "2:45:32 PM")

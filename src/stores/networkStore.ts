@@ -5,14 +5,41 @@ import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 import { debugLog } from '@/utils/debug';
 
+/**
+ * Cardano tip: the SDK tip enriched with the epoch/time/epoch_slot fields the
+ * sync layer attaches. Shape is unchanged from before the BTC union was added.
+ */
+export type CardanoTip = Cardano.Tip & {
+  epoch: number;
+  time: number;
+  epoch_slot: number;
+};
+
+/**
+ * Bitcoin tip: height-only (no slot/epoch/epoch_slot). Matches the `BtcBlock`
+ * wire shape from CONTRACT-btc-wire.md, plus a `chain` discriminant so the two
+ * arms of the union can be told apart. `confirmations` is client-derived.
+ */
+export interface BitcoinTip {
+  chain: 'BITCOIN';
+  height: number;
+  hash: string;
+  time: number;
+  confirmations?: number;
+}
+
+/**
+ * Narrows a stored tip to the Bitcoin arm. Cardano tips have no `chain` field,
+ * so the discriminant unambiguously identifies a height-only BTC tip.
+ */
+export function isBitcoinTip(tip: NetworkStore['tip']): tip is BitcoinTip {
+  return !!tip && 'chain' in tip && tip.chain === 'BITCOIN';
+}
+
 export interface NetworkStore {
   assets: any;
   epochParams: Cardano.ProtocolParameters;
-  tip: Cardano.Tip & {
-    epoch: number;
-    time: number;
-    epoch_slot: number;
-  };
+  tip: CardanoTip | BitcoinTip;
   price: any;
   genesis: any;
 }
@@ -121,10 +148,26 @@ export default {
     broadcastFromBackground({ epochParams });
   },
 
-  setTip(tip: Cardano.Tip & { epoch: number; time: number; epoch_slot: number;}) {
+  setTip(tip: CardanoTip | BitcoinTip) {
+    // Bitcoin path (Phase 3): height-only monotonic guard, kept in a SEPARATE
+    // branch so the Cardano path below stays byte-identical. A BTC tip never
+    // overwrites a newer BTC tip (by block height); the two chains never share a
+    // wallet, so a BTC tip is only ever compared against another BTC tip.
+    if (isBitcoinTip(tip)) {
+      const current = networkStore.tip;
+      if (current && isBitcoinTip(current) && tip.height <= current.height) {
+        debugLog(`⚠️ Ignoring older/duplicate BTC tip - current: ${current.height}, new: ${tip.height}`);
+        return;
+      }
+      debugLog(`✅ Setting new BTC tip - height: ${tip.height}`);
+      networkStore.tip = tip;
+      broadcastFromBackground({ tip });
+      return;
+    }
+
     // RACE CONDITION FIX: Only update tip if it's newer than the current one
     // Prevents old Ably messages from overwriting fresh data
-    if (networkStore.tip) {
+    if (networkStore.tip && !isBitcoinTip(networkStore.tip)) {
       // Compare by block height (blockNo) - higher is newer
       if (tip.blockNo <= networkStore.tip.blockNo) {
         debugLog(`⚠️ Ignoring older/duplicate tip - current: ${networkStore.tip.blockNo}, new: ${tip.blockNo}`);
@@ -181,19 +224,27 @@ export default {
     return networkStore.tip !== null && networkStore.epochParams !== null;
   },
 
-  // Utility method to get current epoch
+  // Utility method to get current epoch (Cardano-only; null for a BTC tip)
   getCurrentEpoch(): number | null {
-    return networkStore.tip?.epoch || null;
+    const tip = networkStore.tip;
+    if (!tip || isBitcoinTip(tip)) return null;
+    return tip.epoch || null;
   },
 
-  // Utility method to get current slot
+  // Utility method to get current slot (Cardano-only; null for a BTC tip)
   getCurrentSlot(): number | null {
-    return networkStore.tip?.slot || null;
+    const tip = networkStore.tip;
+    if (!tip || isBitcoinTip(tip)) return null;
+    return tip.slot || null;
   },
 
-  // Utility method to get current block height
+  // Utility method to get current block height (chain-neutral: `height` for a BTC
+  // tip, `blockNo` for a Cardano tip).
   getCurrentBlockHeight(): number | null {
-    return networkStore.tip?.blockNo || null;
+    const tip = networkStore.tip;
+    if (!tip) return null;
+    if (isBitcoinTip(tip)) return tip.height ?? null;
+    return tip.blockNo || null;
   },
 
   // Utility method to get ADA price in USD
