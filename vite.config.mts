@@ -95,24 +95,6 @@ export const sharedConfig: UserConfig = {
     'APP_VERSION': JSON.stringify(packageJson.version),
     'process.env.NODE_ENV': JSON.stringify(isDev ? 'development' : 'production'),
   },
-  css: {
-    preprocessorOptions: {
-      // Vuetify 2.7's bundled .sass/.scss use legacy Sass syntax (global
-      // map-get, @import, / division) that Dart Sass now deprecates, flooding
-      // the dev console with thousands of warnings from node_modules. quietDeps
-      // silences deprecation warnings originating in dependencies (ours still
-      // surface); silenceDeprecations covers the remaining categories + the
-      // legacy-JS-API notice on Sass versions that honor it.
-      scss: {
-        quietDeps: true,
-        silenceDeprecations: ['legacy-js-api', 'import', 'global-builtin', 'slash-div', 'if-function', 'color-functions'],
-      },
-      sass: {
-        quietDeps: true,
-        silenceDeprecations: ['legacy-js-api', 'import', 'global-builtin', 'slash-div', 'if-function', 'color-functions'],
-      },
-    },
-  },
   plugins: [
     // Dev only: serve the vendored gero-swap widget from src/vendor at the same
     // /vendor/gero-swap/ path the built extension uses. Production wires these up
