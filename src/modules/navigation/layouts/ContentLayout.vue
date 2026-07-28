@@ -101,10 +101,10 @@
 
                         <!-- Small progress bar (hidden in compact mode).
                              Cardano: epoch-slot percentage as a definite value.
-                             Midnight: no epoch concept, so no bar at all —
+                             Midnight/Bitcoin: no epoch concept, so no bar at all —
                              the connection icon already carries the status. -->
                         <v-progress-linear
-                          v-if="!compactNav && !isMidnight"
+                          v-if="!compactNav && !isMidnight && !isBitcoin"
                           class="epoch-progress-liquid-glass"
                           height="8"
                           :buffer-value="isMidnight ? 100 : epochSlotPercentage"
@@ -124,6 +124,10 @@
                       <div><strong>{{ t('navigation.lastSync') }}:</strong> {{ lastSyncTimestamp }}</div>
                       <template v-if="isMidnight">
                         <div><strong>Block:</strong> {{ midnightTip?.height || 'N/A' }}</div>
+                      </template>
+                      <template v-else-if="isBitcoin">
+                        <!-- Bitcoin has no epoch — show block height instead. -->
+                        <div><strong>Block:</strong> {{ btcTipHeight ?? 'N/A' }}</div>
                       </template>
                       <template v-else>
                         <div><strong>{{ t('navigation.epoch') }}:</strong> {{ tip?.epoch || 'N/A' }}</div>
@@ -320,6 +324,13 @@ const { tip: midnightTip, networkStatus: midnightNetworkStatus } = toRefs(midnig
 const { musicPlaylist, context } = toRefs(musicStore);
 
 const isMidnight = computed(() => loggedWallet.value?.chain === Blockchain.MIDNIGHT);
+const isBitcoin = computed(() => loggedWallet.value?.chain === Blockchain.BITCOIN);
+// Height off the height-only BTC tip (no epoch/slot). undefined until the first
+// tip arrives from gero-sync.
+const btcTipHeight = computed(() => {
+  const t = tip.value;
+  return t && isBitcoinTip(t) ? t.height : undefined;
+});
 
 // Empty-state home (any chain but Midnight, zero or not-yet-synced balance):
 // hide the header quick-action buttons — Send/Swap/Perps are dead ends
