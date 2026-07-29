@@ -1,6 +1,7 @@
-// DEV ONLY: the agent key (AGENT_TOKEN) is exposed to the client bundle via vite envPrefix
-// (['VITE_','AGENT_'] in vite.config.mts) so the dock can call Fluxpoint directly in dev.
-// Production must use the Nexus proxy and must NOT expose this key to the client.
+// The Copilot dock's direct-to-Fluxpoint path is DEV ONLY and gated behind
+// `import.meta.env.DEV` (see FLUXPOINT_API_KEY below), so it is dead-code-
+// eliminated from production bundles — no Fluxpoint key is ever shipped.
+// Production uses the Nexus proxy. In dev, set VITE_FLUXPOINT_API_KEY.
 import axios, { type AxiosInstance } from 'axios';
 
 const NEXUS_BASE: string = import.meta.env['VITE_NEXUS_URL'] || '';
@@ -11,12 +12,16 @@ export const agentAxiosInstance: AxiosInstance = axios.create({
   headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
 });
 
-// DEV ONLY: direct-to-Fluxpoint fallback. Active only when the agent key is present.
-// Reads AGENT_TOKEN (the single source in .env.development, exposed via vite envPrefix);
-// falls back to VITE_FLUXPOINT_API_KEY if that is set instead. Uses a SEPARATE axios
-// instance so the api-key header is never sent to Nexus.
-const FLUXPOINT_API_KEY: string =
-  import.meta.env['AGENT_TOKEN'] || import.meta.env['VITE_FLUXPOINT_API_KEY'] || '';
+// DEV ONLY: direct-to-Fluxpoint fallback. Gated on `import.meta.env.DEV`, which
+// Vite statically replaces — in a production build the condition is `false`, so
+// the key resolves to '' and the whole direct-Fluxpoint branch below is
+// dead-code-eliminated. This guarantees no Fluxpoint key is ever baked into a
+// shipped bundle; production always uses the Nexus proxy. In dev, set
+// VITE_FLUXPOINT_API_KEY in .env.development. Uses a SEPARATE axios instance so
+// the api-key header is never sent to Nexus.
+const FLUXPOINT_API_KEY: string = import.meta.env.DEV
+  ? (import.meta.env['VITE_FLUXPOINT_API_KEY'] || '')
+  : '';
 const FLUXPOINT_BASE: string =
   import.meta.env['VITE_FLUXPOINT_BASE_URL'] || 'https://api-v3.fluxpointstudios.com';
 
