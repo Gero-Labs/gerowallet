@@ -177,7 +177,7 @@ Business logic is centralized in **services** (`src/services/`):
 |---------|---------|
 | `walletManager.service.ts` | Wallet lifecycle (create, import, login, switch) |
 | `sync.service.ts` | Blockchain synchronization (UTXOs, transactions) |
-| `ably.service.ts` | Real-time WebSocket communication (Gero Sync push) |
+| `websocket.service.ts` | Real-time WebSocket communication (Gero Sync push) |
 | `krakenWebSocket.service.ts` | Real-time price feeds (via Nexus) |
 | `storeMessaging.service.ts` | Cross-context state synchronization |
 | `storageObserver.service.ts` | Chrome storage change observer |
@@ -537,7 +537,7 @@ if (risk.level === 'high') showWarning();
 2. **Validate all inputs** (addresses, amounts, transaction data)
 3. **Use established crypto patterns** (don't roll your own)
 4. **Handle errors gracefully** without exposing sensitive info
-5. **Regular security audits** (see `docs/SECURITY_AUDIT.md`)
+5. **Regular security audits**
 
 ---
 
@@ -566,7 +566,7 @@ Blockchain Events
            ▼
 ┌───────────────────────┐
 │  Background Worker    │
-│  (ably.service.ts)    │
+│ (websocket.service.ts)│
 └──────────┬────────────┘
            │
            ▼
@@ -993,7 +993,7 @@ For detailed implementation guides, see:
 - **Getting Started**: `docs/GETTING_STARTED.md`
 - **Development Guide**: `CLAUDE.md`
 - **Contributing**: `CONTRIBUTING.md`
-- **Security**: `docs/SECURITY_AUDIT.md`
+- **Security**: see the Security section of [README](README.md)
 
 ---
 

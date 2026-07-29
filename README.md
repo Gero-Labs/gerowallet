@@ -107,8 +107,8 @@ VITE_BACKEND_URL=http://localhost:8081
 # Point this at <gero-backend>/api/nexus, NOT at Nexus directly.
 VITE_NEXUS_URL=http://localhost:8081/api/nexus
 
-# Gero Sync WebSocket (real-time blockchain updates)
-VITE_SYNC_WS_URL=wss://sync.gerowallet.io
+# Gero Sync WebSocket (real-time blockchain updates, served by the backend)
+VITE_SYNC_WS_URL=ws://localhost:8081/sync
 ```
 
 See [`.env.example`](.env.example) for the full list of optional variables
