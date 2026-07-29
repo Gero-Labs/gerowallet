@@ -5,13 +5,29 @@ import { chacha20poly1305 } from '@noble/ciphers/chacha.js';
 import { pbkdf2 } from '@noble/hashes/pbkdf2.js';
 import { sha512 } from '@noble/hashes/sha2.js';
 import { Bip32PrivateKey } from '@cardano-sdk/crypto';
+import { encryptSecret, decryptSecret, isLegacySecret } from './passwordSecret';
 import i18n from '@/plugins/i18n';
 
+/**
+ * Encrypt a small UTF-8 secret (mnemonic, 2FA data, MPC password device share)
+ * under a password. Now delegates to the strong Argon2id/XChaCha20 cipher
+ * (`gpw1.` format); it no longer uses the weak crypto-ts / CryptoJS MD5-1-iter
+ * KDF. Callers are unchanged. NOTE: not for CSL-format root-key blobs — those
+ * use `encryptWithPassword` / `encryptPrivateKey`.
+ */
 export function encrypt(text: string, password: string): string {
-  return CryptoTS.AES.encrypt(text, password).toString();
+  return encryptSecret(text, password);
 }
 
+/**
+ * Decrypt a secret produced by `encrypt`. Transparently reads both the new
+ * Argon2id format and legacy crypto-ts blobs (backward compatible), so existing
+ * wallets keep working. The legacy branch is byte-for-byte the old behavior.
+ */
 export function decrypt(ciphertext: string, password: string): string {
+  if (!isLegacySecret(ciphertext)) {
+    return decryptSecret(ciphertext, password);
+  }
   const bytes = CryptoTS.AES.decrypt(ciphertext, password);
   return bytes.toString(CryptoTS.enc.Utf8);
 }
