@@ -1,0 +1,76 @@
+name: "🐛 Bug report"
+description: Report a problem with Gero Wallet
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report.
+
+        ⚠️ **Never share your seed phrase, private keys, spending password, or any recovery data.** No screenshot, log, or reproduction step should include them. A member of the Gero team will never ask for them.
+
+        🔒 **Found a security vulnerability?** Do **not** open a public issue — follow our [Security Policy](../blob/development/SECURITY.md) and report it privately.
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Pre-flight
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: This report contains no seed phrase, private key, or password.
+          required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug and what you expected instead.
+      placeholder: When I …, I expected …, but instead …
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to …
+        2. Click …
+        3. See error
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Extension version
+      placeholder: e.g. 2.7.0 (see the extension footer or chrome://extensions)
+    validations:
+      required: true
+  - type: dropdown
+    id: browser
+    attributes:
+      label: Browser
+      options:
+        - Chrome
+        - Brave
+        - Edge
+        - Firefox
+        - Other (note it below)
+    validations:
+      required: true
+  - type: dropdown
+    id: network
+    attributes:
+      label: Network
+      options:
+        - Mainnet
+        - Preprod
+        - Preview
+        - Other / multi-chain
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Logs / screenshots / extra context
+      description: Console output or screenshots help — remember to redact any sensitive data first.
+    validations:
+      required: false
