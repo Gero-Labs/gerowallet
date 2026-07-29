@@ -85,8 +85,8 @@ export async function verifyDeviceRegisterProof(
     if (!x || x.length !== 32) return false;
 
     // 2. Signer address from the protected header's "address" label. This is the
-    //    standard CIP-30 signData layout that every Cardano wallet emits (Lace,
-    //    iOS, and our own walletBg.signData). key_id is OPTIONAL in that layout:
+    //    standard CIP-30 signData layout that every Cardano wallet emits (other
+    //    wallets, iOS, and our own walletBg.signData). key_id is OPTIONAL in that layout:
     //    if present it must match, but we do not require it, so any wallet's
     //    canonical signData interoperates. The signature (step 5) is verified over
     //    the message's OWN reconstructed Sig_structure, so header layout is generic.

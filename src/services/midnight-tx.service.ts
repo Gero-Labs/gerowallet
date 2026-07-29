@@ -605,8 +605,8 @@ export async function registerNightForDust(
 
     // Sign the single payload with the existing NightExternal segment-signing
     // BG handler. Wrap the single payload as a one-element segments array;
-    // role is always NightExternal for DUST registration (per Lace's
-    // `signDustRegistration` callback in `dependencies.ts:425`).
+    // role is always NightExternal for DUST registration (per the Midnight
+    // reference implementation's `signDustRegistration` callback).
     const signed = await signSegments(
       [{ index: 1, role: 'NightExternal', dataHex: built.signaturePayloadHex }],
       credentials,

@@ -41,9 +41,9 @@ This guide will help you set up your development environment and start contribut
      - ESLint
      - TypeScript Vue Plugin (Volar)
 
-### API Keys and Access
+### Backend Access
 
-You'll need API keys for various services. See [Environment Configuration](#environment-configuration) below.
+The client needs **no** third-party data keys. All blockchain data, prices, DeFi routing, and real-time sync flow through **Nexus (the Gero backend)**, which holds every provider key server-side. For local development you only point the client at a Gero backend. See [Environment Configuration](#environment-configuration) below.
 
 ---
 
@@ -86,45 +86,31 @@ Create environment files from the example template:
 cp .env.example .env.development
 ```
 
-Open `.env.development` and configure the following **required** variables:
+Open `.env.development` and configure the following **required** variables. These are the only variables the client needs for local development — every one simply points at a Gero backend:
 
 ```bash
-# Backend API
+# Gero backend base URL
 VITE_BACKEND_URL=http://localhost:8081
 
-# Blockchain API (get free key at blockfrost.io)
-VITE_BLOCKFROST_API_KEY=your_blockfrost_api_key_here
-VITE_BLOCKFROST_API_KEY_PREPROD=your_preprod_api_key_here
+# Nexus (Gero backend) API base — always <backend>/api/nexus
+VITE_NEXUS_URL=http://localhost:8081/api/nexus
 
-# Real-time messaging (get free key at ably.com)
-VITE_ABLY_API_KEY=your_ably_api_key_here
+# Real-time sync WebSocket (served by the Gero backend)
+VITE_SYNC_WS_URL=ws://localhost:8081/sync
 
 # Feature flags (optional for local development)
 VITE_ENABLE_MULTISIG=true
 VITE_ENABLE_GOVERNANCE=true
 ```
 
-**Optional** variables (for full feature set):
-```bash
-# Price data
-VITE_COINGECKO_API_KEY=your_coingecko_api_key
-
-# DeFi integrations
-VITE_DEXHUNTER_API_KEY=your_dexhunter_api_key
-VITE_TAPTOOLS_API_KEY=your_taptools_api_key
-
-# Fiat on-ramps
-VITE_MOONPAY_API_KEY=your_moonpay_api_key
-```
-
-**Where to get API keys**:
-- **Blockfrost**: [blockfrost.io](https://blockfrost.io) (free tier: 50,000 requests/day)
-- **Ably**: [ably.com](https://ably.com) (free tier: 6M messages/month)
-- **CoinGecko**: [coingecko.com/en/api](https://www.coingecko.com/en/api) (free tier available)
+**No third-party data keys are required.** The client never talks to blockchain,
+price, or DeFi providers directly — it only points at the Gero backend, and the
+backend holds all provider keys server-side. There are no data-provider keys of
+any kind to configure in the client.
 
 ### 4. Start the Gero Backend (Local Development)
 
-The Gero Backend provides specialized APIs not available in standard blockchain providers.
+The Gero Backend (Nexus) is the single API the client talks to. It holds all provider keys server-side and exposes blockchain data, prices, DeFi routing, and real-time sync to the client.
 
 #### Pull the Docker Image
 
@@ -141,11 +127,9 @@ Create a `.env.backend` file with the following:
 PORT=8081
 NODE_ENV=development
 
-# Blockchain provider (use your Blockfrost key)
-BLOCKFROST_API_KEY=your_blockfrost_api_key_here
-
-# Ably configuration (for real-time sync)
-ABLY_API_KEY=your_ably_api_key_here
+# Provider keys (blockchain data, prices, DeFi routing, real-time sync)
+# are configured server-side here, in the backend — never in the client.
+# Populate the provider credentials your backend build expects.
 
 # Database (if persistence is needed, optional for dev)
 # MONGODB_URI=mongodb://localhost:27017/gerowallet
@@ -669,9 +653,9 @@ console.log('TX fee:', tx.body.fee);
 3. Click on a request to see headers, payload, response
 
 **Common API endpoints**:
-- Blockfrost: `https://cardano-mainnet.blockfrost.io/api/v0/...`
 - Gero Backend: `http://localhost:8081/api/...`
-- Ably: `https://rest.ably.io/...`
+- Nexus (Gero backend): `http://localhost:8081/api/nexus/...`
+- Real-time sync WebSocket: `ws://localhost:8081/sync`
 
 ### Vue Component Debugging
 
@@ -835,21 +819,16 @@ app.addToOptions(MessageTypes.MY_METHOD, async (request, sendResponse) => {
 5. Check firewall settings (allow port 8081)
 6. Restart container: `docker restart gerowallet-backend`
 
-### Ably Connection Issues
+### Real-Time Sync Connection Issues
 
 **Symptom**: "Connecting..." status stuck, no real-time updates
 
 **Solutions**:
-1. Check Ably API key in `.env.development`
-2. Verify backend is providing Ably tokens (check network requests)
-3. Check browser console for Ably errors
-4. Test Ably connection manually:
-   ```typescript
-   import ablyService from '@/services/ably.service';
-   ablyService.setAuthParams('cardano', 'preprod', stakeAddress);
-   await ablyService.connect();
-   console.log('Ably state:', ablyService.getState());
-   ```
+1. Check `VITE_SYNC_WS_URL` in `.env.development` points at your backend's sync WebSocket
+2. Verify the Gero backend is running and reachable (check network requests)
+3. Check browser console for sync/WebSocket errors
+4. Confirm the backend exposes the sync WebSocket endpoint (the client holds no
+   provider keys — all real-time sync is served by the backend)
 
 ### Build Errors
 
@@ -889,7 +868,7 @@ Now that you have your development environment set up:
 ### Learning Resources
 
 - **Cardano**: [Cardano Docs](https://docs.cardano.org/)
-- **Cardano SDK**: [@cardano-sdk/core docs](https://input-output-hk.github.io/cardano-js-sdk/)
+- **Cardano SDK**: `@cardano-sdk/core` (see the package on npm)
 - **Vue.js 2**: [Vue.js Guide](https://v2.vuejs.org/v2/guide/)
 - **Vuetify 2**: [Vuetify Components](https://v2.vuetifyjs.com/)
 - **Chrome Extensions**: [Chrome Extension Docs](https://developer.chrome.com/docs/extensions/)

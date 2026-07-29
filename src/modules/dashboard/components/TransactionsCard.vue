@@ -1263,7 +1263,7 @@ const isInternalTransfer = (item: StoredTransaction): boolean => {
   // the wallet only monitors its base addresses, so an output to an enterprise
   // address derived from the same payment key (e.g. a self-send to the collateral
   // pool) is NOT tracked balance and reads as an ordinary Sent, matching how
-  // other Cardano wallets (Eternl/Lace/Yoroi) classify it.
+  // other Cardano wallets classify it.
   const allOutputsInternal = isCardanoTx(item)
     ? item.body.outputs?.every((output) => walletAddresses.has(output.address))
     : true;

@@ -24,7 +24,7 @@ Gero Wallet is a comprehensive Cardano blockchain wallet implemented as a Chrome
 
 1. **Security First**: Private keys never leave the background context, all sensitive operations are isolated
 2. **Multi-Context Design**: Separate execution contexts (background, content, inject, web) with secure messaging
-3. **Real-Time Sync**: WebSocket-based blockchain updates with Ably for instant portfolio updates
+3. **Real-Time Sync**: WebSocket-based blockchain updates with Gero Sync (WebSocket push) for instant portfolio updates
 4. **Performance Optimized**: Non-blocking initialization, deferred loading, and efficient state management
 5. **Extensible**: Modular architecture with clear separation of concerns
 
@@ -64,8 +64,8 @@ Gero Wallet is a comprehensive Cardano blockchain wallet implemented as a Chrome
                              │
                 ┌────────────▼────────────┐
                 │  External Services      │
-                │  - Blockfrost API       │
-                │  - Ably WebSocket       │
+                │  - Nexus (Gero backend) │
+                │  - Gero Sync (WS push)  │
                 │  - Price Feeds          │
                 │  - DeFi Aggregators     │
                 └─────────────────────────┘
@@ -87,7 +87,7 @@ Gero Wallet is built using Chrome's **Manifest V3** specification, which enforce
   - Transaction construction and signing
   - Message routing between contexts
   - State broadcasting to UI contexts
-  - API communication with blockchain providers
+  - API communication with the blockchain data layer
 
 #### 2. **Content Scripts** (`src/chrome/content/`)
 - **Purpose**: Inject wallet API into web pages
@@ -177,8 +177,8 @@ Business logic is centralized in **services** (`src/services/`):
 |---------|---------|
 | `walletManager.service.ts` | Wallet lifecycle (create, import, login, switch) |
 | `sync.service.ts` | Blockchain synchronization (UTXOs, transactions) |
-| `ably.service.ts` | Real-time WebSocket communication |
-| `krakenWebSocket.service.ts` | Real-time price feeds |
+| `websocket.service.ts` | Real-time WebSocket communication (Gero Sync push) |
+| `krakenWebSocket.service.ts` | Real-time price feeds (via Nexus) |
 | `storeMessaging.service.ts` | Cross-context state synchronization |
 | `storageObserver.service.ts` | Chrome storage change observer |
 
@@ -202,10 +202,10 @@ class BlockchainApi extends Api {
 ```
 
 **Key API Integrations:**
-- **Blockchain**: Blockfrost (primary), Koios (backup), Backend API
-- **Prices**: Kraken WebSocket, CoinGecko, Charli3 Oracle
-- **DeFi**: DEX Hunter (swap aggregation), TapTools (analytics)
-- **Security**: Cardano Shield (risk assessment), Xerberus (ratings)
+- **Blockchain**: Nexus (Gero backend) as the blockchain data layer
+- **Prices**: market/price data (via Nexus), Charli3 Oracle
+- **DeFi**: Nexus DEX routing (swap aggregation), token analytics (via Nexus)
+- **Security**: transaction risk assessment, Xerberus (ratings)
 - **Fiat**: Moonpay, Guardarian (on/off ramps)
 
 ---
@@ -222,7 +222,7 @@ User Login
 │ walletManager.service.ts       │
 │ - Decrypt private keys         │
 │ - Initialize wallet stores     │
-│ - Setup Ably connection        │
+│ - Setup Gero Sync connection   │
 └────────┬───────────────────────┘
          │
          ▼
@@ -278,12 +278,12 @@ User Initiates Transaction
          ▼
 ┌────────────────────────────────┐
 │ BlockchainApi                  │
-│ - Submit to Blockfrost         │
+│ - Submit via Nexus             │
 └────────┬───────────────────────┘
          │
          ▼
 ┌────────────────────────────────┐
-│ Ably Real-time Update          │
+│ Gero Sync Real-time Update     │
 │ - Receive confirmation         │
 │ - Update wallet state          │
 └────────────────────────────────┘
@@ -514,7 +514,7 @@ if (risk.level === 'high') showWarning();
 **Protections**:
 - Domain whitelisting/blacklisting
 - Transaction preview and approval
-- Risk assessment (Cardano Shield API)
+- Transaction risk assessment
 - Limited API exposure (CIP-30 standard only)
 
 #### 4. **Hardware Wallet Integration**
@@ -537,15 +537,15 @@ if (risk.level === 'high') showWarning();
 2. **Validate all inputs** (addresses, amounts, transaction data)
 3. **Use established crypto patterns** (don't roll your own)
 4. **Handle errors gracefully** without exposing sensitive info
-5. **Regular security audits** (see `docs/SECURITY_AUDIT.md`)
+5. **Regular security audits**
 
 ---
 
 ## Real-Time Communication
 
-### Ably WebSocket Service
+### Gero Sync WebSocket Service
 
-Gero Wallet uses **Ably Realtime** for instant blockchain updates:
+Gero Wallet uses **Gero Sync (WebSocket push)** for instant blockchain updates:
 
 **Architecture**:
 ```
@@ -559,14 +559,14 @@ Blockchain Events
            │ publish
            ▼
 ┌───────────────────────┐
-│  Ably Realtime        │
-│  (message broker)     │
+│  Gero Sync            │
+│  (WebSocket push)     │
 └──────────┬────────────┘
            │ subscribe
            ▼
 ┌───────────────────────┐
 │  Background Worker    │
-│  (ably.service.ts)    │
+│ (websocket.service.ts)│
 └──────────┬────────────┘
            │
            ▼
@@ -601,7 +601,7 @@ authCallback: async (tokenParams, callback) => {
 
 **Optimization**: Non-blocking connection during wallet login:
 ```typescript
-// Don't block login waiting for Ably
+// Don't block login waiting for Gero Sync
 (async () => {
   await ablyService.connect();
   await ablyService.subscribe(channels);
@@ -709,21 +709,20 @@ export async function buildTx(params: TxBuilderParams): Promise<Cardano.Tx> {
 
 ## External Integrations
 
-### Blockchain Providers
+### Blockchain Data Layer
 
-**Primary**: Blockfrost
-- **Pros**: Fast, reliable, well-documented
-- **Cons**: Rate limits on free tier
-- **Fallback**: Koios (community-run)
+**Primary**: Nexus (Gero backend)
+- **Pros**: Fast, reliable, first-party
+- Provides all on-chain data (UTXOs, transactions, tips) behind a single API
 
 **Backend API**: Custom backend for specialized operations:
-- Ably token generation
+- Real-time sync token generation
 - Portfolio analytics
 - Custom queries not available in standard APIs
 
 ### Price Feeds
 
-1. **Kraken WebSocket**: Real-time ADA/USD price
+1. **Real-time price stream (via Nexus)**: Real-time ADA/USD price
    ```typescript
    krakenWebSocketService.connect();
    krakenWebSocketService.on('price', (price) => {
@@ -731,16 +730,16 @@ export async function buildTx(params: TxBuilderParams): Promise<Cardano.Tx> {
    });
    ```
 
-2. **CoinGecko**: Historical data, altcoin prices
+2. **Market/price data (via Nexus)**: Historical data, altcoin prices
 3. **Charli3**: On-chain oracle prices
 
 ### DeFi Integrations
 
-- **DEX Hunter**: Swap aggregation across Cardano DEXs
+- **Nexus DEX routing**: Swap aggregation across Cardano DEXs
   - Finds best rates across Minswap, SundaeSwap, WingRiders, etc.
   - Smart order routing
 
-- **TapTools**: Portfolio analytics and token metrics
+- **Token analytics (via Nexus)**: Portfolio analytics and token metrics
   - Token prices and charts
   - Portfolio valuation
 
@@ -809,8 +808,8 @@ npm run build
 
 **Key Variables**:
 - `VITE_BACKEND_URL` - Gero backend API endpoint
-- `VITE_BLOCKFROST_API_KEY` - Blockchain data API
-- `VITE_ABLY_API_KEY` - Real-time messaging
+- `VITE_NEXUS_URL` - Nexus data layer (via backend proxy, `<backend>/api/nexus`)
+- `VITE_SYNC_WS_URL` - Gero Sync WebSocket (real-time updates)
 - `VITE_MOONPAY_API_KEY` - Fiat on-ramp
 
 ---
@@ -821,12 +820,12 @@ npm run build
 
 Recent optimizations reduced login time from **~11 seconds to <200ms**:
 
-1. **API Provider Optimization**: Switched `getTip()` from KOIOS to BLOCKFROST (saved ~400ms)
+1. **API Provider Optimization**: Optimized `getTip()` routing through the blockchain data layer (saved ~400ms)
 2. **Non-Critical Deferrals**:
-   - DexHunter tokens/blacklists load in background (saved ~26ms)
+   - Swap token lists/blacklists (via Nexus) load in background (saved ~26ms)
    - Bring cashback cache loads async (saved ~349ms)
-3. **Ably Non-Blocking**: Connection happens in background (saved **~10,000ms**)
-4. **Chart Data Deferral**: Load Kraken charts after 500ms (saved ~181ms)
+3. **Gero Sync Non-Blocking**: Connection happens in background (saved **~10,000ms**)
+4. **Chart Data Deferral**: Load price charts after 500ms (saved ~181ms)
 5. **Login Response Trust**: Removed 5-second polling loop (saved up to 5000ms)
 
 **Monitoring**:
@@ -994,7 +993,7 @@ For detailed implementation guides, see:
 - **Getting Started**: `docs/GETTING_STARTED.md`
 - **Development Guide**: `CLAUDE.md`
 - **Contributing**: `CONTRIBUTING.md`
-- **Security**: `docs/SECURITY_AUDIT.md`
+- **Security**: see the Security section of [README](README.md)
 
 ---
 

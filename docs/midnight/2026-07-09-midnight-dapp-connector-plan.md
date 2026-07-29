@@ -179,7 +179,7 @@ Return a dust-balanced transfer tx (reuses our build + `balanceTransactions`); `
 
 ## 6. Open decisions
 
-1. ~~**apiVersion pin.**~~ **RESOLVED**: pin `apiVersion: '4.0.1'`, matching Lace 2.0 / 1AM (verified live via `npm view @midnight-ntwrk/dapp-connector-api dist-tags` → `latest: "4.0.1"`). Add `@midnight-ntwrk/dapp-connector-api@^4.0.1` as a dep — **dashed scope**, NOT `@midnightntwrk` (unlike the `wallet-sdk-*` packages: the canonical `@midnightntwrk/dapp-connector-api` scope currently has no stable release at all, only `4.1.0-beta.0+`/canaries — pinning canonical here would put us on a beta by accident).
+1. ~~**apiVersion pin.**~~ **RESOLVED**: pin `apiVersion: '4.0.1'`, matching the reference implementation / 1AM (verified live via `npm view @midnight-ntwrk/dapp-connector-api dist-tags` → `latest: "4.0.1"`). Add `@midnight-ntwrk/dapp-connector-api@^4.0.1` as a dep — **dashed scope**, NOT `@midnightntwrk` (unlike the `wallet-sdk-*` packages: the canonical `@midnightntwrk/dapp-connector-api` scope currently has no stable release at all, only `4.1.0-beta.0+`/canaries — pinning canonical here would put us on a beta by accident).
 2. **Which endpoints `getConfiguration` returns** — our Nexus-proxied indexer, or the public Foundation indexer the dapp's own SDK would hit. Likely the public Foundation endpoints for the dapp's read path; confirm privacy/rate-limit implications.
 3. **Feature-flag gate** — put the connector behind a flag for staged rollout (mirror the `isMidnight*` feature-flag pattern).
 4. **Proving delegation (Phase 3)** — cloud (consent-gated, current) vs WASM in-extension. Blocks contract dapps. Decide after the WASM MV3 spike.

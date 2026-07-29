@@ -1,4 +1,4 @@
-# MPC "Sign in with Google" — MetaMask-style Recovery (self-hosted)
+# MPC "Sign in with Google" — Fileless Recovery (self-hosted)
 
 **Status:** Design approved (brainstorming). Next: implementation plan (writing-plans).
 **Date:** 2026-07-13
@@ -9,7 +9,7 @@
 
 ## Goal
 
-Give the Google MPC wallet MetaMask-style recovery: **recover on any new device with only the Google account + a memorized recovery password — no file to keep** — plus a **revealable seed phrase (SRP)** as an escape hatch. Stay **self-hosted and non-custodial**.
+Give the Google MPC wallet fileless recovery: **recover on any new device with only the Google account + a memorized recovery password — no file to keep** — plus a **revealable seed phrase (SRP)** as an escape hatch. Stay **self-hosted and non-custodial**.
 
 ## Background & problem
 
@@ -22,15 +22,15 @@ Two problems with the file model (confirmed by a 2026-07-12 code audit):
 1. **Lost/forgotten file → unrecoverable** once the device share is also gone (reinstall / new machine / cleared browser data). One surviving share (login) is below threshold.
 2. **No seed-phrase escape hatch** — MPC wallets never expose a mnemonic, so there is no portability/last-resort path (the "mnemonic = ultimate escape" intent was never implemented).
 
-MetaMask "Social Login" (= MetaMask Embedded Wallets, formerly Web3Auth) solves both by making the third factor a **memorized password** (nothing to lose) and by generating a **revealable SRP**.
+The Web3Auth embedded-wallet approach (social login) solves both by making the third factor a **memorized password** (nothing to lose) and by generating a **revealable SRP**.
 
 ## Decisions (decision log)
 
-- **D1 — Match MetaMask's UX.** Password becomes the recovery factor; drop the downloadable file; add a revealable SRP.
-- **D2 — Stay self-hosted; do NOT adopt Web3Auth/Torus nodes.** Web3Auth's node network would remove the custody caveat (D3) via share distribution and is exactly MetaMask's stack, but it is a **paid SaaS** (per-MAW pricing) and puts a **third-party vendor in the trust + availability path** — which this project explicitly rejected at kickoff ("Managed MPC (vendor in trust model)"). Self-sovereignty and zero per-user cost win.
-- **D3 — Accepted custody premise (unavoidable consequence of D1 + D2).** Fileless cross-device recovery on a *single* backend is only possible if the backend serves the second share. So the recovery share moves to the backend as a **password-encrypted blob**, and the backend then holds **2 of 3 shares** (login + encrypted-recovery). A backend breach **plus** a crack of a weak recovery password = reconstruct. This reverses the earlier "no two reconstructable shares server-side" rule. Mitigated (not erased) by: Argon2id, a **second server-side at-rest wrap** (KMS key), enforced recovery-password strength, separate storage/access paths, and rate-limiting. The **device share never touches the backend**, so a breach *without the password* still cannot reconstruct — the recovery password is the load-bearing secret. This mirrors MetaMask's own "lose the password → unrecoverable" cliff.
+- **D1 — Match the industry-standard fileless UX.** Password becomes the recovery factor; drop the downloadable file; add a revealable SRP.
+- **D2 — Stay self-hosted; do NOT adopt Web3Auth/Torus nodes.** Web3Auth's node network would remove the custody caveat (D3) via share distribution, but it is a **paid SaaS** (per-MAW pricing) and puts a **third-party vendor in the trust + availability path** — which this project explicitly rejected at kickoff ("Managed MPC (vendor in trust model)"). Self-sovereignty and zero per-user cost win.
+- **D3 — Accepted custody premise (unavoidable consequence of D1 + D2).** Fileless cross-device recovery on a *single* backend is only possible if the backend serves the second share. So the recovery share moves to the backend as a **password-encrypted blob**, and the backend then holds **2 of 3 shares** (login + encrypted-recovery). A backend breach **plus** a crack of a weak recovery password = reconstruct. This reverses the earlier "no two reconstructable shares server-side" rule. Mitigated (not erased) by: Argon2id, a **second server-side at-rest wrap** (KMS key), enforced recovery-password strength, separate storage/access paths, and rate-limiting. The **device share never touches the backend**, so a breach *without the password* still cannot reconstruct — the recovery password is the load-bearing secret. This mirrors the industry-standard "lose the password → unrecoverable" cliff.
 - **D4 — Avoid hand-rolled GF(256) crypto.** Recomputing the original recovery share from entropy + one share is mathematically possible (2-of-3 ⇒ degree-1 line) but needs custom field arithmetic matching the `shamir-secret-sharing` library — rejected as risk. Consequence: "change recovery password" cannot cheaply re-wrap the old share, so it does a **full re-split** (§3).
-- **D5 — Change recovery password never asks the old one (MetaMask parity).** MetaMask lets a logged-in user set a new password without the old one. Given D4, we honor this by making "change" a **re-split** from the unlocked session (device+login → entropy → fresh split → store under the new password). One consequence, treated as a feature: a password change **rotates all three shares**, so it also voids a previously-leaked recovery blob — there is no separate compromise-rotation action.
+- **D5 — Change recovery password never asks the old one (industry-standard parity).** Industry-standard fileless recovery lets a logged-in user set a new password without the old one. Given D4, we honor this by making "change" a **re-split** from the unlocked session (device+login → entropy → fresh split → store under the new password). One consequence, treated as a feature: a password change **rotates all three shares**, so it also voids a previously-leaked recovery blob — there is no separate compromise-rotation action.
 
 ## Non-goals (v1)
 
@@ -45,7 +45,7 @@ MetaMask "Social Login" (= MetaMask Embedded Wallets, formerly Web3Auth) solves 
 
 Same Shamir **2-of-3**; only the third factor changes.
 
-| Share | Before (file) | Now (MetaMask-style) |
+| Share | Before (file) | Now (fileless) |
 |---|---|---|
 | **Device** | local, passkey-PRF / password | unchanged — daily unlock = device + login, no recovery password |
 | **Login** | backend, Google-gated | unchanged |
@@ -54,7 +54,7 @@ Same Shamir **2-of-3**; only the third factor changes.
 - **Onboarding:** user sets a **recovery password** (already captured in `StepGoogleSecure`). Client wraps the recovery share with `encryptRecoveryShare()` (Argon2id + XChaCha20) and **uploads the ciphertext** (+ the non-secret xpub anchor). No file download.
 - **Recover on a new device:** Google sign-in → backend returns login share + encrypted recovery blob + xpub anchor → user types recovery password → decrypt → login + recovery = 2 → reconstruct → establish local device share. Fileless.
 - **Reveal SRP (new escape hatch):** an unlocked wallet reveals its seed (`entropy → entropyToMnemonic`) behind a device-secret re-auth, shown once → exportable to any BIP39 wallet.
-- **Set / change recovery password (MetaMask parity):** one action, from an **unlocked wallet** (existing device — device+login reconstruct entropy). It **never asks for the old password** (we can't retrieve the old share without it, D4); instead it performs a crash-safe **re-split** (§3) and stores the fresh recovery blob under the new password. Because the underlying share changes, a password change also **voids any previously-leaked recovery blob** — i.e. it doubles as compromise-rotation; there is no separate "rotate" action. A user on a *new* device who has *also* forgotten the recovery password has only the login share (1 of 3) → genuinely unrecoverable, identical to MetaMask's "lose the password → unrecoverable" cliff.
+- **Set / change recovery password (industry-standard parity):** one action, from an **unlocked wallet** (existing device — device+login reconstruct entropy). It **never asks for the old password** (we can't retrieve the old share without it, D4); instead it performs a crash-safe **re-split** (§3) and stores the fresh recovery blob under the new password. Because the underlying share changes, a password change also **voids any previously-leaked recovery blob** — i.e. it doubles as compromise-rotation; there is no separate "rotate" action. A user on a *new* device who has *also* forgotten the recovery password has only the login share (1 of 3) → genuinely unrecoverable, identical to the industry-standard "lose the password → unrecoverable" cliff.
 
 **Recovery-password strength (concrete floor):** minimum **12 characters** + a visible strength meter; the weakest tier is rejected before any store. This is the load-bearing secret (D3), so the floor is enforced client-side on set and change.
 
@@ -102,7 +102,7 @@ Breach now needs **DB + server at-rest key + a crack of the recovery password**.
 - **Onboarding store:** after `createMpcGoogleWalletFlow` yields the recovery share → `encryptRecoveryShare(share, recoveryPassword)` → `storeRecovery(+xpub)`. **Non-fatal** on failure → wallet works (device+login); surface "recovery not set → finish in Settings."
 - **Recover (new device)** — rework `recoverMpcGoogleWalletFlow`: `fetchRecovery` → `decryptRecoveryShare(blob, password)` → `getLoginShare` → `reconstructAndValidateEntropy(recovery, login, xpubFromBackend)` → recreate wallet + establish local device share. Replaces the file-picker path. `404` → "no recovery on file."
 - **`REVEAL_MPC_SRP`** (new): unlocked session **+ device-secret re-auth** → reconstruct entropy → `entropyToMnemonic` → return once. Never persisted, never logged.
-- **`SET_RECOVERY_PASSWORD`** (change / reset, from an unlocked wallet; **never asks the old password**, MetaMask parity): full **crash-safe re-split** — staged `mpcDeviceShareNext` + backend `rotate` (see §4) — then stores the fresh recovery blob under the new password. Single handler covers both "change" and "forgot but still logged in"; also serves compromise-rotation.
+- **`SET_RECOVERY_PASSWORD`** (change / reset, from an unlocked wallet; **never asks the old password**, industry-standard parity): full **crash-safe re-split** — staged `mpcDeviceShareNext` + backend `rotate` (see §4) — then stores the fresh recovery blob under the new password. Single handler covers both "change" and "forgot but still logged in"; also serves compromise-rotation.
 
 **C. Onboarding UI:**
 - `StepGoogleSecure` — keep capturing the recovery password; add a **strength meter + minimum** (now the load-bearing secret).

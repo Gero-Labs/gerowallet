@@ -2016,7 +2016,7 @@ export class WalletBg {
    *
    * Why this lives in BG: the DUST fee step (`dustWallet.balanceTransactions`)
    * needs the user's real dust secret to derive spend nullifiers. Same
-   * constraint Lace lives with. The NIGHT input selection / change / offer
+   * constraint the reference implementation lives with. The NIGHT input selection / change / offer
    * construction is done by Nexus (UTxOs are public; indexer view is canonical).
    */
   async balanceAndSignMidnightUnshieldedTransfer(
@@ -2520,7 +2520,7 @@ export class WalletBg {
    * Sign + submit the Cardano-side DUST registration tx for a Midnight wallet.
    *
    * Both the Midnight HD keys and the Cardano CIP-1852 keys are derived from
-   * the same mnemonic (Lace pattern), so a Midnight wallet can natively sign
+   * the same mnemonic (matching the reference implementation), so a Midnight wallet can natively sign
    * Cardano txs without requiring a separate Cardano wallet.
    *
    * Flow:
@@ -2628,7 +2628,7 @@ export class WalletBg {
     keys: Keys,
     privateKeyBytes?: Uint8Array, // Optional pre-decrypted root key for PRF wallets
   ) {
-    // Use Cardano SDK's cip30signData implementation directly (same as Lace)
+    // Use Cardano SDK's cip30signData implementation directly (per the CIP-30 standard)
     // This ensures 100% compatibility with the Cardano SDK standard
 
     const signWith = addrToSignWith(address);

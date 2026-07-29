@@ -17,7 +17,9 @@ A comprehensive Cardano blockchain wallet browser extension (Chrome Manifest V3)
 
 ## Overview
 
-**Gero Dashboard** (v2.6.4) is a feature-rich, non-custodial Cardano wallet browser extension that provides comprehensive blockchain management with enterprise-grade security, DeFi integrations, and seamless Web3 connectivity.
+**Gero Wallet** (v2.7.0) is a feature-rich, non-custodial Cardano wallet browser extension that provides comprehensive blockchain management with enterprise-grade security, DeFi integrations, and seamless Web3 connectivity.
+
+All blockchain data, price feeds, DeFi routing, and real-time updates are served through **Nexus**, Gero's own backend data layer. The extension holds no third-party data-provider keys — the client talks only to the Gero backend, which brokers everything server-side.
 
 ### Key Features
 
@@ -34,21 +36,21 @@ A comprehensive Cardano blockchain wallet browser extension (Chrome Manifest V3)
 - **Native Tokens**: Full support for Cardano native assets
 
 **🔄 DeFi Integrations**
-- DEX aggregation for best swap rates (via DEX Hunter)
+- DEX aggregation for best swap rates (routed via Nexus)
 - Token swaps across multiple Cardano DEXs
-- Portfolio tracking and analytics (TapTools)
-- Real-time price feeds (Kraken WebSocket)
+- Portfolio tracking and analytics
+- Real-time price feeds
 
 **🔐 Security First**
 - Non-custodial (you control your keys)
-- Transaction risk assessment (Cardano Shield)
+- Transaction risk assessment
 - DApp connection approval system
 - Hardware wallet integration for enhanced security
 
 **🌐 Web3 Connectivity**
 - CIP-30 DApp connector API (window.cardano)
 - Multi-signature wallet support
-- Real-time blockchain updates (Ably WebSocket)
+- Real-time blockchain updates via Gero Sync (WebSocket push)
 
 ## Tech Stack
 
@@ -57,7 +59,8 @@ A comprehensive Cardano blockchain wallet browser extension (Chrome Manifest V3)
 - **State Management**: Custom Vue Observable stores (lightweight, performant)
 - **Database**: Dexie 4.0.7 (IndexedDB wrapper with versioned schemas)
 - **Cardano SDK**: @cardano-sdk/core v0.46.9 (modern, preferred for new features)
-- **Real-time**: Ably v2.11.0 (WebSocket-based blockchain updates)
+- **Data Layer**: Nexus (Gero backend) for blockchain data, prices, and DeFi routing
+- **Real-time**: Gero Sync — WebSocket push for instant blockchain updates
 - **Cryptography**: WebAssembly for performance-critical operations (bip39, blake2b)
 - **Hardware Wallets**: Native support for Ledger, Trezor, and Keystone
 
@@ -92,22 +95,25 @@ cp .env.example .env.development
 
 ### 2. Configure Environment
 
-Edit `.env.development` and add your API keys:
+The client needs no third-party API keys — all blockchain data, prices, and DeFi
+routing are served by the Gero backend (Nexus). For local development you only
+need to point the extension at a backend instance:
 
 ```bash
-# Required: Blockchain API (get free key at blockfrost.io)
-VITE_BLOCKFROST_API_KEY=your_blockfrost_api_key_here
-
-# Required: Real-time messaging (get free key at ably.com)
-VITE_ABLY_API_KEY=your_ably_api_key_here
-
-# Backend URL (localhost for development)
+# Gero backend base URL (localhost for development)
 VITE_BACKEND_URL=http://localhost:8081
+
+# Nexus is reached through the backend proxy (server injects the Nexus key).
+# Point this at <gero-backend>/api/nexus, NOT at Nexus directly.
+VITE_NEXUS_URL=http://localhost:8081/api/nexus
+
+# Gero Sync WebSocket (real-time blockchain updates, served by the backend)
+VITE_SYNC_WS_URL=ws://localhost:8081/sync
 ```
 
-**Get free API keys**:
-- [Blockfrost](https://blockfrost.io) - 50,000 requests/day free tier
-- [Ably](https://ably.com) - 6M messages/month free tier
+See [`.env.example`](.env.example) for the full list of optional variables
+(fiat on-ramp, feature-flag service, blog, etc.). Every entry ships with a safe
+placeholder — none are required to boot the extension against a local backend.
 
 ### 3. Start Gero Backend
 
@@ -223,14 +229,14 @@ gerowallet/
 │   ├── services/            # Business logic services
 │   │   ├── walletManager.service.ts   # Wallet lifecycle
 │   │   ├── sync.service.ts            # Blockchain sync
-│   │   └── ably.service.ts            # Real-time updates
+│   │   └── websocket.service.ts       # Gero Sync real-time updates
 │   ├── db/                  # Database layer (Dexie/IndexedDB)
 │   │   ├── gero-db.ts       # Application-level DB
 │   │   └── wallet-db.ts     # Wallet-specific DBs
-│   ├── api/                 # External API integrations
-│   │   ├── blockchain-api.ts   # Blockfrost/Koios
-│   │   ├── dexhunter-api.ts    # DEX aggregation
-│   │   └── ...                 # Other integrations
+│   ├── api/                 # Backend/data integrations
+│   │   ├── nexus-tx-api.ts     # Nexus transaction building
+│   │   ├── market-api.ts       # Prices & market data (via backend)
+│   │   └── ...                 # Other backend-routed clients
 │   ├── shared/              # Reusable utilities and components
 │   │   ├── utils/           # Helper functions
 │   │   ├── composables/     # Vue composables
@@ -238,7 +244,6 @@ gerowallet/
 │   └── options/             # Extension UI entry points
 ├── docs/                    # Documentation
 │   ├── GETTING_STARTED.md   # Detailed setup guide
-│   ├── SECURITY_AUDIT.md    # Security guidelines
 │   └── ...
 ├── ARCHITECTURE.md          # System architecture overview
 ├── CONTRIBUTING.md          # Contribution guidelines
@@ -294,7 +299,7 @@ Gero Wallet uses a multi-context architecture for security and performance:
    - Wallet-specific DBs: Individual wallet data (transactions, addresses)
 
 2. **Real-Time Communication**
-   - Ably WebSocket for instant blockchain updates
+   - Gero Sync WebSocket push for instant blockchain updates
    - Mutex-protected sync to prevent race conditions
 
 3. **Modern Cardano SDK**
@@ -316,13 +321,12 @@ For complete architectural details, see [ARCHITECTURE.md](ARCHITECTURE.md).
 - **[Getting Started Guide](docs/GETTING_STARTED.md)** - Detailed setup, development workflow, troubleshooting
 - **[Architecture Overview](ARCHITECTURE.md)** - System design, patterns, data flow
 - **[Contributing Guidelines](CONTRIBUTING.md)** - How to contribute, code standards, PR process
-- **[Security Audit](docs/SECURITY_AUDIT.md)** - Security practices and audit reports
 
 ### For Developers
 
 - **Tech Stack**: Vue.js 2.7, TypeScript, Vite, Dexie, Cardano SDK
 - **Key Patterns**: Vue Observable stores, Chrome messaging, two-tier database
-- **External Integrations**: Blockfrost, Ably, Kraken, DEX Hunter, TapTools
+- **Data Layer**: Nexus (Gero backend) — the single source for blockchain data, prices, and DeFi routing; the client carries no third-party provider keys
 
 ### Development Resources
 
@@ -388,7 +392,7 @@ Gero Wallet takes security seriously. This is a non-custodial wallet handling re
 - **Private Key Encryption**: AES-256 + ChaCha20-Poly1305 AEAD
 - **Context Isolation**: Private keys never leave background service worker
 - **Hardware Wallet Support**: Ledger, Trezor, Keystone integration
-- **Transaction Risk Assessment**: Cardano Shield integration
+- **Transaction Risk Assessment**: Inline risk checks before signing
 - **DApp Security**: Connection approval system, domain whitelisting
 
 ### Reporting Security Issues
@@ -398,8 +402,6 @@ If you discover a security vulnerability, please **DO NOT** open a public issue.
 2. Provide detailed information about the vulnerability
 3. Allow time for the team to patch before public disclosure
 
-For security audit information and best practices, see [docs/SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md).
-
 ---
 
 ## Community
@@ -407,7 +409,7 @@ For security audit information and best practices, see [docs/SECURITY_AUDIT.md](
 - **GitHub Issues**: [Report bugs or request features](https://github.com/Gero-Labs/gerowallet/issues)
 - **GitHub Discussions**: Ask questions, share ideas
 - **Discord**: Join our community (coming soon)
-- **Twitter**: [@GeroWallet](https://twitter.com/GeroWallet) (placeholder)
+- **Twitter**: [@GeroWallet](https://twitter.com/GeroWallet)
 
 ---
 
@@ -440,24 +442,23 @@ Gero Wallet is built on the shoulders of giants. Special thanks to:
 - [Vue.js](https://v2.vuejs.org/) - Progressive JavaScript framework
 - [Vuetify](https://v2.vuetifyjs.com/) - Material Design component library
 - [Dexie.js](https://dexie.org/) - IndexedDB wrapper
-- [Ably](https://ably.com/) - Real-time messaging platform
 - And [many more](package.json)...
 
 ---
 
 ## Roadmap
 
-### Current (v2.6.x)
+### Current (v2.7.x)
 - ✅ Conway-era support
 - ✅ PassKey authentication
 - ✅ Multi-signature wallets
 - ✅ Governance (DRep voting)
+- ✅ Multi-chain support (Bitcoin, Midnight)
 
-### Upcoming (v2.7.x)
+### Upcoming
 - 🔜 Enhanced NFT management
-- 🔜 Multi-chain support (Ethereum, Polygon)
-- 🔜 Mobile app (React Native)
 - 🔜 Advanced portfolio analytics
+- 🔜 Mobile companion app
 
 ### Future
 - 💡 Cross-chain swaps
@@ -474,6 +475,6 @@ See our [Project Catalyst proposals](https://projectcatalyst.io/) for community-
 
 [Website](https://gerowallet.io) • [Documentation](ARCHITECTURE.md) • [GitHub](https://github.com/Gero-Labs/gerowallet)
 
-**Last Updated**: 2025-12-23
+**Last Updated**: 2026-07-29
 
 </div>

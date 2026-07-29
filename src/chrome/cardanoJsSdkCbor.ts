@@ -180,7 +180,7 @@ export class BrowserTxConstruction {
   static minAdaRequired(output: Cardano.TxOut, coinsPerUtxoByte: bigint): bigint {
     try {
       // Use the official Cardano SDK function which correctly implements
-      // the protocol's minUTxOValue calculation (same as Lace wallet uses)
+      // the protocol's minUTxOValue calculation (per the CIP-30 standard)
       const minAda = minAdaRequiredSDK(output, coinsPerUtxoByte);
 
       debugLog('MinAda calculation (SDK):', {
