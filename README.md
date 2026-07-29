@@ -398,9 +398,11 @@ Gero Wallet takes security seriously. This is a non-custodial wallet handling re
 ### Reporting Security Issues
 
 If you discover a security vulnerability, please **DO NOT** open a public issue. Instead:
-1. Email security reports to: **security@gerowallet.io**
-2. Provide detailed information about the vulnerability
+1. Open a private report via GitHub: [Report a vulnerability](https://github.com/Gero-Labs/gerowallet/security/advisories/new)
+2. Provide detailed information about the vulnerability (with keys/mnemonics/passwords redacted)
 3. Allow time for the team to patch before public disclosure
+
+See [SECURITY.md](SECURITY.md) for the full policy, scope, and safe-harbor terms.
 
 ---
 

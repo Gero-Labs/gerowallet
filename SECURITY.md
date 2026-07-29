@@ -6,10 +6,9 @@ Gero Wallet is a **non-custodial** browser extension that manages real cryptocur
 
 **Do NOT open a public GitHub issue, pull request, or discussion for a security vulnerability.** Public disclosure before a fix puts users' funds at risk.
 
-Instead, report privately through **either** channel:
+Report privately through GitHub's built-in security advisories:
 
-- **Email:** [security@gerowallet.io](mailto:security@gerowallet.io)
-- **GitHub:** [Report a vulnerability](https://github.com/Gero-Labs/gerowallet/security/advisories/new) (private security advisory)
+- **[Report a vulnerability](https://github.com/Gero-Labs/gerowallet/security/advisories/new)** — this opens a private advisory visible only to you and the maintainers.
 
 Please include:
 
@@ -18,7 +17,7 @@ Please include:
 - Any relevant logs, transactions, or screenshots — **with private keys, mnemonics, and passwords redacted**.
 - Your assessment of severity and, if you have one, a suggested fix.
 
-If you'd like to encrypt your report, ask us for a PGP key at the address above before sending sensitive details.
+The private advisory thread is end-to-end between you and the maintainers; you can share sensitive reproduction details there safely.
 
 ## Our Commitment
 
@@ -61,7 +60,7 @@ We consider security research conducted in good faith and in accordance with thi
 - Only interact with accounts they own or have explicit permission to test;
 - Report promptly and give us reasonable time to remediate before any public disclosure.
 
-If in doubt about whether an action is authorized, ask us first at [security@gerowallet.io](mailto:security@gerowallet.io).
+If in doubt about whether an action is authorized, ask us first by opening a [private security advisory](https://github.com/Gero-Labs/gerowallet/security/advisories/new).
 
 ## Supported Versions
 
