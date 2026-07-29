@@ -3,6 +3,7 @@
   "displayName": "Gero Dashboard",
   "version": "2.7.0",
   "private": true,
+  "license": "SEE LICENSE IN LICENSE",
   "description": "A Multi-chain Light Wallet Merging Web2 and Web3",
   "scripts": {
     "dev": "npm run clear && cross-env NODE_ENV=development NODE_OPTIONS='--max-old-space-size=6144 --max-semi-space-size=256' run-p dev:*",
