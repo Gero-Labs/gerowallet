@@ -1077,12 +1077,17 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
   const signTxReply = (opts: ReplyOpts) => {
     sendResponse({ id: request.id, ...opts, target: TARGET, sender: SENDER.extension });
   };
-  // Same fast-path/whitelist split as signData above.
-  if (!WalletStore.isWhitelisted(request.data?.origin || request.origin)) {
+  // Same fast-path/whitelist split as signData above. Use ONLY the relay-set
+  // `request.origin` (stamped to the true window.origin in messaging.ts) — never
+  // the page-supplied `request.data.origin`, which a malicious site can set to a
+  // whitelisted dApp to bypass the connect gate and spoof the approval dialog.
+  // (The WalletConnect internal caller has its own flow in routeWcSigningRequest
+  // and never reaches this handler.)
+  if (!WalletStore.isWhitelisted(request.origin)) {
     return signTxReply({ error: APIError.Refused });
   }
 
-  const signTxPayload = { ...request.data, website: request.data?.origin || request.origin, favIconUrl: request.send?.tab?.favIconUrl };
+  const signTxPayload = { ...request.data, website: request.origin, favIconUrl: request.send?.tab?.favIconUrl };
   const tabId = request.send?.tab?.id;
 
   const handleMiniGeroSignTx = () => {
@@ -1113,7 +1118,7 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
       }
     }
     const popupURL = chrome.runtime.getURL(
-      `index.html#/${POPUP.signTx}?website=${encodeURIComponent(requestCopy.data.origin)}`
+      `index.html#/${POPUP.signTx}?website=${encodeURIComponent(request.origin)}`
     );
     return focusOrCreatePopup(popupURL, 470, 852)
       .then((tab) => Messaging.sendToPopupInternal(tab.id, requestCopy))
