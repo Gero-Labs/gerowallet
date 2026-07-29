@@ -12,7 +12,7 @@
 There is **no fund-loss path** (the witness must be valid for the user's own keys; the desktop re-checks the tx body hash before submit; the phone decodes the CBOR independently). So this feature is about **authorization policy + confidentiality + anti-DoS**, not about preventing theft.
 
 ## Honest security boundary
-Both the desktop and the phone hold the **same** wallet keys — this is not multisig. The "2FA" / remote-required policy is a **client-enforced gate**: it protects against someone who has one device/credential but not the paired device. It does not defend against a maliciously modified wallet binary. This is the same boundary as MetaMask's mobile-approval prompt, stated plainly in the UI.
+Both the desktop and the phone hold the **same** wallet keys — this is not multisig. The "2FA" / remote-required policy is a **client-enforced gate**: it protects against someone who has one device/credential but not the paired device. It does not defend against a maliciously modified wallet binary. This is the same boundary as the industry-standard mobile-approval prompt, stated plainly in the UI.
 
 ## Model
 Per-wallet security config (stored in the wallet-db `config` table, same place as `unlockMethod` / `autoLockMinutes`), keyed by wallet id:

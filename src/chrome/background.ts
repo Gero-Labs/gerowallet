@@ -2042,7 +2042,7 @@ app.addToOptions(MessageTypes.RECOVER_MPC_GOOGLE_WALLET, async (request, sendRes
 
 /**
  * Set / change the recovery password from an unlocked wallet. NEVER asks for the
- * old password (MetaMask parity): device + login reconstruct the entropy, then a
+ * old password (by design): device + login reconstruct the entropy, then a
  * crash-safe re-split rotates all three shares and stores a fresh recovery blob
  * under the new password. Requires device-secret re-auth (secret in request.data).
  * Never log request.data — it carries idToken / newRecoveryPassword / device secret.

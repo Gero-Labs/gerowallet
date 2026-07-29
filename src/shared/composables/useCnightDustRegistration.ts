@@ -747,7 +747,7 @@ export function useCnightDustRegistration() {
 
   /**
    * Point the existing registration at THIS wallet's own Midnight DUST address
-   * (migration from a portal/Lace registration). One tx: spend + re-output
+   * (migration from a portal registration). One tx: spend + re-output
    * with the replacement datum.
    */
   async function migrateDustAddressToOwn(credentials: RegisterCredentials): Promise<CnightRegistrationResult> {

@@ -106,16 +106,16 @@ describe('verifyDeviceRegisterProof', () => {
 });
 
 // Shared conformance vector — the STANDARD CIP-30 signData structure that both
-// iOS (CardanoKit) and our own walletBg.signData (Cardano SDK, "same as Lace")
+// iOS (CardanoKit) and our own walletBg.signData (Cardano SDK, per the CIP-30 standard)
 // emit: protected header {1:-8, "address":addr} with NO key_id. Inputs: wallet
 // STAKE key = 32 bytes of 0x01 (mainnet), relay-auth pubkey = RELAY_PUB,
 // deviceId = 4884fdaafea47c29fea7159d0daddd9c. The COSE_Key + reward address are
 // byte-identical across clients (so the blake2b224(x)==stake-key-hash binding
-// aligns); the COSE_Sign1 is the canonical iOS/Lace structure and the verifier
+// aligns); the COSE_Sign1 is the canonical CIP-30 structure and the verifier
 // is generic over the header layout (verifies the message's own Sig_structure).
 const VEC_STAKE = 'stake1uyxk54m7j3q6mrkevcunryrwf4p7e68c93cjk8gzxkhlkpswtcyrc';
 const VEC_COSE_KEY = 'a5010102581de10d6a577e9441ad8ed9663931906e4d43ece8f82c712b1d0235affb06032720062158208a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c';
-// iOS/Lace-canonical COSE_Sign1 (standard CIP-30 signData; no key_id in protected).
+// the canonical CIP-30 COSE_Sign1 (standard CIP-30 signData; no key_id in protected).
 const VEC_COSE_SIGN1 = '84582aa201276761646472657373581de10d6a577e9441ad8ed9663931906e4d43ece8f82c712b1d0235affb06a166686173686564f458ba6765726f2d786465762f76317c4445564943455f52454749535445527c34383834666461616665613437633239666561373135396430646164646439637c303132333435363738396162636465663031323334353637383961626364656630313233343536373839616263646566303132333435363738396162636465667c7374616b65317579786b35346d376a3371366d726b657663756e7279727766347037653638633933636a6b38677a786b686c6b70737774637972635840dae7f6bb4dacc10439b9f868c445fa3a1b2e072947ddafe2052afa49eafccc3335dfb3e400853457e061a24d96f1de5cde495ccc9dadd18c19f8351d419fd10a';
 
 describe('DEVICE_REGISTER proof conformance (byte-for-byte with iOS)', () => {

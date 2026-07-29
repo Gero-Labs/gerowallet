@@ -1,4 +1,4 @@
-# MPC MetaMask-style Recovery — Implementation Plan
+# MPC Fileless Recovery — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -8,7 +8,7 @@
 
 **Tech Stack:** Backend — Java 17 / Spring Boot, JPA (Hibernate `ddl-auto: update`, no migration file), reuse `GoogleIdTokenVerifier` + `LoginShareCipher`. Extension — Vue 2.7 + TypeScript + Vuetify 2.7, Dexie, `@cardano-sdk/core`, `shamir-secret-sharing`, Argon2id + XChaCha20 (`@noble`), vitest.
 
-**Design spec:** `docs/plans/2026-07-13-mpc-metamask-style-recovery-design.md`.
+**Design spec:** `docs/plans/2026-07-13-mpc-fileless-recovery-design.md`.
 
 **Worktrees:** extension `gerowallet-google-mpc` (branch `feat/google-mpc-wallet`); backend `gero-backend-google-mpc`. Backend and extension tasks land in their respective repos; commit in each.
 
@@ -415,7 +415,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * MetaMask-style recovery-share store. Holds the wallet's third Shamir share as
+ * Fileless recovery-share store. Holds the wallet's third Shamir share as
  * a client-encrypted blob (Argon2id/XChaCha20), wrapped again by {@link
  * LoginShareCipher} for a second server-side at-rest layer (KMS key). The
  * backend never sees a plaintext share or the recovery password.
@@ -1688,7 +1688,7 @@ Add api.mpc.storeRecovery/fetchRecovery/rotate (literal /api/mpc paths,
 config baseURL, no url-validation); gero-db setMpcDeviceShare/
 setMpcDeviceShareNext/promoteMpcDeviceShareNext; Wallet.mpcDeviceShareNext
 crash-safety field; STORE_MPC_RECOVERY/REVEAL_MPC_SRP/SET_RECOVERY_PASSWORD
-message types. Client foundation for MetaMask-style MPC recovery.
+message types. Client foundation for fileless MPC recovery.
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ```
@@ -1843,7 +1843,7 @@ Append to the end of `src/chrome/mpcWalletHandlers.ts` (after line 358):
 ```ts
 
 // ---------------------------------------------------------------------------
-// Task 7: store the recovery share (MetaMask-style: Google account + recovery
+// Task 7: store the recovery share (fileless: Google account + recovery
 // password, nothing to download)
 // ---------------------------------------------------------------------------
 
@@ -2231,7 +2231,7 @@ Replace the flow doc-comment + body (L301-358) with:
 
 ```ts
 /**
- * Restore an MPC Google wallet on a fresh device — MetaMask-style, fileless.
+ * Restore an MPC Google wallet on a fresh device — fileless.
  *
  * There is nothing to keep: the third factor is the memorized recovery
  * password. The backend serves the password-encrypted recovery blob plus the
@@ -3206,7 +3206,7 @@ export interface SetRecoveryPasswordDeps {
 }
 
 /**
- * Set / change the recovery password from an UNLOCKED wallet (MetaMask parity:
+ * Set / change the recovery password from an UNLOCKED wallet (industry-standard parity:
  * NEVER asks for the old recovery password). Because a 2-of-3 recovery share
  * cannot be cheaply re-wrapped without hand-rolled GF(256) math (D4), this does
  * a full crash-safe RE-SPLIT of the same entropy and stores a fresh recovery
@@ -3250,7 +3250,7 @@ export async function setRecoveryPasswordFlow(
 
   // Reconstruct entropy from the CURRENT device+login under the re-auth secret,
   // validating the derived key still belongs to this wallet. No old recovery
-  // password is ever involved (MetaMask parity).
+  // password is ever involved (industry-standard parity).
   const loginShare = await getLoginShare(idToken, wallet.chain, wallet.network);
   const currentDeviceShare = await decryptDeviceShare(wallet.mpcDeviceShare, secret);
   const entropy = await reconstructAndValidateEntropy(currentDeviceShare, loginShare, wallet.publicKey);
@@ -3328,7 +3328,7 @@ and the deps passed to `unlockMpcWalletFlow`:
 ```typescript
 /**
  * Set / change the recovery password from an unlocked wallet. NEVER asks for the
- * old password (MetaMask parity): device + login reconstruct the entropy, then a
+ * old password (industry-standard parity): device + login reconstruct the entropy, then a
  * crash-safe re-split rotates all three shares and stores a fresh recovery blob
  * under the new password. Requires device-secret re-auth (secret in request.data).
  * Never log request.data — it carries idToken / newRecoveryPassword / device secret.
@@ -3421,7 +3421,7 @@ feat(mpc): crash-safe re-split for set/change recovery password + resume-on-unlo
 
 - setRecoveryPasswordFlow: device+login reconstruct → fresh 2-of-3 re-split;
   order stage-next → rotate-login → promote → store-recovery → clear-cache.
-  Never asks the old recovery password (MetaMask parity). Rotate failure rolls
+  Never asks the old recovery password (industry-standard parity). Rotate failure rolls
   back (drop staged next, stay on old split).
 - unlockMpcWalletFlow: resume-on-unlock — if device+login fails but the staged
   mpcDeviceShareNext + login reconstructs, promote next and continue; else drop
@@ -3438,7 +3438,7 @@ EOF
 
 ### Task 11: Onboarding UI — password recovery, no file
 
-Replace the downloadable `.gmpc` recovery-file UX with MetaMask-style password recovery across the three Google onboarding steps. `StepGoogleSecure` keeps capturing the recovery password but gains a strength meter + min-12 gate via a shared validator; `StepGoogleBackup` swaps the file download for a backend upload (`STORE_MPC_RECOVERY`) with retry; `StepGoogleRestore` swaps the file-picker for a recovery-password field feeding `RECOVER_MPC_GOOGLE_WALLET`. Consumes the background handlers already specified by earlier tasks — does NOT redefine them.
+Replace the downloadable `.gmpc` recovery-file UX with fileless password recovery across the three Google onboarding steps. `StepGoogleSecure` keeps capturing the recovery password but gains a strength meter + min-12 gate via a shared validator; `StepGoogleBackup` swaps the file download for a backend upload (`STORE_MPC_RECOVERY`) with retry; `StepGoogleRestore` swaps the file-picker for a recovery-password field feeding `RECOVER_MPC_GOOGLE_WALLET`. Consumes the background handlers already specified by earlier tasks — does NOT redefine them.
 
 **Files**
 - Create: `src/shared/utils/mpc/recoveryPasswordStrength.ts`
@@ -3756,7 +3756,7 @@ Remove the now-unused `recoveryFileName` import and the `.mnemonic-note` style i
 - [ ] **Step 6: `StepGoogleRestore.vue` — replace the file-picker with a recovery-password-only restore.** Remove the `<v-file-input>` and its recovery-file label; keep the recovery-password field but attach the min-12 rule (a restore password must clear the same floor to match what was stored — but do NOT run the strength gate here, only length, since the user is typing a previously-chosen password). Anchor: replace the "Recovery file upload" block + the recovery-password field:
 
 ```html
-      <!-- Recovery password (no file — MetaMask-style fileless restore) -->
+      <!-- Recovery password (no file — fileless restore) -->
       <div class="step-section-label mb-2">{{ $t('welcome.recoveryPassword') }}</div>
       <div class="field-hint mb-2">{{ $t('welcome.restoreRecoveryPasswordHint') }}</div>
       <v-text-field

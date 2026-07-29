@@ -36,7 +36,7 @@
         class="mb-2"
       ></v-text-field>
 
-      <!-- Recovery password (no file — MetaMask-style fileless restore) -->
+      <!-- Recovery password (no file — fileless restore) -->
       <div class="step-section-label mb-2">{{ $t('welcome.recoveryPassword') }}</div>
       <div class="field-hint mb-2">{{ $t('welcome.restoreRecoveryPasswordHint') }}</div>
       <v-text-field

@@ -128,8 +128,8 @@ export interface MidnightDerivedKeys {
  * Derive the Cardano CIP-1852 xpub + primary base/stake address from the
  * wallet's BIP39 mnemonic. Mirrors `derivePublicKeyFromMnemonic` in
  * `gero-db.ts` but co-located so a single mnemonic produces both the Midnight
- * HD material and the Cardano material in one pass — matching Lace's pattern
- * of one wallet seed feeding every per-chain integration module.
+ * HD material and the Cardano material in one pass — matching the reference
+ * implementation's pattern of one wallet seed feeding every per-chain integration module.
  */
 async function deriveCardanoMaterial(
   mnemonic: string,
@@ -294,7 +294,7 @@ export async function deriveMidnightKeys(
 
   // Derive the Cardano CIP-1852 material from the same mnemonic so a single
   // Midnight wallet can natively sign Cardano-side DUST registration txs
-  // without requiring a separate Cardano wallet (Lace pattern).
+  // without requiring a separate Cardano wallet (matching the reference implementation).
   // Skipped on signing-only paths (see options.skipCardano above).
   const cardano = options.skipCardano
     ? { cardanoXpub: '', cardanoBaseAddress: '', cardanoStakeAddress: '', cardanoPaymentKeyHashHex: '' }

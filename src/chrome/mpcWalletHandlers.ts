@@ -335,7 +335,7 @@ export interface RecoverMpcGoogleWalletResult {
 }
 
 /**
- * Restore an MPC Google wallet on a fresh device — MetaMask-style, fileless.
+ * Restore an MPC Google wallet on a fresh device — fileless (nothing to download).
  *
  * There is nothing to keep: the third factor is the memorized recovery
  * password. The backend serves the password-encrypted recovery blob plus the
@@ -413,7 +413,7 @@ export async function recoverMpcGoogleWalletFlow(
 }
 
 // ---------------------------------------------------------------------------
-// Task 7: store the recovery share (MetaMask-style: Google account + recovery
+// Task 7: store the recovery share (fileless: Google account + recovery
 // password, nothing to download)
 // ---------------------------------------------------------------------------
 
@@ -577,7 +577,7 @@ export interface SetRecoveryPasswordDeps {
 }
 
 /**
- * Set / change the recovery password from an UNLOCKED wallet (MetaMask parity:
+ * Set / change the recovery password from an UNLOCKED wallet (by design,
  * NEVER asks for the old recovery password). Because a 2-of-3 recovery share
  * cannot be cheaply re-wrapped without hand-rolled GF(256) math (D4), this does
  * a full crash-safe RE-SPLIT of the same entropy and stores a fresh recovery
@@ -627,7 +627,7 @@ export async function setRecoveryPasswordFlow(
 
   // Reconstruct entropy from the CURRENT device+login under the re-auth secret,
   // validating the derived key still belongs to this wallet. No old recovery
-  // password is ever involved (MetaMask parity).
+  // password is ever involved (by design).
   const loginShare = await getLoginShare(idToken, wallet.chain, wallet.network);
   const currentDeviceShare = await decryptDeviceShare(wallet.mpcDeviceShare, secret);
   const entropy = await reconstructAndValidateEntropy(currentDeviceShare, loginShare, wallet.publicKey);

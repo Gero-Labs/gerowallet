@@ -4,12 +4,11 @@
  * Core types for Midnight Network state, ported from the prototype on
  * `new-midnight-backup` branch with corrections from production wallets:
  *
- * - **NIGHT decimals: 6** (per Lace's `nativeTokenInfo` — see [const.ts in Lace's
- *   blockchain-midnight package](https://raw.githubusercontent.com/input-output-hk/lace/main/packages/contract/midnight-context/src/const.ts)).
+ * - **NIGHT decimals: 6** (per the Midnight reference implementation).
  *   The prototype used 12 decimals; that's wrong.
- * - **DUST decimals: 15** (per Lace's `DUST_TOKEN_DECIMALS`).
+ * - **DUST decimals: 15** (per the Midnight reference implementation).
  * - **Dust generation status enum** and time-remaining tracking added beyond the prototype's
- *   shape, matching what the indexer and Lace's `getDustTankStatus` use.
+ *   shape, matching what the indexer and the Midnight reference implementation use.
  *
  * Three address types (shielded / unshielded / dust), each derived from a different
  * HD role: Zswap (3), NightExternal (0), Dust (2). (Role 4 is Metadata in wallet-sdk-hd 3.x.) Path: `m/44'/2400'/account'/role/index`.
@@ -91,7 +90,7 @@ export interface MidnightAddresses {
    * Cardano CIP-1852 account 0 xpub (bech32 `xpub1...`) derived from the same
    * mnemonic. Lets a Midnight wallet natively sign the Cardano-side DUST
    * registration tx without requiring a separate Cardano wallet. Mirrors
-   * Lace's pattern of one mnemonic feeding all per-chain integrations.
+   * the reference implementation's pattern of one mnemonic feeding all per-chain integrations.
    * Optional for backward compat — wallets created before this field was added
    * get it derived + persisted on first DUST registration attempt.
    */
@@ -118,7 +117,7 @@ export type DustRegistrationStatus =
   | 'Invalid';       // Mapping exists but rejected (malformed datum, conflict, etc.)
 
 /**
- * State of the dust "tank" — the visual primitive Lace uses to show generation status.
+ * State of the dust "tank" — the visual primitive used to show generation status.
  * Driven by the relationship between current dust balance, max cap, and time.
  */
 export type DustGenerationStatus =

@@ -283,7 +283,7 @@ export async function buildCardanoTransaction({
     computeSelectionLimit: computeSelectionLimit(protocolParams.maxTxSize, buildTx)
   };
 
-  // Eternl-style: exclude the auto-picked collateral UTxO from coin selection
+  // exclude the auto-picked collateral UTxO from coin selection
   // so a regular send doesn't accidentally spend the UTxO that dApps will use
   // for collateral. Callers that explicitly need to use the collateral UTxO
   // (e.g. CollateralTab.vue's "Set Collateral" flow) pass excludeCollateral: false.
