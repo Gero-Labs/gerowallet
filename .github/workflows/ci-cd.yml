@@ -56,8 +56,6 @@ jobs:
           VITE_USE_MOCK_PROOF: ${{ vars.VITE_USE_MOCK_PROOF }}
           VITE_MOONPAY_API_KEY: ${{ secrets.VITE_MOONPAY_API_KEY }}
           VITE_GUARDARIAN_API_KEY: ${{ secrets.VITE_GUARDARIAN_API_KEY }}
-          VITE_ABLY_API_KEY: ${{ secrets.VITE_ABLY_API_KEY }}
-          VITE_ZKFOLD_API_KEY: ${{ secrets.VITE_ZKFOLD_API_KEY }}
         run: |
           {
             echo "VITE_NEXUS_URL=$VITE_NEXUS_URL"
@@ -78,8 +76,6 @@ jobs:
             echo "VITE_USE_MOCK_PROOF=$VITE_USE_MOCK_PROOF"
             echo "VITE_MOONPAY_API_KEY=$VITE_MOONPAY_API_KEY"
             echo "VITE_GUARDARIAN_API_KEY=$VITE_GUARDARIAN_API_KEY"
-            echo "VITE_ABLY_API_KEY=$VITE_ABLY_API_KEY"
-            echo "VITE_ZKFOLD_API_KEY=$VITE_ZKFOLD_API_KEY"
           } > .env.production
           echo "Wrote .env.production ($(grep -c '^VITE_' .env.production) vars)"
 
