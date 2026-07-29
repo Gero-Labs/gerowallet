@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🔒 Report a security vulnerability
+    url: https://github.com/Gero-Labs/gerowallet/security/advisories/new
+    about: Do NOT open a public issue for security problems. Report privately here — see SECURITY.md.
+  - name: 💬 Questions & discussion
+    url: https://github.com/Gero-Labs/gerowallet/discussions
+    about: Ask questions, share ideas, and get help from the community.
