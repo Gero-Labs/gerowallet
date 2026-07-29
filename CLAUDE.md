@@ -14,7 +14,7 @@ Cardano blockchain wallet Chrome extension (Manifest V3). Multi-chain light wall
 - **DB**: Dexie 4.0.7 (IndexedDB) with versioned schemas
 - **Cardano**: `@cardano-sdk/core` v0.46.9 (preferred for new features)
 - **Hardware Wallets**: Ledger, Trezor, Keystone
-- **Real-time**: Ably v2.11.0 (WebSocket blockchain updates)
+- **Real-time**: Gero Sync — push-based WebSocket sync (`VITE_SYNC_WS_URL`)
 - **Crypto**: WebAssembly (bip39, blake2b), `@noble/ciphers` (ChaCha20), `@noble/hashes` (PBKDF2)
 
 ## Project Structure
@@ -23,9 +23,9 @@ src/
   chrome/          # Extension: background.ts, walletBg.ts, messaging.ts, cardanoJsSdkCbor.ts
   modules/         # Feature modules (Vue components): dashboard, staking, governance, swap, pool-operator, etc.
   stores/          # Vue Observable stores: walletStore, geroStore, networkStore, poolOperatorStore, etc.
-  services/        # Business logic: ably, sync, walletManager, storeMessaging
+  services/        # Business logic: sync, websocket (Gero Sync), walletManager, storeMessaging
   db/              # Database: gero-db.ts (app-level), wallet-db.ts (per-wallet)
-  api/             # External APIs: blockchain-api, dexhunter-api, tap-tools-api, spo-api
+  api/             # Data clients, routed through gero-backend/Nexus: blockchain-api, nexus-tx-api, market-api, spo-api
   shared/          # Reusable: utils/, composables/, components/
   options/         # Extension options page entry
   popup/           # Extension popup entry
@@ -114,11 +114,13 @@ function broadcastFromBackground(updates: Partial<StoreType>) {
 }
 ```
 
-## Ably Real-time Service
-- Singleton: `src/services/ably.service.ts`
-- **Recreate client on wallet switch** (`setAuthParams` → `close()` → `recreateClient()`)
-- **Non-blocking connection** — don't block wallet login waiting for Ably
+## Gero Sync Real-time Service
+- Push-based WebSocket sync (replaced Ably): `src/services/websocket.service.ts` + `src/services/sync.service.ts`
+- Connect via `VITE_SYNC_WS_URL`; the server pushes tip/updates (no client polling)
+- **Reconnect + re-subscribe on wallet switch** (subscribe to the new wallet's addresses / stake key)
+- **Non-blocking connection** — don't block wallet login waiting for sync
 - Use async-mutex for sync/tip processing
+- Message contract invariants: `SYNC_CHECK_OK` / `CATCH_UP_COMPLETE`
 
 ## PRF (PassKey) Wallets
 - Core encryption via WebAuthn PRF extension (hardware-backed)
@@ -141,13 +143,13 @@ function broadcastFromBackground(updates: Partial<StoreType>) {
 - Nav hiding: check flag in NavigationDrawer.vue menu items
 
 ## Background Polling
-- **Sync (Ably `onTip`)**: Full speed when unlocked; throttled to every 2 min when locked (`walletManager.service.ts`)
-- **Xerberus risk scores**: Every 12 hours
+- **Sync (Gero Sync tip push)**: Full speed when unlocked; throttled to every 2 min when locked (`walletManager.service.ts`)
+- **Risk scores**: Every 12 hours (via Nexus)
 - **Fiat rates (USD→EUR)**: Fetched on demand by `useCurrencyConverter.ts` via `/api/price/fiatRates`. No background polling.
-- **Price data**: Provided by market data API (`market-api.ts`), NOT by background alarms. No CoinGecko, ticker, DexHunter mcap, RealFi, or TapTools polling in background.
+- **Price data**: Provided by the market data API (`market-api.ts`, via backend), NOT by background alarms. No third-party price/mcap polling in the background.
 
 ## Performance
-- Login optimized to <200ms (non-blocking Ably, deferred BringCache, trusted login response)
+- Login optimized to <200ms (non-blocking sync, deferred BringCache, trusted login response)
 - Use `Promise.all()` for parallel async, `setTimeout` for non-critical deferrals
 - Use `performance.now()` timing logs with `⏱️ PERF:` prefix
 
@@ -158,7 +160,7 @@ function broadcastFromBackground(updates: Partial<StoreType>) {
 - **Store race conditions**: Always use in-memory state, not `chrome.storage.local.get()`
 - **Login freezing**: Make messaging init non-blocking
 - **Connection state stuck**: Use immediate `chrome.storage.local.set()` for critical states
-- **Ably 401**: Recreate client in `setAuthParams()`
+- **Sync WS drop**: reconnect in `websocket.service.ts`; re-subscribe to addresses/stake key on wallet switch
 - **"window/window" error**: Don't use `define: { 'global': ... }` with `nodePolyfills` plugin
 - **pbkdf2 build issues**: Virtual module plugin with `enforce: 'pre'` in background config
 
@@ -188,7 +190,7 @@ node scripts/design/contrast.mjs         # 56 WCAG checks against the real token
 Motion is feedback, not decoration. Keep spinners, ~1.4s skeleton shimmers, typing/dot indicators, and status/sync/connection pulses. Delete decorative loops (glow/breathe/float/aurora/color-shift). Durations resolve to `--g-dur-*`; prefer explicit `transition` property lists over `transition: all` (and never comma-list properties with a single trailing duration — that only animates the last one).
 
 ## External Integrations
-Blockchain: Blockfrost, Koios, Backend API | Price: Market Data API (backend) | DeFi: DEX Hunter (swap only) | Security: Cardano Shield, Xerberus | Fiat: Moonpay, Guardarian | Other: Ably, ADA Handle, Charli3, Bring Cashback | Hardware: Ledger, Trezor, Keystone
+Data layer: **Nexus** (via gero-backend) — blockchain data, prices, DeFi/swap routing, and risk scores are all brokered server-side; the client carries no third-party data keys. Real-time: **Gero Sync** (WebSocket push). Fiat on-ramp: MoonPay, Guardarian. Other: ADA Handle, Bring Cashback. Hardware: Ledger, Trezor, Keystone.
 
 ## Relevant Skills
 Use these slash commands when working on this project:
@@ -203,4 +205,4 @@ Use these slash commands when working on this project:
 - `/simplify` — Review changed code for quality and efficiency
 
 ---
-**Last Updated**: 2026-03-25
+**Last Updated**: 2026-07-29
