@@ -417,12 +417,12 @@ See [SECURITY.md](SECURITY.md) for the full policy, scope, and safe-harbor terms
 
 ## License
 
-The source code is published under a **source-available, Non-Commercial license** (Copyright Gero Labs) - see the [LICENSE](LICENSE) file for the full terms.
+The source code is published under a **source-available, Non-Commercial license** (Copyright A.D. Labs) - see the [LICENSE](LICENSE) file for the full terms.
 
 ### What this means:
 - ✅ View and study the source code
 - ✅ Modify and build on it, and share the result — **for Non-Commercial Use only**
-- ⚠️ You must give prominent notice that your work uses this Program and that it is the copyright of Gero Labs
+- ⚠️ You must give prominent notice that your work uses this Program and that it is the copyright of A.D. Labs
 - ⚠️ You may contribute back to this repository
 - ❌ Commercial use is **not** permitted without a separate agreement
 - ❌ No trademark rights to the Gero name or logos are granted
