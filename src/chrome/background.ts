@@ -537,6 +537,14 @@ chrome.webNavigation?.onCommitted.addListener(async (details) => {
 });
 
 app.add(METHOD.getBalance, async (request, sendResponse) => {
+  // Server-side whitelist enforcement (defense-in-depth): the content relay
+  // pre-checks the whitelist client-side, but the background must not depend on
+  // that. CIP-30 read methods are only reachable after enable(), so a legit
+  // connected dApp always passes.
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+    return;
+  }
   try {
     const collateral = WalletStore.state.collateral;
     const utxosFromStorage = WalletStore.state.utxos;
@@ -681,6 +689,10 @@ app.add(METHOD.isEnabled, (request, sendResponse) => {
 });
 
 app.add(METHOD.getAddress, async (request, sendResponse) => {
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+    return;
+  }
   const loggedWallet = WalletStore.state.loggedWallet
   if (!loggedWallet) {
     sendResponse({
@@ -712,6 +724,15 @@ app.add(METHOD.getAddress, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getAddressBech32, async (request, sendResponse) => {
+  // Gate dApp (CIP-30) callers on the whitelist. The origin-present guard leaves
+  // the trusted internal caller intact: Bring cashback runs in our own content
+  // script and calls this directly (no origin) to bypass the dApp whitelist by
+  // design (see content.ts getWalletAddress). Page requests always carry an
+  // origin (stamped by the relay), so they are always checked.
+  if (request.origin && !WalletStore.isWhitelisted(request.origin)) {
+    sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+    return;
+  }
   const loggedWallet = WalletStore.state.loggedWallet;
   if (!loggedWallet || !loggedWallet.baseAddress) {
     sendResponse({
@@ -767,6 +788,10 @@ async function isWhitelisted(origin: string): Promise<boolean> {
 }
 
 app.add(METHOD.getNetworkId, async (request, sendResponse) => {
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+    return;
+  }
   const loggedWallet = WalletStore.state.loggedWallet
   if (!loggedWallet) {
     sendResponse({
@@ -786,6 +811,10 @@ app.add(METHOD.getNetworkId, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getRewardAddresses, async (request, sendResponse) => {
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+    return;
+  }
   const loggedWallet = WalletStore.state.loggedWallet
   if (!loggedWallet) {
     sendResponse({
@@ -806,6 +835,10 @@ app.add(METHOD.getRewardAddresses, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getUtxos, async (request, sendResponse) => {
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+    return;
+  }
   try {
     const utxosFromStorage = WalletStore.state.utxos as Cardano.Utxo[];
     const collateral = WalletStore.state.collateral;
@@ -906,6 +939,10 @@ app.add(METHOD.getCollateral, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getUsedAddresses, async (request, sendResponse) => {
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+    return;
+  }
   try {
     const loggedWallet = WalletStore.state.loggedWallet
     if (!loggedWallet) {
@@ -934,6 +971,10 @@ app.add(METHOD.getUsedAddresses, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getUnusedAddresses, async (request, sendResponse) => {
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+    return;
+  }
   try {
     const loggedWallet = WalletStore.state.loggedWallet
     if (!loggedWallet) {
