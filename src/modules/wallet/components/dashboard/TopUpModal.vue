@@ -201,7 +201,7 @@ const {
   resetState,
   handlePassKeySuccess: composableHandlePassKeySuccess,
   handlePassKeyError: composableHandlePassKeyError,
-  handlePassKeyAuthSuccess: composableHandlePassKeyAuthSuccess,
+  handlePassKeyAuthSuccess: _composableHandlePassKeyAuthSuccess,
   handlePassKeyAuthError: composableHandlePassKeyAuthError,
   setPasswordFieldRef,
 } = useTransactionSigning({

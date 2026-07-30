@@ -17,7 +17,7 @@ const fundingRates = ref<Record<string, PremiumIndexResponse>>({});
 const loading = ref(false);
 
 let initialized = false;
-let refreshInterval: ReturnType<typeof setInterval> | null = null;
+let _refreshInterval: ReturnType<typeof setInterval> | null = null;
 
 // ---------------------------------------------------------------------------
 // Fetch helpers
@@ -62,7 +62,7 @@ export function useStrikeMarket() {
         loading.value = false;
       });
 
-    refreshInterval = setInterval(async () => {
+    _refreshInterval = setInterval(async () => {
       await Promise.all([fetchTickers(), fetchFundingRates()]);
     }, 30_000);
   }

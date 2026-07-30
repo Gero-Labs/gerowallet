@@ -9,7 +9,7 @@
  */
 
 import { BTCProvider } from './BTCProvider';
-import type { Network, ProviderOption } from '../../WalletProvider';
+import type { ProviderOption } from '../../WalletProvider';
 import type { TomoWallet } from '../../types';
 
 const GERO_BTC_PROVIDER_KEY = 'gero_btc';

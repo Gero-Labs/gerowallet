@@ -104,7 +104,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { poolOperatorStore } from '@/stores/poolOperatorStore';
 
 const { t } = useTranslation();
 
