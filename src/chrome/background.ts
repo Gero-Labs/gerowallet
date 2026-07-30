@@ -2569,7 +2569,7 @@ app.addToOptions(MessageTypes.UNTRUST_CROSS_DEVICE, async (request, sendResponse
 // Sign the one-time wallet-control proof endorsing this device's relay-auth key.
 // Requires spending auth (the wallet stake key COSE-signs), so the UI collects the
 // password / passkey at enable-time and passes it here; the proof is then cached and
-// rides every DEVICE_REGISTER. See docs/plans/2026-07-03-authenticated-device-register-contract.md.
+// rides every DEVICE_REGISTER. See the internal authenticated-device-register contract.
 app.addToOptions(MessageTypes.PRODUCE_DEVICE_REGISTER_PROOF, async (request, sendResponse) => {
   try {
     const password = typeof request.data?.password === 'string' ? request.data.password : undefined;
@@ -4895,8 +4895,8 @@ app.addToOptions(MessageTypes.ADD_MIDNIGHT_PENDING_TX, async (request, sendRespo
 // Midnight DApp Connector (@midnight-ntwrk/dapp-connector-api v4.0.1)
 //
 // Phase 1: discovery + connect + all read getters + signData +
-// submitTransaction. See docs/midnight/2026-07-09-midnight-dapp-connector-plan.md
-// for the full spec-vs-shipped-package verification this is grounded in
+// submitTransaction. Grounded in an internal spec-vs-shipped-package
+// verification of the shipped connector package, which this is based on
 // (several details here diverge from the SPECIFICATION.md prose because the
 // prose is measurably stale against the actual published 4.0.1 types).
 //
