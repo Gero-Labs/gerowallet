@@ -40,7 +40,6 @@
     </v-card>
   </template>
   <script setup lang="ts">
-  import { useTranslation } from '@/shared/composables/useTranslation';
   import { ref, computed, toRefs } from 'vue';
   import { walletStore } from '@/stores/walletStore';
   import Select from '@/shared/components/Select.vue';
@@ -64,7 +63,7 @@
   }>();
 
   const { loggedWallet, baseAddress } = toRefs(walletStore);
-  const { config, utxos } = toRefs(walletStore);
+  const { config: _config, utxos: _utxos } = toRefs(walletStore);
   const loading = ref(false);
   const tx = ref<Transaction | undefined>();
   const risks = ref<Risks>({
@@ -73,7 +72,7 @@
 
   const changeAddress = computed(() => baseAddress.value);
 
-  const recipient = computed(() => {
+  const _recipient = computed(() => {
     if (tx.value) {
       const txBody = tx.value.body();
       for (let i = 0; i < txBody.outputs().len(); i++) {

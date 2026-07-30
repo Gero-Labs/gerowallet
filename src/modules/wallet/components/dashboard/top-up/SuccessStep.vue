@@ -34,7 +34,7 @@ withDefaults(defineProps<Props>(), {
 });
 
 // Emits
-const emit = defineEmits<{
+defineEmits<{
   (e: 'back-to-account'): void;
 }>();
 </script>

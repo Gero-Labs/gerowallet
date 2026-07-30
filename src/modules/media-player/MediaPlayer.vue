@@ -94,7 +94,7 @@
   </v-layout>
 </template>
 <script setup lang="ts">
-import { ref, computed, watch, toRefs } from 'vue';
+import { ref, computed, toRefs } from 'vue';
 import PlayerPlayback from "@/modules/media-player/components/PlayerPlayback.vue";
 import PlayerControls from "@/modules/media-player/components/PlayerControls.vue";
 import MusicStore, { musicStore } from '@/stores/musicStore';
@@ -102,16 +102,16 @@ import MusicStore, { musicStore } from '@/stores/musicStore';
 const { musicPlaylist, context } = toRefs(musicStore);
 
 const search = ref('');
-const trackDuration = ref(0);
-const currentlyPlaying = ref(false);
-const currentlyStopped = ref(false);
-const currentTime = ref(0);
-const currentProgressBar = ref(0);
-const checkingCurrentPositionInTrack = ref(null);
-const imageFile = ref("");
-const track = ref(null);
+const _trackDuration = ref(0);
+const _currentlyPlaying = ref(false);
+const _currentlyStopped = ref(false);
+const _currentTime = ref(0);
+const _currentProgressBar = ref(0);
+const _checkingCurrentPositionInTrack = ref(null);
+const _imageFile = ref("");
+const _track = ref(null);
 
-const fancyTimeFormat = (s: number) => {
+const _fancyTimeFormat = (s: number) => {
   return (s - (s %= 60)) / 60 + (9 < s ? ":" : ":0") + s.toFixed(0);
 };
 
@@ -166,7 +166,7 @@ const selectTrack = (track: any) => {
   }
 };
 
-const calculateIndex = (index: number, category: string) => {
+const _calculateIndex = (index: number, category: string) => {
   // Calculate global index based on the category and track index
   const categoryStartIndex = Object.keys(groupedPlaylist.value).reduce((acc, key) => {
     if (key === category) return acc;
