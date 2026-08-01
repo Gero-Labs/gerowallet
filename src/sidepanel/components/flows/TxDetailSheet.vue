@@ -36,7 +36,7 @@
 
         <div v-if="tx.body?.fee" class="detail-row">
           <span class="detail-label">{{ $t('miniGero.fee') }}</span>
-          <span class="detail-value fee-text">{{ formatAda(tx.body.fee) }}</span>
+          <span class="detail-value fee-text">{{ formatAda(tx.body?.fee) }}</span>
         </div>
 
         <div v-if="tx.epoch_no" class="detail-row">
