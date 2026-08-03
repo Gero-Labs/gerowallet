@@ -472,7 +472,7 @@ watch(
   }
 );
 
-const checkCurrentCardStatus = async () => {
+const _checkCurrentCardStatus = async () => {
   const currentCard = cardsWithOrderSlot.value[currentCardIndex.value];
   if (!currentCard?.cardData?.order_uuid || currentCard?.cardData?.card_uuid) {
     return;

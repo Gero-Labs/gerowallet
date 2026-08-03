@@ -230,7 +230,6 @@ import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import filters from '@/shared/utils/filters';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import { Cardano } from '@cardano-sdk/core';
-import rules from '@/utils/rules';
 import networks from '@/utils/networks';
 import { WalletType } from '@/models/types';
 import assets from '@/utils/assets';

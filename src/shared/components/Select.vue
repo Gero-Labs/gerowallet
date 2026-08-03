@@ -32,7 +32,6 @@
 </template>
 
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import assets from '@/utils/assets';
 
 interface Props {

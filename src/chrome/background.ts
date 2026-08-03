@@ -347,11 +347,11 @@ function sendToMiniGero(method: string, payload: unknown, tabId?: number): Promi
  * Wait for the mini-gero side panel to connect its DApp channel port for a specific tab.
  * Resolves once the port for `tabId` is set, rejects after `timeoutMs`.
  */
-// How long a dApp signTx waits for the side-panel drawer to connect. Long enough
-// to sit through a lock screen while the user signs in (matches the enable/login
-// 5-min cap) — the port connects instantly once the panel is unlocked, so this
-// only matters while locked. Prevents falling back to a welcome popup that can't sign.
-const SIGN_TX_PORT_WAIT_MS = 5 * 60 * 1000;
+// How long a dApp request (enable/signTx/signData) waits for the side-panel drawer
+// to connect its port. Long enough to sit through a lock screen while the user
+// signs in — the port connects instantly once the panel is unlocked, so this only
+// matters while locked. Prevents falling back to a legacy popup window.
+const DAPP_PANEL_PORT_WAIT_MS = 5 * 60 * 1000;
 
 function waitForMiniGeroPort(timeoutMs = 5000, tabId?: number): Promise<void> {
   const hasPort = () => typeof tabId === 'number' ? miniGeroPorts.has(tabId) : miniGeroPorts.size > 0;
@@ -581,7 +581,10 @@ app.add(METHOD.enable, (request, sendResponse) => {
   const enablePayload = { ...request.data, website: origin, favIconUrl };
 
   const handleMiniGeroEnable = () => {
-    return sendToMiniGero('enable', enablePayload, tabId)
+    // Prefer this tab's panel port, else any open panel (same rationale as
+    // handleMiniGeroSignTx — the panel may register under a different tab).
+    const deliverTabId = typeof tabId === 'number' && miniGeroPorts.has(tabId) ? tabId : undefined;
+    return sendToMiniGero('enable', enablePayload, deliverTabId)
       .then(async (response) => {
         if (response.data === true) {
           // Read the wallet fresh: a cold-start request may have logged a
@@ -593,36 +596,55 @@ app.add(METHOD.enable, (request, sendResponse) => {
       });
   };
 
-  const openSidePanelAndSend = () => {
+  const openPopupForEnable = () => {
+    // Legacy popup window — only when the side panel itself can't open.
+    const popupURL = chrome.runtime.getURL(
+      `index.html#/${POPUP.dappConnect}?website=${encodeURIComponent(origin)}` +
+        (favIconUrl ? `&favIconUrl=${encodeURIComponent(favIconUrl)}` : '')
+    );
+    return focusOrCreatePopup(popupURL, 470, 600)
+      .then(newTab => Messaging.sendToPopupInternal(newTab.id, request))
+      .then((response: BackgroundResponse) => {
+        if (response.data) reply({ data: response.data });
+        else if (response.error) reply({ error: response.error });
+        else reply({ error: APIError.InternalError });
+      })
+      .catch(err => reply({ error: err }));
+  };
+
+  const openSidePanelAndSend = async () => {
     if (typeof tabId !== 'number') {
       return reply({ error: APIError.InternalError });
     }
-    openSidebar(tabId, 'sidepanel/index.html')
-      .then(() => waitForMiniGeroPort(5000, tabId))
-      .then(() => handleMiniGeroEnable())
-      .catch(() => {
-        // Fallback: popup window when side panel is not supported or fails
-        const popupURL = chrome.runtime.getURL(
-          `index.html#/${POPUP.dappConnect}?website=${encodeURIComponent(origin)}` +
-            (favIconUrl ? `&favIconUrl=${encodeURIComponent(favIconUrl)}` : '')
-        );
-        focusOrCreatePopup(popupURL, 470, 600)
-          .then(newTab => Messaging.sendToPopupInternal(newTab.id, request))
-          .then((response: BackgroundResponse) => {
-            if (response.data) reply({ data: response.data });
-            else if (response.error) reply({ error: response.error });
-            else reply({ error: APIError.InternalError });
-          })
-          .catch(err => reply({ error: err }));
-      });
+    // Phase 1: open the panel. Only if the panel itself can't open (side panel
+    // disabled) do we fall back to the legacy popup window.
+    try {
+      await openSidebar(tabId, 'sidepanel/index.html');
+    } catch {
+      return openPopupForEnable();
+    }
+    // Phase 2: wait for ANY panel port (through a lock screen, up to the long
+    // cap — not a 5s race that dumps the user into a popup while the wallet is
+    // still locked or the panel registered under another tab).
+    try {
+      await waitForMiniGeroPort(DAPP_PANEL_PORT_WAIT_MS);
+    } catch {
+      return reply({ error: APIError.Refused });
+    }
+    // Phase 3: deliver via the connected panel.
+    handleMiniGeroEnable().catch((err: unknown) => {
+      reply({ error: errorMessage(err) || APIError.InternalError });
+    });
   };
 
   const routeEnable = () => {
     if (WalletStore.isWhitelisted(origin)) {
       return reply({ data: true });
     }
-    // Primary: route through mini-gero side panel drawer
-    if (typeof tabId === 'number' && miniGeroPorts.has(tabId)) {
+    // Primary: route through the drawer if ANY panel is open (handleMiniGeroEnable
+    // prefers this tab's port, falls back to any). Only open a fresh panel when
+    // none is connected.
+    if (miniGeroPorts.size > 0) {
       handleMiniGeroEnable()
         .catch((err: unknown) => {
           reply({ error: errorMessage(err) || APIError.InternalError });
@@ -1190,7 +1212,7 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
       // Wait for ANY panel port, not this tab's specifically — the panel may
       // register under a different active-tab id, and handleMiniGeroSignTx
       // falls back to whatever panel is open.
-      await waitForMiniGeroPort(SIGN_TX_PORT_WAIT_MS);
+      await waitForMiniGeroPort(DAPP_PANEL_PORT_WAIT_MS);
     } catch {
       // Panel opened but no port ever connected (user never unlocked, or
       // closed the panel). Fail the request cleanly rather than spawning a
@@ -2610,7 +2632,7 @@ app.addToOptions(MessageTypes.UNTRUST_CROSS_DEVICE, async (request, sendResponse
 // Sign the one-time wallet-control proof endorsing this device's relay-auth key.
 // Requires spending auth (the wallet stake key COSE-signs), so the UI collects the
 // password / passkey at enable-time and passes it here; the proof is then cached and
-// rides every DEVICE_REGISTER. See docs/plans/2026-07-03-authenticated-device-register-contract.md.
+// rides every DEVICE_REGISTER. See the internal authenticated-device-register contract.
 app.addToOptions(MessageTypes.PRODUCE_DEVICE_REGISTER_PROOF, async (request, sendResponse) => {
   try {
     const password = typeof request.data?.password === 'string' ? request.data.password : undefined;
@@ -4936,8 +4958,8 @@ app.addToOptions(MessageTypes.ADD_MIDNIGHT_PENDING_TX, async (request, sendRespo
 // Midnight DApp Connector (@midnight-ntwrk/dapp-connector-api v4.0.1)
 //
 // Phase 1: discovery + connect + all read getters + signData +
-// submitTransaction. See docs/midnight/2026-07-09-midnight-dapp-connector-plan.md
-// for the full spec-vs-shipped-package verification this is grounded in
+// submitTransaction. Grounded in an internal spec-vs-shipped-package
+// verification of the shipped connector package, which this is based on
 // (several details here diverge from the SPECIFICATION.md prose because the
 // prose is measurably stale against the actual published 4.0.1 types).
 //

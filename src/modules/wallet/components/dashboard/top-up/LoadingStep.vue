@@ -54,7 +54,7 @@ interface Props {
   duration?: number; // Duration in milliseconds
 }
 
-const props = withDefaults(defineProps<Props>(), {
+withDefaults(defineProps<Props>(), {
   duration: 4000, // 30 seconds for testing
 });
 
@@ -113,7 +113,7 @@ const startProgress = () => {
     status: 'active'
   }];
   
-  let elapsedTime = 0;
+  let _elapsedTime = 0;
   let currentStepProgress = 0;
   
   // Calculate total duration and progress breakpoints
@@ -127,7 +127,7 @@ const startProgress = () => {
   console.log('Total duration:', totalDuration, 'Progress breakpoints:', progressBreakpoints);
 
   interval.value = window.setInterval(() => {
-    elapsedTime += 100;
+    _elapsedTime += 100;
     currentStepProgress += 100;
     
     // Check if current step is complete

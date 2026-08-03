@@ -31,7 +31,7 @@
 import { toRefs, computed } from 'vue';
 import MusicStore, { musicStore } from '@/stores/musicStore';
 
-const props = defineProps({
+defineProps({
   xSmall: {
     type: Boolean,
     required: false,
