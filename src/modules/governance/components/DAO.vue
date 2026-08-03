@@ -370,42 +370,15 @@ import VueHighcharts from '@/shared/components/VueHighcharts.vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import clarityApi, { type VotingPowerCalculation, type DaoDetails, type MembershipWorkflow } from '@/api/clarity-api';
 import snackbar from '@/plugins/snackbar';
+import { sanitizeRichText } from '@/shared/utils/sanitizeHtml';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { walletStore } from '@/stores/walletStore';
 
 const { t } = useTranslation();
 const { loggedWallet } = toRefs(walletStore);
 
-/** Sanitize HTML \u2014 whitelist safe tags only, strip everything else */
-const sanitizeHtml = (html: string): string => {
-  const div = document.createElement('div');
-  div.innerHTML = html;
-  const allowedTags = new Set(['p', 'br', 'b', 'strong', 'i', 'em', 'a', 'ul', 'ol', 'li', 'span', 'div']);
-  const walk = (node: Node) => {
-    const children = Array.from(node.childNodes);
-    for (const child of children) {
-      if (child.nodeType === Node.ELEMENT_NODE) {
-        const el = child as HTMLElement;
-        if (!allowedTags.has(el.tagName.toLowerCase())) {
-          // Replace disallowed element with its text content
-          const text = document.createTextNode(el.textContent || '');
-          node.replaceChild(text, child);
-        } else {
-          // Strip event handlers and dangerous attributes
-          for (const attr of Array.from(el.attributes)) {
-            if (attr.name.startsWith('on') || attr.name === 'style' || (attr.name === 'href' && (attr.value.toLowerCase().startsWith('javascript') || attr.value.toLowerCase().startsWith('data:')))) {
-              el.removeAttribute(attr.name);
-            }
-          }
-          if (el.tagName === 'A') el.setAttribute('rel', 'noopener noreferrer');
-          walk(child);
-        }
-      }
-    }
-  };
-  walk(div);
-  return div.innerHTML;
-};
+/** Sanitize untrusted DAO rich text via DOMPurify (see sanitizeRichText). */
+const sanitizeHtml = (html: string): string => sanitizeRichText(html);
 
 // ── State ──
 const daoName = ref('Gero DAO');
