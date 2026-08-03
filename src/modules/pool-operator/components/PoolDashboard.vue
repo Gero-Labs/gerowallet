@@ -414,7 +414,7 @@ const { t } = useTranslation();
 const { poolId, isRegistered, isRetiring, retirementEpoch, registeredParams } = toRefs(poolOperatorStore);
 const { loggedWallet } = toRefs(walletStore);
 
-const emit = defineEmits(['add-node', 'remove-node', 'edit-node', 'retire', 'update']);
+defineEmits(['add-node', 'remove-node', 'edit-node', 'retire', 'update']);
 
 const loading = ref(false);
 const poolInfo = ref<any>(null);
@@ -452,7 +452,7 @@ const currentNextCountdown = computed(() => {
 // Find connected nodes
 const bpNode = computed(() => poolOperatorStore.nodes.find(n => n.type === 'bp' && n.connected));
 const allNodes = computed(() => poolOperatorStore.nodes);
-const connectedNodes = computed(() => poolOperatorStore.nodes.filter(n => n.connected && n.data));
+const _connectedNodes = computed(() => poolOperatorStore.nodes.filter(n => n.connected && n.data));
 
 const setupSteps = [
   { title: t('poolOperator.step1Title'), code: 'curl -sSL https://raw.githubusercontent.com/Gero-Labs/gero-node-monitor/main/gero-node-monitor-server.py -o ~/gero-node-monitor-server.py' },
@@ -487,7 +487,7 @@ const kesDaysLeft = computed(() => {
   return `~${days} days`;
 });
 
-const kesBarPct = computed(() => {
+const _kesBarPct = computed(() => {
   if (kesRemaining.value == null) return 0;
   // Max KES periods = 62 (for standard config)
   return Math.min((kesRemaining.value / 62) * 100, 100);
@@ -517,7 +517,7 @@ const kesUrgencyClass = computed(() => {
   return 'kes-healthy';
 });
 
-const bpNodeHost = computed(() => {
+const _bpNodeHost = computed(() => {
   try {
     return bpNode.value?.url ? new globalThis.URL(bpNode.value.url).hostname : 'your-node';
   } catch {
@@ -525,7 +525,7 @@ const bpNodeHost = computed(() => {
   }
 });
 
-const kesBarClass = computed(() => {
+const _kesBarClass = computed(() => {
   const r = kesRemaining.value;
   if (r == null) return '';
   if (r < 20) return 'bar-critical';
@@ -668,7 +668,7 @@ function closeKesDialog() {
   kesRotateSuccess.value = false;
 }
 
-function copyCmd(cmd: string) {
+function _copyCmd(cmd: string) {
   navigator.clipboard.writeText(cmd);
   snackbar.fireSuccess(t('common.copied'));
 }

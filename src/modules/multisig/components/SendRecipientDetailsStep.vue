@@ -229,7 +229,7 @@ const contact = ref<Contact>({
 // const multiSigWallet = computed(() => multisig.multiSigWallet);
 // const multiSigWallets = computed(() => multisig.multiSigWallets);
 const multiSigWallet = computed(() => ({}));
-const multiSigWallets = computed(() => []);
+const _multiSigWallets = computed(() => []);
 
 const recipientRules = computed(() => {
   if (loggedWallet.value?.network === Network.MAINNET) {
@@ -248,7 +248,7 @@ const recipientRules = computed(() => {
 });
 
 // Methods
-const getMultiSigWallet = () => {
+const _getMultiSigWallet = () => {
   return multiSigWallet.value;
 };
 
@@ -336,7 +336,7 @@ const resolveAdaHandle = debounce(async (val: string) => {
 }, 1000);
 
 // Watchers
-watch(contact, async (val) => {
+watch(contact, async (_val) => {
   // await walletConfig.addOrUpdateContact(val); // TODO: Implement contact add/update in walletStore
 }, { deep: true });
 

@@ -59,13 +59,11 @@
 </template>
 
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, toRefs } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain } from '@/models/types';
 
 
-const { t } = useTranslation();
 
 const { loggedWallet } = toRefs(walletStore);
 
@@ -89,7 +87,7 @@ interface Props {
   clickable?: boolean;
 }
 
-const props = withDefaults(defineProps<Props>(), {
+withDefaults(defineProps<Props>(), {
   iconSize: 64,
   minHeight: '200px',
   outlined: true,
@@ -98,7 +96,7 @@ const props = withDefaults(defineProps<Props>(), {
   clickable: true
 });
 
-const emit = defineEmits(['primary-action', 'secondary-action']);
+defineEmits(['primary-action', 'secondary-action']);
 
 const primaryColor = computed(() => {
   const isApex = loggedWallet.value?.chain === Blockchain.APEX_PRIME || 

@@ -39,6 +39,7 @@ describe('dappRequestHub', () => {
   it('presents the first request and queues the second', async () => {
     const { initDappRequestHub, hub } = await import('./dappRequestHub');
     await initDappRequestHub();
+    hub.setOverlayReady(true); // simulate DAppOverlay being mounted (wallet unlocked)
     port._fire({ type: 'dapp-request', method: 'enable', requestId: 'r1', payload: {} });
     port._fire({ type: 'dapp-request', method: 'signTx', requestId: 'r2', payload: {} });
     expect(hub.currentRequest.value?.requestId).toBe('r1');
@@ -49,6 +50,7 @@ describe('dappRequestHub', () => {
   it('accepts midnight_connect and midnight_signData as valid methods', async () => {
     const { initDappRequestHub, hub } = await import('./dappRequestHub');
     await initDappRequestHub();
+    hub.setOverlayReady(true); // simulate DAppOverlay being mounted (wallet unlocked)
     port._fire({ type: 'dapp-request', method: 'midnight_connect', requestId: 'm1', payload: {} });
     expect(hub.currentRequest.value?.requestId).toBe('m1');
     expect(port.postMessage).not.toHaveBeenCalledWith(
@@ -59,6 +61,7 @@ describe('dappRequestHub', () => {
   it('accepts btcSignPsbt and btcSignMessage as valid methods', async () => {
     const { initDappRequestHub, hub } = await import('./dappRequestHub');
     await initDappRequestHub();
+    hub.setOverlayReady(true); // simulate DAppOverlay being mounted (wallet unlocked)
     port._fire({ type: 'dapp-request', method: 'btcSignPsbt', requestId: 'b1', payload: {} });
     expect(hub.currentRequest.value?.requestId).toBe('b1');
     expect(port.postMessage).not.toHaveBeenCalledWith(
@@ -69,6 +72,7 @@ describe('dappRequestHub', () => {
   it('accepts wcSessionProposal as a valid method', async () => {
     const { initDappRequestHub, hub } = await import('./dappRequestHub');
     await initDappRequestHub();
+    hub.setOverlayReady(true); // simulate DAppOverlay being mounted (wallet unlocked)
     port._fire({ type: 'dapp-request', method: 'wcSessionProposal', requestId: 'w1', payload: {} });
     expect(hub.currentRequest.value?.requestId).toBe('w1');
     expect(port.postMessage).not.toHaveBeenCalledWith(
@@ -79,6 +83,7 @@ describe('dappRequestHub', () => {
   it('deduplicates re-delivered requestIds', async () => {
     const { initDappRequestHub, hub } = await import('./dappRequestHub');
     await initDappRequestHub();
+    hub.setOverlayReady(true); // simulate DAppOverlay being mounted (wallet unlocked)
     port._fire({ type: 'dapp-request', method: 'enable', requestId: 'r1', payload: {} });
     port._fire({ type: 'dapp-request', method: 'enable', requestId: 'r1', payload: {} });
     expect(hub.requestQueue.value.length).toBe(0);
@@ -109,6 +114,7 @@ describe('dappRequestHub', () => {
   it('queues a response while disconnected and flushes it after reconnect', async () => {
     const { initDappRequestHub, hub } = await import('./dappRequestHub');
     await initDappRequestHub();
+    hub.setOverlayReady(true); // simulate DAppOverlay being mounted (wallet unlocked)
     port._fire({ type: 'dapp-request', method: 'signTx', requestId: 'r1', payload: {} });
     port._drop(); // panel port died (tab switch etc.)
     hub.approve('signed-cbor'); // user finished signing after the drop
@@ -128,6 +134,7 @@ describe('dappRequestHub', () => {
     // the user would get the approval dialog a second time.
     const { initDappRequestHub, hub } = await import('./dappRequestHub');
     await initDappRequestHub();
+    hub.setOverlayReady(true); // simulate DAppOverlay being mounted (wallet unlocked)
     port._fire({ type: 'dapp-request', method: 'signTx', requestId: 'r1', payload: {} });
     port._drop();
     hub.approve('signed-cbor'); // answered while the port was down (queued)
@@ -143,6 +150,7 @@ describe('dappRequestHub', () => {
   it('rejectQueued removes one queued item without disturbing currentRequest', async () => {
     const { initDappRequestHub, hub } = await import('./dappRequestHub');
     await initDappRequestHub();
+    hub.setOverlayReady(true); // simulate DAppOverlay being mounted (wallet unlocked)
     port._fire({ type: 'dapp-request', method: 'enable', requestId: 'r1', payload: {} });
     port._fire({ type: 'dapp-request', method: 'signTx', requestId: 'r2', payload: {} });
     port._fire({ type: 'dapp-request', method: 'signData', requestId: 'r3', payload: {} });

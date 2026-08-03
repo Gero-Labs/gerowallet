@@ -122,7 +122,6 @@ import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import TransactionAuthSection from '@/shared/components/TransactionAuthSection.vue';
 import filters from '@/shared/utils/filters';
 import { Cardano } from '@cardano-sdk/core';
-import rules from '@/utils/rules';
 import { WalletType } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';

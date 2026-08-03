@@ -7,7 +7,6 @@
 </template>
 
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import CallToActionSection from '@/modules/wallet/components/CallToActionSection.vue';
 import FeatureGridSection from '@/modules/wallet/components/FeatureGridSection.vue';
 import KaiserexPartnershipSection from '@/modules/wallet/components/KaiserexPartnershipSection.vue';

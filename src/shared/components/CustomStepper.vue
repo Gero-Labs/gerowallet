@@ -6,11 +6,9 @@
   </v-stepper>
 </template>
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed } from 'vue';
 
 
-const { t } = useTranslation();
 
 const props = defineProps({
   steps: {

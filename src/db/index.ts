@@ -1,4 +1,4 @@
-import Dexie, { DexieError } from 'dexie';
+import Dexie from 'dexie';
 import {
   blockChainDBSchema,
   blockChainDBVersion,

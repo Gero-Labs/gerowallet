@@ -1328,8 +1328,8 @@ export default {
    */
   async signBitcoinTransaction(
     psbt: string,
-    addressType: string = 'segwit',
-    accountIndex: number = 0
+    _addressType: string = 'segwit',
+    _accountIndex: number = 0
   ): Promise<string> {
     await this.init();
 

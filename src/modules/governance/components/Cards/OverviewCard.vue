@@ -40,12 +40,10 @@
 </template>
 
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed } from 'vue';
 import VueHighcharts from '@/shared/components/VueHighcharts.vue';
 
 
-const { t } = useTranslation();
 const chartOptions = computed(() => ({
   chart: {
     type: 'area',
