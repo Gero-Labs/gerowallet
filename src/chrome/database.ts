@@ -16,7 +16,7 @@ function openDatabase(dbName: string, version: number): Promise<IDBDatabase> {
       resolve(db);
     };
 
-    request.onerror = function(event) {
+    request.onerror = function() {
       reject(new Error("Error opening database"));
     };
   });
@@ -33,7 +33,7 @@ function addRecord(storeName: string, record: any): Promise<IDBValidKey> {
       resolve((event.target as IDBRequest).result);
     };
 
-    request.onerror = function(event) {
+    request.onerror = function() {
       reject(new Error("Error adding record"));
     };
   });
@@ -50,7 +50,7 @@ function getRecord(storeName: string, id: IDBValidKey): Promise<any> {
       resolve((event.target as IDBRequest).result);
     };
 
-    request.onerror = function(event) {
+    request.onerror = function() {
       reject(new Error("Error retrieving record"));
     };
   });
@@ -72,12 +72,12 @@ function updateRecord(storeName: string, id: IDBValidKey, updatedRecord: any): P
         resolve((event.target as IDBRequest).result);
       };
 
-      updateRequest.onerror = function(event) {
+      updateRequest.onerror = function() {
         reject(new Error("Error updating record"));
       };
     };
 
-    request.onerror = function(event) {
+    request.onerror = function() {
       reject(new Error("Error retrieving record for update"));
     };
   });
@@ -90,11 +90,11 @@ function deleteRecord(storeName: string, id: IDBValidKey): Promise<void> {
     const objectStore = transaction.objectStore(storeName);
     const request = objectStore.delete(id);
 
-    request.onsuccess = function(event) {
+    request.onsuccess = function() {
       resolve();
     };
 
-    request.onerror = function(event) {
+    request.onerror = function() {
       reject(new Error("Error deleting record"));
     };
   });
@@ -111,7 +111,7 @@ function getAllRecords(storeName: string): Promise<any[]> {
       resolve((event.target as IDBRequest).result);
     };
 
-    request.onerror = function(event) {
+    request.onerror = function() {
       reject(new Error("Error retrieving all records"));
     };
   });
@@ -154,7 +154,7 @@ function getProvider(chain: string, network: string): Promise<any[]> {
       }
     };
 
-    request.onerror = function(event) {
+    request.onerror = function() {
       reject(new Error("Error retrieving records"));
     };
   });

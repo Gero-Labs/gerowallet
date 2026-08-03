@@ -228,7 +228,7 @@ import { walletStore } from '@/stores/walletStore';
 import { nodeFetch } from '../utils/nodeFetch';
 import snackbar from '@/plugins/snackbar';
 
-const props = withDefaults(defineProps<{ hideCards?: boolean }>(), { hideCards: false });
+withDefaults(defineProps<{ hideCards?: boolean }>(), { hideCards: false });
 
 const { t } = useTranslation();
 const { poolId, nodes } = toRefs(poolOperatorStore);

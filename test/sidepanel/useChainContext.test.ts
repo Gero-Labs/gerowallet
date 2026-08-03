@@ -56,16 +56,18 @@ describe('useChainContext', () => {
     expect(isCardano.value).toBe(false);
   });
 
+  // themeColors.primary maps to chainAccents[chain].accent (see src/config/themes.ts).
+  // These assert the current accent-system palette, not the pre-migration hexes.
   it('returns the Apex theme palette when Apex wallet is active', () => {
     mockWalletStore.loggedWallet = { chain: Blockchain.APEX_PRIME };
     const { themeColors } = useChainContext();
-    expect(themeColors.value.primary).toBe('#d45d2b');
+    expect(themeColors.value.primary).toBe('#E06030');
   });
 
   it('returns the Cardano theme palette when Cardano wallet is active', () => {
     mockWalletStore.loggedWallet = { chain: Blockchain.CARDANO };
     const { themeColors } = useChainContext();
-    expect(themeColors.value.primary).toBe('#00c7f3');
+    expect(themeColors.value.primary).toBe('#33C7DD');
   });
 
   it('exposes networkInfo from networks.ts for the active wallet', () => {

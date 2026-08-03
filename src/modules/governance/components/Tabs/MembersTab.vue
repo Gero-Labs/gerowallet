@@ -17,7 +17,6 @@
 </template>
 
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import MembersCard from '../Cards/MembersCard.vue';
 import OverviewCard from '../Cards/OverviewCard.vue';
 import ActionPermissionsCard from '../Cards/ActionPermissionsCard.vue';

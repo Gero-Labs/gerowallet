@@ -551,7 +551,6 @@ import BottomSheet from '../BottomSheet.vue';
 import QRAddressScannerDialog from '@/modules/dashboard/dialogs/QRAddressScannerDialog.vue';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
-import { priceStore } from '@/stores/priceStore';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import { nexusTxApi, walletUtxosToNexusInputs, txOutToNexusOutput, type BuildTxRequest } from '@/api/nexus-tx-api';
@@ -559,7 +558,6 @@ import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { computeMinimumCoinQuantity } from '@cardano-sdk/tx-construction';
 import { Messaging, BackgroundResponse, VerifyPasswordResponse, SignTxResponse } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
-import { isPaymentAddress } from '@/chrome/serialization';
 import { applyTokenImageOverride } from '@/shared/utils/resolver';
 import { Blockchain, Network, WalletType } from '@/models/types';
 import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
@@ -584,7 +582,7 @@ const primaryColor = computed(() => themeColors.value.primary);
 const props = defineProps<{ value: boolean }>();
 const emit = defineEmits<{ (e: 'input', value: boolean): void }>();
 
-const { loggedWallet, utxos, tokens: resolvedAssets, keys, contacts, collections: resolvedCollections, config } = toRefs(walletStore);
+const { loggedWallet, utxos, tokens: resolvedAssets, keys, contacts, collections: resolvedCollections, config: _config } = toRefs(walletStore);
 const { tip, epochParams } = toRefs(networkStore);
 
 // ── State ──
@@ -1361,7 +1359,7 @@ function copyTxId() {
   if (txId.value) navigator.clipboard.writeText(txId.value).catch(() => {});
 }
 
-function openDashboardSend() {
+function _openDashboardSend() {
   const url = chrome.runtime.getURL('index.html#/dashboard');
   window.open(url, '_blank');
 }

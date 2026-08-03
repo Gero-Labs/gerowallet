@@ -287,7 +287,7 @@ import { ref, computed, toRefs } from 'vue';
 import thorchainApi, { type ThorQuote } from '@/api/thorchain-api';
 import { walletStore } from '@/stores/walletStore';
 
-const { loggedWallet } = toRefs(walletStore);
+const { loggedWallet: _loggedWallet } = toRefs(walletStore);
 
 const fromAsset = ref('BTC.BTC');
 const toAsset = ref('ADA.ADA');

@@ -1,5 +1,5 @@
 // Pure helpers for the Bring Cashback Portal postMessage bridge.
-// See docs/plans/2026-07-02-bring-cashback-portal-migration-design.md
+// Shapes follow the internal Bring Cashback portal migration design.
 
 export type PortalInboundAction = 'LOGIN' | 'SIGN_MESSAGE' | 'POPUP_CLOSED';
 

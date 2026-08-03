@@ -153,7 +153,7 @@ interface Props {
   value?: boolean;
 }
 
-const props = defineProps<Props>();
+defineProps<Props>();
 
 const emit = defineEmits<{
   input: [value: boolean];

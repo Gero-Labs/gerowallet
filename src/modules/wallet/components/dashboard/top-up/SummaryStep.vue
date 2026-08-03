@@ -112,7 +112,7 @@ interface Props {
   eurAmount: string;
 }
 
-const props = defineProps<Props>();
+defineProps<Props>();
 
 // Emits
 const emit = defineEmits<{
@@ -135,7 +135,7 @@ const geroBalance = computed(() => {
   const tokens = walletStore.state.tokens;
   if (tokens) {
     // Find GERO token by checking metadata ticker
-    for (const [unit, token] of Object.entries(tokens)) {
+    for (const [, token] of Object.entries(tokens)) {
       const tok: any = token;
       if (tok.metadata?.ticker === 'GERO' || tok.metadata?.name === 'GERO') {
         // Convert from smallest unit to display unit (assuming 6 decimals)
@@ -148,7 +148,7 @@ const geroBalance = computed(() => {
 });
 
 // Determine GERO tier based on balance
-const geroTier = computed(() => {
+const _geroTier = computed(() => {
   const balance = parseFloat(geroBalance.value);
 
   // Force Gold tier for now since user has GERO tokens
