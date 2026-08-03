@@ -340,7 +340,7 @@ watch(() => props.isOpen, (val) => {
   }
 });
 
-watch(sendData, (val, oldVal) => {
+watch(sendData, (val, _oldVal) => {
   try {
     if (!val.recipientAddress) {
       return;
@@ -371,7 +371,7 @@ const backScan = () => {
   }
 };
 
-const onDecode = async (result: string) => {
+const _onDecode = async (result: string) => {
   console.log(result);
   const signature = parseSignature(result);
   const signedTx = Transaction.new(
@@ -386,7 +386,7 @@ const onDecode = async (result: string) => {
   emit('close');
 };
 
-const onInit = (promise: Promise<void>) => {
+const _onInit = (promise: Promise<void>) => {
   promise.then(() => {
     isInit.value = true;
     console.log("Camera initialized successfully");

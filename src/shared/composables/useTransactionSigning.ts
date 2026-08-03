@@ -371,7 +371,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
     snackbar.setError(error || t('wallet.keystoneScanError'));
   };
 
-  const onKeystoneProgress = (progress: number) => {
+  const onKeystoneProgress = (_progress: number) => {
     // Progress tracking
   };
 

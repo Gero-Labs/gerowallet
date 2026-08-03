@@ -213,7 +213,7 @@ const _geroWalletStandard: any = {
   features: {
     'bitcoin:connect': {
       version: '1.0.0',
-      connect: async ({ purposes }: { purposes: string[] }) => {
+      connect: async ({ purposes: _purposes }: { purposes: string[] }) => {
         try {
           console.log('[GeroWallet] bitcoin:connect called');
           const addresses = await btcRequestAccounts();

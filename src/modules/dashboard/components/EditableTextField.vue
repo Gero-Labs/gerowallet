@@ -48,7 +48,7 @@
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
 const { t } = useTranslation();
-import { ref, watch, computed } from 'vue';
+import { ref, computed } from 'vue';
 import snackbar from '@/plugins/snackbar';
 
 interface Props {

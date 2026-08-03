@@ -62,35 +62,39 @@ graphify-out/
 # Translation utility scripts (temporary)
 scripts/translate-*.js
 scripts/merge-translations.js
-# Catalyst / milestone deliverables (kept local)
+# Catalyst / milestone deliverables + local write-ups (kept local).
+# docs/catalyst/ is covered by the docs/ allowlist below.
 CloseOut_Video_Script.md
-GeroWallet_CloseOut_Report_FINAL.docx
-GeroWallet_CloseOut_Report.docx
-GeroWallet_Technical_Documentation.docx
 Milestone4_Proof_of_Achievement.md
-docs/catalyst/
+MEDIUM_ARTICLE_*.md
 email-templates/
+
+# Exported reports and vendored example bundles. No .docx/.pdf/.rar/.zip is
+# tracked anywhere in this repo, so ignore them wholesale rather than by name
+# (the .tgz SDK facade in the root IS tracked and is deliberately not listed).
+*.docx
+*.pdf
+*.rar
+*.zip
 
 # Per-developer Claude / superpowers state
 .claude/
 .superpowers/
 
-# Local-only planning / research notes (NOT to be shared)
-docs/session-handoff-market-page.md
-docs/plans/2026-03-09-unified-portfolio-market-page.md
-docs/plans/2026-03-10-portfolio-chart-migration.md
-docs/plans/2026-03-10-token-detail-trading-terminal-impl.md
-docs/plans/2026-03-10-token-detail-trading-terminal.md
-docs/plans/2026-03-10-unified-portfolio-market-design.md
-docs/plans/2026-03-10-unified-portfolio-market-plan.md
-docs/plans/2026-03-11-column-customization-tvl-design.md
-docs/plans/2026-03-11-column-customization-tvl-impl.md
-docs/plans/2026-03-11-pnl-calculation-bug-analysis.md
-docs/plans/2026-03-12-pnl-acquisition-classification.md
-docs/plans/2026-03-12-wallet-ux-research.md
-docs/plans/2026-03-17-multi-chain-market-research.md
-# Superpowers planning/spec notes (whole tree, from either skill set)
-docs/superpowers/
+# ── docs/ : allowlist, not blocklist ─────────────────────────────────────────
+# Everything under docs/ is ignored BY DEFAULT so local-only planning, handoff,
+# research, and demo notes can never reach the public repo via `git add .`.
+# This replaced a per-file blocklist that only listed notes we happened to
+# remember — every new local doc leaked until someone added a line.
+#
+# This does NOT hide the docs already published: .gitignore has no effect on
+# files git already tracks, so every committed doc under docs/ continues to
+# stage, diff, and commit as normal.
+#
+# To publish a NEW doc, opt in deliberately:
+#     git add -f docs/path/to/doc.md
+# Renaming a published doc makes the new path ignored again — re-add with -f.
+docs/**
 
 # Local MCP config + worktrees must never be committed
 .mcp.json.local

@@ -1,4 +1,4 @@
-import axios, { AxiosError } from 'axios';
+import axios from 'axios';
 import { parseHttpError } from '@/shared/utils/parser';
 import { Blockchain, Network, PaginationParams, PaginatedResponse, Tip } from '@/models/types';
 

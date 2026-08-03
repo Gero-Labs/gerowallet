@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import { storageDemo } from '~/logic/storage'
 
 function openOptionsPage() {

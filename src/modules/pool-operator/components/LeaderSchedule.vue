@@ -116,7 +116,7 @@ import { poolOperatorStore } from '@/stores/poolOperatorStore';
 import { nodeFetch } from '../utils/nodeFetch';
 
 const { t } = useTranslation();
-const { poolId } = toRefs(poolOperatorStore);
+const { poolId: _poolId } = toRefs(poolOperatorStore);
 
 const loading = ref(false);
 const fetched = ref(false);
