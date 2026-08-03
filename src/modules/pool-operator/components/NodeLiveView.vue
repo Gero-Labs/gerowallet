@@ -143,7 +143,7 @@ onBeforeUnmount(() => stopPolling());
 
 // Use live data if available, fall back to initial node.data
 const d = computed(() => liveData.value || props.node?.data || {});
-const v = computed(() => props.versions);
+const _v = computed(() => props.versions);
 
 const epochPct = computed(() => {
   const slot = d.value.epochSlot || 0;
@@ -200,7 +200,7 @@ const cpuClass = computed(() => {
 
 const nextSlotCountdown = computed(() => props.nextCountdown);
 
-function formatUptime(seconds: number): string {
+function _formatUptime(seconds: number): string {
   if (!seconds) return '--';
   const d = Math.floor(seconds / 86400);
   const h = Math.floor((seconds % 86400) / 3600);

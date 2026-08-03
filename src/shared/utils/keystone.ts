@@ -451,7 +451,7 @@ export const parseBitcoinAccount = (ur: UR): {
  * @param requestId - Unique request ID (UUID)
  * @returns QR code options for displaying signing request
  */
-export const generateBitcoinPSBTQR = (psbtHex: string, requestId: string = crypto.randomUUID()): Options => {
+export const generateBitcoinPSBTQR = (psbtHex: string, _requestId: string = crypto.randomUUID()): Options => {
   // Convert PSBT hex to Buffer
   const psbtBuffer = Buffer.from(psbtHex, 'hex');
 

@@ -5,7 +5,7 @@
 //
 // Wire shapes are verified against the ACTUAL published
 // `@midnight-ntwrk/dapp-connector-api@4.0.1` package (not just spec prose —
-// see docs/midnight/2026-07-09-midnight-dapp-connector-plan.md §3.1 for two
+// the internal connector plan §3.1 records two
 // places the two disagree).
 
 import { MIDNIGHT_METHOD } from '@/chrome/config';

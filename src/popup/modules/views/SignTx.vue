@@ -306,19 +306,19 @@ const txBody = computed<Cardano.TxBody | undefined>(() => {
   return tx.value?.body;
 })
 
-const certificate = computed(() => {
+const _certificate = computed(() => {
   return txBody.value?.certificates;
 });
 
-const withdrawals = computed(() => {
+const _withdrawals = computed(() => {
   return txBody.value?.withdrawals;
 });
 
-const minting = computed(() => {
+const _minting = computed(() => {
   return txBody.value?.mint;
 });
 
-const script = computed(() => {
+const _script = computed(() => {
   return tx.value?.witness;
 });
 

@@ -105,14 +105,12 @@
   </v-card>
 </template>
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, watch } from 'vue'
 import CopyButton from '@/shared/components/CopyButton.vue';
 import assets from '@/utils/assets';
 import filters from '@/shared/utils/filters';
 
 
-const { t } = useTranslation();
 
 const props = defineProps({
   asset: {

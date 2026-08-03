@@ -17,7 +17,7 @@ interface MultisigWalletInterface {
     paymentAddress?: string;
 }
 
-interface MultisigWalletState {
+interface _MultisigWalletState {
     multiSigWallets: MultisigWalletInterface[];
     multiSigWallet: MultisigWalletInterface;
     assets: any[];
