@@ -34,7 +34,6 @@
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed } from 'vue';
 import cardStore from '@/stores/modules/card';
-import type { Activity } from '@/models/types';
 
 
 const { t } = useTranslation();

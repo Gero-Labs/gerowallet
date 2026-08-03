@@ -38,10 +38,8 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import { useTranslation } from '@/shared/composables/useTranslation';
 import GradientButton from '../GradientButton.vue';
 
-const { t } = useTranslation();
 
 interface Props {
   open: boolean;

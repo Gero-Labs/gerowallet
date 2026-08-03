@@ -11,7 +11,7 @@
 // per-device key store is a follow-up). resolvePubKey resolves against the
 // server-pushed DEVICES registry: until gero-sync fans one out, no sibling
 // pubkeys resolve, so inbound messages are dropped, the safe default for a dark
-// feature. See docs/plans/2026-06-29-cross-device-signing-contract.md.
+// feature. See the internal cross-device signing relay contract.
 
 import { debugLog } from '@/utils/debug';
 import { generateDeviceKeypair, deviceIdFromPubKey } from './deviceIdentity';

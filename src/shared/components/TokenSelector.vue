@@ -207,7 +207,6 @@
   </div>
 </template>
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, toRefs } from 'vue';
 import filters from '@/shared/utils/filters';
 import CurrencyTextField from '@/shared/components/CurrencyTextField.vue';
@@ -221,7 +220,6 @@ import { tokenMetadataStore } from '@/stores/tokenMetadataStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import { useMarketData } from '@/modules/market/composables/useMarketData';
 
-const { t } = useTranslation();
 
 const props = defineProps({
   title: {
@@ -360,7 +358,7 @@ const tokenValue = computed(() => {
 });
 
 // Format price string for display (fallback to prop if provided, otherwise use calculated)
-const displayPrice = computed(() => {
+const _displayPrice = computed(() => {
   // If price prop is provided and valid, use it
   if (props.price && !isNaN(Number(props.price.replaceAll(',', '')))) {
     return props.price;
@@ -375,7 +373,7 @@ const displayPrice = computed(() => {
 });
 
 const selectTokenDialog = ref<boolean>(false);
-const amount = ref('');
+const _amount = ref('');
 
 const selectedToken: any = computed({
   get() {
@@ -403,7 +401,7 @@ const balance = computed(() => {
   return String(selectedToken.value.balance || 0);
 });
 
-const errors = computed(() => {
+const _errors = computed(() => {
   const errors = [];
   if (props.adaShortage !== 0) {
     errors.push(

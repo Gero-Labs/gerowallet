@@ -34,7 +34,7 @@ const addFundTransferStatus = (
   statuses: string[],
   t: Translator,
 ): void => {
-  if (isCardanoTx(item) && item.body.certificates && item.body.certificates.length > 0) {
+  if (isCardanoTx(item) && item.body?.certificates && item.body.certificates.length > 0) {
     return;
   }
   const hasReceivedFunds = item.receivedAmount - item.sentAmount > 0;

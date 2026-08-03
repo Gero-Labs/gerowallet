@@ -18,8 +18,12 @@ const RE_POLL_INTERVAL_MS = 5 * 60 * 1000;
 /** Base back-off before the first SSE reconnect after an error; doubles per failure. */
 const SSE_RECONNECT_BASE_MS = 5000;
 
-/** Ceiling for the exponential reconnect back-off. */
-const SSE_RECONNECT_MAX_MS = 5 * 60 * 1000;
+/**
+ * Ceiling for the exponential reconnect back-off. With a 5s base doubling per
+ * failure (5s, 10s, 20s, 40s, …) this caps the delay at 60s, so the last couple
+ * of attempts before giving up don't drift into multi-minute waits.
+ */
+const SSE_RECONNECT_MAX_MS = 60 * 1000;
 
 /**
  * Give up the live stream after this many consecutive failed reconnects and

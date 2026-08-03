@@ -249,7 +249,6 @@ const {
 const form = ref(null);
 
 import { governanceStore } from '@/stores/governanceStore';
-import networks from '@/utils/networks';
 
 const withdrawals = computed(() => {
   let withdrawalsAmount = 0;

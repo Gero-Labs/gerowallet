@@ -81,9 +81,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import { useTranslation } from '@/shared/composables/useTranslation';
 
-const { t } = useTranslation();
 
 interface RelayEntry {
   type: 'dns' | 'ipv4' | 'ipv6' | 'srv';
