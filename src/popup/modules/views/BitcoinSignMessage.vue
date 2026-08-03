@@ -83,7 +83,7 @@ import rules from '@/utils/rules';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
 import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
-import { Messaging, BackgroundResponse } from '@/chrome/messaging';
+import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { WalletType } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';

@@ -108,7 +108,7 @@ async function authenticate() {
   }
 }
 
-async function authenticateInPopup(wallet: any): Promise<Uint8Array> {
+async function authenticateInPopup(_wallet: any): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
     // Open small popup for PassKey authentication
     const popupUrl = chrome.runtime.getURL('index.html?mode=privateKey#/passkey-auth');

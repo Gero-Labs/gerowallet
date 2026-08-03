@@ -68,7 +68,7 @@ import { Messaging } from '@/chrome/messaging';
 import { resolveGeroChain } from '@/services/walletConnect/chainUtils';
 
 const { t } = useTranslation();
-const vmProxy = getCurrentInstance()!.proxy as any;
+const _vmProxy = getCurrentInstance()!.proxy as any;
 
 const consent = ref(false);
 const loading = ref(false);

@@ -158,7 +158,6 @@
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, toRefs, watch } from 'vue';
 import filters from '@/shared/utils/filters';
-import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
@@ -417,7 +416,7 @@ const showTokenDetail = ref(false);
 const selectedToken = ref<MarketToken | null>(null);
 
 const handleTokenRowClick = (row: any) => {
-  const adaPrice = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
+  const _adaPrice = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
   const isAda = row.policy_id === '' && (row.name === 'Cardano' || row.unit === 'lovelace');
   const dexToken = tokenMetadata.value[row.unit];
   const priceInAda = isAda ? 1 : (dexToken?.price || 0);

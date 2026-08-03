@@ -89,7 +89,7 @@ const shippingOptions = computed(() => [
 ]);
 
 // Get selected option price
-const selectedOptionPrice = computed(() => {
+const _selectedOptionPrice = computed(() => {
   const option = shippingOptions.value.find(o => o.id === localSelectedMethod.value);
   return option?.price || '\u20AC10.00';
 });
