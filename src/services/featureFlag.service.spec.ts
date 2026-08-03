@@ -48,6 +48,10 @@ describe('featureFlagService SSE reconnect', () => {
       })
     );
     onLineSpy = vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(true);
+    // Reconnect back-off adds up to 1s of jitter (Math.random() * 1000). Pin it
+    // to 0 so the exponential boundaries (5s, 10s, 20s, …) are exact and the
+    // fake-timer advances below are deterministic.
+    vi.spyOn(Math, 'random').mockReturnValue(0);
   });
 
   afterEach(async () => {

@@ -13,7 +13,6 @@
 </template>
 
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import TreasuryCard from '../Cards/TreasuryCard.vue';
 //import GovernanceCard from '../Cards/GovernanceCard.vue';
 //import PostsCards from '../Cards/PostsCards.vue';

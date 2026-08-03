@@ -10,7 +10,7 @@
 // the COSE_Key public key MUST equal the stake key-hash inside the signer's
 // reward address. Both are attacker-supplied fields; without cross-binding them,
 // a self-signed proof with an attacker key + the victim's (public) reward address
-// verifies as "valid". See docs/plans/2026-07-03-authenticated-device-register-contract.md.
+// verifies as "valid". See the internal authenticated-device-register contract.
 
 import * as ed25519 from '@noble/ed25519';
 import { blake2bHex } from 'blakejs';

@@ -101,7 +101,7 @@ interface Props {
 
 const props = defineProps<Props>();
 
-const emit = defineEmits(['orderCard', 'dateRangeChange']);
+defineEmits(['orderCard', 'dateRangeChange']);
 
 const { t } = useTranslation();
 

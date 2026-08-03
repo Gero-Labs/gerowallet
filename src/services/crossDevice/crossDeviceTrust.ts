@@ -31,7 +31,7 @@ export type SigningPolicy = 'ask' | 'require_remote';
  * peer to brick pairing against. Gates trustCrossDevice (new pairings) only; existing
  * pins are unaffected. One-line reversible to false if a peer build stops emitting a
  * proof. iOS mirror: `CrossDeviceRegisterProofVerifier.requireProofToPair`. See
- * docs/plans/2026-07-03-authenticated-device-register-contract.md (Rollout step 4).
+ * the internal authenticated-device-register contract (Rollout step 4).
  */
 export const REQUIRE_PROOF_TO_PAIR = true;
 

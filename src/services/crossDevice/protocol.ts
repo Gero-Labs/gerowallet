@@ -5,7 +5,7 @@
 // (e.g. the user's phone). gero-sync only relays + fans out by stake address; it
 // never inspects or trusts payload contents beyond routing.
 //
-// Wire contract is authoritative in docs/plans/2026-06-29-cross-device-signing-contract.md
+// Wire contract is authoritative in the internal relay-protocol contract
 // and is aligned byte-for-byte with the iOS approver. Version is carried in the
 // SIGNING SUBJECT prefix (gero-xdev/v1, see envelope.ts), so signed messages do
 // NOT carry a numeric `v`. Unsigned frames (DEVICE_REGISTER, DEVICES) carry none.

@@ -35,11 +35,9 @@
 </template>
 
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 
 
-const { t } = useTranslation();
 
 const props = defineProps({
   deadline: {
@@ -89,7 +87,7 @@ const twoDigits = (value: number) => {
   return value.toString()
 };
 
-watch(now, (value) => {
+watch(now, (_value) => {
   diff.value = date.value! - now.value;
   if (diff.value <= 0 || props.stop) {
     diff.value = 0;

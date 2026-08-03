@@ -1,7 +1,7 @@
 // Midnight DApp Connector — page-context provider.
 // Spec: @midnight-ntwrk/dapp-connector-api@4.0.1
 // Verified against the installed package's dist/*.d.ts and the fetched
-// SPECIFICATION.md (see docs/midnight/2026-07-09-midnight-dapp-connector-plan.md).
+// SPECIFICATION.md (cross-checked against the internal connector plan).
 //
 // This module runs in the page's MAIN world (same bundle as inject.ts's CIP-30
 // provider) and installs `window.midnight[uuid]` per the spec's discovery
