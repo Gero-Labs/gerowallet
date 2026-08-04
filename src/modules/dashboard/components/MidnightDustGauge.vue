@@ -81,6 +81,7 @@ import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
 import { useDustPathB } from '@/shared/composables/useDustPathB';
 import DustParticleCanvas from '@/shared/components/DustParticleCanvas.vue';
 import { useMidnightLoading } from '@/shared/composables/useMidnightLoading';
+import { debugLog } from '@/utils/debug';
 
 defineEmits<{ (e: 'register'): void }>();
 
@@ -111,21 +112,42 @@ const isRegistered = computed(() => registrationStatus.value === 'Registered');
 // so a stale/failed submission can't sit as "pending" for the full TTL (the
 // pill used to only ever expire, never confirm one way or the other).
 const incomingPending = ref(0);
+// onMounted + watch(registrationStatus) reliably overlap on a Path-B wallet
+// (registrationStatus flips right as the Path-B poll lands, moments after
+// mount) — without this guard the two overlapping async calls
+// read-map/await/write-map out of order and flicker the pill.
+let refreshPendingBusy = false;
 async function refreshPending() {
-  const dust = midnightStore.addresses?.dust ?? '';
-  if (!dust) { incomingPending.value = 0; return; }
-  const network = loggedWallet.value?.network;
-  if (network) {
-    await reconcileDustPendingForDestination(
-      dust,
-      (txHash) => getMidnightApi(network).cardanoTxExists(txHash),
-      (stakeAddress) => pathBStakes.value.includes(stakeAddress),
-    );
+  if (refreshPendingBusy) return;
+  refreshPendingBusy = true;
+  try {
+    const dust = midnightStore.addresses?.dust ?? '';
+    if (!dust) { incomingPending.value = 0; return; }
+    const network = loggedWallet.value?.network;
+    if (network) {
+      await reconcileDustPendingForDestination(
+        dust,
+        (txHash) => getMidnightApi(network).cardanoTxExists(txHash),
+        (stakeAddress) => pathBStakes.value.includes(stakeAddress),
+      );
+    }
+    // The wallet may have switched while the reconcile above was in flight —
+    // re-read rather than trust the `dust` captured at entry, so a stale
+    // response can never overwrite the count for a DIFFERENT wallet.
+    if ((midnightStore.addresses?.dust ?? '') !== dust) return;
+    incomingPending.value = getDustPendingForDestination(dust).length;
+  } finally {
+    refreshPendingBusy = false;
   }
-  incomingPending.value = getDustPendingForDestination(dust).length;
 }
-onMounted(refreshPending);
-watch(registrationStatus, refreshPending);
+function safeRefreshPending() {
+  // Neither onMounted nor watch() awaits or catches its callback's promise,
+  // so an uncaught rejection here (e.g. a localStorage quota error) would
+  // become an unhandled rejection.
+  refreshPending().catch((e) => debugLog('[MidnightDustGauge] refreshPending failed', e));
+}
+onMounted(safeRefreshPending);
+watch(registrationStatus, safeRefreshPending);
 // Path B already reporting a live registration to this dust address is
 // Registered, not pending — guard directly against it too (not just via
 // `isRegistered`) so a stale local record can never outrank chain truth.
