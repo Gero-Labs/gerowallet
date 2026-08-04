@@ -14,8 +14,6 @@
       </v-card-title>
 
       <v-card-text class="px-4 pb-4">
-        <p class="rs-desc">{{ $t('crossDevice.settings.desc') }}</p>
-
         <!-- Master enable -->
         <div class="rs-row d-flex align-center">
           <div class="flex-grow-1">
@@ -67,7 +65,7 @@
             <v-icon class="mr-3" color="var(--g-text-3)">{{ platformIcon(selfEntry.device.platform) }}</v-icon>
             <div class="flex-grow-1">
               <div class="rs-device-label">{{ selfEntry.device.label || $t('crossDevice.settings.unnamed') }}</div>
-              <div class="rs-fingerprint">{{ $t('crossDevice.settings.fingerprint') }}: {{ fingerprint(selfEntry.device.pubKey) }}</div>
+              <div class="rs-fingerprint">{{ fingerprint(selfEntry.device.pubKey) }}</div>
             </div>
           </div>
 
@@ -119,7 +117,7 @@
                   {{ entry.online ? $t('crossDevice.settings.online') : $t('crossDevice.settings.offline') }}
                 </span>
               </div>
-              <div class="rs-fingerprint">{{ $t('crossDevice.settings.fingerprint') }}: {{ fingerprint(entry.device.pubKey) }}</div>
+              <div class="rs-fingerprint">{{ fingerprint(entry.device.pubKey) }}</div>
               <div v-if="entry.trusted && trustedAt(entry.device.deviceId)" class="rs-hint">
                 {{ $t('crossDevice.settings.trustedOn', { date: trustedAt(entry.device.deviceId) }) }}
               </div>
@@ -592,7 +590,6 @@ onBeforeUnmount(() => {
   color: var(--g-text-1);
 }
 .rs-title { font-size: 20px; font-weight: 600; color: var(--g-text-1); }
-.rs-desc { font-size: 13px; color: var(--g-text-2); margin-bottom: 16px; }
 .rs-row { padding: 6px 0; }
 .rs-label { font-size: 14px; font-weight: 600; color: var(--g-text-1); }
 .rs-hint { font-size: 12px; color: var(--g-text-3); line-height: 1.35; }
