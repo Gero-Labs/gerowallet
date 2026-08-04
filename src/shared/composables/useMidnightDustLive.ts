@@ -9,6 +9,15 @@
  * value and use the per-second `dust_generating` rate to extrapolate
  * smoothly between polls via a 1s nowTick.
  *
+ * DUST reaches a wallet two ways (see
+ * `docs/superpowers/plans/2026-07-25-dust-battery-path-b.md`): Path A is
+ * native NIGHT UTxOs on Midnight — everything this file computed before the
+ * Path-B work landed. Path B is cNIGHT held on Cardano, paired to this
+ * wallet's dust address through the mapping validator; `useDustPathB` sums
+ * that side from Nexus's `dust/status` batch endpoint. Every value this
+ * composable exports below is Path A + Path B summed, so consumers don't
+ * need to know which path a given unit of DUST came from.
+ *
  * The polling state is shared module-wide via refcount so multiple
  * components (portfolio chart + registration dialog + …) consuming this
  * composable produce ONE poll loop, not N.
@@ -18,6 +27,7 @@ import { walletStore } from '@/stores/walletStore';
 import { midnightStore } from '@/stores/midnightStore';
 import { getMidnightApi } from '@/api/midnight-api';
 import { debugLog } from '@/utils/debug';
+import { useDustPathB } from '@/shared/composables/useDustPathB';
 
 // Shared module-scope state — one source of truth across all consumers.
 const polledBalance = ref<bigint>(0n);
@@ -31,6 +41,7 @@ const nowTickMs = ref<number>(Date.now());
 let consumers = 0;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let tickTimer: ReturnType<typeof setInterval> | null = null;
+let unwatchIdentity: (() => void) | null = null;
 
 async function refreshOnce() {
   // Read network + address fresh each tick — the active wallet can change.
@@ -59,25 +70,57 @@ function start() {
   void refreshOnce();
   pollTimer = setInterval(refreshOnce, 5_000);
   tickTimer = setInterval(() => { nowTickMs.value = Date.now(); }, 1_000);
+  // Single module-scoped watcher — hoisted out of the per-consumer factory
+  // (same fix as useDustPathB.ts) so N mounted consumers don't each
+  // register their own watcher and all fire concurrent polls on a switch.
+  unwatchIdentity = watch(
+    () => `${walletStore.loggedWallet?.network ?? ''}|${midnightStore.addresses?.unshielded ?? ''}`,
+    () => { void refreshOnce(); },
+  );
 }
 
 function stop() {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
   if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+  if (unwatchIdentity) { unwatchIdentity(); unwatchIdentity = null; }
   // Don't zero out polledBalance — keep the last value visible until next start
   // so navigation back to a dust view shows the previous reading instantly.
 }
 
+/**
+ * Whether the last Path-A poll actually carries usable signal.
+ *
+ * Root cause fixed here: a poll that *succeeds* but returns the hollow
+ * `{0,0,0,'Unregistered'}` shape (normal for a cNIGHT-only / Path-B wallet,
+ * since the sidecar has indexed no NIGHT UTxOs for its Midnight address)
+ * used to permanently outrank a real, non-zero value already sitting in
+ * `midnightStore.dustState` from an earlier gero-sync snapshot — the old
+ * `polled()` helper meant only "has a poll ever completed", not "does the
+ * poll actually say anything". Require the poll to show actual
+ * balance/cap/rate/registered-NIGHT, or an explicit 'Registered' status,
+ * before trusting it over the store snapshot; otherwise fall back to the
+ * store exactly like the "no poll yet" path always did.
+ */
+function pathAPollHasSignal(): boolean {
+  return polledAsOfMs.value !== 0 && (
+    polledBalance.value > 0n
+    || polledGenerating.value > 0n
+    || polledCap.value > 0n
+    || polledNightRegistered.value > 0n
+    || polledRegistrationStatus.value === 'Registered'
+  );
+}
+
 export interface MidnightDustLive {
-  /** Extrapolated current DUST balance, clamped to cap. Updates every 1s. */
+  /** Extrapolated current DUST balance, Path A + Path B, each clamped to its own cap. Updates every 1s. */
   readonly dustBalance: ComputedRef<bigint>;
-  /** Per-second generation rate (atomic units / sec). */
+  /** Per-second generation rate, Path A + Path B (atomic units / sec). */
   readonly dustGenerating: ComputedRef<bigint>;
-  /** Asymptotic cap. */
+  /** Asymptotic cap, Path A + Path B. */
   readonly dustCap: ComputedRef<bigint>;
-  /** Sum of NIGHT registered for DUST generation. */
+  /** Sum of NIGHT registered for DUST generation, Path A + Path B. */
   readonly nightRegistered: ComputedRef<bigint>;
-  /** "Registered" / "Unregistered" / ... */
+  /** "Registered" / "Unregistered" / ... — 'Registered' when either path is. */
   readonly registrationStatus: ComputedRef<string>;
   /** True if at least one poll has succeeded — UI can show a skeleton until then. */
   readonly hasData: ComputedRef<boolean>;
@@ -93,19 +136,20 @@ export function useMidnightDustLive(): MidnightDustLive {
       stop();
     }
   });
-  // Restart polling on wallet/address change so we don't keep showing the
-  // previous wallet's numbers.
-  watch(
-    () => `${walletStore.loggedWallet?.network ?? ''}|${midnightStore.addresses?.unshielded ?? ''}`,
-    () => { void refreshOnce(); },
-  );
+  // Wallet-switch restart is handled by the single module-scoped watcher
+  // registered in start() — see the comment there.
 
-  const dustBalance = computed<bigint>(() => {
-    // No successful poll yet — fall back to the gero-sync snapshot the
-    // registration dialog already trusts, so the gauge never reads 0 while the
-    // wallet is actually generating (the Nexus dust poll can silently 404 on
-    // auth-token expiry — see catch above).
-    if (polledAsOfMs.value === 0) return midnightStore.dustState?.current ?? 0n;
+  const {
+    pathBBalance, pathBCap, pathBRate, pathBNight, pathBRegistered, pathBAsOfMs,
+  } = useDustPathB();
+
+  const pathABalance = computed<bigint>(() => {
+    // No successful poll yet, or the poll was hollow (see pathAPollHasSignal)
+    // — fall back to the gero-sync snapshot the registration dialog already
+    // trusts, so the gauge never reads 0 while the wallet is actually
+    // generating (the Nexus dust poll can silently 404 on auth-token
+    // expiry — see catch above).
+    if (!pathAPollHasSignal()) return midnightStore.dustState?.current ?? 0n;
     const elapsedMs = Math.max(0, nowTickMs.value - polledAsOfMs.value);
     const extra = (polledGenerating.value * BigInt(elapsedMs)) / 1000n;
     let live = polledBalance.value + extra;
@@ -113,15 +157,44 @@ export function useMidnightDustLive(): MidnightDustLive {
     return live;
   });
 
-  // When the poll hasn't produced data, mirror the dialog and fall back to the
-  // WS snapshot (midnightStore.dustState / .balances) rather than showing zeros.
-  const polled = () => polledAsOfMs.value !== 0;
+  // Path B has no 1s poll of its own — extrapolate its capacity by its own
+  // rate over elapsed time since the last Path-B poll, same shape as Path A.
+  const pathBBalanceExtrapolated = computed<bigint>(() => {
+    const asOf = pathBAsOfMs.value;
+    const elapsedMs = asOf > 0 ? Math.max(0, nowTickMs.value - asOf) : 0;
+    const extra = (pathBRate.value * BigInt(elapsedMs)) / 1000n;
+    let live = pathBBalance.value + extra;
+    if (pathBCap.value > 0n && live > pathBCap.value) live = pathBCap.value;
+    return live;
+  });
+
+  const dustBalance = computed<bigint>(() => pathABalance.value + pathBBalanceExtrapolated.value);
+
   return {
     dustBalance,
-    dustGenerating: computed(() => (polled() ? polledGenerating.value : (midnightStore.balances?.dustGenerating ?? 0n))),
-    dustCap: computed(() => (polled() ? polledCap.value : (midnightStore.dustState?.cap ?? 0n))),
-    nightRegistered: computed(() => (polled() ? polledNightRegistered.value : (midnightStore.balances?.nightRegistered ?? 0n))),
-    registrationStatus: computed(() => (polled() ? polledRegistrationStatus.value : (midnightStore.dustState?.registrationStatus ?? 'Unregistered'))),
-    hasData: computed(() => polledAsOfMs.value !== 0 || midnightStore.dustState != null),
+    dustGenerating: computed(() => {
+      const a = pathAPollHasSignal() ? polledGenerating.value : (midnightStore.balances?.dustGenerating ?? 0n);
+      return a + pathBRate.value;
+    }),
+    dustCap: computed(() => {
+      const a = pathAPollHasSignal() ? polledCap.value : (midnightStore.dustState?.cap ?? 0n);
+      return a + pathBCap.value;
+    }),
+    nightRegistered: computed(() => {
+      const a = pathAPollHasSignal() ? polledNightRegistered.value : (midnightStore.balances?.nightRegistered ?? 0n);
+      return a + pathBNight.value;
+    }),
+    registrationStatus: computed(() => {
+      const a = pathAPollHasSignal()
+        ? polledRegistrationStatus.value
+        : (midnightStore.dustState?.registrationStatus ?? 'Unregistered');
+      return (a === 'Registered' || pathBRegistered.value) ? 'Registered' : a;
+    }),
+    // Path B has its own independent poll — a pure-Path-B wallet whose
+    // Path-A poll keeps 404ing (or never had a store snapshot) still needs
+    // `hasData` to flip true once Path B has a reading, otherwise consumers
+    // like DustRegistrationDialog fall back to stale/empty store values
+    // forever even though the battery itself is showing real Path-B charge.
+    hasData: computed(() => polledAsOfMs.value !== 0 || midnightStore.dustState != null || pathBAsOfMs.value !== 0),
   };
 }

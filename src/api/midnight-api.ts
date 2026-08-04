@@ -59,8 +59,6 @@ export interface MidnightDustRegistrationStatusDto {
   cardanoRewardAddress: string;
   dustAddress: string | null;
   registered: boolean;
-  /** Status string: `Unregistered` | `Pending` | `Registered` | `Invalid`. */
-  registrationStatus?: string;
   /** Strings for BigInt portability across JSON. */
   nightBalance?: string;
   generationRate?: string;
@@ -68,6 +66,36 @@ export interface MidnightDustRegistrationStatusDto {
   currentCapacity?: string;
   registrationUtxoTxHash?: string | null;
   registrationUtxoOutputIndex?: number | null;
+}
+
+/** Wire-shape (snake_case) of Nexus's `DustRegistrationStatusDto`. */
+interface MidnightDustRegistrationStatusWire {
+  cardano_reward_address: string;
+  dust_address: string | null;
+  registered: boolean;
+  night_balance?: string;
+  generation_rate?: string;
+  max_capacity?: string;
+  current_capacity?: string;
+  registration_utxo_tx_hash?: string | null;
+  registration_utxo_output_index?: number | null;
+}
+
+/** Exported for `midnight-api.spec.ts` — this exact wire-conversion bug class
+ *  (snake_case fields silently coming through as `undefined`) shipped
+ *  undetected for a full release; see git history for the fix. */
+export function convertDustStatus(wire: MidnightDustRegistrationStatusWire): MidnightDustRegistrationStatusDto {
+  return {
+    cardanoRewardAddress: wire.cardano_reward_address,
+    dustAddress: wire.dust_address ?? null,
+    registered: wire.registered,
+    nightBalance: wire.night_balance,
+    generationRate: wire.generation_rate,
+    maxCapacity: wire.max_capacity,
+    currentCapacity: wire.current_capacity,
+    registrationUtxoTxHash: wire.registration_utxo_tx_hash ?? null,
+    registrationUtxoOutputIndex: wire.registration_utxo_output_index ?? null,
+  };
 }
 
 /**
@@ -530,8 +558,8 @@ export class MidnightApi {
     try {
       const url = nexusMidnightPathFor(this.network, 'dust/status') +
         `?cardanoRewardAddress=${encodeURIComponent(cardanoRewardAddress)}`;
-      const { data, status } = await this.axiosInstance.get<MidnightDustRegistrationStatusDto>(url);
-      if (status === 200) return data;
+      const { data, status } = await this.axiosInstance.get<MidnightDustRegistrationStatusWire>(url);
+      if (status === 200) return convertDustStatus(data);
       throw parseHttpError(data);
     } catch (error) {
       throw parseHttpError(error);
@@ -566,10 +594,10 @@ export class MidnightApi {
     }
     try {
       const url = nexusMidnightPathFor(this.network, 'dust/status/batch');
-      const { data, status } = await this.axiosInstance.post<MidnightDustRegistrationStatusDto[]>(url, {
+      const { data, status } = await this.axiosInstance.post<MidnightDustRegistrationStatusWire[]>(url, {
         cardanoRewardAddresses,
       });
-      if (status === 200) return data ?? [];
+      if (status === 200) return (data ?? []).map(convertDustStatus);
       throw parseHttpError(data);
     } catch (error) {
       throw parseHttpError(error);

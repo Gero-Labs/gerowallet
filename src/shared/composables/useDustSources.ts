@@ -60,6 +60,10 @@ export interface DustSource {
   /** Raw cNIGHT base units; null while loading / on query failure. */
   nightBalance: bigint | null;
   status: MidnightDustRegistrationStatusDto | null;
+  /** Wallet-local "submitted, not yet relayed" marker. Nexus's `dust/status`
+   *  carries no status-string field (only `registered`), so this row-level
+   *  flag — not a field on the DTO — is what the UI renders as "Pending". */
+  pendingLocal: boolean;
 }
 
 export type DustSourceActionResult =
@@ -116,6 +120,7 @@ export function useDustSources() {
       encryptionMethod: wallet.encryptionMethod === 'prf' ? 'prf' : 'password',
       nightBalance: null,
       status: null,
+      pendingLocal: false,
     };
   }
 
@@ -139,6 +144,7 @@ export function useDustSources() {
         encryptionMethod: w.encryptionMethod === 'prf' ? 'prf' : 'password',
         nightBalance: null,
         status: null,
+        pendingLocal: false,
       };
     } catch (e) {
       debugLog('[DustSources] Failed to derive addresses for wallet', w.id, e);
@@ -214,8 +220,9 @@ export function useDustSources() {
     // Overlay the local pending guard: a source we just registered (but the
     // indexer hasn't relayed yet) shows Pending so its row can't re-register.
     for (const source of list) {
-      if (source.status?.registrationStatus === 'Registered') {
+      if (source.status?.registered) {
         clearDustPending(source.stakeAddress);
+        source.pendingLocal = false;
         continue;
       }
       // Reconcile first: a submission that never landed on-chain must not keep
@@ -224,15 +231,15 @@ export function useDustSources() {
         source.stakeAddress,
         (txHash) => api.cardanoTxExists(txHash),
       );
-      if (pending && source.status?.registrationStatus !== 'Pending') {
+      if (pending && !source.pendingLocal) {
         source.status = {
           cardanoRewardAddress: source.stakeAddress,
           dustAddress: pending.dustAddress,
           registered: false,
-          registrationStatus: 'Pending',
           registrationUtxoTxHash: pending.txHash,
         };
       }
+      source.pendingLocal = !!pending;
     }
   }
 
@@ -504,9 +511,9 @@ export function useDustSources() {
         cardanoRewardAddress: source.stakeAddress,
         dustAddress: ownDustAddress.value,
         registered: false,
-        registrationStatus: 'Pending',
         registrationUtxoTxHash: txId,
       };
+      source.pendingLocal = true;
       sources.value = [...sources.value];
       return { status: 'submitted', txHash: txId };
     } catch (e) {
@@ -561,9 +568,9 @@ export function useDustSources() {
         cardanoRewardAddress: source.stakeAddress,
         dustAddress: ownDustAddress.value,
         registered: false,
-        registrationStatus: 'Pending',
         registrationUtxoTxHash: txId,
       };
+      source.pendingLocal = true;
       sources.value = [...sources.value];
       return { status: 'submitted', txHash: txId };
     } catch (e) {

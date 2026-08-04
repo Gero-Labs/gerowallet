@@ -312,8 +312,10 @@ export function useCnightDustRegistration() {
     // the Register CTA must stay hidden until it's back down to one.
     if (registrations.value.length > 1) return 'Duplicated';
 
-    const s = status.value?.registrationStatus;
-    if (s === 'Registered') return 'Registered';
+    // Nexus's `dust/status` carries no status-string field — only
+    // `registered` (see `MidnightDustRegistrationStatusDto`). Derive
+    // 'Registered' from that boolean directly.
+    if (status.value?.registered) return 'Registered';
 
     // Exactly one live registration UTxO: the mapping is valid even if the
     // indexer hasn't relayed `registered:true` yet (~2.5h window) or the
@@ -322,8 +324,6 @@ export function useCnightDustRegistration() {
     // live registration exists.
     if (registrations.value.length === 1) return 'Pending';
 
-    if (s === 'Invalid') return 'Invalid';
-    if (s === 'Pending') return 'Pending';
     // Indexer still says Unregistered (or unknown) but we submitted a
     // registration that hasn't relayed yet — hold Pending so the UI can't
     // offer a duplicate registration.
@@ -414,7 +414,7 @@ export function useCnightDustRegistration() {
       // Registered (and there's at most one live registration — a stale
       // 'Registered' alongside a known duplicate shouldn't clear the guard);
       // otherwise surface any un-expired local record.
-      if (status.value?.registrationStatus === 'Registered' && registrations.value.length <= 1) {
+      if (status.value?.registered && registrations.value.length <= 1) {
         clearDustPending(stakeAddress);
         localPending.value = null;
       } else {
@@ -435,7 +435,6 @@ export function useCnightDustRegistration() {
         cardanoRewardAddress: stakeAddress,
         dustAddress: null,
         registered: false,
-        registrationStatus: 'Unregistered',
       };
       await refreshRegistrations(stakeAddress);
       localPending.value = getDustPending(stakeAddress);
@@ -531,7 +530,6 @@ export function useCnightDustRegistration() {
         cardanoRewardAddress: wallet.stakeAddress,
         dustAddress: destinationBech32,
         registered: false,
-        registrationStatus: 'Pending',
         registrationUtxoTxHash: txId,
       };
       return { status: 'submitted', txHash: txId, dustAddress: destinationBech32 };
@@ -677,7 +675,6 @@ export function useCnightDustRegistration() {
         cardanoRewardAddress: wallet.stakeAddress,
         dustAddress: null,
         registered: false,
-        registrationStatus: 'Unregistered',
       };
       return { status: 'submitted', txHash: txId, dustAddress: '' };
     } catch (e) {
@@ -789,7 +786,6 @@ export function useCnightDustRegistration() {
         cardanoRewardAddress: wallet.stakeAddress,
         dustAddress: derived.dust,
         registered: false,
-        registrationStatus: 'Pending',
         registrationUtxoTxHash: txId,
       };
       return { status: 'submitted', txHash: txId, dustAddress: derived.dust };

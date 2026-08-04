@@ -314,7 +314,15 @@ const dustGenerating = computed(() => {
   return balances.value?.dustGenerating ?? 0n;
 });
 
+// Must read the SUMMED status (Path A + Path B), not the raw Path-A-only
+// store field — otherwise a Path-B-registered wallet shows "Registered" on
+// the dashboard battery but this dialog still renders the Unregistered
+// branch with a "Register for DUST generation" CTA, exactly the false
+// prompt this feature exists to remove.
 const registrationStatus = computed<'Unregistered' | 'Pending' | 'Registered' | 'Invalid'>(() => {
+  if (dustLive.hasData.value) {
+    return dustLive.registrationStatus.value as 'Unregistered' | 'Pending' | 'Registered' | 'Invalid';
+  }
   return (dustState.value?.registrationStatus as 'Unregistered' | 'Pending' | 'Registered' | 'Invalid') ?? 'Unregistered';
 });
 

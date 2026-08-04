@@ -11,10 +11,13 @@
  */
 
 const KEY = 'gero.dustPending';
-/** Relay is ~2.5h; keep the pending guard generous so a slow relay never
- *  re-exposes the register button, but expire eventually so a failed/rolled-back
- *  submission doesn't block forever. */
-const TTL_MS = 24 * 60 * 60 * 1000;
+/** Relay is ~2.5h, occasionally several hours on mainnet; keep the pending
+ *  guard generous so a slow relay never re-exposes the register button, but
+ *  expire well short of 24h — with no reconciliation, 24h was long enough
+ *  for a single failed/rolled-back submission to read as a full day of
+ *  phantom "REGISTRATION PENDING" on a wallet that was never registered. 6h
+ *  still covers 2-3x the normal relay window. */
+const TTL_MS = 6 * 60 * 60 * 1000;
 
 export interface DustPendingRecord {
   dustAddress: string;
@@ -129,4 +132,61 @@ export async function reconcileDustPending(
     // Couldn't confirm; keep the record so a valid registration isn't dropped.
   }
   return rec;
+}
+
+/**
+ * Reconcile EVERY pending record whose *destination* is `dustAddress` against
+ * chain reality. This is the destination-keyed counterpart to
+ * `reconcileDustPending`: a Midnight dashboard knows its own dust address but
+ * not which Cardano stake credential(s) submitted a registration for it, so
+ * it can't call the stake-keyed reconciler directly. This walks the whole
+ * pending map instead and reconciles every match.
+ *
+ * Per record, three independent checks can resolve it, in order:
+ * - TTL: a record older than `TTL_MS` is dropped outright, same as
+ *   `getDustPendingForDestination`'s expiry (this reconciler reads the map
+ *   directly via `readAll()` rather than through that getter, so it must
+ *   apply the same prune itself or an expired record would never clear here).
+ * - `isResolved(stakeAddress, record)`, when supplied, lets the caller assert
+ *   the registration already landed on-chain by some other means (e.g. the
+ *   stake now shows up in `useDustPathB`'s live-registered set) — checked
+ *   next since it needs no network call and no grace window.
+ * - Otherwise, the same grace-window + `txExists` check as
+ *   `reconcileDustPending`: too-fresh records are left alone, and a record
+ *   older than the grace window is dropped once `txExists` definitively
+ *   reports the submitted tx never landed. A throw from `txExists` (couldn't
+ *   determine) keeps the record, same as the stake-keyed version.
+ */
+export async function reconcileDustPendingForDestination(
+  dustAddress: string,
+  txExists: (txHash: string) => Promise<boolean>,
+  isResolved?: (stakeAddress: string, record: DustPendingRecord) => boolean,
+): Promise<void> {
+  if (!dustAddress) return;
+  const all = readAll();
+  let mutated = false;
+  for (const [stakeAddress, rec] of Object.entries(all)) {
+    if (rec.dustAddress !== dustAddress) continue;
+    if (Date.now() - rec.submittedAt > TTL_MS) {
+      delete all[stakeAddress];
+      mutated = true;
+      continue;
+    }
+    if (isResolved?.(stakeAddress, rec)) {
+      delete all[stakeAddress];
+      mutated = true;
+      continue;
+    }
+    // Too fresh to judge — the tx may just not be indexed yet.
+    if (Date.now() - rec.submittedAt <= DUST_PENDING_GRACE_MS) continue;
+    try {
+      if (!(await txExists(rec.txHash))) {
+        delete all[stakeAddress];
+        mutated = true;
+      }
+    } catch {
+      // Couldn't confirm; keep the record so a valid registration isn't dropped.
+    }
+  }
+  if (mutated) writeAll(all);
 }
