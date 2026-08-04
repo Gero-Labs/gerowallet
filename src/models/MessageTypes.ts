@@ -1,6 +1,9 @@
 export enum MessageTypes {
   SIGN_DATA = 'SIGN_DATA',
   SIGN_TX = 'SIGN_TX',
+  /** Register a Nexus-pool collateral ref the SERVER lent (first-party dust flows),
+   *  so SIGN_TX's cosign loop treats a co-sign failure on it as fatal. */
+  MARK_NEXUS_LENT = 'MARK_NEXUS_LENT',
   SIGN_BITCOIN_TX = 'SIGN_BITCOIN_TX',
   SIGN_BITCOIN_TX_HARDWARE = 'SIGN_BITCOIN_TX_HARDWARE',
   SEND_BITCOIN = 'SEND_BITCOIN',
