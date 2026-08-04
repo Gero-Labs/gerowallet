@@ -51,7 +51,7 @@
               {{ t('midnight.dustSourcesGeneratingHere') }}
             </span>
             <!-- Relay in flight -->
-            <span v-else-if="source.status?.registrationStatus === 'Pending'" class="state-chip">
+            <span v-else-if="source.pendingLocal" class="state-chip">
               <v-icon x-small class="mr-1">mdi-clock-outline</v-icon>
               {{ t('midnight.statusPending') }}
             </span>
@@ -61,7 +61,7 @@
             </span>
             <!-- Registered elsewhere: offer redirect -->
             <v-btn
-              v-else-if="source.status?.registrationStatus === 'Registered'"
+              v-else-if="source.status?.registered"
               small outlined :disabled="working"
               @click="openAuth(source, 'redirect')"
             >
@@ -82,7 +82,7 @@
 
         <!-- Relay progress for a pending registration: on-chain tx + elapsed. -->
         <div
-          v-if="source.status?.registrationStatus === 'Pending' && pendingTxHash(source)"
+          v-if="source.pendingLocal && pendingTxHash(source)"
           class="source-relay"
         >
           <a
@@ -190,7 +190,7 @@ const authEncryption = computed<'password' | 'prf'>(() => {
 });
 
 function isGeneratingHere(source: DustSource): boolean {
-  return source.status?.registrationStatus === 'Registered'
+  return !!source.status?.registered
     && !!source.status?.dustAddress
     && source.status.dustAddress === ownDustAddress.value;
 }
