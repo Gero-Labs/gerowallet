@@ -72,11 +72,13 @@
 import { computed, onMounted, ref, toRefs, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { midnightStore } from '@/stores/midnightStore';
-import { getDustPendingForDestination } from '@/shared/composables/useDustPending';
+import { getDustPendingForDestination, reconcileDustPendingForDestination } from '@/shared/composables/useDustPending';
 import { walletStore } from '@/stores/walletStore';
 import { Network } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
+import { getMidnightApi } from '@/api/midnight-api';
 import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
+import { useDustPathB } from '@/shared/composables/useDustPathB';
 import DustParticleCanvas from '@/shared/components/DustParticleCanvas.vue';
 import { useMidnightLoading } from '@/shared/composables/useMidnightLoading';
 
@@ -96,6 +98,7 @@ const {
   dustCap,
   registrationStatus,
 } = useMidnightDustLive();
+const { pathBRegistered, pathBStakes } = useDustPathB();
 
 const midnightLoading = useMidnightLoading();
 const isRegistered = computed(() => registrationStatus.value === 'Registered');
@@ -104,15 +107,30 @@ const isRegistered = computed(() => registrationStatus.value === 'Registered');
 // address but hasn't relayed to Midnight yet (~2.5h), so dustState still reads
 // unregistered. Surface it so the battery shows "pending" instead of a
 // re-registration prompt. localStorage isn't reactive, so refresh on mount and
-// whenever the live status changes.
+// whenever the live status changes — and reconcile against chain truth first
+// so a stale/failed submission can't sit as "pending" for the full TTL (the
+// pill used to only ever expire, never confirm one way or the other).
 const incomingPending = ref(0);
-function refreshPending() {
+async function refreshPending() {
   const dust = midnightStore.addresses?.dust ?? '';
-  incomingPending.value = dust ? getDustPendingForDestination(dust).length : 0;
+  if (!dust) { incomingPending.value = 0; return; }
+  const network = loggedWallet.value?.network;
+  if (network) {
+    await reconcileDustPendingForDestination(
+      dust,
+      (txHash) => getMidnightApi(network).cardanoTxExists(txHash),
+      (stakeAddress) => pathBStakes.value.includes(stakeAddress),
+    );
+  }
+  incomingPending.value = getDustPendingForDestination(dust).length;
 }
 onMounted(refreshPending);
 watch(registrationStatus, refreshPending);
+// Path B already reporting a live registration to this dust address is
+// Registered, not pending — guard directly against it too (not just via
+// `isRegistered`) so a stale local record can never outrank chain truth.
 const isPending = computed(() => !isRegistered.value
+  && !pathBRegistered.value
   && (incomingPending.value > 0 || registrationStatus.value === 'Pending'));
 
 // Percent full (0-100) for the bar width + a11y.
