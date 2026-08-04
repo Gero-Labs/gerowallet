@@ -106,7 +106,7 @@ import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
 
 defineEmits<{ (e: 'refresh'): void }>();
 
-const { addresses, balances, dustState, transactions } = toRefs(midnightStore);
+const { addresses, balances, transactions } = toRefs(midnightStore);
 const { loggedWallet } = toRefs(walletStore);
 const hideBalances = computed(() => walletStore.config?.hideBalances || false);
 const midnightLoading = useMidnightLoading();
@@ -150,8 +150,11 @@ const shortenedAddress = computed(() => {
   return `${a.slice(0, 8)}…${a.slice(-6)}`;
 });
 
+// `useMidnightDustLive.registrationStatus` already implements the
+// hasData-gated Path-A-signal-vs-store fallback internally (see its
+// computed) — no need to re-derive it here.
 const registrationColor = computed(() => {
-  const status = dustLive.hasData.value ? dustLive.registrationStatus.value : (dustState.value?.registrationStatus ?? 'Unregistered');
+  const status = dustLive.registrationStatus.value;
   switch (status) {
     case 'Registered': return 'var(--g-success)';
     case 'Pending': return 'var(--g-warning)';

@@ -21,9 +21,8 @@
 import { computed, onBeforeUnmount, ref, watch, type ComputedRef } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { midnightStore } from '@/stores/midnightStore';
-import { geroStore } from '@/stores/geroStore';
-import { Blockchain, Wallet } from '@/models/types';
 import { getMidnightApi, MidnightDustRegistrationStatusDto } from '@/api/midnight-api';
+import { enumerateCardanoStakeIdentities } from '@/shared/composables/useCardanoStakeEnumeration';
 import { debugLog } from '@/utils/debug';
 
 const STATUS_BATCH_LIMIT = 50;
@@ -40,7 +39,6 @@ const pathBAsOfMs = ref<number>(0);
 
 let consumers = 0;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
-let unwatchIdentity: (() => void) | null = null;
 
 /**
  * `network|dustAddress` of the identity the module refs above currently
@@ -73,42 +71,6 @@ function toBig(v?: string): bigint {
   }
 }
 
-/**
- * Same-seed twin + imported-Cardano-wallet stake addresses this Midnight
- * wallet can see, deduped. Mirrors `useDustSources.ts`'s `twinSource()`
- * (~:107-125) and `enumerate()` (~:155-178) — duplicated here rather than
- * reusing that module because this composable only needs the flat
- * stake-address list (not the full `DustSource` row with label / canSign /
- * nightBalance / status used by the cNIGHT dialog), and because rewiring
- * `useDustSources` to share code is out of this change's scope. Keep this
- * in sync with that file if its derivation logic changes.
- *
- * Public-xpub-only derivation (same as the source) — no auth gesture, no
- * mnemonic decryption required.
- */
-async function collectStakeAddresses(cardanoNetwork: string): Promise<string[]> {
-  const stakes = new Set<string>();
-
-  const twinStake = midnightStore.addresses?.cardanoStakeAddress;
-  if (twinStake) stakes.add(twinStake);
-
-  const records = Object.values(geroStore.wallets ?? {}) as Array<Wallet & { publicKey?: string }>;
-  const cardanoRecords = records.filter(
-    (w) => w.chain === Blockchain.CARDANO && w.network === cardanoNetwork && !!w.publicKey,
-  );
-  if (cardanoRecords.length === 0) return [...stakes];
-
-  const { getRewardAddress } = await import('@/chrome/serialization');
-  for (const w of cardanoRecords) {
-    try {
-      stakes.add(getRewardAddress(w.publicKey as string, Blockchain.CARDANO, w.network).toBech32());
-    } catch (e) {
-      debugLog('[useDustPathB] Failed to derive stake address for wallet', w.id, e);
-    }
-  }
-  return [...stakes];
-}
-
 async function refreshOnce() {
   const network = walletStore.loggedWallet?.network;
   const dustAddress = midnightStore.addresses?.dust;
@@ -126,8 +88,9 @@ async function refreshOnce() {
   }
   if (!network || !dustAddress) return;
 
-  const stakes = await collectStakeAddresses(network);
+  const identities = await enumerateCardanoStakeIdentities(network);
   if (key !== committedKey) return; // superseded by a later wallet switch
+  const stakes = identities.map((identity) => identity.stakeAddress);
 
   if (stakes.length === 0) {
     // No controlled stakes for this identity — that IS this identity's real
@@ -182,23 +145,43 @@ function start() {
   if (pollTimer) return;
   void refreshOnce();
   pollTimer = setInterval(() => { void refreshOnce(); }, POLL_MS);
-  // Single module-scoped watcher — hoisted out of the per-consumer factory
-  // below so N mounted consumers (dashboard gauge, mini-gauge, dialog — each
-  // calling useDustPathB() directly or transitively via useMidnightDustLive)
-  // don't each register their own watcher and all fire concurrent batch
-  // POSTs to Nexus on a single wallet switch.
-  unwatchIdentity = watch(
-    () => `${walletStore.loggedWallet?.network ?? ''}|${midnightStore.addresses?.dust ?? ''}`,
-    () => { void refreshOnce(); },
-  );
 }
 
 function stop() {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-  if (unwatchIdentity) { unwatchIdentity(); unwatchIdentity = null; }
   // Don't zero out the sums — keep the last value visible until next start,
   // same rationale as useMidnightDustLive.
 }
+
+/**
+ * Single module-scoped identity watcher — hoisted to IMPORT TIME (module top
+ * level), NOT inside start(). `start()` used to create this watch() itself,
+ * but `start()` is called synchronously from `useDustPathB()`, which is
+ * itself called from a component's `setup()` — and Vue 2.7's `watch()` binds
+ * to whatever component instance is active when it's called (it calls
+ * `recordEffectScope` against the current instance's `_scope` internally).
+ * That made the "module-scoped" watcher actually owned by whichever consumer
+ * (dashboard gauge / mini-gauge / dialog) happened to mount first, so it died
+ * with THAT component's unmount even while other consumers — and this
+ * module's own `consumers` refcount — were still keeping the poll alive.
+ * Once the first-mounted consumer went away, `stop()` never ran again
+ * (consumers stayed > 0), so the wallet-switch watcher was silently dead for
+ * the rest of the session.
+ *
+ * At module load time there is no active component instance/effect scope, so
+ * this `watch()` call is detached from any of them and is never auto-torn-
+ * down — it lives for the module's lifetime, same as `pollTimer` and
+ * `committedKey` above. Guard on `consumers` so an identity change before the
+ * first `start()` (or after the last `stop()`, when nobody is mounted) is a
+ * no-op rather than waking up a poll loop nobody asked for.
+ */
+watch(
+  () => `${walletStore.loggedWallet?.network ?? ''}|${midnightStore.addresses?.dust ?? ''}`,
+  () => {
+    if (consumers <= 0) return;
+    void refreshOnce();
+  },
+);
 
 export interface DustPathB {
   /** Σ current capacity across stakes live-registered to this wallet's dust address. */
@@ -228,7 +211,7 @@ export function useDustPathB(): DustPathB {
     }
   });
   // Wallet-switch restart is handled by the single module-scoped watcher
-  // registered in start() — see the comment there.
+  // registered at module load, above — see its comment.
 
   return {
     pathBBalance: computed(() => pathBBalance.value),

@@ -73,9 +73,18 @@ const incomingPending = ref(0);
 // its sidepanel clone) — onMounted + watch(registrationStatus) can fire
 // close together on a Path-B wallet, and the two overlapping async calls
 // would otherwise read-map/await/write-map out of order and flicker the pill.
+//
+// A busy call used to just DROP the overlapping one — but the dropped call
+// is precisely the one carrying fresh `pathBStakes` for the `isResolved`
+// clear, and once `registrationStatus` settles there's no guarantee of a
+// later fire to pick it back up, so a real pending record could survive to
+// TTL. Trailing-edge re-run instead: if a call comes in while busy, queue
+// exactly one follow-up re-run from the `finally` (same fix as the dashboard
+// gauge — keep both in sync).
 let refreshPendingBusy = false;
+let refreshPendingQueued = false;
 async function refreshPending() {
-  if (refreshPendingBusy) return;
+  if (refreshPendingBusy) { refreshPendingQueued = true; return; }
   refreshPendingBusy = true;
   try {
     const dust = midnightStore.addresses?.dust ?? '';
@@ -95,6 +104,10 @@ async function refreshPending() {
     incomingPending.value = getDustPendingForDestination(dust).length;
   } finally {
     refreshPendingBusy = false;
+    if (refreshPendingQueued) {
+      refreshPendingQueued = false;
+      safeRefreshPending();
+    }
   }
 }
 function safeRefreshPending() {
