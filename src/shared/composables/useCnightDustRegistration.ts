@@ -517,7 +517,7 @@ export function useCnightDustRegistration() {
       }
 
       stage.value = 'signing';
-      const txId = await signAndSubmit(build.txCbor, credentials, mnemonic);
+      const txId = await signAndSubmit(build.txCbor, credentials, mnemonic, build.sponsoredCollateralRef);
 
       stage.value = 'done';
       // Persist the pending registration so a reopen (before the ~2.5h relay)
@@ -568,6 +568,7 @@ export function useCnightDustRegistration() {
     txCbor: string,
     credentials: RegisterCredentials,
     mnemonic?: string,
+    sponsoredCollateralRef?: string | null,
   ): Promise<string> {
     const wallet = loggedWallet.value;
     if (!wallet) throw new Error('No wallet logged in');
@@ -598,6 +599,19 @@ export function useCnightDustRegistration() {
       }
     } else {
       signingData.password = credentials.password;
+    }
+
+    // Gero-sponsored collateral: the pool UTxO is a collateral input, so the tx needs the
+    // hot wallet's vkey witness too. The SIGN_TX handler ALREADY cosigns every collateral
+    // input and merges the result (background.ts) — do NOT cosign again here, that spends a
+    // second request against the rate limit and 429s. All this flow has to do is register
+    // the ref as one WE borrowed, so that handler treats a cosign failure as fatal instead
+    // of swallowing it and returning an under-signed witness that fails opaquely at the node.
+    if (sponsoredCollateralRef) {
+      await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.MARK_NEXUS_LENT,
+        data: { utxoRef: sponsoredCollateralRef },
+      });
     }
 
     const signResponse = await Messaging.sendToBackgroundFromOptions({
@@ -666,7 +680,7 @@ export function useCnightDustRegistration() {
       }
 
       stage.value = 'signing';
-      const txId = await signAndSubmit(build.txCbor, credentials);
+      const txId = await signAndSubmit(build.txCbor, credentials, undefined, build.sponsoredCollateralRef);
 
       stage.value = 'done';
       clearDustPending(wallet.stakeAddress);
@@ -716,7 +730,7 @@ export function useCnightDustRegistration() {
       }
 
       stage.value = 'signing';
-      const txId = await signAndSubmit(build.txCbor, credentials);
+      const txId = await signAndSubmit(build.txCbor, credentials, undefined, build.sponsoredCollateralRef);
 
       stage.value = 'done';
       // Tombstone the outpoint (with a TTL) so a mempool-lagged
@@ -777,7 +791,7 @@ export function useCnightDustRegistration() {
       }
 
       stage.value = 'signing';
-      const txId = await signAndSubmit(build.txCbor, credentials, mnemonic);
+      const txId = await signAndSubmit(build.txCbor, credentials, mnemonic, build.sponsoredCollateralRef);
 
       stage.value = 'done';
       markDustPending(wallet.stakeAddress, derived.dust, txId);

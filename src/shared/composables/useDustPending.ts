@@ -10,6 +10,17 @@
  * status clears them.
  */
 
+import { ref } from 'vue';
+
+/**
+ * Bumped on every write to the pending map. `useCnightDustRegistration()` builds its
+ * refs PER CALL, so the registration dialog and the holdings-table DUST strip each hold
+ * independent state and neither sees the other's updates — the strip kept offering
+ * "Set up" after a successful registration until a page reload. Components that render
+ * registration state watch this counter and re-read.
+ */
+export const dustPendingRevision = ref(0);
+
 const KEY = 'gero.dustPending';
 /** Relay is ~2.5h, occasionally several hours on mainnet; keep the pending
  *  guard generous so a slow relay never re-exposes the register button, but
@@ -36,6 +47,7 @@ function readAll(): Record<string, DustPendingRecord> {
 
 function writeAll(map: Record<string, DustPendingRecord>): void {
   if (typeof localStorage !== 'undefined') localStorage.setItem(KEY, JSON.stringify(map));
+  dustPendingRevision.value += 1;
 }
 
 /** Record a just-submitted registration/redirect for `stakeAddress`. */

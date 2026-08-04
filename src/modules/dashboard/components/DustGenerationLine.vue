@@ -15,7 +15,7 @@
         class="dust-line-cta"
         @click.stop="$emit('setup')"
       >
-        {{ t('midnight.dustLineSetUp') }}
+        {{ ctaLabel }}
         <v-icon x-small right>mdi-chevron-right</v-icon>
       </v-btn>
     </div>
@@ -27,12 +27,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import DustParticleCanvas from '@/shared/components/DustParticleCanvas.vue';
 import { walletStore } from '@/stores/walletStore';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useCnightDustRegistration } from '@/shared/composables/useCnightDustRegistration';
-import { getDustPending } from '@/shared/composables/useDustPending';
+import { getDustPending, dustPendingRevision } from '@/shared/composables/useDustPending';
 import { debugLog } from '@/utils/debug';
 
 const props = withDefaults(defineProps<{
@@ -65,22 +65,46 @@ onMounted(() => {
   Promise.resolve(refreshStatus()).finally(readLinePending);
 });
 
-/** Registered/Invalid come from the indexer; Pending can come from either the
- *  indexer or the local guard. */
+// The registration dialog holds its OWN useCnightDustRegistration() instance (the
+// composable builds fresh refs per call), so a registration completed there never
+// reached this strip and it kept offering "Set up" until a page reload. The pending
+// store bumps a shared counter on every write; re-read when it moves.
+watch(dustPendingRevision, () => {
+  readLinePending();
+  Promise.resolve(refreshStatus()).finally(readLinePending);
+});
+
+/** Registered/Invalid/Duplicated come from the indexer; Pending can come from
+ *  either the indexer or the local guard. Duplicated must win over the local
+ *  pending guard (same precedence as the composable: a second live
+ *  registration UTxO pauses generation for the whole set). */
 const effectiveStatus = computed(() => {
   const s = registrationStatus.value;
-  if (s === 'Registered' || s === 'Invalid') return s;
+  if (s === 'Registered' || s === 'Invalid' || s === 'Duplicated') return s;
   if (s === 'Pending' || linePending.value) return 'Pending';
   return s; // Unregistered | Unknown
 });
 
+/** Duplicated/Invalid need the dialog too (it opens straight into the
+ *  consolidation panel / invalid hint and never shows the Register CTA in
+ *  those states) — without a CTA here those states would be a dead end, since
+ *  this strip is the only entry point to CnightDustRegistrationDialog. */
+const needsAttention = computed(() =>
+  effectiveStatus.value === 'Duplicated' || effectiveStatus.value === 'Invalid');
+
 const canSetUp = computed(() =>
-  effectiveStatus.value === 'Unregistered' || effectiveStatus.value === 'Unknown');
+  effectiveStatus.value === 'Unregistered' || effectiveStatus.value === 'Unknown'
+  || needsAttention.value);
+
+const ctaLabel = computed(() =>
+  needsAttention.value ? t('midnight.dustLineReview') : t('midnight.dustLineSetUp'));
 
 const statusKey = computed(() => {
   switch (effectiveStatus.value) {
     case 'Registered': return 'registered';
     case 'Pending': return 'pending';
+    case 'Duplicated':
+    case 'Invalid': return 'attention';
     default: return 'unregistered';
   }
 });
@@ -103,6 +127,8 @@ const label = computed(() => {
   switch (effectiveStatus.value) {
     case 'Registered': return t('midnight.dustLineGenerating');
     case 'Pending': return t('midnight.dustLinePending');
+    case 'Duplicated': return t('midnight.dustLineDuplicated');
+    case 'Invalid': return t('midnight.dustLineInvalid');
     default: return t('midnight.dustLinePromo');
   }
 });
@@ -199,6 +225,9 @@ void props;
   margin-right: 6px;
 }
 
-/* Registered/pending read calmer; unregistered nudges with a warmer label. */
-.dust-line--unregistered .dust-line-label { color: rgb(255, 236, 190); }
+/* Registered/pending read calmer; unregistered nudges with a warmer label.
+   Attention (duplicated/invalid) shares the warm label so the paused state
+   reads as "act on this", not as a promo. */
+.dust-line--unregistered .dust-line-label,
+.dust-line--attention .dust-line-label { color: rgb(255, 236, 190); }
 </style>

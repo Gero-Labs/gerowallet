@@ -205,6 +205,13 @@ export interface BuildDustRegistrationTxResponse {
     quantity: number;
   } | null;
   note?: string;
+  /**
+   * `txHash#index` of a Gero-provided collateral UTxO, present only when the wallet had
+   * no pure-ADA UTxO of its own. When set, the signed tx MUST be co-signed by the
+   * collateral pool (`nexusCollateralApi.cosign`) and that witness merged in before
+   * submitting, or the node rejects it as missing a witness.
+   */
+  sponsoredCollateralRef?: string | null;
 }
 
 /** Wire-shape (snake_case) of the Nexus response, before conversion to camelCase. */
@@ -223,6 +230,7 @@ interface BuildDustRegistrationTxResponseWire {
     quantity: number;
   } | null;
   note?: string;
+  sponsored_collateral_ref?: string | null;
 }
 
 /**
@@ -267,6 +275,7 @@ function convertBuildDustTxResponse(data: BuildDustRegistrationTxResponseWire): 
         }
       : null,
     note: data.note,
+    sponsoredCollateralRef: data.sponsored_collateral_ref ?? null,
   };
 }
 

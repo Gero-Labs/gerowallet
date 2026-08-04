@@ -235,6 +235,12 @@ class MidnightSyncService {
       // returns empty by default. When per-address derivation arrives, this
       // is where role-specific public keys would flow.
       [],
+      // `addresses` is BTC-only (CONTRACT-btc-wire.md); Midnight sends none.
+      // MUST be passed explicitly: omitting it shifts every argument below it
+      // one slot left, which put the shielded viewing key into
+      // `midnightLastTxId` (gero-sync then closed the WS with 1011 on every
+      // SUBSCRIBE) and silently disabled shielded sync.
+      undefined,
       midnightLastTxId,
       shielded?.viewingKey ?? null,
       shielded?.lastIndex ?? null,
