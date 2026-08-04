@@ -4205,7 +4205,7 @@ export default {
   'midnight.send.estimatedNetworkFee': 'Geschätzte Netzwerkgebühr',
   'midnight.send.dustResetWarning': 'Die Netzwerkgebühr wird in DUST bezahlt und ist vernachlässigbar. DUST regeneriert sich mit der Zeit aus deinem registrierten NIGHT.',
   'midnight.send.dustResetShort': 'Die Netzwerkgebühr wird in DUST bezahlt; es regeneriert sich mit der Zeit.',
-  'midnight.send.dustLowHint': 'Dein DUST ist niedrig ({percent}%). Beim Senden beginnt die Generierung der bewegten Coins von vorn, daher kann es dauern, bis vor der nächsten Transaktion wieder genug vorhanden ist.',
+  'midnight.send.dustLowHint': 'Dein DUST ist niedrig ({percent}%). Die Netzwerkgebühr ist winzig und DUST füllt sich mit der Zeit aus deinem registrierten NIGHT wieder auf.',
   // Fortschrittsanzeige beim Senden
   'midnight.send.stageAuthorize': 'Autorisieren',
   'midnight.send.stageBuild': 'Transaktion erstellen',
@@ -4316,6 +4316,9 @@ export default {
   'midnight.dustLinePromo': 'Dieses NIGHT kann DUST generieren',
   'midnight.dustLineGenerating': 'Generiert DUST',
   'midnight.dustLinePending': 'DUST-Registrierung ausstehend · einige Stunden',
+  'midnight.dustLineDuplicated': 'DUST-Generierung pausiert · doppelte Registrierungen',
+  'midnight.dustLineInvalid': 'DUST-Registrierung erfordert Aufmerksamkeit',
+  'midnight.dustLineReview': 'Überprüfen',
   'midnight.dustRegistrationChip': 'DUST-Registrierung',
   'midnight.dustRegistrationPending': 'Ausstehend · einige Stunden',
   'midnight.dustLineSetUp': 'Einrichten',

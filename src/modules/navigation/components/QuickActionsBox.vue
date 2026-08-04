@@ -232,7 +232,9 @@ const isPerpetualsDisabled = computed(() => {
   transform: translate(-50%, -50%);
   display: flex;
   height: 44px;
-  min-width: 240px;
+  /* No min-width: the pill hugs its buttons. Chains with few actions
+     (Midnight: Send + Receive only) otherwise get wide empty side padding
+     from a fixed floor + centered content. */
   width: max-content;
   border: 1px solid var(--g-hairline-3);
   /* The whole bar is the liquid-glass surface; the buttons inside are flat

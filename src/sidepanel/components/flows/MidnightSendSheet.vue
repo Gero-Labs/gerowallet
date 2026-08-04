@@ -162,13 +162,16 @@
                 <span>{{ $t('midnight.send.publicTxNote') }}</span>
               </div>
 
-              <!-- Sending registered NIGHT resets its DUST accrual clock. -->
+              <!-- DUST fee note (fee is ~1 Speck; sending does NOT reset DUST —
+                   verified on preprod, the old "reset" was an estimator bug). -->
               <div v-if="!isDustLow" class="midnight-dust-note mt-3">
                 <v-icon size="14" color="warning" class="mr-1">mdi-information-outline</v-icon>
                 <span>{{ $t('midnight.send.dustResetWarning') }}</span>
               </div>
-              <div v-else class="midnight-dust-note midnight-dust-note--low mt-3">
-                <v-icon size="14" color="error" class="mr-1">mdi-battery-alert-variant-outline</v-icon>
+              <!-- Low-DUST hint: informational while any DUST remains (the tiny
+                   fee still clears); red only when DUST is genuinely empty. -->
+              <div v-else class="mt-3" :class="isDustEmpty ? 'midnight-dust-note midnight-dust-note--low' : 'midnight-info-note'">
+                <v-icon size="14" :color="isDustEmpty ? 'error' : 'var(--g-text-3)'" class="mr-1">mdi-battery-alert-variant-outline</v-icon>
                 <span>{{ $t('midnight.send.dustLowHint', { percent: dustBattery.percent }) }}</span>
               </div>
 
@@ -402,6 +405,13 @@ const dustBattery = computed<{ percent: number } | null>(() => {
   return { percent: Math.max(0, Math.min(100, Math.round(raw))) };
 });
 const isDustLow = computed(() => !!dustBattery.value && dustBattery.value.percent < 20);
+
+// Truly empty DUST: the (~1 Speck) fee can't be paid, so the hint escalates to
+// the error tone. Any nonzero DUST covers the fee and stays informational.
+const isDustEmpty = computed(() => {
+  const ds = midnightStore.dustState;
+  return !!ds && ds.current <= 0n;
+});
 
 // ── Review model (fed to the shared TransactionDetailsCard, same as the
 //    dashboard dialog) ──

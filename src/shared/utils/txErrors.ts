@@ -19,6 +19,13 @@ export function isCollateralError(message: string): boolean {
   const l = message.toLowerCase();
   // "pool empty" is a Nexus shared-pool infra state, not the user's wallet.
   if (l.includes('collateral pool')) return false;
+  // Nexus's insufficient-ADA message NAMES the bucket it counted ("available in
+  // non-collateral UTxOs: 2.1 ADA"), so a bare 'collateral' substring match hijacks
+  // it and tells the user to create an ADA-only UTxO when what they actually need is
+  // more ADA. Defer to the more specific classifier — mapErrorMessage checks this
+  // function first, so without the guard the insufficient-ADA branch is unreachable
+  // for that message.
+  if (isInsufficientAdaError(l)) return false;
   return l.includes('collateral') || l.includes('pure-ada') || l.includes('pure ada');
 }
 
