@@ -41,6 +41,7 @@ const nowTickMs = ref<number>(Date.now());
 let consumers = 0;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let tickTimer: ReturnType<typeof setInterval> | null = null;
+let unwatchIdentity: (() => void) | null = null;
 
 async function refreshOnce() {
   // Read network + address fresh each tick — the active wallet can change.
@@ -69,11 +70,19 @@ function start() {
   void refreshOnce();
   pollTimer = setInterval(refreshOnce, 5_000);
   tickTimer = setInterval(() => { nowTickMs.value = Date.now(); }, 1_000);
+  // Single module-scoped watcher — hoisted out of the per-consumer factory
+  // (same fix as useDustPathB.ts) so N mounted consumers don't each
+  // register their own watcher and all fire concurrent polls on a switch.
+  unwatchIdentity = watch(
+    () => `${walletStore.loggedWallet?.network ?? ''}|${midnightStore.addresses?.unshielded ?? ''}`,
+    () => { void refreshOnce(); },
+  );
 }
 
 function stop() {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
   if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+  if (unwatchIdentity) { unwatchIdentity(); unwatchIdentity = null; }
   // Don't zero out polledBalance — keep the last value visible until next start
   // so navigation back to a dust view shows the previous reading instantly.
 }
@@ -127,12 +136,8 @@ export function useMidnightDustLive(): MidnightDustLive {
       stop();
     }
   });
-  // Restart polling on wallet/address change so we don't keep showing the
-  // previous wallet's numbers.
-  watch(
-    () => `${walletStore.loggedWallet?.network ?? ''}|${midnightStore.addresses?.unshielded ?? ''}`,
-    () => { void refreshOnce(); },
-  );
+  // Wallet-switch restart is handled by the single module-scoped watcher
+  // registered in start() — see the comment there.
 
   const {
     pathBBalance, pathBCap, pathBRate, pathBNight, pathBRegistered, pathBAsOfMs,
@@ -185,6 +190,11 @@ export function useMidnightDustLive(): MidnightDustLive {
         : (midnightStore.dustState?.registrationStatus ?? 'Unregistered');
       return (a === 'Registered' || pathBRegistered.value) ? 'Registered' : a;
     }),
-    hasData: computed(() => polledAsOfMs.value !== 0 || midnightStore.dustState != null),
+    // Path B has its own independent poll — a pure-Path-B wallet whose
+    // Path-A poll keeps 404ing (or never had a store snapshot) still needs
+    // `hasData` to flip true once Path B has a reading, otherwise consumers
+    // like DustRegistrationDialog fall back to stale/empty store values
+    // forever even though the battery itself is showing real Path-B charge.
+    hasData: computed(() => polledAsOfMs.value !== 0 || midnightStore.dustState != null || pathBAsOfMs.value !== 0),
   };
 }

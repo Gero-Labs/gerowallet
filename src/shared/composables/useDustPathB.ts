@@ -40,6 +40,29 @@ const pathBAsOfMs = ref<number>(0);
 
 let consumers = 0;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+let unwatchIdentity: (() => void) | null = null;
+
+/**
+ * `network|dustAddress` of the identity the module refs above currently
+ * describe. The refs are a SINGLE shared instance across every consumer, so
+ * when the logged wallet changes mid-flight (or the poll for the previous
+ * wallet is still in flight when a new one starts), every write must be
+ * checked against this — otherwise a stale response either adds a ghost
+ * wallet's charge on top of the new one's, or feeds a stale `pathBStakes`
+ * into a gauge's pending-reconcile and wrongly clears a real pending record
+ * for the new wallet (see refreshOnce below).
+ */
+let committedKey: string | null = null;
+
+function resetPathBState(): void {
+  pathBBalance.value = 0n;
+  pathBCap.value = 0n;
+  pathBRate.value = 0n;
+  pathBNight.value = 0n;
+  pathBRegistered.value = false;
+  pathBStakes.value = [];
+  pathBAsOfMs.value = 0;
+}
 
 function toBig(v?: string): bigint {
   if (!v) return 0n;
@@ -89,10 +112,32 @@ async function collectStakeAddresses(cardanoNetwork: string): Promise<string[]> 
 async function refreshOnce() {
   const network = walletStore.loggedWallet?.network;
   const dustAddress = midnightStore.addresses?.dust;
+  // Identity this call is computing for — captured once, re-checked before
+  // every write below (see `committedKey` doc comment above).
+  const key = `${network ?? ''}|${dustAddress ?? ''}`;
+  if (key !== committedKey) {
+    // The wallet identity changed since the last committed write (a wallet
+    // switch, logout, or the very first call). Wipe the previous wallet's
+    // sums synchronously, before any await, so they can never remain
+    // visible under the new wallet — even if everything below fails or a
+    // later call for a third identity supersedes this one.
+    committedKey = key;
+    resetPathBState();
+  }
   if (!network || !dustAddress) return;
 
   const stakes = await collectStakeAddresses(network);
-  if (stakes.length === 0) return;
+  if (key !== committedKey) return; // superseded by a later wallet switch
+
+  if (stakes.length === 0) {
+    // No controlled stakes for this identity — that IS this identity's real
+    // Path-B state (zero), not "unknown". Stamp the poll rather than bare-
+    // returning, so extrapolation/hasData treat it as a current reading
+    // instead of silently leaving behind whatever the previous identity
+    // (already zeroed above) or a not-yet-run poll left in place.
+    pathBAsOfMs.value = Date.now();
+    return;
+  }
 
   const api = getMidnightApi(network);
   const rows: MidnightDustRegistrationStatusDto[] = [];
@@ -100,13 +145,17 @@ async function refreshOnce() {
     for (let i = 0; i < stakes.length; i += STATUS_BATCH_LIMIT) {
       const chunk = stakes.slice(i, i + STATUS_BATCH_LIMIT);
       rows.push(...(await api.getDustStatusBatch(chunk)));
+      if (key !== committedKey) return; // superseded mid-batch
     }
   } catch (e) {
-    // Keep the last successful sums — a transient Nexus failure must not
-    // zero out the cNIGHT-backed portion of the battery.
+    // Keep the last successful sums FOR THIS IDENTITY — a transient Nexus
+    // failure must not zero out the cNIGHT-backed portion of the battery.
+    // (A genuine identity change already reset state above, so this only
+    // ever preserves same-wallet data, never a stale different wallet's.)
     debugLog('🌙 dust/status batch poll failed (Path B)', e);
     return;
   }
+  if (key !== committedKey) return; // superseded while the last chunk resolved
 
   // Keep only rows registered to THIS wallet's dust address. `registered`
   // already folds in the duplicate-registration rule: Midnight allows at
@@ -133,10 +182,20 @@ function start() {
   if (pollTimer) return;
   void refreshOnce();
   pollTimer = setInterval(() => { void refreshOnce(); }, POLL_MS);
+  // Single module-scoped watcher — hoisted out of the per-consumer factory
+  // below so N mounted consumers (dashboard gauge, mini-gauge, dialog — each
+  // calling useDustPathB() directly or transitively via useMidnightDustLive)
+  // don't each register their own watcher and all fire concurrent batch
+  // POSTs to Nexus on a single wallet switch.
+  unwatchIdentity = watch(
+    () => `${walletStore.loggedWallet?.network ?? ''}|${midnightStore.addresses?.dust ?? ''}`,
+    () => { void refreshOnce(); },
+  );
 }
 
 function stop() {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  if (unwatchIdentity) { unwatchIdentity(); unwatchIdentity = null; }
   // Don't zero out the sums — keep the last value visible until next start,
   // same rationale as useMidnightDustLive.
 }
@@ -168,12 +227,8 @@ export function useDustPathB(): DustPathB {
       stop();
     }
   });
-  // Restart on wallet/dust-address change so a wallet switch doesn't keep
-  // showing the previous wallet's Path-B sums.
-  watch(
-    () => `${walletStore.loggedWallet?.network ?? ''}|${midnightStore.addresses?.dust ?? ''}`,
-    () => { void refreshOnce(); },
-  );
+  // Wallet-switch restart is handled by the single module-scoped watcher
+  // registered in start() — see the comment there.
 
   return {
     pathBBalance: computed(() => pathBBalance.value),

@@ -81,7 +81,10 @@ interface MidnightDustRegistrationStatusWire {
   registration_utxo_output_index?: number | null;
 }
 
-function convertDustStatus(wire: MidnightDustRegistrationStatusWire): MidnightDustRegistrationStatusDto {
+/** Exported for `midnight-api.spec.ts` — this exact wire-conversion bug class
+ *  (snake_case fields silently coming through as `undefined`) shipped
+ *  undetected for a full release; see git history for the fix. */
+export function convertDustStatus(wire: MidnightDustRegistrationStatusWire): MidnightDustRegistrationStatusDto {
   return {
     cardanoRewardAddress: wire.cardano_reward_address,
     dustAddress: wire.dust_address ?? null,

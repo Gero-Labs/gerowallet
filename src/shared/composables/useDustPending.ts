@@ -142,11 +142,15 @@ export async function reconcileDustPending(
  * it can't call the stake-keyed reconciler directly. This walks the whole
  * pending map instead and reconciles every match.
  *
- * Per record, two independent signals can resolve it:
+ * Per record, three independent checks can resolve it, in order:
+ * - TTL: a record older than `TTL_MS` is dropped outright, same as
+ *   `getDustPendingForDestination`'s expiry (this reconciler reads the map
+ *   directly via `readAll()` rather than through that getter, so it must
+ *   apply the same prune itself or an expired record would never clear here).
  * - `isResolved(stakeAddress, record)`, when supplied, lets the caller assert
  *   the registration already landed on-chain by some other means (e.g. the
  *   stake now shows up in `useDustPathB`'s live-registered set) — checked
- *   first since it needs no network call and no grace window.
+ *   next since it needs no network call and no grace window.
  * - Otherwise, the same grace-window + `txExists` check as
  *   `reconcileDustPending`: too-fresh records are left alone, and a record
  *   older than the grace window is dropped once `txExists` definitively
@@ -163,6 +167,11 @@ export async function reconcileDustPendingForDestination(
   let mutated = false;
   for (const [stakeAddress, rec] of Object.entries(all)) {
     if (rec.dustAddress !== dustAddress) continue;
+    if (Date.now() - rec.submittedAt > TTL_MS) {
+      delete all[stakeAddress];
+      mutated = true;
+      continue;
+    }
     if (isResolved?.(stakeAddress, rec)) {
       delete all[stakeAddress];
       mutated = true;
