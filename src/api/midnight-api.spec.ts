@@ -49,7 +49,7 @@ describe('convertDustStatus', () => {
       // absent — Nexus omits them rather than sending explicit nulls.
     };
 
-    expect(convertDustStatus(wire)).toEqual({
+    expect(convertDustStatus(wire)).toStrictEqual({
       cardanoRewardAddress: 'stake1u9xyz0000000000000000000000000000000000000000000000',
       dustAddress: null,
       registered: false,

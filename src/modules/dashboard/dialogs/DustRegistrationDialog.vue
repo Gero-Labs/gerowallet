@@ -319,12 +319,13 @@ const dustGenerating = computed(() => {
 // the dashboard battery but this dialog still renders the Unregistered
 // branch with a "Register for DUST generation" CTA, exactly the false
 // prompt this feature exists to remove.
-const registrationStatus = computed<'Unregistered' | 'Pending' | 'Registered' | 'Invalid'>(() => {
-  if (dustLive.hasData.value) {
-    return dustLive.registrationStatus.value as 'Unregistered' | 'Pending' | 'Registered' | 'Invalid';
-  }
-  return (dustState.value?.registrationStatus as 'Unregistered' | 'Pending' | 'Registered' | 'Invalid') ?? 'Unregistered';
-});
+// `useMidnightDustLive.registrationStatus` already implements this exact
+// hasData-gated Path-A-signal-vs-store fallback internally (see its
+// computed) — re-deriving it here just gives the rule a second place to
+// drift from the source of truth.
+const registrationStatus = computed<'Unregistered' | 'Pending' | 'Registered' | 'Invalid'>(
+  () => dustLive.registrationStatus.value as 'Unregistered' | 'Pending' | 'Registered' | 'Invalid',
+);
 
 // Live DUST balance + cap — composable handles polling + 1s tick. Fall back
 // to gero-sync's AccountInfo snapshot before the first poll completes.

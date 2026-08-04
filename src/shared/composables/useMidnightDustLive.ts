@@ -41,7 +41,6 @@ const nowTickMs = ref<number>(Date.now());
 let consumers = 0;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let tickTimer: ReturnType<typeof setInterval> | null = null;
-let unwatchIdentity: (() => void) | null = null;
 
 async function refreshOnce() {
   // Read network + address fresh each tick — the active wallet can change.
@@ -70,22 +69,40 @@ function start() {
   void refreshOnce();
   pollTimer = setInterval(refreshOnce, 5_000);
   tickTimer = setInterval(() => { nowTickMs.value = Date.now(); }, 1_000);
-  // Single module-scoped watcher — hoisted out of the per-consumer factory
-  // (same fix as useDustPathB.ts) so N mounted consumers don't each
-  // register their own watcher and all fire concurrent polls on a switch.
-  unwatchIdentity = watch(
-    () => `${walletStore.loggedWallet?.network ?? ''}|${midnightStore.addresses?.unshielded ?? ''}`,
-    () => { void refreshOnce(); },
-  );
 }
 
 function stop() {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
   if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
-  if (unwatchIdentity) { unwatchIdentity(); unwatchIdentity = null; }
   // Don't zero out polledBalance — keep the last value visible until next start
   // so navigation back to a dust view shows the previous reading instantly.
 }
+
+/**
+ * Single module-scoped identity watcher — hoisted to IMPORT TIME (module top
+ * level), NOT inside start(). See `useDustPathB.ts` for the full rationale
+ * (same trap, same fix): `start()` used to create this watch() itself, but
+ * `start()` runs synchronously inside `useMidnightDustLive()`, which is
+ * itself called from a component's `setup()` — and Vue 2.7's `watch()` binds
+ * to whichever component instance is active when it's called. A watcher
+ * created there was therefore silently owned by whichever consumer (portfolio
+ * chart / registration dialog / gauges) mounted first and died with THAT
+ * component's unmount, even while other consumers kept `consumers`/`pollTimer`
+ * alive — so `stop()` never ran again and the wallet-switch watcher went dead
+ * for the rest of the session.
+ *
+ * At module load time there is no active component instance, so this
+ * watch() call is detached and never auto-torn-down — it lives for the
+ * module's lifetime. Guard on `consumers` so an identity change before the
+ * first `start()` (or after the last `stop()`) is a no-op.
+ */
+watch(
+  () => `${walletStore.loggedWallet?.network ?? ''}|${midnightStore.addresses?.unshielded ?? ''}`,
+  () => {
+    if (consumers <= 0) return;
+    void refreshOnce();
+  },
+);
 
 /**
  * Whether the last Path-A poll actually carries usable signal.
@@ -137,7 +154,7 @@ export function useMidnightDustLive(): MidnightDustLive {
     }
   });
   // Wallet-switch restart is handled by the single module-scoped watcher
-  // registered in start() — see the comment there.
+  // registered at module load, above — see its comment.
 
   const {
     pathBBalance, pathBCap, pathBRate, pathBNight, pathBRegistered, pathBAsOfMs,
