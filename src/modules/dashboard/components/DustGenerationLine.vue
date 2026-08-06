@@ -7,6 +7,7 @@
 
     <div class="dust-line-body">
       <span class="dust-line-label">{{ label }}</span>
+      <span v-if="capacityLabel" class="dust-line-capacity g-num">{{ capacityLabel }}</span>
 
       <v-btn
         v-if="canSetUp"
@@ -33,6 +34,7 @@ import { walletStore } from '@/stores/walletStore';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useCnightDustRegistration } from '@/shared/composables/useCnightDustRegistration';
 import { getDustPending, dustPendingRevision } from '@/shared/composables/useDustPending';
+import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { debugLog } from '@/utils/debug';
 
 const props = withDefaults(defineProps<{
@@ -46,7 +48,7 @@ defineEmits<{
 }>();
 
 const { t } = useTranslation();
-const { registrationStatus, refreshStatus } = useCnightDustRegistration();
+const { registrationStatus, refreshStatus, status } = useCnightDustRegistration();
 
 // Read the local pending guard directly (synchronous, no network) so the line
 // shows Pending immediately — refreshStatus (below) only upgrades it to
@@ -92,12 +94,37 @@ const effectiveStatus = computed(() => {
 const needsAttention = computed(() =>
   effectiveStatus.value === 'Duplicated' || effectiveStatus.value === 'Invalid');
 
-const canSetUp = computed(() =>
-  effectiveStatus.value === 'Unregistered' || effectiveStatus.value === 'Unknown'
-  || needsAttention.value);
+/**
+ * The strip is the ONLY entry point to CnightDustRegistrationDialog, so every state
+ * needs a way in. Registered used to render no button at all, which stranded the
+ * generating wallet: no way to see capacity, the source wallet, the registration
+ * block, or to migrate/stop. Registered now gets a quieter "Details" CTA.
+ */
+const canSetUp = computed(() => effectiveStatus.value !== 'Pending');
 
-const ctaLabel = computed(() =>
-  needsAttention.value ? t('midnight.dustLineReview') : t('midnight.dustLineSetUp'));
+const ctaLabel = computed(() => {
+  if (effectiveStatus.value === 'Registered') return t('midnight.dustLineDetails');
+  return needsAttention.value ? t('midnight.dustLineReview') : t('midnight.dustLineSetUp');
+});
+
+/**
+ * Full-charge DUST capacity, shown inline beside "Generating DUST" so the headline
+ * number is visible without opening the dialog. Nexus's `max_capacity` (base units,
+ * 15 decimals); empty string hides it.
+ */
+const capacityLabel = computed(() => {
+  if (effectiveStatus.value !== 'Registered') return '';
+  const raw = status.value?.maxCapacity;
+  if (!raw) return '';
+  try {
+    const units = BigInt(raw);
+    if (units <= 0n) return '';
+    const whole = units / (10n ** BigInt(MIDNIGHT_DECIMALS.DUST));
+    return `${whole.toLocaleString()} DUST`;
+  } catch {
+    return '';
+  }
+});
 
 const statusKey = computed(() => {
   switch (effectiveStatus.value) {
@@ -202,6 +229,14 @@ void props;
 
 .dust-line--drawer .dust-line-label {
   font-size: 12px;
+}
+
+.dust-line-capacity {
+  margin-left: 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--g-text-3);
+  white-space: nowrap;
 }
 
 .dust-line-cta {

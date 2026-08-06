@@ -276,6 +276,9 @@ export function useCnightDustRegistration() {
   // duplicate detection; `status` alone can't distinguish "unregistered" from
   // "invalidated by a duplicate" (both read `registered:false`).
   const registrations = ref<DustRegistrationUtxoDto[]>([]);
+  /** True once `dust/registrations` has answered successfully at least once, so an
+   *  EMPTY list can be trusted as "no live registration" rather than "not loaded". */
+  const registrationsLoaded = ref(false);
 
   // Best-effort cache of THIS wallet's own derived DUST address hex. Deriving
   // it requires the decrypted mnemonic (a password/PassKey gesture), so it's
@@ -315,7 +318,15 @@ export function useCnightDustRegistration() {
     // Nexus's `dust/status` carries no status-string field — only
     // `registered` (see `MidnightDustRegistrationStatusDto`). Derive
     // 'Registered' from that boolean directly.
-    if (status.value?.registered) return 'Registered';
+    // `dust/status` proxies the MIDNIGHT indexer, which keeps reporting registered:true
+    // for hours after the Cardano deregistration lands. `dust/registrations` reads
+    // CONFIRMED CARDANO state, so a successful fetch returning ZERO is proof the
+    // registration UTxO is spent and the mapping is gone. Trust the chain over the
+    // lagging indexer — this is what left "Registration active" on screen after a
+    // completed Stop. Guarded on registrationsLoaded so a failed or never-run fetch can
+    // never present as unregistered and invite a duplicate registration.
+    const chainSaysGone = registrationsLoaded.value && registrations.value.length === 0;
+    if (status.value?.registered && !chainSaysGone) return 'Registered';
 
     // Exactly one live registration UTxO: the mapping is valid even if the
     // indexer hasn't relayed `registered:true` yet (~2.5h window) or the
@@ -390,6 +401,7 @@ export function useCnightDustRegistration() {
       // assigning, so a mempool-lagged server response can't resurrect a row
       // we just removed.
       registrations.value = fetched.filter((r) => !isOutpointTombstoned(outpointKey(r.txHash, r.outputIndex)));
+      registrationsLoaded.value = true;
     } catch (e) {
       // Reviewed residual: if consolidation happened in ANOTHER session (or
       // via the official portal) and every fetch in THIS session keeps
@@ -645,14 +657,35 @@ export function useCnightDustRegistration() {
     return getMidnightApi(network.value).submitCardanoTx(tx.toCbor());
   }
 
-  /** The registration UTxO outpoint required by the deregister/update builders. */
+  /**
+   * The registration UTxO outpoint required by the deregister/update builders.
+   *
+   * <p>Two sources carry it and they disagree in practice. `dust/status` proxies the
+   * MIDNIGHT indexer, so its `registrationUtxo*` fields stay null through the whole
+   * relay window (hours) and can be null afterwards for a registration made outside
+   * Gero. `dust/registrations` reads CONFIRMED CARDANO chain state via Nexus, so it
+   * knows the outpoint as soon as the tx lands. Stop/Migrate previously read only
+   * `status` and so refused to build with "Registration UTxO not known yet" even
+   * while the UI was showing the live registration it was refusing to act on.
+   *
+   * <p>Prefer `status` (authoritative once populated), fall back to the primary
+   * registration from chain state.
+   */
   function registrationOutpoint(): { txHash: string; outputIndex: number } {
     const txHash = status.value?.registrationUtxoTxHash;
     const outputIndex = status.value?.registrationUtxoOutputIndex;
-    if (!txHash || outputIndex === null || outputIndex === undefined) {
-      throw new Error('Registration UTxO not known yet. Refresh the status and try again.');
+    if (txHash && outputIndex !== null && outputIndex !== undefined) {
+      return { txHash, outputIndex };
     }
-    return { txHash, outputIndex };
+
+    const primary = primaryRegistration.value;
+    if (primary?.txHash && primary.outputIndex !== null && primary.outputIndex !== undefined) {
+      debugLog('[cNIGHT DUST] outpoint from registrations (status had none):',
+        `${primary.txHash}#${primary.outputIndex}`);
+      return { txHash: primary.txHash, outputIndex: primary.outputIndex };
+    }
+
+    throw new Error('Registration UTxO not known yet. Refresh the status and try again.');
   }
 
   /**
@@ -685,6 +718,15 @@ export function useCnightDustRegistration() {
       stage.value = 'done';
       clearDustPending(wallet.stakeAddress);
       localPending.value = null;
+      // Tombstone + drop the spent outpoint, exactly as deregisterOutpoint() does for
+      // duplicate removal. Without this, the next refreshRegistrations() re-fetched the
+      // still-mempool-lagged outpoint and the row came back, while the optimistic
+      // status reset below was overwritten by the indexer's stale registered:true.
+      removedOutpoints.set(outpointKey(outpoint.txHash, outpoint.outputIndex), Date.now());
+      registrations.value = registrations.value.filter(
+        (r) => !(r.txHash === outpoint.txHash && r.outputIndex === outpoint.outputIndex),
+      );
+      registrationsLoaded.value = true;
       status.value = {
         cardanoRewardAddress: wallet.stakeAddress,
         dustAddress: null,
@@ -821,6 +863,7 @@ export function useCnightDustRegistration() {
     statusLoading,
     registrationStatus,
     registrations,
+    registrationsLoaded,
     replicates,
     primaryRegistration,
     registering,

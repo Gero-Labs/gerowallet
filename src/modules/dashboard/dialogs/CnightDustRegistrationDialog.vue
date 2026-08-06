@@ -24,6 +24,35 @@
           <div class="holdings-label t-label">{{ t('midnight.cnightBalanceLabel') }}</div>
           <div class="holdings-value g-num">{{ formattedBalance }} {{ nightTicker }}</div>
         </div>
+        <!-- Source wallet: which Cardano wallet's NIGHT is doing the generating. With
+             several wallets holding cNIGHT it is otherwise ambiguous which one this
+             dialog is acting on. -->
+        <div v-if="sourceWalletName" class="holdings-row">
+          <div class="holdings-label t-label">{{ t('midnight.cnightSourceWallet') }}</div>
+          <div class="holdings-value holdings-value--stacked">
+            <span>{{ sourceWalletName }}</span>
+            <span v-if="sourceWalletAddress" class="holdings-subvalue g-mono">
+              {{ middleTruncate(sourceWalletAddress, 12, 8) }}
+            </span>
+          </div>
+        </div>
+
+        <!-- Capacity: what this much NIGHT is worth in DUST at full charge. Comes from
+             Nexus (`max_capacity`), NOT a local 5x guess, so it stays correct if the
+             protocol's capacity ratio ever changes. -->
+        <div v-if="estimatedDustCapacity" class="holdings-row">
+          <div class="holdings-label t-label">{{ t('midnight.cnightEstimatedDust') }}</div>
+          <div class="holdings-value g-num">{{ estimatedDustCapacity }} DUST</div>
+        </div>
+
+        <!-- Cardano block the registration landed in. NOTE: this is the Cardano
+             registration block, not a Midnight block — generation itself only starts
+             after the relay, so the label says "registered at", not "generating since". -->
+        <div v-if="registrationBlock" class="holdings-row">
+          <div class="holdings-label t-label">{{ t('midnight.cnightRegisteredAtBlock') }}</div>
+          <div class="holdings-value g-num">#{{ registrationBlock }}</div>
+        </div>
+
         <div class="holdings-row">
           <div class="holdings-label t-label">{{ t('midnight.cnightDustDestination') }}</div>
           <!-- Picker when the user has other Midnight wallets imported and can
@@ -327,6 +356,7 @@
 import { computed, ref, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import { walletStore } from '@/stores/walletStore';
+import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { Network } from '@/models/types';
 import { DustRegistrationUtxoDto } from '@/api/midnight-api';
 import { useTranslation } from '@/shared/composables/useTranslation';
@@ -388,6 +418,48 @@ const manageMode = ref<'migrate' | 'deregister' | null>(null);
 /** Duplicated-state consolidation: the non-primary registration currently
  *  targeted for removal (drives the inline password gate + per-row spinner). */
 const activeRemove = ref<{ txHash: string; outputIndex: number } | null>(null);
+
+/** Name + address of the Cardano wallet whose NIGHT generates the DUST. */
+const sourceWalletName = computed(() => walletStore.loggedWallet?.name || '');
+const sourceWalletAddress = computed(() => walletStore.loggedWallet?.baseAddress || '');
+
+/**
+ * Full-charge DUST capacity for this wallet's NIGHT, from Nexus's `max_capacity`
+ * (base units, 15 decimals). Server-sourced rather than a local `night * 5` so it
+ * tracks the protocol if the capacity ratio changes. Empty string hides the row.
+ */
+const estimatedDustCapacity = computed(() => {
+  const raw = status.value?.maxCapacity;
+  if (!raw) return '';
+  try {
+    const divisor = 10n ** BigInt(MIDNIGHT_DECIMALS.DUST);
+    const units = BigInt(raw);
+    if (units <= 0n) return '';
+    const whole = units / divisor;
+    const frac = ((units % divisor) * 100n) / divisor; // 2dp
+    return `${whole.toLocaleString()}.${frac.toString().padStart(2, '0')}`;
+  } catch {
+    return '';
+  }
+});
+
+/**
+ * Cardano block height of the registration transaction, read from the wallet's own
+ * history — no extra lookup, and Nexus exposes no Cardano tx-detail route today
+ * (`/api/transactions/{hash}` is 404; only `/utxos` exists). Empty when the tx isn't
+ * in the loaded history yet, which just hides the row.
+ */
+const registrationBlock = computed(() => {
+  const txHash = status.value?.registrationUtxoTxHash
+    || primaryRegistration.value?.txHash;
+  if (!txHash) return '';
+  const tx = (walletStore.transactions || []).find(
+    (t: { hash?: string; tx_hash?: string; block_height?: number }) =>
+      t.hash === txHash || t.tx_hash === txHash,
+  );
+  const height = tx?.block_height;
+  return height ? height.toLocaleString() : '';
+});
 
 const isPrfWallet = computed(() => walletStore.loggedWallet?.encryptionMethod === 'prf');
 const isMainnet = computed(() => walletStore.loggedWallet?.network === Network.MAINNET);
@@ -735,6 +807,21 @@ watch(() => props.isOpen, (open) => {
   font-size: 14px;
   font-weight: 600;
   color: var(--g-text-1);
+}
+
+/* Wallet row stacks name over a quieter truncated address. */
+.holdings-value--stacked {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-family: var(--g-font-ui);
+}
+
+.holdings-subvalue {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--g-text-3);
 }
 
 .holdings-dest {
