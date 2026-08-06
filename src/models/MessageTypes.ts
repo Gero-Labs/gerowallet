@@ -145,4 +145,11 @@ export enum MessageTypes {
   // sign the dapp's data with the mandatory midnight_signed_message: prefix.
   // See walletBg.signMidnightConnectorData.
   SIGN_MIDNIGHT_CONNECTOR_DATA = 'SIGN_MIDNIGHT_CONNECTOR_DATA',
+  // Sent by ChangePasswordDialog after a spending-password change. The DB
+  // ciphertext is rotated, but the in-memory copies still hold the OLD blob:
+  // the background WalletBg (used to sign) and walletStore.loggedWallet (used to
+  // reveal the seed). The BG handler re-reads the fresh record and refreshes both
+  // — WalletStore.setLoggedWallet broadcasts the new blob back to the options
+  // store too — so the OLD password stops working immediately, no re-login.
+  REFRESH_LOGGED_WALLET_SECRET = 'REFRESH_LOGGED_WALLET_SECRET',
 }

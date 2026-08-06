@@ -75,6 +75,8 @@ import { walletStore } from '@/stores/walletStore';
 import snackbar from '@/plugins/snackbar';
 import { getDb } from '@/db/wallet-db';
 import { encryptSpendingPasswordWithPrf } from '@/shared/utils/webauthn-prf';
+import { Messaging } from '@/chrome/messaging';
+import { MessageTypes } from '@/models/MessageTypes';
 
 interface Props {
   isOpen: boolean;
@@ -113,6 +115,20 @@ const updateSpendingPassword = async (): Promise<void> => {
   if (vmProxy.$refs.form.validate()) {
     try {
       await geroStore.updateSpendingPassword(loggedWallet.value.id, currentPassword.value, newPassword.value)
+
+      // SECURITY: the DB ciphertext is now rotated, but the in-memory copies still
+      // hold the OLD blob the OLD password can decrypt — the background WalletBg
+      // (used to sign) and walletStore.loggedWallet (used to reveal the seed).
+      // Refresh them from disk so the old password stops working immediately,
+      // without forcing a re-login.
+      try {
+        await Messaging.sendToBackgroundFromOptions({
+          method: MessageTypes.REFRESH_LOGGED_WALLET_SECRET,
+          data: { walletId: loggedWallet.value.id },
+        });
+      } catch (refreshErr) {
+        console.error('Failed to refresh in-memory wallet secret after password change:', refreshErr);
+      }
 
       // Check if PassKey autofill is enabled and auto-update encrypted password
       try {
