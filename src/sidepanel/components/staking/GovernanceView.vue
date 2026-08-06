@@ -177,8 +177,12 @@ import networks from '@/utils/networks';
 import snackbar from '@/plugins/snackbar';
 import BottomSheet from '../../components/BottomSheet.vue';
 import { useChainContext } from '../../composables/useChainContext';
+import { useTranslation } from '@/shared/composables/useTranslation';
+import { openFullDashboard } from '@/shared/utils/openFullDashboard';
+import { setPendingDRepDelegation, PendingDRep, PendingDRepDelegation } from '@/shared/utils/pendingDelegation';
 import debounce from 'lodash/debounce';
 
+const { t } = useTranslation();
 const { themeColors } = useChainContext();
 const primaryColor = computed(() => themeColors.value.primary);
 
@@ -196,12 +200,17 @@ const {
 const search = ref('');
 const currentPage = ref(1);
 const showDRepSheet = ref(false);
-const selectedDRep = ref<any>(null);
+const selectedDRep = ref<PendingDRep | null>(null);
 const drepDelegating = ref(false);
 const delegateLoading = ref(false);
-const delegationModel = ref<string | undefined>(undefined);
+// The value, not the label, crosses to the dashboard — so the handoff survives a
+// locale change between the two contexts.
+const delegationModel = ref<'abstain' | 'noConfidence' | undefined>(undefined);
 
-const delegationOptions = ['Abstain', 'No Confidence'];
+const delegationOptions = computed(() => [
+  { text: t('governance.abstain'), value: 'abstain' },
+  { text: t('governance.noConfidence'), value: 'noConfidence' },
+]);
 
 const drepId = computed(() => keys.value?.drep129?.[0]?.address);
 
@@ -266,9 +275,19 @@ watch(search, () => {
   debouncedSearch();
 });
 
-const selectDRep = (drep: any) => {
+const selectDRep = (drep: PendingDRep) => {
   selectedDRep.value = drep;
   showDRepSheet.value = true;
+};
+
+// The panel can't sign a certificate transaction (hardware, PassKey and Keystone
+// all live in the dashboard's DRepDelegateDialog), so both delegate paths park
+// the choice and hand off. Parking MUST complete before the tab is opened: a
+// freshly created dashboard tab reads the handoff on mount.
+const handOffDelegation = async (pending: Omit<PendingDRepDelegation, 'createdAt'>) => {
+  await setPendingDRepDelegation(pending);
+  await openFullDashboard('#/governance', true);
+  snackbar.fireSuccess(t('miniGero.continueInDashboard'));
 };
 
 const confirmDRepDelegate = async () => {
@@ -276,30 +295,39 @@ const confirmDRepDelegate = async () => {
   drepDelegating.value = true;
 
   try {
+    const drep = selectedDRep.value;
+    await handOffDelegation({
+      kind: 'drep',
+      drep: {
+        id: drep.id,
+        name: drep.name,
+        image: drep.image,
+        hex: drep.hex,
+        has_script: drep.has_script,
+        delegators: drep.delegators,
+        votes: drep.votes,
+        voting_power: drep.voting_power,
+      },
+    });
     showDRepSheet.value = false;
-
-    // Navigate to full dashboard for transaction signing
-    const optionsUrl = chrome.runtime.getURL('index.html#/governance');
-    chrome.tabs.create({ url: optionsUrl });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Error delegating to DRep:', err);
-    snackbar.setError('Failed to initiate delegation');
+    snackbar.setError(t('governance.failedToInitiateDelegation'));
   } finally {
     drepDelegating.value = false;
   }
 };
 
 const quickDelegate = async () => {
-  if (!delegationModel.value) return;
+  const kind = delegationModel.value;
+  if (!kind) return;
   delegateLoading.value = true;
 
   try {
-    // Open full dashboard for signing
-    const optionsUrl = chrome.runtime.getURL('index.html#/governance');
-    chrome.tabs.create({ url: optionsUrl });
-  } catch (err: any) {
+    await handOffDelegation({ kind });
+  } catch (err: unknown) {
     console.error('Error with quick delegation:', err);
-    snackbar.setError('Failed to initiate delegation');
+    snackbar.setError(t('governance.failedToInitiateDelegation'));
   } finally {
     delegateLoading.value = false;
   }

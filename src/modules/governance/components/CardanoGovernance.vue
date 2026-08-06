@@ -347,6 +347,11 @@ import snackbar from '@/plugins/snackbar';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
+import {
+  onPendingDRepDelegation,
+  takePendingDRepDelegation,
+  PendingDRepDelegation,
+} from '@/shared/utils/pendingDelegation';
 import { debugLog } from '@/utils/debug';
 
 const { truncate, toCurrency } = filters;
@@ -737,6 +742,58 @@ const drepDelegate = async (row: DRepRow) => {
   }
 };
 
+// ── Side-panel handoff ──────────────────────────────────────────────────────
+// The side panel has no signing surface for certificates, so its "Confirm
+// Delegation" parks the choice and sends the user here. Replay it as soon as the
+// builder's inputs exist: a tab opened straight from the panel mounts well before
+// its wallet data lands, and firing early would build against a null epochParams
+// (or, worse, mistake a not-yet-loaded account for an unregistered stake key and
+// attach a registration certificate the chain would reject).
+const pendingHandoff = ref<PendingDRepDelegation | null>(null);
+
+const delegationInputsReady = computed(() =>
+  !!loggedWallet.value &&
+  !walletStore.isSyncing &&
+  !!epochParams.value &&
+  !!keys.value?.stake?.[0]?.cred &&
+  !!keys.value?.payment?.[0]?.address &&
+  !!utxos.value
+);
+
+const runPendingHandoff = async () => {
+  const pending = pendingHandoff.value;
+  if (!pending || !delegationInputsReady.value) return;
+  pendingHandoff.value = null; // claim it before any await — the watcher can re-fire
+
+  if (pending.kind === 'drep') {
+    if (!pending.drep) return;
+    // drepDelegate() returns silently for the DRep you are already delegated to.
+    // Coming from the panel that would look exactly like the bug this handoff
+    // fixes, so say it out loud instead.
+    if (isCurrentDRep(pending.drep.id)) {
+      snackbar.setError(t('governance.alreadyDelegatedToDRep'));
+      return;
+    }
+    await drepDelegate(pending.drep as DRepRow);
+    return;
+  }
+
+  // Quick-delegate options cross the boundary as stable ids; delegate() keys off
+  // the localized label its own picker would have set.
+  delegationModel.value = pending.kind === 'noConfidence'
+    ? String(t('governance.noConfidence'))
+    : String(t('governance.abstain'));
+  await delegate();
+};
+
+watch(delegationInputsReady, () => {
+  void runPendingHandoff();
+});
+
+// Fires when the panel hands off while this tab is already sitting on
+// /governance — nothing remounts in that case, so onMounted never runs again.
+let stopPendingHandoffListener: (() => void) | null = null;
+
 const currentPage = ref(1);
 const itemsPerPage = ref(15);
 
@@ -797,6 +854,15 @@ watch([sortBy, sortDesc], ([newSortBy, newSortDesc]) => {
 });
 
 onMounted(async () => {
+  // Pick up a delegation handed off by the side panel before anything that
+  // awaits the network, then keep listening for one arriving while we're open.
+  stopPendingHandoffListener = onPendingDRepDelegation((pending) => {
+    pendingHandoff.value = pending;
+    void runPendingHandoff();
+  });
+  pendingHandoff.value = await takePendingDRepDelegation();
+  void runPendingHandoff();
+
   // Handle ?drep=<id> deep-link from Global Search — pre-fill search
   const drepQuery = instance?.proxy?.$route?.query?.drep;
   if (drepQuery && typeof drepQuery === 'string') {
@@ -834,6 +900,8 @@ onUnmounted(() => {
   // Clean up timeouts
   if (searchTimeout) clearTimeout(searchTimeout);
   if (sortTimeout) clearTimeout(sortTimeout);
+  stopPendingHandoffListener?.();
+  stopPendingHandoffListener = null;
 });
 </script>
 <style scoped>
