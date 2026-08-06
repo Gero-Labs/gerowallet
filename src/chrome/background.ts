@@ -2332,6 +2332,50 @@ app.addToOptions(MessageTypes.REVEAL_MPC_SRP, async (request, sendResponse) => {
   return true; // Required for async Chrome message handlers
 });
 
+app.addToOptions(MessageTypes.REFRESH_LOGGED_WALLET_SECRET, async (request, sendResponse) => {
+  try {
+    // After a spending-password change the DB ciphertext is rotated, but the
+    // in-memory copies still hold the OLD blob the OLD password can decrypt.
+    // Re-read the fresh record and refresh both the signing instance (WalletBg)
+    // and the reveal store (walletStore.loggedWallet). setLoggedWallet runs in
+    // the background context, so its broadcast also updates the options store.
+    // Only ciphertext is touched here — never plaintext secrets, never logged.
+    const walletId = request.data?.walletId;
+    const { getAllWallets } = await import('@/db/gero-db');
+    const wallets = await getAllWallets();
+    const fresh = walletId != null ? wallets?.[walletId] : undefined;
+    if (fresh) {
+      const walletBg = walletManager.getWallet();
+      if (walletBg && walletBg.id === walletId) {
+        walletBg.encryptedPrivateKey = fresh.encryptedPrivateKey;
+        walletBg.encryptedMnemonic = fresh.encryptedMnemonic;
+      }
+      if (walletStore.loggedWallet?.id === walletId) {
+        WalletStore.setLoggedWallet({
+          ...walletStore.loggedWallet,
+          encryptedPrivateKey: fresh.encryptedPrivateKey,
+          encryptedMnemonic: fresh.encryptedMnemonic,
+        });
+      }
+    }
+    sendResponse({
+      id: request.id,
+      data: { success: true },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    console.error('Error refreshing logged wallet secret:', error);
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+  return true;
+});
+
 app.addToOptions(MessageTypes.VERIFY_SPENDING_PASSWORD, async (request, sendResponse) => {
   try {
     // Note: Never log password data
