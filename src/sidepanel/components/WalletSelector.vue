@@ -10,9 +10,13 @@
     </div>
 
     <div class="wallet-list">
-      <div
+      <!-- A real <button>, not a clickable div: inside the wallet-switcher sheet
+           the sheet's drag layer only exempts real controls from pointer capture,
+           and it is keyboard-reachable for free. -->
+      <button
         v-for="wallet in availableWallets"
         :key="wallet.id"
+        type="button"
         class="wallet-item"
         :class="{ 'is-disabled': loadingWalletId !== null && loadingWalletId !== wallet.id }"
         @click="loadingWalletId === null && $emit('select', wallet)"
@@ -72,7 +76,7 @@
           class="hw-icon"
         />
         <v-icon v-else size="18" color="var(--g-text-3)">mdi-chevron-right</v-icon>
-      </div>
+      </button>
     </div>
 
     <!-- Add wallet -->
@@ -170,6 +174,9 @@ defineEmits<{
   align-items: center;
   gap: 12px;
   padding: 12px;
+  width: 100%;
+  text-align: left;
+  font: inherit;
   background: var(--g-raised);
   border-radius: var(--g-r-card);
   border: 1px solid var(--g-hairline-1);

@@ -253,10 +253,18 @@ function onPointerDown(e: PointerEvent) {
   samples.length = 0;
   samples.push({ y: e.clientY, t: performance.now() });
 
-  sheetRef.value?.setPointerCapture(e.pointerId);
-  sheetRef.value?.addEventListener('pointermove', onPointerMove);
-  sheetRef.value?.addEventListener('pointerup', onPointerUp);
-  sheetRef.value?.addEventListener('pointercancel', onPointerCancel);
+  // Capture is deliberately NOT taken here. Capturing on pointerdown retargets
+  // the synthesized click to this container, so a tap on any non-INTERACTIVE
+  // child (the wallet rows in the switcher, Buy/Sell choice cards, Send step
+  // headers — all plain divs with @click) never fired its handler: tapping a
+  // wallet in the switcher looked like a dead button. Same root cause as the
+  // header close button fix, which only exempted real controls. Capture is
+  // taken in onPointerMove once a drag actually commits, at which point the
+  // trailing click is suppressed on purpose anyway. Until then the move/up
+  // listeners live on window so a tap that drifts off the sheet still resolves.
+  window.addEventListener('pointermove', onPointerMove);
+  window.addEventListener('pointerup', onPointerUp);
+  window.addEventListener('pointercancel', onPointerCancel);
 }
 
 function contentAtTop(): boolean {
@@ -279,6 +287,9 @@ function onPointerMove(e: PointerEvent) {
       return;
     }
     dragCommitted = true;
+    // Now that this is a real drag (and no longer a tap), take the pointer so
+    // the gesture keeps resolving even if the finger leaves the panel.
+    try { sheetRef.value?.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
     // Interruptibility: grab the sheet wherever it currently is.
     stopLoop();
     dragStartTranslateY = translateY.value;
@@ -337,12 +348,12 @@ function onPointerCancel(e: PointerEvent) {
 }
 
 function releasePointer() {
-  if (dragPointerId !== null) {
-    try { sheetRef.value?.releasePointerCapture(dragPointerId); } catch { /* gone */ }
+  if (dragPointerId !== null && sheetRef.value?.hasPointerCapture?.(dragPointerId)) {
+    try { sheetRef.value.releasePointerCapture(dragPointerId); } catch { /* gone */ }
   }
-  sheetRef.value?.removeEventListener('pointermove', onPointerMove);
-  sheetRef.value?.removeEventListener('pointerup', onPointerUp);
-  sheetRef.value?.removeEventListener('pointercancel', onPointerCancel);
+  window.removeEventListener('pointermove', onPointerMove);
+  window.removeEventListener('pointerup', onPointerUp);
+  window.removeEventListener('pointercancel', onPointerCancel);
   dragPointerId = null;
   dragCommitted = false;
 }
