@@ -16,7 +16,11 @@
         <router-view :key="$route.path" />
       </transition>
     </main>
-    <BottomNav />
+    <BottomNav @action="onNavAction" />
+
+    <!-- Center nav action: the same swap sheet Quick Actions opens, hosted here
+         so it is reachable from every page. -->
+    <SwapSheet v-model="showSwap" />
   </div>
 </template>
 
@@ -25,22 +29,28 @@ import { computed, ref, watch } from 'vue';
 import { useRoute } from 'vue-router/composables';
 import MiniHeader from '../components/MiniHeader.vue';
 import BottomNav from '../components/BottomNav.vue';
+import SwapSheet from '../components/flows/SwapSheet.vue';
 import assets from '@/utils/assets';
 import { useChainContext } from '../composables/useChainContext';
+
+const showSwap = ref(false);
+
+function onNavAction(id: string) {
+  if (id === 'swap') showSwap.value = true;
+}
 
 const { isMidnight } = useChainContext();
 // Midnight gets its own night-sky backdrop; everything else keeps the
 // Cardano waves (Apex reuses them too, matching current behavior).
 const bgImage = computed(() => (isMidnight.value ? assets.midnightBg : assets.cardanoBg));
 
-// Tab order for directional slide
+// Tab order for directional slide (the center slot is a sheet action, not a route)
 const tabOrder: Record<string, number> = {
   '/': 0,
   '/staking': 1,
-  '/card': 2,
-  '/market': 3,
-  '/activity': 4,
-  '/feed': 5,
+  '/market': 2,
+  '/activity': 3,
+  '/feed': 4,
 };
 
 const transitionName = ref('page-fade');

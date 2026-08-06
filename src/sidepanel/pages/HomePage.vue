@@ -10,7 +10,14 @@
           <AdaPriceHeroCard />
         </div>
         <FundingCard @buy="showBuySell = true" @receive="showReceive = true" />
-        <PerkTeasers @swap="showSwap = true" @perps="router.push('/perps')" />
+        <!-- No Gero Card in the panel, and cashback opens in the full wallet —
+             the panel's router carries neither path. -->
+        <PerkTeasers
+          :exclude="['card']"
+          :external="['cashback']"
+          @swap="showSwap = true"
+          @perps="router.push('/perps')"
+        />
       </div>
     </template>
 
@@ -209,9 +216,6 @@ function handleAction(id: string) {
       break;
     case 'receive':
       showReceive.value = true;
-      break;
-    case 'swap':
-      showSwap.value = true;
       break;
     case 'perps':
       router.push('/perps');

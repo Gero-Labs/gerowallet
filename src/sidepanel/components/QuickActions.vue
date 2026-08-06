@@ -53,12 +53,12 @@ interface QuickAction {
 
 const allActions = computed<QuickAction[]>(() => {
   return [
-    // Fixed tokens for all four actions - the chain accent is deliberately
-    // NOT used here (it previously made Send a mixed purple-circle/cyan-icon
-    // odd one out on Midnight while its three siblings kept stable colors).
-    // Send is neutral white rather than a semantic color: it's the primary
-    // action, and every semantic token is taken by a sibling (success/error/
-    // info) so any reuse would collide on chains that show all four.
+    // Fixed tokens for every action - the chain accent is deliberately NOT
+    // used here (it previously made Send a mixed purple-circle/cyan-icon odd
+    // one out on Midnight while its siblings kept stable colors). Send is
+    // neutral white rather than a semantic color: it's the primary action, and
+    // the semantic tokens are spoken for by its siblings (success/info).
+    // Swap is not here — it owns the center slot of the bottom nav.
     {
       id: 'send',
       svg: assets.sendSvg,
@@ -78,16 +78,6 @@ const allActions = computed<QuickAction[]>(() => {
       borderColor: 'color-mix(in srgb, var(--g-success) 40%, transparent)',
       filter: 'invert(83%) sepia(16%) saturate(992%) hue-rotate(92deg) brightness(94%) contrast(92%)',
       enabled: !!networkInfo.value?.transactionSupport,
-    },
-    {
-      id: 'swap',
-      svg: assets.swapSvg,
-      label: t('swap.swap'),
-      color: 'var(--g-error)',
-      bgColor: 'color-mix(in srgb, var(--g-error) 12%, transparent)',
-      borderColor: 'color-mix(in srgb, var(--g-error) 40%, transparent)',
-      filter: 'invert(62%) sepia(76%) saturate(306%) hue-rotate(314deg) brightness(105%) contrast(98%)',
-      enabled: !!networkInfo.value?.swapSupport,
     },
     {
       id: 'perps',

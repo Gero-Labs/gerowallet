@@ -5,13 +5,13 @@
   "radiusDistinct": 60,
   "zIndexDistinct": 24,
   "backdropFilters": 88,
-  "uppercase": 113,
+  "uppercase": 112,
   "infiniteAnimations": 58,
-  "importantCount": 2310,
+  "importantCount": 2225,
   "lowAlphaText": 19,
   "transitionAll": 8,
   "corruptedMdiNames": 0,
-  "formatFnForks": 16,
-  "clickableDivs": 108,
+  "formatFnForks": 15,
+  "clickableDivs": 106,
   "outlineNone": 26
 }

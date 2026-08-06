@@ -69,16 +69,38 @@ import { walletStore } from '@/stores/walletStore';
 import { Blockchain } from '@/models/types';
 import networks from '@/utils/networks';
 import featureFlagsStore from '@/stores/featureFlagsStore';
+import { openFullDashboard } from '@/shared/utils/openFullDashboard';
 
 // Swap/perps flows differ per host (dashboard: quick-action dialogs;
 // mini-gero: bottom sheets / the /perps page), so those two perks emit and
-// the parent wires the action. Route perks navigate directly — the same
-// paths exist in both routers.
+// the parent wires the action. Route perks navigate directly.
 const emit = defineEmits(['swap', 'perps']);
+
+const props = withDefaults(defineProps<{
+  /** Perk keys this host doesn't offer at all (mini-gero has no Gero Card). */
+  exclude?: string[];
+  /**
+   * Perk keys whose destination lives in the full dashboard rather than this
+   * host's router. The two routers no longer carry the same paths, and a route
+   * the host can't serve would silently bounce to its catch-all.
+   */
+  external?: string[];
+}>(), {
+  exclude: () => [],
+  external: () => [],
+});
 
 const { loggedWallet } = toRefs(walletStore);
 const instance = getCurrentInstance();
 const router = instance?.proxy?.$router;
+
+const goRoute = (key: string, path: string) => {
+  if (props.external.includes(key)) {
+    void openFullDashboard(`#${path}`, true);
+    return;
+  }
+  router?.push(path).catch(() => {});
+};
 
 const perks = computed(() => {
   const chain = loggedWallet.value?.chain;
@@ -93,19 +115,19 @@ const perks = computed(() => {
   if (networks.resolveStakingSupport(chain, network)) {
     list.push({
       key: 'stake', title: 'dashboard.perkStakeTitle', hook: 'portfolio.perkStakeHook',
-      go: () => router?.push('/staking'),
+      go: () => goRoute('stake', '/staking'),
     });
   }
   if (chain === Blockchain.CARDANO) {
     list.push({
       key: 'cashback', title: 'dashboard.perkCashbackTitle', hook: 'portfolio.perkCashbackHook',
-      go: () => router?.push('/cashback'),
+      go: () => goRoute('cashback', '/cashback'),
     });
   }
   if (networks.resolveGeroCardSupport(chain, network)) {
     list.push({
       key: 'card', title: 'dashboard.perkSpendTitle', hook: 'portfolio.perkSpendHook',
-      go: () => router?.push('/card'),
+      go: () => goRoute('card', '/card'),
     });
   }
   if (networks.resolvePerpetualsSupport(chain, network)) {
@@ -114,7 +136,7 @@ const perks = computed(() => {
       go: () => emit('perps'),
     });
   }
-  return list;
+  return list.filter((perk) => !props.exclude.includes(perk.key));
 });
 </script>
 

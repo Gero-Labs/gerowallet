@@ -2,13 +2,14 @@
   <nav class="bottom-nav">
     <button
       v-for="tab in navTabs"
-      :key="tab.route"
+      :key="tab.name"
+      type="button"
       class="nav-tab"
-      :class="{ active: activeTab === tab.route, center: tab.center }"
-      @click="activeTab !== tab.route && $router.push(tab.route).catch(() => {})"
+      :class="{ active: isActive(tab), center: tab.center }"
+      @click="onTab(tab)"
     >
-      <v-icon :size="tab.center ? 28 : 22" :color="activeTab === tab.route ? activeColor : 'var(--g-text-3)'">
-        {{ activeTab === tab.route ? tab.activeIcon : tab.icon }}
+      <v-icon :size="tab.center ? 28 : 22" :color="isActive(tab) ? activeColor : 'var(--g-text-3)'">
+        {{ isActive(tab) ? tab.activeIcon : tab.icon }}
       </v-icon>
     </button>
   </nav>
@@ -16,12 +17,33 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { useMiniNavigation } from '../composables/useMiniNavigation';
+import { useRouter } from 'vue-router/composables';
+import { useMiniNavigation, NavTab } from '../composables/useMiniNavigation';
 import { useChainContext } from '../composables/useChainContext';
 
+const router = useRouter();
 const { navTabs, activeTab } = useMiniNavigation();
 const { themeColors } = useChainContext();
 const activeColor = computed(() => themeColors.value.primary);
+
+const emit = defineEmits<{
+  (e: 'action', id: string): void;
+}>();
+
+// Action tabs (swap) have no route, so they never read as "active".
+function isActive(tab: NavTab): boolean {
+  return !!tab.route && activeTab.value === tab.route;
+}
+
+function onTab(tab: NavTab) {
+  if (tab.action) {
+    emit('action', tab.action);
+    return;
+  }
+  if (tab.route && activeTab.value !== tab.route) {
+    router.push(tab.route).catch(() => {});
+  }
+}
 </script>
 
 <style scoped>
