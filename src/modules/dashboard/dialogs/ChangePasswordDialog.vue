@@ -75,6 +75,9 @@ import { walletStore } from '@/stores/walletStore';
 import snackbar from '@/plugins/snackbar';
 import { getDb } from '@/db/wallet-db';
 import { encryptSpendingPasswordWithPrf } from '@/shared/utils/webauthn-prf';
+import { Messaging } from '@/chrome/messaging';
+import { MessageTypes } from '@/models/MessageTypes';
+import cardStore from '@/stores/modules/card';
 
 interface Props {
   isOpen: boolean;
@@ -145,6 +148,29 @@ const updateSpendingPassword = async (): Promise<void> => {
 
       snackbar.fireSuccess(t('dashboard.spendingPasswordChanged'))
       emit('close')
+
+      // SECURITY: changing the spending password rotates the on-disk ciphertext
+      // (updatePrivateKeyAndMnemonic), but the in-memory copies are NOT refreshed
+      // by that call — the options `walletStore.loggedWallet` (read by the reveal
+      // dialog) and the background `WalletBg.encryptedPrivateKey` (used to sign)
+      // both still hold the OLD ciphertext, which the OLD password can still
+      // decrypt for the rest of the session. Force a full logout so every context
+      // reloads the new ciphertext from disk on the next login and the old
+      // password is dead immediately (defends the "I'm rotating a leaked password"
+      // case).
+      try {
+        await cardStore.logout();
+        await Messaging.sendToBackgroundFromOptions({ method: MessageTypes.LOGOUT, data: {} });
+      } catch (logoutErr) {
+        console.error('Logout after spending-password change failed:', logoutErr);
+      } finally {
+        const appRouter = vmProxy.$router;
+        if (appRouter?.replace) {
+          appRouter.replace('/welcome').catch(() => { window.location.hash = '#/welcome'; });
+        } else {
+          window.location.hash = '#/welcome';
+        }
+      }
     } catch (e) {
       passwordField.value?.showError(t('errors.wrongPassword'));
     }
