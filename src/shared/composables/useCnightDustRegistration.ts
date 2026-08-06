@@ -312,8 +312,10 @@ export function useCnightDustRegistration() {
     // the Register CTA must stay hidden until it's back down to one.
     if (registrations.value.length > 1) return 'Duplicated';
 
-    const s = status.value?.registrationStatus;
-    if (s === 'Registered') return 'Registered';
+    // Nexus's `dust/status` carries no status-string field — only
+    // `registered` (see `MidnightDustRegistrationStatusDto`). Derive
+    // 'Registered' from that boolean directly.
+    if (status.value?.registered) return 'Registered';
 
     // Exactly one live registration UTxO: the mapping is valid even if the
     // indexer hasn't relayed `registered:true` yet (~2.5h window) or the
@@ -322,8 +324,6 @@ export function useCnightDustRegistration() {
     // live registration exists.
     if (registrations.value.length === 1) return 'Pending';
 
-    if (s === 'Invalid') return 'Invalid';
-    if (s === 'Pending') return 'Pending';
     // Indexer still says Unregistered (or unknown) but we submitted a
     // registration that hasn't relayed yet — hold Pending so the UI can't
     // offer a duplicate registration.
@@ -414,7 +414,7 @@ export function useCnightDustRegistration() {
       // Registered (and there's at most one live registration — a stale
       // 'Registered' alongside a known duplicate shouldn't clear the guard);
       // otherwise surface any un-expired local record.
-      if (status.value?.registrationStatus === 'Registered' && registrations.value.length <= 1) {
+      if (status.value?.registered && registrations.value.length <= 1) {
         clearDustPending(stakeAddress);
         localPending.value = null;
       } else {
@@ -435,7 +435,6 @@ export function useCnightDustRegistration() {
         cardanoRewardAddress: stakeAddress,
         dustAddress: null,
         registered: false,
-        registrationStatus: 'Unregistered',
       };
       await refreshRegistrations(stakeAddress);
       localPending.value = getDustPending(stakeAddress);
@@ -518,7 +517,7 @@ export function useCnightDustRegistration() {
       }
 
       stage.value = 'signing';
-      const txId = await signAndSubmit(build.txCbor, credentials, mnemonic);
+      const txId = await signAndSubmit(build.txCbor, credentials, mnemonic, build.sponsoredCollateralRef);
 
       stage.value = 'done';
       // Persist the pending registration so a reopen (before the ~2.5h relay)
@@ -531,7 +530,6 @@ export function useCnightDustRegistration() {
         cardanoRewardAddress: wallet.stakeAddress,
         dustAddress: destinationBech32,
         registered: false,
-        registrationStatus: 'Pending',
         registrationUtxoTxHash: txId,
       };
       return { status: 'submitted', txHash: txId, dustAddress: destinationBech32 };
@@ -570,6 +568,7 @@ export function useCnightDustRegistration() {
     txCbor: string,
     credentials: RegisterCredentials,
     mnemonic?: string,
+    sponsoredCollateralRef?: string | null,
   ): Promise<string> {
     const wallet = loggedWallet.value;
     if (!wallet) throw new Error('No wallet logged in');
@@ -600,6 +599,19 @@ export function useCnightDustRegistration() {
       }
     } else {
       signingData.password = credentials.password;
+    }
+
+    // Gero-sponsored collateral: the pool UTxO is a collateral input, so the tx needs the
+    // hot wallet's vkey witness too. The SIGN_TX handler ALREADY cosigns every collateral
+    // input and merges the result (background.ts) — do NOT cosign again here, that spends a
+    // second request against the rate limit and 429s. All this flow has to do is register
+    // the ref as one WE borrowed, so that handler treats a cosign failure as fatal instead
+    // of swallowing it and returning an under-signed witness that fails opaquely at the node.
+    if (sponsoredCollateralRef) {
+      await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.MARK_NEXUS_LENT,
+        data: { utxoRef: sponsoredCollateralRef },
+      });
     }
 
     const signResponse = await Messaging.sendToBackgroundFromOptions({
@@ -668,7 +680,7 @@ export function useCnightDustRegistration() {
       }
 
       stage.value = 'signing';
-      const txId = await signAndSubmit(build.txCbor, credentials);
+      const txId = await signAndSubmit(build.txCbor, credentials, undefined, build.sponsoredCollateralRef);
 
       stage.value = 'done';
       clearDustPending(wallet.stakeAddress);
@@ -677,7 +689,6 @@ export function useCnightDustRegistration() {
         cardanoRewardAddress: wallet.stakeAddress,
         dustAddress: null,
         registered: false,
-        registrationStatus: 'Unregistered',
       };
       return { status: 'submitted', txHash: txId, dustAddress: '' };
     } catch (e) {
@@ -719,7 +730,7 @@ export function useCnightDustRegistration() {
       }
 
       stage.value = 'signing';
-      const txId = await signAndSubmit(build.txCbor, credentials);
+      const txId = await signAndSubmit(build.txCbor, credentials, undefined, build.sponsoredCollateralRef);
 
       stage.value = 'done';
       // Tombstone the outpoint (with a TTL) so a mempool-lagged
@@ -780,7 +791,7 @@ export function useCnightDustRegistration() {
       }
 
       stage.value = 'signing';
-      const txId = await signAndSubmit(build.txCbor, credentials, mnemonic);
+      const txId = await signAndSubmit(build.txCbor, credentials, mnemonic, build.sponsoredCollateralRef);
 
       stage.value = 'done';
       markDustPending(wallet.stakeAddress, derived.dust, txId);
@@ -789,7 +800,6 @@ export function useCnightDustRegistration() {
         cardanoRewardAddress: wallet.stakeAddress,
         dustAddress: derived.dust,
         registered: false,
-        registrationStatus: 'Pending',
         registrationUtxoTxHash: txId,
       };
       return { status: 'submitted', txHash: txId, dustAddress: derived.dust };

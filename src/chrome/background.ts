@@ -16,6 +16,7 @@ import {
   getUsedAddresses,
   getUtxos,
   isRecentNexusLent,
+  markNexusLent,
   submitTx,
   urlScan,
 } from '@/chrome/serialization';
@@ -2435,6 +2436,22 @@ async function mergeWitnessSets(userWitnessCbor: string, extraWitnessCbor: strin
 
   return Serialization.TransactionWitnessSet.fromCore(merged).toCbor();
 }
+
+/**
+ * Register a collateral ref that NEXUS lent server-side (first-party DUST flows, where
+ * the wallet never calls /lend itself). Without this the SIGN_TX cosign loop can't tell
+ * a Gero-provided pool UTxO from the user's own, so `isRecentNexusLent` is false and a
+ * genuine co-sign failure is swallowed — producing an under-signed tx that only fails
+ * opaquely at the node. Marking is advisory: it only ever makes failures LOUDER.
+ */
+app.addToOptions(MessageTypes.MARK_NEXUS_LENT, async (request, sendResponse) => {
+  const ref = (request.data as { utxoRef?: unknown })?.utxoRef;
+  if (typeof ref === 'string' && /^[0-9a-fA-F]{64}#\d+$/.test(ref)) {
+    markNexusLent(ref);
+  }
+  sendResponse({ id: request.id, data: { success: true }, target: TARGET, sender: SENDER.extension });
+  return true;
+});
 
 app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
   try {

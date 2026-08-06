@@ -72,13 +72,16 @@
 import { computed, onMounted, ref, toRefs, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { midnightStore } from '@/stores/midnightStore';
-import { getDustPendingForDestination } from '@/shared/composables/useDustPending';
+import { getDustPendingForDestination, reconcileDustPendingForDestination } from '@/shared/composables/useDustPending';
 import { walletStore } from '@/stores/walletStore';
 import { Network } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
+import { getMidnightApi } from '@/api/midnight-api';
 import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
+import { useDustPathB } from '@/shared/composables/useDustPathB';
 import DustParticleCanvas from '@/shared/components/DustParticleCanvas.vue';
 import { useMidnightLoading } from '@/shared/composables/useMidnightLoading';
+import { debugLog } from '@/utils/debug';
 
 defineEmits<{ (e: 'register'): void }>();
 
@@ -96,6 +99,7 @@ const {
   dustCap,
   registrationStatus,
 } = useMidnightDustLive();
+const { pathBRegistered, pathBStakes } = useDustPathB();
 
 const midnightLoading = useMidnightLoading();
 const isRegistered = computed(() => registrationStatus.value === 'Registered');
@@ -104,15 +108,65 @@ const isRegistered = computed(() => registrationStatus.value === 'Registered');
 // address but hasn't relayed to Midnight yet (~2.5h), so dustState still reads
 // unregistered. Surface it so the battery shows "pending" instead of a
 // re-registration prompt. localStorage isn't reactive, so refresh on mount and
-// whenever the live status changes.
+// whenever the live status changes — and reconcile against chain truth first
+// so a stale/failed submission can't sit as "pending" for the full TTL (the
+// pill used to only ever expire, never confirm one way or the other).
 const incomingPending = ref(0);
-function refreshPending() {
-  const dust = midnightStore.addresses?.dust ?? '';
-  incomingPending.value = dust ? getDustPendingForDestination(dust).length : 0;
+// onMounted + watch(registrationStatus) reliably overlap on a Path-B wallet
+// (registrationStatus flips right as the Path-B poll lands, moments after
+// mount) — without this guard the two overlapping async calls
+// read-map/await/write-map out of order and flicker the pill.
+//
+// A busy call used to just DROP the overlapping one — but the dropped call
+// is precisely the one carrying fresh `pathBStakes` for the `isResolved`
+// clear, and once `registrationStatus` settles there's no guarantee of a
+// later fire to pick it back up, so a real pending record could survive to
+// TTL. Trailing-edge re-run instead: if a call comes in while busy, queue
+// exactly one follow-up re-run from the `finally`, so the freshest state
+// (dust address / network / pathBStakes at that later point) always gets
+// one more pass after the in-flight call finishes.
+let refreshPendingBusy = false;
+let refreshPendingQueued = false;
+async function refreshPending() {
+  if (refreshPendingBusy) { refreshPendingQueued = true; return; }
+  refreshPendingBusy = true;
+  try {
+    const dust = midnightStore.addresses?.dust ?? '';
+    if (!dust) { incomingPending.value = 0; return; }
+    const network = loggedWallet.value?.network;
+    if (network) {
+      await reconcileDustPendingForDestination(
+        dust,
+        (txHash) => getMidnightApi(network).cardanoTxExists(txHash),
+        (stakeAddress) => pathBStakes.value.includes(stakeAddress),
+      );
+    }
+    // The wallet may have switched while the reconcile above was in flight —
+    // re-read rather than trust the `dust` captured at entry, so a stale
+    // response can never overwrite the count for a DIFFERENT wallet.
+    if ((midnightStore.addresses?.dust ?? '') !== dust) return;
+    incomingPending.value = getDustPendingForDestination(dust).length;
+  } finally {
+    refreshPendingBusy = false;
+    if (refreshPendingQueued) {
+      refreshPendingQueued = false;
+      safeRefreshPending();
+    }
+  }
 }
-onMounted(refreshPending);
-watch(registrationStatus, refreshPending);
+function safeRefreshPending() {
+  // Neither onMounted nor watch() awaits or catches its callback's promise,
+  // so an uncaught rejection here (e.g. a localStorage quota error) would
+  // become an unhandled rejection.
+  refreshPending().catch((e) => debugLog('[MidnightDustGauge] refreshPending failed', e));
+}
+onMounted(safeRefreshPending);
+watch(registrationStatus, safeRefreshPending);
+// Path B already reporting a live registration to this dust address is
+// Registered, not pending — guard directly against it too (not just via
+// `isRegistered`) so a stale local record can never outrank chain truth.
 const isPending = computed(() => !isRegistered.value
+  && !pathBRegistered.value
   && (incomingPending.value > 0 || registrationStatus.value === 'Pending'));
 
 // Percent full (0-100) for the bar width + a11y.

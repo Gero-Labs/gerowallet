@@ -40,26 +40,20 @@ import {
 } from '@/api/midnight-api';
 import { CNIGHT_ASSETS, mapDustBuildError } from '@/shared/composables/useCnightDustRegistration';
 import { clearDustPending, markDustPending, reconcileDustPending } from '@/shared/composables/useDustPending';
+import {
+  CardanoStakeIdentity,
+  enumerateCardanoStakeIdentities,
+} from '@/shared/composables/useCardanoStakeEnumeration';
 import { debugLog } from '@/utils/debug';
 
-export interface DustSource {
-  /** Stable row key — the stake (reward) address. */
-  key: string;
-  /** Wallet name, or the logged Midnight wallet's name for the same-seed twin. */
-  label: string;
-  /** Imported wallet record id; null when the twin isn't separately imported. */
-  walletId: number | null;
-  /** True when this identity derives from the logged Midnight wallet's own seed. */
-  sameSeed: boolean;
-  baseAddress: string;
-  stakeAddress: string;
-  paymentKeyHashHex: string;
-  /** False for watch-only / hardware records — row renders read-only. */
-  canSign: boolean;
-  encryptionMethod: 'password' | 'prf';
+export interface DustSource extends CardanoStakeIdentity {
   /** Raw cNIGHT base units; null while loading / on query failure. */
   nightBalance: bigint | null;
   status: MidnightDustRegistrationStatusDto | null;
+  /** Wallet-local "submitted, not yet relayed" marker. Nexus's `dust/status`
+   *  carries no status-string field (only `registered`), so this row-level
+   *  flag — not a field on the DTO — is what the UI renders as "Pending". */
+  pendingLocal: boolean;
 }
 
 export type DustSourceActionResult =
@@ -95,80 +89,21 @@ export function useDustSources() {
   const isSupported = computed(() =>
     walletStore.loggedWallet?.chain === Blockchain.MIDNIGHT && !!CNIGHT_ASSETS[network.value]);
 
-  function walletCanSign(w: Partial<Wallet>): boolean {
-    return !!(w.encryptedMnemonic || (w.prfEncryptedMnemonic && w.webAuthnCredentialId));
-  }
-
-  /** The Cardano identity derived from the logged Midnight wallet's own seed. */
-  function twinSource(): DustSource | null {
-    const addrs = midnightStore.addresses;
-    const wallet = walletStore.loggedWallet;
-    if (!wallet || !addrs?.cardanoBaseAddress || !addrs?.cardanoStakeAddress) return null;
-    return {
-      key: addrs.cardanoStakeAddress,
-      label: wallet.name ?? 'This wallet',
-      walletId: null,
-      sameSeed: true,
-      baseAddress: addrs.cardanoBaseAddress,
-      stakeAddress: addrs.cardanoStakeAddress,
-      paymentKeyHashHex: addrs.cardanoPaymentKeyHashHex ?? '',
-      canSign: walletCanSign(wallet),
-      encryptionMethod: wallet.encryptionMethod === 'prf' ? 'prf' : 'password',
+  /**
+   * Enumerate every Cardano identity the wallet controls and layer on the
+   * per-row loading state this dialog needs (balance/status/pendingLocal).
+   * The identity derivation itself (same-seed twin + imported records) is
+   * shared with `useDustPathB` via `useCardanoStakeEnumeration` — see that
+   * module's header comment for why the two surfaces must agree.
+   */
+  async function enumerate(): Promise<DustSource[]> {
+    const identities = await enumerateCardanoStakeIdentities(network.value);
+    return identities.map((identity) => ({
+      ...identity,
       nightBalance: null,
       status: null,
-    };
-  }
-
-  /** Compute base/stake/payment-hash for an imported Cardano record from its public xpub. */
-  async function sourceFromRecord(w: Wallet & { publicKey?: string }): Promise<DustSource | null> {
-    if (!w.publicKey) return null;
-    try {
-      const { getAddress, getRewardAddress, getPaymentKeyExternal } = await import('@/chrome/serialization');
-      const baseAddress = getAddress(w.publicKey, Blockchain.CARDANO, w.network, 0).toBech32();
-      const stakeAddress = getRewardAddress(w.publicKey, Blockchain.CARDANO, w.network).toBech32();
-      const paymentKeyHashHex = getPaymentKeyExternal(w.publicKey, 0).hash().hex();
-      return {
-        key: stakeAddress,
-        label: w.name,
-        walletId: w.id,
-        sameSeed: false,
-        baseAddress,
-        stakeAddress,
-        paymentKeyHashHex,
-        canSign: walletCanSign(w),
-        encryptionMethod: w.encryptionMethod === 'prf' ? 'prf' : 'password',
-        nightBalance: null,
-        status: null,
-      };
-    } catch (e) {
-      debugLog('[DustSources] Failed to derive addresses for wallet', w.id, e);
-      return null;
-    }
-  }
-
-  async function enumerate(): Promise<DustSource[]> {
-    const list: DustSource[] = [];
-    const twin = twinSource();
-    if (twin) list.push(twin);
-
-    const records = Object.values(geroStore.wallets ?? {}) as Array<Wallet & { publicKey?: string }>;
-    for (const w of records) {
-      if (w.chain !== Blockchain.CARDANO || w.network !== network.value) continue;
-      const source = await sourceFromRecord(w);
-      if (!source) continue;
-      const existing = list.find(s => s.stakeAddress === source.stakeAddress);
-      if (existing) {
-        // The twin is also imported as its own Cardano wallet record — one row,
-        // signable through either credential set. Prefer the imported record's
-        // name and keep sameSeed so the logged wallet's gesture suffices.
-        existing.walletId = source.walletId;
-        existing.label = source.label;
-        existing.canSign = existing.canSign || source.canSign;
-        continue;
-      }
-      list.push(source);
-    }
-    return list;
+      pendingLocal: false,
+    }));
   }
 
   /** Sum each source's cNIGHT via Nexus's asset-filtered address-UTxO endpoint. */
@@ -214,8 +149,9 @@ export function useDustSources() {
     // Overlay the local pending guard: a source we just registered (but the
     // indexer hasn't relayed yet) shows Pending so its row can't re-register.
     for (const source of list) {
-      if (source.status?.registrationStatus === 'Registered') {
+      if (source.status?.registered) {
         clearDustPending(source.stakeAddress);
+        source.pendingLocal = false;
         continue;
       }
       // Reconcile first: a submission that never landed on-chain must not keep
@@ -224,15 +160,15 @@ export function useDustSources() {
         source.stakeAddress,
         (txHash) => api.cardanoTxExists(txHash),
       );
-      if (pending && source.status?.registrationStatus !== 'Pending') {
+      if (pending && !source.pendingLocal) {
         source.status = {
           cardanoRewardAddress: source.stakeAddress,
           dustAddress: pending.dustAddress,
           registered: false,
-          registrationStatus: 'Pending',
           registrationUtxoTxHash: pending.txHash,
         };
       }
+      source.pendingLocal = !!pending;
     }
   }
 
@@ -504,9 +440,9 @@ export function useDustSources() {
         cardanoRewardAddress: source.stakeAddress,
         dustAddress: ownDustAddress.value,
         registered: false,
-        registrationStatus: 'Pending',
         registrationUtxoTxHash: txId,
       };
+      source.pendingLocal = true;
       sources.value = [...sources.value];
       return { status: 'submitted', txHash: txId };
     } catch (e) {
@@ -561,9 +497,9 @@ export function useDustSources() {
         cardanoRewardAddress: source.stakeAddress,
         dustAddress: ownDustAddress.value,
         registered: false,
-        registrationStatus: 'Pending',
         registrationUtxoTxHash: txId,
       };
+      source.pendingLocal = true;
       sources.value = [...sources.value];
       return { status: 'submitted', txHash: txId };
     } catch (e) {

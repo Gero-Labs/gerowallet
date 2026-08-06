@@ -102,13 +102,18 @@ import { Network } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import type { MidnightTransaction } from '@/chains/midnight/midnightTypes';
 import { useMidnightLoading } from '@/shared/composables/useMidnightLoading';
+import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
 
 defineEmits<{ (e: 'refresh'): void }>();
 
-const { addresses, balances, dustState, transactions } = toRefs(midnightStore);
+const { addresses, balances, transactions } = toRefs(midnightStore);
 const { loggedWallet } = toRefs(walletStore);
 const hideBalances = computed(() => walletStore.config?.hideBalances || false);
 const midnightLoading = useMidnightLoading();
+// Same summed (Path A + Path B) live status the DUST battery + dialog use —
+// the raw store field is Path-A-only, so this dot used to stay neutral
+// beside a battery already showing a real Path-B charge.
+const dustLive = useMidnightDustLive();
 
 const isMainnet = computed(() => loggedWallet.value?.network === Network.MAINNET);
 const nightCurrency = computed(() => (isMainnet.value ? 'NIGHT' : 'tNIGHT'));
@@ -145,8 +150,12 @@ const shortenedAddress = computed(() => {
   return `${a.slice(0, 8)}…${a.slice(-6)}`;
 });
 
+// `useMidnightDustLive.registrationStatus` already implements the
+// hasData-gated Path-A-signal-vs-store fallback internally (see its
+// computed) — no need to re-derive it here.
 const registrationColor = computed(() => {
-  switch (dustState.value?.registrationStatus) {
+  const status = dustLive.registrationStatus.value;
+  switch (status) {
     case 'Registered': return 'var(--g-success)';
     case 'Pending': return 'var(--g-warning)';
     case 'Invalid': return 'var(--g-error)';
