@@ -11,7 +11,7 @@ import 'odometer/themes/odometer-theme-default.css';
 
 interface Props {
   value: number;
-  format?: 'int' | 'float';
+  format?: 'int' | 'float' | 'decimal';
   duration?: number;
 }
 
@@ -21,7 +21,20 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const odometerEl = ref<HTMLElement | null>(null);
-let odometerInstance: any = null;
+/** Minimal surface of the `odometer` instance we actually use (the package ships no types). */
+interface OdometerInstance { update(value: number): void }
+let odometerInstance: OdometerInstance | null = null;
+
+/** Fraction of the value to roll through, so motion reads the same at any magnitude. */
+const ROLL_FRACTION = 0.02;
+
+/** Start point for the intro roll: just under the target, never clamped to 0. */
+function rollStart(value: number): number {
+  if (!Number.isFinite(value) || value === 0) return 0;
+  return value > 0
+    ? Math.max(0, value - Math.abs(value) * ROLL_FRACTION)
+    : value + Math.abs(value) * ROLL_FRACTION;
+}
 
 onMounted(async () => {
   await nextTick();
@@ -32,25 +45,24 @@ onMounted(async () => {
 
     odometerInstance = new Odometer({
       el: odometerEl.value,
-      value: 0,
+      // Mount AT the value, never at 0. Mounting at 0 made the first paint flash a
+      // literal "0" before rolling up, which is what users saw as the counter
+      // "showing a 0 before the number".
+      value: Number.isFinite(props.value) ? props.value : 0,
       format: formatString,
       theme: 'default',
       duration: props.duration,
       auto: false, // Disable auto animation to control it manually
     });
 
-    // Set initial value after initialization
+    // Roll in from just below the target so there's still motion, but scaled to the
+    // MAGNITUDE of the value. The old code subtracted a flat 1000, so any portfolio
+    // under 1000 (e.g. 38.96 ADA) clamped to 0 and rolled the whole way up — the jump.
     requestAnimationFrame(() => {
       if (odometerInstance && props.value) {
-        // Start closer to the target value to reduce rolling
-        const startValue = Math.max(0, props.value - 1000);
-        odometerInstance.update(startValue);
-
-        // Then animate to actual value
+        odometerInstance.update(rollStart(props.value));
         setTimeout(() => {
-          if (odometerInstance) {
-            odometerInstance.update(props.value);
-          }
+          if (odometerInstance) odometerInstance.update(props.value);
         }, 50);
       }
     });
@@ -62,11 +74,11 @@ watch(
   () => props.value,
   (newValue, oldValue) => {
     if (odometerInstance && newValue !== oldValue) {
-      // Calculate a range to roll through (10% of the difference, minimum 100)
+      // Roll range scaled to the value, not a flat floor of 100. A floor of 100 on a
+      // 38.96 ADA balance meant every refresh rolled through the entire number.
       const diff = Math.abs(newValue - oldValue);
-      const rollRange = Math.max(100, Math.min(diff * 0.1, 2000));
+      const rollRange = Math.min(diff * 0.1, Math.abs(newValue) * ROLL_FRACTION) || 0;
 
-      // Start from closer to target value
       const startValue = newValue > oldValue
         ? Math.max(0, newValue - rollRange)
         : newValue + rollRange;

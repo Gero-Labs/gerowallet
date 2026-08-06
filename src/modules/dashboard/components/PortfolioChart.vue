@@ -38,7 +38,7 @@
             <span v-if="hideBalances" key="masked" class="portfolio-amount-masked">••••••</span>
             <span v-else key="visible" class="portfolio-amount-visible">
               <span class="currency-symbol">{{ currentCurrencyConfig.symbol }}</span>
-              <OdometerCounter v-if="isReadyToRender" :value="displayedPortfolioValue" format="decimal" :duration="1000" :key="selectedCurrency" />
+              <OdometerCounter v-if="isReadyToRender" :value="displayedPortfolioValue" format="float" :duration="1000" :key="selectedCurrency" />
               <span v-else class="portfolio-amount-placeholder">—</span>
             </span>
           </transition>
@@ -515,18 +515,30 @@ const currentCurrencyConfig = computed(() => {
   return config;
 });
 
-const activeChartData = computed(() => {
+/** Raw backend snapshot series for the selected currency, before the live tail point. */
+const rawChartData = computed<[number, number][]>(() => {
   // Data already reflects the current mode (adaOnly) — parent fetches the right data
   switch (selectedCurrency.value) {
     case CurrencyType.USD:
-      return props.chartDataUsd || [];
+      return (props.chartDataUsd || []) as [number, number][];
     case CurrencyType.EUR:
-      return props.chartDataEur || [];
+      return (props.chartDataEur || []) as [number, number][];
     case CurrencyType.ADA:
     default:
-      return props.chartData || [];
+      return (props.chartData || []) as [number, number][];
   }
 });
+
+/**
+ * How stale the newest backend snapshot may be before we append a live tail point.
+ * The snapshotter runs on an interval, so a wallet funded minutes ago has no
+ * non-zero snapshot yet — that showed a flat zero line next to a non-zero portfolio
+ * header, which reads as a broken chart (observed 2026-08-06: 2331 snapshots, all
+ * zero, newest 28 minutes old, against a live balance of ~39 ADA).
+ */
+const LIVE_TAIL_STALE_MS = 5 * 60 * 1000;
+/** Relative gap above which the live value is considered to disagree with the tail. */
+const LIVE_TAIL_EPSILON = 0.001;
 
 const activePortfolioValue = computed(() => {
   const isAdaOnly = portfolioMode.value === 'ada-only';
@@ -539,6 +551,30 @@ const activePortfolioValue = computed(() => {
     default:
       return isAdaOnly ? props.adaOnlyValueAda : props.portfolioValueAda;
   }
+});
+
+const activeChartData = computed<[number, number][]>(() => {
+  const series = rawChartData.value;
+  const live = activePortfolioValue.value;
+
+  // Only extend a series that already has shape. A single synthetic point on an
+  // otherwise empty series is not a chart, and `hasData` treats empty as "no data",
+  // which is the correct empty state for a wallet with no history at all.
+  if (!series.length || typeof live !== 'number' || !Number.isFinite(live)) return series;
+
+  const [lastTs, lastValue] = series[series.length - 1];
+  const now = Date.now();
+  if (now - lastTs > LIVE_TAIL_STALE_MS) {
+    return [...series, [now, live] as [number, number]];
+  }
+  // Snapshot is recent but disagrees with the live balance (a just-landed tx the
+  // snapshotter hasn't picked up). Correct the tail in place rather than appending
+  // a near-duplicate timestamp, which would draw a vertical spike.
+  const denom = Math.max(Math.abs(lastValue), Math.abs(live), 1);
+  if (Math.abs(live - lastValue) / denom > LIVE_TAIL_EPSILON) {
+    return [...series.slice(0, -1), [lastTs, live] as [number, number]];
+  }
+  return series;
 });
 
 // Throttle the displayed portfolio value. Live prices update the underlying value

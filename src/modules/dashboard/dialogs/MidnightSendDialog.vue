@@ -105,7 +105,15 @@
           <v-stepper-content step="1">
             <div class="step-recipients-wrapper">
               <div class="step-recipients-inner" :class="{ shake: shakeError }">
-                <!-- Tab toggle: unshielded ↔ shielded (only when a viewing key exists). -->
+                <!-- Balance selector, NOT a privacy mode toggle. Shielded and unshielded
+                     are separate ledger systems (spec/zswap.md vs spec/night.md) and the
+                     ledger states they "are not usually interchangeable" — the issuing
+                     contract fixes a token's shieldedness, the sender never chooses it.
+                     So this picks WHICH BALANCE is being spent, and the label has to say
+                     so or it reads as "send this privately", which is not a thing. -->
+                <div v-if="shieldedAvailable" class="balance-source-label t-label">
+                  {{ t('midnight.send.spendFrom') }}
+                </div>
                 <v-tabs
                   v-if="shieldedAvailable"
                   v-model="activeTab"
@@ -113,7 +121,7 @@
                   centered
                   grow
                   hide-slider
-                  class="mb-3 midnight-send-tabs"
+                  class="mb-1 midnight-send-tabs"
                 >
                   <v-tab :disabled="sending" class="midnight-send-tab">
                     {{ t('midnight.send.tabUnshielded') }}
@@ -122,6 +130,9 @@
                     {{ t('midnight.send.tabShielded') }}
                   </v-tab>
                 </v-tabs>
+                <div v-if="shieldedAvailable" class="balance-source-hint mb-3">
+                  {{ t('midnight.send.shieldednessIsIssuerSet') }}
+                </div>
 
                 <!-- Recipient card — same panel + address-field + pill asset-row
                      layout as the Cardano SendRecipientCard, adapted to a single
@@ -1267,6 +1278,19 @@ watch(
 }
 
 /* ─── Midnight-specific bits ─── */
+/* Reads as a balance selector, not a privacy switch: quiet label above, the
+   issuer-sets-shieldedness note below. */
+.balance-source-label {
+  color: var(--g-text-3);
+  margin-bottom: 4px;
+}
+
+.balance-source-hint {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--g-text-3);
+}
+
 .midnight-send-tabs :deep(.v-tab) {
   text-transform: none;
   letter-spacing: 0;

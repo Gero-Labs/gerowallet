@@ -102,20 +102,28 @@
         </div>
 
         <!-- Validation: insufficient funds -->
+        <!-- Validation: minimum ADA required. Checked BEFORE the generic shortage so the
+             actionable message wins — it names the exact figure and is click-to-fill.
+             It used to be the v-else-if, so any shortage (including one parsed out of a
+             Nexus 400) swallowed it and the user saw a bare "Insufficient balance" while
+             the wallet already knew the number. -->
         <div
-          v-if="index === 0 && value && value.adaShortage > 0"
-          class="token-error"
-        >
-          {{ $t('send.insufficientBalance') }}
-        </div>
-
-        <!-- Validation: minimum ADA required -->
-        <div
-          v-else-if="index === 0 && value && value.minAda > 0 && value.minAda > Number(token.quantity)"
+          v-if="index === 0 && value && value.minAda > 0 && value.minAda > Number(token.quantity)"
           class="token-error token-error--clickable"
           @click="setMinimum(token)"
         >
           {{ $t('assets.minRequired', { amount: value.minAda + ' ' + token.ticker }) }}
+        </div>
+
+        <!-- Shortage: quote the figure when we parsed one out of the build error, rather
+             than a bare "Insufficient balance" that leaves the user guessing. -->
+        <div
+          v-else-if="index === 0 && value && value.adaShortage > 0"
+          class="token-error"
+        >
+          {{ value.adaShortage > 0
+            ? $t('send.insufficientBalanceBy', { amount: value.adaShortage })
+            : $t('send.insufficientBalance') }}
         </div>
 
         <!-- Info: ADA locked for native tokens in wallet -->
