@@ -186,6 +186,8 @@ import AnimatedQRScanner from '@/shared/components/AnimatedQRScanner.vue';
 import { walletStore } from '@/stores/walletStore';
 import { MessageTypes } from '@/models/MessageTypes';
 import ledger from '@/shared/utils/ledger';
+import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { createKeystoneDataSignRequest, parseDataSignature } from '@/shared/utils/keystone';
 import networks from '@/utils/networks';
 import { DeviceStatusError, SignedMessageData } from '@cardano-foundation/ledgerjs-hw-app-cardano';
@@ -498,15 +500,18 @@ const sign = async () => {
     const address = request.value.data.address;
     const payload = request.value.data.payload;
     try {
-      const response = await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.TREZOR,
-        data: {
-          method: 'signData',
-          address,
-          payload,
-          accountIndex: 0
-        }
-      }) as BackgroundResponse<SignDataResponse>;
+      const data = {
+        method: 'signData',
+        address,
+        payload,
+        accountIndex: 0
+      };
+      const response = (featureFlagsStore.state.flags.isTrezorWebUsbEnabled
+        ? await dispatchTrezor(data)
+        : await Messaging.sendToBackgroundFromOptions({
+          method: MessageTypes.TREZOR,
+          data
+        })) as BackgroundResponse<SignDataResponse>;
 
       if (!response?.data?.success) {
         throw new Error(response?.data?.error || t('wallet.trezorSigningFailed'));

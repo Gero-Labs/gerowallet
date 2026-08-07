@@ -6,7 +6,9 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { WalletType } from '@/models/types';
 import type { Wallet, Key } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import ledgerUtils from '@/shared/utils/ledger';
+import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
 import { createKeystoneSignRequest, parseSignature } from '@/shared/utils/keystone';
 import networks from '@/utils/networks';
 import { utxoToCip30Hex } from './utxoToCip30Hex';
@@ -147,10 +149,13 @@ export function useNativeSwapSigner(opts: NativeSwapSignerOptions) {
 
   // ── Trezor (client-side, via background message) — SwapSheet.vue:1230-1270 ──
   async function signTrezor(cbor: string): Promise<string> {
-    const response = (await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.TREZOR,
-      data: { method: 'signTx', txCbor: cbor },
-    })) as { data?: { success?: boolean; error?: string; signatures?: Array<[string, string]> } };
+    const data = { method: 'signTx', txCbor: cbor };
+    const response = (featureFlagsStore.state.flags.isTrezorWebUsbEnabled
+      ? await dispatchTrezor(data)
+      : await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.TREZOR,
+        data,
+      })) as { data?: { success?: boolean; error?: string; signatures?: Array<[string, string]> } };
 
     if (!response?.data?.success) throw new Error(response?.data?.error || 'Trezor signing failed');
 
