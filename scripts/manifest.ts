@@ -220,6 +220,13 @@ async function getManifest() {
       ],
     },
     host_permissions: ['*://*/*'],
+    // Trezor daemon-free WebUSB: connect-webextension (coreMode 'suite-web') opens a
+    // suite.trezor.io tab that runs the connect core + WebUSB transport and messages
+    // results back to this extension. Without this the Suite Web flow is unavailable
+    // and Trezor falls back to the local Bridge daemon. See src/shared/utils/trezor.ts.
+    externally_connectable: {
+      matches: ['https://suite.trezor.io/*'],
+    },
     web_accessible_resources: [
       {
         resources: ["public/logo.png", "public/logo128.png", "content/inject.js", "public/2.6.0.png"],
