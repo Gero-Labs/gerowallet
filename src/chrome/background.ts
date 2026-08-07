@@ -534,7 +534,10 @@ chrome.webNavigation?.onCommitted.addListener(async (details) => {
       } else if (res === 'skip') {
         // nothing
       } else {
-        console.error(res['error'])
+        // urlScan failed (endpoint/network error) — handleBlacklisted returned the
+        // raw error. The site is NOT confirmed blacklisted, so fail open (don't block
+        // it); just log the real reason instead of res['error'] (undefined on an Error).
+        console.error('[websiteProtection] blacklist scan failed:', res instanceof Error ? res.message : res);
       }
     }
   }
