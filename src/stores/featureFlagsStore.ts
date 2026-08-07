@@ -11,6 +11,7 @@ export interface FeatureFlags {
   // is hidden (shown as a "Soon" teaser) until flipped ON via gero-sync — this
   // replaces the hardcoded BITCOIN_REMOVED_2_7 comment-out in networks.ts.
   isBitcoinEnabled: boolean;
+  // Master gate for the daemon-free Trezor WebUSB signing path.
   isTrezorWebUsbEnabled: boolean;
   isPoolOperatorEnabled: boolean;
   isNexusWithdrawalEnabled: boolean;
