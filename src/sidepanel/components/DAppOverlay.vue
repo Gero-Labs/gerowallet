@@ -909,6 +909,8 @@ import { friendlyTxError } from '@/shared/utils/txErrors';
 import cardanoShieldApi from '@/api/cardano-shield-api';
 import { DappScore, type TxScanResponse } from '@/models/cardano-shield-types';
 import ledgerUtils from '@/shared/utils/ledger';
+import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { createKeystoneSignRequest, KeystoneSignRequestResponse, parseSignature } from '@/shared/utils/keystone';
 import { UR } from '@keystonehq/keystone-sdk';
 import networks from '@/utils/networks';
@@ -2294,10 +2296,13 @@ async function signTrezor() {
 
   try {
     const txCbor = getTxCbor();
-    const response = await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.TREZOR,
-      data: { method: 'signTx', txCbor },
-    }) as BackgroundResponse<SignTxResponse>;
+    const data = { method: 'signTx', txCbor };
+    const response = (featureFlagsStore.state.flags.isTrezorWebUsbEnabled
+      ? await dispatchTrezor(data)
+      : await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.TREZOR,
+        data,
+      })) as BackgroundResponse<SignTxResponse>;
 
     if (!response.data.success) {
       throw new Error(response.data.error || 'Trezor signing failed');

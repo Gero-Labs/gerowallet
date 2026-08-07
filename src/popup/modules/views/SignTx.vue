@@ -248,6 +248,8 @@ import { MessageTypes } from '@/models/MessageTypes';
 import ledgerUtils from '@/shared/utils/ledger';
 import { DeviceStatusError } from '@cardano-foundation/ledgerjs-hw-app-cardano';
 import ledger from '@/shared/utils/ledger';
+import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import hardwareLoading from '@/plugins/hardwareLoading';
 import assets from '@/utils/assets';
 import { createKeystoneSignRequest, KeystoneSignRequestResponse, parseSignature } from '@/shared/utils/keystone';
@@ -574,13 +576,16 @@ const sign = async () => {
           }
         }
 
-        const response = await Messaging.sendToBackgroundFromOptions({
-          method: MessageTypes.TREZOR,
-          data: {
-            method: 'signTx',
-            txCbor
-          },
-        }) as BackgroundResponse<SignTxResponse>;
+        const data = {
+          method: 'signTx',
+          txCbor
+        };
+        const response = (featureFlagsStore.state.flags.isTrezorWebUsbEnabled
+          ? await dispatchTrezor(data)
+          : await Messaging.sendToBackgroundFromOptions({
+            method: MessageTypes.TREZOR,
+            data,
+          })) as BackgroundResponse<SignTxResponse>;
 
         if (!response.data.success) {
           throw new Error(response.data.error || 'Trezor signing failed');

@@ -457,6 +457,7 @@ import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { remoteSigningStore } from '@/stores/remoteSigningStore';
 import { BackgroundResponse, Messaging, VerifyPasswordResponse } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
+import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
 import rules from '@/utils/rules';
 import NotificationDot from '@/shared/components/NotificationDot.vue';
 import { isFeatureNew } from '@/shared/composables/useFeatureNotifications';
@@ -644,16 +645,19 @@ const verifyAddressOnDevice = async () => {
       await ledger.default.verifyBitcoinAddress(addressType, accountIndex, addressIndex, isChange, true);
     } else if (loggedWallet.value.type === WalletType.Trezor) {
       // Verify address on Trezor
-      const response = await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.TREZOR,
-        data: {
-          method: 'verifyBitcoinAddress',
-          addressType,
-          accountIndex,
-          addressIndex,
-          isChange
-        },
-      }) as BackgroundResponse<VerifyPasswordResponse>;
+      const data = {
+        method: 'verifyBitcoinAddress',
+        addressType,
+        accountIndex,
+        addressIndex,
+        isChange
+      };
+      const response = (featureFlagsStore.state.flags.isTrezorWebUsbEnabled
+        ? await dispatchTrezor(data)
+        : await Messaging.sendToBackgroundFromOptions({
+          method: MessageTypes.TREZOR,
+          data,
+        })) as BackgroundResponse<VerifyPasswordResponse>;
 
       if (!response.data.success) {
         throw new Error(response.data.error || 'Failed to verify address on Trezor');
