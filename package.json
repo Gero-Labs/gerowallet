@@ -120,7 +120,7 @@
     "tiny-fifo-cache": "^1.0.1",
     "tiny-secp256k1": "^2.2.4",
     "tldts": "^6.1.59",
-    "vue": "^2.7.16",
+    "vue": "^3.0.0",
     "vue-class-component": "^7.2.3",
     "vue-flag-icon": "^2.1.0",
     "vue-i18n": "^8.28.2",
