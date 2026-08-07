@@ -33,8 +33,6 @@
       <div v-if="walletType === WalletType.Trezor">
         <ul class="text-left" style="line-height: 1.5">
           <li>{{ $t('welcome.setupHardwareWallet', { walletType }) }}</li>
-          <li v-if="isBitcoin">{{ $t('welcome.installBitcoinApp', { walletType }) }}</li>
-          <li v-else>{{ $t('welcome.installCardanoApp', { walletType }) }}</li>
           <li>{{ $t('welcome.unlockHardwareWallet') }}</li>
         </ul>
       </div>
@@ -115,6 +113,8 @@ import { bech32 } from 'bech32';
 import { UR } from '@keystonehq/keystone-sdk';
 import { debugLog } from '@/utils/debug';
 import type { NetworkInfo } from '@/utils/networks';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
+import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
 
 interface ConnectionPayload {
   publicKey: string;
@@ -282,11 +282,11 @@ const walletCreationStep2 = async (): Promise<void> => {
     hardwareLoading.setLoading(true);
     try {
       hardwareLoading.setText(t('wallet.connectingToTrezor') as string);
+      const data = { method: 'initTrezor', chain: props.network?.blockchain, network: props.network?.network };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const response: any = await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.TREZOR,
-        data: { method: 'initTrezor', chain: props.network?.blockchain, network: props.network?.network },
-      });
+      const response: any = featureFlagsStore.state.flags.isTrezorWebUsbEnabled
+        ? await dispatchTrezor(data)
+        : await Messaging.sendToBackgroundFromOptions({ method: MessageTypes.TREZOR, data });
 
       debugLog('[TREZOR] init success', response?.data?.success);
 

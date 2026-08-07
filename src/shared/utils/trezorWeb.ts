@@ -1,7 +1,7 @@
 import { coin_type, Key, Keys, purpose } from '@/models/types';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { hdPathToArray, toStakeAddress, getPublicKey } from '@/chrome/serialization';
-import TrezorConnect from '@trezor/connect-webextension';
+import TrezorConnect from '@trezor/connect-web';
 import * as Trezor from '@trezor/connect';
 import {
   AccountKeyDerivationPath,
@@ -37,9 +37,10 @@ interface TrezorTxTransformerContext {
 }
 
 /**
- * Trezor Connect Wrapper
- * Clean wrapper around @trezor/connect-webextension for Cardano operations
- * Works in Chrome extension service worker context
+ * Trezor Connect Wrapper (document-context / WebUSB)
+ * Clean wrapper around @trezor/connect-web for Cardano and Bitcoin operations
+ * Runs in a document context (e.g. options page / side panel) so it can use
+ * WebUSB directly, falling back to Trezor Bridge when WebUSB is unavailable.
  */
 
 // Trezor Connect manifest configuration
@@ -97,11 +98,12 @@ const mapDerivationType = (derivationType: number): number => {
 /**
  * Transform transport errors to proper error types
  */
-const transportTypedError = (error: any): Error => {
+const transportTypedError = (error: unknown): Error => {
   if (error instanceof Error) {
     return error;
   }
-  return new Error(error?.message || 'Unknown transport error');
+  const message = (error as { message?: string } | undefined)?.message;
+  return new Error(message || 'Unknown transport error');
 };
 
 /**
@@ -239,7 +241,7 @@ const toTxOut = (output: { index: number; txOut: Cardano.TxOut; isCollateral?: b
   const { knownAddresses, outputsFormat, collateralReturnFormat } = context;
 
   // Find if this is one of our addresses
-  const knownAddress = knownAddresses.find((addr: any) => addr.address === txOut.address);
+  const knownAddress = knownAddresses.find((addr: GroupedAddress) => addr.address === txOut.address);
 
   const format = output.isCollateral ? collateralReturnFormat : outputsFormat?.[output.index];
   const isBabbage = format === Trezor.PROTO.CardanoTxOutputSerializationFormat.MAP_BABBAGE;
@@ -248,7 +250,7 @@ const toTxOut = (output: { index: number; txOut: Cardano.TxOut; isCollateral?: b
   const serializedOutput = Serialization.TransactionOutput.fromCore(txOut);
   const scriptHex = getScriptHex(serializedOutput);
 
-  const baseOutput: any = {
+  const baseOutput: Record<string, unknown> = {
     amount: txOut.value.coins.toString(),
     tokenBundle: mapTokenMap(txOut.value.assets),
     format,
@@ -291,7 +293,7 @@ const toTxOut = (output: { index: number; txOut: Cardano.TxOut; isCollateral?: b
     baseOutput.address = txOut.address;
   }
 
-  return baseOutput;
+  return baseOutput as unknown as Trezor.CardanoOutput;
 };
 
 const mapTxOuts = (outputs: Cardano.TxOut[], context: TrezorTxTransformerContext): Trezor.CardanoOutput[] =>
@@ -694,6 +696,7 @@ export default {
   /**
    * Initialize TrezorConnect (lazy initialization)
    * Safe to call multiple times - only initializes once
+   * Document-context init: WebUSB primary transport, Bridge as fallback.
    */
   async init(): Promise<void> {
     if (this.initialized) {
@@ -701,18 +704,22 @@ export default {
     }
 
     try {
-      // Service-worker path (flag OFF). The SW has no window.open, so it cannot run
-      // the connect core / WebUSB itself and cannot inject the connect content-script
-      // the tab path needs — every daemon-free coreMode fails here (suite-web
-      // 302-redirects, popup can't inject the content-script). So the SW stays on the
-      // Bridge transport (needs trezord). The daemon-free WebUSB path lives in the
-      // document context (trezorWeb.ts, flag ON). See project_trezor_webusb_daemon_free.
+      // Force env 'web' + coreMode 'popup'. connect-web auto-detects env
+      // 'webextension' whenever chrome.runtime.onConnect exists — true even in this
+      // sidepanel/options document — which routes to a browser tab + a connect
+      // content-script the package never injects, so the handshake times out. env
+      // 'web' takes the window.open + postMessage path instead: the connect core and
+      // WebUSB transport run in the popup window (no content-script, no Trezor Bridge
+      // daemon). This only works from a document (has window.open), never the SW.
+      // env is an internal ConnectSettings field, hence the cast.
       await TrezorConnect.init({
         manifest: TREZOR_MANIFEST,
-        transports: ['WebUsbTransport', 'BridgeTransport', 'BluetoothTransport', 'NativeBluetoothTransport'],
+        transports: ['WebUsbTransport', 'BridgeTransport'],
         connectSrc: 'https://connect.trezor.io/9/',
-        _extendWebextensionLifetime: true,
-      });
+        coreMode: 'popup',
+        env: 'web',
+        lazyLoad: true,
+      } as Parameters<typeof TrezorConnect.init>[0]);
       this.initialized = true;
     } catch (error) {
       console.error('[TREZOR] Initialization failed:', error);
@@ -723,7 +730,7 @@ export default {
   /**
    * Get device features including device name/label
    */
-  async getDeviceInfo(): Promise<Trezor.Features> {
+  async getFeatures(): Promise<Trezor.Features> {
     await this.init();
 
     const result = await TrezorConnect.getFeatures();
@@ -752,19 +759,30 @@ export default {
       const accountIndex = parseInt(pathParts[3].replace("'", ""));
 
       // Get device name
-      const features: Trezor.Features = await this.getDeviceInfo();
+      const features: Trezor.Features = await this.getFeatures();
       const deviceName = features['label'] || 'Trezor';
       const model = features['model'];
 
-      // Get public key from Trezor
-      const res = await TrezorConnect.cardanoGetPublicKey({
+      // Get public key from Trezor. On the connect-web (WebUSB) path the very first
+      // call right after the popup opens can resolve success:true with an incomplete
+      // payload (node missing) — retry once so pairing succeeds on the first attempt
+      // instead of erroring and needing a second click.
+      const getKey = () => TrezorConnect.cardanoGetPublicKey({
         path: `m/${purpose.hdwallet}'/${coin_type.cardano}'/${accountIndex}'`,
         showOnTrezor: false, // Don't show on device during pairing
       } as Trezor.CardanoGetPublicKey);
 
+      let res = await getKey();
+      if (res.success && !res.payload?.node) {
+        res = await getKey();
+      }
+
       if (!res.success) {
         const errorMessage = 'error' in res.payload ? res.payload.error : 'Failed to get Trezor public key';
         throw new Error(errorMessage);
+      }
+      if (!res.payload?.node) {
+        throw new Error('Trezor returned an incomplete public key. Please try again.');
       }
 
       const chainCode = res.payload.node.chain_code;
@@ -784,7 +802,7 @@ export default {
           publicKey,
         }]
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[TREZOR] Failed to get public key:', error);
       throw error;
     }
@@ -822,7 +840,10 @@ export default {
     return Trezor.PROTO.CardanoTxSigningMode.ORDINARY_TRANSACTION;
   },
 
-  async signTransaction(
+  /**
+   * Sign a Cardano transaction (CIP-30 / hardware-trezor signing pipeline)
+   */
+  async cardanoSignTransaction(
     tx: Cardano.Tx,
     keys: Keys,
     utxos: Cardano.Utxo[],
@@ -946,8 +967,9 @@ export default {
       }
 
       return signatures;
-    } catch (error: any) {
-      if (error.innerError?.code === 'Failure_ActionCancelled') {
+    } catch (error: unknown) {
+      const innerErrorCode = (error as { innerError?: { code?: string } } | undefined)?.innerError?.code;
+      if (innerErrorCode === 'Failure_ActionCancelled') {
         throw new errors.AuthenticationError('Transaction signing aborted', error);
       }
       throw transportTypedError(error);
@@ -985,7 +1007,7 @@ export default {
    * @param accountIndex - Account index
    * @param keys
    */
-  async signData(
+  async cardanoSignMessage(
     address: string,
     payload: string,
     networkId: number,
@@ -1057,7 +1079,7 @@ export default {
         addressFieldHex: address,  // Address is already in hex format
       };
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[TREZOR] Data signing failed:', error);
       throw error;
     }
@@ -1282,7 +1304,7 @@ export default {
    * @param verify - Display address on device for verification
    * @returns Bitcoin address
    */
-  async getBitcoinAddress(
+  async getAddress(
     addressType: string = 'segwit',
     accountIndex: number = 0,
     addressIndex: number = 0,
@@ -1293,7 +1315,7 @@ export default {
 
     // Determine path and script type based on address type
     let path: string;
-    let scriptType: any;
+    let scriptType: 'SPENDADDRESS' | 'SPENDMULTISIG' | 'SPENDWITNESS' | 'SPENDP2SHWITNESS' | 'SPENDTAPROOT';
 
     switch (addressType) {
       case 'legacy':
@@ -1332,7 +1354,8 @@ export default {
    * @param accountIndex - Account index
    * @returns Signed PSBT in base64 format
    */
-  async signBitcoinTransaction(
+  // Note: this is the BITCOIN sign (PSBT); the Cardano sign is `cardanoSignTransaction` above.
+  async signTransaction(
     psbt: string,
     _addressType: string = 'segwit',
     _accountIndex: number = 0
@@ -1372,6 +1395,6 @@ export default {
     addressIndex: number = 0,
     isChange: boolean = false
   ): Promise<string> {
-    return await this.getBitcoinAddress(addressType, accountIndex, addressIndex, isChange, true);
+    return await this.getAddress(addressType, accountIndex, addressIndex, isChange, true);
   },
 };

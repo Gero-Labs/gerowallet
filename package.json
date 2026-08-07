@@ -72,6 +72,7 @@
     "@reown/walletkit": "^1.5.5",
     "@scure/bip32": "^1.7.0",
     "@stomp/stompjs": "^7.3.0",
+    "@trezor/connect-web": "^9.7.3",
     "@trezor/connect-webextension": "^9.7.3",
     "@vueuse/core": "6.6.2",
     "@vueuse/rxjs": "6.6.2",

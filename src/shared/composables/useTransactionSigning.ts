@@ -8,6 +8,7 @@ import { walletStore } from '@/stores/walletStore';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { remoteSigningStore } from '@/stores/remoteSigningStore';
 import ledgerUtils from '@/shared/utils/ledger';
+import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
 import { createKeystoneSignRequest, KeystoneSignRequestResponse, parseSignature } from '@/shared/utils/keystone';
 import networks from '@/utils/networks';
 import rules from '@/utils/rules';
@@ -248,13 +249,16 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       txCbor.value = serializeCardanoJsSdkTx(tx);
 
       // Send serialized transaction to background for Trezor signing
-      const response = await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.TREZOR,
-        data: {
-          method: 'signTx',
-          txCbor: txCbor.value
-        },
-      }) as BackgroundResponse<SignTxResponse>;
+      const data = {
+        method: 'signTx',
+        txCbor: txCbor.value
+      };
+      const response = (featureFlagsStore.state.flags.isTrezorWebUsbEnabled
+        ? await dispatchTrezor(data)
+        : await Messaging.sendToBackgroundFromOptions({
+          method: MessageTypes.TREZOR,
+          data,
+        })) as BackgroundResponse<SignTxResponse>;
 
       if (!response.data.success) {
         throw new Error(response.data.error || t('wallet.trezorSigningFailed'));

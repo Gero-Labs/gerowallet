@@ -3,13 +3,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // vi.mock factories are hoisted above all other module code, so any outer variable a
 // factory *immediately* dereferences (not just closes over) must itself be created via
 // vi.hoisted() — otherwise it's still in its TDZ when the factory runs.
-const { sendToBackgroundFromOptions, walletState } = vi.hoisted(() => ({
+const { sendToBackgroundFromOptions, walletState, dispatchTrezor } = vi.hoisted(() => ({
   sendToBackgroundFromOptions: vi.fn(),
   walletState: {
     keys: { payment: [{ address: 'addr_p' }], change: [{ address: 'addr_c' }], stake: [] },
     utxos: [] as unknown[],
     loggedWallet: { type: 'Normal', baseAddress: 'addr_base' } as Record<string, unknown>,
   },
+  dispatchTrezor: vi.fn(),
 }));
 
 vi.mock('@/chrome/messaging', () => ({
@@ -18,6 +19,15 @@ vi.mock('@/chrome/messaging', () => ({
 vi.mock('@/models/MessageTypes', () => ({ MessageTypes: { SIGN_TX: 'SIGN_TX', VERIFY_SPENDING_PASSWORD: 'VERIFY_SPENDING_PASSWORD', TREZOR: 'TREZOR' } }));
 vi.mock('@/stores/walletStore', () => ({ walletStore: walletState }));
 vi.mock('@/models/types', () => ({ WalletType: { Normal: 'Normal', Ledger: 'Ledger', Trezor: 'Trezor', Keystone: 'Keystone' } }));
+// isTrezorWebUsbEnabled defaults OFF — the Trezor test below asserts THIS (flag-off)
+// path explicitly. dispatchTrezor is mocked out too: it transitively imports
+// trezorWeb.ts, which reads `chrome.runtime.id` at module scope (no `chrome` global
+// in this happy-dom test env — see src/shared/utils/trezorWeb.spec.ts), and the
+// flag-off branch below never calls it anyway.
+vi.mock('@/stores/featureFlagsStore', () => ({
+  featureFlagsStore: { state: { flags: { isTrezorWebUsbEnabled: false } } },
+}));
+vi.mock('@/shared/utils/trezorDispatch', () => ({ dispatchTrezor: (...a: unknown[]) => dispatchTrezor(...a) }));
 
 // HW-branch deps are only touched when dispatch actually reaches them (Ledger/Trezor/Keystone
 // tests below just assert dispatch happens; these mocks let the module import cleanly).
@@ -44,6 +54,7 @@ import { useNativeSwapSigner } from '../useNativeSwapSigner';
 describe('useNativeSwapSigner', () => {
   beforeEach(() => {
     sendToBackgroundFromOptions.mockReset();
+    dispatchTrezor.mockReset();
     walletState.loggedWallet = { type: 'Normal', baseAddress: 'addr_base' };
   });
 
@@ -99,7 +110,10 @@ describe('useNativeSwapSigner', () => {
     expect(sendToBackgroundFromOptions).not.toHaveBeenCalled();
   });
 
-  it('dispatches Trezor wallets to MessageTypes.TREZOR (not SIGN_TX)', async () => {
+  it('dispatches Trezor wallets to MessageTypes.TREZOR via the flag-OFF path (not SIGN_TX, not dispatchTrezor)', async () => {
+    // isTrezorWebUsbEnabled defaults to false (mocked above) — this asserts the
+    // flag-OFF branch specifically: Messaging.sendToBackgroundFromOptions is used,
+    // and the WebUSB dispatchTrezor helper is never invoked.
     walletState.loggedWallet = { type: 'Trezor', baseAddress: 'addr_base' };
     sendToBackgroundFromOptions.mockResolvedValueOnce({ data: { success: true, signatures: [] } });
     const { signer } = useNativeSwapSigner({ getPassword: async () => '', getPrfBytes: async () => new Uint8Array() });
@@ -108,6 +122,7 @@ describe('useNativeSwapSigner', () => {
     const call = sendToBackgroundFromOptions.mock.calls.at(-1)![0];
     expect(call.method).toBe('TREZOR');
     expect(call.data.txCbor).toBe('CBOR');
+    expect(dispatchTrezor).not.toHaveBeenCalled();
   });
 
   it('dispatches Keystone wallets to the QR flow; onKeystoneScan resolves signTx', async () => {

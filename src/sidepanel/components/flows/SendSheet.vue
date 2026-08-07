@@ -563,6 +563,7 @@ import { Blockchain, Network, WalletType } from '@/models/types';
 import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
 import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import ledgerUtils from '@/shared/utils/ledger';
+import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
 import { createKeystoneSignRequest, KeystoneSignRequestResponse, parseSignature } from '@/shared/utils/keystone';
 import { UR } from '@keystonehq/keystone-sdk';
 import adaHandleApi from '@/api/ada-handle.api';
@@ -1227,13 +1228,16 @@ async function signTrezor() {
   passwordError.value = '';
   try {
     txCbor.value = serializeCardanoJsSdkTx(tx.value);
-    const response = await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.TREZOR,
-      data: {
-        method: 'signTx',
-        txCbor: txCbor.value,
-      },
-    }) as BackgroundResponse<SignTxResponse>;
+    const data = {
+      method: 'signTx',
+      txCbor: txCbor.value,
+    };
+    const response = (featureFlagsStore.state.flags.isTrezorWebUsbEnabled
+      ? await dispatchTrezor(data)
+      : await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.TREZOR,
+        data,
+      })) as BackgroundResponse<SignTxResponse>;
 
     if (!response.data.success) {
       throw new Error(response.data.error || 'Trezor signing failed');

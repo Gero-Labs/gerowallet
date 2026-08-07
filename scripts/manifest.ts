@@ -231,6 +231,13 @@ async function getManifest() {
         matches: [
           '<all_urls>',
         ],
+        // Don't inject the wallet-standard/dApp provider into Trezor's own Suite:
+        // connect-webextension (coreMode 'suite-web') drives a suite.trezor.io
+        // connect-popup tab, and injecting window.cardano there disrupts its handshake.
+        exclude_matches: [
+          'https://suite.trezor.io/*',
+          'https://connect.trezor.io/*',
+        ],
         js: [ 'content/content.js' ],
         run_at: "document_start",
         all_frames: true

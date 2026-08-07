@@ -11,6 +11,8 @@ export interface FeatureFlags {
   // is hidden (shown as a "Soon" teaser) until flipped ON via gero-sync — this
   // replaces the hardcoded BITCOIN_REMOVED_2_7 comment-out in networks.ts.
   isBitcoinEnabled: boolean;
+  // Master gate for the daemon-free Trezor WebUSB signing path.
+  isTrezorWebUsbEnabled: boolean;
   isPoolOperatorEnabled: boolean;
   isNexusWithdrawalEnabled: boolean;
   isNexusUnstakeEnabled: boolean;
@@ -52,6 +54,7 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
     isPhysicalCardOrderingEnabled: false,
     isGoMiningEnabled: false,
     isBitcoinEnabled: false,
+    isTrezorWebUsbEnabled: false,
     isPoolOperatorEnabled: false,
     isNexusWithdrawalEnabled: false,
     isNexusUnstakeEnabled: false,
@@ -117,6 +120,7 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isPhysicalCardOrderingEnabled = featureFlagService.getFlag('isPhysicalCardOrderingEnabled', false);
     featureFlagsState.flags.isGoMiningEnabled = featureFlagService.getFlag('isGoMiningEnabled', false);
     featureFlagsState.flags.isBitcoinEnabled = featureFlagService.getFlag('isBitcoinEnabled', false);
+    featureFlagsState.flags.isTrezorWebUsbEnabled = featureFlagService.getFlag('isTrezorWebUsbEnabled', false);
     featureFlagsState.flags.isPoolOperatorEnabled = featureFlagService.getFlag('isPoolOperatorEnabled', false);
     featureFlagsState.flags.isNexusWithdrawalEnabled = featureFlagService.getFlag('isNexusWithdrawalEnabled', false);
     featureFlagsState.flags.isNexusUnstakeEnabled = featureFlagService.getFlag('isNexusUnstakeEnabled', false);
