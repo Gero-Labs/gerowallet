@@ -179,31 +179,38 @@ function errorMessage(err: unknown): string | undefined {
   return undefined;
 }
 
-export async function openSidebar(tabId: number, path: string) {
+// Returns true only if the side panel is (now) open for this tab: already
+// connected, or opened successfully here. Returns false when it couldn't be
+// opened — chrome.sidePanel.open() requires a user gesture, so a programmatic
+// (website-initiated) call can't open it. Callers MUST check this and fall back
+// to a popup window instead of waiting on a panel that will never appear.
+export async function openSidebar(tabId: number, path: string): Promise<boolean> {
   if (typeof tabId !== 'number') {
-    return null;
+    return false;
   }
-  // If this tab's panel is already connected, do NOT rewrite its path:
-  // setOptions with a new path reloads the panel document and destroys
-  // whatever the user was doing (half-filled send form, running flow).
-  if (!miniGeroPorts.has(tabId)) {
-    // Append tabId so the side panel can identify which tab it belongs to
-    const separator = path.includes('?') ? '&' : '?';
-    const fullPath = `${path}${separator}tabId=${tabId}`;
-    chrome.sidePanel.setOptions({
-      tabId,
-      path: fullPath,
-      enabled: true
-    });
+  // If this tab's panel is already connected, it's open — do NOT rewrite its
+  // path (setOptions reloads the panel document and destroys whatever the user
+  // was doing) and don't re-open it.
+  if (miniGeroPorts.has(tabId)) {
+    return true;
   }
+  // Append tabId so the side panel can identify which tab it belongs to
+  const separator = path.includes('?') ? '&' : '?';
+  const fullPath = `${path}${separator}tabId=${tabId}`;
+  chrome.sidePanel.setOptions({
+    tabId,
+    path: fullPath,
+    enabled: true
+  });
   try {
     await chrome.sidePanel.open({ tabId });
+    return true;
   } catch (e) {
-    // sidePanel.open() requires a user gesture; silently ignore when called programmatically
+    // No user gesture (e.g. website-initiated) — cannot open the side panel.
     const message = e instanceof Error ? e.message : String(e);
     console.debug('sidePanel.open skipped (no user gesture):', message);
+    return false;
   }
-  return tabId;
 }
 
 // Mini-gero: default to dashboard on icon click, restored from config after loadConfig()
@@ -531,7 +538,10 @@ chrome.webNavigation?.onCommitted.addListener(async (details) => {
       } else if (res === 'skip') {
         // nothing
       } else {
-        console.error(res['error'])
+        // urlScan failed (endpoint/network error) — handleBlacklisted returned the
+        // raw error. The site is NOT confirmed blacklisted, so fail open (don't block
+        // it); just log the real reason instead of res['error'] (undefined on an Error).
+        console.error('[websiteProtection] blacklist scan failed:', res instanceof Error ? res.message : res);
       }
     }
   }
@@ -617,11 +627,14 @@ app.add(METHOD.enable, (request, sendResponse) => {
     if (typeof tabId !== 'number') {
       return reply({ error: APIError.InternalError });
     }
-    // Phase 1: open the panel. Only if the panel itself can't open (side panel
-    // disabled) do we fall back to the legacy popup window.
-    try {
-      await openSidebar(tabId, 'sidepanel/index.html');
-    } catch {
+    // Phase 1: open the panel. A website-initiated enable carries no user
+    // gesture, so chrome.sidePanel.open() can't open it — only a user action
+    // may. When it can't open, show the prompt in a popup window instead of
+    // waiting on a panel that never appears (that was the connecting-spinner
+    // hang). The side panel is still used when the user already has it open
+    // (routeEnable delivers to the existing port before reaching here).
+    const opened = await openSidebar(tabId, 'sidepanel/index.html');
+    if (!opened) {
       return openPopupForEnable();
     }
     // Phase 2: wait for ANY panel port (through a lock screen, up to the long
@@ -664,22 +677,26 @@ app.add(METHOD.enable, (request, sendResponse) => {
       return reply({ error: APIError.AccountNotSet });
     }
     openSidebar(tabId, 'sidepanel/index.html')
-      .then(() => new Promise<boolean>((resolve) => {
-        const LOGIN_TIMEOUT_MS = 5 * 60 * 1000;
-        const started = Date.now();
-        const interval = setInterval(() => {
-          if (WalletStore.state.loggedWallet) {
-            clearInterval(interval);
-            resolve(true);
-          } else if (Date.now() - started >= LOGIN_TIMEOUT_MS) {
-            clearInterval(interval);
-            resolve(false);
-          }
-        }, 250);
-      }))
-      .then((loggedIn) => {
-        if (!loggedIn) return reply({ error: APIError.Refused });
-        routeEnable();
+      .then((opened) => {
+        // No user gesture → the side panel can't open; log in and connect via
+        // the popup window instead of waiting on a panel that never appears.
+        if (!opened) return openPopupForEnable();
+        return new Promise<boolean>((resolve) => {
+          const LOGIN_TIMEOUT_MS = 5 * 60 * 1000;
+          const started = Date.now();
+          const interval = setInterval(() => {
+            if (WalletStore.state.loggedWallet) {
+              clearInterval(interval);
+              resolve(true);
+            } else if (Date.now() - started >= LOGIN_TIMEOUT_MS) {
+              clearInterval(interval);
+              resolve(false);
+            }
+          }, 250);
+        }).then((loggedIn) => {
+          if (!loggedIn) return reply({ error: APIError.Refused });
+          routeEnable();
+        });
       })
       .catch(() => reply({ error: APIError.InternalError }));
     return true;
@@ -1110,7 +1127,9 @@ app.add(METHOD.signData, (request, sendResponse) => {
       return signDataReply({ error: APIError.InternalError });
     }
     openSidebar(tabId, 'sidepanel/index.html')
-      .then(() => waitForMiniGeroPort(5000, tabId))
+      // No user gesture → the panel can't open; skip the 5s port wait and fall
+      // straight to the popup window (via the catch below).
+      .then((opened) => opened ? waitForMiniGeroPort(5000, tabId) : Promise.reject(new Error('side panel needs a user gesture')))
       .then(() => handleMiniGeroSignData())
       .catch(() => {
         // Fallback: popup window
@@ -1199,12 +1218,12 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
       return signTxReply({ error: APIError.InternalError });
     }
 
-    // Phase 1: open the side panel. If the panel itself can't open (e.g. the
-    // user disabled the side panel), the popup window is the only way to show
-    // the prompt at all — fall back to it.
-    try {
-      await openSidebar(tabId, 'sidepanel/index.html');
-    } catch {
+    // Phase 1: open the side panel. A website-initiated request has no user
+    // gesture, so the side panel can't open (Chrome requires one) — the popup
+    // window is then the only way to show the prompt. Fall back to it instead of
+    // waiting on a panel that never appears.
+    const opened = await openSidebar(tabId, 'sidepanel/index.html');
+    if (!opened) {
       return openPopupForSignTx();
     }
 
@@ -2330,6 +2349,50 @@ app.addToOptions(MessageTypes.REVEAL_MPC_SRP, async (request, sendResponse) => {
     });
   }
   return true; // Required for async Chrome message handlers
+});
+
+app.addToOptions(MessageTypes.REFRESH_LOGGED_WALLET_SECRET, async (request, sendResponse) => {
+  try {
+    // After a spending-password change the DB ciphertext is rotated, but the
+    // in-memory copies still hold the OLD blob the OLD password can decrypt.
+    // Re-read the fresh record and refresh both the signing instance (WalletBg)
+    // and the reveal store (walletStore.loggedWallet). setLoggedWallet runs in
+    // the background context, so its broadcast also updates the options store.
+    // Only ciphertext is touched here — never plaintext secrets, never logged.
+    const walletId = request.data?.walletId;
+    const { getAllWallets } = await import('@/db/gero-db');
+    const wallets = await getAllWallets();
+    const fresh = walletId != null ? wallets?.[walletId] : undefined;
+    if (fresh) {
+      const walletBg = walletManager.getWallet();
+      if (walletBg && walletBg.id === walletId) {
+        walletBg.encryptedPrivateKey = fresh.encryptedPrivateKey;
+        walletBg.encryptedMnemonic = fresh.encryptedMnemonic;
+      }
+      if (walletStore.loggedWallet?.id === walletId) {
+        WalletStore.setLoggedWallet({
+          ...walletStore.loggedWallet,
+          encryptedPrivateKey: fresh.encryptedPrivateKey,
+          encryptedMnemonic: fresh.encryptedMnemonic,
+        });
+      }
+    }
+    sendResponse({
+      id: request.id,
+      data: { success: true },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  } catch (error) {
+    console.error('Error refreshing logged wallet secret:', error);
+    sendResponse({
+      id: request.id,
+      data: { success: false, error: getErrorMessage(error) },
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+  return true;
 });
 
 app.addToOptions(MessageTypes.VERIFY_SPENDING_PASSWORD, async (request, sendResponse) => {
@@ -3646,7 +3709,8 @@ app.add(BITCOIN_METHOD.enable, (request, sendResponse) => {
     handleMiniGeroBtcEnable();
   } else {
     openSidebar(tabId, 'sidepanel/index.html')
-      .then(() => waitForMiniGeroPort(5000, tabId))
+      // No user gesture → panel can't open; skip the 5s wait, use the popup.
+      .then((opened) => opened ? waitForMiniGeroPort(5000, tabId) : Promise.reject(new Error('side panel needs a user gesture')))
       .then(() => handleMiniGeroBtcEnable())
       .catch(() => {
         // Fallback: popup window
@@ -3789,7 +3853,8 @@ app.add(BITCOIN_METHOD.signPsbt, (request, sendResponse) => {
       return signPsbtReply({ error: APIError.InternalError });
     }
     return openSidebar(tabId, 'sidepanel/index.html')
-      .then(() => waitForMiniGeroPort(5000, tabId))
+      // No user gesture → panel can't open; skip the 5s wait, use the popup.
+      .then((opened) => opened ? waitForMiniGeroPort(5000, tabId) : Promise.reject(new Error('side panel needs a user gesture')))
       .then(() => handleMiniGeroSignPsbt())
       .catch(() => openPopupForSignPsbt());
   };
@@ -3847,8 +3912,11 @@ app.add(BITCOIN_METHOD.signPsbts, async (request, sendResponse) => {
 
     if (typeof tabId === 'number' && miniGeroPorts.has(tabId)) return viaMiniGero();
     if (typeof tabId !== 'number') throw APIError.InternalError;
+    // No user gesture → panel can't open; go straight to the popup instead of
+    // waiting on a port that never connects.
+    const opened = await openSidebar(tabId, 'sidepanel/index.html');
+    if (!opened) return viaPopup();
     try {
-      await openSidebar(tabId, 'sidepanel/index.html');
       await waitForMiniGeroPort(5000, tabId);
     } catch {
       return viaPopup();
@@ -3906,7 +3974,8 @@ app.add(BITCOIN_METHOD.signMessage, (request, sendResponse) => {
       return signMessageReply({ error: APIError.InternalError });
     }
     return openSidebar(tabId, 'sidepanel/index.html')
-      .then(() => waitForMiniGeroPort(5000, tabId))
+      // No user gesture → panel can't open; skip the 5s wait, use the popup.
+      .then((opened) => opened ? waitForMiniGeroPort(5000, tabId) : Promise.reject(new Error('side panel needs a user gesture')))
       .then(() => handleMiniGeroSignMessage())
       .catch(() => openPopupForSignMessage());
   };

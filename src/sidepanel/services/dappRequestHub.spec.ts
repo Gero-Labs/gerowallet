@@ -89,6 +89,51 @@ describe('dappRequestHub', () => {
     expect(hub.requestQueue.value.length).toBe(0);
   });
 
+  it('coalesces duplicate enable() from the same origin onto one prompt', async () => {
+    const { initDappRequestHub, hub } = await import('./dappRequestHub');
+    await initDappRequestHub();
+    hub.setOverlayReady(true);
+    const payload = { website: 'https://app.dexhunter.io' };
+    port._fire({ type: 'dapp-request', method: 'enable', requestId: 'e1', payload });
+    port._fire({ type: 'dapp-request', method: 'enable', requestId: 'e2', payload });
+    port._fire({ type: 'dapp-request', method: 'enable', requestId: 'e3', payload });
+    // Only the first prompts; the duplicates do not stack in the queue.
+    expect(hub.currentRequest.value?.requestId).toBe('e1');
+    expect(hub.requestQueue.value.length).toBe(0);
+    // Approving once answers all three enable() calls.
+    hub.approve(true);
+    for (const id of ['e1', 'e2', 'e3']) {
+      expect(port.postMessage).toHaveBeenCalledWith({
+        type: 'dapp-response', requestId: id, data: true, error: null,
+      });
+    }
+  });
+
+  it('rejecting a coalesced enable rejects every duplicate', async () => {
+    const { initDappRequestHub, hub } = await import('./dappRequestHub');
+    await initDappRequestHub();
+    hub.setOverlayReady(true);
+    const payload = { website: 'https://app.dexhunter.io' };
+    port._fire({ type: 'dapp-request', method: 'enable', requestId: 'e1', payload });
+    port._fire({ type: 'dapp-request', method: 'enable', requestId: 'e2', payload });
+    hub.reject();
+    for (const id of ['e1', 'e2']) {
+      expect(port.postMessage).toHaveBeenCalledWith({
+        type: 'dapp-response', requestId: id, data: null, error: 'user_rejected',
+      });
+    }
+  });
+
+  it('enable() from different origins each get their own prompt', async () => {
+    const { initDappRequestHub, hub } = await import('./dappRequestHub');
+    await initDappRequestHub();
+    hub.setOverlayReady(true);
+    port._fire({ type: 'dapp-request', method: 'enable', requestId: 'a1', payload: { website: 'https://a.io' } });
+    port._fire({ type: 'dapp-request', method: 'enable', requestId: 'b1', payload: { website: 'https://b.io' } });
+    expect(hub.currentRequest.value?.requestId).toBe('a1');
+    expect(hub.requestQueue.value.map((r) => r.requestId)).toEqual(['b1']);
+  });
+
   it('NACKs unknown methods instead of dropping them', async () => {
     const { initDappRequestHub } = await import('./dappRequestHub');
     await initDappRequestHub();
