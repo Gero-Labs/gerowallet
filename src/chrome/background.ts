@@ -1130,7 +1130,9 @@ app.add(METHOD.signData, (request, sendResponse) => {
       return signDataReply({ error: APIError.InternalError });
     }
     openSidebar(tabId, 'sidepanel/index.html')
-      .then(() => waitForMiniGeroPort(5000, tabId))
+      // No user gesture → the panel can't open; skip the 5s port wait and fall
+      // straight to the popup window (via the catch below).
+      .then((opened) => opened ? waitForMiniGeroPort(5000, tabId) : Promise.reject(new Error('side panel needs a user gesture')))
       .then(() => handleMiniGeroSignData())
       .catch(() => {
         // Fallback: popup window
@@ -3666,7 +3668,8 @@ app.add(BITCOIN_METHOD.enable, (request, sendResponse) => {
     handleMiniGeroBtcEnable();
   } else {
     openSidebar(tabId, 'sidepanel/index.html')
-      .then(() => waitForMiniGeroPort(5000, tabId))
+      // No user gesture → panel can't open; skip the 5s wait, use the popup.
+      .then((opened) => opened ? waitForMiniGeroPort(5000, tabId) : Promise.reject(new Error('side panel needs a user gesture')))
       .then(() => handleMiniGeroBtcEnable())
       .catch(() => {
         // Fallback: popup window
@@ -3809,7 +3812,8 @@ app.add(BITCOIN_METHOD.signPsbt, (request, sendResponse) => {
       return signPsbtReply({ error: APIError.InternalError });
     }
     return openSidebar(tabId, 'sidepanel/index.html')
-      .then(() => waitForMiniGeroPort(5000, tabId))
+      // No user gesture → panel can't open; skip the 5s wait, use the popup.
+      .then((opened) => opened ? waitForMiniGeroPort(5000, tabId) : Promise.reject(new Error('side panel needs a user gesture')))
       .then(() => handleMiniGeroSignPsbt())
       .catch(() => openPopupForSignPsbt());
   };
@@ -3867,8 +3871,11 @@ app.add(BITCOIN_METHOD.signPsbts, async (request, sendResponse) => {
 
     if (typeof tabId === 'number' && miniGeroPorts.has(tabId)) return viaMiniGero();
     if (typeof tabId !== 'number') throw APIError.InternalError;
+    // No user gesture → panel can't open; go straight to the popup instead of
+    // waiting on a port that never connects.
+    const opened = await openSidebar(tabId, 'sidepanel/index.html');
+    if (!opened) return viaPopup();
     try {
-      await openSidebar(tabId, 'sidepanel/index.html');
       await waitForMiniGeroPort(5000, tabId);
     } catch {
       return viaPopup();
@@ -3926,7 +3933,8 @@ app.add(BITCOIN_METHOD.signMessage, (request, sendResponse) => {
       return signMessageReply({ error: APIError.InternalError });
     }
     return openSidebar(tabId, 'sidepanel/index.html')
-      .then(() => waitForMiniGeroPort(5000, tabId))
+      // No user gesture → panel can't open; skip the 5s wait, use the popup.
+      .then((opened) => opened ? waitForMiniGeroPort(5000, tabId) : Promise.reject(new Error('side panel needs a user gesture')))
       .then(() => handleMiniGeroSignMessage())
       .catch(() => openPopupForSignMessage());
   };
