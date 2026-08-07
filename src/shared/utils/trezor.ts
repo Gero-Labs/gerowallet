@@ -701,16 +701,16 @@ export default {
     }
 
     try {
-      // Daemon-free path: coreMode 'popup' runs the connect core in a
-      // connect.trezor.io/9 popup tab (connect-webextension injects its content
-      // script there), where WebUSB is available — no local Trezor Bridge
-      // (trezord :21335) required. 'popup' is the shipped default target and skips
-      // the bridge-first attempt that auto/undefined coreMode makes before every call.
-      // NOT 'suite-web': suite.trezor.io/web/connect-popup 302-redirects to the Suite
-      // dashboard so the handshake never completes. NOT 'auto': tries bridge first.
+      // Service-worker path (flag OFF). The SW has no window.open, so it cannot run
+      // the connect core / WebUSB itself and cannot inject the connect content-script
+      // the tab path needs — every daemon-free coreMode fails here (suite-web
+      // 302-redirects, popup can't inject the content-script). So the SW stays on the
+      // Bridge transport (needs trezord). The daemon-free WebUSB path lives in the
+      // document context (trezorWeb.ts, flag ON). See project_trezor_webusb_daemon_free.
       await TrezorConnect.init({
         manifest: TREZOR_MANIFEST,
-        coreMode: 'popup',
+        transports: ['WebUsbTransport', 'BridgeTransport', 'BluetoothTransport', 'NativeBluetoothTransport'],
+        connectSrc: 'https://connect.trezor.io/9/',
         _extendWebextensionLifetime: true,
       });
       this.initialized = true;
