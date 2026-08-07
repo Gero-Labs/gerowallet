@@ -715,9 +715,12 @@ export async function submitTx(tx: string, chain: string, network: string): Prom
 }
 
 export const urlScan = async (url: string) => {
+  // Short timeout: this feeds the phishing blacklist check, which fails open.
+  // Without it a hanging Shield/backend would stall the fetch indefinitely.
   return fetch(`${baseUrl}/api/url/scan?url=${url}`, {
     method: 'GET',
     headers: { 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(6000),
   });
 };
 

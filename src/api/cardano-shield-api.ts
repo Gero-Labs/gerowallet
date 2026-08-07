@@ -4,7 +4,10 @@ import { TxScanRequest, TxScanResponse } from '@/models/cardano-shield-types';
 
 const axiosInstance = axios.create({
   baseURL: import.meta.env['VITE_BACKEND_URL'],
-  timeout: 120000,
+  // Shield is advisory (risk badges). Keep the timeout short so a slow/down
+  // Shield fails fast to 'unknown' instead of spinning — it must never gate or
+  // delay the connect/sign UX. Callers already treat failures as fail-open.
+  timeout: 8000,
   headers: {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*',
