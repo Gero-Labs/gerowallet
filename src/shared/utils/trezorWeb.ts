@@ -704,11 +704,22 @@ export default {
     }
 
     try {
+      // Force env 'web' + coreMode 'popup'. connect-web auto-detects env
+      // 'webextension' whenever chrome.runtime.onConnect exists — true even in this
+      // sidepanel/options document — which routes to a browser tab + a connect
+      // content-script the package never injects, so the handshake times out. env
+      // 'web' takes the window.open + postMessage path instead: the connect core and
+      // WebUSB transport run in the popup window (no content-script, no Trezor Bridge
+      // daemon). This only works from a document (has window.open), never the SW.
+      // env is an internal ConnectSettings field, hence the cast.
       await TrezorConnect.init({
         manifest: TREZOR_MANIFEST,
         transports: ['WebUsbTransport', 'BridgeTransport'],
+        connectSrc: 'https://connect.trezor.io/9/',
+        coreMode: 'popup',
+        env: 'web',
         lazyLoad: true,
-      });
+      } as Parameters<typeof TrezorConnect.init>[0]);
       this.initialized = true;
     } catch (error) {
       console.error('[TREZOR] Initialization failed:', error);
