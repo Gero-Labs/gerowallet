@@ -1332,6 +1332,7 @@ export default {
    * @param accountIndex - Account index
    * @returns Signed PSBT in base64 format
    */
+  // Note: this is the BITCOIN sign (PSBT); the Cardano sign is `cardanoSignTransaction` above.
   async signTransaction(
     psbt: string,
     _addressType: string = 'segwit',

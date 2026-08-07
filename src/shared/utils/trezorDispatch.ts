@@ -4,7 +4,7 @@ import networks from '@/utils/networks';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { SENDER, TARGET } from '@/chrome/config';
 import WalletStore from '@/stores/walletStore';
-import trezorWeb from '@/shared/utils/trezorWeb';
+import { debugLog } from '@/utils/debug';
 
 /**
  * Document-context dispatcher for Trezor operations (WebUSB + Bridge transport).
@@ -26,6 +26,11 @@ import trezorWeb from '@/shared/utils/trezorWeb';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function dispatchTrezor(data: any): Promise<any> {
   try {
+    // Lazy-loaded so `@trezor/connect-web` (pulled in by trezorWeb) is only added
+    // to a document bundle when Trezor WebUSB is actually dispatched, instead of
+    // being statically bundled for every user of the 8 Cardano sender sites.
+    const trezorWeb = (await import('@/shared/utils/trezorWeb')).default;
+
     if (data.method === 'initTrezor') {
       const network = networks.resolveNetwork(data.chain, data.network);
 
@@ -151,7 +156,7 @@ export async function dispatchTrezor(data: any): Promise<any> {
       sender: SENDER.extension,
     };
   } catch (err) {
-    console.error('[TREZOR WebUSB] Error:', err);
+    debugLog('[TREZOR WebUSB] Error:', err);
     return {
       data: { success: false, error: (err instanceof Error ? err.message : 'Trezor operation failed') },
       target: TARGET,
