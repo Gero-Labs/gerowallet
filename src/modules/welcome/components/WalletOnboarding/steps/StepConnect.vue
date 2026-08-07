@@ -33,8 +33,6 @@
       <div v-if="walletType === WalletType.Trezor">
         <ul class="text-left" style="line-height: 1.5">
           <li>{{ $t('welcome.setupHardwareWallet', { walletType }) }}</li>
-          <li v-if="isBitcoin">{{ $t('welcome.installBitcoinApp', { walletType }) }}</li>
-          <li v-else>{{ $t('welcome.installCardanoApp', { walletType }) }}</li>
           <li>{{ $t('welcome.unlockHardwareWallet') }}</li>
         </ul>
       </div>
