@@ -11,6 +11,7 @@ export interface FeatureFlags {
   // is hidden (shown as a "Soon" teaser) until flipped ON via gero-sync — this
   // replaces the hardcoded BITCOIN_REMOVED_2_7 comment-out in networks.ts.
   isBitcoinEnabled: boolean;
+  isTrezorWebUsbEnabled: boolean;
   isPoolOperatorEnabled: boolean;
   isNexusWithdrawalEnabled: boolean;
   isNexusUnstakeEnabled: boolean;
@@ -52,6 +53,7 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
     isPhysicalCardOrderingEnabled: false,
     isGoMiningEnabled: false,
     isBitcoinEnabled: false,
+    isTrezorWebUsbEnabled: false,
     isPoolOperatorEnabled: false,
     isNexusWithdrawalEnabled: false,
     isNexusUnstakeEnabled: false,
