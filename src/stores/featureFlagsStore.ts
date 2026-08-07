@@ -120,6 +120,7 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isPhysicalCardOrderingEnabled = featureFlagService.getFlag('isPhysicalCardOrderingEnabled', false);
     featureFlagsState.flags.isGoMiningEnabled = featureFlagService.getFlag('isGoMiningEnabled', false);
     featureFlagsState.flags.isBitcoinEnabled = featureFlagService.getFlag('isBitcoinEnabled', false);
+    featureFlagsState.flags.isTrezorWebUsbEnabled = featureFlagService.getFlag('isTrezorWebUsbEnabled', false);
     featureFlagsState.flags.isPoolOperatorEnabled = featureFlagService.getFlag('isPoolOperatorEnabled', false);
     featureFlagsState.flags.isNexusWithdrawalEnabled = featureFlagService.getFlag('isNexusWithdrawalEnabled', false);
     featureFlagsState.flags.isNexusUnstakeEnabled = featureFlagService.getFlag('isNexusUnstakeEnabled', false);
