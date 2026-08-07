@@ -37,6 +37,41 @@ let resolvedTabId = '';
 // because background now parks requests on disconnect instead of rejecting.
 const pendingResponses: Array<{ requestId: string; data: DAppResponseData; error: string | null }> = [];
 const seenRequestIds = new Set<string>();
+// Duplicate enable() calls from the SAME origin coalesce onto one prompt.
+// dApps (e.g. DexHunter) fire enable() several times on load; each gets a
+// distinct requestId, so without this every call stacked its own Connection
+// Request. Here: origin -> requestIds of the duplicates waiting on the primary
+// prompt's answer. When the primary is approved/rejected they all get the same
+// response — approving once connects, no prompt spam.
+const coalescedEnables = new Map<string, string[]>();
+
+function originOf(req: DAppRequest): string {
+  const p = req.payload as { website?: string } | null;
+  return p && typeof p.website === 'string' ? p.website : '';
+}
+
+// Deliver the primary enable's answer to every coalesced duplicate for its
+// origin, mirroring respond()'s dedupe-set eviction rules.
+function drainCoalescedEnables(origin: string, data: DAppResponseData, error: string | null) {
+  if (!origin) return;
+  const ids = coalescedEnables.get(origin);
+  if (!ids) return;
+  coalescedEnables.delete(origin);
+  for (const id of ids) {
+    const delivered = safePost({ type: 'dapp-response', requestId: id, data, error });
+    if (!delivered) pendingResponses.push({ requestId: id, data, error });
+    else seenRequestIds.delete(id);
+  }
+}
+
+// An enable for this origin already prompting or queued? Then a new enable is a
+// duplicate that should wait on that one, not open its own prompt.
+function hasPendingEnable(origin: string): boolean {
+  if (!origin) return false;
+  if (currentRequest.value?.method === 'enable' && originOf(currentRequest.value) === origin) return true;
+  if (coalescedEnables.has(origin)) return true;
+  return requestQueue.value.some((r) => r.method === 'enable' && originOf(r) === origin);
+}
 
 function resolveTabId(): Promise<string> {
   const search = typeof window !== 'undefined' ? window.location.search : '';
@@ -75,6 +110,17 @@ function connect() {
     }
     if (seenRequestIds.has(message.requestId)) return; // re-delivery dedupe
     seenRequestIds.add(message.requestId);
+    // Coalesce duplicate enable() from the same origin: it waits on the primary
+    // prompt instead of stacking its own (see coalescedEnables).
+    if (message.method === 'enable') {
+      const origin = originOf(message);
+      if (hasPendingEnable(origin)) {
+        const ids = coalescedEnables.get(origin) ?? [];
+        ids.push(message.requestId);
+        coalescedEnables.set(origin, ids);
+        return;
+      }
+    }
     // Always enqueue, then let promoteNext() decide whether it can be shown.
     // It only becomes the visible currentRequest when the overlay is actually
     // mounted (wallet unlocked) — a request delivered while locked stays queued
@@ -124,6 +170,9 @@ function flushPendingResponses() {
 }
 
 function respond(requestId: string, data: DAppResponseData, error: string | null = null) {
+  // Captured before currentRequest is cleared: if this is an enable, its
+  // coalesced duplicates get the same answer.
+  const finalized = currentRequest.value;
   const delivered = safePost({ type: 'dapp-response', requestId, data, error });
   if (!delivered) {
     pendingResponses.push({ requestId, data, error });
@@ -139,6 +188,9 @@ function respond(requestId: string, data: DAppResponseData, error: string | null
   if (delivered) seenRequestIds.delete(requestId);
   currentRequest.value = null;
   isVisible.value = false;
+  if (finalized?.requestId === requestId && finalized.method === 'enable') {
+    drainCoalescedEnables(originOf(finalized), data, error);
+  }
   promoteNext();
 }
 
@@ -186,12 +238,16 @@ function reject(reason = 'user_rejected') {
 function rejectQueued(requestId: string, reason = 'user_rejected') {
   const idx = requestQueue.value.findIndex((r) => r.requestId === requestId);
   if (idx === -1) return;
-  requestQueue.value.splice(idx, 1);
+  const [removed] = requestQueue.value.splice(idx, 1);
   const delivered = safePost({ type: 'dapp-response', requestId, data: null, error: reason });
   if (!delivered) pendingResponses.push({ requestId, data: null, error: reason });
   // Same rule as respond(): only evict from the dedupe set on real delivery,
   // so a parked re-delivery of an already-rejected request is swallowed.
   if (delivered) seenRequestIds.delete(requestId);
+  // Rejecting a queued primary enable also rejects its coalesced duplicates.
+  if (removed?.method === 'enable') {
+    drainCoalescedEnables(originOf(removed), null, reason);
+  }
 }
 
 /** Reject everything: every queued item, then the currently displayed one. */
