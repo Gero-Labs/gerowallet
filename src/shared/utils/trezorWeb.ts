@@ -763,15 +763,26 @@ export default {
       const deviceName = features['label'] || 'Trezor';
       const model = features['model'];
 
-      // Get public key from Trezor
-      const res = await TrezorConnect.cardanoGetPublicKey({
+      // Get public key from Trezor. On the connect-web (WebUSB) path the very first
+      // call right after the popup opens can resolve success:true with an incomplete
+      // payload (node missing) — retry once so pairing succeeds on the first attempt
+      // instead of erroring and needing a second click.
+      const getKey = () => TrezorConnect.cardanoGetPublicKey({
         path: `m/${purpose.hdwallet}'/${coin_type.cardano}'/${accountIndex}'`,
         showOnTrezor: false, // Don't show on device during pairing
       } as Trezor.CardanoGetPublicKey);
 
+      let res = await getKey();
+      if (res.success && !res.payload?.node) {
+        res = await getKey();
+      }
+
       if (!res.success) {
         const errorMessage = 'error' in res.payload ? res.payload.error : 'Failed to get Trezor public key';
         throw new Error(errorMessage);
+      }
+      if (!res.payload?.node) {
+        throw new Error('Trezor returned an incomplete public key. Please try again.');
       }
 
       const chainCode = res.payload.node.chain_code;
