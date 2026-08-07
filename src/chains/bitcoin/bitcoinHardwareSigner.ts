@@ -9,6 +9,7 @@
 
 import * as bitcoin from 'bitcoinjs-lib';
 import { WalletType } from '@/models/types';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { getBitcoinNetwork, finalizePsbt } from './bitcoinPsbtBuilder';
 
 /**
@@ -74,7 +75,7 @@ export async function signPsbtWithLedger(
 }
 
 /**
- * Sign PSBT with Trezor hardware wallet (via background script)
+ * Sign PSBT with Trezor hardware wallet (called from a document/popup context)
  *
  * @param psbt PSBT to sign (hex or base64 string)
  * @param network Bitcoin network
@@ -87,12 +88,16 @@ export async function signPsbtWithTrezor(
   addressType: string = 'segwit'
 ): Promise<HardwareSigningResult> {
   try {
-    // Trezor signing happens via background script message handler
-    // This function is called from the background, so we can directly import
-    const trezor = await import('@/shared/utils/trezor');
-
-    // Sign PSBT with Trezor
-    const signedPsbtHex = await trezor.default.signBitcoinTransaction(psbt, addressType);
+    // This function is called from a document context (popup), not the background,
+    // so it can use trezorWeb (connect-web WebUSB) when the flag is enabled.
+    let signedPsbtHex: string;
+    if (featureFlagsStore.state.flags.isTrezorWebUsbEnabled) {
+      const trezorWeb = (await import('@/shared/utils/trezorWeb')).default;
+      signedPsbtHex = await trezorWeb.signTransaction(psbt, addressType);
+    } else {
+      const trezor = (await import('@/shared/utils/trezor')).default;
+      signedPsbtHex = await trezor.signBitcoinTransaction(psbt, addressType);
+    }
 
     // Parse signed PSBT
     const bitcoinNetwork = getBitcoinNetwork(network);
