@@ -2485,6 +2485,32 @@ async function signDataHw() {
 
   try {
     const { address, payload } = currentRequest.value.payload;
+
+    // Trezor: route through the Trezor handler (WebUSB when isTrezorWebUsbEnabled
+    // is on, else the SW bridge), exactly like the popup DappSignData view. The
+    // generic SIGN_DATA path only implements Ledger and otherwise falls through to
+    // a spending-password sign — which is why Trezor signData failed with
+    // "Wrong password". Maps the Trezor response's signatureData -> { signature, key }.
+    if (walletType.value === WalletType.Trezor) {
+      const data = { method: 'signData', address, payload, accountIndex: 0 };
+      const response = (featureFlagsStore.state.flags.isTrezorWebUsbEnabled
+        ? await dispatchTrezor(data)
+        : await Messaging.sendToBackgroundFromOptions({
+          method: MessageTypes.TREZOR,
+          data,
+        })) as BackgroundResponse<{ signatureData?: { signatureHex: string; signingPublicKeyHex: string }; error?: string }>;
+
+      if (!response.data.success || !response.data.signatureData) {
+        throw new Error(response.data.error || 'Trezor signing failed');
+      }
+      approve({
+        signature: response.data.signatureData.signatureHex,
+        key: response.data.signatureData.signingPublicKeyHex,
+      });
+      return;
+    }
+
+    // Ledger (and any other USB HW handled by the SW SIGN_DATA path)
     const res = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SIGN_DATA,
       data: {
