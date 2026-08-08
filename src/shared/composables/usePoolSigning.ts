@@ -185,8 +185,7 @@ function computeHotKeyFundAmount(
  * and the cold key. This composable handles:
  * - Software cold key: sends SIGN_TX_WITH_POOL_KEYS message to background
  * - Ledger wallet: a 2-tx orchestration (fund the ephemeral hot fee key from
- *   the Ledger, then owner-mode-sign the pool-update tx) — see
- *   docs/superpowers/specs/2026-07-23-ledger-pool-update-design.md
+ *   the Ledger, then owner-mode-sign the pool-update tx)
  */
 export function usePoolSigning(options: {
   tx: Ref<Cardano.Tx | undefined | null>;

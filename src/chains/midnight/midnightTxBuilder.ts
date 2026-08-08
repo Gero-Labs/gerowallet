@@ -25,8 +25,7 @@
 // `balanceAndSignUnshieldedTransfer` — so `midnightShieldSwapBuilder.ts`
 // (WP-SH2, 2026-07-13) can reuse the identical DUST-sync and NightExternal-
 // signing pipelines for the unshielded half of a shield/unshield conversion,
-// instead of forking either. See
-// docs/plans/2026-07-13-midnight-shield-unshield.md section 0 and WP-SH2.
+// instead of forking either (WP-SH2).
 
 import type * as ledger from '@midnight-ntwrk/ledger-v8';
 import type { MidnightNetworkEndpoints } from '@/chains/midnight/midnightConfig';

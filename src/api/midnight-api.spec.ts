@@ -3,7 +3,7 @@ import { convertDustStatus } from './midnight-api';
 
 describe('convertDustStatus', () => {
   // Captured shape of a real Nexus `dust/status` response (mainnet, verified
-  // 2026-07-25 — see docs/superpowers/plans/2026-07-25-dust-battery-path-b.md).
+  // 2026-07-25).
   // The wallet-side conversion from this snake_case wire payload to the
   // camelCase DTO was missing entirely for a full release: every hyphenated
   // field (`dust_address`, `night_balance`, `generation_rate`,

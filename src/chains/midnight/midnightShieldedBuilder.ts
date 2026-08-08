@@ -19,7 +19,7 @@
 // self-hosted docker proof server BEFORE serializing, so the returned hex
 // is a FinalizedTransaction ready for Nexus's /tx/submit-proven instead of
 // /tx/prove-and-submit — no witness data leaves this machine. See
-// midnightLocalProver.ts and docs/plans/2026-07-13-midnight-proof-server-setting.md.
+// midnightLocalProver.ts.
 //
 // Phase 1 wallet sync model: the SDK is started with the raw seed each send,
 // then sync from scratch until it has the user's notes. Cold-sync from a
@@ -31,8 +31,7 @@
 // are exported (not just used internally) so `midnightShieldSwapBuilder.ts`
 // (WP-SH2, 2026-07-13) can build a shielded `initSwap` output through the
 // exact same wallet-startup/sync/restore pipeline as a plain shielded send,
-// instead of forking it — see docs/plans/2026-07-13-midnight-shield-unshield.md
-// section 0 and WP-SH2.
+// instead of forking it (WP-SH2).
 
 import type * as ledger from '@midnight-ntwrk/ledger-v8';
 import type { MidnightNetworkEndpoints } from '@/chains/midnight/midnightConfig';

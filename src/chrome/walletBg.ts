@@ -2159,7 +2159,7 @@ export class WalletBg {
    * With {@code proving}: proves + binds locally against the given proof
    * server first, so `signedTxHex` is a finalized tx ready for
    * /tx/submit-proven instead — no witness data leaves this machine. See
-   * midnightShieldedBuilder.ts and docs/plans/2026-07-13-midnight-proof-server-setting.md.
+   * midnightShieldedBuilder.ts.
    *
    * Privacy: when `proven` is false the returned hex embeds the witness
    * data the prover needs. Caller (UI) has surfaced consent that we're
@@ -2303,8 +2303,7 @@ export class WalletBg {
    * conversion: move `amount` of public (unshielded) NIGHT into a brand-new
    * shielded output at the wallet's OWN shielded address. No recipient
    * parameter — shield/unshield always moves value between the wallet's own
-   * two addresses, never to a third party (see
-   * docs/plans/2026-07-13-midnight-shield-unshield.md, WP-SH3).
+   * two addresses, never to a third party (WP-SH3).
    *
    * Mirrors `buildAndSignMidnightShieldedTransfer`'s structure: decrypt the
    * mnemonic, derive Midnight keys, cross-check the cached Zswap viewing key

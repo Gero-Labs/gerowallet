@@ -173,7 +173,7 @@ export default defineComponent({
         changeAddress: senderAddress,
         utxos: [],
         // Note: utxos is [] here because Nexus does server-side UTxO selection
-        // per the DexHunter -> Nexus cutoff plan (docs/plans/2026-06-24-dexhunter-nexus-cutoff.md).
+        // per the DexHunter -> Nexus cutoff plan.
       });
     }
 

@@ -13,7 +13,7 @@ building/signing; sync and orchestration live in `src/services/midnight-*.ts`.
 | `midnightKeyManager.ts` | HD derivation from BIP39 mnemonic: `m/44'/2400'/account'/role/index`. Roles (wallet-sdk-hd 3.x): NightExternal=0, Dust=2, Zswap=3, Metadata=4. Also derives the Cardano CIP-1852 material (same mnemonic) for DUST registration, and the indexer viewing key (`mn_shield-esk_…` — the encryption SECRET key). |
 | `midnightTxBuilder.ts` | BG-side DUST-balance (`syncDustWalletAndBalanceFees`) + NightExternal-sign (`signUnshieldedSegments`) of an unshielded NIGHT transfer pre-built by Nexus. Both steps are exported standalone (not just inlined in `balanceAndSignUnshieldedTransfer`) so `midnightShieldSwapBuilder.ts` can reuse them. Returns signed-but-unproven hex; sidecar `/tx/finalize` proves + submits. |
 | `midnightShieldedBuilder.ts` | BG-side build + sign of a shielded transfer (wallet owns the full pre-prove pipeline). `startAndSyncShieldedWallet` (the sync/restore dance) and `NIGHT_RAW_TOKEN_TYPE` are exported so `midnightShieldSwapBuilder.ts` can reuse them. Sidecar `/tx/prove-and-submit` proves (in-process WASM) + submits, gated by user consent. |
-| `midnightShieldSwapBuilder.ts` | BG-side build + sign of the shield/unshield conversion's **shield** direction only (public NIGHT -> private; see ground rule 16 in the shield-unshield plan — unshield isn't built until a real shield succeeds on-chain). Merges a Nexus-built unshielded half (swap mode, WP-SH1) with a client-side `ShieldedWallet.initSwap` shielded half, balances DUST once against the combined tx, optionally proves locally. See docs/plans/2026-07-13-midnight-shield-unshield.md. |
+| `midnightShieldSwapBuilder.ts` | BG-side build + sign of the shield/unshield conversion's **shield** direction only (public NIGHT -> private; see ground rule 16 in the shield-unshield plan — unshield isn't built until a real shield succeeds on-chain). Merges a Nexus-built unshielded half (swap mode, WP-SH1) with a client-side `ShieldedWallet.initSwap` shielded half, balances DUST once against the combined tx, optionally proves locally. |
 | `midnightWalletStatePersistence.ts` | Persist/restore SDK `serializeState()` in `chrome.storage.local` (keyed network+kind+sha256(seed)) so sends resume from a cursor instead of cold-syncing from genesis. |
 
 ## SDK packages
@@ -22,7 +22,7 @@ Canonical npm scope is `@midnightntwrk/*` (see ADR 0007 in midnightntwrk/midnigh
 Exception: `@midnight-ntwrk/ledger-v8` stays on the dashed scope (upstream package).
 Pinned versions live in `package.json` — don't trust docs' version tables, they drift.
 
-## Load-bearing facts (verified; see docs/midnight/ + the midnight skill)
+## Load-bearing facts (verified against the midnight skill)
 
 - Unshielded signing: BIP-340 via `keystore.signData` per segment; segments may be
   0x-prefixed (walletBg strips before decoding).
@@ -31,5 +31,4 @@ Pinned versions live in `package.json` — don't trust docs' version tables, the
 - `waitForSyncedState()` hangs on an empty ledger in ALL SDK versions — both
   builders wrap it in a bounded `Promise.race` timeout.
 - No hardware-wallet support by design: ZK proving needs cleartext keys.
-- DApp connector (`window.midnight[uuid]`, spec v4) is NOT implemented yet — see
-  `docs/midnight/2026-07-05-midnight-ecosystem-audit.md` §6 for the plan.
+- DApp connector (`window.midnight[uuid]`, spec v4) is NOT implemented yet.
