@@ -959,6 +959,12 @@ async function isTrustedCollateralDapp(origin?: string): Promise<boolean> {
 }
 
 app.add(METHOD.getCollateral, async (request, sendResponse) => {
+  // Server-side whitelist gate (defense-in-depth), mirroring getBalance:
+  // only a connected dApp may read collateral UTxOs.
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+    return;
+  }
   const storedUtxos = WalletStore.state.utxos;
   try {
     const allowNexusFallback = await isTrustedCollateralDapp(request.origin);
@@ -5265,6 +5271,13 @@ app.add(MIDNIGHT_METHOD.connect, (request, sendResponse) => {
 });
 
 app.add(MIDNIGHT_METHOD.getUnshieldedAddress, async (request, sendResponse) => {
+  // Server-side whitelist gate (defense-in-depth): only a connected origin may
+  // read wallet data. Mirrors the Cardano reads; a non-connected origin gets
+  // Disconnected instead of silently leaking addresses/balances/history.
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'Not connected'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
   const { midnightStore } = await import('@/stores/midnightStore');
   const wallet = requireMidnightWallet();
   if (!wallet || !midnightStore.addresses.unshielded) {
@@ -5280,6 +5293,13 @@ app.add(MIDNIGHT_METHOD.getUnshieldedAddress, async (request, sendResponse) => {
 });
 
 app.add(MIDNIGHT_METHOD.getDustAddress, async (request, sendResponse) => {
+  // Server-side whitelist gate (defense-in-depth): only a connected origin may
+  // read wallet data. Mirrors the Cardano reads; a non-connected origin gets
+  // Disconnected instead of silently leaking addresses/balances/history.
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'Not connected'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
   const { midnightStore } = await import('@/stores/midnightStore');
   const wallet = requireMidnightWallet();
   if (!wallet || !midnightStore.addresses.dust) {
@@ -5301,6 +5321,13 @@ app.add(MIDNIGHT_METHOD.getDustAddress, async (request, sendResponse) => {
  * build plan doc §3 for the verification.
  */
 app.add(MIDNIGHT_METHOD.getShieldedAddresses, async (request, sendResponse) => {
+  // Server-side whitelist gate (defense-in-depth): only a connected origin may
+  // read wallet data. Mirrors the Cardano reads; a non-connected origin gets
+  // Disconnected instead of silently leaking addresses/balances/history.
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'Not connected'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
   const { midnightStore } = await import('@/stores/midnightStore');
   const wallet = requireMidnightWallet();
   const shieldedAddress = midnightStore.addresses.shielded;
@@ -5330,6 +5357,13 @@ app.add(MIDNIGHT_METHOD.getShieldedAddresses, async (request, sendResponse) => {
 });
 
 app.add(MIDNIGHT_METHOD.getUnshieldedBalances, async (request, sendResponse) => {
+  // Server-side whitelist gate (defense-in-depth): only a connected origin may
+  // read wallet data. Mirrors the Cardano reads; a non-connected origin gets
+  // Disconnected instead of silently leaking addresses/balances/history.
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'Not connected'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
   const { midnightStore } = await import('@/stores/midnightStore');
   const { NIGHT_TOKEN_TYPE_NULL } = await import('@/services/midnight-sync.service');
   const wallet = requireMidnightWallet();
@@ -5356,6 +5390,13 @@ app.add(MIDNIGHT_METHOD.getUnshieldedBalances, async (request, sendResponse) => 
 });
 
 app.add(MIDNIGHT_METHOD.getShieldedBalances, async (request, sendResponse) => {
+  // Server-side whitelist gate (defense-in-depth): only a connected origin may
+  // read wallet data. Mirrors the Cardano reads; a non-connected origin gets
+  // Disconnected instead of silently leaking addresses/balances/history.
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'Not connected'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
   const { midnightStore } = await import('@/stores/midnightStore');
   const { NIGHT_TOKEN_TYPE_NULL } = await import('@/services/midnight-sync.service');
   const wallet = requireMidnightWallet();
@@ -5376,6 +5417,13 @@ app.add(MIDNIGHT_METHOD.getShieldedBalances, async (request, sendResponse) => {
 });
 
 app.add(MIDNIGHT_METHOD.getDustBalance, async (request, sendResponse) => {
+  // Server-side whitelist gate (defense-in-depth): only a connected origin may
+  // read wallet data. Mirrors the Cardano reads; a non-connected origin gets
+  // Disconnected instead of silently leaking addresses/balances/history.
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'Not connected'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
   const { midnightStore } = await import('@/stores/midnightStore');
   const wallet = requireMidnightWallet();
   if (!wallet) {
@@ -5398,6 +5446,13 @@ app.add(MIDNIGHT_METHOD.getDustBalance, async (request, sendResponse) => {
 });
 
 app.add(MIDNIGHT_METHOD.getTxHistory, async (request, sendResponse) => {
+  // Server-side whitelist gate (defense-in-depth): only a connected origin may
+  // read wallet data. Mirrors the Cardano reads; a non-connected origin gets
+  // Disconnected instead of silently leaking addresses/balances/history.
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'Not connected'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
   const { midnightStore } = await import('@/stores/midnightStore');
   const wallet = requireMidnightWallet();
   if (!wallet) {
@@ -5424,6 +5479,13 @@ app.add(MIDNIGHT_METHOD.getTxHistory, async (request, sendResponse) => {
 });
 
 app.add(MIDNIGHT_METHOD.getConfiguration, async (request, sendResponse) => {
+  // Server-side whitelist gate (defense-in-depth): only a connected origin may
+  // read wallet data. Mirrors the Cardano reads; a non-connected origin gets
+  // Disconnected instead of silently leaking addresses/balances/history.
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'Not connected'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
   const wallet = requireMidnightWallet();
   if (!wallet) {
     sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected'), target: TARGET, sender: SENDER.extension });
