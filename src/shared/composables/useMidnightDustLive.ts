@@ -9,8 +9,7 @@
  * value and use the per-second `dust_generating` rate to extrapolate
  * smoothly between polls via a 1s nowTick.
  *
- * DUST reaches a wallet two ways (see
- * `docs/superpowers/plans/2026-07-25-dust-battery-path-b.md`): Path A is
+ * DUST reaches a wallet two ways: Path A is
  * native NIGHT UTxOs on Midnight — everything this file computed before the
  * Path-B work landed. Path B is cNIGHT held on Cardano, paired to this
  * wallet's dust address through the mapping validator; `useDustPathB` sums

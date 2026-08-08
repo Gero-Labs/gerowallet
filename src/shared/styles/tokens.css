@@ -1,7 +1,6 @@
 /* ============================================================
    Gero Design Language tokens. CANONICAL FILE.
-   Source: docs/design/2026-07-09-design-coherence-audit.md +
-   the Gero Design Language artifact (2026-07).
+   Source: the Gero Design Language artifact (2026-07).
    _tokens.scss MUST mirror these values; scripts/design/audit.mjs
    fails the build if the two files diverge.
    Chain-accent slots (--g-accent, --g-grad-1, --g-grad-2) are

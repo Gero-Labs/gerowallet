@@ -17,8 +17,7 @@ import {
  * @midnight-ntwrk/ledger-v8 (^8.1.0) - verified against Docker Hub
  * (midnightntwrk/proof-server tags) on 2026-07-13. Deliberately not
  * `latest`, which tracks the 9.0.0-rc stream (a newer, mismatched ledger
- * generation) - see docs/plans/2026-07-13-midnight-proof-server-setting.md
- * section 0.
+ * generation).
  */
 export const PROOF_SERVER_DOCKER_TAG = '8.1.0';
 export const PROOF_SERVER_DOCKER_COMMAND =

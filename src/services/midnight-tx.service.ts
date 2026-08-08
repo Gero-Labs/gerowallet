@@ -18,7 +18,6 @@
  *    throwaway dust secret (first-time registration is fee-free), BG signs
  *    the single intent segment, Nexus splices + submits. See bottom of file.
  *
- * See `docs/superpowers/plans/2026-05-26-midnight-tx-asymmetric-split.md`.
  */
 
 import { Messaging } from '@/chrome/messaging';
@@ -442,9 +441,9 @@ export async function sendShieldedNight(
 
 // ─── Shield conversion (public NIGHT -> private NIGHT) ───────────────────────
 //
-// See docs/plans/2026-07-13-midnight-shield-unshield.md, WP-SH4. Unshield
-// (private -> public) is intentionally NOT wired here yet — ground rule 16
-// of that plan: no real shield has succeeded on-chain yet, so there is
+// WP-SH4. Unshield
+// (private -> public) is intentionally NOT wired here yet — ground rule 16:
+// no real shield has succeeded on-chain yet, so there is
 // nothing to unshield to test against.
 
 /**

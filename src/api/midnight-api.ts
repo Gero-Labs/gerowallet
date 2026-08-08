@@ -339,8 +339,7 @@ export interface BuildMidnightTxResponse {
  * `midnightShieldSwapBuilder.ts`).
  *
  * WP-SH1 has shipped on nexus's `development` branch. The wire field names
- * were originally a best-effort guess (see docs/plans/2026-07-13-midnight-
- * shield-unshield.md section 0); `shieldAmount` turned out wrong and 400'd
+ * were originally a best-effort guess; `shieldAmount` turned out wrong and 400'd
  * with nexus's actual validator name: `swapAmountValidForMode: swapAmount
  * required (positive integer string) when swapMode is true`. Field names
  * below are now `swapMode` + `swapAmount`, confirmed against that response.

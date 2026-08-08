@@ -290,8 +290,7 @@ export const featureFlagsStore = {
   /**
    * Check if the cross-device signing bridge is enabled.
    * Ships DARK (default false): when off, no cross-device relay message is sent
-   * and the WebSocket service behaves exactly as before. See
-   * docs/plans/2026-06-29-cross-device-signing-bridge.md.
+   * and the WebSocket service behaves exactly as before.
    */
   isCrossDeviceSigningEnabled(): boolean {
     return featureFlagsState.flags.isCrossDeviceSigningEnabled;

@@ -2,7 +2,7 @@
 // (public NIGHT -> private/shielded NIGHT).
 //
 // Unshield (private -> public) is deliberately NOT implemented in this file
-// yet — ground rule 16 of docs/plans/2026-07-13-midnight-shield-unshield.md:
+// yet — ground rule 16:
 // no real shield has succeeded on-chain yet, so there is nothing to unshield
 // to test against. Build order per that plan's section 3: shield first,
 // human on-chain checkpoint, THEN unshield. See that plan's section 0 for
@@ -41,8 +41,7 @@
 //
 // No @midnightntwrk/wallet-sdk-facade or `effect` import, by design — hand-
 // rolled from pieces Gero already has, same reasoning as the local-prover
-// spike (docs/plans/2026-07-13-midnight-proof-server-setting.md ground
-// rule 12).
+// spike (ground rule 12).
 //
 // SEQUENCING NOTE (flag for the human on-chain checkpoint — plan section 3
 // step 5): this file signs the unshielded half LAST — after merging it with

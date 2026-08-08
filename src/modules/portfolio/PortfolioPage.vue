@@ -99,8 +99,7 @@
     </template>
 
     <!-- Empty state for wallets with no tokens. Mainnet Cardano skips this
-         page: it gets the market-first empty mode inside the main view below
-         (spec: docs/superpowers/specs/2026-07-15-market-first-empty-state-design.md). -->
+         page: it gets the market-first empty mode inside the main view below. -->
     <template v-else-if="isWalletEmpty && !isMainnetCardano">
       <v-row no-gutters>
         <v-col cols="12" class="pa-2">

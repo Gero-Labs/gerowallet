@@ -94,9 +94,8 @@ export enum MessageTypes {
   // Nexus-built unshielded half (swap mode) with a client-side
   // ShieldedWallet.initSwap shielded half, balances DUST once against the
   // combined tx, and returns signed-but-unproven hex by default (or
-  // finalized hex when `proving` is supplied). See
-  // docs/plans/2026-07-13-midnight-shield-unshield.md WP-SH3. Unshield is
-  // not wired yet (ground rule 16 of that plan).
+  // finalized hex when `proving` is supplied). Unshield is
+  // not wired yet (ground rule 16).
   BUILD_AND_SIGN_MIDNIGHT_SHIELD_TX = 'BUILD_AND_SIGN_MIDNIGHT_SHIELD_TX',
   // Midnight: record the user's consent to ship shielded-tx witness data to
   // Gero Cloud for proving. Browser routes the consent click here so BG can

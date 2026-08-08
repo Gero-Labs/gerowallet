@@ -28,8 +28,7 @@ interface WsHandlers {
   onForceResync?: () => Promise<void>;
   // Cross-device signing bridge (ships DARK behind isCrossDeviceSigningEnabled).
   // Purely additive: when unset, cross-device message types fall through to the
-  // existing "unknown type" default and nothing else changes. See
-  // docs/plans/2026-06-29-cross-device-signing-bridge.md.
+  // existing "unknown type" default and nothing else changes.
   onCrossDeviceMessage?: (raw: unknown) => void;
   /**
    * Fired inside onopen, immediately after SUBSCRIBE is sent, on the initial connect

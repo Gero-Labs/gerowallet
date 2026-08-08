@@ -12,8 +12,7 @@
  * client reduces to two plain fetches (see
  * `node_modules/@midnightntwrk/wallet-sdk-prover-client/dist/effect/HttpProverClient.js`)
  * behind an Effect + web-worker dependency graph this wallet doesn't
- * otherwise need. See docs/plans/2026-07-13-midnight-proof-server-setting.md
- * section 0 and ground rule 12.
+ * otherwise need.
  *
  * Runs in whichever context calls it — the BG service worker
  * (`midnightShieldedBuilder.ts`, local/zkPaaS shielded sends; reachable via

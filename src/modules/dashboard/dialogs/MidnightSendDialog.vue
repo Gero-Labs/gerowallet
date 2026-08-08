@@ -522,8 +522,7 @@ const timelineNodes = computed<TimelineNode[]>(() => {
   // Wallet-side shielded sends (WP-P5 local; zkPaaS hosted): the BG round
   // trip is one opaque proving+binding call with no percent signal, so it
   // gets a single indeterminate-bar node (staged copy, not a fake
-  // percentage — rule 14 in
-  // docs/plans/2026-07-13-midnight-proof-server-setting.md section 1) rather
+  // percentage — rule 14) rather
   // than the sync/sign split above, which is specific to DUST-balance sync.
   const provingActive = s === 'provingLocal' || s === 'provingZkpaas';
   const provingLabel = s === 'provingZkpaas'
