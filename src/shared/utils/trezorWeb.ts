@@ -1056,27 +1056,19 @@ export default {
         }
       }
 
-      // Find the matching key from the wallet's known addresses
-      // Check payment keys first
-      let matchingKey = keys.payment.find(key => key.address === normalizedAddress);
+      // Only sign for an address this wallet actually owns. Search payment,
+      // change, AND stake keys (mirrors the PRF signData path). A dApp-supplied
+      // address that matches none must be REJECTED — never fall back to signing
+      // with the stake key over an arbitrary payload for an address we don't own.
+      const matchingKey =
+        keys.payment.find(key => key.address === normalizedAddress) ||
+        keys.change.find(key => key.address === normalizedAddress) ||
+        keys.stake.find(key => key.address === normalizedAddress);
 
-      // If not found, check change keys
-      if (!matchingKey) {
-        matchingKey = keys.change.find(key => key.address === normalizedAddress);
+      if (!matchingKey?.path) {
+        throw new Error('Address not found in wallet keys');
       }
-
-      let derivationPath: string;
-
-      if (matchingKey && matchingKey.path) {
-        // Use the actual path from the matching key
-        derivationPath = matchingKey.path;
-      } else {
-        // Not found in payment/change keys - assume it's a stake address
-        // Use stake key path: m/1852'/1815'/accountIndex'/2/0
-        const role = 2; // ChainDerivations.CHIMERIC_ACCOUNT (stake key)
-        const index = 0; // Stake keys use index 0
-        derivationPath = `m/${purpose.hdwallet}'/${coin_type.cardano}'/${accountIndex}'/${role}/${index}`;
-      }
+      const derivationPath: string = matchingKey.path;
 
       // Sign the message with Trezor using the correct parameter structure
       const result = await TrezorConnect.cardanoSignMessage({

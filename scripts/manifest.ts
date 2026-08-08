@@ -46,12 +46,6 @@ function buildCSP(dev: boolean): string {
     // Babylon staking
     'https://*.babylonchain.io',
     'https://*.babylonlabs.io',
-    // Ably (real-time blockchain updates)
-    'wss://*.ably.net',
-    'wss://*.ably-realtime.com',
-    'https://*.ably-realtime.com',
-    'https://*.ably.io',
-    'wss://*.ably.io',
     // Kraken (price feed)
     'wss://ws.kraken.com',
     'https://api.kraken.com',
@@ -104,7 +98,6 @@ function buildCSP(dev: boolean): string {
       : ['ws://127.0.0.1:*', 'http://localhost:6300', 'http://127.0.0.1:6300']),
     // SPO Node Monitor (Cloudflare Tunnel)
     'https://*.trycloudflare.com',
-    'data:',
   ];
 
   const scriptSrc = dev

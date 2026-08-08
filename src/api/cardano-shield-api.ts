@@ -17,7 +17,7 @@ const axiosInstance = axios.create({
 export default {
   async scanUrl(url: string) {
     try {
-      const { data, status } = await axiosInstance.get(`/api/url/scan?url=${url}`);
+      const { data, status } = await axiosInstance.get(`/api/url/scan?url=${encodeURIComponent(url)}`);
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error) {
