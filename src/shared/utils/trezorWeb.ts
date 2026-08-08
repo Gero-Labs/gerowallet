@@ -43,6 +43,10 @@ interface TrezorTxTransformerContext {
  * WebUSB directly, falling back to Trezor Bridge when WebUSB is unavailable.
  */
 
+// Guards the one-time window.open patch that forces connect-web's UI to open as
+// a popup window instead of a tab (see init()).
+let windowOpenPatchedForTrezor = false;
+
 // Trezor Connect manifest configuration
 const TREZOR_MANIFEST = {
   appName: 'Gero Dashboard',
@@ -704,6 +708,25 @@ export default {
     }
 
     try {
+      // connect-web opens its UI via window.open(url, 'modal') with NO window
+      // features, which Chrome renders as a browser TAB. A tab lingers after the
+      // operation and keeps holding the WebUSB device, so back-to-back ops collide
+      // with "device is used by another application" / Failure_ActionCancelled.
+      // Force a popup WINDOW for connect.trezor.io URLs (features string) — connect
+      // owns and closes it after each op, releasing the device. Scoped to Trezor
+      // URLs; every other window.open is passed through untouched. Idempotent.
+      if (!windowOpenPatchedForTrezor && typeof window !== 'undefined') {
+        const nativeOpen = window.open.bind(window);
+        window.open = function patchedOpen(url?: string | URL, target?: string, features?: string): Window | null {
+          const href = typeof url === 'string' ? url : (url?.href ?? '');
+          if (href.includes('connect.trezor.io') && !features) {
+            return nativeOpen(url as string, target ?? 'modal', 'popup=yes,width=420,height=680');
+          }
+          return nativeOpen(url as string, target as string, features as string);
+        } as typeof window.open;
+        windowOpenPatchedForTrezor = true;
+      }
+
       // Force env 'web' + coreMode 'popup'. connect-web auto-detects env
       // 'webextension' whenever chrome.runtime.onConnect exists — true even in this
       // sidepanel/options document — which routes to a browser tab + a connect
