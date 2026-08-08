@@ -70,8 +70,7 @@ MEDIUM_ARTICLE_*.md
 email-templates/
 
 # Exported reports and vendored example bundles. No .docx/.pdf/.rar/.zip is
-# tracked anywhere in this repo, so ignore them wholesale rather than by name
-# (the .tgz SDK facade in the root IS tracked and is deliberately not listed).
+# tracked anywhere in this repo, so ignore them wholesale rather than by name.
 *.docx
 *.pdf
 *.rar
