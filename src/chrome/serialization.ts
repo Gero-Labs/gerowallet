@@ -1223,27 +1223,22 @@ export async function signDataCip8(
   // Find the address in knownAddresses that matches signWith
   let matchingAddress = knownAddresses.find(addr => addr.address === signWith);
 
-  // If not found in payment/change addresses, check if it's a stake address
+  // If not found in payment/change addresses, only sign with the stake key when
+  // signWith is one of THIS wallet's OWN reward accounts. A bare
+  // startsWith('stake') check would let a malicious dApp obtain a stake-key
+  // signature over an arbitrary payload for a reward address the user doesn't
+  // own — so match on ownership, never on the address prefix.
   if (!matchingAddress) {
-    // Check if signWith is a reward account (stake address)
-    const signWithStr = signWith.toString();
-    const isRewardAccount = signWithStr.startsWith('stake') ||
-                           knownAddresses.some(addr => addr.rewardAccount === signWith);
-
-    if (isRewardAccount) {
-      // Use stake key (role 2, index 0)
-      const firstAddress = knownAddresses[0];
-      if (!firstAddress) {
-        throw new Error(DataSignError.AddressNotPK.info);
-      }
-
+    const owningAddress = knownAddresses.find(addr => addr.rewardAccount === signWith);
+    if (owningAddress) {
+      // Use the stake key (role 2, index 0) of the owning account.
       matchingAddress = {
         type: ChainDerivations.CHIMERIC_ACCOUNT, // Stake key role
         index: 0,
-        networkId: firstAddress.networkId,
-        accountIndex: firstAddress.accountIndex,
-        address: firstAddress.address,
-        rewardAccount: signWith as Cardano.RewardAccount
+        networkId: owningAddress.networkId,
+        accountIndex: owningAddress.accountIndex,
+        address: owningAddress.address,
+        rewardAccount: owningAddress.rewardAccount
       };
     }
   }
