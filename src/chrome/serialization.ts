@@ -399,12 +399,18 @@ export function coalesceValueQuantities(quantities: Serialization.Value[]): Seri
   const value: Serialization.Value = new Serialization.Value(BigInt(0), new Map<Cardano.AssetId, bigint>());
   quantities.forEach((val: Serialization.Value) => {
     value.setCoin(value.coin() + val.coin());
-    const tokenMap = value.multiasset();
+    // @cardano-sdk/core 0.47: Value.multiasset() returns undefined for an
+    // ADA-only value (0.46 returned an empty Map). Default to a fresh Map, and
+    // only call setMultiasset when there are assets — setMultiasset(undefined)
+    // reads .size and throws.
+    const tokenMap = value.multiasset() ?? new Map<Cardano.AssetId, bigint>();
     val.multiasset()?.forEach((quantity, assetId) => {
       const current = tokenMap.get(assetId) ?? BigInt(0);
       tokenMap.set(assetId, current + quantity);
     })
-    value.setMultiasset(tokenMap);
+    if (tokenMap.size > 0) {
+      value.setMultiasset(tokenMap);
+    }
   })
   return value;
 }
