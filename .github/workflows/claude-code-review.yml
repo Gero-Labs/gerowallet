@@ -6,7 +6,12 @@ on:
 
 jobs:
   claude-review:
-    if: github.event.pull_request.user.login != 'dependabot[bot]'
+    # Same-repo guard: fork PRs don't receive repository secrets, so
+    # CLAUDE_CODE_OAUTH_TOKEN resolves empty and the job would fail on every
+    # external PR. Skip fork PRs instead of failing them (matches dev-bundle-gate.yml).
+    if: >-
+      github.event.pull_request.user.login != 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository
 
     runs-on: gero-plain
     permissions:

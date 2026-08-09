@@ -62,7 +62,7 @@ Please read and follow our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ### Pull Requests
 
-1. Create a new branch from `main`:
+1. Create a new branch from `development`:
    ```bash
    git checkout -b feature/your-feature-name
    ```
