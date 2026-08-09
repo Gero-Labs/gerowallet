@@ -7,7 +7,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-4.9-blue.svg)](https://www.typescriptlang.org/)
 [![Vue](https://img.shields.io/badge/Vue.js-2.7-green.svg)](https://v2.vuejs.org/)
 
-A comprehensive Cardano blockchain wallet browser extension (Chrome Manifest V3) merging Web2 and Web3 technologies.
+A multi-chain, non-custodial wallet browser extension (Chrome Manifest V3) for Cardano, Midnight, and Apex Fusion.
 
 [Features](#key-features) • [Quick Start](#quick-start) • [Documentation](#documentation) • [Contributing](#contributing)
 
@@ -17,39 +17,62 @@ A comprehensive Cardano blockchain wallet browser extension (Chrome Manifest V3)
 
 ## Overview
 
-**Gero Wallet** (v2.7.0) is a feature-rich, non-custodial Cardano wallet browser extension that provides comprehensive blockchain management with enterprise-grade security, DeFi integrations, and seamless Web3 connectivity.
+**Gero Wallet** (v2.7.0) is a feature-rich, non-custodial multi-chain wallet browser extension. It supports Cardano, Midnight, and Apex Fusion (Prime and Vector), and ships two interfaces: a full dashboard and Mini-Gero, a compact side-panel wallet.
 
 All blockchain data, price feeds, DeFi routing, and real-time updates are served through **Nexus**, Gero's own backend data layer. The extension holds no third-party data-provider keys — the client talks only to the Gero backend, which brokers everything server-side.
+
+### Two interfaces
+
+Gero ships two surfaces over the same wallet core:
+
+- **Full dashboard** — the complete extension: portfolio, swaps, perpetuals, staking, governance, dApp connections, rewards, and settings.
+- **Mini-Gero** — a compact wallet in the browser side panel, for working without leaving the page you're on. It covers the common flows: balances, send, receive, swap, buy and sell, staking and DRep delegation, market prices, perpetuals, vaults, activity, and dApp approvals.
+
+Mini-Gero is a focused subset of the dashboard. Anything not in the side panel is available in the full interface.
 
 ### Key Features
 
 **💼 Wallet Management**
 - Create and import wallets with BIP39 mnemonic phrases
 - Hardware wallet support (Ledger, Trezor, Keystone)
+- PassKey (WebAuthn PRF) wallets with hardware-backed key encryption
 - Multi-account and multi-wallet support
 - Enterprise-grade encryption (AES-256 + ChaCha20-Poly1305)
 
-**⛓️ Cardano Native Features**
-- **Staking**: Delegate to stake pools and earn rewards
-- **Governance**: Participate in Cardano governance (CIP-1694 DRep voting)
-- **NFTs**: View, manage, and trade Cardano NFTs
-- **Native Tokens**: Full support for Cardano native assets
+**⛓️ Multi-Chain Support**
+- **Cardano** — staking, CIP-1694 governance, native assets, NFTs, dApp connector
+- **Midnight** — shielded transfers, NIGHT/DUST management, proof server, and a shielded proving consent flow
+- **Apex Fusion** — Prime and Vector chains
 
-**🔄 DeFi Integrations**
+**⛓️ Cardano Native Features**
+- **Staking**: delegate to stake pools and earn rewards
+- **Governance**: CIP-1694 DRep voting and delegation
+- **NFTs**: view, manage, and trade Cardano NFTs
+- **Native Tokens**: full support for Cardano native assets
+
+**🔄 DeFi and Trading**
 - DEX aggregation for best swap rates (routed via Nexus)
 - Token swaps across multiple Cardano DEXs
-- Portfolio tracking and analytics
-- Real-time price feeds
+- Perpetuals trading via Strike Finance: order book, market and limit orders, TWAP orders, positions and order history
+- Vaults via Strike Finance: deposit into yield vaults and track positions
+- Portfolio tracking, analytics, and real-time price feeds
+- Fiat on-ramp via MoonPay and Guardarian
+
+**🎁 Rewards**
+- Cashback via the Bring portal (on supported networks)
 
 **🔐 Security First**
 - Non-custodial (you control your keys)
+- Configurable lock methods: password, PIN, or pattern
+- Two-factor authentication
+- Auto-lock with configurable timeout
 - Transaction risk assessment
 - DApp connection approval system
-- Hardware wallet integration for enhanced security
+- Hardware wallet integration
 
 **🌐 Web3 Connectivity**
-- CIP-30 DApp connector API (window.cardano)
-- Multi-signature wallet support
+- CIP-30 dApp connector API (`window.cardano`)
+- WalletConnect session support
 - Real-time blockchain updates via Gero Sync (WebSocket push)
 
 ## Tech Stack
@@ -389,11 +412,22 @@ Gero Wallet takes security seriously. This is a non-custodial wallet handling re
 
 ### Security Features
 
-- **Private Key Encryption**: AES-256 + ChaCha20-Poly1305 AEAD
-- **Context Isolation**: Private keys never leave background service worker
-- **Hardware Wallet Support**: Ledger, Trezor, Keystone integration
-- **Transaction Risk Assessment**: Inline risk checks before signing
-- **DApp Security**: Connection approval system, domain whitelisting
+**Key protection**
+- **Private key encryption**: AES-256 + ChaCha20-Poly1305 AEAD, with PBKDF2 key derivation
+- **Context isolation**: private keys never leave the background service worker
+- **Hardware wallet support**: Ledger, Trezor, and Keystone
+- **PassKey (WebAuthn PRF) wallets**: key encryption bound to platform authenticator hardware, with no spending password
+
+**Access control**
+- **Configurable lock methods**: password, PIN, or pattern
+- **Two-factor authentication**
+- **Auto-lock**: configurable inactivity timeout
+- **Separate recovery password**: independent of the spending password
+
+**Transaction and dApp safety**
+- **Transaction risk assessment**: inline risk checks before signing
+- **dApp security**: connection approval system and domain whitelisting
+- **Shielded proving consent**: explicit approval before Midnight proving operations
 
 ### Reporting Security Issues
 
@@ -455,11 +489,19 @@ Gero Wallet is built on the shoulders of giants. Special thanks to:
 ### Current (v2.7.x)
 - ✅ Conway-era support
 - ✅ PassKey authentication
-- ✅ Multi-signature wallets
 - ✅ Governance (DRep voting)
-- ✅ Multi-chain support (Bitcoin, Midnight)
+- ✅ Multi-chain support (Cardano, Midnight, Apex Fusion)
+- ✅ Mini-Gero side panel
+- ✅ Perpetuals trading
 
 ### Upcoming
+- 🔜 Bitcoin support (BTC, Lightning, Ordinals, Babylon staking, Thorchain swaps)
+- 🔜 Stake pool operator dashboard
+- 🔜 Gero Card
+- 🔜 Google-backed (MPC) wallets
+- 🔜 Remote signing across trusted devices
+- 🔜 Copilot insights feed
+- 🔜 Multi-signature wallets
 - 🔜 Enhanced NFT management
 - 🔜 Advanced portfolio analytics
 - 🔜 Mobile companion app
@@ -479,6 +521,6 @@ See our [Project Catalyst proposals](https://projectcatalyst.io/) for community-
 
 [Website](https://gerowallet.io) • [Documentation](ARCHITECTURE.md) • [GitHub](https://github.com/Gero-Labs/gerowallet)
 
-**Last Updated**: 2026-07-29
+**Last Updated**: 2026-08-09
 
 </div>
