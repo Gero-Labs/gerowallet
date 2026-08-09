@@ -28,9 +28,9 @@
     </v-card>
 
     <!-- WalletConnect Sessions -->
-    <v-card flat class="transparent mt-4">
+    <v-card v-if="wcEnabled" flat class="transparent mt-4">
       <v-card-title class="px-0 py-2 d-flex align-center">
-        <v-icon left small color="primary">mdi-link-variant</v-icon>
+        <span class="wc-logo mr-2" :style="{ '--wc-img': `url(${walletConnectLogo})` }"></span>
         <span style="font-size: 14px;">{{ $t('walletConnect.sessions') }}</span>
         <v-spacer />
         <v-btn small text color="primary" @click="showPairDialog = true">
@@ -112,27 +112,37 @@
     </v-dialog>
 
     <!-- WalletConnect Pair Dialog -->
-    <WalletConnectPairDialog v-model="showPairDialog" @paired="onPaired" />
+    <WalletConnectPairDialog v-if="wcEnabled" v-model="showPairDialog" @paired="onPaired" />
   </v-tab-item>
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref, toRefs } from 'vue';
+import { computed, ref, toRefs } from 'vue';
 import WalletStore, { walletStore } from '@/stores/walletStore';
 import { walletConnectState } from '@/stores/walletConnectStore';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import WalletConnectPairDialog from '@/modules/walletconnect/dialogs/WalletConnectPairDialog.vue';
 import type { WCSession } from '@/services/walletConnect/types';
+import assets from '@/utils/assets';
 
 const { t } = useTranslation();
 
+const walletConnectLogo = assets.walletConnectLogo;
+
+interface ConnectedDapp {
+  id: string;
+  domain: string;
+}
+
 const { loggedWallet, connectedDapps } = toRefs(walletStore);
 const wcSessions = toRefs(walletConnectState).activeSessions;
+const wcEnabled = computed(() => featureFlagsStore.isWalletConnectEnabled());
 
 // Reactive data
 const confirmRemoveDialog = ref(false);
-const itemToDelete = ref<any>(undefined);
+const itemToDelete = ref<ConnectedDapp | undefined>(undefined);
 const showPairDialog = ref(false);
 const confirmWcDialog = ref(false);
 const wcSessionToDisconnect = ref<WCSession | null>(null);
@@ -143,12 +153,13 @@ const headers = ref([
 ]);
 
 // DApp methods
-const confirmRemove = (item: any) => {
+const confirmRemove = (item: ConnectedDapp) => {
   itemToDelete.value = item;
   confirmRemoveDialog.value = true;
 };
 
 const remove = () => {
+  if (!itemToDelete.value) return;
   WalletStore.disconnectDapp(loggedWallet.value.id, itemToDelete.value.id);
   itemToDelete.value = undefined;
   confirmRemoveDialog.value = false;
@@ -194,6 +205,16 @@ const onPaired = () => {
   line-height: 20px;
   text-align: left;
   color: #94969C;
+}
+
+.wc-logo {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  vertical-align: middle;
+  background-color: var(--g-accent);
+  -webkit-mask: var(--wc-img) no-repeat center / contain;
+  mask: var(--wc-img) no-repeat center / contain;
 }
 
 </style>

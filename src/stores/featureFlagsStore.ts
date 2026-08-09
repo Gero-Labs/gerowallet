@@ -26,6 +26,11 @@ export interface FeatureFlags {
   isBitcoinGeroSyncEnabled: boolean;
   isMidnightConvertEnabled: boolean;
   isGoogleWalletEnabled: boolean;
+  // Master gate for WalletConnect v2 pairing/signing. Default OFF: even with a
+  // VITE_WALLETCONNECT_PROJECT_ID configured, the background skips WalletKit init
+  // and the Connected dApps UI hides the WalletConnect section until flipped ON
+  // via gero-sync — acts as a remote KILL-SWITCH.
+  isWalletConnectEnabled: boolean;
   /**
    * Origins allowed to draw from the Nexus shared-pool collateral. A dApp must be
    * on this Gero-curated list AND already connected by the user before the wallet
@@ -65,6 +70,7 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
     isBitcoinGeroSyncEnabled: true, // Phase-5 cutover: WS default; kill-switch to false = poller
     isMidnightConvertEnabled: false,
     isGoogleWalletEnabled: false,
+    isWalletConnectEnabled: false,
     collateralTrustedDapps: [],
   },
   isInitialized: false,
@@ -133,6 +139,9 @@ export const featureFlagsStore = {
     // MPC "Sign in with Google" wallet — ships DARK (default false) until the
     // recovery/sign flows have been through a security audit (see Plan D).
     featureFlagsState.flags.isGoogleWalletEnabled = featureFlagService.getFlag('isGoogleWalletEnabled', false);
+    // WalletConnect ships DARK (default false); the background reads this mirror
+    // to decide whether to init WalletKit at all.
+    featureFlagsState.flags.isWalletConnectEnabled = featureFlagService.getFlag('isWalletConnectEnabled', false);
     featureFlagsState.flags.collateralTrustedDapps = featureFlagService.getFlag<string[]>('collateralTrustedDapps', []);
     persistFlagsForBackground();
   },
@@ -192,6 +201,11 @@ export const featureFlagsStore = {
     });
     featureFlagService.onFlagChange('isGoogleWalletEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isGoogleWalletEnabled', newValue);
+    });
+    featureFlagService.onFlagChange('isWalletConnectEnabled', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'isWalletConnectEnabled', newValue);
+      // Mirror the live flip so the background picks it up on next login/init.
+      persistFlagsForBackground();
     });
     featureFlagService.onFlagChange('collateralTrustedDapps', (newValue) => {
       Vue.set(featureFlagsState.flags, 'collateralTrustedDapps', Array.isArray(newValue) ? newValue : []);
@@ -331,6 +345,16 @@ export const featureFlagsStore = {
   },
 
   /**
+   * Check if WalletConnect v2 is enabled.
+   * Ships DARK (default false): the background skips WalletKit init and the
+   * Connected dApps UI hides the WalletConnect section until this is flipped ON,
+   * so gero-sync can hold or kill WalletConnect without a client release.
+   */
+  isWalletConnectEnabled(): boolean {
+    return featureFlagsState.flags.isWalletConnectEnabled;
+  },
+
+  /**
    * Reset flags (disable all until re-initialized).
    */
   reset(): void {
@@ -351,6 +375,7 @@ export const featureFlagsStore = {
       isBitcoinGeroSyncEnabled: true, // matches the documented default (WS on); kill-switch is explicit false
       isMidnightConvertEnabled: false,
       isGoogleWalletEnabled: false,
+      isWalletConnectEnabled: false,
       collateralTrustedDapps: [],
     });
     featureFlagsState.isInitialized = false;

@@ -85,6 +85,14 @@ function buildCSP(dev: boolean): string {
     'https://*.arkhia.network',
     // Gero Copilot agent (direct-to-Fluxpoint dev fallback)
     'https://api-v3.fluxpointstudios.com',
+    // WalletConnect v2 / Reown WalletKit — relay (wss, REQUIRED for pairing),
+    // plus telemetry (pulse), verify, and registry APIs. Wildcards cover the
+    // .org and .com domains the SDK reaches across versions.
+    'https://*.walletconnect.org',
+    'wss://*.walletconnect.org',
+    'https://*.walletconnect.com',
+    'wss://*.walletconnect.com',
+    'https://*.reown.com',
     // Dev-only
     ...(dev
       ? [

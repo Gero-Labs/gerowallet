@@ -103,12 +103,14 @@ loadWallets().then(async () => {
 
     await walletManager.login(walletStore.loggedWallet);
 
-    // Initialize WalletConnect in background (non-blocking)
-    import('@/services/walletConnect/walletConnect.service').then(({ walletConnectService }) => {
-      walletConnectService.initialize()
-        .then(() => setupWalletConnectCallbacks(walletConnectService))
-        .catch(e => console.warn('⚠️ WC init failed:', e));
-    });
+    // Initialize WalletConnect in background (non-blocking), gated by the flag.
+    if (await isWalletConnectEnabled()) {
+      import('@/services/walletConnect/walletConnect.service').then(({ walletConnectService }) => {
+        walletConnectService.initialize()
+          .then(() => setupWalletConnectCallbacks(walletConnectService))
+          .catch(e => console.warn('⚠️ WC init failed:', e));
+      });
+    }
   } else {
     Loading.setLoading(false)
   }
@@ -3264,12 +3266,14 @@ app.addToOptions(MessageTypes.LOGIN, async (request, sendResponse) => {
     console.log('login', request)
     const walletBg = await walletManager.login(request.data.wallet);
     if (walletBg) {
-      // Initialize WalletConnect in background (non-blocking)
-      import('@/services/walletConnect/walletConnect.service').then(({ walletConnectService }) => {
-        walletConnectService.initialize()
-          .then(() => setupWalletConnectCallbacks(walletConnectService))
-          .catch(e => console.warn('⚠️ WC init failed:', e));
-      });
+      // Initialize WalletConnect in background (non-blocking), gated by the flag.
+      if (await isWalletConnectEnabled()) {
+        import('@/services/walletConnect/walletConnect.service').then(({ walletConnectService }) => {
+          walletConnectService.initialize()
+            .then(() => setupWalletConnectCallbacks(walletConnectService))
+            .catch(e => console.warn('⚠️ WC init failed:', e));
+        });
+      }
       sendResponse({
         id: request.id,
         data: { success: true },
@@ -4092,6 +4096,23 @@ app.addToOptions(MessageTypes.BITCOIN_DAPP_SIGN_MESSAGE, async (request, sendRes
 
 // ====== WalletConnect v2 ======
 
+/**
+ * Read isWalletConnectEnabled from the chrome.storage.local `featureFlags` mirror
+ * (same path walletManager uses for isBitcoinGeroSyncEnabled). The EventSource
+ * flag service can't run in an MV3 service worker, so the background relies on
+ * featureFlagsStore.persistFlagsForBackground() to mirror the value here.
+ * Defaults OFF: WalletConnect ships DARK until flipped ON via gero-sync.
+ */
+async function isWalletConnectEnabled(): Promise<boolean> {
+  try {
+    const stored = await chrome.storage.local.get('featureFlags');
+    const flags = (stored?.featureFlags as Record<string, unknown>) ?? {};
+    return flags['isWalletConnectEnabled'] === true; // default OFF; only explicit true enables
+  } catch {
+    return false;
+  }
+}
+
 // WC keepalive alarm
 chrome.alarms.create('wc-keepalive', {
   delayInMinutes: 5,
@@ -4140,15 +4161,32 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
       }
 
       let approved = false;
-      if (miniGeroPorts.size > 0) {
+      const useMiniGero = miniGeroPorts.size > 0;
+      console.log(`🔗 WC proposal routing: ${useMiniGero ? 'mini-gero panel' : 'popup'} (miniGeroPorts=${miniGeroPorts.size})`);
+      if (useMiniGero) {
         try {
           const response = await sendToMiniGero('wcSessionProposal', { ...proposalData, website: peerUrl || 'WalletConnect' }, undefined);
           approved = !!(response.data as { approved?: boolean } | undefined)?.approved;
-        } catch {
-          approved = false; // explicit reject, NACK, or wallet-changed guard
+        } catch (miniErr) {
+          // A dead/stale panel port must not silently reject a real approval —
+          // fall back to the standalone popup instead of hard-rejecting.
+          console.warn('⚠️ WC mini-gero proposal failed, falling back to popup:', miniErr);
+          const peerIcon = proposalData?.proposer?.metadata?.icons?.[0] || '';
+          const q = new URLSearchParams({ website: peerUrl || 'WalletConnect' });
+          if (peerIcon) q.set('favIconUrl', peerIcon);
+          const popupURL = chrome.runtime.getURL(`index.html#/${POPUP.wcSessionProposal}?${q.toString()}`);
+          const tab = await focusOrCreatePopup(popupURL, 470, 600);
+          const popupResponse = await Messaging.sendToPopupInternal(tab.id, { data: proposalData }) as { data?: { approved?: boolean } };
+          approved = !!popupResponse?.data?.approved;
         }
       } else {
-        const popupURL = chrome.runtime.getURL(`index.html#/${POPUP.wcSessionProposal}`);
+        // Feed the peer URL (+ icon) as query params so PopupHeader renders the
+        // dApp website + favicon + risk scan instead of "N/A" — WC popups carry
+        // no tab origin, unlike injected-dApp popups.
+        const peerIcon = proposalData?.proposer?.metadata?.icons?.[0] || '';
+        const q = new URLSearchParams({ website: peerUrl || 'WalletConnect' });
+        if (peerIcon) q.set('favIconUrl', peerIcon);
+        const popupURL = chrome.runtime.getURL(`index.html#/${POPUP.wcSessionProposal}?${q.toString()}`);
         const tab = await focusOrCreatePopup(popupURL, 470, 600);
         const popupResponse = await Messaging.sendToPopupInternal(tab.id, { data: proposalData }) as { data?: { approved?: boolean } };
         approved = !!popupResponse?.data?.approved;
@@ -4169,9 +4207,11 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
           accounts.bitcoin = loggedWallet.bitcoinAddress ? [loggedWallet.bitcoinAddress] : [];
         }
 
+        console.log('🔗 WC approving session:', { chain: loggedWallet.chain, network: loggedWallet.network, accounts });
         await wcService.approveSession(proposalData.id, accounts, loggedWallet.chain, loggedWallet.network);
         await updateStore();
       } else {
+        console.log('🔗 WC proposal not approved → rejecting');
         await wcService.rejectSession(proposalData.id, 'User rejected');
       }
     } catch (e) {
@@ -4289,6 +4329,16 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
             await wcService.respondSuccess(topic, id, addr);
             return;
           }
+          case 'cardano_getRewardAddresses': {
+            const address = getRewardAddress(loggedWallet.publicKey, loggedWallet.chain, loggedWallet.network);
+            await wcService.respondSuccess(topic, id, [address.toBytes()]);
+            return;
+          }
+          case 'cardano_getRewardAddress': {
+            const address = getRewardAddress(loggedWallet.publicKey, loggedWallet.chain, loggedWallet.network);
+            await wcService.respondSuccess(topic, id, address.toBytes());
+            return;
+          }
           case 'cardano_submitTx': {
             const txCbor = wcRequest.params?.tx || wcRequest.params;
             const response = await submitTx(txCbor, loggedWallet.chain, loggedWallet.network);
@@ -4366,8 +4416,16 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
 
 app.addToOptions(MessageTypes.WC_PAIR, async (request, sendResponse) => {
   try {
+    if (!(await isWalletConnectEnabled())) {
+      sendResponse({ id: request.id, data: { success: false, error: 'WalletConnect is disabled' }, target: TARGET, sender: SENDER.extension });
+      return true;
+    }
     const { walletConnectService } = await import('@/services/walletConnect/walletConnect.service');
-    if (!walletConnectService.initialized) await walletConnectService.initialize();
+    if (!walletConnectService.initialized) {
+      await walletConnectService.initialize();
+      // Wire event handlers in case pairing happens before the login-time init ran.
+      setupWalletConnectCallbacks(walletConnectService);
+    }
     await walletConnectService.pair(request.data.uri);
     sendResponse({ id: request.id, data: { success: true }, target: TARGET, sender: SENDER.extension });
   } catch (error) {

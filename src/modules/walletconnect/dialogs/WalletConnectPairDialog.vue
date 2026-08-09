@@ -1,73 +1,74 @@
 <template>
-  <v-dialog v-model="dialogModel" persistent max-width="440">
-    <v-card>
-      <v-card-title class="d-flex align-center">
-        <v-icon left color="primary">mdi-link-variant</v-icon>
-        {{ $t('walletConnect.walletConnect') }}
-        <v-spacer />
-        <v-btn icon small @click="close">
-          <v-icon>mdi-close</v-icon>
-        </v-btn>
-      </v-card-title>
-
-      <v-tabs v-model="tab" centered>
-        <v-tab>{{ $t('walletConnect.connectViaPaste') }}</v-tab>
-        <v-tab>{{ $t('walletConnect.connectViaScan') }}</v-tab>
+  <BaseDialog
+    :isOpen="value"
+    @close="close"
+    :img="walletConnectLogo"
+    imgColor="var(--g-accent)"
+    :title="$t('walletConnect.walletConnect')"
+    :subtitle="$t('walletConnect.pairSubtitle')"
+    size="sm"
+    :min-height="0"
+    :loading="loading"
+  >
+    <v-card-text class="px-0 pt-2 pb-0" style="min-height: 0;">
+      <v-tabs
+        v-model="tab"
+        grow
+        background-color="transparent"
+        color="var(--g-accent)"
+        slider-color="var(--g-accent)"
+        class="wc-tabs mb-4"
+      >
+        <v-tab class="wc-tab">{{ $t('walletConnect.connectViaPaste') }}</v-tab>
+        <v-tab class="wc-tab">{{ $t('walletConnect.connectViaScan') }}</v-tab>
       </v-tabs>
 
-      <v-tabs-items v-model="tab">
-        <!-- Paste URI tab -->
+      <v-tabs-items v-model="tab" class="transparent">
+        <!-- Paste URI -->
         <v-tab-item>
-          <v-card-text>
-            <v-text-field
-              v-model="uri"
-              :label="$t('walletConnect.pasteUri')"
-              :placeholder="$t('walletConnect.uriPlaceholder')"
-              outlined
-              dense
-              clearable
-              :error-messages="errorMessage"
-              @keyup.enter="pair"
-            />
-          </v-card-text>
-          <v-card-actions class="px-4 pb-4">
-            <v-btn
-              block
-              class="geroButton"
-              style="color: black!important;"
-              :disabled="!isValidUri"
-              :loading="loading"
-              @click="pair"
-            >
-              {{ $t('walletConnect.connect') }}
-            </v-btn>
-          </v-card-actions>
+          <v-text-field
+            v-model="uri"
+            :label="$t('walletConnect.pasteUri')"
+            :placeholder="$t('walletConnect.uriPlaceholder')"
+            outlined
+            dense
+            clearable
+            persistent-placeholder
+            hide-details="auto"
+            :error-messages="errorMessage"
+            class="wc-input"
+            @keyup.enter="pair"
+          />
         </v-tab-item>
 
-        <!-- QR Scanner tab -->
+        <!-- QR Scanner -->
         <v-tab-item>
-          <v-card-text class="pa-2">
-            <div v-if="tab === 1" style="min-height: 300px;">
-              <AnimatedQRScanner
-                mode="text"
-                @scan="onQrScan"
-                @error="onQrError"
-              />
-            </div>
-            <div v-if="qrError" class="caption error--text text-center mt-2">
-              {{ qrError }}
-            </div>
-          </v-card-text>
+          <div v-if="tab === 1" class="wc-scanner">
+            <AnimatedQRScanner
+              mode="text"
+              @scan="onQrScan"
+              @error="onQrError"
+            />
+          </div>
+          <div v-if="qrError" class="t-caption delta-down text-center mt-2">
+            {{ qrError }}
+          </div>
         </v-tab-item>
       </v-tabs-items>
+    </v-card-text>
 
-      <!-- Loading overlay -->
-      <v-overlay :value="loading" absolute>
-        <v-progress-circular indeterminate color="primary" />
-        <div class="mt-2 white--text">{{ $t('walletConnect.connecting') }}</div>
-      </v-overlay>
-    </v-card>
-  </v-dialog>
+    <v-card-actions v-if="tab === 0" class="px-0 pt-4 pb-0">
+      <GButton
+        tier="primary"
+        block
+        :disabled="!isValidUri"
+        :loading="loading"
+        @click="pair"
+      >
+        {{ $t('walletConnect.connect') }}
+      </GButton>
+    </v-card-actions>
+  </BaseDialog>
 </template>
 
 <script setup lang="ts">
@@ -75,7 +76,12 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, ref, watch } from 'vue';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
+import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
+import GButton from '@/shared/components/GButton/GButton.vue';
 import AnimatedQRScanner from '@/shared/components/AnimatedQRScanner.vue';
+import assets from '@/utils/assets';
+
+const walletConnectLogo = assets.walletConnectLogo;
 
 const { t } = useTranslation();
 
@@ -88,20 +94,13 @@ const emit = defineEmits<{
   (e: 'paired'): void;
 }>();
 
-const dialogModel = computed({
-  get: () => props.value,
-  set: (v) => emit('input', v),
-});
-
 const tab = ref(0);
 const uri = ref('');
 const loading = ref(false);
 const errorMessage = ref('');
 const qrError = ref('');
 
-const isValidUri = computed(() => {
-  return uri.value.trim().startsWith('wc:');
-});
+const isValidUri = computed(() => (uri.value ?? '').trim().startsWith('wc:'));
 
 // Reset state when dialog opens
 watch(() => props.value, (open) => {
@@ -126,7 +125,7 @@ const pair = async () => {
   try {
     const response = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.WC_PAIR,
-      data: { uri: uri.value.trim() },
+      data: { uri: (uri.value ?? '').trim() },
     });
 
     if (response.data?.success) {
@@ -135,8 +134,8 @@ const pair = async () => {
     } else {
       errorMessage.value = response.data?.error || t('walletConnect.pairingFailed');
     }
-  } catch (error: any) {
-    errorMessage.value = error.message || t('walletConnect.pairingFailed');
+  } catch (error) {
+    errorMessage.value = (error instanceof Error && error.message) || t('walletConnect.pairingFailed');
   } finally {
     loading.value = false;
   }
@@ -155,6 +154,38 @@ const onQrError = (error: string) => {
 };
 
 const close = () => {
-  dialogModel.value = false;
+  emit('input', false);
 };
 </script>
+
+<style scoped lang="scss">
+.wc-tabs {
+  border-bottom: 1px solid var(--g-hairline-1);
+}
+
+.wc-tab {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--g-text-3);
+}
+
+.wc-tab.v-tab--active {
+  color: var(--g-text-1);
+}
+
+.wc-input {
+  padding-top: var(--g-s-2);
+}
+
+.wc-input :deep(.v-input__slot) {
+  border-radius: var(--g-r-control);
+}
+
+.wc-scanner {
+  min-height: 300px;
+  border-radius: var(--g-r-card);
+  overflow: hidden;
+}
+</style>

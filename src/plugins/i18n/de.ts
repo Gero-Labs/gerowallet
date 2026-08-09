@@ -3244,6 +3244,7 @@ export default {
   'walletConnect.unsupportedChain': 'Einige angeforderte Chains werden nicht unterstützt',
   'walletConnect.uriPlaceholder': 'wc:...',
   'walletConnect.walletConnect': 'WalletConnect',
+  'walletConnect.pairSubtitle': 'Verbinde eine dApp per WalletConnect-URI mit deiner Wallet',
   'welcome.adLabs': 'A.D. Labs',
   'welcome.adjustDistance': 'Passen Sie den Abstand an und tippen Sie bei Bedarf auf den Keystone-QR-Code, um das Scannen zu verbessern.',
   'welcome.agreeToTerms': 'Ich habe die Bedingungen gelesen und stimme ihnen zu.',

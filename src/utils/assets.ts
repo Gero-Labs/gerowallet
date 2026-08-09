@@ -75,6 +75,7 @@ import depositSvg from '@/assets/svg/deposit.svg'
 import cardanoBackground from '@/assets/cardanoBg.png'
 import cardanoBlueLogo from '@/assets/svg/cardano-blue.svg'
 import cardanoShieldLogo from '@/assets/svg/cardano_shield_logo.svg'
+import walletConnectLogo from '@/assets/svg/walletconnect.svg'
 import cardanoShieldBigLogo from '@/assets/img/cardano-shield/logo.png'
 import geroLogo from '@/assets/svg/gero-logo.svg'
 import geroLogoApex from '@/assets/svg/gero-logo-apex.svg'
@@ -224,6 +225,7 @@ export default {
   detailsSvg,
   depositSvg,
   cardanoShieldLogo,
+  walletConnectLogo,
   cardanoShieldBigLogo,
   geroLogo,
   geroLogoApex,
