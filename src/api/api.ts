@@ -38,7 +38,7 @@ export class Api {
     try {
       const size = 100;
       let page = 1;
-      let allRewards: any[] = []; // Accumulator for all rewards
+      let allRewards: unknown[] = []; // Accumulator for all rewards
       let morePages = true; // Condition to control the loop
 
       while (morePages) {
@@ -71,8 +71,8 @@ export class Api {
       );
       if (status === 200) return data;
       throw parseHttpError(data);
-    } catch (error: any) {
-      if (error.response?.status === 404) {
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 404) {
         return [];
       }
       throw parseHttpError(error);
@@ -97,7 +97,7 @@ export class Api {
     );
   }
 
-  async getAssetNFTAddress(policyId: string, assetName: string): Promise<any> {
+  async getAssetNFTAddress(policyId: string, assetName: string): Promise<unknown> {
     try {
       const { data, status } = await this.axiosInstance.get(
         `/api/assets/NFTAddress?chain=${this.chain}&network=${this.network}&policyId=${policyId}&assetName=${assetName}`
@@ -135,7 +135,7 @@ export class Api {
     return parseHttpError(data);
   }
 
-  async submitTx(body: string): Promise<any> {
+  async submitTx(body: string): Promise<string> {
     // Preview submits via Nexus → ogmios (self-hosted node). The legacy backend has no
     // cardano-preview provider block, so its Blockfrost path times out. Mainnet/preprod
     // keep the existing Blockfrost-backed legacy path (already working).
