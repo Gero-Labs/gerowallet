@@ -48,7 +48,6 @@ import governance from '@/assets/svg/governance.svg'
 import dao from '@/assets/svg/dao.svg'
 import transactions from '@/assets/svg/transaction.svg'
 import market from '@/assets/svg/finance.svg'
-import zkFiat from '@/assets/svg/euro.svg'
 import infinity from '@/assets/svg/infinity.svg'
 import usersPlus from '@/assets/svg/users-plus.svg'
 import logout from '@/assets/svg/log-out-01.svg'
@@ -64,12 +63,6 @@ import dollarShieldSvg from '@/assets/svg/dollar-shield.svg'
 import swapSvg from '@/assets/svg/swap.svg'
 import qrCodeSvg from '@/assets/svg/qr-code.svg'
 import sendSvg from '@/assets/svg/send.svg'
-import multisigTree from '@/assets/svg/multisig-tree.svg'
-import multisigPaid from '@/assets/svg/multisig_paid.svg'
-import multisigPending from '@/assets/svg/multisig_pending.svg'
-import multisigDollar from '@/assets/svg/multisig_dollar.svg'
-import multisigExpired from '@/assets/svg/multisig_expired.svg'
-import multisigTotal from '@/assets/svg/multisig_stack.svg'
 import detailsSvg from '@/assets/svg/details.svg'
 import depositSvg from '@/assets/svg/deposit.svg'
 import cardanoBackground from '@/assets/cardanoBg.png'
@@ -199,7 +192,6 @@ export default {
   governance,
   transactions,
   market,
-  zkFiat,
   infinity,
   usersPlus,
   logout,
@@ -215,12 +207,6 @@ export default {
   swapSvg,
   qrCodeSvg,
   sendSvg,
-  multisigTree,
-  multisigPaid,
-  multisigPending,
-  multisigDollar,
-  multisigExpired,
-  multisigTotal,
   detailsSvg,
   depositSvg,
   cardanoShieldLogo,

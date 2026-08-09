@@ -356,7 +356,6 @@ const items = computed((): NavigationItemUnion[] => {
     { title: t('navigation.midnightProofServer'), icon: 'mdi-server-security', link: '/proof-server', enabled: isMidnight.value },
     { title: t('navigation.staking'), icon: assts.coinsStacked, link: '/staking', enabled: isStakingEnabled },
     { title: t('navigation.governance'), icon: assts.governance, link: '/governance', enabled: networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network) },
-    { title: t('navigation.multisig'), icon: assts.multisigTree, link: '/multisig', enabled: false }, // Disabled - under maintenance
     {
       title: t('navigation.geroCard'),
       icon: assts.cardIcon,
@@ -413,7 +412,6 @@ const items = computed((): NavigationItemUnion[] => {
     { title: t('navigation.claimRewards'), icon: assts.infinity, link: '/claim-rewards', enabled: isClaimRewardsEnabled },
     { title: t('navigation.cashback'), icon: assts.cashback, link: '/cashback', enabled: isCashbackEnabled },
     { title: t('navigation.referral'), icon: assts.usersPlus, link: '/referral', enabled: isReferralEnabled },
-    // { title: 'zkFiat', icon: assts.zkFiat, link: '/zkFiat', enabled: false },
     { header: t('navigation.media'), enabled: loggedWallet.value?.chain !== Blockchain.BITCOIN && loggedWallet.value?.chain !== Blockchain.APEX_VECTOR },
     // Only show the player when the wallet actually holds playable media —
     // an empty player is dead weight (and the Media header auto-hides with it).

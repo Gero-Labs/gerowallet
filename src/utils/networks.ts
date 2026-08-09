@@ -42,7 +42,6 @@ export interface NetworkInfo {
   buySupport: boolean;
   zkSmartWalletSupport: boolean;
   perpetualsSupport: boolean;
-  multiSigSupport: boolean,
   geroCardSupport: boolean;
   goMiningSupport: boolean;
   babylonSupport: boolean;
@@ -92,7 +91,6 @@ export default {
       buySupport: true,
       zkSmartWalletSupport: false,
       perpetualsSupport: true,
-      multiSigSupport: false,
       geroCardSupport: true,
       goMiningSupport: false,
       babylonSupport: false,
@@ -139,7 +137,6 @@ export default {
       buySupport: false,
       zkSmartWalletSupport: false,
       perpetualsSupport: false,
-      multiSigSupport: false,
       geroCardSupport: false,
       goMiningSupport: false,
       babylonSupport: false,
@@ -186,7 +183,6 @@ export default {
       buySupport: false,
       zkSmartWalletSupport: false,
       perpetualsSupport: false,
-      multiSigSupport: false,
       geroCardSupport: false,
       goMiningSupport: false,
       babylonSupport: false,
@@ -234,7 +230,6 @@ export default {
       buySupport: false,
       zkSmartWalletSupport: false,
       perpetualsSupport: false,
-      multiSigSupport: false,
       geroCardSupport: false,
       goMiningSupport: false,
       babylonSupport: false,
@@ -283,7 +278,6 @@ export default {
       buySupport: false,
       zkSmartWalletSupport: false,
       perpetualsSupport: false,
-      multiSigSupport: false,
       geroCardSupport: false,
       goMiningSupport: false,
       babylonSupport: false,
@@ -339,7 +333,6 @@ export default {
       buySupport: true,
       zkSmartWalletSupport: false,
       perpetualsSupport: false,
-      multiSigSupport: false,
       geroCardSupport: false,
       goMiningSupport: true,
       babylonSupport: true,
@@ -392,7 +385,6 @@ export default {
       buySupport: false,
       zkSmartWalletSupport: false,
       perpetualsSupport: false,
-      multiSigSupport: false,
       geroCardSupport: false,
       goMiningSupport: false,
       babylonSupport: true,
@@ -445,7 +437,6 @@ export default {
       buySupport: false,
       zkFoldSupport: false,
       perpetualsSupport: false,
-      multiSigSupport: false,
       geroCardSupport: false,
       goMiningSupport: false,
       babylonSupport: false,
@@ -494,7 +485,6 @@ export default {
       buySupport: false,
       zkFoldSupport: false,
       perpetualsSupport: false,
-      multiSigSupport: false,
       geroCardSupport: false,
       goMiningSupport: false,
       babylonSupport: false,
@@ -543,7 +533,6 @@ export default {
       buySupport: false,
       zkSmartWalletSupport: false,
       perpetualsSupport: false,
-      multiSigSupport: false,
       geroCardSupport: false,
       goMiningSupport: false,
       babylonSupport: false,
@@ -612,12 +601,6 @@ export default {
       return false
     }
     return this.resolveNetwork(chain, network)?.governanceSupport
-  },
-  resolveMultiSigSupport(chain: string, network: string): boolean {
-    if (!chain || !network) {
-      return false
-    }
-    return this.resolveNetwork(chain, network)?.multiSigSupport
   },
   resolveGeroCardSupport(chain: string, network: string): boolean {
     if (!chain || !network) {

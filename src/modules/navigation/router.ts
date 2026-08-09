@@ -25,7 +25,6 @@ const WarningPopUp = () => import('@/popup/modules/views/WarningPopUp.vue');
 const Transactions = () => import('@/modules/transactions/Transactions.vue');
 const Blog = () => import('@/modules/blog/Blog.vue');
 const BlogPost = () => import('@/modules/blog/BlogPost.vue');
-// const MultiSig = () => import('@/modules/multisig/views/MultiSig.vue'); // Disabled - under maintenance
 const Card = () => import('@/modules/wallet/GeroCard.vue');
 const PassKeyAuth = () => import('@/modules/authentication/views/PassKeyAuth.vue');
 const LedgerBleSign = () => import('@/modules/authentication/views/LedgerBleSign.vue');
@@ -250,16 +249,6 @@ const routes = [
       requiresAuth: true,
     },
   },
-  // MultiSig route disabled - under maintenance
-  // {
-  //   path: '/multisig',
-  //   name: 'multisig',
-  //   component: MultiSig,
-  //   meta: {
-  //     layout: ContentLayout,
-  //     requiresAuth: false,
-  //   },
-  // },
   {
     path: '/card',
     name: 'card',
@@ -381,10 +370,6 @@ function isRouteUnderMaintenance(routeName: string | null | undefined): boolean 
     case 'copilotFeed':
       // Gero Copilot feed gated by the master feature flag (ships dark)
       return !featureFlagsStore.isCopilotEnabled();
-
-    case 'multisig':
-      // MultiSig is currently under maintenance (route is commented out)
-      return true;
 
     // Add other routes that can be under maintenance here
     // case 'someOtherRoute':

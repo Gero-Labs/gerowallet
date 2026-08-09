@@ -501,7 +501,6 @@ Gero Wallet is built on the shoulders of giants. Special thanks to:
 - 🔜 Google-backed (MPC) wallets
 - 🔜 Remote signing across trusted devices
 - 🔜 Copilot insights feed
-- 🔜 Multi-signature wallets
 - 🔜 Enhanced NFT management
 - 🔜 Advanced portfolio analytics
 - 🔜 Mobile companion app
