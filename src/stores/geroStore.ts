@@ -2,7 +2,6 @@ import Vue from 'vue';
 import {
   deleteWallet,
   createNewWallet,
-  createNewGoogleWallet,
   createNewHardwareWallet,
   getAllWallets,
   setWalletName as dbSetWalletName,
@@ -260,14 +259,6 @@ export default {
     const walletId = await createNewWallet(name, icon, theme, mnemonic, password, chain, network, addressType, options);
     // Update the wallets field with the latest wallets from the database
     const updatedWallets: Record<number, Wallet> = await getAllWallets();
-    geroStore.wallets = updatedWallets;
-    broadcastFromBackground({ wallets: updatedWallets });
-    return geroStore.wallets[walletId];
-  },
-  async createNewGoogleWallet(name: string, icon: string, theme: string, password: string, chain: string, network: string, jwt: string) {
-    const walletId = await createNewGoogleWallet(name, icon, theme, password, chain, network, jwt);
-    // Update the wallets field with the latest wallets from the database
-    const updatedWallets = await getAllWallets();
     geroStore.wallets = updatedWallets;
     broadcastFromBackground({ wallets: updatedWallets });
     return geroStore.wallets[walletId];

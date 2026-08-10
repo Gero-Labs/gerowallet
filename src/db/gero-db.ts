@@ -501,69 +501,6 @@ export async function createNewHardwareWallet(wallet) {
   return walletId;
 }
 
-export async function createNewGoogleWallet(
-  name: string,
-  icon: string,
-  theme: string,
-  password: string,
-  chain: string,
-  network: string,
-  jwt: string
-) {
-  const db: Dexie = await getDb();
-  let order = await getLatestWalletByOrder();
-  if (order == null) {
-    order = 1;
-  } else {
-    order++;
-  }
-
-  // Extract user ID from JWT
-  const parts = jwt.split(".");
-  const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-  const userId = payload.email;
-
-  // Generate random 96 bytes for BIP32 Ed25519 key
-  // BIP32 private key = 64 bytes (private key) + 32 bytes (chain code)
-  const randomBytes = new Uint8Array(96);
-  crypto.getRandomValues(randomBytes);
-  const rootKey: Bip32PrivateKey = Bip32PrivateKey.fromBytes(Buffer.from(randomBytes));
-
-  // Encrypt the root key with password (more secure than zkSmartWallet's plaintext storage)
-  const encryptedPrivateKey: string = encryptPrivateKey(rootKey, password);
-
-  // Get the public key for account #0
-  const accountIndex = 0;
-  const bip32Ed25519: Bip32Ed25519 = await SodiumBip32Ed25519.create();
-  const xpubHex: Bip32PublicKeyHex = bip32Ed25519.getBip32PublicKey(
-    rootKey.derive([
-      WalletTypePurpose.CIP1852,
-      CoinTypes.CARDANO,
-      HARDENED + accountIndex
-    ]).hex()
-  );
-
-  // NOTE: We DON'T create the wallet database yet!
-  // The wallet DB will be created AFTER successful proof generation
-  // This prevents creating orphaned databases if proof generation fails
-  // await createNewWalletDb(walletId, false);
-
-  return await db['wallets'].add({
-    name,
-    icon,
-    type: WalletType.Google,
-    theme,
-    order,
-    encryptedPrivateKey,
-    publicKey: xpubHex,
-    passwordLastUpdate: new Date(),
-    chain,
-    network,
-    userId,
-    jwt, // Store JWT for proof generation later
-  });
-}
-
 /**
  * Persist a Google "Sign in with Google" MPC wallet: type Google,
  * encryptionMethod 'mpc', keyed by the Google `sub` (userId) with the
@@ -737,30 +674,6 @@ export async function updatePrivateKeyAndMnemonic(
   }
 
   await db['wallets'].update(walletId, updateData);
-}
-
-export async function getGoogleWalletWithEmail(email: string) {
-  const db: Dexie = await getDb();
-  const wallets = await db['wallets'].where('userId').equals(email).toArray();
-  if (wallets && wallets.length > 0) {
-    return wallets[0];
-  }
-  return null;
-}
-
-/**
- * Get Google wallet by userId (same as email for Google wallets)
- */
-export async function getGoogleWalletByUserId(userId: string) {
-  return await getGoogleWalletWithEmail(userId);
-}
-
-/**
- * Check if a Google wallet exists for the given email/userId
- */
-export async function googleWalletExists(email: string): Promise<boolean> {
-  const wallet = await getGoogleWalletWithEmail(email);
-  return wallet !== null;
 }
 
 /**

@@ -12,7 +12,6 @@ import MusicStore from '@/stores/musicStore';
 import NetworkStore from '@/stores/networkStore';
 import { debugLog } from '@/utils/debug';
 import { Cardano } from '@cardano-sdk/core';
-import zkSmartWalletApi from '@/api/zkSmartWalletApi';
 import { bootstrapCrossDeviceSigning } from '@/services/crossDevice/crossDeviceBootstrap';
 import type { CrossDeviceSigning } from '@/services/crossDevice/crossDeviceSigning.service';
 import {
@@ -219,17 +218,7 @@ export class WalletManager {
         // keyed by walletId and the OUTGOING wallet is cleared by logout() above
         // on a switch, so there is no cross-wallet leakage to defend against here.
         TapToolsStore.clear();
-        let walletBg: WalletBg
-        if (wallet.type === WalletType.Google && wallet.encryptionMethod !== 'mpc') {
-          // Legacy smart-contract Google wallet: address is fetched from
-          // the contract. MPC Sign-in-with-Google wallets are also type===Google
-          // but are normal HD wallets (real CIP-1852 xpub) — construct them the
-          // same way as Normal wallets (no smart-contract address).
-          const smartBaseAddress: Cardano.Address = await zkSmartWalletApi.walletAddress(wallet.userId)
-          walletBg = new WalletBg(wallet, smartBaseAddress.toBech32())
-        } else {
-          walletBg = new WalletBg(wallet);
-        }
+        const walletBg = new WalletBg(wallet);
 
         // Debug: Check WalletBg instance has PRF fields
         console.log('🔍 [WalletManager] WalletBg PRF fields after construction:', {
@@ -359,16 +348,6 @@ export class WalletManager {
     LoadingState.setText('Setting up wallet address...');
     const promises = [];
     console.log('walletBg', walletBg)
-    if (walletBg.type === WalletType.Google) {
-      // promises.push(
-      //   zkSmartWalletApi.walletAddress(walletBg.userId).then(res => {
-      //     if (res['status'] !== 200) {
-      //       throw new Error('Failed to get address');
-      //     }
-      //     walletBg.baseAddress = res['data']['address'];
-      //   })
-      // );
-    }
 
     LoadingState.setText('Loading blockchain data...');
 
