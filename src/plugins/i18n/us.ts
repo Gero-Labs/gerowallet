@@ -2686,7 +2686,6 @@ export default {
   'welcome.geroWallet': 'Gero Wallet',
   'welcome.getStarted': 'Get Started',
   'welcome.glass': 'Glass',
-  'welcome.googleLogin': 'Google Login',
   'welcome.googleWalletSetup': 'Google Wallet Setup',
   'welcome.hardwareWalletDescription': 'Hardware wallets, a type of cold wallet, provide one of the most secure ways to keep cryptocurrencies. They work by storing your private keys in an external, physical device (usually a USB or Bluetooth device)',
   'welcome.hardwareWalletType': 'What Type of Hardware Wallet Would You Like to Connect With?',

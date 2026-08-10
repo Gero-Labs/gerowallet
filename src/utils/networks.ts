@@ -40,7 +40,6 @@ export interface NetworkInfo {
   transactionSupport: boolean;
   swapSupport: boolean;
   buySupport: boolean;
-  zkSmartWalletSupport: boolean;
   perpetualsSupport: boolean;
   geroCardSupport: boolean;
   goMiningSupport: boolean;
@@ -89,7 +88,6 @@ export default {
       transactionSupport:true,
       swapSupport: true,
       buySupport: true,
-      zkSmartWalletSupport: false,
       perpetualsSupport: true,
       geroCardSupport: true,
       goMiningSupport: false,
@@ -135,7 +133,6 @@ export default {
       transactionSupport:true,
       swapSupport: false,
       buySupport: false,
-      zkSmartWalletSupport: false,
       perpetualsSupport: false,
       geroCardSupport: false,
       goMiningSupport: false,
@@ -181,7 +178,6 @@ export default {
       transactionSupport:true,
       swapSupport: false,
       buySupport: false,
-      zkSmartWalletSupport: false,
       perpetualsSupport: false,
       geroCardSupport: false,
       goMiningSupport: false,
@@ -228,7 +224,6 @@ export default {
       transactionSupport:true,
       swapSupport: false,
       buySupport: false,
-      zkSmartWalletSupport: false,
       perpetualsSupport: false,
       geroCardSupport: false,
       goMiningSupport: false,
@@ -276,7 +271,6 @@ export default {
       transactionSupport:true,
       swapSupport: false,
       buySupport: false,
-      zkSmartWalletSupport: false,
       perpetualsSupport: false,
       geroCardSupport: false,
       goMiningSupport: false,
@@ -331,7 +325,6 @@ export default {
       transactionSupport: true,
       swapSupport: false,
       buySupport: true,
-      zkSmartWalletSupport: false,
       perpetualsSupport: false,
       geroCardSupport: false,
       goMiningSupport: true,
@@ -383,7 +376,6 @@ export default {
       transactionSupport: true,
       swapSupport: false,
       buySupport: false,
-      zkSmartWalletSupport: false,
       perpetualsSupport: false,
       geroCardSupport: false,
       goMiningSupport: false,
@@ -531,7 +523,6 @@ export default {
       transactionSupport: true,
       swapSupport: false,
       buySupport: false,
-      zkSmartWalletSupport: false,
       perpetualsSupport: false,
       geroCardSupport: false,
       goMiningSupport: false,

@@ -113,11 +113,11 @@ const { wallets } = toRefs(geroStore);
 const availableWallets = computed<Wallet[]>(() => {
   return (Object.values(wallets.value) as Wallet[])
     .filter((wallet: Wallet) => {
-      // Legacy "Google" wallets have their own sign-in button + dialog
-      // (GoogleLogIn.vue) and stay off this list. MPC "Sign in with Google"
-      // wallets (Plan D, `encryptionMethod === 'mpc'`) are also `type: Google`
-      // but behave like any other wallet here — login goes through the normal
-      // pre-login unlock gate below.
+      // Legacy "Google" wallets (non-mpc) are handled separately and stay off
+      // this list. MPC "Sign in with Google" wallets (Plan D,
+      // `encryptionMethod === 'mpc'`) are also `type: Google` but behave like
+      // any other wallet here — login goes through the normal pre-login unlock
+      // gate below.
       return networks.resolveNetwork(wallet?.chain, wallet?.network)
         && (wallet.type != WalletType.Google || wallet.encryptionMethod === 'mpc');
     });
