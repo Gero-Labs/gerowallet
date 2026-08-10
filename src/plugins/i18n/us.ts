@@ -2664,7 +2664,6 @@ export default {
   'wallet.remove': 'Remove',
   'wallet.usb': 'USB',
   'wallet.comingSoon': 'Coming Soon',
-  'wallet.physicalCardOrderingComingSoon': 'Physical card ordering will be available soon! We\'re working hard to bring you this feature.',
   'wallet.stayTuned': 'Stay tuned for updates.',
   'welcome.adLabs': 'A.D. Labs',
   'welcome.adjustDistance': 'Adjust the distance and, if needed, tap on the Keystone QR code to enhance scanning',
@@ -3043,15 +3042,12 @@ export default {
 
   // Security - Auto-Lock
   'security.autoLockTimer': 'Auto-Lock Timer',
-  'security.selectAutoLockTime': 'Select auto-lock time',
   'security.walletLocksAfterInactivity': 'Wallet locks after inactivity',
   'security.never': 'Never',
   'security.1Minute': '1 Minute',
   'security.xMinutes': '{minutes} Minutes',
   'security.1Hour': '1 Hour',
   'security.xHours': '{hours} Hours',
-  'security.minutesLabel': 'Minutes',
-  'security.custom': 'Custom',
   'security.autoLockUpdateFailed': 'Failed to update auto-lock timer',
 
   // Security - General
