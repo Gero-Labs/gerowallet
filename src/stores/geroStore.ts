@@ -21,6 +21,7 @@ import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 export interface GeroStore {
   wallets: Record<number, Wallet>;
   network: NetworkInfo;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- config is a dynamic settings bag: ~20 varied fields (hideBalances, currency, txAutoSubmit, spend caps, …) are read/written across the app; a strict type would break many consumers
   config: any;
 }
 
@@ -60,12 +61,12 @@ if (context === 'browser') {
 }
 
 // Serializer function for complex data types (used with JSON.stringify replacer)
-function serializeValue(_key: string, value: any): any {
+function serializeValue(_key: string, value: unknown): unknown {
   if (value instanceof Map) {
     return Array.from(value.entries()).reduce((obj, [k, v]) => {
-      obj[k] = v;
+      obj[String(k)] = v;
       return obj;
-    }, {} as Record<string, any>);
+    }, {} as Record<string, unknown>);
   } else if (typeof value === 'bigint') {
     return value.toString();
   } else {
@@ -140,6 +141,7 @@ export default {
     geroStore.wallets = wallets;
     broadcastFromBackground({ wallets });
   },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- config is the dynamic settings bag (see GeroStore.config)
   setConfig(config: any) {
     // CRITICAL: Trust the incoming locale from database if it exists
     // The database is the source of truth after setLocale() saves to it
@@ -263,7 +265,7 @@ export default {
     broadcastFromBackground({ wallets: updatedWallets });
     return geroStore.wallets[walletId];
   },
-  async createNewHardwareWallet(wallet: any) {
+  async createNewHardwareWallet(wallet: unknown) {
     const walletId = await createNewHardwareWallet(wallet);
     // Update the wallets field with the latest wallets from the database
     const updatedWallets = await getAllWallets();
