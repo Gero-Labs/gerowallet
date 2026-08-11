@@ -5,7 +5,9 @@
     :title="activeTab === 0 ? t('navigation.whatsNew') : t('navigation.aboutUs')"
     :subtitle="activeTab === 0 ? t('navigation.whatsNewSubtitle') : t('navigation.aboutGeroDashboard')"
     :loading="loading"
+    size="xl"
     :min-height="0"
+    :height="640"
     scrollable
     :persistent="persistent"
     icon="mdi-lightning-bolt"
