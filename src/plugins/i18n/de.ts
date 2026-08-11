@@ -2356,6 +2356,7 @@ export default {
   'security.passKeyPrfDisabled': 'PRF nicht verfügbar',
   'security.passKeyPrfEnabled': 'PRF-sichere Verschlüsselung aktiviert',
   'security.passKeyPrfNotSupported': 'PassKey-Registrierung erfolgreich, aber die PRF-Erweiterung wird nicht unterstützt. Für PassKey-Autofill werden Chrome, Edge oder Firefox mit einem kompatiblen Authentifikator benötigt.',
+  'security.passKeyUnsupportedBrowser': 'Dieser Browser oder dieses Gerät unterstützt keine PassKey-Wallets. Verwende Chrome oder Edge, oder gehe zurück und erstelle stattdessen eine passwortgeschützte Wallet.',
   'security.passKeyPrfRequired': 'Für PassKey-Autofill ist ein Browser mit WebAuthn-PRF-Unterstützung erforderlich (Chrome, Edge oder Firefox)',
   'security.passKeyPrfUnavailable': 'Die PRF-Erweiterung wird in diesem Browser nicht unterstützt. Für PassKey-Autofill werden Chrome, Edge oder Firefox benötigt.',
   'security.passKeyPrfWalletDescription': 'PassKey ist die primäre Verschlüsselung Ihrer Wallet - sie kann nicht entfernt werden',
