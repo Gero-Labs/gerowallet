@@ -9,6 +9,13 @@ import { StoredTransaction } from '@/models/transaction.types';
 /** Loose UTxO shape used for input token-amount resolution (see resolveInputAmounts). */
 type ResolvableUtxo = { tx_hash?: string; output_index?: number; address?: string; amount?: unknown[] };
 
+/** A native-token amount as carried on a stored tx input/output. */
+type LoaderAmount = { unit: string; quantity: number | string; policy_id?: string; asset_name?: string };
+/** Derived per-asset entry accumulated during sent/received accounting. */
+type LoaderAsset = LoaderAmount & { quantity: number; [key: string]: unknown };
+/** Loose input/output shape carrying an address and native-token amounts. */
+type LoaderUtxo = { address?: string; amount?: LoaderAmount[] };
+
 /**
  * Loader for wallet account information
  */
@@ -226,7 +233,31 @@ export class TransactionsLoader extends BaseLoader {
 
               const totalAmount = receivedAmount - sentAmount;
 
-              const finalAssets = this.calculateFinalAssets(sentAssets, receivedAssets);
+              // Tokens routed to foreign (non-own) outputs — the assets that actually
+              // left the wallet. Always trustworthy, since it reads this tx's own
+              // outputs (no dependency on producer resolution).
+              const foreignSentAssets = this.collectForeignOutputAssets(
+                tx.utxo?.outputs, currentAddress, currentStake, networkId
+              );
+
+              // Whether every consumed input resolved to a locally-synced producing
+              // output. Only then do own-input token amounts fully offset the change
+              // output, so precise received−sent netting is safe. When a producer
+              // isn't synced (e.g. NFTs acquired outside the synced window), the
+              // change tokens have nothing to cancel against and would masquerade as
+              // "received" — so we fall back to output-ownership accounting, which
+              // hides change on a spend and surfaces only the assets that truly moved.
+              const inputs = tx.utxo?.inputs ?? [];
+              const allInputsResolved = inputs.every(
+                (inp: { tx_hash?: string; output_index?: number }) =>
+                  outputIndex.has(`${inp.tx_hash}#${inp.output_index}`)
+              );
+
+              const finalAssets = allInputsResolved
+                ? this.calculateFinalAssets(sentAssets, receivedAssets)
+                : this.calculateRelevantAssetsFromOutputs(
+                    foreignSentAssets, receivedAssets, sentAmount > 0
+                  );
 
               const nativeAsset = {
                 unit: "lovelace",
@@ -331,6 +362,64 @@ export class TransactionsLoader extends BaseLoader {
         }
       }
     }
+  }
+
+  /**
+   * Collect native-token amounts sitting in this tx's FOREIGN (non-own) outputs —
+   * the assets that genuinely left the wallet. Reads only the tx's own output list,
+   * so it never depends on producer-output resolution (unlike sent-asset accounting).
+   */
+  private collectForeignOutputAssets(
+    outputs: LoaderUtxo[] | undefined,
+    currentAddress: string,
+    currentStake: string,
+    networkId: number
+  ): Map<string, LoaderAsset> {
+    const foreign = new Map<string, LoaderAsset>();
+    if (!outputs?.length) return foreign;
+
+    for (const out of outputs) {
+      const isOwnAddress = out.address === currentAddress ||
+        toStakeAddress(out.address, networkId) === currentStake;
+      if (isOwnAddress) continue;
+
+      for (const amount of out.amount ?? []) {
+        if (amount.unit !== 'lovelace') {
+          this.updateAssetMap(foreign, amount);
+        }
+      }
+    }
+    return foreign;
+  }
+
+  /**
+   * Output-ownership fallback for when some consumed inputs aren't locally resolved,
+   * so change tokens can't be netted away via received−sent. Surfaces only assets
+   * that actually moved:
+   *   - sends: tokens routed to foreign outputs (negative quantity)
+   *   - receives (no own inputs spent): own-output tokens not also sent out (positive)
+   * On a spend, own-output tokens are treated as change and omitted — matching a
+   * user's mental model that assets returned to themselves aren't part of the tx.
+   */
+  private calculateRelevantAssetsFromOutputs(
+    foreignSentAssets: Map<string, LoaderAsset>,
+    receivedAssets: Map<string, LoaderAsset>,
+    isSpend: boolean
+  ): LoaderAsset[] {
+    const relevant: LoaderAsset[] = [];
+
+    foreignSentAssets.forEach((asset) => {
+      relevant.push({ ...asset, quantity: -Math.abs(Number(asset.quantity)) });
+    });
+
+    if (!isSpend) {
+      receivedAssets.forEach((asset, unit) => {
+        if (!foreignSentAssets.has(unit)) {
+          relevant.push({ ...asset, quantity: Math.abs(Number(asset.quantity)) });
+        }
+      });
+    }
+    return relevant;
   }
 
   private updateAssetMap(assetsMap: Map<string, any>, asset: any): void {
