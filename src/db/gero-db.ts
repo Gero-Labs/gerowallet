@@ -433,13 +433,15 @@ export async function createNewWallet(
     // Encrypt private key based on chain
     let encryptedPrivateKey: string;
     if (chain === Blockchain.BITCOIN || chain === Blockchain.MIDNIGHT) {
-      // Bitcoin/Midnight: encrypt raw key bytes (Uint8Array). Same double-encrypt
-      // pattern as Cardano's encryptPrivateKey, just without the Bip32PrivateKey wrapper.
+      // Bitcoin/Midnight: encrypt raw key bytes (Uint8Array) with the strong
+      // single-layer routine — same format as Cardano's encryptPrivateKey, just
+      // without the Bip32PrivateKey wrapper. The weak crypto-ts outer wrap that
+      // used to double-encrypt this blob is removed (it negated the PBKDF2 cost —
+      // see decryptPrivateKey / PR #888). decryptPrivateKey reads both formats, so
+      // wallets created before this fix still unlock and migrate on next unlock.
       const { encryptWithPassword } = await import('@/shared/utils/crypto');
-      const CryptoTS = await import('crypto-ts');
       const keyBytes = rootKey.privateKey;  // Uint8Array
-      const encryptedBytes = encryptWithPassword(password, keyBytes);
-      encryptedPrivateKey = CryptoTS.AES.encrypt(JSON.stringify(encryptedBytes), password).toString();
+      encryptedPrivateKey = encryptWithPassword(password, keyBytes);
     } else {
       // Cardano: Use existing encryptPrivateKey function
       encryptedPrivateKey = encryptPrivateKey(rootKey, password);
