@@ -2673,6 +2673,7 @@ export default {
   'staking.signAndWithdraw': 'Signieren & Abheben',
   'staking.spendingPassword': 'Ausgabepasswort',
   'staking.stakeWithGero': 'Mit GERO staken',
+  'staking.delegationPending': 'Delegierung ausstehend',
   'staking.staking': 'Staking',
   'staking.stakingAllowsPassiveIncome': 'Durch Staking können Sie passives Einkommen aus Ihren Beständen erzielen.',
   'staking.submit': 'Absenden',

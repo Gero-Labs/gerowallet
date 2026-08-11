@@ -1,5 +1,6 @@
-import { ref, toRefs } from 'vue';
+import { ref, toRefs, computed } from 'vue';
 import { Cardano, Serialization } from '@cardano-sdk/core';
+import { isCardanoTx } from '@/models/transaction.types';
 import { HexBlob } from '@cardano-sdk/util';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { walletStore } from '@/stores/walletStore';
@@ -13,8 +14,8 @@ import networks from '@/utils/networks';
 import { WalletType } from '@/models/types';
 
 /**
- * Composable for handling Cardano staking delegation transactions
- * Shared logic between Staking.vue and NoTokensCard.vue
+ * Composable for handling Cardano staking delegation transactions and the
+ * shared "delegation pending" state used by the staking UI (Staking.vue).
  */
 export function useDelegation() {
   const { t } = useTranslation();
@@ -25,6 +26,30 @@ export function useDelegation() {
   const selectedPool = ref<any>(null);
   const txData = ref<Cardano.Tx | null>(null);
   const isDelegateDialogOpen = ref(false);
+
+  // Stake-pool delegation certificates (excludes DRep-only VoteDelegation /
+  // VoteRegistrationDelegation — those don't delegate stake to a pool).
+  const POOL_DELEGATION_CERTS: Cardano.CertificateType[] = [
+    Cardano.CertificateType.StakeDelegation,
+    Cardano.CertificateType.StakeRegistrationDelegation,
+    Cardano.CertificateType.StakeVoteRegistrationDelegation,
+    Cardano.CertificateType.StakeVoteDelegation,
+  ];
+
+  /**
+   * True while a stake-pool delegation transaction is submitted but not yet
+   * confirmed on-chain (a pending tx carrying a pool-delegation certificate).
+   * Lets the staking UI show a "delegation pending" state instead of the
+   * delegate CTA until `account.pool_id` updates on confirmation (#499).
+   */
+  const isDelegationPending = computed(() =>
+    (walletStore.transactions ?? []).some(
+      (tx) =>
+        tx.pending &&
+        isCardanoTx(tx) &&
+        (tx.body?.certificates ?? []).some((c) => POOL_DELEGATION_CERTS.includes(c.__typename)),
+    ),
+  );
 
   /**
    * Delegate to the Gero pool (official wallet pool)
@@ -226,6 +251,7 @@ export function useDelegation() {
     selectedPool,
     txData,
     isDelegateDialogOpen,
+    isDelegationPending,
 
     // Methods
     delegateToGero,
