@@ -16,6 +16,22 @@ export interface PrfExtensionResults {
 }
 
 /**
+ * Thrown when the browser/authenticator cannot create a PRF-capable PassKey —
+ * either registration fails outright (e.g. Brave, older platform authenticators
+ * that surface a "you may need a more recent device" WebAuthn error) or it
+ * succeeds without enabling the PRF extension. Callers should treat this as
+ * "PassKey wallets are unavailable here" and steer the user to a password
+ * wallet, rather than showing the raw browser error. Distinct from a user
+ * cancellation (NotAllowedError), which is not an error condition.
+ */
+export class PrfUnsupportedError extends Error {
+  constructor(message = 'PassKey wallets are not supported in this browser or on this device') {
+    super(message);
+    this.name = 'PrfUnsupportedError';
+  }
+}
+
+/**
  * WebAuthn PRF (Pseudo-Random Function) Extension Utilities
  *
  * This module provides secure passkey-based password encryption using the WebAuthn PRF extension.
@@ -367,15 +383,37 @@ export async function registerWebAuthnCredentialWithPrf(
       prfOutput
     };
   } catch (error) {
-    console.error('[PRF] Registration error:', error);
+    const err = error as Error;
+    console.error('[PRF] Registration error:', err);
 
-    // User cancelled the passkey prompt
-    if ((error as Error).name === 'NotAllowedError') {
+    // Re-throw our own typed error unchanged (e.g. the !prfEnabled case below).
+    if (err instanceof PrfUnsupportedError) {
+      throw err;
+    }
+
+    // User cancelled the passkey prompt — not an error condition.
+    if (err.name === 'NotAllowedError') {
       throw new Error('PassKey registration was cancelled');
     }
 
+    // Browser/authenticator can't create a PRF PassKey (e.g. Brave, or an older
+    // platform authenticator). Chromium reports this as NotSupportedError /
+    // ConstraintError, or a message about needing a "more recent" or "different
+    // kind of" device. Map it to a typed error so callers can steer the user to
+    // a password wallet instead of surfacing the raw browser string.
+    const msg = (err.message || '').toLowerCase();
+    if (
+      err.name === 'NotSupportedError' ||
+      err.name === 'ConstraintError' ||
+      msg.includes('more recent') ||
+      msg.includes('different kind') ||
+      msg.includes('not supported')
+    ) {
+      throw new PrfUnsupportedError();
+    }
+
     // Other errors
-    throw new Error(`PassKey registration failed: ${(error as Error).message}`);
+    throw new Error(`PassKey registration failed: ${err.message}`);
   }
 }
 

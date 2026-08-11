@@ -2995,6 +2995,7 @@ export default {
 
   // Security - PassKey PRF Extension
   'security.passKeyPrfNotSupported': 'PassKey registration succeeded but PRF extension is not supported. PassKey autofill requires Chrome, Edge, or Firefox with a compatible authenticator.',
+  'security.passKeyUnsupportedBrowser': "This browser or device doesn't support PassKey wallets. Try Chrome or Edge, or go back and create a password-protected wallet instead.",
   'security.passKeyPrfUnavailable': 'PRF extension not supported in this browser. PassKey autofill requires Chrome, Edge, or Firefox.',
   'security.passKeyLegacyDetected': 'Your existing PassKey does not support the new secure PRF encryption method. Please delete and re-register your PassKey to continue using autofill.',
   'security.passKeyPrfRequired': 'PassKey autofill requires a browser with WebAuthn PRF support (Chrome, Edge, or Firefox)',
