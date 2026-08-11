@@ -677,6 +677,21 @@ export async function updatePrivateKeyAndMnemonic(
 }
 
 /**
+ * Persist a re-encrypted private key WITHOUT bumping `passwordLastUpdate`.
+ *
+ * Used by the silent one-time upgrade of legacy (weak-outer-KDF) root-key blobs
+ * on unlock. The password itself is unchanged, so the password-age timestamp must
+ * not move — that distinguishes migration from a real spending-password change.
+ */
+export async function migrateEncryptedPrivateKey(
+  walletId: number,
+  encryptedPrivateKey: string
+): Promise<void> {
+  const db: Dexie = await getDb();
+  await db['wallets'].update(walletId, { encryptedPrivateKey });
+}
+
+/**
  * Get wallet by public key (xpub)
  * @param publicKey - The public key (xpub) to search for
  * @returns The wallet object if found, null otherwise

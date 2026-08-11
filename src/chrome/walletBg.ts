@@ -39,7 +39,7 @@ import {
   submitTx as submitTxFn,
   toStakeAddress,
 } from '@/chrome/serialization';
-import { decryptWithPassword, decrypt } from '@/shared/utils/crypto';
+import { decryptPrivateKey, encryptWithPassword, isRawEncryptedKey } from '@/shared/utils/crypto';
 import {
   deriveBitcoinAddress,
   deriveBitcoinAddressSetFromXpubs,
@@ -992,12 +992,37 @@ export class WalletBg {
       }
 
       try {
-        const decrypted = decrypt(this.encryptedPrivateKey, password);
-        const buffer: Buffer = decryptWithPassword(password, JSON.parse(decrypted));
+        const buffer: Buffer = decryptPrivateKey(this.encryptedPrivateKey, password);
+        // One-time silent upgrade of legacy weak-outer-KDF blobs. Non-blocking:
+        // a failed rewrite must never break signing; it retries on next unlock.
+        if (!isRawEncryptedKey(this.encryptedPrivateKey)) {
+          void this.migrateEncryptedPrivateKeyFormat(buffer, password);
+        }
         return Bip32PrivateKey.fromBytes(buffer);
       } catch (e) {
         throw ERROR.wrongPassword;
       }
+    }
+  }
+
+  /**
+   * Silently re-encrypt a legacy root-key blob into the current strong format.
+   *
+   * Legacy blobs wrapped the strong ChaCha20/PBKDF2 ciphertext in a weak crypto-ts
+   * (MD5, 1-iter) outer layer under the same password, negating the KDF cost. This
+   * rewrites the stored blob to the single strong layer on first password unlock,
+   * once per wallet (subsequent unlocks see raw-hex and skip). Best-effort: any
+   * failure is swallowed so it can never interfere with signing.
+   */
+  private async migrateEncryptedPrivateKeyFormat(rootKeyBuffer: Buffer, password: string): Promise<void> {
+    try {
+      const upgraded = encryptWithPassword(password, rootKeyBuffer.toString('hex'));
+      const { migrateEncryptedPrivateKey } = await import('@/db/gero-db');
+      await migrateEncryptedPrivateKey(this.id, upgraded);
+      this.encryptedPrivateKey = upgraded;
+      debugLog(`🔐 Migrated wallet ${this.id} private key to hardened KDF format`);
+    } catch (e) {
+      debugLog('🔐 Private-key KDF migration deferred (will retry on next unlock):', e);
     }
   }
 
@@ -1618,8 +1643,7 @@ export class WalletBg {
       // ============================================================================
 
       try {
-        const decrypted = decrypt(this.encryptedPrivateKey, password);
-        decryptWithPassword(password, JSON.parse(decrypted));
+        decryptPrivateKey(this.encryptedPrivateKey, password);
         return true;
       } catch (e) {
         return false;

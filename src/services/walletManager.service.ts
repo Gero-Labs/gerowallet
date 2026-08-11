@@ -1025,9 +1025,8 @@ export class WalletManager {
 
         // Verify password by attempting to decrypt
         try {
-          const { decrypt, decryptWithPassword } = await import('@/shared/utils/crypto');
-          const decrypted = decrypt(encryptedPrivateKey, unlockCredential as string);
-          decryptWithPassword(unlockCredential as string, JSON.parse(decrypted));
+          const { decryptPrivateKey } = await import('@/shared/utils/crypto');
+          decryptPrivateKey(encryptedPrivateKey, unlockCredential as string);
           unlockValid = true;
         } catch (error) {
           unlockValid = false;

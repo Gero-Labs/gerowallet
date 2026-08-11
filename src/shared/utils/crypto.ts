@@ -123,7 +123,37 @@ export function decryptWithPassword(password: string, encryptedData): Buffer {
   }
 }
 
+/**
+ * Encrypt a root key under a password. Stores the strong `encryptWithPassword`
+ * output (PBKDF2-SHA512 19162 iter + ChaCha20-Poly1305) directly as a hex blob.
+ *
+ * The previous version wrapped this a second time with `CryptoTS.AES.encrypt`,
+ * whose OpenSSL EvpKDF is MD5 with a single iteration. Since both layers used the
+ * same password, an attacker holding the stored blob could brute-force the weak
+ * outer layer offline and recover the password without ever paying the PBKDF2
+ * cost — negating the encryption at rest. The outer wrap is removed; read-back is
+ * handled by `decryptPrivateKey`, which still decodes legacy nested blobs.
+ */
 export function encryptPrivateKey(rootKey: Bip32PrivateKey, password: string): string {
-  const privateKey = encryptWithPassword(password, rootKey.bytes());
-  return CryptoTS.AES.encrypt(JSON.stringify(privateKey), password).toString();
+  return encryptWithPassword(password, rootKey.bytes());
+}
+
+/** True for the current `encryptPrivateKey` output: a plain, even-length hex string. */
+export function isRawEncryptedKey(blob: string): boolean {
+  return typeof blob === 'string' && blob.length % 2 === 0 && /^[0-9a-fA-F]+$/.test(blob);
+}
+
+/**
+ * Decrypt a root key produced by `encryptPrivateKey`. Reads both formats:
+ *  - Current: raw `encryptWithPassword` hex (single strong layer).
+ *  - Legacy: `CryptoTS.AES.encrypt(JSON.stringify(hex), password)` — the weak
+ *    crypto-ts outer wrap around the strong inner blob. Kept for backward
+ *    compatibility so existing wallets still unlock; re-saving migrates them.
+ */
+export function decryptPrivateKey(encryptedPrivateKey: string, password: string): Buffer {
+  if (isRawEncryptedKey(encryptedPrivateKey)) {
+    return decryptWithPassword(password, encryptedPrivateKey);
+  }
+  const inner = decrypt(encryptedPrivateKey, password);
+  return decryptWithPassword(password, JSON.parse(inner));
 }
