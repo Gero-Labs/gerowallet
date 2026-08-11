@@ -2,7 +2,8 @@
   <v-dialog
     v-model="isDialogOpen"
     :persistent="persistent || loading"
-    :width="resolvedWidth"
+    width="90%"
+    :max-width="resolvedWidth"
     :scrollable="scrollable"
     transition="g-dialog-transition"
     overlay-color="#000000"
