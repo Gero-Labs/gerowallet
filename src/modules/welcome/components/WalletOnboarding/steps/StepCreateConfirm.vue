@@ -278,14 +278,16 @@ const walletCreationStep = async (): Promise<void> => {
         const newWalletId = await getNextWalletId();
 
         // Step 2: Register credential AND evaluate PRF in one prompt
-        const { registerWebAuthnCredentialWithPrf } = await import('@/shared/utils/webauthn-prf');
+        const { registerWebAuthnCredentialWithPrf, PrfUnsupportedError } = await import('@/shared/utils/webauthn-prf');
         const { credentialId, prfEnabled, prfOutput } = await registerWebAuthnCredentialWithPrf(
           newWalletId.toString(),
           props.name
         );
 
         if (!prfEnabled) {
-          throw new Error(vmProxy.$t('security.passKeyPrfNotSupported') as string);
+          // Registration succeeded but the authenticator didn't enable PRF — the
+          // wallet could never unlock, so treat it as unsupported (see #655).
+          throw new PrfUnsupportedError();
         }
 
         try {
@@ -319,6 +321,12 @@ const walletCreationStep = async (): Promise<void> => {
         const message = error instanceof Error ? error.message : String(error);
         const isDOMException = error instanceof DOMException && error.name === 'NotAllowedError';
         if (message.includes('cancelled') || isDOMException) {
+          return;
+        }
+        // Browser/device can't do PassKey wallets (e.g. Brave): show an actionable
+        // message pointing to a password wallet, instead of a generic error (#655).
+        if (error instanceof Error && error.name === 'PrfUnsupportedError') {
+          vmProxy['$snackbar']?.setError(vmProxy.$t('security.passKeyUnsupportedBrowser') as string);
           return;
         }
         throw error;

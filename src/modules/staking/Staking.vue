@@ -25,7 +25,11 @@
               </v-list-item-content>
               <v-list-item-action class="staking-gero-support ma-0" v-if="geroPoolExists && !delegatingToGero">
                 <v-card-subtitle>
-                  <v-btn small class="geroButton" style="color: var(--g-on-grad)!important" @click="delegateToGero">{{ $t('staking.stakeWithGero') }}</v-btn>
+                  <v-btn v-if="isDelegationPending" small class="geroButton" style="color: var(--g-on-grad)!important" disabled>
+                    <v-progress-circular indeterminate size="14" width="2" class="mr-2" />
+                    {{ $t('staking.delegationPending') }}
+                  </v-btn>
+                  <v-btn v-else small class="geroButton" style="color: var(--g-on-grad)!important" @click="delegateToGero">{{ $t('staking.stakeWithGero') }}</v-btn>
                 </v-card-subtitle>
               </v-list-item-action>
             </v-list-item>
@@ -479,7 +483,7 @@ const instance = getCurrentInstance();
 const { config, loggedWallet, account } = toRefs(walletStore);
 
 // Use the shared delegation composable
-const { selectedPool, txData, isDelegateDialogOpen, delegateToGero, delegate, closeDelegateDialog } = useDelegation();
+const { selectedPool, txData, isDelegateDialogOpen, isDelegationPending, delegateToGero, delegate, closeDelegateDialog } = useDelegation();
 
 const {
   pools: paginatedPools,

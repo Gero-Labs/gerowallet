@@ -174,8 +174,6 @@
             @refresh="refreshPortfolioChart"
             @timeframe-change="handleChartTimeframeChange"
             @mode-change="handleChartModeChange"
-            @withdraw-rewards="handleWithdrawRewards"
-            @delegate-gero="handleDelegateGero"
           />
         </v-col>
         <!-- Recent Transactions compact card (replaces the old FeatureCarousel slot) -->
@@ -380,12 +378,6 @@
       <!-- Swap Dialog -->
       <SwapDialog :isOpen="swapDialogOpen" @close="swapDialogOpen = false; swapToken = null" :buy-token-unit="swapToken?.unit" />
 
-      <!-- Withdrawal Dialog -->
-      <WithdrawalDialog :isOpen="withdrawalDialog" :tx="withdrawalTxData" @close="closeWithdrawalDialog" />
-
-      <!-- Delegate Dialog -->
-      <DelegateDialog :isOpen="isDelegateDialogOpen" :pool="selectedPool" :tx="delegateTxData" @close="closeDelegateDialog" />
-
       <!-- cNIGHT → DUST registration -->
       <CnightDustRegistrationDialog :isOpen="cnightDialogOpen" @close="cnightDialogOpen = false" />
     </template>
@@ -402,8 +394,6 @@ import { useWalletPnl } from '@/modules/market/composables/useWalletPnl';
 import { useColumnPreferences, type ColumnKey } from '@/modules/market/composables/useColumnPreferences';
 import { usePortfolioData } from '@/shared/composables/usePortfolioData';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
-import { useWithdrawal } from '@/shared/composables/useWithdrawal';
-import { useDelegation } from '@/shared/composables/useDelegation';
 import { useHoldingsValuation } from '@/shared/composables/useHoldingsValuation';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain, Network } from '@/models/types';
@@ -433,8 +423,6 @@ import CollectiblesTab from '@/modules/assets/components/CollectiblesTab.vue';
 import NftCollectionTable from '@/modules/market/components/NftCollectionTable.vue';
 import TokensDialog from '@/modules/assets/dialogs/TokensDialog.vue';
 import SwapDialog from '@/modules/dashboard/dialogs/SwapDialog.vue';
-import WithdrawalDialog from '@/modules/staking/dialogs/WithdrawalDialog.vue';
-import DelegateDialog from '@/modules/staking/dialogs/DelegateDialog.vue';
 import CnightDustRegistrationDialog from '@/modules/dashboard/dialogs/CnightDustRegistrationDialog.vue';
 import snackbar from '@/plugins/snackbar';
 
@@ -480,9 +468,6 @@ const columnOptions = computed<{ key: ColumnKey; label: string }[]>(() => {
   }
   return opts;
 });
-
-const { txData: withdrawalTxData, withdrawalDialog, withdraw: withdrawRewards, closeWithdrawalDialog } = useWithdrawal();
-const { selectedPool, txData: delegateTxData, isDelegateDialogOpen, delegateToGero, closeDelegateDialog } = useDelegation();
 
 // ── Store refs ────────────────────────────────────────────────────────────────
 
@@ -889,14 +874,6 @@ async function refreshPortfolioChart() {
   if (address && !isApex.value) {
     await refreshPortfolioData(address);
   }
-}
-
-function handleWithdrawRewards() {
-  withdrawRewards();
-}
-
-function handleDelegateGero() {
-  delegateToGero();
 }
 
 // Read persisted chart settings so API calls match the UI toggle state

@@ -353,8 +353,6 @@ const emit = defineEmits<{
   (e: 'refresh'): void;
   (e: 'timeframe-change', timeframe: string): void;
   (e: 'mode-change', adaOnly: boolean): void;
-  (e: 'withdraw-rewards'): void;
-  (e: 'delegate-gero'): void;
 }>();
 
 // Refs
