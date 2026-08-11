@@ -13,7 +13,7 @@ import { governanceStore } from '@/stores/governanceStore';
 
 /**
  * Composable for handling Cardano staking reward withdrawals
- * Shared logic between StakingCard.vue and StakingCard2.vue
+ * Shared logic used by StakingCard.vue
  */
 export function useWithdrawal() {
   const { t } = useTranslation();
