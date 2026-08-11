@@ -66,6 +66,10 @@ jobs:
 
       # Resolves eslint.config.mjs end to end, loading every referenced plugin.
       # Fails on a broken/missing/incompatible plugin; unaffected by the legacy
-      # no-explicit-any debt because no file bodies are linted here.
+      # no-explicit-any debt because no file bodies are linted here. Checked for
+      # both a .vue and a .ts path so a rule/plugin that only breaks resolving
+      # one file type is still caught.
       - name: Verify flat config resolves
-        run: npx eslint --print-config src/options/App.vue > /dev/null
+        run: |
+          npx eslint --print-config src/options/App.vue > /dev/null
+          npx eslint --print-config src/utils/debug.ts > /dev/null
