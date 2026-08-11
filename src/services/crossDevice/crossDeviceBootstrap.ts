@@ -16,13 +16,32 @@
 import { debugLog } from '@/utils/debug';
 import { generateDeviceKeypair, deviceIdFromPubKey } from './deviceIdentity';
 import { createCrossDeviceSigning, type CrossDeviceSigning } from './crossDeviceSigning.service';
+import { createProveService, type ProveService } from './proveService';
 import type { PairConfirm } from './protocol';
-import { createWsTransport, feedCrossDeviceMessage } from './wsTransport';
+import { createWsTransport, createProveWsTransport, feedCrossDeviceMessage } from './wsTransport';
 import { isDevicesSnapshot, type DeviceRegister, type DevicePlatform, type DeviceInfo, type DeviceRegisterProof } from './protocol';
-import { emptyRegistry, applyDevicesSnapshot, pubKeyOf, type DeviceRegistryState } from './deviceRegistry';
+import { emptyRegistry, applyDevicesSnapshot, pubKeyOf, checkProverEcho, type DeviceRegistryState } from './deviceRegistry';
+
+/**
+ * XDP serving wiring (R3/R6). Absent => this desktop never serves proofs: no
+ * prove service is created and PROVE_* frames are parsed and dropped. Present
+ * => the service is created, but every gate still applies per job.
+ */
+export interface ProveServingOptions {
+  /** Proof-server docker tag we prove against (advertised in DEVICE_REGISTER). */
+  ledgerVersion: string;
+  /** Live per-device gate: `isServingProofsTo(settings, deviceId)`. */
+  isServingEnabled: (deviceId: string) => boolean;
+  /** Local proof-server `/health`. */
+  checkProverHealth: () => Promise<boolean>;
+  /** Signed-but-unproven bytes in, finalized bytes out (midnightUnshieldedProver). */
+  prove: (payload: Uint8Array) => Promise<Uint8Array>;
+}
 
 export interface CrossDeviceHandles {
   signing: CrossDeviceSigning;
+  /** XDP prover service, or null when serving is not wired for this session. */
+  proving: ProveService | null;
   /** This device's own id (to mark "this device" and skip it in the pairing list). */
   selfDeviceId: string;
   /** Feed an inbound raw relay message (wired into WsHandlers.onCrossDeviceMessage). */
@@ -50,7 +69,13 @@ export interface CrossDeviceHandles {
 function publishDeviceRegister(
   send: (msg: DeviceRegister) => void,
   identity: { deviceId: string; pubKeyHex: string },
-  opts: { label: string; platform: DevicePlatform; hasSigningKey: boolean; proof?: DeviceRegisterProof },
+  opts: {
+    label: string;
+    platform: DevicePlatform;
+    hasSigningKey: boolean;
+    proof?: DeviceRegisterProof;
+    prover?: { hasProver: boolean; proverLedgerVersion: string };
+  },
 ): void {
   const register: DeviceRegister = {
     type: 'DEVICE_REGISTER',
@@ -60,6 +85,12 @@ function publishDeviceRegister(
     pubKey: identity.pubKeyHex,
     hasSigningKey: opts.hasSigningKey,
     ...(opts.proof ? { proof: opts.proof } : {}),
+    // XDP R2. Only announced when actually serving: advertising a prover we
+    // would then reject on every gate is worse than staying silent, because the
+    // phone would build + encrypt a payload before learning it cannot be served.
+    ...(opts.prover?.hasProver
+      ? { hasProver: true, proverLedgerVersion: opts.prover.proverLedgerVersion }
+      : {}),
   };
   send(register);
 }
@@ -88,9 +119,15 @@ export function bootstrapCrossDeviceSigning(opts: {
   // Latest cached wallet-control proof, read at each register() so a proof
   // produced AFTER bootstrap (on enable) rides the next DEVICE_REGISTER.
   getProof?: () => DeviceRegisterProof | undefined;
+  // XDP R2: live prover capability, read at each register() for the same reason
+  // as getProof — the user can flip the serving toggle after bootstrap, and the
+  // next register (every reconnect) should carry the truth.
+  getProver?: () => { hasProver: boolean; proverLedgerVersion: string } | undefined;
   // QR pairing: a verified inbound PAIR_CONFIRM (already frame-sig-checked by the
   // service). The caller (walletManager) does the nonce consume + proof verify + pin.
   onPairConfirm?: (frame: PairConfirm) => void;
+  // XDP serving (R3/R6). Omit to never serve proofs.
+  serving?: ProveServingOptions;
 }): CrossDeviceHandles | null {
   if (!opts.enabled) {
     return null;
@@ -105,9 +142,30 @@ export function bootstrapCrossDeviceSigning(opts: {
 
   // Server-pushed device registry backs sender-pubkey resolution.
   let registry: DeviceRegistryState = emptyRegistry();
+  // What our last DEVICE_REGISTER actually advertised, for the Q1b round-trip
+  // check below. Recorded at send time rather than read from getProver() so the
+  // check compares against what the relay was really given.
+  let advertisedProver: { hasProver: boolean; proverLedgerVersion: string } | undefined;
+  // Latch so a stripped-field relay logs once per session, not once per snapshot
+  // (DEVICES arrives on every reconnect and every sibling change).
+  let proverEchoReported = false;
   const unsubRegistry = transport.onMessage((raw) => {
     if (isDevicesSnapshot(raw)) {
       registry = applyDevicesSnapshot(registry, raw);
+      // gero-sync Q1b, answered from production instead of by waiting: if the
+      // relay rebuilds DeviceInfo against a fixed schema, our own advertised
+      // hasProver never comes back, XDP discovery silently no-ops on BOTH
+      // clients, and the only symptom is "the phone never asks to prove".
+      const echo = checkProverEcho(registry, deviceId, advertisedProver);
+      if (echo === 'stripped' && !proverEchoReported) {
+        proverEchoReported = true;
+        debugLog('⚠️ XDP Q1b: relay STRIPPED hasProver/proverLedgerVersion from the DEVICES '
+          + 'echo of this device — capability advertising is a no-op; the phone will never see '
+          + 'a prover. Relay must preserve unknown DeviceInfo fields.');
+      } else if (echo === 'confirmed' && !proverEchoReported) {
+        proverEchoReported = true;
+        debugLog('✅ XDP Q1b: relay preserved hasProver/proverLedgerVersion in the DEVICES echo.');
+      }
       // Diagnostic: show WHO is in the snapshot so an empty "other devices" list
       // can be told apart from a UI-filtering bug. platform:id8(self?) per device.
       const ids = Object.values(registry.byId).map((d) =>
@@ -138,22 +196,55 @@ export function bootstrapCrossDeviceSigning(opts: {
   const register = (): void => {
     try {
       const proof = opts.getProof?.();
+      const prover = opts.getProver?.();
+      // Record for the Q1b echo check, and re-arm it: a toggle change means the
+      // next snapshot is a fresh round-trip worth reporting on.
+      if (prover?.hasProver !== advertisedProver?.hasProver
+        || prover?.proverLedgerVersion !== advertisedProver?.proverLedgerVersion) {
+        proverEchoReported = false;
+      }
+      advertisedProver = prover;
       publishDeviceRegister((msg) => transport.send(msg), { deviceId, pubKeyHex: identity.pubKeyHex }, {
         label: opts.label,
         platform: 'extension',
         hasSigningKey: opts.hasSigningKey,
         proof,
+        prover,
       });
-      debugLog('📇 DEVICE_REGISTER sent:', deviceId, 'proof=' + (proof ? 'yes' : 'no'));
+      debugLog('📇 DEVICE_REGISTER sent:', deviceId, 'proof=' + (proof ? 'yes' : 'no'),
+        'prover=' + (prover?.hasProver ? prover.proverLedgerVersion : 'no'));
     } catch (e) {
       debugLog('cross-device DEVICE_REGISTER failed:', e);
     }
   };
 
-  debugLog('🔗 Cross-device signing bridge wired (dark):', deviceId);
+  // XDP prover service. Shares the transport, identity and registry with the
+  // signing bridge — XDP adds no new pairing, so the pinned peer that may ask us
+  // to sign is exactly the peer that may ask us to prove.
+  const proving = opts.serving
+    ? createProveService({
+      transport: createProveWsTransport(),
+      identity: { deviceId, privKeyHex: identity.privKeyHex },
+      resolvePubKey: async (id) => pubKeyOf(registry, id),
+      // Reuses the SAME pin check as signing (gate 1); the serving toggle is a
+      // separate, narrower gate on top of it (gate 2).
+      isPeerPinned: (id, pk) => opts.isRequesterTrusted?.(id, pk) ?? false,
+      isServingEnabled: opts.serving.isServingEnabled,
+      ledgerVersion: opts.serving.ledgerVersion,
+      checkProverHealth: opts.serving.checkProverHealth,
+      prove: opts.serving.prove,
+      now: () => Date.now(),
+      newId: () => globalThis.crypto.randomUUID(),
+      log: (m) => debugLog('🧾 xprove:', m),
+    })
+    : null;
+
+  debugLog('🔗 Cross-device signing bridge wired (dark):', deviceId,
+    proving ? '(+ XDP prover)' : '');
 
   return {
     signing,
+    proving,
     selfDeviceId: deviceId,
     onCrossDeviceMessage: feedCrossDeviceMessage,
     getDevices: () => Object.values(registry.byId),
@@ -161,6 +252,7 @@ export function bootstrapCrossDeviceSigning(opts: {
     dispose: () => {
       unsubRegistry();
       signing.dispose();
+      proving?.dispose();
     },
   };
 }

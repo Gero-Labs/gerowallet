@@ -36,10 +36,15 @@ import {
   trustDevice as trustAddDevice,
   untrustDevice as trustRemoveDevice,
   soleSignerDeviceId,
+  hasProofServingDevice,
+  isServingProofsTo,
+  setServeProofs as trustSetServeProofs,
+  setDeviceServeProofs as trustSetDeviceServeProofs,
   REQUIRE_PROOF_TO_PAIR,
   type RemoteSigningSettings,
   type SigningPolicy,
 } from '@/services/crossDevice/crossDeviceTrust';
+import { PROOF_SERVER_DOCKER_TAG } from '@/chains/midnight/midnightConfig';
 import type { DeviceInfo } from '@/services/crossDevice/protocol';
 import { mpcSessionCache } from '@/chrome/mpcSessionCache';
 import { mpcLoginShareCache } from '@/chrome/mpcLoginShareCache';
@@ -550,6 +555,19 @@ export class WalletManager {
         getProof: () => this.crossDeviceProof ?? undefined,
         // QR pairing: a frame-verified PAIR_CONFIRM -> nonce consume + proof verify + pin.
         onPairConfirm: (frame) => void this.handlePairConfirm(frame),
+        // XDP R2: advertise the prover only when the user is actually serving
+        // SOMEONE. Announcing a prover we would reject on every gate is worse
+        // than silence — the phone would build and encrypt a payload first.
+        getProver: () => (this.remoteSigning.serveProofs && hasProofServingDevice(this.remoteSigning)
+          ? { hasProver: true, proverLedgerVersion: PROOF_SERVER_DOCKER_TAG }
+          : undefined),
+        // XDP R3/R6: serve proofs to individually-enabled pinned devices.
+        serving: {
+          ledgerVersion: PROOF_SERVER_DOCKER_TAG,
+          isServingEnabled: (id) => isServingProofsTo(this.remoteSigning, id),
+          checkProverHealth: () => this.checkLocalProverHealth(),
+          prove: (payload) => this.proveForPeer(payload),
+        },
       });
 
       webSocketService.connect(chain, network, address, lastSyncedBlock, {
@@ -1462,6 +1480,70 @@ export class WalletManager {
     this.remoteSigning = trustSetPolicy(this.remoteSigning, policy);
     await this.persistRemoteSigning();
     return this.remoteSigning;
+  }
+
+  /**
+   * XDP master switch. No re-bootstrap: the prove service reads the gate live,
+   * exactly like the signing trust predicates. Re-registers so siblings learn
+   * about the capability change without waiting for a reconnect.
+   */
+  async setServeProofsEnabled(serveProofs: boolean): Promise<RemoteSigningSettings> {
+    this.remoteSigning = trustSetServeProofs(this.remoteSigning, serveProofs);
+    await this.persistRemoteSigning();
+    this.reAdvertiseProver();
+    return this.remoteSigning;
+  }
+
+  /** XDP per-device switch. */
+  async setDeviceServeProofs(deviceId: string, serveProofs: boolean): Promise<RemoteSigningSettings> {
+    this.remoteSigning = trustSetDeviceServeProofs(this.remoteSigning, deviceId, serveProofs);
+    await this.persistRemoteSigning();
+    this.reAdvertiseProver();
+    return this.remoteSigning;
+  }
+
+  /**
+   * Re-publish DEVICE_REGISTER so `hasProver` reflects the toggles now. The
+   * relay upserts by deviceId, so a repeat register is idempotent.
+   */
+  private reAdvertiseProver(): void {
+    if (this.crossDevice && webSocketService.isConnected()) this.crossDevice.register();
+  }
+
+  /**
+   * XDP: is the local proof server reachable? Always the LOCAL url, never the
+   * zkPaaS gateway — proving a peer's tx against a third-party TEE would ship
+   * their witness data off-machine, which is the exact thing XDP exists to stop.
+   * The desktop's own `proofServer.mode` governs its own sends, not this.
+   */
+  private async checkLocalProverHealth(): Promise<boolean> {
+    try {
+      const { checkProofServerHealth } = await import('@/chains/midnight/midnightLocalProver');
+      const { midnightStore } = await import('@/stores/midnightStore');
+      return await checkProofServerHealth(midnightStore.proofServer.localUrl);
+    } catch (e) {
+      debugLog('XDP health check failed:', e);
+      return false;
+    }
+  }
+
+  /**
+   * XDP: prove a peer's signed-but-unproven unshielded tx locally.
+   *
+   * The payload buffer is zeroed by the caller once this settles (R8), so the
+   * hex conversion below must happen — and does — before returning.
+   */
+  private async proveForPeer(payload: Uint8Array): Promise<Uint8Array> {
+    const { proveUnshieldedTransfer } = await import('@/chains/midnight/midnightUnshieldedProver');
+    const { midnightStore } = await import('@/stores/midnightStore');
+    const { hexToBytes } = await import('@/chains/midnight/midnightTxBuilder');
+    let signedTxHex = '';
+    for (let i = 0; i < payload.length; i++) signedTxHex += payload[i].toString(16).padStart(2, '0');
+    const { provenTxHex } = await proveUnshieldedTransfer({
+      signedTxHex,
+      proving: { url: midnightStore.proofServer.localUrl },
+    });
+    return hexToBytes(provenTxHex);
   }
 
   /** Pair (trust) a device currently visible in the registry, pinning its pubKey. */

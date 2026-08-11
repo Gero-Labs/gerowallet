@@ -1,0 +1,91 @@
+{
+  "_comment": [
+    "FROZEN cross-client conformance vectors for gero-xprove/v1 (Cross-Device Proving).",
+    "Mirrored byte-for-byte by gero-ios. Generated from this repo's implementation and",
+    "asserted against it by proveSession.spec.ts / proveEnvelope.spec.ts, so this file and",
+    "the code cannot drift: change one without the other and the suite fails.",
+    "",
+    "DO NOT EDIT BY HAND to make a test pass. If a value here needs to change, the wire",
+    "contract changed, which means a coordinated change with gero-ios and a version bump.",
+    "",
+    "The KDF is the trap: 'HKDF-BLAKE2b' has two readings that do not interoperate. This",
+    "contract is RFC 5869 HKDF with HMAC-BLAKE2b-512 over UNKEYED BLAKE2b (ipad/opad,",
+    "128-byte block), 64 zero-byte salt, 64-byte PRK. It is NOT BLAKE2b's native keyed",
+    "mode, which is what libsodium's crypto_generichash gives you and what iOS shipped",
+    "first. HMAC-BLAKE2b is not a stock primitive on iOS (libsodium exposes HMAC-SHA512;",
+    "CryptoKit has no BLAKE2b), so iOS hand-rolls HMAC over unkeyed BLAKE2b-512 — vector",
+    "`prk` below is what makes that safe to verify independently of the final keys."
+  ],
+  "version": "gero-xprove/v1",
+  "kdf": {
+    "construction": "RFC5869-HKDF-HMAC-BLAKE2b-512",
+    "hashLen": 64,
+    "blockLen": 128,
+    "saltBytes": 64,
+    "saltAllZero": true,
+    "okmLen": 32
+  },
+  "aead": {
+    "algorithm": "XChaCha20-Poly1305",
+    "keyBytes": 32,
+    "nonceBytes": 24,
+    "tagBytes": 16
+  },
+  "session": {
+    "_comment": "Fixed ephemeral secrets — TEST ONLY. Real jobs mint a fresh pair per job.",
+    "reqId": "req-1",
+    "phoneDeviceId": "phone-dev",
+    "desktopDeviceId": "desk-dev",
+    "phoneEphemeralPrivHex": "1111111111111111111111111111111111111111111111111111111111111111",
+    "desktopEphemeralPrivHex": "2222222222222222222222222222222222222222222222222222222222222222",
+    "phoneEphemeralPubHex": "7b4e909bbe7ffe44c465a220037d608ee35897d31ef972f07f74892cb0f73f13",
+    "desktopEphemeralPubHex": "0faa684ed28867b97f4a6a2dee5df8ce974e76b7018e3f22a1c4cf2678570f20",
+    "ecdhSharedHex": "9e004098efc091d4ec2663b4e9f5cfd4d7064571690b4bea97ab146ab9f35056",
+    "prkHex": "d74b44c27980244dec7d11bda9a67caf7f2a6a33604348ccbb7fca1dd54ecad679f9e8ad7774142ed057e0481ac8a203d73bf742fefc78f06c6a7bfa30eb5713",
+    "infoP2d": "gero-xprove/v1|req-1|phone-dev|desk-dev|p2d",
+    "infoD2p": "gero-xprove/v1|req-1|phone-dev|desk-dev|d2p",
+    "keyP2dHex": "f12adaf1187195d83f8dc7c73ccde874f197008785977bc02c9788f3edd1b140",
+    "keyD2pHex": "b3cd2461624748ad825186b64bf51a38aa72d9dcb4a155d0b3d3aab30214b3c9",
+    "negativeControl": {
+      "_comment": "BLAKE2b native keyed mode over the same shared secret. If your PRK equals THIS, you implemented the wrong construction.",
+      "nativeKeyedPrkHex": "d3315a0baeb7371d74cd5e87a1b68bbe74f9b01030bb64186f1e71f0f871d10ba6eb02c5eec908a4523b8c79769a8a4311c321589e5e39af0ed906f559f90c30"
+    }
+  },
+  "chunk": {
+    "_comment": "Sealed under keyP2d. AAD binds version|reqId|dir|seq|count — this is why chunks need no per-chunk signature.",
+    "aad": "gero-xprove/v1|req-1|p2d|0|1",
+    "plaintextUtf8": "unproven-tx-bytes",
+    "nonceHex": "a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+    "ciphertextHex": "470f9789d9f6609e9b3311100850bb4d392da48923c18431405fd6794698035d49",
+    "ciphertextB64": "Rw+Xidn2YJ6bMxEQCFC7TTktpIkjwYQxQF/WeUaYA11J"
+  },
+  "payloadDigest": {
+    "_comment": "blake2b-256 over the PLAINTEXT payload, never the ciphertext.",
+    "plaintextUtf8": "unproven-tx-bytes",
+    "digestHex": "cf0993512d6d06ec100df25e954a9b5476debbd768274330b4bc4b28b9752ef5"
+  },
+  "subjects": {
+    "_comment": [
+      "Ed25519 over the UTF-8 subject, using the EXISTING relay device identity (the same",
+      "key that signs SIGN_RESPONSE) — XDP adds no new pairing. Signing keys below are",
+      "derived from all-0x09 (phone) and all-0x08 (desktop) seeds, test only.",
+      "`to` is inside every subject: these frames carry ephemeral key material, so",
+      "redirection must be unforgeable rather than merely detectable."
+    ],
+    "phoneSignPubHex": "fd1724385aa0c75b64fb78cd602fa1d991fdebf76b13c58ed702eac835e9f618",
+    "desktopSignPubHex": "1398f62c6d1a457c51ba6a4b5f3dbd2f69fca93216218dc8997e416bd17d93ca",
+    "proveInit": {
+      "subject": "gero-xprove/v1|PROVE_INIT|req-1|n1|phone-dev|desk-dev|stake1xyz|7b4e909bbe7ffe44c465a220037d608ee35897d31ef972f07f74892cb0f73f13|8.1.0|17|1|1000|cf0993512d6d06ec100df25e954a9b5476debbd768274330b4bc4b28b9752ef5",
+      "sigHex": "5b3549563ab87f792818d461380a13c21a3d0abe97f532c3e3a899010e98fb8427a65c8e473a1690e1396662c0cdb3bb80e485baa4bec0daa4ed422df5d4140f"
+    },
+    "proveAccept": {
+      "subject": "gero-xprove/v1|PROVE_ACCEPT|req-1|n2|desk-dev|phone-dev|0faa684ed28867b97f4a6a2dee5df8ce974e76b7018e3f22a1c4cf2678570f20|8.1.0",
+      "sigHex": "52a696647a3f0639d44b3a56637c662b44a00dbc57c01efa2976e015fdeb229f91d3a998389e7b6d05276ee088b39a1c25f3643e673420080c4cee8a4eeda20f"
+    }
+  },
+  "limits": {
+    "_comment": "Set from iOS's ledger-v8 8.1.0 measurements: unshielded 1-in/1-out + 1 DUST spend = 1685 B unproven -> 3627 B proven; range across shapes 1.5-9 KB -> 3.6-60 KB.",
+    "maxProvePayloadBytes": 262144,
+    "defaultChunkBytes": 65536
+  }
+}

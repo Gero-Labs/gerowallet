@@ -42,6 +42,24 @@ export interface DeviceInfo {
   pubKey: string; // hex Ed25519 public key (verifies this device's signed messages)
   hasSigningKey: boolean; // true if this device holds a wallet spending key
   proof?: DeviceRegisterProof; // optional wallet-control proof
+  /**
+   * XDP (R2): this device can serve Cross-Device Proving — it has a reachable
+   * Midnight proof server AND the user has enabled serving. Lets a phone see
+   * that a pinned prover exists without probing for one.
+   *
+   * OPTIONAL, and absence means "no"; a device that predates XDP simply omits
+   * it. Advertising it is NOT authorization: `hasProver` is self-declared over
+   * an unsigned DEVICE_REGISTER, exactly like `hasSigningKey`, so it is a
+   * capability HINT only. The desktop still re-checks every gate (pinning,
+   * toggle, version, health) when a real PROVE_INIT arrives.
+   */
+  hasProver?: boolean;
+  /**
+   * Proof-server docker tag this device proves against (e.g. "8.1.0"), so a
+   * requester can refuse on version skew BEFORE building and encrypting a
+   * payload. Only meaningful alongside `hasProver`.
+   */
+  proverLedgerVersion?: string;
 }
 
 /** Outbound, unsigned (trust-on-first-use); wallet inferred server-side from SUBSCRIBE. */

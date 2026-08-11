@@ -13,15 +13,13 @@ import {
 } from '@/chains/midnight/midnightZkpaas';
 
 /**
- * Pinned to the 8.x proof-server release that matches the installed
- * @midnight-ntwrk/ledger-v8 (^8.1.0) - verified against Docker Hub
- * (midnightntwrk/proof-server tags) on 2026-07-13. Deliberately not
- * `latest`, which tracks the 9.0.0-rc stream (a newer, mismatched ledger
- * generation).
+ * Re-exported for the existing UI consumers. The definitions moved to
+ * midnightConfig.ts so the BACKGROUND worker can read the pinned tag (XDP
+ * advertises it as `proverLedgerVersion` and gates jobs on it) without
+ * importing this composable, which pulls in Vue, snackbar and the stores.
  */
-export const PROOF_SERVER_DOCKER_TAG = '8.1.0';
-export const PROOF_SERVER_DOCKER_COMMAND =
-  `docker run -p 6300:6300 midnightntwrk/proof-server:${PROOF_SERVER_DOCKER_TAG} midnight-proof-server -v`;
+export { PROOF_SERVER_DOCKER_TAG, PROOF_SERVER_DOCKER_COMMAND } from '@/chains/midnight/midnightConfig';
+import { PROOF_SERVER_DOCKER_COMMAND } from '@/chains/midnight/midnightConfig';
 
 export type ProofServerMode = 'remote' | 'local' | 'zkpaas';
 

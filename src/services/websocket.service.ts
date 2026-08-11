@@ -2,6 +2,7 @@ import { debugLog } from '@/utils/debug';
 import LoadingState from '@/stores/loading';
 import FIFOCache from 'tiny-fifo-cache';
 import { midnightStore } from '@/stores/midnightStore';
+import { PROVE_MESSAGE_TYPES } from '@/services/crossDevice/proveProtocol';
 
 interface WsSyncBlock {
   hash: string;
@@ -44,7 +45,12 @@ interface WsHandlers {
 // WAKE_PENDING is a relay CONTROL frame (unsigned, not a CrossDeviceMessage) that the
 // signing service special-cases in handleInbound — it MUST be allow-listed here too or
 // the requester never learns the target was offline and never re-issues on wake.
-const CROSS_DEVICE_MESSAGE_TYPES = [
+// The XDP proving frames (gero-xprove/v1) ride the SAME socket and the same
+// bridge hand-off. They come from PROVE_MESSAGE_TYPES rather than a second hand-
+// maintained literal: this array is exactly the kind of list that goes stale (see
+// the WAKE_PENDING note above), and a missing proving type would drop jobs into
+// the sync switch's unknown-type default with no breadcrumb.
+const CROSS_DEVICE_MESSAGE_TYPES: readonly string[] = [
   'DEVICE_REGISTER',
   'DEVICES',
   'DEVICE_REGISTER_ACK',
@@ -52,6 +58,7 @@ const CROSS_DEVICE_MESSAGE_TYPES = [
   'SIGN_RESPONSE',
   'PAIR_CONFIRM',
   'WAKE_PENDING',
+  ...PROVE_MESSAGE_TYPES,
 ];
 
 class WebSocketService {

@@ -101,6 +101,18 @@ export const remoteSigningStore = {
     if (r.success && r.settings) state.settings = r.settings;
   },
 
+  /** XDP master switch: may this desktop serve proofs to paired phones at all. */
+  async setServeProofs(enabled: boolean): Promise<void> {
+    const r = await send<SettingsReply>(MessageTypes.SET_SERVE_PROOFS_ENABLED, { enabled });
+    if (r.success && r.settings) state.settings = r.settings;
+  },
+
+  /** XDP per-device switch. Both this AND the master must be on to serve. */
+  async setDeviceServeProofs(deviceId: string, enabled: boolean): Promise<void> {
+    const r = await send<SettingsReply>(MessageTypes.SET_DEVICE_SERVE_PROOFS, { deviceId, enabled });
+    if (r.success && r.settings) state.settings = r.settings;
+  },
+
   /** Returns false when the device could not be pinned (e.g. it went offline). */
   async trust(deviceId: string): Promise<boolean> {
     const r = await send<SettingsReply>(MessageTypes.TRUST_CROSS_DEVICE, { deviceId });

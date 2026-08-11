@@ -24,6 +24,15 @@ export default defineConfig({
     environment: 'happy-dom',
     setupFiles: [],
     testTimeout: 30000,
+    // `.claude/worktrees/*` holds per-developer agent worktrees — full checkouts
+    // of other branches, gitignored (see .gitignore's `.claude/`). Without this
+    // exclusion vitest globs every one of them, so a local run executes the same
+    // suites N+1 times: stale copies of the code, counted into the totals, and
+    // competing for CPU. That last part is not cosmetic — the duplicated
+    // real-timer suites (crossDeviceSigning's WAKE_PENDING polls) starve each
+    // other and flake. Four worktrees present when this was added turned 251
+    // crossDevice tests into 807.
+    exclude: ['**/node_modules/**', '**/dist/**', '**/.claude/**'],
   },
   resolve: {
     alias: {

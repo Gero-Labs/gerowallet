@@ -2484,6 +2484,25 @@ app.addToOptions(MessageTypes.SET_CROSS_DEVICE_POLICY, async (request, sendRespo
   }
 });
 
+app.addToOptions(MessageTypes.SET_SERVE_PROOFS_ENABLED, async (request, sendResponse) => {
+  try {
+    const settings = await walletManager.setServeProofsEnabled(!!request.data?.enabled);
+    sendResponse(crossDeviceReply(request.id, { success: true, settings }));
+  } catch (error) {
+    sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
+  }
+});
+
+app.addToOptions(MessageTypes.SET_DEVICE_SERVE_PROOFS, async (request, sendResponse) => {
+  try {
+    const deviceId = String(request.data?.deviceId ?? '');
+    const settings = await walletManager.setDeviceServeProofs(deviceId, !!request.data?.enabled);
+    sendResponse(crossDeviceReply(request.id, { success: true, settings }));
+  } catch (error) {
+    sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
+  }
+});
+
 app.addToOptions(MessageTypes.TRUST_CROSS_DEVICE, async (request, sendResponse) => {
   try {
     const deviceId = String(request.data?.deviceId ?? '');

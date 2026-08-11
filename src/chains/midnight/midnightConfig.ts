@@ -166,3 +166,20 @@ export function nexusMidnightPathFor(network: string, subpath: string): string {
   const trimmedSubpath = subpath.startsWith('/') ? subpath.slice(1) : subpath;
   return `${endpoints.nexusBaseUrl}/api/midnight/${slug}/${trimmedSubpath}`;
 }
+
+/**
+ * Pinned to the 8.x proof-server release that matches the installed
+ * @midnight-ntwrk/ledger-v8 (^8.1.0) - verified against Docker Hub
+ * (midnightntwrk/proof-server tags) on 2026-07-13. Deliberately not
+ * `latest`, which tracks the 9.0.0-rc stream (a newer, mismatched ledger
+ * generation).
+ *
+ * Lives here rather than in useProofServerSettings.ts (which re-exports it for
+ * the UI) because the BACKGROUND worker needs it too: Cross-Device Proving
+ * advertises this tag as `proverLedgerVersion` in DEVICE_REGISTER and refuses
+ * jobs whose requester pinned a different one, and the BG cannot import a Vue
+ * composable.
+ */
+export const PROOF_SERVER_DOCKER_TAG = '8.1.0';
+export const PROOF_SERVER_DOCKER_COMMAND =
+  `docker run -p 6300:6300 midnightntwrk/proof-server:${PROOF_SERVER_DOCKER_TAG} midnight-proof-server -v`;

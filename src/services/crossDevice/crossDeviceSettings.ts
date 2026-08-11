@@ -36,6 +36,10 @@ export function sanitizeTrusted(raw: unknown): Record<string, TrustedDevice> {
       // QR-verified pin to "SAS only" and could hide a paired-but-offline signer.
       if (typeof d['verified'] === 'boolean') entry.verified = d['verified'];
       if (typeof d['hasSigningKey'] === 'boolean') entry.hasSigningKey = d['hasSigningKey'];
+      // XDP per-device serving opt-in. Same preservation reason as the two
+      // above: dropping it on load would silently stop serving a phone the user
+      // had enabled, with no visible cause.
+      if (typeof d['serveProofs'] === 'boolean') entry.serveProofs = d['serveProofs'];
       out[id] = entry;
     }
   }
@@ -53,6 +57,8 @@ export async function loadRemoteSigningSettings(walletId: number): Promise<Remot
       enabled: v['enabled'] === true,
       policy: v['policy'] === 'require_remote' ? 'require_remote' : 'ask',
       trustedDevices: sanitizeTrusted(v['trustedDevices']),
+      // Absent (pre-XDP row) => off. Serving must never turn itself on.
+      serveProofs: v['serveProofs'] === true,
     };
   } catch (e) {
     console.warn('loadRemoteSigningSettings failed, using defaults:', e);

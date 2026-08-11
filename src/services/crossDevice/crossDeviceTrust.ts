@@ -58,6 +58,12 @@ export interface TrustedDevice {
    * device was pinned precisely to enable remote signing).
    */
   hasSigningKey?: boolean;
+  /**
+   * XDP (R6): serve Cross-Device Proving to THIS device. Opt-in per device, so
+   * pairing a phone for signing never silently enlists this machine as its
+   * prover. Absent = off — an existing pin does not start serving on upgrade.
+   */
+  serveProofs?: boolean;
 }
 
 export interface RemoteSigningSettings {
@@ -66,10 +72,16 @@ export interface RemoteSigningSettings {
   policy: SigningPolicy;
   /** Pinned devices, keyed by deviceId. */
   trustedDevices: Record<string, TrustedDevice>;
+  /**
+   * XDP (R6) master switch. Off by default: proving for a phone means running
+   * the user's proof server on their behalf, which is a resource decision as
+   * much as a trust one, so it is never implied by pairing.
+   */
+  serveProofs: boolean;
 }
 
 export function defaultRemoteSigningSettings(): RemoteSigningSettings {
-  return { enabled: false, policy: 'ask', trustedDevices: {} };
+  return { enabled: false, policy: 'ask', trustedDevices: {}, serveProofs: false };
 }
 
 /**
@@ -174,6 +186,54 @@ export function trustDevice(
     ...settings,
     trustedDevices: { ...settings.trustedDevices, [device.deviceId]: entry },
   };
+}
+
+/** XDP master switch. */
+export function setServeProofs(
+  settings: RemoteSigningSettings,
+  serveProofs: boolean,
+): RemoteSigningSettings {
+  return { ...settings, serveProofs };
+}
+
+/** XDP per-device switch. No-op for a device that is not pinned. */
+export function setDeviceServeProofs(
+  settings: RemoteSigningSettings,
+  deviceId: string,
+  serveProofs: boolean,
+): RemoteSigningSettings {
+  const pinned = settings.trustedDevices[deviceId];
+  if (!pinned) return settings;
+  return {
+    ...settings,
+    trustedDevices: { ...settings.trustedDevices, [deviceId]: { ...pinned, serveProofs } },
+  };
+}
+
+/**
+ * The XDP serving gate (proveService gate 2): serve proofs to this device iff
+ * remote signing is on for the wallet, the master switch is on, the device is
+ * PINNED, and it is individually enabled. Every clause must hold — this is the
+ * only thing standing between "a paired phone" and "this machine runs proofs
+ * for it", and proving is otherwise silent with no approval UI.
+ *
+ * Note this deliberately does NOT re-check the pubKey: the caller
+ * (proveService) has already verified the frame signature against the pinned
+ * key via isDeviceTrusted before this runs. Kept separate so each gate says one
+ * thing.
+ */
+export function isServingProofsTo(
+  settings: RemoteSigningSettings,
+  deviceId: string,
+): boolean {
+  return settings.enabled
+    && settings.serveProofs
+    && settings.trustedDevices[deviceId]?.serveProofs === true;
+}
+
+/** Whether any pinned device is enabled for proving (drives the settings summary). */
+export function hasProofServingDevice(settings: RemoteSigningSettings): boolean {
+  return Object.values(settings.trustedDevices).some((d) => d.serveProofs === true);
 }
 
 /** Remove a pinned device. Idempotent. */

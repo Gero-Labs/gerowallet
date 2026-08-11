@@ -59,6 +59,28 @@
 
           <v-divider class="rs-divider" />
 
+          <!-- XDP master switch (R6) -->
+          <div class="rs-row d-flex align-center">
+            <div class="flex-grow-1">
+              <div class="rs-label">{{ $t('crossDevice.settings.serveProofs') }}</div>
+              <div class="rs-hint">{{ $t('crossDevice.settings.serveProofsHint') }}</div>
+            </div>
+            <v-switch
+              :input-value="serveProofs"
+              :loading="busy"
+              color="var(--g-accent)"
+              inset
+              hide-details
+              class="mt-0 ml-2"
+              @change="onToggleServeProofs"
+            />
+          </div>
+          <div v-if="serveProofs" class="rs-hint rs-serve-note">
+            {{ $t('crossDevice.settings.serveProofsRequirement', { command: dockerRunCommand }) }}
+          </div>
+
+          <v-divider class="rs-divider" />
+
           <!-- This device -->
           <div v-if="selfEntry" class="rs-label mb-2">{{ $t('crossDevice.settings.thisDevice') }}</div>
           <div v-if="selfEntry" class="rs-device rs-self d-flex align-center">
@@ -120,6 +142,22 @@
               <div class="rs-fingerprint">{{ fingerprint(entry.device.pubKey) }}</div>
               <div v-if="entry.trusted && trustedAt(entry.device.deviceId)" class="rs-hint">
                 {{ $t('crossDevice.settings.trustedOn', { date: trustedAt(entry.device.deviceId) }) }}
+              </div>
+              <!-- XDP: per-device serving. Only for paired devices, and only
+                   once the master switch is on — a lone per-device toggle that
+                   silently does nothing is worse than not showing it. -->
+              <div v-if="entry.trusted && serveProofs" class="rs-serve d-flex align-center mt-1">
+                <v-switch
+                  :input-value="deviceServes(entry.device.deviceId)"
+                  :loading="busy"
+                  color="var(--g-accent)"
+                  inset
+                  hide-details
+                  dense
+                  class="mt-0 mr-2"
+                  @change="onToggleDeviceServe(entry.device.deviceId, $event)"
+                />
+                <span class="rs-hint">{{ $t('crossDevice.settings.serveThisDevice') }}</span>
               </div>
             </div>
             <v-btn
@@ -275,6 +313,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import QRCodeStyling from 'qr-code-styling';
 import { remoteSigningStore, type CrossDeviceListEntry, type PairedResult } from '@/stores/remoteSigningStore';
 import { pairingFingerprint, type SigningPolicy } from '@/services/crossDevice/crossDeviceTrust';
+import { PROOF_SERVER_DOCKER_COMMAND as dockerRunCommand } from '@/chains/midnight/midnightConfig';
 import { encodePairingQr, type PairingQrPayload } from '@/services/crossDevice/pairingQr';
 import snackbar from '@/plugins/snackbar';
 import { useTranslation } from '@/shared/composables/useTranslation';
@@ -292,6 +331,10 @@ const state = remoteSigningStore.state;
 const busy = computed(() => state.loading);
 const enabled = computed(() => state.settings.enabled);
 const policy = computed(() => state.settings.policy);
+// XDP: master serving switch + per-device opt-in.
+const serveProofs = computed(() => state.settings.serveProofs === true);
+const deviceServes = (deviceId: string): boolean =>
+  state.settings.trustedDevices[deviceId]?.serveProofs === true;
 // Persistent pairing gates the policy toggle (survives the phone going offline).
 const hasPairedDevice = computed(() => remoteSigningStore.hasPairedDevice());
 
@@ -422,6 +465,17 @@ function cancelEnableAuth() {
 async function onPolicyChange(value: SigningPolicy) {
   if (value === 'require_remote' && !hasPairedDevice.value) return; // guarded in UI
   await remoteSigningStore.setPolicy(value);
+}
+
+// XDP (R6). No auth step and no confirm dialog, unlike enabling remote SIGNING:
+// serving a proof authorizes nothing — the tx is already signed, and the desktop
+// cannot alter what it proves. The toggles are the whole consent surface.
+async function onToggleServeProofs(value: boolean) {
+  await remoteSigningStore.setServeProofs(!!value);
+}
+
+async function onToggleDeviceServe(deviceId: string, value: boolean) {
+  await remoteSigningStore.setDeviceServeProofs(deviceId, !!value);
 }
 
 // SAS pairing: never trust straight from the list. Open a confirm step so the
@@ -596,6 +650,10 @@ onBeforeUnmount(() => {
 .rs-radio-title { font-size: 14px; color: var(--g-text-1); }
 .rs-policy :deep(.v-radio) { align-items: flex-start; margin-bottom: 10px; }
 .rs-divider { margin: 14px 0; border-color: var(--g-hairline-1); }
+/* XDP serving: the docker command is a literal the user retypes, so it gets the
+   mono face; the per-device row sits under the device meta as a sub-control. */
+.rs-serve-note { margin-top: 6px; font-family: var(--g-font-mono); word-break: break-all; }
+.rs-serve :deep(.v-input--switch) { flex: 0 0 auto; }
 .rs-device {
   padding: 10px 12px;
   border: 1px solid var(--g-hairline-1);
