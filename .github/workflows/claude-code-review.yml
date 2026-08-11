@@ -13,7 +13,9 @@ jobs:
       github.event.pull_request.user.login != 'dependabot[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository
 
-    runs-on: gero-plain
+    # GitHub-hosted: public repo can't use the self-hosted arc-private runner
+    # group (allows_public_repositories:false). See dev-bundle-gate.yml.
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: write
