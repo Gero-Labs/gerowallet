@@ -240,24 +240,19 @@ export class TransactionsLoader extends BaseLoader {
                 tx.utxo?.outputs, currentAddress, currentStake, networkId
               );
 
-              // Whether every consumed input resolved to a locally-synced producing
-              // output. Only then do own-input token amounts fully offset the change
-              // output, so precise received−sent netting is safe. When a producer
-              // isn't synced (e.g. NFTs acquired outside the synced window), the
-              // change tokens have nothing to cancel against and would masquerade as
-              // "received" — so we fall back to output-ownership accounting, which
-              // hides change on a spend and surfaces only the assets that truly moved.
-              const inputs = tx.utxo?.inputs ?? [];
-              const allInputsResolved = inputs.every(
-                (inp: { tx_hash?: string; output_index?: number }) =>
-                  outputIndex.has(`${inp.tx_hash}#${inp.output_index}`)
+              // Surface only assets that actually moved, via output ownership:
+              //   - tokens routed to FOREIGN outputs = genuine sends (negative)
+              //   - on a spend, own-output tokens are change and are omitted
+              //   - on a pure receive (no own lovelace spent), own-output tokens
+              //     are what was received (positive)
+              // This is used as the PRIMARY accounting (not a fallback) because
+              // received−sent netting silently over-reports change whenever an
+              // own input's producing output is missing OR was stored lovelace-only
+              // — both common for NFTs acquired outside the synced window. Output
+              // ownership never depends on producer resolution, so change can't leak.
+              const finalAssets = this.calculateRelevantAssetsFromOutputs(
+                foreignSentAssets, receivedAssets, sentAmount > 0
               );
-
-              const finalAssets = allInputsResolved
-                ? this.calculateFinalAssets(sentAssets, receivedAssets)
-                : this.calculateRelevantAssetsFromOutputs(
-                    foreignSentAssets, receivedAssets, sentAmount > 0
-                  );
 
               const nativeAsset = {
                 unit: "lovelace",
