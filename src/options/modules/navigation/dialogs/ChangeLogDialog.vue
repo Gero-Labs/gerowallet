@@ -51,7 +51,8 @@
                           <v-card-title class="py-0"></v-card-title>
                         </v-expansion-panel-header>
                         <v-expansion-panel-content>
-                          <VueShowdown :markdown="release.body" flavor="vanilla" :options="{ emoji: true }"/>
+                          <!-- eslint-disable-next-line vue/no-v-html — output is DOMPurify-sanitized in renderMarkdown() -->
+                          <div class="markdown-body" v-html="renderMarkdown(release.body)"></div>
                         </v-expansion-panel-content>
                       </v-expansion-panel>
                     </v-expansion-panels>
@@ -226,11 +227,23 @@
 </template>
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import showdown from 'showdown';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import time from '@/plugins/time';
 import cryptoApi from '@/api/crypto-api';
 import assets from '@/utils/assets';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import { sanitizeMarkdownHtml } from '@/shared/utils/sanitizeHtml';
+
+// showdown emits raw HTML unchanged, so its output is always run through
+// DOMPurify before v-html. Release notes come from our own GitHub releases
+// (backend /api/github/releases), but sanitizing keeps a compromised or
+// crafted release body from injecting script into the options page.
+const markdownConverter = new showdown.Converter({ emoji: true });
+function renderMarkdown(body?: string): string {
+  if (!body) return '';
+  return sanitizeMarkdownHtml(markdownConverter.makeHtml(body));
+}
 
 defineProps({
   isOpen: {

@@ -10,7 +10,6 @@ import '../shared/styles/baseline.css';
 import Vue from 'vue';
 import VueRouter from 'vue-router';
 import FlagIcon from 'vue-flag-icon';
-import VueShowdown from 'vue-showdown'
 import i18n, { loadLanguage } from '../plugins/i18n';
 import vuetify from '../plugins/vuetify';
 import router from '../modules/navigation/router';
@@ -71,13 +70,6 @@ Promise.all([loadPersistedGero(), hydrateWalletStore()]).then(() => {
   Vue.config.productionTip = false;
   Vue.config.ignoredElements = [...(Vue.config.ignoredElements || []), 'gero-swap'];
   Vue.use(FlagIcon);
-  Vue.use(VueShowdown, {
-    flavor: 'github',
-    options: {
-      emoji: false,
-    },
-  })
-
   Vue.use(VueRouter);
   Vue.directive('click-outside', ClickOutside);
   Vue.component('notifications', Notifications);

@@ -115,6 +115,7 @@
     "qr-code-styling": "^1.6.0-rc.1",
     "qrcode": "^1.5.4",
     "shamir-secret-sharing": "0.0.4",
+    "showdown": "^2.1.0",
     "sockjs-client": "^1.6.1",
     "tiny-fifo-cache": "^1.0.1",
     "tiny-secp256k1": "^2.2.4",
@@ -125,7 +126,6 @@
     "vue-i18n": "^8.28.2",
     "vue-property-decorator": "^9.1.2",
     "vue-router": "^3.6.5",
-    "vue-showdown": "^2.4.1",
     "vuetify": "^2.7.2",
     "webextension-polyfill": "^0.12.0"
   },
