@@ -11,7 +11,7 @@ import snackbar from '@/plugins/snackbar';
 
 /**
  * Composable for handling Cardano unstaking (deregistration) transactions
- * Shared logic between StakingCard.vue and StakingCard2.vue
+ * Shared logic used by StakingCard.vue
  */
 export function useUnstake() {
   const { t } = useTranslation();
