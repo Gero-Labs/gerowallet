@@ -1129,7 +1129,11 @@ const receivedAssets = computed(() => {
   const assts = props.transactionInfo['assets']
     .filter((asset: TxAsset) => asset.policy_id !== '')
     .map((asset: TxAsset) => {
-      const res = structuredClone(txAssets.value[asset.unit]);
+      // txAssets is keyed off the wallet's OWN sent/received tokens. Tokens that
+      // only touch foreign outputs (e.g. a token routed to the recipient) aren't
+      // in that map, so resolve them directly — mirroring the Inputs/Outputs
+      // path (resolveIoAmount) — instead of dropping them to a raw-hex chip.
+      const res = structuredClone(txAssets.value[asset.unit]) ?? resolveAsset(asset);
       if (res) {
         res.quantity = asset.quantity;
       }
