@@ -67,5 +67,9 @@ export function decryptLegacyAes(blob: string, password: string): string {
   const { key, iv } = evpBytesToKey(new TextEncoder().encode(password), salt);
   // cbc() applies PKCS7 by default and throws on invalid padding (wrong password).
   const plaintext = cbc(key, iv).decrypt(ciphertext);
-  return new TextDecoder().decode(plaintext);
+  // fatal:true so malformed UTF-8 throws instead of yielding U+FFFD garbage — this
+  // matches CryptoJS's enc.Utf8 (which throws "Malformed UTF-8 data") and preserves
+  // the "wrong password always throws" guarantee for the rare case where a wrong key
+  // produces coincidentally-valid PKCS7 padding but non-UTF-8 bytes.
+  return new TextDecoder('utf-8', { fatal: true }).decode(plaintext);
 }
