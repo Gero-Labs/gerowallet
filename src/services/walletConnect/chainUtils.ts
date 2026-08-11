@@ -59,6 +59,8 @@ export const CARDANO_METHODS = [
   'cardano_getUsedAddresses',
   'cardano_getUnusedAddresses',
   'cardano_getChangeAddress',
+  'cardano_getRewardAddress',
+  'cardano_getRewardAddresses',
 ];
 
 export const CARDANO_EVENTS = [

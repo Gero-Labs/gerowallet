@@ -2466,7 +2466,6 @@ export default {
   'wallet.failedToConnectTrezor': 'Failed to connect to Trezor device',
   'wallet.failedToGetTrezorVersion': 'Failed to get Trezor app version',
   'wallet.finalize': 'Finalize',
-  'wallet.googleAccountProfilePicture': 'Google Account Profile Picture',
   'wallet.grantPermission': 'Grant Permission',
   'wallet.guardarianOffer': 'Limited Offer - 0% Wallet Fees',
   'wallet.moonpaySigningWarning': 'Payment URL signing unavailable. MoonPay may show a signature error - please check your backend configuration.',
@@ -2664,7 +2663,6 @@ export default {
   'wallet.remove': 'Remove',
   'wallet.usb': 'USB',
   'wallet.comingSoon': 'Coming Soon',
-  'wallet.physicalCardOrderingComingSoon': 'Physical card ordering will be available soon! We\'re working hard to bring you this feature.',
   'wallet.stayTuned': 'Stay tuned for updates.',
   'welcome.adLabs': 'A.D. Labs',
   'welcome.adjustDistance': 'Adjust the distance and, if needed, tap on the Keystone QR code to enhance scanning',
@@ -2686,8 +2684,6 @@ export default {
   'welcome.geroWallet': 'Gero Wallet',
   'welcome.getStarted': 'Get Started',
   'welcome.glass': 'Glass',
-  'welcome.googleLogin': 'Google Login',
-  'welcome.googleWalletSetup': 'Google Wallet Setup',
   'welcome.hardwareWalletDescription': 'Hardware wallets, a type of cold wallet, provide one of the most secure ways to keep cryptocurrencies. They work by storing your private keys in an external, physical device (usually a USB or Bluetooth device)',
   'welcome.hardwareWalletType': 'What Type of Hardware Wallet Would You Like to Connect With?',
   'welcome.iHaveReadTerms': 'I have read and agree to the',
@@ -2713,8 +2709,6 @@ export default {
   'welcome.scanQRWithKeystone': 'Use your Keystone device to scan the QR code.',
   'welcome.seedPhrase': 'Seed Phrase',
   'welcome.selectScanQR': 'Select the option to scan a QR code.',
-  'welcome.setUpSpendingPassword': 'Set up your spending password',
-  'welcome.setUpWalletName': 'Set up your wallet name',
   // PRF Wallet Creation
   'welcome.encryptionMethod': 'Encryption Method',
   'welcome.chooseEncryptionMethod': 'Choose how your wallet keys will be secured.',
@@ -2750,14 +2744,9 @@ export default {
   'welcome.wouldYouLikeToLogin': 'Would you like to log in to this wallet?',
   'welcome.welcomeMessage': 'Welcome!',
   'welcome.welcomeTo': 'Welcome to',
-  'welcome.youllUseThisToLogin': 'You\'ll use this to log into your wallet and make transactions.',
   'welcome.yourNew': 'Your New',
   // Google Wallet activation messages
-  'welcome.generatingProof': 'Generating zero-knowledge proof...',
-  'welcome.proofMayTakeTime': 'This may take 5-10 minutes.',
   'welcome.checkedTimes': 'Checked {count} time | Checked {count} times',
-  'welcome.submittingActivation': 'Submitting activation transaction to Cardano blockchain...',
-  'welcome.walletReadyToUse': 'Your wallet is now ready to use!',
 
   // Onboarding - security method selection & wallet creation
   'welcome.passKeyMethod': 'PassKey',
@@ -2772,7 +2761,6 @@ export default {
   'welcome.almostDone': 'Almost Done!',
   'welcome.reviewYourChoices': 'Review your wallet configuration below',
   'welcome.prfNotSupported': 'PassKey is not supported in this browser. Using password encryption instead.',
-  'welcome.chooseNameToIdentify': 'Choose a name to identify your wallet',
   'welcome.saveRecoveryBackup': 'I\'ll save my recovery phrase as a backup',
   'welcome.passwordNoRecoveryWarning': 'If you forget this password, you\'ll need your recovery phrase to restore your wallet.',
   'welcome.onboardingStepMethod': 'Method',
@@ -3044,15 +3032,12 @@ export default {
 
   // Security - Auto-Lock
   'security.autoLockTimer': 'Auto-Lock Timer',
-  'security.selectAutoLockTime': 'Select auto-lock time',
   'security.walletLocksAfterInactivity': 'Wallet locks after inactivity',
   'security.never': 'Never',
   'security.1Minute': '1 Minute',
   'security.xMinutes': '{minutes} Minutes',
   'security.1Hour': '1 Hour',
   'security.xHours': '{hours} Hours',
-  'security.minutesLabel': 'Minutes',
-  'security.custom': 'Custom',
   'security.autoLockUpdateFailed': 'Failed to update auto-lock timer',
 
   // Security - General
@@ -3888,6 +3873,7 @@ export default {
 
   // WalletConnect
   'walletConnect.walletConnect': 'WalletConnect',
+  'walletConnect.pairSubtitle': 'Link a dApp to your wallet with a WalletConnect URI',
   'walletConnect.connectViaPaste': 'Paste URI',
   'walletConnect.connectViaScan': 'Scan QR Code',
   'walletConnect.pasteUri': 'Paste WalletConnect URI',
