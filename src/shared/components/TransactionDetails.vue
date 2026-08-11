@@ -430,7 +430,7 @@
               <CopyButton :value="getMetadata(transactionInfo)" small></CopyButton>
             </v-card-title>
             <v-card-text class="text-left pa-2" style="font-size: 12px; font-family: var(--g-font-mono) !important">
-              <pre>{{ getMetadata(transactionInfo) }}</pre>
+              <pre style="white-space: pre-wrap; word-wrap: anywhere; overflow-wrap: anywhere;">{{ getMetadata(transactionInfo) }}</pre>
             </v-card-text>
           </v-card>
         </v-expansion-panel-content>
@@ -605,7 +605,7 @@
                           <CopyButton :value="getRedeemerDataJson(redeemer.data)" small></CopyButton>
                         </v-card-title>
                         <v-card-text class="text-left pa-2" style="font-size: 12px; font-family: var(--g-font-mono) !important">
-                          <pre>{{ getRedeemerDataJson(redeemer.data) }}</pre>
+                          <pre style="white-space: pre-wrap; word-wrap: anywhere; overflow-wrap: anywhere;">{{ getRedeemerDataJson(redeemer.data) }}</pre>
                         </v-card-text>
                       </v-card>
                     </td>
