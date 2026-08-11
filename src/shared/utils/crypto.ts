@@ -1,4 +1,3 @@
-import * as CryptoTS from 'crypto-ts';
 import { Buffer } from 'buffer';
 import cryptoRandomString from 'crypto-random-string';
 import { chacha20poly1305 } from '@noble/ciphers/chacha.js';
@@ -6,6 +5,7 @@ import { pbkdf2 } from '@noble/hashes/pbkdf2.js';
 import { sha512 } from '@noble/hashes/sha2.js';
 import { Bip32PrivateKey } from '@cardano-sdk/crypto';
 import { encryptSecret, decryptSecret, isLegacySecret } from './passwordSecret';
+import { decryptLegacyAes } from './legacyCryptoJs';
 import i18n from '@/plugins/i18n';
 
 /**
@@ -28,8 +28,7 @@ export function decrypt(ciphertext: string, password: string): string {
   if (!isLegacySecret(ciphertext)) {
     return decryptSecret(ciphertext, password);
   }
-  const bytes = CryptoTS.AES.decrypt(ciphertext, password);
-  return bytes.toString(CryptoTS.enc.Utf8);
+  return decryptLegacyAes(ciphertext, password);
 }
 
 /**
