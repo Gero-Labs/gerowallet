@@ -9,6 +9,7 @@ Gero Wallet is a **non-custodial** browser extension that manages real cryptocur
 Report privately through GitHub's built-in security advisories:
 
 - **[Report a vulnerability](https://github.com/Gero-Labs/gerowallet/security/advisories/new)** — this opens a private advisory visible only to you and the maintainers.
+- **Email fallback** — if the advisory page is unavailable, email **support@gerowallet.io** with `SECURITY` in the subject and the same details. Please redact private keys, mnemonics, and passwords, and never include them in email.
 
 Please include:
 
