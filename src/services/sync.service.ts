@@ -651,6 +651,33 @@ export class SyncService {
           }))
         })
         const txsCborResults = (await Promise.all(promises)).flat();
+
+        // Sync metadata for EVERY token these txs reference, not just held ones.
+        // applyUtxos() only fetches metadata for assets in the wallet's UTxO set,
+        // so a token that merely passes through a tx (sent, or received and
+        // forwarded on) renders without decimals/logo. Collect its units here and
+        // normalize the dotted `policyId.assetNameHex` form to the concatenated
+        // key the metadata store uses; syncAssets skips already-synced units.
+        try {
+          const units = new Set<string>();
+          for (const tx of txsCborResults) {
+            const ios = [...(tx?.utxo?.inputs || []), ...(tx?.utxo?.outputs || [])];
+            for (const io of ios) {
+              for (const amt of io?.amount || []) {
+                const unit = amt?.unit;
+                if (unit && unit !== 'lovelace') {
+                  units.add(unit.includes('.') ? unit.replace('.', '') : unit);
+                }
+              }
+            }
+          }
+          if (units.size > 0) {
+            await this.syncAssets(Array.from(units));
+          }
+        } catch (e) {
+          debugLog('syncAccountTransactions: token metadata enrichment failed', e);
+        }
+
         await this.walletBg.setAccountTransactions(txsCborResults);
         return txsCborResults;
       }
