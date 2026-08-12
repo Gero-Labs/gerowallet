@@ -177,6 +177,10 @@ onMounted(() => {
 <style>
 .detail-card {
   width: 60%;
+  /* Flex items default to min-width:auto, so a wide child (e.g. an expanded
+     redeemer's data) can grow the card past its 60% and shove the layout on
+     expand. min-width:0 lets it hold width and clip via overflow-x. */
+  min-width: 0;
   max-height: calc(-163px + 100vh) !important;
   overflow-y: auto;
   overflow-x: hidden;
