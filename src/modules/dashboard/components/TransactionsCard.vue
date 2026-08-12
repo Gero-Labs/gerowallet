@@ -353,7 +353,7 @@
                     x-small
                     color="#007DFF"
                     style="margin-left: 1px; margin-bottom: 1px"
-                    >{{ $t('transactions.swap') }}</v-chip
+                    >{{ $t('transactions.dexhunter') }}</v-chip
                   >
                   <v-chip
                     v-if="isMinswap(item)"

@@ -2352,6 +2352,7 @@ export default {
   'transactions.delegatingToPool': 'Delegating to Pool',
   'transactions.delegation': 'Delegation',
   'transactions.swap': 'Swap',
+  'transactions.dexhunter': 'DexHunter',
   'transactions.epoch': 'Epoch',
   'transactions.failed': 'Failed',
   'transactions.loadingMoreTransactions': 'Loading more transactions',

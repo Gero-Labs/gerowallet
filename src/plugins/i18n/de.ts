@@ -2823,6 +2823,7 @@ export default {
   'transactions.delegatingToPool': 'An Pool delegieren',
   'transactions.delegation': 'Delegation',
   'transactions.swap': 'Swap',
+  'transactions.dexhunter': 'DexHunter',
   'transactions.epoch': 'Epoch',
   'transactions.failed': 'Fehlgeschlagen',
   'transactions.failedTransaction': 'Fehlgeschlagene Transaktion',
