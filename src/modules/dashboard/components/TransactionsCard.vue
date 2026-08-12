@@ -873,6 +873,13 @@ const addFundTransferStatus = (item: StoredTransaction, statuses: string[]): voi
   if (isCardanoTx(item) && item.body?.certificates && item.body.certificates.length > 0) {
     return;
   }
+  // A detected DEX interaction (swap / add-remove liquidity) reads wrong as
+  // "Sent Funds". Title it "DEX Order" — accurate whichever pool op it is; the
+  // venue chip (Minswap, etc.) names the platform.
+  if (isDexTransaction(item)) {
+    statuses.push(t('transactions.dexOrder'));
+    return;
+  }
   const hasReceivedFunds = item.receivedAmount - item.sentAmount > 0;
   const hasSentFunds = item.receivedAmount - item.sentAmount < 0;
   const receivedTokenCount = item.assets?.filter((asset) => asset.unit !== 'lovelace' && asset.quantity > 0).length ?? 0;
@@ -1311,6 +1318,10 @@ const isDustRegistration = (item: StoredTransaction): boolean => {
 // TODO: add aggregator swap-tx heuristic (order/fee address or metadata) once the
 // Gero aggregator's on-chain order/fee address is confirmed, so newly created
 // aggregator swaps are also tagged here.
+// Any recognised DEX/aggregator interaction — used to title the tx "DEX Order".
+const isDexTransaction = (item: StoredTransaction): boolean =>
+  isMinswap(item) || isSundaeSwap(item) || isSplash(item) || isDexHunter(item);
+
 const isDexHunter = (item: StoredTransaction): boolean => {
   if (!isCardanoTx(item)) return false;
   // Check for DexHunter order contract address (primary indicator)

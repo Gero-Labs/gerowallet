@@ -2828,6 +2828,7 @@ export default {
   'transactions.failedTransaction': 'Fehlgeschlagene Transaktion',
   'transactions.loadingMoreTransactions': 'Weitere Transaktionen werden geladen',
   'transactions.minswap': 'Minswap',
+  'transactions.dexOrder': 'DEX-Auftrag',
   'transactions.moreTransactions': 'Weitere Transaktionen',
   'transactions.muesliswap': 'MuesliSwap',
   'transactions.native': 'Nativ',
