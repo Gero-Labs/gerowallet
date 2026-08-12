@@ -122,21 +122,6 @@
           </v-row>
         </v-layout>
       </v-card-actions>
-      <v-overlay v-show="hardwareLoading.loading" opacity="0.9" style="text-align: center; ">
-        <v-card flat style="background-color: transparent!important; text-align: -webkit-center;">
-          <video :src="assets.loadingAnimation" playsinline autoplay muted loop style="width: 120px; object-fit: contain; object-position: center bottom; left: 0; top: 0;">
-          </video>
-          <v-progress-linear
-            buffer-value="0"
-            color="primary"
-            reverse
-            stream
-            value="0"
-            style="color: cyan; width: 100px; text-align: center"
-          ></v-progress-linear>
-          <v-card-title v-if="hardwareLoading.text" v-html="hardwareLoading.text" style="word-break: break-word;" />
-        </v-card>
-      </v-overlay>
 
       <!-- Keystone QR Code Overlay -->
       <v-overlay
@@ -251,7 +236,6 @@ import ledger from '@/shared/utils/ledger';
 import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import hardwareLoading from '@/plugins/hardwareLoading';
-import assets from '@/utils/assets';
 import { createKeystoneSignRequest, KeystoneSignRequestResponse, parseSignature } from '@/shared/utils/keystone';
 import { UR } from '@keystonehq/keystone-sdk';
 import AnimatedQRCode from '@/shared/components/AnimatedQRCode.vue';
@@ -503,7 +487,7 @@ const sign = async () => {
           await confirm();
         }
       } else if (loggedWallet.value.type === WalletType.Ledger) {
-        hardwareLoading.setLoading(true);
+        hardwareLoading.begin('Ledger', t('wallet.ledgerPreparingTransaction') as string);
         const tx: Cardano.Tx = deserializeCardanoJsSdkTx(txCbor);
 
         // Extract existing witnesses if this is a partial sign (multisig transaction)
@@ -576,6 +560,9 @@ const sign = async () => {
           }
         }
 
+        // Trezor reports no intermediate stages, so this one label covers the
+        // whole call — connecting through the confirmation it is waiting on.
+        hardwareLoading.begin('Trezor', t('wallet.confirmOnTrezor') as string);
         const data = {
           method: 'signTx',
           txCbor
@@ -586,6 +573,8 @@ const sign = async () => {
             method: MessageTypes.TREZOR,
             data,
           })) as BackgroundResponse<SignTxResponse>;
+
+        hardwareLoading.end();
 
         if (!response.data.success) {
           throw new Error(response.data.error || 'Trezor signing failed');
@@ -673,6 +662,8 @@ const sign = async () => {
       }
     } finally {
       txSignLoading.value = false;
+      // Belt and braces: no device path may leave the prompt on screen.
+      hardwareLoading.end();
     }
   };
   if (loggedWallet.value.type === WalletType.Normal) {

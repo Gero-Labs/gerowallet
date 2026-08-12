@@ -572,6 +572,7 @@ import networks from '@/utils/networks';
 import filters from '@/shared/utils/filters';
 import rules from '@/utils/rules';
 import snackbar from '@/plugins/snackbar';
+import hardwareLoading from '@/plugins/hardwareLoading';
 import i18n from '@/plugins/i18n';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { remoteSigningStore } from '@/stores/remoteSigningStore';
@@ -1201,6 +1202,9 @@ async function signLedger() {
   if (!tx.value) return;
   submitting.value = true;
   passwordError.value = '';
+  // The device holds the transaction on its own screen; without this the sheet
+  // shows only a button spinner that cannot resolve until the user acts on it.
+  hardwareLoading.begin('Ledger', i18n.t('wallet.ledgerPreparingTransaction') as string);
   try {
     txCbor.value = serializeCardanoJsSdkTx(tx.value);
     const signatures: Cardano.Signatures = await ledgerUtils.txToLedger(
@@ -1218,6 +1222,7 @@ async function signLedger() {
     passwordError.value = e?.message || 'Ledger signing failed';
   } finally {
     submitting.value = false;
+    hardwareLoading.end();
   }
 }
 
@@ -1226,6 +1231,9 @@ async function signTrezor() {
   if (!tx.value) return;
   submitting.value = true;
   passwordError.value = '';
+  // Trezor reports no intermediate stages, so this one label covers the whole
+  // call — connecting through the confirmation the device is waiting on.
+  hardwareLoading.begin('Trezor', i18n.t('wallet.confirmOnTrezor') as string);
   try {
     txCbor.value = serializeCardanoJsSdkTx(tx.value);
     const data = {
@@ -1242,6 +1250,10 @@ async function signTrezor() {
     if (!response.data.success) {
       throw new Error(response.data.error || 'Trezor signing failed');
     }
+
+    // Device work is done — drop the prompt before the network submit below,
+    // which is not something the user does anything about on the device.
+    hardwareLoading.end();
 
     const signaturesArray = response.data.signatures as unknown as Array<[string, string]>;
     const signatures: Cardano.Signatures = new Map(signaturesArray);
@@ -1260,6 +1272,7 @@ async function signTrezor() {
     }
   } finally {
     submitting.value = false;
+    hardwareLoading.end();
   }
 }
 

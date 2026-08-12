@@ -23,6 +23,9 @@
         <v-card-text style="color: white; height: 76px" v-html="text"></v-card-text>
       </v-card>
     </v-overlay>
+    <!-- Global, so every hardware-wallet signing path gets the "continue on
+         your device" prompt without each dialog re-declaring it. -->
+    <HardwareSignPrompt />
     <notifications></notifications>
     <v-snackbar
       content-class="custom-snackbar"
@@ -48,6 +51,7 @@ import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import AgentDock from '@/sidepanel/components/AgentDock.vue';
+import HardwareSignPrompt from '@/shared/components/HardwareSignPrompt.vue';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { useChainAccent } from '@/shared/composables/useChainAccent';
 

@@ -411,7 +411,10 @@ export function usePoolSigning(options: {
 
       const fundAmount = computeHotKeyFundAmount(certificate, hotAddress, epochParams.value, tip.value);
 
-      hardwareLoading.setText(t('wallet.ledgerPreparingTransaction') as string);
+      // Two separate device taps happen below (fund tx, then the owner
+      // witness); the prompt stays up across both so the user knows the run is
+      // parked on the Ledger rather than hung.
+      hardwareLoading.begin('Ledger', t('wallet.ledgerPreparingTransaction') as string);
       const fundTx = await buildCardanoTransaction({
         outputs: [{
           address: hotAddress as Cardano.PaymentAddress,
@@ -481,7 +484,11 @@ export function usePoolSigning(options: {
       assertOwnerModeShape(tx2, ledgerAddresses, [hotAddress]);
 
       // --- Ledger tap #2: owner witness ---
+      // `txToLedger` dropped the prompt when tap #1 completed, and the fund
+      // wait above is network-bound (nothing for the user to do on the device);
+      // raise it again now that the device is back in the loop.
       phase.value = 'signingOwner';
+      hardwareLoading.begin('Ledger', t('wallet.ledgerConnectingDevice') as string);
       const ownerSignatures = await ledgerUtils.poolOwnerWitness(tx2, keys.value, utxos.value as Cardano.Utxo[], isUsb, network);
 
       // --- cold witness (background, cold-key-only) ---

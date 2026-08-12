@@ -914,6 +914,7 @@ import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { createKeystoneSignRequest, KeystoneSignRequestResponse, parseSignature } from '@/shared/utils/keystone';
 import { UR } from '@keystonehq/keystone-sdk';
 import networks from '@/utils/networks';
+import hardwareLoading from '@/plugins/hardwareLoading';
 import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { decodedPayloadHexPreview, decodeSignDataPayload, type MidnightSignDataEncoding } from '@/chrome/midnightSignDataCodec';
@@ -2268,6 +2269,9 @@ async function signLedger() {
 
     const tx: Cardano.Tx = deserializeCardanoJsSdkTx(txCbor);
 
+    // Only on the WebUSB path — the BLE branch above returned already, and its
+    // separate signing window carries its own device status.
+    hardwareLoading.begin('Ledger', t('wallet.ledgerPreparingTransaction') as string);
     const signatures: Cardano.Signatures = await ledgerUtils.txToLedger(
       tx,
       keys.value,
@@ -2285,6 +2289,7 @@ async function signLedger() {
     signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Ledger signing failed';
   } finally {
     signing.value = false;
+    hardwareLoading.end();
   }
 }
 
@@ -2294,6 +2299,9 @@ async function signTrezor() {
   signing.value = true;
   signError.value = '';
 
+  // Trezor reports no intermediate stages, so this one label covers the whole
+  // call — connecting through the confirmation the device is waiting on.
+  hardwareLoading.begin('Trezor', t('wallet.confirmOnTrezor') as string);
   try {
     const txCbor = getTxCbor();
     const data = { method: 'signTx', txCbor };
@@ -2322,6 +2330,7 @@ async function signTrezor() {
     }
   } finally {
     signing.value = false;
+    hardwareLoading.end();
   }
 }
 
@@ -2483,6 +2492,15 @@ async function signDataHw() {
   signing.value = true;
   signError.value = '';
 
+  // The Ledger branch below runs in the background service worker, so the step
+  // labels ledger.ts publishes there never reach this panel — carry a static
+  // one here instead. Either way the device is what the request is waiting on.
+  const isTrezor = walletType.value === WalletType.Trezor;
+  hardwareLoading.begin(
+    isTrezor ? 'Trezor' : 'Ledger',
+    (isTrezor ? t('wallet.confirmOnTrezor') : t('wallet.ledgerPleaseConfirmDevice')) as string,
+  );
+
   try {
     const { address, payload } = currentRequest.value.payload;
 
@@ -2533,6 +2551,7 @@ async function signDataHw() {
     signError.value = (e instanceof Error ? friendlyTxError(e) : '') || 'Signing failed';
   } finally {
     signing.value = false;
+    hardwareLoading.end();
   }
 }
 

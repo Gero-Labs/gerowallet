@@ -82,14 +82,8 @@
       <v-btn color="primary" @click="walletCreationStep2()">{{ $t('common.continue') }}</v-btn>
     </div>
 
-    <!-- Hardware loading overlay -->
-    <v-overlay v-show="hardwareLoading.loading" opacity="0.9" style="text-align: center;">
-      <v-card flat style="background-color: transparent!important; text-align: -webkit-center;">
-        <video :src="assets.loadingAnimation" playsinline autoplay muted loop style="width: 120px; object-fit: contain; object-position: center bottom; left: 0; top: 0;" />
-        <v-progress-linear buffer-value="0" color="primary" reverse stream value="0" style="color: cyan; width: 100px; text-align: center" />
-        <v-card-title v-if="hardwareLoading.text" v-html="hardwareLoading.text" />
-      </v-card>
-    </v-overlay>
+    <!-- The device prompt is mounted globally in options/App.vue and driven by
+         the hardwareLoading singleton this step writes to. -->
   </div>
 </template>
 
@@ -239,8 +233,7 @@ const onKeystoneProgress = (progress: number): void => {
 
 const walletCreationStep2 = async (): Promise<void> => {
   if (props.walletType === WalletType.Ledger) {
-    hardwareLoading.setText(t('wallet.followHardwareInstructions', { walletType: props.walletType }) as string);
-    hardwareLoading.setLoading(true);
+    hardwareLoading.begin('Ledger', t('wallet.followHardwareInstructions', { walletType: props.walletType }) as string);
 
     try {
       let coldWalletProps;
@@ -278,8 +271,7 @@ const walletCreationStep2 = async (): Promise<void> => {
       hardwareLoading.setLoading(false);
     }
   } else if (props.walletType === WalletType.Trezor) {
-    hardwareLoading.setText(t('wallet.followHardwareInstructions', { walletType: props.walletType }) as string);
-    hardwareLoading.setLoading(true);
+    hardwareLoading.begin('Trezor', t('wallet.followHardwareInstructions', { walletType: props.walletType }) as string);
     try {
       hardwareLoading.setText(t('wallet.connectingToTrezor') as string);
       const data = { method: 'initTrezor', chain: props.network?.blockchain, network: props.network?.network };

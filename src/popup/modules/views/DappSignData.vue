@@ -178,6 +178,7 @@ import { BackgroundResponse, Messaging, SignDataResponse, VerifyPasswordResponse
 import { DataSignError } from '@/chrome/config';
 import { Key, WalletType } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
+import hardwareLoading from '@/plugins/hardwareLoading';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
 import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
@@ -453,6 +454,9 @@ const sign = async () => {
     }
 
     loading.value = true;
+    // The device holds the message on its own screen; without this the view
+    // shows only a spinner that cannot resolve until the user acts on it.
+    hardwareLoading.begin('Ledger', t('wallet.ledgerPleaseConfirmDevice') as string);
     const address = request.value.data.address;
     const payload = request.value.data.payload;
     try {
@@ -469,6 +473,9 @@ const sign = async () => {
         knownAddresses
       );
       signature.value = { signature: response.signatureHex, key: response.signingPublicKeyHex};
+      // Device work is done — drop the prompt before the submit below, which is
+      // not something the user does anything about on the device.
+      hardwareLoading.end();
       if (txAutoSubmit.value) {
         await confirm();
       }
@@ -489,6 +496,7 @@ const sign = async () => {
       }
     } finally {
       loading.value = false;
+      hardwareLoading.end();
     }
   } else if (loggedWallet.value.type === WalletType.Trezor) {
     if (!request.value?.data) {
@@ -497,6 +505,9 @@ const sign = async () => {
     }
 
     loading.value = true;
+    // Trezor reports no intermediate stages, so this one label covers the whole
+    // call — connecting through the confirmation it is waiting on.
+    hardwareLoading.begin('Trezor', t('wallet.confirmOnTrezor') as string);
     const address = request.value.data.address;
     const payload = request.value.data.payload;
     try {
@@ -522,6 +533,10 @@ const sign = async () => {
         key: response.data.signatureData.signingPublicKeyHex
       };
 
+      // Device work is done — drop the prompt before the submit below, which is
+      // not something the user does anything about on the device.
+      hardwareLoading.end();
+
       if (txAutoSubmit.value) {
         await confirm();
       }
@@ -531,6 +546,7 @@ const sign = async () => {
       snackbar.setError(errorMessage);
     } finally {
       loading.value = false;
+      hardwareLoading.end();
     }
   } else if (loggedWallet.value.type === WalletType.Keystone) {
     if (!request.value?.data) {

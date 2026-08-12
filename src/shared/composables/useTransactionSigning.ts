@@ -12,6 +12,7 @@ import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
 import { createKeystoneSignRequest, KeystoneSignRequestResponse, parseSignature } from '@/shared/utils/keystone';
 import networks from '@/utils/networks';
 import rules from '@/utils/rules';
+import hardwareLoading from '@/plugins/hardwareLoading';
 import snackbar from '@/plugins/snackbar';
 import { friendlyTxError } from '@/shared/utils/txErrors';
 import { useTranslation } from './useTranslation';
@@ -208,6 +209,11 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
 
   const signLedgerTx = async (): Promise<boolean> => {
     loading.value = true;
+    // The button spinner alone cannot resolve: the Ledger is holding the
+    // transaction on its own screen waiting for a button press. Show the
+    // "continue on your device" prompt for the whole device-bound stretch —
+    // `txToLedger` overwrites the label as it moves through its stages.
+    hardwareLoading.begin('Ledger', t('wallet.ledgerPreparingTransaction') as string);
     try {
       const tx = options.tx.value;
       if (!tx) {
@@ -235,11 +241,15 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       return false;
     } finally {
       loading.value = false;
+      hardwareLoading.end();
     }
   };
 
   const signTrezorTx = async (): Promise<boolean> => {
     loading.value = true;
+    // Trezor publishes no intermediate stages, so this label stands for the
+    // whole call — from connecting to the confirmation the device is waiting on.
+    hardwareLoading.begin('Trezor', t('wallet.confirmOnTrezor') as string);
     try {
       const tx = options.tx.value;
       if (!tx) {
@@ -300,6 +310,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       return false;
     } finally {
       loading.value = false;
+      hardwareLoading.end();
     }
   };
 

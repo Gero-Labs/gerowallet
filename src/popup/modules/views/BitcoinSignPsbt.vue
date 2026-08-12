@@ -139,6 +139,7 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { WalletType } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
 import snackbar from '@/plugins/snackbar';
+import hardwareLoading from '@/plugins/hardwareLoading';
 import { toRefs } from 'vue';
 import { UR } from '@keystonehq/keystone-sdk';
 
@@ -255,6 +256,9 @@ const sign = async () => {
 
 const signWithLedger = async () => {
   loading.value = true;
+  // The device holds the PSBT on its own screen; without this the view shows
+  // only a spinner that cannot resolve until the user acts on it.
+  hardwareLoading.begin('Ledger', t('wallet.ledgerPleaseConfirmDevice') as string);
   try {
     const { signPsbtWithLedger } = await import('@/chains/bitcoin/bitcoinHardwareSigner');
     const result = await signPsbtWithLedger(
@@ -283,11 +287,16 @@ const signWithLedger = async () => {
   } catch (e: any) {
     snackbar.setError(e.message || t('wallet.ledgerDeviceError', { message: '' }));
     loading.value = false;
+  } finally {
+    hardwareLoading.end();
   }
 };
 
 const signWithTrezor = async () => {
   loading.value = true;
+  // Trezor reports no intermediate stages, so this one label covers the whole
+  // call — connecting through the confirmation it is waiting on.
+  hardwareLoading.begin('Trezor', t('wallet.confirmOnTrezor') as string);
   try {
     const { signPsbtWithTrezor } = await import('@/chains/bitcoin/bitcoinHardwareSigner');
     const result = await signPsbtWithTrezor(
@@ -313,6 +322,8 @@ const signWithTrezor = async () => {
   } catch (e: any) {
     snackbar.setError(e.message || t('wallet.trezorSigningFailed'));
     loading.value = false;
+  } finally {
+    hardwareLoading.end();
   }
 };
 

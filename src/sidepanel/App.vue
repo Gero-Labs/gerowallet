@@ -56,6 +56,10 @@
       />
     </BottomSheet>
 
+    <!-- Global, so every hardware-wallet signing path gets the "continue on
+         your device" prompt without each sheet re-declaring it. -->
+    <HardwareSignPrompt />
+
   </v-app>
 </template>
 <script setup lang="ts">
@@ -73,6 +77,7 @@ import PendingRequestBanner from './components/PendingRequestBanner.vue';
 import BottomSheet from './components/BottomSheet.vue';
 import { initDappRequestHub } from './services/dappRequestHub';
 import AgentDock from '@/sidepanel/components/AgentDock.vue';
+import HardwareSignPrompt from '@/shared/components/HardwareSignPrompt.vue';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { Wallet } from '@/models/types';
