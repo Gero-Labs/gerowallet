@@ -171,7 +171,6 @@ export const sharedConfig: UserConfig = {
       'vue-router',
       'bip39',
       'blake2b',
-      'crypto-ts',
       // Pre-bundle the node-polyfill shims so the dev server doesn't discover
       // them lazily on the first route that needs them (e.g. Gero Card) and
       // trigger a mid-session re-optimize + full page reload.
