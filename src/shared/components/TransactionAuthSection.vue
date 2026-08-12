@@ -1,5 +1,5 @@
 <template>
-  <div class="transaction-auth-section">
+  <div v-if="hasContent" class="transaction-auth-section">
     <!-- PRF Wallet: PassKey Button or Submit Button -->
     <template v-if="isPrfWallet">
       <PassKeyAuthButton
@@ -67,7 +67,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, useSlots } from 'vue';
 import { WalletType } from '@/models/types';
 import PassKeyAuthButton from './PassKeyAuthButton.vue';
 import PassKeyPasswordField from './PassKeyPasswordField.vue';
@@ -131,6 +131,27 @@ defineEmits<{
 
 const isPasswordWallet = computed(() =>
   props.walletType === WalletType.Normal && !props.isPrfWallet
+);
+
+const slots = useSlots();
+
+/**
+ * Whether any of the three branches above actually renders a control.
+ *
+ * Wallets that need no local auth input — hardware wallets without a BT toggle
+ * (Keystone, or a USB-only Ledger/Trezor), MPC/Google wallets, and password
+ * wallets once the tx is signed — match none of them. The wrapper still carried
+ * `width: 100%`, and callers lay it out as a flex sibling of the action button
+ * with `justify-content: space-evenly`. Since Vuetify's `.v-btn` is
+ * `flex: 0 0 auto` it cannot shrink, so the empty full-width wrapper absorbed
+ * the remaining space and pinned the button flush right instead of centred.
+ * Render nothing at all in that case so the button is the only flex item.
+ */
+const hasContent = computed(() =>
+  props.isPrfWallet ||
+  (isPasswordWallet.value && !props.isSigned) ||
+  props.showBtToggle ||
+  !!slots.default,
 );
 </script>
 

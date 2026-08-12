@@ -60,8 +60,19 @@
         </div>
       </div>
 
+      <!-- Hardware wallet: Strike is not wired for these yet. The connect flow
+           encrypts the generated Strike API key with either a spending password
+           or the PRF passkey, and a hardware wallet has neither — so show the
+           state plainly instead of a password field the user cannot fill. -->
+      <template v-if="!isConnected && isHwWallet">
+        <div class="hw-notice">
+          <v-icon size="14" color="warning" class="mr-2" style="flex-shrink: 0">mdi-clock-outline</v-icon>
+          <span>{{ $t('perps.connect.hwComingSoon') }}</span>
+        </div>
+      </template>
+
       <!-- PRF (passkey) wallet: authenticate with PassKey instead of password -->
-      <template v-if="!isConnected && isPrfWallet">
+      <template v-else-if="!isConnected && isPrfWallet">
         <PassKeyAuthButton
           :disabled="isLoading"
           :text="needsUnlock ? $t('perpetuals.unlockStrike') : $t('perps.connect.cta')"
@@ -128,6 +139,8 @@ import { useStrikeOnboarding } from '@/modules/market/composables/useStrikeOnboa
 import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
 import snackbar from '@/plugins/snackbar';
 import i18n from '@/plugins/i18n';
+import { walletStore } from '@/stores/walletStore';
+import { WalletType } from '@/models/types';
 
 const emit = defineEmits<{
   (e: 'connected'): void;
@@ -152,6 +165,14 @@ const {
 const password = ref('');
 const showPassword = ref(false);
 const copied = ref(false);
+
+// Mirrors DepositSheet's gate: Ledger/Trezor/Keystone have neither a spending
+// password nor a PRF credential, which is what the Strike key blob is encrypted
+// with (useStrikeOnboarding.encryptStrikePrivateKey).
+const isHwWallet = computed(() => {
+  const type = walletStore.loggedWallet?.type;
+  return type === WalletType.Ledger || type === WalletType.Trezor || type === WalletType.Keystone;
+});
 
 const truncatedKey = computed(() => {
   if (!publicKey.value) return '';
@@ -366,6 +387,18 @@ watch(isConnected, (val) => {
 
 .copy-btn {
   flex-shrink: 0;
+}
+
+.hw-notice {
+  display: flex;
+  align-items: flex-start;
+  padding: var(--g-s-3);
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-control);
+  background: var(--g-raised);
+  color: var(--g-text-2);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .connect-btn {
