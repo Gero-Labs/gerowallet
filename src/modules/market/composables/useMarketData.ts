@@ -97,7 +97,14 @@ function enrichWithStores(apiToken: TokenPriceResponse, sparklineMap?: Record<st
   const assetId = apiToken.assetId;
 
   // DexHunter data as fallback for fields the backend doesn't yet provide
-  const dhToken = (tokenMetadataStore.tokens as Record<string, any>)[assetId];
+  const dhToken = (tokenMetadataStore.tokens as Record<string, {
+    fingerprint?: string;
+    name?: string;
+    ticker?: string;
+    verified?: boolean;
+    holders?: number | null;
+    decimals?: number;
+  } | undefined>)[assetId];
 
   // Fingerprint: prefer API, fallback to DexHunter
   const fingerprint = apiToken.fingerprint || dhToken?.fingerprint || '';
@@ -180,14 +187,31 @@ async function fetchAllTokens(silent = false): Promise<void> {
         volume24h: apexData?.usd_24h_vol ?? 0,
       };
     } else {
-      const adaPrice = await marketApi.getAdaPrice();
-      nativePrice = {
-        priceUsd: adaPrice.priceUsd,
-        priceEur: adaPrice.priceEur ?? 0,
-        priceChange24h: adaPrice.priceChange24h ?? 0,
-        marketCap: adaPrice.marketCap ?? 0,
-        volume24h: adaPrice.volume24h ?? 0,
-      };
+      // Native ADA price. The backend Nexus market upstream intermittently
+      // returns a transient 502/503/504 — a single blip must NOT blank the whole
+      // market view for a poll cycle. Degrade to the last-known native price
+      // (kept in adaData) and let the next poll refill. Only surface a hard error
+      // when we have no cached native price at all (genuine first-load failure).
+      try {
+        const adaPrice = await marketApi.getAdaPrice();
+        nativePrice = {
+          priceUsd: adaPrice.priceUsd,
+          priceEur: adaPrice.priceEur ?? 0,
+          priceChange24h: adaPrice.priceChange24h ?? 0,
+          marketCap: adaPrice.marketCap ?? 0,
+          volume24h: adaPrice.volume24h ?? 0,
+        };
+      } catch (e) {
+        if (!adaData.value) throw e; // no cached price to fall back on — surface it
+        console.debug('Market: ADA price unavailable, reusing last-known native price', e);
+        nativePrice = {
+          priceUsd: adaData.value.priceUsd,
+          priceEur: adaData.value.priceEur,
+          priceChange24h: adaData.value.priceChange24h,
+          marketCap: adaData.value.marketCap ?? 0,
+          volume24h: adaData.value.volume24h ?? 0,
+        };
+      }
     }
 
     // Full token list is best-effort. Apex has no listing; for Cardano the
@@ -286,11 +310,11 @@ async function fetchAllTokens(silent = false): Promise<void> {
       marketCap: nativePrice.marketCap,
       volume24h: nativePrice.volume24h,
     };
-  } catch (e: any) {
+  } catch (e) {
     // Don't let a stale/superseded call surface its error over a newer fetch.
     if (!isStale()) {
       console.error('Market: Failed to fetch tokens', e);
-      error.value = e?.message || 'Failed to load market data';
+      error.value = (e instanceof Error ? e.message : '') || 'Failed to load market data';
     }
   } finally {
     // Only the latest in-flight call owns the loading flag.
