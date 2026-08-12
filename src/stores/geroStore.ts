@@ -11,9 +11,9 @@ import {
 import { ERROR, Wallet, WalletType } from '@/models/types';
 import { Buffer } from 'buffer';
 import { Bip32PrivateKey } from '@cardano-sdk/crypto';
-import { decrypt, decryptWithPassword, encrypt } from '@/shared/utils/crypto';
+import { decrypt, encrypt } from '@/shared/utils/crypto';
 import networks, { NetworkInfo } from '@/utils/networks';
-import { encryptPrivateKey } from '@/shared/utils/crypto';
+import { encryptPrivateKey, decryptPrivateKey } from '@/shared/utils/crypto';
 import { getContextType } from '@/utils/storageSync';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
@@ -326,9 +326,8 @@ export default {
 
     if (wallet.type === WalletType.Normal) {
       try {
-        // Decrypt current private key
-        const decrypted = decrypt(wallet.encryptedPrivateKey, currentPassword);
-        const buffer: Buffer = decryptWithPassword(currentPassword, JSON.parse(decrypted));
+        // Decrypt current private key (reads legacy nested + current raw formats)
+        const buffer: Buffer = decryptPrivateKey(wallet.encryptedPrivateKey, currentPassword);
         const rootKey = Bip32PrivateKey.fromBytes(buffer);
 
         // Re-encrypt with new password

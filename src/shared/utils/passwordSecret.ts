@@ -1,6 +1,6 @@
 import { argon2id } from '@noble/hashes/argon2.js';
 import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
-import * as CryptoTS from 'crypto-ts';
+import { decryptLegacyAes } from './legacyCryptoJs';
 import { toB64url, fromB64url } from './mpc/base64url';
 
 /**
@@ -83,8 +83,8 @@ export function decryptSecret(blob: string, password: string): string {
     return td.decode(xchacha20poly1305(key, nonce).decrypt(ciphertext));
   }
 
-  // Legacy crypto-ts (CryptoJS) blob — decrypt-only, for backward compatibility.
-  const decrypted = CryptoTS.AES.decrypt(blob, password).toString(CryptoTS.enc.Utf8);
+  // Legacy CryptoJS blob — decrypt-only, for backward compatibility.
+  const decrypted = decryptLegacyAes(blob, password);
   if (!decrypted) throw new Error('Wrong password');
   return decrypted;
 }

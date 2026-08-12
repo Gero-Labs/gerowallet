@@ -1,0 +1,75 @@
+name: ESLint Config Gate
+
+# Guards against the ESLint flat-config silently failing to load — the exact
+# break this workflow was added for: eslint.config.mjs does
+# `import vue from 'eslint-plugin-vue'`, which needs eslint-plugin-vue >=9 for
+# flat-config support, but package-lock had it pinned at 8.7.1 (no flat export).
+# Every `git commit` then died in its pre-commit hook with
+# "Cannot find package '.../eslint-plugin-vue/index.js'", so the whole team
+# committed with --no-verify. There was no ESLint job in CI, so it went
+# unnoticed for a long time.
+#
+# What this job does (and deliberately does NOT do): it installs from the
+# lockfile and resolves the full flat config via `eslint --print-config`. That
+# instantiates every plugin exactly as a real lint run would, so a plugin that
+# is missing / on an incompatible major / renamed makes this job fail — while
+# NOT drowning in the ~730 pre-existing @typescript-eslint/no-explicit-any
+# errors in src/ (print-config resolves config, it does not lint file bodies).
+# New-code linting is enforced separately by the pre-commit hook
+# (scripts/precommit-lint.mjs, staged files only). Clearing the legacy `any`
+# debt so a full `eslint .` gate can go green is a separate task.
+#
+# Secret-free by design (contents: read, --ignore-scripts), like
+# lockfile-check.yml, so it runs on every PR including Dependabot's.
+
+on:
+  pull_request:
+    branches:
+      - development
+      - main
+  push:
+    branches:
+      - development
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eslint-config-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  eslint-config:
+    name: ESLint flat config loads
+    # Same-repo guard (matches lockfile-check.yml / dev-bundle-gate.yml): don't
+    # run PR-controlled trees on shared infra. Dependabot branches are same-repo.
+    if: >-
+      github.event_name == 'push' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    # GitHub-hosted: the repo is public and the self-hosted arc-private runner
+    # group forbids public-repo jobs (allows_public_repositories:false).
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22.11.0'
+          cache: 'npm'
+
+      # Installs eslint + eslint-plugin-vue at the locked versions. If the lock
+      # and the flat config disagree (the original break), the next step throws.
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      # Resolves eslint.config.mjs end to end, loading every referenced plugin.
+      # Fails on a broken/missing/incompatible plugin; unaffected by the legacy
+      # no-explicit-any debt because no file bodies are linted here. Checked for
+      # both a .vue and a .ts path so a rule/plugin that only breaks resolving
+      # one file type is still caught.
+      - name: Verify flat config resolves
+        run: |
+          npx eslint --print-config src/options/App.vue > /dev/null
+          npx eslint --print-config src/utils/debug.ts > /dev/null
