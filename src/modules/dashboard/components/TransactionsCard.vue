@@ -1345,20 +1345,24 @@ const isMinswap = (item: StoredTransaction): boolean => {
   const MINSWAP_V2_ORDER_ADDRESS =
     'addr1zxn9efv2f6w82hagxqtn62ju4m293tqvw0uhmdl64ch8uw6j2c79gy9l76sdg0xwhd7r0c0kna0tycz4y5s6mlenh8pq6s3z70';
 
-  // Check for Minswap order contract addresses (indicates DEX interaction)
+  // Minswap V2 pool script address — a pool operation (swap/deposit/withdraw)
+  // spends the pool UTxO, so this address appears as a tx input. Some pool txs
+  // carry no 674 metadata and no locally-stored datums, so the order-address /
+  // metadata / datum checks below miss them; matching the pool address catches
+  // them without false-positiving on plain Minswap-LP-token transfers.
+  const MINSWAP_V2_POOL_ADDRESS = 'addr1w9e7ft4rrdd4rkdseguxr9hudfxyytm5ckh2qy0yhz7lfeg9lvhq7';
+
+  const MINSWAP_CONTRACT_ADDRESSES = [
+    MINSWAP_V1_MARKET_ORDER_ADDRESS,
+    MINSWAP_V1_LIMIT_ORDER_ADDRESS,
+    MINSWAP_V2_ORDER_ADDRESS,
+    MINSWAP_V2_POOL_ADDRESS,
+  ];
+
+  // Check for Minswap contract addresses (indicates DEX interaction)
   const hasMinswapOrderAddress =
-    item.utxo?.inputs?.some(
-      (input) =>
-        input.address === MINSWAP_V1_MARKET_ORDER_ADDRESS ||
-        input.address === MINSWAP_V1_LIMIT_ORDER_ADDRESS ||
-        input.address === MINSWAP_V2_ORDER_ADDRESS
-    ) ||
-    item.body?.outputs?.some(
-      (output) =>
-        output.address === MINSWAP_V1_MARKET_ORDER_ADDRESS ||
-        output.address === MINSWAP_V1_LIMIT_ORDER_ADDRESS ||
-        output.address === MINSWAP_V2_ORDER_ADDRESS
-    );
+    item.utxo?.inputs?.some((input) => !!input.address && MINSWAP_CONTRACT_ADDRESSES.includes(input.address)) ||
+    item.body?.outputs?.some((output) => !!output.address && MINSWAP_CONTRACT_ADDRESSES.includes(output.address));
 
   // Check for Minswap metadata message (indicates platform interaction)
   const msg = item.auxiliaryData?.blob?.[674]?.msg;
