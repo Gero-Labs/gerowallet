@@ -381,16 +381,7 @@ export function resolveAsset(token: any): any {
   let policy_id: string;
   let asset_name: string;
 
-  // Transaction amount units arrive as a dotted `policyId.assetNameHex`, but the
-  // metadata store and Cardano.AssetId both key on the concatenated hex. Normalize
-  // to the concatenated form for lookups/parsing, and keep the split parts so we
-  // can populate policy_id / asset_name even for a lovelace-only-shaped entry.
-  const dotIdx = typeof unit === 'string' ? unit.indexOf('.') : -1;
-  const normalizedUnit = dotIdx >= 0 ? unit.slice(0, dotIdx) + unit.slice(dotIdx + 1) : unit;
-  const dottedPolicy = dotIdx >= 0 ? unit.slice(0, dotIdx) : undefined;
-  const dottedName = dotIdx >= 0 ? unit.slice(dotIdx + 1) : undefined;
-
-  const asset = structuredClone(NetworkStore.state.assets[normalizedUnit]);
+  const asset = structuredClone(NetworkStore.state.assets[token.unit]);
   if (!asset) {
     // TODO
   }
@@ -416,25 +407,21 @@ export function resolveAsset(token: any): any {
     // parse the unit when it's valid hex; otherwise fall back to the explicit
     // policy_id / asset_name fields.
     const unitIsHexAssetId =
-      typeof normalizedUnit === 'string' &&
-      normalizedUnit.length >= 56 &&
-      normalizedUnit.length % 2 === 0 &&
-      /^[0-9a-fA-F]+$/.test(normalizedUnit);
+      typeof token.unit === 'string' &&
+      token.unit.length >= 56 &&
+      token.unit.length % 2 === 0 &&
+      /^[0-9a-fA-F]+$/.test(token.unit);
 
     if (token.policy_id) {
       policy_id = token.policy_id;
-    } else if (dottedPolicy) {
-      policy_id = dottedPolicy;
     } else if (unitIsHexAssetId) {
-      policy_id = Cardano.AssetId.getPolicyId(normalizedUnit);
+      policy_id = Cardano.AssetId.getPolicyId(token.unit);
     }
 
     if (token.asset_name) {
       asset_name = token.asset_name;
-    } else if (dottedName !== undefined) {
-      asset_name = dottedName;
     } else if (unitIsHexAssetId) {
-      asset_name = Cardano.AssetId.getAssetName(normalizedUnit);
+      asset_name = Cardano.AssetId.getAssetName(token.unit);
     }
     if (policy_id) {
       isScam = TokenMetadataStore.state.blacklistPolicies.includes(policy_id)

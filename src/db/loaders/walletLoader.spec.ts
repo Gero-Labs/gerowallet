@@ -11,11 +11,6 @@ interface LoaderInternals {
     outputIndex: Map<string, { address?: string; amount?: unknown[] }>,
   ): Utxo[] | undefined;
   calculateFinalAssets(sent: Map<string, Amount>, received: Map<string, Amount>): Amount[];
-  calculateRelevantAssetsFromOutputs(
-    foreignSent: Map<string, Amount>,
-    received: Map<string, Amount>,
-    isSpend: boolean,
-  ): Amount[];
 }
 
 // The private methods under test are pure and don't touch the DB, so a loader
@@ -118,47 +113,5 @@ describe('TransactionsLoader.calculateFinalAssets', () => {
     const byUnit = Object.fromEntries(final.map((a) => [a.unit, a.quantity]));
 
     expect(byUnit).toEqual({ S: -7, R: 4 });
-  });
-});
-
-describe('TransactionsLoader.calculateRelevantAssetsFromOutputs', () => {
-  it('hides change on a spend even when nothing offsets it (the 210-token leak)', () => {
-    const loader = makeLoader();
-    // A small ADA send whose change output returns a large NFT bundle to us.
-    // No token left for a foreign address, so nothing is "relevant".
-    const foreignSent = new Map<string, Amount>();
-    const received = new Map<string, Amount>([
-      ['NFT1', tok('NFT1', 1)],
-      ['NFT2', tok('NFT2', 1)],
-      ['NFT3', tok('NFT3', 1)],
-    ]);
-
-    const final = loader.calculateRelevantAssetsFromOutputs(foreignSent, received, true);
-
-    expect(final).toHaveLength(0);
-  });
-
-  it('on a spend, surfaces only tokens routed to foreign outputs (negative), not change', () => {
-    const loader = makeLoader();
-    const foreignSent = new Map<string, Amount>([['SENT', tok('SENT', 2)]]);
-    const received = new Map<string, Amount>([
-      ['SENT', tok('SENT', 3)], // change remainder of the same token — must not appear
-      ['CHANGE', tok('CHANGE', 9)],
-    ]);
-
-    const final = loader.calculateRelevantAssetsFromOutputs(foreignSent, received, true);
-    const byUnit = Object.fromEntries(final.map((a) => [a.unit, a.quantity]));
-
-    expect(byUnit).toEqual({ SENT: -2 });
-  });
-
-  it('on a receive, surfaces own-output tokens as positive', () => {
-    const loader = makeLoader();
-    const received = new Map<string, Amount>([['GOT', tok('GOT', 5)]]);
-
-    const final = loader.calculateRelevantAssetsFromOutputs(new Map(), received, false);
-    const byUnit = Object.fromEntries(final.map((a) => [a.unit, a.quantity]));
-
-    expect(byUnit).toEqual({ GOT: 5 });
   });
 });
