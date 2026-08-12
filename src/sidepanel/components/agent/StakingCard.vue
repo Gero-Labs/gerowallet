@@ -88,6 +88,7 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { buildCardanoTransaction } from '@/shared/utils/builder';
+import { isStakeKeyRegistered } from '@/shared/utils/stakeRegistration';
 import type { Keys } from '@/models/types';
 
 export default defineComponent({
@@ -180,7 +181,7 @@ export default defineComponent({
       const stakeKeyDepositLovelace = BigInt(epochParams.stakeKeyDeposit ?? 2_000000);
       let implicitCoin = 0n;
 
-      if (!account?.active) {
+      if (!isStakeKeyRegistered(account)) {
         // Conway combined cert: register + delegate + vote (abstain)
         certificates.push({
           __typename: Cardano.CertificateType.StakeVoteRegistrationDelegation,

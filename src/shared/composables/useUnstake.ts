@@ -8,6 +8,7 @@ import { buildCardanoTransaction } from '@/shared/utils/builder';
 import { nexusTxApi, cardanoUtxoToNexusInput, type BuildStakeRegistrationTxRequest } from '@/api/nexus-tx-api';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import snackbar from '@/plugins/snackbar';
+import { isStakeKeyRegistered } from '@/shared/utils/stakeRegistration';
 
 /**
  * Composable for handling Cardano unstaking (deregistration) transactions
@@ -33,8 +34,10 @@ export function useUnstake() {
         throw new Error(t('common.epochParametersNotAvailable'));
       }
 
-      // Check if stake key is registered
-      if (!account.value?.active) {
+      // Check if stake key is registered. Uses the shared predicate rather than
+      // `account.active` directly — the synced payload omits that field, so a
+      // direct read threw `cannotUnstake` for every wallet.
+      if (!isStakeKeyRegistered(account.value)) {
         throw new Error(t('common.cannotUnstake'));
       }
 

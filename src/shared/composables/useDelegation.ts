@@ -12,6 +12,7 @@ import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import snackbar from '@/plugins/snackbar';
 import networks from '@/utils/networks';
 import { WalletType } from '@/models/types';
+import { isStakeKeyRegistered } from '@/shared/utils/stakeRegistration';
 
 /**
  * Composable for handling Cardano staking delegation transactions and the
@@ -94,7 +95,7 @@ export function useDelegation() {
 
       // Nexus migration: build the delegation server-side for software + Ledger.
       if (featureFlagsStore.isNexusDelegateEnabled() && !isTrezorWallet) {
-        const isRegistered = !!account.value?.active;
+        const isRegistered = isStakeKeyRegistered(account.value);
         const hasDrep = !!account.value?.drep_id;
         const poolId = Cardano.PoolId(selectedPool.value.pool_id_bech32);
         const nexusReq = {
@@ -136,7 +137,7 @@ export function useDelegation() {
 
       let implicitCoin = BigInt(0);
 
-      if (!account.value?.active) {
+      if (!isStakeKeyRegistered(account.value)) {
         // Need to register a stake key first, then delegate
         if (isTrezorWallet) {
           // Trezor: Use separate certificates

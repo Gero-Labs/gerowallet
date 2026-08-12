@@ -342,6 +342,7 @@ import { HexBlob } from '@cardano-sdk/util';
 import { buildCardanoTransaction, extractCip149Compensation } from '@/shared/utils/builder';
 import { nexusTxApi, walletUtxosToNexusInputs } from '@/api/nexus-tx-api';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
+import { isStakeKeyRegistered } from '@/shared/utils/stakeRegistration';
 import { WalletType } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
 import assets from '@/utils/assets';
@@ -572,7 +573,7 @@ const delegate = async () => {
     let implicitCoin = BigInt(0);
     let certificate: Cardano.Certificate;
 
-    if (!account.value?.active) {
+    if (!isStakeKeyRegistered(account.value)) {
       // Need to register a stake key first, then delegate
       certificate = {
         __typename: Cardano.CertificateType.VoteRegistrationDelegation,
@@ -624,7 +625,7 @@ const delegate = async () => {
         drepId: nexusDrepId,
         changeAddress: keys.value.payment[0].address,
         utxos: walletUtxosToNexusInputs(utxos.value as Cardano.Utxo[], walletStore.collateral),
-        includeStakeRegistration: !account.value?.active,
+        includeStakeRegistration: !isStakeKeyRegistered(account.value),
       }, loggedWallet.value.network);
       if (!tx_cbor) throw new Error('Nexus returned an empty transaction CBOR');
       txData.value = Serialization.Transaction.fromCbor(HexBlob(tx_cbor)).toCore();
@@ -685,7 +686,7 @@ const drepDelegate = async (row: DRepRow) => {
     let implicitCoin = BigInt(0);
     let certificate: Cardano.Certificate;
 
-    if (!account.value?.active) {
+    if (!isStakeKeyRegistered(account.value)) {
       // Need to register a stake key first, then delegate
       certificate = {
         __typename: Cardano.CertificateType.VoteRegistrationDelegation,
@@ -714,7 +715,7 @@ const drepDelegate = async (row: DRepRow) => {
         drepId: selectedDRep.value.id,
         changeAddress: keys.value.payment[0].address,
         utxos: walletUtxosToNexusInputs(utxos.value as Cardano.Utxo[], walletStore.collateral),
-        includeStakeRegistration: !account.value?.active,
+        includeStakeRegistration: !isStakeKeyRegistered(account.value),
       }, loggedWallet.value.network);
       if (!tx_cbor) throw new Error('Nexus returned an empty transaction CBOR');
       txData.value = Serialization.Transaction.fromCbor(HexBlob(tx_cbor)).toCore();

@@ -1,4 +1,5 @@
 import networks from '@/utils/networks';
+import { isStakeKeyRegistered } from '@/shared/utils/stakeRegistration';
 import i18n from '@/plugins/i18n';
 
 export interface EmptyStateConfig {
@@ -170,7 +171,7 @@ export const isWalletEmpty = (account: any, tokens: any): boolean => {
 // Helper to determine if user is completely new
 export const isNewUser = (transactions: any[], account: any): boolean => {
   return (!transactions || transactions.length === 0) &&
-         (!account || !account.active);
+         !isStakeKeyRegistered(account);
 };
 
 // Get contextual help tips based on empty state

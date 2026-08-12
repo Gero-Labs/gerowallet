@@ -2,6 +2,7 @@ import { Buffer } from 'buffer';
 import Loading from '@/stores/loading';
 import { Messaging } from '@/chrome/messaging';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
+import { isStakeKeyRegistered } from '@/shared/utils/stakeRegistration';
 import { APIError, BITCOIN_METHOD, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, POPUP, SENDER, TARGET, TxSendError } from '@/chrome/config';
 import { bringInitBackground } from '@bringweb3/chrome-extension-kit';
 import {
@@ -1407,7 +1408,7 @@ app.add(METHOD.getRegisteredPubStakeKeys, async (request, sendResponse) => {
         sender: SENDER.extension,
       });
     }
-    if (account.active) {
+    if (isStakeKeyRegistered(account)) {
       const loggedWallet = WalletStore.state.loggedWallet;
       if (!loggedWallet || !loggedWallet.publicKey) {
         sendResponse({
@@ -1456,7 +1457,7 @@ app.add(METHOD.getUnregisteredPubStakeKeys, async (request, sendResponse) => {
         sender: SENDER.extension,
       });
     }
-    if (account.active) {
+    if (isStakeKeyRegistered(account)) {
       const loggedWallet = WalletStore.state.loggedWallet;
       if (!loggedWallet || !loggedWallet.publicKey) {
         sendResponse({
