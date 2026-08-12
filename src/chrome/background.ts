@@ -1544,19 +1544,16 @@ app.add(METHOD.getNetworkMagic, async (request, sendResponse) => {
 });
 
 // Check if a specific tab is open
-const checkTabOpen = (tabId) => {
+// Find an already-open dashboard tab (root index.html), regardless of hash route.
+// Query by URL so it survives service-worker restarts, where lastFullscreenTabId
+// (in-memory) is reset to -1 and can't be trusted.
+const findDashboardTab = (): Promise<chrome.tabs.Tab | undefined> => {
   return new Promise((resolve) => {
-    const url = chrome.runtime.getURL("*");
-    chrome.tabs.query({ url }, function (tabList) {
-      let isTabOpen = false;
-      for (let i = 0; i < tabList.length; i++) {
-        const tmpTab = tabList[i];
-        if (tmpTab && tmpTab.id === tabId) {
-          isTabOpen = true;
-          break;
-        }
-      }
-      resolve(isTabOpen);
+    const dashboardUrl = `${chrome.runtime.getURL("index.html")}*`;
+    chrome.tabs.query({ url: dashboardUrl }, (tabList) => {
+      // Prefer the last-known tab if it's still open, else the first match.
+      const known = tabList.find((tab) => tab.id === lastFullscreenTabId);
+      resolve(known ?? tabList[0]);
     });
   });
 };
@@ -1564,8 +1561,8 @@ const checkTabOpen = (tabId) => {
 // Open the dashboard in a new tab or focus on an existing tab
 const openDashboard = () => {
   return new Promise((resolve) => {
-    checkTabOpen(lastFullscreenTabId).then((isOpen) => {
-      if (!isOpen) {
+    findDashboardTab().then((existingTab) => {
+      if (!existingTab || existingTab.id == null) {
         chrome.tabs.create({
           url: chrome.runtime.getURL("index.html"),
           active: true
@@ -1581,19 +1578,11 @@ const openDashboard = () => {
           return resolve(true);
         });
       } else {
-        chrome.tabs.update(lastFullscreenTabId, { selected: true });
-        chrome.windows.getAll({ populate: true, windowTypes: ["normal", "popup"] }, (list) => {
-          for (const win of list) {
-            if (win.id && win.tabs) {
-              for (const tab of win.tabs) {
-                if (tab.id === lastFullscreenTabId) {
-                  chrome.windows.update(win.id, { focused: true });
-                  break;
-                }
-              }
-            }
-          }
-        });
+        lastFullscreenTabId = existingTab.id;
+        chrome.tabs.update(existingTab.id, { active: true });
+        if (existingTab.windowId != null) {
+          chrome.windows.update(existingTab.windowId, { focused: true });
+        }
         resolve(true);
       }
     });
