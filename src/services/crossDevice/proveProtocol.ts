@@ -68,7 +68,7 @@ export type ProveRejectReason =
   | 'prover_unhealthy' // local proof server failed /health
   | 'busy' // a job is already running (single-job queue)
   | 'timeout' // the job exceeded its budget
-  | 'decrypt_failed' // a chunk failed its AEAD tag, or chunks never completed
+  | 'decrypt_failed' // session key establishment failed, a chunk failed its AEAD tag, or chunks never completed
   | 'digest_mismatch' // reassembled payload != the digest signed in PROVE_INIT
   | 'prove_failed'; // the proof server itself failed
 
@@ -232,6 +232,29 @@ function isNumber(x: unknown): x is number {
   return typeof x === 'number' && Number.isFinite(x);
 }
 
+/**
+ * Hex string of an exact byte length.
+ *
+ * Applied to the fields that feed DIRECTLY into crypto that throws on bad
+ * input — the ephemeral public key, the digests, the AEAD nonce. Without this,
+ * a `typeof === 'string'` check lets a malformed value through the guard and
+ * the failure surfaces as an exception deep inside key derivation rather than
+ * as a clean frame rejection. Validating shape at the parse boundary is where
+ * every other structural check in this file already lives.
+ *
+ * Case-insensitive: the contract specifies lowercase, but accepting uppercase
+ * costs nothing and refusing it would be a gratuitous interop trap.
+ */
+function isHexOfBytes(x: unknown, byteLen: number): x is string {
+  return isString(x) && x.length === byteLen * 2 && /^[0-9a-fA-F]+$/.test(x);
+}
+
+/** X25519 public keys and blake2b-256 digests are both 32 bytes. */
+const KEY_HEX_BYTES = 32;
+const DIGEST_HEX_BYTES = 32;
+/** XChaCha20-Poly1305 nonce. */
+const NONCE_HEX_BYTES = 24;
+
 const REJECT_REASONS: readonly ProveRejectReason[] = [
   'serving_off', 'ledger_mismatch', 'too_large', 'rate_limited', 'prover_unhealthy',
   'busy', 'timeout', 'decrypt_failed', 'digest_mismatch', 'prove_failed',
@@ -254,18 +277,20 @@ export function isProveInit(x: unknown): x is ProveInit {
   return (
     hasSignedEnvelope(x)
     && (x['stakeAddress'] === undefined || isString(x['stakeAddress']))
-    && isString(x['ephPub'])
+    && isHexOfBytes(x['ephPub'], KEY_HEX_BYTES)
     && isString(x['ledgerVersion'])
     && isCount(x['byteLen'])
     && isCount(x['chunkCount'])
     && isNumber(x['expiresAt'])
-    && isString(x['payloadDigest'])
+    && isHexOfBytes(x['payloadDigest'], DIGEST_HEX_BYTES)
   );
 }
 
 export function isProveAccept(x: unknown): x is ProveAccept {
   if (!isObject(x) || x['type'] !== 'PROVE_ACCEPT') return false;
-  return hasSignedEnvelope(x) && isString(x['ephPub']) && isString(x['ledgerVersion']);
+  return hasSignedEnvelope(x)
+    && isHexOfBytes(x['ephPub'], KEY_HEX_BYTES)
+    && isString(x['ledgerVersion']);
 }
 
 export function isProveReject(x: unknown): x is ProveReject {
@@ -281,7 +306,7 @@ export function isProveChunk(x: unknown): x is ProveChunk {
     && isString(x['to'])
     && isCount(x['seq'])
     && isCount(x['count'])
-    && isString(x['nonceHex'])
+    && isHexOfBytes(x['nonceHex'], NONCE_HEX_BYTES)
     && isString(x['ciphertextB64'])
   );
 }
@@ -296,7 +321,7 @@ export function isProveResult(x: unknown): x is ProveResult {
   return hasSignedEnvelope(x)
     && isCount(x['byteLen'])
     && isCount(x['chunkCount'])
-    && isString(x['provenDigest']);
+    && isHexOfBytes(x['provenDigest'], DIGEST_HEX_BYTES);
 }
 
 export function isProveCancel(x: unknown): x is ProveCancel {

@@ -1537,8 +1537,12 @@ export class WalletManager {
     const { proveUnshieldedTransfer } = await import('@/chains/midnight/midnightUnshieldedProver');
     const { midnightStore } = await import('@/stores/midnightStore');
     const { hexToBytes } = await import('@/chains/midnight/midnightTxBuilder');
-    let signedTxHex = '';
-    for (let i = 0; i < payload.length; i++) signedTxHex += payload[i].toString(16).padStart(2, '0');
+    // Buffer, not proveSession's bytesToHex: importing that module here drags
+    // @noble/curves into walletManager's graph, which perturbs module
+    // resolution for @trezor/device-authenticity's CJS entry and breaks
+    // trezorWeb.spec. This is also the idiom the surrounding Midnight code
+    // already uses (midnightUnshieldedProver, midnightShieldedBuilder).
+    const signedTxHex = Buffer.from(payload).toString('hex');
     const { provenTxHex } = await proveUnshieldedTransfer({
       signedTxHex,
       proving: { url: midnightStore.proofServer.localUrl },

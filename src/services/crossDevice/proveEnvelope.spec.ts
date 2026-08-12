@@ -187,8 +187,25 @@ describe('parseProveMessage', () => {
     ['a fractional chunk seq', { type: 'PROVE_CHUNK', reqId: 'r', to: 'b', seq: 1.5, count: 2, nonceHex: 'aa', ciphertextB64: 'AA' }],
     ['a negative chunk count', { type: 'PROVE_CHUNK', reqId: 'r', to: 'b', seq: 0, count: -1, nonceHex: 'aa', ciphertextB64: 'AA' }],
     ['a stringified byteLen', { ...init, byteLen: '17', sig: 'ab' }],
+    // Hex-typed fields feed straight into crypto that throws on bad input, so
+    // they are validated at the parse boundary rather than at the call site.
+    ['a non-hex ephPub', { ...init, ephPub: 'z'.repeat(64), sig: 'ab' }],
+    ['an odd-length ephPub', { ...init, ephPub: 'ab'.repeat(31) + 'a', sig: 'ab' }],
+    ['a short ephPub', { ...init, ephPub: 'ab'.repeat(16), sig: 'ab' }],
+    ['an over-long ephPub', { ...init, ephPub: 'ab'.repeat(33), sig: 'ab' }],
+    ['a non-hex payloadDigest', { ...init, payloadDigest: 'x'.repeat(64), sig: 'ab' }],
+    ['a short payloadDigest', { ...init, payloadDigest: 'ab', sig: 'ab' }],
+    ['a chunk nonce of the wrong length', {
+      type: 'PROVE_CHUNK', reqId: 'r', to: 'b', seq: 0, count: 1,
+      nonceHex: 'aa'.repeat(12), ciphertextB64: 'AA',
+    }],
   ])('rejects %s', (_label, raw) => {
     expect(parseProveMessage(raw)).toBeNull();
+  });
+
+  it('accepts uppercase hex (contract says lowercase; refusing it would be an interop trap)', () => {
+    const upper = { ...init, ephPub: EPH.toUpperCase(), sig: 'ab' };
+    expect(isProveInit(upper)).toBe(true);
   });
 
   it('does not confuse a chunk with a signed frame', () => {

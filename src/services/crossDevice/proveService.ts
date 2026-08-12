@@ -45,6 +45,7 @@ import {
   type SessionKeys,
 } from './proveSession';
 
+
 export interface ProveTransport {
   send(msg: ProveMessage): void;
   onMessage(cb: (raw: unknown) => void): () => void;
@@ -250,18 +251,33 @@ export function createProveService(deps: ProveServiceDeps): ProveService {
     // health check below (see the `active` declaration).
     if (active) return reject(init, 'busy');
 
+    // Session establishment. `isProveInit` already rejects an ephPub that is not
+    // 32 bytes of hex, but a WELL-FORMED low-order curve point still makes
+    // getSharedSecret throw, and this runs under `void handleInbound(...)` — so
+    // an escape here becomes an unhandled rejection in the service worker
+    // instead of an answer to the peer, leaving the phone to wait out its own
+    // timeout with its rate-limit budget already spent. Every other risky step
+    // in this file is wrapped; this one was not.
     const eph = generateEphemeralKeyPair();
-    const job: ActiveJob = {
-      reqId: init.reqId,
-      peerId: init.from,
-      keys: deriveSessionKeys({
+    let keys: SessionKeys;
+    try {
+      keys = deriveSessionKeys({
         ourPrivKey: eph.privKey,
         theirPubKeyHex: init.ephPub,
         reqId: init.reqId,
         phoneDeviceId: init.from,
         desktopDeviceId: identity.deviceId,
         role: 'desktop',
-      }),
+      });
+    } catch (e) {
+      wipe(eph.privKey);
+      log(`session setup failed for ${init.reqId}: ${e instanceof Error ? e.message : String(e)}`);
+      return reject(init, 'decrypt_failed');
+    }
+    const job: ActiveJob = {
+      reqId: init.reqId,
+      peerId: init.from,
+      keys,
       ephPriv: eph.privKey,
       expectedChunks: init.chunkCount,
       received: new Map(),

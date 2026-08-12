@@ -258,6 +258,21 @@ describe('gate order', () => {
     expect(prove).not.toHaveBeenCalled();
   });
 
+  // The guard stops malformed hex, but a well-formed LOW-ORDER curve point still
+  // makes getSharedSecret throw. Under `void handleInbound(...)` that escape
+  // would become an unhandled rejection in the service worker rather than an
+  // answer, leaving the phone to wait out its own timeout.
+  it('rejects a well-formed but unusable ephPub instead of throwing', async () => {
+    const { t, deps } = makeDeps();
+    svc = createProveService(deps);
+    // All-zero: valid 32-byte hex, passes the shape guard, low-order point.
+    const phone = await makePhone('req-lo', PAYLOAD, { ephPub: '00'.repeat(32) });
+    t.deliver(phone.init);
+    await flush();
+    expect((t.lastOf('PROVE_REJECT') as ProveReject).reason).toBe('decrypt_failed');
+    expect(svc!.isBusy()).toBe(false);
+  });
+
   it('drops a frame addressed to a different device', async () => {
     const { t, deps } = makeDeps();
     svc = createProveService(deps);
