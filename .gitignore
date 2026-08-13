@@ -12,8 +12,10 @@ Thumbs.db
 # not a secret, but infra config doesn't belong in the wallet repo).
 .cloudflare_api
 
-# Dependencies
+# Dependencies. Both forms: `node_modules/` only matches a directory, so a
+# node_modules SYMLINK (worktree dev setups) would slip past it.
 node_modules/
+node_modules
 
 # Build outputs
 /dist
