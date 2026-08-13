@@ -28,6 +28,12 @@ import { execFileSync } from 'node:child_process';
 
 const LINT_EXT = /\.(?:js|mjs|cjs|ts|tsx|vue)$/;
 
+// On Windows npx is a batch file, and execFileSync without a shell cannot
+// spawn one — it throws ENOENT, which the catch below would otherwise record
+// as "this file has lint errors". Name the .cmd explicitly rather than passing
+// shell: true, which would re-parse the file path through cmd.exe.
+const NPX = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+
 // ACMR: added / copied / modified / renamed — never deleted (D), so every path
 // here still has a blob in the index for `git show :path` to read.
 const staged = execFileSync(
@@ -62,11 +68,19 @@ for (const file of staged) {
     // --no-warn-ignored keeps that skip silent. --cache is incompatible with
     // --stdin, so it is omitted — the staged set is small, so this is fine.
     execFileSync(
-      'npx',
+      NPX,
       ['eslint', '--stdin', '--stdin-filename', file, '--no-warn-ignored'],
       { input: indexContent, stdio: ['pipe', 'inherit', 'inherit'] }
     );
-  } catch {
+  } catch (err) {
+    // Distinguish "eslint ran and found problems" (exit 1, errors already
+    // printed) from "eslint never started". A silent ENOENT here reads as a
+    // lint failure with no output, which is how this hook looked permanently
+    // broken on Windows.
+    if (err?.code === 'ENOENT' || err?.code === 'EACCES') {
+      console.error(`precommit-lint: could not run \`${NPX}\` (${err.code}). Is the toolchain installed?`);
+      process.exit(1);
+    }
     // ESLint already printed this file's errors; record and keep going so the
     // developer sees every offending staged file in one run, not just the first.
     failed = true;
