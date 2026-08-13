@@ -446,7 +446,9 @@ function availableTokensFor(recipientId: string) {
     }, BigInt(0));
     const rawBalance = decimalToBaseUnits(token.balance ?? 0, 0);
     const newBalance = rawBalance - committed;
-    return { ...token, balance: newBalance < BigInt(0) ? 0 : Number(newBalance) };
+    // Keep the exact bigint as a string — Number() would round above 2^53 and
+    // setMax re-parses this via decimalToBaseUnits, so precision must survive
+    return { ...token, balance: newBalance < BigInt(0) ? '0' : newBalance.toString() };
   });
 }
 
