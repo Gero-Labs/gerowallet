@@ -10,6 +10,19 @@
   >
     <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
       <v-alert
+        v-if="drepBlocked"
+        border="left"
+        color="warning"
+        type="warning"
+        prominent
+        class="text-left mb-3"
+      >
+        <strong>{{ $t('staking.drepDelegationRequiredTitle') }}</strong>
+        <p class="mb-0 mt-2">
+          {{ $t('staking.unstakeDrepRequiredDesc') }}
+        </p>
+      </v-alert>
+      <v-alert
         outlined
         border="left"
         color="warning"
@@ -20,6 +33,14 @@
         {{ $t('staking.unstakingWillClaimRewards') }}<br>{{ $t('staking.verifyUnstakeDetails') }}
       </v-alert>
     </v-card-text>
+
+    <!-- Blocked: rewards pending but no DRep — the unstake tx cannot succeed
+         in Conway, so route the user to Governance instead of the sign form -->
+    <v-card-actions class="justify-center text-center pt-0" v-if="drepBlocked">
+      <v-btn color="primary" elevation="2" block to="/governance" class="mx-2" @click="$emit('close')">
+        {{ $t('staking.goToGovernanceDelegate') }}
+      </v-btn>
+    </v-card-actions>
     <v-card-actions class="justify-center text-center pt-0" v-if="account && tx">
       <v-form ref="form" v-model="valid" style="width: 100%">
         <v-row no-gutters >
@@ -122,7 +143,7 @@ import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import TransactionAuthSection from '@/shared/components/TransactionAuthSection.vue';
 import filters from '@/shared/utils/filters';
 import { Cardano } from '@cardano-sdk/core';
-import { WalletType } from '@/models/types';
+import { WalletType, Blockchain } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { clearWithdrawableAmount } from '@/shared/utils/autoWithdraw';
@@ -176,12 +197,21 @@ const {
   tx: txRef,
   successMessageKey: 'staking.unstakeTxSubmitted',
   // Unstake sweeps outstanding rewards — zero the local balance so a second
-  // withdrawal/send before the next account sync doesn't re-attach it (#941)
+  // withdrawal/send before the next account sync doesn't re-attach it (issue 941)
   onSuccess: () => clearWithdrawableAmount(),
   onClose: () => emit('close'),
 });
 
 const form = ref<{ validate: () => boolean; resetValidation: () => void } | null>(null);
+
+// Conway blocker (issue 951): with pending rewards and no DRep delegation the
+// unstake tx cannot succeed (dereg needs a zero reward balance, withdrawal
+// needs a DRep) — show the Governance CTA instead of the sign form
+const drepBlocked = computed(() =>
+  loggedWallet.value?.chain === Blockchain.CARDANO &&
+  !account.value?.drep_id &&
+  Number(account.value?.withdrawable_amount || 0) > 0,
+);
 
 const withdrawals = computed(() => {
   let withdrawalsAmount = 0;
@@ -196,7 +226,7 @@ const withdrawals = computed(() => {
 });
 
 const depositFee = computed(() => {
-  const hasDeregistrationCert = props.tx.body.certificates?.some(
+  const hasDeregistrationCert = props.tx?.body?.certificates?.some(
     cert => cert.__typename === Cardano.CertificateType.StakeDeregistration ||
       cert.__typename === Cardano.CertificateType.Unregistration
   );

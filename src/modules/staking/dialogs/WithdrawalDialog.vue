@@ -245,7 +245,7 @@ const {
   tx: txRef,
   successMessageKey: 'staking.withdrawalSubmitted',
   // Zero the local rewards balance so a second withdrawal/send before the
-  // next account sync doesn't re-attach the already-claimed amount (#941)
+  // next account sync doesn't re-attach the already-claimed amount (issue 941)
   onSuccess: () => clearWithdrawableAmount(),
   onClose: () => emit('close'),
 });
