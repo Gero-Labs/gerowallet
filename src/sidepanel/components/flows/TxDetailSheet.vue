@@ -107,10 +107,15 @@ type TxDetail = {
   assets?: TxAsset[];
 };
 
-const props = defineProps<{
-  value: boolean;
-  tx: TxDetail | null;
-}>();
+// Vue 2.7 compiles type-only defineProps to `{ tx: { type: Object, required: true } }`,
+// which rejects the pre-selection `null` — declare the runtime default explicitly.
+const props = withDefaults(
+  defineProps<{
+    value: boolean;
+    tx?: TxDetail | null;
+  }>(),
+  { tx: null },
+);
 
 defineEmits<{
   (e: 'input', value: boolean): void;
