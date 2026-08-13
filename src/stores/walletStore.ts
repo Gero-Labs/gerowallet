@@ -71,19 +71,24 @@ export interface Account {
 }
 
 export interface WalletStore {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- wallet record carries chain-specific runtime fields (baseAddress, stakeAddress, …) beyond the DB Wallet shape; a strict type breaks many consumers
   loggedWallet: any;
   isLocked: boolean;
   isSyncing: boolean;
-  account: Account;
+  account: Account | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mixed Cardano/Apex/BTC tx records with chain-specific shapes; consumers narrow per chain
   transactions: any[];
   utxos: Cardano.Utxo[] | IUnifiedUtxo[];  // Support both Cardano and Bitcoin UTXOs
   collateral: Cardano.Utxo | null;
-  keys: Keys;
+  keys: Keys | null;
   tokens: {};
   collections: {};
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- config is a dynamic settings bag (~20 varied fields read/written across the app); see GeroStore.config
   config: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- reward history entries come straight from the provider payload
   rewards?: any[];
   contacts?: Record<string, Contact>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- DB dapp rows plus legacy bare-hostname entries; narrowed to WhitelistedEntry where matched
   connectedDapps?: any[];
   // Bitcoin-specific state
   bitcoinBalance?: IBalance;  // Bitcoin balance (available, total, locked)
@@ -133,7 +138,7 @@ if (context === 'browser') {
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
       if (key in walletStore) {
-        (walletStore as any)[key] = updates[key as keyof WalletStore];
+        (walletStore as unknown as Record<string, unknown>)[key] = updates[key as keyof WalletStore];
       }
     });
   });
@@ -170,7 +175,7 @@ export const hydrateWalletStore = (): Promise<void> => {
 let storageWriteTimeout: ReturnType<typeof setTimeout> | null = null;
 
 // Serializer function for complex data types
-function serializeValue(key: string, value: any): any {
+function serializeValue(key: string, value: unknown): unknown {
   if (typeof value === 'bigint') {
     return value.toString();
   } else if (value instanceof Map) {
@@ -222,7 +227,7 @@ export default {
     broadcastFromBackground({ isSyncing });
   },
 
-  setLoggedWallet(loggedWallet: any) {
+  setLoggedWallet(loggedWallet: WalletStore['loggedWallet']) {
     const prevAddress = walletStore.loggedWallet?.baseAddress;
     const newAddress = loggedWallet?.baseAddress;
     walletStore.loggedWallet = loggedWallet;
@@ -262,12 +267,12 @@ export default {
     broadcastFromBackground({ isLocked });
   },
 
-  setAccount(account: any) {
+  setAccount(account: Account | null) {
     walletStore.account = account;
     broadcastFromBackground({ account });
   },
 
-  setTransactions(transactions: any[]) {
+  setTransactions(transactions: WalletStore['transactions']) {
     walletStore.transactions = transactions;
     broadcastFromBackground({ transactions });
   },
@@ -288,6 +293,8 @@ export default {
         })
         if (collateralCandidates && collateralCandidates.length > 0 && cardanoUtxos.length > 1) {
           this.setCollateral(collateralCandidates[0])
+        } else if (walletStore.collateral) {
+          this.setCollateral(null)
         }
       } else {
         // Bitcoin UTXO handling - calculate and store balance
@@ -302,12 +309,12 @@ export default {
     broadcastFromBackground({ utxos });
   },
 
-  setCollateral(collateral: Cardano.Utxo) {
+  setCollateral(collateral: Cardano.Utxo | null) {
     walletStore.collateral = collateral;
     broadcastFromBackground({ collateral });
   },
 
-  setKeys(keys: any) {
+  setKeys(keys: Keys | null) {
     walletStore.keys = keys;
     broadcastFromBackground({ keys });
   },
@@ -327,7 +334,7 @@ export default {
     broadcastFromBackground({ config });
   },
 
-  setRewards(rewards: any[]) {
+  setRewards(rewards: WalletStore['rewards']) {
     walletStore.rewards = rewards;
     broadcastFromBackground({ rewards });
   },
@@ -344,20 +351,20 @@ export default {
   },
 
   getBackup(): boolean {
-    if (walletStore.config && this.hasBackup) {
+    if (walletStore.config && this.hasBackup()) {
       return walletStore.config.backup
     }
     return true
   },
 
-  setContacts(contacts: any) {
+  setContacts(contacts: Record<string, Contact>) {
     walletStore.contacts = contacts;
     broadcastFromBackground({ contacts });
   },
 
   setBackup(value: boolean) {
     if (walletStore.config && walletStore.loggedWallet) {
-      walletStore.config.backuzp = value;
+      walletStore.config.backup = value;
       broadcastFromBackground({ config: walletStore.config });
       setWalletConfiguration(walletStore.loggedWallet.id, 'backup', value);
     }
@@ -402,7 +409,7 @@ export default {
     }
   },
 
-  setConnectedDapps(connectedDapps: any[]) {
+  setConnectedDapps(connectedDapps: WalletStore['connectedDapps']) {
     walletStore.connectedDapps = connectedDapps;
     broadcastFromBackground({ connectedDapps });
   },
