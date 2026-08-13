@@ -95,7 +95,7 @@ export function resolveIcon(icon: string): string {
   return `data:${mimeType};base64,${icon}`;
 }
 
-function cip68Label(asset_name: any): number | null {
+function cip68Label(asset_name: string | null | undefined): number | null {
   if (!asset_name) {
     return null;
   }
@@ -109,9 +109,14 @@ function cip68Label(asset_name: any): number | null {
   return check === crc8(Buffer.from(numHex, 'hex')).toString(16).padStart(2, '0') ? num : null;
 }
 
-function resolveCip68(onchain_metadata_extra: any, label: number, metadata, tokenInfo?: any) {
+function resolveCip68(
+  onchain_metadata_extra: string,
+  label: number,
+  metadata,
+  tokenInfo?: { unit?: string; policy_id?: string; asset_name?: string },
+) {
   const plutusData: Serialization.PlutusData = jsonToPlutusData(JSON.parse(onchain_metadata_extra)[label]);
-  const metadataJson: Asset.NftMetadata | any = fromPlutusData(plutusData.toCore());
+  const metadataJson: Asset.NftMetadata | null = fromPlutusData(plutusData.toCore());
 
   if (!metadataJson) {
     console.warn('⚠️ CIP68: Failed to parse PlutusData for token:', {
@@ -275,7 +280,7 @@ const mapFile = (file: Cardano.PlutusData): Asset.NftMetadataFile | undefined =>
 export const fromPlutusData = (
   plutusData: Cardano.PlutusData | undefined,
   strict = false
-): Asset.NftMetadata | any => {
+): Asset.NftMetadata | null => {
   const conditionalValidators = getConditionalValidators(strict);
   if (!conditionalValidators.isValidDatumShape(plutusData)) {
     return null;
@@ -370,6 +375,7 @@ export function applyTokenImageOverride(name: string | undefined, originalImg: s
   return originalImg;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- token records mix provider payload + chain-specific metadata shapes; resolves to a dynamic display bag consumed across the app
 export function resolveAsset(token: any): any {
   const unit = token.unit;
   let metadata = null;
@@ -509,7 +515,7 @@ export function resolveAsset(token: any): any {
         }
       }
       if (asset.onchain_metadata?.files && !img) {
-        const file = asset.onchain_metadata?.files.find((file: any) => !!file.src && file.mediaType?.includes('image'));
+        const file = asset.onchain_metadata?.files.find((file: { src?: string; mediaType?: string }) => !!file.src && file.mediaType?.includes('image'));
         if (file) {
           if (typeof file.src == "string") {
             img = resolveIcon(file.src)
@@ -580,7 +586,7 @@ export function longestCommonStartingSubstring(array) {
     return
   }
 
-  const sortedArray: any[] = [...array].sort();
+  const sortedArray: string[] = [...array].sort();
   const firstItem = sortedArray[0];
   const lastItem = sortedArray[sortedArray.length - 1];
   try {
@@ -652,7 +658,8 @@ export function get24hChange(data) {
   }
 
   const change = latest.close - past.close;
-  const percentChange = (change / past.close) * 100;
+  // Baseline close can be 0 (newly-listed token, gap-filled candle) — avoid Infinity/NaN
+  const percentChange = past.close > 0 ? (change / past.close) * 100 : 0;
 
   return {
     latestTime: latest.time,
@@ -700,12 +707,12 @@ export function analyzeTransactionForSignatures(
 
       // Search in payment addresses
       if (addresses.payment) {
-        foundAddressInfo = addresses.payment.find((addr: any) => addr.address === outputAddress);
+        foundAddressInfo = addresses.payment.find((addr: { address: string }) => addr.address === outputAddress);
       }
 
       // Search in change addresses if not found in payment
       if (!foundAddressInfo && addresses.change) {
-        foundAddressInfo = addresses.change.find((addr: any) => addr.address === outputAddress);
+        foundAddressInfo = addresses.change.find((addr: { address: string }) => addr.address === outputAddress);
       }
 
       if (foundAddressInfo && foundAddressInfo.path) {
@@ -761,12 +768,12 @@ export function analyzeTransactionForSignatures(
           }
         }
         // Flag that cold key signature is also needed (handled by pool signing flow)
-        (requiredSigners as any).requiresColdKeySignature = true;
+        (requiredSigners as unknown as { requiresColdKeySignature?: boolean }).requiresColdKeySignature = true;
       }
 
       if (certificate.__typename === Cardano.CertificateType.PoolRetirement) {
         // Pool retirement requires cold key signature (handled by pool signing flow)
-        (requiredSigners as any).requiresColdKeySignature = true;
+        (requiredSigners as unknown as { requiresColdKeySignature?: boolean }).requiresColdKeySignature = true;
       }
     }
   }
@@ -832,8 +839,8 @@ export function analyzeTransactionForSignatures(
   );
 
   // Carry forward the pool operator cold key flag (if set during certificate analysis)
-  if ((requiredSigners as any).requiresColdKeySignature) {
-    (result as any).requiresColdKeySignature = true;
+  if ((requiredSigners as unknown as { requiresColdKeySignature?: boolean }).requiresColdKeySignature) {
+    (result as unknown as { requiresColdKeySignature?: boolean }).requiresColdKeySignature = true;
   }
 
   return result;

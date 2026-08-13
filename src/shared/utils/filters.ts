@@ -19,6 +19,27 @@ const formatMax2Decimals = new Intl.NumberFormat('en-US', {
   useGrouping: true
 })
 
+// Formatter per requested max-fraction-digits, cached (Intl.NumberFormat construction is expensive)
+const maxDecimalsFormatters = new Map<number, Intl.NumberFormat>([
+  [6, formatMax6Decimals],
+  [4, formatMax4Decimals],
+  [2, formatMax2Decimals],
+])
+
+const formatterForMaxDecimals = (places: number): Intl.NumberFormat => {
+  const normalized = Number.isInteger(places) && places >= 0 && places <= 20 ? places : 2;
+  let formatter = maxDecimalsFormatters.get(normalized);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: normalized,
+      useGrouping: true
+    });
+    maxDecimalsFormatters.set(normalized, formatter);
+  }
+  return formatter;
+}
+
 /**
  * Cleans a numeric value by removing any locale-specific formatting (commas, spaces, etc.)
  * This ensures consistent parsing regardless of the user's locale
@@ -44,7 +65,7 @@ const convertFromSmallestUnit = (balance: number | string, decimals: number = 6)
 }
 
 const filters = {
-  truncate(value: string): any {
+  truncate(value: string): string {
     if (!value || value.length <= 16) return value;
     const separator = '...';
     const sepLen = separator.length;
@@ -129,22 +150,13 @@ const filters = {
         res = res / item.value
       }
     }
-    if (decimalPlaces == 6) {
-      if (res >= 0) {
-        return (signs ? '+ ' : '') + symbolPrefix + formatMax6Decimals.format(res) + symbolSuffix;
-      }
-      return (signs ? '- ' : '') + symbolPrefix + formatMax6Decimals.format(Math.abs(res)) + symbolSuffix;
-    } else if (decimalPlaces == 4) {
-      if (res >= 0) {
-        return (signs ? '+ ' : '') + symbolPrefix + formatMax4Decimals.format(res) + symbolSuffix;
-      }
-      return (signs ? '- ' : '') + symbolPrefix + formatMax4Decimals.format(Math.abs(res)) + symbolSuffix;
-    } else {
-      if (res >= 0) {
-        return (signs ? '+ ' : '') + symbolPrefix + formatMax2Decimals.format(res) + symbolSuffix;
-      }
-      return (signs ? '- ' : '') + symbolPrefix + formatMax2Decimals.format(Math.abs(res)) + symbolSuffix;
+    // Honor the exact decimalPlaces requested (default 2) instead of collapsing
+    // everything that isn't 6 or 4 down to 2
+    const formatter = formatterForMaxDecimals(decimalPlaces == undefined ? 2 : decimalPlaces);
+    if (res >= 0) {
+      return (signs ? '+ ' : '') + symbolPrefix + formatter.format(res) + symbolSuffix;
     }
+    return (signs ? '- ' : '') + symbolPrefix + formatter.format(Math.abs(res)) + symbolSuffix;
   },
   lastIndex(val: string) {
     const tok = val.split('.');

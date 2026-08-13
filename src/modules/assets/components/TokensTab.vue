@@ -83,7 +83,7 @@
               </v-tooltip>
             </span>
           </v-list-item-title>
-          <v-list-item-subtitle class="px-0" v-if="item.change !== undefined">
+          <v-list-item-subtitle class="px-0" v-if="Number.isFinite(item.change)">
             <v-avatar tile size="12" class="mr-1" style="align-self: center">
               <v-img
                 :src="
@@ -170,9 +170,14 @@ import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter'
 import TokenDetailPanel from '@/modules/market/components/TokenDetailPanel.vue';
 import type { MarketToken } from '@/modules/market/composables/useMarketData';
 
+// Display row assembled by tokensList — a dynamic bag built by resolveAsset plus
+// per-row market fields (price/value/mcap/change/allocation)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type TokenRow = Record<string, any>;
+
 // Props
 interface Props {
-  sortOptions: any;
+  sortOptions: { sortBy: string[]; sortDesc: boolean[] };
   hideScam?: boolean;
   hideUnverified?: boolean;
   searchTerm?: string;
@@ -201,7 +206,7 @@ const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 const hideBalances = computed(() => walletStore.config?.hideBalances || false);
 
 // Headers for the data table
-const headers = ref<any[]>([
+const headers = ref<Array<{ text: string; align: string; sortable: boolean; value: string; width?: string }>>([
   { text: String(t('common.asset')), align: 'start', sortable: true, value: 'name' },
   { text: String(t('common.quantity')), align: 'center', sortable: true, value: 'quantity', width: '102' },
   { text: String(t('common.price')), align: 'center', sortable: true, value: 'price', width: '100' },
@@ -225,7 +230,7 @@ const sortOptions = computed({
 });
 
 // Methods
-const customSort = (items: any[], sortBy: any[], sortDesc: any[]) => {
+const customSort = (items: TokenRow[], sortBy: string[], sortDesc: boolean[]) => {
   // First, separate native tokens from others
   const nativeTokens = items.filter(item => {
     // Check if it's a native token (empty policy_id means native token)
@@ -262,7 +267,7 @@ const customSort = (items: any[], sortBy: any[], sortDesc: any[]) => {
 
   // Sort the non-native tokens if sortBy is specified
   if (sortBy.length) {
-    otherTokens.sort((a: any, b: any) => {
+    otherTokens.sort((a: TokenRow, b: TokenRow) => {
       const sortKey = sortBy[0];
       const compareA = a[sortKey];
       const compareB = b[sortKey];
@@ -304,7 +309,7 @@ const customSort = (items: any[], sortBy: any[], sortDesc: any[]) => {
 
 // Computed properties
 const tokensList = computed(() => {
-  let res = Object.values(tokens.value).map((token: any) => {
+  let res = Object.values(tokens.value).map((token: TokenRow) => {
     if (token.policy_id === '') {
       // Use Kraken WebSocket price for ADA, fallback to network store price (in USD)
       // Convert to user's selected currency (USD or EUR)
@@ -415,7 +420,7 @@ const totalAllocation = computed(() => {
 const showTokenDetail = ref(false);
 const selectedToken = ref<MarketToken | null>(null);
 
-const handleTokenRowClick = (row: any) => {
+const handleTokenRowClick = (row: TokenRow) => {
   const _adaPrice = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
   const isAda = row.policy_id === '' && (row.name === 'Cardano' || row.unit === 'lovelace');
   const dexToken = tokenMetadata.value[row.unit];
