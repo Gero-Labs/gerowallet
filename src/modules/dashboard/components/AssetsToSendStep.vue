@@ -249,6 +249,10 @@ const emit = defineEmits(['input', 'setMax', 'openCollectiblesDialog', 'sendEnti
 const { loggedWallet, collections: resolvedCollections } = toRefs(walletStore);
 const { price } = toRefs(networkStore);
 
+// Honor the top-bar Hide Balances privacy toggle — mask displayed balances only;
+// MAX and the underlying quantities keep using the real values
+const hideBalances = computed(() => walletStore.config?.hideBalances || false);
+
 const selectedCollectibles = ref<any[]>([]);
 const search = ref<string>('');
 const selectedTokens = ref<any[]>([]);
@@ -486,6 +490,7 @@ function getAvailableTokens(currentIndex: number) {
 
 function formatBalance(token: any): string {
   if (!token) return '0';
+  if (hideBalances.value) return '••••••';
   // Find the matching token in props.tokens which has the adjusted balance
   // (total minus what other recipients have committed)
   const available = props.tokens.find((t: any) => t.unit === token.unit || t.ticker === token.ticker);
@@ -672,6 +677,7 @@ function swapToken(index: number, newToken: any) {
 
 function formatTokenBalance(token: any): string {
   if (!token?.balance) return '0';
+  if (hideBalances.value) return '••••••';
   return filters.toCurrency(token.balance, false, 2, '', '', true, token.decimals);
 }
 

@@ -36,7 +36,9 @@
                   <span v-if="externalBalance" class="caption grey--text" style="text-box-trim: trim-end"
                     >Balance:
                     {{
-                      filters.toCurrency(selectedToken.balance, false, 2, '', '', true, selectedToken.decimals)
+                      hideBalances
+                        ? '••••••'
+                        : filters.toCurrency(selectedToken.balance, false, 2, '', '', true, selectedToken.decimals)
                     }}</span
                   >
                 </div>
@@ -303,7 +305,7 @@ const chainLogo = computed(
 );
 
 // Get token price in USD (same logic as AssetsToSendStep)
-function getTokenPriceInUsd(token: any): number {
+function getTokenPriceInUsd(token: { ticker?: string; policy_id?: string; unit?: string; last_price?: number } | null | undefined): number {
   if (!token) return 0;
 
   const nativeTicker = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
@@ -375,6 +377,7 @@ const _displayPrice = computed(() => {
 const selectTokenDialog = ref<boolean>(false);
 const _amount = ref('');
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- v-model token is a dynamic display bag (balance/decimals/ticker/unit/…) shaped by the parent
 const selectedToken: any = computed({
   get() {
     return props.value;
@@ -384,9 +387,14 @@ const selectedToken: any = computed({
   },
 });
 
+// Honor the top-bar Hide Balances privacy toggle — masks the displayed figure only;
+// MAX and validation keep using the real balance
+const hideBalances = computed(() => walletStore.config?.hideBalances || false);
+
 const balance = computed(() => {
   if (!selectedToken.value) return '0';
-  
+  if (hideBalances.value) return '••••••';
+
   if (selectedToken.value.decimals) {
     return filters.toCurrency(
       selectedToken.value.balance,
