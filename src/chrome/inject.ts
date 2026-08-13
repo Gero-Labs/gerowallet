@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- page-world provider shim: implements external untyped interfaces (CIP-30 enable, Sats Connect / Wallet Standard PSBT providers, WBIP-004 registry) against window globals */
 import {
   enable,
   getAccountPub,
@@ -358,20 +359,6 @@ if (BITCOIN_DAPP_ENABLED) (function _registerBtcProvider() {
 })();
 
 // ====== WalletConnect Deep Link Interception ======
-// Intercept clicks on wc: links and forward to the extension for pairing
-document.addEventListener('click', (e: MouseEvent) => {
-  const anchor = (e.target as Element)?.closest?.('a[href^="wc:"]');
-  if (anchor) {
-    e.preventDefault();
-    e.stopPropagation();
-    const uri = anchor.getAttribute('href');
-    if (uri) {
-      window.postMessage({
-        method: 'walletconnect_pair',
-        data: { uri },
-        target: 'gerowallet',
-        sender: 'webpage',
-      }, '*');
-    }
-  }
-}, true);
+// Handled by the content script (content.ts) in its isolated world with an
+// isTrusted gesture check — a page-world postMessage bridge here would let any
+// site script initiate a pairing without a user gesture (spoofed proposals).

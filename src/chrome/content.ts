@@ -127,19 +127,26 @@ if (shouldInject()) {
       console.warn('[content.ts] initial wallet-address check failed:', e);
     }
 
-    // Listen for WalletConnect deep link pairing from inject script
-    window.addEventListener('message', (e) => {
-      if (e.source !== window || e.origin !== window.location.origin) return;
-      const msg = e.data;
-      if (msg?.target === 'gerowallet' && msg?.method === 'walletconnect_pair' && msg?.data?.uri) {
-        // Forward to background as an options-context message so it reaches WC_PAIR handler
-        chrome.runtime.sendMessage({
-          method: 'WC_PAIR',
-          sender: 'options',
-          data: { uri: msg.data.uri },
-        }).catch(() => {});
-      }
-    });
+    // WalletConnect deep-link pairing: intercept clicks on wc: anchors HERE,
+    // in the content script's isolated world, instead of trusting a
+    // page-posted `walletconnect_pair` message. A page script can post any
+    // message (the old bridge let every visited site force a pairing to an
+    // attacker relay and spoof the session proposal), but it cannot forge
+    // `isTrusted: true` on an event — only a real user gesture carries it.
+    document.addEventListener('click', (e: MouseEvent) => {
+      if (!e.isTrusted) return; // synthetic clicks can't start a pairing
+      const anchor = (e.target as Element)?.closest?.('a[href^="wc:"]');
+      if (!anchor) return;
+      const uri = anchor.getAttribute('href');
+      if (!uri) return;
+      e.preventDefault();
+      e.stopPropagation();
+      chrome.runtime.sendMessage({
+        method: 'WC_PAIR',
+        sender: 'options',
+        data: { uri },
+      }).catch(() => {});
+    }, true);
 
     // Store listener reference for cleanup
     messageListener = (message, _sender, _sendResponse) => {

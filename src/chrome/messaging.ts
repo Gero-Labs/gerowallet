@@ -531,8 +531,7 @@ export const Messaging = {
       // Only accept messages this frame posted to itself (the inject script posts
       // to its own window). Reject anything from a child iframe posting to
       // window.top — otherwise a cross-origin frame could have its CIP-30 request
-      // relayed under the top frame's (whitelisted) origin. Matches the guard the
-      // WC_PAIR listener in content.ts already uses.
+      // relayed under the top frame's (whitelisted) origin.
       if (e.source !== window) return;
       const request = e.data;
       if (
