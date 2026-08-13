@@ -121,7 +121,7 @@
                     <span class="global-total__label">{{ $t('common.total') }}</span>
                     <div>
                       <span class="global-total__ada">{{ globalTotal.formattedTotal }}</span>
-                      <span class="global-total__fiat">{{ '≈' }} {{ globalTotal.formattedUsd }}</span>
+                      <span class="global-total__fiat">{{ '≈' }} {{ hideBalances ? '$•••' : globalTotal.formattedUsd }}</span>
                     </div>
                   </div>
                 </div>
@@ -281,6 +281,11 @@ const { loggedWallet, utxos, tokens: resolvedAssets, keys, collections: resolved
 const { epochParams } = toRefs(networkStore)
 
 const nativeTicker = computed(() => networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network));
+
+// Honor the top-bar Hide Balances privacy toggle. The ADA total is transaction
+// state the user just chose, so it stays readable — but its fiat conversion is
+// masked everywhere else in the app (see TransactionsCard), so mask it here too.
+const hideBalances = computed(() => walletStore.config?.hideBalances || false);
 
 // Midnight wallets render `MidnightSendDialog` instead of the Cardano stepper
 // (see template's v-if at the top of the file). That dialog owns its own
@@ -456,6 +461,42 @@ function availableTokensFor(recipientId: string) {
     // setMax re-parses this via decimalToBaseUnits, so precision must survive
     return { ...token, balance: newBalance < BigInt(0) ? '0' : newBalance.toString() };
   });
+}
+
+/**
+ * Base units of every non-ADA asset already committed to recipients OTHER than
+ * `recipientId`. Mirrors recipientToNexusOutput's per-recipient dedupe — a unit
+ * present in selectedTokens wins and the matching collectible is skipped — so
+ * these totals match what actually goes on the wire.
+ *
+ * Collectible quantities are already base units (they come straight off the
+ * UTxO scan / picker), unlike token quantities which are human decimals.
+ */
+function committedBaseUnitsExcluding(recipientId: string): Map<string, bigint> {
+  const committed = new Map<string, bigint>();
+  const add = (unit: string, qty: bigint) => {
+    if (!unit || qty <= BigInt(0)) return;
+    committed.set(unit, (committed.get(unit) ?? BigInt(0)) + qty);
+  };
+
+  recipients.value
+    .filter((r: SendRecipient) => r.id !== recipientId)
+    .forEach((r: SendRecipient) => {
+      const seen = new Set<string>();
+      r.selectedTokens.forEach((token: Token) => {
+        if (!token?.unit || token.ticker === nativeTicker.value) return;
+        add(token.unit, decimalToBaseUnits(token.quantity, token.decimals != null ? token.decimals : 0));
+        seen.add(token.unit);
+      });
+      Object.values(r.selectedCollectibles).forEach((col: Collectible & { unit?: string }) => {
+        const unit = col.unit || ((col.policy_id || '') + (col.asset_name || ''));
+        if (!unit || seen.has(unit)) return;
+        add(unit, decimalToBaseUnits(col.toSendQuantity ?? col.quantity ?? 1, 0));
+        seen.add(unit);
+      });
+    });
+
+  return committed;
 }
 
 function excludedFingerprintsFor(recipientId: string): Set<string> {
@@ -915,10 +956,10 @@ async function sendEntireWallet(recipientId: string) {
 
   // Authoritative fix: rebuild the recipient's outbound assets straight from
   // the on-chain UTxO set. Keep only ADA in selectedTokens (so max-ada fills
-  // it), and put EVERY other asset in selectedCollectibles at its full UTxO
-  // quantity. This sidesteps any drift between walletStore.tokens /
-  // resolvedCollections / child state that would otherwise leave stragglers
-  // in the change output.
+  // it), and put every other asset in selectedCollectibles at whatever the
+  // other recipients have left unclaimed. This sidesteps any drift between
+  // walletStore.tokens / resolvedCollections / child state that would
+  // otherwise leave stragglers in the change output.
   const idx = recipients.value.findIndex((r: SendRecipient) => r.id === recipientId);
   if (idx !== -1) {
     const recipient = recipients.value[idx];
@@ -944,17 +985,30 @@ async function sendEntireWallet(recipientId: string) {
     // known-good quantities derived from the UTxOs.
     const adaOnlyTokens = recipient.selectedTokens.filter((tk: Token) => tk?.ticker === nativeTicker.value);
 
+    // Sweep only the REMAINDER — whatever other recipients haven't already
+    // claimed. Without this, running "send entire wallet" on a second card
+    // hands out the same assets twice and the build is rejected downstream
+    // (#938). ADA needs no such netting: max-ada accounts for other outputs.
+    const committed = committedBaseUnitsExcluding(recipientId);
+    let assetsClaimedElsewhere = 0;
+
     const fullCollectibles: Record<string, Collectible & { unit: string }> = {};
     for (const [unit, qty] of totals) {
       if (!unit || unit === 'lovelace') continue;
-      const qtyNum = Number(qty);
+      const remaining = qty - (committed.get(unit) ?? BigInt(0));
+      if (remaining <= BigInt(0)) {
+        assetsClaimedElsewhere++;
+        continue;
+      }
       fullCollectibles[unit] = {
         unit,
         policy_id: unit.slice(0, 56),
         asset_name: unit.slice(56),
         fingerprint: '',
-        quantity: qtyNum,
-        toSendQuantity: qtyNum,
+        // quantity stays the full on-chain holding (what the UI calls the max);
+        // toSendQuantity is the remainder, and that's what the output emitter reads
+        quantity: Number(qty),
+        toSendQuantity: Number(remaining),
       } as Collectible & { unit: string };
     }
 
@@ -970,6 +1024,7 @@ async function sendEntireWallet(recipientId: string) {
       uniqueAssets: totals.size,
       tokensKeptInRecipient: adaOnlyTokens.length,
       collectiblesEmitted: Object.keys(fullCollectibles).length,
+      assetsClaimedElsewhere,
     });
   }
 

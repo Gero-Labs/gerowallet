@@ -132,7 +132,9 @@
           class="token-info"
         >
           <v-icon x-small color="warning" style="margin-top: -1px;" class="mr-1">mdi-lock-outline</v-icon>
-          {{ lockedAdaForTokens.toFixed(2) }} {{ token.ticker }} {{ $t('wallet.lockedForTokens') }}
+          <!-- Wallet state, not transaction state — mask the figure under Hide
+               Balances while keeping the hint that tokens are locking ADA -->
+          {{ hideBalances ? '••••••' : lockedAdaForTokens.toFixed(2) }} {{ token.ticker }} {{ $t('wallet.lockedForTokens') }}
         </div>
 
         <!-- Info: ADA auto-set to min UTxO for tokens -->
@@ -232,6 +234,7 @@ import { networkStore } from '@/stores/networkStore';
 import { priceStore } from '@/stores/priceStore';
 import { tokenMetadataStore } from '@/stores/tokenMetadataStore';
 import filters from '@/shared/utils/filters';
+import { decimalToBaseUnits, baseUnitsToDecimalString } from '@/shared/utils/amount';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 
 interface Props {
@@ -597,15 +600,14 @@ function autoSetMinAda() {
 /** Add all tokens at full balance + all NFTs, then trigger MAX ADA */
 function sendEntireWallet() {
   // Max out EVERY token in the recipient (including ones already present at
-  // qty 0 from manual "add") and append every token missing so far. Using
-  // plain math for the smallest-unit → decimal conversion — filters.toCurrency
-  // rounds to max 2 decimals when decimalPlaces isn't 4 or 6, which would
-  // overstate tokens like AGIX (8 decimals) and make Nexus reject the tx.
+  // qty 0 from manual "add") and append every token missing so far. props.tokens
+  // is the live per-recipient availability (total minus what other cards hold),
+  // so this already sweeps only the remainder. Exact string-shift conversion —
+  // float division drifts by a smallest unit (#933) and filters.toCurrency
+  // rounds, which would overstate tokens like AGIX (8 decimals).
   const nativeTickerLocal = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
-  const toDecimal = (balance: unknown, decimals: unknown) => {
-    const dec = Number(decimals) || 0;
-    return dec > 0 ? Number(balance) / Math.pow(10, dec) : Number(balance);
-  };
+  const toDecimal = (balance: unknown, decimals: unknown) =>
+    baseUnitsToDecimalString(decimalToBaseUnits(balance as string | number, 0), Number(decimals) || 0);
   const allTokens = tokenModel.value.map((tk: any) => {
     if (tk?.ticker === nativeTickerLocal) return tk; // ADA handled separately by max-ada
     const full = props.tokens.find((t: any) => t.unit === tk.unit) || tk;
@@ -629,6 +631,13 @@ function sendEntireWallet() {
   // Always derive `unit` from policy_id + asset_name when missing so the
   // output emitter doesn't silently drop the asset (which would leave it in
   // the change output and defeat "send entire wallet").
+  //
+  // Read from the unfiltered collections, not the `collections` computed —
+  // that one also applies the search box, which must not narrow a sweep. The
+  // exclusion set is applied directly instead, so the sweep agrees with the
+  // picker and a second recipient can't be handed assets the first already
+  // claimed (#938).
+  const excluded = props.excludedCollectibleFingerprints ?? new Set<string>();
   const allCollectibles: any[] = [];
   for (const collection of Object.values(resolvedCollections.value)) {
     const items = (collection as any)?.items;
@@ -637,6 +646,7 @@ function sendEntireWallet() {
       const unit = item.unit || ((item.policy_id || '') + (item.asset_name || ''));
       if (!unit) continue;
       if (tokenUnits.has(unit)) continue;
+      if (excluded.has(unit) || (item.fingerprint && excluded.has(item.fingerprint))) continue;
       // Send the FULL on-chain quantity for each NFT/collectible — otherwise
       // a previously-set partial toSendQuantity would leave the remainder in
       // change and defeat "send entire wallet".
