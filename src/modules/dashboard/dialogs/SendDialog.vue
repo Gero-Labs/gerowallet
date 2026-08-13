@@ -255,7 +255,7 @@ import { isPaymentAddress } from '@/chrome/serialization';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { priceStore } from '@/stores/priceStore';
-import { currentRewardWithdrawals } from '@/shared/utils/autoWithdraw';
+import { currentRewardWithdrawals, clearWithdrawableAmount } from '@/shared/utils/autoWithdraw';
 import debounce from 'lodash/debounce';
 import { nexusTxApi, cardanoUtxoToNexusInput, type BuildTxRequest, type NexusTxAsset, type MaxAdaRequest } from '@/api/nexus-tx-api';
 import { Serialization } from '@cardano-sdk/core';
@@ -354,6 +354,12 @@ const {
 } = useTransactionSigning({
   tx,
   successMessageKey: 'wallet.txSubmittedSuccess',
+  onSuccess: () => {
+    // If this send swept rewards (auto-withdraw), zero the local balance so a
+    // second send before the next account sync doesn't re-attach the
+    // already-claimed withdrawal (#941)
+    if (tx.value?.body?.withdrawals?.length) clearWithdrawableAmount();
+  },
   onClose: () => emit('close'),
 });
 

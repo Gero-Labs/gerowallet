@@ -185,6 +185,7 @@ import filters from '@/shared/utils/filters';
 import { Cardano } from '@cardano-sdk/core';
 import { WalletType, Blockchain } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
+import { clearWithdrawableAmount } from '@/shared/utils/autoWithdraw';
 
 
 const { t } = useTranslation();
@@ -243,6 +244,9 @@ const {
 } = useTransactionSigning({
   tx: txRef,
   successMessageKey: 'staking.withdrawalSubmitted',
+  // Zero the local rewards balance so a second withdrawal/send before the
+  // next account sync doesn't re-attach the already-claimed amount (#941)
+  onSuccess: () => clearWithdrawableAmount(),
   onClose: () => emit('close'),
 });
 

@@ -125,6 +125,7 @@ import { Cardano } from '@cardano-sdk/core';
 import { WalletType } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
+import { clearWithdrawableAmount } from '@/shared/utils/autoWithdraw';
 import { useTranslation } from '@/shared/composables/useTranslation';
 
 const { t } = useTranslation();
@@ -174,10 +175,13 @@ const {
 } = useTransactionSigning({
   tx: txRef,
   successMessageKey: 'staking.unstakeTxSubmitted',
+  // Unstake sweeps outstanding rewards — zero the local balance so a second
+  // withdrawal/send before the next account sync doesn't re-attach it (#941)
+  onSuccess: () => clearWithdrawableAmount(),
   onClose: () => emit('close'),
 });
 
-const form = ref<any>(null);
+const form = ref<{ validate: () => boolean; resetValidation: () => void } | null>(null);
 
 const withdrawals = computed(() => {
   let withdrawalsAmount = 0;

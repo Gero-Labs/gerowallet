@@ -1,4 +1,5 @@
 import { walletStore } from '@/stores/walletStore';
+import { Blockchain } from '@/models/types';
 import type { NexusTxWithdrawal } from '@/api/nexus-tx-api';
 
 /**
@@ -19,6 +20,12 @@ export function currentRewardWithdrawals(): NexusTxWithdrawal[] | undefined {
   const amount = walletStore.account?.withdrawable_amount;
   if (!stakeAddr || !amount) return undefined;
 
+  // Conway: the node rejects a rewards withdrawal unless the stake key is
+  // DRep-delegated. Mirror useWithdrawal's precondition — silently skip the
+  // auto-withdraw rather than attaching a withdrawal that fails every send.
+  const isCardano = walletStore.loggedWallet?.chain === Blockchain.CARDANO;
+  if (isCardano && !walletStore.account?.drep_id) return undefined;
+
   try {
     if (BigInt(amount) <= BigInt(0)) return undefined;
   } catch {
@@ -26,4 +33,19 @@ export function currentRewardWithdrawals(): NexusTxWithdrawal[] | undefined {
   }
 
   return [{ stakeAddress: stakeAddr, amount: String(amount) }];
+}
+
+/**
+ * Optimistically zero the in-memory withdrawable rewards balance right after
+ * a transaction carrying a withdrawal was successfully submitted. Nothing
+ * else resets it before the next background account sync, so a second send
+ * (with auto-withdraw on) or a second withdrawal inside that window would
+ * re-attach the already-claimed amount and be rejected by the node
+ * (WithdrawalsNotInRewards). The next sync reconciles the true value.
+ */
+export function clearWithdrawableAmount(): void {
+  const account = walletStore.account;
+  if (account?.withdrawable_amount && account.withdrawable_amount !== '0') {
+    account.withdrawable_amount = '0';
+  }
 }
