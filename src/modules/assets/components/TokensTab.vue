@@ -177,7 +177,7 @@ type TokenRow = Record<string, any>;
 
 // Props
 interface Props {
-  sortOptions: { sortBy: string[]; sortDesc: boolean[] };
+  sortOptions: { by: string; desc: boolean };
   hideScam?: boolean;
   hideUnverified?: boolean;
   searchTerm?: string;

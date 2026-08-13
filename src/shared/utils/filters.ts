@@ -150,9 +150,12 @@ const filters = {
         res = res / item.value
       }
     }
-    // Honor the exact decimalPlaces requested (default 2) instead of collapsing
-    // everything that isn't 6 or 4 down to 2
-    const formatter = formatterForMaxDecimals(decimalPlaces == undefined ? 2 : decimalPlaces);
+    // Honor the exact decimalPlaces requested instead of collapsing everything
+    // that isn't 6 or 4 down to 2. Exception: 0 keeps its legacy meaning of
+    // "default" (2 decimals) — many call sites pass 0 for fractional ADA
+    // amounts (tx fees, deposits on signing screens) and honoring it literally
+    // would render a real 0.19 ADA fee as "₳0".
+    const formatter = formatterForMaxDecimals(decimalPlaces ? decimalPlaces : 2);
     if (res >= 0) {
       return (signs ? '+ ' : '') + symbolPrefix + formatter.format(res) + symbolSuffix;
     }
