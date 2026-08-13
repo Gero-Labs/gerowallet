@@ -988,7 +988,7 @@ async function sendEntireWallet(recipientId: string) {
     // Sweep only the REMAINDER — whatever other recipients haven't already
     // claimed. Without this, running "send entire wallet" on a second card
     // hands out the same assets twice and the build is rejected downstream
-    // (#938). ADA needs no such netting: max-ada accounts for other outputs.
+    // (issue 938). ADA needs no such netting: max-ada accounts for other outputs.
     const committed = committedBaseUnitsExcluding(recipientId);
     let assetsClaimedElsewhere = 0;
 

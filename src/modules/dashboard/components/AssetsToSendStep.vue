@@ -603,7 +603,7 @@ function sendEntireWallet() {
   // qty 0 from manual "add") and append every token missing so far. props.tokens
   // is the live per-recipient availability (total minus what other cards hold),
   // so this already sweeps only the remainder. Exact string-shift conversion —
-  // float division drifts by a smallest unit (#933) and filters.toCurrency
+  // float division drifts by a smallest unit (issue 933) and filters.toCurrency
   // rounds, which would overstate tokens like AGIX (8 decimals).
   const nativeTickerLocal = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
   const toDecimal = (balance: unknown, decimals: unknown) =>
@@ -636,7 +636,7 @@ function sendEntireWallet() {
   // that one also applies the search box, which must not narrow a sweep. The
   // exclusion set is applied directly instead, so the sweep agrees with the
   // picker and a second recipient can't be handed assets the first already
-  // claimed (#938).
+  // claimed (issue 938).
   const excluded = props.excludedCollectibleFingerprints ?? new Set<string>();
   const allCollectibles: any[] = [];
   for (const collection of Object.values(resolvedCollections.value)) {
