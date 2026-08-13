@@ -343,6 +343,7 @@ import { buildCardanoTransaction, extractCip149Compensation } from '@/shared/uti
 import { nexusTxApi, walletUtxosToNexusInputs } from '@/api/nexus-tx-api';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { isStakeKeyRegistered } from '@/shared/utils/stakeRegistration';
+import { isCardanoTx } from '@/models/transaction.types';
 import { WalletType } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
 import assets from '@/utils/assets';
@@ -371,15 +372,22 @@ const compensationPercentDisplay = computed(() => {
   return (currentCompensationBps.value / 10).toFixed(1) + '%';
 });
 
-const currentDrepTxIsPending = computed(() => {
-  const pendingTx = txs.value?.find(tx => tx.pending);
-  const isDrepTx = pendingTx?.body.certificates?.some(
-    cert =>
-      cert.__typename === Cardano.CertificateType.VoteDelegation ||
-      cert.__typename === Cardano.CertificateType.VoteRegistrationDelegation
-  );
-  return !!isDrepTx;
-});
+// Scan ALL pending txs, not just the first one — a pending send/pool
+// delegation sorting ahead of the vote-delegation must not hide the pending
+// state. Mirrors useDelegation.isDelegationPending. isCardanoTx also guards
+// body access (absent on ApexTx).
+const currentDrepTxIsPending = computed(() =>
+  (txs.value ?? []).some(
+    tx =>
+      tx.pending &&
+      isCardanoTx(tx) &&
+      (tx.body?.certificates ?? []).some(
+        cert =>
+          cert.__typename === Cardano.CertificateType.VoteDelegation ||
+          cert.__typename === Cardano.CertificateType.VoteRegistrationDelegation,
+      ),
+  ),
+);
 
 // Create a computed property for dreps that combines governance data
 const dreps = computed(() => {
