@@ -345,7 +345,9 @@ const collections = computed(() => {
     cols = cols.map(collection => ({
       ...collection,
       items: collection.items.filter((item: any) =>
-        !excluded.has(item.fingerprint)
+        // Exclude by fingerprint OR unit — send-entire-wallet reconstructs
+        // collectibles with an empty fingerprint, so unit is the reliable key
+        !excluded.has(item.fingerprint) && !excluded.has(item.unit)
       ),
     })).filter(collection => collection.items.length > 0);
   }

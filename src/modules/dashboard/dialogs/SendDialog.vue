@@ -251,6 +251,7 @@ import { WalletType, Blockchain } from '@/models/types';
 import { Token, Collectible, SendRecipient } from '@/models/send-flow.types';
 import networks from '@/utils/networks';
 import filters from '@/shared/utils/filters';
+import { decimalToBaseUnits, baseUnitsToDecimalString } from '@/shared/utils/amount';
 import { isPaymentAddress } from '@/chrome/serialization';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
@@ -436,14 +437,16 @@ const resetData = () => {
 function availableTokensFor(recipientId: string) {
   const others = recipients.value.filter((r: SendRecipient) => r.id !== recipientId);
   return tokens.value.map((token: Token & { balance?: string | number; name?: string; img?: string; decimals: number }) => {
-    const committed = others.reduce((sum: number, r: SendRecipient) => {
+    // BigInt-safe: float multiply can drop a smallest unit (#933) and Number
+    // loses integer precision above 2^53
+    const committed = others.reduce((sum: bigint, r: SendRecipient) => {
       const t2 = r.selectedTokens.find((tk: Token) => tk.unit === token.unit);
       if (!t2) return sum;
-      return sum + Math.floor(Number(t2.quantity) * Math.pow(10, token.decimals ?? 6));
-    }, 0);
-    const rawBalance = Number(token.balance ?? 0);
+      return sum + decimalToBaseUnits(t2.quantity, token.decimals ?? 6);
+    }, BigInt(0));
+    const rawBalance = decimalToBaseUnits(token.balance ?? 0, 0);
     const newBalance = rawBalance - committed;
-    return { ...token, balance: newBalance < 0 ? 0 : newBalance };
+    return { ...token, balance: newBalance < BigInt(0) ? 0 : Number(newBalance) };
   });
 }
 
@@ -453,6 +456,10 @@ function excludedFingerprintsFor(recipientId: string): Set<string> {
   others.forEach((r: SendRecipient) => {
     Object.values(r.selectedCollectibles).forEach((col: Collectible & { unit: string }) => {
       if (col.fingerprint) fingerprints.add(col.fingerprint);
+      // Send-entire-wallet reconstructs collectibles with fingerprint: '' —
+      // also exclude by unit so those still vanish from other pickers (#938)
+      const unit = col.unit || ((col.policy_id || '') + (col.asset_name || ''));
+      if (unit) fingerprints.add(unit);
     });
   });
   return fingerprints;
@@ -611,7 +618,8 @@ function recipientToNexusOutput(r: SendRecipient, overrideLovelace?: string) {
       // Treat missing decimals as 0 — otherwise a no-metadata fungible would
       // be silently dropped from the output and end up in change.
       const decimals = token.decimals != null ? token.decimals : 0;
-      const qty = BigInt(Math.floor(Number(token.quantity) * Math.pow(10, decimals)));
+      // String-shift, not float multiply: 0.29 * 100 floors to 28 (#933)
+      const qty = decimalToBaseUnits(token.quantity, decimals);
       if (token.ticker === nativeTicker.value) {
         if (!overrideLovelace) lovelace = qty.toString();
       } else if (token.unit) {
@@ -724,15 +732,16 @@ async function setMax(recipientId: string, tokenIndex: number) {
   const selectedToken = sendTokensCopy[tokenIndex];
   if (!selectedToken) { isCalculatingMax.value = false; return; }
 
-  // For non-ADA tokens: just set to full balance, single build.
-  // Use plain math for smallest-unit → decimal conversion — filters.toCurrency
-  // rounds to max 2 decimals when decimalPlaces isn't 4 or 6, which would
-  // over-commit tokens like AGIX (8 decimals, small balances).
+  // For non-ADA tokens: set to the LIVE available balance (total minus what
+  // other recipients committed — the same figure the card displays), not the
+  // snapshot stored when the token was added (#938). Exact string-shift
+  // conversion — filters.toCurrency rounds and float divide drifts (#933).
   if (selectedToken.ticker !== nativeTicker.value) {
     const decimals = Number(selectedToken.decimals) || 0;
-    selectedToken.quantity = decimals > 0
-      ? Number(selectedToken.balance) / Math.pow(10, decimals)
-      : Number(selectedToken.balance);
+    const liveToken = availableTokensFor(recipientId)
+      .find((tk: Token & { balance?: string | number }) => tk.unit === selectedToken.unit);
+    const liveBalance = liveToken?.balance ?? selectedToken.balance;
+    selectedToken.quantity = baseUnitsToDecimalString(decimalToBaseUnits(liveBalance, 0), decimals);
     try {
       const updated = { ...recipient, selectedTokens: sendTokensCopy };
       recipients.value.splice(recipientIdx, 1, updated);
@@ -1157,8 +1166,8 @@ watch(
       });
       r.selectedTokens.forEach((token: Token) => {
         if (token?.unit && token.ticker !== nativeTicker.value) {
-          const qty = token.quantity ? Math.floor(Number(token.quantity) * Math.pow(10, token.decimals || 0)) : 0;
-          if (qty > 0) assetsMap.set(token.unit as Cardano.AssetId, BigInt(qty));
+          const qty = token.quantity ? decimalToBaseUnits(token.quantity, token.decimals || 0) : BigInt(0);
+          if (qty > BigInt(0)) assetsMap.set(token.unit as Cardano.AssetId, qty);
         }
       });
       if (assetsMap.size > 0) {
