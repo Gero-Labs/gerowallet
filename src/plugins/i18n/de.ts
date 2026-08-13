@@ -2649,6 +2649,7 @@ export default {
   'staking.drepDelegationRequired': 'Für das Abheben von Belohnungen ist eine DRep-Delegation erforderlich. Besuche den Governance-Tab, um zu delegieren.',
   'staking.drepDelegationRequiredDesc': 'Auf Cardano musst du an eine DRep (Delegated Representative) delegiert sein, um Staking-Belohnungen abzuheben. Bitte besuche den Governance-Tab, um dich vor dem Abheben deiner Belohnungen an eine DRep zu delegieren.',
   'staking.drepDelegationRequiredTitle': 'DRep-Delegation erforderlich',
+  'staking.unstakeDrepRequiredDesc': 'Beim Unstaking werden deine ausstehenden Belohnungen eingelöst. Auf Cardano können Belohnungen nur abgehoben werden, solange du an eine DRep delegiert bist. Delegiere zuerst an eine DRep und starte das Unstaking danach erneut.',
   'staking.earnRewards': 'Verdiene Belohnungen, indem du deine',
   'staking.earnRewardsByStakingDesc': 'Verdiene Belohnungen, indem du deine ADA-Token beim umfangreichen Netzwerk von Stake-Pools von Cardano einsetzt.',
   'staking.epoch': 'Epoche',

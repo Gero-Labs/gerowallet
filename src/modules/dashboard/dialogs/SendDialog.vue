@@ -358,7 +358,7 @@ const {
   onSuccess: () => {
     // If this send swept rewards (auto-withdraw), zero the local balance so a
     // second send before the next account sync doesn't re-attach the
-    // already-claimed withdrawal (#941)
+    // already-claimed withdrawal (issue 941)
     if (tx.value?.body?.withdrawals?.length) clearWithdrawableAmount();
   },
   onClose: () => emit('close'),
@@ -443,7 +443,7 @@ const resetData = () => {
 function availableTokensFor(recipientId: string) {
   const others = recipients.value.filter((r: SendRecipient) => r.id !== recipientId);
   return tokens.value.map((token: Token & { balance?: string | number; name?: string; img?: string; decimals: number }) => {
-    // BigInt-safe: float multiply can drop a smallest unit (#933) and Number
+    // BigInt-safe: float multiply can drop a smallest unit (issue 933) and Number
     // loses integer precision above 2^53
     const committed = others.reduce((sum: bigint, r: SendRecipient) => {
       const t2 = r.selectedTokens.find((tk: Token) => tk.unit === token.unit);
@@ -465,7 +465,7 @@ function excludedFingerprintsFor(recipientId: string): Set<string> {
     Object.values(r.selectedCollectibles).forEach((col: Collectible & { unit: string }) => {
       if (col.fingerprint) fingerprints.add(col.fingerprint);
       // Send-entire-wallet reconstructs collectibles with fingerprint: '' —
-      // also exclude by unit so those still vanish from other pickers (#938)
+      // also exclude by unit so those still vanish from other pickers (issue 938)
       const unit = col.unit || ((col.policy_id || '') + (col.asset_name || ''));
       if (unit) fingerprints.add(unit);
     });
@@ -626,7 +626,7 @@ function recipientToNexusOutput(r: SendRecipient, overrideLovelace?: string) {
       // Treat missing decimals as 0 — otherwise a no-metadata fungible would
       // be silently dropped from the output and end up in change.
       const decimals = token.decimals != null ? token.decimals : 0;
-      // String-shift, not float multiply: 0.29 * 100 floors to 28 (#933)
+      // String-shift, not float multiply: 0.29 * 100 floors to 28 (issue 933)
       const qty = decimalToBaseUnits(token.quantity, decimals);
       if (token.ticker === nativeTicker.value) {
         if (!overrideLovelace) lovelace = qty.toString();
@@ -742,8 +742,8 @@ async function setMax(recipientId: string, tokenIndex: number) {
 
   // For non-ADA tokens: set to the LIVE available balance (total minus what
   // other recipients committed — the same figure the card displays), not the
-  // snapshot stored when the token was added (#938). Exact string-shift
-  // conversion — filters.toCurrency rounds and float divide drifts (#933).
+  // snapshot stored when the token was added (issue 938). Exact string-shift
+  // conversion — filters.toCurrency rounds and float divide drifts (issue 933).
   if (selectedToken.ticker !== nativeTicker.value) {
     const decimals = Number(selectedToken.decimals) || 0;
     const liveToken = availableTokensFor(recipientId)

@@ -9,6 +9,7 @@ import { nexusTxApi, cardanoUtxoToNexusInput, type BuildStakeRegistrationTxReque
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import snackbar from '@/plugins/snackbar';
 import { isStakeKeyRegistered } from '@/shared/utils/stakeRegistration';
+import { Blockchain } from '@/models/types';
 
 /**
  * Composable for handling Cardano unstaking (deregistration) transactions
@@ -44,6 +45,20 @@ export function useUnstake() {
       // Check if keys are loaded
       if (!keys.value || !keys.value.stake || keys.value.stake.length === 0) {
         throw new Error(t('common.walletKeysNotAvailable'));
+      }
+
+      // Conway pre-flight (issue 951): deregistration requires a ZERO reward
+      // balance, and withdrawing those rewards requires DRep delegation.
+      // With pending rewards and no DRep the unstake tx cannot succeed in
+      // either shape (with the withdrawal the node rejects the withdrawal;
+      // without it, the deregistration). Open the dialog in its blocked
+      // state (warning + Go to Governance) instead of building a doomed tx.
+      const isCardano = loggedWallet.value?.chain === Blockchain.CARDANO;
+      const hasPendingRewards = Number(account.value?.withdrawable_amount || 0) > 0;
+      if (isCardano && hasPendingRewards && !account.value?.drep_id) {
+        txData.value = null;
+        unstakeDialog.value = true;
+        return;
       }
 
       const certificates: Cardano.Certificate[] = [];
@@ -112,9 +127,10 @@ export function useUnstake() {
       }
 
       unstakeDialog.value = true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error building unstake transaction:', error);
-      snackbar.setError(t('errors.buildTransactionFailed') + ': ' + (error.message || t('errors.unknownError')));
+      const message = error instanceof Error ? error.message : t('errors.unknownError');
+      snackbar.setError(t('errors.buildTransactionFailed') + ': ' + message);
     }
   };
 
