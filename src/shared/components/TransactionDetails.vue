@@ -777,6 +777,7 @@ import stakingStoreActions from '@/stores/stakingStore';
 import blockchainApi from '@/api/blockchain-api';
 import { getBlockchainDb } from '@/db';
 import { Blockchain, Network } from '@/models/types';
+import { getExplorerUrl } from '@/shared/utils/explorer';
 
 /** Koios API UTXO amount entry */
 interface TxAmount {
@@ -1085,29 +1086,27 @@ const receivedAssets = computed(() => {
   return asstsResolved;
 });
 
-const transactionUrl = computed(() => {
-  const txId = props.transactionInfo['id'];
-  if (loggedWallet.value?.chain === Blockchain.APEX_PRIME) {
-    return `https://apexscan.org/en/transaction/${txId}/summary/`;
-  } else if (loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET) {
-    return `https://cexplorer.io/tx/${txId}`;
-  } else if (loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.PREPROD) {
-    return `https://preprod.cexplorer.io/tx/${txId}`;
-  }
-  return null;
-});
+// Use the shared explorer helper, which handles both Apex chains (Prime AND
+// Vector → apexscan) and Cardano networks. The previous inline branches only
+// special-cased APEX_PRIME, so a Vector wallet got a null tx link / a Cardano
+// cexplorer block link (bug 954).
+const transactionUrl = computed(() =>
+  getExplorerUrl(
+    loggedWallet.value?.chain ?? '',
+    props.transactionInfo['id'],
+    'tx',
+    loggedWallet.value?.network,
+  ) || null,
+);
 
-const blockUrl = computed(() => {
-  const blockHash = props.transactionInfo['block_hash'];
-  if (loggedWallet.value?.chain === Blockchain.APEX_PRIME) {
-    return `https://apexscan.org/en/block/${blockHash}`;
-  } else if (loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.MAINNET) {
-    return `https://cexplorer.io/block/${blockHash}`;
-  } else if (loggedWallet.value?.chain === Blockchain.CARDANO && loggedWallet.value?.network === Network.PREPROD) {
-    return `https://preprod.cexplorer.io/block/${blockHash}`;
-  }
-  return `https://cexplorer.io/block/${blockHash}`;
-});
+const blockUrl = computed(() =>
+  getExplorerUrl(
+    loggedWallet.value?.chain ?? '',
+    props.transactionInfo['block_hash'],
+    'block',
+    loggedWallet.value?.network,
+  ),
+);
 
 const receivedArrowStyle = computed(() => {
   if (isApex.value) {

@@ -104,7 +104,7 @@ import filters from '@/shared/utils/filters';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import NetworkStore from '@/stores/networkStore';
 import { walletStore } from '@/stores/walletStore';
-import { Blockchain, Network } from '@/models/types';
+import { getExplorerUrl } from '@/shared/utils/explorer';
 import { useTranslation } from '@/shared/composables/useTranslation';
 
 const { t } = useTranslation();
@@ -127,14 +127,17 @@ const props = defineProps<{
   };
 }>();
 
-const txUrl = computed(() => {
-  if (loggedWallet.value?.chain === Blockchain.APEX_PRIME) {
-    return `https://apexscan.org/en/transaction/${props.utxo.txHash}/summary/`;
-  } else if (loggedWallet.value?.network === Network.PREPROD) {
-    return `https://preprod.cexplorer.io/tx/${props.utxo.txHash}`;
-  }
-  return `https://cexplorer.io/tx/${props.utxo.txHash}`;
-});
+// Shared explorer helper handles both Apex chains (incl. Vector → apexscan) and
+// Cardano networks; the previous inline logic only special-cased APEX_PRIME, so
+// a Vector UTxO link fell through to Cardano cexplorer (bug 954).
+const txUrl = computed(() =>
+  getExplorerUrl(
+    loggedWallet.value?.chain ?? '',
+    props.utxo.txHash,
+    'tx',
+    loggedWallet.value?.network,
+  ),
+);
 
 const tokenEntries = computed(() => {
   if (!props.utxo.assets) return [];
