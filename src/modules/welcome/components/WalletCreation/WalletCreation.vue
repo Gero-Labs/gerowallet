@@ -16,7 +16,10 @@
 
       <div class="welcome-heading">
         <div class="welcome-title">{{ $t('welcome.welcomeMessage') }}</div>
-        <div class="welcome-subtitle">{{ $t('welcome.chooseAWallet') }}</div>
+        <!-- "Choose a wallet to sign in" only makes sense when there is a wallet
+             to choose. With an empty list the right-column hero + Get Started CTA
+             is the create-first-wallet path, so drop the sign-in subtitle. -->
+        <div v-if="hasWallets" class="welcome-subtitle">{{ $t('welcome.chooseAWallet') }}</div>
       </div>
 
       <WalletsListLogin :hide-header="true" class="wallet-list-block" @network-change="onNetworkChange" />
@@ -26,10 +29,12 @@
   </div>
 </template>
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, toRefs } from 'vue';
 import { geroDashboardApex, geroDashboardPrime, geroDashboardVector, geroDashboardBitcoin, geroDashboard } from '@/utils/assets';
 import WalletsListLogin from '@/options/modules/welcome/components/WalletsListLogin.vue';
-import { NetworkInfo } from '@/utils/networks';
+import networks, { NetworkInfo } from '@/utils/networks';
+import { geroStore } from '@/stores/geroStore';
+import { Wallet, WalletType } from '@/models/types';
 
 const props = defineProps<{
   selectedNetwork: NetworkInfo;
@@ -42,6 +47,17 @@ const emit = defineEmits<{
 const onNetworkChange = (n: NetworkInfo): void => {
   emit('network-change', n);
 };
+
+// Mirrors WalletsListLogin's `availableWallets` filter so the heading stays in
+// sync with what the list actually renders (same store + network/google rules).
+const { wallets } = toRefs(geroStore);
+const hasWallets = computed<boolean>(() =>
+  (Object.values(wallets.value) as Wallet[]).some(
+    (wallet: Wallet) =>
+      !!networks.resolveNetwork(wallet?.chain, wallet?.network)
+      && (wallet.type !== WalletType.Google || wallet.encryptionMethod === 'mpc'),
+  ),
+);
 
 // Logo reacts to the selected network's brand colors.
 const logo = computed(() => {
