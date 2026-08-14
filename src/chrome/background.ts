@@ -23,6 +23,7 @@ import {
 } from '@/chrome/serialization';
 import { Blockchain, coin_type, ERROR, Network, purpose } from '@/models/types';
 import networks from '@/utils/networks';
+import coinGeckoStore from '@/stores/coinGeckoStore';
 import { getDomain } from 'tldts';
 import { MessageTypes } from '@/models/MessageTypes';
 import { signInWithGoogle } from '@/chrome/auth';
@@ -463,12 +464,26 @@ chrome.alarms.create('auto-lock-check', {
   periodInMinutes: 1 // Check every minute
 });
 
+// Populate the CoinGecko price cache. Nothing else calls updatePrices(), so
+// without this the cache stays {} and every consumer that reads it — notably
+// Apex fiat valuation (coinGeckoStore.cache['apex-4']) — values at $0. Fetch
+// once on startup, then refresh on an alarm (cache is considered stale >5min).
+coinGeckoStore.updatePrices().catch(() => {});
+chrome.alarms.create('refreshCoinGeckoPrices', {
+  delayInMinutes: 5,
+  periodInMinutes: 5
+});
+
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === 'clearProcessedDomains') {
     clearProcessedDomains();
   } else if (alarm.name === 'auto-lock-check') {
     checkAutoLock().catch(error => {
       console.error('❌ Error in auto-lock check:', error);
+    });
+  } else if (alarm.name === 'refreshCoinGeckoPrices') {
+    coinGeckoStore.updatePrices().catch(error => {
+      console.warn('❌ Error refreshing CoinGecko prices:', error);
     });
   } else if (alarm.name === 'wc-keepalive') {
     import('@/services/walletConnect/walletConnect.service').then(({ walletConnectService }) => {
