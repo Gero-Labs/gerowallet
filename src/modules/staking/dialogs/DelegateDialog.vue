@@ -325,10 +325,13 @@ watch(
 const depositFee = computed(() => {
   if (!props.tx?.body) return 0;
 
-  const registrationCert: any = props.tx.body.certificates?.find(
-    cert =>
-      cert.__typename === Cardano.CertificateType.StakeRegistration ||
-      cert.__typename === Cardano.CertificateType.StakeRegistrationDelegation
+  // Recognize every registration-carrying cert type, including the Conway ones
+  // a first-time delegation actually builds — StakeVoteRegistrationDelegation
+  // (default client path) and Registration (Trezor) — not just the two legacy
+  // types. Without this the deposit row is hidden on the majority first
+  // delegation. Mirrors UnstakeDialog's both-generations check on the dereg side.
+  const registrationCert: any = props.tx.body.certificates?.find(cert =>
+    Cardano.isCertType(cert, Cardano.StakeRegistrationCertificateTypes)
   );
 
   return registrationCert && registrationCert.deposit ? Number(registrationCert?.deposit) : 0;
