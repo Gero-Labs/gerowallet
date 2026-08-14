@@ -147,7 +147,6 @@
 import { ref, computed, toRefs, watch, onMounted } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import stakingStoreActions, { stakingStore as stakingStoreState } from '@/stores/stakingStore';
-import { useDelegation } from '@/shared/composables/useDelegation';
 import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
 import BottomSheet from '../../components/BottomSheet.vue';
@@ -166,7 +165,6 @@ const {
   error,
 } = toRefs(stakingStoreState);
 
-const { delegate } = useDelegation();
 
 const search = ref('');
 const hideSaturated = ref(true);
@@ -230,10 +228,17 @@ const confirmDelegate = async () => {
   delegating.value = true;
 
   try {
-    await delegate(selectedPool.value);
+    // The side panel has no signing surface for certificate transactions
+    // (hardware, PassKey/PRF and Keystone all sign through the dashboard's
+    // DelegateDialog). Building the delegation tx here would leave it with
+    // nowhere to be signed — the button appeared to do nothing. Hand off to the
+    // full dashboard staking page to complete + sign, mirroring the reward-claim
+    // handoff in StakingPage.vue (confirmClaim).
+    const dashboardUrl = chrome.runtime.getURL('index.html#/staking');
+    chrome.tabs.create({ url: dashboardUrl });
     showDelegateSheet.value = false;
   } catch (e) {
-    console.error('Delegation error:', e);
+    console.error('Delegation handoff error:', e);
   } finally {
     delegating.value = false;
   }
