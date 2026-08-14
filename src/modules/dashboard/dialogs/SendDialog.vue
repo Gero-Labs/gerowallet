@@ -82,7 +82,6 @@
                 <SendRecipientCard
                   v-for="(recipient, idx) in recipients"
                   :key="recipient.id"
-                  :class="{ shake: shakeError && !isRecipientValid(recipient) }"
                   :recipient="recipient"
                   :index="idx"
                   :is-expanded="expandedRecipientId === recipient.id"
@@ -200,11 +199,12 @@
           <!-- Step 1: Continue button -->
           <v-btn
             v-if="currentStep !== 2"
-            :class="['continue-button', { shake: shakeError }]"
+            class="continue-button"
             @click="nextStep()"
+            :disabled="!isValid || txSignLoading"
             :loading="txSignLoading"
           >{{ $t('common.continue') + ' ' }}
-            <v-icon style="color: var(--g-on-grad)!important;" small class="ml-1">mdi-arrow-right</v-icon>
+            <v-icon style="color: var(--g-canvas)!important;" small class="ml-1">mdi-arrow-right</v-icon>
           </v-btn>
           <!-- Step 2: Sign/Confirm button for non-PRF wallets. Local signing is
                disabled while a "require remote" policy is active (unless already
@@ -236,7 +236,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import { toRefs, ref, computed, watch, onMounted, nextTick } from 'vue';
+import { computed, nextTick, onMounted, ref, toRefs, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useTransactionSigning } from '@/shared/composables/useTransactionSigning';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
@@ -247,32 +247,35 @@ import SummaryStep from '../components/SummaryStep.vue';
 import SendRecipientCard from '../components/SendRecipientCard.vue';
 import MidnightSendDialog from './MidnightSendDialog.vue';
 import rules from '@/utils/rules';
-import { WalletType, Blockchain } from '@/models/types';
-import { Token, Collectible, SendRecipient } from '@/models/send-flow.types';
+import { Blockchain, WalletType } from '@/models/types';
+import { Collectible, SendRecipient, Token } from '@/models/send-flow.types';
 import networks from '@/utils/networks';
 import filters from '@/shared/utils/filters';
-import { decimalToBaseUnits, baseUnitsToDecimalString } from '@/shared/utils/amount';
+import { baseUnitsToDecimalString, decimalToBaseUnits } from '@/shared/utils/amount';
 import { isPaymentAddress } from '@/chrome/serialization';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { priceStore } from '@/stores/priceStore';
-import { currentRewardWithdrawals, clearWithdrawableAmount } from '@/shared/utils/autoWithdraw';
+import { clearWithdrawableAmount, currentRewardWithdrawals } from '@/shared/utils/autoWithdraw';
 import debounce from 'lodash/debounce';
-import { nexusTxApi, cardanoUtxoToNexusInput, type BuildTxRequest, type NexusTxAsset, type MaxAdaRequest } from '@/api/nexus-tx-api';
-import { Serialization } from '@cardano-sdk/core';
+import {
+  type BuildTxRequest,
+  cardanoUtxoToNexusInput,
+  type MaxAdaRequest,
+  nexusTxApi,
+  type NexusTxAsset,
+} from '@/api/nexus-tx-api';
+import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import { BrowserTxConstruction } from '@/chrome/cardanoJsSdkCbor';
-import { Cardano } from '@cardano-sdk/core';
 import assets from '@/utils/assets';
 import { debugLog } from '@/utils/debug';
 import { useQuickActionDialogs } from '@/shared/composables/useQuickActionDialogs';
 import { loadingState } from '@/stores/loading';
 
-interface Props {
-  isOpen: boolean;
-}
-
-const props = defineProps<Props>();
+const props = defineProps({
+  isOpen: { type: Boolean, required: true },
+});
 const emit = defineEmits(['close']);
 
 const { t } = useTranslation();
@@ -306,7 +309,6 @@ const currentStep = ref<number>(1);
 const expandedRecipientId = ref<string | null>(null);
 const txValid = ref<boolean>(false);
 const isCalculatingMax = ref<boolean>(false);
-const shakeError = ref<boolean>(false);
 const maxRecipientIds = ref<Set<string>>(new Set());
 
 function createEmptyRecipient(): SendRecipient {
@@ -419,8 +421,8 @@ const isValid = computed(() => {
       const hasAsset = r.selectedTokens.some((tk: Token) => Number(tk.quantity) > 0) ||
         Object.keys(r.selectedCollectibles).length > 0;
       if (!hasAsset) return false;
-      if (r.adaShortage > 0) return false;
-      return true;
+      return r.adaShortage <= 0;
+
     });
   }
   if (currentStep.value === 2) {
@@ -439,7 +441,6 @@ const resetData = () => {
   currentStep.value = 1;
   tx.value = undefined;
   txValid.value = false;
-  shakeError.value = false;
   maxRecipientIds.value = new Set();
   recipients.value = [createEmptyRecipient()];
   expandedRecipientId.value = recipients.value[0].id;
@@ -573,17 +574,6 @@ function getDuplicateOfIndex(recipientId: string, address: string): number | und
   return idx >= 0 ? idx : undefined;
 }
 
-function isRecipientValid(r: SendRecipient): boolean {
-  const addr = r.resolvedAddress ?? r.address;
-  const rule = rules.recipientRules(loggedWallet.value?.chain, loggedWallet.value?.network);
-  if (rule(addr) !== true) return false;
-  const hasAsset = r.selectedTokens.some((tk: Token) => Number(tk.quantity) > 0) ||
-    Object.keys(r.selectedCollectibles).length > 0;
-  if (!hasAsset) return false;
-  if (r.adaShortage > 0) return false;
-  return true;
-}
-
 const showAddLink = computed(() => {
   return recipients.value.length > 0;
 });
@@ -591,7 +581,7 @@ const showAddLink = computed(() => {
 /** Aggregate total across all recipients for the global total line. */
 const globalTotal = computed(() => {
   let totalAda = 0;
-  let totalUsd = 0;
+  let totalUsd: number;
 
   recipients.value.forEach((r: SendRecipient) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -737,11 +727,7 @@ const summaryRef = ref<InstanceType<typeof SummaryStep>>();
 
 async function nextStep() {
   if (currentStep.value === 1) {
-    if (!isValid.value) {
-      shakeError.value = true;
-      setTimeout(() => { shakeError.value = false; }, 600);
-      return;
-    }
+    if (!isValid.value) return;
     summaryRef.value?.scanTx(tx.value);
     currentStep.value++;
   } else if (currentStep.value === 2) {
@@ -1079,8 +1065,7 @@ const debouncedBuild = debounce(async () => {
       // Show shortage in the first recipient (same UX as other shortage errors).
       const match = msg.match(/Available:\s*(\d+)\s*lovelace,\s*required:\s*(\d+)\s*lovelace/);
       if (match && recipients.value[0]) {
-        const shortage = Number(filters.toCurrency(parseInt(match[2], 10) - parseInt(match[1], 10), false, 6, '', '', false, 6).replaceAll(',', ''));
-        recipients.value[0].adaShortage = shortage;
+        recipients.value[0].adaShortage = Number(filters.toCurrency(parseInt(match[2], 10) - parseInt(match[1], 10), false, 6, '', '', false, 6).replaceAll(',', ''));
       }
     } else if (msg.includes('Insufficient token balance')) {
       // Nexus 400 — the output asked for more of a token than the wallet holds.
@@ -1396,11 +1381,11 @@ onMounted(() => {
 /* ─── Buttons ─── */
 .continue-button {
   background: var(--g-grad);
-  color: var(--g-on-grad);
+  color: var(--g-canvas);
 
   &:disabled {
     opacity: 0.5;
-    color: var(--g-on-grad) !important;
+    color: var(--g-canvas) !important;
   }
 }
 
@@ -1466,16 +1451,5 @@ onMounted(() => {
 
 .v-stepper__content {
   padding: 0;
-}
-
-/* ─── Shake animation ─── */
-.shake {
-  animation: shake 0.4s ease-in-out;
-}
-
-@keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  20%, 60% { transform: translateX(-4px); }
-  40%, 80% { transform: translateX(4px); }
 }
 </style>
