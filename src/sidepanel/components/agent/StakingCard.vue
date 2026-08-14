@@ -89,6 +89,7 @@ import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { buildCardanoTransaction } from '@/shared/utils/builder';
 import { isStakeKeyRegistered } from '@/shared/utils/stakeRegistration';
+import { Blockchain } from '@/models/types';
 import type { Keys } from '@/models/types';
 
 export default defineComponent({
@@ -234,6 +235,14 @@ export default defineComponent({
       if (!keys?.payment?.length) throw new Error('Payment key not available.');
       const stakeAddress = walletStore.loggedWallet?.stakeAddress;
       if (!stakeAddress) throw new Error('Stake address not available.');
+      // Conway pre-flight (issue 951): withdrawing rewards requires DRep
+      // delegation. Every other withdrawal path enforces this (useWithdrawal,
+      // autoWithdraw, WithdrawalDialog); the copilot path reimplements the build
+      // and must gate too, or it proposes a ready-to-sign withdrawal that can't
+      // succeed for a DRep-less account.
+      if (walletStore.loggedWallet?.chain === Blockchain.CARDANO && !walletStore.account?.drep_id) {
+        throw new Error('Withdrawing rewards requires DRep delegation. Delegate to a DRep in Governance first.');
+      }
       const network = walletStore.loggedWallet?.network;
 
       const request = {
