@@ -202,9 +202,10 @@
             v-if="currentStep !== 2"
             :class="['continue-button', { shake: shakeError }]"
             @click="nextStep()"
+            :disabled="!isValid || txSignLoading"
             :loading="txSignLoading"
           >{{ $t('common.continue') + ' ' }}
-            <v-icon style="color: var(--g-on-grad)!important;" small class="ml-1">mdi-arrow-right</v-icon>
+            <v-icon style="color: var(--g-canvas)!important;" small class="ml-1">mdi-arrow-right</v-icon>
           </v-btn>
           <!-- Step 2: Sign/Confirm button for non-PRF wallets. Local signing is
                disabled while a "require remote" policy is active (unless already
@@ -268,11 +269,9 @@ import { debugLog } from '@/utils/debug';
 import { useQuickActionDialogs } from '@/shared/composables/useQuickActionDialogs';
 import { loadingState } from '@/stores/loading';
 
-interface Props {
-  isOpen: boolean;
-}
-
-const props = defineProps<Props>();
+const props = defineProps({
+  isOpen: { type: Boolean, required: true },
+});
 const emit = defineEmits(['close']);
 
 const { t } = useTranslation();
@@ -1396,11 +1395,11 @@ onMounted(() => {
 /* ─── Buttons ─── */
 .continue-button {
   background: var(--g-grad);
-  color: var(--g-on-grad);
+  color: var(--g-canvas);
 
   &:disabled {
     opacity: 0.5;
-    color: var(--g-on-grad) !important;
+    color: var(--g-canvas) !important;
   }
 }
 

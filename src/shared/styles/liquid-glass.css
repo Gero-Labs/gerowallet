@@ -32,7 +32,7 @@
 .v-card.glass-chrome,
 .v-navigation-drawer.liquid-glass-nav-drawer,
 .v-navigation-drawer.glass-chrome {
-  background: rgba(0, 0, 0, 0.82) !important;
+  background: rgba(0, 0, 0, 0) !important;
   backdrop-filter: blur(30px) saturate(1.3) !important;
   -webkit-backdrop-filter: blur(30px) saturate(1.3) !important;
   border-right: 1px solid var(--g-hairline-1) !important;
