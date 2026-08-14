@@ -237,7 +237,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import { toRefs, ref, computed, watch, onMounted, nextTick } from 'vue';
+import { computed, nextTick, onMounted, ref, toRefs, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useTransactionSigning } from '@/shared/composables/useTransactionSigning';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
@@ -248,22 +248,27 @@ import SummaryStep from '../components/SummaryStep.vue';
 import SendRecipientCard from '../components/SendRecipientCard.vue';
 import MidnightSendDialog from './MidnightSendDialog.vue';
 import rules from '@/utils/rules';
-import { WalletType, Blockchain } from '@/models/types';
-import { Token, Collectible, SendRecipient } from '@/models/send-flow.types';
+import { Blockchain, WalletType } from '@/models/types';
+import { Collectible, SendRecipient, Token } from '@/models/send-flow.types';
 import networks from '@/utils/networks';
 import filters from '@/shared/utils/filters';
-import { decimalToBaseUnits, baseUnitsToDecimalString } from '@/shared/utils/amount';
+import { baseUnitsToDecimalString, decimalToBaseUnits } from '@/shared/utils/amount';
 import { isPaymentAddress } from '@/chrome/serialization';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { priceStore } from '@/stores/priceStore';
-import { currentRewardWithdrawals, clearWithdrawableAmount } from '@/shared/utils/autoWithdraw';
+import { clearWithdrawableAmount, currentRewardWithdrawals } from '@/shared/utils/autoWithdraw';
 import debounce from 'lodash/debounce';
-import { nexusTxApi, cardanoUtxoToNexusInput, type BuildTxRequest, type NexusTxAsset, type MaxAdaRequest } from '@/api/nexus-tx-api';
-import { Serialization } from '@cardano-sdk/core';
+import {
+  type BuildTxRequest,
+  cardanoUtxoToNexusInput,
+  type MaxAdaRequest,
+  nexusTxApi,
+  type NexusTxAsset,
+} from '@/api/nexus-tx-api';
+import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import { BrowserTxConstruction } from '@/chrome/cardanoJsSdkCbor';
-import { Cardano } from '@cardano-sdk/core';
 import assets from '@/utils/assets';
 import { debugLog } from '@/utils/debug';
 import { useQuickActionDialogs } from '@/shared/composables/useQuickActionDialogs';
@@ -418,8 +423,8 @@ const isValid = computed(() => {
       const hasAsset = r.selectedTokens.some((tk: Token) => Number(tk.quantity) > 0) ||
         Object.keys(r.selectedCollectibles).length > 0;
       if (!hasAsset) return false;
-      if (r.adaShortage > 0) return false;
-      return true;
+      return r.adaShortage <= 0;
+
     });
   }
   if (currentStep.value === 2) {
@@ -579,8 +584,8 @@ function isRecipientValid(r: SendRecipient): boolean {
   const hasAsset = r.selectedTokens.some((tk: Token) => Number(tk.quantity) > 0) ||
     Object.keys(r.selectedCollectibles).length > 0;
   if (!hasAsset) return false;
-  if (r.adaShortage > 0) return false;
-  return true;
+  return r.adaShortage <= 0;
+
 }
 
 const showAddLink = computed(() => {
@@ -590,7 +595,7 @@ const showAddLink = computed(() => {
 /** Aggregate total across all recipients for the global total line. */
 const globalTotal = computed(() => {
   let totalAda = 0;
-  let totalUsd = 0;
+  let totalUsd: number;
 
   recipients.value.forEach((r: SendRecipient) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1078,8 +1083,7 @@ const debouncedBuild = debounce(async () => {
       // Show shortage in the first recipient (same UX as other shortage errors).
       const match = msg.match(/Available:\s*(\d+)\s*lovelace,\s*required:\s*(\d+)\s*lovelace/);
       if (match && recipients.value[0]) {
-        const shortage = Number(filters.toCurrency(parseInt(match[2], 10) - parseInt(match[1], 10), false, 6, '', '', false, 6).replaceAll(',', ''));
-        recipients.value[0].adaShortage = shortage;
+        recipients.value[0].adaShortage = Number(filters.toCurrency(parseInt(match[2], 10) - parseInt(match[1], 10), false, 6, '', '', false, 6).replaceAll(',', ''));
       }
     } else if (msg.includes('Insufficient token balance')) {
       // Nexus 400 — the output asked for more of a token than the wallet holds.
