@@ -142,4 +142,4 @@ src/
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the project's [source-available, Non-Commercial license](LICENSE) (Copyright A.D. Labs).
+By contributing, you agree that your contributions will be licensed under the project's [Apache License 2.0](LICENSE) (Copyright A.D. Labs), consistent with Section 5 of that license.

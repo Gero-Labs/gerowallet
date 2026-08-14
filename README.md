@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![License](https://img.shields.io/badge/license-Source%20Available%20(Non--Commercial)-orange.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-4.9-blue.svg)](https://www.typescriptlang.org/)
 [![Vue](https://img.shields.io/badge/Vue.js-2.7-green.svg)](https://v2.vuejs.org/)
@@ -451,17 +451,16 @@ See [SECURITY.md](SECURITY.md) for the full policy, scope, and safe-harbor terms
 
 ## License
 
-The source code is published under a **source-available, Non-Commercial license** (Copyright A.D. Labs) - see the [LICENSE](LICENSE) file for the full terms.
+Licensed under the **Apache License, Version 2.0** (Copyright A.D. Labs) - see the [LICENSE](LICENSE) and [NOTICE](NOTICE) files for the full terms.
 
 ### What this means:
-- ✅ View and study the source code
-- ✅ Modify and build on it, and share the result — **for Non-Commercial Use only**
-- ⚠️ You must give prominent notice that your work uses this Program and that it is the copyright of A.D. Labs
-- ⚠️ You may contribute back to this repository
-- ❌ Commercial use is **not** permitted without a separate agreement
-- ❌ No trademark rights to the Gero name or logos are granted
+- ✅ Use, modify, and distribute the source code, including for commercial purposes
+- ✅ Includes an express patent grant from contributors
+- ⚠️ You must retain the copyright, license, and attribution notices (see [NOTICE](NOTICE))
+- ⚠️ You must state any changes you make to the files
+- ❌ No trademark rights to the "Gero" name or logos are granted
 
-For commercial use or other licensing questions, reach out via [gerowallet.io](https://gerowallet.io).
+For licensing questions, reach out via [gerowallet.io](https://gerowallet.io).
 
 ---
 
