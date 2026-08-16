@@ -22,7 +22,9 @@
         <div v-if="hasWallets" class="welcome-subtitle">{{ $t('welcome.chooseAWallet') }}</div>
       </div>
 
-      <WalletsListLogin :hide-header="true" class="wallet-list-block" @network-change="onNetworkChange" />
+      <!-- The zero-wallet case never reaches this panel: Welcome.vue swaps the
+           whole left column for the centered onboarding hero instead. -->
+      <WalletsListLogin v-if="hasWallets" :hide-header="true" class="wallet-list-block" @network-change="onNetworkChange" />
     </div>
 
     <div class="footer-left">&#169; {{ new Date().getFullYear() }} {{ $t('welcome.adLabs') }}</div>
