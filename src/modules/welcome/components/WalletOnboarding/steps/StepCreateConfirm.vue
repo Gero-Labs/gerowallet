@@ -383,10 +383,6 @@ const walletCreationStep = async (): Promise<void> => {
 
 <style scoped lang="scss">
 /* Continue/CREATE CTA: black label on gradient/accent, incl. disabled */
-.onb-continue.v-btn,
-.onb-continue.v-btn.v-btn--disabled {
-  color: var(--g-canvas) !important;
-}
 // Terms link
 .terms-link {
   color: var(--v-primary-base);

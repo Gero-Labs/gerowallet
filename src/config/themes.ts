@@ -67,8 +67,12 @@ const legacy = (a: ChainAccent) => ({
   gradient2: a.gradient2,
 });
 
-export const themes = {
+export const themes: Record<ChainKey, ReturnType<typeof legacy>> = {
   cardano: legacy(chainAccents.cardano),
+  // Both Apex families, so legacy consumers resolved via chainKeyFor get the
+  // right accent (Prime teal / Vector orange) instead of the old shared orange.
+  apexPrime: legacy(chainAccents.apexPrime),
+  apexVector: legacy(chainAccents.apexVector),
   apex: legacy(chainAccents.apex),
   bitcoin: legacy(chainAccents.bitcoin),
   midnight: legacy(chainAccents.midnight),

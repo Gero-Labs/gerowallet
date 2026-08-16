@@ -310,11 +310,6 @@ const onContinue = (): void => {
 </script>
 
 <style scoped>
-/* Continue CTA: black label on gradient/teal, incl. disabled */
-.onb-continue.v-btn,
-.onb-continue.v-btn.v-btn--disabled {
-  color: var(--g-canvas) !important;
-}
 .step-google-signin {
   display: flex;
   flex-direction: column;

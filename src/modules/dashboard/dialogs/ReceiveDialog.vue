@@ -457,16 +457,7 @@ const usedAddresses = computed(() => {
 });
 
 // QR-center Gero logo, tinted per chain (Apex Prime teal / Vector orange).
-const qrLogo = computed(() => {
-  switch (loggedWallet.value?.chain) {
-    case Blockchain.APEX_PRIME:
-      return assets.geroLogoPrime;
-    case Blockchain.APEX_VECTOR:
-      return assets.geroLogoVector;
-    default:
-      return assets.geroLogo;
-  }
-});
+const qrLogo = computed(() => assets.resolveChainLogo(loggedWallet.value?.chain));
 
 // Bitcoin computed properties
 const bitcoinAddressTypeOptions = computed(() => [

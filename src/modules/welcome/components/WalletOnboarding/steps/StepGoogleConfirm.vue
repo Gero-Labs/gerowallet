@@ -149,8 +149,4 @@ const finish = async (): Promise<void> => {
 
 <style scoped>
 /* Continue/CREATE CTA: black label on gradient/accent, incl. disabled */
-.onb-continue.v-btn,
-.onb-continue.v-btn.v-btn--disabled {
-  color: var(--g-canvas) !important;
-}
 </style>

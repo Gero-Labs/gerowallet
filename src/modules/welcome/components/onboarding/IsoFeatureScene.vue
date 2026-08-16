@@ -39,7 +39,7 @@
     <polygon points="96.4,27.6 92.5,33.1 89.7,27.8" fill="#00CCBB" class="iso-head" />
   </svg>
 
-  <svg v-else-if="kind === 'cashback'" viewBox="0 0 120 120" class="iso-feature" aria-hidden="true">
+  <svg v-else viewBox="0 0 120 120" class="iso-feature" aria-hidden="true">
     <defs><linearGradient id="isoG-cyan-cb" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#86e9f5" /><stop offset="1" stop-color="#37c6dd" /></linearGradient><linearGradient id="isoG-green-cb" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8ceebb" /><stop offset="1" stop-color="#34cd77" /></linearGradient></defs>
     <ellipse cx="60" cy="96" rx="36" ry="7" fill="#0e2a3d" opacity="0.12" />
     <!-- Sandwich paint: side faces, guide, the travelling coin, THEN the top
@@ -55,22 +55,9 @@
     </g>
     <polygon points="60,63 86,76 60,89 34,76" fill="url(#isoG-cyan-cb)" />
   </svg>
-
-  <svg v-else viewBox="0 0 120 120" class="iso-feature" aria-hidden="true">
-    <!-- first-wallet: an empty slot inviting creation -->
-    <defs><linearGradient id="isoG-cyan-new" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#86e9f5" /><stop offset="1" stop-color="#37c6dd" /></linearGradient></defs>
-    <ellipse cx="60" cy="92" rx="30" ry="6" fill="#0e2a3d" opacity="0.12" />
-    <polygon points="38,64 60,75 60,93 38,82" fill="#12a6c4" />
-    <polygon points="82,64 60,75 60,93 82,82" fill="#0d84a0" />
-    <polygon points="60,53 82,64 60,75 38,64" fill="url(#isoG-cyan-new)" />
-    <circle cx="60" cy="30" r="12" fill="#00CCBB" opacity="0.25" class="iso-halo" />
-    <g class="iso-bob">
-      <path d="M60,24 v12 M54,30 h12" stroke="#00CCBB" stroke-width="3" stroke-linecap="round" fill="none" />
-    </g>
-  </svg>
 </template>
 <script setup lang="ts">
-defineProps<{ kind: 'security' | 'earn' | 'cashback' | 'first-wallet' }>();
+defineProps<{ kind: 'security' | 'earn' | 'cashback' }>();
 </script>
 <style scoped>
 .iso-feature {

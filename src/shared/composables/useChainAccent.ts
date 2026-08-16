@@ -6,6 +6,28 @@ import { updateVuetifyTheme } from '@/plugins/vuetify';
 let applied = false;
 
 /**
+ * Writes a chain's accent slots as CSS custom properties on :root.
+ * The single body shared by useChainAccent (post-login, keyed on
+ * loggedWallet) and the welcome screen's pre-login network preview —
+ * a new accent slot only ever needs adding here.
+ */
+export function applyChainAccent(chain: string | undefined | null): void {
+  const a = chainAccents[chainKeyFor(chain)];
+  const root = document.documentElement;
+  root.style.setProperty('--g-accent', a.accent);
+  root.style.setProperty('--g-grad-1', a.gradient1);
+  root.style.setProperty('--g-grad-2', a.gradient2);
+  // On-gradient text: only chains that override it (Midnight = bright white)
+  // set the inline value; the rest fall back to the tokens.css default.
+  if (a.onGrad) root.style.setProperty('--g-on-grad', a.onGrad);
+  else root.style.removeProperty('--g-on-grad');
+  // legacy aliases (do not add new consumers)
+  root.style.setProperty('--chain-primary', a.accent);
+  root.style.setProperty('--chain-gradient1', a.gradient1);
+  root.style.setProperty('--chain-gradient2', a.gradient2);
+}
+
+/**
  * The ONE place a chain switch touches the UI. Writes the accent
  * slots as CSS custom properties and re-points the Vuetify theme.
  * Legacy --chain-* names are kept as aliases so the ~198 existing
@@ -25,19 +47,7 @@ export function useChainAccent(): void {
     watch(
       () => walletStore.loggedWallet?.chain,
       (chain) => {
-        const a = chainAccents[chainKeyFor(chain)];
-        const root = document.documentElement;
-        root.style.setProperty('--g-accent', a.accent);
-        root.style.setProperty('--g-grad-1', a.gradient1);
-        root.style.setProperty('--g-grad-2', a.gradient2);
-        // On-gradient text: only chains that override it (Midnight = pure black)
-        // set the inline value; the rest fall back to the tokens.css default.
-        if (a.onGrad) root.style.setProperty('--g-on-grad', a.onGrad);
-        else root.style.removeProperty('--g-on-grad');
-        // legacy aliases (do not add new consumers)
-        root.style.setProperty('--chain-primary', a.accent);
-        root.style.setProperty('--chain-gradient1', a.gradient1);
-        root.style.setProperty('--chain-gradient2', a.gradient2);
+        applyChainAccent(chain);
         updateVuetifyTheme(chain ?? 'Cardano');
       },
       { immediate: true },

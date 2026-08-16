@@ -150,11 +150,6 @@ const onContinue = (): void => {
 </script>
 
 <style scoped>
-/* Continue CTA: black label on gradient/teal, incl. disabled */
-.onb-continue.v-btn,
-.onb-continue.v-btn.v-btn--disabled {
-  color: var(--g-canvas) !important;
-}
 /* Fill the onboarding body and split into a scrollable content region plus a
    pinned action footer. The scrollbar lives on .step-scroll (content only), so
    the CONTINUE row sits below/outside it instead of scrolling with the list. */

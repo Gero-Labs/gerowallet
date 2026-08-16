@@ -255,6 +255,18 @@ export default {
       return null; // Not a valid CID
     }
   },
+  // Gero brand logo tinted per chain (Apex Prime teal / Vector orange) —
+  // the single source for QR-center and similar per-chain logo picks.
+  resolveChainLogo(chain?: string): string {
+    switch (chain) {
+      case 'Apex Fusion Prime':
+        return geroLogoPrime;
+      case 'Apex Fusion Vector':
+        return geroLogoVector;
+      default:
+        return geroLogo;
+    }
+  },
   resolveIcon(icon: string): string {
     if (!icon) {
       return errorImage;

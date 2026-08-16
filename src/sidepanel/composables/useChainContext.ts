@@ -2,7 +2,7 @@ import { computed, ComputedRef } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain } from '@/models/types';
 import networks, { NetworkInfo } from '@/utils/networks';
-import { themes } from '@/config/themes';
+import { themes, chainKeyFor } from '@/config/themes';
 import { useChainAccent } from '@/shared/composables/useChainAccent';
 
 export interface ThemePalette {
@@ -57,14 +57,11 @@ export function useChainContext(): ChainContext {
   });
 
   // Kept for the ~28 JS `:color` bindings that read themeColors directly.
-  // The Midnight branch is required: without it a Midnight wallet would mix
-  // violet CSS accents (from useChainAccent) with teal JS bindings.
-  const themeColors = computed<ThemePalette>(() => {
-    if (isApex.value) return themes.apex;
-    if (isBitcoin.value) return themes.bitcoin;
-    if (isMidnight.value) return themes.midnight;
-    return themes.cardano;
-  });
+  // Resolved through chainKeyFor so both Apex families get their own accent
+  // (Prime teal / Vector orange) — an if-chain on isApex previously collapsed
+  // them to the old shared orange across the whole sidepanel.
+  const themeColors = computed<ThemePalette>(() =>
+    themes[chainKeyFor(walletStore.loggedWallet?.chain)]);
 
   return { isApex, isCardano, isBitcoin, isMidnight, networkInfo, themeColors };
 }

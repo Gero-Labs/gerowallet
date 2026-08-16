@@ -310,11 +310,6 @@ const walletCreationStep2 = async (): Promise<void> => {
 </script>
 
 <style scoped lang="scss">
-/* Continue CTA: black label on gradient/teal, incl. disabled */
-.onb-continue.v-btn,
-.onb-continue.v-btn.v-btn--disabled {
-  color: var(--g-canvas) !important;
-}
 #qr-code > svg {
   border-radius: 10px;
 }
