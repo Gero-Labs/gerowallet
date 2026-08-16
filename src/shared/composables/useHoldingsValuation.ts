@@ -73,13 +73,18 @@ export function useHoldingsValuation() {
     Object.entries(tokens).forEach(([unit, token]: [string, { quantity?: number | string; amount?: string; name?: string; policy_id?: string; metadata?: { name?: string; ticker?: string; decimals?: number } }]) => {
       if (!token.quantity || Number(token.quantity) <= 0) return;
 
-      const decimals = token.metadata?.decimals || 0;
-      const rawQuantity = Number(token.quantity);
-      const quantity = decimals > 0 ? rawQuantity / Math.pow(10, decimals) : rawQuantity;
-
       // Find in market data for enrichment
       const marketToken = allTokens.value.find(t => t.unit === unit);
       const dhToken = dhTokens[unit];
+
+      // Decimals: registry metadata first, then market/DexHunter fallbacks —
+      // on a fresh profile the wallet token can be built before the registry
+      // cache exists, and pricing the raw quantity inflates the portfolio by
+      // 10^decimals. The same value feeds `decimals` below so balance and
+      // formatting can never disagree.
+      const decimals = token.metadata?.decimals ?? marketToken?.decimals ?? dhToken?.decimals ?? 0;
+      const rawQuantity = Number(token.quantity);
+      const quantity = decimals > 0 ? rawQuantity / Math.pow(10, decimals) : rawQuantity;
 
       // Price: prefer market API data, then DexHunter fallback
       let priceUsd = marketToken?.price || 0;
@@ -127,7 +132,7 @@ export function useHoldingsValuation() {
         isNew: false,
         policyLocked: true,
         fingerprint: marketToken?.fingerprint || dhToken?.fingerprint || '',
-        decimals: marketToken?.decimals ?? dhToken?.decimals ?? decimals,
+        decimals,
         balance: quantity,
         value,
         allocation: value,

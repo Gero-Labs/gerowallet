@@ -263,8 +263,8 @@ export class SyncService {
     const txTable = db.table('transactions');
     const allTxs = await txTable.toArray();
     const invalidTxIds = allTxs
-      .filter((tx: any) => tx.absolute_slot && tx.absolute_slot > rollbackToSlot)
-      .map((tx: any) => tx.id);
+      .filter((tx: { absolute_slot?: number }) => tx.absolute_slot && tx.absolute_slot > rollbackToSlot)
+      .map((tx: { id: IndexableType }) => tx.id);
 
     if (invalidTxIds.length > 0) {
       await txTable.bulkDelete(invalidTxIds);
@@ -294,7 +294,7 @@ export class SyncService {
    */
   async setSync(syncObject) {
     if (syncObject && (syncObject.success || syncObject.type === 'SYNC')) {
-      const promises: any[] = [];
+      const promises: Promise<unknown>[] = [];
       // gero-sync sends a zero-filled account object (controlled_amount "0", not
       // `null`) for undelegated/unregistered stake. Applying it blanks a funded
       // wallet's balance until the next reconcile. Treat a 0-controlled account the
@@ -575,6 +575,7 @@ export class SyncService {
   /**
    * Sync account information
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy public signature; callers consume the raw account payload
   async syncAccountInfo(): Promise<any> {
     try {
       let res;
@@ -612,6 +613,7 @@ export class SyncService {
    * Sync account transactions from a specific height
    * @param height - Block height to sync from
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy public signature; callers consume the raw tx payload
   async syncAccountTransactions(height: number): Promise<any> {
     try {
       let res;
@@ -621,9 +623,11 @@ export class SyncService {
         res = await this.api.getAccountTransactions(this.walletBg.stakeAddress, height);
       }
       if (res && Array.isArray(res)) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- raw tx payload from the API, consumed field-by-field below
         const txMap: Map<string, any> = res.reduce((map, tx: any) => {
           map.set(tx.tx_hash, tx);
           return map;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- raw tx payload from the API
         }, new Map<string, any>());
         const promises = [];
         const txHashes: string[] = res.map(tx => tx.tx_hash);
@@ -631,6 +635,7 @@ export class SyncService {
         smallerArrays.forEach(smallerArray => {
           promises.push(this.api.getTransactionsCbor(smallerArray).then(txCborsResult => {
             if (txCborsResult.status == 200) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any -- raw cbor row from the API
               return txCborsResult.data.map((txCbor: any) => {
                 let txDeserialized: Cardano.Tx | {} = {};
                 if (txCbor.cbor) {
@@ -672,33 +677,47 @@ export class SyncService {
       return;
     }
 
+    type AssetRow = { asset: string } & Record<string, unknown>;
     const blockchainDB: Dexie = await this.walletBg.getBlockchainDb();
-    const assetsTable: Table<any, IndexableType, any> = blockchainDB.table('assets');
+    const assetsTable: Table<AssetRow, IndexableType> = blockchainDB.table('assets');
     const existingRows = await assetsTable.bulkGet(uniqueUnits);
     const units = uniqueUnits.filter((unit, idx) => !existingRows[idx]);
-    const promises: any[] = [];
+    const promises: Promise<AssetRow[] | null>[] = [];
     const smallerArrays: string[][] = chunkArray({ input: units, bytesSize: 4000 });
     smallerArrays.forEach((smallerArray: string[]) => {
       promises.push(this.getAssetsInfo(smallerArray));
     });
     const resAll = await Promise.all(promises);
-    const assets = resAll.flat().filter(res => res)
-    assetsTable.bulkPut(assets);
+    const assets = resAll.flat().filter((res): res is AssetRow => !!res);
+    if (assets.length === 0) return;
+    await assetsTable.bulkPut(assets);
+    // Publish the fresh rows into the in-memory map SYNCHRONOUSLY, not just the
+    // DB: applyUtxos awaits this method and immediately resolves token metadata
+    // through NetworkStore.state.assets. On a fresh profile the assets liveQuery
+    // has already fired on an empty table, and its refresh only lands after
+    // setAssets has baked metadata-less tokens — first login then shows raw
+    // (undivided-by-decimals) balances until the next login rebuilds them.
+    NetworkStore.setAssets({
+      ...NetworkStore.state.assets,
+      ...Object.fromEntries(assets.map(a => [a.asset, a])),
+    });
   }
 
   /**
    * Sync key information for known addresses
    * @param knownAddresses - Array of known addresses to sync keys for
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy public signature; callers consume the raw resolved-keys map
   async syncKeys(knownAddresses: string[]): Promise<any> {
 
     if (!knownAddresses || knownAddresses.length === 0) {
       return null;
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- resolver returns a dynamic path->key map
     let resolvedKeys: any = {};
     try {
-      const db: any = await this.walletBg.getDb();
+      const db = await this.walletBg.getDb();
       const addressesTable = db.table('addresses');
       if (!addressesTable) {
         console.error('syncKeys error - No Addresses Table');
@@ -781,6 +800,7 @@ export class SyncService {
    * Nexus: {txHash, txIndex, address, value, assetList, datumHash, inlineDatum, referenceScript}
    * Wallet: [[{txId, index, address}, {address, value: {coins, assets}, datumHash, datum, scriptReference}]]
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Nexus payload shape documented above; fields normalized defensively below
   private convertNexusUtxos(nexusUtxos: any[]): Cardano.Utxo[] {
     const result: Cardano.Utxo[] = [];
     for (const u of nexusUtxos) {
