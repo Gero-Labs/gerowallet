@@ -47,6 +47,8 @@ export function useMiniNavigation() {
     return base.filter((tab) => {
       // Gero Copilot feed tab gated by the master flag (ships dark)
       if (tab.name === 'feed') return featureFlagsStore.isCopilotEnabled();
+      // Hide Staking on chains without delegated staking (e.g. Apex Vector).
+      if (tab.name === 'staking') return !!networkInfo.value?.stakingSupport;
       // Same gate Quick Actions uses — a chain without swap support (e.g. BTC)
       // gets no swap button rather than a dead one. The isSwapEnabled
       // maintenance gate is handled inside SwapSheet.

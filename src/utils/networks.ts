@@ -265,7 +265,8 @@ export default {
       geroPool: '',
       defaultProvider: Provider.KOIOS,
       cashbackSupport: false,
-      stakingSupport: true,
+      // Apex Vector has no delegated staking — hide the Staking page/nav on it.
+      stakingSupport: false,
       governanceSupport: false,
       daoSupport: false,
       transactionSupport:true,

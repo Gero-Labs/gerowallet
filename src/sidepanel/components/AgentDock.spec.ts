@@ -1226,18 +1226,18 @@ describe('AgentDock — FAB icon (Gero Companion mark)', () => {
     expect(wrapper.find('.agent-dock__fab-icon').attributes('src')).toBe(assets.geroNoText);
   });
 
-  it('switches to the Apex mark for an Apex Fusion Prime wallet', () => {
+  it('switches to the Apex Prime (teal) mark for an Apex Fusion Prime wallet', () => {
     setWalletChain(Blockchain.APEX_PRIME);
     mockDock.isOpen.value = false;
     const wrapper = mountDock();
-    expect(wrapper.find('.agent-dock__fab-icon').attributes('src')).toBe(assets.geroNoTextApex);
+    expect(wrapper.find('.agent-dock__fab-icon').attributes('src')).toBe(assets.geroNoTextPrime);
   });
 
-  it('switches to the Apex mark for an Apex Fusion Vector wallet too', () => {
+  it('switches to the Apex Vector (orange) mark for an Apex Fusion Vector wallet', () => {
     setWalletChain(Blockchain.APEX_VECTOR);
     mockDock.isOpen.value = false;
     const wrapper = mountDock();
-    expect(wrapper.find('.agent-dock__fab-icon').attributes('src')).toBe(assets.geroNoTextApex);
+    expect(wrapper.find('.agent-dock__fab-icon').attributes('src')).toBe(assets.geroNoTextVector);
   });
 
   it('switches to the Midnight mark for a Midnight wallet', () => {

@@ -474,7 +474,7 @@ const handleLoggedOut = async (): Promise<void> => {
 }
 
 .wallet-row {
-  background: var(--g-raised) !important;
+  background: rgb(from var(--g-raised) r g b / 0.55) !important;
   border: 1px solid var(--g-hairline-1) !important;
   border-radius: var(--g-r-control) !important;
   margin: 4px 0 !important;
@@ -484,7 +484,7 @@ const handleLoggedOut = async (): Promise<void> => {
 }
 
 .wallet-row:hover {
-  background: var(--g-raised) !important;
+  background: rgb(from var(--g-raised) r g b / 0.72) !important;
   border-color: var(--g-accent) !important;
   transform: translateY(-1px) !important;
 }
@@ -503,12 +503,12 @@ const handleLoggedOut = async (): Promise<void> => {
 /* Logged in wallet styling (teal/cyan) */
 .wallet-locked {
   border-color: var(--g-accent) !important;
-  background: var(--g-raised) !important;
+  background: rgb(from var(--g-raised) r g b / 0.6) !important;
 }
 
 .wallet-locked:hover {
   border-color: var(--g-accent) !important;
-  background: var(--g-raised) !important;
+  background: rgb(from var(--g-raised) r g b / 0.72) !important;
 }
 
 /* Fallback for browsers without backdrop-filter support */

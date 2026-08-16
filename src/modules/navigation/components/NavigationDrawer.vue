@@ -14,7 +14,7 @@
         <v-list-item-content class="pb-2" style="padding-top: 22px;">
           <v-list-item-title>
             <img
-              :src="isApex ? assets.geroNoTextApex : isMidnight ? assets.geroNoTextMidnight : assets.geroNoText"
+              :src="navLogo"
               width="64"
               alt="logo"
             />
@@ -41,7 +41,7 @@
           :to="item.link"
           v-show="item.enabled || item.soon"
           :disabled="item.soon || item.loading || item.underMaintenance"
-          :active-class="themeDark ? (isApex ? 'activePageDark apex' : isBitcoin ? 'activePageDark bitcoin' : 'activePageDark') : (isApex ? 'activePage apex' : isBitcoin ? 'activePage bitcoin' : 'activePage')"
+          :active-class="themeDark ? 'activePageDark' : 'activePage'"
           link
           :class="['menuItem', { 'nexus-item': item.special }]"
           style="height: 34px"
@@ -308,17 +308,23 @@ function openExternalLink(href?: string) {
   }
 }
 
-const isApex = computed(() => {
-  return loggedWallet.value?.chain === Blockchain.APEX_PRIME ||
-    loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
-});
-
-const isBitcoin = computed(() => {
-  return loggedWallet.value?.chain === Blockchain.BITCOIN;
-});
-
 const isMidnight = computed(() => {
   return loggedWallet.value?.chain === Blockchain.MIDNIGHT;
+});
+
+// Nav-bar Gero mark, tinted per chain. Apex Prime (teal) and Vector (orange)
+// use their own variants so the logo matches the chain's onboarding art.
+const navLogo = computed(() => {
+  switch (loggedWallet.value?.chain) {
+    case Blockchain.APEX_PRIME:
+      return assets.geroNoTextPrime;
+    case Blockchain.APEX_VECTOR:
+      return assets.geroNoTextVector;
+    case Blockchain.MIDNIGHT:
+      return assets.geroNoTextMidnight;
+    default:
+      return assets.geroNoText;
+  }
 });
 
 const items = computed((): NavigationItemUnion[] => {
@@ -331,6 +337,9 @@ const items = computed((): NavigationItemUnion[] => {
     isStakingEnabled = Cardano.Address.fromBech32(loggedWallet.value.baseAddress).getType() !==
       Cardano.AddressType.EnterpriseScript
   }
+  // Chains without delegated staking (e.g. Apex Vector) never show the page.
+  isStakingEnabled = isStakingEnabled &&
+    networks.resolveStakingSupport(loggedWallet.value?.chain, loggedWallet.value?.network);
 
   // Check if any Activities & Rewards items are enabled
   const isClaimRewardsEnabled = false;
@@ -747,35 +756,9 @@ onUnmounted(() => {
   }
 }
 
-.activePage.apex,
-.activePageDark.apex {
-  color: #F8A282;
-  background: rgba(248, 162, 130, 0.12);
-  border-color: rgba(248, 162, 130, 0.28);
-
-  .v-image {
-    filter: brightness(0) saturate(100%) invert(92%) sepia(45%) saturate(5319%) hue-rotate(301deg) brightness(100%) contrast(95%) !important;
-  }
-
-  .v-icon {
-    color: #F8A282 !important;
-  }
-}
-
-.activePage.bitcoin,
-.activePageDark.bitcoin {
-  color: #F7931A;
-  background: rgba(247, 147, 26, 0.12);
-  border-color: rgba(247, 147, 26, 0.28);
-
-  .v-image {
-    filter: brightness(0) saturate(100%) invert(63%) sepia(88%) saturate(2100%) hue-rotate(8deg) brightness(104%) contrast(103%) !important;
-  }
-
-  .v-icon {
-    color: #F7931A !important;
-  }
-}
+/* Per-chain active-item colors are handled entirely by the base rule above via
+   --g-accent (set per chain by useChainAccent). No hardcoded per-chain overrides:
+   they broke Apex Prime (teal art) by forcing the shared Apex orange. */
 
 .theme--dark.v-list-item {
   &:not(.v-list-item--active):not(.v-list-item--disabled) {

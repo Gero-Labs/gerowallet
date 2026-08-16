@@ -157,6 +157,7 @@
       <v-btn text @click="$emit('back')" :disabled="creatingWalletLoader">{{ $t('common.back') }}</v-btn>
       <v-spacer />
       <v-btn
+        class="onb-continue"
         color="primary"
         :disabled="!canCreate"
         :loading="creatingWalletLoader"
@@ -185,7 +186,7 @@
           <v-btn text @click="handleCancelLogin()">
             {{ $t('common.cancel') }}
           </v-btn>
-          <v-btn color="primary" @click="handleConfirmLogin()" :loading="creatingWalletLoader">
+          <v-btn class="onb-continue" color="primary" @click="handleConfirmLogin()" :loading="creatingWalletLoader">
             {{ $t('wallet.login') }}
           </v-btn>
         </v-card-actions>
@@ -453,6 +454,11 @@ const handleCancelLogin = (): void => {
 </script>
 
 <style scoped lang="scss">
+/* Continue/CREATE CTA: black label on gradient/accent, incl. disabled */
+.onb-continue.v-btn,
+.onb-continue.v-btn.v-btn--disabled {
+  color: var(--g-canvas) !important;
+}
 // Terms link
 .terms-link {
   color: var(--v-primary-base);

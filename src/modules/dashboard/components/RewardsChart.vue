@@ -9,6 +9,7 @@ import Highcharts from 'highcharts'
 import { walletStore } from '@/stores/walletStore';
 import networks from '@/utils/networks';
 import { Blockchain } from '@/models/types';
+import { chainAccents, chainKeyFor } from '@/config/themes';
 
 
 const { t } = useTranslation();
@@ -30,6 +31,12 @@ const isApex = computed(() => {
   return loggedWallet.value?.chain === Blockchain.APEX_PRIME ||
     loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
 });
+
+// Series color: Highcharts needs a concrete hex (canvas), so we can't use the
+// --g-accent CSS var here. Resolve the chain accent from the single source —
+// teal for Apex Prime, orange for Vector — keeping the Cardano cyan as-is.
+const chartAccent = computed(() =>
+  isApex.value ? chainAccents[chainKeyFor(loggedWallet.value?.chain)].accent : '#00c7f3');
 
 const chartOptions = computed(() => {
   return {
@@ -74,7 +81,7 @@ const chartOptions = computed(() => {
       enabled: false,
     },
     tooltip: {
-      positioner: function (this: any, labelWidth: number, labelHeight: number, point: any) {
+      positioner: function (this: Highcharts.Tooltip, labelWidth: number, labelHeight: number, point: Highcharts.TooltipPositionerPointObject) {
         let x = point.plotX + this.chart.plotLeft - labelWidth / 2;
         let y = point.plotY + this.chart.plotTop - labelHeight - 10;
 
@@ -91,7 +98,7 @@ const chartOptions = computed(() => {
       pointFormat: `{point.y} ${networks.resolveCurrencySymbol(loggedWallet.value?.chain, loggedWallet.value?.network)}`,
       outside: false,
       backgroundColor: 'rgba(0, 0, 0, 0.8)',
-      borderColor: isApex.value ? '#dc753e' : '#00c7f3',
+      borderColor: chartAccent.value,
       borderRadius: 8,
       borderWidth: 1,
       style: {
@@ -127,17 +134,17 @@ const chartOptions = computed(() => {
       min: 0,
       opposite: true,
     },
-    colors: [isApex.value ? '#dc753e' : '#00c7f3', '#155B75', '#167dd6', '#900C3F', '#511849', '#3D3D6B', '#2A7B9B', '#00BAAD', '#57C785', '#ADD45C'],
+    colors: [chartAccent.value, '#155B75', '#167dd6', '#900C3F', '#511849', '#3D3D6B', '#2A7B9B', '#00BAAD', '#57C785', '#ADD45C'],
     series: [
       {
         name: 'ADA',
         data: Object.values(props.chartData),
-        color: isApex.value ? '#dc753e' : '#00c7f3',
+        color: chartAccent.value,
         lineWidth: 2,
         marker: {
           radius: 2,
-          fillColor: isApex.value ? '#dc753e' : '#00c7f3',
-          lineColor: isApex.value ? '#dc753e' : '#00c7f3',
+          fillColor: chartAccent.value,
+          lineColor: chartAccent.value,
           lineWidth: 1
         }
       },

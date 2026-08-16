@@ -74,7 +74,7 @@
     <!-- Navigation (footer — outside the scroll region above) -->
     <div class="onboarding-actions d-flex" style="gap: 12px;">
       <v-spacer />
-      <v-btn class="onb-btn" depressed color="primary" :disabled="!selectedMethod" @click="onContinue()">{{ $t('common.continue') }}</v-btn>
+      <v-btn class="onb-btn onb-continue" depressed color="primary" :disabled="!selectedMethod" @click="onContinue()">{{ $t('common.continue') }}</v-btn>
     </div>
   </div>
 </template>
@@ -150,6 +150,11 @@ const onContinue = (): void => {
 </script>
 
 <style scoped>
+/* Continue CTA: black label on gradient/teal, incl. disabled */
+.onb-continue.v-btn,
+.onb-continue.v-btn.v-btn--disabled {
+  color: var(--g-canvas) !important;
+}
 /* Fill the onboarding body and split into a scrollable content region plus a
    pinned action footer. The scrollbar lives on .step-scroll (content only), so
    the CONTINUE row sits below/outside it instead of scrolling with the list. */

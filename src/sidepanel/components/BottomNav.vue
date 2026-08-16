@@ -16,15 +16,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
 import { useRouter } from 'vue-router/composables';
 import { useMiniNavigation, NavTab } from '../composables/useMiniNavigation';
-import { useChainContext } from '../composables/useChainContext';
 
 const router = useRouter();
 const { navTabs, activeTab } = useMiniNavigation();
-const { themeColors } = useChainContext();
-const activeColor = computed(() => themeColors.value.primary);
+// Active icon uses the single per-chain accent (teal for Apex Prime, orange for
+// Vector, …) — the same --g-accent the active tab background already uses.
+// themeColors.primary collapsed both Apex families to one shared orange.
+const activeColor = 'var(--g-accent)';
 
 const emit = defineEmits<{
   (e: 'action', id: string): void;

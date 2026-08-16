@@ -29,7 +29,7 @@
     <div class="onboarding-actions d-flex" style="gap: 12px;">
       <v-btn text @click="$emit('back')">{{ $t('common.back') }}</v-btn>
       <v-spacer />
-      <v-btn class="onb-btn" depressed color="primary" :disabled="!localWalletType" @click="onContinue()">{{ $t('common.continue') }}</v-btn>
+      <v-btn class="onb-btn onb-continue" depressed color="primary" :disabled="!localWalletType" @click="onContinue()">{{ $t('common.continue') }}</v-btn>
     </div>
   </div>
 </template>
@@ -89,6 +89,11 @@ const onContinue = (): void => {
 </script>
 
 <style scoped lang="scss">
+/* Continue CTA: black label on gradient/teal, incl. disabled */
+.onb-continue.v-btn,
+.onb-continue.v-btn.v-btn--disabled {
+  color: var(--g-canvas) !important;
+}
 .step-section-label {
   font-size: 10px;
   font-weight: 600;

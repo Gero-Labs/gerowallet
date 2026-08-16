@@ -2,6 +2,7 @@ import VueRouter, { RouteConfig } from 'vue-router';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain } from '@/models/types';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
+import networks from '@/utils/networks';
 
 const routes: RouteConfig[] = [
   { path: '/', name: 'home', component: () => import('./pages/HomePage.vue') },
@@ -23,6 +24,12 @@ router.beforeEach((to, _from, next) => {
   const isApex = chain === Blockchain.APEX_PRIME || chain === Blockchain.APEX_VECTOR;
 
   if (isApex && to.name && !APEX_ALLOWED_ROUTE_NAMES.has(to.name)) {
+    next({ name: 'home' });
+    return;
+  }
+  // Staking page only on chains that support delegated staking (Apex Vector doesn't).
+  if (to.name === 'staking' &&
+      !networks.resolveStakingSupport(chain ?? '', walletStore.loggedWallet?.network ?? '')) {
     next({ name: 'home' });
     return;
   }

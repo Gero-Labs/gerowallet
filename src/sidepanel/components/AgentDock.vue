@@ -338,8 +338,8 @@ import SupportAuthPrompt from '@/sidepanel/components/SupportAuthPrompt.vue';
 // because it is a single scalable vector path per variant, which stays crisp
 // at the FAB's ~22px render size and costs a fraction of the bytes. Each
 // variant bakes its own fixed gradient (the default is Cardano cyan/blue),
-// so which one renders has to track the active chain via the isApex/isMidnight
-// computeds below, mirroring NavigationDrawer.vue's derivation exactly.
+// so which one renders has to track the active chain via the geroMark
+// computed below, mirroring NavigationDrawer.vue's derivation exactly.
 import assets from '@/utils/assets';
 
 type DockMode = 'copilot' | 'support';
@@ -357,20 +357,25 @@ export default defineComponent({
     const scroll = ref<HTMLElement | null>(null);
     const { isAnySheetOpen } = useSheetVisibility();
 
-    // Mirrors NavigationDrawer.vue's isApex/isMidnight derivation exactly (same
+    // Mirrors NavigationDrawer.vue's navLogo derivation exactly (same
     // walletStore.loggedWallet?.chain source, same Blockchain members) so the
     // FAB always shows the same chain-accented mark the nav drawer does. Each
     // gero-notext*.svg variant bakes its own fixed gradient rather than
     // reading --g-accent, so picking the wrong one shows the wrong brand
-    // color — e.g. Cardano cyan on an Apex or Midnight wallet.
-    const isApex = computed(() =>
-      walletStore.loggedWallet?.chain === Blockchain.APEX_PRIME
-      || walletStore.loggedWallet?.chain === Blockchain.APEX_VECTOR,
-    );
-    const isMidnight = computed(() => walletStore.loggedWallet?.chain === Blockchain.MIDNIGHT);
-    const geroMark = computed(() =>
-      isApex.value ? assets.geroNoTextApex : isMidnight.value ? assets.geroNoTextMidnight : assets.geroNoText,
-    );
+    // color — e.g. Cardano cyan on an Apex or Midnight wallet. Apex Prime and
+    // Vector each get their own variant (teal vs orange).
+    const geroMark = computed(() => {
+      switch (walletStore.loggedWallet?.chain) {
+        case Blockchain.APEX_PRIME:
+          return assets.geroNoTextPrime;
+        case Blockchain.APEX_VECTOR:
+          return assets.geroNoTextVector;
+        case Blockchain.MIDNIGHT:
+          return assets.geroNoTextMidnight;
+        default:
+          return assets.geroNoText;
+      }
+    });
 
     // ── Support attachments: pending picker state + sent-attachment bubbles ──
     const pendingFiles = ref<File[]>([]);

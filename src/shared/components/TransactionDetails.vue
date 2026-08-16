@@ -5,7 +5,7 @@
         Transaction ID:
         <a
           class="ml-1"
-          :style="isApex ? {color: '#dc753e', alignItems: 'center' } : {color: 'var(--g-accent)', alignItems: 'center'  }"
+          :style="{ color: 'var(--g-accent)', alignItems: 'center' }"
           :href="transactionUrl"
           target="_blank"
         >
@@ -26,7 +26,7 @@
       </div>
       <div v-if="transactionInfo['block_hash']">
         Block ID:
-        <a :style="isApex ? {color: '#dc753e' } : {color: 'var(--g-accent)' }" :href="blockUrl" target="_blank">
+        <a :style="{ color: 'var(--g-accent)' }" :href="blockUrl" target="_blank">
           {{ filters.truncate(transactionInfo['block_hash']) }}</a
         >
         <CopyButton x-small :value="transactionInfo['block_hash']" class="ml-1"></CopyButton>
@@ -41,7 +41,7 @@
         {{ Number(transactionInfo['ada']) > 0 ? 'Received: ' : 'Sent: ' }}
         <span
           :style="{
-            color: Number(transactionInfo['ada']) > 0 ? (isApex ? '#dc753e' : 'var(--g-accent)') : 'var(--g-error)',
+            color: Number(transactionInfo['ada']) > 0 ? 'var(--g-accent)' : 'var(--g-error)',
           }"
         >
           <span style="margin-right: 4px">
@@ -58,7 +58,7 @@
               style="margin-bottom: 2px"
               class="mr-1 pl-0"
               :key="`asset_${index}`"
-              :color="Number(transactionInfo['ada']) > 0 ? (isApex ? '#dc753e' : 'var(--g-accent)') : 'error'"
+              :color="Number(transactionInfo['ada']) > 0 ? 'var(--g-accent)' : 'error'"
             >
               <v-avatar v-if="asset.img" left>
                 <v-img :src="asset.img" :alt="`${asset.name} Logo`" contain>
@@ -227,7 +227,7 @@
                     </td>
                     <td class="text-right">
                       <div style="color: var(--g-accent)">
-                        <v-chip pill class="pl-0" outlined :color="isApex ? '#dc753e' : 'var(--g-accent)'" style="margin: 2px !important">
+                        <v-chip pill class="pl-0" outlined :color="'var(--g-accent)'" style="margin: 2px !important">
                           <v-avatar left>
                             <v-img
                               :src="networks.resolveCurrencyImage(loggedWallet?.chain, loggedWallet?.network)"
@@ -264,7 +264,7 @@
                             pill
                             class="pl-0"
                             outlined
-                            :color="isApex ? '#dc753e' : 'var(--g-accent)'"
+                            :color="'var(--g-accent)'"
                             :key="`output${index}_asset_${assetIndex}`"
                             style="margin: 2px !important"
                           >
@@ -823,11 +823,6 @@ const currentPoolMeta = ref<{ url_png_icon_64x64?: string } | null>(null);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const txDRep = ref<any>(null);
 
-const isApex = computed(() => {
-  return loggedWallet.value?.chain === Blockchain.APEX_PRIME ||
-    loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
-});
-
 // Report Transaction routes to Cardano Shield's scam/fraud registry, which only
 // covers Cardano mainnet — hide it on testnets and non-Cardano chains.
 const isCardanoMainnet = computed(() =>
@@ -991,9 +986,9 @@ const getMint = (transactionInfo: { body?: { mint?: Cardano.TokenMap } }) => {
   if (transactionInfo.body?.mint) {
     const mint = transactionInfo.body.mint;
     // Handle both Map (from CBOR deserialization) and plain object (from chrome.storage.local)
-    const entries: [string, any][] = mint instanceof Map
+    const entries: [string, bigint][] = mint instanceof Map
       ? Array.from(mint.entries())
-      : Object.entries(mint);
+      : (Object.entries(mint) as [string, bigint][]);
     return entries.map(([assetId, quantity]) => {
       const policyId = Cardano.AssetId.getPolicyId(assetId);
       const assetNameHex = Cardano.AssetId.getAssetName(assetId);
@@ -1108,12 +1103,9 @@ const blockUrl = computed(() =>
   ),
 );
 
-const receivedArrowStyle = computed(() => {
-  if (isApex.value) {
-    return 'background: linear-gradient(to right, #F8A282, #FECB82);';
-  }
-  return 'background: var(--g-grad);';
-});
+// Avatar gradient follows the chain accent (--g-grad = grad-1→grad-2, set per
+// chain by useChainAccent): teal for Apex Prime, orange for Vector, etc.
+const receivedArrowStyle = 'background: var(--g-grad);';
 
 const getCertificateType = (certificate: Cardano.Certificate) => {
   const certificateType: Cardano.CertificateType = certificate.__typename;

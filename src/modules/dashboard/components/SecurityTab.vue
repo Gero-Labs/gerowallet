@@ -932,17 +932,24 @@ function cancelVerification() {
 
 const qrCodeRef = ref<HTMLElement|null>(null)
 
-const isApex = computed(() => {
-  return loggedWallet.value?.chain === Blockchain.APEX_PRIME ||
-    loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
-})
+// QR-center Gero logo, tinted per chain (Apex Prime teal / Vector orange).
+const qrLogo = computed(() => {
+  switch (loggedWallet.value?.chain) {
+    case Blockchain.APEX_PRIME:
+      return assets.geroLogoPrime;
+    case Blockchain.APEX_VECTOR:
+      return assets.geroLogoVector;
+    default:
+      return assets.geroLogo;
+  }
+});
 
 const options = computed((): Partial<Options> => ({
   width: 170,
   height: 170,
   type: 'svg',
   data: loggedWallet.value?.publicKey.toString(),
-  image: isApex.value ? assets.geroLogoApex : assets.geroLogo,
+  image: qrLogo.value,
   margin: 2,
   qrOptions: {
     typeNumber: 0,

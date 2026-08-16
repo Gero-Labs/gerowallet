@@ -73,7 +73,7 @@
       <v-spacer />
       <v-btn
         v-if="existingWallet"
-        class="onb-btn"
+        class="onb-btn onb-continue"
         depressed
         color="primary"
         @click="openUnlockExisting()"
@@ -82,7 +82,7 @@
       </v-btn>
       <v-btn
         v-else-if="enrolledOnBackend"
-        class="onb-btn"
+        class="onb-btn onb-continue"
         depressed
         color="primary"
         @click="restoreExisting()"
@@ -91,7 +91,7 @@
       </v-btn>
       <v-btn
         v-else
-        class="onb-btn"
+        class="onb-btn onb-continue"
         depressed
         color="primary"
         :disabled="!email"
@@ -310,6 +310,11 @@ const onContinue = (): void => {
 </script>
 
 <style scoped>
+/* Continue CTA: black label on gradient/teal, incl. disabled */
+.onb-continue.v-btn,
+.onb-continue.v-btn.v-btn--disabled {
+  color: var(--g-canvas) !important;
+}
 .step-google-signin {
   display: flex;
   flex-direction: column;

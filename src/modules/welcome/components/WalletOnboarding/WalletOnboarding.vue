@@ -346,6 +346,13 @@ onUnmounted(() => {
 }
 
 /* CONTENT */
+/* Translucent card: let the animated network background show through the glass.
+   Higher specificity + !important to beat the global `.v-card.liquid-glass`
+   background; the blur/saturate backdrop is inherited from `.liquid-glass`. */
+.v-card.onboarding-content {
+  background: rgb(from var(--g-raised) r g b / 0.78) !important;
+}
+
 .onboarding-content {
   width: 100%;
   min-width: 0;

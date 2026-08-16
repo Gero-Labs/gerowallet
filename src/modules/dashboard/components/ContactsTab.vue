@@ -17,7 +17,7 @@
           </v-toolbar-title>
           <v-spacer></v-spacer>
           <v-btn
-            style="letter-spacing: normal; background: linear-gradient(45deg, #00c7f3, #00ffd1); color: black"
+            style="letter-spacing: normal; background: var(--g-grad); color: var(--g-canvas)"
             @click="dialog = true"
           >
             {{ $t('common.addContact') }}

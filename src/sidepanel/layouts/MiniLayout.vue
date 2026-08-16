@@ -31,6 +31,8 @@ import MiniHeader from '../components/MiniHeader.vue';
 import BottomNav from '../components/BottomNav.vue';
 import SwapSheet from '../components/flows/SwapSheet.vue';
 import assets from '@/utils/assets';
+import { walletStore } from '@/stores/walletStore';
+import { Blockchain } from '@/models/types';
 import { useChainContext } from '../composables/useChainContext';
 
 const showSwap = ref(false);
@@ -40,9 +42,22 @@ function onNavAction(id: string) {
 }
 
 const { isMidnight } = useChainContext();
-// Midnight gets its own night-sky backdrop; everything else keeps the
-// Cardano waves (Apex reuses them too, matching current behavior).
-const bgImage = computed(() => (isMidnight.value ? assets.midnightBg : assets.cardanoBg));
+// Backdrop matches the logged wallet's chain, same assets the full dashboard
+// (ContentLayout) and onboarding use — Apex Prime teal, Vector orange, etc.
+const bgImage = computed(() => {
+  switch (walletStore.loggedWallet?.chain) {
+    case Blockchain.APEX_PRIME:
+      return assets.apexPrimeBg;
+    case Blockchain.APEX_VECTOR:
+      return assets.apexVectorBg;
+    case Blockchain.BITCOIN:
+      return assets.bitcoinBg;
+    case Blockchain.MIDNIGHT:
+      return assets.midnightBg;
+    default:
+      return assets.cardanoBg;
+  }
+});
 
 // Tab order for directional slide (the center slot is a sheet action, not a route)
 const tabOrder: Record<string, number> = {

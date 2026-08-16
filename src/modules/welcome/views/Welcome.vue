@@ -78,6 +78,7 @@
 <script setup lang="ts">
 import { computed, ref, toRefs, watch } from 'vue';
 import networks, { NetworkInfo } from '@/utils/networks';
+import { chainAccents, chainKeyFor } from '@/config/themes';
 import assets from '@/utils/assets';
 import WalletOnboarding from '@/modules/welcome/components/WalletOnboarding/WalletOnboarding.vue';
 import WalletCreation from '@/modules/welcome/components/WalletCreation/WalletCreation.vue';
@@ -109,6 +110,25 @@ const devMode = ref<boolean>(localStorage.getItem(DEV_NETWORKS_KEY) === 'true');
 watch(devMode, (val) => {
   localStorage.setItem(DEV_NETWORKS_KEY, String(val));
 });
+
+// Pre-login, useChainAccent is dormant (it keys on loggedWallet, and none is
+// signed in yet), so the chain accent slots stay at the Cardano default while
+// the welcome background already follows the previewed network. Drive the same
+// --g-* slots here from selectedNetwork so the Get Started CTA gradient and any
+// accent-tinted chrome match the chosen chain (teal Prime, orange Vector, …).
+watch(selectedNetwork, (n) => {
+  const a = chainAccents[chainKeyFor(n?.blockchain)];
+  const root = document.documentElement;
+  root.style.setProperty('--g-accent', a.accent);
+  root.style.setProperty('--g-grad-1', a.gradient1);
+  root.style.setProperty('--g-grad-2', a.gradient2);
+  if (a.onGrad) root.style.setProperty('--g-on-grad', a.onGrad);
+  else root.style.removeProperty('--g-on-grad');
+  // Legacy aliases kept in sync with useChainAccent.
+  root.style.setProperty('--chain-primary', a.accent);
+  root.style.setProperty('--chain-gradient1', a.gradient1);
+  root.style.setProperty('--chain-gradient2', a.gradient2);
+}, { immediate: true });
 
 const onOnboardingNetwork = (n: NetworkInfo): void => {
   selectedNetwork.value = n;

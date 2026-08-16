@@ -16,13 +16,15 @@
             "
             :style="{
               backgroundImage: `url(${
-                loggedWallet?.chain === Blockchain.APEX_PRIME || loggedWallet?.chain === Blockchain.APEX_VECTOR
-                  ? assets.apexBg
-                  : loggedWallet?.chain === Blockchain.BITCOIN
-                    ? assets.bitcoinBg
-                    : loggedWallet?.chain === Blockchain.MIDNIGHT
-                      ? assets.midnightBg
-                      : assets.cardanoBg
+                loggedWallet?.chain === Blockchain.APEX_PRIME
+                  ? assets.apexPrimeBg
+                  : loggedWallet?.chain === Blockchain.APEX_VECTOR
+                    ? assets.apexVectorBg
+                    : loggedWallet?.chain === Blockchain.BITCOIN
+                      ? assets.bitcoinBg
+                      : loggedWallet?.chain === Blockchain.MIDNIGHT
+                        ? assets.midnightBg
+                        : assets.cardanoBg
               })`,
             }"
           ></div>
@@ -500,7 +502,7 @@ async function openMiniMode() {
     // (messaging to background loses user gesture propagation)
     const win = await chrome.windows.getCurrent();
     await chrome.sidePanel.setOptions({ path: 'sidepanel/index.html', enabled: true });
-    await (chrome.sidePanel as any).open({ windowId: win.id });
+    await (chrome.sidePanel as unknown as { open: (opts: { windowId?: number }) => Promise<void> }).open({ windowId: win.id });
   } catch (e) {
     console.warn('Failed to open side panel:', e);
   }
@@ -516,8 +518,10 @@ const preloadBackgroundImage = () => {
   let imageUrl: string;
   switch (currentChain) {
     case Blockchain.APEX_PRIME:
+      imageUrl = assets.apexPrimeBg;
+      break;
     case Blockchain.APEX_VECTOR:
-      imageUrl = assets.apexBg;
+      imageUrl = assets.apexVectorBg;
       break;
     case Blockchain.BITCOIN:
       imageUrl = assets.bitcoinBg;

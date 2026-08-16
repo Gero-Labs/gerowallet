@@ -73,6 +73,7 @@
       <v-btn text @click="$emit('back')">{{ $t('common.back') }}</v-btn>
       <v-spacer />
       <v-btn
+        class="onb-continue"
         color="primary"
         :disabled="!canContinue"
         @click="handleContinue()"
@@ -135,6 +136,11 @@ const handleContinue = (): void => {
 </script>
 
 <style scoped lang="scss">
+/* Continue CTA: black label on gradient/teal, incl. disabled */
+.onb-continue.v-btn,
+.onb-continue.v-btn.v-btn--disabled {
+  color: var(--g-canvas) !important;
+}
 // ─── Section labels ───────────────────────────────────────────────────────────
 .step-section-label {
   font-size: 10px;

@@ -8,7 +8,7 @@
     <v-card-title v-if="isBitcoin" class="px-3 pt-3 pb-2 flex-grow-0 tx-card-title">
       <div class="tx-icon-box">
         <svg viewBox="0 0 20 20" fill="none" width="13" height="13">
-          <path d="M3 5h14M3 9h14M3 13h8M3 17h5" stroke="#F7931A" stroke-width="1.5" stroke-linecap="round"/>
+          <path d="M3 5h14M3 9h14M3 13h8M3 17h5" stroke="var(--g-accent)" stroke-width="1.5" stroke-linecap="round"/>
         </svg>
       </div>
       <div class="tx-heading-group ml-2">
@@ -1719,8 +1719,8 @@ onUnmounted(() => {
 .tx-icon-box {
   width: 30px;
   height: 30px;
-  background: rgba(247, 147, 26, 0.12);
-  border: 1px solid rgba(247, 147, 26, 0.2);
+  background: color-mix(in srgb, var(--g-accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--g-accent) 20%, transparent);
   border-radius: var(--g-r-control);
   display: flex;
   align-items: center;
@@ -1746,7 +1746,7 @@ onUnmounted(() => {
 }
 
 .tx-heading-link:hover {
-  color: #F7931A !important;
+  color: var(--g-accent) !important;
 }
 
 .tx-count {

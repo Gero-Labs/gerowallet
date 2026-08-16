@@ -59,13 +59,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, toRefs } from 'vue';
-import { walletStore } from '@/stores/walletStore';
-import { Blockchain } from '@/models/types';
-
-
-
-const { loggedWallet } = toRefs(walletStore);
+import { computed } from 'vue';
 
 interface ActionConfig {
   label: string;
@@ -98,11 +92,9 @@ withDefaults(defineProps<Props>(), {
 
 defineEmits(['primary-action', 'secondary-action']);
 
-const primaryColor = computed(() => {
-  const isApex = loggedWallet.value?.chain === Blockchain.APEX_PRIME || 
-                 loggedWallet.value?.chain === Blockchain.APEX_VECTOR;
-  return isApex ? '#dc753e' : 'var(--g-accent)';
-});
+// Chain accent (teal for Apex Prime, orange for Vector, cyan for Cardano, …)
+// comes from the single --g-accent source, set per chain by useChainAccent.
+const primaryColor = computed(() => 'var(--g-accent)');
 </script>
 
 <style scoped>
