@@ -306,6 +306,8 @@ export class SyncService {
         promises.push(this.walletBg.setAccountInfo(syncObject.account));
       }
       if (syncObject.assets) {
+        const sample = syncObject.assets[0] as { asset?: string; metadata?: { decimals?: number } } | undefined;
+        debugLog(`🔬 setSync: server pushed ${syncObject.assets.length} asset rows; sample asset=${sample?.asset} hasMetadata=${!!sample?.metadata} decimals=${sample?.metadata?.decimals}`);
         promises.push(this.walletBg.setAssets2(syncObject.assets));
       }
       if (syncObject.rewards) {
@@ -689,6 +691,11 @@ export class SyncService {
     });
     const resAll = await Promise.all(promises);
     const assets = resAll.flat().filter((res): res is AssetRow => !!res);
+    debugLog(`🔬 syncAssets: requested=${uniqueUnits.length} alreadyInDb=${uniqueUnits.length - units.length} fetched=${assets.length}`);
+    if (assets.length > 0) {
+      const sample = assets[0] as { asset?: string; metadata?: { decimals?: number } };
+      debugLog(`🔬 syncAssets sample fetched row: asset=${sample.asset} hasMetadata=${!!sample.metadata} decimals=${sample.metadata?.decimals}`);
+    }
     if (assets.length === 0) return;
     await assetsTable.bulkPut(assets);
     // Publish the fresh rows into the in-memory map SYNCHRONOUSLY, not just the

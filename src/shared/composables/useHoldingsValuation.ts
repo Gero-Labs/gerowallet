@@ -144,6 +144,14 @@ export function useHoldingsValuation() {
       });
     });
 
+    {
+      const suspicious = rows.filter(r => !r.isNative && (r.decimals ?? 0) === 0 && (r.balance ?? 0) > 1e6);
+      if (suspicious.length > 0) {
+        // eslint-disable-next-line no-console -- temporary diagnostic for the fresh-restore decimals bug
+        console.log(`🔬 valuation: ${suspicious.length}/${rows.length} tokens resolved decimals=0 with balance>1e6; sample unit=${suspicious[0].unit?.slice(0, 20)}… hasWalletMeta=${!!(tokens[suspicious[0].unit ?? ''] as { metadata?: unknown })?.metadata} marketDecimals=${allTokens.value.find(t => t.unit === suspicious[0].unit)?.decimals} dhDecimals=${dhTokens[suspicious[0].unit ?? '']?.decimals}`);
+      }
+    }
+
     // Sort: native token pinned to top, then by value descending
     rows.sort((a, b) => {
       if (a.unit === 'lovelace' || a.isNative) return -1;

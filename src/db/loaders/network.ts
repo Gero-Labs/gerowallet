@@ -3,6 +3,9 @@ import { BaseLoader } from './base';
 import NetworkStore from '@/stores/networkStore';
 import { Cardano } from '@cardano-sdk/core';
 
+/** Shape of a row in the per-wallet `assets` table (as read back from Dexie). */
+type AssetRow = { asset: string; metadata?: unknown };
+
 /**
  * Loader for assets data
  */
@@ -11,16 +14,18 @@ export class AssetsLoader extends BaseLoader {
     super('assets');
   }
 
-  async load(): Promise<any> {
+  async load(): Promise<unknown> {
     const blockchainDB = await this.getBlockchainDb();
 
     return this.createSubscription(
       () => blockchainDB.table('assets').toArray(),
       assets => {
-        const map = assets.reduce((map: Record<string, any>, asset: any) => {
+        const map = assets.reduce((map: Record<string, AssetRow>, asset: AssetRow) => {
           map[asset.asset] = asset;
           return map;
         }, {});
+        const noMeta = assets.filter((a: { metadata?: unknown }) => !a.metadata).length;
+        console.log(`🔬 AssetsLoader: ${assets.length} rows from DB → NetworkStore (withoutMetadata=${noMeta})`);
         NetworkStore.setAssets(map);
       }
     );
@@ -35,7 +40,7 @@ export class GenesisLoader extends BaseLoader {
     super('genesis_info');
   }
 
-  async load(): Promise<any> {
+  async load(): Promise<unknown> {
     const blockchainDB = await this.getBlockchainDb();
 
     return this.createSubscription(
@@ -53,6 +58,70 @@ export class GenesisLoader extends BaseLoader {
 }
 
 /**
+ * Row shape of the per-wallet `epoch_params` table (Koios-style snake_case
+ * protocol parameters). All fields optional because older DB rows may predate
+ * newer params; every field the loader reads is declared explicitly.
+ */
+type EpochParamsRow = {
+  max_tx_size?: number;
+  min_fee_a?: number;
+  min_fee_b?: number;
+  max_block_size?: number;
+  max_block_header_size?: number;
+  key_deposit?: number;
+  pool_deposit?: number;
+  e_max?: number;
+  n_opt?: number;
+  a0?: number;
+  rho?: number;
+  tau?: number;
+  decentralisation_param?: number;
+  min_utxo?: number;
+  min_pool_cost?: number;
+  extra_entropy?: string | null;
+  protocol_major_ver?: number;
+  protocol_minor_ver?: number;
+  coins_per_utxo_word?: number;
+  max_val_size?: number;
+  collateral_percent?: number;
+  max_collateral_inputs?: number;
+  cost_models?: {
+    PlutusV1?: Record<string, number>;
+    PlutusV2?: Record<string, number>;
+    PlutusV3?: Record<string, number>;
+  };
+  price_mem?: number;
+  price_step?: number;
+  max_tx_ex_mem?: number;
+  max_tx_ex_steps?: number;
+  max_block_ex_mem?: number;
+  max_block_ex_steps?: number;
+  coins_per_utxo_size?: number;
+  pvt_motion_no_confidence?: number;
+  pvt_committee_normal?: number;
+  pvt_committee_no_confidence?: number;
+  pvt_hard_fork_initiation?: number;
+  pvt_p_p_security_group?: number;
+  dvt_motion_no_confidence?: number;
+  dvt_committee_normal?: number;
+  dvt_committee_no_confidence?: number;
+  dvt_hard_fork_initiation?: number;
+  dvt_update_to_constitution?: number;
+  dvt_p_p_network_group?: number;
+  dvt_p_p_economic_group?: number;
+  dvt_p_p_technical_group?: number;
+  dvt_p_p_gov_group?: number;
+  dvt_treasury_withdrawal?: number;
+  committee_min_size?: number;
+  committee_max_term_length?: number;
+  gov_action_lifetime?: number;
+  gov_action_deposit?: number;
+  drep_deposit?: number;
+  drep_activity?: number;
+  min_fee_ref_script_cost_per_byte?: number;
+};
+
+/**
  * Loader for epoch parameters
  */
 export class EpochParamsLoader extends BaseLoader {
@@ -60,12 +129,12 @@ export class EpochParamsLoader extends BaseLoader {
     super('epoch_params');
   }
 
-  async load(): Promise<any> {
+  async load(): Promise<unknown> {
     const blockchainDB = await this.getBlockchainDb();
 
     return this.createSubscription(
       () => blockchainDB.table('epoch_params').orderBy('epoch').last(),
-      (epochParams: any) => {
+      (epochParams: EpochParamsRow | undefined) => {
         console.log('loading epochParams', epochParams)
 
         // Default epoch params (Cardano Mainnet Conway era - 2024)
@@ -236,7 +305,7 @@ export class EpochParamsLoader extends BaseLoader {
             ...newProtocolParamsInAlonzo,
             ...newProtocolParamsInBabbage,
             ...newProtocolParamsInConway,
-          } as Cardano.ProtocolParameters);
+          } as unknown as Cardano.ProtocolParameters);
         } catch (error) {
           console.error('❌ Error processing epoch params:', error);
           console.warn('⚠️ Using default epoch parameters due to error');
