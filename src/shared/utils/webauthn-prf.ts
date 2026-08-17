@@ -113,8 +113,12 @@ async function detectPrfSupport(): Promise<boolean> {
 
       return supported;
     } catch (error) {
+      // Rethrow instead of resolving false: isPrfSupported() only caches a
+      // clean determination, so a transient failure here (e.g. the Windows
+      // Hello service still spinning up) stays retryable instead of
+      // permanently disabling PassKey for the whole session.
       console.error('[PRF] Error checking capabilities:', error);
-      return false;
+      throw error;
     }
   }
 
