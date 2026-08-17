@@ -4,6 +4,7 @@ import { Messaging } from '@/chrome/messaging';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
 import { isStakeKeyRegistered } from '@/shared/utils/stakeRegistration';
 import { APIError, BITCOIN_METHOD, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, POPUP, SENDER, TARGET, TxSendError } from '@/chrome/config';
+import { toDappError } from '@/chrome/dappError';
 import { bringInitBackground } from '@bringweb3/chrome-extension-kit';
 import {
   focusOrCreatePopup,
@@ -68,9 +69,14 @@ loadConfig().then(() => {
   // Config loaded
 })
 
+// Browsers without the Side Panel API (Opera exposes its own sidebarAction
+// instead). Every chrome.sidePanel touch must be gated on this — an unguarded
+// call throws and, at top level, would kill the whole service worker.
+const sidePanelSupported = !!chrome.sidePanel;
+
 // Restore side panel behavior from its own chrome.storage key
 chrome.storage.local.get('openMiniGeroOnClick', (result) => {
-  if (result['openMiniGeroOnClick']) {
+  if (result['openMiniGeroOnClick'] && sidePanelSupported) {
     chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(console.error);
   }
 });
@@ -201,6 +207,19 @@ export async function openSidebar(tabId: number, path: string): Promise<boolean>
   // Append tabId so the side panel can identify which tab it belongs to
   const separator = path.includes('?') ? '&' : '?';
   const fullPath = `${path}${separator}tabId=${tabId}`;
+  // No Side Panel API (Opera) — run the mini-gero SPA in a popup window
+  // instead. The tabId in the URL makes the panel register its dApp port
+  // under the requesting tab (see dappRequestHub.resolveTabId), so exact-tab
+  // request routing and parked-request redelivery work unchanged.
+  if (!sidePanelSupported) {
+    try {
+      await focusOrCreatePopup(chrome.runtime.getURL(fullPath), 470, 852);
+      return true;
+    } catch (e) {
+      console.warn('mini-gero window fallback failed:', errorMessage(e));
+      return false;
+    }
+  }
   chrome.sidePanel.setOptions({
     tabId,
     path: fullPath,
@@ -218,7 +237,9 @@ export async function openSidebar(tabId: number, path: string): Promise<boolean>
 }
 
 // Mini-gero: default to dashboard on icon click, restored from config after loadConfig()
-chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false });
+if (sidePanelSupported) {
+  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false });
+}
 
 // Mini-gero DApp channel — per-tab port routing
 // Port name format: "mini-gero-dapp-channel" or "mini-gero-dapp-channel:${tabId}"
@@ -590,7 +611,7 @@ app.add(METHOD.getBalance, async (request, sendResponse) => {
   } catch (e) {
     sendResponse({
       id: request.id,
-      error: e,
+      error: toDappError(e),
       target: TARGET,
       sender: SENDER.extension,
     });
@@ -641,7 +662,7 @@ app.add(METHOD.enable, (request, sendResponse) => {
         else if (response.error) reply({ error: response.error });
         else reply({ error: APIError.InternalError });
       })
-      .catch(err => reply({ error: err }));
+      .catch(err => reply({ error: toDappError(err) }));
   };
 
   const openSidePanelAndSend = async () => {
@@ -920,7 +941,7 @@ app.add(METHOD.getUtxos, async (request, sendResponse) => {
   } catch (e) {
     sendResponse({
       id: request.id,
-      error: e,
+      error: toDappError(e),
       target: TARGET,
       sender: SENDER.extension,
     });
@@ -997,7 +1018,7 @@ app.add(METHOD.getCollateral, async (request, sendResponse) => {
     console.error('[CIP-30] getCollateral error:', e);
     sendResponse({
       id: request.id,
-      error: e,
+      error: toDappError(e),
       target: TARGET,
       sender: SENDER.extension,
     });
@@ -1030,7 +1051,7 @@ app.add(METHOD.getUsedAddresses, async (request, sendResponse) => {
   } catch (e) {
     sendResponse({
       id: request.id,
-      error: e,
+      error: toDappError(e),
       target: TARGET,
       sender: SENDER.extension,
     });
@@ -1063,7 +1084,7 @@ app.add(METHOD.getUnusedAddresses, async (request, sendResponse) => {
     console.error(e)
     sendResponse({
       id: request.id,
-      error: e,
+      error: toDappError(e),
       target: TARGET,
       sender: SENDER.extension,
     });
@@ -1093,11 +1114,11 @@ app.add(METHOD.popupLogin, async (request, sendResponse) => {
   const canUseSidePanel = !!request.data?.userGesture && typeof tabId === 'number';
 
   try {
-    if (canUseSidePanel) {
-      await openSidebar(tabId as number, 'sidepanel/index.html');
-    } else {
+    const panelOpened = canUseSidePanel && (await openSidebar(tabId as number, 'sidepanel/index.html'));
+    if (!panelOpened) {
       // Fallback: open the side-panel SPA in a popup window when no user
-      // gesture is present (chrome.sidePanel.open requires one).
+      // gesture is present (chrome.sidePanel.open requires one) or the
+      // browser has no Side Panel API at all (Opera).
       const popupURL = chrome.runtime.getURL('sidepanel/index.html');
       await focusOrCreatePopup(popupURL, 470, 600);
     }
@@ -1168,7 +1189,7 @@ app.add(METHOD.signData, (request, sendResponse) => {
             else if (response.error) signDataReply({ error: response.error });
             else signDataReply({ error: APIError.InternalError });
           })
-          .catch((e) => signDataReply({ error: e }));
+          .catch((e) => signDataReply({ error: toDappError(e) }));
       });
   };
 
@@ -1237,7 +1258,7 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
         else if (response.error) signTxReply({ error: response.error });
         else signTxReply({ error: APIError.InternalError });
       })
-      .catch((e) => signTxReply({ error: e }));
+      .catch((e) => signTxReply({ error: toDappError(e) }));
   };
 
   const openSidePanelForSignTx = async () => {
@@ -1376,7 +1397,7 @@ app.add(METHOD.submitTx, async (request, sendResponse) => {
     console.error("Error in submitTx:", e);
     sendResponse({
       id: request.id,
-      error: e,
+      error: toDappError(e),
       target: TARGET,
       sender: SENDER.extension,
     });
@@ -3563,7 +3584,7 @@ app.add(BITCOIN_METHOD.enable, (request, sendResponse) => {
         focusOrCreatePopup(popupURL, 470, 600)
           .then(tab => Messaging.sendToPopupInternal(tab.id, request))
           .then(handleResponse)
-          .catch(err => reply({ error: err }));
+          .catch(err => reply({ error: toDappError(err) }));
       });
   }
 
@@ -3688,7 +3709,7 @@ app.add(BITCOIN_METHOD.signPsbt, (request, sendResponse) => {
         if (response.data !== undefined) signPsbtReply({ data: response.data });
         else signPsbtReply({ error: response.error ?? APIError.InternalError });
       })
-      .catch((e) => signPsbtReply({ error: e }));
+      .catch((e) => signPsbtReply({ error: toDappError(e) }));
   };
 
   const openSidePanelForSignPsbt = () => {
@@ -3774,7 +3795,7 @@ app.add(BITCOIN_METHOD.signPsbts, async (request, sendResponse) => {
     }
     sendResponse({ id: request.id, data: signedHexs, target: TARGET, sender: SENDER.extension });
   } catch (err) {
-    sendResponse({ id: request.id, error: err, target: TARGET, sender: SENDER.extension });
+    sendResponse({ id: request.id, error: toDappError(err), target: TARGET, sender: SENDER.extension });
   }
   return true;
 });
@@ -3809,7 +3830,7 @@ app.add(BITCOIN_METHOD.signMessage, (request, sendResponse) => {
         if (response.data !== undefined) signMessageReply({ data: response.data });
         else signMessageReply({ error: response.error ?? APIError.InternalError });
       })
-      .catch((e) => signMessageReply({ error: e }));
+      .catch((e) => signMessageReply({ error: toDappError(e) }));
   };
 
   const openSidePanelForSignMessage = () => {

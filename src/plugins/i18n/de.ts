@@ -923,7 +923,7 @@ export default {
   'copilot.allowance.errors.wildcardCategory': 'Wildcard-Kategorie ist nicht erlaubt.',
   'copilot.allowance.errors.expiryPast': 'Ablaufdatum muss in der Zukunft liegen.',
   // --- Support (Live-Chat, Agent Dock) ---
-  'support.toggle.copilot': 'Assistent',
+  'support.toggle.copilot': 'Agent',
   'support.toggle.support': 'Support',
   'support.chip.talkToHuman': 'Mit einem Mitarbeiter sprechen',
   'support.intro.title': 'Brauchst du Hilfe?',

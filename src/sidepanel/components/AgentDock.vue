@@ -31,7 +31,7 @@
           </div>
 
           <!-- Support-first: Support is the default/leftmost tab (see `mode`'s
-               initial value below); Assistant is second and disabled whenever
+               initial value below); Agent (copilot) is second and disabled whenever
                copilotEnabled is off — visible so the capability is discoverable,
                but neither clickable (real `disabled`) nor announced as
                actionable (`aria-disabled`) to assistive tech. -->

@@ -498,13 +498,43 @@ function navigateToPoolOperator() {
 
 async function openMiniMode() {
   try {
+    // No Side Panel API (Opera) — open the mini-gero SPA in a popup window
+    // instead: focus it when one is already open, else create it.
+    if (!chrome.sidePanel) {
+      const url = chrome.runtime.getURL('sidepanel/index.html');
+      const wins = await chrome.windows.getAll({ populate: true });
+      const existing = wins.find((w) => w.type === 'popup' && w.tabs?.some((t) => t.url === url));
+      if (existing?.id !== undefined) {
+        await chrome.windows.update(existing.id, { focused: true });
+      } else {
+        await chrome.windows.create({ url, type: 'popup', focused: true, width: 470, height: 852 });
+      }
+      return;
+    }
+
     // Must call sidePanel.open() directly from user gesture context
     // (messaging to background loses user gesture propagation)
     const win = await chrome.windows.getCurrent();
+
+    // Toggle: if the panel is already open (a SIDE_PANEL context exists),
+    // close it instead. There is no sidePanel.close() — disabling the panel
+    // closes it; re-enable right away so it can be opened again later.
+    const runtimeWithContexts = chrome.runtime as unknown as {
+      getContexts?: (filter: { contextTypes: string[] }) => Promise<unknown[]>;
+    };
+    const contexts = runtimeWithContexts.getContexts
+      ? await runtimeWithContexts.getContexts({ contextTypes: ['SIDE_PANEL'] })
+      : [];
+    if (contexts.length > 0) {
+      await chrome.sidePanel.setOptions({ enabled: false });
+      await chrome.sidePanel.setOptions({ path: 'sidepanel/index.html', enabled: true });
+      return;
+    }
+
     await chrome.sidePanel.setOptions({ path: 'sidepanel/index.html', enabled: true });
     await (chrome.sidePanel as unknown as { open: (opts: { windowId?: number }) => Promise<void> }).open({ windowId: win.id });
   } catch (e) {
-    console.warn('Failed to open side panel:', e);
+    console.warn('Failed to toggle side panel:', e);
   }
 }
 

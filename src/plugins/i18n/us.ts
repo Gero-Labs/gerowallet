@@ -816,7 +816,7 @@ export default {
   'copilot.allowance.errors.wildcardCategory': 'Wildcard category is not permitted.',
   'copilot.allowance.errors.expiryPast': 'Expiry must be in the future.',
   // --- Support (live chat, Agent Dock) ---
-  'support.toggle.copilot': 'Assistant',
+  'support.toggle.copilot': 'Agent',
   'support.toggle.support': 'Support',
   'support.chip.talkToHuman': 'Talk to a human',
   'support.intro.title': 'Need a hand?',
