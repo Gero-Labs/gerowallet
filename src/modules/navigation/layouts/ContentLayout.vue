@@ -503,7 +503,9 @@ async function openMiniMode() {
     if (!chrome.sidePanel) {
       const url = chrome.runtime.getURL('sidepanel/index.html');
       const wins = await chrome.windows.getAll({ populate: true });
-      const existing = wins.find((w) => w.type === 'popup' && w.tabs?.some((t) => t.url === url));
+      // startsWith, not ===: the SPA's hash router rewrites the tab URL to
+      // `.../sidepanel/index.html#/...` once mounted.
+      const existing = wins.find((w) => w.type === 'popup' && w.tabs?.some((t) => t.url?.startsWith(url)));
       if (existing?.id !== undefined) {
         await chrome.windows.update(existing.id, { focused: true });
       } else {

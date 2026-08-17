@@ -5738,6 +5738,17 @@ app.addToOptions(MessageTypes.SIGN_MIDNIGHT_CONNECTOR_DATA, async (request, send
 
 app.addToOptions(MessageTypes.SET_OPEN_MINI_GERO_ON_CLICK, async (request, sendResponse) => {
   try {
+    // No Side Panel API (Opera) — the icon-click behavior toggle cannot apply;
+    // fail with a clear reason instead of a generic thrown TypeError.
+    if (!sidePanelSupported) {
+      sendResponse({
+        id: request.id,
+        data: { success: false, error: 'Side Panel API is not available in this browser' },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+      return true;
+    }
     // Only update panel behavior — storage is written directly by the component
     await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: !!request.data.value });
     sendResponse({
