@@ -2,6 +2,7 @@ import Dexie from 'dexie';
 import { BaseLoader } from './base';
 import NetworkStore from '@/stores/networkStore';
 import { Cardano } from '@cardano-sdk/core';
+import { debugLog } from '@/utils/debug';
 
 /** Shape of a row in the per-wallet `assets` table (as read back from Dexie). */
 type AssetRow = { asset: string; metadata?: unknown };
@@ -25,7 +26,9 @@ export class AssetsLoader extends BaseLoader {
           return map;
         }, {});
         const noMeta = assets.filter((a: { metadata?: unknown }) => !a.metadata).length;
-        console.log(`🔬 AssetsLoader: ${assets.length} rows from DB → NetworkStore (withoutMetadata=${noMeta})`);
+        // debugLog, not console.log: this liveQuery re-fires on every assets
+        // write, so an ungated log would spam production consoles.
+        debugLog(`🔬 AssetsLoader: ${assets.length} rows from DB → NetworkStore (withoutMetadata=${noMeta})`);
         NetworkStore.setAssets(map);
       }
     );
