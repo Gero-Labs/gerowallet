@@ -3255,6 +3255,7 @@ export default {
   'welcome.passwordMethodDesc': 'Traditionelle Passwortverschlüsselung',
   'welcome.passwordNoRecoveryWarning': 'Wenn Sie dieses Passwort vergessen, benötigen Sie Ihre Wiederherstellungsphrase, um Ihre Wallet wiederherzustellen.',
   'welcome.passwordsMustMatch': 'Passwörter müssen übereinstimmen.',
+  'welcome.prfChecking': 'Prüfe Geräteunterstützung…',
   'welcome.prfEncryption': 'PassKey-Verschlüsselung (PRF)',
   'welcome.prfEncryptionDesc': 'Hardwaregestützte PassKey-Authentifizierung',
   'welcome.prfNotSupported': 'PassKey wird in diesem Browser nicht unterstützt. Stattdessen wird Passwortverschlüsselung verwendet.',

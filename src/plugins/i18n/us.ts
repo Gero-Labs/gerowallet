@@ -2733,6 +2733,7 @@ export default {
   'welcome.pairing': 'Pairing',
   'welcome.password': 'Password',
   'welcome.passwordsMustMatch': 'Passwords must match',
+  'welcome.prfChecking': 'Checking device support…',
   'welcome.recoveryPhrase': 'Recovery Phrase',
   'welcome.recoveryPhraseAlert': 'Your recovery phrase should be stored in a secure place. Anyone with access to your recovery phrase can access your funds.',
   'welcome.createWallet': 'Create Wallet',

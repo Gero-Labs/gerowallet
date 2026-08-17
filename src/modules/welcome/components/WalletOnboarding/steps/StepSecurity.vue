@@ -15,8 +15,11 @@
         class="mb-3"
       ></v-text-field>
 
-      <!-- Security Method — side-by-side compact tiles -->
-      <template v-if="prfSupported">
+      <!-- Security Method — side-by-side compact tiles. While the PRF probe
+           is still pending (null) the PassKey tile shows a checking state
+           instead of falsely claiming "not supported": on Windows the first
+           capability call can take seconds while Windows Hello spins up. -->
+      <template v-if="prfSupported !== false">
         <v-divider class="my-4" style="border-color: rgba(255, 255, 255, 0.08);" />
         <div class="step-section-label mb-2">{{ $t('welcome.securityMethod') }}</div>
         <div class="security-row">
@@ -24,8 +27,11 @@
           <!-- PassKey tile -->
           <div
             class="security-tile"
-            :class="{ 'security-tile--active': selectedSecurityMethod === 'prf' }"
-            @click="selectedSecurityMethod = 'prf'"
+            :class="{
+              'security-tile--active': selectedSecurityMethod === 'prf',
+              'security-tile--pending': prfSupported === null,
+            }"
+            @click="prfSupported && pickMethod('prf')"
           >
             <div class="security-tile__head">
               <v-icon size="15" color="primary">mdi-shield-key</v-icon>
@@ -38,16 +44,17 @@
               </v-tooltip>
             </div>
             <div class="d-flex align-center mt-1">
-              <v-chip color="primary" x-small class="mr-1">{{ $t('welcome.recommended') }}</v-chip>
+              <v-progress-circular v-if="prfSupported === null" indeterminate size="12" width="2" color="primary" class="mr-1" />
+              <v-chip v-else color="primary" x-small class="mr-1">{{ $t('welcome.recommended') }}</v-chip>
             </div>
-            <span class="security-tile__sub mt-1">{{ $t('welcome.passKeyBenefit2') }}</span>
+            <span class="security-tile__sub mt-1">{{ prfSupported === null ? $t('welcome.prfChecking') : $t('welcome.passKeyBenefit2') }}</span>
           </div>
 
           <!-- Password tile -->
           <div
             class="security-tile"
             :class="{ 'security-tile--active': selectedSecurityMethod === 'password' }"
-            @click="selectedSecurityMethod = 'password'"
+            @click="pickMethod('password')"
           >
             <div class="security-tile__head">
               <v-icon size="15" color="grey lighten-1">mdi-key-variant</v-icon>
@@ -105,27 +112,34 @@ const nameValid = ref(false);
 // Wallet name
 const name = ref(generateWalletName());
 
-// Security method
-const prfSupported = ref(false);
+// Security method. null = probe still pending (never claim "not supported"
+// while checking — the first Windows Hello capability call can take seconds).
+const prfSupported = ref<boolean | null>(null);
 const selectedSecurityMethod = ref<'prf' | 'password'>('password');
+let userPicked = false;
+
+const pickMethod = (method: 'prf' | 'password'): void => {
+  userPicked = true;
+  selectedSecurityMethod.value = method;
+};
 
 const canContinue = computed(() => nameValid.value && !!selectedSecurityMethod.value);
 
-// Check PRF support on mount
+// Check PRF support on mount (memoized + prefetched by WalletOnboarding, so
+// this usually resolves instantly).
 onMounted(async () => {
   try {
     const { isPrfSupported } = await import('@/shared/utils/webauthn-prf');
     prfSupported.value = await isPrfSupported();
 
-    if (prfSupported.value) {
+    // Default to PassKey when supported — unless the user already made a
+    // choice while the probe was pending.
+    if (prfSupported.value && !userPicked) {
       selectedSecurityMethod.value = 'prf';
-    } else {
-      selectedSecurityMethod.value = 'password';
     }
   } catch (error) {
     console.error('Error checking PRF support:', error);
     prfSupported.value = false;
-    selectedSecurityMethod.value = 'password';
   }
 });
 
@@ -170,6 +184,12 @@ const handleContinue = (): void => {
     border-color: #{"rgb(from var(--v-primary-base) r g b / 0.55)"};
     background: #{"rgb(from var(--v-primary-base) r g b / 0.06)"};
     box-shadow: 0 0 14px #{"rgb(from var(--v-primary-base) r g b / 0.07)"};
+  }
+
+  // PRF probe still pending: visibly "checking", not selectable yet
+  &--pending {
+    opacity: 0.75;
+    cursor: progress;
   }
 
   &__head {

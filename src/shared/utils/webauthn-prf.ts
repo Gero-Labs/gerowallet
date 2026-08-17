@@ -62,8 +62,36 @@ export class PrfUnsupportedError extends Error {
  * Falls back to assuming unsupported for older browsers
  *
  * @returns Promise<boolean> - true if PRF extension is supported
+ *
+ * Memoized: on Windows the first getClientCapabilities() call can take
+ * seconds while Chrome spins up the Windows Hello platform service, so the
+ * result is cached and consumers can prefetch it early (see WalletOnboarding).
+ * A determination (true/false) is cached; a thrown error is not, so a
+ * transient failure can be retried on the next call.
  */
-export async function isPrfSupported(): Promise<boolean> {
+let prfSupportCache: boolean | null = null;
+let prfSupportInflight: Promise<boolean> | null = null;
+
+export function isPrfSupported(): Promise<boolean> {
+  if (prfSupportCache !== null) return Promise.resolve(prfSupportCache);
+  if (!prfSupportInflight) {
+    prfSupportInflight = detectPrfSupport()
+      .then((supported) => {
+        prfSupportCache = supported;
+        return supported;
+      })
+      .catch((error) => {
+        console.error('[PRF] support check failed:', error);
+        return false;
+      })
+      .finally(() => {
+        prfSupportInflight = null;
+      });
+  }
+  return prfSupportInflight;
+}
+
+async function detectPrfSupport(): Promise<boolean> {
   // Check if WebAuthn is available
   if (!window.PublicKeyCredential) {
     debugWarn('[PRF] WebAuthn not supported in this browser');
