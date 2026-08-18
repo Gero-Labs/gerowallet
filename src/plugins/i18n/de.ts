@@ -4363,6 +4363,8 @@ export default {
   'poolOperator.nodeMonitorSetup': 'Node-Monitor-Einrichtung',
   'poolOperator.nodeMonitorSetupDescription': 'Geben Sie die URL Ihres Node-Monitoring-Endpunkts ein. Führen Sie das Setup-Skript auf Ihrem Block Producer aus, um den leichtgewichtigen Monitoring-Agent zu installieren.',
   'poolOperator.nodeEndpoint': 'Node-Monitor-URL',
+  'poolOperator.nodeAuthToken': 'Auth-Token',
+  'poolOperator.nodeAuthTokenHint': 'Der authToken aus deiner Agent-Konfiguration. Leer lassen, wenn der Agent ohne Token läuft.',
   'poolOperator.quickSetup': 'Schnelleinrichtung (auf Ihrem Node ausführen)',
   'poolOperator.connect': 'Verbinden',
   'poolOperator.nodeConnected': 'Node erfolgreich verbunden',

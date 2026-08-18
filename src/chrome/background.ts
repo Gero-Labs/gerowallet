@@ -2764,18 +2764,37 @@ app.addToOptions(MessageTypes.SIGN_TX_WITH_POOL_KEYS, async (request, sendRespon
 // SPO Node Monitor — proxy fetch through background (bypasses extension page CSP)
 app.addToOptions(MessageTypes.SPO_NODE_FETCH, async (request, sendResponse) => {
   try {
-    const { url, timeout, method, body } = request.data;
+    const { url, timeout, method, body, authToken } = request.data;
     if (!url || typeof url !== 'string') {
       throw new Error('Invalid URL');
+    }
+    // The monitor is reached over https:// in every real deployment (cloudflare
+    // tunnel) or http://localhost when the operator runs it locally. Refuse to
+    // put a bearer token on a plaintext request to anywhere else — that would
+    // hand the agent's token to anyone on the path.
+    let isLocal = false;
+    try {
+      const parsed = new URL(url);
+      isLocal = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1' || parsed.hostname === '[::1]';
+      if (authToken && parsed.protocol !== 'https:' && !isLocal) {
+        throw new Error('Refusing to send auth token over an insecure connection');
+      }
+    } catch (e) {
+      throw e instanceof Error && e.message.startsWith('Refusing') ? e : new Error('Invalid URL');
     }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeout || 10000);
     const fetchOpts: RequestInit = { signal: controller.signal };
+    const headers: Record<string, string> = {};
     if (method === 'POST') {
       fetchOpts.method = 'POST';
-      fetchOpts.headers = { 'Content-Type': 'application/json' };
+      headers['Content-Type'] = 'application/json';
       if (body) fetchOpts.body = body;
     }
+    // Never logged: the catch below reports errorMessage(error), and fetch
+    // failures do not carry request headers.
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+    if (Object.keys(headers).length > 0) fetchOpts.headers = headers;
     const response = await fetch(url, fetchOpts);
     clearTimeout(timer);
     const data = await response.json();

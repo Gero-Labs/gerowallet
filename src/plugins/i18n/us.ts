@@ -4464,6 +4464,8 @@ export default {
   'poolOperator.nodeMonitorSetup': 'Node Monitor Setup',
   'poolOperator.nodeMonitorSetupDescription': 'Enter the URL of your node monitoring endpoint. Run the setup script on your block producer to install the lightweight monitoring agent.',
   'poolOperator.nodeEndpoint': 'Node Monitor URL',
+  'poolOperator.nodeAuthToken': 'Auth token',
+  'poolOperator.nodeAuthTokenHint': 'The authToken from your agent config. Leave empty if the agent runs without one.',
   'poolOperator.quickSetup': 'Quick Setup (run on your node)',
   'poolOperator.connect': 'Connect',
   'poolOperator.nodeConnected': 'Node connected successfully',

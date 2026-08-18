@@ -207,6 +207,19 @@
             outlined dense dark hide-details
             class="glass-input"
           />
+
+          <v-text-field
+            v-model="newNodeAuthToken"
+            :label="$t('poolOperator.nodeAuthToken')"
+            :hint="$t('poolOperator.nodeAuthTokenHint')"
+            :type="showAuthToken ? 'text' : 'password'"
+            :append-icon="showAuthToken ? 'mdi-eye-off' : 'mdi-eye'"
+            @click:append="showAuthToken = !showAuthToken"
+            autocomplete="off"
+            spellcheck="false"
+            outlined dense dark persistent-hint
+            class="glass-input mt-3"
+          />
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -241,6 +254,8 @@ function openAddDialog() {
   newNodeName.value = '';
   newNodeUrl.value = '';
   newNodeType.value = 'bp';
+  newNodeAuthToken.value = '';
+  showAuthToken.value = false;
   showAddNode.value = true;
 }
 
@@ -249,6 +264,8 @@ function openEditDialog(node: MonitoredNode) {
   newNodeName.value = node.name;
   newNodeUrl.value = node.url;
   newNodeType.value = node.type;
+  newNodeAuthToken.value = node.authToken || '';
+  showAuthToken.value = false;
   showAddNode.value = true;
 }
 
@@ -256,6 +273,8 @@ defineExpose({ openAddDialog, openEditDialog });
 const newNodeName = ref('');
 const newNodeType = ref<'bp' | 'relay'>('bp');
 const newNodeUrl = ref('');
+const newNodeAuthToken = ref('');
+const showAuthToken = ref(false);
 const autoDetecting = ref(false);
 let pollInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -271,10 +290,10 @@ function formatMem(mb: number): string {
   return mb >= 1024 ? (mb / 1024).toFixed(1) + 'G' : mb + 'M';
 }
 
-function epochPct(data: any): string {
+function epochPct(data: { epochSlot?: number; epochSlotsRemaining?: number } | null): string {
   if (!data) return '0';
   const total = (data.epochSlot || 0) + (data.epochSlotsRemaining || 0);
-  return total ? ((data.epochSlot / total) * 100).toFixed(1) : '0';
+  return total ? (((data.epochSlot || 0) / total) * 100).toFixed(1) : '0';
 }
 
 function copyText(text: string) {
@@ -305,6 +324,7 @@ async function autoDetect() {
 async function addNode() {
   const url = newNodeUrl.value.trim().replace(/\/+$/, '');
   if (!url || !newNodeName.value) return;
+  const authToken = newNodeAuthToken.value.trim() || undefined;
 
   if (editingNodeId.value) {
     // Edit existing node
@@ -313,6 +333,7 @@ async function addNode() {
       existing.name = newNodeName.value;
       existing.type = newNodeType.value;
       existing.url = url;
+      existing.authToken = authToken;
       existing.connected = false;
       existing.data = null;
       await pollSingleNode(existing);
@@ -324,6 +345,7 @@ async function addNode() {
       name: newNodeName.value,
       type: newNodeType.value,
       url,
+      authToken,
       connected: false,
       lastSeen: null,
       data: null,
