@@ -58,10 +58,12 @@ describe('useChainContext', () => {
 
   // themeColors.primary maps to chainAccents[chain].accent (see src/config/themes.ts).
   // These assert the current accent-system palette, not the pre-migration hexes.
-  it('returns the Apex theme palette when Apex wallet is active', () => {
+  it('returns the Apex Prime theme palette when an Apex Prime wallet is active', () => {
     mockWalletStore.loggedWallet = { chain: Blockchain.APEX_PRIME };
     const { themeColors } = useChainContext();
-    expect(themeColors.value.primary).toBe('#E06030');
+    // Prime is teal, NOT the legacy shared-Apex orange (#E06030) — chainKeyFor
+    // routes Prime and Vector to their own accents.
+    expect(themeColors.value.primary).toBe('#16B89E');
   });
 
   it('returns the Cardano theme palette when Cardano wallet is active', () => {
