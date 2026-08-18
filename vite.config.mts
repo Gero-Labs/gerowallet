@@ -9,7 +9,6 @@ import packageJson from './package.json';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import copy from 'rollup-plugin-copy';
 import { existsSync, createReadStream } from 'node:fs';
-// import { viteImagemin } from 'vite-plugin-imagemin';
 
 // Absolute POSIX path: sass `@import` does not reliably resolve vite's `@/`
 // alias on Windows (r() yields backslashes), so we hand it a literal path.
