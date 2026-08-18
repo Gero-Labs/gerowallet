@@ -357,8 +357,8 @@ const signDataLocallyWithPrf = async () => {
 
     // Step 3: Derive the signing key
     const pathParts = foundKey.path.split('/');
-    const role = parseInt(pathParts[4].replace("'", ""), 10);
-    const index = parseInt(pathParts[5].replace("'", ""), 10);
+    const role = parseInt(pathParts[4].replace(/'/g, ""), 10);
+    const index = parseInt(pathParts[5].replace(/'/g, ""), 10);
 
     const accountKey = rootKey.derive([2147485500, 2147485463, 2147483648]); // m/1852'/1815'/0'
     const derived = accountKey.derive([role, index]);
@@ -588,8 +588,8 @@ const sign = async () => {
 
       // Parse derivation path: m/1852'/1815'/0'/role/index
       const pathParts = foundKey.path.split('/');
-      const role = parseInt(pathParts[4].replace("'", ""), 10);
-      const keyIndex = parseInt(pathParts[5].replace("'", ""), 10);
+      const role = parseInt(pathParts[4].replace(/'/g, ""), 10);
+      const keyIndex = parseInt(pathParts[5].replace(/'/g, ""), 10);
 
       // Derive the appropriate key based on the role
       let derivedKey: Ed25519PublicKey;

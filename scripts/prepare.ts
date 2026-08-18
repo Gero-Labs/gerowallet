@@ -90,9 +90,12 @@ if (isDev) {
     })
 } else {
   (async () => {
-    // Fix broken Vite asset paths on Windows (resolves to deep absolute-like relative paths)
+    // Fix broken Vite asset paths on Windows (resolves to deep absolute-like relative paths).
+    // The segment class excludes `/` so each `(?:…\/)` iteration consumes exactly one path
+    // segment — `[^"']*` would also match `/`, making the two quantifiers ambiguous and the
+    // match super-linear on long non-matching runs.
     const fixBrokenPaths = (html: string, correctPrefix: string) =>
-      html.replace(/(?:\.\.\/)+(?:[A-Za-z]:\/)?(?:[^"']*\/)*(?=(?:assets|js)\/)/g, correctPrefix)
+      html.replace(/(?:\.\.\/)+(?:[A-Za-z]:\/)?(?:[^"'/]*\/)*(?=(?:assets|js)\/)/g, correctPrefix)
 
     // Move options/index.html to extension root and fix paths
     log('PRE', 'stub options')

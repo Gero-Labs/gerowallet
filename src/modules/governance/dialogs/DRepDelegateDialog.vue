@@ -24,20 +24,20 @@
                 <v-btn
                   icon
                   x-small
-                  v-for="(link, index) in drep.links"
+                  v-for="(link, index) in toSafeLinks(drep.links)"
                   :key="index"
-                  :href="link.uri"
+                  :href="link.href"
                   target="_blank"
-                  v-show="link.uri && typeof link.uri === 'string'"
+                  rel="noopener noreferrer"
                   class="ml-1"
                 >
-                  <v-avatar tile size="12" v-if="String(link.uri).includes('https://x.com') || String(link.uri).includes('https://twitter.com')">
+                  <v-avatar tile size="12" v-if="link.brand === 'x'">
                     <v-img :src="xLogo" alt="x"></v-img>
                   </v-avatar>
-                  <v-avatar tile size="12" v-else-if="String(link.uri).includes('https://t.me')">
+                  <v-avatar tile size="12" v-else-if="link.brand === 'telegram'">
                     <v-img :src="telegramLogo" alt="x"></v-img>
                   </v-avatar>
-                  <v-icon x-small v-else>{{ getIconByURI(link.uri) }}</v-icon>
+                  <v-icon x-small v-else>{{ link.icon }}</v-icon>
                 </v-btn>
               </template>
             </div>
@@ -236,7 +236,15 @@ import assets from '@/utils/assets';
 import TransactionAuthSection from '@/shared/components/TransactionAuthSection.vue';
 import { walletStore } from '@/stores/walletStore';
 import { buildCip149AuxiliaryData } from '@/shared/utils/builder';
+import { toSafeLinks } from '@/shared/utils/externalLink';
+import type { PendingDRep } from '@/shared/utils/pendingDelegation';
 import governanceStoreActions from '@/stores/governanceStore';
+
+/** DRep row as this dialog renders it: the governance API shape plus its metadata links. */
+interface DelegateDialogDRep extends PendingDRep {
+  /** Raw metadata anchor links — author-controlled, normalized by `toSafeLinks` before render. */
+  links?: unknown;
+}
 
 const props = defineProps({
   isOpen: {
@@ -244,7 +252,7 @@ const props = defineProps({
     default: false,
   },
   drep: {
-    type: Object as () => any,
+    type: Object as () => DelegateDialogDRep,
     default: () => {},
   },
   tx: {
@@ -353,7 +361,7 @@ const depositFee = computed(() => {
 
   // Check for vote registration certificate with deposit
   const registrationCert: Cardano.Certificate = props.tx.body.certificates?.find(
-    (cert: any) =>
+    (cert: Cardano.Certificate) =>
       cert.__typename === Cardano.CertificateType.StakeVoteRegistrationDelegation ||
       cert.__typename === Cardano.CertificateType.VoteRegistrationDelegation ||
       cert.__typename === Cardano.CertificateType.VoteDelegation
@@ -365,7 +373,10 @@ const depositFee = computed(() => {
   }
 
   // Also check for governance deposit in certificates
-  const drepRegistration = props.tx.body.certificates?.find((cert: any) => cert.deposit && (cert.dRep || cert.anchor));
+  const drepRegistration = props.tx.body.certificates?.find(
+    (cert: Cardano.Certificate) =>
+      'deposit' in cert && cert.deposit && ('dRep' in cert || 'anchor' in cert)
+  );
 
   if (drepRegistration && 'deposit' in drepRegistration && drepRegistration.deposit) {
     return Number(drepRegistration.deposit);
@@ -381,21 +392,6 @@ const cols = computed(() => {
   return Math.floor(12 / sections);
 });
 
-const getIconByURI = (uri: string) => {
-  if (String(uri).includes('https://github.com')) {
-    return 'mdi-github';
-  } else if (String(uri).includes('youtube.com') || String(uri).includes('youtu.be')) {
-    return 'mdi-youtube';
-  } else if (String(uri).includes('linkedin.com')) {
-    return 'mdi-linkedin';
-  } else if (String(uri).includes('instagram.com')) {
-    return 'mdi-instagram';
-  } else if (String(uri).includes('discord.com')) {
-    return 'mdi-discord';
-  }
-  return 'mdi-link';
-};
-
 // Use composable's passkey handlers
 const handlePassKeySuccess = () => {
   composableHandlePassKeySuccess();
@@ -410,8 +406,8 @@ const signAndSubmitDelegationTx = async () => {
   await handleSign(form.value || undefined);
 };
 
-const fallbackImage = (e: any) => {
-  e.target.src = assets.errorImage;
+const fallbackImage = (e: Event) => {
+  (e.target as HTMLImageElement).src = assets.errorImage;
 };
 
 watch(

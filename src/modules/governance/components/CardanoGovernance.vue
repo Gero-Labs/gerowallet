@@ -261,31 +261,24 @@
                                 </template>
                                 <span>{{ $t('governance.youAreSupportingThisDrep', { percent: compensationPercentDisplay }) }}</span>
                               </v-tooltip>
-                              <template v-for="(link, index) in item.links">
+                              <template v-for="(link, index) in toSafeLinks(item.links)">
                                 <v-btn
                                   icon
                                   x-small
                                   :key="index"
-                                  :href="link.uri"
+                                  :href="link.href"
                                   target="_blank"
-                                  v-if="link.uri && typeof link.uri === 'string'"
+                                  rel="noopener noreferrer"
                                   :class="index == 0 ? 'ml-2' : ''"
                                 >
-                                  <v-avatar
-                                    tile
-                                    size="14"
-                                    v-if="
-                                      String(link.uri).includes('https://x.com') ||
-                                      String(link.uri).includes('https://twitter.com')
-                                    "
-                                  >
+                                  <v-avatar tile size="14" v-if="link.brand === 'x'">
                                     <v-img :src="xLogo" alt="x"></v-img>
                                   </v-avatar>
-                                  <v-avatar tile size="14" v-else-if="String(link.uri).includes('https://t.me')">
+                                  <v-avatar tile size="14" v-else-if="link.brand === 'telegram'">
                                     <v-img :src="telegramLogo" alt="x"></v-img>
                                   </v-avatar>
                                   <v-icon v-else>
-                                    {{ getIconByURI(link.uri) }}
+                                    {{ link.icon }}
                                   </v-icon>
                                 </v-btn>
                               </template>
@@ -343,6 +336,7 @@ import { buildCardanoTransaction, extractCip149Compensation } from '@/shared/uti
 import { nexusTxApi, walletUtxosToNexusInputs } from '@/api/nexus-tx-api';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { isStakeKeyRegistered } from '@/shared/utils/stakeRegistration';
+import { toSafeLinks } from '@/shared/utils/externalLink';
 import { isCardanoTx } from '@/models/transaction.types';
 import { WalletType } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
@@ -527,21 +521,6 @@ const drepsList = computed(() => {
 });
 
 // Methods
-const getIconByURI = (uri: string) => {
-  if (String(uri).includes('https://github.com')) {
-    return 'mdi-github';
-  } else if (String(uri).includes('youtube.com') || String(uri).includes('youtu.be')) {
-    return 'mdi-youtube';
-  } else if (String(uri).includes('linkedin.com')) {
-    return 'mdi-linkedin';
-  } else if (String(uri).includes('instagram.com')) {
-    return 'mdi-instagram';
-  } else if (String(uri).includes('discord.com')) {
-    return 'mdi-discord';
-  }
-  return 'mdi-link';
-};
-
 const delegate = async () => {
   delegateLoading.value = true;
 

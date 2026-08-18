@@ -97,11 +97,15 @@ const mapDerivationType = (derivationType: number): number => {
 /**
  * Transform transport errors to proper error types
  */
-const transportTypedError = (error: any): Error => {
+const transportTypedError = (error: unknown): Error => {
   if (error instanceof Error) {
     return error;
   }
-  return new Error(error?.message || 'Unknown transport error');
+  const message =
+    typeof error === 'object' && error !== null && 'message' in error
+      ? String((error as { message?: unknown }).message ?? '')
+      : '';
+  return new Error(message || 'Unknown transport error');
 };
 
 /**
@@ -231,6 +235,17 @@ const getInlineDatum = (datum: Cardano.PlutusData): string => {
 };
 
 /**
+ * `Trezor.CardanoOutput` is a union: an output carries EITHER a plain `address`
+ * string OR `addressParameters`, never both. The builder below fills the shared
+ * fields first and picks the branch afterwards, so it needs a shape where both
+ * are optional; the return re-asserts the union once exactly one is set.
+ */
+type MutableCardanoOutput = Omit<Trezor.CardanoOutput, 'address' | 'addressParameters'> & {
+  address?: string;
+  addressParameters?: Trezor.CardanoAddressParameters;
+};
+
+/**
  * Convert TxOut to Trezor format with Babbage-era support
  * Includes inline datum and reference script handling
  */
@@ -239,7 +254,7 @@ const toTxOut = (output: { index: number; txOut: Cardano.TxOut; isCollateral?: b
   const { knownAddresses, outputsFormat, collateralReturnFormat } = context;
 
   // Find if this is one of our addresses
-  const knownAddress = knownAddresses.find((addr: any) => addr.address === txOut.address);
+  const knownAddress = knownAddresses.find((addr: GroupedAddress) => addr.address === txOut.address);
 
   const format = output.isCollateral ? collateralReturnFormat : outputsFormat?.[output.index];
   const isBabbage = format === Trezor.PROTO.CardanoTxOutputSerializationFormat.MAP_BABBAGE;
@@ -248,7 +263,7 @@ const toTxOut = (output: { index: number; txOut: Cardano.TxOut; isCollateral?: b
   const serializedOutput = Serialization.TransactionOutput.fromCore(txOut);
   const scriptHex = getScriptHex(serializedOutput);
 
-  const baseOutput: any = {
+  const baseOutput: MutableCardanoOutput = {
     amount: txOut.value.coins.toString(),
     tokenBundle: mapTokenMap(txOut.value.assets),
     format,
@@ -291,7 +306,7 @@ const toTxOut = (output: { index: number; txOut: Cardano.TxOut; isCollateral?: b
     baseOutput.address = txOut.address;
   }
 
-  return baseOutput;
+  return baseOutput as Trezor.CardanoOutput;
 };
 
 const mapTxOuts = (outputs: Cardano.TxOut[], context: TrezorTxTransformerContext): Trezor.CardanoOutput[] =>
@@ -749,7 +764,7 @@ export default {
     try {
       // Extract account index from path (e.g., "m/1852'/1815'/0'" -> 0)
       const pathParts = path.split('/');
-      const accountIndex = parseInt(pathParts[3].replace("'", ""));
+      const accountIndex = parseInt(pathParts[3].replace(/'/g, ""));
 
       // Get device name
       const features: Trezor.Features = await this.getDeviceInfo();
@@ -784,7 +799,7 @@ export default {
           publicKey,
         }]
       };
-    } catch (error: any) {
+    } catch (error) {
       console.error('[TREZOR] Failed to get public key:', error);
       throw error;
     }
@@ -946,8 +961,9 @@ export default {
       }
 
       return signatures;
-    } catch (error: any) {
-      if (error.innerError?.code === 'Failure_ActionCancelled') {
+    } catch (error) {
+      const innerCode = (error as { innerError?: { code?: string } } | null)?.innerError?.code;
+      if (innerCode === 'Failure_ActionCancelled') {
         throw new errors.AuthenticationError('Transaction signing aborted', error);
       }
       throw transportTypedError(error);
@@ -1049,7 +1065,7 @@ export default {
         addressFieldHex: address,  // Address is already in hex format
       };
 
-    } catch (error: any) {
+    } catch (error) {
       console.error('[TREZOR] Data signing failed:', error);
       throw error;
     }
@@ -1285,7 +1301,7 @@ export default {
 
     // Determine path and script type based on address type
     let path: string;
-    let scriptType: any;
+    let scriptType: 'SPENDADDRESS' | 'SPENDWITNESS' | 'SPENDTAPROOT';
 
     switch (addressType) {
       case 'legacy':

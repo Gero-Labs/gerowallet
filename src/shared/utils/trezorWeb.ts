@@ -779,7 +779,7 @@ export default {
     try {
       // Extract account index from path (e.g., "m/1852'/1815'/0'" -> 0)
       const pathParts = path.split('/');
-      const accountIndex = parseInt(pathParts[3].replace("'", ""));
+      const accountIndex = parseInt(pathParts[3].replace(/'/g, ""));
 
       // Get device name
       const features: Trezor.Features = await this.getFeatures();

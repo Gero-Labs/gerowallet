@@ -2463,8 +2463,8 @@ async function signDataPrf() {
     if (!foundKey?.path) throw new Error('Address not found in wallet keys');
 
     const pathParts = foundKey.path.split('/');
-    const role = parseInt(pathParts[4].replace("'", ""), 10);
-    const index = parseInt(pathParts[5].replace("'", ""), 10);
+    const role = parseInt(pathParts[4].replace(/'/g, ""), 10);
+    const index = parseInt(pathParts[5].replace(/'/g, ""), 10);
 
     const accountKey = rootKey.derive([2147485500, 2147485463, 2147483648]);
     const signingKey = accountKey.derive([role, index]).toRawKey();

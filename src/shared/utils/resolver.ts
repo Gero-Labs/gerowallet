@@ -856,7 +856,7 @@ export function parseDerivationPath(pathString: string): number[] {
     .replace('m/', '')
     .split('/')
     .map(segment => {
-      const num = parseInt(segment.replace("'", ""));
+      const num = parseInt(segment.replace(/'/g, ""));
       return segment.includes("'") ? num + HARDENED : num;
     })
     .slice(3); // Remove the first 3 elements (purpose, coin_type, account) as they're handled at account level
