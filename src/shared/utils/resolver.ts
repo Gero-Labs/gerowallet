@@ -177,15 +177,16 @@ const tryConvertPlutusDataToUtf8String = (data: Cardano.PlutusData): Cardano.Plu
 
 const tryConvertPlutusDataToUtf8List = (data: Cardano.PlutusData): Cardano.PlutusData | string => {
   if (!Cardano.util.isPlutusList(data)) return data;
+  // A chunked string is only valid when EVERY item decodes as UTF-8 bounded bytes.
+  // String-coercing a stray int/map into the concatenation would fabricate a garbage
+  // value that then passes downstream `typeof x === 'string'` checks unwarned.
   let list: string = "";
-  try {
-    data.items.forEach(item => {
-      list += tryConvertPlutusDataToUtf8String(item);
-    })
-    return list;
-  } catch {
-    return data;
+  for (const item of data.items) {
+    const chunk = tryConvertPlutusDataToUtf8String(item);
+    if (typeof chunk !== 'string') return data;
+    list += chunk;
   }
+  return list;
 }
 
 const tryConvertPlutusMapToUtf8Record = (map: Cardano.PlutusMap): Partial<Record<string, string | Cardano.PlutusData>> => {

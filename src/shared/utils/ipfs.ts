@@ -15,31 +15,28 @@ export function detectCIDVersion(cidStr: string): number | null {
 }
 
 /**
- * Builds the backend IPFS proxy URL for an already-normalized `<cid>[/sub/path]`.
+ * Builds the backend IPFS proxy URL for a `<cid>[/sub/path]` whose sub-path segments
+ * are still in their original (possibly percent-encoded) URL form.
  *
- * The sub-path is percent-encoded into the single `path` param on purpose: the
- * proxies reject a raw `//` and any `http://` substring as path traversal /
- * protocol injection (nexus `IpfsPathValidator`), and gero-backend explicitly
- * decodes `%2F` back to `/` before hitting the gateway.
+ * Each raw segment is percent-encoded once more into the single `path` param — so a
+ * literal `%` becomes `%25` — and segments are joined with `%2F`. The backend decodes
+ * the query param exactly once, which restores the raw segments byte-identical, and
+ * the gateway then performs the final URL decode. Never decode here: a segment whose
+ * literal name contains an encoded slash (`a%2Fb.png`) must not collapse into two
+ * path segments, and only double-encoding survives the backend's single decode.
+ * The `%2F` join (rather than a raw `/`) is deliberate: nexus's `IpfsPathValidator`
+ * rejects a raw `//` and any `http://` substring as path traversal / protocol
+ * injection.
  */
 export function ipfsProxyUrl(path: string): string {
-  return `${baseUrl}/api/ipfs?path=${encodeURIComponent(path)}`;
-}
-
-/** Joins a CID with an optional gateway sub-path, decoded so callers can re-encode once. */
-function joinCidPath(cid: string, subPath: string): string {
-  const rest = subPath.replace(/^\/+/, '').replace(/\/+$/, '');
-  if (!rest) return cid;
-  try {
-    return `${cid}/${decodeURIComponent(rest)}`;
-  } catch {
-    return `${cid}/${rest}`;
-  }
+  const encoded = path.split('/').filter(Boolean).map(encodeURIComponent).join('%2F');
+  return `${baseUrl}/api/ipfs?path=${encoded}`;
 }
 
 /**
  * Extracts `<cid>[/sub/path]` from a public IPFS gateway URL, or returns null when
- * the URL isn't one.
+ * the URL isn't one. The sub-path keeps its original percent-encoding — see
+ * {@link ipfsProxyUrl} for why it must not be decoded here.
  *
  * Token metadata frequently hardcodes a gateway (`https://ipfs.io/ipfs/<cid>`,
  * `https://<cid>.ipfs.dweb.link`, Pinata, Cloudflare, …) instead of the `ipfs://`
@@ -49,10 +46,20 @@ function joinCidPath(cid: string, subPath: string): string {
  * is content-addressed, re-pointing the same CID at our own proxy returns identical
  * bytes from an origin we control.
  *
- * The leading path segment must parse as a real CID, so URLs that merely happen to
- * contain an `/ipfs/` segment are left alone.
+ * Deliberately left alone:
+ * - URLs whose leading path segment doesn't parse as a real CID (they merely happen
+ *   to contain an `/ipfs/` segment);
+ * - URLs carrying a query string other than the cosmetic `?filename=` — e.g. a
+ *   `?pinataGatewayToken=` on a dedicated gateway is an access credential for
+ *   privately-pinned content, which our proxy cannot resolve.
  */
 export function ipfsPathFromGatewayUrl(value: string): string | null {
+  // Cheap pre-filters: resolveIcon calls this for EVERY icon string on every
+  // render, including multi-KB base64 data: URIs — don't pay a URL parse for
+  // strings that cannot be gateway URLs.
+  if (!value.startsWith('http')) return null;
+  if (!value.includes('/ipfs/') && !value.includes('.ipfs.')) return null;
+
   let url: URL;
   try {
     url = new URL(value);
@@ -60,6 +67,9 @@ export function ipfsPathFromGatewayUrl(value: string): string | null {
     return null;
   }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+  for (const key of url.searchParams.keys()) {
+    if (key !== 'filename') return null;
+  }
 
   // Subdomain gateways: https://<cid>.ipfs.<host>/<sub/path>
   const subdomainCid = url.hostname.match(/^([^.]+)\.ipfs\..+$/)?.[1];
@@ -74,4 +84,10 @@ export function ipfsPathFromGatewayUrl(value: string): string | null {
   }
 
   return null;
+}
+
+/** Joins a CID with an optional gateway sub-path, keeping the raw segment encoding. */
+function joinCidPath(cid: string, subPath: string): string {
+  const segments = subPath.split('/').filter(Boolean);
+  return segments.length ? `${cid}/${segments.join('/')}` : cid;
 }

@@ -59,15 +59,42 @@ describe('isClickInsidePanel', () => {
     expect(isClickInsidePanel(evt($('#menu-item')), PANEL)).toBe(true);
   });
 
+  // A global toast is unrelated chrome — clicking it must still close the panel.
+  it('treats a click in a snackbar as outside', () => {
+    document.body.insertAdjacentHTML(
+      'beforeend',
+      '<div class="v-snack"><button id="snack-action">Undo</button></div>',
+    );
+    expect(isClickInsidePanel(evt($('#snack-action')), PANEL)).toBe(false);
+  });
+
   // The widget re-renders the clicked node in its own handler, so by the time the event
   // reaches the document listener the target is detached and contains() says "outside".
-  it('treats a detached target as inside', () => {
+  it('treats a detached target as inside when nothing better is known', () => {
     const gone = document.createElement('button');
     expect(isClickInsidePanel(evt(gone), PANEL)).toBe(true);
   });
 
   it('treats a null target as inside', () => {
     expect(isClickInsidePanel({ target: null, composedPath: () => [] }, PANEL)).toBe(true);
+  });
+
+  // The pointerdown-captured node is attached before any click handler re-renders,
+  // so it can arbitrate detached click targets in both directions.
+  it('closes on a detached target when the pressed node was attached outside', () => {
+    const gone = document.createElement('button');
+    expect(isClickInsidePanel(evt(gone), PANEL, document, $('#elsewhere'))).toBe(false);
+  });
+
+  it('stays open on a detached target when the pressed node was inside the panel', () => {
+    const gone = document.createElement('button');
+    expect(isClickInsidePanel(evt(gone), PANEL, document, $('#swap-btn'))).toBe(true);
+  });
+
+  it('stays open when both the target and the pressed node are detached', () => {
+    const gone = document.createElement('button');
+    const alsoGone = document.createElement('button');
+    expect(isClickInsidePanel(evt(gone), PANEL, document, alsoGone)).toBe(true);
   });
 
   it('falls back to target when composedPath is unavailable', () => {

@@ -79,6 +79,37 @@ describe('resolveIcon — IPFS gateway URLs', () => {
     expect(resolved).toContain(`/api/ipfs?path=${CID_V1}%2Flogo.png`);
   });
 
+  // The proxy decodes the `path` param exactly once, and the gateway performs the
+  // final URL decode — so the client must double-encode, never decode. A segment
+  // whose literal name contains an encoded slash must not collapse into two segments.
+  it('preserves percent-encoding in sub-path segments (double-encodes for the proxy)', () => {
+    expect(resolveIcon(`https://ipfs.io/ipfs/${CID_V1}/a%2Fb.png`)).toContain(
+      `/api/ipfs?path=${CID_V1}%2Fa%252Fb.png`,
+    );
+    expect(resolveIcon(`https://ipfs.io/ipfs/${CID_V1}/logo%20v2.png`)).toContain(
+      `/api/ipfs?path=${CID_V1}%2Flogo%2520v2.png`,
+    );
+  });
+
+  it('encodes ipfs:// sub-paths identically to gateway URLs for the same resource', () => {
+    expect(resolveIcon(`ipfs://${CID_V1}/logo%20v2.png`)).toContain(
+      `/api/ipfs?path=${CID_V1}%2Flogo%2520v2.png`,
+    );
+  });
+
+  it('leaves authenticated dedicated-gateway URLs untouched', () => {
+    // A gateway token is an access credential for privately-pinned content the
+    // backend proxy cannot resolve — rewriting would strip it.
+    const url = `https://brand.mypinata.cloud/ipfs/${CID_V1}?pinataGatewayToken=tok123`;
+    expect(resolveIcon(url)).toBe(url);
+  });
+
+  it('still rewrites gateway URLs carrying only a cosmetic filename param', () => {
+    expect(resolveIcon(`https://ipfs.io/ipfs/${CID_V1}?filename=logo.png`)).toContain(
+      `/api/ipfs?path=${CID_V1}`,
+    );
+  });
+
   it('leaves ordinary https image URLs untouched', () => {
     const url = 'https://tokens.gerowallet.io/logo.png';
     expect(resolveIcon(url)).toBe(url);
@@ -127,6 +158,22 @@ describe('fromPlutusData — CIP-68 fungible tokens (label 333)', () => {
     );
 
     expect(result).not.toBeNull();
+    expect(result?.image).toBeUndefined();
+    expect(debugLog).toHaveBeenCalledWith(expect.stringContaining('"image"'));
+  });
+
+  it('warns and drops a chunked image containing a non-bytes item instead of coercing garbage', () => {
+    const result = fromPlutusData(
+      cip68Datum(
+        plutusMap({
+          name: bytes('Mangled') as Cardano.PlutusData,
+          // A chunk that is an int, not bounded bytes: naive string-coercion would
+          // fabricate "ipfs://…42", which passes the typeof-string check unwarned.
+          image: { items: [bytes(`ipfs://${CID_V1}`), 42n] } as Cardano.PlutusData,
+        }),
+      ),
+    );
+
     expect(result?.image).toBeUndefined();
     expect(debugLog).toHaveBeenCalledWith(expect.stringContaining('"image"'));
   });
