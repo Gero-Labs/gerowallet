@@ -5,7 +5,7 @@ import { isNotNil } from '@cardano-sdk/util';
 import { Hash28ByteBase16, Bip32PrivateKey } from '@cardano-sdk/crypto';
 import TokenMetadataStore from '@/stores/tokenMetadataStore';
 import NetworkStore from '@/stores/networkStore';
-import { detectCIDVersion, ipfsPathFromGatewayUrl, ipfsProxyUrl } from '@/shared/utils/ipfs';
+import { resolveIconUrl, type IconPlaceholders } from '@/shared/utils/iconResolver';
 import * as bip39 from 'bip39';
 import { Buffer } from 'buffer';
 import { HARDENED, ChainDerivations, Keys } from '@/models/types';
@@ -14,84 +14,22 @@ import assetsModule from '@/utils/assets';
 
 // Service worker compatible icon resolution
 const isServiceWorker = typeof document === 'undefined';
-const baseUrl = import.meta.env['VITE_BACKEND_URL'];
 
 // Import assets from a centralized location (static import)
 // In service worker context, these will be empty strings and the bundler will tree-shake the unused module
-const greenSvg = isServiceWorker ? '' : assetsModule.greenSvg;
-const purpleSvg = isServiceWorker ? '' : assetsModule.purpleSvg;
-const pinkSvg = isServiceWorker ? '' : assetsModule.pinkSvg;
-const orangeSvg = isServiceWorker ? '' : assetsModule.orangeSvg;
-const yellowSvg = isServiceWorker ? '' : assetsModule.yellowSvg;
-const blueSvg = isServiceWorker ? '' : assetsModule.blueSvg;
-const greySvg = isServiceWorker ? '' : assetsModule.greySvg;
-const errorImage = isServiceWorker ? '' : assetsModule.errorImage;
+const placeholders: IconPlaceholders = {
+  greenSvg: isServiceWorker ? '' : assetsModule.greenSvg,
+  purpleSvg: isServiceWorker ? '' : assetsModule.purpleSvg,
+  pinkSvg: isServiceWorker ? '' : assetsModule.pinkSvg,
+  orangeSvg: isServiceWorker ? '' : assetsModule.orangeSvg,
+  yellowSvg: isServiceWorker ? '' : assetsModule.yellowSvg,
+  blueSvg: isServiceWorker ? '' : assetsModule.blueSvg,
+  greySvg: isServiceWorker ? '' : assetsModule.greySvg,
+  errorImage: isServiceWorker ? '' : assetsModule.errorImage,
+};
 
 export function resolveIcon(icon: string): string {
-  if (!icon) {
-    return errorImage;
-  }
-
-  // Metadata that hardcodes a public gateway (https://ipfs.io/ipfs/<cid>, dweb.link,
-  // Pinata, …) has to be re-pointed at our proxy before the generic http passthrough
-  // below: those hosts block cross-origin extension requests, so the image 403s.
-  const gatewayPath = ipfsPathFromGatewayUrl(icon);
-  if (gatewayPath) {
-    return ipfsProxyUrl(gatewayPath);
-  }
-
-  if (icon.startsWith('http') || icon.startsWith('data:')) {
-    return icon;
-  } else if (icon.startsWith('ar://') || icon.startsWith('ar/')) {
-    return `${baseUrl}/api/ar/${icon.replace('ar://', '').replace('ar/', '')}`
-  } else if (icon.startsWith('ipfs://') || icon.startsWith('ipfs/')) {
-    return ipfsProxyUrl(icon.replace('ipfs://', '').replace('ipfs/', ''));
-  } else if (detectCIDVersion(icon) != null) {
-    return ipfsProxyUrl(icon);
-  }
-
-  switch (icon) {
-    case 'green':
-    case 'teal':
-      return greenSvg;
-    case 'yellow':
-      return yellowSvg;
-    case 'purple':
-    case 'deep-purple':
-      return purpleSvg;
-    case 'pink':
-      return pinkSvg;
-    case 'orange':
-    case 'chocolate':
-      return orangeSvg;
-    case 'blue':
-    case 'cyan':
-      return blueSvg;
-    case 'grey':
-      return greySvg;
-  }
-
-  const firstChar = icon.charAt(0);
-  let mimeType: string | null = null;
-
-  switch (firstChar) {
-    case '/':
-      mimeType = 'image/jpeg';
-      break;
-    case 'i':
-      mimeType = 'image/png';
-      break;
-    case 'R':
-      mimeType = 'image/gif';
-      break;
-    case 'U':
-      mimeType = 'image/webp';
-      break;
-    default:
-      return errorImage;
-  }
-
-  return `data:${mimeType};base64,${icon}`;
+  return resolveIconUrl(icon, placeholders);
 }
 
 function cip68Label(asset_name: string | null | undefined): number | null {

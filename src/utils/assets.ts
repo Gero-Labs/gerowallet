@@ -1,4 +1,4 @@
-import { detectCIDVersion, ipfsPathFromGatewayUrl, ipfsProxyUrl } from '@/shared/utils/ipfs'
+import { resolveIconUrl } from '@/shared/utils/iconResolver'
 import apexBg from '@/assets/apexBg.png'
 import apexPrimeBg from '@/assets/apexPrimeBg.png'
 import apexVectorBg from '@/assets/apexVectorBg.png'
@@ -149,8 +149,6 @@ import babylonStakingIcon from '@/assets/svg/babylon-staking.svg';
 import mempoolSvg from '@/assets/svg/mempool.svg';
 import miniModeSvg from '@/assets/svg/mini-mode.svg'
 
-const baseUrl = import.meta.env['VITE_BACKEND_URL'];
-
 export default {
   apexBg,
   apexPrimeBg,
@@ -247,9 +245,6 @@ export default {
   bringWhite,
   passKeySvg,
   autoTriggerSvg,
-  detectCIDVersion(cidStr: string) {
-    return detectCIDVersion(cidStr);
-  },
   // Gero brand logo tinted per chain (Apex Prime teal / Vector orange) —
   // the single source for QR-center and similar per-chain logo picks.
   resolveChainLogo(chain?: string): string {
@@ -263,70 +258,16 @@ export default {
     }
   },
   resolveIcon(icon: string): string {
-    if (!icon) {
-      return errorImage;
-    }
-
-    // Public-gateway URLs must be re-pointed at our proxy before the generic http
-    // passthrough below — see ipfsPathFromGatewayUrl's note on the 403 / CORP block.
-    const gatewayPath = ipfsPathFromGatewayUrl(icon);
-    if (gatewayPath) {
-      return ipfsProxyUrl(gatewayPath);
-    }
-
-    if (icon.startsWith('http') || icon.startsWith('data:')) {
-      return icon;
-    } else if (icon.startsWith('ar://') || icon.startsWith('ar/')) {
-      return `${baseUrl}/api/ar/${icon.replace('ar://', '').replace('ar/', '')}`
-    } else if (icon.startsWith('ipfs://') || icon.startsWith('ipfs/')) {
-      return ipfsProxyUrl(icon.replace('ipfs://', '').replace('ipfs/', ''));
-    } else if (this.detectCIDVersion(icon) != null) {
-      return ipfsProxyUrl(icon);
-    }
-
-    switch (icon) {
-      case 'green':
-      case 'teal':
-        return greenSvg;
-      case 'yellow':
-          return yellowSvg
-      case 'purple':
-      case 'deep-purple':
-        return purpleSvg;
-      case 'pink':
-        return pinkSvg;
-      case 'orange':
-      case 'chocolate':
-        return orangeSvg;
-      case 'blue':
-      case 'cyan':
-        return blueSvg;
-      case 'grey':
-        return greySvg;
-    }
-
-    const firstChar = icon.charAt(0);
-
-    let mimeType: string | null = null;
-
-    switch (firstChar) {
-      case '/':
-        mimeType = 'image/jpeg';
-        break;
-      case 'i':
-        mimeType = 'image/png';
-        break;
-      case 'R':
-        mimeType = 'image/gif';
-        break;
-      case 'U':
-        mimeType = 'image/webp';
-        break;
-      default:
-        return errorImage;
-    }
-
-    return `data:${mimeType};base64,${icon}`;
+    return resolveIconUrl(icon, {
+      greenSvg,
+      yellowSvg,
+      purpleSvg,
+      pinkSvg,
+      orangeSvg,
+      blueSvg,
+      greySvg,
+      errorImage,
+    });
   },
   fallbackImage(e) {
     if (e && e.target) {
