@@ -11,7 +11,8 @@ export const CHROME_WEB_STORE_EXTENSION_ID = 'bgpipimickeadkjlklgciifhnalhdjhe';
 /** Bare listing URL — what we advertise to external consumers (dApps). */
 export const CHROME_WEB_STORE_URL = `https://chromewebstore.google.com/detail/gero-dashboard/${CHROME_WEB_STORE_EXTENSION_ID}`;
 
-/** Listing URL with attribution params, for links surfaced inside the extension. */
-export function chromeWebStoreUrlWithSource(utmSource: string): string {
-  return `${CHROME_WEB_STORE_URL}?hl=en-US&utm_source=${encodeURIComponent(utmSource)}`;
-}
+/**
+ * Listing URL with attribution, for the link surfaced in the extension's beta
+ * banner. No `hl` param: the store localizes from the browser locale.
+ */
+export const CHROME_WEB_STORE_URL_SIDEBAR = `${CHROME_WEB_STORE_URL}?utm_source=ext_sidebar`;

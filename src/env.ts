@@ -5,6 +5,7 @@ const forbiddenProtocols = [
   'devtools://',
   'edge://',
   'https://chrome.google.com/webstore',
+  'https://chromewebstore.google.com',
 ]
 
 export function isForbiddenUrl(url: string): boolean {
