@@ -5,7 +5,7 @@ import { isNotNil } from '@cardano-sdk/util';
 import { Hash28ByteBase16, Bip32PrivateKey } from '@cardano-sdk/crypto';
 import TokenMetadataStore from '@/stores/tokenMetadataStore';
 import NetworkStore from '@/stores/networkStore';
-import { CID } from 'multiformats/cid';
+import { detectCIDVersion, ipfsPathFromGatewayUrl, ipfsProxyUrl } from '@/shared/utils/ipfs';
 import * as bip39 from 'bip39';
 import { Buffer } from 'buffer';
 import { HARDENED, ChainDerivations, Keys } from '@/models/types';
@@ -27,18 +27,17 @@ const blueSvg = isServiceWorker ? '' : assetsModule.blueSvg;
 const greySvg = isServiceWorker ? '' : assetsModule.greySvg;
 const errorImage = isServiceWorker ? '' : assetsModule.errorImage;
 
-function detectCIDVersion(cidStr: string) {
-  try {
-    const cid = CID.parse(cidStr);
-    return cid.version; // 0, 1, or 2
-  } catch (e) {
-    return null; // Not a valid CID
-  }
-}
-
 export function resolveIcon(icon: string): string {
   if (!icon) {
     return errorImage;
+  }
+
+  // Metadata that hardcodes a public gateway (https://ipfs.io/ipfs/<cid>, dweb.link,
+  // Pinata, …) has to be re-pointed at our proxy before the generic http passthrough
+  // below: those hosts block cross-origin extension requests, so the image 403s.
+  const gatewayPath = ipfsPathFromGatewayUrl(icon);
+  if (gatewayPath) {
+    return ipfsProxyUrl(gatewayPath);
   }
 
   if (icon.startsWith('http') || icon.startsWith('data:')) {
@@ -46,9 +45,9 @@ export function resolveIcon(icon: string): string {
   } else if (icon.startsWith('ar://') || icon.startsWith('ar/')) {
     return `${baseUrl}/api/ar/${icon.replace('ar://', '').replace('ar/', '')}`
   } else if (icon.startsWith('ipfs://') || icon.startsWith('ipfs/')) {
-    return `${baseUrl}/api/ipfs?path=${icon.replace('ipfs://', '').replace('ipfs/', '')}`
+    return ipfsProxyUrl(icon.replace('ipfs://', '').replace('ipfs/', ''));
   } else if (detectCIDVersion(icon) != null) {
-    return `${baseUrl}/api/ipfs?path=${icon}`
+    return ipfsProxyUrl(icon);
   }
 
   switch (icon) {
@@ -313,11 +312,14 @@ export const fromPlutusData = (
     return null;
   }
 
+  // `image` is the CIP-68 *NFT* (222) field; fungible tokens (333) carry `logo`
+  // instead and legitimately have no `image` at all. Only an image that is present
+  // but undecodable is a real defect — warning on every absent one buried the log.
   let imageAsUri: Asset.Uri = undefined
-  if (typeof image !== 'string') {
-    debugLog('Invalid PlutusData: "image" must be UTF-8 bounded bytes');
-  } else {
+  if (typeof image === 'string') {
     imageAsUri = tryCoerce(image, Asset.Uri);
+  } else if (typeof image !== 'undefined') {
+    debugLog('Invalid PlutusData: "image" must be UTF-8 bounded bytes');
   }
 
   // Extract decimals from PlutusData - it's stored as a map with "int" key

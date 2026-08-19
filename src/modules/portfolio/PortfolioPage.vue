@@ -396,6 +396,7 @@ import { usePortfolioData } from '@/shared/composables/usePortfolioData';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import { useHoldingsValuation } from '@/shared/composables/useHoldingsValuation';
 import { walletStore } from '@/stores/walletStore';
+import { isClickInsidePanel } from '@/shared/utils/outsideClick';
 import { Blockchain, Network } from '@/models/types';
 import { isNewUser as checkNewUser } from '@/modules/dashboard/utils/emptyStateConfigs';
 
@@ -848,8 +849,11 @@ function handleOutsideClick(e: MouseEvent) {
     skipNextOutsideClose = false;
     return;
   }
-  const panel = document.querySelector('.token-detail-panel');
-  if (panel && panel.contains(e.target as HTMLElement)) return;
+  // Not a plain `panel.contains(e.target)`: confirming a swap detaches the clicked
+  // control before the click reaches this listener, and the embed's password/PassKey
+  // prompts render outside the panel's subtree. Both read as "outside" and tore the
+  // panel down mid-swap — see isClickInsidePanel.
+  if (isClickInsidePanel(e, '.token-detail-panel')) return;
   panelOpen.value = false;
 }
 

@@ -1,4 +1,4 @@
-import { CID } from 'multiformats/cid'
+import { detectCIDVersion, ipfsPathFromGatewayUrl, ipfsProxyUrl } from '@/shared/utils/ipfs'
 import apexBg from '@/assets/apexBg.png'
 import apexPrimeBg from '@/assets/apexPrimeBg.png'
 import apexVectorBg from '@/assets/apexVectorBg.png'
@@ -248,12 +248,7 @@ export default {
   passKeySvg,
   autoTriggerSvg,
   detectCIDVersion(cidStr: string) {
-    try {
-      const cid = CID.parse(cidStr);
-      return cid.version; // 0, 1, or 2
-    } catch (e) {
-      return null; // Not a valid CID
-    }
+    return detectCIDVersion(cidStr);
   },
   // Gero brand logo tinted per chain (Apex Prime teal / Vector orange) —
   // the single source for QR-center and similar per-chain logo picks.
@@ -272,14 +267,21 @@ export default {
       return errorImage;
     }
 
+    // Public-gateway URLs must be re-pointed at our proxy before the generic http
+    // passthrough below — see ipfsPathFromGatewayUrl's note on the 403 / CORP block.
+    const gatewayPath = ipfsPathFromGatewayUrl(icon);
+    if (gatewayPath) {
+      return ipfsProxyUrl(gatewayPath);
+    }
+
     if (icon.startsWith('http') || icon.startsWith('data:')) {
       return icon;
     } else if (icon.startsWith('ar://') || icon.startsWith('ar/')) {
       return `${baseUrl}/api/ar/${icon.replace('ar://', '').replace('ar/', '')}`
     } else if (icon.startsWith('ipfs://') || icon.startsWith('ipfs/')) {
-      return `${baseUrl}/api/ipfs?path=${icon.replace('ipfs://', '').replace('ipfs/', '')}`
+      return ipfsProxyUrl(icon.replace('ipfs://', '').replace('ipfs/', ''));
     } else if (this.detectCIDVersion(icon) != null) {
-      return `${baseUrl}/api/ipfs?path=${icon}`
+      return ipfsProxyUrl(icon);
     }
 
     switch (icon) {
