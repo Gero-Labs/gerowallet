@@ -33,6 +33,7 @@ import {
 import { Cardano, CollateralParams, Extensions, Paginate } from '@/models/types';
 import { Cardano as CardanoCore } from '@cardano-sdk/core';
 import { GERO_CARDANO_ICON } from './injectIcon';
+import { CHROME_WEB_STORE_URL } from '@/config/storeLinks';
 // Installs window.midnight[uuid] as a side effect of import (see file).
 import './injectMidnight';
 
@@ -349,7 +350,7 @@ if (BITCOIN_DAPP_ENABLED) (function _registerBtcProvider() {
     name: 'Gero Wallet',
     icon: _geroWalletStandard.icon,
     webUrl: 'https://gerowallet.io',
-    chromeWebStoreUrl: 'https://chromewebstore.google.com/detail/gero-dashboard/iifeegfcfhlhhnilnggaopkpegobafdn',
+    chromeWebStoreUrl: CHROME_WEB_STORE_URL,
     mozillaAddOnsUrl: null,
   };
   if (!Array.isArray((window as any).btc_providers)) {
