@@ -30,6 +30,12 @@ import type { UnifiedTransaction } from '@/chains/bitcoin/bitcoinTransactionPars
 export class SyncService {
   private walletBg: WalletBg | null = null;
   private api: Api;
+  // CBOR-heal state: tx hashes already retried this service-worker lifetime
+  // (the SW dying and restarting naturally allows an occasional retry), plus
+  // a timestamp throttle so the heal pass doesn't scan the tx table on every
+  // ~20s tip push.
+  private cborHealAttempted = new Set<string>();
+  private lastCborHealAt = 0;
 
   constructor(walletBg: WalletBg) {
     this.walletBg = walletBg;
@@ -356,6 +362,9 @@ export class SyncService {
         await this.reconcileControlledAmountFromUtxos();
       }
       debugLog('setSync', syncObject);
+      // Heal any "thin" tx records (stored without CBOR) in the background —
+      // deliberately not awaited so it never delays tip/sync processing.
+      void this.healMissingTxCbor();
       if (syncObject.block) {
         NetworkStore.setTip({
           blockNo: syncObject.block.height,
@@ -667,6 +676,76 @@ export class SyncService {
       }
     } catch (e) {
       debugLog(e);
+    }
+  }
+
+  /**
+   * Re-fetch CBOR for confirmed transactions that were stored without it.
+   *
+   * A wallet synced seconds after a block (gero-sync tip push) can race the
+   * backend's async transaction_cbor writer, which typically runs 30s-10min
+   * behind the tip: the sync payload then carries `cbor: null` and the record
+   * is stored "thin" - no `body`, so isCardanoTx() is false and tx-type
+   * detection (Internal / DEX venue chips), metadata and the detail view all
+   * degrade. The CBOR is available shortly after, so retry here: newest
+   * records first, one bounded batch per pass, at most once per tx per
+   * service-worker lifetime, throttled between passes. Old pre-backfill txs
+   * whose CBOR the backend never returns are thereby retried at most once
+   * per SW lifetime and don't cause repeated traffic.
+   */
+  async healMissingTxCbor(): Promise<void> {
+    if (this.walletBg?.chain !== Blockchain.CARDANO) return;
+    const now = Date.now();
+    if (now - this.lastCborHealAt < 120_000) return;
+    this.lastCborHealAt = now;
+    try {
+      const db = await this.walletBg.getDb();
+      const txsTable = db.table('transactions');
+      if (!txsTable) return;
+      const thin = await txsTable
+        .filter((tx) => !tx.cbor && !tx.pending && !!(tx.tx_hash || tx.id))
+        .toArray();
+      const candidates = thin
+        .filter((tx) => !this.cborHealAttempted.has(tx.tx_hash || tx.id))
+        .sort((a, b) => (b.block_height || 0) - (a.block_height || 0))
+        .slice(0, 40);
+      if (candidates.length === 0) return;
+      const hashes: string[] = candidates.map((tx) => tx.tx_hash || tx.id);
+      hashes.forEach((hash) => this.cborHealAttempted.add(hash));
+      const res = await this.api.getTransactionsCbor(hashes);
+      if (res.status !== 200 || !Array.isArray(res.data)) return;
+      const healed = res.data
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- raw cbor row from the API, same shape as syncAccountTransactions consumes
+        .filter((row: any) => !!row?.cbor)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- raw cbor row from the API
+        .map((row: any) => {
+          try {
+            const txDeserialized = Serialization.TxCBOR.deserialize(Serialization.TxCBOR(row.cbor));
+            // Same record shape syncAccountTransactions builds
+            return {
+              tx_hash: row.tx_hash,
+              utxo: row.utxo,
+              block_hash: row.block_hash,
+              block_height: row.block_height,
+              epoch_no: row.epoch_no,
+              absolute_slot: row.absolute_slot,
+              tx_timestamp: row.tx_timestamp,
+              tx_size: row.tx_size,
+              cbor: row.cbor,
+              pending: false,
+              ...txDeserialized,
+            };
+          } catch {
+            return null;
+          }
+        })
+        .filter(Boolean);
+      if (healed.length > 0) {
+        debugLog(`🩹 Healed CBOR for ${healed.length}/${hashes.length} thin tx record(s)`);
+        await this.walletBg.setAccountTransactions(healed);
+      }
+    } catch (e) {
+      debugLog('healMissingTxCbor failed:', e);
     }
   }
 

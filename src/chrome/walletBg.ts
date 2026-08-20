@@ -757,6 +757,11 @@ export class WalletBg {
             } else if (existingTx.pending !== newTx.pending || existingTx.tx_timestamp !== newTx.tx_timestamp) {
               // Transaction exists but pending status or timestamp changed - update it
               txsToUpdate.push(newTx);
+            } else if (!existingTx.cbor && newTx.cbor) {
+              // Record was stored "thin" (synced while the backend's async
+              // transaction_cbor writer still lagged the tip, so cbor/body were
+              // missing) - upgrade it in place now that the CBOR is available
+              txsToUpdate.push(newTx);
             }
           });
 
