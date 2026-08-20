@@ -1,12 +1,17 @@
 import { Buffer } from 'buffer';
 import {
-  isPrfSupported,
+  getPrfSupportMode,
   registerWebAuthnCredentialWithPrf,
   evaluatePrfForWallet,
 } from '@/shared/utils/webauthn-prf';
 
 export function mpcPasskeyAvailable(): Promise<boolean> {
-  return isPrfSupported();
+  // Platform authenticators only. The Google/MPC onboarding steps render
+  // EITHER the passkey button OR the spending-password fields with no toggle
+  // between them, so in 'security-key' mode (Brave, external hardware key
+  // required) a user without a key would dead-end mid-onboarding. Keep the
+  // pre-mode behavior here until those steps grow a password escape hatch.
+  return getPrfSupportMode().then((mode) => mode === 'platform');
 }
 
 /** Register a NEW platform passkey for an MPC wallet and return the material needed

@@ -67,6 +67,22 @@ describe('PRF support detection', () => {
     const mod = await loadModule();
     await expect(mod.getPrfSupportMode()).resolves.toBe('platform');
   });
+
+  // The Google/MPC steps show EITHER the passkey button OR the password
+  // fields with no toggle, so 'security-key' mode (Brave) must not count as
+  // available there — a user without a hardware key would dead-end.
+  it('mpcPasskeyAvailable stays platform-only (false on Brave)', async () => {
+    (navigator as BraveNavigator).brave = { isBrave: () => Promise.resolve(true) };
+    vi.resetModules();
+    const mpc = await import('../src/shared/utils/mpc/mpcPasskey');
+    await expect(mpc.mpcPasskeyAvailable()).resolves.toBe(false);
+  });
+
+  it('mpcPasskeyAvailable true for platform mode', async () => {
+    vi.resetModules();
+    const mpc = await import('../src/shared/utils/mpc/mpcPasskey');
+    await expect(mpc.mpcPasskeyAvailable()).resolves.toBe(true);
+  });
 });
 
 describe('registerWebAuthnCredentialWithPrf authenticator attachment', () => {
