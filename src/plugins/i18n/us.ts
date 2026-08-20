@@ -2800,6 +2800,8 @@ export default {
   'welcome.recommended': 'Recommended',
   'welcome.passKeyBenefit1': 'No password to remember',
   'welcome.passKeyBenefit2': 'Uses device security (Fingerprint, Face ID, PIN)',
+  'welcome.passKeySecurityKeyHint': 'Requires a hardware security key (YubiKey or similar) in this browser',
+  'welcome.securityKeyRequired': 'Security key required',
   'welcome.passKeyBenefitKeysSecure': 'Keys never leave your device',
   'welcome.passKeyLearnMoreFull': 'PassKey uses your device\'s built-in secure hardware to protect your wallet. The encryption key never leaves your device, making it more secure than traditional passwords. Note: your PassKey is tied to this device - if you lose access, your recovery phrase is the only way to restore your wallet.',
   'welcome.securityMethod': 'Security',

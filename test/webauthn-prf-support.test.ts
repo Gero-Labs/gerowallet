@@ -1,29 +1,31 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import type * as WebauthnPrf from '../src/shared/utils/webauthn-prf';
 
 /**
- * isPrfSupported() — Brave detection (#655-2 follow-up)
+ * getPrfSupportMode() / isPrfSupported() — Brave handling (#655-2, #987)
  *
  * Brave's getClientCapabilities() reports `extension:prf: true`, but its
- * platform authenticator then creates credentials with the PRF extension
+ * platform passkey provider creates credentials with the PRF extension
  * disabled (prf.enabled=false, no results). Trusting the capability probe on
- * Brave therefore offers (and defaults to) a PassKey wallet that can never
- * unlock, and every attempt leaves an orphaned passkey in the OS store.
- * isPrfSupported() must report unsupported on Brave regardless of what the
- * capability probe claims.
+ * Brave therefore offered (and defaulted to) a platform PassKey wallet that
+ * could never unlock, and every attempt left an orphaned passkey in the OS
+ * store. Chromium's FIDO stack (which Brave keeps) does speak CTAP2
+ * hmac-secret to external security keys, so on Brave PRF is available via a
+ * hardware security key only: mode 'security-key', and registration must pin
+ * authenticatorAttachment to 'cross-platform'.
  *
- * isPrfSupported() memoizes its result at module scope, so each test
- * re-imports the module fresh via vi.resetModules().
+ * The module memoizes the probe at module scope, so each test re-imports the
+ * module fresh via vi.resetModules().
  */
 
 type BraveNavigator = Navigator & { brave?: { isBrave: () => Promise<boolean> } };
 
-const loadIsPrfSupported = async (): Promise<() => Promise<boolean>> => {
+const loadModule = async (): Promise<typeof WebauthnPrf> => {
   vi.resetModules();
-  const mod = await import('../src/shared/utils/webauthn-prf');
-  return mod.isPrfSupported;
+  return import('../src/shared/utils/webauthn-prf');
 };
 
-describe('isPrfSupported', () => {
+describe('PRF support detection', () => {
   const originalPkc = window.PublicKeyCredential;
 
   beforeEach(() => {
@@ -37,28 +39,73 @@ describe('isPrfSupported', () => {
     delete (navigator as BraveNavigator).brave;
   });
 
-  it('returns true when capabilities report PRF support (non-Brave)', async () => {
-    const isPrfSupported = await loadIsPrfSupported();
-    await expect(isPrfSupported()).resolves.toBe(true);
+  it("reports 'platform' when capabilities report PRF support (non-Brave)", async () => {
+    const mod = await loadModule();
+    await expect(mod.getPrfSupportMode()).resolves.toBe('platform');
+    await expect(mod.isPrfSupported()).resolves.toBe(true);
   });
 
-  it('returns false on Brave even when capabilities claim PRF support', async () => {
+  it("reports 'security-key' on Brave even when capabilities claim PRF support", async () => {
     (navigator as BraveNavigator).brave = { isBrave: () => Promise.resolve(true) };
-    const isPrfSupported = await loadIsPrfSupported();
-    await expect(isPrfSupported()).resolves.toBe(false);
+    const mod = await loadModule();
+    await expect(mod.getPrfSupportMode()).resolves.toBe('security-key');
+    // PassKey wallets remain available on Brave — via hardware security key.
+    await expect(mod.isPrfSupported()).resolves.toBe(true);
   });
 
-  it('returns false when capabilities report no PRF support', async () => {
+  it("reports 'none' when capabilities report no PRF support", async () => {
     (window as unknown as Record<string, unknown>).PublicKeyCredential = {
       getClientCapabilities: vi.fn().mockResolvedValue({ 'extension:prf': false }),
     };
-    const isPrfSupported = await loadIsPrfSupported();
-    await expect(isPrfSupported()).resolves.toBe(false);
+    const mod = await loadModule();
+    await expect(mod.getPrfSupportMode()).resolves.toBe('none');
+    await expect(mod.isPrfSupported()).resolves.toBe(false);
   });
 
   it('still trusts the capability probe when navigator.brave errors', async () => {
     (navigator as BraveNavigator).brave = { isBrave: () => Promise.reject(new Error('boom')) };
-    const isPrfSupported = await loadIsPrfSupported();
-    await expect(isPrfSupported()).resolves.toBe(true);
+    const mod = await loadModule();
+    await expect(mod.getPrfSupportMode()).resolves.toBe('platform');
+  });
+});
+
+describe('registerWebAuthnCredentialWithPrf authenticator attachment', () => {
+  const originalPkc = window.PublicKeyCredential;
+  let createSpy: ReturnType<typeof vi.fn>;
+
+  const fakeCredential = {
+    rawId: new Uint8Array([1, 2, 3]).buffer,
+    getClientExtensionResults: () => ({ prf: { enabled: true, results: { first: new Uint8Array(32).buffer } } }),
+  };
+
+  beforeEach(() => {
+    (window as unknown as Record<string, unknown>).PublicKeyCredential = {
+      getClientCapabilities: vi.fn().mockResolvedValue({ 'extension:prf': true }),
+    };
+    createSpy = vi.fn().mockResolvedValue(fakeCredential);
+    vi.stubGlobal('navigator', Object.create(navigator, {
+      credentials: { value: { create: createSpy }, configurable: true },
+    }));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    (window as unknown as Record<string, unknown>).PublicKeyCredential = originalPkc;
+    delete (navigator as BraveNavigator).brave;
+  });
+
+  it("pins authenticatorAttachment 'platform' off Brave", async () => {
+    const mod = await loadModule();
+    await mod.registerWebAuthnCredentialWithPrf('1', 'Test Wallet');
+    const options = createSpy.mock.calls[0][0].publicKey as PublicKeyCredentialCreationOptions;
+    expect(options.authenticatorSelection?.authenticatorAttachment).toBe('platform');
+  });
+
+  it("pins authenticatorAttachment 'cross-platform' on Brave (security-key mode)", async () => {
+    (navigator as BraveNavigator).brave = { isBrave: () => Promise.resolve(true) };
+    const mod = await loadModule();
+    await mod.registerWebAuthnCredentialWithPrf('1', 'Test Wallet');
+    const options = createSpy.mock.calls[0][0].publicKey as PublicKeyCredentialCreationOptions;
+    expect(options.authenticatorSelection?.authenticatorAttachment).toBe('cross-platform');
   });
 });

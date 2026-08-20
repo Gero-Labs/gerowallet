@@ -45,9 +45,10 @@
             </div>
             <div class="d-flex align-center mt-1">
               <v-progress-circular v-if="prfSupported === null" indeterminate size="12" width="2" color="primary" class="mr-1" />
+              <v-chip v-else-if="prfMode === 'security-key'" color="warning" outlined x-small class="mr-1">{{ $t('welcome.securityKeyRequired') }}</v-chip>
               <v-chip v-else color="primary" x-small class="mr-1">{{ $t('welcome.recommended') }}</v-chip>
             </div>
-            <span class="security-tile__sub mt-1">{{ prfSupported === null ? $t('welcome.prfChecking') : $t('welcome.passKeyBenefit2') }}</span>
+            <span class="security-tile__sub mt-1">{{ passKeySubText }}</span>
           </div>
 
           <!-- Password tile -->
@@ -92,10 +93,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, getCurrentInstance } from 'vue';
 import rules from '@/utils/rules';
 import { generateWalletName } from '@/shared/utils/walletNameGenerator';
 import { NetworkInfo } from '@/utils/networks';
+import type { PrfSupportMode } from '@/shared/utils/webauthn-prf';
+
+const vmProxy = getCurrentInstance()!.proxy;
 
 defineProps<{ network: NetworkInfo }>();
 
@@ -114,7 +118,17 @@ const name = ref(generateWalletName());
 
 // Security method. null = probe still pending (never claim "not supported"
 // while checking — the first Windows Hello capability call can take seconds).
-const prfSupported = ref<boolean | null>(null);
+// 'security-key' (Brave): PassKey works but only through an external hardware
+// key, so the tile is offered without being preselected (issue 987).
+const prfMode = ref<PrfSupportMode | null>(null);
+const prfSupported = computed<boolean | null>(() =>
+  prfMode.value === null ? null : prfMode.value !== 'none'
+);
+const passKeySubText = computed(() => {
+  if (prfMode.value === null) return vmProxy.$t('welcome.prfChecking');
+  if (prfMode.value === 'security-key') return vmProxy.$t('welcome.passKeySecurityKeyHint');
+  return vmProxy.$t('welcome.passKeyBenefit2');
+});
 const selectedSecurityMethod = ref<'prf' | 'password'>('password');
 let userPicked = false;
 
@@ -129,17 +143,18 @@ const canContinue = computed(() => nameValid.value && !!selectedSecurityMethod.v
 // this usually resolves instantly).
 onMounted(async () => {
   try {
-    const { isPrfSupported } = await import('@/shared/utils/webauthn-prf');
-    prfSupported.value = await isPrfSupported();
+    const { getPrfSupportMode } = await import('@/shared/utils/webauthn-prf');
+    prfMode.value = await getPrfSupportMode();
 
-    // Default to PassKey when supported — unless the user already made a
-    // choice while the probe was pending.
-    if (prfSupported.value && !userPicked) {
+    // Default to PassKey only for platform authenticators — unless the user
+    // already made a choice while the probe was pending. In 'security-key'
+    // mode the user may not own a hardware key, so password stays default.
+    if (prfMode.value === 'platform' && !userPicked) {
       selectedSecurityMethod.value = 'prf';
     }
   } catch (error) {
     console.error('Error checking PRF support:', error);
-    prfSupported.value = false;
+    prfMode.value = 'none';
   }
 });
 

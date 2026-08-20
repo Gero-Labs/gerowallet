@@ -3246,6 +3246,8 @@ export default {
   'welcome.pairing': 'Kopplung',
   'welcome.passKeyBenefit1': 'Kein Passwort zum Merken',
   'welcome.passKeyBenefit2': 'Nutzt Gerätesicherheit (Fingerabdruck, Face ID, PIN)',
+  'welcome.passKeySecurityKeyHint': 'Erfordert in diesem Browser einen Hardware-Sicherheitsschlüssel (YubiKey oder ähnlich)',
+  'welcome.securityKeyRequired': 'Sicherheitsschlüssel erforderlich',
   'welcome.passKeyBenefitKeysSecure': 'Schlüssel verlassen nie Ihr Gerät',
   'welcome.passKeyLearnMoreFull': 'PassKey nutzt die integrierte sichere Hardware Ihres Geräts, um Ihre Wallet zu schützen. Der Verschlüsselungsschlüssel verlässt Ihr Gerät nie und ist dadurch sicherer als herkömmliche Passwörter. Hinweis: Ihr PassKey ist an dieses Gerät gebunden – bei Verlust des Zugangs ist Ihre Wiederherstellungsphrase der einzige Weg, Ihre Wallet wiederherzustellen.',
   'welcome.passKeyMethod': 'PassKey',

@@ -56,58 +56,69 @@ export class PrfUnsupportedError extends Error {
  */
 
 /**
- * Check if WebAuthn PRF extension is supported by the browser
- *
- * Uses PublicKeyCredential.getClientCapabilities() API (Chrome 128+)
- * Falls back to assuming unsupported for older browsers
- *
- * @returns Promise<boolean> - true if PRF extension is supported
+ * How PRF PassKeys are available in this browser.
  *
  * Memoized: on Windows the first getClientCapabilities() call can take
  * seconds while Chrome spins up the Windows Hello platform service, so the
  * result is cached and consumers can prefetch it early (see WalletOnboarding).
- * A determination (true/false) is cached; a thrown error is not, so a
- * transient failure can be retried on the next call.
+ * A determination is cached; a thrown error is not, so a transient failure
+ * can be retried on the next call.
+ *
+ * - 'platform':     the platform authenticator (Touch ID / Windows Hello /
+ *                   Google Password Manager) delivers PRF — best UX, default.
+ * - 'security-key': only external CTAP2 authenticators (YubiKey and similar)
+ *                   deliver PRF. Brave: its platform passkey provider creates
+ *                   credentials with PRF disabled, but the Chromium FIDO stack
+ *                   it keeps speaks hmac-secret to hardware keys (issue 987).
+ * - 'none':         no PRF path at all — steer to a password wallet.
  */
-let prfSupportCache: boolean | null = null;
-let prfSupportInflight: Promise<boolean> | null = null;
+export type PrfSupportMode = 'platform' | 'security-key' | 'none';
 
-export function isPrfSupported(): Promise<boolean> {
-  if (prfSupportCache !== null) return Promise.resolve(prfSupportCache);
-  if (!prfSupportInflight) {
-    prfSupportInflight = detectPrfSupport()
-      .then((supported) => {
-        prfSupportCache = supported;
-        return supported;
+let prfModeCache: PrfSupportMode | null = null;
+let prfModeInflight: Promise<PrfSupportMode> | null = null;
+
+export function getPrfSupportMode(): Promise<PrfSupportMode> {
+  if (prfModeCache !== null) return Promise.resolve(prfModeCache);
+  if (!prfModeInflight) {
+    prfModeInflight = detectPrfSupportMode()
+      .then((mode) => {
+        prfModeCache = mode;
+        return mode;
       })
       .catch((error) => {
         console.error('[PRF] support check failed:', error);
-        return false;
+        return 'none' as const;
       })
       .finally(() => {
-        prfSupportInflight = null;
+        prfModeInflight = null;
       });
   }
-  return prfSupportInflight;
+  return prfModeInflight;
 }
 
-async function detectPrfSupport(): Promise<boolean> {
+/** True when any PRF path exists ('platform' or 'security-key'). */
+export function isPrfSupported(): Promise<boolean> {
+  return getPrfSupportMode().then((mode) => mode !== 'none');
+}
+
+async function detectPrfSupportMode(): Promise<PrfSupportMode> {
   // Check if WebAuthn is available
   if (!window.PublicKeyCredential) {
     debugWarn('[PRF] WebAuthn not supported in this browser');
-    return false;
+    return 'none';
   }
 
   // Brave lies: getClientCapabilities() reports `extension:prf: true`, but its
-  // platform authenticator then creates credentials with PRF disabled
+  // platform passkey provider then creates credentials with PRF disabled
   // (prf.enabled=false, no results) — a wallet that could never unlock, plus an
-  // orphaned passkey in the OS store per attempt (#655-2). Treat Brave as
-  // unsupported before consulting the capability probe.
+  // orphaned passkey in the OS store per attempt (#655-2). External security
+  // keys still work through Chromium's FIDO stack, so report 'security-key'
+  // instead of trusting the capability probe (issue 987).
   try {
     const braveNavigator = navigator as Navigator & { brave?: { isBrave?: () => Promise<boolean> } };
     if (await braveNavigator.brave?.isBrave?.()) {
-      debugWarn('[PRF] ❌ Brave detected — platform authenticator does not deliver PRF results');
-      return false;
+      debugWarn('[PRF] ⚠️ Brave detected — PRF available via hardware security key only');
+      return 'security-key';
     }
   } catch {
     // Detection failure ≠ Brave; fall through to the capability probe.
@@ -126,9 +137,9 @@ async function detectPrfSupport(): Promise<boolean> {
         debugWarn('[PRF] ❌ PRF extension not supported by browser');
       }
 
-      return supported;
+      return supported ? 'platform' : 'none';
     } catch (error) {
-      // Rethrow instead of resolving false: isPrfSupported() only caches a
+      // Rethrow instead of resolving 'none': getPrfSupportMode() only caches a
       // clean determination, so a transient failure here (e.g. the Windows
       // Hello service still spinning up) stays retryable instead of
       // permanently disabling PassKey for the whole session.
@@ -139,7 +150,7 @@ async function detectPrfSupport(): Promise<boolean> {
 
   // Fallback for older browsers without getClientCapabilities
   debugWarn('[PRF] getClientCapabilities not available, assuming PRF unsupported');
-  return false;
+  return 'none';
 }
 
 /**
@@ -335,6 +346,11 @@ export async function registerWebAuthnCredentialWithPrf(
     // PRF salt format: "gero-wallet-passkey-v1:{walletId}"
     const salt = new TextEncoder().encode(`gero-wallet-passkey-v1:${walletId}`);
 
+    // In 'security-key' mode (Brave) the platform provider would accept the
+    // registration but silently drop PRF — pin cross-platform so the browser
+    // only offers external authenticators that can actually deliver it (issue 987).
+    const supportMode = await getPrfSupportMode();
+
     // Create credential options with PRF extension AND evaluation
     const publicKeyCredentialCreationOptions: PublicKeyCredentialCreationOptions = {
       challenge,
@@ -358,7 +374,7 @@ export async function registerWebAuthnCredentialWithPrf(
         }
       ],
       authenticatorSelection: {
-        authenticatorAttachment: 'platform',
+        authenticatorAttachment: supportMode === 'security-key' ? 'cross-platform' : 'platform',
         userVerification: 'required',
         requireResidentKey: false
       },
