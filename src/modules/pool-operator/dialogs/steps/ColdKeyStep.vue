@@ -16,6 +16,9 @@
       <p v-if="prfSupported && !usePassword" class="text-body-2 grey--text">
         {{ $t('poolOperator.coldKeyPrfEncryptionHint') }}
       </p>
+      <p v-if="prfMode === 'security-key' && !usePassword" class="text-body-2 warning--text">
+        {{ $t('welcome.passKeySecurityKeyHint') }}
+      </p>
       <template v-if="!prfSupported || usePassword">
         <v-text-field
           v-model="password" :label="isNormalWallet ? $t('wallet.spendingPassword') : $t('poolOperator.coldKeyPassword')"
@@ -57,6 +60,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import type { PrfSupportMode } from '@/shared/utils/webauthn-prf';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { walletStore } from '@/stores/walletStore';
 import { WalletType } from '@/models/types';
@@ -73,7 +77,11 @@ const password = ref('');
 const passwordConfirm = ref('');
 const error = ref('');
 const importing = ref(false);
-const prfSupported = ref(false);
+// 'security-key' (Brave): PassKey import works but only through an external
+// hardware key (issue 987) — surface a hint and default to the password path,
+// since the user may not own one. The PassKey button stays one click away.
+const prfMode = ref<PrfSupportMode | null>(null);
+const prfSupported = computed(() => prfMode.value !== null && prfMode.value !== 'none');
 const usePassword = ref(false);
 
 const isNormalWallet = computed(() => {
@@ -83,18 +91,19 @@ const isNormalWallet = computed(() => {
 
 onMounted(async () => {
   try {
-    const { isPrfSupported } = await import('@/shared/utils/webauthn-prf');
-    prfSupported.value = await isPrfSupported();
+    const { getPrfSupportMode } = await import('@/shared/utils/webauthn-prf');
+    prfMode.value = await getPrfSupportMode();
   } catch {
-    prfSupported.value = false;
+    prfMode.value = 'none';
   }
+  usePassword.value = prfMode.value === 'security-key';
 });
 
 async function onFile() {
   parsedType.value = '';
   rawKeyBytes.value = null;
   error.value = '';
-  usePassword.value = false;
+  usePassword.value = prfMode.value === 'security-key';
   password.value = '';
   passwordConfirm.value = '';
   if (!file.value) return;
