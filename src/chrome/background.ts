@@ -418,13 +418,21 @@ chrome.storage.local.get(['processedDomains', 'lastCleared'], (result) => {
   domains.forEach((domain: string) => processedDomains.add(domain));
 });
 
-// One-time cleanup: drop the orphaned `realFiStore` key. It cached price candles for the
-// removed legacy price-candles store; nothing reads or writes it now, but existing installs
-// still carry a per-token candle blob under this key.
-chrome.storage.local.remove('realFiStore', () => {
-  if (chrome.runtime.lastError) {
-    debugLog('Failed to remove legacy realFiStore key:', chrome.runtime.lastError);
-  }
+// Cleanup: drop the orphaned `realFiStore` key. It cached price candles for the removed
+// legacy price-candles store; nothing reads or writes it now, but existing installs still
+// carry a per-token candle blob under this key. Read first so the common case — an MV3
+// service-worker restart long after the key is gone — costs a read instead of a pointless
+// write, and so the log only fires on a real removal. Same shape as
+// removeLegacyPassKeyMasterKey() in shared/utils/security.ts.
+chrome.storage.local.get('realFiStore', (result) => {
+  if (chrome.runtime.lastError || !result['realFiStore']) return;
+  chrome.storage.local.remove('realFiStore', () => {
+    if (chrome.runtime.lastError) {
+      debugLog('Failed to remove legacy realFiStore key:', chrome.runtime.lastError);
+    } else {
+      debugLog('🗑️ Removed orphaned realFiStore key from chrome.storage.local');
+    }
+  });
 });
 
 function clearProcessedDomains() {
