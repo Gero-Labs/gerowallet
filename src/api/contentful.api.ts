@@ -9,6 +9,7 @@
  * shape here mirrors Gero-Control-Panel/src/lib/contentful.ts.
  */
 import type { Document } from '@contentful/rich-text-types';
+import { parseSafeUrl } from '@/shared/utils/externalLink';
 
 const SPACE = import.meta.env['VITE_CONTENTFUL_SPACE_ID'] as string | undefined;
 const TOKEN = import.meta.env['VITE_CONTENTFUL_ACCESS_TOKEN'] as string | undefined;
@@ -83,7 +84,10 @@ function absoluteUrl(url: string | undefined): string | undefined {
 function cardThumb(asset: RawAsset | undefined): string | undefined {
   const abs = absoluteUrl(asset?.fields?.file?.url);
   if (!abs) return undefined;
-  return abs.includes('images.ctfassets.net') ? `${abs}?w=480&h=300&fit=fill&fm=webp` : abs;
+  // Image-transform params are only valid on the Contentful images host; match
+  // the parsed hostname, not a substring anywhere in the URL.
+  const isImagesHost = parseSafeUrl(abs)?.hostname === 'images.ctfassets.net';
+  return isImagesHost ? `${abs}?w=480&h=300&fit=fill&fm=webp` : abs;
 }
 
 /** ~200 wpm reading-time estimate, used when the CMS field is absent. */
