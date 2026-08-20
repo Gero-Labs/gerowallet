@@ -711,27 +711,28 @@ const transactions = computed<StoredTransaction[]>(() => {
         );
       });
 
-      // Check tags/chips and certificates (CardanoTx-specific fields)
+      // Check tags/chips and certificates (fields only present on full CardanoTx records)
       let matchesChip = false;
       if (isCardanoTx(tx)) {
         matchesChip =
-          ('minswap'.includes(searchLower) && isMinswap(tx)) ||
-          ('wingriders'.includes(searchLower) && isWingRiders(tx)) ||
-          ('muesliswap'.includes(searchLower) && isMuesliSwap(tx)) ||
           ('vyfi'.includes(searchLower) && isVyFi(tx)) ||
-          ('sundaeswap'.includes(searchLower) && isSundaeSwap(tx)) ||
           ('splash'.includes(searchLower) && isSplash(tx)) ||
-          ('dexhunter'.includes(searchLower) && isDexHunter(tx)) ||
-          ('strike'.includes(searchLower) && isStrike(tx)) ||
-          ('dust'.includes(searchLower) && isDustRegistration(tx)) ||
-          ('jpg.store'.includes(searchLower) && isJpgStore(tx)) ||
           ('withdrawal'.includes(searchLower) && isWithdrawal(tx)) ||
           ('stake'.includes(searchLower) && isStakeRegistration(tx)) ||
           (tx.body?.certificates?.some((cert) => cert.__typename.toLowerCase().includes(searchLower)) ?? false);
       }
 
-      // Checks that work for all transaction types
+      // Checks that work for all transaction types (address-based detectors also
+      // match thin records via the utxo set)
       matchesChip = matchesChip ||
+        ('minswap'.includes(searchLower) && isMinswap(tx)) ||
+        ('wingriders'.includes(searchLower) && isWingRiders(tx)) ||
+        ('muesliswap'.includes(searchLower) && isMuesliSwap(tx)) ||
+        ('sundaeswap'.includes(searchLower) && isSundaeSwap(tx)) ||
+        ('dexhunter'.includes(searchLower) && isDexHunter(tx)) ||
+        ('strike'.includes(searchLower) && isStrike(tx)) ||
+        ('dust'.includes(searchLower) && isDustRegistration(tx)) ||
+        ('jpg.store'.includes(searchLower) && isJpgStore(tx)) ||
         ('cashback'.includes(searchLower) && isCashback(tx)) ||
         ('steelswap'.includes(searchLower) && isSteelSwap(tx)) ||
         ('internal'.includes(searchLower) && isInternalTransfer(tx)) ||
@@ -1299,7 +1300,9 @@ const isInternalTransfer = (item: StoredTransaction): boolean => {
 };
 
 const isStrike = (item: StoredTransaction): boolean => {
-  if (!isCardanoTx(item)) return false;
+  // body/witness are only present on full Cardano records; address checks below
+  // also run on the utxo set so thin records (no CBOR stored) are still tagged
+  const cardano = isCardanoTx(item) ? item : undefined;
   // Strike Finance perpetual trading transactions
   const STRIKE_SCRIPT_HASH = 'be7544ca7d42c903268caecae465f3f8b5a7e7607d09165e471ac8b5';
   const STRIKE_CONTRACT_ADDRESS = 'addr1wytzw530pgjxm4wxsxj5ufp23cxacrvzmytpjnlcgq6t7vsgz25ef';
@@ -1307,10 +1310,11 @@ const isStrike = (item: StoredTransaction): boolean => {
   // Check for Strike contract address (primary indicator of platform interaction)
   const hasStrikeAddress =
     item.utxo?.inputs?.some((input) => input.address === STRIKE_CONTRACT_ADDRESS) ||
-    item.body?.outputs?.some((output) => output.address === STRIKE_CONTRACT_ADDRESS);
+    item.utxo?.outputs?.some((output) => output.address === STRIKE_CONTRACT_ADDRESS) ||
+    cardano?.body?.outputs?.some((output) => output.address === STRIKE_CONTRACT_ADDRESS);
 
   // Check for Strike script hash in witness (indicates contract execution)
-  const hasStrikeScript = item.witness?.scripts?.some(
+  const hasStrikeScript = cardano?.witness?.scripts?.some(
     (script) => Serialization.Script.fromCore(script).hash() === STRIKE_SCRIPT_HASH
   );
 
@@ -1323,10 +1327,10 @@ const isStrike = (item: StoredTransaction): boolean => {
 // (Deregistration spends that UTxO as an input, so keying on the output keeps
 // this registration-specific.)
 const isDustRegistration = (item: StoredTransaction): boolean => {
-  if (!isCardanoTx(item)) return false;
+  const cardano = isCardanoTx(item) ? item : undefined;
   const validator = DUST_MAPPING_VALIDATOR[loggedWallet.value?.network ?? ''];
   if (!validator) return false;
-  return item.body?.outputs?.some((output) => output.address === validator.address)
+  return cardano?.body?.outputs?.some((output) => output.address === validator.address)
     || item.utxo?.outputs?.some((output) => output.address === validator.address)
     || false;
 };
@@ -1342,21 +1346,24 @@ const isDexTransaction = (item: StoredTransaction): boolean =>
   isMinswap(item) || isSundaeSwap(item) || isSplash(item) || isDexHunter(item) || isSteelSwap(item);
 
 const isDexHunter = (item: StoredTransaction): boolean => {
-  if (!isCardanoTx(item)) return false;
+  const cardano = isCardanoTx(item) ? item : undefined;
   // Check for DexHunter order contract address (primary indicator)
   const DEXHUNTER_ORDER_ADDRESS =
     'addr1z8p79rpkcdz8x9d6tft0x0dx5mwuzac2sa4gm8cvkw5hcn84xmy84q2crvzy6he2j69798923xvt3jk5n3nd9eecmxks7hfyu8';
   const hasDexHunterOrderAddress =
     item.utxo?.inputs?.some((input) => input.address === DEXHUNTER_ORDER_ADDRESS) ||
-    item.body?.outputs?.some((output) => output.address === DEXHUNTER_ORDER_ADDRESS);
+    item.utxo?.outputs?.some((output) => output.address === DEXHUNTER_ORDER_ADDRESS) ||
+    cardano?.body?.outputs?.some((output) => output.address === DEXHUNTER_ORDER_ADDRESS);
 
   // Check for DexHunter fee address (indicates completed trade)
   const DEXHUNTER_FEE_ADDRESS =
     'addr1q8l7hny7x96fadvq8cukyqkcfca5xmkrvfrrkt7hp76v3qvssm7fz9ajmtd58ksljgkyvqu6gl23hlcfgv7um5v0rn8qtnzlfk';
-  const hasDexHunterFeeAddress = item.body?.outputs?.some((output) => output.address === DEXHUNTER_FEE_ADDRESS);
+  const hasDexHunterFeeAddress =
+    item.utxo?.outputs?.some((output) => output.address === DEXHUNTER_FEE_ADDRESS) ||
+    cardano?.body?.outputs?.some((output) => output.address === DEXHUNTER_FEE_ADDRESS);
 
   // Check metadata for DexHunter Trade message (indicates trade execution)
-  const msg = item.auxiliaryData?.blob?.[674]?.msg;
+  const msg = cardano?.auxiliaryData?.blob?.[674]?.msg;
   const hasDexHunterMetadata =
     msg && Array.isArray(msg) ? msg.some((m: string) => m.includes('Dexhunter') || m.includes('DexHunter')) : false;
 
@@ -1386,7 +1393,7 @@ const isSteelSwap = (item: StoredTransaction): boolean => {
 };
 
 const isMinswap = (item: StoredTransaction): boolean => {
-  if (!isCardanoTx(item)) return false;
+  const cardano = isCardanoTx(item) ? item : undefined;
   // Minswap V1 addresses
   const MINSWAP_V1_MARKET_ORDER_ADDRESS = 'addr1wxn9efv2f6w82hagxqtn62ju4m293tqvw0uhmdl64ch8uwc0h43gt';
   const MINSWAP_V1_LIMIT_ORDER_ADDRESS =
@@ -1413,19 +1420,20 @@ const isMinswap = (item: StoredTransaction): boolean => {
   // Check for Minswap contract addresses (indicates DEX interaction)
   const hasMinswapOrderAddress =
     item.utxo?.inputs?.some((input) => !!input.address && MINSWAP_CONTRACT_ADDRESSES.includes(input.address)) ||
-    item.body?.outputs?.some((output) => !!output.address && MINSWAP_CONTRACT_ADDRESSES.includes(output.address));
+    item.utxo?.outputs?.some((output) => !!output.address && MINSWAP_CONTRACT_ADDRESSES.includes(output.address)) ||
+    cardano?.body?.outputs?.some((output) => !!output.address && MINSWAP_CONTRACT_ADDRESSES.includes(output.address));
 
   // Check for Minswap metadata message (indicates platform interaction)
-  const msg = item.auxiliaryData?.blob?.[674]?.msg;
+  const msg = cardano?.auxiliaryData?.blob?.[674]?.msg;
   const hasMinswapMetadata = msg && Array.isArray(msg) ? msg.some((m: string) => m.includes('Minswap')) : false;
 
   // Check for Minswap pool NFT policy in datum CBOR (indicates pool interaction)
-  const hasMinswapInOutputDatum = (item.body?.outputs as Array<Cardano.TxOut & { datum?: { cbor?: string } }>)?.some(
+  const hasMinswapInOutputDatum = (cardano?.body?.outputs as Array<Cardano.TxOut & { datum?: { cbor?: string } }>)?.some(
     (output) => output.datum?.cbor?.includes('f5808c2c990d86da54bfc97d89cee6efa20cd8461616359478d96b4c')
   );
 
   // Check for Minswap pool NFT policy in witness datums (indicates pool interaction)
-  const hasMinswapInWitnessDatum = (item.witness?.datums as Array<{ cbor?: string }> | undefined)?.some(
+  const hasMinswapInWitnessDatum = (cardano?.witness?.datums as Array<{ cbor?: string }> | undefined)?.some(
     (datum) => datum.cbor?.includes('f5808c2c990d86da54bfc97d89cee6efa20cd8461616359478d96b4c')
   );
 
@@ -1434,7 +1442,7 @@ const isMinswap = (item: StoredTransaction): boolean => {
 };
 
 const isJpgStore = (item: StoredTransaction): boolean => {
-  if (!isCardanoTx(item)) return false;
+  const cardano = isCardanoTx(item) ? item : undefined;
   // Check for jpg.store marketplace script address
   const JPGSTORE_SCRIPT_ADDRESS =
     'addr1zxgx3far7qygq0k6epa0zcvcvrevmn0ypsnfsue94nsn3tvpw288a4x0xf8pxgcntelxmyclq83s0ykeehchz2wtspks905plm';
@@ -1446,32 +1454,34 @@ const isJpgStore = (item: StoredTransaction): boolean => {
   const hasJpgStoreAddress =
     item.utxo?.inputs?.some(
       (input) => input.address === JPGSTORE_SCRIPT_ADDRESS || input.address === JPGSTORE_ASK_V1_ADDRESS
-    ) || item.body?.outputs?.some((output) => output.address === JPGSTORE_SCRIPT_ADDRESS);
+    ) ||
+    item.utxo?.outputs?.some((output) => output.address === JPGSTORE_SCRIPT_ADDRESS) ||
+    cardano?.body?.outputs?.some((output) => output.address === JPGSTORE_SCRIPT_ADDRESS);
 
   // Check for jpg.store auxiliary data structure (fields 0-10, 30)
   const hasJpgStoreMetadata =
-    item.auxiliaryData?.blob &&
-    (item.auxiliaryData.blob[0] ||
-      item.auxiliaryData.blob[1] ||
-      item.auxiliaryData.blob[2] ||
-      item.auxiliaryData.blob[3] ||
-      item.auxiliaryData.blob[4] ||
-      item.auxiliaryData.blob[5] ||
-      item.auxiliaryData.blob[6] ||
-      item.auxiliaryData.blob[7] ||
-      item.auxiliaryData.blob[8] ||
-      item.auxiliaryData.blob[9] ||
-      item.auxiliaryData.blob[10] ||
-      item.auxiliaryData.blob[30]);
+    cardano?.auxiliaryData?.blob &&
+    (cardano.auxiliaryData.blob[0] ||
+      cardano.auxiliaryData.blob[1] ||
+      cardano.auxiliaryData.blob[2] ||
+      cardano.auxiliaryData.blob[3] ||
+      cardano.auxiliaryData.blob[4] ||
+      cardano.auxiliaryData.blob[5] ||
+      cardano.auxiliaryData.blob[6] ||
+      cardano.auxiliaryData.blob[7] ||
+      cardano.auxiliaryData.blob[8] ||
+      cardano.auxiliaryData.blob[9] ||
+      cardano.auxiliaryData.blob[10] ||
+      cardano.auxiliaryData.blob[30]);
 
   // Check for datum hash (indicating a marketplace listing)
-  const hasDatumHash = item.body?.outputs?.some((output) => output.datumHash);
+  const hasDatumHash = cardano?.body?.outputs?.some((output) => output.datumHash);
 
   return hasJpgStoreAddress || (hasJpgStoreMetadata && hasDatumHash) || false;
 };
 
 const isWingRiders = (item: StoredTransaction): boolean => {
-  if (!isCardanoTx(item)) return false;
+  const cardano = isCardanoTx(item) ? item : undefined;
   // WingRiders V1 order address
   const WINGRIDERS_V1_ORDER_ADDRESS = 'addr1wxr2a8htmzuhj39y2gq7ftkpxv98y2g67tg8zezthgq4jkg0a4ul4';
 
@@ -1483,13 +1493,16 @@ const isWingRiders = (item: StoredTransaction): boolean => {
     item.utxo?.inputs?.some(
       (input) => input.address === WINGRIDERS_V1_ORDER_ADDRESS || input.address === WINGRIDERS_V2_ORDER_ADDRESS
     ) ||
-    item.body?.outputs?.some(
+    item.utxo?.outputs?.some(
+      (output) => output.address === WINGRIDERS_V1_ORDER_ADDRESS || output.address === WINGRIDERS_V2_ORDER_ADDRESS
+    ) ||
+    cardano?.body?.outputs?.some(
       (output) => output.address === WINGRIDERS_V1_ORDER_ADDRESS || output.address === WINGRIDERS_V2_ORDER_ADDRESS
     );
 
   // Check for WingRiders V1 pool validity asset policy in datum CBOR (indicates pool interaction)
-  const enrichedOutputs = item.body?.outputs as Array<Cardano.TxOut & { datum?: { cbor?: string } }>;
-  const enrichedDatums = item.witness?.datums as Array<{ cbor?: string }> | undefined;
+  const enrichedOutputs = cardano?.body?.outputs as Array<Cardano.TxOut & { datum?: { cbor?: string } }>;
+  const enrichedDatums = cardano?.witness?.datums as Array<{ cbor?: string }> | undefined;
 
   const hasWingRidersV1InDatum =
     enrichedDatums?.some((datum) =>
@@ -1519,7 +1532,7 @@ const isVyFi = (item: StoredTransaction): boolean => {
 };
 
 const isSundaeSwap = (item: StoredTransaction): boolean => {
-  if (!isCardanoTx(item)) return false;
+  const cardano = isCardanoTx(item) ? item : undefined;
   // SundaeSwap V1 addresses
   const SUNDAESWAP_V1_ORDER_ADDRESS = 'addr1wxaptpmxcxawvr3pzlhgnpmzz3ql43n2tc8mn3av5kx0yzs09tqh8';
   const SUNDAESWAP_V1_POOL_ADDRESS = 'addr1w9qzpelu9hn45pefc0xr4ac4kdxeswq7pndul2vuj59u8tqaxdznu';
@@ -1536,7 +1549,13 @@ const isSundaeSwap = (item: StoredTransaction): boolean => {
         input.address === SUNDAESWAP_V1_POOL_ADDRESS ||
         input.address === SUNDAESWAP_V3_POOL_ADDRESS
     ) ||
-    item.body?.outputs?.some(
+    item.utxo?.outputs?.some(
+      (output) =>
+        output.address === SUNDAESWAP_V1_ORDER_ADDRESS ||
+        output.address === SUNDAESWAP_V1_POOL_ADDRESS ||
+        output.address === SUNDAESWAP_V3_POOL_ADDRESS
+    ) ||
+    cardano?.body?.outputs?.some(
       (output) =>
         output.address === SUNDAESWAP_V1_ORDER_ADDRESS ||
         output.address === SUNDAESWAP_V1_POOL_ADDRESS ||
@@ -1565,7 +1584,7 @@ const isSplash = (item: StoredTransaction): boolean => {
 };
 
 const isMuesliSwap = (item: StoredTransaction): boolean => {
-  if (!isCardanoTx(item)) return false;
+  const cardano = isCardanoTx(item) ? item : undefined;
   // MuesliSwap order address
   const MUESLISWAP_ORDER_ADDRESS =
     'addr1zyq0kyrml023kwjk8zr86d5gaxrt5w8lxnah8r6m6s4jp4g3r6dxnzml343sx8jweqn4vn3fz2kj8kgu9czghx0jrsyqqktyhv';
@@ -1573,10 +1592,11 @@ const isMuesliSwap = (item: StoredTransaction): boolean => {
   // Check for MuesliSwap order contract address (indicates DEX interaction)
   const hasMuesliSwapOrderAddress =
     item.utxo?.inputs?.some((input) => input.address === MUESLISWAP_ORDER_ADDRESS) ||
-    item.body?.outputs?.some((output) => output.address === MUESLISWAP_ORDER_ADDRESS);
+    item.utxo?.outputs?.some((output) => output.address === MUESLISWAP_ORDER_ADDRESS) ||
+    cardano?.body?.outputs?.some((output) => output.address === MUESLISWAP_ORDER_ADDRESS);
 
-  const enrichedOutputs = item.body?.outputs as Array<Cardano.TxOut & { datum?: { cbor?: string } }>;
-  const enrichedDatums = item.witness?.datums as Array<{ cbor?: string }> | undefined;
+  const enrichedOutputs = cardano?.body?.outputs as Array<Cardano.TxOut & { datum?: { cbor?: string } }>;
+  const enrichedDatums = cardano?.witness?.datums as Array<{ cbor?: string }> | undefined;
 
   // Check for MuesliSwap V1 pool NFT policy in datum CBOR (indicates pool interaction)
   const hasMuesliSwapV1InDatum =
