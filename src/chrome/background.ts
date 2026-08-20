@@ -418,6 +418,15 @@ chrome.storage.local.get(['processedDomains', 'lastCleared'], (result) => {
   domains.forEach((domain: string) => processedDomains.add(domain));
 });
 
+// One-time cleanup: drop the orphaned `realFiStore` key. It cached price candles for the
+// removed legacy price-candles store; nothing reads or writes it now, but existing installs
+// still carry a per-token candle blob under this key.
+chrome.storage.local.remove('realFiStore', () => {
+  if (chrome.runtime.lastError) {
+    debugLog('Failed to remove legacy realFiStore key:', chrome.runtime.lastError);
+  }
+});
+
 function clearProcessedDomains() {
   processedDomains.clear();
   chrome.storage.local.remove(['processedDomains', 'lastCleared'], () => {

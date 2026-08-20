@@ -162,10 +162,8 @@ import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { tokenMetadataStore } from '@/stores/tokenMetadataStore';
-import { realFiStore } from '@/stores/realFiStore';
 import { coinGeckoStore } from '@/stores/coinGeckoStore';
 import { priceStore } from '@/stores/priceStore';
-import { get24hChange } from '@/shared/utils/resolver';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import TokenDetailPanel from '@/modules/market/components/TokenDetailPanel.vue';
 import type { MarketToken } from '@/modules/market/composables/useMarketData';
@@ -198,7 +196,6 @@ const { t } = useTranslation();
 const { price } = toRefs(networkStore);
 const { loggedWallet, tokens } = toRefs(walletStore);
 const { tokens: tokenMetadata } = toRefs(tokenMetadataStore);
-const { tokens: realFiTokens } = toRefs(realFiStore);
 const { cache } = toRefs(coinGeckoStore);
 
 const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
@@ -342,7 +339,8 @@ const tokensList = computed(() => {
       );
       token.value = quantity * token.price;
       token.allocation = token.value;
-      token.change = get24hChange(realFiTokens.value[token.unit])?.percentChange;
+      // No 24h change for native tokens: the legacy price-candles feed was removed and
+      // never had a producer. The row hides the delta while token.change is undefined.
     }
     if (isNaN(token.allocation)) {
       token.allocation = 0;
