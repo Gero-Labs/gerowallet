@@ -60,11 +60,18 @@ const geroCardanoProvider = {
   async enable(extensions: Extensions): Promise<any> {
     const enabled = await enable();
     if (enabled) {
+      // CIP-30 requires getExtensions() to report the extensions enabled for THIS
+      // instance, not a fixed list: "they should decide what they enable and
+      // reflect their choice in the response to api.getExtensions()". The static
+      // list is supportedExtensions' job. Built up by the branches below and
+      // closed over by getExtensions, which the dApp only calls after enable()
+      // has returned.
+      const enabledExtensions: { cip: number }[] = [{ cip: 30 }];
       const cip30 = {
         getCollateral: (params?: CollateralParams) => getCollateral(params),
         getBalance: () => getBalance(),
         getChangeAddress: () => getAddress(),
-        getExtensions: () => [{ cip: 30 },{ cip: 95 }, { cip: 104 }],
+        getExtensions: () => [...enabledExtensions],
         getNetworkId: () => getNetworkId(),
         getRewardAddresses: () => getRewardAddresses(),
         getUnusedAddresses: () => getUnusedAddresses(),
@@ -82,16 +89,19 @@ const geroCardanoProvider = {
           signTx: (tx: string, partialSign: boolean) => signTx(tx, partialSign),
           signData: (address: CardanoCore.PaymentAddress | CardanoCore.RewardAccount | string, payload: string) => signData(address, payload),
         }
+        enabledExtensions.push({ cip: 95 });
       }
       if (extensions?.extensions?.find(e => e.cip == 104)) {
         cip30['cip104'] = {
           getAccountPub: () => getAccountPub()
         }
+        enabledExtensions.push({ cip: 104 });
       }
       if (extensions?.extensions?.find(e => e.cip == 142)) {
         cip30['cip142'] = {
           getNetworkMagic: () => getNetworkMagic()
         }
+        enabledExtensions.push({ cip: 142 });
       }
       return cip30
     }
