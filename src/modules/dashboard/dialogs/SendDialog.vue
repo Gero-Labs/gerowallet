@@ -618,7 +618,7 @@ const globalTotal = computed(() => {
   }
 
   const totalWithFee = totalAda + feeAda - withdrawalAda;
-  const adaPrice = Number(priceStore.adaUsd?.lastPrice || networkStore.price?.lastPrice || 0);
+  const adaPrice = Number(priceStore.adaUsd?.lastPrice || 0);
   totalUsd = totalWithFee * adaPrice;
 
   return {

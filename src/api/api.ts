@@ -123,12 +123,6 @@ export class Api {
     );
   }
 
-  async fetchTickerStatistics() {
-    const { data, status } = await this.axiosInstance.get(`/api/price/ticker?chain=${this.chain}`);
-    if (status === 200) return data;
-    return parseHttpError(data);
-  }
-
   async fetchFiatRates() {
     const { data, status } = await this.axiosInstance.get(`/api/price/fiatRates`);
     if (status === 200) return data;

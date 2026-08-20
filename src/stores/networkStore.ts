@@ -36,12 +36,19 @@ export function isBitcoinTip(tip: NetworkStore['tip']): tip is BitcoinTip {
   return !!tip && 'chain' in tip && tip.chain === 'BITCOIN';
 }
 
+// A native-asset row as written by the assets liveQuery (db/loaders/network.ts).
+// resolveAsset() in shared/utils/resolver.ts walks AND mutates its nested metadata
+// (asset.metadata.decimals, asset.onchain_metadata['721'], CIP-68 extras), so pinning
+// a real shape here means retyping that whole CIP-25/CIP-68 walk. Left dynamic on
+// purpose, same as TokenRow in TokensTab.vue.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type NetworkAsset = any;
+
 export interface NetworkStore {
-  assets: any;
+  assets: Record<string, NetworkAsset>;
   epochParams: Cardano.ProtocolParameters;
   tip: CardanoTip | BitcoinTip;
-  price: any;
-  genesis: any;
+  genesis: Record<string, unknown> | null;
 }
 
 // Create observable state
@@ -49,7 +56,6 @@ export const networkStore = Vue.observable<NetworkStore>({
   assets: {},
   epochParams: null,
   tip: null,
-  price: {},
   genesis: null,
 });
 
@@ -66,7 +72,7 @@ if (context === 'browser') {
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
       if (key in networkStore) {
-        (networkStore as any)[key] = updates[key as keyof NetworkStore];
+        (networkStore as unknown as Record<string, unknown>)[key] = updates[key as keyof NetworkStore];
       }
     });
   });
@@ -83,11 +89,11 @@ if (context === 'browser') {
 let storageWriteTimeout: ReturnType<typeof setTimeout> | null = null;
 
 // Serializer function for complex data types
-function serializeValue(key: string, value: any): any {
+function serializeValue(key: string, value: unknown): unknown {
   if (typeof value === 'bigint') {
     return value.toString();
   } else if (value instanceof Map) {
-    return Array.from(value.entries()).reduce((obj, [key, value]) => {
+    return Array.from(value.entries()).reduce<Record<string, unknown>>((obj, [key, value]) => {
       obj[key] = value;
       return obj;
     }, {});
@@ -130,7 +136,7 @@ function broadcastFromBackground(updates: Partial<NetworkStore>) {
 }
 
 export default {
-  setAssets(assets: any) {
+  setAssets(assets: Record<string, NetworkAsset>) {
     const context = getContextType();
     debugLog(`🔍 NetworkStore setAssets called from ${context} context`);
     networkStore.assets = assets;
@@ -182,13 +188,7 @@ export default {
     broadcastFromBackground({ tip });
   },
 
-  setPrice(price: {}) {
-    networkStore.price = price;
-    // Broadcast from background context
-    broadcastFromBackground({ price });
-  },
-
-  setGenesis(genesis: any) {
+  setGenesis(genesis: Record<string, unknown>) {
     const context = getContextType();
     debugLog(`🔍 NetworkStore setGenesis called from ${context} context`);
     networkStore.genesis = genesis;
@@ -211,7 +211,6 @@ export default {
       assets: {},
       epochParams: null,
       tip: null,
-      price: {},
       genesis: null
     };
 
@@ -247,23 +246,13 @@ export default {
     return tip.blockNo || null;
   },
 
-  // Utility method to get ADA price in USD
-  getAdaPrice(): number {
-    return networkStore.price?.lastPrice || 0;
-  },
-
-  // Utility method to get price change percentage
-  getPriceChangePercent(): number {
-    return networkStore.price?.priceChangePercentage || 0;
-  },
-
   // Utility method to check if an asset exists
   hasAsset(unit: string): boolean {
     return unit in networkStore.assets;
   },
 
   // Utility method to get asset by unit
-  getAsset(unit: string): any {
+  getAsset(unit: string): NetworkAsset {
     return networkStore.assets[unit];
   }
 };

@@ -230,7 +230,6 @@
 import { toRefs, computed, watch, onMounted, ref, nextTick } from 'vue';
 import networks from '@/utils/networks';
 import { walletStore } from '@/stores/walletStore';
-import { networkStore } from '@/stores/networkStore';
 import { priceStore } from '@/stores/priceStore';
 import { tokenMetadataStore } from '@/stores/tokenMetadataStore';
 import filters from '@/shared/utils/filters';
@@ -250,7 +249,6 @@ const props = defineProps<Props>();
 const emit = defineEmits(['input', 'setMax', 'openCollectiblesDialog', 'sendEntireWallet']);
 
 const { loggedWallet, collections: resolvedCollections } = toRefs(walletStore);
-const { price } = toRefs(networkStore);
 
 // Honor the top-bar Hide Balances privacy toggle — mask displayed balances only;
 // MAX and the underlying quantities keep using the real values
@@ -276,14 +274,14 @@ function getTokenPriceInUsd(token: any): number {
 
   // For native tokens (ADA)
   if (token.ticker === nativeTicker || fullToken?.policy_id === '') {
-    return priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
+    return priceStore.adaUsd?.lastPrice || 0;
   }
 
   // For other tokens: get price from DexHunter (in ADA), convert to USD
   const unit = token.unit || fullToken?.unit;
   if (unit && tokenMetadataStore.tokens[unit]) {
     const priceInAda = tokenMetadataStore.tokens[unit].price || 0;
-    const adaPriceUsd = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
+    const adaPriceUsd = priceStore.adaUsd?.lastPrice || 0;
     return priceInAda * adaPriceUsd;
   }
 
@@ -396,7 +394,7 @@ function getTokenPriceInAda(token: any): number {
 
   // Fallback: if we have USD price, convert to ADA
   const tokenPriceUsd = getTokenPriceInUsd(token);
-  const adaPriceUsd = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
+  const adaPriceUsd = priceStore.adaUsd?.lastPrice || 0;
   if (tokenPriceUsd > 0 && adaPriceUsd > 0) {
     return tokenPriceUsd / adaPriceUsd;
   }

@@ -17,7 +17,6 @@
 import { computed, toRefs } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { priceStore } from '@/stores/priceStore';
-import { networkStore } from '@/stores/networkStore';
 import { coinGeckoStore } from '@/stores/coinGeckoStore';
 import { tokenMetadataStore } from '@/stores/tokenMetadataStore';
 import { Blockchain } from '@/models/types';
@@ -29,7 +28,6 @@ import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrenc
 
 export function useHoldingsValuation() {
   const { loggedWallet, utxos, collateral, tokens: walletTokens } = toRefs(walletStore);
-  const { price } = toRefs(networkStore);
   const { allTokens } = useMarketData();
   const { usdToEurRate } = useCurrencyConverter();
   const { currencyName: nativeCurrencyName, currencyTicker: nativeCurrencyTicker } = useNativeCurrency();
@@ -55,7 +53,7 @@ export function useHoldingsValuation() {
       return coinGeckoStore.cache['apex-4']?.usd ?? 0;
     }
     const marketAdaPrice = allTokens.value.find(t => t.unit === 'lovelace')?.price;
-    return marketAdaPrice || Number(price.value?.lastPrice) || 0;
+    return marketAdaPrice || 0;
   });
 
   /**
@@ -66,7 +64,7 @@ export function useHoldingsValuation() {
     const tokens = walletTokens.value || {};
     const adaPriceUsd = isApex.value
       ? (coinGeckoStore.cache['apex-4']?.usd ?? 0)
-      : (priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0);
+      : (priceStore.adaUsd?.lastPrice || 0);
     const dhTokens = tokenMetadataStore.tokens || {};
     const rows: MarketToken[] = [];
 

@@ -80,7 +80,6 @@ import { ref, computed, onUnmounted, toRefs } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import filters from '@/shared/utils/filters';
 import debounce from 'lodash/debounce';
-import { networkStore } from '@/stores/networkStore';
 import { priceStore } from '@/stores/priceStore';
 import { tokenMetadataStore } from '@/stores/tokenMetadataStore';
 import { walletStore } from '@/stores/walletStore';
@@ -91,10 +90,25 @@ import { useMarketData } from '@/modules/market/composables/useMarketData';
 
 const { t } = useTranslation();
 
+// Token rows reach this dialog from several sources (wallet balances, market
+// search results, DexHunter metadata) and carry different field sets, so this
+// is the union of what the template and the helpers below actually read.
+interface SelectableToken {
+  unit?: string;
+  ticker?: string;
+  name?: string;
+  policy_id?: string;
+  balance?: number | string;
+  decimals?: number;
+  last_price?: number;
+  quantity?: string;
+  metadata?: { decimals?: number };
+}
+
 interface Props {
-  value?: any;
+  value?: SelectableToken | null;
   isOpen?: boolean;
-  availableTokens?: any[];
+  availableTokens?: SelectableToken[];
   searchMechanism?: Function;
 }
 
@@ -105,7 +119,6 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits(['close', 'input']);
 
-const { price } = toRefs(networkStore);
 const { loggedWallet } = toRefs(walletStore);
 const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 
@@ -116,25 +129,25 @@ const chainLogo = computed(
 );
 
 const search = ref('');
-const additional = ref<any[]>([]);
+const additional = ref<SelectableToken[]>([]);
 const searchLoading = ref(false);
 
 // Get token price in USD (same logic as AssetsToSendStep)
-function getTokenPriceInUsd(token: any): number {
+function getTokenPriceInUsd(token: SelectableToken | null): number {
   if (!token) return 0;
 
   const nativeTicker = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
 
   // For native tokens (ADA)
   if (token.ticker === nativeTicker || token.policy_id === '') {
-    return priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
+    return priceStore.adaUsd?.lastPrice || 0;
   }
 
   // For other tokens: get price from DexHunter (in ADA), convert to USD
   const unit = token.unit;
   if (unit && tokenMetadataStore.tokens[unit]) {
     const priceInAda = tokenMetadataStore.tokens[unit].price || 0;
-    const adaPriceUsd = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
+    const adaPriceUsd = priceStore.adaUsd?.lastPrice || 0;
     return priceInAda * adaPriceUsd;
   }
 
@@ -187,7 +200,7 @@ const onSearchInput = () => {
   debouncedSearch();
 };
 
-const onChange = (item: any) => {
+const onChange = (item: SelectableToken) => {
   selectedToken.value = { ...item, quantity: formatTokenBalance(item) };
   emit('close');
 };
@@ -196,7 +209,7 @@ onUnmounted(() => {
   debouncedSearch.cancel();
 });
 
-const handleImageError = (event: Event, _item: any) => {
+const handleImageError = (event: Event, _item: SelectableToken) => {
   const target = event.target as HTMLImageElement;
   target.onerror = null;
   // Market-data logo failed to load → fall back to the chain logo.
@@ -204,7 +217,7 @@ const handleImageError = (event: Event, _item: any) => {
 };
 
 // Format token balance: convert from smallest unit to display balance
-const formatTokenBalance = (token: any): string => {
+const formatTokenBalance = (token: SelectableToken | null): string => {
   if (!token || !token.balance) return '0';
 
   const decimals = token.decimals || token.metadata?.decimals || 6;

@@ -216,7 +216,6 @@ import SelectTokenDialog from '@/shared/components/SelectTokenDialog.vue';
 import networks from '@/utils/networks';
 import rules from '@/utils/rules';
 import { walletStore } from '@/stores/walletStore';
-import { networkStore } from '@/stores/networkStore';
 import { priceStore } from '@/stores/priceStore';
 import { tokenMetadataStore } from '@/stores/tokenMetadataStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
@@ -295,7 +294,6 @@ const props = defineProps({
 const emit = defineEmits(['input', 'change', 'setMax', 'remove']);
 
 const { loggedWallet } = toRefs(walletStore);
-const { price } = toRefs(networkStore);
 const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 
 // Token images come from main-page market data (keyed by unit), not DexHunter.
@@ -312,14 +310,14 @@ function getTokenPriceInUsd(token: { ticker?: string; policy_id?: string; unit?:
 
   // For native tokens (ADA)
   if (token.ticker === nativeTicker || token.policy_id === '') {
-    return priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
+    return priceStore.adaUsd?.lastPrice || 0;
   }
 
   // For other tokens: get price from DexHunter (in ADA), convert to USD
   const unit = token.unit;
   if (unit && tokenMetadataStore.tokens[unit]) {
     const priceInAda = tokenMetadataStore.tokens[unit].price || 0;
-    const adaPriceUsd = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
+    const adaPriceUsd = priceStore.adaUsd?.lastPrice || 0;
     return priceInAda * adaPriceUsd;
   }
 

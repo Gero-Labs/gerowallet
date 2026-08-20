@@ -537,7 +537,6 @@ const props = defineProps({
 const emit = defineEmits(['row-click']);
 
 const { transactions: txs, loggedWallet, keys, contacts } = toRefs(walletStore);
-const { price } = toRefs(networkStore);
 const { assets } = toRefs(networkStore);
 const { loadingTxs } = toRefs(loadingState);
 
@@ -545,8 +544,8 @@ const isBitcoin = computed(() => loggedWallet.value?.chain === Blockchain.BITCOI
 
 const hideBalances = computed(() => walletStore.config?.hideBalances || false);
 
-// Use Kraken WebSocket price for ADA, fallback to network store price
-const adaPrice = computed(() => priceStore.adaUsd?.lastPrice || price.value?.lastPrice || 0);
+// Live Kraken ticker price for ADA
+const adaPrice = computed(() => priceStore.adaUsd?.lastPrice || 0);
 
 const activityHeaders = computed(() => [
   { text: t('transactions.activity'), align: 'start overflow-x', sortable: true, value: 'tx_timestamp' },
