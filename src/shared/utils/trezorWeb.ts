@@ -14,6 +14,7 @@ import {
   util,
 } from '@cardano-sdk/key-management';
 import { bech32 } from 'bech32';
+import { parseSafeUrl } from '@/shared/utils/externalLink';
 import { NetworkInfo } from '@/utils/networks';
 import { BIP32Path, Ed25519KeyHashHex, Ed25519PublicKeyHex, Ed25519SignatureHex } from '@cardano-sdk/crypto';
 import { areStringsEqualInConstantTime, HexBlob } from '@cardano-sdk/util';
@@ -719,7 +720,7 @@ export default {
         const nativeOpen = window.open.bind(window);
         window.open = function patchedOpen(url?: string | URL, target?: string, features?: string): Window | null {
           const href = typeof url === 'string' ? url : (url?.href ?? '');
-          if (href.includes('connect.trezor.io') && !features) {
+          if (parseSafeUrl(href)?.hostname === 'connect.trezor.io' && !features) {
             return nativeOpen(url as string, target ?? 'modal', 'popup=yes,width=420,height=680');
           }
           return nativeOpen(url as string, target as string, features as string);
