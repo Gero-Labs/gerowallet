@@ -13,11 +13,11 @@
     </div>
 
     <template v-if="parsedType">
-      <p v-if="prfSupported && !usePassword" class="text-body-2 grey--text">
-        {{ $t('poolOperator.coldKeyPrfEncryptionHint') }}
-      </p>
       <p v-if="prfMode === 'security-key' && !usePassword" class="text-body-2 warning--text">
         {{ $t('welcome.passKeySecurityKeyHint') }}
+      </p>
+      <p v-else-if="prfSupported && !usePassword" class="text-body-2 grey--text">
+        {{ $t('poolOperator.coldKeyPrfEncryptionHint') }}
       </p>
       <template v-if="!prfSupported || usePassword">
         <v-text-field
