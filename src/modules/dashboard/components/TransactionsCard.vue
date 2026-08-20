@@ -356,6 +356,15 @@
                     >{{ $t('transactions.dexhunter') }}</v-chip
                   >
                   <v-chip
+                    v-if="isSteelSwap(item)"
+                    outlined
+                    class="px-1"
+                    x-small
+                    color="var(--g-text-1)"
+                    style="margin-left: 1px; margin-bottom: 1px"
+                    >{{ $t('transactions.steelswap') }}</v-chip
+                  >
+                  <v-chip
                     v-if="isMinswap(item)"
                     outlined
                     class="px-1"
@@ -724,6 +733,7 @@ const transactions = computed<StoredTransaction[]>(() => {
       // Checks that work for all transaction types
       matchesChip = matchesChip ||
         ('cashback'.includes(searchLower) && isCashback(tx)) ||
+        ('steelswap'.includes(searchLower) && isSteelSwap(tx)) ||
         ('internal'.includes(searchLower) && isInternalTransfer(tx)) ||
         ('pending'.includes(searchLower) && tx.pending);
 
@@ -1266,17 +1276,26 @@ const isInternalTransfer = (item: StoredTransaction): boolean => {
   // Check all input addresses
   const allInputsInternal = item.utxo.inputs?.every((input) => walletAddresses.has(input.address));
 
-  // Check all output addresses (CardanoTx only). Match by full (base) address —
-  // the wallet only monitors its base addresses, so an output to an enterprise
-  // address derived from the same payment key (e.g. a self-send to the collateral
-  // pool) is NOT tracked balance and reads as an ordinary Sent, matching how
-  // other Cardano wallets classify it.
-  const allOutputsInternal = isCardanoTx(item)
-    ? item.body?.outputs?.every((output) => walletAddresses.has(output.address))
-    : true;
+  // Check all output addresses. Prefer the utxo output set — it is the full
+  // on-chain output list and is present even for records stored before the
+  // backend had the tx CBOR (no `body`, so isCardanoTx() is false for them);
+  // `body.outputs` is the fallback for just-submitted pending txs (utxo is
+  // null until confirmation). Match by full (base) address — the wallet only
+  // monitors its base addresses, so an output to an enterprise address derived
+  // from the same payment key (e.g. a self-send to the collateral pool) is NOT
+  // tracked balance and reads as an ordinary Sent, matching how other Cardano
+  // wallets classify it.
+  const outputAddresses = item.utxo.outputs?.length
+    ? item.utxo.outputs.map((output) => output.address)
+    : (isCardanoTx(item) ? item.body?.outputs?.map((output) => output.address) : undefined);
+
+  // Without a verifiable output list, never claim the tx is internal
+  if (!outputAddresses?.length) {
+    return false;
+  }
 
   // Transaction is internal if ALL inputs AND ALL outputs belong to this wallet
-  return allInputsInternal && allOutputsInternal;
+  return !!allInputsInternal && outputAddresses.every((address) => walletAddresses.has(address));
 };
 
 const isStrike = (item: StoredTransaction): boolean => {
@@ -1320,7 +1339,7 @@ const isDustRegistration = (item: StoredTransaction): boolean => {
 // aggregator swaps are also tagged here.
 // Any recognised DEX/aggregator interaction — used to title the tx "DEX Order".
 const isDexTransaction = (item: StoredTransaction): boolean =>
-  isMinswap(item) || isSundaeSwap(item) || isSplash(item) || isDexHunter(item);
+  isMinswap(item) || isSundaeSwap(item) || isSplash(item) || isDexHunter(item) || isSteelSwap(item);
 
 const isDexHunter = (item: StoredTransaction): boolean => {
   if (!isCardanoTx(item)) return false;
@@ -1343,6 +1362,27 @@ const isDexHunter = (item: StoredTransaction): boolean => {
 
   // Only tag as DexHunter if there's actual platform interaction
   return hasDexHunterOrderAddress || hasDexHunterFeeAddress || hasDexHunterMetadata || false;
+};
+
+const isSteelSwap = (item: StoredTransaction): boolean => {
+  // SteelSwap order contract address (enterprise-address deployment of the
+  // shared aggregator order script — same payment credential as the DexHunter
+  // order contract but with no staking part, so the bech32 forms don't collide)
+  const STEELSWAP_ORDER_ADDRESS = 'addr1w8p79rpkcdz8x9d6tft0x0dx5mwuzac2sa4gm8cvkw5hcnqst2ctf';
+
+  // Address check runs on the utxo set so records stored before the backend
+  // had the tx CBOR (no body/auxiliaryData) are still tagged
+  const hasSteelSwapOrderAddress =
+    item.utxo?.inputs?.some((input) => input.address === STEELSWAP_ORDER_ADDRESS) ||
+    item.utxo?.outputs?.some((output) => output.address === STEELSWAP_ORDER_ADDRESS) ||
+    (isCardanoTx(item) && item.body?.outputs?.some((output) => output.address === STEELSWAP_ORDER_ADDRESS));
+
+  // Check metadata for SteelSwap message, e.g. { 674: { msg: ['CarDeM', 'SteelSwap: 1.18.0'] } }
+  const msg = isCardanoTx(item) ? item.auxiliaryData?.blob?.[674]?.msg : undefined;
+  const hasSteelSwapMetadata =
+    msg && Array.isArray(msg) ? msg.some((m: string) => typeof m === 'string' && m.includes('SteelSwap')) : false;
+
+  return hasSteelSwapOrderAddress || hasSteelSwapMetadata || false;
 };
 
 const isMinswap = (item: StoredTransaction): boolean => {

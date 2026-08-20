@@ -2829,6 +2829,7 @@ export default {
   'transactions.delegation': 'Delegation',
   'transactions.swap': 'Swap',
   'transactions.dexhunter': 'DexHunter',
+  'transactions.steelswap': 'SteelSwap',
   'transactions.epoch': 'Epoch',
   'transactions.failed': 'Fehlgeschlagen',
   'transactions.failedTransaction': 'Fehlgeschlagene Transaktion',
