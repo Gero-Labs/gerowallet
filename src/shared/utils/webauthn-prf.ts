@@ -98,6 +98,21 @@ async function detectPrfSupport(): Promise<boolean> {
     return false;
   }
 
+  // Brave lies: getClientCapabilities() reports `extension:prf: true`, but its
+  // platform authenticator then creates credentials with PRF disabled
+  // (prf.enabled=false, no results) — a wallet that could never unlock, plus an
+  // orphaned passkey in the OS store per attempt (#655-2). Treat Brave as
+  // unsupported before consulting the capability probe.
+  try {
+    const braveNavigator = navigator as Navigator & { brave?: { isBrave?: () => Promise<boolean> } };
+    if (await braveNavigator.brave?.isBrave?.()) {
+      debugWarn('[PRF] ❌ Brave detected — platform authenticator does not deliver PRF results');
+      return false;
+    }
+  } catch {
+    // Detection failure ≠ Brave; fall through to the capability probe.
+  }
+
   // Check if getClientCapabilities is available (Chrome 128+, Firefox 134+)
   if (typeof PublicKeyCredential.getClientCapabilities === 'function') {
     try {
