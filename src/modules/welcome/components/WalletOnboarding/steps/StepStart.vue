@@ -69,6 +69,29 @@
       </button>
     </div>
 
+    <!-- Dev builds only: watch a user-supplied address (read-only, no keys) -->
+    <div v-if="watchVisible" class="watch-dev">
+      <div class="step-section-label mb-2">{{ $t('welcome.watchDevTitle') }}</div>
+      <div class="watch-dev__row">
+        <v-text-field
+          v-model="watchAddress"
+          dense
+          outlined
+          hide-details
+          :placeholder="$t('welcome.watchDevPlaceholder')"
+          class="watch-dev__field"
+        />
+        <v-btn
+          class="onb-btn"
+          depressed
+          color="primary"
+          :loading="watchLoading"
+          :disabled="!watchAddress.trim()"
+          @click="onWatchSubmit()"
+        >{{ $t('welcome.watchDevButton') }}</v-btn>
+      </div>
+    </div>
+
     </div>
 
     <!-- Navigation (footer — outside the scroll region above) -->
@@ -80,12 +103,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, getCurrentInstance } from 'vue';
 import assets from '@/utils/assets';
-import { NetworkInfo } from '@/utils/networks';
-import { Blockchain } from '@/models/types';
+import networks, { NetworkInfo } from '@/utils/networks';
+import { Blockchain, Theme, WalletType } from '@/models/types';
 import NetworkSelector from '@/modules/welcome/components/NetworkSelector.vue';
 import featureFlagsStore from '@/stores/featureFlagsStore';
+import GeroStore from '@/stores/geroStore';
+import { Messaging } from '@/chrome/messaging';
+import { MessageTypes } from '@/models/MessageTypes';
 
 type Method = 'create' | 'restore' | 'pair' | 'google' | 'googleRestore';
 
@@ -146,6 +172,56 @@ const onNetworkChange = (n: NetworkInfo): void => {
 
 const onContinue = (): void => {
   if (selectedMethod.value) emit('select', selectedMethod.value);
+};
+
+// ── Dev-only watch wallet ────────────────────────────────────────────────
+// Read-only wallet from a user-supplied base address — for inspecting what a
+// user sees given their address. `import.meta.env.DEV` is baked at build
+// time, so the whole block is compiled out of production builds; the runtime
+// devMode toggle additionally hides it behind the "Developer networks"
+// switch. Cardano-family chains only (Shelley address model).
+const vmProxy = getCurrentInstance()?.proxy;
+const router = vmProxy?.$router;
+const watchAddress = ref('');
+const watchLoading = ref(false);
+const watchVisible = computed(
+  () =>
+    import.meta.env.DEV &&
+    !!props.devMode &&
+    localNetwork.value?.blockchain !== Blockchain.BITCOIN &&
+    localNetwork.value?.blockchain !== Blockchain.MIDNIGHT
+);
+
+const onWatchSubmit = async (): Promise<void> => {
+  const address = watchAddress.value.trim();
+  if (!address) return;
+  watchLoading.value = true;
+  try {
+    // Reuses the hardware-wallet persistence path — it stores the record
+    // verbatim (type Watch, watchAddress carried, no key material).
+    const wallet = await GeroStore.createNewHardwareWallet({
+      name: `Watch ${address.slice(0, 14)}…`,
+      type: WalletType.Watch,
+      watchAddress: address,
+      publicKey: '',
+      theme: Theme.GERO,
+      chain: localNetwork.value?.blockchain,
+      network: localNetwork.value?.network,
+      icon: networks.resolveIconColor(localNetwork.value?.blockchain || '', localNetwork.value?.network || ''),
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- messaging envelope is untyped, same as the other onboarding steps
+    const response: any = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.LOGIN,
+      data: { wallet },
+    });
+    if (response && !response.error) {
+      router?.push('/').catch(() => {});
+    }
+  } catch (e) {
+    console.error('Watch wallet creation failed:', e);
+  } finally {
+    watchLoading.value = false;
+  }
 };
 </script>
 
@@ -280,5 +356,21 @@ const onContinue = (): void => {
   color: var(--g-text-3);
   margin-top: 2px;
   line-height: 1.35;
+}
+
+.watch-dev {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--g-hairline-1);
+}
+
+.watch-dev__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.watch-dev__field {
+  flex: 1 1 auto;
 }
 </style>

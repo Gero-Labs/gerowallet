@@ -8,6 +8,10 @@ const WalletType = {
   Keystone: 'Keystone',
   Normal: 'Normal',
   Google: 'Google',
+  // Dev-only read-only wallet watching a user-supplied address (no keys).
+  // Creation UI is gated to dev builds; the type itself must exist in all
+  // builds so a dev-profile DB carrying one doesn't break a prod build.
+  Watch: 'Watch',
 };
 
 type WalletTypeValue = typeof WalletType[keyof typeof WalletType];
@@ -33,6 +37,7 @@ export interface Wallet {
   userId?: string; // Google `sub` for Google/MPC wallets (NOT email)
   mpcDeviceShare?: string; // AES-encrypted encoded device share (non-indexed)
   mpcDeviceShareNext?: string; // Staged next device share during crash-safe re-split (non-indexed)
+  watchAddress?: string; // Watch wallets only: the watched base address (no keys)
 }
 
 export type NetworkScheme = {
