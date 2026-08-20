@@ -12,17 +12,6 @@
   background-size: cover;
   background: linear-gradient(0deg, rgba(0, 0, 0, 0.90), rgba(0, 0, 0, 0.90)), url(@/assets/bg-dapp.png) center no-repeat!important;
 }
-.info {
-  -webkit-box-shadow:inset 0 0 0 2px #00dff3;
-  -moz-box-shadow:inset 0 0 0 2px #00dff3;
-  box-shadow:inset 0 0 0 2px #00dff3;
-}
-
-.warning {
-  -webkit-box-shadow:inset 0 0 0 2px #ff8e8e;
-  -moz-box-shadow:inset 0 0 0 2px #ff8e8e;
-  box-shadow:inset 0 0 0 2px #ff8e8e;
-}
 .check .v-label {
   color: white!important;
 }
