@@ -627,7 +627,12 @@ function toggleWatch(unit: string) {
 
 function handleImgError(e: Event) {
   const target = e.target as HTMLImageElement;
-  if (target) target.style.display = 'none';
+  if (!target) return;
+  // Fall back to the chain logo rather than hiding, which left an empty avatar in the row.
+  // Clear the handler first so a chain logo that itself fails can't loop.
+  target.onerror = null;
+  if (chainLogo.value) target.src = chainLogo.value;
+  else target.style.display = 'none';
 }
 
 import { formatPrice, formatCompact, formatBalance, formatChange, changeColor, formatInt } from '@/modules/market/utils/formatters';

@@ -3,7 +3,7 @@
     <!-- Header -->
     <div class="d-flex align-center pa-4 pb-2">
       <v-avatar size="36" class="mr-3">
-        <img v-if="token.img" :src="token.img" :alt="token.ticker" />
+        <img v-if="token.img && !imgFailed" :src="token.img" :alt="token.ticker" @error="imgFailed = true" />
         <img v-else-if="chainLogo" :src="chainLogo" :alt="token.ticker" style="opacity: 0.5" />
         <v-icon v-else>mdi-circle-outline</v-icon>
       </v-avatar>
@@ -308,6 +308,13 @@ defineEmits<{
   (e: 'close'): void;
   (e: 'dust-setup'): void;
 }>();
+
+// A logo URL that resolves but fails to load (dead IPFS CID, gateway 504, an image too large for
+// the renderer) would otherwise sit here as a broken-image glyph — the chain-logo branch below
+// only covers a token with NO logo at all. Falling through to it on error keeps the header intact.
+// Reset per token, or the next token selected inherits this one's failure.
+const imgFailed = ref(false);
+watch(() => props.token?.img, () => { imgFailed.value = false; });
 
 /** Whether this drawer's token is the current network's cNIGHT/NIGHT on a
  *  Cardano wallet — the only token that can generate DUST. */

@@ -34,6 +34,14 @@
   /* Text color ON the gradient (near-black, AA on both stops) */
   --g-on-grad: #06181B;
 
+  /* Partner brand marks.
+     NOT accents. The chain accent (--g-accent / --g-grad-*) stays the only colour a
+     screen may use for interactive, selected or stateful elements; a partner colour
+     is allowed to identify WHOSE surface you are on and nothing else — a lockup and
+     at most a hero tint. If you are reaching for one to colour a control, the answer
+     is --g-accent. RealFi mint, per their brand: */
+  --g-partner-realfi: #3EDCA8;
+
   /* Semantic */
   --g-error: #F97066;
   --g-success: #47CD89;

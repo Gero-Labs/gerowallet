@@ -38,6 +38,7 @@ const BitcoinSignPsbt = () => import('@/popup/modules/views/BitcoinSignPsbt.vue'
 const BitcoinSignMessage = () => import('@/popup/modules/views/BitcoinSignMessage.vue');
 const WCSessionProposal = () => import('@/popup/modules/views/WCSessionProposal.vue');
 const PoolOperator = () => import('@/modules/pool-operator/PoolOperator.vue');
+const RealFi = () => import('@/modules/realfi/RealFi.vue');
 const NexusPage = () => import('@/modules/nexus/NexusPage.vue');
 const ProofServerPage = () => import('@/modules/midnight/ProofServerPage.vue');
 
@@ -116,6 +117,15 @@ const routes = [
     path: '/pool-operator',
     name: 'poolOperator',
     component: PoolOperator,
+    meta: {
+      layout: ContentLayout,
+      requiresAuth: true,
+    },
+  },
+  {
+    path: '/realfi',
+    name: 'realfi',
+    component: RealFi,
     meta: {
       layout: ContentLayout,
       requiresAuth: true,
@@ -367,6 +377,11 @@ function isRouteUnderMaintenance(routeName: string | null | undefined): boolean 
       // Pool Operator dashboard gated by feature flag
       return !featureFlagsStore.isPoolOperatorEnabled();
 
+    case 'realfi':
+      // RealFi Earn ships dark — it is a value-moving surface, so it is enabled
+      // deliberately via gero-sync rather than by default.
+      return !featureFlagsStore.isRealFiEnabled();
+
     case 'copilotFeed':
       // Gero Copilot feed gated by the master feature flag (ships dark)
       return !featureFlagsStore.isCopilotEnabled();
@@ -469,6 +484,11 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
       // live values (not a hard false) so gero-sync can turn it on without a release;
       // falsy => redirect to '/'. (Same pattern as copilotFeed below.)
       poolOperator: (c, n) => networks.resolveStakingSupport(c, n) && featureFlagsStore.isPoolOperatorEnabled(),
+      // RealFi Earn — network support (Cardano preprod only today) AND the master
+      // flag, same AND-the-flag shape as poolOperator above. Both are live reads so
+      // gero-sync can turn it on without a release; falsy => redirect to '/', which
+      // also closes the direct-URL gap for a mainnet wallet visiting #/realfi.
+      realfi: (c, n) => networks.resolveRealFiSupport(c, n) && featureFlagsStore.isRealFiEnabled(),
       // Copilot feed — closes the cold-refresh window before flags init. Returns
       // the live flag (not a hard false) so the maintenance case can turn it ON
       // once gero-sync enables it. Falsy => redirect to '/'.

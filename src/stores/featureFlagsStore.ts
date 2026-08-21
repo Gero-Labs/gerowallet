@@ -14,6 +14,12 @@ export interface FeatureFlags {
   // Master gate for the daemon-free Trezor WebUSB signing path.
   isTrezorWebUsbEnabled: boolean;
   isPoolOperatorEnabled: boolean;
+  // Master gate for the RealFi Earn surface (USDr / sUSDr yield). Default OFF and
+  // ships dark: RealFi is a value-moving surface, so it is enabled deliberately via
+  // gero-sync, never by a flag-service outage. Network support is a SEPARATE gate —
+  // `networks.resolveRealFiSupport` currently returns true for Cardano preprod only —
+  // so both must pass before the route or the nav item appears.
+  isRealFiEnabled: boolean;
   isNexusWithdrawalEnabled: boolean;
   isNexusUnstakeEnabled: boolean;
   isNexusDelegateEnabled: boolean;
@@ -72,6 +78,7 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
     isBitcoinEnabled: false,
     isTrezorWebUsbEnabled: false,
     isPoolOperatorEnabled: false,
+    isRealFiEnabled: false,
     isNexusWithdrawalEnabled: false,
     isNexusUnstakeEnabled: false,
     isNexusDelegateEnabled: false,
@@ -140,6 +147,7 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isBitcoinEnabled = featureFlagService.getFlag('isBitcoinEnabled', false);
     featureFlagsState.flags.isTrezorWebUsbEnabled = featureFlagService.getFlag('isTrezorWebUsbEnabled', false);
     featureFlagsState.flags.isPoolOperatorEnabled = featureFlagService.getFlag('isPoolOperatorEnabled', false);
+    featureFlagsState.flags.isRealFiEnabled = featureFlagService.getFlag('isRealFiEnabled', false);
     featureFlagsState.flags.isNexusWithdrawalEnabled = featureFlagService.getFlag('isNexusWithdrawalEnabled', false);
     featureFlagsState.flags.isNexusUnstakeEnabled = featureFlagService.getFlag('isNexusUnstakeEnabled', false);
     featureFlagsState.flags.isNexusDelegateEnabled = featureFlagService.getFlag('isNexusDelegateEnabled', false);
@@ -184,6 +192,9 @@ export const featureFlagsStore = {
     });
     featureFlagService.onFlagChange('isPoolOperatorEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isPoolOperatorEnabled', newValue);
+    });
+    featureFlagService.onFlagChange('isRealFiEnabled', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'isRealFiEnabled', newValue);
     });
     featureFlagService.onFlagChange('isNexusWithdrawalEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isNexusWithdrawalEnabled', newValue);
@@ -281,6 +292,19 @@ export const featureFlagsStore = {
    */
   isPoolOperatorEnabled(): boolean {
     return featureFlagsState.flags.isPoolOperatorEnabled;
+  },
+
+  /**
+   * Check if the RealFi Earn surface is enabled.
+   *
+   * This is only the MASTER gate. Callers must AND it with
+   * `networks.resolveRealFiSupport(chain, network)` — the flag says "the feature is
+   * live", the network resolver says "this wallet's chain/network can reach it"
+   * (Cardano preprod only today). The router dual-gates on both, matching the
+   * NavigationDrawer item's own `enabled` condition.
+   */
+  isRealFiEnabled(): boolean {
+    return featureFlagsState.flags.isRealFiEnabled;
   },
 
   /**
@@ -406,6 +430,7 @@ export const featureFlagsStore = {
       isGoMiningEnabled: false,
       isBitcoinEnabled: false,
       isPoolOperatorEnabled: false,
+      isRealFiEnabled: false,
       isNexusWithdrawalEnabled: false,
       isNexusUnstakeEnabled: false,
       isNexusDelegateEnabled: false,
