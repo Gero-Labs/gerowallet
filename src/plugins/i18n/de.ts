@@ -3417,6 +3417,7 @@ export default {
   'market.verifiedOnly': 'Nur verifizierte',
   'market.hideScam': 'Betrug ausblenden',
   'market.hiddenByFilters': '{count} durch Filter ausgeblendet',
+  'market.decimalsUnknown': 'Rohwert - Dezimalstellen unbekannt',
   'market.rank': '#',
   'market.token': 'Token',
   'market.price': 'Preis',

@@ -233,13 +233,23 @@
 
     <!-- Holdings columns (when showHoldingsColumns) -->
     <template v-slot:[`item.balance`]="{ item }">
-      <v-tooltip v-if="item.balance" top content-class="custom-tooltip">
-        <template v-slot:activator="{ on, attrs }">
-          <span v-bind="attrs" v-on="on" style="font-size: 12px">{{ hideBalances ? '••••••' : formatBalance(item.balance) }}</span>
-        </template>
-        {{ hideBalances ? '••••••' : item.balance.toLocaleString('en-US', { maximumFractionDigits: 20 }) }}
-      </v-tooltip>
-      <span v-else style="font-size: 12px">—</span>
+      <div class="d-flex align-center" style="gap: 4px;">
+        <v-tooltip v-if="item.balance" top content-class="custom-tooltip">
+          <template v-slot:activator="{ on, attrs }">
+            <span v-bind="attrs" v-on="on" style="font-size: 12px">{{ hideBalances ? '••••••' : formatBalance(item.balance) }}</span>
+          </template>
+          {{ hideBalances ? '••••••' : item.balance.toLocaleString('en-US', { maximumFractionDigits: 20 }) }}
+        </v-tooltip>
+        <span v-else style="font-size: 12px">—</span>
+        <!-- Decimals couldn't be resolved from any source — the balance above is
+             raw units, not divided by decimals (issue 1003). -->
+        <v-tooltip v-if="item.decimalsUnknown" top content-class="custom-tooltip">
+          <template v-slot:activator="{ on, attrs }">
+            <v-icon x-small color="warning" v-bind="attrs" v-on="on">mdi-help-circle-outline</v-icon>
+          </template>
+          {{ $t('market.decimalsUnknown') }}
+        </v-tooltip>
+      </div>
     </template>
 
     <template v-slot:[`item.value`]="{ item }">

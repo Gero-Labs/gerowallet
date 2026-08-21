@@ -35,6 +35,10 @@ export interface MarketToken {
   policyLocked: boolean;
   fingerprint: string;
   decimals: number;
+  // True when decimals could not be resolved from registry metadata or any
+  // market fallback, so `decimals`/`balance` above fell back to raw units
+  // instead of a wrong divided-by-decimals value (issue 1003).
+  decimalsUnknown?: boolean;
   description?: string;
   // Populated when cross-referencing with wallet holdings
   balance?: number;

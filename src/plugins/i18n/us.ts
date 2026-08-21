@@ -3115,6 +3115,7 @@ export default {
   'market.verifiedOnly': 'Verified Only',
   'market.hideScam': 'Hide Scam',
   'market.hiddenByFilters': '{count} hidden by filters',
+  'market.decimalsUnknown': 'Raw units - decimals unknown',
   'market.rank': '#',
   'market.token': 'Token',
   'market.price': 'Price',
