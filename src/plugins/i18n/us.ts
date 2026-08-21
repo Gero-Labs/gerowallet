@@ -3113,7 +3113,6 @@ export default {
   'market.liveUpdates': 'Live price updates',
   'market.connecting': 'Connecting to live feed...',
   'market.verifiedOnly': 'Verified Only',
-  'market.hideScam': 'Hide Scam',
   'market.hiddenByFilters': '{count} hidden by filters',
   'market.decimalsUnknown': 'Raw units - decimals unknown',
   'market.rank': '#',

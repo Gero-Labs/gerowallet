@@ -3415,7 +3415,6 @@ export default {
   'market.liveUpdates': 'Live-Preisaktualisierungen',
   'market.connecting': 'Verbindung zum Live-Feed...',
   'market.verifiedOnly': 'Nur verifizierte',
-  'market.hideScam': 'Betrug ausblenden',
   'market.hiddenByFilters': '{count} durch Filter ausgeblendet',
   'market.decimalsUnknown': 'Rohwert - Dezimalstellen unbekannt',
   'market.rank': '#',

@@ -354,7 +354,7 @@
                  balance never silently disappears (issue 1003). -->
             <div
               v-if="activeView === 'holdings' && hiddenByFilterCount > 0"
-              class="hidden-by-filter-row d-flex align-center px-3 py-1"
+              class="d-flex align-center px-3 py-1"
             >
               <span class="t-caption" style="color: var(--g-text-3);">
                 {{ $t('market.hiddenByFilters', { count: hiddenByFilterCount }) }}
@@ -787,14 +787,7 @@ const displayedTokens = computed(() => {
   }
 
   // Apply search filter
-  if (debouncedSearchQuery.value) {
-    const q = debouncedSearchQuery.value.toLowerCase();
-    tokens = tokens.filter(tok =>
-      tok.name?.toLowerCase().includes(q) ||
-      tok.ticker?.toLowerCase().includes(q) ||
-      tok.unit?.toLowerCase().includes(q)
-    );
-  }
+  tokens = applySearchFilter(tokens);
 
   // Apply the verified filter — mainnet Cardano only (verifiedFilterActive),
   // and NEVER strip snek.fun tokens (bonding-curve tokens are inherently
@@ -818,20 +811,23 @@ const displayedTokens = computed(() => {
   return tokens;
 });
 
+// Shared by displayedTokens and hiddenByFilterCount — both must agree on which
+// rows the search keeps, or the hidden count drifts from the table.
+function applySearchFilter(tokens: MarketToken[]): MarketToken[] {
+  if (!debouncedSearchQuery.value) return tokens;
+  const q = debouncedSearchQuery.value.toLowerCase();
+  return tokens.filter(tok =>
+    tok.name?.toLowerCase().includes(q) ||
+    tok.ticker?.toLowerCase().includes(q) ||
+    tok.unit?.toLowerCase().includes(q)
+  );
+}
+
 // Rows the verified filter removed from the holdings view — surfaced under the
 // table so a real balance never silently disappears (issue 1003).
 const hiddenByFilterCount = computed(() => {
   if (activeView.value !== 'holdings' || !verifiedFilterActive.value) return 0;
-  let base = myHoldings.value;
-  if (debouncedSearchQuery.value) {
-    const q = debouncedSearchQuery.value.toLowerCase();
-    base = base.filter(tok =>
-      tok.name?.toLowerCase().includes(q) ||
-      tok.ticker?.toLowerCase().includes(q) ||
-      tok.unit?.toLowerCase().includes(q)
-    );
-  }
-  return base.filter(tok => !(tok.verified || tok.isSnekFun)).length;
+  return applySearchFilter(myHoldings.value).filter(tok => !(tok.verified || tok.isSnekFun)).length;
 });
 
 // ── Actions ───────────────────────────────────────────────────────────────────
