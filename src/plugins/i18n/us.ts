@@ -2020,6 +2020,8 @@ export default {
   'vaults.withdrawPreview': 'Withdraw Preview',
   'vaults.withdrawSettled': 'Withdrawal Settled',
 
+  'portfolio.hiddenByFilters': '1 token hidden by your filters | {n} tokens hidden by your filters',
+  'portfolio.showAll': 'Show all',
   'portfolio.collection': 'Collection',
   'portfolio.floorPrice': 'Floor',
   'portfolio.floorPriceTooltip': 'Lowest listing price for an NFT in this collection',

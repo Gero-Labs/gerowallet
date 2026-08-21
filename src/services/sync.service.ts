@@ -27,6 +27,13 @@ import type { UnifiedTransaction } from '@/chains/bitcoin/bitcoinTransactionPars
  * SyncService handles all wallet synchronization operations
  * Manages blockchain sync, account info, transactions, assets, and rewards
  */
+/**
+ * How long to trust a 'this asset has no off-chain metadata' answer before asking
+ * again. Registry entries appear after a token launches, so the answer is not
+ * permanent — but it changes on the order of days, not minutes.
+ */
+const ASSET_METADATA_RETRY_MS = 24 * 60 * 60 * 1000;
+
 export class SyncService {
   private walletBg: WalletBg | null = null;
   private api: Api;
@@ -762,7 +769,28 @@ export class SyncService {
     const blockchainDB: Dexie = await this.walletBg.getBlockchainDb();
     const assetsTable: Table<AssetRow, IndexableType> = blockchainDB.table('assets');
     const existingRows = await assetsTable.bulkGet(uniqueUnits);
-    const units = uniqueUnits.filter((unit, idx) => !existingRows[idx]);
+
+    // Re-fetch rows we have but that carry NO off-chain metadata.
+    //
+    // Caching on presence alone poisons the row permanently: an asset held before
+    // it lands in the Cardano token registry gets stored with `metadata: null`,
+    // and because the row now exists it is never asked about again. It stays
+    // unverified (hidden by the verified-only filter) and undecimalled (balance
+    // rendered 1e6 too large) FOREVER — including after the token is registered.
+    // Every newly launched token has that window, and it is exactly when holders
+    // are most likely to be looking. See gerowallet#1003.
+    //
+    // The TTL keeps this cheap: a token that legitimately has no registry entry
+    // (anything on a testnet, where no registry exists at all) is retried once a
+    // day rather than on every sync.
+    const now = Date.now();
+    const units = uniqueUnits.filter((unit, idx) => {
+      const row = existingRows[idx] as { metadata?: unknown; metadataCheckedAt?: number } | undefined;
+      if (!row) return true;
+      if (row.metadata) return false;
+      const checkedAt = typeof row.metadataCheckedAt === 'number' ? row.metadataCheckedAt : 0;
+      return now - checkedAt > ASSET_METADATA_RETRY_MS;
+    });
     const promises: Promise<AssetRow[] | null>[] = [];
     const smallerArrays: string[][] = chunkArray({ input: units, bytesSize: 4000 });
     smallerArrays.forEach((smallerArray: string[]) => {
@@ -776,7 +804,10 @@ export class SyncService {
       debugLog(`🔬 syncAssets sample fetched row: asset=${sample.asset} hasMetadata=${!!sample.metadata} decimals=${sample.metadata?.decimals}`);
     }
     if (assets.length === 0) return;
-    await assetsTable.bulkPut(assets);
+    // Stamp when we last asked. Without this a metadata-less row has no retry
+    // clock and would be re-fetched on every single sync.
+    const stamped = assets.map(a => ({ ...a, metadataCheckedAt: now }));
+    await assetsTable.bulkPut(stamped);
     // Publish the fresh rows into the in-memory map SYNCHRONOUSLY, not just the
     // DB: applyUtxos awaits this method and immediately resolves token metadata
     // through NetworkStore.state.assets. On a fresh profile the assets liveQuery
@@ -785,7 +816,7 @@ export class SyncService {
     // (undivided-by-decimals) balances until the next login rebuilds them.
     NetworkStore.setAssets({
       ...NetworkStore.state.assets,
-      ...Object.fromEntries(assets.map(a => [a.asset, a])),
+      ...Object.fromEntries(stamped.map(a => [a.asset, a])),
     });
   }
 

@@ -2259,6 +2259,8 @@ export default {
   'vaults.withdrawPreview': 'Auszahlungsvorschau',
   'vaults.withdrawSettled': 'Auszahlung abgewickelt',
 
+  'portfolio.hiddenByFilters': '1 Token durch deine Filter ausgeblendet | {n} Token durch deine Filter ausgeblendet',
+  'portfolio.showAll': 'Alle anzeigen',
   'portfolio.collection': 'Sammlung',
   'portfolio.floorPrice': 'Mindestpreis',
   'portfolio.floorPriceTooltip': 'Niedrigster Angebotspreis für ein NFT in dieser Sammlung',

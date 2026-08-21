@@ -187,6 +187,16 @@
       <v-row no-gutters>
         <v-col cols="12" class="pa-2">
           <v-card flat class="glass-panel holdings-table-card">
+            <!-- Say it when the trust filters are withholding rows. A holder whose
+                 token is missing must never have to guess whether the wallet lost
+                 it or is just hiding it. -->
+            <div v-if="hiddenByTrustFilters > 0" class="hidden-by-filters px-3">
+              <v-icon x-small color="var(--g-text-3)" class="mr-1">mdi-eye-off-outline</v-icon>
+              <span class="t-caption">{{ $tc('portfolio.hiddenByFilters', hiddenByTrustFilters) }}</span>
+              <button type="button" class="hidden-by-filters__action" @click="showAllHoldings()">
+                {{ $t('portfolio.showAll') }}
+              </button>
+            </div>
             <!-- Filter chips + search + filter menu — single row -->
             <div class="filter-toolbar d-flex align-center px-3" style="gap: 6px; padding-top: 6px; padding-bottom: 6px;">
               <!-- Category chips (scrollable, collapse to icons at small widths) -->
@@ -562,6 +572,14 @@ function setActiveView(view: ViewMode) {
 const searchQuery = ref('');
 const filterMenuOpen = ref(false);
 const verifiedOnly = ref(true);
+/** How many holdings the verified/scam filters removed from the current view. */
+const hiddenByTrustFilters = ref(0);
+
+/** Clear both trust filters so withheld holdings become visible. */
+function showAllHoldings(): void {
+  verifiedOnly.value = false;
+  hideScam.value = false;
+}
 const hideScam = ref(true);
 // Graduated snek.fun tokens shown inline in the market list (toggle, default on)
 const showSnekfun = ref(true);
@@ -790,12 +808,21 @@ const displayedTokens = computed(() => {
   // tokens are inherently unverified) or apply these on the snek.fun tab itself.
   // TODO(product): hideScam is verified-only after Xerberus removal.
   if (activeView.value !== 'snekfun') {
+    const beforeVerifiedFilters = tokens.length;
     if (verifiedOnly.value) {
       tokens = tokens.filter(tok => tok.verified || tok.isSnekFun);
     }
     if (hideScam.value) {
       tokens = tokens.filter(tok => tok.verified || tok.isSnekFun);
     }
+    // Count what the trust filters removed so the UI can SAY it removed something.
+    // Silently subtracting rows is the actual defect here (gerowallet issue 1003): a
+    // holder of a token that is not in the registry sees no trace of it and
+    // reasonably concludes the wallet has lost their funds. Whether the filter
+    // should default on is a separate product call; being quiet about it is not.
+    hiddenByTrustFilters.value = beforeVerifiedFilters - tokens.length;
+  } else {
+    hiddenByTrustFilters.value = 0;
   }
 
   // Dedupe by unit — a token can appear in both the registered market list and the
@@ -1193,6 +1220,28 @@ watch(
 }
 
 /* ── Holdings table card ──────────────────────────────────────────────────────── */
+
+.hidden-by-filters {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-2);
+  padding-top: var(--g-s-2);
+  color: var(--g-text-3);
+}
+
+.hidden-by-filters__action {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--g-accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.hidden-by-filters__action:hover {
+  text-decoration: underline;
+}
 
 .holdings-table-card ::v-deep .v-data-table {
   background: transparent;
