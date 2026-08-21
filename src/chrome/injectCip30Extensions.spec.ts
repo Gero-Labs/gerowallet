@@ -3,26 +3,13 @@ import { describe, it, expect, beforeAll, vi } from 'vitest';
 /**
  * inject.ts installs the CIP-30 provider on `window.cardano.gerowallet` as an
  * import side effect, so the suite imports the module and drives the real
- * provider object. Only `enable()` has to behave; the rest of the page-world
- * surface is stubbed so the module can load under happy-dom.
+ * provider object. Only `enable()` is stubbed; every other export keeps its real
+ * binding, so a new export in webpage.ts cannot break this spec at module load.
  */
-vi.mock('./webpage', () => {
-  const stub = () => vi.fn(async () => undefined);
-  return {
-    enable: vi.fn(async () => true),
-    isEnabled: vi.fn(async () => true),
-    getAccountPub: stub(), getAddress: stub(), getBalance: stub(),
-    getCollateral: stub(), getNetworkId: stub(), getPubDRepKey: stub(),
-    getRegisteredPubStakeKeys: stub(), getRewardAddresses: stub(),
-    getUnregisteredPubStakeKeys: stub(), getUnusedAddresses: stub(),
-    getUsedAddresses: stub(), getUtxos: stub(), signData: stub(),
-    signTx: stub(), submitTx: stub(), getNetworkMagic: stub(),
-    btcRequestAccounts: stub(), btcGetAccounts: stub(), btcGetPublicKey: stub(),
-    btcGetNetwork: stub(), btcGetBalance: stub(), btcSignPsbt: stub(),
-    btcSignPsbts: stub(), btcSignMessage: stub(), btcPushTx: stub(),
-    btcPushPsbt: stub(),
-  };
-});
+vi.mock('./webpage', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./webpage')>()),
+  enable: vi.fn(async () => true),
+}));
 vi.mock('./injectMidnight', () => ({}));
 
 type Cip30Api = Record<string, unknown>;
@@ -35,43 +22,74 @@ beforeAll(async () => {
   provider = (window as unknown as { cardano: Record<string, Cip30Provider> }).cardano['gerowallet'];
 });
 
-const cips = (api: Cip30Api) =>
-  (api['getExtensions'] as () => { cip: number }[])().map(e => e.cip).sort((a, b) => a - b);
+const getExtensions = (api: Cip30Api) => (api['getExtensions'] as () => { cip: number }[])();
+
+// What the api says it enabled.
+const reported = (api: Cip30Api) =>
+  getExtensions(api).map(e => e.cip).sort((a, b) => a - b);
+
+// What the api actually carries, read off the object instead of a fixed list, so
+// a CIP added later is covered by these assertions without touching the spec.
+const attached = (api: Cip30Api) =>
+  Object.keys(api)
+    .filter(k => /^cip\d+$/.test(k))
+    .map(k => Number(k.slice(3)))
+    .sort((a, b) => a - b);
 
 describe('CIP-30 getExtensions()', () => {
-  it('reports only the base API when the dApp requests no extensions', async () => {
+  it('reports nothing when the dApp requests no extensions', async () => {
     const api = await provider.enable();
-    expect(cips(api)).toEqual([30]);
-    // The guarantee that matters: nothing is advertised that isn't attached.
-    expect(api['cip95']).toBeUndefined();
-    expect(api['cip104']).toBeUndefined();
-    expect(api['cip142']).toBeUndefined();
+    expect(reported(api)).toEqual([]);
+    expect(attached(api)).toEqual([]);
   });
 
   it('reports CIP-142 when it is requested, and attaches it', async () => {
     const api = await provider.enable({ extensions: [{ cip: 142 }] });
-    expect(cips(api)).toEqual([30, 142]);
+    expect(reported(api)).toEqual([142]);
     expect(api['cip142']).toBeDefined();
   });
 
   it('reports exactly the requested subset, not the full supported list', async () => {
     const api = await provider.enable({ extensions: [{ cip: 95 }] });
-    expect(cips(api)).toEqual([30, 95]);
-    expect(api['cip95']).toBeDefined();
+    expect(reported(api)).toEqual([95]);
     expect(api['cip104']).toBeUndefined();
+    expect(api['cip142']).toBeUndefined();
   });
 
-  it('every reported extension has a matching object on the api', async () => {
-    const api = await provider.enable({ extensions: [{ cip: 95 }, { cip: 104 }, { cip: 142 }] });
-    expect(cips(api)).toEqual([30, 95, 104, 142]);
-    for (const cip of cips(api).filter(c => c !== 30)) {
-      expect(api[`cip${cip}`]).toBeDefined();
+  it('reports exactly what it attaches, in both directions', async () => {
+    const combinations: { cip: number }[][] = [
+      [],
+      [{ cip: 95 }],
+      [{ cip: 104 }, { cip: 142 }],
+      [{ cip: 95 }, { cip: 104 }, { cip: 142 }],
+    ];
+    for (const extensions of combinations) {
+      const api = await provider.enable({ extensions });
+      expect(reported(api)).toEqual(attached(api));
     }
+  });
+
+  it('ignores an extension it does not support instead of failing', async () => {
+    // CIP-30: "wallets aren't expected to fail should they not recognize or not
+    // support a particular combination of extensions. Instead, they should decide
+    // what they enable and reflect their choice in the response to
+    // api.getExtensions()".
+    const api = await provider.enable({ extensions: [{ cip: 95 }, { cip: 9999 }] });
+    expect(reported(api)).toEqual([95]);
+    expect(api['cip9999']).toBeUndefined();
+  });
+
+  it('hands out a fresh list, so a caller cannot corrupt later calls', async () => {
+    const api = await provider.enable({ extensions: [{ cip: 95 }] });
+    const first = getExtensions(api);
+    first[0].cip = 104;
+    first.push({ cip: 142 });
+    expect(reported(api)).toEqual([95]);
   });
 
   it('does not leak state between enable() calls', async () => {
     await provider.enable({ extensions: [{ cip: 95 }, { cip: 104 }, { cip: 142 }] });
     const api = await provider.enable();
-    expect(cips(api)).toEqual([30]);
+    expect(reported(api)).toEqual([]);
   });
 });

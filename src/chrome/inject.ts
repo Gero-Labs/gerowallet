@@ -57,21 +57,22 @@ const BITCOIN_DAPP_ENABLED = false;
 // Gero missing from window.cardano on Brave). The provider object itself is
 // extensible, so register in place and only assign the binding when absent.
 const geroCardanoProvider = {
-  async enable(extensions: Extensions): Promise<any> {
+  async enable(extensions?: Extensions): Promise<any> {
     const enabled = await enable();
     if (enabled) {
-      // CIP-30 requires getExtensions() to report the extensions enabled for THIS
-      // instance, not a fixed list: "they should decide what they enable and
-      // reflect their choice in the response to api.getExtensions()". The static
-      // list is supportedExtensions' job. Built up by the branches below and
-      // closed over by getExtensions, which the dApp only calls after enable()
-      // has returned.
-      const enabledExtensions: { cip: number }[] = [{ cip: 30 }];
+      // CIP-30 requires getExtensions() to report "the list of extensions enabled
+      // by the wallet" for THIS instance, not a fixed list: wallets "should decide
+      // what they enable and reflect their choice in the response to
+      // api.getExtensions()". The static list is supportedExtensions' job, and
+      // CIP-30 is the base API rather than an extension, so it is not reported.
+      const enabledCips: number[] = [];
       const cip30 = {
         getCollateral: (params?: CollateralParams) => getCollateral(params),
         getBalance: () => getBalance(),
         getChangeAddress: () => getAddress(),
-        getExtensions: () => [...enabledExtensions],
+        // Derived from what attachExtension() actually attached, and rebuilt on
+        // every call so a dApp that mutates the result cannot corrupt later ones.
+        getExtensions: () => enabledCips.map(cip => ({ cip })),
         getNetworkId: () => getNetworkId(),
         getRewardAddresses: () => getRewardAddresses(),
         getUnusedAddresses: () => getUnusedAddresses(),
@@ -81,28 +82,33 @@ const geroCardanoProvider = {
         signTx: (tx: string, partialSign: boolean) => signTx(tx, partialSign),
         submitTx: (tx: string) => submitTx(tx),
       }
-      if (extensions?.extensions?.find(e => e.cip == 95)) {
-        cip30['cip95'] = {
-          getPubDRepKey: () => getPubDRepKey(),
-          getRegisteredPubStakeKeys: () => getRegisteredPubStakeKeys(),
-          getUnregisteredPubStakeKeys: () => getUnregisteredPubStakeKeys(),
-          signTx: (tx: string, partialSign: boolean) => signTx(tx, partialSign),
-          signData: (address: CardanoCore.PaymentAddress | CardanoCore.RewardAccount | string, payload: string) => signData(address, payload),
-        }
-        enabledExtensions.push({ cip: 95 });
-      }
-      if (extensions?.extensions?.find(e => e.cip == 104)) {
-        cip30['cip104'] = {
-          getAccountPub: () => getAccountPub()
-        }
-        enabledExtensions.push({ cip: 104 });
-      }
-      if (extensions?.extensions?.find(e => e.cip == 142)) {
-        cip30['cip142'] = {
-          getNetworkMagic: () => getNetworkMagic()
-        }
-        enabledExtensions.push({ cip: 142 });
-      }
+      // The only path by which an extension namespace reaches the api. Attaching
+      // and reporting are the same statement, so the drift that caused this bug
+      // (48fe6def added the cip142 branch and left getExtensions behind) is no
+      // longer expressible: a future CIP is one call, and there is no separate
+      // bookkeeping line to forget. An extension the wallet does not support is
+      // ignored rather than rejected, as CIP-30 requires — getExtensions() is
+      // what makes that choice visible to the dApp.
+      const attachExtension = (cip: number, api: Record<string, unknown>) => {
+        if (!extensions?.extensions?.some(e => Number(e.cip) === cip)) return;
+        cip30[`cip${cip}`] = api;
+        enabledCips.push(cip);
+      };
+
+      attachExtension(95, {
+        getPubDRepKey: () => getPubDRepKey(),
+        getRegisteredPubStakeKeys: () => getRegisteredPubStakeKeys(),
+        getUnregisteredPubStakeKeys: () => getUnregisteredPubStakeKeys(),
+        signTx: (tx: string, partialSign: boolean) => signTx(tx, partialSign),
+        signData: (address: CardanoCore.PaymentAddress | CardanoCore.RewardAccount | string, payload: string) => signData(address, payload),
+      });
+      attachExtension(104, {
+        getAccountPub: () => getAccountPub()
+      });
+      attachExtension(142, {
+        getNetworkMagic: () => getNetworkMagic()
+      });
+
       return cip30
     }
     return null;
