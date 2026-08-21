@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, vi } from 'vitest';
+import type { Cardano, Extensions, WalletInstance } from '@/models/types';
 
 /**
  * inject.ts installs the CIP-30 provider on `window.cardano.gerowallet` as an
@@ -12,25 +13,20 @@ vi.mock('./webpage', async (importOriginal) => ({
 }));
 vi.mock('./injectMidnight', () => ({}));
 
-type Cip30Api = Record<string, unknown>;
-type Cip30Provider = { enable: (e?: unknown) => Promise<Cip30Api> };
-
-let provider: Cip30Provider;
+let provider: Cardano[string];
 
 beforeAll(async () => {
   await import('./inject');
-  provider = (window as unknown as { cardano: Record<string, Cip30Provider> }).cardano['gerowallet'];
+  provider = window.cardano['gerowallet'];
 });
 
-const getExtensions = (api: Cip30Api) => (api['getExtensions'] as () => { cip: number }[])();
-
 // What the api says it enabled.
-const reported = (api: Cip30Api) =>
-  getExtensions(api).map(e => e.cip).sort((a, b) => a - b);
+const reported = (api: WalletInstance) =>
+  api.getExtensions().map(e => e.cip).sort((a, b) => a - b);
 
 // What the api actually carries, read off the object instead of a fixed list, so
 // a CIP added later is covered by these assertions without touching the spec.
-const attached = (api: Cip30Api) =>
+const attached = (api: WalletInstance) =>
   Object.keys(api)
     .filter(k => /^cip\d+$/.test(k))
     .map(k => Number(k.slice(3)))
@@ -57,7 +53,7 @@ describe('CIP-30 getExtensions()', () => {
   });
 
   it('reports exactly what it attaches, in both directions', async () => {
-    const combinations: { cip: number }[][] = [
+    const combinations: Extensions['extensions'][] = [
       [],
       [{ cip: 95 }],
       [{ cip: 104 }, { cip: 142 }],
@@ -81,7 +77,7 @@ describe('CIP-30 getExtensions()', () => {
 
   it('hands out a fresh list, so a caller cannot corrupt later calls', async () => {
     const api = await provider.enable({ extensions: [{ cip: 95 }] });
-    const first = getExtensions(api);
+    const first = api.getExtensions();
     first[0].cip = 104;
     first.push({ cip: 142 });
     expect(reported(api)).toEqual([95]);
