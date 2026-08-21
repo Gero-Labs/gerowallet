@@ -759,10 +759,17 @@ export class SyncService {
     }
 
     type AssetRow = { asset: string } & Record<string, unknown>;
+    const ASSET_METADATA_RETRY_TTL_MS = 24 * 60 * 60 * 1000;
     const blockchainDB: Dexie = await this.walletBg.getBlockchainDb();
     const assetsTable: Table<AssetRow, IndexableType> = blockchainDB.table('assets');
     const existingRows = await assetsTable.bulkGet(uniqueUnits);
-    const units = uniqueUnits.filter((unit, idx) => !existingRows[idx]);
+    const now = Date.now();
+    const units = uniqueUnits.filter((unit, idx) => {
+      const row = existingRows[idx] as (AssetRow & { metadata?: unknown; metadataFetchedAt?: number }) | undefined;
+      if (!row) return true;
+      if (row.metadata) return false; // registered rows are permanent
+      return now - (row.metadataFetchedAt ?? 0) > ASSET_METADATA_RETRY_TTL_MS; // unstamped legacy rows qualify immediately
+    });
     const promises: Promise<AssetRow[] | null>[] = [];
     const smallerArrays: string[][] = chunkArray({ input: units, bytesSize: 4000 });
     smallerArrays.forEach((smallerArray: string[]) => {
@@ -770,13 +777,9 @@ export class SyncService {
     });
     const resAll = await Promise.all(promises);
     const assets = resAll.flat().filter((res): res is AssetRow => !!res);
-    debugLog(`🔬 syncAssets: requested=${uniqueUnits.length} alreadyInDb=${uniqueUnits.length - units.length} fetched=${assets.length}`);
-    if (assets.length > 0) {
-      const sample = assets[0] as { asset?: string; metadata?: { decimals?: number } };
-      debugLog(`🔬 syncAssets sample fetched row: asset=${sample.asset} hasMetadata=${!!sample.metadata} decimals=${sample.metadata?.decimals}`);
-    }
     if (assets.length === 0) return;
-    await assetsTable.bulkPut(assets);
+    const stamped = assets.map((a) => (a['metadata'] ? a : { ...a, metadataFetchedAt: now }));
+    await assetsTable.bulkPut(stamped);
     // Publish the fresh rows into the in-memory map SYNCHRONOUSLY, not just the
     // DB: applyUtxos awaits this method and immediately resolves token metadata
     // through NetworkStore.state.assets. On a fresh profile the assets liveQuery
@@ -785,7 +788,7 @@ export class SyncService {
     // (undivided-by-decimals) balances until the next login rebuilds them.
     NetworkStore.setAssets({
       ...NetworkStore.state.assets,
-      ...Object.fromEntries(assets.map(a => [a.asset, a])),
+      ...Object.fromEntries(stamped.map(a => [a.asset, a])),
     });
   }
 
