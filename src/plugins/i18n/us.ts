@@ -3114,6 +3114,7 @@ export default {
   'market.connecting': 'Connecting to live feed...',
   'market.verifiedOnly': 'Verified Only',
   'market.hideScam': 'Hide Scam',
+  'market.hiddenByFilters': '{count} hidden by filters',
   'market.rank': '#',
   'market.token': 'Token',
   'market.price': 'Price',

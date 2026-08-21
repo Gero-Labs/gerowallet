@@ -259,7 +259,7 @@
               >
                 <template v-slot:activator="{ on, attrs }">
                   <v-btn icon small v-bind="attrs" v-on="on" class="flex-shrink-0 filter-menu-btn">
-                    <v-badge :value="!verifiedOnly || !hideScam || !showSnekfun || (!isApex && hasCustomColumns)" dot color="primary" overlap>
+                    <v-badge :value="(isMainnetCardano && !verifiedOnly) || !showSnekfun || (!isApex && hasCustomColumns)" dot color="primary" overlap>
                       <v-icon small>mdi-tune</v-icon>
                     </v-badge>
                   </v-btn>
@@ -267,21 +267,13 @@
                 <v-card flat class="liquid-glass-dialog">
                   <!-- Filters -->
                   <v-list dense class="transparent pa-0">
-                    <v-list-item v-if="activeView !== 'collectibles'" @click="verifiedOnly = !verifiedOnly">
+                    <v-list-item v-if="activeView !== 'collectibles' && isMainnetCardano" @click="verifiedOnly = !verifiedOnly">
                       <v-list-item-action class="mr-2">
                         <v-icon small :color="verifiedOnly ? 'primary' : ''">
                           {{ verifiedOnly ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
                         </v-icon>
                       </v-list-item-action>
                       <v-list-item-title style="font-size: 13px;">{{ $t('market.verifiedOnly') }}</v-list-item-title>
-                    </v-list-item>
-                    <v-list-item @click="hideScam = !hideScam">
-                      <v-list-item-action class="mr-2">
-                        <v-icon small :color="hideScam ? 'primary' : ''">
-                          {{ hideScam ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
-                        </v-icon>
-                      </v-list-item-action>
-                      <v-list-item-title style="font-size: 13px;">{{ $t('market.hideScam') }}</v-list-item-title>
                     </v-list-item>
                     <!-- Graduated snek.fun tokens: show inline in the market list (like verified-only) -->
                     <v-list-item v-if="activeView !== 'collectibles'" @click="showSnekfun = !showSnekfun">
@@ -346,17 +338,31 @@
             <!-- Collectibles: Table view (default) -->
             <NftCollectionTable
               v-else-if="nftViewMode === 'table'"
-              :hide-scam="hideScam"
+              :hide-scam="true"
               @collection-click="openNftCollection"
             />
 
             <!-- Collectibles: Gallery view -->
             <CollectiblesTab
               v-else
-              :hide-scam="hideScam"
+              :hide-scam="true"
               :search-term="debouncedSearchQuery"
               sort-by="quantity_desc"
             />
+
+            <!-- Verified filter hid some holdings — surface a way back so a real
+                 balance never silently disappears (issue 1003). -->
+            <div
+              v-if="activeView === 'holdings' && hiddenByFilterCount > 0"
+              class="hidden-by-filter-row d-flex align-center px-3 py-1"
+            >
+              <span class="t-caption" style="color: var(--g-text-3);">
+                {{ $t('market.hiddenByFilters', { count: hiddenByFilterCount }) }}
+              </span>
+              <v-btn text x-small color="primary" class="ml-2" @click="verifiedOnly = false">
+                {{ $t('common.showAll') }}
+              </v-btn>
+            </div>
 
             <!-- NFT Dialog (for table view clicks) -->
             <TokensDialog @close="nftDialogData = null" :modalData="nftDialogData" />
@@ -562,7 +568,11 @@ function setActiveView(view: ViewMode) {
 const searchQuery = ref('');
 const filterMenuOpen = ref(false);
 const verifiedOnly = ref(true);
-const hideScam = ref(true);
+// The verified filter only means anything on Cardano mainnet — off-mainnet
+// chains (Apex, preprod, etc.) have no token registry to verify against, so
+// gating on isMainnetCardano stops the filter from silently hiding real
+// holdings there (issue 1003).
+const verifiedFilterActive = computed(() => verifiedOnly.value && isMainnetCardano.value);
 // Graduated snek.fun tokens shown inline in the market list (toggle, default on)
 const showSnekfun = ref(true);
 const nftViewMode = ref<'table' | 'gallery'>('table');
@@ -786,16 +796,14 @@ const displayedTokens = computed(() => {
     );
   }
 
-  // Apply verified / scam filters — but NEVER strip snek.fun tokens (bonding-curve
-  // tokens are inherently unverified) or apply these on the snek.fun tab itself.
-  // TODO(product): hideScam is verified-only after Xerberus removal.
-  if (activeView.value !== 'snekfun') {
-    if (verifiedOnly.value) {
-      tokens = tokens.filter(tok => tok.verified || tok.isSnekFun);
-    }
-    if (hideScam.value) {
-      tokens = tokens.filter(tok => tok.verified || tok.isSnekFun);
-    }
+  // Apply the verified filter — mainnet Cardano only (verifiedFilterActive),
+  // and NEVER strip snek.fun tokens (bonding-curve tokens are inherently
+  // unverified) or apply it on the snek.fun tab itself. hideScam used to
+  // duplicate this exact predicate (dead weight left over from the Xerberus
+  // scam-score removal) and off-mainnet chains had no registry to verify
+  // against, so both together could silently hide real holdings (issue 1003).
+  if (activeView.value !== 'snekfun' && verifiedFilterActive.value) {
+    tokens = tokens.filter(tok => tok.verified || tok.isSnekFun);
   }
 
   // Dedupe by unit — a token can appear in both the registered market list and the
@@ -808,6 +816,22 @@ const displayedTokens = computed(() => {
   });
 
   return tokens;
+});
+
+// Rows the verified filter removed from the holdings view — surfaced under the
+// table so a real balance never silently disappears (issue 1003).
+const hiddenByFilterCount = computed(() => {
+  if (activeView.value !== 'holdings' || !verifiedFilterActive.value) return 0;
+  let base = myHoldings.value;
+  if (debouncedSearchQuery.value) {
+    const q = debouncedSearchQuery.value.toLowerCase();
+    base = base.filter(tok =>
+      tok.name?.toLowerCase().includes(q) ||
+      tok.ticker?.toLowerCase().includes(q) ||
+      tok.unit?.toLowerCase().includes(q)
+    );
+  }
+  return base.filter(tok => !(tok.verified || tok.isSnekFun)).length;
 });
 
 // ── Actions ───────────────────────────────────────────────────────────────────
