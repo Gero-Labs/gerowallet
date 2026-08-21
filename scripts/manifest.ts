@@ -49,6 +49,14 @@ function buildCSP(dev: boolean): string {
     // Kraken (price feed)
     'wss://ws.kraken.com',
     'https://api.kraken.com',
+    // DEX token registries — decimals/ticker fallback when the Cardano token
+    // registry has no entry (every testnet asset, and every mainnet token before
+    // it is registered). Display fields only; never used for verification.
+    'https://api-mainnet-prod.minswap.org',
+    'https://api-preprod.minswap.org',
+    'https://api.sundae.fi',
+    'https://api.preprod.sundae.fi',
+    'https://api.preview.sundae.fi',
     // Koios (SPO pool data)
     'https://api.koios.rest',
     'https://preprod.koios.rest',

@@ -9,6 +9,7 @@ import { AxiosResponse } from 'axios';
 import { parseHttpError } from '@/shared/utils/parser';
 import { WalletBg } from '@/chrome/walletBg';
 import { debugLog } from '@/utils/debug';
+import { fetchDexAssetMetadataBatch } from '@/api/dex-token-registry';
 import blockchainApi from '@/api/blockchain-api';
 import webSocketService, { type WsSyncMessage } from '@/services/websocket.service';
 import WalletStore, { walletStore } from '@/stores/walletStore';
@@ -804,9 +805,27 @@ export class SyncService {
       debugLog(`🔬 syncAssets sample fetched row: asset=${sample.asset} hasMetadata=${!!sample.metadata} decimals=${sample.metadata?.decimals}`);
     }
     if (assets.length === 0) return;
+
+    // Fall back to the DEX registries for anything the Cardano token registry does
+    // not carry. Without decimals a 6dp balance renders a MILLION times too large,
+    // which is worse than showing nothing. Display fields only — `verified` is left
+    // alone deliberately (see dex-token-registry.ts).
+    const missingMetadata = assets
+      .filter(a => !(a as { metadata?: unknown }).metadata)
+      .map(a => a.asset)
+      .filter((unit): unit is string => typeof unit === 'string' && unit.length > 56);
+    const dexMetadata = missingMetadata.length
+      ? await fetchDexAssetMetadataBatch(missingMetadata, this.walletBg.network)
+      : {};
+
     // Stamp when we last asked. Without this a metadata-less row has no retry
     // clock and would be re-fetched on every single sync.
-    const stamped = assets.map(a => ({ ...a, metadataCheckedAt: now }));
+    const stamped = assets.map(a => {
+      const dex = dexMetadata[a.asset as string];
+      return dex
+        ? { ...a, metadata: { name: dex.name, ticker: dex.ticker, decimals: dex.decimals }, metadataSource: 'dex', metadataCheckedAt: now }
+        : { ...a, metadataCheckedAt: now };
+    });
     await assetsTable.bulkPut(stamped);
     // Publish the fresh rows into the in-memory map SYNCHRONOUSLY, not just the
     // DB: applyUtxos awaits this method and immediately resolves token metadata
