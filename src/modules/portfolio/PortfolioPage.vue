@@ -750,14 +750,23 @@ const watchlistedTokens = computed(() => allTokens.value.filter(tok => isWatched
 // Market overview stat bar: aggregate over all listed (non-native) market tokens
 const marketStatTokens = computed(() => allTokens.value.filter(t => !t.isNative));
 
+// Holdings, already search-filtered. Shared by displayedTokens and
+// hiddenByFilterCount so the search pass over myHoldings runs once per
+// reactive tick (Vue caches computeds) instead of twice.
+const searchedHoldings = computed<MarketToken[]>(() => applySearchFilter(myHoldings.value));
+
 // ── Computed: Unified displayed tokens ────────────────────────────────────────
 
 const displayedTokens = computed(() => {
   let tokens: MarketToken[];
+  // Holdings already ran through applySearchFilter via searchedHoldings above;
+  // every other branch still needs the generic pass below.
+  let alreadySearched = false;
 
   switch (activeView.value) {
     case 'holdings':
-      tokens = myHoldings.value;
+      tokens = searchedHoldings.value;
+      alreadySearched = true;
       break;
     case 'market':
       tokens = allTokens.value.filter(t => !t.isNative);
@@ -783,11 +792,14 @@ const displayedTokens = computed(() => {
       tokens = [];
       break;
     default:
-      tokens = myHoldings.value;
+      tokens = searchedHoldings.value;
+      alreadySearched = true;
   }
 
-  // Apply search filter
-  tokens = applySearchFilter(tokens);
+  // Apply search filter (holdings branch above already searched)
+  if (!alreadySearched) {
+    tokens = applySearchFilter(tokens);
+  }
 
   // Apply the verified filter — mainnet Cardano only (verifiedFilterActive),
   // and NEVER strip snek.fun tokens (bonding-curve tokens are inherently
@@ -796,7 +808,7 @@ const displayedTokens = computed(() => {
   // scam-score removal) and off-mainnet chains had no registry to verify
   // against, so both together could silently hide real holdings (issue 1003).
   if (activeView.value !== 'snekfun' && verifiedFilterActive.value) {
-    tokens = tokens.filter(tok => tok.verified || tok.isSnekFun);
+    tokens = tokens.filter(passesVerifiedFilter);
   }
 
   // Dedupe by unit — a token can appear in both the registered market list and the
@@ -823,11 +835,15 @@ function applySearchFilter(tokens: MarketToken[]): MarketToken[] {
   );
 }
 
+// Shared by displayedTokens and hiddenByFilterCount — both must agree on which
+// rows the verified filter keeps, or the hidden count drifts from the table.
+const passesVerifiedFilter = (tok: MarketToken): boolean => tok.verified || tok.isSnekFun;
+
 // Rows the verified filter removed from the holdings view — surfaced under the
 // table so a real balance never silently disappears (issue 1003).
 const hiddenByFilterCount = computed(() => {
   if (activeView.value !== 'holdings' || !verifiedFilterActive.value) return 0;
-  return applySearchFilter(myHoldings.value).filter(tok => !(tok.verified || tok.isSnekFun)).length;
+  return searchedHoldings.value.filter(tok => !passesVerifiedFilter(tok)).length;
 });
 
 // ── Actions ───────────────────────────────────────────────────────────────────
