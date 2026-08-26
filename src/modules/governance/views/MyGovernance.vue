@@ -1366,12 +1366,23 @@ watch(() => walletStore.account?.drep_id, () => void loadDRep(), { immediate: tr
   padding: var(--g-s-2) var(--g-s-3);
   white-space: normal;
 }
-.my-governance__change-row .v-btn.g-btn .v-btn__content {
+/* `>>>`, not a plain descendant: `.v-btn__content` lives inside GButton's own
+   template, and a scoped rule never reaches it — the parent's data-v attribute
+   only lands on the child's ROOT. That is why the earlier wrap did nothing and
+   the label kept spilling past the border, icon and all. */
+.my-governance__change-row >>> .v-btn__content {
   flex: 1 1 auto;
   min-width: 0;
   white-space: normal;
   line-height: 1.25;
   text-align: center;
+}
+/* Vuetify pulls a `left` icon 4px outside the content box. Harmless at its
+   default 16px padding; here it is the difference between the icon sitting
+   inside the button and hanging off it. */
+.my-governance__change-row >>> .v-icon--left {
+  margin-left: 0;
+  margin-right: var(--g-s-2);
 }
 .my-governance__manage-state {
   margin: 0;
