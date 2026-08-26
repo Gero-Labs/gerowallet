@@ -7,10 +7,19 @@
         <h1 class="t-display">{{ $t('navigation.governanceMe') }}</h1>
         <p class="t-body my-governance__subtitle">{{ $t(subtitleKey) }}</p>
       </div>
+      <!-- The two ways off this page. `AsOf` used to sit here too, stamping the
+           header with a freshness the header does not carry — the stamp belongs
+           on the voting record, which is the thing that was fetched, and it is
+           still there. -->
       <div class="my-governance__header-side">
-        <GButton tier="secondary" block @click="goToDReps()">{{ $t('governance.browseDReps') }}</GButton>
-        <GButton tier="secondary" compact @click="goToActions()">{{ $t('governance.actionsTitle') }}</GButton>
-        <AsOf :timestamp="fetchedAt" />
+        <GButton tier="secondary" compact @click="goToDReps()">
+          <v-icon left size="16" color="var(--g-accent)">mdi-account-group-outline</v-icon>
+          {{ $t('governance.browseDReps') }}
+        </GButton>
+        <GButton tier="secondary" compact @click="goToActions()">
+          <v-icon left size="16" color="var(--g-accent)">mdi-gavel</v-icon>
+          {{ $t('governance.actionsTitle') }}
+        </GButton>
       </div>
     </div>
 
@@ -152,7 +161,7 @@
           </div>
 
           <div class="my-governance__change-row">
-            <GButton tier="secondary" compact @click="goToDReps()">
+            <GButton tier="secondary" block @click="goToDReps()">
               <v-icon left size="16" color="var(--g-accent)">mdi-account-search-outline</v-icon>
               {{ $t('governance.changeToAnotherDRep') }}
             </GButton>
@@ -163,7 +172,7 @@
               :loading="building === 'drep_always_abstain'"
               @click="delegateToPredefined('abstain')"
             >
-              <v-icon left size="16" color="var(--g-accent)">mdi-minus-circle-outline</v-icon>
+              <v-icon left size="16" color="var(--g-text-3)">mdi-minus-circle-outline</v-icon>
               {{ isAbstaining ? $t('governance.alreadyAbstaining') : $t('governance.stepBackToAbstain') }}
             </GButton>
             <GButton
@@ -173,7 +182,7 @@
               :loading="building === 'drep_always_no_confidence'"
               @click="delegateToPredefined('noConfidence')"
             >
-              <v-icon left size="16" color="var(--g-accent)">mdi-close-circle-outline</v-icon>
+              <v-icon left size="16" color="var(--g-warning)">mdi-close-circle-outline</v-icon>
               {{ isNoConfidence ? $t('governance.alreadyNoConfidence') : $t('governance.chooseNoConfidence') }}
             </GButton>
           </div>
@@ -1228,14 +1237,34 @@ watch(() => walletStore.account?.drep_id, () => void loadDRep(), { immediate: tr
   color: var(--g-text-1);
 }
 
-/* The two management cards, side by side. `auto-fit` means a single card takes
-   the full width on its own — a wallet delegated to a keyword has no support
-   card, and one lonely half-width panel would read as a layout bug. */
+/* The two management cards, side by side and the SAME HEIGHT — `stretch`, not
+   `start`. The change card carries three buttons and the support card one, so
+   left to themselves they end at different depths and the pair reads as two
+   unrelated panels that happen to be adjacent.
+   The change card gets the wider track because three buttons have to fit across
+   it; `auto-fit` still gives a lone card the full width, which matters because a
+   wallet delegated to a keyword has no support card at all. */
 .my-governance__manage {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: var(--g-s-4);
-  align-items: start;
+  align-items: stretch;
+}
+@media (min-width: 1100px) {
+  .my-governance__manage {
+    grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  }
+}
+/* Both cards are columns whose action block is pushed to the bottom, so the two
+   button rows sit on the same line however much text is above them. */
+.my-governance__manage > .glass-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-3);
+}
+.my-governance__change-row,
+.my-governance__support-row {
+  margin-top: auto;
 }
 .my-governance__manage-head {
   display: flex;
@@ -1317,6 +1346,20 @@ watch(() => walletStore.account?.drep_id, () => void loadDRep(), { immediate: tr
   flex-direction: column;
   gap: var(--g-s-2);
 }
+/* Long labels in a narrow track wrap rather than overflow, and every button in
+   the row takes the height of the tallest so the row stays level. Two classes,
+   because Vuetify sizes `.v-btn` at (0,1,0) with a fixed height and a single
+   class would tie rather than win. */
+.my-governance__change-row .v-btn.g-btn {
+  height: auto;
+  min-height: 34px;
+  padding-top: var(--g-s-2);
+  padding-bottom: var(--g-s-2);
+}
+.my-governance__change-row .v-btn.g-btn .v-btn__content {
+  white-space: normal;
+  line-height: 1.25;
+}
 
 .my-governance__change {
   display: flex;
@@ -1324,14 +1367,19 @@ watch(() => walletStore.account?.drep_id, () => void loadDRep(), { immediate: tr
   gap: var(--g-s-3);
   padding: var(--g-s-4);
 }
-/* A COLUMN, not a wrapping row. Three buttons across a half-width card wrapped
-   2 + 1 and left a ragged edge; stacked full-width they read as what they are —
-   three alternatives, equally weighted — and the support card's buttons line up
-   with them. */
+/* A grid of equal columns rather than a wrapping row: the three used to break
+   2 + 1 and leave a ragged edge. Equal tracks also state the thing the copy
+   states — these are three alternatives of equal standing. Below the breakpoint
+   the card is too narrow for three, so they become one column. */
 .my-governance__change-row {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--g-s-2);
+}
+@media (max-width: 1099px) {
+  .my-governance__change-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .my-governance__honesty {
