@@ -539,6 +539,32 @@ export class WalletManager {
       const lastSyncInfo = await walletBg.getLastSyncInfo();
       const lastSyncedBlock = lastSyncInfo?.height || 0;
 
+      // Seed the tip from this wallet's own sync checkpoint.
+      //
+      // logout() calls NetworkStore.reset(), which nulls the tip, and on Cardano
+      // NOTHING else sets it until a payload arrives from gero-sync carrying a
+      // block. For a wallet already AT the tip, gero-sync answers SUBSCRIBE with
+      // nothing at all: measured across a wallet switch, the first inbound frame
+      // was a SYNC_CHECK_OK 128.7 SECONDS after SUBSCRIBE. Until it landed the
+      // network tooltip read "Last Sync: N/A, Epoch: N/A, Progress: 0.0%".
+      //
+      // The checkpoint on disk already holds every field setTip needs, and it is
+      // the honest answer to "when did this wallet last sync" — it is the same
+      // value the wallet just sent gero-sync as SUBSCRIBE's lastSyncedBlock. The
+      // first real payload overwrites it. `time` is stored in unix SECONDS (see
+      // setSync -> setLastSyncInfo(syncObject.block)), so it is scaled here the
+      // way every other setTip call scales it.
+      if (lastSyncInfo?.height) {
+        NetworkStore.setTip({
+          blockNo: lastSyncInfo.height,
+          slot: lastSyncInfo.slot,
+          hash: lastSyncInfo.hash,
+          time: lastSyncInfo.time ? lastSyncInfo.time * 1000 : undefined,
+          epoch: lastSyncInfo.epoch,
+          epoch_slot: lastSyncInfo.epoch_slot || 0,
+        });
+      }
+
       const credentials = walletBg.derivePaymentCredentials();
 
       // Cross-device signing bridge (ships DARK behind isCrossDeviceSigningEnabled).

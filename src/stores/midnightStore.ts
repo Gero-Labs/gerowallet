@@ -53,7 +53,13 @@ import type {
 export interface MidnightChainTip {
   hash: string | null;
   height: number;
-  timestamp: number; // Unix seconds
+  /**
+   * Epoch MILLISECONDS. Both writers pass ms (midnight-sync's tip bootstrap
+   * documents Nexus's BlockDto as epoch ms) and ContentLayout feeds it
+   * straight to `new Date()`. The old `// Unix seconds` note here was the
+   * only claim to the contrary and would have cost someone an afternoon.
+   */
+  timestamp: number;
 }
 
 /**
@@ -261,6 +267,20 @@ const EMPTY_ADDRESSES: MidnightAddresses = {
   shielded: '',
   unshielded: '',
 };
+
+/**
+ * The network a Midnight unshielded address belongs to, as its bech32m HRP.
+ *
+ * `mn_addr1…` is mainnet and `mn_addr_<network>1…` is everything else (see the
+ * prefix built in background.ts), and the bech32 data part cannot contain `1`,
+ * so the separator is unambiguous. Returns null for anything unparseable, which
+ * callers must treat as "not the same network".
+ */
+function midnightNetworkOf(address: string | null): string | null {
+  if (!address) return null;
+  const separator = address.lastIndexOf('1');
+  return separator > 0 ? address.slice(0, separator) : null;
+}
 
 const EMPTY_TIP: MidnightChainTip = {
   hash: null,
@@ -717,6 +737,17 @@ export const midnightActions = {
     const prevKey = midnightStore.activeWalletKey;
     const isSwitch = !!prevKey && !!newKey && prevKey !== newKey;
 
+    // The chain tip is a property of the NETWORK, not of the wallet: moving
+    // between two wallets on the same Midnight network does not make the last
+    // observed block untrue. Wiping it here left the network tooltip reading
+    // "Block: N/A" and "Last Sync: N/A" until the first tip event arrived —
+    // the same gap the Cardano side had before walletManager began seeding
+    // NetworkStore.tip from the wallet's sync checkpoint. A NETWORK switch is
+    // a different chain, so there the tip really is unknown and must clear.
+    const prevNetwork = midnightNetworkOf(prevKey);
+    const sameNetwork = prevNetwork !== null && prevNetwork === midnightNetworkOf(newKey);
+    const carriedTip: MidnightChainTip = sameNetwork ? midnightStore.tip : { ...EMPTY_TIP };
+
     if (isSwitch) {
       // Wipe per-wallet state that belongs to the PREVIOUS wallet/network so
       // a stale NIGHT balance / UTxO set / cursor can't leak across the
@@ -725,7 +756,7 @@ export const midnightActions = {
       // activeWalletKey are set below to the new wallet.
       Object.assign(midnightStore, {
         lastSync: null,
-        tip: { ...EMPTY_TIP },
+        tip: carriedTip,
         balances: { ...EMPTY_BALANCES },
         transactions: [],
         utxos: [],
@@ -749,7 +780,7 @@ export const midnightActions = {
           networkStatus: 'connecting',
           shieldedSyncAvailable,
           lastSync: null,
-          tip: { ...EMPTY_TIP },
+          tip: carriedTip,
           balances: { ...EMPTY_BALANCES },
           transactions: [],
           utxos: [],
