@@ -53,6 +53,21 @@ import { PROOF_SERVER_DOCKER_TAG } from '@/chains/midnight/midnightConfig';
 import type { DeviceInfo } from '@/services/crossDevice/protocol';
 import { mpcSessionCache } from '@/chrome/mpcSessionCache';
 import { mpcLoginShareCache } from '@/chrome/mpcLoginShareCache';
+// Static, deliberately. The background is bundled as ONE iife
+// (vite.config.background.mts: format 'iife', manualChunks undefined), so a
+// dynamic `import()` here cannot produce a separate chunk — Rollup inlines the
+// module and hands back a namespace `const` declared wherever that module lands
+// in the emitted order. `midnightSync_service` was landing ~90k lines AFTER the
+// code that read it, so an evaluation that reached a reader before the
+// declaration threw `Cannot access 'midnightSync_service' before
+// initialization` and killed wallet login. A static import makes the order a
+// guarantee rather than a coincidence: an imported module is fully evaluated
+// before its importer's body. Verified safe: nothing this module reaches
+// imports walletManager (no cycle), its top level only constructs a
+// field-initialised singleton, and it is absent from the options graph, so it
+// cannot bloat that bundle. scripts/check-bundle-tdz.mjs fails the build if a
+// namespace const regresses behind its first reader.
+import midnightSyncService from '@/services/midnight-sync.service';
 
 /**
  * WalletManager service to handle wallet login/logout and lifecycle management
@@ -436,7 +451,6 @@ export class WalletManager {
       // service translates SYNC / CATCH_UP_COMPLETE / ROLLBACK / FORCE_RESYNC
       // into midnightStore actions. Skip if the address derivation failed.
       if (addresses.unshielded) {
-        const { default: midnightSyncService } = await import('@/services/midnight-sync.service');
         // Opt into shielded sync only if the wallet record carries a viewing
         // key in the form the indexer's connect(viewingKey) mutation accepts:
         // bech32m with HRP `mn_shield-esk_` (see the a3f76f1f fix). Wallets
@@ -524,6 +538,7 @@ export class WalletManager {
     if (walletBg.chain !== Blockchain.BITCOIN && walletBg.chain !== Blockchain.MIDNIGHT) {
       const lastSyncInfo = await walletBg.getLastSyncInfo();
       const lastSyncedBlock = lastSyncInfo?.height || 0;
+
       const credentials = walletBg.derivePaymentCredentials();
 
       // Cross-device signing bridge (ships DARK behind isCrossDeviceSigningEnabled).
@@ -783,7 +798,6 @@ export class WalletManager {
       // Stop the Midnight sync bridge if it was active. This shuts down its
       // gero-sync subscription and clears midnightStore.
       try {
-        const { default: midnightSyncService } = await import('@/services/midnight-sync.service');
         if (midnightSyncService.isActive()) {
           midnightSyncService.stop();
         }

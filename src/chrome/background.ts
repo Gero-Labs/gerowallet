@@ -43,6 +43,21 @@ import trezor from '@/shared/utils/trezor';
 import type { IUnifiedUtxo } from '@/chains/common/interfaces';
 import { mpcSessionCache } from '@/chrome/mpcSessionCache';
 import { mpcLoginShareCache } from '@/chrome/mpcLoginShareCache';
+// Static, deliberately. The background is bundled as ONE iife
+// (vite.config.background.mts: format 'iife', manualChunks undefined), so a
+// dynamic `import()` here cannot produce a separate chunk — Rollup inlines the
+// module and hands back a namespace `const` declared wherever that module lands
+// in the emitted order. `midnightSync_service` was landing ~90k lines AFTER the
+// code that read it, so an evaluation that reached a reader before the
+// declaration threw `Cannot access 'midnightSync_service' before
+// initialization` and killed wallet login. A static import makes the order a
+// guarantee rather than a coincidence: an imported module is fully evaluated
+// before its importer's body. Verified safe: nothing this module reaches
+// imports walletManager (no cycle), its top level only constructs a
+// field-initialised singleton, and it is absent from the options graph, so it
+// cannot bloat that bundle. scripts/check-bundle-tdz.mjs fails the build if a
+// namespace const regresses behind its first reader.
+import midnightSyncService, { NIGHT_TOKEN_TYPE_NULL } from '@/services/midnight-sync.service';
 import {
   createMpcGoogleWalletFlow,
   unlockMpcWalletFlow,
@@ -4935,7 +4950,6 @@ app.addToOptions(MessageTypes.RESYNC_MIDNIGHT, async (request, sendResponse) => 
     if (walletBg.chain !== Blockchain.MIDNIGHT) {
       throw new Error('RESYNC_MIDNIGHT called on non-Midnight wallet');
     }
-    const { default: midnightSyncService } = await import('@/services/midnight-sync.service');
     if (!midnightSyncService.isActive()) {
       throw new Error('Midnight sync service is not active');
     }
@@ -5314,7 +5328,6 @@ app.add(MIDNIGHT_METHOD.getUnshieldedBalances, async (request, sendResponse) => 
     return;
   }
   const { midnightStore } = await import('@/stores/midnightStore');
-  const { NIGHT_TOKEN_TYPE_NULL } = await import('@/services/midnight-sync.service');
   const wallet = requireMidnightWallet();
   if (!wallet) {
     sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected'), target: TARGET, sender: SENDER.extension });
@@ -5347,7 +5360,6 @@ app.add(MIDNIGHT_METHOD.getShieldedBalances, async (request, sendResponse) => {
     return;
   }
   const { midnightStore } = await import('@/stores/midnightStore');
-  const { NIGHT_TOKEN_TYPE_NULL } = await import('@/services/midnight-sync.service');
   const wallet = requireMidnightWallet();
   if (!wallet) {
     sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected'), target: TARGET, sender: SENDER.extension });
