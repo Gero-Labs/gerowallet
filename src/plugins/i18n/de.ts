@@ -1735,7 +1735,6 @@ export default {
   'governance.supportHint': 'Mit CIP-149 können Sie einen Anteil jeder Belohnungsauszahlung an den DRep senden, der für Sie abstimmt. Freiwillig und jederzeit kündbar.',
   'governance.supportOnAt': 'Sie senden {percent} jeder Auszahlung an {name}.',
   'governance.supportOff': 'Sie senden derzeit keinen Anteil Ihrer Belohnungen an Ihren DRep.',
-  'governance.supportAppliesOnWithdrawal': 'Wird von den ausgezahlten Belohnungen abgezogen, nie von Ihrem Stake.',
   'governance.supportNoPayoutAddress': 'Dieser DRep hat keine Zahlungsadresse veröffentlicht, daher wird nichts gesendet. Der Anteil entfällt bei der Auszahlung.',
   'governance.supportStart': 'Unterstützung einrichten',
   'governance.supportChange': 'Anteil ändern',

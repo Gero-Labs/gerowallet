@@ -1564,7 +1564,6 @@ export default {
   'governance.supportHint': 'CIP-149 lets you send a share of every reward withdrawal to the DRep who votes for you. It is optional and you can stop at any time.',
   'governance.supportOnAt': 'You send {percent} of each withdrawal to {name}.',
   'governance.supportOff': 'You are not sending any of your rewards to your DRep.',
-  'governance.supportAppliesOnWithdrawal': 'Taken from the rewards you withdraw, never from your stake.',
   'governance.supportNoPayoutAddress': 'This DRep has not published a payment address, so nothing is actually sent. The share is skipped when you withdraw.',
   'governance.supportStart': 'Set up support',
   'governance.supportChange': 'Change the share',

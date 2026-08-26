@@ -8,7 +8,7 @@
         <p class="t-body my-governance__subtitle">{{ $t(subtitleKey) }}</p>
       </div>
       <div class="my-governance__header-side">
-        <GButton tier="secondary" compact @click="goToDReps()">{{ $t('governance.browseDReps') }}</GButton>
+        <GButton tier="secondary" block @click="goToDReps()">{{ $t('governance.browseDReps') }}</GButton>
         <GButton tier="secondary" compact @click="goToActions()">{{ $t('governance.actionsTitle') }}</GButton>
         <AsOf :timestamp="fetchedAt" />
       </div>
@@ -130,10 +130,25 @@
             <span class="my-governance__manage-icon">
               <v-icon size="18" color="var(--g-accent)">mdi-account-switch-outline</v-icon>
             </span>
-            <span class="my-governance__manage-heading">
-              <span class="t-label">{{ $t('governance.changeDelegationTitle') }}</span>
-              <p class="t-body-sm">{{ $t('governance.changeDelegationHint') }}</p>
-            </span>
+            <span class="t-label my-governance__manage-title">{{ $t('governance.changeDelegationTitle') }}</span>
+            <!-- The mechanics live behind this rather than on the card. A real
+                 button, not an icon with a hover handler: it must be reachable
+                 by keyboard and carry the baseline focus ring. -->
+            <v-tooltip bottom max-width="320" content-class="glass-popover">
+              <template #activator="{ on, attrs }">
+                <button
+                  type="button"
+                  class="my-governance__manage-info"
+                  v-bind="attrs"
+                  :aria-label="String($t('common.learnMore'))"
+                  v-on="on"
+                >
+                  <v-icon size="14">mdi-information-outline</v-icon>
+                </button>
+              </template>
+              <span class="t-body-sm">{{ $t('governance.changeDelegationHint') }}</span>
+              <span class="t-body-sm">{{ $t('governance.changeDelegationNote') }}</span>
+            </v-tooltip>
           </div>
 
           <div class="my-governance__change-row">
@@ -143,7 +158,7 @@
             </GButton>
             <GButton
               tier="secondary"
-              compact
+              block
               :disabled="isAbstaining"
               :loading="building === 'drep_always_abstain'"
               @click="delegateToPredefined('abstain')"
@@ -153,7 +168,7 @@
             </GButton>
             <GButton
               tier="secondary"
-              compact
+              block
               :disabled="isNoConfidence"
               :loading="building === 'drep_always_no_confidence'"
               @click="delegateToPredefined('noConfidence')"
@@ -163,7 +178,6 @@
             </GButton>
           </div>
 
-          <p class="t-caption my-governance__change-note">{{ $t('governance.changeDelegationNote') }}</p>
         </section>
 
         <!-- ── CIP-149: a share of each withdrawal, sent to your DRep ──────── -->
@@ -180,10 +194,22 @@
                 {{ supportingNow ? 'mdi-gift-outline' : 'mdi-gift-off-outline' }}
               </v-icon>
             </span>
-            <span class="my-governance__manage-heading">
-              <span class="t-label">{{ $t('governance.supportTitle') }}</span>
-              <p class="t-body-sm">{{ $t('governance.supportHint') }}</p>
-            </span>
+            <span class="t-label my-governance__manage-title">{{ $t('governance.supportTitle') }}</span>
+            <v-tooltip bottom max-width="320" content-class="glass-popover">
+              <template #activator="{ on, attrs }">
+                <button
+                  type="button"
+                  class="my-governance__manage-info"
+                  v-bind="attrs"
+                  :aria-label="String($t('common.learnMore'))"
+                  v-on="on"
+                >
+                  <v-icon size="14">mdi-information-outline</v-icon>
+                </button>
+              </template>
+              <span class="t-body-sm">{{ $t('governance.supportHint') }}</span>
+              <span class="t-body-sm">{{ $t('governance.supportTxNote') }}</span>
+            </v-tooltip>
           </div>
 
           <div class="my-governance__support-state">
@@ -203,23 +229,19 @@
                 <v-icon size="14" color="var(--g-warning)">mdi-alert-outline</v-icon>
                 {{ $t('governance.supportNoPayoutAddress') }}
               </span>
-              <span v-else-if="supportingNow" class="t-caption">
-                {{ $t('governance.supportAppliesOnWithdrawal') }}
-              </span>
             </span>
           </div>
 
           <div class="my-governance__support-row">
-            <GButton tier="secondary" compact @click="openSupportDialog()">
+            <GButton tier="secondary" block @click="openSupportDialog()">
               <v-icon left size="16" color="var(--g-accent)">mdi-gift-outline</v-icon>
               {{ supportingNow ? $t('governance.supportChange') : $t('governance.supportStart') }}
             </GButton>
-            <GButton v-if="supportingNow" tier="tertiary" compact @click="openSupportDialog()">
+            <GButton v-if="supportingNow" tier="tertiary" block @click="openSupportDialog()">
               {{ $t('governance.supportStop') }}
             </GButton>
           </div>
 
-          <p class="t-caption my-governance__support-note">{{ $t('governance.supportTxNote') }}</p>
         </section>
         </div>
 
@@ -1217,7 +1239,7 @@ watch(() => walletStore.account?.drep_id, () => void loadDRep(), { immediate: tr
 }
 .my-governance__manage-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--g-s-3);
 }
 /* The same 36px tile the choice cards use, so these join the page's existing
@@ -1236,11 +1258,33 @@ watch(() => walletStore.account?.drep_id, () => void loadDRep(), { immediate: tr
 .my-governance__manage-icon--off {
   border-color: var(--g-hairline-1);
 }
-.my-governance__manage-heading {
-  display: flex;
-  flex-direction: column;
-  gap: var(--g-s-1);
+.my-governance__manage-title {
   min-width: 0;
+  flex: 1;
+}
+/* The explanation lives behind this. A real button so it is tabbable and takes
+   the baseline focus ring; no outline is cleared anywhere here. */
+.my-governance__manage-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  padding: 0;
+  border: none;
+  background: none;
+  border-radius: var(--g-r-pill);
+  color: var(--g-text-3);
+  cursor: help;
+}
+.my-governance__manage-info:hover {
+  color: var(--g-text-2);
+}
+/* Two paragraphs of prose need to sit apart inside the popover. */
+.glass-popover .t-body-sm + .t-body-sm {
+  display: block;
+  margin-top: var(--g-s-2);
 }
 
 .my-governance__support {
@@ -1270,11 +1314,8 @@ watch(() => walletStore.account?.drep_id, () => void loadDRep(), { immediate: tr
 }
 .my-governance__support-row {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: var(--g-s-2);
-}
-.my-governance__support-note {
-  margin: 0;
 }
 
 .my-governance__change {
@@ -1283,13 +1324,14 @@ watch(() => walletStore.account?.drep_id, () => void loadDRep(), { immediate: tr
   gap: var(--g-s-3);
   padding: var(--g-s-4);
 }
+/* A COLUMN, not a wrapping row. Three buttons across a half-width card wrapped
+   2 + 1 and left a ragged edge; stacked full-width they read as what they are —
+   three alternatives, equally weighted — and the support card's buttons line up
+   with them. */
 .my-governance__change-row {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: var(--g-s-2);
-}
-.my-governance__change-note {
-  margin: 0;
 }
 
 .my-governance__honesty {
