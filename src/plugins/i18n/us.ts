@@ -1558,6 +1558,18 @@ export default {
   'governance.youVotedChoice': 'You voted {vote}',
 
   // CIP-0149: Voluntary DRep Compensation
+  'governance.delegationPendingTitle': 'Your delegation change is on its way',
+  'governance.delegationPendingHint': 'Submitted and waiting for the chain. Nothing below has changed yet, and this page updates itself once it confirms.',
+  'governance.supportTitle': 'Supporting your DRep',
+  'governance.supportHint': 'CIP-149 lets you send a share of every reward withdrawal to the DRep who votes for you. It is optional and you can stop at any time.',
+  'governance.supportOnAt': 'You send {percent} of each withdrawal to {name}.',
+  'governance.supportOff': 'You are not sending any of your rewards to your DRep.',
+  'governance.supportAppliesOnWithdrawal': 'Taken from the rewards you withdraw, never from your stake.',
+  'governance.supportNoPayoutAddress': 'This DRep has not published a payment address, so nothing is actually sent. The share is skipped when you withdraw.',
+  'governance.supportStart': 'Set up support',
+  'governance.supportChange': 'Change the share',
+  'governance.supportStop': 'Stop supporting',
+  'governance.supportTxNote': 'Setting, changing or stopping this means one transaction that delegates to the same DRep again with the new share attached. The fee applies either way.',
   'governance.supportDrep': 'Support this DRep',
   'governance.supportDrepDesc': 'Donate a portion of your staking rewards to compensate this DRep for their governance work.',
   'governance.compensationPercent': 'Compensation',

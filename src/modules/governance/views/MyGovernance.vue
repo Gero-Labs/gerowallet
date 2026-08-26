@@ -29,6 +29,20 @@
       <div class="my-governance__main">
         <!-- ── The state hero ───────────────────────────────────────────── -->
         <div class="my-governance__hero glass-panel" :class="`my-governance__hero--${status.tone}`">
+          <!-- A submitted delegation the chain has not confirmed yet.
+               Deliberately a QUALIFIER rather than a status of its own: the state
+               below is still the one in force, and replacing it would trade one
+               false impression for another. This only says why it has not moved. -->
+          <div v-if="delegationPending" class="my-governance__pending" role="status">
+            <v-progress-circular indeterminate size="16" width="2" color="var(--g-accent)" />
+            <span class="my-governance__pending-text">
+              <span class="t-body-sm my-governance__pending-title">
+                {{ $t('governance.delegationPendingTitle') }}
+              </span>
+              <span class="t-caption">{{ $t('governance.delegationPendingHint') }}</span>
+            </span>
+          </div>
+
           <div class="my-governance__hero-top">
             <div class="my-governance__hero-headline">
               <span class="t-label">{{ $t('governance.yourVotingStatus') }}</span>
@@ -96,7 +110,11 @@
         </div>
 
         <!-- ── Registered but undelegated: the three ways to unlock ───────── -->
-        <template v-if="status.status === 'registeredNoDRep'">
+        <!-- Not while a delegation is in flight. These three cards are a prompt
+             to take a position, and showing them over a submitted certificate
+             asks the user to do the thing they just did — the exact complaint
+             this fixes. The hero's qualifier above carries the state instead. -->
+        <template v-if="status.status === 'registeredNoDRep' && !delegationPending">
           <div class="my-governance__choices">
             <div class="my-governance__choice my-governance__choice--featured glass-panel">
               <div class="my-governance__choice-top">
@@ -207,7 +225,7 @@
              REPLACES it, so stepping back from a DRep means choosing Abstain.
              Offering a button labelled "undelegate" would promise a state the
              ledger does not have; these are the three that exist. -->
-        <section v-if="canChangeDelegation" class="my-governance__change glass-panel">
+        <section v-if="canChangeDelegation && !delegationPending" class="my-governance__change glass-panel">
           <div class="my-governance__panel-head">
             <span class="t-label">{{ $t('governance.changeDelegationTitle') }}</span>
             <p class="t-body-sm">{{ $t('governance.changeDelegationHint') }}</p>
@@ -241,6 +259,55 @@
           </div>
 
           <p class="t-caption my-governance__change-note">{{ $t('governance.changeDelegationNote') }}</p>
+        </section>
+
+        <!-- ── CIP-149: a share of each withdrawal, sent to your DRep ──────── -->
+        <!-- Only for a real DRep. The two predefined choices are not people and
+             have nowhere to receive anything, and a wallet delegated to its own
+             key would be paying itself. -->
+        <section v-if="showsSupport" class="my-governance__support glass-panel">
+          <div class="my-governance__panel-head">
+            <span class="t-label">{{ $t('governance.supportTitle') }}</span>
+            <p class="t-body-sm">{{ $t('governance.supportHint') }}</p>
+          </div>
+
+          <div class="my-governance__support-state">
+            <span class="my-governance__support-icon" :class="`my-governance__support-icon--${supportTone}`">
+              <v-icon size="18">{{ supportingNow ? 'mdi-gift-outline' : 'mdi-gift-off-outline' }}</v-icon>
+            </span>
+            <span class="my-governance__support-body">
+              <span class="t-body-lg">
+                {{
+                  supportingNow
+                    ? $t('governance.supportOnAt', { percent: supportPercentDisplay, name: drepName })
+                    : $t('governance.supportOff')
+                }}
+              </span>
+              <!-- The rate is a commitment to send, not proof anything arrives:
+                   the withdrawal builder drops the donation output when the DRep
+                   published no payment address, and says nothing when it does.
+                   Stated here rather than discovered later. -->
+              <span v-if="supportingNow && !drepCanReceive" class="t-caption my-governance__support-warn">
+                <v-icon size="14" color="var(--g-warning)">mdi-alert-outline</v-icon>
+                {{ $t('governance.supportNoPayoutAddress') }}
+              </span>
+              <span v-else-if="supportingNow" class="t-caption">
+                {{ $t('governance.supportAppliesOnWithdrawal') }}
+              </span>
+            </span>
+          </div>
+
+          <div class="my-governance__support-row">
+            <GButton tier="secondary" compact @click="openSupportDialog()">
+              <v-icon left size="16">mdi-gift-outline</v-icon>
+              {{ supportingNow ? $t('governance.supportChange') : $t('governance.supportStart') }}
+            </GButton>
+            <GButton v-if="supportingNow" tier="tertiary" compact @click="openSupportDialog()">
+              {{ $t('governance.supportStop') }}
+            </GButton>
+          </div>
+
+          <p class="t-caption my-governance__support-note">{{ $t('governance.supportTxNote') }}</p>
         </section>
       </div>
 
@@ -342,6 +409,8 @@ import {
 } from '@/shared/composables/useGovernanceHydration';
 import { KEYWORD_DREPS } from '@/shared/utils/drepId';
 import { useGovernanceStatus } from '@/shared/composables/useGovernanceStatus';
+import { usePendingVoteDelegation } from '@/shared/composables/usePendingVoteDelegation';
+import { governanceStore } from '@/stores/governanceStore';
 import type { DelegatedDRepRecord, DRepVoteRecord } from '@/shared/composables/useDelegationHealth';
 import { useWithdrawal } from '@/shared/composables/useWithdrawal';
 import DelegationAlertsPanel from '@/modules/governance/components/alerts/DelegationAlertsPanel.vue';
@@ -672,7 +741,72 @@ function openAction(id: GovActionId): void {
  * the certificate, the fee and the signing surface are identical wherever the
  * choice is made.
  */
-const { selectedDRep, tx, isDialogOpen, building, delegateToPredefined, closeDialog } = useDRepDelegation();
+const { selectedDRep, tx, isDialogOpen, building, delegateToDRep, delegateToPredefined, closeDialog } =
+  useDRepDelegation();
+
+/** The pending qualifier. See usePendingVoteDelegation for why it is not a status. */
+const delegationPending = usePendingVoteDelegation();
+
+// ---------------------------------------------------------------------------
+// CIP-149 support
+// ---------------------------------------------------------------------------
+
+/**
+ * The rate this wallet committed to, in TENTHS OF A PERCENT.
+ *
+ * Named `bps` throughout the codebase, but it is not basis points: the
+ * withdrawal builder computes `amount * bps / 1000` and the dialog renders
+ * `bps / 10 + '%'`, so 50 is 5%. Matched here rather than corrected — the unit
+ * is load-bearing in money math that already ships.
+ */
+const supportBps = computed(() => governanceStore.currentCompensationBps);
+
+const supportingNow = computed(() => (supportBps.value ?? 0) > 0);
+
+const supportPercentDisplay = computed(() => `${((supportBps.value ?? 0) / 10).toFixed(1)}%`);
+
+const supportTone = computed(() => (supportingNow.value ? 'on' : 'off'));
+
+/**
+ * Whether the DRep published somewhere to receive it.
+ *
+ * The same check the withdrawal builder makes before it adds the donation
+ * output — and it drops that output silently when this is false, which is why
+ * the section says so instead of letting the user find out by not being thanked.
+ */
+const drepCanReceive = computed(() => {
+  const address = record.value?.metadata?.meta_json?.body?.paymentAddress;
+  return typeof address === 'string' && (address.startsWith('addr1') || address.startsWith('addr_test1'));
+});
+
+/**
+ * Only offered against a real DRep, and never while a delegation is in flight:
+ * changing the rate means submitting another vote-delegation certificate, which
+ * would replace the one still waiting.
+ */
+const showsSupport = computed(
+  () =>
+    !delegationPending.value &&
+    status.value.delegation === 'drep' &&
+    !!record.value,
+);
+
+/**
+ * Set, change or stop it — all three are the same gesture: re-delegate to the
+ * SAME DRep, with different CIP-149 metadata attached. The dialog owns the
+ * toggle and the presets, so it is the one surface for all of them; submitting
+ * with the switch off is what clears the rate.
+ */
+function openSupportDialog(): void {
+  const drep = record.value;
+  if (!drep?.drep_id) return;
+  void delegateToDRep({
+    id: drep.drep_id,
+    name: drepName.value,
+    hex: drep.hex ?? undefined,
+    has_script: drep.has_script ?? undefined,
+  });
+}
 
 const isAbstaining = computed(() => walletStore.account?.drep_id === 'drep_always_abstain');
 const isNoConfidence = computed(() => walletStore.account?.drep_id === 'drep_always_no_confidence');
@@ -1027,6 +1161,78 @@ watch(() => walletStore.account?.drep_id, () => void loadDRep(), { immediate: tr
 /* ---- Honesty strip ---- */
 /* Solid on purpose: glass means "this floats above content", and a one-line
    footnote under three cards is the most static thing on the page. */
+/* The in-flight qualifier. Sits inside the hero rather than above it: it is a
+   caveat on the state below, not a state of its own, and a full-width banner
+   would read as the more important of the two. */
+.my-governance__pending {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--g-s-3);
+  padding: var(--g-s-3);
+  margin-bottom: var(--g-s-3);
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-control);
+  background: var(--g-raised);
+}
+.my-governance__pending-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-1);
+  min-width: 0;
+}
+.my-governance__pending-title {
+  color: var(--g-text-1);
+}
+
+.my-governance__support {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-3);
+  padding: var(--g-s-4);
+}
+.my-governance__support-state {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--g-s-3);
+}
+.my-governance__support-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: var(--g-r-pill);
+  border: 1px solid var(--g-hairline-2);
+  background: var(--g-raised);
+  color: var(--g-text-3);
+}
+.my-governance__support-icon--on {
+  color: var(--g-accent);
+}
+.my-governance__support-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-1);
+  min-width: 0;
+}
+/* A commitment that cannot be honoured is not a smaller version of one that
+   can, so it is toned as a warning rather than as another caption. */
+.my-governance__support-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--g-s-2);
+  color: var(--g-warning);
+}
+.my-governance__support-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--g-s-2);
+}
+.my-governance__support-note {
+  margin: 0;
+}
+
 .my-governance__change {
   display: flex;
   flex-direction: column;
