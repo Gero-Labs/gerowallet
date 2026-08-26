@@ -160,6 +160,13 @@
             </v-tooltip>
           </div>
 
+          <!-- The card's own state line, matching the support card's. Without it
+               the card was a title and a row of buttons with a hole between
+               them, and it said nothing about what your stake is doing now. -->
+          <p class="t-body-lg my-governance__manage-state">
+            {{ $t('governance.changeCurrentDrep', { name: drepName }) }}
+          </p>
+
           <div class="my-governance__change-row">
             <GButton tier="secondary" block @click="goToDReps()">
               <v-icon left size="16" color="var(--g-accent)">mdi-account-search-outline</v-icon>
@@ -1346,19 +1353,28 @@ watch(() => walletStore.account?.drep_id, () => void loadDRep(), { immediate: tr
   flex-direction: column;
   gap: var(--g-s-2);
 }
-/* Long labels in a narrow track wrap rather than overflow, and every button in
-   the row takes the height of the tallest so the row stays level. Two classes,
-   because Vuetify sizes `.v-btn` at (0,1,0) with a fixed height and a single
-   class would tie rather than win. */
+/* Vuetify gives `.v-btn` a `min-width` and a fixed height, and never lets
+   `.v-btn__content` shrink — so in a narrow grid track the label ran straight
+   past the border instead of wrapping inside it. `min-width: 0` on both is what
+   actually lets the track govern the button; the rest is the wrap itself.
+   Two classes, because Vuetify's own rule is (0,1,0) and a single class ties. */
 .my-governance__change-row .v-btn.g-btn {
   height: auto;
-  min-height: 34px;
-  padding-top: var(--g-s-2);
-  padding-bottom: var(--g-s-2);
+  min-height: 36px;
+  min-width: 0;
+  max-width: 100%;
+  padding: var(--g-s-2) var(--g-s-3);
+  white-space: normal;
 }
 .my-governance__change-row .v-btn.g-btn .v-btn__content {
+  flex: 1 1 auto;
+  min-width: 0;
   white-space: normal;
   line-height: 1.25;
+  text-align: center;
+}
+.my-governance__manage-state {
+  margin: 0;
 }
 
 .my-governance__change {

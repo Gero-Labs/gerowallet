@@ -1475,6 +1475,7 @@ export default {
   'governance.castVoteSubtitle': 'Als DRep über Cardano-Governance-Aktionen abstimmen.',
   'governance.checkingActions': 'Es wird geprüft, ob die ausgewählten Aktionen noch offen sind…',
   'governance.changeDelegationTitle': 'Ändern, wie Ihr Stake abstimmt',
+  'governance.changeCurrentDrep': 'Ihr Stake folgt derzeit {name}.',
   'governance.changeDelegationHint': 'Eine Transaktion, wirksam ab der nächsten Epoche. Ihr ADA verlässt Ihr Wallet nie.',
   'governance.changeToAnotherDRep': 'Anderen DRep wählen',
   'governance.stepBackToAbstain': 'Vertretung beenden',

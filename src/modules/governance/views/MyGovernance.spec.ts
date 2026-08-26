@@ -879,6 +879,18 @@ describe('a delegation the chain has not confirmed', () => {
     expect(wrapper.find('.my-governance__choices').exists()).toBe(false);
   });
 
+  it('says what the stake follows now, so the card is not a hole with buttons', async () => {
+    represented();
+    getDRepById.mockResolvedValue({ registered: true, votes: [] });
+
+    wrapper = mountPage();
+    await settle();
+
+    const change = wrapper.find('.my-governance__change');
+    expect(change.exists()).toBe(true);
+    expect(change.text()).toContain('governance.changeCurrentDrep');
+  });
+
   it('offers no second certificate while one is still in flight', async () => {
     represented();
     getDRepById.mockResolvedValue({ registered: true, votes: [] });
