@@ -58,7 +58,6 @@ import { governanceStore } from '@/stores/governanceStore';
 import { networkStore } from '@/stores/networkStore';
 import governanceActionsStore from '@/stores/governanceActionsStore';
 import { resetDRepRecords } from '@/shared/composables/useGovernanceHydration';
-import { Cardano } from '@cardano-sdk/core';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import governanceAlertsStore from '@/stores/governanceAlertsStore';
 
