@@ -46,14 +46,15 @@ concurrency:
 jobs:
   bundle:
     name: Production bundle (SFC parse)
-    # This job runs a full `npm ci` + `npm run build`, which executes
-    # PR-controlled code (install scripts, build-time JS) on the self-hosted
-    # `gero-plain` runner. Restrict to same-repo PRs (Dependabot branches count)
-    # and pushes; external fork PRs are skipped so untrusted code never runs on
-    # the shared runner. No secrets are exposed here (contents: read only).
-    if: >-
-      github.event_name == 'push' ||
-      github.event.pull_request.head.repo.full_name == github.repository
+    # Fork PRs run here too. The same-repo guard this job used to carry existed
+    # because it ran `npm ci` + `npm run build` — PR-controlled install scripts
+    # and build-time JS — on the shared self-hosted `gero-plain` runner. That
+    # stopped being true when the job moved to `ubuntu-latest` (see below), and a
+    # skipped required check counts as PASSING for branch protection, so the guard
+    # was leaving every external contribution merged with the gate green and never
+    # run. Safe to drop: `pull_request` (not `pull_request_target`) checks out the
+    # fork's tree with a read-only token on a disposable hosted runner, and no
+    # secrets are exposed here (contents: read only).
     # GitHub-hosted: the repo is public, and the self-hosted arc-private runner
     # group forbids public-repo jobs (allows_public_repositories:false), so
     # gero-plain jobs never dispatch. Hosted runners also avoid exposing internal
