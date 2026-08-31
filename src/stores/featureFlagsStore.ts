@@ -61,6 +61,11 @@ export interface FeatureFlags {
   // and the Connected dApps UI hides the WalletConnect section until flipped ON
   // via gero-sync — acts as a remote KILL-SWITCH.
   isWalletConnectEnabled: boolean;
+  // Master gate for the CIP-45 (WebRTC dApp bridge) pairing/signing surface.
+  // Default OFF: the peerjs signaling connection and the Connected dApps CIP-45
+  // section stay dark until flipped ON via gero-sync — acts as a remote
+  // KILL-SWITCH, mirroring isWalletConnectEnabled.
+  isCip45Enabled: boolean;
   /**
    * Origins allowed to draw from the Nexus shared-pool collateral. A dApp must be
    * on this Gero-curated list AND already connected by the user before the wallet
@@ -104,6 +109,7 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
     isMidnightConvertEnabled: false,
     isGoogleWalletEnabled: false,
     isWalletConnectEnabled: false,
+    isCip45Enabled: false,
     isLiveChatEnabled: false,
     collateralTrustedDapps: [],
   },
@@ -179,6 +185,8 @@ export const featureFlagsStore = {
     // WalletConnect ships DARK (default false); the background reads this mirror
     // to decide whether to init WalletKit at all.
     featureFlagsState.flags.isWalletConnectEnabled = featureFlagService.getFlag('isWalletConnectEnabled', false);
+    // CIP-45 ships DARK (default false); mirrors isWalletConnectEnabled's gating pattern.
+    featureFlagsState.flags.isCip45Enabled = featureFlagService.getFlag('isCip45Enabled', false);
     // Live support chat ships DARK (default false) until the Chatwoot inbox is staffed.
     featureFlagsState.flags.isLiveChatEnabled = featureFlagService.getFlag('isLiveChatEnabled', false);
     featureFlagsState.flags.collateralTrustedDapps = featureFlagService.getFlag<string[]>('collateralTrustedDapps', []);
@@ -252,6 +260,11 @@ export const featureFlagsStore = {
     });
     featureFlagService.onFlagChange('isWalletConnectEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isWalletConnectEnabled', newValue);
+      // Mirror the live flip so the background picks it up on next login/init.
+      persistFlagsForBackground();
+    });
+    featureFlagService.onFlagChange('isCip45Enabled', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'isCip45Enabled', newValue);
       // Mirror the live flip so the background picks it up on next login/init.
       persistFlagsForBackground();
     });
@@ -448,6 +461,17 @@ export const featureFlagsStore = {
   },
 
   /**
+   * Check if CIP-45 (WebRTC dApp bridge) pairing/signing is enabled.
+   * Ships DARK (default false), mirroring {@link isWalletConnectEnabled}: the
+   * peerjs signaling connection stays uninitialized and the Connected dApps UI
+   * hides the CIP-45 section until this is flipped ON, so gero-sync can hold or
+   * kill CIP-45 without a client release.
+   */
+  isCip45Enabled(): boolean {
+    return featureFlagsState.flags.isCip45Enabled;
+  },
+
+  /**
    * Check if the non-custodial live support chat is enabled.
    * Ships DARK (default false). The caller is the UI that renders the support
    * entry point: while it is hidden nothing calls the chat composable, so no
@@ -490,6 +514,7 @@ export const featureFlagsStore = {
       isMidnightConvertEnabled: false,
       isGoogleWalletEnabled: false,
       isWalletConnectEnabled: false,
+      isCip45Enabled: false,
       isLiveChatEnabled: false,
       collateralTrustedDapps: [],
     });

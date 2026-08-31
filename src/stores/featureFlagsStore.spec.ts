@@ -41,3 +41,20 @@ test('reset() turns isGovernanceVotingEnabled back off', () => {
   featureFlagsStore.reset();
   expect(featureFlagsStore.isGovernanceVotingEnabled()).toBe(false);
 });
+
+test('exposes isCip45Enabled, defaulting to false', () => {
+  expect(featureFlagsStore.isCip45Enabled()).toBe(false);
+});
+
+test('reflects a remote isCip45Enabled flag once loaded', () => {
+  vi.mocked(featureFlagService.getFlag).mockImplementation((key: string, fallback: unknown) =>
+    key === 'isCip45Enabled' ? true : fallback,
+  );
+  featureFlagsStore.loadFlags();
+  expect(featureFlagsStore.isCip45Enabled()).toBe(true);
+});
+
+test('reset() turns isCip45Enabled back off', () => {
+  featureFlagsStore.reset();
+  expect(featureFlagsStore.isCip45Enabled()).toBe(false);
+});

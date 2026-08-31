@@ -99,6 +99,14 @@ function buildCSP(dev: boolean): string {
     'https://*.walletconnect.com',
     'wss://*.walletconnect.com',
     'https://*.reown.com',
+    // CIP-45 peerjs signaling (WebSocket + id REST endpoint). Primary is the
+    // CF-hosted server (VITE_PEERJS_HOST); 0.peerjs.com is the public-cloud
+    // fallback the service retries against once. The WebRTC data channel
+    // itself is not CSP-governed — only signaling appears here.
+    'https://peerjs.dev.ecosyseng.cf-deployments.org',
+    'wss://peerjs.dev.ecosyseng.cf-deployments.org',
+    'https://0.peerjs.com',
+    'wss://0.peerjs.com',
     // Dev-only
     ...(dev
       ? [

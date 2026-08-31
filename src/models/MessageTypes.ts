@@ -67,6 +67,8 @@ export enum MessageTypes {
   WC_REJECT_SESSION = 'WC_REJECT_SESSION',
   WC_DISCONNECT_SESSION = 'WC_DISCONNECT_SESSION',
   WC_GET_SESSIONS = 'WC_GET_SESSIONS',
+  CIP45_INVOKE = 'CIP45_INVOKE',
+  CIP45_UPDATE_SESSION = 'CIP45_UPDATE_SESSION',
   WC_RESPOND_REQUEST = 'WC_RESPOND_REQUEST',
   // Midnight: persist a re-derived publicKey JSON (3 addresses) for an existing
   // Midnight wallet. Used by the legacy-wallet upgrade path when the persisted
