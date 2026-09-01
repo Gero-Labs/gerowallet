@@ -94,6 +94,15 @@ onMounted(async () => {
   } catch (error) {
     console.error('❌ Failed to trigger auto-lock check on mount:', error);
   }
+
+  // CIP-45: bring the discovery peer up so paired dApps can reconnect.
+  // Deferred: feature flags hydrate async and this is never login-critical.
+  setTimeout(async () => {
+    const { featureFlagsStore } = await import('@/stores/featureFlagsStore');
+    if (!featureFlagsStore.isCip45Enabled()) return;
+    const { cip45Service } = await import('@/services/cip45/cip45.service');
+    cip45Service.resumeIfPaired();
+  }, 3000);
 });
 
 // Watch geroStore for locale changes (global preference) instead of walletStore
