@@ -4308,6 +4308,7 @@ export default {
   'cip45.pairingFailed': 'Connection failed. Check that the dApp is open and try again.',
   'cip45.sessions': 'CIP-45 Connections',
   'cip45.connectViaCip45': 'Connect via CIP-45',
+  'cip45.noActiveSessions': 'No active CIP-45 connections',
 
   // WalletConnect
   'walletConnect.walletConnect': 'WalletConnect',

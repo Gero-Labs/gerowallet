@@ -146,8 +146,11 @@ const onQrScan = (text: string) => {
     uri.value = text;
     tab.value = 0; // Switch to paste tab to show the peer ID
     pair();
-  } catch {
-    qrError.value = t('cip45.invalidId');
+  } catch (error) {
+    // Mirror pair()'s error mapping: a stale (expired) QR payload gets its
+    // own message rather than the generic "invalid" one.
+    const msg = error instanceof Error ? error.message : '';
+    qrError.value = msg === 'stale' ? t('cip45.staleQr') : t('cip45.invalidId');
   }
 };
 

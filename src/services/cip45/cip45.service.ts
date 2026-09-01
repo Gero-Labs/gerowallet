@@ -1,4 +1,5 @@
 import { Mutex } from 'async-mutex';
+import { watch } from 'vue';
 import { CardanoPeerConnect } from '@fabianbormann/cardano-peer-connect';
 import type { PeerConnectStorage, IConnectMessage } from '@fabianbormann/cardano-peer-connect';
 import { Messaging } from '@/chrome/messaging';
@@ -60,6 +61,14 @@ class GeroPeerConnect extends CardanoPeerConnect {
    * `any` escape hatch.
    */
   private invoke = async <T>(method: string, params: Record<string, unknown> = {}): Promise<T> => {
+    // Belt-and-braces vs. FIX 1's wallet-switch watcher: the watcher's
+    // disconnect() is async and best-effort, so a request already in flight
+    // (or one that races the watcher between the wallet-id change and the
+    // disconnect landing) must not be forwarded to a session that no longer
+    // belongs to the logged-in wallet.
+    if (!this.service.isSessionPeerAllowed()) {
+      throw { code: -3, info: 'Wallet changed — pairing not authorized' };
+    }
     const response = (await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.CIP45_INVOKE,
       data: { method, params, dapp: this.service.currentDappInfo() },
@@ -103,6 +112,35 @@ class Cip45Service {
    */
   private initMutex = new Mutex();
 
+  /**
+   * Fix round 2, finding 1: a live CIP-45 session used to survive a wallet
+   * switch, so a dApp paired to wallet A kept reading wallet B once the user
+   * switched. Guards `registerWalletSwitchWatch()` so it's wired exactly
+   * once per service instance even though `startWallet()` itself runs more
+   * than once (e.g. `restartWithFallback()`'s primary→fallback retry).
+   */
+  private walletSwitchWatchStarted = false;
+
+  /**
+   * Tears down a live session the moment the logged-in wallet changes.
+   * `walletStore` is a `Vue.observable` (see stores/walletStore.ts), so
+   * Vue 2.7's standalone `watch()` can track `loggedWallet?.id` outside a
+   * component. Best-effort: a session-teardown failure here must not become
+   * an unhandled rejection or block the wallet switch itself.
+   */
+  private registerWalletSwitchWatch(): void {
+    if (this.walletSwitchWatchStarted) return;
+    this.walletSwitchWatchStarted = true;
+    watch(
+      () => walletStore.loggedWallet?.id,
+      () => {
+        if (this.session) {
+          this.disconnect().catch(() => { /* best effort */ });
+        }
+      },
+    );
+  }
+
   currentDappInfo(): { name: string; url: string } | undefined {
     return this.session ? { name: this.session.dappName, url: this.session.dappUrl } : undefined;
   }
@@ -110,6 +148,18 @@ class Cip45Service {
   isAllowedPeerSync(peerId: string): boolean {
     return this.pendingPeerId === peerId
       || this.activePairings().some(p => p.dappPeerId === peerId);
+  }
+
+  /**
+   * Fix round 2, finding 1 (belt-and-braces): the wallet-switch watcher in
+   * `startWallet()` tears the session down on a wallet switch, but that
+   * disconnect is async/best-effort. `GeroPeerConnect.invoke()` calls this
+   * first so a CIP-30 request already in flight (or racing the watcher)
+   * can't be served against a session paired to a wallet that's no longer
+   * logged in.
+   */
+  isSessionPeerAllowed(): boolean {
+    return !this.session || this.isAllowedPeerSync(this.session.dappPeerId);
   }
 
   async isAllowedPeer(peerId: string): Promise<boolean> {
@@ -206,6 +256,7 @@ class Cip45Service {
 
     const storage = await this.buildLibStorage();
     this.wallet = new GeroPeerConnect(this, peerId, storage, peerJsConfig);
+    this.registerWalletSwitchWatch();
 
     this.setConnectHandler((message) => {
       if (!message.connected) return;
@@ -235,7 +286,13 @@ class Cip45Service {
 
   private recordPairing(dappPeerId: string, dappName: string, dappUrl: string): void {
     const walletId = this.currentWalletId();
-    if (!this.pairingsCache.some(p => p.dappPeerId === dappPeerId)) {
+    // Fix round 2, finding 3: the on-disk list is flat (every wallet's
+    // pairings share it — see activePairings() above), but de-duping by bare
+    // dappPeerId meant a dApp already paired under wallet A never persisted
+    // a record for wallet B, so wallet B's reconnect gate (isAllowedPeerSync
+    // → activePairings(), scoped by walletId) would then refuse a dApp it
+    // just connected to. De-dupe by the (dappPeerId, walletId) pair instead.
+    if (!this.pairingsCache.some(p => p.dappPeerId === dappPeerId && p.walletId === walletId)) {
       this.pairingsCache.push({ dappPeerId, dappName, dappUrl, walletId, pairedAt: Date.now() });
       this.savePairings();
     }
@@ -255,6 +312,12 @@ class Cip45Service {
   /** Pair with a dApp from a scanned QR payload or a pasted peer id. */
   async pair(input: string): Promise<void> {
     const { dappPeerId } = parseCip45Input(input); // throws 'invalid' / 'stale'
+    // Fix round 2, finding 2: `startedWithFallback` used to be set once and
+    // never reset, so once ANY pair() attempt in this service's lifetime had
+    // fallen back, every later pair() attempt lost its one retry forever —
+    // even a brand new pairing with no relation to the earlier failure.
+    // Scope the flag to a single pair() attempt sequence instead.
+    this.startedWithFallback = false;
     await this.ensureStarted();
     this.pendingPeerId = dappPeerId;
     this.pushSession('connecting', null);
@@ -262,7 +325,12 @@ class Cip45Service {
     try {
       await this.connectWithTimeout(dappPeerId);
     } catch (primaryError) {
-      if (this.startedWithFallback) throw primaryError;
+      // Fix round 2, finding 2: retry only on the 15s connect timeout
+      // (signaling-level failure) — a dApp-side rejection surfaces as
+      // Error(message.errorMessage || 'rejected') from connectWithTimeout
+      // and must propagate immediately, not trigger a fallback retry.
+      const isTimeout = primaryError instanceof Error && primaryError.message === 'timeout';
+      if (!isTimeout || this.startedWithFallback) throw primaryError;
       // One retry against the peerjs public cloud (signaling-level failure).
       console.warn('CIP-45: primary signaling failed, retrying via public cloud', primaryError);
       await this.restartWithFallback();

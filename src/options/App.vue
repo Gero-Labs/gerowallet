@@ -55,6 +55,7 @@ import HardwareSignPrompt from '@/shared/components/HardwareSignPrompt.vue';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { useChainAccent } from '@/shared/composables/useChainAccent';
 import { useGovernanceHydration } from '@/shared/composables/useGovernanceHydration';
+import { debugLog } from '@/utils/debug';
 
 // Bootstrap the single chain-accent writer at the dashboard root. It lives here
 // rather than in ContentLayout because ContentLayout unmounts on the welcome
@@ -101,7 +102,9 @@ onMounted(async () => {
     const { featureFlagsStore } = await import('@/stores/featureFlagsStore');
     if (!featureFlagsStore.isCip45Enabled()) return;
     const { cip45Service } = await import('@/services/cip45/cip45.service');
-    cip45Service.resumeIfPaired();
+    cip45Service.resumeIfPaired().catch((error) => {
+      debugLog('CIP-45: resumeIfPaired failed', error);
+    });
   }, 3000);
 });
 

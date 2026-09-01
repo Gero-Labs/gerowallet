@@ -590,6 +590,7 @@ export default {
   'cip45.connectViaCip45': 'Über CIP-45 verbinden',
   'cip45.idPlaceholder': 'dapp-xxxxxx… oder gescannter QR-Inhalt',
   'cip45.invalidId': 'Ungültige dApp-Peer-ID oder ungültiger QR-Code',
+  'cip45.noActiveSessions': 'Keine aktiven CIP-45-Verbindungen',
   'cip45.pairSubtitle': 'Peer-to-Peer-Verbindung zu einer dApp über WebRTC',
   'cip45.pairingFailed': 'Verbindung fehlgeschlagen. Prüfe, ob die dApp geöffnet ist, und versuche es erneut.',
   'cip45.pasteId': 'dApp-Peer-ID einfügen',

@@ -75,7 +75,7 @@
       </v-card-title>
       <v-card-text class="px-0">
         <div v-if="!cip45Session" class="text-center grey--text py-4">
-          {{ $t('walletConnect.noActiveSessions') }}
+          {{ $t('cip45.noActiveSessions') }}
         </div>
         <v-list v-else dense class="transparent">
           <v-list-item class="px-0">

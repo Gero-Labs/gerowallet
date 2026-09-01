@@ -36,6 +36,7 @@ import { nexusCollateralApi } from '@/api/nexus-collateral-api';
 import { toNexusNetwork } from '@/api/nexus-tx-api';
 import { debugLog } from '@/utils/debug';
 import type { walletConnectService } from '@/services/walletConnect/walletConnect.service';
+import type { Cip45Session } from '@/services/cip45/types';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { HexBlob } from '@cardano-sdk/util';
@@ -4385,8 +4386,8 @@ async function isCip45Enabled(): Promise<boolean> {
 app.addToOptions(MessageTypes.CIP45_UPDATE_SESSION, async (request, sendResponse) => {
   try {
     const { default: Cip45Store } = await import('@/stores/cip45Store');
-    const { status, session } = request.data as { status: 'idle' | 'connecting' | 'connected' | 'disconnected'; session?: unknown };
-    Cip45Store.setSession(status, (session as never) ?? null);
+    const { status, session } = request.data as { status: 'idle' | 'connecting' | 'connected' | 'disconnected'; session?: Cip45Session };
+    Cip45Store.setSession(status, session ?? null);
     sendResponse({ id: request.id, data: { success: true }, target: TARGET, sender: SENDER.extension });
   } catch (error) {
     sendResponse({ id: request.id, data: { success: false, error: getErrorMessage(error) }, target: TARGET, sender: SENDER.extension });
@@ -4449,7 +4450,14 @@ app.addToOptions(MessageTypes.CIP45_INVOKE, async (request, sendResponse) => {
       fail(APIError.Refused.code, 'No wallet logged in');
       return true;
     }
-    if (loggedWallet.chain === Blockchain.BITCOIN) {
+    // Cardano-only allowlist, mirroring how the WC session-proposal handler
+    // (~background.ts:4095) classifies the Cardano-family chains — CIP-45 is
+    // a Cardano dApp-bridge standard, so gate by "is this a Cardano chain"
+    // rather than by "is this specifically Bitcoin" (which let Midnight and
+    // any future non-Cardano chain through).
+    if (loggedWallet.chain !== Blockchain.CARDANO
+      && loggedWallet.chain !== 'Apex Prime'
+      && loggedWallet.chain !== 'Apex Vector') {
       fail(APIError.Refused.code, 'CIP-45 supports Cardano wallets only');
       return true;
     }
@@ -4470,7 +4478,7 @@ app.addToOptions(MessageTypes.CIP45_INVOKE, async (request, sendResponse) => {
         break;
       }
       case 'getCollateral': {
-        const result = await getCollateral(params ?? {}, WalletStore.state.utxos as Cardano.Utxo[], { allowNexusFallback: false });
+        const result = await getCollateral(params, WalletStore.state.utxos as Cardano.Utxo[], { allowNexusFallback: false });
         reply({ success: true, result });
         break;
       }
