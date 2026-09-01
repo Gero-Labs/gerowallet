@@ -204,14 +204,21 @@ async function getManifest() {
       },
       default_title: "Gero Dashboard | A Multi-chain Light Wallet Merging Web2 and Web3"
     },
-    oauth2: {
-      client_id,
-      scopes:[
-        "openid",
-        "profile",
-        "email"
-      ]
-    },
+    // Chrome refuses to load a manifest whose oauth2 block lacks a valid
+    // client_id, so an env-less build (no GOOGLE_CLIENT_ID) must omit the
+    // block entirely — Google login is simply unavailable in such builds.
+    ...(client_id
+      ? {
+        oauth2: {
+          client_id,
+          scopes: [
+            "openid",
+            "profile",
+            "email"
+          ]
+        }
+      }
+      : {}),
     background: isFirefox
       ? {
         scripts: ['background/_virtual_index.js'],
