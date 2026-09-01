@@ -1,3 +1,4 @@
+import { Mutex } from 'async-mutex';
 import { CardanoPeerConnect } from '@fabianbormann/cardano-peer-connect';
 import type { PeerConnectStorage, IConnectMessage } from '@fabianbormann/cardano-peer-connect';
 import { Messaging } from '@/chrome/messaging';
@@ -88,6 +89,19 @@ class Cip45Service {
   private pendingPeerId: string | null = null;
   private pairingsCache: Cip45Pairing[] = [];
   private startedWithFallback = false;
+  /**
+   * Fix round 1, finding 1: `ensureStarted()` used to check `if (this.wallet)
+   * return;` and then cross four `await` points before assigning
+   * `this.wallet`, so a `pair()` call racing App.vue's 3s-deferred
+   * `resumeIfPaired()` (or any two concurrent callers) could both pass the
+   * guard and construct two `GeroPeerConnect` instances — orphaning one live
+   * peer connection and double-registering `onDisconnect`/`onServerShutdown`/
+   * `beforeunload` handlers. Serialize init through the same `async-mutex`
+   * pattern `walletConnect.service.ts` uses (`initMutex.runExclusive`, with
+   * the guard re-checked *inside* the critical section) so concurrent callers
+   * await the same initialization instead of racing it.
+   */
+  private initMutex = new Mutex();
 
   currentDappInfo(): { name: string; url: string } | undefined {
     return this.session ? { name: this.session.dappName, url: this.session.dappUrl } : undefined;
@@ -95,7 +109,7 @@ class Cip45Service {
 
   isAllowedPeerSync(peerId: string): boolean {
     return this.pendingPeerId === peerId
-      || this.pairingsCache.some(p => p.dappPeerId === peerId);
+      || this.activePairings().some(p => p.dappPeerId === peerId);
   }
 
   async isAllowedPeer(peerId: string): Promise<boolean> {
@@ -105,7 +119,27 @@ class Cip45Service {
 
   async getPairings(): Promise<Cip45Pairing[]> {
     await this.loadPairings();
-    return this.pairingsCache;
+    return this.activePairings();
+  }
+
+  /**
+   * Fix round 1, finding 2: `pairingsCache` holds every wallet's pairings
+   * (each entry carries its own `walletId`), but `isAllowedPeerSync()`,
+   * `getPairings()`, and `resumeIfPaired()` used to read the flat cache
+   * directly — after a wallet switch, wallet A's paired dApp would still
+   * pass wallet B's discovery-reconnect gate. Every READ that decides "is
+   * this dApp allowed to reach the currently logged-in wallet" goes through
+   * this helper instead. The on-disk list stays flat (unscoped) by design —
+   * `removePairing()` still operates on it by peerId — and wallet-switch
+   * auto-disconnect is explicitly out of scope for this fix.
+   */
+  private activePairings(): Cip45Pairing[] {
+    const walletId = this.currentWalletId();
+    return this.pairingsCache.filter(p => p.walletId === walletId);
+  }
+
+  private currentWalletId(): string {
+    return String((walletStore.loggedWallet as { id?: unknown } | null)?.id ?? '');
   }
 
   private async loadPairings(): Promise<void> {
@@ -132,6 +166,35 @@ class Cip45Service {
 
   private async ensureStarted(peerJsConfig: Record<string, unknown> = PRIMARY_PEERJS_CONFIG): Promise<void> {
     if (this.wallet) return;
+    await this.initMutex.runExclusive(async () => {
+      // Re-check: another caller may have finished init while we waited for the lock.
+      if (this.wallet) return;
+      await this.startWallet(peerJsConfig);
+    });
+  }
+
+  /**
+   * Tears the current peer down and rebuilds it against the fallback peerjs
+   * config, all inside the same `initMutex` critical section as
+   * `ensureStarted()` — so a concurrent `ensureStarted()`/`resumeIfPaired()`
+   * call can't observe `this.wallet` mid-teardown (already destroyed, not
+   * yet nulled, or nulled but not yet rebuilt) and either dial out on a dead
+   * peer or race the rebuild. `startWallet()` itself must not go through
+   * `ensureStarted()` here — `Mutex` isn't reentrant, so calling back into
+   * `runExclusive` from inside an already-held critical section would
+   * deadlock.
+   */
+  private async restartWithFallback(): Promise<void> {
+    await this.initMutex.runExclusive(async () => {
+      try { this.wallet?.destroy(); } catch { /* best effort */ }
+      this.wallet = null;
+      this.startedWithFallback = true;
+      await this.startWallet(FALLBACK_PEERJS_CONFIG);
+    });
+  }
+
+  /** Assumes `initMutex` is already held by the caller. */
+  private async startWallet(peerJsConfig: Record<string, unknown>): Promise<void> {
     await this.loadPairings();
 
     const stored = await chrome.storage.local.get(PEER_ID_KEY);
@@ -171,7 +234,7 @@ class Cip45Service {
   }
 
   private recordPairing(dappPeerId: string, dappName: string, dappUrl: string): void {
-    const walletId = String((walletStore.loggedWallet as { id?: unknown } | null)?.id ?? '');
+    const walletId = this.currentWalletId();
     if (!this.pairingsCache.some(p => p.dappPeerId === dappPeerId)) {
       this.pairingsCache.push({ dappPeerId, dappName, dappUrl, walletId, pairedAt: Date.now() });
       this.savePairings();
@@ -202,10 +265,7 @@ class Cip45Service {
       if (this.startedWithFallback) throw primaryError;
       // One retry against the peerjs public cloud (signaling-level failure).
       console.warn('CIP-45: primary signaling failed, retrying via public cloud', primaryError);
-      this.wallet?.destroy();
-      this.wallet = null;
-      this.startedWithFallback = true;
-      await this.ensureStarted(FALLBACK_PEERJS_CONFIG);
+      await this.restartWithFallback();
       this.pendingPeerId = dappPeerId;
       await this.connectWithTimeout(dappPeerId);
     } finally {
@@ -272,7 +332,7 @@ class Cip45Service {
   /** Start the discovery peer if this wallet has pairings, so dApps can auto-reconnect. */
   async resumeIfPaired(): Promise<void> {
     await this.loadPairings();
-    if (this.pairingsCache.length > 0) {
+    if (this.activePairings().length > 0) {
       await this.ensureStarted();
       this.pushSession(this.session ? 'connected' : 'idle', this.session);
     }
