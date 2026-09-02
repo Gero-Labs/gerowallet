@@ -186,7 +186,9 @@ async function getManifest() {
     name: (pkg.displayName || pkg.name) + (isBeta ? ' (Beta)' : '') ,
     version: pkg.version,
     description: pkg.description,
-    key,
+    // Chrome rejects a manifest whose `key` is empty/invalid — include it only
+    // when MANIFEST_KEY is actually set (dev/test builds run without one).
+    ...(key ? { key } : {}),
     // options_ui: {
     //   page: './dist/options/index.html',
     //   open_in_tab: true,
@@ -282,7 +284,7 @@ async function getManifest() {
     },
   }
 
-  if (!isDev) {
+  if (!isDev && process.env['MANIFEST_KEY']) {
     manifest['key'] = process.env['MANIFEST_KEY']
   }
 
