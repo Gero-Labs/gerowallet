@@ -126,12 +126,25 @@ loadWallets().then(async () => {
 });
 
 (async () => {
-  await bringInitBackground({
-    isEnabledByDefault: true,
-    identifier: import.meta.env['VITE_CASHBACK_IDENTIFIER'],
-    apiEndpoint: import.meta.env['VITE_CASHBACK_ENVIRONMENT'],
-    cashbackPagePath: '/index.html#/cashback'
-  })
+  // The Bring SDK throws ('Missing configuration') when identifier/apiEndpoint
+  // are absent — builds without the cashback env vars must skip init entirely
+  // (cashback is simply unavailable) instead of crashing SW startup.
+  const cashbackIdentifier = import.meta.env['VITE_CASHBACK_IDENTIFIER'];
+  const cashbackEnvironment = import.meta.env['VITE_CASHBACK_ENVIRONMENT'];
+  if (!cashbackIdentifier || !cashbackEnvironment) {
+    debugLog('Bring cashback disabled: VITE_CASHBACK_* not configured in this build');
+    return;
+  }
+  try {
+    await bringInitBackground({
+      isEnabledByDefault: true,
+      identifier: cashbackIdentifier,
+      apiEndpoint: cashbackEnvironment,
+      cashbackPagePath: '/index.html#/cashback'
+    })
+  } catch (e) {
+    console.warn('⚠️ Bring cashback init failed:', e);
+  }
 })();
 
 // Initialize background store messaging (the import alone initializes it)
