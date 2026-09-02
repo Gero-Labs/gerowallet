@@ -6,7 +6,15 @@ type ManifestWithOAuth2 = Manifest.WebExtensionManifest & {
 
 const manifest: ManifestWithOAuth2 = browser.runtime.getManifest() as ManifestWithOAuth2;
 
-const { client_id, scopes }: { client_id: string; scopes: string[] } = manifest.oauth2!;
+// Builds without GOOGLE_CLIENT_ID ship no oauth2 manifest block (see
+// scripts/manifest.ts), so resolve the config lazily: importing this module
+// must not crash such builds — only actually signing in needs the values.
+function getOAuthConfig(): { client_id: string; scopes: string[] } {
+  if (!manifest.oauth2?.client_id) {
+    throw new Error('Google OAuth2 is not configured in this build');
+  }
+  return manifest.oauth2;
+}
 
 // CSPRNG token for OAuth state/nonce. Math.random() is predictable and must not
 // gate MPC key-material release; use crypto.getRandomValues.
@@ -22,6 +30,7 @@ function decodeJwtPayload(jwt: string): Record<string, unknown> {
 }
 
 export async function signInWithGoogle(): Promise<{accessToken: string; idToken: string}> {
+  const { client_id, scopes } = getOAuthConfig();
   const redirectUri: string = browser.identity.getRedirectURL();
   const authUrl: URL = new URL('https://accounts.google.com/o/oauth2/v2/auth');
 
