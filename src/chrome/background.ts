@@ -4387,12 +4387,19 @@ app.addToOptions(MessageTypes.WC_GET_SESSIONS, async (request, sendResponse) => 
 
 /** Same mirror-read pattern as isWalletConnectEnabled — the flag service can't run in the SW. */
 async function isCip45Enabled(): Promise<boolean> {
+  // Dev/test builds can default the flag ON via VITE_CIP45_DEFAULT_ENABLED
+  // (baked in at build time). An explicit boolean in the mirror still wins,
+  // so the flag service can flip it either way even in such builds.
+  const buildDefault = import.meta.env['VITE_CIP45_DEFAULT_ENABLED'] === 'true';
   try {
     const stored = await chrome.storage.local.get('featureFlags');
     const flags = (stored?.['featureFlags'] as Record<string, unknown>) ?? {};
-    return flags['isCip45Enabled'] === true;
+    if (typeof flags['isCip45Enabled'] === 'boolean') {
+      return flags['isCip45Enabled'];
+    }
+    return buildDefault;
   } catch {
-    return false;
+    return buildDefault;
   }
 }
 

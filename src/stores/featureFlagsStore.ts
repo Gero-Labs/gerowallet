@@ -1,6 +1,13 @@
 import Vue from 'vue';
 import featureFlagService from '@/services/featureFlag.service';
 
+// Build-time default override for the CIP-45 flag, for dev/test builds only
+// (set VITE_CIP45_DEFAULT_ENABLED=true in a local env). It changes the flag's
+// DEFAULT, so a value delivered by the flag service still wins; release envs
+// must never set it.
+const CIP45_DEFAULT_ENABLED =
+  (import.meta as { env?: Record<string, unknown> }).env?.['VITE_CIP45_DEFAULT_ENABLED'] === 'true';
+
 export interface FeatureFlags {
   swapEnabled: boolean;
   isGeroCardEnabled: boolean;
@@ -109,7 +116,7 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
     isMidnightConvertEnabled: false,
     isGoogleWalletEnabled: false,
     isWalletConnectEnabled: false,
-    isCip45Enabled: false,
+    isCip45Enabled: CIP45_DEFAULT_ENABLED,
     isLiveChatEnabled: false,
     collateralTrustedDapps: [],
   },
@@ -186,7 +193,7 @@ export const featureFlagsStore = {
     // to decide whether to init WalletKit at all.
     featureFlagsState.flags.isWalletConnectEnabled = featureFlagService.getFlag('isWalletConnectEnabled', false);
     // CIP-45 ships DARK (default false); mirrors isWalletConnectEnabled's gating pattern.
-    featureFlagsState.flags.isCip45Enabled = featureFlagService.getFlag('isCip45Enabled', false);
+    featureFlagsState.flags.isCip45Enabled = featureFlagService.getFlag('isCip45Enabled', CIP45_DEFAULT_ENABLED);
     // Live support chat ships DARK (default false) until the Chatwoot inbox is staffed.
     featureFlagsState.flags.isLiveChatEnabled = featureFlagService.getFlag('isLiveChatEnabled', false);
     featureFlagsState.flags.collateralTrustedDapps = featureFlagService.getFlag<string[]>('collateralTrustedDapps', []);
@@ -514,7 +521,7 @@ export const featureFlagsStore = {
       isMidnightConvertEnabled: false,
       isGoogleWalletEnabled: false,
       isWalletConnectEnabled: false,
-      isCip45Enabled: false,
+      isCip45Enabled: CIP45_DEFAULT_ENABLED,
       isLiveChatEnabled: false,
       collateralTrustedDapps: [],
     });
