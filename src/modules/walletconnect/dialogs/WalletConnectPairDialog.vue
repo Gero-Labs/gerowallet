@@ -26,14 +26,19 @@
       <v-tabs-items v-model="tab" class="transparent">
         <!-- Paste URI -->
         <v-tab-item>
+          <!-- Caption above the field instead of a floating label: outlined
+               fields mounted inside a dialog compute a zero-width label notch,
+               so the border strikes through the label text. -->
+          <label class="t-label wc-input-label" for="wc-uri-input">
+            {{ $t('walletConnect.pasteUri') }}
+          </label>
           <v-text-field
+            id="wc-uri-input"
             v-model="uri"
-            :label="$t('walletConnect.pasteUri')"
             :placeholder="$t('walletConnect.uriPlaceholder')"
             outlined
             dense
             clearable
-            persistent-placeholder
             hide-details="auto"
             :error-messages="errorMessage"
             class="wc-input"
@@ -173,6 +178,12 @@ const close = () => {
 
 .wc-tab.v-tab--active {
   color: var(--g-text-1);
+}
+
+.wc-input-label {
+  display: block;
+  margin-bottom: var(--g-s-1);
+  color: var(--g-text-2);
 }
 
 .wc-input {
