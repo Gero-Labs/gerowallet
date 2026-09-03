@@ -16,33 +16,38 @@
         background-color="transparent"
         color="var(--g-accent)"
         slider-color="var(--g-accent)"
-        class="wc-tabs mb-4"
+        class="cip45-tabs mb-4"
       >
-        <v-tab class="wc-tab">{{ $t('walletConnect.connectViaPaste') }}</v-tab>
-        <v-tab class="wc-tab">{{ $t('walletConnect.connectViaScan') }}</v-tab>
+        <v-tab class="cip45-tab">{{ $t('walletConnect.connectViaPaste') }}</v-tab>
+        <v-tab class="cip45-tab">{{ $t('walletConnect.connectViaScan') }}</v-tab>
       </v-tabs>
 
       <v-tabs-items v-model="tab" class="transparent">
         <!-- Paste peer ID -->
         <v-tab-item>
+          <!-- Caption above the field instead of a floating label: outlined
+               fields mounted inside a dialog compute a zero-width label notch,
+               so the border strikes through the label text. -->
+          <label class="t-label cip45-input-label" for="cip45-peer-id-input">
+            {{ $t('cip45.pasteId') }}
+          </label>
           <v-text-field
+            id="cip45-peer-id-input"
             v-model="uri"
-            :label="$t('cip45.pasteId')"
             :placeholder="$t('cip45.idPlaceholder')"
             outlined
             dense
             clearable
-            persistent-placeholder
             hide-details="auto"
             :error-messages="errorMessage"
-            class="wc-input"
+            class="cip45-input"
             @keyup.enter="pair()"
           />
         </v-tab-item>
 
         <!-- QR Scanner -->
         <v-tab-item>
-          <div v-if="tab === 1" class="wc-scanner">
+          <div v-if="tab === 1" class="cip45-scanner">
             <AnimatedQRScanner
               mode="text"
               @scan="onQrScan"
@@ -164,11 +169,11 @@ const close = () => {
 </script>
 
 <style scoped lang="scss">
-.wc-tabs {
+.cip45-tabs {
   border-bottom: 1px solid var(--g-hairline-1);
 }
 
-.wc-tab {
+.cip45-tab {
   text-transform: none;
   letter-spacing: 0;
   font-weight: 600;
@@ -176,19 +181,25 @@ const close = () => {
   color: var(--g-text-3);
 }
 
-.wc-tab.v-tab--active {
+.cip45-tab.v-tab--active {
   color: var(--g-text-1);
 }
 
-.wc-input {
+.cip45-input-label {
+  display: block;
+  margin-bottom: var(--g-s-1);
+  color: var(--g-text-2);
+}
+
+.cip45-input {
   padding-top: var(--g-s-2);
 }
 
-.wc-input :deep(.v-input__slot) {
+.cip45-input :deep(.v-input__slot) {
   border-radius: var(--g-r-control);
 }
 
-.wc-scanner {
+.cip45-scanner {
   min-height: 300px;
   border-radius: var(--g-r-card);
   overflow: hidden;
