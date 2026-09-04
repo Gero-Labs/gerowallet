@@ -101,6 +101,18 @@ onMounted(async () => {
   setTimeout(async () => {
     const { featureFlagsStore } = await import('@/stores/featureFlagsStore');
     if (!featureFlagsStore.isCip45Enabled()) return;
+    // The signing/connect approval prompts are full instances of THIS options
+    // app, opened as popup windows. They must NOT host a CIP-45 peer: a second
+    // peer with the same id would collide, and — worse — a fresh service in the
+    // popup broadcasts its own empty session state, clobbering the dashboard's
+    // live-session UI (the exact "entry disappears when the sign dialog opens"
+    // bug). Only the dashboard tab (a normal window) hosts the peer.
+    try {
+      const currentWindow = await chrome.windows.getCurrent();
+      if (currentWindow?.type === 'popup') return;
+    } catch {
+      // If the window type can't be read, fall through and host as before.
+    }
     const { cip45Service } = await import('@/services/cip45/cip45.service');
     cip45Service.resumeIfPaired().catch((error) => {
       debugLog('CIP-45: resumeIfPaired failed', error);
