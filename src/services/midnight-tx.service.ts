@@ -222,11 +222,12 @@ export async function addPendingMidnightTx(
   amount: bigint,
   counterparty: string,
   isShielded: boolean,
+  token: string = 'NIGHT',
 ): Promise<void> {
   try {
     await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.ADD_MIDNIGHT_PENDING_TX,
-      data: { hash, amount: amount.toString(), counterparty, isShielded },
+      data: { hash, amount: amount.toString(), counterparty, isShielded, token },
     });
   } catch {
     /* optimistic-only — gero-sync will deliver the confirmed entry anyway */

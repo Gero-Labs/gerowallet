@@ -6,7 +6,7 @@
       :title="t('wallet.quickSend')"
       :loading="false"
       :min-height="0"
-      :subtitle="t('wallet.quickSendSubtitle', { currency: nightCurrency })"
+      :subtitle="t('wallet.quickSendSubtitle', { currency: selectedTicker })"
       :persistent="sending"
       :img="assets.sendSvg"
       :width="sending ? 468 : 428"
@@ -44,7 +44,7 @@
         <!-- ── Send-in-progress: left summary + right stage timeline ── -->
         <div v-if="sending" class="midnight-progress-view">
           <div class="mpv-summary">
-            <div class="mpv-summary-amount">{{ amount || '0' }} {{ nightCurrency }}</div>
+            <div class="mpv-summary-amount">{{ amount || '0' }} {{ selectedTicker }}</div>
             <div class="mpv-summary-to">
               <span class="mpv-summary-to-label">{{ t('common.to') }}</span>
               <span class="mpv-summary-to-addr">{{ truncate(recipient.trim()) }}</span>
@@ -182,16 +182,34 @@
                     <div class="assets-section">
                       <div class="token-row">
                         <div class="token-row__left">
-                          <v-avatar size="20" class="mr-1">
-                            <img :src="midnightLogo" alt="NIGHT" />
-                          </v-avatar>
-                          <span class="token-ticker">{{ nightCurrency }}</span>
-                          <v-icon
-                            x-small
-                            color="var(--g-accent)"
-                            class="ml-1"
-                            style="margin-top: -1px; font-size: 11px;"
-                          >mdi-check-decagram</v-icon>
+                          <!-- Only a picker once there is a genuine choice; a
+                               NIGHT-only wallet keeps the original chip. -->
+                          <v-select
+                            v-if="assetOptions.length > 1"
+                            v-model="selectedToken"
+                            :items="assetOptions"
+                            item-value="value"
+                            item-text="ticker"
+                            dense
+                            outlined
+                            hide-details
+                            attach
+                            class="asset-select"
+                            :disabled="sending"
+                            :aria-label="t('common.asset')"
+                          />
+                          <template v-else>
+                            <v-avatar size="20" class="mr-1">
+                              <img :src="midnightLogo" :alt="nightCurrency" />
+                            </v-avatar>
+                            <span class="token-ticker">{{ selectedTicker }}</span>
+                            <v-icon
+                              x-small
+                              color="var(--g-accent)"
+                              class="ml-1"
+                              style="margin-top: -1px; font-size: 11px;"
+                            >mdi-check-decagram</v-icon>
+                          </template>
                           <span class="token-balance">{{ formattedAvailable }}</span>
                         </div>
                         <div class="token-row__right">
@@ -199,7 +217,7 @@
                             v-model="amount"
                             type="number"
                             min="0"
-                            step="0.000001"
+                            :step="amountStep"
                             outlined
                             dense
                             hide-details="auto"
@@ -222,6 +240,10 @@
                         <v-icon x-small color="var(--g-text-3)" class="mr-1">mdi-information-outline</v-icon>
                         {{ t('midnight.send.shieldedBalanceNote') }}
                       </div>
+                      <div v-else-if="rawUnits" class="token-info">
+                        <v-icon x-small color="var(--g-text-3)" class="mr-1">mdi-information-outline</v-icon>
+                        {{ t('midnight.send.rawUnitsNote') }}
+                      </div>
                     </div>
                   </div>
                 </v-form>
@@ -235,7 +257,7 @@
                   <div class="global-total__row global-total__total-row">
                     <span class="global-total__label">{{ t('common.total') }}</span>
                     <div>
-                      <span class="global-total__ada">{{ amount }} {{ nightCurrency }}</span>
+                      <span class="global-total__ada">{{ amount }} {{ selectedTicker }}</span>
                     </div>
                   </div>
                 </div>
@@ -253,7 +275,7 @@
               <TransactionDetailsCard
                 :outputs="reviewOutputs"
                 :totals="reviewTotals"
-                :unit="nightCurrency"
+                :unit="selectedTicker"
                 :fee-unit="dustCurrency"
                 :fee-label="t('midnight.send.estimatedNetworkFee')"
               />
@@ -399,6 +421,13 @@ import type { MidnightSendStage } from '@/services/midnight-tx.service';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain, Network, WalletType } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
+import { midnightTokenBalances } from '@/chains/midnight/midnightTokenBalances';
+import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
+import {
+  formatTokenAmount,
+  parseTokenAmount,
+  toAmountInput,
+} from '@/chains/midnight/midnightAmount';
 import { debugLog } from '@/utils/debug';
 import rules from '@/utils/rules';
 import assets from '@/utils/assets';
@@ -436,18 +465,68 @@ const shieldedAvailable = computed(() => midnightStore.shieldedSyncAvailable);
 const activeTab = ref(0);
 const isShielded = computed(() => activeTab.value === 1);
 
-const NIGHT_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.NIGHT);
-const available = computed(() =>
-  isShielded.value
-    ? (midnightStore.balances?.nightShielded ?? 0n)
-    : (midnightStore.balances?.nightUnshielded ?? 0n));
+/** `NIGHT` for the native token, otherwise a 32-byte colour as hex. */
+const selectedToken = ref<string>('NIGHT');
+
+/**
+ * Shielded is NIGHT-only: it runs a different builder entirely and no token
+ * has a shielded representation today. Reset on the way in so the amount is
+ * never parsed against a token's decimals while the shielded tab is active.
+ */
+watch(isShielded, (shielded) => {
+  if (shielded) selectedToken.value = 'NIGHT';
+});
+
+/** Per-colour unshielded balances derived from the wallet's own UTxO set. */
+const tokenBalances = computed(() => midnightTokenBalances(midnightStore.utxos ?? []));
+
+interface AssetOption {
+  value: string;
+  ticker: string;
+  /**
+   * Decimal exponent, or null when the token isn't in the registry. null means
+   * "unknown", NOT zero-with-a-shrug: amounts are then entered and shown as raw
+   * base units and the UI says so. Guessing 6 here could send 1000x too much.
+   */
+  decimals: number | null;
+}
+
+const assetOptions = computed<AssetOption[]>(() => {
+  const night: AssetOption = {
+    value: 'NIGHT',
+    ticker: nightCurrency.value,
+    decimals: MIDNIGHT_DECIMALS.NIGHT,
+  };
+  if (isShielded.value) return [night];
+  const tokens = Object.entries(tokenBalances.value).map(([color, _bal]) => {
+    const meta = midnightTokenMeta(color);
+    return {
+      value: color,
+      ticker: meta?.symbol ?? `${color.slice(0, 8)}\u2026${color.slice(-6)}`,
+      decimals: meta?.decimals ?? null,
+    } as AssetOption;
+  });
+  return [night, ...tokens];
+});
+
+const selectedAsset = computed<AssetOption>(
+  () => assetOptions.value.find((o) => o.value === selectedToken.value) ?? assetOptions.value[0],
+);
+/** null decimals => raw base units, so the divisor is 1 and nothing is scaled. */
+const selectedDecimals = computed(() => selectedAsset.value.decimals);
+const selectedTicker = computed(() => selectedAsset.value.ticker);
+const rawUnits = computed(() => selectedDecimals.value === null);
+const amountStep = computed(() =>
+  rawUnits.value ? '1' : `0.${'0'.repeat((selectedDecimals.value ?? 1) - 1)}1`,
+);
+
+const available = computed(() => {
+  if (isShielded.value) return midnightStore.balances?.nightShielded ?? 0n;
+  if (selectedToken.value === 'NIGHT') return midnightStore.balances?.nightUnshielded ?? 0n;
+  return tokenBalances.value[selectedToken.value] ?? 0n;
+});
 const formattedAvailable = computed(() => {
-  const value = available.value;
-  const whole = value / NIGHT_DIVISOR;
-  const remainder = value % NIGHT_DIVISOR;
-  const remainderStr = remainder.toString().padStart(NIGHT_DIVISOR.toString().length - 1, '0');
-  const fraction = remainderStr.slice(0, 2).padEnd(2, '0');
-  return `${whole.toLocaleString('en-US')}.${fraction}`;
+  return formatTokenAmount(available.value, selectedDecimals.value);
 });
 
 // Network fees on Midnight are paid in DUST and are negligible (~1 Speck
@@ -664,21 +743,13 @@ const amountRules = computed(() => [
   (v: string) => parseAmount(v) <= available.value || t('errors.insufficientBalance'),
 ]);
 
+/** Scales against the SELECTED token's decimals — see midnightAmount.ts. */
 function parseAmount(input: string): bigint {
-  if (!input) return 0n;
-  const [whole = '0', fractionRaw = ''] = input.trim().split('.');
-  const fraction = (fractionRaw + '0'.repeat(MIDNIGHT_DECIMALS.NIGHT))
-    .slice(0, MIDNIGHT_DECIMALS.NIGHT);
-  try { return BigInt(whole) * NIGHT_DIVISOR + BigInt(fraction || '0'); }
-  catch { return 0n; }
+  return parseTokenAmount(input, selectedDecimals.value);
 }
 
 function setMax() {
-  const value = available.value;
-  const whole = value / NIGHT_DIVISOR;
-  const remainder = value % NIGHT_DIVISOR;
-  const remainderStr = remainder.toString().padStart(NIGHT_DIVISOR.toString().length - 1, '0');
-  amount.value = remainder === 0n ? whole.toString() : `${whole}.${remainderStr.replace(/0+$/, '')}`;
+  amount.value = toAmountInput(available.value, selectedDecimals.value);
 }
 
 // ── Review-step model (fed to the shared TransactionDetailsCard) ──
@@ -881,7 +952,7 @@ async function sendUnshielded(credentials: { password?: string; prfSecret?: Uint
         outputs: [{
           address: recipient.value.trim(),
           amount: parseAmount(amount.value).toString(),
-          token: 'NIGHT',
+          token: selectedToken.value,
         }],
         ttlMs: Date.now() + 5 * 60_000,
       },
@@ -961,9 +1032,13 @@ async function sendShielded(credentials: { password?: string; prfSecret?: Uint8A
 async function addOptimisticPendingTx(hash: string, shielded = false) {
   const amountBig = parseAmount(amount.value);
   const to = recipient.value.trim();
+  // Captured with the amount: without it a USDM send shows as NIGHT in
+  // history until gero-sync backfills the confirmed row. Shielded is
+  // NIGHT-only by construction.
+  const token = shielded ? 'NIGHT' : selectedToken.value;
   try {
     const { addPendingMidnightTx } = await import('@/services/midnight-tx.service');
-    await addPendingMidnightTx(hash, amountBig, to, shielded);
+    await addPendingMidnightTx(hash, amountBig, to, shielded, token);
   } catch {
     /* non-fatal — gero-sync backfills the confirmed entry */
   }
@@ -1216,6 +1291,13 @@ watch(
   color: var(--g-text-1);
   white-space: nowrap;
 }
+/* Vuetify's `dense` already gives the control its compact height; only the
+   width needs constraining so the balance keeps its place in the row. */
+.asset-select {
+  max-width: 140px;
+  flex: 0 0 auto;
+}
+
 .token-balance {
   font-size: 11px;
   color: var(--g-text-3);
