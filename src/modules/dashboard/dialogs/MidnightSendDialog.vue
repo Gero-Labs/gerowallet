@@ -736,10 +736,14 @@ const addressRules = computed(() => {
 
 const amountRules = computed(() => [
   (v: string) => !!v || t('midnight.send.amountRequired'),
-  (v: string) => {
-    const n = Number(v);
-    return (Number.isFinite(n) && n > 0) || t('send.amountMustBePositive');
-  },
+  // Positivity is judged by the SAME parser that builds the transaction.
+  // Number() disagreed with it in two ways that both submitted a 0-unit tx:
+  //   - Number('1e2') is 100, but exponential notation isn't a plain decimal
+  //     so parseTokenAmount returns 0n — and <input type="number"> accepts it
+  //   - an amount below one base unit ('0.0000001' at 6 decimals) truncates
+  //     to 0n while Number() still calls it positive
+  // The balance rule below is an upper bound only, so nothing else caught 0n.
+  (v: string) => parseAmount(v) > 0n || t('send.amountMustBePositive'),
   (v: string) => parseAmount(v) <= available.value || t('errors.insufficientBalance'),
 ]);
 
@@ -1060,6 +1064,8 @@ function onDialogClose() {
 function resetForm() {
   recipient.value = '';
   amount.value = '';
+  // Back to NIGHT: a fresh send shouldn't inherit the last session's asset.
+  selectedToken.value = 'NIGHT';
   password.value = '';
   currentStep.value = 1;
   sendStage.value = 'idle';

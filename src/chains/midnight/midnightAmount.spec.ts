@@ -52,6 +52,28 @@ describe('parseTokenAmount', () => {
     expect(parseTokenAmount('1.9', 0)).toBe(1n);
   });
 
+  it('rejects exponential notation rather than accepting it as a number', () => {
+    // Load-bearing: <input type="number"> accepts '1e2' and Number('1e2') is
+    // 100, so callers must gate positivity on THIS function, not Number().
+    // Treating it as 100 here would silently scale by the wrong magnitude.
+    expect(parseTokenAmount('1e2', 6)).toBe(0n);
+    expect(parseTokenAmount('1e-6', 6)).toBe(0n);
+    expect(parseTokenAmount('1E2', 6)).toBe(0n);
+  });
+
+  it('truncates an amount below one base unit to zero', () => {
+    // The caller must reject this: Number() calls it positive, but there is no
+    // representable amount here and the tx would move 0.
+    expect(parseTokenAmount('0.0000001', 6)).toBe(0n);
+  });
+
+  it('rejects signs, whitespace and separators', () => {
+    expect(parseTokenAmount('-1', 6)).toBe(0n);
+    expect(parseTokenAmount('+1', 6)).toBe(0n);
+    expect(parseTokenAmount('1 000', 6)).toBe(0n);
+    expect(parseTokenAmount('1,000', 6)).toBe(0n);
+  });
+
   it('returns 0n for empty, blank and unparseable input', () => {
     expect(parseTokenAmount('', 6)).toBe(0n);
     expect(parseTokenAmount('   ', 6)).toBe(0n);

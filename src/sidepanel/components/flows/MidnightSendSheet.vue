@@ -443,16 +443,16 @@ const recipientError = computed(() => {
 
 const amountError = computed(() => {
   if (!amount.value) return '';
-  const n = Number(amount.value);
-  if (!Number.isFinite(n) || n <= 0) return t('send.amountMustBePositive');
+  // Judged by the parser that builds the tx, not Number(): the two disagree on
+  // exponential notation ('1e2' passes Number, parses to 0n) and on amounts
+  // below one base unit, and the balance check below is an upper bound only.
+  if (parseAmount(amount.value) <= 0n) return t('send.amountMustBePositive');
   if (parseAmount(amount.value) > available.value) return t('errors.insufficientBalance');
   return '';
 });
 
-const isAmountValid = computed(() => {
-  const n = Number(amount.value);
-  return !!amount.value && Number.isFinite(n) && n > 0 && !amountError.value;
-});
+const isAmountValid = computed(() =>
+  !!amount.value && parseAmount(amount.value) > 0n && !amountError.value);
 
 // ── DUST battery (same store source as MidnightSendDialog.vue) ──
 const dustBattery = computed<{ percent: number } | null>(() => {
@@ -675,6 +675,9 @@ function resetAll() {
   step.value = 1;
   recipient.value = '';
   amount.value = '';
+  // The sheet resets everything else on every open; the asset was the one
+  // field that persisted, which risks sending the wrong colour by inertia.
+  selectedToken.value = 'NIGHT';
   showQR.value = false;
   spendingPassword.value = '';
   showPassword.value = false;
