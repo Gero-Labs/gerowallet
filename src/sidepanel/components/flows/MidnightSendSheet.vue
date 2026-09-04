@@ -83,7 +83,7 @@
             </div>
             <div class="step-info">
               <span class="step-label">{{ $t('common.amount') }}</span>
-              <span v-if="step > 2" class="step-summary">{{ amount || '0' }} {{ nightCurrency }}</span>
+              <span v-if="step > 2" class="step-summary">{{ amount || '0' }} {{ selectedTicker }}</span>
             </div>
           </button>
 
@@ -91,19 +91,40 @@
             <div v-show="step === 2" class="step-body">
               <div class="asset-input-section">
                 <div class="asset-input-header">
-                  <v-avatar size="24" class="mr-2">
-                    <img :src="midnightLogo" alt="NIGHT" />
-                  </v-avatar>
-                  <span class="white--text text-body-2 font-weight-bold">{{ nightCurrency }}</span>
+                  <!-- Only a picker once there is a genuine choice. -->
+                  <v-select
+                    v-if="assetOptions.length > 1"
+                    v-model="selectedToken"
+                    :items="assetOptions"
+                    item-value="value"
+                    item-text="ticker"
+                    dense
+                    outlined
+                    dark
+                    hide-details
+                    attach
+                    class="asset-select"
+                    :disabled="submitting"
+                    :aria-label="$t('common.asset')"
+                  />
+                  <template v-else>
+                    <v-avatar size="24" class="mr-2">
+                      <img :src="midnightLogo" :alt="nightCurrency" />
+                    </v-avatar>
+                    <span class="white--text text-body-2 font-weight-bold">{{ selectedTicker }}</span>
+                  </template>
                   <v-spacer />
                   <span class="grey--text text-caption">{{ $t('miniGero.available') }}: {{ formattedAvailable }}</span>
+                </div>
+                <div v-if="rawUnits" class="grey--text text-caption mb-2">
+                  {{ $t('midnight.send.rawUnitsNote') }}
                 </div>
                 <div class="amount-row">
                   <v-text-field
                     v-model="amount"
                     type="number"
                     min="0"
-                    step="0.000001"
+                    :step="amountStep"
                     outlined
                     dense
                     dark
@@ -151,7 +172,7 @@
               <TransactionDetailsCard
                 :outputs="reviewOutputs"
                 :totals="reviewTotals"
-                :unit="nightCurrency"
+                :unit="selectedTicker"
                 :fee-unit="dustCurrency"
                 :fee-label="$t('midnight.send.estimatedNetworkFee')"
               />
@@ -289,6 +310,13 @@ import { walletStore } from '@/stores/walletStore';
 import { midnightStore } from '@/stores/midnightStore';
 import { Network, WalletType } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
+import { midnightTokenBalances } from '@/chains/midnight/midnightTokenBalances';
+import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
+import {
+  formatTokenAmount,
+  parseTokenAmount,
+  toAmountInput,
+} from '@/chains/midnight/midnightAmount';
 import type { MidnightSendStage } from '@/services/midnight-tx.service';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useChainContext } from '../../composables/useChainContext';
@@ -335,32 +363,61 @@ const isPrfWallet = computed(() =>
 const sheetTitle = computed(() => (txSuccess.value ? '' : t('wallet.quickSend')));
 
 // ── Balance / amount (unshielded only — WP7 scope decision) ──
-const NIGHT_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.NIGHT);
-const available = computed(() => midnightStore.balances?.nightUnshielded ?? 0n);
+/** `NIGHT` for the native token, otherwise a 32-byte colour as hex. */
+const selectedToken = ref<string>('NIGHT');
 
-const formattedAvailable = computed(() => {
-  const value = available.value;
-  const whole = value / NIGHT_DIVISOR;
-  const remainder = value % NIGHT_DIVISOR;
-  const remainderStr = remainder.toString().padStart(NIGHT_DIVISOR.toString().length - 1, '0');
-  const fraction = remainderStr.slice(0, 2).padEnd(2, '0');
-  return `${whole.toLocaleString('en-US')}.${fraction}`;
+/** Per-colour unshielded balances derived from the wallet's own UTxO set. */
+const tokenBalances = computed(() => midnightTokenBalances(midnightStore.utxos ?? []));
+
+interface AssetOption {
+  value: string;
+  ticker: string;
+  /** null = exponent genuinely unknown; amounts are then raw base units. */
+  decimals: number | null;
+}
+
+const assetOptions = computed<AssetOption[]>(() => {
+  const night: AssetOption = {
+    value: 'NIGHT',
+    ticker: nightCurrency.value,
+    decimals: MIDNIGHT_DECIMALS.NIGHT,
+  };
+  const tokens = Object.keys(tokenBalances.value).map((color) => {
+    const meta = midnightTokenMeta(color);
+    return {
+      value: color,
+      ticker: meta?.symbol ?? `${color.slice(0, 8)}\u2026${color.slice(-6)}`,
+      decimals: meta?.decimals ?? null,
+    } as AssetOption;
+  });
+  return [night, ...tokens];
 });
 
+const selectedAsset = computed<AssetOption>(
+  () => assetOptions.value.find((o) => o.value === selectedToken.value) ?? assetOptions.value[0],
+);
+const selectedDecimals = computed(() => selectedAsset.value.decimals);
+const selectedTicker = computed(() => selectedAsset.value.ticker);
+const rawUnits = computed(() => selectedDecimals.value === null);
+const amountStep = computed(() =>
+  rawUnits.value ? '1' : `0.${'0'.repeat((selectedDecimals.value ?? 1) - 1)}1`,
+);
+
+const available = computed(() =>
+  selectedToken.value === 'NIGHT'
+    ? (midnightStore.balances?.nightUnshielded ?? 0n)
+    : (tokenBalances.value[selectedToken.value] ?? 0n));
+
+const formattedAvailable = computed(() =>
+  formatTokenAmount(available.value, selectedDecimals.value));
+
+/** Scales against the SELECTED token's decimals — see midnightAmount.ts. */
 function parseAmount(input: string): bigint {
-  if (!input) return 0n;
-  const [whole = '0', fractionRaw = ''] = input.trim().split('.');
-  const fraction = (fractionRaw + '0'.repeat(MIDNIGHT_DECIMALS.NIGHT)).slice(0, MIDNIGHT_DECIMALS.NIGHT);
-  try { return BigInt(whole) * NIGHT_DIVISOR + BigInt(fraction || '0'); }
-  catch { return 0n; }
+  return parseTokenAmount(input, selectedDecimals.value);
 }
 
 function setMax() {
-  const value = available.value;
-  const whole = value / NIGHT_DIVISOR;
-  const remainder = value % NIGHT_DIVISOR;
-  const remainderStr = remainder.toString().padStart(NIGHT_DIVISOR.toString().length - 1, '0');
-  amount.value = remainder === 0n ? whole.toString() : `${whole}.${remainderStr.replace(/0+$/, '')}`;
+  amount.value = toAmountInput(available.value, selectedDecimals.value);
 }
 
 // ── Validation ──
@@ -504,9 +561,12 @@ function copyTxId() {
 async function addOptimisticPendingTx(hash: string) {
   const amountBig = parseAmount(amount.value);
   const to = recipient.value.trim();
+  // Captured with the amount: without it a token send shows as NIGHT in
+  // history until gero-sync backfills the confirmed row.
+  const token = selectedToken.value;
   try {
     const { addPendingMidnightTx } = await import('@/services/midnight-tx.service');
-    await addPendingMidnightTx(hash, amountBig, to, false);
+    await addPendingMidnightTx(hash, amountBig, to, false, token);
   } catch {
     /* non-fatal — gero-sync backfills the confirmed entry */
   }
@@ -531,7 +591,7 @@ async function submitSend(credentials: { password?: string; prfSecret?: Uint8Arr
         outputs: [{
           address: recipient.value.trim(),
           amount: parseAmount(amount.value).toString(),
-          token: 'NIGHT',
+          token: selectedToken.value,
         }],
         ttlMs: Date.now() + 5 * 60_000,
       },
@@ -755,6 +815,12 @@ watch(() => props.value, (val) => {
   display: flex;
   align-items: center;
   margin-bottom: 6px;
+}
+/* Vuetify `dense` already sets the compact height; only the width needs
+   constraining so the available-balance label keeps its place in the row. */
+.asset-select {
+  max-width: 132px;
+  flex: 0 0 auto;
 }
 .amount-row {
   display: flex;
