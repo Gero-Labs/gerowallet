@@ -57,11 +57,17 @@ export class AccountLoader extends BaseLoader {
     return this.createSubscription(
       () => walletDB.table('account').where({ walletId: this.walletId }).first(),
       (account) => {
-        // A missing row is not news. liveQuery re-runs this on every write to the
-        // table, and a query that momentarily resolves to `undefined` would push
-        // a null account into the store, blanking every screen that reads it
-        // until the next emission restored it.
-        if (!account) return;
+        // Every emission is passed through, including an empty one.
+        //
+        // A `if (!account) return` guard lived here briefly. It was added on a
+        // hunch while chasing an unrelated flicker, did not fix that flicker,
+        // and changed what a wallet SWITCH looks like: the new wallet's loader
+        // subscribes with no row of its own yet, and swallowing that emission
+        // leaves the store holding whatever the last write left behind until
+        // something writes the account table again — which, on a wallet already
+        // at the tip, is not until the next SYNC_CHECK_OK carries an account.
+        // An empty answer about the current wallet is information; withholding
+        // it only makes the gap silent.
         WalletStore.setAccount(account);
       },
       (error) => {

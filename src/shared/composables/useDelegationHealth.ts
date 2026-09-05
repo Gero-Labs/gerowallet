@@ -77,6 +77,23 @@ export interface DelegatedDRepRecord {
   votes?: DRepVoteRecord[] | null;
   delegators?: unknown[] | null;
   metadata?: unknown;
+  /**
+   * The DRep's 56-char credential hex, and whether that credential is a script.
+   *
+   * Both are on the wire and read all over the governance module
+   * (DRepDirectory, DRepProfile, GovernanceView, drepRegister), but they were
+   * never declared here, so anything reading them off a DelegatedDRepRecord was
+   * a type error — invisible, because `tsc --noEmit` does not read `.vue` files
+   * and `vue-tsc` is not in CI. drepRegister worked around it with an index
+   * access and a cast; declaring them is the honest fix.
+   *
+   * `hex` is what a delegation certificate is actually built from
+   * (useDRepDelegation refuses to build one without it), and `has_script`
+   * decides between newScriptHash and newKeyHash — get it wrong and the
+   * certificate names a credential that does not exist.
+   */
+  hex?: string | null;
+  has_script?: boolean | null;
 }
 
 export interface DelegationHealthOptions {
