@@ -1,6 +1,7 @@
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { Ref, ComputedRef, toRefs, ref, computed } from 'vue';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
+import { CIP113_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
 import { BackgroundResponse, Messaging, SignTxResponse, VerifyPasswordResponse } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { Blockchain, WalletType } from '@/models/types';
@@ -18,6 +19,24 @@ import { friendlyTxError } from '@/shared/utils/txErrors';
 import { useTranslation } from './useTranslation';
 import { UR } from '@keystonehq/keystone-sdk';
 
+/** The subset of the password field component instance this composable drives. */
+interface PasswordFieldRef {
+  showError?: (message: string) => void;
+}
+
+/** Payload for MessageTypes.SIGN_TX — assembled field by field below. */
+interface SignTxRequestData {
+  txCbor: string;
+  partialSign: boolean;
+  accountIndex?: number;
+  utxos?: unknown;
+  addresses?: unknown;
+  mergeWitnesses?: boolean;
+  password?: string;
+  privateKeyBytes?: number[];
+  [key: string]: unknown;
+}
+
 export interface TransactionSigningOptions {
   tx: Ref<Cardano.Tx | undefined> | ComputedRef<Cardano.Tx | undefined>;
   successMessageKey: string;
@@ -34,7 +53,7 @@ export interface TransactionSigningReturn {
   txCbor: Ref<string>;
   txWitnesses: Ref<string | null>;
   valid: Ref<boolean>;
-  passwordRules: Ref<any[]>;
+  passwordRules: Ref<Array<(v: string) => boolean | string>>;
   privateKeyBytes: Ref<Uint8Array | null>;
   isPrfWallet: ComputedRef<boolean>;
   isBTSupported: ComputedRef<boolean>;
@@ -57,7 +76,7 @@ export interface TransactionSigningReturn {
   handlePassKeyError: (error: string) => void;
   handlePassKeyAuthSuccess: (pkBytes: Uint8Array) => void;
   handlePassKeyAuthError: (error: Error) => void;
-  setPasswordFieldRef: (ref: any) => void;
+  setPasswordFieldRef: (ref: PasswordFieldRef | null) => void;
   // Keystone methods
   onKeystoneScan: (ur: UR) => Promise<void>;
   onKeystoneError: (error: string) => void;
@@ -72,7 +91,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
   // State
   const loading = ref(false);
   const spendingPassword = ref('');
-  const passwordField = ref<any>(null);
+  const passwordField = ref<PasswordFieldRef | null>(null);
   const valid = ref(false);
   const passwordRules = ref([rules.required()]);
   const isBT = ref(false);
@@ -130,7 +149,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       remoteSigningStore.requiresRemoteForSend();
   });
 
-  const setPasswordFieldRef = (ref: any) => {
+  const setPasswordFieldRef = (ref: PasswordFieldRef | null) => {
     passwordField.value = ref;
   };
 
@@ -171,7 +190,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       txCbor.value = serializeCardanoJsSdkTx(tx);
 
       // Prepare signing data
-      const signingData: any = {
+      const signingData: SignTxRequestData = {
         txCbor: txCbor.value,
         partialSign: false,
         password: spendingPassword.value,
@@ -190,7 +209,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       const witnessResult = (await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.SIGN_TX,
         data: signingData,
-      })) as { data: { witnesses?: any; error?: string } };
+      })) as { data: { witnesses?: string; error?: string } };
 
       if (witnessResult.data.error) {
         throw new Error(witnessResult.data.error);
@@ -302,7 +321,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
         } else if (e.message.toLowerCase().includes('device')) {
           snackbar.setError(t('wallet.trezorDeviceError', { message: e.message }));
         } else {
-          snackbar.setError(e.message);
+          snackbar.setError(friendlyTxError(e));
         }
       } else {
         snackbar.setError(t('errors.unknownError'));
@@ -456,6 +475,10 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
         await submitTx();
       } else if (result.data.reason === 'expired') {
         snackbar.setError(t('crossDevice.requestExpired'));
+      } else if (result.data.reason === CIP113_SIGN_REFUSAL_MESSAGE) {
+        // Refused on THIS device, before the relay — the other device was never asked,
+        // so the generic "rejected" would blame a co-signer that never saw the request.
+        snackbar.setError(t('programmableTokens.signRefused'));
       } else {
         snackbar.setError(t('crossDevice.requestRejected'));
       }

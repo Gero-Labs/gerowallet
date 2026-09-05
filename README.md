@@ -49,6 +49,7 @@ Mini-Gero is a focused subset of the dashboard. Anything not in the side panel i
 - **Governance**: CIP-1694 DRep voting and delegation
 - **NFTs**: view, manage, and trade Cardano NFTs
 - **Native Tokens**: full support for Cardano native assets
+- **CIP-113 programmable tokens**: shown in the portfolio and badged; Stage 1 is display only, transfers of these tokens are not supported yet
 
 **🔄 DeFi and Trading**
 - DEX aggregation for best swap rates (routed via Nexus)
@@ -142,6 +143,14 @@ extension against a local backend. To list every variable the code reads:
 ```bash
 grep -rhoE 'VITE_[A-Z0-9_]+' src/ scripts/ | sort -u
 ```
+
+CIP-113 programmable-token display is behind two independent gates, both of which must
+pass. The per-network deployment list lives in
+[`src/utils/cip113Deployments.ts`](src/utils/cip113Deployments.ts) - the
+`programmable_logic_base` script hashes are reviewed protocol constants, an empty list
+disables the feature for that network, and mainnet ships empty. The `isCip113Enabled`
+feature flag is the runtime half: it ships off and is the only kill-switch that does not
+need a rebuild and a store review.
 
 ### 3. Start Gero Backend
 

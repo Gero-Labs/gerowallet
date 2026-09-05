@@ -300,7 +300,7 @@ import { chainAccents, chainKeyFor } from '@/config/themes';
 import { CHROME_WEB_STORE_URL_SIDEBAR } from '@/config/storeLinks';
 import { loadingState } from '@/stores/loading';
 import changeLogPlugin from '@/plugins/changeLog';
-import { walletStore } from '@/stores/walletStore';
+import { walletStore, hasProgrammableLockedLovelace } from '@/stores/walletStore';
 import WalletStore from '@/stores/walletStore';
 import { poolOperatorStore } from '@/stores/poolOperatorStore';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
@@ -355,6 +355,9 @@ const emptyStateShowing = computed(() => {
   if (loggedWallet.value?.chain === Blockchain.BITCOIN) {
     return !(bitcoinBalance.value && BigInt(bitcoinBalance.value.total ?? 0) > 0n);
   }
+  // Mirrors PortfolioPage: controlled_amount is spendable-only, so CIP-113 locked ADA
+  // has to be counted separately or a fully-locked wallet reads as empty.
+  if (hasProgrammableLockedLovelace()) return false;
   return !account.value || account.value?.controlled_amount === '0';
 });
 
@@ -401,6 +404,7 @@ const hasNewSettingsFeatures = computed(() => hasNewFeaturesInPath(['settings'])
 
 // Check if wallet is empty (no native tokens)
 const isWalletEmpty = computed(() => {
+  if (hasProgrammableLockedLovelace()) return false;
   return !account.value || account.value.controlled_amount === '0';
 });
 // Notifications menu

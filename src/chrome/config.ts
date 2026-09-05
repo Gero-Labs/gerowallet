@@ -1,3 +1,10 @@
+/**
+ * The one refusal message every CIP-113 signing path reports. Defined here so the four
+ * background.ts call sites, WalletBg.signTx and friendlyTxError() cannot drift apart —
+ * friendlyTxError matches on this exact string to localise it before it reaches a snackbar.
+ */
+export const CIP113_SIGN_REFUSAL_MESSAGE = 'Gero cannot sign transfers of CIP-113 programmable tokens';
+
 export const TARGET = 'gerowallet';
 export const SENDER = {
   extension: 'extension',

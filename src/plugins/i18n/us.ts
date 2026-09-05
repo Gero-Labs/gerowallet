@@ -4930,6 +4930,11 @@ export default {
   // Non-NIGHT token holdings rows (decimals unknown until token metadata lands)
   'midnight.unknownToken': 'Unknown token',
   'midnight.rawBalanceNotice': 'Raw amount — decimals unknown',
+  'programmableTokens.badge': 'CIP-113',
+  'programmableTokens.lockedAdaTooltip': 'ADA held inside your CIP-113 token UTxOs. It counts toward your portfolio value, but Gero can\'t spend it, and moving these tokens isn\'t supported yet.',
+  'programmableTokens.listFootnote': 'Locked tokens stay in your wallet, but transfers of them aren\'t supported yet.',
+  'programmableTokens.signRefused': 'This transaction moves a CIP-113 programmable token. Gero can\'t sign these transfers yet.',
+  'programmableTokens.badgeTooltip': 'CIP-113 programmable token. Gero shows your balance, but transfers of these tokens aren\'t supported yet.',
   // ---- Positions explorer (action detail) ----
   // One key for one concept: this replaced 'assets.clearFilters' and
   // 'transactions.clearFilters', which said the same thing in three spellings.

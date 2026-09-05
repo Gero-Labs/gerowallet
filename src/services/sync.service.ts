@@ -530,6 +530,10 @@ export class SyncService {
    * stored account. Used when a SYNC push omits `account` (unregistered stake), so
    * balance + empty-state reflect on-chain funds immediately instead of waiting for
    * delegation. Preserves rewards/withdrawable/pool/drep from the previous account.
+   *
+   * The `account` row holds the stake-level total the provider would report, which the
+   * store then reduces by the CIP-113 locked share. `utxos` is already the spendable
+   * partition, so the locked lovelace is added back here to keep the row on that meaning.
    */
   private async reconcileControlledAmountFromUtxos(): Promise<void> {
     try {
@@ -539,7 +543,7 @@ export class SyncService {
         const coins = u?.[1]?.value?.coins;
         if (coins != null) sum += BigInt(coins);
       }
-      const controlled = sum.toString();
+      const controlled = (sum + BigInt(WalletStore.state.programmableLockedLovelace || '0')).toString();
       const prev = (await this.walletBg.getAccountInfo()) || {};
       if (prev.controlled_amount === controlled) return; // no change — skip a redundant write
       await this.walletBg.setAccountInfo({

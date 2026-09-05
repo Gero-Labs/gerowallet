@@ -1615,6 +1615,22 @@ const assetInfoLookup = computed<Map<string, KnownAssetInfo>>(() => {
     }
   }
 
+  // CIP-113 programmable holdings live in their own store map (never in `tokens`, so
+  // nothing that selects inputs can reach them), but they need the same name/decimals
+  // resolution — without this a 6-decimal programmable token renders 10^6 times too large.
+  const programmable = WalletStore.state.programmableTokens as Record<string, { metadata?: { ticker?: string; name?: string; decimals?: number } }> | undefined;
+  if (programmable) {
+    for (const [unit, info] of Object.entries(programmable)) {
+      const candidates = [info?.metadata?.ticker, info?.metadata?.name].filter(
+        (n): n is string => !!n && !looksLikeHex(n)
+      );
+      if (candidates.length > 0) {
+        const decimals = typeof info?.metadata?.decimals === 'number' ? info.metadata.decimals : 0;
+        map.set(unit, { name: candidates[0], decimals });
+      }
+    }
+  }
+
   // NFT collections — keyed by policy_id, with items[].unit + items[].name. NFTs have 0 decimals.
   const collections = WalletStore.state.collections as Record<string, { name?: string; items?: { unit?: string; name?: string }[] }> | undefined;
   if (collections) {
