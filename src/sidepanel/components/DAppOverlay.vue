@@ -667,16 +667,16 @@
             </div>
             <div class="d-flex justify-space-between mt-1">
               <span class="grey--text text-caption">{{ $t('common.amount') }}</span>
-              <span class="white--text text-caption font-weight-bold">{{ formatNightBase(o.value) }} {{ nightCurrency }}</span>
+              <span class="white--text text-caption font-weight-bold">{{ outputAmountDisplay(o) }} {{ outputTicker(o) }}</span>
             </div>
           </div>
           <div
-            v-if="makeTransferOutputs.length > 1"
+            v-if="makeTransferOutputs.length > 1 && makeTransferSingleToken"
             class="d-flex justify-space-between pt-2"
             style="border-top: 1px solid var(--g-hairline-1);"
           >
             <span class="white--text text-body-2 font-weight-bold">{{ $t('common.total') }}</span>
-            <span class="white--text text-body-2 font-weight-bold">{{ makeTransferTotalDisplay }} {{ nightCurrency }}</span>
+            <span class="white--text text-body-2 font-weight-bold">{{ makeTransferTotalDisplay }} {{ makeTransferTotalTicker }}</span>
           </div>
           <div class="d-flex align-start mt-2">
             <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-eye-outline</v-icon>
@@ -920,6 +920,8 @@ import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { decodedPayloadHexPreview, decodeSignDataPayload, type MidnightSignDataEncoding } from '@/chrome/midnightSignDataCodec';
 import { MidnightErrorCode } from '@/chrome/config';
+import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
+import { toAmountInput } from '@/chains/midnight/midnightAmount';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { resolveGeroChain } from '@/services/walletConnect/chainUtils';
 
@@ -1087,24 +1089,72 @@ const makeTransferOutputs = computed<ConnectorDesiredOutput[]>(() => {
   return Array.isArray(data?.desiredOutputs) ? (data!.desiredOutputs as ConnectorDesiredOutput[]) : [];
 });
 
-const NIGHT_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.NIGHT);
-// Format base-unit NIGHT (bigint or decimal string) for display. Mirrors
-// MidnightSendDialog.formattedAvailable — a chain-specific unit conversion, not
-// a fork of the canonical price formatters in shared/utils/format.
-function formatNightBase(baseUnits: string | bigint): string {
+/**
+ * The colour a connector output moves. `type` absent, or an all-zero token
+ * type, means native NIGHT; anything else is a 32-byte colour as hex.
+ */
+function outputToken(o: ConnectorDesiredOutput): string {
+  const t = o.type ?? '';
+  return !t || /^0+$/.test(t) ? 'NIGHT' : t;
+}
+
+/** Decimal exponent for a connector output, or null when it isn't known. */
+function outputDecimals(o: ConnectorDesiredOutput): number | null {
+  const token = outputToken(o);
+  if (token === 'NIGHT') return MIDNIGHT_DECIMALS.NIGHT;
+  return midnightTokenMeta(token)?.decimals ?? null;
+}
+
+/** Ticker to show beside the amount. Never claims NIGHT for a token. */
+function outputTicker(o: ConnectorDesiredOutput): string {
+  const token = outputToken(o);
+  if (token === 'NIGHT') return nightCurrency.value;
+  const meta = midnightTokenMeta(token);
+  return meta?.symbol ?? `${token.slice(0, 8)}\u2026${token.slice(-6)}`;
+}
+
+/**
+ * Amount as the user will actually send it.
+ *
+ * This is a SIGNING PROMPT: it previously formatted every output with NIGHT's
+ * 6 decimals and labelled it NIGHT, so a dApp requesting a token transfer
+ * showed an amount scaled by the wrong exponent under the wrong ticker — the
+ * user would approve something other than what they read. Unknown decimals
+ * render as raw base units rather than being guessed.
+ */
+function outputAmountDisplay(o: ConnectorDesiredOutput): string {
   let value: bigint;
   try {
-    value = typeof baseUnits === 'bigint' ? baseUnits : BigInt(baseUnits);
+    value = BigInt(o.value);
   } catch {
     return '0';
   }
-  const whole = value / NIGHT_DIVISOR;
-  const remainder = value % NIGHT_DIVISOR;
-  const frac = remainder.toString().padStart(MIDNIGHT_DECIMALS.NIGHT, '0').replace(/0+$/, '');
-  return frac ? `${whole.toLocaleString('en-US')}.${frac}` : whole.toLocaleString('en-US');
+  return toAmountInput(value, outputDecimals(o));
 }
 
+/**
+ * The one colour every output shares, or null when they differ. A single
+ * summed total across two colours would be a fabricated number, so the total
+ * row is hidden in that case rather than shown wrong.
+ */
+const makeTransferSingleToken = computed<ConnectorDesiredOutput | null>(() => {
+  const outs = makeTransferOutputs.value;
+  if (outs.length === 0) return null;
+  const first = outputToken(outs[0]);
+  return outs.every((o) => outputToken(o) === first) ? outs[0] : null;
+});
+
+/** Ticker for the total row. A computed, not a template call with a non-null
+ * assertion: Vue 2 template expressions are parsed as plain JS, so TS syntax
+ * there is a build-time SyntaxError that typecheck and lint both let through. */
+const makeTransferTotalTicker = computed(() => {
+  const sample = makeTransferSingleToken.value;
+  return sample ? outputTicker(sample) : '';
+});
+
 const makeTransferTotalDisplay = computed(() => {
+  const sample = makeTransferSingleToken.value;
+  if (!sample) return '';
   let total = 0n;
   for (const o of makeTransferOutputs.value) {
     try {
@@ -1113,7 +1163,7 @@ const makeTransferTotalDisplay = computed(() => {
       /* skip unparseable — BG already validated, this is display-only */
     }
   }
-  return formatNightBase(total);
+  return toAmountInput(total, outputDecimals(sample));
 });
 
 // Network-aware ticker — mirror MidnightSendDialog's nightCurrency (mainnet
@@ -2693,7 +2743,9 @@ async function buildMidnightTransferTx(
   const outputs = makeTransferOutputs.value.map((o) => ({
     address: o.recipient,
     amount: o.value, // already base units (decimal string) from the connector
-    token: 'NIGHT' as const,
+    // The colour the dApp asked for. Hardcoding NIGHT here silently sent the
+    // native token for a request that named a different one.
+    token: outputToken(o),
   }));
   const { buildAndSignUnshieldedTransfer } = await import('@/services/midnight-tx.service');
   return buildAndSignUnshieldedTransfer(

@@ -159,24 +159,45 @@ Seven gates. Six are mechanical; gate 7 is the one that fails silently.
 | 6 | `sidecar/sdk/unshieldedTransfer.ts` — `nightUtxos` filter `/^0+$/.test(u.type)` | select per color |
 | 7 | `sidecar/sdk/unshieldedTransfer.ts` — offer section + segment id | **see below** |
 
-### Gate 7: the trap
+### Gate 7: CORRECTED — the "segment 0 trap" does not exist
 
-`unshieldedTransfer.ts` hardcodes `intent.fallibleUnshieldedOffer = offer` and signs
-`intent.signatureData(1)`. The SDK's own `makeTransfer` does not
-(`wallet-sdk-unshielded-wallet/dist/v1/Transacting.js:122-127`):
+**An earlier version of this spec was wrong here, and the error was load-bearing:**
+it claimed a token-only send belongs in the guaranteed offer at segment **0**, called
+that a fund-losing trap, and made an acceptance test mandatory on that basis.
 
-```js
-const hasNightOutput = ledgerOutputs.some((o) => o.type === ledger.nativeToken().raw);
-if (hasNightOutput) { intent.fallibleUnshieldedOffer = offer; }
-else { intent.guaranteedUnshieldedOffer = offer; }
-```
+That was derived from `GUARANTEED_SEGMENT = 0` in the SDK's `Transacting.js`. But that
+constant selects which *offer slot* to splice signatures into during `addSignatures` —
+it is **not** the argument to `signatureData()`.
 
-with `GUARANTEED_SEGMENT = 0` (`Transacting.js:19`).
+Verified against current nexus (`origin/development` @ `e612d5dc`):
 
-**A USDM-only send belongs in the guaranteed offer, segment 0.** Shipping the obvious version of
-this change signs every pure-USDM transfer against the wrong segment payload.
+- `sidecar/src/sdk/segments.ts:86-89` derives the segment id from the intent's key in
+  `tx.intents` — `intent.signatureData(segmentId)` — not from which slot holds the offer.
+  A single-intent transfer is segment 1 either way.
+- `sidecar/src/sdk/unshieldedTransfer.ts:171-189` already branches: shield-swap puts the
+  offer in `guaranteedUnshieldedOffer`, everything else in `fallibleUnshieldedOffer`, and
+  **both** sign `signatureData(1)`. The swap path runs in production.
+- That code's own comment records the empirical basis: *"intents keep their segment id (1)
+  regardless of slot, and signature splicing already handles both slots"* — with a live
+  preprod observation (Custom(138) BalanceCheckOverspend, 2026-07-13) behind the
+  slot choice.
+- The wallet signs via `signUnshieldedSegments` (`midnightTxBuilder.ts:486`), which
+  delegates to the SDK's `UnshieldedWallet`; slot selection is the SDK's concern.
 
-Required: `hasNightOutput ? (fallible, signatureData(1)) : (guaranteed, signatureData(0))`.
+**So signing needs no change for token sends.**
+
+### The real open question: which slot
+
+What remains genuinely undecided is the *slot*, not the segment. The SDK's `makeTransfer`
+picks `guaranteed` when a transfer has no NIGHT output, and the swap path needs
+`guaranteed` because the ledger balance-checks per segment. Whether a pure token transfer
+(no NIGHT output, no shielded half) must also sit in `guaranteed` is **not established by
+reading** — the swap rationale does not obviously transfer, since there is no
+guaranteed-segment counterparty to balance against.
+
+This is empirical. Resolve it with a preprod token transfer before mainnet, and expect
+`Custom(138) BalanceCheckOverspend` as the failure signature if the slot is wrong. Do not
+guess it from the SDK source; that is exactly how the previous error was made.
 
 ### Coin selection
 
@@ -185,11 +206,15 @@ change output **per color**. A single offer can carry mixed colors: `UtxoSpend.t
 `UtxoOutput.type` are per-entry (`ledger-v8.d.ts:1818`, *"The token type of this UTXO"*), and
 `UnshieldedOffer.new(inputs, outputs, signatures)` takes flat arrays (`ledger-v8.d.ts:2079`).
 
-### Mandatory acceptance test
+### Mandatory acceptance test — revised
 
-A USDM-only send asserting (a) the offer landed in `guaranteedUnshieldedOffer`, and (b) the signed
-payload came from `signatureData(0)`. Without this the failure is a signature verifying against
-nothing.
+The original test asserted `guaranteedUnshieldedOffer` + `signatureData(0)`. Both halves were
+wrong (see Gate 7). Replace with:
+
+A **preprod token transfer, end to end**, asserting it submits and the recipient's balance moves.
+That is the only thing that settles the slot question, and it is cheap next to the cost of being
+wrong on mainnet. A unit test over the builder cannot answer it — the constraint lives in the
+ledger's per-segment balance check, not in our code.
 
 ### Product dead-end to surface honestly
 

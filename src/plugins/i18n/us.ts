@@ -4686,6 +4686,7 @@ export default {
   'midnight.send.addressPrefix': 'Address should start with {prefix}',
   'midnight.send.amountRequired': 'Amount required',
   'midnight.send.shieldedBalanceNote': 'Private balance. Updates as shielded sync progresses.',
+  'midnight.send.rawUnitsNote': 'This token\'s decimals aren\'t known, so amounts are in base units.',
   'midnight.send.publicTxNote': 'Public transaction: the amount and addresses will be visible on the Midnight indexer.',
   'midnight.send.estimatedNetworkFee': 'Estimated network fee',
   'midnight.send.dustResetWarning': 'The network fee is paid in DUST and is negligible. DUST regenerates over time from your registered NIGHT.',

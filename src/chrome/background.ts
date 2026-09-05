@@ -4990,7 +4990,7 @@ app.addToOptions(MessageTypes.ADD_MIDNIGHT_PENDING_TX, async (request, sendRespo
     if (walletBg.chain !== Blockchain.MIDNIGHT) {
       throw new Error('ADD_MIDNIGHT_PENDING_TX called on non-Midnight wallet');
     }
-    const { hash, amount, counterparty, isShielded } = request.data || {};
+    const { hash, amount, counterparty, isShielded, token } = request.data || {};
     if (typeof hash !== 'string' || !hash) throw new Error('hash is required');
     const { midnightActions } = await import('@/stores/midnightStore');
     let amountBig = 0n;
@@ -4998,7 +4998,10 @@ app.addToOptions(MessageTypes.ADD_MIDNIGHT_PENDING_TX, async (request, sendRespo
     midnightActions.applyTransaction({
       hash,
       type: 'send',
-      token: 'NIGHT',
+      // Colour of what was actually sent. Defaulted rather than required so
+      // older callers (and the shielded path) keep their NIGHT behaviour; a
+      // hardcoded 'NIGHT' here would label a USDM send as NIGHT in history.
+      token: typeof token === 'string' && token ? token : 'NIGHT',
       amount: amountBig,
       counterparty: typeof counterparty === 'string' ? counterparty : '',
       timestamp: Date.now(),

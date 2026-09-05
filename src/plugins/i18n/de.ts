@@ -4582,6 +4582,7 @@ export default {
   'midnight.send.addressRequired': 'Empfängeradresse erforderlich',
   'midnight.send.addressPrefix': 'Adresse muss mit {prefix} beginnen',
   'midnight.send.amountRequired': 'Betrag erforderlich',
+  'midnight.send.rawUnitsNote': 'Die Dezimalstellen dieses Tokens sind nicht bekannt, daher werden Beträge in Basiseinheiten angegeben.',
   'midnight.send.shieldedBalanceNote': 'Privates Guthaben. Wird mit dem Shielded-Sync aktualisiert.',
   'midnight.send.publicTxNote': 'Öffentliche Transaktion: Betrag und Adressen sind im Midnight-Indexer sichtbar.',
   'midnight.send.estimatedNetworkFee': 'Geschätzte Netzwerkgebühr',
