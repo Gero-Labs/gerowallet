@@ -67,10 +67,21 @@
             attach
             class="holdings-dest-select"
           />
+          <!-- `registeredDustAddress` is the Midnight INDEXER's value, which
+               lags Cardano by the relay — so right after a redirect it still
+               shows the OLD destination. Show the in-flight one alongside it
+               rather than letting the card read as settled. -->
           <div v-else class="holdings-dest">
-            {{ registeredDustAddress
-              ? middleTruncate(registeredDustAddress, 18, 8)
-              : t('midnight.cnightDustDestinationOwn') }}
+            <span :class="{ 'holdings-dest--superseded': !!pendingDestination }">
+              {{ registeredDustAddress
+                ? middleTruncate(registeredDustAddress, 18, 8)
+                : t('midnight.cnightDustDestinationOwn') }}
+            </span>
+            <span v-if="pendingDestination" class="holdings-dest-next">
+              <v-icon x-small class="mr-1">mdi-arrow-down</v-icon>
+              <span class="g-mono">{{ middleTruncate(pendingDestination, 18, 8) }}</span>
+              <span class="holdings-dest-note">{{ t('midnight.cnightDestinationChanging') }}</span>
+            </span>
           </div>
         </div>
       </div>
@@ -375,6 +386,7 @@ const {
   status,
   statusLoading,
   registrationStatus,
+  localPending,
   registrations,
   primaryRegistration,
   registering,
@@ -466,6 +478,19 @@ const isMainnet = computed(() => walletStore.loggedWallet?.network === Network.M
 const nightTicker = computed(() => (isMainnet.value ? 'NIGHT' : 'tNIGHT'));
 const hasNight = computed(() => cnightBalance.value > 0n);
 const registeredDustAddress = computed(() => status.value?.dustAddress || '');
+
+/**
+ * A submitted-but-not-yet-relayed destination change for this stake. Only
+ * surfaced when it actually differs from what the indexer reports, so a plain
+ * first registration (where the indexer simply hasn't caught up) doesn't
+ * render a pointless "X → X" row.
+ */
+const pendingDestination = computed(() => {
+  const next = localPending.value?.dustAddress;
+  if (!next) return '';
+  const current = registeredDustAddress.value;
+  return current && current.toLowerCase() === next.toLowerCase() ? '' : next;
+});
 
 const formattedBalance = computed(() => {
   const divisor = 10n ** BigInt(cnightDecimals.value);
@@ -829,6 +854,26 @@ watch(() => props.isOpen, (open) => {
   color: var(--g-text-2);
   text-align: right;
   min-width: 0;
+}
+
+/* The indexer's destination while a redirect is in flight: still true today,
+   but on its way out — quieted, not struck through (it is not wrong yet). */
+.holdings-dest--superseded {
+  color: var(--g-text-3);
+}
+
+.holdings-dest-next {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--g-text-1);
+}
+
+.holdings-dest-note {
+  color: var(--g-text-3);
 }
 
 /* ── Flow diagram ──────────────────────────────────────────────────────────── */

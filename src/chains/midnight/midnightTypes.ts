@@ -148,8 +148,11 @@ export interface MidnightTransaction {
   hash: string;
   /** High-level UI category. */
   type: MidnightTransactionType;
-  /** Which token moved. */
-  token: 'NIGHT' | 'DUST';
+  /**
+   * What moved. Native NIGHT and DUST keep their names; anything else is the
+   * 32-byte token color, resolved for display through midnightTokenMeta().
+   */
+  token: 'NIGHT' | 'DUST' | (string & {});
   /** Token amount (base units; divide by `MIDNIGHT_DECIMALS[token]`). */
   amount: bigint;
   /** Counterparty address (sender or recipient depending on `type`). */

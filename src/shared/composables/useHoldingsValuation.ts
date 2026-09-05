@@ -15,6 +15,7 @@
  * mainnet-Cardano page concern, not part of valuation.
  */
 import { computed, toRefs } from 'vue';
+import { tokenRowKey } from '@/shared/utils/tokenRowKey';
 import { walletStore } from '@/stores/walletStore';
 import { priceStore } from '@/stores/priceStore';
 import { coinGeckoStore } from '@/stores/coinGeckoStore';
@@ -27,7 +28,7 @@ import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter'
 import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
 
 export function useHoldingsValuation() {
-  const { loggedWallet, utxos, collateral, tokens: walletTokens } = toRefs(walletStore);
+  const { loggedWallet, utxos, collateral, tokens: walletTokens, programmableTokens, programmableLockedLovelace } = toRefs(walletStore);
   const { allTokens } = useMarketData();
   const { usdToEurRate } = useCurrencyConverter();
   const { currencyName: nativeCurrencyName, currencyTicker: nativeCurrencyTicker } = useNativeCurrency();
@@ -68,7 +69,29 @@ export function useHoldingsValuation() {
     const dhTokens = tokenMetadataStore.tokens || {};
     const rows: MarketToken[] = [];
 
-    Object.entries(tokens).forEach(([unit, token]: [string, { quantity?: number | string; amount?: string; name?: string; policy_id?: string; metadata?: { name?: string; ticker?: string; decimals?: number } }]) => {
+    // Programmable tokens live in their own store map so nothing that selects
+    // transaction inputs can reach them; merged here because this composable is the
+    // one place both the dashboard and mini-Gero read holdings from.
+    type HoldingEntry = [string, { quantity?: number | string; amount?: string; name?: string; policy_id?: string; metadata?: { name?: string; ticker?: string; decimals?: number } }, boolean];
+    const entries: HoldingEntry[] = [
+      ...Object.entries(tokens).map(([unit, token]) => [unit, token, false] as HoldingEntry),
+      ...Object.entries(programmableTokens.value || {}).map(([unit, token]) => [unit, token, true] as HoldingEntry),
+    ];
+
+    // ADA riding along in the programmable UTxOs. It is the user's, but Gero cannot
+    // spend it, so it gets its own locked row instead of joining adaBalance, keyed apart
+    // from the spendable row via tokenRowKey() ('lovelace#locked'). Unlike locked CIP-113
+    // tokens, this row keeps its real price and counts toward totals — see below.
+    const lockedLovelace = Number(programmableLockedLovelace.value || '0');
+    if (lockedLovelace > 0) {
+      entries.push(['lovelace', {
+        quantity: lockedLovelace,
+        name: nativeCurrencyName.value,
+        metadata: { name: nativeCurrencyName.value, ticker: nativeCurrencyTicker.value, decimals: 6 },
+      }, true] as HoldingEntry);
+    }
+
+    entries.forEach(([unit, token, isProgrammable]: HoldingEntry) => {
       if (!token.quantity || Number(token.quantity) <= 0) return;
 
       // Find in market data for enrichment
@@ -101,12 +124,33 @@ export function useHoldingsValuation() {
         priceUsd = priceAda * adaPriceUsd;
       }
 
+      // Locked CIP-113 TOKENS stay unpriced: sitting at the programmable address is not
+      // evidence the token is registered or legitimate (anyone can send an asset there),
+      // so there is no price source worth trusting and a wrong one is worse than none.
+      //
+      // Locked ADA is different. It is the native currency at the native price, and it is
+      // genuinely the user's — it just cannot be spent through Gero. Zeroing it would
+      // understate what they hold, so it keeps its real price and counts toward the
+      // portfolio total. Spendable figures are unaffected: `adaBalance` is derived from
+      // walletStore.utxos, which programmable UTxOs never enter.
+      if (isProgrammable && !isNativeToken) {
+        priceUsd = 0;
+        priceAda = 0;
+      }
+
       const value = quantity * priceUsd;
 
       rows.push({
         unit,
         name: marketToken?.name || token.name || token.metadata?.name || (isNativeToken ? nativeCurrencyName.value : unit),
-        ticker: marketToken?.ticker || token.metadata?.ticker || (isNativeToken ? nativeCurrencyTicker.value : ''),
+        // The table renders `ticker` as the row label, so an empty one leaves a
+        // nameless row. Tokens with no registry entry and no market data have none,
+        // so fall back to the asset name resolveAsset() already decoded.
+        ticker: marketToken?.ticker
+          || token.metadata?.ticker
+          || (isNativeToken ? nativeCurrencyTicker.value : '')
+          || token.name
+          || '',
         img: marketToken?.img || (token as { img?: string }).img || '',
         verified: marketToken?.verified ?? dhToken?.verified ?? isNativeToken,
         // Graduated snek.fun tokens are unverified but legit — carry the market
@@ -114,6 +158,9 @@ export function useHoldingsValuation() {
         // badge renders (mirrors the market list). Missing here = held snek
         // tokens silently stripped by verified-only.
         isSnekFun: marketToken?.isSnekFun ?? false,
+        isProgrammable,
+        rowKey: tokenRowKey(unit, isProgrammable),
+        isScam: (token as { isScam?: boolean }).isScam ?? false,
         price: priceUsd,
         priceAda,
         priceEur: marketToken?.priceEur ?? 0,

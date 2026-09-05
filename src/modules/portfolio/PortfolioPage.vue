@@ -392,6 +392,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, toRefs, onMounted, onBeforeUnmount, getCurrentInstance } from 'vue';
+import { tokenRowKey } from '@/shared/utils/tokenRowKey';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useQuickActionDialogs } from '@/shared/composables/useQuickActionDialogs';
 import { useMarketData, type MarketToken } from '@/modules/market/composables/useMarketData';
@@ -401,7 +402,7 @@ import { useColumnPreferences, type ColumnKey } from '@/modules/market/composabl
 import { usePortfolioData } from '@/shared/composables/usePortfolioData';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import { useHoldingsValuation } from '@/shared/composables/useHoldingsValuation';
-import { walletStore } from '@/stores/walletStore';
+import { walletStore, hasProgrammableLockedLovelace } from '@/stores/walletStore';
 import { isClickInsidePanel } from '@/shared/utils/outsideClick';
 import { Blockchain, Network } from '@/models/types';
 import { isNewUser as checkNewUser } from '@/modules/dashboard/utils/emptyStateConfigs';
@@ -601,6 +602,10 @@ const isWalletEmpty = computed(() => {
   if (loggedWallet.value?.chain === Blockchain.BITCOIN) {
     return !(bitcoinBalance.value && BigInt(bitcoinBalance.value.total ?? 0) > 0n);
   }
+  // controlled_amount is the SPENDABLE figure — the CIP-113 locked share is subtracted
+  // from it in the store — so a wallet holding nothing but programmable UTxOs reads
+  // exactly '0' here and would get the "no funds" hero over a funded portfolio.
+  if (hasProgrammableLockedLovelace()) return false;
   return !account.value || account.value?.controlled_amount === '0';
 });
 
@@ -813,10 +818,13 @@ const displayedTokens = computed(() => {
 
   // Dedupe by unit — a token can appear in both the registered market list and the
   // snek.fun feed (and the snek feed can list the same token more than once).
+  // A unit can appear twice — spendable and locked — so key the dedupe by partition
+  // too, or the locked row is dropped and the balance reads short.
   const seen = new Set<string>();
   tokens = tokens.filter(t => {
-    if (seen.has(t.unit)) return false;
-    seen.add(t.unit);
+    const key = tokenRowKey(t.unit, t.isProgrammable);
+    if (seen.has(key)) return false;
+    seen.add(key);
     return true;
   });
 
@@ -837,7 +845,9 @@ function applySearchFilter(tokens: MarketToken[]): MarketToken[] {
 
 // Shared by displayedTokens and hiddenByFilterCount — both must agree on which
 // rows the verified filter keeps, or the hidden count drifts from the table.
-const passesVerifiedFilter = (tok: MarketToken): boolean => tok.verified || tok.isSnekFun;
+// Programmable tokens are exempt for the same reason snek.fun ones are: legitimate
+// holdings that are inherently unverified.
+const passesVerifiedFilter = (tok: MarketToken): boolean => tok.verified || tok.isSnekFun || tok.isProgrammable;
 
 // Rows the verified filter removed from the holdings view — surfaced under the
 // table so a real balance never silently disappears (issue 1003).

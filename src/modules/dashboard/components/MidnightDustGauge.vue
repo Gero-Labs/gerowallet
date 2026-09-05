@@ -99,7 +99,7 @@ const {
   dustCap,
   registrationStatus,
 } = useMidnightDustLive();
-const { pathBRegistered, pathBStakes } = useDustPathB();
+const { pathBRegistered, pathBStakes, pathBIncomingStakes } = useDustPathB();
 
 const midnightLoading = useMidnightLoading();
 const isRegistered = computed(() => registrationStatus.value === 'Registered');
@@ -165,9 +165,18 @@ watch(registrationStatus, safeRefreshPending);
 // Path B already reporting a live registration to this dust address is
 // Registered, not pending — guard directly against it too (not just via
 // `isRegistered`) so a stale local record can never outrank chain truth.
+//
+// `pathBIncomingStakes` is the chain-truth half of "pending": a registration
+// confirmed on Cardano and pointed here, which the Midnight indexer hasn't
+// relayed yet. `incomingPending` (localStorage) only ever saw registrations
+// submitted from THIS browser profile, so a registration made from the Cardano
+// wallet's own dialog or the official portal left the battery showing a
+// "Register for DUST" prompt for the whole relay window.
 const isPending = computed(() => !isRegistered.value
   && !pathBRegistered.value
-  && (incomingPending.value > 0 || registrationStatus.value === 'Pending'));
+  && (incomingPending.value > 0
+    || pathBIncomingStakes.value.length > 0
+    || registrationStatus.value === 'Pending'));
 
 // Percent full (0-100) for the bar width + a11y.
 const pct = computed(() => {

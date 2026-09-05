@@ -9,6 +9,7 @@
  * the user's locale is active). Anything not recognized is returned unchanged.
  */
 import i18n from '@/plugins/i18n';
+import { CIP113_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
 
 /**
  * True when the error is the user lacking a pure-ADA UTxO for script collateral.
@@ -44,6 +45,10 @@ export function isInsufficientAdaError(message: string): boolean {
 export function friendlyTxError(raw: unknown): string {
   const message = raw instanceof Error ? raw.message : String(raw ?? '');
   const l = message.toLowerCase();
+
+  // The CIP-113 signing refusal is thrown from the background as a fixed English
+  // string, so it has to be mapped back to a key here or a non-English user sees it raw.
+  if (message === CIP113_SIGN_REFUSAL_MESSAGE) return i18n.t('programmableTokens.signRefused') as string;
 
   // Nexus's shared collateral pool is exhausted — transient infra, retryable.
   if (l.includes('collateral pool')) return i18n.t('errors.collateralPoolEmpty') as string;

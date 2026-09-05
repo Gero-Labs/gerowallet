@@ -53,6 +53,14 @@ export interface MarketToken {
   unrealizedPnl?: number | null;
   isNative?: boolean;
   isSnekFun?: boolean;
+  // Visible but not sendable. Carry it wherever isSnekFun travels — missing here
+  // means the verified-only filter silently strips the row.
+  isProgrammable?: boolean;
+  // Stable row identity: a unit can appear twice (spendable + locked), and `unit`
+  // alone collides as a v-data-table item-key.
+  rowKey?: string;
+  // Carried so the programmable exemption cannot override a hide-scam preference.
+  isScam?: boolean;
 }
 
 export interface CandlestickDataPoint {
@@ -118,8 +126,20 @@ function enrichWithStores(apiToken: TokenPriceResponse, sparklineMap?: Record<st
   // we surface that null as-is ('—'). DexHunter is metadata-only — no numeric mcap fallback.
   const mcap = apiToken.marketCap ?? null;
 
+  // Market rows are built from the price feed, which knows nothing about CIP-113. The
+  // wallet does: a unit held at the programmable-logic-base address is one Gero refuses
+  // to move, so the badge and — more importantly — the swap-widget suppression in
+  // TokenDetailPanel have to hold for the row opened from Market too, not just for the
+  // holdings rows useHoldingsValuation stamps.
+  const isProgrammable = Object.prototype.hasOwnProperty.call(
+    walletStore.programmableTokens || {},
+    assetId,
+  );
+
   return {
     unit: assetId,
+    rowKey: assetId,
+    isProgrammable,
     name: apiToken.name || dhToken?.name || apiToken.assetNameAscii || assetId,
     ticker: apiToken.ticker || dhToken?.ticker || apiToken.assetNameAscii || '',
     img: apiToken.logo || '',
@@ -251,6 +271,7 @@ async function fetchAllTokens(silent = false): Promise<void> {
     const nativeImg = networks.resolveCurrencyImage(chain, walletStore.loggedWallet?.network) || '';
     const nativeToken: MarketToken = {
       unit: 'lovelace',
+      rowKey: 'lovelace',
       name: nativeName,
       ticker: nativeTicker,
       img: nativeImg,

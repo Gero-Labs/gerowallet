@@ -44,31 +44,49 @@
             </template>
             <template v-else>—</template>
           </div>
+          <!-- One switch on `dustSourceRowState`, shared with the composable's
+               own pre-flight guard, so the button and the action can never
+               disagree about what this stake's chain state allows. -->
           <div class="source-action">
             <!-- Generating to this wallet already -->
-            <span v-if="isGeneratingHere(source)" class="state-chip state-chip--active">
+            <span v-if="rowState(source) === 'generatingHere'" class="state-chip state-chip--active">
               <v-icon x-small color="var(--g-success)" class="mr-1">mdi-check-circle</v-icon>
               {{ t('midnight.dustSourcesGeneratingHere') }}
             </span>
+            <!-- More than one live registration UTxO: the whole set is
+                 protocol-invalid. Neither action is meaningful until it's back
+                 down to one, and consolidation lives on the Cardano wallet. -->
+            <span v-else-if="rowState(source) === 'duplicated'" class="state-chip state-chip--warn">
+              <v-icon x-small color="var(--g-error)" class="mr-1">mdi-alert-outline</v-icon>
+              {{ t('midnight.dustSourcesDuplicate') }}
+            </span>
             <!-- Relay in flight -->
-            <span v-else-if="source.pendingLocal" class="state-chip">
+            <span v-else-if="rowState(source) === 'pending'" class="state-chip">
               <v-icon x-small class="mr-1">mdi-clock-outline</v-icon>
               {{ t('midnight.statusPending') }}
             </span>
             <!-- No local keys -->
-            <span v-else-if="!source.canSign" class="state-chip">
+            <span v-else-if="rowState(source) === 'readOnly'" class="state-chip">
               {{ t('midnight.dustSourcesReadOnly') }}
             </span>
-            <!-- Registered elsewhere: offer redirect -->
+            <!-- Neither chain read answered. Fail closed: no CTA, because
+                 "unregistered" and "the query failed" look identical here and
+                 registering over a live registration invalidates both. -->
+            <span v-else-if="rowState(source) === 'unknown'" class="state-chip">
+              <v-icon x-small class="mr-1">mdi-help-circle-outline</v-icon>
+              {{ t('midnight.dustSourcesUnknownState') }}
+            </span>
+            <!-- Exactly one live registration, pointed elsewhere (or not yet
+                 relayed, so we can't see where): redirect, never register. -->
             <v-btn
-              v-else-if="source.status?.registered"
+              v-else-if="rowState(source) === 'registeredElsewhere'"
               small outlined :disabled="working"
               @click="openAuth(source, 'redirect')"
             >
               <v-icon small left>mdi-swap-horizontal</v-icon>
               {{ t('midnight.dustSourcesRedirectHere') }}
             </v-btn>
-            <!-- Unregistered with NIGHT: register -->
+            <!-- Confirmed clear, with NIGHT: register -->
             <v-btn
               v-else
               small class="geroButton"
@@ -80,9 +98,25 @@
           </div>
         </div>
 
+        <!-- Why this row can't just be registered. Without this the states
+             above read as arbitrary — the user's only feedback used to be a
+             button that silently wasn't there. -->
+        <div v-if="rowNote(source)" class="source-note">
+          <span>{{ rowNote(source) }}</span>
+          <button
+            v-if="rowState(source) === 'unknown'"
+            type="button"
+            class="source-note-retry"
+            :disabled="loading"
+            @click="refresh()"
+          >
+            {{ t('common.retry') }}
+          </button>
+        </div>
+
         <!-- Relay progress for a pending registration: on-chain tx + elapsed. -->
         <div
-          v-if="source.pendingLocal && pendingTxHash(source)"
+          v-if="rowState(source) === 'pending' && pendingTxHash(source)"
           class="source-relay"
         >
           <a
@@ -146,7 +180,13 @@ import { walletStore } from '@/stores/walletStore';
 import { geroStore } from '@/stores/geroStore';
 import { Blockchain, Network } from '@/models/types';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { useDustSources, DustSource, DustSourceStage } from '@/shared/composables/useDustSources';
+import {
+  useDustSources,
+  dustSourceRowState,
+  DustSource,
+  DustSourceRowState,
+  DustSourceStage,
+} from '@/shared/composables/useDustSources';
 import { getDustPending } from '@/shared/composables/useDustPending';
 import { getExplorerUrl } from '@/shared/utils/explorer';
 import timeAgo from '@/plugins/time';
@@ -161,6 +201,7 @@ const {
   loading,
   working,
   ownDustAddress,
+  ownDustAddressHex,
   refresh,
   registerSource,
   redirectSource,
@@ -189,10 +230,32 @@ const authEncryption = computed<'password' | 'prf'>(() => {
   return source?.encryptionMethod ?? 'password';
 });
 
-function isGeneratingHere(source: DustSource): boolean {
-  return !!source.status?.registered
-    && !!source.status?.dustAddress
-    && source.status.dustAddress === ownDustAddress.value;
+/** Single source of truth for what this row shows and may do. */
+function rowState(source: DustSource): DustSourceRowState {
+  return dustSourceRowState(source, ownDustAddress.value, ownDustAddressHex.value);
+}
+
+/**
+ * The one-line explanation under a row that isn't offering a plain Register.
+ * `registeredElsewhere` names the current destination when the indexer has
+ * relayed it; during the relay window it hasn't, so we say that instead of
+ * showing a blank address.
+ */
+function rowNote(source: DustSource): string {
+  switch (rowState(source)) {
+    case 'duplicated':
+      return t('midnight.dustSourcesDuplicateHint');
+    case 'unknown':
+      return t('midnight.dustSourcesUnknownHint');
+    case 'registeredElsewhere': {
+      const dest = source.status?.registered ? source.status.dustAddress : '';
+      return dest
+        ? t('midnight.dustSourcesElsewhere', { address: middleTruncate(dest, 14, 6) })
+        : t('midnight.dustSourcesElsewhereUnknown');
+    }
+    default:
+      return '';
+  }
 }
 
 // The submitted registration tx for a pending source (indexer field first,
@@ -277,6 +340,14 @@ async function confirmAction(source: DustSource) {
       authError.value = t('midnight.dustSourcesBagTooLarge');
     } else if (result.message === 'NO_COLLATERAL') {
       authError.value = t('midnight.dustNoCollateral');
+    } else if (result.message === 'ALREADY_REGISTERED') {
+      // The pre-flight guard in `registerSource` fired — chain state moved
+      // between render and click. Re-read so the row redraws as Redirect.
+      authError.value = t('midnight.dustSourcesAlreadyRegistered');
+      void refresh();
+    } else if (result.message === 'DUPLICATE_REGISTRATIONS') {
+      authError.value = t('midnight.dustSourcesDuplicateHint');
+      void refresh();
     } else {
       authError.value = result.message || t('midnight.dustRegistrationFailed');
     }
@@ -394,6 +465,40 @@ watch(() => props.isOpen, (open) => {
   color: var(--g-success);
   background: var(--g-success-fill);
   border-color: var(--g-success-line);
+}
+
+.source-note {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--g-hairline-1);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--g-text-3);
+}
+
+.source-note-retry {
+  margin-left: auto;
+  flex-shrink: 0;
+  color: var(--g-accent);
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.source-note-retry:disabled {
+  color: var(--g-text-3);
+  cursor: default;
+}
+
+.state-chip--warn {
+  color: var(--g-error);
+  background: var(--g-error-fill);
+  border-color: var(--g-error-line);
 }
 
 .source-relay {

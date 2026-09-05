@@ -32,7 +32,8 @@ export function resolveIcon(icon: string): string {
   return resolveIconUrl(icon, placeholders);
 }
 
-function cip68Label(asset_name: string | null | undefined): number | null {
+/** CIP-67 label prefix (100 reference, 222 NFT, 333 FT, 444 RFT), or null. */
+export function cip68Label(asset_name: string | null | undefined): number | null {
   if (!asset_name) {
     return null;
   }
@@ -395,15 +396,21 @@ export function resolveAsset(token: any): any {
           }
         }
       }
-    } else if (asset_name) {
+    }
+    // Also reached when the label branch above found no metadata — a CIP-68 token
+    // whose reference token is missing or unindexed still carries a readable name in
+    // its asset name, after the CIP-67 label prefix. Without stripping it, the name
+    // decodes to control characters and the row falls back to truncated hex.
+    if (!name && asset_name) {
+      const nameHex = label ? asset_name.slice(8) : asset_name;
       try {
-        const decoded = Cardano.AssetName.toUTF8(Cardano.AssetName(asset_name), true);
+        const decoded = Cardano.AssetName.toUTF8(Cardano.AssetName(nameHex), true);
         // Check if UTF-8 decoding produced valid readable text (no replacement chars or control chars)
         const hasInvalidChars = /[\uFFFD\u0000-\u001F]/.test(decoded) ||
           decoded.split('').some(ch => ch.charCodeAt(0) > 127 && ch.charCodeAt(0) < 160);
-        name = hasInvalidChars ? asset_name.slice(0, 16) + '...' : decoded;
+        name = hasInvalidChars ? nameHex.slice(0, 16) + '...' : decoded;
       } catch (e) {
-        name = asset_name.slice(0, 16) + '...';
+        name = nameHex.slice(0, 16) + '...';
       }
     }
   }

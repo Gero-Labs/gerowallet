@@ -49,6 +49,7 @@ Mini-Gero is a focused subset of the dashboard. Anything not in the side panel i
 - **Governance**: CIP-1694 DRep voting and delegation
 - **NFTs**: view, manage, and trade Cardano NFTs
 - **Native Tokens**: full support for Cardano native assets
+- **CIP-113 programmable tokens**: shown in the portfolio and badged; Stage 1 is display only, transfers of these tokens are not supported yet
 
 **🔄 DeFi and Trading**
 - DEX aggregation for best swap rates (routed via Nexus)
@@ -112,8 +113,9 @@ cd gerowallet
 # Install dependencies
 npm install
 
-# Create environment file
-cp .env.example .env.development
+# Create environment file (the three variables below are all you need —
+# see "Configure Environment")
+touch .env.development
 ```
 
 ### 2. Configure Environment
@@ -134,18 +136,27 @@ VITE_NEXUS_URL=http://localhost:8081/api/nexus
 VITE_SYNC_WS_URL=ws://localhost:8081/sync
 ```
 
-See [`.env.example`](.env.example) for the full list of optional variables
-(fiat on-ramp, feature-flag service, blog, etc.). Every entry ships with a safe
-placeholder — none are required to boot the extension against a local backend.
+Those three are all you need. Other `VITE_*` variables (fiat on-ramp,
+feature-flag service, blog, etc.) are optional — none are required to boot the
+extension against a local backend. To list every variable the code reads:
+
+```bash
+grep -rhoE 'VITE_[A-Z0-9_]+' src/ scripts/ | sort -u
+```
+
+CIP-113 programmable-token display is behind two independent gates, both of which must
+pass. The per-network deployment list lives in
+[`src/utils/cip113Deployments.ts`](src/utils/cip113Deployments.ts) - the
+`programmable_logic_base` script hashes are reviewed protocol constants, an empty list
+disables the feature for that network, and mainnet ships empty. The `isCip113Enabled`
+feature flag is the runtime half: it ships off and is the only kill-switch that does not
+need a rebuild and a store review.
 
 ### 3. Start Gero Backend
 
 ```bash
 # Pull Docker image
 docker pull skyhawkofficial/gero:gerowallet-backend-v1.76
-
-# Create backend env file (optional, uses defaults)
-cp .env.example .env.backend
 
 # Run container
 docker run -d \

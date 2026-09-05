@@ -51,6 +51,17 @@
           <ToggleSwitch text-left="FULL" text-right="MINI" font-size="10px" v-model="openMiniGeroOnClick" style="margin: auto" />
         </v-col>
       </v-row>
+      <!-- Only rendered when the dock could exist at all: with both flags off
+           there is nothing for this switch to show or hide. -->
+      <v-row no-gutters class="py-2" v-if="isSupportChatAvailable">
+        <v-col cols="9" class="text-left">
+          <h3 style="color: white">{{ $t('settings.supportChatButton') }}</h3>
+          <span class="helper my-0">{{ $t('settings.supportChatButtonHelper') }}</span>
+        </v-col>
+        <v-col cols="3" style="display: flex;">
+          <ToggleSwitch text-left="OFF" text-right="ON" font-size="10px" v-model="supportChatButton" style="margin: auto" />
+        </v-col>
+      </v-row>
       <v-row no-gutters class="py-2">
         <v-col cols="9" class="text-left">
           <h3 style="color: white">{{ $t('settings.reSyncWallet') }}</h3>
@@ -163,6 +174,8 @@ import { midnightStore } from '@/stores/midnightStore';
 import { Blockchain } from '@/models/types';
 import { isFeatureNew, markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
 import GeroStore from '@/stores/geroStore';
+import { agentDockPrefsStore } from '@/stores/agentDockPrefsStore';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { setWalletConfiguration } from '@/db/wallet-db';
 import cardStore from '@/stores/modules/card';
 
@@ -227,6 +240,23 @@ watch(openMiniGeroOnClick, (val) => {
     method: MessageTypes.SET_OPEN_MINI_GERO_ON_CLICK,
     data: { value: val },
   });
+});
+
+// The one way back after hiding the dock from its own header (AgentDock.vue's
+// hide confirmation names this switch by the label below, so the two must stay
+// in sync). Stored inverted: the store persists "hidden", the switch shows
+// "shown", because an ON/OFF switch reading "on = gone" is a trap.
+const isSupportChatAvailable = computed(
+  () => featureFlagsStore.isCopilotEnabled() || featureFlagsStore.isLiveChatEnabled(),
+);
+
+const supportChatButton = computed({
+  get() {
+    return !agentDockPrefsStore.hidden;
+  },
+  set(val: boolean) {
+    agentDockPrefsStore.setHidden(!val);
+  },
 });
 
 const cashbackPopups = computed({

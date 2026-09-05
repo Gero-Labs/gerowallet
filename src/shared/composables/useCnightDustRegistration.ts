@@ -862,6 +862,7 @@ export function useCnightDustRegistration() {
     status,
     statusLoading,
     registrationStatus,
+    localPending,
     registrations,
     registrationsLoaded,
     replicates,

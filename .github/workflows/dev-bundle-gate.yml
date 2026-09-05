@@ -22,9 +22,10 @@ name: Dev Bundle Gate
 # also unavailable: Vue 2.7 + TS 5.8 has no compatible version — 1.x caps at
 # ~TS 5.4, 2.x+ dropped Vue 2.) Cleaning up the tsc/lint debt is a separate task.
 #
-# Secret-free by design: it materializes a placeholder .env.production from the
-# committed .env.example (VITE_* values are inlined runtime strings, not build
-# secrets), so the bundle path matches production without exposing credentials.
+# Secret-free by design: it synthesizes a placeholder .env.production from the
+# VITE_* names the source references (VITE_* values are inlined runtime strings,
+# not build secrets), so the bundle path matches production without exposing
+# credentials and without depending on a committed env file.
 
 on:
   pull_request:
@@ -46,14 +47,15 @@ concurrency:
 jobs:
   bundle:
     name: Production bundle (SFC parse)
-    # This job runs a full `npm ci` + `npm run build`, which executes
-    # PR-controlled code (install scripts, build-time JS) on the self-hosted
-    # `gero-plain` runner. Restrict to same-repo PRs (Dependabot branches count)
-    # and pushes; external fork PRs are skipped so untrusted code never runs on
-    # the shared runner. No secrets are exposed here (contents: read only).
-    if: >-
-      github.event_name == 'push' ||
-      github.event.pull_request.head.repo.full_name == github.repository
+    # Fork PRs run here too. The same-repo guard this job used to carry existed
+    # because it ran `npm ci` + `npm run build` — PR-controlled install scripts
+    # and build-time JS — on the shared self-hosted `gero-plain` runner. That
+    # stopped being true when the job moved to `ubuntu-latest` (see below), and a
+    # skipped required check counts as PASSING for branch protection, so the guard
+    # was leaving every external contribution merged with the gate green and never
+    # run. Safe to drop: `pull_request` (not `pull_request_target`) checks out the
+    # fork's tree with a read-only token on a disposable hosted runner, and no
+    # secrets are exposed here (contents: read only).
     # GitHub-hosted: the repo is public, and the self-hosted arc-private runner
     # group forbids public-repo jobs (allows_public_repositories:false), so
     # gero-plain jobs never dispatch. Hosted runners also avoid exposing internal
@@ -96,6 +98,11 @@ jobs:
       # parses every SFC in options/popup/sidepanel and fails on syntax errors.
       - name: Bundle check (build:web, placeholder env)
         run: |
-          cp .env.example .env.production
+          # Synthesize the placeholder from the VITE_* names the source actually
+          # references, rather than from a committed .env.example. That file was
+          # removed (it carried MANIFEST_KEY), and hard-depending on it made this
+          # gate fail for a reason unrelated to buildability. Deriving the list
+          # from src/ also keeps it correct as new vars are added.
+          grep -rhoE 'VITE_[A-Z0-9_]+' src/ scripts/ 2>/dev/null             | sort -u | sed 's/$/=placeholder/' > .env.production
           echo "Wrote placeholder .env.production ($(grep -c '^VITE_' .env.production) vars)"
           npm run build:web -- --mode production
