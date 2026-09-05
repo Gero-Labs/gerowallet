@@ -842,4 +842,163 @@ describe('MyGovernance', () => {
       expect(change.text()).not.toContain('governance.stepBackToAbstain');
     });
   });
+describe('a delegation the chain has not confirmed', () => {
+  /** A pending tx carrying a vote-delegation certificate, as the mempool holds it. */
+  function pendingVoteDelegation(type = Cardano.CertificateType.VoteDelegation): void {
+    walletStore.transactions = [
+      { pending: true, body: { certificates: [{ __typename: type }] } },
+    ] as unknown as typeof walletStore.transactions;
+  }
+
+  it('says the change is on its way, without claiming it landed', async () => {
+    represented();
+    getDRepById.mockResolvedValue({ registered: true, votes: [] });
+    pendingVoteDelegation();
+
+    wrapper = mountPage();
+    await settle();
+
+    const pending = wrapper.find('.my-governance__pending');
+    expect(pending.exists()).toBe(true);
+    expect(pending.text()).toContain('governance.delegationPendingTitle');
+    // The state below is still the one in force, and still says so. The
+    // qualifier explains it; it does not replace it.
+    expect(wrapper.html()).toContain('governance.status.represented.title');
+  });
+
+  it('stops asking an undelegated wallet to take a position it just took', async () => {
+    // The reported bug: submitting from the empty state left three big cards up
+    // telling the user to do the thing they had just paid a fee to do.
+    registeredNoDRep();
+    pendingVoteDelegation();
+
+    wrapper = mountPage();
+    await settle();
+
+    expect(wrapper.find('.my-governance__pending').exists()).toBe(true);
+    expect(wrapper.find('.my-governance__choices').exists()).toBe(false);
+  });
+
+  it('says what the stake follows now, so the card is not a hole with buttons', async () => {
+    represented();
+    getDRepById.mockResolvedValue({ registered: true, votes: [] });
+
+    wrapper = mountPage();
+    await settle();
+
+    const change = wrapper.find('.my-governance__change');
+    expect(change.exists()).toBe(true);
+    expect(change.text()).toContain('governance.changeCurrentDrep');
+  });
+
+  it('offers no second certificate while one is still in flight', async () => {
+    represented();
+    getDRepById.mockResolvedValue({ registered: true, votes: [] });
+    pendingVoteDelegation();
+
+    wrapper = mountPage();
+    await settle();
+
+    // Changing now would replace the certificate still waiting.
+    expect(wrapper.find('.my-governance__change').exists()).toBe(false);
+    expect(wrapper.find('.my-governance__support').exists()).toBe(false);
+  });
+
+  it.each([
+    ['StakeVoteDelegation', Cardano.CertificateType.StakeVoteDelegation],
+    ['VoteRegistrationDelegation', Cardano.CertificateType.VoteRegistrationDelegation],
+    ['StakeVoteRegistrationDelegation', Cardano.CertificateType.StakeVoteRegistrationDelegation],
+  ])('recognises a pending %s too', async (_label, type) => {
+    // A first-time delegator and anyone delegating stake and vote together emit
+    // these, and they are exactly the users who most need the feedback.
+    registeredNoDRep();
+    pendingVoteDelegation(type);
+
+    wrapper = mountPage();
+    await settle();
+
+    expect(wrapper.find('.my-governance__pending').exists()).toBe(true);
+  });
+
+  it('goes away once nothing is pending', async () => {
+    represented();
+    getDRepById.mockResolvedValue({ registered: true, votes: [] });
+
+    wrapper = mountPage();
+    await settle();
+
+    expect(wrapper.find('.my-governance__pending').exists()).toBe(false);
+  });
+});
+
+describe('supporting the DRep (CIP-149)', () => {
+  const WITH_PAYMENT = {
+    registered: true,
+    votes: [],
+    drep_id: 'drep1yfrexample',
+    metadata: { meta_json: { body: { paymentAddress: 'addr1qxexample' } } },
+  };
+
+  it('says plainly when no share is being sent', async () => {
+    represented();
+    getDRepById.mockResolvedValue(WITH_PAYMENT);
+    governanceStore.currentCompensationBps = null;
+
+    wrapper = mountPage();
+    await settle();
+
+    const support = wrapper.find('.my-governance__support');
+    expect(support.exists()).toBe(true);
+    expect(support.text()).toContain('governance.supportOff');
+    expect(support.text()).toContain('governance.supportStart');
+    expect(support.text()).not.toContain('governance.supportStop');
+  });
+
+  it('states the rate as a percentage, not as raw bps', async () => {
+    // The stored unit is TENTHS of a percent: 50 is 5.0%, because the withdrawal
+    // builder divides by 1000. Rendering 50 would overstate it a hundredfold.
+    represented();
+    getDRepById.mockResolvedValue(WITH_PAYMENT);
+
+    wrapper = mountPage();
+    await settle();
+    // Set AFTER the load: applyGovernanceHydration recomputes the rate from
+    // confirmed CIP-149 metadata on every load, so a value set before mount is
+    // overwritten. This is the store the section actually binds to.
+    governanceStore.currentCompensationBps = 50;
+    await settle();
+
+    const support = wrapper.find('.my-governance__support');
+    expect(support.text()).toContain('5.0%');
+    expect(support.text()).toContain('governance.supportStop');
+  });
+
+  it('warns when the DRep published nowhere to receive it', async () => {
+    // The withdrawal builder drops the donation output silently in this case, so
+    // the commitment would never be honoured and nothing would say so.
+    represented();
+    getDRepById.mockResolvedValue({ registered: true, votes: [], drep_id: 'drep1yfrexample' });
+
+    wrapper = mountPage();
+    await settle();
+    governanceStore.currentCompensationBps = 50;
+    await settle();
+
+    expect(wrapper.find('.my-governance__support').text()).toContain('governance.supportNoPayoutAddress');
+  });
+
+  it('is not offered for a keyword choice, which has nobody to pay', async () => {
+    walletStore.account = {
+      active: true,
+      drep_id: 'drep_always_abstain',
+      controlled_amount: '23718000000',
+      withdrawable_amount: '0',
+    } as unknown as typeof walletStore.account;
+
+    wrapper = mountPage();
+    await settle();
+
+    expect(wrapper.find('.my-governance__support').exists()).toBe(false);
+  });
+});
 });

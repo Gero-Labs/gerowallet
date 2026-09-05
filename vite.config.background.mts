@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { defineConfig } from 'vite';
 import { sharedConfig } from './vite.config.mts';
 import { isDev, r } from './scripts/utils';
@@ -239,11 +240,43 @@ export const AssertionError = assert.AssertionError;
   }
 };
 
+/**
+ * Fail the build when an inlined dynamic-import namespace is read before it is
+ * declared.
+ *
+ * This output is a single iife (`format: 'iife'`, `manualChunks: undefined`),
+ * so `await import('x')` cannot become its own chunk — Rollup inlines the
+ * module and leaves a namespace `const` wherever that module lands in the
+ * emitted order. When it lands after its reader, evaluation reaching the reader
+ * first dies with a temporal-dead-zone ReferenceError. `Cannot access
+ * 'midnightSync_service' before initialization` broke wallet login exactly that
+ * way, and it was introduced by adding ONE unrelated leaf import — the order is
+ * that easy to disturb.
+ *
+ * `onwarn`/CIRCULAR_DEPENDENCY cannot catch it: there is no cycle. The check
+ * runs against the emitted artifact, in `writeBundle`, so it fires on every
+ * build including watch rebuilds. It is baselined, so only NEW offenders fail.
+ */
+const bundleTdzGuard = {
+  name: 'gero-bundle-tdz-guard',
+  writeBundle() {
+    const result = spawnSync(process.execPath, [r('scripts/check-bundle-tdz.mjs')], {
+      stdio: 'inherit',
+    });
+    if (result.status !== 0) {
+      throw new Error(
+        'Bundle TDZ guard failed — see scripts/check-bundle-tdz.mjs output above.',
+      );
+    }
+  },
+};
+
 export default defineConfig({
   ...sharedConfig,
   plugins: [
     ...(Array.isArray(sharedConfig.plugins) ? sharedConfig.plugins : []),
     cjsInteropPlugin,
+    bundleTdzGuard,
   ],
   resolve: {
     ...sharedConfig.resolve,

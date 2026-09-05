@@ -7,10 +7,19 @@
         <h1 class="t-display">{{ $t('navigation.governanceMe') }}</h1>
         <p class="t-body my-governance__subtitle">{{ $t(subtitleKey) }}</p>
       </div>
+      <!-- The two ways off this page. `AsOf` used to sit here too, stamping the
+           header with a freshness the header does not carry — the stamp belongs
+           on the voting record, which is the thing that was fetched, and it is
+           still there. -->
       <div class="my-governance__header-side">
-        <GButton tier="secondary" compact @click="goToDReps()">{{ $t('governance.browseDReps') }}</GButton>
-        <GButton tier="secondary" compact @click="goToActions()">{{ $t('governance.actionsTitle') }}</GButton>
-        <AsOf :timestamp="fetchedAt" />
+        <GButton tier="secondary" compact @click="goToDReps()">
+          <v-icon left size="16" color="var(--g-accent)">mdi-account-group-outline</v-icon>
+          {{ $t('governance.browseDReps') }}
+        </GButton>
+        <GButton tier="secondary" compact @click="goToActions()">
+          <v-icon left size="16" color="var(--g-accent)">mdi-gavel</v-icon>
+          {{ $t('governance.actionsTitle') }}
+        </GButton>
       </div>
     </div>
 
@@ -29,6 +38,20 @@
       <div class="my-governance__main">
         <!-- ── The state hero ───────────────────────────────────────────── -->
         <div class="my-governance__hero glass-panel" :class="`my-governance__hero--${status.tone}`">
+          <!-- A submitted delegation the chain has not confirmed yet.
+               Deliberately a QUALIFIER rather than a status of its own: the state
+               below is still the one in force, and replacing it would trade one
+               false impression for another. This only says why it has not moved. -->
+          <div v-if="delegationPending" class="my-governance__pending" role="status">
+            <v-progress-circular indeterminate size="16" width="2" color="var(--g-accent)" />
+            <span class="my-governance__pending-text">
+              <span class="t-body-sm my-governance__pending-title">
+                {{ $t('governance.delegationPendingTitle') }}
+              </span>
+              <span class="t-caption">{{ $t('governance.delegationPendingHint') }}</span>
+            </span>
+          </div>
+
           <div class="my-governance__hero-top">
             <div class="my-governance__hero-headline">
               <span class="t-label">{{ $t('governance.yourVotingStatus') }}</span>
@@ -95,8 +118,155 @@
           </div>
         </div>
 
+        <!-- ── Managing the position the hero just described ───────────────
+             Directly under the hero, and paired. The page used to read
+             state + CTA -> history -> more actions, which put the controls for
+             changing a delegation below six rows of what the DRep did. State,
+             then what you can do about it, then the evidence. Two cards side by
+             side rather than two full-width slabs: they are one control group.
+             Placed BEFORE the registeredNoDRep block on purpose — the record
+             below is that block's `v-else`, and anything inserted between them
+             would steal it. Both are hidden in that state anyway. -->
+        <div class="my-governance__manage">
+        <!-- ── Already delegated: the ways to change it ──────────────────── -->
+        <!-- There is no "undelegate" in CIP-1694. Once a stake key carries a
+             vote delegation the only certificate that removes it is one that
+             REPLACES it, so stepping back from a DRep means choosing Abstain.
+             Offering a button labelled "undelegate" would promise a state the
+             ledger does not have; these are the three that exist. -->
+        <section v-if="canChangeDelegation && !delegationPending" class="my-governance__change glass-panel">
+          <div class="my-governance__manage-head">
+            <span class="my-governance__manage-icon">
+              <v-icon size="18" color="var(--g-accent)">mdi-account-switch-outline</v-icon>
+            </span>
+            <span class="t-label my-governance__manage-title">{{ $t('governance.changeDelegationTitle') }}</span>
+            <!-- The mechanics live behind this rather than on the card. A real
+                 button, not an icon with a hover handler: it must be reachable
+                 by keyboard and carry the baseline focus ring. -->
+            <v-tooltip bottom max-width="320" content-class="glass-popover">
+              <template #activator="{ on, attrs }">
+                <button
+                  type="button"
+                  class="my-governance__manage-info"
+                  v-bind="attrs"
+                  :aria-label="String($t('common.learnMore'))"
+                  v-on="on"
+                >
+                  <v-icon size="14">mdi-information-outline</v-icon>
+                </button>
+              </template>
+              <span class="t-body-sm">{{ $t('governance.changeDelegationHint') }}</span>
+              <span class="t-body-sm">{{ $t('governance.changeDelegationNote') }}</span>
+            </v-tooltip>
+          </div>
+
+          <!-- The card's own state line, matching the support card's. Without it
+               the card was a title and a row of buttons with a hole between
+               them, and it said nothing about what your stake is doing now. -->
+          <p class="t-body-lg my-governance__manage-state">
+            {{ $t('governance.changeCurrentDrep', { name: drepName }) }}
+          </p>
+
+          <div class="my-governance__change-row">
+            <GButton tier="secondary" block @click="goToDReps()">
+              <v-icon left size="16" color="var(--g-accent)">mdi-account-search-outline</v-icon>
+              {{ $t('governance.changeToAnotherDRep') }}
+            </GButton>
+            <GButton
+              tier="secondary"
+              block
+              :disabled="isAbstaining"
+              :loading="building === 'drep_always_abstain'"
+              @click="delegateToPredefined('abstain')"
+            >
+              <v-icon left size="16" color="var(--g-text-3)">mdi-minus-circle-outline</v-icon>
+              {{ isAbstaining ? $t('governance.alreadyAbstaining') : $t('governance.stepBackToAbstain') }}
+            </GButton>
+            <GButton
+              tier="secondary"
+              block
+              :disabled="isNoConfidence"
+              :loading="building === 'drep_always_no_confidence'"
+              @click="delegateToPredefined('noConfidence')"
+            >
+              <v-icon left size="16" color="var(--g-warning)">mdi-close-circle-outline</v-icon>
+              {{ isNoConfidence ? $t('governance.alreadyNoConfidence') : $t('governance.chooseNoConfidence') }}
+            </GButton>
+          </div>
+
+        </section>
+
+        <!-- ── CIP-149: a share of each withdrawal, sent to your DRep ──────── -->
+        <!-- Only for a real DRep. The two predefined choices are not people and
+             have nowhere to receive anything, and a wallet delegated to its own
+             key would be paying itself. -->
+        <section v-if="showsSupport" class="my-governance__support glass-panel">
+          <!-- One icon, and it carries the STATE: accent while a share is going
+               out, muted while none is. A second decorative icon beside it would
+               say nothing the words do not. -->
+          <div class="my-governance__manage-head">
+            <span class="my-governance__manage-icon" :class="{ 'my-governance__manage-icon--off': !supportingNow }">
+              <v-icon size="18" :color="supportingNow ? 'var(--g-accent)' : 'var(--g-text-3)'">
+                {{ supportingNow ? 'mdi-gift-outline' : 'mdi-gift-off-outline' }}
+              </v-icon>
+            </span>
+            <span class="t-label my-governance__manage-title">{{ $t('governance.supportTitle') }}</span>
+            <v-tooltip bottom max-width="320" content-class="glass-popover">
+              <template #activator="{ on, attrs }">
+                <button
+                  type="button"
+                  class="my-governance__manage-info"
+                  v-bind="attrs"
+                  :aria-label="String($t('common.learnMore'))"
+                  v-on="on"
+                >
+                  <v-icon size="14">mdi-information-outline</v-icon>
+                </button>
+              </template>
+              <span class="t-body-sm">{{ $t('governance.supportHint') }}</span>
+              <span class="t-body-sm">{{ $t('governance.supportTxNote') }}</span>
+            </v-tooltip>
+          </div>
+
+          <div class="my-governance__support-state">
+            <span class="my-governance__support-body">
+              <span class="t-body-lg">
+                {{
+                  supportingNow
+                    ? $t('governance.supportOnAt', { percent: supportPercentDisplay, name: drepName })
+                    : $t('governance.supportOff')
+                }}
+              </span>
+              <!-- The rate is a commitment to send, not proof anything arrives:
+                   the withdrawal builder drops the donation output when the DRep
+                   published no payment address, and says nothing when it does.
+                   Stated here rather than discovered later. -->
+              <span v-if="supportingNow && !drepCanReceive" class="t-caption my-governance__support-warn">
+                <v-icon size="14" color="var(--g-warning)">mdi-alert-outline</v-icon>
+                {{ $t('governance.supportNoPayoutAddress') }}
+              </span>
+            </span>
+          </div>
+
+          <div class="my-governance__support-row">
+            <GButton tier="secondary" block @click="openSupportDialog()">
+              <v-icon left size="16" color="var(--g-accent)">mdi-gift-outline</v-icon>
+              {{ supportingNow ? $t('governance.supportChange') : $t('governance.supportStart') }}
+            </GButton>
+            <GButton v-if="supportingNow" tier="tertiary" block @click="openSupportDialog()">
+              {{ $t('governance.supportStop') }}
+            </GButton>
+          </div>
+
+        </section>
+        </div>
+
         <!-- ── Registered but undelegated: the three ways to unlock ───────── -->
-        <template v-if="status.status === 'registeredNoDRep'">
+        <!-- Not while a delegation is in flight. These three cards are a prompt
+             to take a position, and showing them over a submitted certificate
+             asks the user to do the thing they just did — the exact complaint
+             this fixes. The hero's qualifier above carries the state instead. -->
+        <template v-if="status.status === 'registeredNoDRep' && !delegationPending">
           <div class="my-governance__choices">
             <div class="my-governance__choice my-governance__choice--featured glass-panel">
               <div class="my-governance__choice-top">
@@ -201,47 +371,6 @@
           <p class="t-caption my-governance__record-note">{{ $t('governance.onlyCastVotesCount') }}</p>
         </div>
 
-        <!-- ── Already delegated: the ways to change it ──────────────────── -->
-        <!-- There is no "undelegate" in CIP-1694. Once a stake key carries a
-             vote delegation the only certificate that removes it is one that
-             REPLACES it, so stepping back from a DRep means choosing Abstain.
-             Offering a button labelled "undelegate" would promise a state the
-             ledger does not have; these are the three that exist. -->
-        <section v-if="canChangeDelegation" class="my-governance__change glass-panel">
-          <div class="my-governance__panel-head">
-            <span class="t-label">{{ $t('governance.changeDelegationTitle') }}</span>
-            <p class="t-body-sm">{{ $t('governance.changeDelegationHint') }}</p>
-          </div>
-
-          <div class="my-governance__change-row">
-            <GButton tier="secondary" compact @click="goToDReps()">
-              <v-icon left size="16">mdi-account-search-outline</v-icon>
-              {{ $t('governance.changeToAnotherDRep') }}
-            </GButton>
-            <GButton
-              tier="secondary"
-              compact
-              :disabled="isAbstaining"
-              :loading="building === 'drep_always_abstain'"
-              @click="delegateToPredefined('abstain')"
-            >
-              <v-icon left size="16">mdi-minus-circle-outline</v-icon>
-              {{ isAbstaining ? $t('governance.alreadyAbstaining') : $t('governance.stepBackToAbstain') }}
-            </GButton>
-            <GButton
-              tier="secondary"
-              compact
-              :disabled="isNoConfidence"
-              :loading="building === 'drep_always_no_confidence'"
-              @click="delegateToPredefined('noConfidence')"
-            >
-              <v-icon left size="16">mdi-close-circle-outline</v-icon>
-              {{ isNoConfidence ? $t('governance.alreadyNoConfidence') : $t('governance.chooseNoConfidence') }}
-            </GButton>
-          </div>
-
-          <p class="t-caption my-governance__change-note">{{ $t('governance.changeDelegationNote') }}</p>
-        </section>
       </div>
 
       <aside class="my-governance__side">
@@ -341,7 +470,10 @@ import {
   fetchDelegatedDRepRecord,
 } from '@/shared/composables/useGovernanceHydration';
 import { KEYWORD_DREPS } from '@/shared/utils/drepId';
+import { drepPayoutAddress } from '@/modules/governance/utils/govAnchor';
 import { useGovernanceStatus } from '@/shared/composables/useGovernanceStatus';
+import { usePendingVoteDelegation } from '@/shared/composables/usePendingVoteDelegation';
+import { governanceStore } from '@/stores/governanceStore';
 import type { DelegatedDRepRecord, DRepVoteRecord } from '@/shared/composables/useDelegationHealth';
 import { useWithdrawal } from '@/shared/composables/useWithdrawal';
 import DelegationAlertsPanel from '@/modules/governance/components/alerts/DelegationAlertsPanel.vue';
@@ -672,7 +804,67 @@ function openAction(id: GovActionId): void {
  * the certificate, the fee and the signing surface are identical wherever the
  * choice is made.
  */
-const { selectedDRep, tx, isDialogOpen, building, delegateToPredefined, closeDialog } = useDRepDelegation();
+const { selectedDRep, tx, isDialogOpen, building, delegateToDRep, delegateToPredefined, closeDialog } =
+  useDRepDelegation();
+
+/** The pending qualifier. See usePendingVoteDelegation for why it is not a status. */
+const delegationPending = usePendingVoteDelegation();
+
+// ---------------------------------------------------------------------------
+// CIP-149 support
+// ---------------------------------------------------------------------------
+
+/**
+ * The rate this wallet committed to, in TENTHS OF A PERCENT.
+ *
+ * Named `bps` throughout the codebase, but it is not basis points: the
+ * withdrawal builder computes `amount * bps / 1000` and the dialog renders
+ * `bps / 10 + '%'`, so 50 is 5%. Matched here rather than corrected — the unit
+ * is load-bearing in money math that already ships.
+ */
+const supportBps = computed(() => governanceStore.currentCompensationBps);
+
+const supportingNow = computed(() => (supportBps.value ?? 0) > 0);
+
+const supportPercentDisplay = computed(() => `${((supportBps.value ?? 0) / 10).toFixed(1)}%`);
+
+/**
+ * Whether the DRep published somewhere to receive it.
+ *
+ * The same check the withdrawal builder makes before it adds the donation
+ * output — and it drops that output silently when this is false, which is why
+ * the section says so instead of letting the user find out by not being thanked.
+ */
+const drepCanReceive = computed(() => drepPayoutAddress(record.value) !== null);
+
+/**
+ * Only offered against a real DRep, and never while a delegation is in flight:
+ * changing the rate means submitting another vote-delegation certificate, which
+ * would replace the one still waiting.
+ */
+const showsSupport = computed(
+  () =>
+    !delegationPending.value &&
+    status.value.delegation === 'drep' &&
+    !!record.value,
+);
+
+/**
+ * Set, change or stop it — all three are the same gesture: re-delegate to the
+ * SAME DRep, with different CIP-149 metadata attached. The dialog owns the
+ * toggle and the presets, so it is the one surface for all of them; submitting
+ * with the switch off is what clears the rate.
+ */
+function openSupportDialog(): void {
+  const drep = record.value;
+  if (!drep?.drep_id) return;
+  void delegateToDRep({
+    id: drep.drep_id,
+    name: drepName.value,
+    hex: drep.hex ?? undefined,
+    has_script: drep.has_script ?? undefined,
+  });
+}
 
 const isAbstaining = computed(() => walletStore.account?.drep_id === 'drep_always_abstain');
 const isNoConfidence = computed(() => walletStore.account?.drep_id === 'drep_always_no_confidence');
@@ -1027,19 +1219,192 @@ watch(() => walletStore.account?.drep_id, () => void loadDRep(), { immediate: tr
 /* ---- Honesty strip ---- */
 /* Solid on purpose: glass means "this floats above content", and a one-line
    footnote under three cards is the most static thing on the page. */
+/* The in-flight qualifier. Sits inside the hero rather than above it: it is a
+   caveat on the state below, not a state of its own, and a full-width banner
+   would read as the more important of the two. */
+.my-governance__pending {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--g-s-3);
+  padding: var(--g-s-3);
+  margin-bottom: var(--g-s-3);
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-control);
+  background: var(--g-raised);
+}
+.my-governance__pending-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-1);
+  min-width: 0;
+}
+.my-governance__pending-title {
+  color: var(--g-text-1);
+}
+
+/* The two management cards, side by side and the SAME HEIGHT — `stretch`, not
+   `start`. The change card carries three buttons and the support card one, so
+   left to themselves they end at different depths and the pair reads as two
+   unrelated panels that happen to be adjacent.
+   The change card gets the wider track because three buttons have to fit across
+   it; `auto-fit` still gives a lone card the full width, which matters because a
+   wallet delegated to a keyword has no support card at all. */
+.my-governance__manage {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--g-s-4);
+  align-items: stretch;
+}
+@media (min-width: 1100px) {
+  .my-governance__manage {
+    grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  }
+}
+/* Both cards are columns whose action block is pushed to the bottom, so the two
+   button rows sit on the same line however much text is above them. */
+.my-governance__manage > .glass-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-3);
+}
+.my-governance__change-row,
+.my-governance__support-row {
+  margin-top: auto;
+}
+.my-governance__manage-head {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-3);
+}
+/* The same 36px tile the choice cards use, so these join the page's existing
+   action vocabulary instead of introducing a third one. */
+.my-governance__manage-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: var(--g-r-control);
+  border: 1px solid var(--g-hairline-2);
+  background: var(--g-raised);
+}
+.my-governance__manage-icon--off {
+  border-color: var(--g-hairline-1);
+}
+.my-governance__manage-title {
+  min-width: 0;
+  flex: 1;
+}
+/* The explanation lives behind this. A real button so it is tabbable and takes
+   the baseline focus ring; no outline is cleared anywhere here. */
+.my-governance__manage-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  padding: 0;
+  border: none;
+  background: none;
+  border-radius: var(--g-r-pill);
+  color: var(--g-text-3);
+  cursor: help;
+}
+.my-governance__manage-info:hover {
+  color: var(--g-text-2);
+}
+/* Two paragraphs of prose need to sit apart inside the popover. */
+.glass-popover .t-body-sm + .t-body-sm {
+  display: block;
+  margin-top: var(--g-s-2);
+}
+
+.my-governance__support {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-3);
+  padding: var(--g-s-4);
+}
+.my-governance__support-state {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--g-s-3);
+}
+.my-governance__support-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-1);
+  min-width: 0;
+}
+/* A commitment that cannot be honoured is not a smaller version of one that
+   can, so it is toned as a warning rather than as another caption. */
+.my-governance__support-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--g-s-2);
+  color: var(--g-warning);
+}
+.my-governance__support-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-2);
+}
+/* Vuetify gives `.v-btn` a `min-width` and a fixed height, and never lets
+   `.v-btn__content` shrink — so in a narrow grid track the label ran straight
+   past the border instead of wrapping inside it. `min-width: 0` on both is what
+   actually lets the track govern the button; the rest is the wrap itself.
+   Two classes, because Vuetify's own rule is (0,1,0) and a single class ties. */
+.my-governance__change-row .v-btn.g-btn {
+  height: auto;
+  min-height: 36px;
+  min-width: 0;
+  max-width: 100%;
+  padding: var(--g-s-2) var(--g-s-3);
+  white-space: normal;
+}
+/* `>>>`, not a plain descendant: `.v-btn__content` lives inside GButton's own
+   template, and a scoped rule never reaches it — the parent's data-v attribute
+   only lands on the child's ROOT. That is why the earlier wrap did nothing and
+   the label kept spilling past the border, icon and all. */
+.my-governance__change-row >>> .v-btn__content {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: normal;
+  line-height: 1.25;
+  text-align: center;
+}
+/* Vuetify pulls a `left` icon 4px outside the content box. Harmless at its
+   default 16px padding; here it is the difference between the icon sitting
+   inside the button and hanging off it. */
+.my-governance__change-row >>> .v-icon--left {
+  margin-left: 0;
+  margin-right: var(--g-s-2);
+}
+.my-governance__manage-state {
+  margin: 0;
+}
+
 .my-governance__change {
   display: flex;
   flex-direction: column;
   gap: var(--g-s-3);
   padding: var(--g-s-4);
 }
+/* A grid of equal columns rather than a wrapping row: the three used to break
+   2 + 1 and leave a ragged edge. Equal tracks also state the thing the copy
+   states — these are three alternatives of equal standing. Below the breakpoint
+   the card is too narrow for three, so they become one column. */
 .my-governance__change-row {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--g-s-2);
 }
-.my-governance__change-note {
-  margin: 0;
+@media (max-width: 1099px) {
+  .my-governance__change-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .my-governance__honesty {

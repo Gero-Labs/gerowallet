@@ -110,3 +110,28 @@ export function toExternalHref(raw: unknown): string | null {
   if (path) return `${PUBLIC_IPFS_GATEWAY}${path}`;
   return safeExternalHref(raw) ?? null;
 }
+
+/**
+ * The payout address a DRep published under CIP-119, or null.
+ *
+ * `DelegatedDRepRecord.metadata` is typed `unknown` — it is upstream JSON-LD
+ * and nothing validates its shape — so it has to be walked, not dotted into.
+ * MyGovernance read `record.metadata?.meta_json?.body?.paymentAddress` straight
+ * through, which TypeScript rejects on `unknown` regardless of strictness. It
+ * survived review only because `tsc --noEmit` does not read `.vue` files and
+ * `vue-tsc` is not in CI, so neither gate ever saw it.
+ *
+ * The prefix test is deliberate and is NOT `isPaymentAddress`: that helper is
+ * `Cardano.Address.isValid`, which accepts a STAKE address, and a stake address
+ * cannot receive a payout. What a supporter needs is somewhere the money can
+ * actually land, so only `addr1…` / `addr_test1…` qualify.
+ */
+export function drepPayoutAddress(record: unknown): string | null {
+  if (!record || typeof record !== 'object') return null;
+  const meta = (record as { metadata?: { meta_json?: { body?: Record<string, unknown> | null } | null } | null })
+    .metadata;
+  const raw = meta?.meta_json?.body?.['paymentAddress'];
+  if (typeof raw !== 'string') return null;
+  const address = raw.trim();
+  return address.startsWith('addr1') || address.startsWith('addr_test1') ? address : null;
+}
