@@ -5,7 +5,6 @@ import type { PeerConnectStorage, IConnectMessage } from '@fabianbormann/cardano
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { walletStore } from '@/stores/walletStore';
-import { debugLog } from '@/utils/debug';
 import { parseCip45Input } from './qr';
 import type { Cip45Pairing, Cip45Session, Cip45Status } from './types';
 
@@ -144,7 +143,6 @@ class Cip45Service {
         // no-op while a real A → B switch tears down. The invoke-time gate is
         // the belt-and-braces for anything that races this.
         if (newId && this.session && !this.isSessionPeerAllowed()) {
-          debugLog('CIP-45: wallet switched away from the paired wallet — disconnecting session');
           this.disconnect().catch(() => { /* best effort */ });
         }
       },
@@ -309,9 +307,6 @@ class Cip45Service {
   }
 
   private async pushSession(status: Cip45Status, session: Cip45Session | null): Promise<void> {
-    if (!session) {
-      debugLog('CIP-45: pushSession clearing session', { status });
-    }
     try {
       await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.CIP45_UPDATE_SESSION,
