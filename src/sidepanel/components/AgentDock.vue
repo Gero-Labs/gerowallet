@@ -65,13 +65,22 @@
             >{{ $t('support.toggle.copilot') }}</button>
           </div>
 
-          <button
-            class="agent-dock__close"
-            :aria-label="$t('copilot.close')"
-            @click="dock.close()"
-          >
-            <v-icon size="18" color="var(--g-text-2)">mdi-close</v-icon>
-          </button>
+          <div class="agent-dock__head-actions">
+            <button
+              class="agent-dock__head-btn"
+              :aria-label="$t('support.hide.action')"
+              @click="hideConfirmOpen = true"
+            >
+              <v-icon size="18" color="var(--g-text-2)">mdi-eye-off-outline</v-icon>
+            </button>
+            <button
+              class="agent-dock__head-btn agent-dock__close"
+              :aria-label="$t('copilot.close')"
+              @click="dock.close()"
+            >
+              <v-icon size="18" color="var(--g-text-2)">mdi-close</v-icon>
+            </button>
+          </div>
         </header>
 
         <div
@@ -304,6 +313,26 @@
           </button>
         </footer>
         <p v-if="activeMode === 'copilot'" class="agent-dock__disclaimer">{{ $t('copilot.disclaimer') }}</p>
+
+        <!-- Hiding is one click from an always-on-screen control, so it asks
+             first — and the ask is the only place the user is told where the
+             dock went and how to bring it back. A transient toast would be the
+             lighter pattern, but it is exactly the thing a user who just made
+             the UI disappear can miss. Kept LAST in the panel deliberately: it
+             shares the same stacking level as every other panel child, so being
+             last is what paints it over them (see the note on its rule). -->
+        <div v-if="hideConfirmOpen" class="agent-dock__hide-confirm">
+          <p class="agent-dock__hide-title">{{ $t('support.hide.title') }}</p>
+          <p class="agent-dock__hide-body">{{ $t('support.hide.body') }}</p>
+          <div class="agent-dock__hide-actions">
+            <button class="agent-dock__hide-btn" @click="hideConfirmOpen = false">
+              {{ $t('common.cancel') }}
+            </button>
+            <button class="agent-dock__hide-btn is-primary" @click="hideDock()">
+              {{ $t('support.hide.confirm') }}
+            </button>
+          </div>
+        </div>
       </div>
     </transition>
 
@@ -326,6 +355,7 @@ import {
   type SupportAttachment,
 } from '@/sidepanel/composables/useSupportChat';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
+import { agentDockPrefsStore } from '@/stores/agentDockPrefsStore';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain } from '@/models/types';
 import { debugWarn } from '@/utils/debug';
@@ -360,6 +390,20 @@ export default defineComponent({
     const dock = agentDock;
     const scroll = ref<HTMLElement | null>(null);
     const { isAnySheetOpen } = useSheetVisibility();
+
+    // Whether the "you can get it back in Settings" confirmation is showing.
+    // Local to this instance: the dock is a singleton on screen, and a
+    // half-answered confirmation should not survive an unmount.
+    const hideConfirmOpen = ref(false);
+
+    // Persisting `hidden` is what actually unmounts this component (the
+    // dashboard root gates on the same store), so close the panel first —
+    // otherwise the dock reappears mid-open the next time it is unhidden.
+    function hideDock(): void {
+      hideConfirmOpen.value = false;
+      dock.close();
+      agentDockPrefsStore.setHidden(true);
+    }
 
     // Mirrors NavigationDrawer.vue's navLogo derivation exactly (same
     // walletStore.loggedWallet?.chain source, same Blockchain members) so the
@@ -722,6 +766,8 @@ export default defineComponent({
       triggerFilePicker,
       onFilesPicked,
       removePendingFile,
+      hideConfirmOpen,
+      hideDock,
     };
   },
 });
@@ -928,7 +974,13 @@ export default defineComponent({
   background: var(--g-accent);
 }
 
-.agent-dock__close {
+.agent-dock__head-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.agent-dock__head-btn {
   width: 28px;
   height: 28px;
   display: flex;
@@ -942,15 +994,79 @@ export default defineComponent({
 }
 
 /* With the toggle in play the header is a flex-start row (see
-   .agent-dock__head--with-toggle above), so the close button needs its own
+   .agent-dock__head--with-toggle above), so the trailing buttons need their own
    push-to-the-end instead of relying on justify-content: space-between. */
-.agent-dock__head--with-toggle .agent-dock__close {
+.agent-dock__head--with-toggle .agent-dock__head-actions {
   margin-left: auto;
   flex-shrink: 0;
 }
 
-.agent-dock__close:hover :deep(.v-icon) {
+.agent-dock__head-btn:hover :deep(.v-icon) {
   color: var(--g-text-1) !important;
+}
+
+/* ── Hide confirmation ────────────────────────────────────────────────── */
+/* Overlays the panel body rather than replacing it: the thread underneath keeps
+   its scroll position and its component state while the user decides. It sits on
+   the SAME stacking level as the head/messages/input rather than outbidding them
+   with a new one — being the panel's last child is what puts it on top, which is
+   also why the audit's z-index budget doesn't move. */
+.agent-dock__hide-confirm {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--g-s-2);
+  padding: var(--g-s-4);
+  text-align: left;
+  background: var(--surface);
+}
+
+.agent-dock__hide-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--g-text-1);
+}
+
+.agent-dock__hide-body {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--g-text-2);
+}
+
+.agent-dock__hide-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--g-s-2);
+  margin-top: var(--g-s-2);
+}
+
+.agent-dock__hide-btn {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--input-border);
+  border-radius: var(--g-r-control);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--g-text-2);
+  cursor: pointer;
+  transition: color var(--g-dur-fast) ease, border-color var(--g-dur-fast) ease;
+}
+
+.agent-dock__hide-btn:hover {
+  color: var(--g-text-1);
+  border-color: var(--accent-35);
+}
+
+.agent-dock__hide-btn.is-primary {
+  border-color: var(--accent-35);
+  background: var(--accent-14);
+  color: var(--g-accent);
 }
 
 /* ── Messages ─────────────────────────────────────────────────────────── */
