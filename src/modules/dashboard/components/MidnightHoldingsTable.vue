@@ -45,7 +45,7 @@
         </div>
         <div v-if="item.breakdownText" class="breakdown-row">
           <span class="t-caption g-num">{{ item.breakdownText }}</span>
-          <v-tooltip v-if="convertEnabled" top content-class="custom-tooltip" max-width="220">
+          <v-tooltip v-if="convertEnabled && item.canConvert" top content-class="custom-tooltip" max-width="220">
             <template v-slot:activator="{ on, attrs }">
               <button
                 type="button"
@@ -110,6 +110,9 @@ import { midnightStore } from '@/stores/midnightStore';
 import { walletStore } from '@/stores/walletStore';
 import { Network } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
+import { midnightTokenBalances } from '@/chains/midnight/midnightTokenBalances';
+import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
+import { getTokenByUnit } from '@/modules/market/composables/useMarketData';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useMidnightLoading } from '@/shared/composables/useMidnightLoading';
 import { useNightFiat } from '@/shared/composables/useNightFiat';
@@ -181,6 +184,13 @@ interface MidnightHoldingRow {
   iconColor: string;
   /** Brand logo (takes precedence over the mdi icon when set). */
   image?: string;
+  /**
+   * Whether this row may show the shield/convert CTA. `convertEnabled` is
+   * row-independent (a feature flag), so without this every row with a
+   * non-empty `breakdownText` — including "Unknown token" rows — would show
+   * a NIGHT-only Convert action. Only the NIGHT row sets this true.
+   */
+  canConvert?: boolean;
 }
 
 // `nightRegistered` is a SUBSET of `nightUnshielded` (the portion registered
@@ -212,6 +222,75 @@ const nightValueUsd = computed<number>(() => {
   return Number(totalNight.value) / Number(NIGHT_DIVISOR) * nightFiat.usd.value;
 });
 
+/**
+ * One row per non-NIGHT color the wallet holds.
+ *
+ * Decimals are unknown until token metadata lands, so the RAW base-unit amount
+ * is shown and explicitly labelled as raw. Scaling by a guessed exponent would
+ * repeat the Cardano mis-scaling bug fixed in commit e0af42bc — a wrong
+ * balance is worse than an obviously-unscaled one.
+ */
+const tokenRows = computed<MidnightHoldingRow[]>(() =>
+  Object.entries(midnightTokenBalances(midnightStore.utxos)).map(([color, amount]) => {
+    const meta = midnightTokenMeta(color);
+
+    // Unlisted color: the amount is known, the exponent is not. Show raw base
+    // units and say so. Guessing a divisor would repeat the Cardano
+    // mis-scaling bug fixed in e0af42bc — a wrong balance is worse than an
+    // obviously unscaled one. This path is permanent, not a stopgap: with
+    // manual curation every new token starts here.
+    if (!meta) {
+      return {
+        // Head+tail, not a prefix: a prefix-only label lets a malicious issuer
+        // grind a colliding prefix and impersonate a legitimate token.
+        ticker: `${color.slice(0, 8)}…${color.slice(-6)}`,
+        name: t('midnight.unknownToken') as string,
+        balanceFormatted: amount.toString(),
+        breakdownText: t('midnight.rawBalanceNotice') as string,
+        price: '—',
+        value: '—',
+        change24h: '—',
+        change24hRaw: null,
+        mcap: '—',
+        avgCost: '—',
+        pnl: '—',
+        icon: 'mdi-help-circle-outline',
+        iconBg: 'grey darken-4',
+        iconColor: 'grey',
+      };
+    }
+
+    // Listed color. Price, 24h change and logo are BORROWED from the Cardano
+    // token named by `cardanoPriceUnit` — an assumption that the two are
+    // economically interchangeable, not a feed for this token. See that
+    // field's doc in midnightTokenRegistry.ts. With no market data every
+    // money-ish cell falls back to an em-dash rather than a fabricated number.
+    const divisor = 10n ** BigInt(meta.decimals);
+    const market = meta.cardanoPriceUnit ? getTokenByUnit(meta.cardanoPriceUnit) : undefined;
+    const priceUsd = market?.price ?? 0;
+    const hasPrice = priceUsd > 0;
+    const units = Number(amount) / Number(divisor);
+
+    return {
+      ticker: meta.symbol,
+      name: meta.name,
+      balanceFormatted: `${formatBigDecimal(amount, divisor, 2)} ${meta.symbol}`,
+      breakdownText: '',
+      price: hasPrice ? formatPrice(priceUsd) : '—',
+      value: hasPrice ? formatUsd(units * priceUsd) : '—',
+      change24h: hasPrice && market?.change24h != null ? formatSignedChange(market.change24h) : '—',
+      change24hRaw: hasPrice ? market?.change24h ?? null : null,
+      mcap: '—',
+      avgCost: '—',
+      pnl: '—',
+      icon: 'mdi-circle-multiple-outline',
+      iconBg: 'grey darken-4',
+      iconColor: 'grey',
+      image: market?.img || undefined,
+    };
+  }),
+);
+
 // tDUST is deliberately NOT a table row — the dedicated DUST battery panel
 // above owns the live DUST display (it's a fee resource, not a holding).
 const rows = computed<MidnightHoldingRow[]>(() => [
@@ -220,6 +299,7 @@ const rows = computed<MidnightHoldingRow[]>(() => [
     name: 'Midnight Native Token',
     balanceFormatted: `${formatBigDecimal(totalNight.value, NIGHT_DIVISOR, 2)} ${nightCurrency.value}`,
     breakdownText: breakdownText.value,
+    canConvert: true,
     price: hasNightPrice.value && nightFiat.usd.value ? formatPrice(nightFiat.usd.value) : '—',
     value: hasNightPrice.value ? formatUsd(nightValueUsd.value) : '—',
     change24h: hasNightPrice.value && nightFiat.change24h.value !== null
@@ -236,6 +316,7 @@ const rows = computed<MidnightHoldingRow[]>(() => [
     iconColor: 'grey lighten-2',
     image: midnightLogo,
   },
+  ...tokenRows.value,
 ]);
 </script>
 

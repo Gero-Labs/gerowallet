@@ -93,7 +93,7 @@
 import { onMounted, onUnmounted, ref, computed, watch } from 'vue';
 import { useIntersectionObserver } from '@vueuse/core';
 import { useRouter } from 'vue-router/composables';
-import { getBlogPosts, type BlogPost } from '@/api/contentful.api';
+import { getBlogPosts, type BlogPost } from '@/api/blog.api';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import ErrorState from '@/shared/components/feedback/ErrorState.vue';
 

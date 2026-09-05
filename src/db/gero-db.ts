@@ -259,6 +259,12 @@ export async function createNewWallet(
     passwordUnlockEnabled?: boolean;
     backupMnemonic?: boolean;
     prfOutput?: ArrayBuffer; // PRF output from registration (avoids second prompt)
+    /**
+     * Where the PassKey lives, as the authenticator reported at registration.
+     * Stored so every later prompt can name the right authenticator instead of
+     * offering the browser's full picker — see `allowCredentialFor`.
+     */
+    credentialTransports?: readonly AuthenticatorTransport[] | null;
     walletId?: number; // Pre-allocated wallet ID for PRF wallets (must match PRF salt)
     /**
      * For Midnight wallets only. Pre-derived bech32m addresses (3 role-specific
@@ -353,7 +359,11 @@ export async function createNewWallet(
     if (options.prfOutput) {
       prfOutput = options.prfOutput;
     } else {
-      prfOutput = await evaluatePrfForWallet(options.credentialId, newWalletId.toString());
+      prfOutput = await evaluatePrfForWallet(
+        options.credentialId,
+        newWalletId.toString(),
+        options.credentialTransports,
+      );
     }
 
     try {
@@ -401,6 +411,9 @@ export async function createNewWallet(
         prfEncryptedPrivateKey,
         prfEncryptedMnemonic,
         webAuthnCredentialId: options.credentialId,
+        webAuthnTransports: options.credentialTransports?.length
+          ? [...options.credentialTransports]
+          : undefined,
         prfSpendingPassword
       };
 
@@ -604,6 +617,23 @@ export async function deleteWallet(walletId: number|string) {
 export async function setWalletName(walletId: number, name: string): Promise<void> {
   const db: Dexie = await getDb();
   await db['wallets'].update(walletId, { name });
+}
+
+/**
+ * Record where this wallet's PassKey lives, once it is known.
+ *
+ * Written on registration for new wallets, and learned from a successful
+ * ceremony for wallets created before it was captured. Replayed in
+ * `allowCredentials` so the browser prompts for the right authenticator instead
+ * of offering every route it supports.
+ */
+export async function setWalletWebAuthnTransports(
+  walletId: number,
+  transports: readonly AuthenticatorTransport[],
+): Promise<void> {
+  if (!transports.length) return;
+  const db: Dexie = await getDb();
+  await db['wallets'].update(walletId, { webAuthnTransports: [...transports] });
 }
 
 /**

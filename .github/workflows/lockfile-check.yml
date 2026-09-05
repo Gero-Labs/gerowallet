@@ -24,13 +24,10 @@ permissions:
 jobs:
   lockfile:
     name: npm ci (lock in sync)
-    # Same-repo guard (matches dev-bundle-gate.yml): don't pull fork-controlled
-    # trees onto the shared self-hosted runner. --ignore-scripts already blocks
-    # lifecycle execution, but the guard keeps protection on the job not running
-    # rather than on a single load-bearing flag. Dependabot branches are same-repo.
-    if: >-
-      github.event_name == 'push' ||
-      github.event.pull_request.head.repo.full_name == github.repository
+    # Fork PRs run here too — see the note in dev-bundle-gate.yml for why the
+    # same-repo guard was dropped. This job is the mildest of the three:
+    # `npm ci --ignore-scripts` on a disposable hosted runner with a read-only
+    # token, so no fork-authored code executes at all.
     # GitHub-hosted: public repo can't use the self-hosted arc-private runner
     # group (allows_public_repositories:false). See dev-bundle-gate.yml.
     runs-on: ubuntu-latest

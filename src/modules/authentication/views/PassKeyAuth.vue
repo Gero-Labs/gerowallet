@@ -43,7 +43,8 @@ import { ref, onMounted } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import assets from '@/utils/assets';
 import { getDb } from '@/db/wallet-db';
-import { decryptSpendingPasswordWithPrf, decryptPrivateKeyWithPrf, evaluatePrfForWallet } from '@/shared/utils/webauthn-prf';
+import { decryptSpendingPasswordWithPrf, decryptPrivateKeyWithPrf } from '@/shared/utils/webauthn-prf';
+import { evaluateWalletPrf } from '@/shared/utils/passkeyPrf';
 
 const loading = ref(true);
 const error = ref('');
@@ -62,7 +63,15 @@ onMounted(async () => {
       throw new Error('No wallet logged in');
     }
 
-    let resultPayload: any;
+    // One union over the four modes below, rather than `any`: every branch
+    // carries `success` plus exactly the material its caller unpacks, and the
+    // popup posts this verbatim.
+    let resultPayload:
+      | { success: true; prfOutput: number[] }
+      | { success: true; privateKeyBytes: number[] }
+      | { success: true; prfOutputHex: string; webAuthnCredentialId: string; mpcPrfSaltId: string }
+      | { success: true; password: string }
+      | undefined;
 
     if (mode === 'rawPrf') {
       // Raw PRF output — for chains (Midnight) whose signing key material is
@@ -76,7 +85,7 @@ onMounted(async () => {
       if (!wallet.webAuthnCredentialId) {
         throw new Error('PRF wallet not properly configured');
       }
-      const prfOutput = await evaluatePrfForWallet(wallet.webAuthnCredentialId, wallet.id.toString());
+      const prfOutput = await evaluateWalletPrf(wallet);
       resultPayload = {
         success: true,
         prfOutput: Array.from(new Uint8Array(prfOutput)),
@@ -175,8 +184,12 @@ onMounted(async () => {
     setTimeout(() => {
       window.close();
     }, 500);
-  } catch (err: any) {
-    console.error('[PassKeyAuth] Error:', err);
+  } catch (caught: unknown) {
+    // NOT named `error`: this component has an `error` ref, and shadowing it
+    // makes `error.value = ...` below write to the exception instead of the
+    // ref, so the failure never reaches the screen.
+    const err = caught as { name?: string; message?: string };
+    console.error('[PassKeyAuth] Error:', caught);
 
     // Check if this is a user cancellation
     // WebAuthn throws NotAllowedError when user cancels or denies

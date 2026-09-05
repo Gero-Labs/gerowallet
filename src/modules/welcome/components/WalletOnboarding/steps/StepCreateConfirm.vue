@@ -280,7 +280,7 @@ const walletCreationStep = async (): Promise<void> => {
 
         // Step 2: Register credential AND evaluate PRF in one prompt
         const { registerWebAuthnCredentialWithPrf, PrfUnsupportedError } = await import('@/shared/utils/webauthn-prf');
-        const { credentialId, prfEnabled, prfOutput } = await registerWebAuthnCredentialWithPrf(
+        const { credentialId, prfEnabled, prfOutput, transports } = await registerWebAuthnCredentialWithPrf(
           newWalletId.toString(),
           props.name
         );
@@ -298,6 +298,10 @@ const walletCreationStep = async (): Promise<void> => {
             passwordUnlockEnabled: false,
             backupMnemonic: true,
             prfOutput,
+            // Recorded once, here: an assertion cannot report where a credential
+            // lives, so if this is not captured at registration the browser is
+            // never told and offers its full picker at every later prompt.
+            credentialTransports: transports,
             walletId: newWalletId, // CRITICAL: Must match ID used for PRF salt
             ...(midnightAddresses ? { midnightAddresses } : {}),
           };

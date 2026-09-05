@@ -1,4 +1,9 @@
 import { Blockchain, Network, Provider } from '@/models/types';
+import {
+  CIP113_BASE_MAINNET as CIP113_DEPLOYMENTS_MAINNET,
+  CIP113_BASE_PREPROD as CIP113_DEPLOYMENTS_PREPROD,
+  CIP113_BASE_PREVIEW as CIP113_DEPLOYMENTS_PREVIEW,
+} from '@/utils/cip113Deployments';
 import cardanoBlueLogo from '@/assets/svg/cardano-blue.svg';
 import cardanoSvg from '@/assets/svg/cardano.svg';
 import apexSvg from '@/assets/svg/ap3x.svg';
@@ -48,6 +53,10 @@ export interface NetworkInfo {
   thorchainSupport: boolean;
   mempoolSupport: boolean;
   lightningSupport: boolean;
+  // CIP-113 `programmable_logic_base` script hashes. A list, not one value: a
+  // re-bootstrap changes the hash while existing holdings stay at the old script.
+  // Empty means CIP-113 is unavailable on this network, and it fails closed.
+  programmableLogicBaseScriptHashes?: string[];
   /**
    * RealFi Earn (USDr / sUSDr yield) availability for this network.
    *
@@ -61,6 +70,25 @@ export interface NetworkInfo {
     networkMagic: number;
   }
 }
+
+// Hashes come from cip113Deployments.ts. Re-validated here because they are taken as
+// granted downstream, so this is the only guard against a mistyped literal.
+function normalizeCip113BaseScriptHashes(hashes: readonly string[]): string[] {
+  const seen = new Set<string>();
+  for (const entry of hashes) {
+    const hash = entry.trim().toLowerCase();
+    if (/^[0-9a-f]{56}$/.test(hash)) {
+      seen.add(hash);
+    }
+  }
+  return Array.from(seen);
+}
+
+const CIP113_BASE_MAINNET: string[] = normalizeCip113BaseScriptHashes(CIP113_DEPLOYMENTS_MAINNET);
+const CIP113_BASE_PREPROD: string[] = normalizeCip113BaseScriptHashes(CIP113_DEPLOYMENTS_PREPROD);
+const CIP113_BASE_PREVIEW: string[] = normalizeCip113BaseScriptHashes(CIP113_DEPLOYMENTS_PREVIEW);
+
+
 export default {
   networks: [
     {
@@ -105,6 +133,7 @@ export default {
       thorchainSupport: false,
       mempoolSupport: false,
       lightningSupport: false,
+      programmableLogicBaseScriptHashes: CIP113_BASE_MAINNET,
       networkParams: {
         networkMagic: 764824073
       }
@@ -150,6 +179,7 @@ export default {
       thorchainSupport: false,
       mempoolSupport: false,
       lightningSupport: false,
+      programmableLogicBaseScriptHashes: CIP113_BASE_PREPROD,
       // RealFi runs its public testnet on Cardano preprod; this is the only
       // network the Earn surface is reachable from today.
       realFiSupport: true,
@@ -198,6 +228,7 @@ export default {
       thorchainSupport: false,
       mempoolSupport: false,
       lightningSupport: false,
+      programmableLogicBaseScriptHashes: CIP113_BASE_PREVIEW,
       networkParams: {
         networkMagic: 2
       }
@@ -661,6 +692,16 @@ export default {
       return false
     }
     return this.resolveNetwork(chain, network)?.lightningSupport ?? false
+  },
+  // Support is derived from the configured hashes rather than tracked separately.
+  resolveProgrammableLogicBaseScriptHashes(chain: string, network: string): string[] {
+    if (!chain || !network) {
+      return []
+    }
+    return this.resolveNetwork(chain, network)?.programmableLogicBaseScriptHashes || []
+  },
+  resolveProgrammableTokenSupport(chain: string, network: string): boolean {
+    return this.resolveProgrammableLogicBaseScriptHashes(chain, network).length > 0
   },
   resolveDaoSupport(chain: string, network: string): boolean {
     if (!chain || !network) {

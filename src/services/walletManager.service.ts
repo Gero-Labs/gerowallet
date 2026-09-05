@@ -1,3 +1,4 @@
+import { refreshCip113Flag } from '@/chrome/cip113Flag';
 import { WalletBg, alarmListener } from '@/chrome/walletBg';
 import LoadingState from '@/stores/loading';
 import WalletStore, { walletStore } from '@/stores/walletStore';
@@ -496,7 +497,22 @@ export class WalletManager {
       // Load holdings from cached UTxOs, keys and account immediately — no need to wait for
       // transactions or gero-sync. The cached account keeps the balance/empty-state showing the
       // last-known value on login instead of flashing empty until the first sync.
-      await Promise.all([walletBg.loadCachedUtxos(), walletBg.loadCachedKeys(), walletBg.loadCachedAccount()]);
+      // Before loadProgrammableRefs(), which reads the gate to decide whether to restore
+      // the refusal index at all. A stale `false` here would partition nothing on a
+      // network that does support CIP-113, so it is awaited rather than fired alongside.
+      await refreshCip113Flag();
+
+      await Promise.all([
+        // Arms the CIP-113 signing guard before any sign request can arrive.
+        walletBg.loadProgrammableRefs(),
+        walletBg.loadCachedKeys(),
+        // Ordered, not parallel: `controlled_amount` is a stake-level total and the
+        // CIP-113 locked share comes off it as the account enters the store, so the
+        // partition has to be restored first. setAccount() re-derives when the order
+        // is the other way round, but setAccountInfo()'s synthesized lovelace token
+        // does not — it would keep the locked ADA in the spendable figure.
+        walletBg.loadCachedUtxos().then(() => walletBg.loadCachedAccount()),
+      ]);
 
       promises.push(
         walletBg.loadConfig(),
@@ -524,7 +540,9 @@ export class WalletManager {
     if (walletBg.chain !== Blockchain.BITCOIN && walletBg.chain !== Blockchain.MIDNIGHT) {
       const lastSyncInfo = await walletBg.getLastSyncInfo();
       const lastSyncedBlock = lastSyncInfo?.height || 0;
-      const credentials = walletBg.derivePaymentCredentials();
+      // See subscriptionCredentials(): empty where CIP-113 is configured, so gero-sync
+      // resolves by stake address and returns the programmable-token UTxOs too.
+      const credentials = walletBg.subscriptionCredentials();
 
       // Cross-device signing bridge (ships DARK behind isCrossDeviceSigningEnabled).
       // Returns null and does nothing when the flag is off, so the handlers below

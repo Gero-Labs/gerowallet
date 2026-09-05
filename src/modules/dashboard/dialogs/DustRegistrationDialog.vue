@@ -546,8 +546,8 @@ async function confirmRegistration() {
       if (!wallet.webAuthnCredentialId) {
         throw new Error('PRF wallet missing credential ID');
       }
-      const { evaluatePrfForWallet } = await import('@/shared/utils/webauthn-prf');
-      const prfBuf = await evaluatePrfForWallet(wallet.webAuthnCredentialId, wallet.id.toString());
+      const { evaluateWalletPrf } = await import('@/shared/utils/passkeyPrf');
+      const prfBuf = await evaluateWalletPrf(wallet);
       prfSecret = new Uint8Array(prfBuf);
     }
 

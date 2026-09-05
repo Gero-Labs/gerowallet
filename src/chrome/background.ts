@@ -3,7 +3,7 @@ import Loading from '@/stores/loading';
 import { Messaging } from '@/chrome/messaging';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
 import { isStakeKeyRegistered } from '@/shared/utils/stakeRegistration';
-import { APIError, BITCOIN_METHOD, DataSignError, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, POPUP, SENDER, TARGET, TxSendError, TxSignError } from '@/chrome/config';
+import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, POPUP, SENDER, TARGET, TxSendError, TxSignError } from '@/chrome/config';
 import { toDappError } from '@/chrome/dappError';
 import { bringInitBackground } from '@bringweb3/chrome-extension-kit';
 import {
@@ -1233,6 +1233,38 @@ app.add(METHOD.signData, (request, sendResponse) => {
   }
 });
 
+/**
+ * CIP-113 preflight: refuse to sign a transaction spending one of this wallet's
+ * programmable UTxOs. Keeping them out of walletStore.utxos already stops Gero
+ * selecting or disclosing them, but a caller that derives the address itself can
+ * still hand over a complete transaction.
+ *
+ * Runs at REQUEST ENTRY, before the approval UI, so it covers every downstream signer
+ * for anything already known to be programmable. It is NOT a signature-time check: a
+ * UTxO first learned while the prompt is open is re-checked by WalletBg.signTx on the
+ * software path, but not by the hardware paths, which sign in document context.
+ *
+ * Returns a reason string when the transaction must be refused, else null.
+ */
+function refusalForProgrammableInputs(txCbor: unknown): string | null {
+  if (typeof txCbor !== 'string' || !txCbor) return null;
+  const wallet = walletManager.getWallet();
+  if (!wallet?.findProgrammableInputs) return null;
+  // Before the parse, not after: an empty index cannot produce a refusal, and every
+  // signTx on a network without a CIP-113 deployment (mainnet included) takes this
+  // branch. deserializeCardanoJsSdkTx() on the request path is not free.
+  if (wallet.hasProgrammableInputs && !wallet.hasProgrammableInputs()) return null;
+  try {
+    const hits = wallet.findProgrammableInputs(deserializeCardanoJsSdkTx(txCbor));
+    if (hits.length === 0) return null;
+    return `CIP-113: refusing to sign, transaction spends programmable-token UTxOs ${hits.join(', ')}`;
+  } catch (e) {
+    // Unparseable here means the signer would fail anyway — don't refuse spuriously.
+    debugLog('CIP-113 preflight could not parse transaction:', e);
+    return null;
+  }
+}
+
 app.add(METHOD.signTx, async (request, sendResponse) => {
   const signTxReply = (opts: ReplyOpts) => {
     sendResponse({ id: request.id, ...opts, target: TARGET, sender: SENDER.extension });
@@ -1245,6 +1277,14 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
   // and never reaches this handler.)
   if (!WalletStore.isWhitelisted(request.origin)) {
     return signTxReply({ error: APIError.Refused });
+  }
+
+  const programmableRefusal = refusalForProgrammableInputs(request.data?.tx);
+  if (programmableRefusal) {
+    debugLog(programmableRefusal);
+    // Refused, like the whitelist check above: this returns before the approval UI opens
+    // and Gero does hold the key, so the wallet is declining by policy.
+    return signTxReply({ error: { code: APIError.Refused.code, info: CIP113_SIGN_REFUSAL_MESSAGE } });
   }
 
   const signTxPayload = { ...request.data, website: request.origin, favIconUrl: request.send?.tab?.favIconUrl };
@@ -2503,6 +2543,19 @@ app.addToOptions(MessageTypes.REQUEST_CROSS_DEVICE_SIGNATURE, async (request, se
     }
 
     const { unsignedCbor, intent, stakeAddress, ttlMs } = request.data;
+
+    // The relay only forwards CBOR, so the receiving device never sees our index.
+    const crossDeviceRefusal = refusalForProgrammableInputs(unsignedCbor);
+    if (crossDeviceRefusal) {
+      debugLog(crossDeviceRefusal);
+      sendResponse({
+        id: request.id,
+        data: { decision: 'rejected', reason: CIP113_SIGN_REFUSAL_MESSAGE },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+      return;
+    }
     // Route to a specific device when the caller named one, else to the sole
     // online trusted signer; null => broadcast (backward-compatible).
     const to = (typeof request.data?.to === 'string' && request.data.to)
@@ -2776,18 +2829,37 @@ app.addToOptions(MessageTypes.SIGN_TX_WITH_POOL_KEYS, async (request, sendRespon
 // SPO Node Monitor — proxy fetch through background (bypasses extension page CSP)
 app.addToOptions(MessageTypes.SPO_NODE_FETCH, async (request, sendResponse) => {
   try {
-    const { url, timeout, method, body } = request.data;
+    const { url, timeout, method, body, authToken } = request.data;
     if (!url || typeof url !== 'string') {
       throw new Error('Invalid URL');
+    }
+    // The monitor is reached over https:// in every real deployment (cloudflare
+    // tunnel) or http://localhost when the operator runs it locally. Refuse to
+    // put a bearer token on a plaintext request to anywhere else — that would
+    // hand the agent's token to anyone on the path.
+    let isLocal = false;
+    try {
+      const parsed = new URL(url);
+      isLocal = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1' || parsed.hostname === '[::1]';
+      if (authToken && parsed.protocol !== 'https:' && !isLocal) {
+        throw new Error('Refusing to send auth token over an insecure connection');
+      }
+    } catch (e) {
+      throw e instanceof Error && e.message.startsWith('Refusing') ? e : new Error('Invalid URL');
     }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeout || 10000);
     const fetchOpts: RequestInit = { signal: controller.signal };
+    const headers: Record<string, string> = {};
     if (method === 'POST') {
       fetchOpts.method = 'POST';
-      fetchOpts.headers = { 'Content-Type': 'application/json' };
+      headers['Content-Type'] = 'application/json';
       if (body) fetchOpts.body = body;
     }
+    // Never logged: the catch below reports errorMessage(error), and fetch
+    // failures do not carry request headers.
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+    if (Object.keys(headers).length > 0) fetchOpts.headers = headers;
     const response = await fetch(url, fetchOpts);
     clearTimeout(timer);
     const data = await response.json();
@@ -3469,6 +3541,13 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
       });
     } else if (request.data.method === 'signTx') {
       const { txCbor } = request.data;
+
+      // Trezor signs here rather than through WalletBg.signTx, so it needs its own check.
+      const trezorRefusal = refusalForProgrammableInputs(txCbor);
+      if (trezorRefusal) {
+        debugLog(trezorRefusal);
+        throw new Error(CIP113_SIGN_REFUSAL_MESSAGE);
+      }
 
       const tx = deserializeCardanoJsSdkTx(txCbor);
 
@@ -4255,9 +4334,16 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
           }
           case 'cardano_signTx': {
             const wcParams = wcRequest.params || {};
+            const wcTx = wcParams.tx || wcParams;
+            const wcProgrammableRefusal = refusalForProgrammableInputs(wcTx);
+            if (wcProgrammableRefusal) {
+              debugLog(wcProgrammableRefusal);
+              await wcService.respondError(topic, id, 4100, CIP113_SIGN_REFUSAL_MESSAGE);
+              return;
+            }
             await routeWcSigningRequest(
               'signTx',
-              { tx: wcParams.tx || wcParams, partialSign: wcParams.partialSign, origin: 'WalletConnect' },
+              { tx: wcTx, partialSign: wcParams.partialSign, origin: 'WalletConnect' },
               topic, id, POPUP.signTx, [470, 852],
             );
             return;
@@ -5157,7 +5243,7 @@ app.addToOptions(MessageTypes.ADD_MIDNIGHT_PENDING_TX, async (request, sendRespo
     if (walletBg.chain !== Blockchain.MIDNIGHT) {
       throw new Error('ADD_MIDNIGHT_PENDING_TX called on non-Midnight wallet');
     }
-    const { hash, amount, counterparty, isShielded } = request.data || {};
+    const { hash, amount, counterparty, isShielded, token } = request.data || {};
     if (typeof hash !== 'string' || !hash) throw new Error('hash is required');
     const { midnightActions } = await import('@/stores/midnightStore');
     let amountBig = 0n;
@@ -5165,7 +5251,10 @@ app.addToOptions(MessageTypes.ADD_MIDNIGHT_PENDING_TX, async (request, sendRespo
     midnightActions.applyTransaction({
       hash,
       type: 'send',
-      token: 'NIGHT',
+      // Colour of what was actually sent. Defaulted rather than required so
+      // older callers (and the shielded path) keep their NIGHT behaviour; a
+      // hardcoded 'NIGHT' here would label a USDM send as NIGHT in history.
+      token: typeof token === 'string' && token ? token : 'NIGHT',
       amount: amountBig,
       counterparty: typeof counterparty === 'string' ? counterparty : '',
       timestamp: Date.now(),
@@ -5506,22 +5595,34 @@ app.add(MIDNIGHT_METHOD.getUnshieldedBalances, async (request, sendResponse) => 
     sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected'), target: TARGET, sender: SENDER.extension });
     return;
   }
-  // midnightStore.utxos only ever carries NIGHT-type outputs today (the sync
-  // layer filters non-native tokenTypes out — see midnight-sync.service.ts's
-  // isNightOutput), so this record has at most one key. Normalize an empty
-  // tokenType (Gero's internal "native NIGHT" convention) to the canonical
-  // 32-byte-zero hex a dapp checking nativeToken().raw would expect.
+  // midnightStore.utxos now carries every token color the wallet holds — the
+  // sync layer (midnight-sync.service.ts's CATCH_UP snapshot and per-tx delta
+  // paths) no longer filters non-native tokenTypes out. The check below is
+  // deliberately the LOOSE native-NIGHT predicate (any all-zero tokenType,
+  // not just the canonical 64-hex-zero string) — the same one
+  // `midnightTokenBalances()` uses below to decide what counts as a token —
+  // so NIGHT and the token map partition the UTxO set with no gap: an
+  // all-zero color of non-canonical length (e.g. 63 zeros, or `'0'`) would
+  // otherwise satisfy neither predicate and vanish from a dapp's view
+  // entirely. It still normalizes to the canonical 32-byte-zero hex a dapp
+  // checking nativeToken().raw would expect.
+  const { midnightTokenBalances, isNativeNight } = await import('@/chains/midnight/midnightTokenBalances');
   let night = 0n;
   for (const u of midnightStore.utxos) {
     const tt = u.tokenType ?? '';
-    if (tt === '' || tt === NIGHT_TOKEN_TYPE_NULL) night += u.value;
+    if (isNativeNight(tt)) night += u.value;
   }
-  sendResponse({
-    id: request.id,
-    data: night > 0n ? { [NIGHT_TOKEN_TYPE_NULL]: night.toString() } : {},
-    target: TARGET,
-    sender: SENDER.extension,
-  });
+  // Every non-native color the wallet holds, alongside NIGHT. Keys are the raw
+  // 32-byte token colors; NIGHT is reported under the canonical zero key above.
+  // Null-prototype (not `{}`): mirrors the map `midnightTokenBalances()`
+  // returns, so a token color equal to `'__proto__'` can't hit
+  // Object.prototype's setter and get silently dropped from the response.
+  const data: Record<string, string> = Object.create(null);
+  if (night > 0n) data[NIGHT_TOKEN_TYPE_NULL] = night.toString();
+  for (const [color, amount] of Object.entries(midnightTokenBalances(midnightStore.utxos))) {
+    data[color] = amount.toString();
+  }
+  sendResponse({ id: request.id, data, target: TARGET, sender: SENDER.extension });
 });
 
 app.add(MIDNIGHT_METHOD.getShieldedBalances, async (request, sendResponse) => {

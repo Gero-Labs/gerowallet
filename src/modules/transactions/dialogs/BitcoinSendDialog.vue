@@ -337,6 +337,7 @@ const btcPrice = computed(() => priceStore.btcUsd?.lastPrice ?? 0);
 // Available balance (from UTXOs)
 const availableBalance = computed(() => {
   if (!utxos.value || utxos.value.length === 0) return BigInt(0);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- walletStore.utxos is a chain-agnostic union (bigint | IUnifiedUtxo | Utxo); annotating a shape here type-errors rather than describes it
   return utxos.value.reduce((sum: bigint, utxo: any) => sum + BigInt(utxo.value), BigInt(0));
 });
 
@@ -353,6 +354,7 @@ function estimateInputCount(): number {
   const target = BigInt(amountInSats.value || 0);
   if (target <= BigInt(0)) return 1;
   // Simulate largest-first selection (default strategy)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- walletStore.utxos is a chain-agnostic union (bigint | IUnifiedUtxo | Utxo); annotating a shape here type-errors rather than describes it
   const sorted = [...utxos.value].sort((a: any, b: any) => {
     const av = BigInt(a.value), bv = BigInt(b.value);
     return bv > av ? 1 : bv < av ? -1 : 0;
@@ -481,14 +483,12 @@ async function authenticateWithPassKey() {
   }
   loading.value = true;
   try {
-    const { evaluatePrfForWallet } = await import('@/shared/utils/webauthn-prf');
-    const prfOutput = await evaluatePrfForWallet(
-      loggedWallet.value.webAuthnCredentialId,
-      loggedWallet.value.id.toString()
-    );
+    const { evaluateWalletPrf } = await import('@/shared/utils/passkeyPrf');
+    const prfOutput = await evaluateWalletPrf(loggedWallet.value);
     privateKeyBytes.value = new Uint8Array(prfOutput);
-  } catch (error: any) {
-    txStatus.value = { type: 'error', message: error.message || t('security.passKeyAuthFailed') };
+  } catch (error: unknown) {
+    const message = (error as { message?: string })?.message;
+    txStatus.value = { type: 'error', message: message || t('security.passKeyAuthFailed') };
   } finally {
     loading.value = false;
   }
@@ -499,7 +499,7 @@ async function confirmSend() {
   loading.value = true;
   txStatus.value = { type: 'info', message: t('send.buildingTransaction') };
   try {
-    const signingData: Record<string, any> = {
+    const signingData: Record<string, unknown> = {
       recipientAddress: recipientAddress.value,
       amount: amountInSats.value,
       feeRate: feeEstimates.value[selectedFeePriority.value],
@@ -511,6 +511,7 @@ async function confirmSend() {
       signingData['password'] = password.value;
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- sendToBackgroundFromOptions resolves an untyped messaging envelope
     const response: any = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SEND_BITCOIN,
       data: signingData,

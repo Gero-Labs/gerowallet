@@ -60,7 +60,7 @@ const dustTicker = computed(() => (isMainnet.value ? 'DUST' : 'tDUST'));
 const DUST_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.DUST);
 
 const { dustBalance, dustGenerating, dustCap, registrationStatus } = useMidnightDustLive();
-const { pathBRegistered, pathBStakes } = useDustPathB();
+const { pathBRegistered, pathBStakes, pathBIncomingStakes } = useDustPathB();
 
 const isRegistered = computed(() => registrationStatus.value === 'Registered');
 
@@ -119,10 +119,14 @@ function safeRefreshPending() {
 onMounted(safeRefreshPending);
 watch(registrationStatus, safeRefreshPending);
 // Path B already reporting a live registration to this dust address is
-// Registered, not pending.
+// Registered, not pending. `pathBIncomingStakes` covers a registration
+// confirmed on Cardano but not yet relayed — see MidnightDustGauge for why
+// the localStorage marker alone wasn't enough.
 const isPending = computed(() => !isRegistered.value
   && !pathBRegistered.value
-  && (incomingPending.value > 0 || registrationStatus.value === 'Pending'));
+  && (incomingPending.value > 0
+    || pathBIncomingStakes.value.length > 0
+    || registrationStatus.value === 'Pending'));
 const pct = computed(() => {
   if (dustCap.value <= 0n) return 0;
   const p = Number((dustBalance.value * 10000n) / dustCap.value) / 100;

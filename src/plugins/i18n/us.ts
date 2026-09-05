@@ -837,6 +837,10 @@ export default {
   'support.error.sendFailed': 'Your message could not be sent. Please try again.',
   'support.error.fileTooLarge': 'Files must be under 20 MB.',
   'support.error.tooManyFiles': 'You can attach up to 5 files per message.',
+  'support.hide.action': 'Hide the support button',
+  'support.hide.title': 'Hide the support button?',
+  'support.hide.body': 'It will disappear from your dashboard. To bring it back, open Settings → Advanced and turn on “Support chat button”.',
+  'support.hide.confirm': 'Hide',
   // --- Cross-device signing ---
   'crossDevice.signOnAnotherDevice': 'Sign on another device',
   'crossDevice.requestExpired': 'The signing request expired. Please try again.',
@@ -2515,6 +2519,8 @@ export default {
   'settings.autoWithdrawRewardsHelper': 'Pull available staking rewards into every send',
   'settings.extensionClickAction': 'Extension Click Action',
   'settings.extensionClickActionHelper': 'Choose what opens when you click the GeroWallet extension icon',
+  'settings.supportChatButton': 'Support Chat Button',
+  'settings.supportChatButtonHelper': 'Show the floating support button on your dashboard',
   'settings.uploadPicture': 'Upload Picture',
   'settings.utxo': 'UTxO',
   'settings.walletBackupRequired': 'Wallet backup required',
@@ -4476,6 +4482,8 @@ export default {
   'poolOperator.nodeMonitorSetup': 'Node Monitor Setup',
   'poolOperator.nodeMonitorSetupDescription': 'Enter the URL of your node monitoring endpoint. Run the setup script on your block producer to install the lightweight monitoring agent.',
   'poolOperator.nodeEndpoint': 'Node Monitor URL',
+  'poolOperator.nodeAuthToken': 'Auth token',
+  'poolOperator.nodeAuthTokenHint': 'The authToken from your agent config. Leave empty if the agent runs without one.',
   'poolOperator.quickSetup': 'Quick Setup (run on your node)',
   'poolOperator.connect': 'Connect',
   'poolOperator.nodeConnected': 'Node connected successfully',
@@ -4660,7 +4668,7 @@ export default {
   // Receive dialog Midnight branch (Public / Private / DUST tabs)
   'midnight.receive.tabDust': 'DUST',
   'midnight.receive.publicLabel': 'Public address',
-  'midnight.receive.publicInfo': 'For regular (unshielded) NIGHT transfers. Amounts and addresses are visible on-chain.',
+  'midnight.receive.publicInfo': 'For regular (unshielded) transfers of NIGHT and other Midnight tokens. Amounts and addresses are visible on-chain.',
   'midnight.receive.privateLabel': 'Private address',
   'midnight.receive.privateInfo': 'For private (shielded) transfers. Amounts and participants stay confidential.',
   'midnight.receive.dustLabel': 'DUST address',
@@ -4690,6 +4698,7 @@ export default {
   'midnight.send.addressPrefix': 'Address should start with {prefix}',
   'midnight.send.amountRequired': 'Amount required',
   'midnight.send.shieldedBalanceNote': 'Private balance. Updates as shielded sync progresses.',
+  'midnight.send.rawUnitsNote': 'This token\'s decimals aren\'t known, so amounts are in base units.',
   'midnight.send.publicTxNote': 'Public transaction: the amount and addresses will be visible on the Midnight indexer.',
   'midnight.send.estimatedNetworkFee': 'Estimated network fee',
   'midnight.send.dustResetWarning': 'The network fee is paid in DUST and is negligible. DUST regenerates over time from your registered NIGHT.',
@@ -4803,6 +4812,17 @@ export default {
   'midnight.dustRelayEstimate': 'Relay to Midnight (a few hours)',
   'midnight.relayFewHours': 'a few hours',
   'midnight.dustSourcesReadOnly': 'No local keys',
+  // Row states that must NOT offer a plain "Generate here" — a stake credential
+  // may carry exactly one live registration, so registering over an existing
+  // one invalidates both and pauses DUST for the whole set.
+  'midnight.dustSourcesUnknownState': 'Status unavailable',
+  'midnight.dustSourcesUnknownHint': 'Could not check this wallet\'s DUST registration just now. Registering without checking could create a duplicate and pause DUST generation.',
+  'midnight.dustSourcesDuplicate': 'Duplicate registrations',
+  'midnight.dustSourcesDuplicateHint': 'This wallet has more than one DUST registration, so it generates nothing. Open it as a Cardano wallet to remove the extras.',
+  'midnight.dustSourcesElsewhere': 'Currently generating to {address}.',
+  'midnight.dustSourcesElsewhereUnknown': 'Already registered on Cardano. Redirect it here to generate DUST for this wallet instead.',
+  'midnight.dustSourcesAlreadyRegistered': 'This wallet already has a live DUST registration. Use Redirect here instead.',
+  'midnight.cnightDestinationChanging': 'New destination, waiting for the relay',
   // Inline DUST generation line (holdings table row + token drawer)
   'midnight.dustLinePromo': 'This NIGHT can generate DUST',
   'midnight.dustLineGenerating': 'Generating DUST',
@@ -4832,6 +4852,14 @@ export default {
   'midnight.txShield': 'Shielded NIGHT',
   'midnight.txUnshield': 'Unshielded NIGHT',
   'midnight.txContractCall': 'Contract call',
+  // Transaction detail: expandable per-tx inputs/outputs (UTxO inspector)
+  'midnight.utxoInputs': 'Inputs',
+  'midnight.utxoOutputs': 'Outputs',
+  'midnight.thisWallet': 'This wallet',
+  'midnight.utxoLoadFailed': 'Failed to load inputs and outputs for this transaction.',
+  // UTxOs tab detail pane: a Midnight UTxO's reference is intentHash:outputIndex,
+  // not a transaction hash — a distinct field from transactions.transactionId.
+  'midnight.intentHash': 'Intent Hash',
   // Settings > Advanced: Midnight proof server section (WP-P4)
   'midnight.proofServer.title': 'Midnight proof server',
   'midnight.proofServer.remoteLabel': 'Gero Cloud (default)',
@@ -4911,6 +4939,14 @@ export default {
   'midnight.proofServerPage.faq4A': 'No. Only shielded (private) transactions require a proof. Public NIGHT transfers are unaffected by this setting.',
   'midnight.proofServerPage.faq5Q': 'What is Arkhia zkPaaS?',
   'midnight.proofServerPage.faq5A': 'A hosted proving service for the Midnight ecosystem, run behind the Arkhia API gateway on Google Cloud confidential computing (a trusted execution environment, so proof data stays encrypted even while in use). It needs an API key from the Arkhia dashboard. Like any remote prover it receives your private transaction data for the proving step; unlike Gero Cloud, that data goes to Arkhia rather than Gero.',
+  // Non-NIGHT token holdings rows (decimals unknown until token metadata lands)
+  'midnight.unknownToken': 'Unknown token',
+  'midnight.rawBalanceNotice': 'Raw amount — decimals unknown',
+  'programmableTokens.badge': 'CIP-113',
+  'programmableTokens.lockedAdaTooltip': 'ADA held inside your CIP-113 token UTxOs. It counts toward your portfolio value, but Gero can\'t spend it, and moving these tokens isn\'t supported yet.',
+  'programmableTokens.listFootnote': 'Locked tokens stay in your wallet, but transfers of them aren\'t supported yet.',
+  'programmableTokens.signRefused': 'This transaction moves a CIP-113 programmable token. Gero can\'t sign these transfers yet.',
+  'programmableTokens.badgeTooltip': 'CIP-113 programmable token. Gero shows your balance, but transfers of these tokens aren\'t supported yet.',
   // ---- Positions explorer (action detail) ----
   // One key for one concept: this replaced 'assets.clearFilters' and
   // 'transactions.clearFilters', which said the same thing in three spellings.

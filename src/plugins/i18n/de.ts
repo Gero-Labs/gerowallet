@@ -951,6 +951,10 @@ export default {
   'support.error.sendFailed': 'Deine Nachricht konnte nicht gesendet werden. Bitte versuche es erneut.',
   'support.error.fileTooLarge': 'Dateien müssen kleiner als 20 MB sein.',
   'support.error.tooManyFiles': 'Du kannst bis zu 5 Dateien pro Nachricht anhängen.',
+  'support.hide.action': 'Support-Schaltfläche ausblenden',
+  'support.hide.title': 'Support-Schaltfläche ausblenden?',
+  'support.hide.body': 'Sie verschwindet aus deinem Dashboard. Um sie zurückzuholen, öffne Einstellungen → Erweitert und aktiviere „Support-Chat-Schaltfläche“.',
+  'support.hide.confirm': 'Ausblenden',
   // --- Cross-Device-Signierung ---
   'crossDevice.signOnAnotherDevice': 'Auf einem anderen Gerät signieren',
   'crossDevice.requestExpired': 'Die Signieranfrage ist abgelaufen. Bitte versuchen Sie es erneut.',
@@ -2985,6 +2989,8 @@ export default {
   'settings.autoWithdrawRewardsHelper': 'Verfügbare Staking-Belohnungen bei jedem Senden mitnehmen',
   'settings.extensionClickAction': 'Erweiterung-Klickaktion',
   'settings.extensionClickActionHelper': 'Wählen Sie, was beim Klicken auf das GeroWallet-Erweiterungssymbol geöffnet wird',
+  'settings.supportChatButton': 'Support-Chat-Schaltfläche',
+  'settings.supportChatButtonHelper': 'Die schwebende Support-Schaltfläche auf dem Dashboard anzeigen',
   'settings.uploadPicture': 'Bild hochladen',
   'settings.utxo': 'UTxO',
   'settings.walletBackupRequired': 'Wallet-Backup erforderlich',
@@ -4373,6 +4379,8 @@ export default {
   'poolOperator.nodeMonitorSetup': 'Node-Monitor-Einrichtung',
   'poolOperator.nodeMonitorSetupDescription': 'Geben Sie die URL Ihres Node-Monitoring-Endpunkts ein. Führen Sie das Setup-Skript auf Ihrem Block Producer aus, um den leichtgewichtigen Monitoring-Agent zu installieren.',
   'poolOperator.nodeEndpoint': 'Node-Monitor-URL',
+  'poolOperator.nodeAuthToken': 'Auth-Token',
+  'poolOperator.nodeAuthTokenHint': 'Der authToken aus deiner Agent-Konfiguration. Leer lassen, wenn der Agent ohne Token läuft.',
   'poolOperator.quickSetup': 'Schnelleinrichtung (auf Ihrem Node ausführen)',
   'poolOperator.connect': 'Verbinden',
   'poolOperator.nodeConnected': 'Node erfolgreich verbunden',
@@ -4555,7 +4563,7 @@ export default {
   // Empfangsdialog Midnight-Bereich (Öffentlich / Privat / DUST Tabs)
   'midnight.receive.tabDust': 'DUST',
   'midnight.receive.publicLabel': 'Öffentliche Adresse',
-  'midnight.receive.publicInfo': 'Für normale (Unshielded) NIGHT-Transfers. Beträge und Adressen sind on-chain sichtbar.',
+  'midnight.receive.publicInfo': 'Für normale (Unshielded) Transfers von NIGHT und anderen Midnight-Token. Beträge und Adressen sind on-chain sichtbar.',
   'midnight.receive.privateLabel': 'Private Adresse',
   'midnight.receive.privateInfo': 'Für private (Shielded) Transfers. Beträge und Teilnehmer bleiben vertraulich.',
   'midnight.receive.dustLabel': 'DUST-Adresse',
@@ -4584,6 +4592,7 @@ export default {
   'midnight.send.addressRequired': 'Empfängeradresse erforderlich',
   'midnight.send.addressPrefix': 'Adresse muss mit {prefix} beginnen',
   'midnight.send.amountRequired': 'Betrag erforderlich',
+  'midnight.send.rawUnitsNote': 'Die Dezimalstellen dieses Tokens sind nicht bekannt, daher werden Beträge in Basiseinheiten angegeben.',
   'midnight.send.shieldedBalanceNote': 'Privates Guthaben. Wird mit dem Shielded-Sync aktualisiert.',
   'midnight.send.publicTxNote': 'Öffentliche Transaktion: Betrag und Adressen sind im Midnight-Indexer sichtbar.',
   'midnight.send.estimatedNetworkFee': 'Geschätzte Netzwerkgebühr',
@@ -4699,6 +4708,16 @@ export default {
   'midnight.dustRelayEstimate': 'Relay zu Midnight (einige Stunden)',
   'midnight.relayFewHours': 'einige Stunden',
   'midnight.dustSourcesReadOnly': 'Keine lokalen Schlüssel',
+  // Zeilenzustände, die kein einfaches „Hier erzeugen“ anbieten dürfen — ein
+  // Stake-Credential darf genau eine aktive Registrierung tragen.
+  'midnight.dustSourcesUnknownState': 'Status nicht verfügbar',
+  'midnight.dustSourcesUnknownHint': 'Die DUST-Registrierung dieser Wallet konnte gerade nicht geprüft werden. Eine Registrierung ohne Prüfung könnte ein Duplikat erzeugen und die DUST-Erzeugung anhalten.',
+  'midnight.dustSourcesDuplicate': 'Doppelte Registrierungen',
+  'midnight.dustSourcesDuplicateHint': 'Diese Wallet hat mehr als eine DUST-Registrierung und erzeugt deshalb nichts. Öffne sie als Cardano-Wallet, um die überzähligen zu entfernen.',
+  'midnight.dustSourcesElsewhere': 'Erzeugt derzeit für {address}.',
+  'midnight.dustSourcesElsewhereUnknown': 'Auf Cardano bereits registriert. Leite sie hierher um, damit sie DUST für diese Wallet erzeugt.',
+  'midnight.dustSourcesAlreadyRegistered': 'Diese Wallet hat bereits eine aktive DUST-Registrierung. Nutze stattdessen „Hierher umleiten“.',
+  'midnight.cnightDestinationChanging': 'Neues Ziel, wartet auf die Weiterleitung',
   // Inline DUST-Generierungszeile (Holdings-Tabelle + Token-Drawer)
   'midnight.dustLinePromo': 'Dieses NIGHT kann DUST generieren',
   'midnight.dustLineGenerating': 'Generiert DUST',
@@ -4728,6 +4747,14 @@ export default {
   'midnight.txShield': 'NIGHT verschleiert',
   'midnight.txUnshield': 'NIGHT entschleiert',
   'midnight.txContractCall': 'Contract-Aufruf',
+  // Transaktionsdetail: aufklappbare Ein-/Ausgaben pro Transaktion (UTxO-Inspektor)
+  'midnight.utxoInputs': 'Eingänge',
+  'midnight.utxoOutputs': 'Ausgänge',
+  'midnight.thisWallet': 'Dieses Wallet',
+  'midnight.utxoLoadFailed': 'Ein- und Ausgänge für diese Transaktion konnten nicht geladen werden.',
+  // UTxOs-Tab-Detailbereich: Die Referenz eines Midnight-UTxO ist intentHash:outputIndex,
+  // ein eigenes Feld, verschieden von transactions.transactionId.
+  'midnight.intentHash': 'Intent-Hash',
   // Einstellungen > Erweitert: Midnight-Proof-Server-Bereich (WP-P4)
   'midnight.proofServer.title': 'Midnight-Proof-Server',
   'midnight.proofServer.remoteLabel': 'Gero Cloud (Standard)',
@@ -4807,6 +4834,14 @@ export default {
   'midnight.proofServerPage.faq4A': 'Nein. Nur geschützte (private) Transaktionen benötigen einen Proof. Öffentliche NIGHT-Überweisungen sind von dieser Einstellung nicht betroffen.',
   'midnight.proofServerPage.faq5Q': 'Was ist Arkhia zkPaaS?',
   'midnight.proofServerPage.faq5A': 'Ein gehosteter Beweis-Dienst für das Midnight-Ökosystem, betrieben hinter dem Arkhia-API-Gateway auf Google Cloud Confidential Computing (einer Trusted Execution Environment, sodass Proof-Daten selbst während der Verarbeitung verschlüsselt bleiben). Er benötigt einen API-Key aus dem Arkhia-Dashboard. Wie jeder entfernte Prover erhält er deine privaten Transaktionsdaten für den Beweis-Schritt; anders als bei Gero Cloud gehen diese Daten an Arkhia statt an Gero.',
+  // Non-NIGHT-Token-Zeilen (Dezimalstellen unbekannt, bis Token-Metadaten verfügbar sind)
+  'midnight.unknownToken': 'Unbekanntes Token',
+  'midnight.rawBalanceNotice': 'Rohbetrag — Dezimalstellen unbekannt',
+  'programmableTokens.badge': 'CIP-113',
+  'programmableTokens.lockedAdaTooltip': 'ADA, das in deinen CIP-113-Token-UTxOs liegt. Es zählt zum Portfoliowert, Gero kann es aber nicht ausgeben, und das Bewegen dieser Token wird noch nicht unterstützt.',
+  'programmableTokens.listFootnote': 'Gesperrte Token bleiben in deiner Wallet, Transfers dieser Token werden aber noch nicht unterstützt.',
+  'programmableTokens.signRefused': 'Diese Transaktion bewegt einen programmierbaren CIP-113-Token. Gero kann solche Überweisungen noch nicht signieren.',
+  'programmableTokens.badgeTooltip': 'Programmierbarer CIP-113-Token. Gero zeigt dein Guthaben an, Überweisungen dieser Token werden aber noch nicht unterstützt.',
   // ---- Positions explorer (action detail) ----
   // One key for one concept: this replaced 'assets.clearFilters' and
   // 'transactions.clearFilters', which said the same thing in three spellings.

@@ -51,8 +51,10 @@ import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import AgentDock from '@/sidepanel/components/AgentDock.vue';
+import ContentLayout from '@/modules/navigation/layouts/ContentLayout.vue';
 import HardwareSignPrompt from '@/shared/components/HardwareSignPrompt.vue';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
+import { agentDockPrefsStore } from '@/stores/agentDockPrefsStore';
 import { useChainAccent } from '@/shared/composables/useChainAccent';
 import { useGovernanceHydration } from '@/shared/composables/useGovernanceHydration';
 import { debugLog } from '@/utils/debug';
@@ -77,12 +79,26 @@ const isLoading = computed(() => {
   return loading.value || isRestoring.value;
 });
 
+// The dock belongs to the full-page dashboard and nowhere else. This options
+// entry also renders the dApp popup windows (PopupLayout: connect / sign-tx /
+// sign-data / WC proposal) and the standalone BlankLayout screens (welcome,
+// passkey-auth, ledger-ble-sign) — all of them small, single-purpose windows
+// where a floating FAB is pure obstruction, and where it sat on top of signing
+// content. Comparing against the layout COMPONENT (not a route name list) is
+// what keeps a future route correct by default: it inherits the right answer
+// from the layout it already declares in router.ts.
+const isDashboardShell = computed(() => vmProxy.$route?.meta?.['layout'] === ContentLayout);
+
 const isAgentVisible = computed(() => {
   // Gero Companion mounts on EITHER flag: isCopilotEnabled alone (legacy
   // copilot-only dock) or isLiveChatEnabled alone (support-only dock, Assistant
   // tab visible but disabled) — see featureFlagsStore's doc blocks for both.
   return (featureFlagsStore.isCopilotEnabled() || featureFlagsStore.isLiveChatEnabled())
-    && !!walletStore.loggedWallet && !walletStore.isLocked;
+    && !!walletStore.loggedWallet && !walletStore.isLocked
+    && isDashboardShell.value
+    // Wait for the persisted preference before the first render, otherwise a
+    // user who hid the dock sees it flash on every dashboard load.
+    && agentDockPrefsStore.hydrated && !agentDockPrefsStore.hidden;
 });
 
 // Check auto-lock immediately when page loads/becomes visible

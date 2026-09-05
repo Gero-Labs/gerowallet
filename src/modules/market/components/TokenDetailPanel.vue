@@ -11,6 +11,20 @@
         <div class="d-flex align-center">
           <span class="text-h6 font-weight-bold mr-2">{{ token.ticker }}</span>
           <v-icon v-if="token.verified" small color="primary" class="mr-1">mdi-check-decagram</v-icon>
+          <v-tooltip v-if="isProgrammableRow(token)" top :open-delay="300" content-class="custom-tooltip">
+            <template v-slot:activator="{ on, attrs }">
+              <v-chip
+                x-small label
+                class="mr-1 flex-shrink-0"
+                style="height: 16px; font-size: 10px; padding: 0 5px; color: var(--g-warning); background: var(--g-warning-fill); border: 1px solid var(--g-warning-line);"
+                v-bind="attrs"
+                v-on="on"
+              >
+                {{ $t('programmableTokens.badge') }}
+              </v-chip>
+            </template>
+            {{ $t(programmableTooltipKey(token.unit)) }}
+          </v-tooltip>
         </div>
         <span class="text--secondary text-caption">{{ token.name }}</span>
       </div>
@@ -161,6 +175,8 @@
       <div class="right-col">
         <!-- Right column tabs -->
         <v-tabs v-model="rightTab" dense background-color="transparent" height="28" class="detail-sub-tabs mb-3">
+          <!-- Shown for a programmable token too: rightTab defaults here, and this is
+               where the reason the widget is suppressed gets explained. -->
           <v-tab tab-value="swap">{{ $t('market.swap') }}</v-tab>
           <v-tab tab-value="depth">{{ $t('market.depth') }}</v-tab>
           <v-tab v-if="!isApex && token.unit !== 'lovelace'" tab-value="markets">{{ $t('market.markets') }}</v-tab>
@@ -169,13 +185,18 @@
         <!-- Swap tab -->
         <transition name="tab-fade" mode="out-in">
         <div v-if="rightTab === 'swap'" key="swap">
-          <!-- GeroSwapEmbed (Cardano DEX only) -->
-          <div v-if="!isApex && token.unit !== 'lovelace'" class="swap-shell">
+          <!-- GeroSwapEmbed (Cardano DEX only). Never for a CIP-113 token: moving one
+               needs the transfer-logic script and directory proofs, which ordinary DEX
+               routing cannot supply, so the swap could only fail. -->
+          <div v-if="!isApex && token.unit !== 'lovelace' && !isProgrammableRow(token)" class="swap-shell">
             <GeroSwapEmbed
               :token-out="token.unit"
               context="dialog"
               @swap-submitted="onSwapComplete"
             />
+          </div>
+          <div v-else-if="isProgrammableRow(token)" class="text-center py-4 text--secondary text-caption">
+            {{ $t(programmableTooltipKey(token.unit)) }}
           </div>
           <div v-else class="text-center py-4 text--secondary text-caption">
             {{ $t('market.na') }}
@@ -273,6 +294,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, type Ref } from 'vue';
+import { programmableTooltipKey, isProgrammableRow } from '@/shared/utils/programmableTokenDisplay';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useWatchlist } from '@/modules/market/composables/useWatchlist';
 import { useMarketData, type MarketToken, type CandlestickDataPoint } from '@/modules/market/composables/useMarketData';

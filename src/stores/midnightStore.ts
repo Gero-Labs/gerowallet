@@ -36,6 +36,7 @@ import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 import { debugLog } from '@/utils/debug';
 import { getMidnightEndpoints } from '@/chains/midnight/midnightConfig';
+import { isNativeNight } from '@/chains/midnight/midnightTokenBalances';
 import { Network } from '@/models/types';
 import type {
   MidnightBalances,
@@ -325,6 +326,20 @@ function serializeValue(_key: string, value: unknown): unknown {
 function normalizeTxHash(hash: string): string {
   const h = (hash || '').toLowerCase();
   return h.startsWith('0x') ? h.slice(2) : h;
+}
+
+/**
+ * Dedup key for a transaction row: hash + token. A single indexer tx that
+ * moves more than one color now produces multiple `MidnightTransaction`
+ * rows sharing one hash (one per color) — keying on hash alone would make
+ * the second `applyTransaction` call overwrite the first instead of adding
+ * a second row. Keying on hash+token keeps the original single-row dedup
+ * behavior for NIGHT/DUST-only txs (including the optimistic pending-send
+ * insert in background.ts, which is hardcoded to 'NIGHT') while letting
+ * distinct colors of the same tx coexist.
+ */
+function txRowKey(tx: MidnightTransaction): string {
+  return `${normalizeTxHash(tx.hash)}::${tx.token}`;
 }
 
 // ---------------------------------------------------------------- hydration
@@ -891,9 +906,11 @@ export const midnightActions = {
     // Normalize (strip 0x, lowercase) so an optimistic pending entry inserted
     // right after submit — whose hash may carry a `0x` prefix or different
     // case than gero-sync's later confirmed hash — is replaced in place rather
-    // than duplicated when the confirmed event arrives.
-    const key = normalizeTxHash(tx.hash);
-    const existing = midnightStore.transactions.findIndex(t => normalizeTxHash(t.hash) === key);
+    // than duplicated when the confirmed event arrives. Keyed on hash+token
+    // (see txRowKey) so a multi-color tx's rows land as separate entries
+    // instead of clobbering each other.
+    const key = txRowKey(tx);
+    const existing = midnightStore.transactions.findIndex(t => txRowKey(t) === key);
     if (existing >= 0) {
       midnightStore.transactions.splice(existing, 1, tx);
     } else {
@@ -936,10 +953,13 @@ export const midnightActions = {
    * `(intentHash, outputIndex)` — re-deliveries of the same tx during history
    * replay are no-ops on both the set and the derived balance.
    *
-   * Performance: O(|added| + |removed|), independent of the steady-state
-   * UTxO set size. A wallet with 50k lifetime txs replays in N×k ops, not
-   * N×|set| ops — the previous full re-sum would have been ~25M ops at
-   * |set|=500 vs ~50k here.
+   * Performance: O(|set| + |added| + |removed|) per call, NOT independent of
+   * the steady-state UTxO set size — `byKey` below is rebuilt from the
+   * ENTIRE current `midnightStore.utxos` on every invocation (and written
+   * back in full at the end), so every transaction applied pays a
+   * map-rebuild proportional to |set| on top of the delta work itself.
+   * Deltas are applied per-transaction (see midnight-sync.service.ts), so a
+   * batch of N txs against a |set|=500 wallet costs N×500+ ops, not N×k.
    */
   applyUtxoDeltas(deltas: {
     added: MidnightUnshieldedUtxo[];
@@ -947,16 +967,20 @@ export const midnightActions = {
     /** Highest indexer txId seen in this batch — advances the resume cursor. */
     maxTxId?: number;
   }) {
+    let balanceDelta = 0n;
+    const isNight = (u: MidnightUnshieldedUtxo) => isNativeNight(u.tokenType);
+
     const byKey = new Map<string, MidnightUnshieldedUtxo>();
     for (const u of midnightStore.utxos) {
-      byKey.set(`${u.intentHash}:${u.outputIndex}`, u);
+      const key = `${u.intentHash}:${u.outputIndex}`;
+      const collided = byKey.get(key);
+      // `setUtxos` stores an array and does NOT dedup, so a persisted set can
+      // hold two entries under one key. Folding them into the map here drops
+      // one of them; without this its value would stay in nightUnshielded
+      // while it vanished from the set.
+      if (collided && isNight(collided)) balanceDelta -= collided.value;
+      byKey.set(key, u);
     }
-
-    let balanceDelta = 0n;
-    const isNight = (u: MidnightUnshieldedUtxo) => {
-      const tt = u.tokenType ?? '';
-      return tt === '' || /^0+$/.test(tt);
-    };
 
     // ORDER MATTERS: removals BEFORE additions, and callers apply deltas
     // PER TRANSACTION. DUST registration flags a UTxO in place — the tx
@@ -975,13 +999,19 @@ export const midnightActions = {
     }
     for (const u of deltas.added) {
       const key = `${u.intentHash}:${u.outputIndex}`;
-      if (byKey.has(key)) {
-        // Duplicate replay — refresh metadata (e.g. registeredForDustGeneration)
-        // without touching the balance.
-        byKey.set(key, u);
-        continue;
-      }
+      const replaced = byKey.get(key);
       byKey.set(key, u);
+      // A duplicate replay carries the same color and value, so the two
+      // adjustments below cancel out and the balance is untouched — that is
+      // the long-standing behaviour, which exists so a re-delivery can refresh
+      // metadata like registeredForDustGeneration. They only bite when the key
+      // collides between genuinely DIFFERENT UTxOs, which a malformed payload
+      // can cause (see resolveOutputIndex in midnight-sync.service.ts). The
+      // bare overwrite dropped the previous entry from the set while leaving
+      // its value in nightUnshielded, and the eventual spend then decremented
+      // against the wrong color — a permanent overstatement. Keep the balance
+      // tied to whatever actually survives in the set.
+      if (replaced && isNight(replaced)) balanceDelta -= replaced.value;
       if (isNight(u)) balanceDelta += u.value;
     }
 

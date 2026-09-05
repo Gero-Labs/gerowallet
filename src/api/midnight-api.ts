@@ -295,8 +295,15 @@ export interface MidnightTxOutput {
   address: string;
   /** Token amount in base units (NIGHT = 6 decimals; DUST = 15 decimals). */
   amount: string;
-  /** Token type — `NIGHT` for native NIGHT (only currently supported asset). */
-  token: 'NIGHT';
+  /**
+   * What to send: the literal `NIGHT` for the native token, or a 32-byte token
+   * colour as 64-char hex. Nexus validates the shape and maps `NIGHT` to the
+   * chain's native raw token type.
+   *
+   * `amount` is always in that token's own base units — the wallet owns the
+   * decimal scaling, the chain has no concept of it.
+   */
+  token: 'NIGHT' | (string & {});
 }
 
 /** A single 32-byte intent hash that needs a BIP-340 signature from the wallet. */
