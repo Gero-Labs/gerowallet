@@ -470,6 +470,7 @@ import {
   fetchDelegatedDRepRecord,
 } from '@/shared/composables/useGovernanceHydration';
 import { KEYWORD_DREPS } from '@/shared/utils/drepId';
+import { drepPayoutAddress } from '@/modules/governance/utils/govAnchor';
 import { useGovernanceStatus } from '@/shared/composables/useGovernanceStatus';
 import { usePendingVoteDelegation } from '@/shared/composables/usePendingVoteDelegation';
 import { governanceStore } from '@/stores/governanceStore';
@@ -834,10 +835,7 @@ const supportPercentDisplay = computed(() => `${((supportBps.value ?? 0) / 10).t
  * output — and it drops that output silently when this is false, which is why
  * the section says so instead of letting the user find out by not being thanked.
  */
-const drepCanReceive = computed(() => {
-  const address = record.value?.metadata?.meta_json?.body?.paymentAddress;
-  return typeof address === 'string' && (address.startsWith('addr1') || address.startsWith('addr_test1'));
-});
+const drepCanReceive = computed(() => drepPayoutAddress(record.value) !== null);
 
 /**
  * Only offered against a real DRep, and never while a delegation is in flight:
