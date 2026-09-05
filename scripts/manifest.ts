@@ -99,10 +99,7 @@ function buildCSP(dev: boolean): string {
     'https://*.walletconnect.com',
     'wss://*.walletconnect.com',
     'https://*.reown.com',
-    // CIP-45 peerjs signaling (WebSocket + id REST endpoint). Primary is the
-    // CF-hosted server (VITE_PEERJS_HOST); 0.peerjs.com is the public-cloud
-    // fallback the service retries against once. The WebRTC data channel
-    // itself is not CSP-governed — only signaling appears here.
+    // CIP-45 peerjs signaling (CF primary + public-cloud fallback).
     'https://peerjs.dev.ecosyseng.cf-deployments.org',
     'wss://peerjs.dev.ecosyseng.cf-deployments.org',
     'https://0.peerjs.com',
@@ -186,8 +183,7 @@ async function getManifest() {
     name: (pkg.displayName || pkg.name) + (isBeta ? ' (Beta)' : '') ,
     version: pkg.version,
     description: pkg.description,
-    // Chrome rejects a manifest whose `key` is empty/invalid — include it only
-    // when MANIFEST_KEY is actually set (dev/test builds run without one).
+    // Include key only when set — Chrome rejects an empty key.
     ...(key ? { key } : {}),
     // options_ui: {
     //   page: './dist/options/index.html',
@@ -206,9 +202,7 @@ async function getManifest() {
       },
       default_title: "Gero Dashboard | A Multi-chain Light Wallet Merging Web2 and Web3"
     },
-    // Chrome refuses to load a manifest whose oauth2 block lacks a valid
-    // client_id, so an env-less build (no GOOGLE_CLIENT_ID) must omit the
-    // block entirely — Google login is simply unavailable in such builds.
+    // Omit oauth2 unless GOOGLE_CLIENT_ID is set — Chrome rejects an empty client_id.
     ...(client_id
       ? {
         oauth2: {

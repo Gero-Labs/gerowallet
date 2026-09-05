@@ -96,17 +96,12 @@ onMounted(async () => {
     console.error('❌ Failed to trigger auto-lock check on mount:', error);
   }
 
-  // CIP-45: bring the discovery peer up so paired dApps can reconnect.
-  // Deferred: feature flags hydrate async and this is never login-critical.
+  // CIP-45: bring the discovery peer up so paired dApps can reconnect (deferred, non-critical).
   setTimeout(async () => {
     const { featureFlagsStore } = await import('@/stores/featureFlagsStore');
     if (!featureFlagsStore.isCip45Enabled()) return;
-    // The signing/connect approval prompts are full instances of THIS options
-    // app, opened as popup windows. They must NOT host a CIP-45 peer: a second
-    // peer with the same id would collide, and — worse — a fresh service in the
-    // popup broadcasts its own empty session state, clobbering the dashboard's
-    // live-session UI (the exact "entry disappears when the sign dialog opens"
-    // bug). Only the dashboard tab (a normal window) hosts the peer.
+    // Only the dashboard hosts the peer — approval popups are separate app
+    // instances whose empty session state would clobber the dashboard's UI.
     try {
       const currentWindow = await chrome.windows.getCurrent();
       if (currentWindow?.type === 'popup') return;

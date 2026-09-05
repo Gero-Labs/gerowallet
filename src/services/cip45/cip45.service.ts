@@ -35,15 +35,12 @@ class GeroPeerConnect extends CardanoPeerConnect {
         icon: 'https://gerowallet.io/images/logo.svg',
         requestAutoconnect: true,
       },
-      // `peerjs`'s `PeerOptions` isn't re-exported from the package root and
-      // isn't a direct dependency of this repo, so cast structurally rather
-      // than reaching into a transitive dependency's types (or using `any`,
-      // which this repo's eslint config forbids).
+      // peerjs's PeerOptions isn't re-exported; cast structurally (eslint forbids any).
       { peerId, storage, peerJsConfig: peerJsConfig as never, logLevel: 'warn' },
     );
   }
 
-  /** Discovery-reconnect gate: only paired (or actively-pairing) dApps may trigger a dial-out. */
+  // Discovery-reconnect gate: only paired (or actively-pairing) dApps may dial out.
   public override connect(identifier: string): string {
     if (!this.service.isAllowedPeerSync(identifier)) {
       console.warn('CIP-45: refusing connection to unknown peer', identifier);
@@ -52,20 +49,9 @@ class GeroPeerConnect extends CardanoPeerConnect {
     return super.connect(identifier);
   }
 
-  /**
-   * Adaptation vs. the brief: `Promise<any>` on the shared invoke helper trips
-   * this repo's `@typescript-eslint/no-explicit-any` (error, no test-file
-   * exemption). Made generic instead — each override below carries an
-   * explicit return type matching the abstract CIP-30 method it implements,
-   * so TS infers `T` from that contextual return type rather than needing an
-   * `any` escape hatch.
-   */
+  // Generic so each override keeps its CIP-30 return type (eslint forbids any).
   private invoke = async <T>(method: string, params: Record<string, unknown> = {}): Promise<T> => {
-    // Belt-and-braces vs. FIX 1's wallet-switch watcher: the watcher's
-    // disconnect() is async and best-effort, so a request already in flight
-    // (or one that races the watcher between the wallet-id change and the
-    // disconnect landing) must not be forwarded to a session that no longer
-    // belongs to the logged-in wallet.
+    // Don't forward a request for a wallet that's no longer logged in.
     if (!this.service.isSessionPeerAllowed()) {
       throw { code: -3, info: 'Wallet changed — pairing not authorized' };
     }
@@ -98,50 +84,19 @@ class Cip45Service {
   private pendingPeerId: string | null = null;
   private pairingsCache: Cip45Pairing[] = [];
   private startedWithFallback = false;
-  /**
-   * Fix round 1, finding 1: `ensureStarted()` used to check `if (this.wallet)
-   * return;` and then cross four `await` points before assigning
-   * `this.wallet`, so a `pair()` call racing App.vue's 3s-deferred
-   * `resumeIfPaired()` (or any two concurrent callers) could both pass the
-   * guard and construct two `GeroPeerConnect` instances — orphaning one live
-   * peer connection and double-registering `onDisconnect`/`onServerShutdown`/
-   * `beforeunload` handlers. Serialize init through the same `async-mutex`
-   * pattern `walletConnect.service.ts` uses (`initMutex.runExclusive`, with
-   * the guard re-checked *inside* the critical section) so concurrent callers
-   * await the same initialization instead of racing it.
-   */
+  // Serialize init so concurrent pair()/resumeIfPaired() calls don't build two peers.
   private initMutex = new Mutex();
-
-  /**
-   * Fix round 2, finding 1: a live CIP-45 session used to survive a wallet
-   * switch, so a dApp paired to wallet A kept reading wallet B once the user
-   * switched. Guards `registerWalletSwitchWatch()` so it's wired exactly
-   * once per service instance even though `startWallet()` itself runs more
-   * than once (e.g. `restartWithFallback()`'s primary→fallback retry).
-   */
   private walletSwitchWatchStarted = false;
 
-  /**
-   * Tears down a live session the moment the logged-in wallet changes.
-   * `walletStore` is a `Vue.observable` (see stores/walletStore.ts), so
-   * Vue 2.7's standalone `watch()` can track `loggedWallet?.id` outside a
-   * component. Best-effort: a session-teardown failure here must not become
-   * an unhandled rejection or block the wallet switch itself.
-   */
+  // Tear down a live session when the logged-in wallet changes (wired once).
   private registerWalletSwitchWatch(): void {
     if (this.walletSwitchWatchStarted) return;
     this.walletSwitchWatchStarted = true;
     watch(
       () => walletStore.loggedWallet?.id,
       (newId) => {
-        // Only a genuine switch to a DIFFERENT logged-in wallet tears the
-        // session down. `loggedWallet` transiently clears to undefined during
-        // signing (a signing popup makes the background re-broadcast the
-        // store), which must NOT drop the session — hence the `newId` guard —
-        // and `isSessionPeerAllowed()` re-checks the session's dApp against the
-        // now-active wallet's pairings, so a null → same-id round-trip is a
-        // no-op while a real A → B switch tears down. The invoke-time gate is
-        // the belt-and-braces for anything that races this.
+        // Only a real switch to a different wallet drops the session; transient
+        // loggedWallet clears during signing must not (isSessionPeerAllowed re-checks).
         if (newId && this.session && !this.isSessionPeerAllowed()) {
           this.disconnect().catch(() => { /* best effort */ });
         }
@@ -158,14 +113,7 @@ class Cip45Service {
       || this.activePairings().some(p => p.dappPeerId === peerId);
   }
 
-  /**
-   * Fix round 2, finding 1 (belt-and-braces): the wallet-switch watcher in
-   * `startWallet()` tears the session down on a wallet switch, but that
-   * disconnect is async/best-effort. `GeroPeerConnect.invoke()` calls this
-   * first so a CIP-30 request already in flight (or racing the watcher)
-   * can't be served against a session paired to a wallet that's no longer
-   * logged in.
-   */
+  // Request-time gate: block invokes for a session not paired under the active wallet.
   isSessionPeerAllowed(): boolean {
     return !this.session || this.isAllowedPeerSync(this.session.dappPeerId);
   }
@@ -180,17 +128,7 @@ class Cip45Service {
     return this.activePairings();
   }
 
-  /**
-   * Fix round 1, finding 2: `pairingsCache` holds every wallet's pairings
-   * (each entry carries its own `walletId`), but `isAllowedPeerSync()`,
-   * `getPairings()`, and `resumeIfPaired()` used to read the flat cache
-   * directly — after a wallet switch, wallet A's paired dApp would still
-   * pass wallet B's discovery-reconnect gate. Every READ that decides "is
-   * this dApp allowed to reach the currently logged-in wallet" goes through
-   * this helper instead. The on-disk list stays flat (unscoped) by design —
-   * `removePairing()` still operates on it by peerId — and wallet-switch
-   * auto-disconnect is explicitly out of scope for this fix.
-   */
+  // The on-disk list is flat; scope reads to the active wallet by walletId.
   private activePairings(): Cip45Pairing[] {
     const walletId = this.currentWalletId();
     return this.pairingsCache.filter(p => p.walletId === walletId);
@@ -209,9 +147,8 @@ class Cip45Service {
     await chrome.storage.local.set({ [PAIRINGS_KEY]: this.pairingsCache });
   }
 
+  // The library's storage is sync; back it with a write-through cache over chrome.storage.
   private async buildLibStorage(): Promise<PeerConnectStorage> {
-    // The library's storage interface is sync; back it with a write-through
-    // in-memory cache preloaded from chrome.storage.local.
     const stored = await chrome.storage.local.get(LIB_STORAGE_KEY);
     const cache: Record<string, string> = (stored?.[LIB_STORAGE_KEY] as Record<string, string>) ?? {};
     const persist = () => { chrome.storage.local.set({ [LIB_STORAGE_KEY]: cache }); };
@@ -225,23 +162,13 @@ class Cip45Service {
   private async ensureStarted(peerJsConfig: Record<string, unknown> = PRIMARY_PEERJS_CONFIG): Promise<void> {
     if (this.wallet) return;
     await this.initMutex.runExclusive(async () => {
-      // Re-check: another caller may have finished init while we waited for the lock.
-      if (this.wallet) return;
+      if (this.wallet) return; // another caller may have finished init while we waited
       await this.startWallet(peerJsConfig);
     });
   }
 
-  /**
-   * Tears the current peer down and rebuilds it against the fallback peerjs
-   * config, all inside the same `initMutex` critical section as
-   * `ensureStarted()` — so a concurrent `ensureStarted()`/`resumeIfPaired()`
-   * call can't observe `this.wallet` mid-teardown (already destroyed, not
-   * yet nulled, or nulled but not yet rebuilt) and either dial out on a dead
-   * peer or race the rebuild. `startWallet()` itself must not go through
-   * `ensureStarted()` here — `Mutex` isn't reentrant, so calling back into
-   * `runExclusive` from inside an already-held critical section would
-   * deadlock.
-   */
+  // Rebuild on the fallback config inside the same mutex; calls startWallet directly
+  // (not ensureStarted) because Mutex isn't reentrant.
   private async restartWithFallback(): Promise<void> {
     await this.initMutex.runExclusive(async () => {
       try { this.wallet?.destroy(); } catch { /* best effort */ }
@@ -251,7 +178,7 @@ class Cip45Service {
     });
   }
 
-  /** Assumes `initMutex` is already held by the caller. */
+  // Assumes initMutex is already held by the caller.
   private async startWallet(peerJsConfig: Record<string, unknown>): Promise<void> {
     await this.loadPairings();
 
@@ -294,12 +221,7 @@ class Cip45Service {
 
   private recordPairing(dappPeerId: string, dappName: string, dappUrl: string): void {
     const walletId = this.currentWalletId();
-    // Fix round 2, finding 3: the on-disk list is flat (every wallet's
-    // pairings share it — see activePairings() above), but de-duping by bare
-    // dappPeerId meant a dApp already paired under wallet A never persisted
-    // a record for wallet B, so wallet B's reconnect gate (isAllowedPeerSync
-    // → activePairings(), scoped by walletId) would then refuse a dApp it
-    // just connected to. De-dupe by the (dappPeerId, walletId) pair instead.
+    // De-dupe by (dappPeerId, walletId) so each wallet keeps its own pairing record.
     if (!this.pairingsCache.some(p => p.dappPeerId === dappPeerId && p.walletId === walletId)) {
       this.pairingsCache.push({ dappPeerId, dappName, dappUrl, walletId, pairedAt: Date.now() });
       this.savePairings();
@@ -320,12 +242,7 @@ class Cip45Service {
   /** Pair with a dApp from a scanned QR payload or a pasted peer id. */
   async pair(input: string): Promise<void> {
     const { dappPeerId } = parseCip45Input(input); // throws 'invalid' / 'stale'
-    // Fix round 2, finding 2: `startedWithFallback` used to be set once and
-    // never reset, so once ANY pair() attempt in this service's lifetime had
-    // fallen back, every later pair() attempt lost its one retry forever —
-    // even a brand new pairing with no relation to the earlier failure.
-    // Scope the flag to a single pair() attempt sequence instead.
-    this.startedWithFallback = false;
+    this.startedWithFallback = false; // scope the one retry to this attempt
     await this.ensureStarted();
     this.pendingPeerId = dappPeerId;
     this.pushSession('connecting', null);
@@ -333,13 +250,9 @@ class Cip45Service {
     try {
       await this.connectWithTimeout(dappPeerId);
     } catch (primaryError) {
-      // Fix round 2, finding 2: retry only on the 15s connect timeout
-      // (signaling-level failure) — a dApp-side rejection surfaces as
-      // Error(message.errorMessage || 'rejected') from connectWithTimeout
-      // and must propagate immediately, not trigger a fallback retry.
+      // Retry only on the connect timeout (signaling failure); a rejection propagates.
       const isTimeout = primaryError instanceof Error && primaryError.message === 'timeout';
       if (!isTimeout || this.startedWithFallback) throw primaryError;
-      // One retry against the peerjs public cloud (signaling-level failure).
       console.warn('CIP-45: primary signaling failed, retrying via public cloud', primaryError);
       await this.restartWithFallback();
       this.pendingPeerId = dappPeerId;
@@ -367,24 +280,8 @@ class Cip45Service {
     });
   }
 
-  /**
-   * Adaptation vs. the brief: the brief reads the standing handler back off
-   * the live instance with `this.wallet!['onConnect']`. That bracket read
-   * does type-check (TS's `protected` visibility check is bypassed by
-   * element-access syntax, unlike `.onConnect`), and against the *real*
-   * library it would work, since its `setOnConnect` assigns `this.onConnect
-   * = cb` internally (confirmed in the published bundle) with a no-op
-   * default from the constructor. But the brief's own spec mock does not
-   * mirror that internal assignment — its `setOnConnect` only stashes the
-   * callback into the test's external `callbacks` bag, so `wallet['onConnect']`
-   * would read back `undefined` and crash the very case Step 1 tests for
-   * ("pair() connects... and records the pairing on success" — confirmed by
-   * running the literal brief snippet: `TypeError: previous is not a
-   * function`). `Cip45Service` tracks its own reference to the standing
-   * handler instead, updated every time it calls `setOnConnect`, so
-   * `connectWithTimeout()` can wrap-and-chain it without depending on the
-   * peer-connect instance's internal field bookkeeping.
-   */
+  // Track our own reference to the standing onConnect so connectWithTimeout can
+  // wrap-and-chain it without reading the peer instance's internal field.
   private standingOnConnect: ((message: IConnectMessage) => void) | null = null;
 
   private setConnectHandler(handler: (message: IConnectMessage) => void): void {

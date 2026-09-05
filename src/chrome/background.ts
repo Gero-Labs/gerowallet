@@ -126,9 +126,7 @@ loadWallets().then(async () => {
 });
 
 (async () => {
-  // The Bring SDK throws ('Missing configuration') when identifier/apiEndpoint
-  // are absent — builds without the cashback env vars must skip init entirely
-  // (cashback is simply unavailable) instead of crashing SW startup.
+  // Skip cashback init without its env vars — the SDK throws on missing config.
   const cashbackIdentifier = import.meta.env['VITE_CASHBACK_IDENTIFIER'];
   const cashbackEnvironment = import.meta.env['VITE_CASHBACK_ENVIRONMENT'];
   if (!cashbackIdentifier || !cashbackEnvironment) {
@@ -4385,11 +4383,8 @@ app.addToOptions(MessageTypes.WC_GET_SESSIONS, async (request, sendResponse) => 
 
 // ====== CIP-45 (peer-to-peer dApp bridge) ======
 
-/** Same mirror-read pattern as isWalletConnectEnabled — the flag service can't run in the SW. */
 async function isCip45Enabled(): Promise<boolean> {
-  // Dev/test builds can default the flag ON via VITE_CIP45_DEFAULT_ENABLED
-  // (baked in at build time). An explicit boolean in the mirror still wins,
-  // so the flag service can flip it either way even in such builds.
+  // Build-time default; an explicit value in the mirror still wins.
   const buildDefault = import.meta.env['VITE_CIP45_DEFAULT_ENABLED'] === 'true';
   try {
     const stored = await chrome.storage.local.get('featureFlags');
@@ -4470,11 +4465,7 @@ app.addToOptions(MessageTypes.CIP45_INVOKE, async (request, sendResponse) => {
       fail(APIError.Refused.code, 'No wallet logged in');
       return true;
     }
-    // Cardano-only allowlist, mirroring how the WC session-proposal handler
-    // (~background.ts:4095) classifies the Cardano-family chains — CIP-45 is
-    // a Cardano dApp-bridge standard, so gate by "is this a Cardano chain"
-    // rather than by "is this specifically Bitcoin" (which let Midnight and
-    // any future non-Cardano chain through).
+    // CIP-45 is a Cardano dApp bridge — allow Cardano-family chains only.
     if (loggedWallet.chain !== Blockchain.CARDANO
       && loggedWallet.chain !== 'Apex Prime'
       && loggedWallet.chain !== 'Apex Vector') {

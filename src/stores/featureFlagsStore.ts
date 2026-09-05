@@ -1,10 +1,7 @@
 import Vue from 'vue';
 import featureFlagService from '@/services/featureFlag.service';
 
-// Build-time default override for the CIP-45 flag, for dev/test builds only
-// (set VITE_CIP45_DEFAULT_ENABLED=true in a local env). It changes the flag's
-// DEFAULT, so a value delivered by the flag service still wins; release envs
-// must never set it.
+// Build-time default for the CIP-45 flag (dev/test only); a flag-service value still wins.
 const CIP45_DEFAULT_ENABLED =
   (import.meta as { env?: Record<string, unknown> }).env?.['VITE_CIP45_DEFAULT_ENABLED'] === 'true';
 

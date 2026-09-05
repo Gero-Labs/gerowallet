@@ -6,9 +6,7 @@ type ManifestWithOAuth2 = Manifest.WebExtensionManifest & {
 
 const manifest: ManifestWithOAuth2 = browser.runtime.getManifest() as ManifestWithOAuth2;
 
-// Builds without GOOGLE_CLIENT_ID ship no oauth2 manifest block (see
-// scripts/manifest.ts), so resolve the config lazily: importing this module
-// must not crash such builds — only actually signing in needs the values.
+// Resolved lazily: an env-less build has no oauth2 block, so importing must not throw.
 function getOAuthConfig(): { client_id: string; scopes: string[] } {
   if (!manifest.oauth2?.client_id) {
     throw new Error('Google OAuth2 is not configured in this build');
