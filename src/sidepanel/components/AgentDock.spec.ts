@@ -216,6 +216,12 @@ Object.assign(mockDock, {
   messages: ref([]),
 });
 
+// Imported for real, unlike every mocked collaborator above: it is a leaf module
+// with no network/Dexie/WASM dependencies, and under happy-dom (no `chrome`) it
+// is just an in-memory Vue.observable — mocking it would only hide the behavior
+// the hide tests exist to check.
+import { agentDockPrefsStore } from '@/stores/agentDockPrefsStore';
+
 // @ts-ignore — tsconfig has no `*.vue` module shim, so `tsc` cannot resolve an
 // SFC imported from a .ts file. Vite/vitest resolve it fine; this keeps the
 // repo's typecheck error count where it was.
@@ -1306,5 +1312,70 @@ describe('AgentDock — assistant markdown adopts the shared prose recipe', () =
 
     expect(wrapper.find('.agent-dock__md').html()).not.toContain('md-ref');
     expect(wrapper.find('.agent-dock__md').text()).toContain('[2]');
+  });
+});
+
+describe('AgentDock — hiding the dock', () => {
+  // The prefs store is imported for real (not mocked like the other
+  // collaborators): with no `chrome` global under happy-dom it degrades to a
+  // plain in-memory observable, which is exactly the surface these tests want
+  // to assert against. Reset between tests so one hide doesn't leak.
+  beforeEach(() => {
+    agentDockPrefsStore.setHidden(false);
+  });
+
+  function findHideButton(wrapper: Wrapper<Vue>): Wrapper<Vue> {
+    const match = wrapper
+      .findAll('.agent-dock__head-btn')
+      .wrappers.find((w) => w.attributes('aria-label') === 'support.hide.action');
+    if (!match) throw new Error('hide button not found');
+    return match;
+  }
+
+  it('shows no confirmation until the hide button is clicked', () => {
+    const wrapper = mountDock();
+    expect(wrapper.find('.agent-dock__hide-confirm').exists()).toBe(false);
+  });
+
+  it('asks first, and the ask tells the user how to get the dock back', async () => {
+    const wrapper = mountDock();
+    await findHideButton(wrapper).trigger('click');
+
+    const confirm = wrapper.find('.agent-dock__hide-confirm');
+    expect(confirm.exists()).toBe(true);
+    // The restore instructions are the whole point of confirming rather than
+    // hiding on the first click — without them the dock just vanishes.
+    expect(confirm.text()).toContain('support.hide.body');
+    // Nothing is persisted merely by asking.
+    expect(agentDockPrefsStore.hidden).toBe(false);
+  });
+
+  it('cancel dismisses the confirmation and leaves the dock visible', async () => {
+    const wrapper = mountDock();
+    await findHideButton(wrapper).trigger('click');
+    await wrapper.findAll('.agent-dock__hide-btn').at(0).trigger('click');
+
+    expect(wrapper.find('.agent-dock__hide-confirm').exists()).toBe(false);
+    expect(agentDockPrefsStore.hidden).toBe(false);
+  });
+
+  it('confirming persists the preference and closes the open panel', async () => {
+    const wrapper = mountDock();
+    await findHideButton(wrapper).trigger('click');
+    await wrapper.find('.agent-dock__hide-btn.is-primary').trigger('click');
+
+    expect(agentDockPrefsStore.hidden).toBe(true);
+    // Closing matters because the dashboard root unmounts the dock off the same
+    // preference — an open panel left behind would reappear mid-open on unhide.
+    expect(mockDock.close).toHaveBeenCalled();
+    expect(wrapper.find('.agent-dock__hide-confirm').exists()).toBe(false);
+  });
+
+  it('offers the hide control with live chat off too — the FAB obstructs either way', async () => {
+    setLiveChatEnabled(false);
+    const wrapper = mountDock();
+    await findHideButton(wrapper).trigger('click');
+
+    expect(wrapper.find('.agent-dock__hide-confirm').exists()).toBe(true);
   });
 });
