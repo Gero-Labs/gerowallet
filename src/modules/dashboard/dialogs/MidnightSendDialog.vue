@@ -240,6 +240,10 @@
                         <v-icon x-small color="var(--g-text-3)" class="mr-1">mdi-information-outline</v-icon>
                         {{ t('midnight.send.shieldedBalanceNote') }}
                       </div>
+                      <div v-if="noFeeCapacity" class="token-info">
+                        <v-icon x-small color="var(--g-warning)" class="mr-1">mdi-alert-outline</v-icon>
+                        {{ t('midnight.send.noDustFee') }}
+                      </div>
                       <div v-else-if="rawUnits" class="token-info">
                         <v-icon x-small color="var(--g-text-3)" class="mr-1">mdi-information-outline</v-icon>
                         {{ t('midnight.send.rawUnitsNote') }}
@@ -423,6 +427,7 @@ import { Blockchain, Network, WalletType } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { midnightTokenBalances } from '@/chains/midnight/midnightTokenBalances';
 import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
+import { blocksMidnightSend } from '@/chains/midnight/midnightFeeCapacity';
 import {
   formatTokenAmount,
   parseTokenAmount,
@@ -519,6 +524,13 @@ const rawUnits = computed(() => selectedDecimals.value === null);
 const amountStep = computed(() =>
   rawUnits.value ? '1' : `0.${'0'.repeat((selectedDecimals.value ?? 1) - 1)}1`,
 );
+
+/**
+  * No spendable DUST means no fee can be paid, so the send cannot succeed.
+  * Caught here rather than four steps later inside the SDK's
+  * `balanceTransactions`, which neither returns nor throws in that state.
+  */
+const noFeeCapacity = computed(() => blocksMidnightSend(midnightStore.dustState));
 
 const available = computed(() => {
   if (isShielded.value) return midnightStore.balances?.nightShielded ?? 0n;
@@ -790,6 +802,10 @@ const reviewTotals = computed<TxDetailsTotals>(() => ({
 function nextStep() {
   errorMessage.value = null;
   if (currentStep.value === 1) {
+    if (noFeeCapacity.value) {
+      errorMessage.value = t('midnight.send.noDustFee');
+      return;
+    }
     if (!step1FormRef.value?.validate()) {
       shakeError.value = true;
       setTimeout(() => { shakeError.value = false; }, 400);
