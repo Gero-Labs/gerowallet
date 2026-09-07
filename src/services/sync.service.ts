@@ -36,6 +36,11 @@ export class SyncService {
   // ~20s tip push.
   private cborHealAttempted = new Set<string>();
   private lastCborHealAt = 0;
+  private rewardsRefreshInFlight: Promise<void> | null = null;
+  private lastRewardsAttemptAt: number | null = null;
+  private lastRewardsRefreshAt: number | null = null;
+  private lastRewardsEpoch: number | undefined;
+  private lastRewardsSum: string | undefined;
 
   constructor(walletBg: WalletBg) {
     this.walletBg = walletBg;
@@ -375,6 +380,10 @@ export class SyncService {
           epoch_slot: syncObject.block.epoch_slot || 0,
         });
       }
+      // gero-sync pushes the reward balance, but no reward history. Refresh
+      // independently of transactions and the persisted account balance so
+      // wallets with already-stale history also recover on their next sync.
+      void this.refreshAccountRewards(syncObject.block?.epoch, syncObject.account?.rewards_sum);
     }
   }
 
@@ -608,20 +617,58 @@ export class SyncService {
   }
 
   /**
+   * Refresh history on first sync, epoch/reward changes, and hourly while open.
+   * The periodic check covers providers whose reward indexing trails the epoch
+   * boundary. Failed requests retry after a minute; block pushes share one fetch.
+   */
+  private async refreshAccountRewards(epoch?: number, rewardsSum?: string): Promise<void> {
+    if (
+      ![Blockchain.CARDANO, Blockchain.APEX_PRIME, Blockchain.APEX_VECTOR].includes(this.walletBg.chain)
+      || !this.walletBg.stakeAddress
+      || this.walletBg.isEnterpriseAddress()
+    ) return;
+    if (this.rewardsRefreshInFlight) return this.rewardsRefreshInFlight;
+
+    const now = Date.now();
+    if (this.lastRewardsAttemptAt !== null && now - this.lastRewardsAttemptAt < 60_000) return;
+    const needsRefresh = this.lastRewardsRefreshAt === null
+      || now - this.lastRewardsRefreshAt >= 3_600_000
+      || (epoch !== undefined && epoch !== this.lastRewardsEpoch)
+      || (rewardsSum !== undefined && rewardsSum !== this.lastRewardsSum);
+    if (!needsRefresh) return;
+
+    this.lastRewardsAttemptAt = now;
+    this.rewardsRefreshInFlight = (async () => {
+      if (await this.syncAccountRewards()) {
+        this.lastRewardsRefreshAt = Date.now();
+        this.lastRewardsEpoch = epoch ?? this.lastRewardsEpoch;
+        this.lastRewardsSum = rewardsSum ?? this.lastRewardsSum;
+      }
+    })();
+    try {
+      await this.rewardsRefreshInFlight;
+    } finally {
+      this.rewardsRefreshInFlight = null;
+    }
+  }
+
+  /**
    * Sync account rewards
    */
-  async syncAccountRewards(): Promise<void> {
+  async syncAccountRewards(): Promise<boolean> {
     try {
       if (this.walletBg.isEnterpriseAddress()) {
-        return;
+        return false;
       }
       const res = await this.api.getAccountRewards(this.walletBg.stakeAddress);
-      if (res) {
+      if (Array.isArray(res)) {
         await this.walletBg.setAccountRewards(res);
+        return true;
       }
     } catch (e) {
-      // console.log(e);
+      console.warn('Failed to refresh account reward history; a later sync will retry.');
     }
+    return false;
   }
 
   /**
