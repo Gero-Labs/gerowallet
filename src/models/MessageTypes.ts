@@ -133,7 +133,7 @@ export enum MessageTypes {
   //   2. Derives the Cardano payment key at CIP-1852 / 1815' / account / 0 / 0.
   //   3. Signs the supplied Cardano tx CBOR with that key.
   //   4. Submits the signed tx to the Cardano network corresponding to the
-  //      Midnight wallet's network (midnight-preview → cardano-preview, etc.).
+  //      Midnight wallet's network (midnight-stagenet → cardano-preprod, etc.).
   // Returns the tx hash. Used by `DustRegistrationDialog` for native registration.
   SIGN_AND_SUBMIT_DUST_REGISTRATION_TX = 'SIGN_AND_SUBMIT_DUST_REGISTRATION_TX',
   // Midnight: force a full re-sync from block 0. Clears both halves of the warm

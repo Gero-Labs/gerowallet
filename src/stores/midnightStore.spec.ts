@@ -19,10 +19,10 @@ const addr = (hrp: string, body: string): MidnightAddresses =>
   ({ dust: '', shielded: '', unshielded: `${hrp}1${body}` }) as MidnightAddresses;
 
 // The real HRPs: background.ts builds `mn_addr1…` for mainnet and
-// `mn_addr_<network>1…` for every other Network member (preview/preprod/testnet).
+// `mn_addr_<network>1…` for every other Network member (stagenet/preprod/testnet).
 const MAINNET_A = addr('mn_addr', 'apsqqzzwwvvee');
 const MAINNET_B = addr('mn_addr', 'zzqqwwvvsspp');
-const PREVIEW = addr('mn_addr_preview', 'apsqqzzwwvvee');
+const STAGENET = addr('mn_addr_stagenet', 'apsqqzzwwvvee');
 const PREPROD = addr('mn_addr_preprod', 'apsqqzzwwvvee');
 const TESTNET = addr('mn_addr_testnet', 'zzqqwwvvsspp');
 
@@ -49,9 +49,9 @@ describe('midnight wallet switch: chain tip', () => {
   it('clears the tip when the network changes', () => {
     // A mainnet height must never render under a testnet wallet, or the reverse.
     for (const [from, to] of [
-      [MAINNET_A, PREVIEW],
-      [PREVIEW, MAINNET_A],
-      [PREVIEW, PREPROD],
+      [MAINNET_A, STAGENET],
+      [STAGENET, MAINNET_A],
+      [STAGENET, PREPROD],
       [PREPROD, TESTNET],
     ] as const) {
       midnightStore.activeWalletKey = null;
@@ -65,12 +65,12 @@ describe('midnight wallet switch: chain tip', () => {
     // `mn_addr` is a literal prefix of `mn_addr_preview`, so a startsWith-style
     // comparison would call these the same network and leak a mainnet tip onto
     // preview. The HRPs are compared whole.
-    switchFrom(MAINNET_A, PREVIEW);
+    switchFrom(MAINNET_A, STAGENET);
     expect(midnightStore.tip.height).toBe(0);
   });
 
   it('keeps the tip between two wallets on the same testnet', () => {
-    switchFrom(PREVIEW, addr('mn_addr_preview', 'zzqqwwvvsspp'));
+    switchFrom(STAGENET, addr('mn_addr_stagenet', 'zzqqwwvvsspp'));
     expect(midnightStore.tip).toEqual(TIP);
   });
 

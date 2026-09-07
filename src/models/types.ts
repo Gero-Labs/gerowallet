@@ -140,6 +140,9 @@ const Network = {
   PREVIEW: 'Preview',
   PREPROD: 'Preprod',
   TESTNET: 'Testnet',
+  // Midnight-only. Nexus retired `midnight-preview` on 2026-09-06; stagenet is
+  // the network that replaced it. No Cardano network carries this name.
+  STAGENET: 'Stagenet',
 };
 
 const ERROR = {

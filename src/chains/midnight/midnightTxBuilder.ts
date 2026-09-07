@@ -38,7 +38,7 @@ import {
 import { getNexusAccessToken, reauthenticateNexus } from '@/services/nexusDevice.service';
 
 export interface BalanceAndSignUnshieldedTransferArgs {
-  /** SDK network ID — 'mainnet' / 'preview' / 'preprod' / 'testnet'. */
+  /** SDK network ID — 'mainnet' / 'stagenet' / 'preprod' / 'testnet'. */
   readonly sdkNetworkId: string;
   /** Indexer URLs (the BG knows these via midnightConfig). */
   readonly endpoints: MidnightNetworkEndpoints;

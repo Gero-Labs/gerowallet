@@ -60,7 +60,7 @@ interface CapturedHandlers {
  * would do.
  */
 async function sync(payload: WsSyncMessage): Promise<void> {
-  midnightSyncService.start(Network.PREVIEW, ADDRESSES);
+  midnightSyncService.start(Network.STAGENET, ADDRESSES);
   const lastCall = h.connect.mock.calls[h.connect.mock.calls.length - 1];
   const handlers = lastCall[4] as CapturedHandlers;
   await handlers.onSync?.(payload);

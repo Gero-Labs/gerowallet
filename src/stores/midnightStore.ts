@@ -300,7 +300,7 @@ const EMPTY_TIP: MidnightChainTip = {
  */
 const DEFAULT_PROOF_SERVER: MidnightStore['proofServer'] = {
   mode: 'remote',
-  localUrl: getMidnightEndpoints(Network.PREVIEW)!.defaultProofServerUrl,
+  localUrl: getMidnightEndpoints(Network.STAGENET)!.defaultProofServerUrl,
   zkpaasUrl: '',
   zkpaasApiKey: '',
   zkpaasApiSecret: '',
