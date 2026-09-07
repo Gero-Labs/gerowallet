@@ -55,6 +55,10 @@ const Cip45Store = {
   clear() {
     broadcastFromBackground({ status: 'idle', session: null });
   },
+
+  clearSession(sessionId: string) {
+    if (cip45State.session?.authorization?.sessionId === sessionId) this.clear();
+  },
 };
 
 export default Cip45Store;

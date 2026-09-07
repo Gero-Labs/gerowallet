@@ -6,7 +6,8 @@ import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { walletStore } from '@/stores/walletStore';
 import { parseCip45Input } from './qr';
-import type { Cip45Pairing, Cip45Session, Cip45Status } from './types';
+import type { Cip45Pairing, Cip45Session, Cip45WalletContext, Cip45Authorization } from './types';
+import { CIP45_REVOKED, walletContext, sameWallet } from './authorization';
 
 const PAIRINGS_KEY = 'cip45Pairings';
 const PEER_ID_KEY = 'cip45PeerId';
@@ -22,6 +23,7 @@ const PRIMARY_PEERJS_CONFIG = {
 const FALLBACK_PEERJS_CONFIG = {}; // peerjs public cloud defaults
 
 class GeroPeerConnect extends CardanoPeerConnect {
+  private publishOriginalApi: () => void;
   constructor(
     private service: Cip45Service,
     peerId: string,
@@ -38,33 +40,36 @@ class GeroPeerConnect extends CardanoPeerConnect {
       // peerjs's PeerOptions isn't re-exported; cast structurally (eslint forbids any).
       { peerId, storage, peerJsConfig: peerJsConfig as never, logLevel: 'warn' },
     );
+    this.publishOriginalApi = this.injectApi;
+    this.injectApi = () => {};
   }
 
-  // Discovery-reconnect gate: only paired (or actively-pairing) dApps may dial out.
+  // Discovery can only start a fresh attempt for a pairing belonging to this wallet.
   public override connect(identifier: string): string {
-    if (!this.service.isAllowedPeerSync(identifier)) {
-      console.warn('CIP-45: refusing connection to unknown peer', identifier);
-      return '';
-    }
-    return super.connect(identifier);
+    this.service.reconnect(this, identifier);
+    return identifier;
   }
 
-  // Generic so each override keeps its CIP-30 return type (eslint forbids any).
-  private invoke = async <T>(method: string, params: Record<string, unknown> = {}): Promise<T> => {
-    // Don't forward a request for a wallet that's no longer logged in.
-    if (!this.service.isSessionPeerAllowed()) {
-      throw { code: -3, info: 'Wallet changed — pairing not authorized' };
-    }
+  public openConnection(identifier: string): void { super.connect(identifier); }
+
+  // The SDK injects the API before onConnect. Publish only after the background
+  // accepts the wallet-bound session, otherwise the dApp can race activation.
+  public publishApi(): void { this.publishOriginalApi(); }
+
+  private invoke = async <T,>(method: string, params: Record<string, unknown> = {}): Promise<T> => {
+    const session = this.service.authorizedSession(this);
     const response = (await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.CIP45_INVOKE,
-      data: { method, params, dapp: this.service.currentDappInfo() },
+      data: { method, params, authorization: session.authorization,
+        dapp: { name: session.dappName, url: session.dappUrl } },
     })) as { data?: { success: boolean; result?: T; error?: unknown } };
+    // Do not deliver a response from a connection revoked while the RPC was running.
+    this.service.authorizedSession(this);
     if (!response?.data?.success) {
       throw response?.data?.error ?? { code: -2, info: 'CIP-45 invoke failed' };
     }
-    return response.data!.result as T;
+    return response.data.result as T;
   };
-
   protected override getNetworkId(): Promise<number> { return this.invoke('getNetworkId'); }
   protected override getUtxos(amount?: string, paginate?: unknown): Promise<string[] | null> { return this.invoke('getUtxos', { amount, paginate }); }
   protected override getCollateral(params?: { amount?: string }): Promise<string[] | null> { return this.invoke('getCollateral', params ?? {}); }
@@ -78,44 +83,63 @@ class GeroPeerConnect extends CardanoPeerConnect {
   protected override submitTx(tx: string): Promise<string> { return this.invoke('submitTx', { tx }); }
 }
 
+interface PairingAttempt {
+  context: Cip45WalletContext;
+  peerId: string;
+  generation: number;
+  authorization?: Cip45Authorization;
+  cancel?: () => void;
+  revoke?: () => void;
+}
+
 class Cip45Service {
   private wallet: GeroPeerConnect | null = null;
+  private owner: Cip45WalletContext | null = null;
   private session: Cip45Session | null = null;
-  private pendingPeerId: string | null = null;
+  private attempt: PairingAttempt | null = null;
+  private generation = 0;
   private pairingsCache: Cip45Pairing[] = [];
-  private startedWithFallback = false;
-  // Serialize init so concurrent pair()/resumeIfPaired() calls don't build two peers.
+  private storageMutex = new Mutex();
   private initMutex = new Mutex();
-  private walletSwitchWatchStarted = false;
 
-  // Tear down a live session when the logged-in wallet changes (wired once).
-  private registerWalletSwitchWatch(): void {
-    if (this.walletSwitchWatchStarted) return;
-    this.walletSwitchWatchStarted = true;
-    watch(
-      () => walletStore.loggedWallet?.id,
-      (newId) => {
-        // Only a real switch to a different wallet drops the session; transient
-        // loggedWallet clears during signing must not (isSessionPeerAllowed re-checks).
-        if (newId && this.session && !this.isSessionPeerAllowed()) {
-          this.disconnect().catch(() => { /* best effort */ });
-        }
-      },
-    );
+  constructor() {
+    watch(() => [walletStore.loggedWallet?.id, walletStore.loggedWallet?.chain,
+      walletStore.loggedWallet?.network, walletStore.isLocked], () => {
+      const current = walletContext(walletStore.loggedWallet);
+      // UI hydration may briefly clear the wallet during signing. Calls fail
+      // closed during that interval; background logout/lock independently revokes.
+      if (walletStore.isLocked || (current && this.owner && !sameWallet(current, this.owner))) {
+        this.invalidate();
+      }
+    }, { flush: 'sync' });
+    window.addEventListener('beforeunload', () => this.invalidate());
   }
 
-  currentDappInfo(): { name: string; url: string } | undefined {
-    return this.session ? { name: this.session.dappName, url: this.session.dappUrl } : undefined;
+  private currentContext(): Cip45WalletContext {
+    const context = walletContext(walletStore.loggedWallet);
+    if (!context || walletStore.isLocked) throw new Error(CIP45_REVOKED);
+    return context;
+  }
+
+  private assertAttempt(attempt: PairingAttempt): void {
+    if (this.attempt !== attempt || attempt.generation !== this.generation
+      || !sameWallet(attempt.context, this.currentContext())) throw new Error(CIP45_REVOKED);
+  }
+
+  authorizedSession(peer: GeroPeerConnect): Cip45Session {
+    if (peer !== this.wallet || !this.session
+      || !sameWallet(this.session.authorization, this.currentContext())) throw new Error(CIP45_REVOKED);
+    return this.session;
+  }
+
+  isSessionPeerAllowed(): boolean {
+    try { return !!this.wallet && !!this.authorizedSession(this.wallet); } catch { return false; }
   }
 
   isAllowedPeerSync(peerId: string): boolean {
-    return this.pendingPeerId === peerId
-      || this.activePairings().some(p => p.dappPeerId === peerId);
-  }
-
-  // Request-time gate: block invokes for a session not paired under the active wallet.
-  isSessionPeerAllowed(): boolean {
-    return !this.session || this.isAllowedPeerSync(this.session.dappPeerId);
+    const context = walletContext(walletStore.loggedWallet);
+    return !!context && !walletStore.isLocked && this.pairingsCache.some(p =>
+      p.walletId === context.walletId && p.dappPeerId === peerId);
   }
 
   async isAllowedPeer(peerId: string): Promise<boolean> {
@@ -125,189 +149,211 @@ class Cip45Service {
 
   async getPairings(): Promise<Cip45Pairing[]> {
     await this.loadPairings();
-    return this.activePairings();
-  }
-
-  // The on-disk list is flat; scope reads to the active wallet by walletId.
-  private activePairings(): Cip45Pairing[] {
-    const walletId = this.currentWalletId();
-    return this.pairingsCache.filter(p => p.walletId === walletId);
-  }
-
-  private currentWalletId(): string {
-    return String((walletStore.loggedWallet as { id?: unknown } | null)?.id ?? '');
+    const context = walletContext(walletStore.loggedWallet);
+    return this.pairingsCache.filter(p => p.walletId === context?.walletId);
   }
 
   private async loadPairings(): Promise<void> {
-    const stored = await chrome.storage.local.get(PAIRINGS_KEY);
-    this.pairingsCache = (stored?.[PAIRINGS_KEY] as Cip45Pairing[]) ?? [];
-  }
-
-  private async savePairings(): Promise<void> {
-    await chrome.storage.local.set({ [PAIRINGS_KEY]: this.pairingsCache });
-  }
-
-  // The library's storage is sync; back it with a write-through cache over chrome.storage.
-  private async buildLibStorage(): Promise<PeerConnectStorage> {
-    const stored = await chrome.storage.local.get(LIB_STORAGE_KEY);
-    const cache: Record<string, string> = (stored?.[LIB_STORAGE_KEY] as Record<string, string>) ?? {};
-    const persist = () => { chrome.storage.local.set({ [LIB_STORAGE_KEY]: cache }); };
-    return {
-      get: (key) => cache[key] ?? null,
-      set: (key, value) => { cache[key] = value; persist(); },
-      remove: (key) => { delete cache[key]; persist(); },
-    };
-  }
-
-  private async ensureStarted(peerJsConfig: Record<string, unknown> = PRIMARY_PEERJS_CONFIG): Promise<void> {
-    if (this.wallet) return;
-    await this.initMutex.runExclusive(async () => {
-      if (this.wallet) return; // another caller may have finished init while we waited
-      await this.startWallet(peerJsConfig);
+    await this.storageMutex.runExclusive(async () => {
+      const stored = await chrome.storage.local.get(PAIRINGS_KEY);
+      this.pairingsCache = (stored?.[PAIRINGS_KEY] as Cip45Pairing[]) ?? [];
     });
   }
 
-  // Rebuild on the fallback config inside the same mutex; calls startWallet directly
-  // (not ensureStarted) because Mutex isn't reentrant.
-  private async restartWithFallback(): Promise<void> {
-    await this.initMutex.runExclusive(async () => {
-      try { this.wallet?.destroy(); } catch { /* best effort */ }
-      this.wallet = null;
-      this.startedWithFallback = true;
-      await this.startWallet(FALLBACK_PEERJS_CONFIG);
-    });
+  private endGrant(authorization?: Cip45Authorization): void {
+    if (authorization) void Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.CIP45_END_SESSION, data: { authorization },
+    }).catch(() => {});
   }
 
-  // Assumes initMutex is already held by the caller.
-  private async startWallet(peerJsConfig: Record<string, unknown>): Promise<void> {
-    await this.loadPairings();
-
-    const stored = await chrome.storage.local.get(PEER_ID_KEY);
-    let peerId = stored?.[PEER_ID_KEY] as string | undefined;
-    if (!peerId) {
-      peerId = `gero-${crypto.randomUUID()}`;
-      await chrome.storage.local.set({ [PEER_ID_KEY]: peerId });
-    }
-
-    const storage = await this.buildLibStorage();
-    this.wallet = new GeroPeerConnect(this, peerId, storage, peerJsConfig);
-    this.registerWalletSwitchWatch();
-
-    this.setConnectHandler((message) => {
-      if (!message.connected) return;
-      this.session = {
-        dappPeerId: message.dApp.address,
-        dappName: message.dApp.name,
-        dappUrl: message.dApp.url,
-        identicon: this.wallet?.getIdenticon() ?? null,
-        connectedAt: Date.now(),
-      };
-      this.recordPairing(message.dApp.address, message.dApp.name, message.dApp.url);
-      this.pushSession('connected', this.session);
-    });
-    this.wallet.setOnDisconnect(() => {
-      this.session = null;
-      this.pushSession('disconnected', null);
-    });
-    this.wallet.setOnServerShutdown(() => {
-      this.session = null;
-      this.pushSession('disconnected', null);
-    });
-
-    window.addEventListener('beforeunload', () => {
-      try { this.wallet?.destroy(); } catch { /* best effort */ }
-    });
-  }
-
-  private recordPairing(dappPeerId: string, dappName: string, dappUrl: string): void {
-    const walletId = this.currentWalletId();
-    // De-dupe by (dappPeerId, walletId) so each wallet keeps its own pairing record.
-    if (!this.pairingsCache.some(p => p.dappPeerId === dappPeerId && p.walletId === walletId)) {
-      this.pairingsCache.push({ dappPeerId, dappName, dappUrl, walletId, pairedAt: Date.now() });
-      this.savePairings();
-    }
-  }
-
-  private async pushSession(status: Cip45Status, session: Cip45Session | null): Promise<void> {
-    try {
-      await Messaging.sendToBackgroundFromOptions({
-        method: MessageTypes.CIP45_UPDATE_SESSION,
-        data: { status, session },
-      });
-    } catch {
-      // The store update is cosmetic; never fail the connection over it.
-    }
-  }
-
-  /** Pair with a dApp from a scanned QR payload or a pasted peer id. */
-  async pair(input: string): Promise<void> {
-    const { dappPeerId } = parseCip45Input(input); // throws 'invalid' / 'stale'
-    this.startedWithFallback = false; // scope the one retry to this attempt
-    await this.ensureStarted();
-    this.pendingPeerId = dappPeerId;
-    this.pushSession('connecting', null);
-
-    try {
-      await this.connectWithTimeout(dappPeerId);
-    } catch (primaryError) {
-      // Retry only on the connect timeout (signaling failure); a rejection propagates.
-      const isTimeout = primaryError instanceof Error && primaryError.message === 'timeout';
-      if (!isTimeout || this.startedWithFallback) throw primaryError;
-      console.warn('CIP-45: primary signaling failed, retrying via public cloud', primaryError);
-      await this.restartWithFallback();
-      this.pendingPeerId = dappPeerId;
-      await this.connectWithTimeout(dappPeerId);
-    } finally {
-      this.pendingPeerId = null;
-    }
-  }
-
-  private connectWithTimeout(dappPeerId: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        reject(new Error('timeout'));
-      }, CONNECT_TIMEOUT_MS);
-
-      const previous = this.standingOnConnect;
-      this.setConnectHandler((message) => {
-        clearTimeout(timer);
-        previous?.(message);
-        if (message.connected) resolve();
-        else reject(new Error(message.errorMessage || 'rejected'));
-      });
-
-      this.wallet!.connect(dappPeerId);
-    });
-  }
-
-  // Track our own reference to the standing onConnect so connectWithTimeout can
-  // wrap-and-chain it without reading the peer instance's internal field.
-  private standingOnConnect: ((message: IConnectMessage) => void) | null = null;
-
-  private setConnectHandler(handler: (message: IConnectMessage) => void): void {
-    this.standingOnConnect = handler;
-    this.wallet!.setOnConnect(handler);
-  }
-
-  async disconnect(): Promise<void> {
-    try { this.wallet?.disconnect(''); } catch { /* not connected */ }
+  private invalidate(): void {
+    // Revoke before any asynchronous work. Destroy does not wait for a remote ACK.
+    this.generation++;
+    const attempt = this.attempt;
+    this.attempt = null;
+    this.endGrant(attempt?.authorization);
+    this.endGrant(this.session?.authorization);
     this.session = null;
-    this.pushSession('idle', null);
+    const peer = this.wallet;
+    this.wallet = null;
+    this.owner = null;
+    attempt?.revoke?.();
+    attempt?.cancel?.();
+    try { peer?.destroy(); } catch { /* already closed */ }
   }
+
+  private async beginGrant(attempt: PairingAttempt): Promise<void> {
+    this.assertAttempt(attempt);
+    const response = await Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.CIP45_BEGIN_SESSION,
+      data: { context: attempt.context, dappPeerId: attempt.peerId },
+    }) as { data?: { success: boolean; authorization?: Cip45Authorization; error?: string } };
+    const authorization = response?.data?.authorization;
+    try {
+      this.assertAttempt(attempt);
+      if (!response?.data?.success || !authorization) throw new Error(response?.data?.error || CIP45_REVOKED);
+      attempt.authorization = authorization;
+    } catch (error) {
+      this.endGrant(authorization);
+      throw error;
+    }
+  }
+
+  private async ensureStarted(context: Cip45WalletContext, generation: number,
+    config: Record<string, unknown> = PRIMARY_PEERJS_CONFIG): Promise<GeroPeerConnect> {
+    return this.initMutex.runExclusive(async () => {
+      const assertCurrent = () => {
+        if (generation !== this.generation || !sameWallet(context, this.currentContext())) throw new Error(CIP45_REVOKED);
+      };
+      assertCurrent();
+      if (this.wallet) return this.wallet;
+      const stored = await chrome.storage.local.get([PEER_ID_KEY, LIB_STORAGE_KEY]);
+      assertCurrent();
+      let peerId = stored?.[PEER_ID_KEY] as string | undefined;
+      if (!peerId) {
+        peerId = `gero-${crypto.randomUUID()}`;
+        await chrome.storage.local.set({ [PEER_ID_KEY]: peerId });
+        assertCurrent();
+      }
+      const cache = (stored?.[LIB_STORAGE_KEY] as Record<string, string>) ?? {};
+      const persist = () => { void chrome.storage.local.set({ [LIB_STORAGE_KEY]: cache }); };
+      const storage: PeerConnectStorage = {
+        get: key => cache[key] ?? null,
+        set: (key, value) => { cache[key] = value; persist(); },
+        remove: key => { delete cache[key]; persist(); },
+      };
+      const peer = new GeroPeerConnect(this, peerId, storage, config);
+      this.wallet = peer;
+      this.owner = context;
+      const closed = () => { if (this.wallet === peer) this.invalidate(); };
+      peer.setOnDisconnect(closed);
+      peer.setOnServerShutdown(closed);
+      return peer;
+    });
+  }
+
+  reconnect(peer: GeroPeerConnect, peerId: string): void {
+    if (peer !== this.wallet || this.attempt || this.session || !this.isAllowedPeerSync(peerId)) return;
+    void this.pair(peerId).catch(() => {});
+  }
+
+  async pair(input: string): Promise<void> {
+    const { dappPeerId } = parseCip45Input(input);
+    const context = this.currentContext(); // Capture ownership before the first await.
+    if (this.attempt) throw new Error('A CIP-45 pairing is already in progress');
+    this.invalidate();
+    const attempt: PairingAttempt = { context, peerId: dappPeerId, generation: this.generation };
+    this.owner = context;
+    this.attempt = attempt;
+    const cancelled = new Promise<never>((_, reject) => {
+      attempt.revoke = () => reject(new Error(CIP45_REVOKED));
+    });
+    try {
+      for (const config of [PRIMARY_PEERJS_CONFIG, FALLBACK_PEERJS_CONFIG]) {
+        await Promise.race([this.beginGrant(attempt), cancelled]);
+        const peer = await Promise.race([this.ensureStarted(context, attempt.generation, config), cancelled]);
+        this.assertAttempt(attempt);
+        try {
+          await this.connectWithTimeout(attempt, peer);
+          return;
+        } catch (error) {
+          this.assertAttempt(attempt);
+          if (!(error instanceof Error) || error.message !== 'timeout' || config === FALLBACK_PEERJS_CONFIG) throw error;
+          // Detach the old transport before destroying it; late callbacks cannot
+          // cancel or authorize the replacement transport using the same attempt.
+          this.wallet = null;
+          peer.destroy();
+          this.endGrant(attempt.authorization);
+          attempt.authorization = undefined;
+        }
+      }
+    } catch (error) {
+      if (this.attempt === attempt) this.invalidate();
+      throw error;
+    } finally {
+      if (this.attempt === attempt) this.attempt = null;
+    }
+  }
+
+  private connectWithTimeout(attempt: PairingAttempt, peer: GeroPeerConnect): Promise<void> {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      let completing = false;
+      const finish = (error?: Error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        attempt.cancel = undefined;
+        peer.setOnConnect(() => {});
+        if (error) reject(error); else resolve();
+      };
+      const timer = setTimeout(() => finish(new Error('timeout')), CONNECT_TIMEOUT_MS);
+      attempt.cancel = () => finish(new Error(CIP45_REVOKED));
+      peer.setOnConnect((message: IConnectMessage) => {
+        if (settled || completing || peer !== this.wallet) return;
+        completing = true;
+        void (async () => {
+          this.assertAttempt(attempt);
+          if (!message.connected) throw new Error(message.errorMessage || 'rejected');
+          if (message.dApp.address !== attempt.peerId) throw new Error('Unexpected CIP-45 peer');
+          const session: Cip45Session = {
+            authorization: attempt.authorization!, dappPeerId: attempt.peerId,
+            dappName: message.dApp.name, dappUrl: message.dApp.url,
+            identicon: peer.getIdenticon() ?? null, connectedAt: Date.now(),
+          };
+          const response = await Messaging.sendToBackgroundFromOptions({
+            method: MessageTypes.CIP45_UPDATE_SESSION, data: { status: 'connected', session },
+          }) as { data?: { success: boolean } };
+          this.assertAttempt(attempt);
+          if (settled || peer !== this.wallet || !response?.data?.success) throw new Error(CIP45_REVOKED);
+          await this.storageMutex.runExclusive(async () => {
+            this.assertAttempt(attempt);
+            if (settled || peer !== this.wallet) throw new Error(CIP45_REVOKED);
+            const stored = await chrome.storage.local.get(PAIRINGS_KEY);
+            this.assertAttempt(attempt);
+            if (settled || peer !== this.wallet) throw new Error(CIP45_REVOKED);
+            const rows = (stored?.[PAIRINGS_KEY] as Cip45Pairing[]) ?? [];
+            if (!rows.some(p => p.walletId === attempt.context.walletId && p.dappPeerId === attempt.peerId)) {
+              rows.push({ dappPeerId: attempt.peerId, dappName: session.dappName,
+                dappUrl: session.dappUrl, walletId: attempt.context.walletId, pairedAt: Date.now() });
+              await chrome.storage.local.set({ [PAIRINGS_KEY]: rows });
+            }
+            this.pairingsCache = rows;
+          });
+          this.assertAttempt(attempt);
+          if (settled || peer !== this.wallet) throw new Error(CIP45_REVOKED);
+          this.session = session;
+          peer.publishApi();
+          finish();
+        })().catch(error => finish(error instanceof Error ? error : new Error(CIP45_REVOKED)));
+      });
+      try { peer.openConnection(attempt.peerId); } catch (error) {
+        finish(error instanceof Error ? error : new Error(CIP45_REVOKED));
+      }
+    });
+  }
+
+  async disconnect(): Promise<void> { this.invalidate(); }
 
   async removePairing(dappPeerId: string): Promise<void> {
-    await this.loadPairings();
-    this.pairingsCache = this.pairingsCache.filter(p => p.dappPeerId !== dappPeerId);
-    await this.savePairings();
-    if (this.session?.dappPeerId === dappPeerId) await this.disconnect();
+    const context = this.currentContext();
+    if (this.session?.dappPeerId === dappPeerId || this.attempt?.peerId === dappPeerId) this.invalidate();
+    await this.storageMutex.runExclusive(async () => {
+      const stored = await chrome.storage.local.get(PAIRINGS_KEY);
+      this.pairingsCache = ((stored?.[PAIRINGS_KEY] as Cip45Pairing[]) ?? []).filter(p =>
+        !(p.dappPeerId === dappPeerId && p.walletId === context.walletId));
+      await chrome.storage.local.set({ [PAIRINGS_KEY]: this.pairingsCache });
+    });
   }
 
-  /** Start the discovery peer if this wallet has pairings, so dApps can auto-reconnect. */
   async resumeIfPaired(): Promise<void> {
+    const context = this.currentContext();
+    const generation = this.generation;
+    this.owner = context;
     await this.loadPairings();
-    if (this.activePairings().length > 0) {
-      await this.ensureStarted();
-      this.pushSession(this.session ? 'connected' : 'idle', this.session);
+    if (generation !== this.generation || !sameWallet(context, this.currentContext())) return;
+    if (this.pairingsCache.some(p => p.walletId === context.walletId)) {
+      await this.ensureStarted(context, generation);
     }
   }
 }
