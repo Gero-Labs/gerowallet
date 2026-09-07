@@ -51,11 +51,11 @@ import type {
  * "Stagenet" / "Preprod"); anything gero-sync doesn't list is rejected with WS
  * code 1011.
  *
- * NOTE: gero-sync's `MidnightSyncProvider.getSupportedNetworks()` still hard-
- * codes `["midnight-mainnet", "midnight-preprod", "midnight-preview"]`, so
- * `midnight-stagenet` is refused until Gero-Labs/gero-sync#56 swaps preview for
- * stagenet there. Live tip/tx push on stagenet stays down until it does; the
- * Nexus-backed REST reads are unaffected.
+ * NOTE: gero-sync only accepts `midnight-stagenet` once Gero-Labs/gero-sync#57
+ * lands (it swaps preview for stagenet in
+ * `MidnightSyncProvider.getSupportedNetworks()`, closing gero-sync#56). Until
+ * it merges and deploys, live tip/tx push on stagenet is refused with WS 1011;
+ * the Nexus-backed REST reads are unaffected.
  */
 function toGeroSyncMidnightNetwork(network: string): string {
   switch (network) {
