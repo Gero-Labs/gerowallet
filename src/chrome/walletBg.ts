@@ -968,23 +968,10 @@ export class WalletBg {
     }
   }
 
-  async setAccountRewards(res): Promise<unknown[] | void> {
-    return this.getDb()
-      .then(db => {
-        const rew = [];
-        const rewardsTable = db.table('rewards');
-
-        if (!rewardsTable) throw new Error('No Rewards table.');
-
-        res.forEach(reward => {
-          rew.push(rewardsTable.put(reward));
-        });
-
-        return rew;
-      })
-      .catch(err => {
-        console.error(`Failed to open database: ${err.stack || err}`);
-      });
+  async setAccountRewards(res): Promise<void> {
+    const db = await this.getDb();
+    // Await durable writes and propagate failures so refresh can retry.
+    await db.table('rewards').bulkPut(res);
   }
 
   async setAccountTransactions(txs): Promise<unknown> {
