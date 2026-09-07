@@ -2,10 +2,9 @@
   <BaseDialog
     :isOpen="value"
     @close="close"
-    :img="walletConnectLogo"
-    imgColor="var(--g-accent)"
-    :title="$t('walletConnect.walletConnect')"
-    :subtitle="$t('walletConnect.pairSubtitle')"
+    icon="mdi-access-point"
+    :title="$t('cip45.title')"
+    :subtitle="$t('cip45.pairSubtitle')"
     size="sm"
     :min-height="0"
     :loading="loading"
@@ -17,38 +16,38 @@
         background-color="transparent"
         color="var(--g-accent)"
         slider-color="var(--g-accent)"
-        class="wc-tabs mb-4"
+        class="cip45-tabs mb-4"
       >
-        <v-tab class="wc-tab">{{ $t('walletConnect.connectViaPaste') }}</v-tab>
-        <v-tab class="wc-tab">{{ $t('walletConnect.connectViaScan') }}</v-tab>
+        <v-tab class="cip45-tab">{{ $t('walletConnect.connectViaPaste') }}</v-tab>
+        <v-tab class="cip45-tab">{{ $t('walletConnect.connectViaScan') }}</v-tab>
       </v-tabs>
 
       <v-tabs-items v-model="tab" class="transparent">
-        <!-- Paste URI -->
+        <!-- Paste peer ID -->
         <v-tab-item>
           <!-- Caption above the field instead of a floating label: outlined
                fields mounted inside a dialog compute a zero-width label notch,
                so the border strikes through the label text. -->
-          <label class="t-label wc-input-label" for="wc-uri-input">
-            {{ $t('walletConnect.pasteUri') }}
+          <label class="t-label cip45-input-label" for="cip45-peer-id-input">
+            {{ $t('cip45.pasteId') }}
           </label>
           <v-text-field
-            id="wc-uri-input"
+            id="cip45-peer-id-input"
             v-model="uri"
-            :placeholder="$t('walletConnect.uriPlaceholder')"
+            :placeholder="$t('cip45.idPlaceholder')"
             outlined
             dense
             clearable
             hide-details="auto"
             :error-messages="errorMessage"
-            class="wc-input"
-            @keyup.enter="pair"
+            class="cip45-input"
+            @keyup.enter="pair()"
           />
         </v-tab-item>
 
         <!-- QR Scanner -->
         <v-tab-item>
-          <div v-if="tab === 1" class="wc-scanner">
+          <div v-if="tab === 1" class="cip45-scanner">
             <AnimatedQRScanner
               mode="text"
               @scan="onQrScan"
@@ -66,9 +65,9 @@
       <GButton
         tier="primary"
         block
-        :disabled="!isValidUri"
+        :disabled="!isValidInput"
         :loading="loading"
-        @click="pair"
+        @click="pair()"
       >
         {{ $t('walletConnect.connect') }}
       </GButton>
@@ -79,14 +78,11 @@
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, ref, watch } from 'vue';
-import { Messaging } from '@/chrome/messaging';
-import { MessageTypes } from '@/models/MessageTypes';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import AnimatedQRScanner from '@/shared/components/AnimatedQRScanner.vue';
-import assets from '@/utils/assets';
-
-const walletConnectLogo = assets.walletConnectLogo;
+import { parseCip45Input } from '@/services/cip45/qr';
+import { cip45Service } from '@/services/cip45/cip45.service';
 
 const { t } = useTranslation();
 
@@ -105,7 +101,14 @@ const loading = ref(false);
 const errorMessage = ref('');
 const qrError = ref('');
 
-const isValidUri = computed(() => (uri.value ?? '').trim().startsWith('wc:'));
+const isValidInput = computed(() => {
+  try {
+    parseCip45Input(uri.value ?? '');
+    return true;
+  } catch {
+    return false;
+  }
+});
 
 // Reset state when dialog opens
 watch(() => props.value, (open) => {
@@ -119,8 +122,8 @@ watch(() => props.value, (open) => {
 });
 
 const pair = async () => {
-  if (!isValidUri.value) {
-    errorMessage.value = t('walletConnect.invalidUri');
+  if (!isValidInput.value) {
+    errorMessage.value = t('cip45.invalidId');
     return;
   }
 
@@ -128,29 +131,31 @@ const pair = async () => {
   errorMessage.value = '';
 
   try {
-    const response = await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.WC_PAIR,
-      data: { uri: (uri.value ?? '').trim() },
-    });
-
-    if (response.data?.success) {
-      emit('paired');
-      close();
-    } else {
-      errorMessage.value = response.data?.error || t('walletConnect.pairingFailed');
-    }
+    await cip45Service.pair((uri.value ?? '').trim());
+    emit('paired');
+    close();
   } catch (error) {
-    errorMessage.value = (error instanceof Error && error.message) || t('walletConnect.pairingFailed');
+    const msg = error instanceof Error ? error.message : '';
+    errorMessage.value =
+      msg === 'invalid' ? t('cip45.invalidId')
+        : msg === 'stale' ? t('cip45.staleQr')
+          : t('cip45.pairingFailed');
   } finally {
     loading.value = false;
   }
 };
 
 const onQrScan = (text: string) => {
-  if (text && text.startsWith('wc:')) {
+  try {
+    parseCip45Input(text);
     uri.value = text;
-    tab.value = 0; // Switch to paste tab to show the URI
+    tab.value = 0; // Switch to paste tab to show the peer ID
     pair();
+  } catch (error) {
+    // Mirror pair()'s error mapping: a stale (expired) QR payload gets its
+    // own message rather than the generic "invalid" one.
+    const msg = error instanceof Error ? error.message : '';
+    qrError.value = msg === 'stale' ? t('cip45.staleQr') : t('cip45.invalidId');
   }
 };
 
@@ -164,11 +169,11 @@ const close = () => {
 </script>
 
 <style scoped lang="scss">
-.wc-tabs {
+.cip45-tabs {
   border-bottom: 1px solid var(--g-hairline-1);
 }
 
-.wc-tab {
+.cip45-tab {
   text-transform: none;
   letter-spacing: 0;
   font-weight: 600;
@@ -176,25 +181,25 @@ const close = () => {
   color: var(--g-text-3);
 }
 
-.wc-tab.v-tab--active {
+.cip45-tab.v-tab--active {
   color: var(--g-text-1);
 }
 
-.wc-input-label {
+.cip45-input-label {
   display: block;
   margin-bottom: var(--g-s-1);
   color: var(--g-text-2);
 }
 
-.wc-input {
+.cip45-input {
   padding-top: var(--g-s-2);
 }
 
-.wc-input :deep(.v-input__slot) {
+.cip45-input :deep(.v-input__slot) {
   border-radius: var(--g-r-control);
 }
 
-.wc-scanner {
+.cip45-scanner {
   min-height: 300px;
   border-radius: var(--g-r-card);
   overflow: hidden;

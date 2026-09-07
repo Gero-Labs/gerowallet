@@ -97,6 +97,11 @@ function buildCSP(dev: boolean): string {
     'https://*.walletconnect.com',
     'wss://*.walletconnect.com',
     'https://*.reown.com',
+    // CIP-45 peerjs signaling (CF primary + public-cloud fallback).
+    'https://peerjs.dev.ecosyseng.cf-deployments.org',
+    'wss://peerjs.dev.ecosyseng.cf-deployments.org',
+    'https://0.peerjs.com',
+    'wss://0.peerjs.com',
     // Dev-only
     ...(dev
       ? [
@@ -176,7 +181,8 @@ async function getManifest() {
     name: (pkg.displayName || pkg.name) + (isBeta ? ' (Beta)' : '') ,
     version: pkg.version,
     description: pkg.description,
-    key,
+    // Include key only when set — Chrome rejects an empty key.
+    ...(key ? { key } : {}),
     // options_ui: {
     //   page: './dist/options/index.html',
     //   open_in_tab: true,
@@ -194,14 +200,19 @@ async function getManifest() {
       },
       default_title: "Gero Dashboard | A Multi-chain Light Wallet Merging Web2 and Web3"
     },
-    oauth2: {
-      client_id,
-      scopes:[
-        "openid",
-        "profile",
-        "email"
-      ]
-    },
+    // Omit oauth2 unless GOOGLE_CLIENT_ID is set — Chrome rejects an empty client_id.
+    ...(client_id
+      ? {
+        oauth2: {
+          client_id,
+          scopes: [
+            "openid",
+            "profile",
+            "email"
+          ]
+        }
+      }
+      : {}),
     background: isFirefox
       ? {
         scripts: ['background/_virtual_index.js'],
@@ -265,7 +276,7 @@ async function getManifest() {
     },
   }
 
-  if (!isDev) {
+  if (!isDev && process.env['MANIFEST_KEY']) {
     manifest['key'] = process.env['MANIFEST_KEY']
   }
 

@@ -2044,6 +2044,7 @@ export class WalletBg {
     utxos: Cardano.Utxo[],
     addresses: Keys,
     privateKeyBytes?: Uint8Array, // Optional pre-decrypted private key for PRF wallets
+    assertAuthorized?: () => void,
   ): Promise<{ witnesses: string }> {
     let transaction: Cardano.Tx;
 
@@ -2077,6 +2078,7 @@ export class WalletBg {
     }
     password = null; // Clear password from memory
 
+    assertAuthorized?.();
     // Derive an account private key
     const accountPrivateKey: Bip32PrivateKey = rootPrivateKey.derive([
       WalletTypePurpose.CIP1852,
@@ -3036,6 +3038,7 @@ export class WalletBg {
     accountIndex: number,
     keys: Keys,
     privateKeyBytes?: Uint8Array, // Optional pre-decrypted root key for PRF wallets
+    assertAuthorized?: () => void,
   ) {
     // Use Cardano SDK's cip30signData implementation directly (per the CIP-30 standard)
     // This ensures 100% compatibility with the Cardano SDK standard
@@ -3059,6 +3062,7 @@ export class WalletBg {
         throw new Error(`Unknown derivation role: ${derivationPath.role}`);
       },
       signBlob: async (derivationPath: { role: number; index: number }, blob: string) => {
+        assertAuthorized?.();
         // Determine key type from role
         let keyType: 'payment' | 'change' | 'stake' | 'drep';
         if (derivationPath.role === ChainDerivations.DREP) {
@@ -3082,6 +3086,7 @@ export class WalletBg {
           : await this.requestAccountKey(keyType, password, accountIndex, derivationPath.index);
 
         // Sign the blob
+        assertAuthorized?.();
         const signature = privateKey.sign(HexBlob(blob));
 
         return {

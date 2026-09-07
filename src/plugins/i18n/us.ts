@@ -4316,6 +4316,18 @@ export default {
   'lightning.whatIsLightning': 'What is Lightning Network?',
   'lightning.lightningExplainer': 'The Lightning Network is a Layer 2 payment protocol on Bitcoin that enables near-instant, low-fee micropayments. Lightning addresses (user@domain.com) work like email for Bitcoin payments. LNURL is a standard protocol for requesting Lightning invoices. Since this is an on-chain wallet, Lightning payments are facilitated via submarine swaps through services like Boltz.exchange.',
 
+  // CIP-45
+  'cip45.title': 'CIP-45 Connect',
+  'cip45.pairSubtitle': 'Connect to a dApp peer-to-peer via WebRTC',
+  'cip45.pasteId': 'Paste dApp peer ID',
+  'cip45.idPlaceholder': 'dapp-xxxxxx… or scanned QR content',
+  'cip45.invalidId': 'Invalid dApp peer ID or QR code',
+  'cip45.staleQr': 'This QR code has expired — reload the dApp and scan again',
+  'cip45.pairingFailed': 'Connection failed. Check that the dApp is open and try again.',
+  'cip45.sessions': 'CIP-45 Connections',
+  'cip45.connectViaCip45': 'Connect via CIP-45',
+  'cip45.noActiveSessions': 'No active CIP-45 connections',
+
   // WalletConnect
   'walletConnect.walletConnect': 'WalletConnect',
   'walletConnect.pairSubtitle': 'Link a dApp to your wallet with a WalletConnect URI',

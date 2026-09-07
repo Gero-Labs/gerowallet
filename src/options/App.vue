@@ -57,6 +57,7 @@ import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { agentDockPrefsStore } from '@/stores/agentDockPrefsStore';
 import { useChainAccent } from '@/shared/composables/useChainAccent';
 import { useGovernanceHydration } from '@/shared/composables/useGovernanceHydration';
+import { debugLog } from '@/utils/debug';
 
 // Bootstrap the single chain-accent writer at the dashboard root. It lives here
 // rather than in ContentLayout because ContentLayout unmounts on the welcome
@@ -110,6 +111,24 @@ onMounted(async () => {
   } catch (error) {
     console.error('❌ Failed to trigger auto-lock check on mount:', error);
   }
+
+  // CIP-45: bring the discovery peer up so paired dApps can reconnect (deferred, non-critical).
+  setTimeout(async () => {
+    const { featureFlagsStore } = await import('@/stores/featureFlagsStore');
+    if (!featureFlagsStore.isCip45Enabled()) return;
+    // Only the dashboard hosts the peer — approval popups are separate app
+    // instances whose empty session state would clobber the dashboard's UI.
+    try {
+      const currentWindow = await chrome.windows.getCurrent();
+      if (currentWindow?.type === 'popup') return;
+    } catch {
+      // If the window type can't be read, fall through and host as before.
+    }
+    const { cip45Service } = await import('@/services/cip45/cip45.service');
+    cip45Service.resumeIfPaired().catch((error) => {
+      debugLog('CIP-45: resumeIfPaired failed', error);
+    });
+  }, 3000);
 });
 
 // Watch geroStore for locale changes (global preference) instead of walletStore

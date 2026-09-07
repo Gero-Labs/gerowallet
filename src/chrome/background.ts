@@ -3,7 +3,7 @@ import Loading from '@/stores/loading';
 import { Messaging } from '@/chrome/messaging';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
 import { isStakeKeyRegistered } from '@/shared/utils/stakeRegistration';
-import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, POPUP, SENDER, TARGET, TxSendError } from '@/chrome/config';
+import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, POPUP, SENDER, TARGET, TxSendError, TxSignError } from '@/chrome/config';
 import { toDappError } from '@/chrome/dappError';
 import { bringInitBackground } from '@bringweb3/chrome-extension-kit';
 import {
@@ -22,7 +22,7 @@ import {
   submitTx,
   urlScan,
 } from '@/chrome/serialization';
-import { Blockchain, coin_type, ERROR, Network, purpose } from '@/models/types';
+import { Blockchain, coin_type, ERROR, Network, Paginate, purpose } from '@/models/types';
 import networks from '@/utils/networks';
 import coinGeckoStore from '@/stores/coinGeckoStore';
 import { getDomain } from 'tldts';
@@ -36,6 +36,12 @@ import { nexusCollateralApi } from '@/api/nexus-collateral-api';
 import { toNexusNetwork } from '@/api/nexus-tx-api';
 import { debugLog } from '@/utils/debug';
 import type { walletConnectService } from '@/services/walletConnect/walletConnect.service';
+import type { Cip45Session } from '@/services/cip45/types';
+import type { Cip45Authorization, Cip45WalletContext } from '@/services/cip45/types';
+import { Cip45AuthorizationRegistry, walletContext } from '@/services/cip45/authorization';
+import { watch } from 'vue';
+// The background is one IIFE; import the store statically to preserve initialization order.
+import Cip45Store from '@/stores/cip45Store';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { HexBlob } from '@cardano-sdk/util';
@@ -140,12 +146,23 @@ loadWallets().then(async () => {
 });
 
 (async () => {
-  await bringInitBackground({
-    isEnabledByDefault: true,
-    identifier: import.meta.env['VITE_CASHBACK_IDENTIFIER'],
-    apiEndpoint: import.meta.env['VITE_CASHBACK_ENVIRONMENT'],
-    cashbackPagePath: '/index.html#/cashback'
-  })
+  // Skip cashback init without its env vars — the SDK throws on missing config.
+  const cashbackIdentifier = import.meta.env['VITE_CASHBACK_IDENTIFIER'];
+  const cashbackEnvironment = import.meta.env['VITE_CASHBACK_ENVIRONMENT'];
+  if (!cashbackIdentifier || !cashbackEnvironment) {
+    debugLog('Bring cashback disabled: VITE_CASHBACK_* not configured in this build');
+    return;
+  }
+  try {
+    await bringInitBackground({
+      isEnabledByDefault: true,
+      identifier: cashbackIdentifier,
+      apiEndpoint: cashbackEnvironment,
+      cashbackPagePath: '/index.html#/cashback'
+    })
+  } catch (e) {
+    console.warn('⚠️ Bring cashback init failed:', e);
+  }
 })();
 
 // Initialize background store messaging (the import alone initializes it)
@@ -548,6 +565,23 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 let lastFullscreenTabId = -1;
 
 const app = Messaging.createBackgroundController();
+const cip45Authorization = new Cip45AuthorizationRegistry();
+// Invalidate in the authoritative context, synchronously, including A -> logout -> A.
+watch(() => [walletStore.loggedWallet?.id, walletStore.loggedWallet?.chain,
+  walletStore.loggedWallet?.network, walletStore.isLocked], () => {
+  if (cip45Authorization.setWallet(walletStore.isLocked ? null : walletContext(walletStore.loggedWallet))) {
+    Cip45Store.clear();
+  }
+}, { immediate: true, flush: 'sync' });
+
+function cip45Owner(sender: chrome.runtime.MessageSender): string {
+  // documentId distinguishes reloads in the same tab. The tab fallback supports older Chrome.
+  return sender.documentId || `tab:${sender.tab?.id}:${sender.url}`;
+}
+
+function assertCip45SigningRequest(data: { cip45Authorization?: Cip45Authorization }): void {
+  if (data.cip45Authorization) cip45Authorization.assert(data.cip45Authorization);
+}
 
 async function handleBlacklisted(request: { id: string; origin: string }, tabId: number) {
   // Check if website protection is enabled
@@ -2344,6 +2378,7 @@ app.addToOptions(MessageTypes.VERIFY_SPENDING_PASSWORD, async (request, sendResp
 
 app.addToOptions(MessageTypes.SIGN_DATA, async (request, sendResponse) => {
   try {
+    assertCip45SigningRequest(request.data);
     // Note: Never log request - contains password
     const walletBg = walletManager.getWallet();
     if (walletBg) {
@@ -2361,7 +2396,9 @@ app.addToOptions(MessageTypes.SIGN_DATA, async (request, sendResponse) => {
         request.data.accountIndex || 0,
         WalletStore.state.keys,
         privateKeyBytes, // Pass pre-decrypted root key for PRF wallets
+        () => assertCip45SigningRequest(request.data),
       );
+      assertCip45SigningRequest(request.data);
       sendResponse({
         id: request.id,
         data: res,
@@ -2432,6 +2469,7 @@ app.addToOptions(MessageTypes.MARK_NEXUS_LENT, async (request, sendResponse) => 
 
 app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
   try {
+    assertCip45SigningRequest(request.data);
     // Note: Never log request - contains password
     const walletBg = walletManager.getWallet();
     if (walletBg) {
@@ -2462,7 +2500,10 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
         request.data.utxos,
         request.data.addresses,
         privateKeyBytes, // Pass pre-decrypted private key for PRF wallets
+        () => assertCip45SigningRequest(request.data),
       );
+
+      assertCip45SigningRequest(request.data);
 
       // Nexus shared-pool collateral co-sign. If the tx's collateralInputs include
       // any UTxO from the Nexus enterprise pool, request the hot wallet's witness
@@ -2503,6 +2544,7 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
         }
       }
 
+      assertCip45SigningRequest(request.data);
       sendResponse({
         id: request.id,
         data: witnessResult,
@@ -3493,6 +3535,7 @@ app.addToOptions(MessageTypes.REMOVE_PENDING_TRANSACTION, async (request, sendRe
 
 app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
   try {
+    assertCip45SigningRequest(request.data);
     if (request.data.method === 'initTrezor') {
       const network = networks.resolveNetwork(request.data.chain, request.data.network);
 
@@ -3536,6 +3579,7 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
         addressFieldHex: string;
       } = await trezor.signData(address, payload, network.networkId, accountIndex, WalletStore.state.keys);
 
+      assertCip45SigningRequest(request.data);
       sendResponse({
         id: request.id,
         data: { success: true, signatureData },
@@ -3590,6 +3634,7 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
       const signaturesArray = Array.from(signatures.entries());
       console.log('[TREZOR Background] Signatures array:', signaturesArray);
 
+      assertCip45SigningRequest(request.data);
       sendResponse({
         id: request.id,
         data: { success: true, signatures: signaturesArray },
@@ -4468,6 +4513,221 @@ app.addToOptions(MessageTypes.WC_GET_SESSIONS, async (request, sendResponse) => 
   } catch (error) {
     sendResponse({ id: request.id, data: { success: false, error: getErrorMessage(error) }, target: TARGET, sender: SENDER.extension });
   }
+});
+
+// ====== CIP-45 (peer-to-peer dApp bridge) ======
+
+async function isCip45Enabled(): Promise<boolean> {
+  // Build-time default; an explicit value in the mirror still wins.
+  const buildDefault = import.meta.env['VITE_CIP45_DEFAULT_ENABLED'] === 'true';
+  try {
+    const stored = await chrome.storage.local.get('featureFlags');
+    const flags = (stored?.['featureFlags'] as Record<string, unknown>) ?? {};
+    if (typeof flags['isCip45Enabled'] === 'boolean') {
+      return flags['isCip45Enabled'];
+    }
+    return buildDefault;
+  } catch {
+    return buildDefault;
+  }
+}
+
+app.addToOptions(MessageTypes.CIP45_UPDATE_SESSION, async (request, sendResponse) => {
+  try {
+    const { status, session } = request.data as { status: 'idle' | 'connecting' | 'connected' | 'disconnected'; session?: Cip45Session };
+    if (status !== 'connected' || !session) throw new Error('Missing CIP-45 session');
+    cip45Authorization.activate(cip45Owner(request.send), session.authorization);
+    Cip45Store.setSession(status, session ?? null);
+    sendResponse({ id: request.id, data: { success: true }, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, data: { success: false, error: getErrorMessage(error) }, target: TARGET, sender: SENDER.extension });
+  }
+  return true;
+});
+
+app.addToOptions(MessageTypes.CIP45_BEGIN_SESSION, async (request, sendResponse) => {
+  let authorization: Cip45Authorization | undefined;
+  try {
+    const { context, dappPeerId } = request.data as { context: Cip45WalletContext; dappPeerId: string };
+    authorization = cip45Authorization.begin(cip45Owner(request.send), context, dappPeerId);
+    if (!(await isCip45Enabled())) throw new Error('CIP-45 is disabled');
+    cip45Authorization.assert(authorization, cip45Owner(request.send), false);
+    sendResponse({ data: { success: true, authorization } });
+  } catch (error) {
+    if (authorization) cip45Authorization.revoke(cip45Owner(request.send), authorization);
+    sendResponse({ data: { success: false, error: getErrorMessage(error) } });
+  }
+  return true;
+});
+
+app.addToOptions(MessageTypes.CIP45_END_SESSION, (request, sendResponse) => {
+  cip45Authorization.revoke(cip45Owner(request.send), request.data.authorization);
+  Cip45Store.clearSession(request.data.authorization?.sessionId);
+  sendResponse({ data: { success: true } });
+});
+
+app.addToOptions(MessageTypes.CIP45_VALIDATE_SESSION, async (request, sendResponse) => {
+  try {
+    if (!(await isCip45Enabled())) throw new Error('CIP-45 is disabled');
+    cip45Authorization.assert(request.data.authorization);
+    sendResponse({ data: { success: true } });
+  } catch (error) {
+    sendResponse({ data: { success: false, error: getErrorMessage(error) } });
+  }
+  return true;
+});
+
+/**
+ * Route one CIP-45 signing request through the mini-gero panel if connected
+ * (tabless, exactly like WalletConnect's routeWcSigningRequest), else the
+ * standalone approval popup. Returns the approval result; throws on rejection.
+ */
+async function routeCip45SigningRequest(
+  portMethod: 'signTx' | 'signData',
+  data: Record<string, unknown>,
+  popupRoute: string,
+  popupSize: [number, number],
+): Promise<unknown> {
+  assertCip45SigningRequest(data);
+  if (miniGeroPorts.size > 0) {
+    const response = await sendToMiniGero(portMethod, data, undefined);
+    return response.data;
+  }
+
+  const fakeRequest = { id: `cip45-${crypto.randomUUID()}`, data, origin: 'CIP-45', send: { tab: { id: -1 } } };
+  const website = String((data as { website?: unknown }).website ?? 'CIP-45');
+  const popupURL = chrome.runtime.getURL(`index.html#/${popupRoute}?website=${encodeURIComponent(website)}`);
+  const tab = await focusOrCreatePopup(popupURL, popupSize[0], popupSize[1]);
+  const response = await Messaging.sendToPopupInternal(tab.id, fakeRequest) as BackgroundResponse;
+  if (response.data !== undefined) return response.data;
+  const errInfo = (response.error as { info?: string } | undefined)?.info;
+  throw new Error(errInfo || 'User rejected');
+}
+
+app.addToOptions(MessageTypes.CIP45_INVOKE, async (request, sendResponse) => {
+  const reply = (data: { success: boolean; result?: unknown; error?: unknown }) => {
+    if (data.success) cip45Authorization.assert(request.data.authorization, cip45Owner(request.send));
+    sendResponse({ id: request.id, data, target: TARGET, sender: SENDER.extension });
+  };
+  const fail = (code: number, info: string) => reply({ success: false, error: { code, info } });
+
+  try {
+    if (!(await isCip45Enabled())) {
+      fail(APIError.Refused.code, 'CIP-45 is disabled');
+      return true;
+    }
+
+    const { method, params = {}, dapp, authorization } = request.data as {
+      authorization: Cip45Authorization;
+      method: string;
+      params?: {
+        amount?: string;
+        paginate?: Paginate;
+        tx?: string;
+        partialSign?: boolean;
+        addr?: string;
+        payload?: string;
+      };
+      dapp?: { name?: string; url?: string };
+    };
+
+    cip45Authorization.assert(authorization, cip45Owner(request.send));
+
+    const loggedWallet = WalletStore.state.loggedWallet;
+    if (!loggedWallet) {
+      fail(APIError.Refused.code, 'No wallet logged in');
+      return true;
+    }
+    // CIP-45 is a Cardano dApp bridge — allow Cardano-family chains only.
+    if (loggedWallet.chain !== Blockchain.CARDANO
+      && loggedWallet.chain !== 'Apex Prime'
+      && loggedWallet.chain !== 'Apex Vector') {
+      fail(APIError.Refused.code, 'CIP-45 supports Cardano wallets only');
+      return true;
+    }
+
+    switch (method) {
+      case 'getNetworkId': {
+        reply({ success: true, result: networks.resolveNetworkId(loggedWallet.chain, loggedWallet.network) });
+        break;
+      }
+      case 'getBalance': {
+        const balance = getBalance(WalletStore.state.utxos as Cardano.Utxo[], WalletStore.state.collateral);
+        reply({ success: true, result: balance.toCbor() });
+        break;
+      }
+      case 'getUtxos': {
+        const converted = getUtxos(params.amount, params.paginate, WalletStore.state.utxos as Cardano.Utxo[], WalletStore.state.collateral);
+        reply({ success: true, result: converted ? converted.map(u => u.toCbor()) : null });
+        break;
+      }
+      case 'getCollateral': {
+        const result = await getCollateral(params, WalletStore.state.utxos as Cardano.Utxo[], { allowNexusFallback: false });
+        reply({ success: true, result });
+        break;
+      }
+      case 'getUsedAddresses': {
+        reply({ success: true, result: getUsedAddresses(WalletStore.state.keys, params.paginate) });
+        break;
+      }
+      case 'getUnusedAddresses': {
+        reply({ success: true, result: getUnusedAddresses(loggedWallet.publicKey, loggedWallet.chain, loggedWallet.network, WalletStore.state.keys) });
+        break;
+      }
+      case 'getChangeAddress': {
+        reply({ success: true, result: Cardano.Address.fromBech32(loggedWallet.baseAddress).toBytes() });
+        break;
+      }
+      case 'getRewardAddresses': {
+        const address = getRewardAddress(loggedWallet.publicKey, loggedWallet.chain, loggedWallet.network);
+        reply({ success: true, result: [address.toBytes()] });
+        break;
+      }
+      case 'submitTx': {
+        const response = await submitTx(params.tx, loggedWallet.chain, loggedWallet.network);
+        if (response.ok) {
+          reply({ success: true, result: await response.text() });
+        } else {
+          fail(TxSendError.Failure.code, `Submit failed: ${response.statusText}`);
+        }
+        break;
+      }
+      case 'signTx': {
+        try {
+          const result = await routeCip45SigningRequest(
+            'signTx',
+            { tx: params.tx, partialSign: params.partialSign, cip45Authorization: authorization, origin: 'CIP-45', website: dapp?.url || 'CIP-45' },
+            POPUP.signTx, [470, 852],
+          );
+          cip45Authorization.assert(authorization, cip45Owner(request.send));
+          reply({ success: true, result });
+        } catch (err) {
+          fail(TxSignError.UserDeclined.code, getErrorMessage(err) || TxSignError.UserDeclined.info);
+        }
+        break;
+      }
+      case 'signData': {
+        try {
+          const result = await routeCip45SigningRequest(
+            'signData',
+            { address: params.addr, payload: params.payload, cip45Authorization: authorization, origin: 'CIP-45', website: dapp?.url || 'CIP-45' },
+            POPUP.dappSignData, [470, 600],
+          );
+          cip45Authorization.assert(authorization, cip45Owner(request.send));
+          reply({ success: true, result });
+        } catch (err) {
+          fail(DataSignError.UserDeclined.code, getErrorMessage(err) || DataSignError.UserDeclined.info);
+        }
+        break;
+      }
+      default:
+        fail(APIError.InternalError.code, `Method not supported: ${method}`);
+    }
+  } catch (e) {
+    console.error('❌ CIP-45 invoke failed:', e);
+    fail(APIError.InternalError.code, getErrorMessage(e));
+  }
+  return true;
 });
 
 /**
