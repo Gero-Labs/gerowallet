@@ -3339,6 +3339,7 @@ export default {
   'welcome.unlockKeystone': 'Entsperren Sie Ihr Keystone-Gerät',
   'welcome.walletAlreadyExists': 'Wallet existiert bereits',
   'welcome.walletExistsMessage': 'Dieses Wallet existiert bereits als "{name}".',
+  'welcome.walletExistsOnNetwork': 'Es ist bereits auf {chain} ({network}) eingerichtet.',
   'welcome.walletIcon': 'Wallet-Symbol',
   'welcome.walletName': 'Wallet-Name',
   'welcome.walletNamePlaceholder': 'z. B. Meine neue Wallet',

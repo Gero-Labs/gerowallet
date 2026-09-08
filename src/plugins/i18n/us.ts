@@ -2825,6 +2825,7 @@ export default {
   'welcome.walletSetup': 'Wallet Setup',
   'welcome.walletAlreadyExists': 'Wallet Already Exists',
   'welcome.walletExistsMessage': 'This wallet already exists as "{name}".',
+  'welcome.walletExistsOnNetwork': 'It is already set up on {chain} ({network}).',
   'welcome.wouldYouLikeToLogin': 'Would you like to log in to this wallet?',
   'welcome.welcomeMessage': 'Welcome!',
   'welcome.welcomeTo': 'Welcome to',
