@@ -17,6 +17,11 @@ const WalletType = {
 type WalletTypeValue = typeof WalletType[keyof typeof WalletType];
 
 export interface Wallet {
+  order?: number;
+  isFavorite?: boolean;
+  categoryId?: string | null;
+  baseAddress?: string;
+  stakeAddress?: string;
   id: number;
   name: string;
   chain: string;
