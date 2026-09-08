@@ -1,0 +1,1 @@
+export default { resolveNetwork(chain: string) { return { icon: chain === 'Bitcoin' ? '/src/assets/bitcoin-logo.svg' : chain === 'Midnight' ? '/src/assets/svg/midnight.svg' : '/src/assets/svg/cardano.svg' }; } };

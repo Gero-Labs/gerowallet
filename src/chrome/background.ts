@@ -4832,7 +4832,7 @@ app.addToOptions(
       if (walletBg.chain !== Blockchain.MIDNIGHT) {
         throw new Error('BALANCE_AND_SIGN_MIDNIGHT_UNSHIELDED_TX called on non-Midnight wallet');
       }
-      const { unprovenTxHex, ttlMs, password, prfSecret } = request.data || {};
+      const { unprovenTxHex, ttlMs, password, prfSecret, sponsor } = request.data || {};
       if (typeof unprovenTxHex !== 'string' || unprovenTxHex.length === 0) {
         throw new Error('unprovenTxHex is required');
       }
@@ -4840,11 +4840,37 @@ app.addToOptions(
         throw new Error('ttlMs is required (epoch millis)');
       }
       const prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
+      // Optional DUST sponsor: another wallet the user owns pays the fee.
+      // Crossing the message boundary, so shape-check it here rather than
+      // trusting the sender — walletBg re-checks eligibility (chain, network,
+      // not-self) before any decryption happens.
+      let sponsorArg: { walletId: number; password?: string; prfSecret?: Uint8Array } | undefined;
+      if (sponsor !== undefined && sponsor !== null) {
+        if (typeof sponsor !== 'object') throw new Error('sponsor must be an object');
+        const walletId = (sponsor as { walletId?: unknown }).walletId;
+        if (typeof walletId !== 'number' || !Number.isInteger(walletId)) {
+          throw new Error('sponsor.walletId is required (integer wallet id)');
+        }
+        const sPassword = (sponsor as { password?: unknown }).password;
+        const sPrf = (sponsor as { prfSecret?: unknown }).prfSecret;
+        if (sPassword !== undefined && typeof sPassword !== 'string') {
+          throw new Error('sponsor.password must be a string');
+        }
+        if (sPrf !== undefined && !Array.isArray(sPrf)) {
+          throw new Error('sponsor.prfSecret must be a byte array');
+        }
+        sponsorArg = {
+          walletId,
+          password: sPassword as string | undefined,
+          prfSecret: sPrf ? new Uint8Array(sPrf as number[]) : undefined,
+        };
+      }
       const signedTxHex = await walletBg.balanceAndSignMidnightUnshieldedTransfer(
         unprovenTxHex,
         ttlMs,
         password,
         prfBytes,
+        sponsorArg,
       );
       sendResponse({
         id: request.id,
