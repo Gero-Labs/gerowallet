@@ -47,15 +47,20 @@ import type {
 /**
  * Map our project's `Network` constants to gero-sync's Midnight network keys.
  *
- * gero-sync's `MidnightSyncProvider.getSupportedNetworks()` returns
- * `["midnight-mainnet", "midnight-preprod", "midnight-preview"]` — the wallet
- * sends one of `Network.MAINNET | PREVIEW | PREPROD` ("Mainnet" / "Preview" /
- * "Preprod"), and the backend would otherwise reject with WS code 1011.
+ * The wallet sends one of `Network.MAINNET | STAGENET | PREPROD` ("Mainnet" /
+ * "Stagenet" / "Preprod"); anything gero-sync doesn't list is rejected with WS
+ * code 1011.
+ *
+ * NOTE: gero-sync only accepts `midnight-stagenet` once Gero-Labs/gero-sync#57
+ * lands (it swaps preview for stagenet in
+ * `MidnightSyncProvider.getSupportedNetworks()`, closing gero-sync#56). Until
+ * it merges and deploys, live tip/tx push on stagenet is refused with WS 1011;
+ * the Nexus-backed REST reads are unaffected.
  */
 function toGeroSyncMidnightNetwork(network: string): string {
   switch (network) {
     case Network.MAINNET: return 'midnight-mainnet';
-    case Network.PREVIEW: return 'midnight-preview';
+    case Network.STAGENET: return 'midnight-stagenet';
     case Network.PREPROD: return 'midnight-preprod';
     default:
       // Already in gero-sync form, or an unknown value — pass through and let
@@ -207,7 +212,7 @@ class MidnightSyncService {
    * disconnects + reconnects via {@link webSocketService.connect}'s built-in
    * handover (`close()` → fresh `openConnection()`).
    *
-   * @param network        Midnight network identifier (`Network.PREVIEW` etc.)
+   * @param network        Midnight network identifier (`Network.STAGENET` etc.)
    * @param addresses      The wallet's three Midnight addresses; `unshielded` is
    *                       the one gero-sync uses to filter `unshieldedTransactions`
    * @param lastSyncedBlock Block height the wallet last saw — gero-sync resumes

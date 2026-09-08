@@ -5477,7 +5477,7 @@ function recordMidnightPermissionDenial(tabId: number | undefined, method: strin
 function midnightSdkNetworkId(network: string): string {
   switch (network) {
     case Network.MAINNET: return 'mainnet';
-    case Network.PREVIEW: return 'preview';
+    case Network.STAGENET: return 'stagenet';
     case Network.PREPROD: return 'preprod';
     case Network.TESTNET: return 'testnet';
     default: throw new Error(`Unsupported Midnight network: ${network}`);
@@ -5536,11 +5536,11 @@ app.add(MIDNIGHT_METHOD.connect, (request, sendResponse) => {
   // The connector spec only formally standardizes 'mainnet' as a well-known
   // network id (SPECIFICATION.md §Initial API point 13) — non-mainnet ids
   // aren't governed by a canonical registry across dapps/wallets. But our
-  // own SDK networkId vocabulary ('mainnet'/'preview'/'preprod'/'testnet',
+  // own SDK networkId vocabulary ('mainnet'/'stagenet'/'preprod'/'testnet',
   // via midnightSdkNetworkId) is exactly what a Gero-aware dapp — or any
   // dapp using the same SDK convention — would send. Reject on ANY mismatch
   // against the active wallet's actual network, not just a mainnet-specific
-  // special case: silently accepting e.g. a 'preview' request while the
+  // special case: silently accepting e.g. a 'stagenet' request while the
   // wallet is on 'preprod' would connect the dapp to the wrong chain without
   // it ever knowing. Better to over-reject an unusual-but-valid networkId
   // string than to silently cross-connect networks.

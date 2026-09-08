@@ -63,7 +63,7 @@ export interface BuildAndSignShieldedTransferOutput {
 }
 
 export interface BuildAndSignShieldedTransferArgs {
-  /** SDK network ID — 'mainnet' / 'preview' / 'preprod' / 'testnet'. */
+  /** SDK network ID — 'mainnet' / 'stagenet' / 'preprod' / 'testnet'. */
   readonly sdkNetworkId: string;
   /** Indexer URLs (the BG knows these via midnightConfig). */
   readonly endpoints: MidnightNetworkEndpoints;
@@ -274,7 +274,7 @@ export type ShieldedWalletInstance = {
 };
 
 export interface StartAndSyncShieldedWalletArgs {
-  /** SDK network ID — 'mainnet' / 'preview' / 'preprod' / 'testnet'. */
+  /** SDK network ID — 'mainnet' / 'stagenet' / 'preprod' / 'testnet'. */
   readonly sdkNetworkId: string;
   /** Indexer URLs (the BG knows these via midnightConfig). */
   readonly endpoints: MidnightNetworkEndpoints;

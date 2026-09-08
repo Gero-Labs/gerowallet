@@ -8,7 +8,7 @@ building/signing; sync and orchestration live in `src/services/midnight-*.ts`.
 
 | File | Role |
 |---|---|
-| `midnightConfig.ts` | Per-network endpoints (Nexus REST base, gero-sync WS, public Foundation indexer/RPC) + Nexus path composition. Networks: preview / preprod / mainnet. |
+| `midnightConfig.ts` | Per-network endpoints (Nexus REST base, gero-sync WS, public Foundation indexer/RPC) + Nexus path composition. Networks: stagenet / preprod / mainnet. |
 | `midnightTypes.ts` | Types + decimals (NIGHT=6, DUST=15), addresses, UTxOs, dust state, tx model. |
 | `midnightKeyManager.ts` | HD derivation from BIP39 mnemonic: `m/44'/2400'/account'/role/index`. Roles (wallet-sdk-hd 3.x): NightExternal=0, Dust=2, Zswap=3, Metadata=4. Also derives the Cardano CIP-1852 material (same mnemonic) for DUST registration, and the indexer viewing key (`mn_shield-esk_…` — the encryption SECRET key). |
 | `midnightTxBuilder.ts` | BG-side DUST-balance (`syncDustWalletAndBalanceFees`) + NightExternal-sign (`signUnshieldedSegments`) of an unshielded NIGHT transfer pre-built by Nexus. Both steps are exported standalone (not just inlined in `balanceAndSignUnshieldedTransfer`) so `midnightShieldSwapBuilder.ts` can reuse them. Returns signed-but-unproven hex; sidecar `/tx/finalize` proves + submits. |

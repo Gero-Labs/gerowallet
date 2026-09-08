@@ -2276,7 +2276,7 @@ export class WalletBg {
       let networkId: string;
       switch (this.network) {
         case Network.MAINNET: networkId = 'mainnet'; break;
-        case Network.PREVIEW: networkId = 'preview'; break;
+        case Network.STAGENET: networkId = 'stagenet'; break;
         case Network.PREPROD: networkId = 'preprod'; break;
         case Network.TESTNET: networkId = 'testnet'; break;
         default: throw new Error(`Unsupported Midnight network: ${this.network}`);
@@ -2388,7 +2388,7 @@ export class WalletBg {
       let networkId: string;
       switch (this.network) {
         case Network.MAINNET: networkId = 'mainnet'; break;
-        case Network.PREVIEW: networkId = 'preview'; break;
+        case Network.STAGENET: networkId = 'stagenet'; break;
         case Network.PREPROD: networkId = 'preprod'; break;
         case Network.TESTNET: networkId = 'testnet'; break;
         default: throw new Error(`Unsupported Midnight network: ${this.network}`);
@@ -2511,7 +2511,7 @@ export class WalletBg {
         let sdkNetworkId: string;
         switch (this.network) {
           case Network.MAINNET: sdkNetworkId = 'mainnet'; break;
-          case Network.PREVIEW: sdkNetworkId = 'preview'; break;
+          case Network.STAGENET: sdkNetworkId = 'stagenet'; break;
           case Network.PREPROD: sdkNetworkId = 'preprod'; break;
           case Network.TESTNET: sdkNetworkId = 'testnet'; break;
           default: throw new Error(`Unsupported Midnight network: ${this.network}`);
@@ -2692,7 +2692,7 @@ export class WalletBg {
       let sdkNetworkId: string;
       switch (this.network) {
         case Network.MAINNET: sdkNetworkId = 'mainnet'; break;
-        case Network.PREVIEW: sdkNetworkId = 'preview'; break;
+        case Network.STAGENET: sdkNetworkId = 'stagenet'; break;
         case Network.PREPROD: sdkNetworkId = 'preprod'; break;
         case Network.TESTNET: sdkNetworkId = 'testnet'; break;
         default: throw new Error(`Unsupported Midnight network: ${this.network}`);
@@ -2853,7 +2853,7 @@ export class WalletBg {
       let sdkNetworkId: string;
       switch (this.network) {
         case Network.MAINNET: sdkNetworkId = 'mainnet'; break;
-        case Network.PREVIEW: sdkNetworkId = 'preview'; break;
+        case Network.STAGENET: sdkNetworkId = 'stagenet'; break;
         case Network.PREPROD: sdkNetworkId = 'preprod'; break;
         case Network.TESTNET: sdkNetworkId = 'testnet'; break;
         default: throw new Error(`Unsupported Midnight network: ${this.network}`);
@@ -3069,9 +3069,11 @@ export class WalletBg {
 
       // 4. Attach the witness set and submit via the chain-agnostic submit
       // endpoint, explicitly targeting the Cardano network that mirrors the
-      // Midnight wallet's network (preview ↔ preview, preprod ↔ preprod,
-      // mainnet ↔ mainnet).
-      const cardanoNetwork = this.network; // Network.PREVIEW etc — same string for both chains
+      // Midnight wallet's network (preprod ↔ preprod, mainnet ↔ mainnet, and
+      // stagenet ↔ preprod — stagenet has no Cardano namesake, and its cNIGHT
+      // is the preprod deployment).
+      const { cardanoTwinNetwork } = await import('@/chains/midnight/midnightConfig');
+      const cardanoNetwork = cardanoTwinNetwork(this.network);
       const txDeserialized = Serialization.Transaction.fromCbor(HexBlob(txCborHex));
       // Splice the witness CBOR into the tx by re-serializing.
       const txCore = txDeserialized.toCore();

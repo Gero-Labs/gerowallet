@@ -6,6 +6,7 @@ import { Blockchain, CoinTypes, Currency, HARDENED, Wallet, WalletType, WalletTy
 import { bech32, bech32m } from 'bech32';
 import { clearDbCache } from '@/db/wallet-db';
 import { resolvePrivateKey } from '@/shared/utils/resolver';
+import { debugLog } from '@/utils/debug';
 import { Bip32Ed25519, Bip32PrivateKey, Bip32PublicKeyHex, SodiumBip32Ed25519 } from '@cardano-sdk/crypto';
 import { findDuplicateWallet, WalletIdentitySource } from '@/db/walletIdentity';
 
@@ -80,7 +81,7 @@ export async function getDb() {
   });
 
   // Version 15: Add addressType field for Bitcoin support
-  db.version(geroDBVersion).stores(geroDBSchema).upgrade(async (tx) => {
+  db.version(15).stores(geroDBSchema).upgrade(async (tx) => {
     console.log('Upgrading GeroWalletDatabase to v15: Adding addressType field...');
     try {
       const wallets = await tx.table('wallets').toArray();
@@ -104,6 +105,35 @@ export async function getDb() {
       console.log('✅ GeroWalletDatabase v15 migration complete');
     } catch (error) {
       console.error('❌ GeroWalletDatabase v15 migration failed:', error);
+      throw error;
+    }
+  });
+
+  // Version 16: Midnight preview → stagenet.
+  // Nexus retired the `midnight-preview` slug on 2026-09-06, so a Midnight
+  // wallet still stamped 'Preview' has no endpoint config and no Nexus route —
+  // every call 400s. Stagenet replaced it. Schema is unchanged; this only
+  // rewrites the `network` field, and ONLY on Midnight wallets — Cardano
+  // preview is a different, still-live network that must not be touched.
+  //
+  // The wallet's keys are unaffected: addresses re-derive from the mnemonic at
+  // login, and the Cardano twin address is byte-identical either way (both
+  // resolve to testnet). The Midnight bech32m addresses do change HRP
+  // (`mn_addr_preview…` → `mn_addr_stagenet…`), which is correct — they name a
+  // different chain.
+  db.version(geroDBVersion).stores(geroDBSchema).upgrade(async (tx) => {
+    debugLog('Upgrading GeroWalletDatabase to v16: Midnight preview → stagenet...');
+    try {
+      const wallets = await tx.table('wallets').toArray();
+      let migrated = 0;
+      for (const wallet of wallets) {
+        if (wallet.chain !== 'Midnight' || wallet.network !== 'Preview') continue;
+        await tx.table('wallets').update(wallet.id, { network: 'Stagenet' });
+        migrated += 1;
+      }
+      debugLog(`GeroWalletDatabase v16 migration complete (${migrated} Midnight wallet(s) moved to stagenet)`);
+    } catch (error) {
+      debugLog('GeroWalletDatabase v16 migration failed:', error);
       throw error;
     }
   });
