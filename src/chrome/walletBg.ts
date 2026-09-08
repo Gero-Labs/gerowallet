@@ -2583,24 +2583,24 @@ export class WalletBg {
           ? new Date(createdMs)
           : new Date(Date.now() - 90 * 24 * 3_600_000);
 
-          const signedTxHex = await balanceAndSignUnshieldedTransfer({
-            sdkNetworkId,
-            endpoints,
-            // Always THIS wallet's signing key: a sponsor authorises a fee,
-            // never a transfer.
-            unshieldedSecretKey: derived.unshieldedSecretKey,
-            dustSecretSeed: sponsorDustSeed ?? derived.dustSecretKey,
-            unprovenTxHex,
-            ttl: new Date(ttlMs),
-            dustRegisteredAt,
-            // Forward the (long) DUST-ledger sync percentage to the store so the
-            // send dialog's stage timeline renders a real bar. Broadcast-only,
-            // cleared in the finally below.
-            onDustSyncProgress: (percent, detail) => {
-              midnightActions.setSendProgress({ phase: 'syncingDust', percent, detail });
-            },
-          });
-          return signedTxHex;
+        const signedTxHex = await balanceAndSignUnshieldedTransfer({
+          sdkNetworkId,
+          endpoints,
+          // Always THIS wallet's signing key: a sponsor authorises a fee,
+          // never a transfer.
+          unshieldedSecretKey: derived.unshieldedSecretKey,
+          dustSecretSeed: sponsorDustSeed ?? derived.dustSecretKey,
+          unprovenTxHex,
+          ttl: new Date(ttlMs),
+          dustRegisteredAt,
+          // Forward the (long) DUST-ledger sync percentage to the store so the
+          // send dialog's stage timeline renders a real bar. Broadcast-only,
+          // cleared in the finally below.
+          onDustSyncProgress: (percent, detail) => {
+            midnightActions.setSendProgress({ phase: 'syncingDust', percent, detail });
+          },
+        });
+        return signedTxHex;
       } finally {
         // Clear the transient progress bar (success or failure) so a stale
         // percentage can't linger on the next send's opening frame.
