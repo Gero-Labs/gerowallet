@@ -79,6 +79,13 @@ import {
 import { debugLog } from '@/utils/debug';
 import type { GroupedAddress } from '@/chrome/serialization';
 import { signDataCip8 } from '@/chrome/serialization';
+// Static, not dynamic: walletBg and this module land in the same background
+// IIFE, so a dynamic import buys no code splitting — it only pushes the
+// module's declaration later in the emitted bundle, which is exactly the
+// temporal-dead-zone shape `scripts/check-bundle-tdz.mjs` guards against
+// (it once threw "Cannot access 'midnightSync_service' before initialization"
+// and broke login). The module's own heavy dependencies stay lazy inside it.
+import { deriveSponsorDustSeed } from '@/chains/midnight/midnightSponsorKeys';
 
 let blockchainDb: Dexie = null;
 
@@ -2494,102 +2501,106 @@ export class WalletBg {
       // Midnight transfer — same workaround we use in signMidnightSegments.
       const derived = await deriveMidnightKeys(mnemonic, this.network, 0, { skipCardano: true });
       this.cacheMidnightViewingKeyToSession(derived.zswapViewingKey);
-      let sdkNetworkId: string;
-      switch (this.network) {
-        case Network.MAINNET: sdkNetworkId = 'mainnet'; break;
-        case Network.PREVIEW: sdkNetworkId = 'preview'; break;
-        case Network.PREPROD: sdkNetworkId = 'preprod'; break;
-        case Network.TESTNET: sdkNetworkId = 'testnet'; break;
-        default: throw new Error(`Unsupported Midnight network: ${this.network}`);
-      }
-      const endpoints = getMidnightEndpoints(this.network);
-      if (!endpoints) {
-        throw new Error(`No Midnight endpoints configured for network ${this.network}`);
-      }
-
-      // Sanity check: the publicKey BG re-derives from the mnemonic MUST
-      // match the publicKey stored in the wallet record (which Nexus used
-      // to build the unproven tx's inputs). If they diverge, BG signatures
-      // won't verify against Nexus's input.owner field → the SDK rejects
-      // with "Invalid signature value" inside the ledger WASM. This is a
-      // hard signal that bip39/HD derivation differs between the bundle
-      // that created the wallet and the BG bundle that's now signing.
-      let storedPublicKeyHex: string | undefined;
-      try {
-        const parsed = this.publicKey ? JSON.parse(this.publicKey) : null;
-        storedPublicKeyHex = parsed?.publicKeyHex;
-      } catch { /* ignore — fall through to throw below if needed */ }
-      if (storedPublicKeyHex) {
-        const livePublicKeyHex = derived.publicKeyHex;
-        if (livePublicKeyHex !== storedPublicKeyHex) {
-          throw new Error(
-            `Midnight key derivation mismatch — BG-derived publicKey ` +
-            `(${livePublicKeyHex.slice(0, 16)}…) doesn't match the wallet record's ` +
-            `stored publicKey (${storedPublicKeyHex.slice(0, 16)}…). The wallet ` +
-            `was created with a different bundle's bip39/HD derivation than the ` +
-            `BG bundle uses now; signatures would not verify.`,
-          );
-        }
-      }
-
-      // Registration lower bound for the dust snapshot bootstrap: the wallet
-      // can't have registered for DUST before it was created. For restored
-      // wallets (creation = restore time, registration possibly earlier) a
-      // too-new snapshot degrades safely to the cold-replay fallback inside
-      // the builder. Missing createdAt → conservative 90-day lookback.
-      // Whose DUST pays — and therefore whose registration time bounds the
-      // snapshot fast path. Using THIS wallet's createdAt for a sponsored send
-      // would silently disable the accelerator and force a full cold replay of
-      // the dust ledger on every send.
-      let dustOwner: { createdAt?: string } = this;
+      // Everything from here to the matching finally runs with live key
+      // material in memory. The wipe used to begin only at the SDK call, which
+      // left the sponsor-derivation block outside it: a wrong sponsor password
+      // — the likeliest failure on that path — threw straight past the wipe and
+      // left the sender's keys in memory.
       let sponsorDustSeed: Uint8Array | undefined;
-      if (sponsor) {
-        const { getAllWallets } = await import('@/db/gero-db');
-        // getAllWallets returns a MAP keyed by wallet id, not an array.
-        // createdAt is stored on the record but is not on the base Wallet
-        // interface (WalletBg takes it as a constructor-level extension), so
-        // widen it here rather than lose the sync accelerator's bound.
-        const wallets = (await getAllWallets()) as unknown as
-          Record<number, Wallet & { createdAt?: string }>;
-        const sponsorWallet = wallets[sponsor.walletId];
-        if (!sponsorWallet) throw new Error('Sponsor wallet not found');
-        const { deriveSponsorDustSeed } = await import('@/chains/midnight/midnightSponsorKeys');
-        // Throws on a structurally ineligible sponsor BEFORE decrypting.
-        sponsorDustSeed = await deriveSponsorDustSeed(
-          {
-            sponsor: sponsorWallet,
-            network: this.network,
-            credential: { password: sponsor.password, prfSecret: sponsor.prfSecret },
-          },
-          this.id,
-        );
-        dustOwner = sponsorWallet;
-      }
-
-      const createdMs = dustOwner.createdAt ? Date.parse(dustOwner.createdAt) : NaN;
-      const dustRegisteredAt = Number.isFinite(createdMs)
-        ? new Date(createdMs)
-        : new Date(Date.now() - 90 * 24 * 3_600_000);
-
       try {
-        const signedTxHex = await balanceAndSignUnshieldedTransfer({
-          sdkNetworkId,
-          endpoints,
-          // Always THIS wallet's signing key: a sponsor authorises a fee,
-          // never a transfer.
-          unshieldedSecretKey: derived.unshieldedSecretKey,
-          dustSecretSeed: sponsorDustSeed ?? derived.dustSecretKey,
-          unprovenTxHex,
-          ttl: new Date(ttlMs),
-          dustRegisteredAt,
-          // Forward the (long) DUST-ledger sync percentage to the store so the
-          // send dialog's stage timeline renders a real bar. Broadcast-only,
-          // cleared in the finally below.
-          onDustSyncProgress: (percent, detail) => {
-            midnightActions.setSendProgress({ phase: 'syncingDust', percent, detail });
-          },
-        });
-        return signedTxHex;
+        let sdkNetworkId: string;
+        switch (this.network) {
+          case Network.MAINNET: sdkNetworkId = 'mainnet'; break;
+          case Network.PREVIEW: sdkNetworkId = 'preview'; break;
+          case Network.PREPROD: sdkNetworkId = 'preprod'; break;
+          case Network.TESTNET: sdkNetworkId = 'testnet'; break;
+          default: throw new Error(`Unsupported Midnight network: ${this.network}`);
+        }
+        const endpoints = getMidnightEndpoints(this.network);
+        if (!endpoints) {
+          throw new Error(`No Midnight endpoints configured for network ${this.network}`);
+        }
+
+        // Sanity check: the publicKey BG re-derives from the mnemonic MUST
+        // match the publicKey stored in the wallet record (which Nexus used
+        // to build the unproven tx's inputs). If they diverge, BG signatures
+        // won't verify against Nexus's input.owner field → the SDK rejects
+        // with "Invalid signature value" inside the ledger WASM. This is a
+        // hard signal that bip39/HD derivation differs between the bundle
+        // that created the wallet and the BG bundle that's now signing.
+        let storedPublicKeyHex: string | undefined;
+        try {
+          const parsed = this.publicKey ? JSON.parse(this.publicKey) : null;
+          storedPublicKeyHex = parsed?.publicKeyHex;
+        } catch { /* ignore — fall through to throw below if needed */ }
+        if (storedPublicKeyHex) {
+          const livePublicKeyHex = derived.publicKeyHex;
+          if (livePublicKeyHex !== storedPublicKeyHex) {
+            throw new Error(
+              `Midnight key derivation mismatch — BG-derived publicKey ` +
+              `(${livePublicKeyHex.slice(0, 16)}…) doesn't match the wallet record's ` +
+              `stored publicKey (${storedPublicKeyHex.slice(0, 16)}…). The wallet ` +
+              `was created with a different bundle's bip39/HD derivation than the ` +
+              `BG bundle uses now; signatures would not verify.`,
+            );
+          }
+        }
+
+        // Registration lower bound for the dust snapshot bootstrap: the wallet
+        // can't have registered for DUST before it was created. For restored
+        // wallets (creation = restore time, registration possibly earlier) a
+        // too-new snapshot degrades safely to the cold-replay fallback inside
+        // the builder. Missing createdAt → conservative 90-day lookback.
+        // Whose DUST pays — and therefore whose registration time bounds the
+        // snapshot fast path. Using THIS wallet's createdAt for a sponsored send
+        // would silently disable the accelerator and force a full cold replay of
+        // the dust ledger on every send.
+        let dustOwner: { createdAt?: string } = this;
+        if (sponsor) {
+          const { getAllWallets } = await import('@/db/gero-db');
+          // getAllWallets returns a MAP keyed by wallet id, not an array.
+          // createdAt is stored on the record but is not on the base Wallet
+          // interface (WalletBg takes it as a constructor-level extension), so
+          // widen it here rather than lose the sync accelerator's bound.
+          const wallets = (await getAllWallets()) as unknown as
+            Record<number, Wallet & { createdAt?: string }>;
+          const sponsorWallet = wallets[sponsor.walletId];
+          if (!sponsorWallet) throw new Error('Sponsor wallet not found');
+          // Throws on a structurally ineligible sponsor BEFORE decrypting.
+          sponsorDustSeed = await deriveSponsorDustSeed(
+            {
+              sponsor: sponsorWallet,
+              network: this.network,
+              credential: { password: sponsor.password, prfSecret: sponsor.prfSecret },
+            },
+            this.id,
+          );
+          dustOwner = sponsorWallet;
+        }
+
+        const createdMs = dustOwner.createdAt ? Date.parse(dustOwner.createdAt) : NaN;
+        const dustRegisteredAt = Number.isFinite(createdMs)
+          ? new Date(createdMs)
+          : new Date(Date.now() - 90 * 24 * 3_600_000);
+
+          const signedTxHex = await balanceAndSignUnshieldedTransfer({
+            sdkNetworkId,
+            endpoints,
+            // Always THIS wallet's signing key: a sponsor authorises a fee,
+            // never a transfer.
+            unshieldedSecretKey: derived.unshieldedSecretKey,
+            dustSecretSeed: sponsorDustSeed ?? derived.dustSecretKey,
+            unprovenTxHex,
+            ttl: new Date(ttlMs),
+            dustRegisteredAt,
+            // Forward the (long) DUST-ledger sync percentage to the store so the
+            // send dialog's stage timeline renders a real bar. Broadcast-only,
+            // cleared in the finally below.
+            onDustSyncProgress: (percent, detail) => {
+              midnightActions.setSendProgress({ phase: 'syncingDust', percent, detail });
+            },
+          });
+          return signedTxHex;
       } finally {
         // Clear the transient progress bar (success or failure) so a stale
         // percentage can't linger on the next send's opening frame.

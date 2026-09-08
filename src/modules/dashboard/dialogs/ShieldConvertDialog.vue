@@ -324,6 +324,7 @@
 
 <script setup lang="ts">
 import { computed, ref, toRefs, watch } from 'vue';
+import { blocksMidnightSend } from '@/chains/midnight/midnightFeeCapacity';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
 import TransactionAuthSection from '@/shared/components/TransactionAuthSection.vue';
@@ -474,6 +475,14 @@ const dustBattery = computed<{ percent: number } | null>(() => {
 });
 const isDustLow = computed(() => !!dustBattery.value && dustBattery.value.percent < 20);
 
+/**
+ * No spendable DUST means no fee can be paid, so the conversion cannot
+ * succeed. Mirrors MidnightSendDialog/MidnightSendSheet: caught here rather
+ * than four steps later inside the SDK's balanceTransactions, which neither
+ * returns nor throws in that state.
+ */
+const noFeeCapacity = computed(() => blocksMidnightSend(midnightStore.dustState));
+
 const consentDialogOpen = ref(false);
 const pendingCredentials = ref<{ password?: string; prfSecret?: Uint8Array } | null>(null);
 
@@ -554,6 +563,14 @@ const reviewTotals = computed<TxDetailsTotals>(() => ({
 function nextStep() {
   errorMessage.value = null;
   if (currentStep.value === 1) {
+    // Same pre-flight the send surfaces run. A conversion balances its fee
+    // through the shared dust builder, so with no spendable DUST it stalls on
+    // exactly the path the send dialogs now guard — without this it only fails
+    // after the 60s timeout, with a vaguer message.
+    if (noFeeCapacity.value) {
+      errorMessage.value = t('midnight.send.noDustFee');
+      return;
+    }
     if (!step1FormRef.value?.validate()) {
       shakeError.value = true;
       setTimeout(() => { shakeError.value = false; }, 400);
