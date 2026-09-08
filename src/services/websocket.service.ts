@@ -192,8 +192,15 @@ class WebSocketService {
       // wallet's `applyUtxoDeltas` may have advanced `lastMidnightTxId` since
       // the last SUBSCRIBE (auto-reconnect after a transient WS drop, network
       // hiccup, BG SW wake-up). Stale cursor = needless replay on every drop.
+      //
+      // A NULL cursor from the caller is an instruction, not a missing value:
+      // midnight-sync.service passes null to force a full replay when the
+      // wallet has a cursor but no preserved UTxOs. Live-reading over the top
+      // of it re-sent the stale cursor, gero-sync answered SYNC_CHECK "caught
+      // up", and the balance stayed empty forever. Only refresh a cursor the
+      // caller actually supplied.
       let liveMidnightCursor: number | null = this.midnightLastTxId;
-      if (this.chain === 'MIDNIGHT') {
+      if (this.chain === 'MIDNIGHT' && this.midnightLastTxId != null) {
         const live = (midnightStore as { lastMidnightTxId?: number | null }).lastMidnightTxId;
         if (typeof live === 'number' && live >= 0) liveMidnightCursor = live;
       }
@@ -477,8 +484,10 @@ class WebSocketService {
     // Live-read the Midnight cursor for resubscribe too — same reason as the
     // initial connect path: store may have advanced since the last SUBSCRIBE.
     // Only consumed by the non-BTC send below; the BITCOIN branch returns first.
+    // Same null-means-replay rule as openConnection: never live-read over a
+    // caller-supplied null, or a forced resync silently resumes instead.
     let liveMidnightCursor: number | null = this.midnightLastTxId;
-    if (this.chain === 'MIDNIGHT') {
+    if (this.chain === 'MIDNIGHT' && this.midnightLastTxId != null) {
       const live = (midnightStore as { lastMidnightTxId?: number | null }).lastMidnightTxId;
       if (typeof live === 'number' && live >= 0) liveMidnightCursor = live;
     }

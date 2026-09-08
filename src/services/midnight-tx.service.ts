@@ -133,6 +133,7 @@ async function balanceAndSignInBg(
   unprovenTxHex: string,
   ttlMs: number,
   credentials: MidnightSendCredentials,
+  sponsor?: MidnightSponsor,
 ): Promise<string> {
   const response = await Messaging.sendToBackgroundFromOptions({
     method: MessageTypes.BALANCE_AND_SIGN_MIDNIGHT_UNSHIELDED_TX,
@@ -141,6 +142,15 @@ async function balanceAndSignInBg(
       ttlMs,
       password: credentials.password,
       prfSecret: credentials.prfSecret ? Array.from(credentials.prfSecret) : undefined,
+      // Uint8Array can't cross Chrome messaging; the sponsor's PRF output goes
+      // as a plain array, same as the sender's above.
+      sponsor: sponsor
+        ? {
+          walletId: sponsor.walletId,
+          password: sponsor.password,
+          prfSecret: sponsor.prfSecret ? Array.from(sponsor.prfSecret) : undefined,
+        }
+        : undefined,
     },
   }) as { data: { success: boolean; signedTxHex?: string; error?: string } };
 
@@ -171,18 +181,33 @@ async function submitSignedTx(
  *   3. balanceAndSignInBg → BG adds DUST fee inputs + signs each input
  *   4. submitSignedTx     → Nexus relays to sidecar /tx/finalize (prove + submit)
  */
+/**
+ * Another wallet the user owns, paying this transaction's DUST fee.
+ *
+ * The credential is that wallet's own — never the sender's — and is used once
+ * in the background to derive a DUST seed. Nothing is retained between sends.
+ */
+export interface MidnightSponsor {
+  readonly walletId: number;
+  readonly password?: string;
+  readonly prfSecret?: Uint8Array;
+}
+
 export async function sendUnshieldedNight(
   network: string,
   baseRequest: Omit<BuildMidnightTxRequest, 'publicKeyHex' | 'addressHex'>,
   credentials: MidnightSendCredentials,
   onStage?: (stage: MidnightSendStage) => void,
+  sponsor?: MidnightSponsor,
 ): Promise<SubmitMidnightTxResponse> {
   onStage?.('authorizing');
   const { publicKeyHex, addressHex } = await getWalletKeys(credentials);
   onStage?.('building');
   const built = await buildUnshielded(network, { ...baseRequest, publicKeyHex, addressHex });
   onStage?.('working');
-  const signedTxHex = await balanceAndSignInBg(built.unprovenTxHex, baseRequest.ttlMs, credentials);
+  const signedTxHex = await balanceAndSignInBg(
+    built.unprovenTxHex, baseRequest.ttlMs, credentials, sponsor,
+  );
   onStage?.('submitting');
   const result = await submitSignedTx(network, signedTxHex);
   onStage?.('done');

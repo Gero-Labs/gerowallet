@@ -312,6 +312,7 @@ import { Network, WalletType } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { midnightTokenBalances } from '@/chains/midnight/midnightTokenBalances';
 import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
+import { blocksMidnightSend } from '@/chains/midnight/midnightFeeCapacity';
 import {
   formatTokenAmount,
   parseTokenAmount,
@@ -441,7 +442,14 @@ const recipientError = computed(() => {
   return '';
 });
 
+/**
+  * No spendable DUST means no fee can be paid. Surfaced on the amount step so
+  * the user learns it before authorizing, not after the SDK stalls.
+  */
+const noFeeCapacity = computed(() => blocksMidnightSend(midnightStore.dustState));
+
 const amountError = computed(() => {
+  if (noFeeCapacity.value) return t('midnight.send.noDustFee');
   if (!amount.value) return '';
   // Judged by the parser that builds the tx, not Number(): the two disagree on
   // exponential notation ('1e2' passes Number, parses to 0n) and on amounts

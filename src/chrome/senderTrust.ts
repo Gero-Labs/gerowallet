@@ -13,6 +13,11 @@
  * router-level check's blast radius small.
  */
 export const EXTENSION_PAGE_ONLY_METHODS = new Set<string>([
+  'CIP45_BEGIN_SESSION',
+  'CIP45_END_SESSION',
+  'CIP45_VALIDATE_SESSION',
+  'CIP45_INVOKE',
+  'CIP45_UPDATE_SESSION',
   'SET_REMOTE_SIGNING_ENABLED',
   'SET_CROSS_DEVICE_POLICY',
   'TRUST_CROSS_DEVICE',

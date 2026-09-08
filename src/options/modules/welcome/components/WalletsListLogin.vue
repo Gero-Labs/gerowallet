@@ -8,70 +8,8 @@
         {{ $t('welcome.chooseAWallet') }}
       </v-card-subtitle>
     </template>
-    <v-card-text class="px-2 pa-0 mt-4" style="flex: 1 1 auto; min-height: 0; overflow-y: auto; background: transparent!important;">
-      <v-list nav dense class="pa-0 wallet-list" style="min-height: 51px;">
-        <v-list-item-group v-model="selectedWallet" color="primary">
-          <v-list-item
-            class="wallet-row"
-            :class="{ 'wallet-locked': isWalletLocked(item) }"
-            v-for="(item, i) in availableWallets"
-            :key="i"
-            @click="submitLogin(item.id)"
-            @mouseenter="onWalletHover(item)"
-          >
-            <v-list-item-icon style="height: 40px" class="mr-4">
-              <v-badge
-                class="chain-badge"
-                overlap
-                avatar
-                bottom
-                bordered
-                offset-y="20"
-              >
-                <template v-slot:badge>
-                  <v-avatar>
-                    <v-img :src="resolveNetworkIcon(item)"></v-img>
-                  </v-avatar>
-                </template>
-                <v-avatar size="40">
-                  <v-img :src="assets.resolveIcon(item.icon)"></v-img>
-                </v-avatar>
-              </v-badge>
-            </v-list-item-icon>
-            <v-list-item-content>
-              <v-list-item-title>
-                {{ item.name }}
-                <v-chip
-                  v-if="isWalletLocked(item)"
-                  x-small
-                  color="transparent"
-                  text-color="primary"
-                  class="mb-1 ml-1"
-                >
-                  <v-icon x-small left>mdi-lock</v-icon>
-                  {{ $t('wallet.loggedIn') }}
-                </v-chip>
-              </v-list-item-title>
-              <v-list-item-subtitle>
-                {{ item.chain }} - {{item.network}}
-              </v-list-item-subtitle>
-            </v-list-item-content>
-            <v-list-item-avatar tile size="20" style="margin: 8px;" v-if="item.type === WalletType.Ledger">
-              <v-img :src="assets.ledgerSvg" contain width="18"></v-img>
-            </v-list-item-avatar>
-            <v-list-item-avatar tile size="20" style="margin: 8px;" v-if="item.type === WalletType.Trezor">
-              <v-img :src="assets.trezorSvg" contain width="18"></v-img>
-            </v-list-item-avatar>
-            <v-list-item-avatar tile size="20" style="margin: 8px;" v-if="item.type === WalletType.Keystone">
-              <v-img :src="assets.keystoneSvg" contain width="18"></v-img>
-            </v-list-item-avatar>
-            <v-list-item-avatar tile size="20" style="margin: 8px;" v-if="item.type === WalletType.Google && item.encryptionMethod === 'mpc'">
-              <v-img :src="assets.googleSvg" contain width="18"></v-img>
-            </v-list-item-avatar>
-          </v-list-item>
-        </v-list-item-group>
-      </v-list>
-    </v-card-text>
+    <WalletLibrary :available-wallets="availableWallets" :locked-wallet-id="isLocked ? loggedWallet?.id : null"
+      @select="submitLogin" @focus-wallet="onWalletHover" />
 
     <!-- Unlock Wallet Dialog -->
     <UnlockWalletDialog
@@ -85,8 +23,8 @@
   </v-card>
 </template>
 <script setup lang="ts">
-import assets from '@/utils/assets';
-import { Wallet, WalletType } from '@/models/types';
+import WalletLibrary from './WalletLibrary.vue';
+import { Wallet } from '@/models/types';
 import { ref, toRefs, getCurrentInstance, watch, onMounted } from 'vue';
 import networks, { NetworkInfo } from '@/utils/networks';
 import { Messaging } from '@/chrome/messaging';
@@ -115,14 +53,6 @@ const { wallets } = toRefs(geroStore);
 // login for MPC Google wallets still goes through the pre-login unlock gate.
 const { availableWallets } = useAvailableWallets();
 
-const resolveNetworkIcon = (item: Wallet): string => {
-  const network = networks.resolveNetwork(item.chain, item.network);
-  if (network) {
-    return network.icon;
-  }
-  return '';
-};
-
 defineProps<{ hideHeader?: boolean }>();
 const emit = defineEmits<{ (e: 'network-change', n: NetworkInfo): void }>();
 
@@ -137,10 +67,6 @@ onMounted(() => {
   const first = availableWallets.value[0];
   if (first) onWalletHover(first);
 });
-
-const isWalletLocked = (wallet: Wallet): boolean => {
-  return loggedWallet.value?.id === wallet.id && isLocked.value;
-};
 
 const vmProxy = getCurrentInstance()!.proxy
 
@@ -438,87 +364,3 @@ const handleLoggedOut = async (): Promise<void> => {
   // Stay on the welcome screen
 };
 </script>
-<style scoped>
-/* Chain badge disc: force a dark surface so the transparent white marks
-   (Apex ap3x.svg, Midnight midnight.svg) read on dark. Without this the
-   colorless v-badge falls back to the Vuetify theme primary and paints the
-   disc blue behind the glyph — the "Midnight shows a blue logo" symptom. */
-.chain-badge ::v-deep .v-badge__badge {
-  background: var(--g-raised) !important;
-  border-color: var(--g-hairline-2) !important;
-}
-
-/* Ensure all parent elements are transparent for backdrop-filter to work */
-.transparent-override,
-.transparent-override .v-card__title,
-.transparent-override .v-card__subtitle,
-.transparent-override .v-card__text {
-  background: transparent !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-
-.wallet-list,
-.wallet-list .v-list-item-group {
-  background: transparent !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-
-.wallet-row {
-  background: rgb(from var(--g-raised) r g b / 0.55) !important;
-  border: 1px solid var(--g-hairline-1) !important;
-  border-radius: var(--g-r-control) !important;
-  margin: 4px 0 !important;
-  transition: background-color var(--g-dur-base) ease, border-color var(--g-dur-base) ease, transform var(--g-dur-base) ease !important;
-  position: relative !important;
-  overflow: hidden !important;
-}
-
-.wallet-row:hover {
-  background: rgb(from var(--g-raised) r g b / 0.72) !important;
-  border-color: var(--g-accent) !important;
-  transform: translateY(-1px) !important;
-}
-
-.wallet-row::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: var(--g-hairline-2);
-  z-index: 1;
-}
-
-/* Logged in wallet styling (teal/cyan) */
-.wallet-locked {
-  border-color: var(--g-accent) !important;
-  background: rgb(from var(--g-raised) r g b / 0.6) !important;
-}
-
-.wallet-locked:hover {
-  border-color: var(--g-accent) !important;
-  background: rgb(from var(--g-raised) r g b / 0.72) !important;
-}
-
-/* Fallback for browsers without backdrop-filter support */
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .wallet-row {
-    background-color: var(--g-raised) !important;
-  }
-
-  .wallet-row:hover {
-    background-color: var(--g-raised) !important;
-  }
-
-  .wallet-locked {
-    background-color: var(--g-warning) !important;
-  }
-
-  .wallet-locked:hover {
-    background-color: var(--g-warning) !important;
-  }
-}
-</style>

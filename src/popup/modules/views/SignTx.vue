@@ -200,6 +200,10 @@
   </v-form>
 </template>
 <script setup lang="ts">
+import type { Cip45Authorization } from '@/services/cip45/types';
+import type { TxScanResponse } from '@/models/cardano-shield-types';
+import { getErrorMessage } from '@/shared/utils/errorHandler';
+import { validateCip45Signing } from '@/services/cip45/signingAuthorization';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 import {
@@ -246,19 +250,27 @@ const { t } = useTranslation();
 const { loggedWallet, config, utxos, keys } = toRefs(walletStore);
 
 const isBT = ref(false);
-const risks = ref<any>(undefined);
+const risks = ref<TxScanResponse | { addressRisk: 'unknown'; score: 'unknown' }>(undefined);
 const spendingPassword = ref('');
 const privateKeyBytes = ref<Uint8Array | null>(null);
-const request = ref<any>(null);
+interface SignTxRequest {
+  data?: {
+    tx: string;
+    partialSign?: boolean;
+    mergeWitnesses?: boolean;
+    cip45Authorization?: Cip45Authorization;
+  };
+}
+const request = ref<SignTxRequest | null>(null);
 const tx = ref<Cardano.Tx | undefined>(undefined);
 const valid = ref(false);
-const passwordField = ref<any>(null);
+const passwordField = ref<{ showError(message: string): void } | null>(null);
 const txSignLoading = ref(false);
 const loading = ref(true);
-const controller = ref<any>(null);
-const witnesses = ref<any>(undefined);
-const form = ref<any>(null);
-const popupHeader = ref<any>(null);
+const controller = ref<ReturnType<typeof Messaging.createInternalController> | null>(null);
+const witnesses = ref<string>(undefined);
+const form = ref<{ validate(): boolean } | null>(null);
+const popupHeader = ref<InstanceType<typeof PopupHeader> | null>(null);
 // Keystone state
 const keystoneOverlay = ref(false);
 const keystoneScan = ref(false);
@@ -344,7 +356,7 @@ const reconstructedUTxOs = computed(() => {
       const assetsMap = new Map<Cardano.AssetId, bigint>();
       // Convert plain object back to Map
       Object.entries(value.assets).forEach(([assetId, quantity]) => {
-        assetsMap.set(assetId as Cardano.AssetId, BigInt(quantity as any));
+        assetsMap.set(assetId as Cardano.AssetId, BigInt(quantity as string | number | bigint));
       });
       value = {
         coins: BigInt(value.coins),
@@ -457,6 +469,7 @@ const sign = async () => {
   const signAndReturnTx = async () => {
     txSignLoading.value = true;
     try {
+      await validateCip45Signing(request.value?.data);
       const txCbor = request.value?.data?.tx;
       const partialSign = request.value?.data?.partialSign;
       const mergeWitnesses = request.value?.data?.mergeWitnesses;
@@ -464,6 +477,7 @@ const sign = async () => {
         const witnessResult = await Messaging.sendToBackgroundFromOptions({
           method: MessageTypes.SIGN_TX,
           data: {
+            cip45Authorization: request.value?.data?.cip45Authorization,
             txCbor: txCbor,
             partialSign: partialSign,
             password: spendingPassword.value,
@@ -473,7 +487,7 @@ const sign = async () => {
             mergeWitnesses: mergeWitnesses || false,
             privateKeyBytes: privateKeyBytes.value ? Array.from(privateKeyBytes.value) : undefined,
           }
-        }) as { data: { witnesses?: any; error?: string } };
+        }) as { data: { witnesses?: string; error?: string } };
 
         debugLog('[NORMAL-SIGN] Transaction signed successfully:', witnessResult);
 
@@ -565,6 +579,7 @@ const sign = async () => {
         hardwareLoading.begin('Trezor', t('wallet.confirmOnTrezor') as string);
         const data = {
           method: 'signTx',
+          cip45Authorization: request.value?.data?.cip45Authorization,
           txCbor
         };
         const response = (featureFlagsStore.state.flags.isTrezorWebUsbEnabled
@@ -620,6 +635,7 @@ const sign = async () => {
         }
       } else if (loggedWallet.value.type === WalletType.Keystone) {
         try {
+          await validateCip45Signing(request.value?.data);
           // Create transaction object from CBOR
           const fullTx = Serialization.Transaction.fromCbor(Serialization.TxCBOR(txCbor));
 
@@ -639,12 +655,12 @@ const sign = async () => {
           // Show overlay with animated QR code
           keystoneOverlay.value = true;
           keystoneScan.value = false;
-        } catch (e: any) {
+        } catch (e: unknown) {
           debugLog('[KEYSTONE-SIGN] Error:', e);
-          snackbar.setError(e.message || t('wallet.keystoneSigningFailed'));
+          snackbar.setError(getErrorMessage(e) || t('wallet.keystoneSigningFailed'));
         }
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       hardwareLoading.setLoading(false);
       if (e instanceof DeviceStatusError) {
         const error: DeviceStatusError = e;
@@ -658,7 +674,7 @@ const sign = async () => {
         }
       } else {
         debugLog('[SIGN] Transaction error:', e);
-        snackbar.setError(e);
+        snackbar.setError(getErrorMessage(e));
       }
     } finally {
       txSignLoading.value = false;
@@ -693,6 +709,7 @@ const sign = async () => {
 
 const onKeystoneScan = async (ur: UR) => {
   try {
+    await validateCip45Signing(request.value?.data);
     const txCbor = request.value?.data?.tx;
     const partialSign = request.value?.data?.partialSign;
     const mergeWitnesses = request.value?.data?.mergeWitnesses;
@@ -801,16 +818,22 @@ const backKeystoneScan = () => {
 };
 
 const confirm = async () => {
+  try {
+    await validateCip45Signing(request.value?.data);
+  } catch {
+    await decline();
+    return;
+  }
   await controller.value.returnData({ data: witnesses.value, error: undefined });
   window.close();
 };
 
-const vmProxy = getCurrentInstance()!.proxy as any
+const vmProxy = getCurrentInstance()!.proxy
 const route = vmProxy.$route;
 
 const init = async () => {
   let txCbor;
-  request.value = await controller.value.requestData();
+  request.value = await controller.value.requestData() as SignTxRequest;
   if (request.value?.data?.tx) {
     txCbor = request.value?.data?.tx;
   }
@@ -839,7 +862,7 @@ const init = async () => {
         fromAddress: changeAddress.value,
         url: queryParams['website'] as string,
       }),
-      new Promise<any>((_, reject) =>
+      new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('Cardano Shield scan timeout')), 10000)
       )
     ]);
