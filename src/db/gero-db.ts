@@ -7,6 +7,7 @@ import { bech32, bech32m } from 'bech32';
 import { clearDbCache } from '@/db/wallet-db';
 import { resolvePrivateKey } from '@/shared/utils/resolver';
 import { Bip32Ed25519, Bip32PrivateKey, Bip32PublicKeyHex, SodiumBip32Ed25519 } from '@cardano-sdk/crypto';
+import { findDuplicateWallet, WalletIdentitySource } from '@/db/walletIdentity';
 
 let cachedDb: Dexie | null = null;
 
@@ -227,6 +228,84 @@ function getDefaultAddressType(chain: string): string {
 }
 
 /**
+ * Pre-derived Midnight bech32m addresses. Derived by the caller in an
+ * SDK-aware context — see the Midnight branch of `createNewWallet`.
+ */
+export interface MidnightAddresses {
+  unshielded: string;
+  shielded: string;
+  dust: string;
+}
+
+/**
+ * Thrown when a wallet with the same identity (chain + network + derived public
+ * key) is already stored. Carries the existing record so the UI can offer to
+ * open it instead of creating a duplicate.
+ */
+export class DuplicateWalletError extends Error {
+  readonly existingWallet: Wallet;
+
+  constructor(existingWallet: Wallet) {
+    super(`Wallet already exists: "${existingWallet.name}" (${existingWallet.chain} / ${existingWallet.network})`);
+    this.name = 'DuplicateWalletError';
+    this.existingWallet = existingWallet;
+  }
+}
+
+/**
+ * Derive the chain-specific public key that identifies a wallet.
+ *
+ * This is exactly the value `createNewWallet` persists as `wallet.publicKey`,
+ * which is what makes it usable as a pre-flight duplicate check: derive it from
+ * the entered seed phrase and look for a stored wallet carrying the same value
+ * on the same chain and network.
+ *
+ * @param mnemonic - BIP39 mnemonic.
+ * @param chain - Blockchain (see `Blockchain`).
+ * @param network - Network (e.g. 'Mainnet', 'Preprod').
+ * @param addressType - Address type; defaults per chain. Part of the Bitcoin
+ *                      derivation path, so a legacy and a segwit restore of the
+ *                      same seed are legitimately different wallets.
+ * @param midnightAddresses - Pre-derived Midnight addresses. gero-db.ts cannot
+ *                            derive these itself without dragging the Midnight
+ *                            WASM into the background bundle, so callers pass
+ *                            them in; without them the Midnight identity is
+ *                            unknown and no duplicate can be detected.
+ */
+export async function deriveWalletPublicKey(
+  mnemonic: string,
+  chain: string,
+  network: string,
+  addressType: string = getDefaultAddressType(chain),
+  midnightAddresses?: MidnightAddresses,
+): Promise<string> {
+  if (chain === Blockchain.BITCOIN) {
+    const { deriveBitcoinAccountXpub } = await import('@/chains/bitcoin/bitcoinKeyManager');
+    return deriveBitcoinAccountXpub(mnemonic, network, addressType);
+  }
+
+  if (chain === Blockchain.MIDNIGHT) {
+    return JSON.stringify(midnightAddresses ?? { unshielded: '', shielded: '', dust: '' });
+  }
+
+  // Cardano and the Apex Fusion chains share the CIP-1852 derivation.
+  return derivePublicKeyFromMnemonic(mnemonic);
+}
+
+/**
+ * Find a stored wallet with the same identity as `candidate`.
+ *
+ * Identity is (chain, network, derived public key) — never the wallet name. The
+ * same seed restored on a different chain or network is NOT a duplicate.
+ *
+ * @returns The existing wallet, or null when the candidate is new.
+ */
+export async function findExistingWallet(candidate: WalletIdentitySource): Promise<Wallet | null> {
+  const wallets = await getAllWallets();
+  return findDuplicateWallet<Wallet>(candidate, wallets as Record<string, Wallet>);
+}
+
+/**
  * Create a new wallet with password or PRF encryption
  *
  * @param name - Wallet name
@@ -271,7 +350,7 @@ export async function createNewWallet(
      * ones) computed by the caller in an SDK-aware context. gero-db does not
      * derive these itself — see the Midnight branch above for why.
      */
-    midnightAddresses?: { unshielded: string; shielded: string; dust: string };
+    midnightAddresses?: MidnightAddresses;
   }
 ) {
   let isRestore = true;
@@ -290,9 +369,8 @@ export async function createNewWallet(
 
   if (chain === Blockchain.BITCOIN) {
     // Bitcoin key derivation
-    const { deriveBitcoinAccountXpub, deriveBitcoinRootKey } = await import('@/chains/bitcoin/bitcoinKeyManager');
+    const { deriveBitcoinRootKey } = await import('@/chains/bitcoin/bitcoinKeyManager');
     rootKey = deriveBitcoinRootKey(mnemonic);
-    publicKey = deriveBitcoinAccountXpub(mnemonic, network, addressType);
   } else if (chain === Blockchain.MIDNIGHT) {
     // Midnight key derivation: BIP39 → 64-byte seed. The Midnight SDK
     // (HDWallet + UnshieldedAddress) is intentionally NOT imported here —
@@ -304,13 +382,21 @@ export async function createNewWallet(
     // wallet record under `publicKey`.
     const seed: Uint8Array = bip39.mnemonicToSeedSync(mnemonic);
     rootKey = { privateKey: seed };
-    publicKey = options?.midnightAddresses
-      ? JSON.stringify(options.midnightAddresses)
-      : JSON.stringify({ unshielded: '', shielded: '', dust: '' });
   } else {
     // Cardano key derivation (existing logic)
     rootKey = resolvePrivateKey(mnemonic);
-    publicKey = await derivePublicKeyFromMnemonic(mnemonic);
+  }
+
+  // The stored public key comes from the same helper the restore flow uses for
+  // its duplicate check, so the two can never drift out of sync.
+  publicKey = await deriveWalletPublicKey(mnemonic, chain, network, addressType, options?.midnightAddresses);
+
+  // Reject a restore of a seed that is already stored for this chain+network.
+  // The restore UI checks first (and prompts); this is the last line of defence
+  // so no code path can silently write a duplicate record.
+  const duplicate = await findExistingWallet({ chain, network, publicKey });
+  if (duplicate) {
+    throw new DuplicateWalletError(duplicate);
   }
 
   const db: Dexie = await getDb();
@@ -721,20 +807,6 @@ export async function migrateEncryptedPrivateKey(
 ): Promise<void> {
   const db: Dexie = await getDb();
   await db['wallets'].update(walletId, { encryptedPrivateKey });
-}
-
-/**
- * Get wallet by public key (xpub)
- * @param publicKey - The public key (xpub) to search for
- * @returns The wallet object if found, null otherwise
- */
-export async function getWalletByPublicKey(publicKey: string) {
-  const db: Dexie = await getDb();
-  const wallets = await db['wallets'].where('publicKey').equals(publicKey).toArray();
-  if (wallets && wallets.length > 0) {
-    return wallets[0];
-  }
-  return null;
 }
 
 /**
