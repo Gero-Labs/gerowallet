@@ -70,6 +70,10 @@ balance control also accepts a spending password or PassKey ceremony. After a
 background restart, authorize private sync again. Unknown private state is not
 presented as an authoritative zero balance.
 
+The first complete private snapshot is published promptly. Later snapshots
+are verified and published every 30 seconds. A disconnected or lagging SDK
+stream marks private balances as syncing while retaining cached display data.
+
 Local proving requires the matching native server. Stagenet setup displays:
 
 ```sh
@@ -112,7 +116,7 @@ restored empty checkpoint so a later attempt can recover.
 Run repeatable wallet checks without funded accounts:
 
 ```sh
-npx vitest run src/chains/midnight src/services/midnight-tx.ledger.spec.ts src/services/__tests__/midnightTxPerToken.test.ts
+npx vitest run src/chains/midnight src/services/midnight-tx.ledger.spec.ts src/services/__tests__/midnightTxPerToken.test.ts src/services/crossDevice src/stores/midnightStore.spec.ts
 ```
 
 Real SDK tests exercise signing, note spending, network validation, and binding.

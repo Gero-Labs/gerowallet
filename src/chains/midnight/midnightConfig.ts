@@ -43,10 +43,10 @@ export interface MidnightNetworkEndpoints {
    * API (`/prove`, `/check`) under this base, so the wallet's hand-rolled
    * ProvingProvider works against it unchanged apart from `x-api-key` /
    * `x-api-secret` auth headers. Arkhia only distinguishes mainnet vs
-   * testnet, so stagenet and preprod share the testnet base — proving is
-   * circuit-level (ledger-generation-coupled), not network-specific, so
-   * that sharing is sound. Users can override per device via
-   * `midnightStore.proofServer.zkpaasUrl`.
+   * testnet in the documented default URLs. Stagenet and Preprod now use
+   * different ledger generations, so a reachable shared URL does not establish
+   * compatibility. Stagenet requires a ledger-9-capable service; override its
+   * URL per device via `midnightStore.proofServer.zkpaasUrl` as needed.
    */
   zkpaasProofServerUrl: string;
   /**

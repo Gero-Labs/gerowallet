@@ -8,7 +8,7 @@ import type { MidnightPrivateSyncArgs } from './midnightPrivateSync';
 
 const h = vi.hoisted(() => ({
   factory: vi.fn(), identity: vi.fn(), save: vi.fn(), history: vi.fn(), publish: vi.fn(), status: vi.fn(),
-  store: { activeWalletKey: 'mn_addr_stagenet1owner', addresses: { shielded: '' },
+  store: { activeWalletKey: 'mn_addr_stagenet1owner', privateSyncStatus: 'idle', addresses: { shielded: '' },
     chainIdentity: { network: 'midnight-stagenet', generation: 1, genesisHash: `0x${'ab'.repeat(32)}` } },
   wallet: { loggedWallet: { id: 7, network: 'Stagenet', chain: 'Midnight' }, isLocked: false },
 }));
@@ -54,10 +54,13 @@ describe('private sync ownership and generation', () => {
     h.wallet.isLocked = false; h.wallet.loggedWallet.id = 7;
     h.store.activeWalletKey = 'mn_addr_stagenet1owner';
     h.store.chainIdentity = { network: identity.network, generation: 1, genesisHash: identity.genesis_hash };
+    h.store.privateSyncStatus = 'idle';
     events = new Subject();
     wallet = { state: events, start: vi.fn().mockResolvedValue(undefined), stop: vi.fn().mockResolvedValue(undefined) };
     h.factory.mockReturnValue({ startWithSecretKeys: () => wallet });
     h.identity.mockResolvedValue(identity); h.history.mockResolvedValue([]); h.save.mockResolvedValue(undefined);
+    h.status.mockImplementation(status => { h.store.privateSyncStatus = status; });
+    h.publish.mockImplementation(() => { h.store.privateSyncStatus = 'synced'; });
   });
   afterEach(async () => { await stopMidnightPrivateSync(); vi.useRealTimers(); });
 
@@ -67,6 +70,93 @@ describe('private sync ownership and generation', () => {
     events.next(state()); await vi.advanceTimersByTimeAsync(1001);
     expect(h.publish).toHaveBeenCalledWith({ [token]: 12n }, []);
     expect(h.save).toHaveBeenCalledWith('verified-1', 'shielded', seed, 'public-sdk-state');
+  });
+
+  it('publishes the first complete state promptly then bounds identity, history and checkpoint work to 30s', async () => {
+    await startMidnightPrivateSync(args());
+    events.next(state()); await vi.advanceTimersByTimeAsync(1000);
+    expect(h.publish).toHaveBeenCalledOnce();
+    expect(h.identity).toHaveBeenCalledTimes(2); // startup, then first complete snapshot
+    for (let second = 1; second < 29; second += 1) {
+      events.next(state()); await vi.advanceTimersByTimeAsync(1000);
+    }
+    expect(h.identity).toHaveBeenCalledTimes(2);
+    expect(h.history).toHaveBeenCalledOnce();
+    expect(h.save).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(h.identity).toHaveBeenCalledTimes(3);
+    expect(h.publish).toHaveBeenCalledTimes(2);
+    expect(h.save).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not lose a complete event sampled while SDK startup is still pending', async () => {
+    let release!: () => void;
+    wallet.start.mockReturnValue(new Promise<void>(resolve => { release = resolve; }));
+    const starting = startMidnightPrivateSync(args());
+    await vi.advanceTimersByTimeAsync(1);
+    events.next(state()); await vi.advanceTimersByTimeAsync(1000);
+    expect(h.publish).not.toHaveBeenCalled();
+    release(); await starting; await vi.advanceTimersByTimeAsync(1);
+    expect(h.publish).toHaveBeenCalledOnce();
+    expect(h.identity).toHaveBeenCalledTimes(2);
+  });
+
+  it('revokes synced status immediately when the stream falls behind without polling identity per event', async () => {
+    await startMidnightPrivateSync(args());
+    events.next(state()); await vi.advanceTimersByTimeAsync(1000);
+    expect(h.store.privateSyncStatus).toBe('synced');
+    const incomplete = { ...state(), progress: { isStrictlyComplete: () => false } } as unknown as ShieldedWalletState;
+    events.next(incomplete); await vi.advanceTimersByTimeAsync(1000);
+    expect(h.store.privateSyncStatus).toBe('syncing');
+    expect(h.identity).toHaveBeenCalledTimes(2);
+    expect(h.publish).toHaveBeenCalledOnce();
+    events.next(state()); await vi.advanceTimersByTimeAsync(1000);
+    expect(h.store.privateSyncStatus).toBe('syncing');
+    await vi.advanceTimersByTimeAsync(27_000);
+    expect(h.store.privateSyncStatus).toBe('synced');
+  });
+
+  it('starts a replacement even if the previous SDK rejects shutdown', async () => {
+    await startMidnightPrivateSync(args());
+    const oldEvents = events;
+    const oldWallet = wallet;
+    oldWallet.stop.mockRejectedValue(new Error('SDK shutdown failed'));
+    events = new Subject();
+    wallet = { state: events, start: vi.fn().mockResolvedValue(undefined), stop: vi.fn().mockResolvedValue(undefined) };
+    await expect(startMidnightPrivateSync(args())).resolves.toBeUndefined();
+    expect(wallet.start).toHaveBeenCalledOnce();
+    oldEvents.next(state()); await vi.advanceTimersByTimeAsync(1000);
+    expect(h.publish).not.toHaveBeenCalled();
+    events.next(state()); await vi.advanceTimersByTimeAsync(1000);
+    expect(h.publish).toHaveBeenCalledOnce();
+  });
+
+  it('fails closed when a scheduled identity check becomes unknown after publication', async () => {
+    await startMidnightPrivateSync(args());
+    events.next(state()); await vi.advanceTimersByTimeAsync(1000);
+    h.identity.mockRejectedValue(new Error('genesis unavailable'));
+    events.next(state()); await vi.advanceTimersByTimeAsync(29_000);
+    expect(h.store.privateSyncStatus).toBe('error');
+    expect(wallet.stop).toHaveBeenCalledOnce();
+    expect(h.publish).toHaveBeenCalledOnce();
+    expect(h.save).toHaveBeenCalledOnce();
+  });
+
+  it('rebuilds for a confirmed generation change before publishing new state', async () => {
+    await startMidnightPrivateSync(args());
+    events.next(state()); await vi.advanceTimersByTimeAsync(1000);
+    const oldWallet = wallet;
+    h.identity.mockResolvedValue({ ...identity, chain_generation: 2, genesis_hash: `0x${'cd'.repeat(32)}` });
+    h.store.chainIdentity = { network: identity.network, generation: 2, genesisHash: `0x${'cd'.repeat(32)}` };
+    events = new Subject();
+    wallet = { state: events, start: vi.fn().mockResolvedValue(undefined), stop: vi.fn().mockResolvedValue(undefined) };
+    await vi.advanceTimersByTimeAsync(29_000);
+    expect(oldWallet.stop).toHaveBeenCalledOnce();
+    expect(h.store.privateSyncStatus).toBe('syncing');
+    expect(h.publish).toHaveBeenCalledOnce();
+    events.next(state()); await vi.advanceTimersByTimeAsync(1000);
+    expect(h.publish).toHaveBeenCalledTimes(2);
+    expect(h.save).toHaveBeenLastCalledWith('verified-2', 'shielded', seed, 'public-sdk-state');
   });
 
   it('lock during pending identity read prevents starting SDK or applying late state', async () => {
