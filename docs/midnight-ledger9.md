@@ -19,6 +19,11 @@ ZKPAAS, and cross-device proving return an explicit unsupported error. Remote
 sidecar proving remains the supported transfer path. Sponsored multi-wallet DUST
 is not certified by the current tests.
 
+Keep the existing parser for long public shielded addresses: the new beta.2
+parser with its resolved `@scure/base@2.4.0` rejects their 133-character length.
+This must be resolved before switching shielded parsing to the new package;
+see [wallet #1045](https://github.com/Gero-Labs/gerowallet/issues/1045).
+
 Ledger 9 DUST checkpoints use the separate `stagenet-ledger9-rc3` namespace.
 The adapter restores its own checkpoints or cold-replays; it does not yet consume
 Nexus global snapshots. The initial replay may take substantially longer than a
