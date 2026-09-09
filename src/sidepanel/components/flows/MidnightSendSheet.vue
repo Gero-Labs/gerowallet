@@ -6,6 +6,10 @@
       <div v-if="txSuccess" class="success-overlay">
         <v-icon size="56" color="success">mdi-check-circle</v-icon>
         <div class="text-h6 white--text mt-3">{{ $t('miniGero.txSubmitted') }}</div>
+        <div v-if="sponsorWallet" class="success-sponsor">
+          <span class="success-sponsor__av">{{ sponsorInitials }}</span>
+          {{ $t('midnight.sponsor.feePaidByLabel') }}: {{ sponsorWallet.name }}
+        </div>
         <div class="text-caption grey--text mt-1 text-center">{{ $t('miniGero.txSubmittedDesc') }}</div>
         <button v-if="txId" type="button" class="tx-id-box mt-4" @click="copyTxId">
           <span class="text-caption grey--text">{{ truncate(txId) }}</span>
@@ -83,7 +87,10 @@
             </div>
             <div class="step-info">
               <span class="step-label">{{ $t('common.amount') }}</span>
-              <span v-if="step > 2" class="step-summary">{{ amount || '0' }} {{ selectedTicker }}</span>
+              <span v-if="step > 2" class="step-summary">
+              {{ amount || '0' }} {{ selectedTicker }}<template v-if="sponsorWallet">
+                · {{ $t('midnight.sponsor.feeFrom', { name: sponsorWallet.name }) }}</template>
+            </span>
             </div>
           </button>
 
@@ -138,6 +145,46 @@
                     {{ $t('miniGero.max') }}
                   </v-btn>
                 </div>
+
+                <MidnightSponsorPicker
+                  v-if="noFeeCapacity && loggedWallet"
+                  :value="sponsorWalletId"
+                  :sender-wallet-id="loggedWallet.id"
+                  :network="loggedWallet.network"
+                  @input="sponsorWalletId = $event"
+                />
+                <div v-if="sponsorWallet" class="sponsor-unlock">
+                  <template v-if="sponsorNeedsPassword">
+                    <v-text-field
+                      v-model="sponsorPassword"
+                      type="password"
+                      autocomplete="off"
+                      dense
+                      outlined
+                      dark
+                      hide-details="auto"
+                      :label="$t('midnight.sponsor.passwordLabel', { name: sponsorWallet.name })"
+                    />
+                    <div class="sponsor-unlock__warn">
+                      {{ $t('midnight.sponsor.notSenderPassword', {
+                        sender: loggedWallet ? loggedWallet.name : '',
+                      }) }}
+                    </div>
+                  </template>
+                  <!-- The panel cannot host WebAuthn, so a sponsor PassKey opens
+                       a popup. Say so before it happens. -->
+                  <div v-else class="sponsor-unlock__passkey">
+                    <v-icon small class="mr-2">mdi-fingerprint</v-icon>
+                    <span>
+                      {{ $t('midnight.sponsor.passkeyNotice', {
+                        name: sponsorWallet.name,
+                        sender: loggedWallet ? loggedWallet.name : '',
+                      }) }}
+                      {{ $t('midnight.sponsor.passkeyPopupNote') }}
+                    </span>
+                  </div>
+
+                </div>
               </div>
 
               <div class="step-actions-row mt-4">
@@ -174,7 +221,7 @@
                 :totals="reviewTotals"
                 :unit="selectedTicker"
                 :fee-unit="dustCurrency"
-                :fee-label="$t('midnight.send.estimatedNetworkFee')"
+                :fee-label="String($t('midnight.send.estimatedNetworkFee'))"
               />
 
               <!-- Public-chain disclosure: unshielded transfers are indexer-visible. -->
@@ -276,8 +323,16 @@
                 </div>
               </template>
 
-              <div v-if="submitting && stageLabel" class="text-caption grey--text text-center mt-3">
-                {{ stageLabel }}
+              <!-- The same five-node timeline the options page shows. This
+                   used to be one line of text, hiding a first-time DUST ledger
+                   replay that can run for minutes. -->
+              <div v-if="submitting" class="mini-tl mt-3">
+                <div v-if="sponsorWallet" class="mini-tl__who">
+                  <span class="success-sponsor__av">{{ sponsorInitials }}</span>
+                  {{ $t('midnight.sponsor.feePaidByLabel') }}: {{ sponsorWallet.name }}
+                </div>
+                <MidnightSendTimeline compact :nodes="timelineNodes" />
+                <div class="mini-tl__keep">{{ $t('midnight.sponsor.keepOpen') }}</div>
               </div>
 
               <div v-if="passwordError" class="text-caption mt-2 text-center" style="color: var(--g-error)">
@@ -298,7 +353,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, toRefs } from 'vue';
+import { ref, computed, onMounted, watch, nextTick, toRefs } from 'vue';
+import { geroStore } from '@/stores/geroStore';
+import { useMidnightSendTimeline } from '@/shared/composables/useMidnightSendTimeline';
+import MidnightSendTimeline from '@/shared/components/MidnightSendTimeline.vue';
+import MidnightSponsorPicker from '@/modules/dashboard/dialogs/MidnightSponsorPicker.vue';
 import BottomSheet from '../BottomSheet.vue';
 import QRAddressScannerDialog from '@/modules/dashboard/dialogs/QRAddressScannerDialog.vue';
 import TransactionDetailsCard, {
@@ -448,8 +507,36 @@ const recipientError = computed(() => {
   */
 const noFeeCapacity = computed(() => blocksMidnightSend(midnightStore.dustState));
 
+/**
+ * Wallet chosen to pay this send's DUST fee, mirroring the options-page dialog.
+ * The picker is the only writer.
+ */
+const sponsorWalletId = ref<number | null>(null);
+const sponsorWallet = computed(() => (
+  sponsorWalletId.value == null ? null : (geroStore.wallets?.[sponsorWalletId.value] ?? null)
+));
+const sponsorNeedsPassword = computed(() => (
+  !!sponsorWallet.value && sponsorWallet.value.encryptionMethod !== 'prf'
+));
+const sponsorPassword = ref('');
+
+/** Monogram for the success pill. */
+const sponsorInitials = computed(() => {
+  const name = sponsorWallet.value?.name ?? '';
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '??';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+});
+
+/**
+ * Missing DUST only blocks the send while nothing else will pay for it — with
+ * a sponsor chosen the fee comes from that wallet.
+ */
+const blockedByFee = computed(() => noFeeCapacity.value && sponsorWalletId.value == null);
+
 const amountError = computed(() => {
-  if (noFeeCapacity.value) return t('midnight.send.noDustFee');
+  if (blockedByFee.value) return t('midnight.send.noDustFee');
   if (!amount.value) return '';
   // Judged by the parser that builds the tx, not Number(): the two disagree on
   // exponential notation ('1e2' passes Number, parses to 0n) and on amounts
@@ -509,18 +596,6 @@ const reviewTotals = computed<TxDetailsTotals>(() => ({
 
 // ── Progress label (mirrors MidnightSendDialog.vue's timeline stage split,
 //    condensed to a single caption line for the sidepanel). ──
-const stageLabel = computed(() => {
-  const s = sendStage.value;
-  if (s === 'authorizing') return t('midnight.send.stageAuthorize');
-  if (s === 'building') return t('midnight.send.stageBuild');
-  if (s === 'working') {
-    const prog = midnightStore.sendProgress;
-    const pct = prog && prog.phase === 'syncingDust' ? prog.percent : null;
-    return pct != null && pct < 100 ? t('midnight.send.stageSync') : t('midnight.send.stageSign');
-  }
-  if (s === 'submitting') return t('midnight.send.stageSubmit');
-  return '';
-});
 
 // ── Step navigation ──
 function editStep(target: number) {
@@ -605,8 +680,39 @@ async function submitSend(credentials: { password?: string; prfSecret?: Uint8Arr
       },
       credentials,
       (stage) => { sendStage.value = stage; },
+      await buildSponsorArg(),
     );
-    debugLog('🌙 mini-Gero Midnight unshielded tx submitted:', result.txHash, 'status:', result.status);
+    debugLog('🌙 mini-Gero Midnight unshielded tx submitted:', result.txHash, 'status:', result.status,
+      'sponsor:', sponsorWalletId.value ?? 'none');
+
+    // Remember who paid, for the battery indicator on both wallets and the
+    // transaction details screen. Best effort — never fail a submitted tx.
+    if (sponsorWallet.value) {
+      const paying = sponsorWallet.value;
+      try {
+        const { recordSponsoredTx, saveSponsorLink } = await import('@/chains/midnight/midnightSponsorLinks');
+        const at = Date.now();
+        await saveSponsorLink({
+          walletId: wallet.id,
+          sponsorWalletId: paying.id,
+          sponsorName: paying.name,
+          network: wallet.network,
+          at,
+        });
+        await recordSponsoredTx({
+          txHash: result.txHash,
+          sponsorWalletId: paying.id,
+          sponsorName: paying.name,
+          at,
+          sponsoredWalletId: wallet.id,
+          sponsoredWalletName: wallet.name,
+          amountLabel: `${amount.value} ${selectedToken.value === 'NIGHT' ? 'NIGHT' : shortToken(selectedToken.value)}`,
+          recipient: recipient.value.trim(),
+        });
+      } catch (e) {
+        debugLog('🌙 could not record sponsorship for this tx', e);
+      }
+    }
     // Show it in history right away — gero-sync backfills the confirmed entry.
     void addOptimisticPendingTx(result.txHash);
     txId.value = result.txHash;
@@ -630,8 +736,11 @@ async function signAndSubmit() {
 // the exact cross-window popup workaround DAppOverlay.vue's
 // signMidnightTransferPrf() implements (mode=rawPrf), since Midnight decrypts
 // its mnemonic from the raw PRF output rather than a Cardano private key.
-function requestRawPrf(): Promise<Uint8Array> {
-  const popupUrl = chrome.runtime.getURL('index.html?mode=rawPrf#/passkey-auth');
+function requestRawPrf(walletId?: number): Promise<Uint8Array> {
+  // `walletId` unlocks a wallet OTHER than the logged-in one — a DUST sponsor.
+  // Omitted, the popup evaluates the active wallet exactly as before.
+  const target = walletId == null ? '' : `&walletId=${encodeURIComponent(String(walletId))}`;
+  const popupUrl = chrome.runtime.getURL(`index.html?mode=rawPrf${target}#/passkey-auth`);
   const popup = window.open(popupUrl, 'PassKeyAuth', 'width=400,height=500,popup=1');
   if (!popup) return Promise.reject(new Error(t('errors.popupBlocked')));
 
@@ -653,6 +762,41 @@ function requestRawPrf(): Promise<Uint8Array> {
     }, 60000);
   });
 }
+
+/**
+ * The sponsor argument for `sendUnshieldedNight`, using the sponsor wallet's
+ * OWN credential.
+ *
+ * The PassKey path goes through the same popup as the sender's, but with an
+ * explicit `walletId`: the side panel cannot host WebAuthn, and the sponsor is
+ * by definition not the logged-in wallet, so the popup has to be told which
+ * credential to evaluate.
+ */
+async function buildSponsorArg() {
+  const sponsor = sponsorWallet.value;
+  if (!sponsor) return undefined;
+
+  if (sponsor.encryptionMethod === 'prf') {
+    const prfBytes = await requestRawPrf(sponsor.id);
+    return { walletId: sponsor.id, prfSecret: prfBytes };
+  }
+
+  if (!sponsorPassword.value) throw new Error(t('midnight.sponsor.passwordRequired'));
+  return { walletId: sponsor.id, password: sponsorPassword.value };
+}
+
+/**
+ * Restore the stored sponsor preference. The picker still re-resolves whether
+ * that wallet can actually pay.
+ */
+async function restoreSponsorPreference() {
+  const wallet = loggedWallet.value;
+  if (!wallet) return;
+  const { linkFor, loadSponsorLinks } = await import('@/chains/midnight/midnightSponsorLinks');
+  const link = linkFor(await loadSponsorLinks(), wallet.id, wallet.network);
+  sponsorWalletId.value = link?.sponsorWalletId ?? null;
+}
+onMounted(restoreSponsorPreference);
 
 async function signAndSubmitPrf() {
   if (submitting.value) return;
@@ -699,6 +843,29 @@ function resetAll() {
 watch(() => props.value, (val) => {
   if (val) resetAll();
 });
+
+/** Token colours are 64-char hex; show the head so a label stays readable. */
+function shortToken(colour: string): string {
+  return colour.length > 12 ? `${colour.slice(0, 6)}…` : colour;
+}
+
+/**
+ * Same five-node timeline the options-page dialog shows, driven by the same
+ * stage rank and the same `midnightStore.sendProgress`, so the two surfaces
+ * can never disagree about where a send has got to.
+ */
+const timelineLabels = computed(() => ({
+  authorize: t('midnight.send.stageAuthorize') as string,
+  build: t('midnight.send.stageBuild') as string,
+  sync: (sponsorWallet.value
+    ? t('midnight.send.stageSyncNamed', { name: sponsorWallet.value.name })
+    : t('midnight.send.stageSync')) as string,
+  sign: t('midnight.send.stageSign') as string,
+  submit: t('midnight.send.stageSubmit') as string,
+  provingLocal: t('midnight.send.stageProvingLocal') as string,
+  provingZkpaas: t('midnight.send.stageProvingZkpaas') as string,
+}));
+const timelineNodes = useMidnightSendTimeline(computed(() => sendStage.value), timelineLabels);
 </script>
 
 <style scoped>
@@ -895,5 +1062,75 @@ input::-webkit-inner-spin-button {
 }
 input[type='number'] {
   -moz-appearance: textfield;
+}
+
+.sponsor-unlock {
+  margin-top: 8px;
+}
+
+.sponsor-unlock__warn {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--g-warning);
+}
+
+.sponsor-unlock__passkey {
+  display: flex;
+  align-items: flex-start;
+  padding: 8px;
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-control);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--g-text-2);
+}
+
+.sponsor-unlock__note {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--g-text-3);
+}
+
+.success-sponsor {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 3px 10px;
+  border-radius: var(--g-r-pill);
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-2);
+  font-size: 11px;
+  color: var(--g-text-2);
+}
+
+.success-sponsor__av {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--g-overlay);
+  border: 1px solid var(--g-hairline-2);
+  color: var(--g-text-1);
+  font-size: 8px;
+  font-weight: 600;
+}
+
+.mini-tl__who {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  font-size: 11px;
+  color: var(--g-text-2);
+}
+
+.mini-tl__keep {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--g-text-3);
 }
 </style>

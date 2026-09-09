@@ -1,16 +1,23 @@
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
 import type { Ref } from 'vue';
 import type { Subscription } from 'dexie';
 import { liveQuery } from 'dexie';
 import type { Wallet } from '@/models/types';
 import { walletLibraryRepository, WalletLibraryError } from '@/db/wallet-library';
-import { categoryFor, matchesWallet, normalizePreferences, sortWallets } from '@/services/walletLibrary/model';
-import type { LibraryWallet, WalletOrganization, WalletSearchAddresses } from '@/services/walletLibrary/model';
+import { categoryFor, favoriteWallet, moveWalletOrder, matchesWallet, normalizePreferences, sortWallets } from '@/services/walletLibrary/model';
+import type { LibraryWallet, WalletLibrarySnapshot, WalletSearchAddresses } from '@/services/walletLibrary/model';
 import { walletSearchAddresses } from '@/services/walletLibrary/addresses';
 
-export function useWalletLibrary(available: Ref<Wallet[]>) {
-  const preferences = ref(normalizePreferences(null));
-  const organization = ref<WalletOrganization[]>([]);
+export function useWalletLibrary(available: Ref<Wallet[]>, repository = walletLibraryRepository) {
+  const confirmed = shallowRef<WalletLibrarySnapshot>({ preferences: normalizePreferences(null), wallets: [] });
+  type Change = (snapshot: WalletLibrarySnapshot) => WalletLibrarySnapshot;
+  const pending = shallowRef<{ change: Change }[]>([]);
+  const state = computed(() => pending.value.reduce((snapshot, entry) => {
+    try { return entry.change(snapshot); }
+    catch { return snapshot; } // A concurrent deletion is reported by the queued write.
+  }, confirmed.value));
+  const preferences = computed(() => state.value.preferences);
+  const pendingCount = computed(() => pending.value.length);
   const addresses = ref<Record<number, WalletSearchAddresses>>({});
   const query = ref('');
   const favoritesOnly = ref(false);
@@ -22,19 +29,18 @@ export function useWalletLibrary(available: Ref<Wallet[]>) {
   let generation = 0;
   // Signatures avoid expensive address derivation when only display metadata changes.
   const cache = new Map<number, { signature: string; result: WalletSearchAddresses }>();
-  const apply = (data: Awaited<ReturnType<typeof walletLibraryRepository.read>>) => {
+  const apply = (data: Awaited<ReturnType<typeof repository.read>>) => {
     if (disposed) return;
-    preferences.value = data.preferences;
-    organization.value = data.wallets;
+    confirmed.value = data;
     ready.value = true;
   };
   let subscription: Subscription | undefined;
   const loadFailed = () => { if (!disposed) { ready.value = true; error.value = 'loadFailed'; } };
   // Opening/upgrading IndexedDB can write. Complete it outside liveQuery's
   // read-only context before subscribing (including first install/restore).
-  void walletLibraryRepository.initialize().then(() => {
+  void repository.initialize().then(() => {
     if (disposed) return;
-    subscription = liveQuery(() => walletLibraryRepository.read()).subscribe({ next: apply, error: loadFailed });
+    subscription = liveQuery(() => repository.read()).subscribe({ next: apply, error: loadFailed });
   }).catch(loadFailed);
   watch(available, async wallets => {
     const current = ++generation;
@@ -58,7 +64,7 @@ export function useWalletLibrary(available: Ref<Wallet[]>) {
   onBeforeUnmount(() => { disposed = true; generation++; subscription?.unsubscribe(); });
 
   const wallets = computed<LibraryWallet[]>(() => {
-    const metadata = new Map(organization.value.map(wallet => [wallet.id, wallet]));
+    const metadata = new Map(state.value.wallets.map(wallet => [wallet.id, wallet]));
     return sortWallets(available.value.map(wallet => ({ ...wallet, ...metadata.get(wallet.id),
       ...(addresses.value[wallet.id] || { addresses: [wallet.baseAddress || wallet.watchAddress || ''].filter(Boolean), stakeAddress: wallet.stakeAddress || '' }) })));
   });
@@ -66,20 +72,60 @@ export function useWalletLibrary(available: Ref<Wallet[]>) {
   const filtered = computed(() => wallets.value.filter(wallet => (!favoritesOnly.value || wallet.isFavorite) && matchesWallet(wallet, query.value || '')));
   const filtering = computed(() => !!(query.value || '').trim() || favoritesOnly.value);
   const groups = computed(() => {
+    const pinned = filtered.value.filter(wallet => wallet.isFavorite);
     const categories = [...preferences.value.categories, { id: null, name: '', collapsed: preferences.value.uncategorizedCollapsed }];
-    return categories.map(category => ({ ...category,
+    const regular = categories.map(category => ({ ...category, key: category.id || 'uncategorized', favorites: false,
       expanded: filtering.value || !category.collapsed,
-      wallets: filtered.value.filter(wallet => categoryFor(wallet, preferences.value) === category.id),
-      total: wallets.value.filter(wallet => categoryFor(wallet, preferences.value) === category.id).length,
+      wallets: filtered.value.filter(wallet => !wallet.isFavorite && categoryFor(wallet, preferences.value) === category.id),
+      total: wallets.value.filter(wallet => !wallet.isFavorite && categoryFor(wallet, preferences.value) === category.id).length,
     })).filter(group => !filtering.value || group.wallets.length > 0);
+    return [{ id: undefined, key: 'favorites', name: '', favorites: true, collapsed: false, expanded: true,
+      wallets: pinned, total: favoriteCount.value }, ...regular].filter(group => !filtering.value || group.wallets.length > 0);
   });
+
+  // Apply each intent immediately and serialize storage writes. Keep pending
+  // intents over liveQuery snapshots so a late echo cannot undo a newer click.
+  // A failed write removes only its own overlay; later edits are replayed.
+  let tail = Promise.resolve();
+  function enqueue(change: Change, persist: () => Promise<void>): Promise<boolean> {
+    const entry = { change };
+    pending.value = [...pending.value, entry];
+    error.value = '';
+    const job = tail.then(async () => {
+      try {
+        await persist();
+        apply(await repository.read());
+        return true;
+      } catch (failure) {
+        if (!disposed) error.value = failure instanceof WalletLibraryError ? failure.code : 'saveFailed';
+        try { apply(await repository.read()); } catch { /* Keep the last confirmed state for rollback. */ }
+        return false;
+      } finally {
+        pending.value = pending.value.filter(item => item !== entry);
+      }
+    });
+    tail = job.then(() => undefined);
+    return job;
+  }
+  const toggleFavorite = (id: number) => {
+    const wallet = wallets.value.find(item => item.id === id);
+    if (!wallet) return Promise.resolve(false);
+    const favorite = !wallet.isFavorite;
+    return enqueue(snapshot => ({ ...snapshot, wallets: favoriteWallet(snapshot.wallets, id, favorite) }),
+      () => repository.setFavorite(id, favorite));
+  };
+  const moveWallet = (id: number, categoryId: string | null | undefined, beforeId: number | null = null, favorite?: boolean) =>
+    enqueue(snapshot => ({ preferences: { ...snapshot.preferences,
+      uncategorizedCollapsed: categoryId === null ? false : snapshot.preferences.uncategorizedCollapsed,
+      categories: snapshot.preferences.categories.map(category => category.id === categoryId ? { ...category, collapsed: false } : category),
+    }, wallets: moveWalletOrder(snapshot.wallets, snapshot.preferences, id, categoryId, beforeId, favorite) }),
+    () => repository.moveWallet(id, categoryId, beforeId, favorite));
   const run = async (operation: () => Promise<void>): Promise<boolean> => {
     if (saving.value) return false;
     saving.value = true;
-    error.value = '';
-    try { await operation(); apply(await walletLibraryRepository.read()); return true; }
-    catch (failure) { error.value = failure instanceof WalletLibraryError ? failure.code : 'saveFailed'; return false; }
+    try { return await enqueue(snapshot => snapshot, operation); }
     finally { saving.value = false; }
   };
-  return { preferences, query, favoritesOnly, ready, saving, error, indexing, wallets, filtered, filtering, groups, favoriteCount, run };
+  return { preferences, query, favoritesOnly, ready, saving, pendingCount, error, indexing, wallets, filtered, filtering,
+    groups, favoriteCount, run, toggleFavorite, moveWallet };
 }

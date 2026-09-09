@@ -33,11 +33,27 @@
       <span v-else>{{ $t('midnight.statusUnregistered') }}</span>
       <span v-if="isCharging"> · {{ timeToFullLabel }}</span>
     </div>
+
+    <!-- Same sponsorship indication as the options-page battery: the side
+         panel is where most sends start, so the state has to be visible here
+         too. -->
+    <MidnightSponsorStatus compact :revision="sponsorRevision" @choose="feeWalletOpen = true" />
+    <MidnightFeeWalletDialog
+      v-if="loggedWallet"
+      :is-open="feeWalletOpen"
+      :wallet-id="loggedWallet.id"
+      :wallet-name="loggedWallet.name"
+      :network="loggedWallet.network"
+      @close="feeWalletOpen = false"
+      @saved="onSponsorSaved"
+    />
   </v-card>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, toRefs, watch } from 'vue';
+import MidnightFeeWalletDialog from '@/modules/dashboard/dialogs/MidnightFeeWalletDialog.vue';
+import MidnightSponsorStatus from '@/modules/dashboard/components/MidnightSponsorStatus.vue';
 import { walletStore } from '@/stores/walletStore';
 import { midnightStore } from '@/stores/midnightStore';
 import { Network } from '@/models/types';
@@ -157,6 +173,22 @@ const timeToFullLabel = computed(() => {
   if (h > 0) return `~${h}h ${m}m`;
   return `~${m}m`;
 });
+
+/** The fee-wallet picker, reachable from the strip under the battery. */
+const feeWalletOpen = ref(false);
+const sponsorRevision = ref(0);
+
+/**
+ * Force the strip to re-read after the dialog writes. The strip owns its own
+ * load, so bumping its key is the cheapest way to make it honest immediately
+ * rather than on the next wallet switch.
+ */
+function onSponsorSaved(): void {
+  feeWalletOpen.value = false;
+  // The dialog has already written the link; bump so the strip re-reads it
+  // immediately instead of waiting for a wallet switch.
+  sponsorRevision.value += 1;
+}
 </script>
 
 <style scoped>

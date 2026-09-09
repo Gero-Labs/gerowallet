@@ -46,7 +46,7 @@
     <DAppOverlay v-if="hasActiveWallet && !isLocked" />
 
     <!-- Wallet switcher bottom sheet (available from header) -->
-    <BottomSheet v-model="showWalletSwitcher" :title="t('miniGero.selectWallet')" height="60%">
+    <BottomSheet v-model="showWalletSwitcher" :title="t('miniGero.selectWallet')" height="85%">
       <WalletSelector
         compact
         :loading-wallet-id="loggingInWalletId"

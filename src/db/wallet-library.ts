@@ -1,12 +1,10 @@
 import type Dexie from 'dexie';
 import { getDb } from '@/db/gero-db';
 import type { Wallet } from '@/models/types';
-import { categoryFor, LIBRARY_CONFIG_KEY, normalizePreferences, sortWallets } from '@/services/walletLibrary/model';
+import { favoriteWallet, moveWalletOrder, LIBRARY_CONFIG_KEY, normalizePreferences, WalletLibraryError } from '@/services/walletLibrary/model';
 import type { WalletLibraryPreferences, WalletOrganization } from '@/services/walletLibrary/model';
 
-export class WalletLibraryError extends Error {
-  constructor(public code: 'duplicateName' | 'invalidName' | 'missingWallet' | 'missingCategory') { super(code); }
-}
+export { WalletLibraryError } from '@/services/walletLibrary/model';
 
 // Reuse the existing wallet order and config tables. These display-only fields
 // need no new indexes or schema migration. Every mutation reads the latest rows
@@ -18,7 +16,9 @@ export function createWalletLibraryRepository(provideDb: () => Promise<Dexie>) {
       const record = await db.table('config').where('key').equals(LIBRARY_CONFIG_KEY).first();
       const preferences = normalizePreferences(record?.value);
       await change(db, preferences);
-      await db.table('config').put({ ...record, key: LIBRARY_CONFIG_KEY, value: preferences });
+      if (JSON.stringify(record?.value) !== JSON.stringify(preferences)) {
+        await db.table('config').put({ ...record, key: LIBRARY_CONFIG_KEY, value: preferences });
+      }
     });
   };
   const validateCategory = (preferences: WalletLibraryPreferences, id: string | null) => {
@@ -36,32 +36,27 @@ export function createWalletLibraryRepository(provideDb: () => Promise<Dexie>) {
       });
     },
     async setFavorite(id: number, favorite: boolean) {
-      await mutate(async db => {
-        if (!await db.table('wallets').update(id, { isFavorite: favorite })) throw new WalletLibraryError('missingWallet');
+      const db = await provideDb();
+      await db.transaction('rw', db.table('wallets'), async () => {
+        const wallet = await db.table<Wallet>('wallets').get(id);
+        if (!wallet) throw new WalletLibraryError('missingWallet');
+        const first = await db.table<Wallet>('wallets').orderBy('order').first();
+        const updated = favoriteWallet(first && first.id !== id ? [wallet, first] : [wallet], id, favorite).find(row => row.id === id)!;
+        await db.table('wallets').update(id, { isFavorite: updated.isFavorite, order: updated.order });
       });
     },
-    async moveWallet(id: number, categoryId: string | null, beforeId: number | null = null) {
+    async moveWallet(id: number, categoryId: string | null | undefined, beforeId: number | null = null, favorite?: boolean) {
       await mutate(async (db, preferences) => {
-        validateCategory(preferences, categoryId);
-        const wallets = sortWallets(await db.table<Wallet>('wallets').toArray());
-        const moving = wallets.find(wallet => wallet.id === id);
-        if (!moving) throw new WalletLibraryError('missingWallet');
-        if (beforeId === id) return;
-        const remaining = wallets.filter(wallet => wallet.id !== id);
-        let index = remaining.length;
-        if (beforeId !== null) {
-          index = remaining.findIndex(wallet => wallet.id === beforeId && categoryFor(wallet, preferences) === categoryId);
-          if (index < 0) throw new WalletLibraryError('missingWallet');
-        } else {
-          const last = remaining.map(wallet => categoryFor(wallet, preferences)).lastIndexOf(categoryId);
-          if (last >= 0) index = last + 1;
-        }
-        remaining.splice(index, 0, { ...moving, categoryId });
-        // Reveal the destination in the same transaction as the move.
+        const wallets = await db.table<Wallet>('wallets').toArray();
+        const updated = moveWalletOrder(wallets, preferences, id, categoryId, beforeId, favorite);
+        const previous = new Map(wallets.map(wallet => [wallet.id, wallet]));
+        await Promise.all(updated.filter(wallet => {
+          const old = previous.get(wallet.id)!;
+          return old.order !== wallet.order || old.categoryId !== wallet.categoryId || old.isFavorite !== wallet.isFavorite;
+        }).map(wallet => db.table('wallets').update(wallet.id,
+          { order: wallet.order, categoryId: wallet.categoryId, isFavorite: wallet.isFavorite })));
         if (categoryId === null) preferences.uncategorizedCollapsed = false;
-        else preferences.categories.find(category => category.id === categoryId)!.collapsed = false;
-        await Promise.all(remaining.map((wallet, order) => db.table('wallets').update(wallet.id,
-          wallet.id === id ? { order, categoryId } : { order })));
+        else if (categoryId !== undefined) preferences.categories.find(category => category.id === categoryId)!.collapsed = false;
       });
     },
     async saveCategory(id: string | null, input: string) {

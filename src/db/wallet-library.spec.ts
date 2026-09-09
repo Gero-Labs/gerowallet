@@ -34,7 +34,8 @@ describe('wallet library persistence', () => {
   });
   it('persists favorites without losing concurrent order changes', async () => {
     await Promise.all([repo.setFavorite(1, true), repo.moveWallet(1, null)]);
-    expect(await db.table('wallets').get(1)).toMatchObject({ isFavorite: true, order: 2 });
+    expect(await db.table('wallets').get(1)).toMatchObject({ isFavorite: true });
+    expect((await db.table('wallets').orderBy('order').toArray()).map(row => row.id)).toEqual([2, 3, 1]);
     const reopened = createWalletLibraryRepository(async () => db);
     expect((await reopened.read()).wallets.find(wallet => wallet.id === 1)?.isFavorite).toBe(true);
   });
@@ -90,4 +91,44 @@ describe('wallet library persistence', () => {
       expect(await db.table('wallets').get(1)).toMatchObject({ name: 'Renamed elsewhere', isFavorite: true });
     } finally { other.close(); }
   });
+  it('writes only the moved wallet for ordinary reorders and does not rewrite config', async () => {
+    await repo.setCollapsed(null, false);
+    const updated: number[] = [];
+    const configUpdated = vi.fn();
+    db.table('wallets').hook('updating', (_changes, key) => { updated.push(key as number); });
+    db.table('config').hook('updating', configUpdated);
+    await repo.moveWallet(3, null, 2);
+    expect(updated).toEqual([3]);
+    expect(configUpdated).not.toHaveBeenCalled();
+    expect((await db.table('wallets').orderBy('order').toArray()).map(row => row.id)).toEqual([1, 3, 2]);
+  });
+  it('pins a newly starred wallet first without changing its category or writing config', async () => {
+    await repo.saveCategory(null, 'Work');
+    const category = (await repo.read()).preferences.categories[0];
+    await repo.moveWallet(2, category.id);
+    const configUpdated = vi.fn();
+    db.table('config').hook('updating', configUpdated);
+    await repo.setFavorite(1, true);
+    await repo.setFavorite(2, true);
+    expect((await db.table('wallets').orderBy('order').toArray())[0].id).toBe(2);
+    expect(await db.table('wallets').get(2)).toMatchObject({ isFavorite: true, categoryId: category.id });
+    expect(configUpdated).not.toHaveBeenCalled();
+    await repo.setFavorite(2, false);
+    expect(await db.table('wallets').get(2)).toMatchObject({ isFavorite: false, categoryId: category.id });
+  });
+  it('preserves categories when dragged into Favorites and unstars when dropped into a category', async () => {
+    await repo.saveCategory(null, 'Work');
+    const category = (await repo.read()).preferences.categories[0];
+    await repo.moveWallet(2, category.id);
+    await repo.moveWallet(2, undefined, null, true);
+    expect(await db.table('wallets').get(2)).toMatchObject({ isFavorite: true, categoryId: category.id });
+    await repo.moveWallet(2, null, 1, false);
+    expect(await db.table('wallets').get(2)).toMatchObject({ isFavorite: false, categoryId: null });
+  });
+  it('rebalances equal legacy ranks without losing a wallet', async () => {
+    await db.table('wallets').toCollection().modify({ order: 0 });
+    await repo.moveWallet(3, null, 2);
+    expect((await db.table('wallets').orderBy('order').toArray()).map(row => row.id)).toEqual([1, 3, 2]);
+  });
+
 });

@@ -82,10 +82,26 @@ onMounted(async () => {
       // flow (MidnightSendDialog.vue) — this popup exists only because
       // WebAuthn doesn't reliably work from inside the side panel's own
       // window, so the ceremony has to happen in a real top-level popup.
-      if (!wallet.webAuthnCredentialId) {
+      // A DUST-sponsored send unlocks a wallet OTHER than the logged-in one:
+      // the sponsor pays the fee with its own key and is never the active
+      // wallet. Resolve it by explicit `walletId`, exactly as mpcPrf does for
+      // its pre-switch unlock; without the param this is the logged-in wallet
+      // as before.
+      const rawTargetId = urlParams.get('walletId');
+      let target: { id: number; webAuthnCredentialId?: string; webAuthnTransports?: AuthenticatorTransport[] } | undefined = wallet;
+      if (rawTargetId) {
+        const { getAllWallets } = await import('@/db/gero-db');
+        target = (await getAllWallets())[Number(rawTargetId)];
+        if (!target) throw new Error('Wallet not found');
+      }
+      if (!target?.webAuthnCredentialId) {
         throw new Error('PRF wallet not properly configured');
       }
-      const prfOutput = await evaluateWalletPrf(wallet);
+      const prfOutput = await evaluateWalletPrf({
+        id: target.id,
+        webAuthnCredentialId: target.webAuthnCredentialId,
+        webAuthnTransports: target.webAuthnTransports,
+      });
       resultPayload = {
         success: true,
         prfOutput: Array.from(new Uint8Array(prfOutput)),

@@ -1,5 +1,5 @@
 <template>
-  <BottomSheet :value="value" @input="$emit('input', $event)" :title="$t('miniGero.txDetail')" height="85%">
+  <BottomSheet :value="value" @input="$emit('input', $event)" :title="String($t('miniGero.txDetail'))" height="85%">
     <div v-if="tx" class="tx-detail">
       <!-- Amount -->
       <div class="tx-amount-section">
@@ -39,6 +39,32 @@
           <span class="detail-value fee-text">{{ formatAda(tx.body?.fee) }}</span>
         </div>
 
+        <!-- Who paid, when another wallet covered the Midnight DUST fee.
+             Absent for ordinary self-paid transactions. -->
+        <template v-if="sponsorTx">
+          <div class="detail-row">
+            <span class="detail-label">{{ $t('midnight.sponsor.feePaidByLabel') }}</span>
+            <span class="detail-value">
+              <span class="mn-av">{{ sponsorInitials }}</span>
+              {{ sponsorTx.sponsorName }}
+            </span>
+          </div>
+          <div class="mn-fee-callout">
+            <span class="mn-av">{{ sponsorInitials }}</span>
+            <span class="mn-fee-callout__body">
+              <span class="mn-fee-callout__title">
+                {{ $t('midnight.sponsor.paidThisFee', { name: sponsorTx.sponsorName }) }}
+              </span>
+              <span class="mn-fee-callout__sub">
+                {{ $t('midnight.sponsor.paidThisFeeSub', {
+                  name: sponsorTx.sponsorName,
+                  wallet: sponsorTx.sponsoredWalletName || '',
+                }) }}
+              </span>
+            </span>
+          </div>
+        </template>
+
         <div v-if="tx.epoch_no" class="detail-row">
           <span class="detail-label">{{ $t('transactions.epoch') }}</span>
           <span class="detail-value">{{ tx.epoch_no }}</span>
@@ -76,7 +102,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import type { SponsoredTx } from '@/chains/midnight/midnightSponsorLinks';
 import BottomSheet from '../BottomSheet.vue';
 import filters from '@/shared/utils/filters';
 import { geroStore } from '@/stores/geroStore';
@@ -120,6 +147,32 @@ const props = withDefaults(
 defineEmits<{
   (e: 'input', value: boolean): void;
 }>();
+
+/**
+ * The wallet that paid this transaction's DUST fee, when it was not this one.
+ * Read from stored attribution — gero-sync does not forward the fee payer, and
+ * the sponsor's inputs live in a separate intent, so chain data cannot say.
+ */
+const sponsorTx = ref<SponsoredTx | null>(null);
+
+const sponsorInitials = computed(() => {
+  const name = sponsorTx.value?.sponsorName ?? '';
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '??';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+});
+
+async function loadSponsorAttribution(): Promise<void> {
+  sponsorTx.value = null;
+  const hash = props.tx?.id;
+  if (!hash) return;
+  const { loadSponsoredTxs, sponsoredTxFor } = await import('@/chains/midnight/midnightSponsorLinks');
+  sponsorTx.value = sponsoredTxFor(await loadSponsoredTxs(), hash);
+}
+
+onMounted(loadSponsorAttribution);
+watch(() => props.tx?.id, loadSponsorAttribution);
 
 const isReceive = computed(() => props.tx && Number(props.tx.ada) > 0);
 
@@ -269,5 +322,41 @@ function openExplorer() {
 
 .asset-chip:last-child {
   border-bottom: none;
+}
+
+.mn-av {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--g-r-pill);
+  background: var(--g-overlay);
+  border: 1px solid var(--g-hairline-2);
+  color: var(--g-text-2);
+}
+
+.mn-fee-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--g-s-2);
+  margin-top: var(--g-s-2);
+  padding: var(--g-s-2);
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
+}
+
+.mn-fee-callout__body {
+  display: flex;
+  flex-direction: column;
+}
+
+.mn-fee-callout__title {
+  color: var(--g-text-1);
+}
+
+.mn-fee-callout__sub {
+  color: var(--g-text-3);
 }
 </style>

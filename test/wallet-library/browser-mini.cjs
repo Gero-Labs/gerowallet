@@ -1,0 +1,77 @@
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const assert = require('node:assert/strict');
+const { join } = require('node:path');
+const { tmpdir } = require('node:os');
+(async () => {
+  const browser = await chromium.launch({ headless: true, ...(process.env.CHROME_EXECUTABLE ? { executablePath: process.env.CHROME_EXECUTABLE } : {}) });
+  try {
+    const url = process.env.WALLET_LIBRARY_URL || 'http://127.0.0.1:3317/test/wallet-library/index.html';
+    for (const mode of ['login', 'sheet']) {
+      const context = await browser.newContext({ viewport: { width: 375, height: 820 } });
+      const page = await context.newPage();
+      const errors = [];
+      page.on('pageerror', error => errors.push(error.message));
+      await page.goto(url + '?mini=' + mode);
+      if (mode === 'sheet') await page.getByRole('button', { name: 'Switch wallet', exact: true }).click();
+      await page.getByRole('button', { name: 'Open Company treasury', exact: true }).waitFor();
+      await page.waitForTimeout(350);
+      assert.equal(await page.locator('.library-wallet').count(), 9);
+      assert.equal(await page.getByRole('button', { name: 'Open Legacy Google wallet', exact: true }).count(), 0);
+      assert.equal(await page.getByRole('button', { name: 'Open Unsupported wallet', exact: true }).count(), 0);
+      await page.waitForFunction(() => [...document.querySelectorAll('.wallet-hardware')].length === 4 && [...document.querySelectorAll('.wallet-hardware')].every(img => img.complete && img.naturalWidth > 0));
+      const search = page.getByRole('searchbox', { name: 'Search wallets' });
+      await search.fill('stake1urewardsonly');
+      assert.equal(await page.locator('.library-wallet').count(), 1);
+      await search.press('Escape');
+      assert.equal(await page.locator('.library-wallet').count(), 9);
+      if (mode === 'sheet') assert.equal(await page.getByRole('dialog', { name: 'Select Wallet', exact: true }).isVisible(), true);
+      await page.getByRole('button', { name: 'Add Operating expenses to favorites', exact: true }).click();
+      await page.waitForFunction(() => document.querySelector('.library-wallet .wallet-name')?.textContent.trim() === 'Operating expenses');
+      const dashboard = await context.newPage();
+      await dashboard.goto(url);
+      await dashboard.getByRole('button', { name: 'Remove Operating expenses from favorites', exact: true }).waitFor();
+      assert.equal((await dashboard.locator('.library-wallet .wallet-name').first().textContent()).trim(), 'Operating expenses');
+      await dashboard.getByRole('button', { name: 'Remove Company treasury from favorites', exact: true }).click();
+      await page.getByRole('button', { name: 'Add Company treasury to favorites', exact: true }).waitFor();
+      await dashboard.close();
+      // Sorting must operate on the wallet list without dismissing its parent sheet.
+      await page.locator('.library-scroll').evaluate(el => { el.scrollTop = 0; });
+      const from = await page.getByRole('button', { name: /Reorder Everyday wallet/ }).boundingBox();
+      const to = await page.locator('[data-wallet-id="2"]').boundingBox();
+      await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(from.x + from.width / 2 + 8, from.y + from.height / 2 - 8, { steps: 3 });
+      await page.mouse.move(to.x + to.width / 2, to.y + 10, { steps: 20 });
+      await page.waitForTimeout(200);
+      await page.mouse.up();
+      await page.waitForFunction(() => document.querySelector('.library-wallet .wallet-name')?.textContent.trim() === 'Everyday wallet');
+      if (mode === 'sheet') assert.equal(await page.getByRole('dialog', { name: 'Select Wallet', exact: true }).isVisible(), true);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+      await page.screenshot({ path: join(tmpdir(), `mini-gero-wallets-${mode}.png`) });
+      await page.getByRole('button', { name: 'New category', exact: true }).click();
+      await page.getByRole('textbox', { name: 'Category name' }).fill('Mini category');
+      await page.getByRole('button', { name: 'Save', exact: true }).click();
+      await page.getByRole('button', { name: 'Mini category 0', exact: true }).waitFor({ state: 'attached' });
+      await page.locator('.v-dialog__content--active').waitFor({ state: 'hidden' });
+      if (mode === 'sheet') assert.equal(await page.getByRole('dialog', { name: 'Select Wallet', exact: true }).isVisible(), true);
+      await page.setViewportSize({ width: 320, height: 600 });
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+      await search.fill('Google');
+      const open = page.getByRole('button', { name: 'Open Google wallet', exact: true });
+      await open.click();
+      const selected = JSON.parse(await page.evaluate(() => document.documentElement.dataset.selectedWallet));
+      assert.equal(selected.id, 501);
+      assert.equal(selected.encryptionMethod, 'mpc');
+      assert.equal(await open.isDisabled(), true);
+      await page.locator('.wallet-network[role="status"]').waitFor();
+      await page.evaluate(() => { const state = window.walletLibraryFixture.panelState; state.loadingWalletId = null; state.errorMessage = 'Unable to unlock this wallet'; });
+      await page.getByRole('alert').filter({ hasText: 'Unable to unlock this wallet' }).waitFor();
+      assert.equal(await open.isEnabled(), true);
+      await page.getByRole('button', { name: 'Enter Setup', exact: true }).click();
+      assert.ok((await page.evaluate(() => document.documentElement.dataset.setupUrl)).endsWith('index.html#/welcome?addWallet=1'));
+      assert.deepEqual(errors, []);
+      console.log(`PASS Mini Gero ${mode}: shared search/favorites/order, cross-surface persistence, hardware/Google icons, eligibility, drag, loading/error feedback, setup action, narrow layout.`);
+      await context.close();
+    }
+  } finally { await browser.close(); }
+})().catch(error => { console.error(error); process.exitCode = 1; });

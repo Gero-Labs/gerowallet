@@ -62,42 +62,7 @@
             </div>
           </div>
 
-          <div class="mpv-timeline">
-            <div
-              v-for="(node, i) in timelineNodes"
-              :key="node.key"
-              class="mpv-node"
-              :class="node.state"
-            >
-              <div class="mpv-node-marker">
-                <div class="mpv-dot">
-                  <v-icon v-if="node.state === 'done'" size="13" color="var(--g-surface)">mdi-check</v-icon>
-                  <span v-else-if="node.state === 'active'" class="mpv-pulse"></span>
-                </div>
-                <div
-                  v-if="i < timelineNodes.length - 1"
-                  class="mpv-connector"
-                  :class="{ filled: node.state === 'done' }"
-                ></div>
-              </div>
-              <div class="mpv-node-body">
-                <div class="mpv-node-label">{{ node.label }}</div>
-                <div
-                  v-if="node.state === 'active' && node.showBar"
-                  class="mpv-node-bar"
-                  :class="{ indeterminate: node.percent == null || node.percent < 0 }"
-                >
-                  <div
-                    class="mpv-node-bar-fill"
-                    :style="node.percent != null && node.percent >= 0 ? { width: node.percent + '%' } : {}"
-                  ></div>
-                </div>
-                <div v-if="node.state === 'active' && node.detail" class="mpv-node-detail">
-                  {{ node.detail }}
-                </div>
-              </div>
-            </div>
-          </div>
+          <MidnightSendTimeline class="mpv-timeline" :nodes="timelineNodes" />
         </div>
 
         <CustomStepper v-else :currentStep="currentStep" :steps="steps">
@@ -244,6 +209,47 @@
                         <v-icon x-small color="var(--g-warning)" class="mr-1">mdi-alert-outline</v-icon>
                         {{ t('midnight.send.noDustFee') }}
                       </div>
+                      <MidnightSponsorPicker
+                        v-if="noFeeCapacity && loggedWallet"
+                        :value="sponsorWalletId"
+                        :sender-wallet-id="loggedWallet.id"
+                        :network="loggedWallet.network"
+                        @input="sponsorWalletId = $event"
+                      />
+                      <!-- Unlock block for the chosen sponsor. Both branches name
+                           BOTH wallets: the single likeliest mistake here is
+                           entering the sending wallet's credential. -->
+                      <div v-if="sponsorWallet" class="sponsor-unlock">
+                        <template v-if="sponsorNeedsPassword">
+                          <v-text-field
+                            v-model="sponsorPassword"
+                            type="password"
+                            autocomplete="off"
+                            dense
+                            outlined
+                            hide-details="auto"
+                            :label="t('midnight.sponsor.passwordLabel', { name: sponsorWallet.name })"
+                          />
+                          <div class="sponsor-unlock__warn">
+                            {{ t('midnight.sponsor.notSenderPassword', {
+                              sender: loggedWallet ? loggedWallet.name : '',
+                            }) }}
+                          </div>
+                        </template>
+                        <!-- A PassKey sponsor used to show NOTHING here: the first
+                             sign of a second credential was the browser's own
+                             prompt, mid-send. -->
+                        <div v-else class="sponsor-unlock__passkey">
+                          <v-icon small class="mr-2">mdi-fingerprint</v-icon>
+                          <span>
+                            {{ t('midnight.sponsor.passkeyNotice', {
+                              name: sponsorWallet.name,
+                              sender: loggedWallet ? loggedWallet.name : '',
+                            }) }}
+                          </span>
+                        </div>
+
+                      </div>
                       <div v-else-if="rawUnits" class="token-info">
                         <v-icon x-small color="var(--g-text-3)" class="mr-1">mdi-information-outline</v-icon>
                         {{ t('midnight.send.rawUnitsNote') }}
@@ -288,6 +294,24 @@
               <div v-if="!isShielded" class="midnight-info-note mt-3">
                 <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-eye-outline</v-icon>
                 <span>{{ t('midnight.send.publicTxNote') }}</span>
+              </div>
+              <!-- Sponsored sends carry a second, different disclosure: an
+                   honest unknown about on-chain linkability, not a promise. -->
+              <div v-if="sponsorWallet" class="midnight-info-note mt-2">
+                <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-link-variant</v-icon>
+                <span>{{ t('midnight.sponsor.disclosureLinkability') }}</span>
+              </div>
+              <!-- Who is unlocked for this send, with a way back to the picker. -->
+              <div v-if="sponsorWallet" class="sponsor-review mt-2">
+                <span class="sponsor-review__av">{{ initialsOf(sponsorWallet.name) }}</span>
+                <span class="sponsor-review__body">
+                  <span class="sponsor-review__name">{{ sponsorWallet.name }}</span>
+                  <span class="sponsor-review__sub">{{ t('midnight.sponsor.feeWalletUnlocked') }}</span>
+                </span>
+                <span class="grow"></span>
+                <button type="button" class="sponsor-review__change" @click="currentStep = 1">
+                  {{ t('midnight.sponsor.change') }}
+                </button>
               </div>
               <!-- DUST fee note (fee is ~1 Speck; sending does NOT reset DUST —
                    verified on preprod, the old "reset" was an estimator bug).
@@ -404,7 +428,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, toRefs, watch } from 'vue';
+import { computed, onMounted, ref, toRefs, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
 import TransactionAuthSection from '@/shared/components/TransactionAuthSection.vue';
@@ -416,6 +440,10 @@ import ShieldedProvingConsentDialog from '@/modules/dashboard/dialogs/ShieldedPr
 import QRAddressScannerDialog from '@/modules/dashboard/dialogs/QRAddressScannerDialog.vue';
 import midnightLogo from '@/assets/svg/midnight.svg';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import MidnightSponsorPicker from '@/modules/dashboard/dialogs/MidnightSponsorPicker.vue';
+import { geroStore } from '@/stores/geroStore';
+import MidnightSendTimeline from '@/shared/components/MidnightSendTimeline.vue';
+import { chargePercent, type SponsorCandidate } from '@/chains/midnight/midnightSponsorEligibility';
 import { settingsNavRequest } from '@/shared/composables/useGlobalSearch';
 import {
   midnightStore,
@@ -532,6 +560,94 @@ const amountStep = computed(() =>
   */
 const noFeeCapacity = computed(() => blocksMidnightSend(midnightStore.dustState));
 
+/**
+ * Wallet chosen to pay this send's DUST fee, or null to pay from this wallet.
+ * Only set while `noFeeCapacity` holds — the picker is the only writer.
+ */
+const sponsorWalletId = ref<number | null>(null);
+
+/**
+ * A missing DUST balance only blocks the send when nothing else will pay for
+ * it. With a sponsor chosen the fee comes from that wallet, so the step-1 guard
+ * must stand down — otherwise the feature is unreachable from the one screen
+ * that needs it.
+ */
+const blockedByFee = computed(() => noFeeCapacity.value && sponsorWalletId.value == null);
+
+/** The chosen sponsor's stored record, for deciding how to unlock it. */
+const sponsorWallet = computed(() => (
+  sponsorWalletId.value == null ? null : (geroStore.wallets?.[sponsorWalletId.value] ?? null)
+));
+
+/**
+ * A PassKey sponsor is unlocked by a prompt; a password sponsor needs its OWN
+ * password. Never the sender's — the two wallets are independently encrypted.
+ */
+const sponsorNeedsPassword = computed(() => (
+  !!sponsorWallet.value && sponsorWallet.value.encryptionMethod !== 'prf'
+));
+const sponsorPassword = ref('');
+
+/**
+ * Live state for the chosen sponsor — its DUST charge drives the progress
+ * battery and the review card. Resolved from live registrations, never from
+ * the dashboard battery (which can carry a previous wallet's figure).
+ */
+const sponsorCandidate = ref<SponsorCandidate | null>(null);
+
+async function refreshSponsorCandidate(): Promise<void> {
+  sponsorCandidate.value = null;
+  const wallet = loggedWallet.value;
+  const id = sponsorWalletId.value;
+  if (!wallet || id == null) return;
+  const { loadSponsorCandidates } = await import('@/chains/midnight/midnightSponsorLookup');
+  const { candidates } = await loadSponsorCandidates(wallet.id, wallet.network);
+  sponsorCandidate.value = candidates.find((c) => c.walletId === id) ?? null;
+}
+watch(() => sponsorWalletId.value, refreshSponsorCandidate);
+
+/**
+ * Restore the wallet's stored sponsor preference when the dialog opens. The
+ * picker still re-resolves whether that wallet can actually pay — a stale
+ * preference degrades to "not ready" there rather than producing a failing
+ * send.
+ */
+async function restoreSponsorPreference(): Promise<void> {
+  const wallet = loggedWallet.value;
+  if (!wallet) return;
+  const { linkFor, loadSponsorLinks } = await import('@/chains/midnight/midnightSponsorLinks');
+  const link = linkFor(await loadSponsorLinks(), wallet.id, wallet.network);
+  sponsorWalletId.value = link?.sponsorWalletId ?? null;
+}
+onMounted(restoreSponsorPreference);
+
+/**
+ * The sponsor argument for `sendUnshieldedNight`, collecting that wallet's own
+ * credential. Returns undefined for an unsponsored send.
+ *
+ * The PassKey prompt happens HERE rather than inside the send so the second
+ * approval is raised before any network work starts — the review step warns
+ * the user to expect two.
+ */
+async function buildSponsorArg() {
+  const sponsor = sponsorWallet.value;
+  if (!sponsor) return undefined;
+
+  if (sponsor.encryptionMethod === 'prf') {
+    if (!sponsor.webAuthnCredentialId) throw new Error(t('midnight.sponsor.unlockFailed') as string);
+    const { evaluateWalletPrf } = await import('@/shared/utils/passkeyPrf');
+    const buf = await evaluateWalletPrf({
+      id: sponsor.id,
+      webAuthnCredentialId: sponsor.webAuthnCredentialId,
+      webAuthnTransports: sponsor.webAuthnTransports,
+    });
+    return { walletId: sponsor.id, prfSecret: new Uint8Array(buf) };
+  }
+
+  if (!sponsorPassword.value) throw new Error(t('midnight.sponsor.passwordRequired') as string);
+  return { walletId: sponsor.id, password: sponsorPassword.value };
+}
+
 const available = computed(() => {
   if (isShielded.value) return midnightStore.balances?.nightShielded ?? 0n;
   if (selectedToken.value === 'NIGHT') return midnightStore.balances?.nightUnshielded ?? 0n;
@@ -633,7 +749,11 @@ const timelineNodes = computed<TimelineNode[]>(() => {
     },
     {
       key: 'sync',
-      label: provingActive ? provingLabel : t('midnight.send.stageSync'),
+      label: provingActive
+        ? provingLabel
+        : (sponsorWallet.value
+          ? t('midnight.send.stageSyncNamed', { name: sponsorWallet.value.name })
+          : t('midnight.send.stageSync')),
       state: rank > 3 || signActive ? 'done' : (syncActive || provingActive) ? 'active' : 'pending',
       showBar: true,
       percent: provingActive ? null : (syncActive ? pct : undefined),
@@ -655,6 +775,15 @@ const timelineNodes = computed<TimelineNode[]>(() => {
 // Compact DUST battery for the progress summary (current / cap), so the user
 // sees their DUST level while the send runs and the reset note has context.
 const dustBattery = computed<{ percent: number } | null>(() => {
+  // A sponsored send draws down the SPONSOR's DUST, so that is the bar to
+  // show. Reading midnightStore.dustState here is the sender's state, which
+  // for a sponsored send is empty by definition (that is why a sponsor was
+  // needed) — so cap is 0, this returns null, and the whole block used to
+  // disappear at exactly the moment it mattered most.
+  if (sponsorWalletId.value != null) {
+    const pct = sponsorCandidate.value ? chargePercent(sponsorCandidate.value) : null;
+    return pct === null ? null : { percent: pct };
+  }
   const ds = midnightStore.dustState;
   if (!ds || ds.cap <= 0n) return null;
   const raw = Number((ds.current * 10000n) / ds.cap) / 100;
@@ -796,13 +925,31 @@ const reviewTotals = computed<TxDetailsTotals>(() => ({
   // amount — we don't sum a NIGHT amount with a DUST fee.
   youPayAda: amount.value || '0',
   isInternal: isSelfSend.value,
+  // Split the single "You pay" line when another wallet covers the fee, so
+  // the DUST cost is never shown without naming whose DUST it is.
+  sponsor: sponsorWallet.value && loggedWallet.value
+    ? {
+      senderName: loggedWallet.value.name,
+      senderInitials: initialsOf(loggedWallet.value.name),
+      sponsorName: sponsorWallet.value.name,
+      sponsorInitials: initialsOf(sponsorWallet.value.name),
+    }
+    : undefined,
 }));
+
+/** Two-letter monogram for the attributed summary rows. */
+function initialsOf(name: string): string {
+  const parts = (name || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '??';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
 
 // ── Step navigation ──
 function nextStep() {
   errorMessage.value = null;
   if (currentStep.value === 1) {
-    if (noFeeCapacity.value) {
+    if (blockedByFee.value) {
       errorMessage.value = t('midnight.send.noDustFee');
       return;
     }
@@ -978,8 +1125,40 @@ async function sendUnshielded(credentials: { password?: string; prfSecret?: Uint
       },
       credentials,
       (stage) => { sendStage.value = stage; },
+      await buildSponsorArg(),
     );
-    debugLog('🌙 Midnight unshielded tx submitted:', result.txHash, 'status:', result.status);
+    debugLog('🌙 Midnight unshielded tx submitted:', result.txHash, 'status:', result.status,
+      'sponsor:', sponsorWalletId.value ?? 'none');
+
+    // Remember who paid — for the dashboard indicator on BOTH wallets, and so
+    // the transaction details screen can say the fee came from elsewhere.
+    // Best effort: a storage failure must never fail a submitted transaction.
+    if (sponsorWallet.value) {
+      const paying = sponsorWallet.value;
+      try {
+        const { recordSponsoredTx, saveSponsorLink } = await import('@/chains/midnight/midnightSponsorLinks');
+        const at = Date.now();
+        await saveSponsorLink({
+          walletId: wallet.id,
+          sponsorWalletId: paying.id,
+          sponsorName: paying.name,
+          network: wallet.network,
+          at,
+        });
+        await recordSponsoredTx({
+          txHash: result.txHash,
+          sponsorWalletId: paying.id,
+          sponsorName: paying.name,
+          at,
+          sponsoredWalletId: wallet.id,
+          sponsoredWalletName: wallet.name,
+          amountLabel: `${amount.value} ${selectedToken.value === 'NIGHT' ? 'NIGHT' : shortToken(selectedToken.value)}`,
+          recipient: recipient.value.trim(),
+        });
+      } catch (e) {
+        debugLog('🌙 could not record sponsorship for this tx', e);
+      }
+    }
     // Show it in history right away — gero-sync backfills the confirmed entry.
     void addOptimisticPendingTx(result.txHash);
     // Brief completed-state hold so the user sees the timeline finish.
@@ -1094,6 +1273,11 @@ watch(
   () => currentStep.value,
   () => { errorMessage.value = null; },
 );
+
+/** Token colours are 64-char hex; show the head so a label stays readable. */
+function shortToken(colour: string): string {
+  return colour.length > 12 ? `${colour.slice(0, 6)}…` : colour;
+}
 </script>
 
 <style scoped>
@@ -1529,102 +1713,83 @@ watch(
   display: flex;
   flex-direction: column;
 }
-.mpv-node {
-  display: flex;
-  gap: 12px;
-  min-height: 54px;
+
+.sponsor-unlock {
+  margin-top: var(--g-s-2);
 }
-.mpv-node:last-child {
-  min-height: auto;
+
+.sponsor-unlock__warn {
+  margin-top: var(--g-s-1);
+  font-size: 11px;
+  color: var(--g-warning);
 }
-.mpv-node-marker {
+
+.sponsor-unlock__passkey {
   display: flex;
-  flex-direction: column;
+  align-items: flex-start;
+  padding: var(--g-s-2);
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-control);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--g-text-2);
+}
+
+.sponsor-unlock__note {
+  margin-top: var(--g-s-1);
+  font-size: 11px;
+  color: var(--g-text-3);
+}
+
+.sponsor-review {
+  display: flex;
   align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-control);
 }
-.mpv-dot {
+
+.sponsor-review .grow {
+  flex: 1 1 auto;
+}
+
+.sponsor-review__av {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 22px;
   height: 22px;
   border-radius: 50%;
+  background: var(--g-overlay);
+  border: 1px solid var(--g-hairline-2);
+  color: var(--g-text-1);
+  font-size: 9px;
+  font-weight: 600;
   flex-shrink: 0;
+}
+
+.sponsor-review__body {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--g-raised);
-  transition: background-color 0.35s ease, box-shadow 0.35s ease;
+  flex-direction: column;
 }
-.mpv-node.done .mpv-dot {
-  background: var(--g-accent);
-}
-.mpv-node.active .mpv-dot {
-  background: transparent;
-  box-shadow: 0 0 0 2px var(--g-accent);
-}
-.mpv-pulse {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--g-accent);
-  animation: mpv-pulse 1.2s ease-in-out infinite;
-}
-@keyframes mpv-pulse {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.55); opacity: 0.5; }
-}
-.mpv-connector {
-  width: 2px;
-  flex: 1;
-  min-height: 20px;
-  margin: 3px 0;
-  background: var(--g-raised);
-  transition: background-color 0.4s ease;
-}
-.mpv-connector.filled {
-  background: var(--g-accent);
-}
-.mpv-node-body {
-  flex: 1;
-  min-width: 0;
-  padding-top: 2px;
-}
-.mpv-node-label {
+
+.sponsor-review__name {
   font-size: 13px;
   font-weight: 600;
-  color: var(--g-text-3);
-  transition: color 0.3s ease;
-}
-.mpv-node.active .mpv-node-label {
   color: var(--g-text-1);
 }
-.mpv-node.done .mpv-node-label {
-  color: var(--g-text-2);
-}
-.mpv-node-bar {
-  margin-top: 7px;
-  height: 4px;
-  max-width: 190px;
-  border-radius: 4px;
-  background: var(--g-hairline-1);
-  overflow: hidden;
-}
-.mpv-node-bar-fill {
-  height: 100%;
-  width: 0;
-  border-radius: 4px;
-  background: var(--g-accent);
-  transition: width 0.45s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.mpv-node-bar.indeterminate .mpv-node-bar-fill {
-  width: 40%;
-  animation: mpv-indet 1.1s ease-in-out infinite;
-}
-@keyframes mpv-indet {
-  0% { transform: translateX(-120%); }
-  100% { transform: translateX(320%); }
-}
-.mpv-node-detail {
-  margin-top: 5px;
+
+.sponsor-review__sub {
   font-size: 11px;
   color: var(--g-text-3);
+}
+
+.sponsor-review__change {
+  color: var(--g-accent);
+  font-size: 11px;
+  font-weight: 600;
 }
 </style>

@@ -202,7 +202,15 @@
             @click="selectRow(tx)"
           >
             <div class="mn-tx-row__main">
-              <div class="mn-tx-row__type">{{ typeLabel(tx.type) }}</div>
+              <div class="mn-tx-row__type">
+                {{ typeLabel(tx.type) }}
+                <!-- Attribution belongs here too: the full history is where a
+                     user goes to reconcile, and it had none. -->
+                <span v-if="sponsorFor(tx.hash)" class="tx-chip">
+                  <v-icon x-small>mdi-lightning-bolt</v-icon>
+                  {{ $t('midnight.sponsor.feeInline', { name: sponsorFor(tx.hash) }) }}
+                </span>
+              </div>
               <div class="mn-tx-row__meta">
                 <span v-if="tx.counterparty" class="mn-tx-row__counterparty">
                   {{ shortAddress(tx.counterparty) }} ·
@@ -232,7 +240,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onUnmounted, ref, toRefs, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, toRefs, watch } from 'vue';
 import debounce from 'lodash/debounce';
 import { midnightStore } from '@/stores/midnightStore';
 import { walletStore } from '@/stores/walletStore';
@@ -538,6 +546,25 @@ async function copyHash(hash: string): Promise<void> {
     snackbar.setError(t('common.somethingWentWrong'));
   }
 }
+
+/**
+ * Fee attribution by transaction hash. Read from storage — gero-sync does not
+ * forward the fee payer, and the sponsor's inputs sit in a separate intent, so
+ * the chain data cannot say who paid.
+ */
+const sponsoredTxs = ref<Record<string, { sponsorName: string }>>({});
+
+function sponsorFor(hash: string): string {
+  if (!hash) return '';
+  return sponsoredTxs.value[hash.toLowerCase()]?.sponsorName ?? '';
+}
+
+async function loadSponsorAttribution(): Promise<void> {
+  const { loadSponsoredTxs } = await import('@/chains/midnight/midnightSponsorLinks');
+  sponsoredTxs.value = await loadSponsoredTxs();
+}
+
+onMounted(loadSponsorAttribution);
 </script>
 
 <style scoped>
@@ -627,6 +654,22 @@ async function copyHash(hash: string): Promise<void> {
 .mn-tx-row__main {
   flex: 1;
   min-width: 0;
+}
+
+.tx-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+  border-radius: var(--g-r-chip);
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-2);
+  color: var(--g-text-2);
 }
 
 .mn-tx-row__type {
