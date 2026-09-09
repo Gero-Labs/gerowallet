@@ -81,6 +81,11 @@ function buildCSP(dev: boolean): string {
     // (https://rpc.preview.midnight.network, etc).
     'https://*.midnight.network',
     'wss://*.midnight.network',
+    // Stagenet moved off midnight.network; keep the direct SDK endpoints usable.
+    'https://rpc.stagenet.shielded.tools',
+    'wss://rpc.stagenet.shielded.tools',
+    'https://indexer.stagenet.shielded.tools',
+    'wss://indexer.stagenet.shielded.tools',
     // Arkhia zkPaaS (hosted Midnight proof server) — extension-page health
     // checks + BG proving fetches. Wildcard covers the starter tier plus any
     // other plan subdomain a user's project lands on; .network is Arkhia's
