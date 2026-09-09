@@ -23,7 +23,7 @@
   </v-card>
 </template>
 <script setup lang="ts">
-import WalletLibrary from './WalletLibrary.vue';
+import WalletLibrary from '@/shared/components/WalletLibrary/WalletLibrary.vue';
 import { Wallet } from '@/models/types';
 import { ref, toRefs, getCurrentInstance, watch, onMounted } from 'vue';
 import networks, { NetworkInfo } from '@/utils/networks';

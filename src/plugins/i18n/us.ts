@@ -2,6 +2,7 @@
  * EN translations
  */
 export default {
+  'walletLibrary.saving': 'Saving changes...',
   'walletLibrary.search': "Search wallets",
   'walletLibrary.searchPlaceholder': "Name, wallet or stake address",
   'walletLibrary.filter': "Filter wallets",

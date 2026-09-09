@@ -1,1 +1,1 @@
-export default { resolveNetwork(chain: string) { return { icon: chain === 'Bitcoin' ? '/src/assets/bitcoin-logo.svg' : chain === 'Midnight' ? '/src/assets/svg/midnight.svg' : '/src/assets/svg/cardano.svg' }; } };
+export default { resolveNetwork(chain: string) { if (!['Cardano', 'Bitcoin', 'Midnight'].includes(chain)) return null; return { icon: chain === 'Bitcoin' ? '/src/assets/bitcoin-logo.svg' : chain === 'Midnight' ? '/src/assets/svg/midnight.svg' : '/src/assets/svg/cardano.svg' }; } };

@@ -5,7 +5,21 @@ export const wallets: Wallet[] = [
   { id: 3, name: 'Long-term reserve', chain: 'Bitcoin', network: 'Mainnet', type: 'Trezor', icon: 'orange', baseAddress: 'bc1qreserve95k3v72m9x8cr03f60z8vh7' },
   { id: 4, name: 'Everyday wallet', chain: 'Cardano', network: 'Mainnet', icon: 'purple', baseAddress: 'addr1qpersonal38cm574jv9w0x2e6q3a8j', stakeAddress: 'stake1upersonal3m9x8v4c7' },
   { id: 5, name: 'Private assets', chain: 'Midnight', network: 'Mainnet', icon: 'grey', baseAddress: 'mn_addr_unshielded1privateassets7km3v9' },
-  { id: 6, name: 'Staking rewards', chain: 'Cardano', network: 'Mainnet', icon: 'pink', baseAddress: 'addr1qstakingrewards038fmv17x9ad3', stakeAddress: 'stake1urewardsonly7x03k9m5' },
+  { id: 6, name: 'Staking rewards', chain: 'Cardano', network: 'Mainnet', type: 'Keystone', icon: 'pink', baseAddress: 'addr1qstakingrewards038fmv17x9ad3', stakeAddress: 'stake1urewardsonly7x03k9m5' },
   { id: 7, name: 'Testnet development', chain: 'Cardano', network: 'Preprod', icon: 'yellow', baseAddress: 'addr_test1qdevelopmentm4c7x03' },
   { id: 8, name: 'Partner payments', chain: 'Cardano', network: 'Mainnet', icon: 'blue', baseAddress: 'addr1qpartners0m2x7r99lfa84' },
 ];
+
+// Optional scale fixture for responsiveness checks; all addresses remain synthetic.
+const count = Math.min(500, Math.max(8, Number(new URLSearchParams(location.search).get('walletCount')) || 8));
+for (let id = 9; id <= count; id++) {
+  wallets.push({ ...wallets[7], id, name: `Wallet ${id}`, baseAddress: `addr1qfixture${id}`, stakeAddress: `stake1ufixture${id}` });
+}
+
+if (new URLSearchParams(location.search).has('mini')) {
+  wallets.push(
+    { id: 501, name: 'Google wallet', chain: 'Cardano', network: 'Mainnet', type: 'Google', encryptionMethod: 'mpc', icon: 'blue' },
+    { id: 502, name: 'Legacy Google wallet', chain: 'Cardano', network: 'Mainnet', type: 'Google', icon: 'blue' },
+    { id: 503, name: 'Unsupported wallet', chain: 'Unsupported', network: 'Mainnet', icon: 'blue' },
+  );
+}
