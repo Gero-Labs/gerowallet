@@ -29,6 +29,8 @@
  */
 
 import * as ledger from '@midnight-ntwrk/ledger-v8';
+import * as ledger9 from '@midnightntwrk/ledger-v9';
+import { midnightLedgerVersion } from './midnightLedger';
 import { debugLog } from '@/utils/debug';
 
 /** Transient proof-server states worth retrying (matches the SDK client). */
@@ -49,6 +51,9 @@ function delay(ms: number): Promise<void> {
  */
 export interface ProverRequestOptions {
   headers?: Record<string, string>;
+  sdkNetworkId?: string;
+  /** Covers response headers and the complete binary response body. */
+  timeoutMs?: number;
 }
 
 /**
@@ -82,20 +87,20 @@ async function attemptPost(
     res = await fetch(url, {
       method: 'POST',
       headers: { ...options?.headers, 'Content-Type': 'application/octet-stream' },
-      body,
+      body: new Uint8Array(body).buffer,
+      signal: AbortSignal.timeout(options?.timeoutMs ?? 120_000),
     });
   } catch (networkErr) {
     throw new RetryableProverError(
-      networkErr instanceof Error ? networkErr.message : `network error contacting ${path}`,
+      `network error contacting proof server ${path}`,
     );
   }
   if (res.status === 200) {
     return new Uint8Array(await res.arrayBuffer());
   }
-  // Error TEXT is diagnostic (HTTP status explanation from the proof
-  // server), never the request payload — safe to log per the file header.
-  const text = await res.text().catch(() => '');
-  const message = `proof server ${path}: HTTP ${res.status}${text ? ` - ${text.slice(0, 200)}` : ''}`;
+  // A prover can echo witness material in an error body. Do not read/log it.
+  await res.body?.cancel().catch(() => {});
+  const message = `proof server ${path}: HTTP ${res.status}`;
   if (RETRYABLE_STATUS.has(res.status)) throw new RetryableProverError(message);
   throw new Error(message);
 }
@@ -145,15 +150,19 @@ async function postToProver(
 export function makeLocalProvingProvider(
   baseUrl: string,
   options?: ProverRequestOptions,
-): ledger.ProvingProvider {
+): ledger.ProvingProvider & ledger9.ProvingProvider {
+  const runtime = midnightLedgerVersion(options?.sdkNetworkId ?? 'mainnet') === 9 ? ledger9 : ledger;
   return {
+    // Built-in transfer and DUST circuits are supplied by the native server.
+    // Contract-specific key material must be provided by a separate contract flow.
+    lookupKey: async () => undefined,
     check: async (serializedPreimage, _keyLocation) => {
-      const payload = ledger.createCheckPayload(serializedPreimage);
+      const payload = runtime.createCheckPayload(serializedPreimage);
       const result = await postToProver(baseUrl, '/check', payload, options);
-      return ledger.parseCheckResult(result);
+      return runtime.parseCheckResult(result);
     },
     prove: async (serializedPreimage, _keyLocation, overwriteBindingInput) => {
-      const payload = ledger.createProvingPayload(serializedPreimage, overwriteBindingInput);
+      const payload = runtime.createProvingPayload(serializedPreimage, overwriteBindingInput);
       return postToProver(baseUrl, '/prove', payload, options);
     },
   };

@@ -54,8 +54,10 @@ import type * as ledger from '@midnight-ntwrk/ledger-v8';
 import { debugLog } from '@/utils/debug';
 import { LocalProvingError } from '@/chains/midnight/midnightShieldedBuilder';
 import { hexToBytes } from '@/chains/midnight/midnightTxBuilder';
+import { midnightLedgerVersion } from './midnightLedger';
 
 export interface ProveUnshieldedTransferArgs {
+  readonly sdkNetworkId?: string;
   /**
    * Hex of the signed-but-unproven unshielded tx. Markers are
    * `signature / pre-proof / pre-binding` — see {@link deserializeSignedUnproven}.
@@ -142,17 +144,39 @@ export async function proveUnshieldedTransfer(
     throw new Error('signedTxHex is not valid hex');
   }
 
-  const ledgerMod = await import('@midnight-ntwrk/ledger-v8');
+  // Cross-device payloads are already authenticated envelopes and carry their
+  // network in the ledger serialization. Do not infer Midnight from the paired
+  // Cardano wallet's network (which has no Stagenet counterpart).
+  let network = args.sdkNetworkId;
+  if (!network) {
+    for (const candidate of ['stagenet', 'mainnet', 'preprod', 'testnet']) {
+      try {
+        const runtime = candidate === 'stagenet' ? await import('@midnightntwrk/ledger-v9') : await import('@midnight-ntwrk/ledger-v8');
+        const decoded = deserializeSignedUnproven(runtime.Transaction, signedBytes);
+        (runtime.Transaction.fromParts(candidate) as unknown as { merge(tx: ledger.UnprovenTransaction): unknown }).merge(decoded);
+        network = candidate;
+        break;
+      } catch { /* Try the next supported network without logging payloads. */ }
+    }
+    if (!network) throw new Error('Unsupported Midnight transaction network or ledger format');
+  }
+  const ledgerMod = midnightLedgerVersion(network) === 9
+    ? await import('@midnightntwrk/ledger-v9')
+    : await import('@midnight-ntwrk/ledger-v8');
   const signedTx = deserializeSignedUnproven(ledgerMod.Transaction, signedBytes);
+  // Ask the actual SDK to validate the embedded network. Discard the merge.
+  (ledgerMod.Transaction.fromParts(network) as unknown as {
+    merge(tx: ledger.UnprovenTransaction): unknown;
+  }).merge(signedTx);
   debugLog('🌙 unshielded prove: signed tx deserialized', { bytes: signedBytes.length });
 
   // URL only — never the auth header values (file-header privacy note).
-  debugLog('🌙 unshielded prove: proving wallet-side', { url: args.proving.url });
+  debugLog('🌙 unshielded prove: proving wallet-side', { network });
   const proveStartMs = Date.now();
   let boundBytes: Uint8Array;
   try {
     const { makeLocalProvingProvider } = await import('@/chains/midnight/midnightLocalProver');
-    const provider = makeLocalProvingProvider(args.proving.url, { headers: args.proving.headers });
+    const provider = makeLocalProvingProvider(args.proving.url, { headers: args.proving.headers, sdkNetworkId: network });
     const proven = await (signedTx as unknown as ProvableTx).prove(
       provider, ledgerMod.CostModel.initialCostModel(),
     );
@@ -162,9 +186,9 @@ export async function proveUnshieldedTransfer(
     boundBytes = proven.bind().serialize();
   } catch (err) {
     const durationMs = Date.now() - proveStartMs;
-    const message = err instanceof Error ? err.message : String(err);
+    const message = 'Midnight local proving failed';
     debugLog(`🌙 unshielded prove: failed after ${durationMs}ms`, message);
-    throw new LocalProvingError(message, durationMs, { cause: err });
+    throw new LocalProvingError(message, durationMs);
   }
 
   const proveDurationMs = Date.now() - proveStartMs;

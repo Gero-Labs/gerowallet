@@ -101,6 +101,7 @@ export enum MessageTypes {
   // to this spend. Caller (UI) must surface the explicit consent for routing
   // it through Gero Cloud proving — see ShieldedProvingConsentDialog.
   BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX = 'BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX',
+  START_MIDNIGHT_PRIVATE_SYNC = 'START_MIDNIGHT_PRIVATE_SYNC',
   // Midnight: build + sign the SHIELD direction of a shield/unshield
   // conversion (public NIGHT -> private/shielded NIGHT, always between the
   // wallet's OWN two addresses — no recipient field). BG merges a

@@ -41,13 +41,6 @@
             </span>
           </div>
           <div class="pnl-item">
-            <span class="pnl-label">{{ $t('midnight.shielded') }}</span>
-            <v-skeleton-loader v-if="midnightLoading && !hideBalances" type="text" width="90" />
-            <span v-else class="pnl-value" :style="{ color: 'var(--g-text-1)' }">
-              {{ hideBalances ? '••••' : formatNight(balances.nightShielded ?? 0n) + ' ' + nightCurrency }}
-            </span>
-          </div>
-          <div class="pnl-item">
             <span class="pnl-label">{{ $t('midnight.registered') }}</span>
             <v-skeleton-loader v-if="midnightLoading && !hideBalances" type="text" width="90" />
             <span v-else class="pnl-value" :style="{ color: registrationColor }">
@@ -137,10 +130,7 @@ const timeframeWindowMs: Record<Timeframe, number> = {
 // `nightRegistered` is a SUBSET of `nightUnshielded` (the portion already
 // registered for DUST generation), not a separate pile. Summing all three
 // double-counted the registered amount — total = unshielded + shielded.
-const totalNight = computed<bigint>(() =>
-  (balances.value.nightUnshielded ?? 0n) +
-  (balances.value.nightShielded ?? 0n),
-);
+const totalNight = computed<bigint>(() => balances.value.nightUnshielded ?? 0n);
 
 const unshieldedAddress = computed(() => addresses.value?.unshielded ?? loggedWallet.value?.baseAddress ?? '');
 const shortenedAddress = computed(() => {

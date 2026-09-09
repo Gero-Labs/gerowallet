@@ -238,6 +238,8 @@ class WebSocketService {
           // Midnight shielded-only: pair of fields that opt this WS session
           // into gero-sync's shielded-tx subscription. Both null → unshielded-
           // only sync (today's default).
+          midnightChainGeneration: midnightStore.chainIdentity?.network === this.network
+            ? midnightStore.chainIdentity.generation : null,
           midnightShieldedViewingKey: this.midnightShieldedViewingKey,
           midnightShieldedLastIndex: this.midnightShieldedLastIndex,
         });
@@ -310,6 +312,13 @@ class WebSocketService {
 
       switch (type) {
         case 'SYNC': {
+          // Midnight streams carry independent transaction cursors. Deduplicating
+          // by block hash drops every transaction after the first in a block;
+          // batching across generations can relabel an old chain's events.
+          if (this.chain === 'MIDNIGHT') {
+            void this.handlers.onSync?.(data)?.catch((error) => debugLog('Midnight sync failed', error));
+            break;
+          }
           const txCount = Array.isArray(data['transactions']) ? data['transactions'].length : 0;
           const blockHeight = data.block?.height || 0;
           debugLog(`📥 SYNC received: ${txCount} tx(s), block ${blockHeight}`);
@@ -345,6 +354,15 @@ class WebSocketService {
         }
 
         case 'CATCH_UP_COMPLETE': {
+          if (this.chain === 'MIDNIGHT') {
+            // Midnight history arrives through the generation-stamped streams.
+            // Generic catch-up snapshots have no generation and cannot replace it.
+            this.pendingTxBatches = [];
+            this.catchingUp = false;
+            LoadingState.setProgress(100);
+            if (this.syncResolve) { this.syncResolve(); this.syncResolve = null; }
+            break;
+          }
           LoadingState.setProgress(95);
           LoadingState.setText('Processing transactions...');
           const block = data.block as { height: number; hash: string; slot: number; epoch: number; time: number } | undefined;
@@ -522,7 +540,9 @@ class WebSocketService {
       // Mirror the connect-path payload so a force-resync doesn't accidentally
       // strip Midnight-only resume cursors and re-trigger full replay.
       midnightLastTxId: liveMidnightCursor,
-      midnightShieldedViewingKey: this.midnightShieldedViewingKey,
+      midnightChainGeneration: midnightStore.chainIdentity?.network === this.network
+            ? midnightStore.chainIdentity.generation : null,
+          midnightShieldedViewingKey: this.midnightShieldedViewingKey,
       midnightShieldedLastIndex: this.midnightShieldedLastIndex,
     });
   }

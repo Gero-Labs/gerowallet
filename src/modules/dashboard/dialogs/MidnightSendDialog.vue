@@ -272,6 +272,7 @@
                   </div>
                 </div>
 
+                <MidnightPrivateBalances />
                 <div v-if="!shieldedAvailable" class="text-caption text--secondary text-center mt-3">
                   {{ t('midnight.shieldedSendComingNote') }}
                 </div>
@@ -428,6 +429,8 @@
 </template>
 
 <script setup lang="ts">
+import { hasMidnightProvingConsent, type MidnightRemoteProver } from '@/chains/midnight/midnightProvingConsent';
+import MidnightPrivateBalances from '@/modules/dashboard/components/MidnightPrivateBalances.vue';
 import { computed, onMounted, ref, toRefs, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
@@ -447,7 +450,6 @@ import { chargePercent, type SponsorCandidate } from '@/chains/midnight/midnight
 import { settingsNavRequest } from '@/shared/composables/useGlobalSearch';
 import {
   midnightStore,
-  SHIELDED_PROVING_CONSENT_VERSION,
 } from '@/stores/midnightStore';
 import type { MidnightSendStage } from '@/services/midnight-tx.service';
 import { walletStore } from '@/stores/walletStore';
@@ -493,22 +495,14 @@ const shakeError = ref(false);
 // kept out of midnightStore (see midnightStore.setActive) — the UI only needs
 // to know whether shielded sync is available, which the store publishes as a
 // boolean derived from the same `mn_shield-esk_` validity check.
-const shieldedAvailable = computed(() => midnightStore.shieldedSyncAvailable);
+const shieldedAvailable = computed(() => midnightStore.privateSyncStatus === 'synced'
+  && Object.keys(midnightStore.balances.shieldedTokens ?? {}).length > 0);
 
 const activeTab = ref(0);
 const isShielded = computed(() => activeTab.value === 1);
 
 /** `NIGHT` for the native token, otherwise a 32-byte colour as hex. */
 const selectedToken = ref<string>('NIGHT');
-
-/**
- * Shielded is NIGHT-only: it runs a different builder entirely and no token
- * has a shielded representation today. Reset on the way in so the amount is
- * never parsed against a token's decimals while the shielded tab is active.
- */
-watch(isShielded, (shielded) => {
-  if (shielded) selectedToken.value = 'NIGHT';
-});
 
 /** Per-colour unshielded balances derived from the wallet's own UTxO set. */
 const tokenBalances = computed(() => midnightTokenBalances(midnightStore.utxos ?? []));
@@ -530,8 +524,7 @@ const assetOptions = computed<AssetOption[]>(() => {
     ticker: nightCurrency.value,
     decimals: MIDNIGHT_DECIMALS.NIGHT,
   };
-  if (isShielded.value) return [night];
-  const tokens = Object.entries(tokenBalances.value).map(([color, _bal]) => {
+  const tokens = Object.entries(isShielded.value ? (midnightStore.balances.shieldedTokens ?? {}) : tokenBalances.value).map(([color, _bal]) => {
     const meta = midnightTokenMeta(color);
     return {
       value: color,
@@ -539,12 +532,15 @@ const assetOptions = computed<AssetOption[]>(() => {
       decimals: meta?.decimals ?? null,
     } as AssetOption;
   });
-  return [night, ...tokens];
+  return isShielded.value ? tokens : [night, ...tokens];
 });
 
 const selectedAsset = computed<AssetOption>(
-  () => assetOptions.value.find((o) => o.value === selectedToken.value) ?? assetOptions.value[0],
+  () => assetOptions.value.find((o) => o.value === selectedToken.value) ?? assetOptions.value[0] ?? { value: '', ticker: t('midnight.shielded') as string, decimals: null },
 );
+watch(assetOptions, options => {
+  if (!options.some(option => option.value === selectedToken.value)) selectedToken.value = options[0]?.value ?? '';
+}, { immediate: true });
 /** null decimals => raw base units, so the divisor is 1 and nothing is scaled. */
 const selectedDecimals = computed(() => selectedAsset.value.decimals);
 const selectedTicker = computed(() => selectedAsset.value.ticker);
@@ -649,7 +645,7 @@ async function buildSponsorArg() {
 }
 
 const available = computed(() => {
-  if (isShielded.value) return midnightStore.balances?.nightShielded ?? 0n;
+  if (isShielded.value) return midnightStore.balances.shieldedTokens?.[selectedToken.value] ?? 0n;
   if (selectedToken.value === 'NIGHT') return midnightStore.balances?.nightUnshielded ?? 0n;
   return tokenBalances.value[selectedToken.value] ?? 0n;
 });
@@ -977,9 +973,8 @@ function preflight(): boolean {
   return true;
 }
 
-function hasFreshConsent(): boolean {
-  const consent = midnightStore.shieldedProvingConsent;
-  return !!consent && consent.version === SHIELDED_PROVING_CONSENT_VERSION;
+function hasFreshConsent(provider: MidnightRemoteProver): boolean {
+  return hasMidnightProvingConsent(midnightStore.shieldedProvingConsent, provider);
 }
 
 async function submitWithPassword() {
@@ -997,10 +992,6 @@ function onPasskeyError(error: Error) {
 }
 
 async function routeSend(credentials: { password?: string; prfSecret?: Uint8Array }) {
-  if (!isShielded.value) {
-    await sendUnshielded(credentials);
-    return;
-  }
   const mode = midnightStore.proofServer.mode;
   // Local proof-server mode never needs cloud consent — witness data stays
   // on the user's machine — so it skips the consent dialog entirely and
@@ -1012,12 +1003,12 @@ async function routeSend(credentials: { password?: string; prfSecret?: Uint8Arra
     await routeWalletProvedShielded(credentials);
     return;
   }
-  if (hasFreshConsent()) {
+  if (hasFreshConsent(mode === 'zkpaas' ? 'zkpaas' : 'cloud')) {
     if (mode === 'zkpaas') {
       await routeWalletProvedShielded(credentials);
       return;
     }
-    await sendShielded(credentials);
+    await dispatchSend(credentials);
     return;
   }
   pendingCredentials.value = credentials;
@@ -1049,7 +1040,7 @@ async function routeWalletProvedShielded(credentials: { password?: string; prfSe
   } finally {
     checkingLocalProver.value = false;
   }
-  await sendShielded(credentials);
+  await dispatchSend(credentials);
 }
 
 /** "Open settings" fallback action — navigates to Settings > Advanced (the
@@ -1072,9 +1063,9 @@ function useCloudForThisTransaction() {
   if (!credentials) return;
   localProverUnavailable.value = false;
   forceRemoteForNextSend.value = true;
-  if (hasFreshConsent()) {
+  if (hasFreshConsent('cloud')) {
     pendingCredentials.value = null;
-    void sendShielded(credentials);
+    void dispatchSend(credentials);
     return;
   }
   // pendingCredentials stays set — onConsentAccepted below reads it once the
@@ -1095,6 +1086,12 @@ async function onConsentAccepted() {
   const credentials = pendingCredentials.value;
   pendingCredentials.value = null;
   if (!credentials) return;
+  const mode = midnightStore.proofServer.mode;
+  const recipient = forceRemoteForNextSend.value || mode !== 'zkpaas' ? 'cloud' : 'zkpaas';
+  if (!forceRemoteForNextSend.value && mode !== 'local' && recipient !== consentProvider.value) {
+    await routeSend(credentials);
+    return;
+  }
   // A freshly-consented zkPaaS send still needs its preflight; the one-off
   // "use Gero Cloud" fallback (forceRemoteForNextSend) goes straight to the
   // remote path instead — sendShielded consumes that flag.
@@ -1102,12 +1099,20 @@ async function onConsentAccepted() {
     await routeWalletProvedShielded(credentials);
     return;
   }
-  await sendShielded(credentials);
+  await dispatchSend(credentials);
+}
+
+async function dispatchSend(credentials: { password?: string; prfSecret?: Uint8Array }) {
+  if (isShielded.value) await sendShielded(credentials);
+  else await sendUnshielded(credentials);
 }
 
 async function sendUnshielded(credentials: { password?: string; prfSecret?: Uint8Array }) {
   const wallet = loggedWallet.value;
   if (!wallet) return;
+  const forceRemote = forceRemoteForNextSend.value;
+  forceRemoteForNextSend.value = false;
+  localProverUnavailable.value = false;
   sending.value = true;
   sendStage.value = 'authorizing';
   try {
@@ -1126,6 +1131,7 @@ async function sendUnshielded(credentials: { password?: string; prfSecret?: Uint
       credentials,
       (stage) => { sendStage.value = stage; },
       await buildSponsorArg(),
+      forceRemote,
     );
     debugLog('🌙 Midnight unshielded tx submitted:', result.txHash, 'status:', result.status,
       'sponsor:', sponsorWalletId.value ?? 'none');
@@ -1195,11 +1201,13 @@ async function sendShielded(credentials: { password?: string; prfSecret?: Uint8A
       [{
         receiverAddress: recipient.value.trim(),
         amount: parseAmount(amount.value),
+        tokenType: selectedToken.value,
       }],
       credentials,
       'InBlock',
       (stage) => { sendStage.value = stage; },
       forceRemote,
+      await buildSponsorArg(),
     );
     debugLog('🌙 Midnight shielded tx submitted:', result.txHash, 'status:', result.status);
     void addOptimisticPendingTx(result.txHash, true);
@@ -1231,10 +1239,8 @@ async function sendShielded(credentials: { password?: string; prfSecret?: Uint8A
 async function addOptimisticPendingTx(hash: string, shielded = false) {
   const amountBig = parseAmount(amount.value);
   const to = recipient.value.trim();
-  // Captured with the amount: without it a USDM send shows as NIGHT in
-  // history until gero-sync backfills the confirmed row. Shielded is
-  // NIGHT-only by construction.
-  const token = shielded ? 'NIGHT' : selectedToken.value;
+  // Preserve the selected public or private custom token in pending history.
+  const token = selectedToken.value;
   try {
     const { addPendingMidnightTx } = await import('@/services/midnight-tx.service');
     await addPendingMidnightTx(hash, amountBig, to, shielded, token);

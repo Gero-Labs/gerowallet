@@ -19,7 +19,9 @@ import {
  * importing this composable, which pulls in Vue, snackbar and the stores.
  */
 export { PROOF_SERVER_DOCKER_TAG, PROOF_SERVER_DOCKER_COMMAND } from '@/chains/midnight/midnightConfig';
-import { PROOF_SERVER_DOCKER_COMMAND } from '@/chains/midnight/midnightConfig';
+import { midnightProofServerCommand } from '@/chains/midnight/midnightConfig';
+
+import type { LocalProverProfile } from '@/services/crossDevice/localProverProfile';
 
 export type ProofServerMode = 'remote' | 'local' | 'zkpaas';
 
@@ -99,6 +101,11 @@ export function useMidnightProofServer() {
   });
 
   // ── Drafts: field edits buffer locally and persist on blur ──────────────
+
+  const localProverProfile = computed<LocalProverProfile>({
+    get: () => proofServer.value.localProfile ?? 'legacy',
+    set: (localProfile) => { void saveProofServer({ localProfile }); },
+  });
 
   const localUrlDraft = ref(proofServer.value.localUrl);
   const localUrlError = ref('');
@@ -289,6 +296,7 @@ export function useMidnightProofServer() {
     proofServer,
     proofServerMode,
     proofServerSaving,
+    localProverProfile,
     localUrlDraft,
     localUrlError,
     onLocalUrlBlur,
@@ -302,7 +310,7 @@ export function useMidnightProofServer() {
     zkpaasEffectiveUrl,
     zkpaasConfigured,
     arkhiaDashboardUrl: ARKHIA_DASHBOARD_URL,
-    dockerRunCommand: PROOF_SERVER_DOCKER_COMMAND,
+    dockerRunCommand: computed(() => midnightProofServerCommand(walletStore.loggedWallet?.network)),
     healthStatus,
     healthStatusLabel,
     testingConnection,

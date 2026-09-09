@@ -3,9 +3,11 @@ import * as ledger from '@midnightntwrk/ledger-v9';
 import { createKeystore } from 'midnight-v9-unshielded-wallet';
 import { DustWallet } from 'midnight-v9-dust-wallet';
 import { InMemoryTransactionHistoryStorage, TransactionHistoryStorage } from 'midnight-v9-abstractions';
-import type { BalanceAndSignUnshieldedTransferArgs } from './midnightTxBuilder';
+import type { BalanceAndSignUnshieldedTransferArgs, SyncDustAndBalanceFeesArgs } from './midnightTxBuilder';
 import { midnightLedgerVersion, strictMidnightHex } from './midnightLedger';
 import { loadWalletState, saveWalletState, clearWalletState } from './midnightWalletStatePersistence';
+import { shouldDiscardCheckpoint } from './midnightDustCheckpoint';
+import { readVerifiedMidnightChainIdentity, midnightCheckpointNamespace, assertMidnightChainIdentityUnchanged, fetchLedger9DustSnapshot } from './midnightChainIdentity';
 
 export function deserializeLedger9Transaction(network: string, hex: string): ledger.UnprovenTransaction {
   if (midnightLedgerVersion(network) !== 9) throw new Error('Ledger 9 requires Midnight Stagenet');
@@ -61,43 +63,72 @@ async function bounded<T>(promise: Promise<T>, milliseconds: number, operation: 
 
 export async function balanceAndSignLedger9Transfer(args: BalanceAndSignUnshieldedTransferArgs): Promise<string> {
   const tx = deserializeLedger9Transaction(args.sdkNetworkId, args.unprovenTxHex);
-  if (args.endpoints.sdkNetworkId !== 'stagenet') throw new Error('Midnight endpoint network mismatch');
+  const fee = await balanceLedger9Fees(args, [tx]);
+  const merged = tx.merge(fee);
+  return signLedger9Transaction('stagenet', Buffer.from(merged.serialize()).toString('hex'), args.unshieldedSecretKey);
+}
+
+/** Fee ownership follows the supplied DUST seed, independently of the transaction signer. */
+export async function balanceLedger9Fees(
+  args: SyncDustAndBalanceFeesArgs,
+  transactions: ledger.UnprovenTransaction[],
+): Promise<ledger.UnprovenTransaction> {
+  if (midnightLedgerVersion(args.sdkNetworkId) !== 9 || args.endpoints.sdkNetworkId !== 'stagenet') {
+    throw new Error('Midnight endpoint network mismatch');
+  }
+  if (!transactions.length) throw new Error('At least one Midnight transaction is required');
+  if (!Number.isFinite(args.ttl.getTime()) || args.ttl.getTime() <= Date.now()) throw new Error('Midnight transaction expiry must be in the future');
+  for (const tx of transactions) ledger.Transaction.fromParts('stagenet').merge(tx);
+  const identity = await readVerifiedMidnightChainIdentity(args.endpoints);
   const dustKey = ledger.DustSecretKey.fromSeed(args.dustSecretSeed);
-  // A separate namespace prevents restoring an old ledger-8 Stagenet checkpoint.
-  const stateNetwork = 'stagenet-ledger9-rc3';
-  const history = new InMemoryTransactionHistoryStorage(TransactionHistoryStorage.TransactionHistoryEntryCommonSchema);
-  const configuration = {
-    networkId: 'stagenet' as const,
-    costParameters: { feeBlocksMargin: 1 },
-    indexerClientConnection: {
-      indexerHttpUrl: args.endpoints.publicIndexerUrl,
-      indexerWsUrl: args.endpoints.publicIndexerWsUrl,
-    },
-    txHistoryStorage: history,
-  };
-  const builder = DustWallet(configuration);
-  let wallet: ReturnType<typeof builder.startWithSecretKey> | undefined;
+  const stateNetwork = midnightCheckpointNamespace(identity);
+  let wallet: ReturnType<ReturnType<typeof DustWallet>['startWithSecretKey']> | undefined;
   let subscription: { unsubscribe(): void } | undefined;
+  let restoredFromLocal = false;
   try {
+    const history = new InMemoryTransactionHistoryStorage(TransactionHistoryStorage.TransactionHistoryEntryCommonSchema);
+    const configuration = {
+      networkId: 'stagenet' as const,
+      costParameters: { feeBlocksMargin: 1 },
+      indexerClientConnection: {
+        indexerHttpUrl: args.endpoints.publicIndexerUrl,
+        indexerWsUrl: args.endpoints.publicIndexerWsUrl,
+      },
+      txHistoryStorage: history,
+    };
+    const builder = DustWallet(configuration);
     const saved = await loadWalletState(stateNetwork, 'dust', args.dustSecretSeed);
     if (saved) {
-      try { wallet = builder.restore(saved); } catch {
+      try { wallet = builder.restore(saved); restoredFromLocal = true; } catch {
         await clearWalletState(stateNetwork, 'dust', args.dustSecretSeed);
+      }
+    }
+    if (!wallet && args.dustRegisteredAt) {
+      const snapshot = await fetchLedger9DustSnapshot(args.endpoints, identity, args.dustRegisteredAt);
+      if (snapshot) {
+        try { wallet = builder.restore(snapshot); } catch { /* incompatible snapshots fall back to replay */ }
       }
     }
     wallet ??= builder.startWithSecretKey(dustKey, ledger.LedgerParameters.initialParameters().dust);
     await bounded(wallet.start(dustKey), 30_000, 'DUST startup');
-    subscription = wallet.state.subscribe(() => {
+    subscription = wallet.state.subscribe({ next: () => {
       try { args.onDustSyncProgress?.(-1, 'Synchronizing Stagenet DUST'); } catch { /* progress is advisory */ }
-    });
+    }, error: () => {} });
     await bounded(wallet.waitForSyncedState(), 15 * 60_000, 'DUST synchronization');
-    const serialized = await wallet.serializeState();
+    const serialized = await bounded<string>(wallet.serializeState(), 10_000, 'DUST checkpoint');
+    await assertMidnightChainIdentityUnchanged(args.endpoints, identity);
     await saveWalletState(stateNetwork, 'dust', args.dustSecretSeed, serialized).catch(() => {});
-    const fee = await bounded<{ transaction: ledger.UnprovenTransaction }>(wallet.balanceTransactions(dustKey, [tx], args.ttl), 60_000, 'DUST fee calculation');
-    const merged = tx.merge(fee.transaction);
-    return signLedger9Transaction('stagenet', Buffer.from(merged.serialize()).toString('hex'), args.unshieldedSecretKey);
+    const fee = await bounded<{ transaction: ledger.UnprovenTransaction }>(wallet.balanceTransactions(dustKey, transactions, args.ttl), 60_000, 'DUST fee calculation');
+    await assertMidnightChainIdentityUnchanged(args.endpoints, identity);
+    return fee.transaction;
+  } catch (error) {
+    const feeTimedOut = error instanceof Error && error.message === 'Midnight DUST fee calculation timed out';
+    if (shouldDiscardCheckpoint(error, restoredFromLocal) || (restoredFromLocal && feeTimedOut)) {
+      await clearWalletState(stateNetwork, 'dust', args.dustSecretSeed);
+    }
+    throw error;
   } finally {
     subscription?.unsubscribe();
-    try { await wallet?.stop(); } finally { dustKey.clear(); }
+    try { if (wallet) await bounded(wallet.stop(), 30_000, 'DUST shutdown'); } finally { dustKey.clear(); }
   }
 }

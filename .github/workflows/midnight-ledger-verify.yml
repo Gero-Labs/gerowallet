@@ -8,7 +8,16 @@ on:
       - 'src/chrome/background.ts'
       - 'src/chrome/walletBg.ts'
       - 'src/services/midnight-tx*'
+      - 'src/services/midnight-sync.service.ts'
+      - 'src/services/websocket.service.ts'
+      - 'src/services/__tests__/midnightTxPerToken.test.ts'
+      - 'src/stores/midnightStore.ts'
+      - 'src/modules/dashboard/components/Midnight*.vue'
+      - 'src/modules/dashboard/dialogs/Midnight*.vue'
+      - 'src/modules/dashboard/dialogs/Shield*.vue'
+      - 'src/sidepanel/components/flows/MidnightSendSheet.vue'
       - 'src/services/walletManager.service.ts'
+      - 'src/services/crossDevice/localProverProfile*'
       - 'package*.json'
       - 'vite.config.*'
       - 'scripts/build-isolated-extension.mjs'
@@ -35,6 +44,6 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Test both ledger lines and transaction orchestration
-        run: npx vitest run src/chains/midnight src/services/midnight-tx.ledger.spec.ts
+        run: npx vitest run src/chains/midnight src/services/midnight-tx.ledger.spec.ts src/services/__tests__/midnightTxPerToken.test.ts src/services/crossDevice
       - name: Build every production extension entry point
         run: node scripts/build-isolated-extension.mjs .

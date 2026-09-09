@@ -50,8 +50,6 @@ import {
   type RemoteSigningSettings,
   type SigningPolicy,
 } from '@/services/crossDevice/crossDeviceTrust';
-import { PROOF_SERVER_DOCKER_TAG } from '@/chains/midnight/midnightConfig';
-import { requireMidnightLedger8 } from '@/chains/midnight/midnightLedger';
 import type { DeviceInfo } from '@/services/crossDevice/protocol';
 import { mpcSessionCache } from '@/chrome/mpcSessionCache';
 import { mpcLoginShareCache } from '@/chrome/mpcLoginShareCache';
@@ -70,6 +68,7 @@ import { mpcLoginShareCache } from '@/chrome/mpcLoginShareCache';
 // cannot bloat that bundle. scripts/check-bundle-tdz.mjs fails the build if a
 // namespace const regresses behind its first reader.
 import midnightSyncService from '@/services/midnight-sync.service';
+import { midnightPrivateSessionEpoch, prepareMidnightPrivateSession, activateMidnightPrivateSession, clearMidnightPrivateSession } from '@/chains/midnight/midnightPrivateSyncSession';
 
 /**
  * WalletManager service to handle wallet login/logout and lifecycle management
@@ -193,6 +192,7 @@ export class WalletManager {
         await this.initializeWallet(walletBg);
 
         this.walletBg = walletBg;
+        if (!walletStore.isLocked) void activateMidnightPrivateSession(walletBg.id, walletBg.network).catch(() => {});
 
         await walletBg.syncService.resync();
 
@@ -473,7 +473,8 @@ export class WalletManager {
         const sessionVk = await getSessionViewingKey(walletBg.id, walletBg.network);
         const vk = sessionVk ?? addresses.zswapViewingKey;
         const vkIsValid = isValidMidnightViewingKey(vk);
-        const shielded = vkIsValid
+        // Stagenet private notes are synchronized locally with ephemeral keys.
+        const shielded = vkIsValid && walletBg.network !== Network.STAGENET
           ? { viewingKey: vk, lastIndex: null }
           : undefined;
         if (shielded) {
@@ -607,33 +608,7 @@ export class WalletManager {
       );
       const serverFlagOn = await this.isCrossDeviceSigningEnabled();
       this.crossDevice?.dispose();
-      this.crossDevice = bootstrapCrossDeviceSigning({
-        label: 'Gero Extension',
-        hasSigningKey: true,
-        identity: this.crossDeviceIdentity,
-        // Both the server flag AND this wallet's opt-in must be on.
-        enabled: serverFlagOn && this.remoteSigning.enabled,
-        // Live trust gates: only paired devices may approve/answer.
-        isRequesterTrusted: (id, pk) => isDeviceTrusted(this.remoteSigning, id, pk),
-        isResponderTrusted: (id, pk) => isDeviceTrusted(this.remoteSigning, id, pk),
-        // Cached proof, re-sent on every register (produced once at enable-time).
-        getProof: () => this.crossDeviceProof ?? undefined,
-        // QR pairing: a frame-verified PAIR_CONFIRM -> nonce consume + proof verify + pin.
-        onPairConfirm: (frame) => void this.handlePairConfirm(frame),
-        // XDP R2: advertise the prover only when the user is actually serving
-        // SOMEONE. Announcing a prover we would reject on every gate is worse
-        // than silence — the phone would build and encrypt a payload first.
-        getProver: () => (this.remoteSigning.serveProofs && hasProofServingDevice(this.remoteSigning)
-          ? { hasProver: true, proverLedgerVersion: PROOF_SERVER_DOCKER_TAG }
-          : undefined),
-        // XDP R3/R6: serve proofs to individually-enabled pinned devices.
-        serving: {
-          ledgerVersion: PROOF_SERVER_DOCKER_TAG,
-          isServingEnabled: (id) => isServingProofsTo(this.remoteSigning, id),
-          checkProverHealth: () => this.checkLocalProverHealth(),
-          prove: (payload) => this.proveForPeer(payload),
-        },
-      });
+      this.crossDevice = await this.createCrossDeviceBridge(serverFlagOn);
 
       webSocketService.connect(chain, network, address, lastSyncedBlock, {
         // Always a LIVE closure, never a static `undefined`. The socket outlives
@@ -807,7 +782,7 @@ export class WalletManager {
   // target's just-authenticated session and re-lock it. On a switch we only clear
   // the OUTGOING wallet's caches.
   async logout(clearAllMpcCaches = true): Promise<void> {
-
+    await clearMidnightPrivateSession(clearAllMpcCaches ? undefined : this.currentWalletId ?? undefined);
     try {
       // Clear cached MPC root-key bytes and login shares for the logged-out wallet
       // (or all wallets on an explicit logout) — never survive a logout.
@@ -970,6 +945,7 @@ export class WalletManager {
    * User must unlock with PIN/Pattern/Spending Password + 2FA (not supported for now) to access UI
    */
   async lock(): Promise<void> {
+    await clearMidnightPrivateSession();
     try {
       // Clear cached MPC root-key bytes — signing an MPC wallet after a lock
       // requires re-unlock, same as PRF wallets require a fresh WebAuthn prompt.
@@ -1185,6 +1161,7 @@ export class WalletManager {
    * swallows errors so it can never break the unlock path that calls it.
    */
   private async cacheMidnightViewingKeyToSession(walletId: number, password: string): Promise<void> {
+    const privateEpoch = midnightPrivateSessionEpoch();
     try {
       // Resolve encrypted mnemonic + network: prefer the live walletBg
       // (post-login unlock), fall back to the DB record (pre-login).
@@ -1211,9 +1188,20 @@ export class WalletManager {
       // Only the viewing key is consumed.
       const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
       const derived = await deriveMidnightKeys(mnemonic, network, 0, { skipCardano: true });
+      try {
       const { setSessionViewingKey } = await import('@/chains/midnight/midnightViewingKeySession');
       await setSessionViewingKey(walletId, network, derived.zswapViewingKey);
+      prepareMidnightPrivateSession(walletId, network, derived.zswapSecretKey, privateEpoch);
+      if (this.walletBg?.id === walletId && this.walletBg.network === network && !walletStore.isLocked) {
+        await activateMidnightPrivateSession(walletId, network);
+      }
       debugLog('🌙 Midnight viewing key cached to session at unlock');
+      } finally {
+        derived.unshieldedSecretKey.fill(0);
+        derived.dustSecretKey.fill(0);
+        derived.zswapSecretKey.fill(0);
+        derived.seed.fill(0);
+      }
     } catch (e) {
       debugLog('🌙 cacheMidnightViewingKeyToSession failed (non-fatal):', (e as Error)?.message);
     }
@@ -1251,6 +1239,7 @@ export class WalletManager {
 
       // Unlock successful - restore keys and clear locked state
       WalletStore.setLocked(false);
+      void activateMidnightPrivateSession(this.walletBg.id, this.walletBg.network).catch(() => {});
 
       // Initialize lastActivityTimestamp for auto-lock functionality
       await this.initializeLastActivityTimestamp(walletStore.loggedWallet.id);
@@ -1579,14 +1568,10 @@ export class WalletManager {
    * their witness data off-machine, which is the exact thing XDP exists to stop.
    * The desktop's own `proofServer.mode` governs its own sends, not this.
    */
-  private async checkLocalProverHealth(): Promise<boolean> {
+  private async checkLocalProverHealth(localUrl: string): Promise<boolean> {
     try {
-      if (this.walletBg?.chain === Blockchain.MIDNIGHT) {
-        requireMidnightLedger8(this.walletBg.network, 'Cross-device proving');
-      }
       const { checkProofServerHealth } = await import('@/chains/midnight/midnightLocalProver');
-      const { midnightStore } = await import('@/stores/midnightStore');
-      return await checkProofServerHealth(midnightStore.proofServer.localUrl);
+      return await checkProofServerHealth(localUrl);
     } catch (e) {
       debugLog('XDP health check failed:', e);
       return false;
@@ -1599,12 +1584,8 @@ export class WalletManager {
    * The payload buffer is zeroed by the caller once this settles (R8), so the
    * hex conversion below must happen — and does — before returning.
    */
-  private async proveForPeer(payload: Uint8Array): Promise<Uint8Array> {
-    if (this.walletBg?.chain === Blockchain.MIDNIGHT) {
-      requireMidnightLedger8(this.walletBg.network, 'Cross-device proving');
-    }
+  private async proveForPeer(payload: Uint8Array, localUrl: string): Promise<Uint8Array> {
     const { proveUnshieldedTransfer } = await import('@/chains/midnight/midnightUnshieldedProver');
-    const { midnightStore } = await import('@/stores/midnightStore');
     const { hexToBytes } = await import('@/chains/midnight/midnightTxBuilder');
     // Buffer, not proveSession's bytesToHex: importing that module here drags
     // @noble/curves into walletManager's graph, which perturbs module
@@ -1614,7 +1595,7 @@ export class WalletManager {
     const signedTxHex = Buffer.from(payload).toString('hex');
     const { provenTxHex } = await proveUnshieldedTransfer({
       signedTxHex,
-      proving: { url: midnightStore.proofServer.localUrl },
+      proving: { url: localUrl },
     });
     return hexToBytes(provenTxHex);
   }
@@ -1682,13 +1663,15 @@ export class WalletManager {
    * on/off. If the socket is already open, re-register immediately (onSocketOpen
    * won't fire again for an existing connection).
    */
-  private async reconfigureCrossDevice(): Promise<void> {
-    const serverFlagOn = await this.isCrossDeviceSigningEnabled();
-    if (!this.crossDeviceIdentity) {
-      this.crossDeviceIdentity = await loadOrCreateDeviceIdentity();
-    }
-    this.crossDevice?.dispose();
-    this.crossDevice = bootstrapCrossDeviceSigning({
+  private async createCrossDeviceBridge(serverFlagOn: boolean) {
+    if (!this.crossDeviceIdentity) return null;
+    const { midnightStore } = await import('@/stores/midnightStore');
+    const { createLocalProverServingOptions, localProverProfile } = await import('@/services/crossDevice/localProverProfile');
+    // Capture one server profile and URL for the bridge lifetime. A settings
+    // change disposes this bridge before advertising the replacement.
+    const profile = localProverProfile(midnightStore.proofServer.localProfile);
+    const localUrl = midnightStore.proofServer.localUrl;
+    return bootstrapCrossDeviceSigning({
       label: 'Gero Extension',
       hasSigningKey: true,
       identity: this.crossDeviceIdentity,
@@ -1697,7 +1680,27 @@ export class WalletManager {
       isResponderTrusted: (id, pk) => isDeviceTrusted(this.remoteSigning, id, pk),
       getProof: () => this.crossDeviceProof ?? undefined,
       onPairConfirm: (frame) => void this.handlePairConfirm(frame),
+      ...createLocalProverServingOptions(profile, {
+        isAdvertised: () => this.remoteSigning.serveProofs && hasProofServingDevice(this.remoteSigning),
+        isServingEnabled: (id) => isServingProofsTo(this.remoteSigning, id),
+        checkProverHealth: () => this.checkLocalProverHealth(localUrl),
+        prove: (payload) => this.proveForPeer(payload, localUrl),
+      }),
     });
+  }
+
+  /** Refresh an existing Cardano pairing bridge after local prover settings change. */
+  async refreshCrossDeviceProver(): Promise<void> {
+    if (this.crossDevice) await this.reconfigureCrossDevice();
+  }
+
+  private async reconfigureCrossDevice(): Promise<void> {
+    const serverFlagOn = await this.isCrossDeviceSigningEnabled();
+    if (!this.crossDeviceIdentity) {
+      this.crossDeviceIdentity = await loadOrCreateDeviceIdentity();
+    }
+    this.crossDevice?.dispose();
+    this.crossDevice = await this.createCrossDeviceBridge(serverFlagOn);
     if (this.crossDevice && webSocketService.isConnected()) {
       this.crossDevice.register();
     }
