@@ -432,21 +432,21 @@ export default {
         networkMagic: 0x0709110B  // Bitcoin testnet magic bytes
       }
     },
-    // Midnight Preview (testnet)
+    // Midnight Stagenet (testnet — replaced preview, retired by Nexus 2026-09-06)
     {
       icon: midnightLogo,
       iconColor: 'grey',
-      title: 'Midnight Preview',
+      title: 'Midnight Stagenet',
       blockchain: Blockchain.MIDNIGHT,
-      network: Network.PREVIEW,
+      network: Network.STAGENET,
       // No hardware wallet support: Midnight ZK proof generation requires the
       // secret key in cleartext, which Ledger/Trezor cannot expose.
       supportedHardware: false,
       networkId: 0,
       currencySymbol: 'tNIGHT',
       currencyTicker: 'tNIGHT',
-      currencyName: 'Midnight Preview',
-      currencyDescription: 'Midnight Preview Network Token',
+      currencyName: 'Midnight Stagenet',
+      currencyDescription: 'Midnight Stagenet Network Token',
       currencyImage: midnightLogo,
       // Midnight uses Substrate fee model (DUST), not Cardano protocol params.
       // These fields stay zeroed; Midnight-specific parameters live elsewhere.

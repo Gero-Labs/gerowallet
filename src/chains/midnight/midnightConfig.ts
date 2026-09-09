@@ -43,7 +43,7 @@ export interface MidnightNetworkEndpoints {
    * API (`/prove`, `/check`) under this base, so the wallet's hand-rolled
    * ProvingProvider works against it unchanged apart from `x-api-key` /
    * `x-api-secret` auth headers. Arkhia only distinguishes mainnet vs
-   * testnet, so preview and preprod share the testnet base — proving is
+   * testnet, so stagenet and preprod share the testnet base — proving is
    * circuit-level (ledger-generation-coupled), not network-specific, so
    * that sharing is sound. Users can override per device via
    * `midnightStore.proofServer.zkpaasUrl`.
@@ -67,7 +67,7 @@ export interface MidnightNetworkEndpoints {
    * SDK NetworkId — the string the `@midnightntwrk/wallet-sdk-*` packages use
    * internally for serialization and address-format selection. Lowercase.
    */
-  sdkNetworkId: 'mainnet' | 'preprod' | 'preview' | 'undeployed';
+  sdkNetworkId: 'mainnet' | 'preprod' | 'stagenet' | 'undeployed';
 }
 
 /**
@@ -94,18 +94,34 @@ const ARKHIA_ZKPAAS_MAINNET = 'https://starter.arkhia.io/midnight/zkpaas/mainnet
 const ARKHIA_ZKPAAS_TESTNET = 'https://starter.arkhia.io/midnight/zkpaas/testnet';
 
 const MIDNIGHT_NETWORK_ENDPOINTS: Record<string, MidnightNetworkEndpoints> = {
-  [Network.PREVIEW]: {
-    network: Network.PREVIEW,
+  /**
+   * Stagenet — the network that replaced preview. Nexus retired the
+   * `midnight-preview` slug on 2026-09-06 (its `Network.fromString` now 400s
+   * on it), so preview is gone from this map rather than kept alongside.
+   *
+   * Stagenet is the ledger-9 pre-release network and is NOT hosted under
+   * `*.midnight.network` — the Foundation serves it from `shielded.tools`.
+   * These URLs match the `MIDNIGHT_STAGENET_*` values Nexus itself is
+   * deployed with, so the wallet's direct-access fallback and the Nexus proxy
+   * talk to the same chain.
+   *
+   * Read paths (blocks, transactions, DUST status) work today. The Nexus tx
+   * sidecar is still pinned to `@midnight-ntwrk/ledger-v8` and answers 501 for
+   * stagenet on `tx/build-unshielded`, `tx/submit` and the DUST registration
+   * routes until its ledger-9 port lands — see issue #1024.
+   */
+  [Network.STAGENET]: {
+    network: Network.STAGENET,
     nexusBaseUrl: NEXUS_BASE,
     geroSyncWsUrl: GERO_SYNC_WS,
     defaultProofServerUrl: 'http://localhost:6300',
     zkpaasProofServerUrl: ARKHIA_ZKPAAS_TESTNET,
-    publicIndexerUrl: 'https://indexer.preview.midnight.network/api/v4/graphql',
-    publicIndexerWsUrl: 'wss://indexer.preview.midnight.network/api/v4/graphql/ws',
-    publicRpcUrl: 'https://rpc.preview.midnight.network',
-    faucetUrl: 'https://midnight-tmnight-preview.nethermind.dev',
-    blockExplorerUrl: 'https://polkadot.js.org/apps/?rpc=wss%3A%2F%2Frpc.preview.midnight.network#/explorer',
-    sdkNetworkId: 'preview',
+    publicIndexerUrl: 'https://indexer.stagenet.shielded.tools/api/v4/graphql',
+    publicIndexerWsUrl: 'wss://indexer.stagenet.shielded.tools/api/v4/graphql/ws',
+    publicRpcUrl: 'https://rpc.stagenet.shielded.tools',
+    faucetUrl: 'https://faucet.stagenet.shielded.tools',
+    blockExplorerUrl: 'https://polkadot.js.org/apps/?rpc=wss%3A%2F%2Frpc.stagenet.shielded.tools#/explorer',
+    sdkNetworkId: 'stagenet',
   },
   [Network.PREPROD]: {
     network: Network.PREPROD,
@@ -135,6 +151,23 @@ const MIDNIGHT_NETWORK_ENDPOINTS: Record<string, MidnightNetworkEndpoints> = {
 };
 
 /**
+ * The Cardano network a Midnight network's cNIGHT lives on.
+ *
+ * Until stagenet these two vocabularies happened to coincide — Midnight
+ * "Preview"/"Preprod"/"Mainnet" all named a Cardano network too, so every
+ * cNIGHT lookup could pass the Midnight network straight through. Stagenet
+ * has no Cardano namesake, and its cNIGHT policy + DUST mapping validator are
+ * the ones deployed on Cardano **preprod** (identical to preprod's, per
+ * Nexus's `midnight.dust.*.stagenet-*` pins), so it maps there.
+ *
+ * Both are testnet (`networkId` 0), so a wallet's derived Cardano twin address
+ * is byte-identical before and after this mapping — only the lookup changes.
+ */
+export function cardanoTwinNetwork(midnightNetwork: string): string {
+  return midnightNetwork === Network.STAGENET ? Network.PREPROD : midnightNetwork;
+}
+
+/**
  * Look up endpoint config for a Midnight network. Returns `undefined` if the
  * network isn't a recognized Midnight network — caller should treat that as a
  * configuration error.
@@ -146,8 +179,8 @@ export function getMidnightEndpoints(network: string): MidnightNetworkEndpoints 
 /**
  * Compose the full Nexus URL for a per-network Midnight REST resource.
  *
- * Example: `nexusUrlFor(Network.PREVIEW, 'dust/status')` →
- * `https://nexus.gerowallet.io/api/midnight/midnight-preview/dust/status`
+ * Example: `nexusUrlFor(Network.STAGENET, 'dust/status')` →
+ * `https://nexus.gerowallet.io/api/midnight/midnight-stagenet/dust/status`
  *
  * Network slug mapping mirrors what Nexus expects in its `?network=` parameter
  * for chain-agnostic endpoints, and the `{network}` path segment for Midnight-only

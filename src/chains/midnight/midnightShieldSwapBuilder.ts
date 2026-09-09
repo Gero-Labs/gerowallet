@@ -80,7 +80,7 @@ import {
 export type BuildAndSignShieldResult = BuildAndSignShieldedTransferResult;
 
 export interface BuildAndSignShieldArgs {
-  /** SDK network ID — 'mainnet' / 'preview' / 'preprod' / 'testnet'. */
+  /** SDK network ID — 'mainnet' / 'stagenet' / 'preprod' / 'testnet'. */
   readonly sdkNetworkId: string;
   /** Indexer + Nexus endpoints (the BG knows these via midnightConfig). Also carries the Gero `Network` slug ({@code endpoints.network}) used for `getMidnightApi`. */
   readonly endpoints: MidnightNetworkEndpoints;

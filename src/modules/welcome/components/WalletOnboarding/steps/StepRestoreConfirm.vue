@@ -177,6 +177,12 @@
           <p class="mb-2">
             {{ $t('welcome.walletExistsMessage', { name: existingWalletInfo.name }) }}
           </p>
+          <p class="mb-2">
+            {{ $t('welcome.walletExistsOnNetwork', {
+              chain: existingWalletInfo.chain,
+              network: existingWalletInfo.network
+            }) }}
+          </p>
           <p class="text--secondary">
             {{ $t('welcome.wouldYouLikeToLogin') }}
           </p>
@@ -204,6 +210,7 @@ import GeroStore from '@/stores/geroStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import networks, { NetworkInfo } from '@/utils/networks';
+import type { Wallet } from '@/models/types';
 
 interface Props {
   network: NetworkInfo;
@@ -255,7 +262,7 @@ const acknowledgments = reactive({
 
 // ─── Existing wallet confirm dialog ──────────────────────────────────────────
 const showConfirmDialog = ref(false);
-const existingWalletInfo = ref<{ name: string } | null>(null);
+const existingWalletInfo = ref<Wallet | null>(null);
 
 const canCreate = computed(() => {
   if (props.securityMethod === 'prf') {
@@ -268,30 +275,19 @@ const openTerms = (): void => {
   window.open('https://gerowallet.io/legal/terms/', '_blank');
 };
 
+/** Stop the restore and offer to open the wallet that already holds this seed. */
+const showExistingWallet = (existingWallet: Wallet): void => {
+  existingWalletInfo.value = existingWallet;
+  showConfirmDialog.value = true;
+  creatingWalletLoader.value = false;
+};
+
 // ========================================================================
 // WALLET RESTORE LOGIC — PRESERVED FROM RestoreWallet.vue VERBATIM (~640-769)
 // ========================================================================
 const walletCreationStep = async (): Promise<void> => {
   creatingWalletLoader.value = true;
   try {
-    // Midnight derives its wallet identity via the wallet-sdk-facade (not the
-    // Cardano publicKey path), which isn't wired into the dedup helper yet.
-    // Skip dedup on Midnight until the SDK lands. Re-restoring the same Midnight
-    // mnemonic will create a separate wallet record for now.
-    if (props.network.blockchain !== 'Midnight') {
-      // Check if wallet with same mnemonic already exists
-      const { derivePublicKeyFromMnemonic, getWalletByPublicKey } = await import('@/db/gero-db');
-      const publicKey = await derivePublicKeyFromMnemonic(seedToStr.value);
-      const existingWallet = await getWalletByPublicKey(publicKey);
-
-      if (existingWallet) {
-        existingWalletInfo.value = existingWallet;
-        showConfirmDialog.value = true;
-        creatingWalletLoader.value = false;
-        return;
-      }
-    }
-
     let wallet;
 
     const walletIcon = networks.resolveIconColor(props.network?.blockchain || '', props.network?.network || '');
@@ -299,6 +295,8 @@ const walletCreationStep = async (): Promise<void> => {
     // Pre-derive Midnight bech32m addresses in this options context. See
     // StepCreateConfirm.vue / midnightKeyManager.ts for why this can't live in
     // the background service worker. Restore uses the user-entered mnemonic.
+    // Derived before the duplicate check because the Midnight identity is read
+    // from these addresses.
     let midnightAddresses: {
       unshielded: string;
       shielded: string;
@@ -314,6 +312,30 @@ const walletCreationStep = async (): Promise<void> => {
       const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
       const derived = await deriveMidnightKeys(seedToStr.value, props.network.network);
       midnightAddresses = derived.addresses;
+    }
+
+    // Refuse to restore a seed that already has a wallet on this chain+network.
+    // The identity is the derived public key, so a rename doesn't hide a
+    // duplicate and the same seed can still be restored on another chain or
+    // network. Checked before anything is written — and, on the PRF path,
+    // before the user is prompted to register a PassKey.
+    const { deriveWalletPublicKey, findExistingWallet } = await import('@/db/gero-db');
+    const candidatePublicKey = await deriveWalletPublicKey(
+      seedToStr.value,
+      props.network.blockchain,
+      props.network.network,
+      undefined,  // addressType - use default based on chain
+      midnightAddresses
+    );
+    const existingWallet = await findExistingWallet({
+      chain: props.network.blockchain,
+      network: props.network.network,
+      publicKey: candidatePublicKey,
+    });
+
+    if (existingWallet) {
+      showExistingWallet(existingWallet);
+      return;
     }
 
     if (props.securityMethod === 'prf') {
@@ -405,6 +427,13 @@ const walletCreationStep = async (): Promise<void> => {
 
     await performLogin(wallet);
   } catch (error: unknown) {
+    // Backstop: gero-db rejects duplicates too, in case a race let one slip past
+    // the check above. Prompt rather than reporting an opaque failure.
+    const { DuplicateWalletError } = await import('@/db/gero-db');
+    if (error instanceof DuplicateWalletError) {
+      showExistingWallet(error.existingWallet);
+      return;
+    }
     const msg = error instanceof Error ? error.message : 'Unknown error';
     console.error('Wallet restoration failed:', msg);
     vmProxy['$snackbar']?.setError(vmProxy.$t('errors.unknownError') as string);

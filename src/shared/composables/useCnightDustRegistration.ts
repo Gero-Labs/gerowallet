@@ -51,10 +51,16 @@ export interface DustDestination {
 }
 
 /**
- * cNIGHT asset identity per Cardano network. Values verified 2026-07-14 from
+ * cNIGHT asset identity, keyed by network. Values verified 2026-07-14 from
  * the official DUST Generator portal's baked config (Next.js bundle) —
  * mainnet name is `NIGHT` (`4e49474854`); the testnet asset has an empty
- * asset name. Preview and preprod share one policy (same token deployment).
+ * asset name. Preview, preprod and stagenet share one policy (same token
+ * deployment), which is also what Nexus pins as `stagenet-cnight-unit`.
+ *
+ * Keyed by network NAME, and read with either vocabulary: a Cardano wallet
+ * looks up its own network, a Midnight wallet looks up its Midnight network
+ * (see `useDustSources`). `Network.PREVIEW` therefore stays here for Cardano
+ * preview even though Midnight preview is gone.
  */
 export const CNIGHT_ASSETS: Record<string, { policyId: string; assetNameHex: string }> = {
   [Network.MAINNET]: {
@@ -69,6 +75,10 @@ export const CNIGHT_ASSETS: Record<string, { policyId: string; assetNameHex: str
     policyId: 'd2dbff622e509dda256fedbd31ef6e9fd98ed49ad91d5c0e07f68af1',
     assetNameHex: '',
   },
+  [Network.STAGENET]: {
+    policyId: 'd2dbff622e509dda256fedbd31ef6e9fd98ed49ad91d5c0e07f68af1',
+    assetNameHex: '',
+  },
 };
 
 /**
@@ -76,7 +86,8 @@ export const CNIGHT_ASSETS: Record<string, { policyId: string; assetNameHex: str
  * script a cNIGHT→DUST registration locks its mapping NFT under. Used to detect
  * and deep-link a registration transaction. Script hashes portal-verified
  * 2026-07-14; addresses derived from them (type-7 enterprise script address).
- * Preview and preprod share one deployment.
+ * Preview, preprod and stagenet share one deployment — Nexus pins the same
+ * hash for stagenet and preprod for the same reason.
  */
 export const DUST_MAPPING_VALIDATOR: Record<string, { scriptHash: string; address: string }> = {
   [Network.MAINNET]: {
@@ -88,6 +99,10 @@ export const DUST_MAPPING_VALIDATOR: Record<string, { scriptHash: string; addres
     address: 'addr_test1wplxjzranravtp574s2wz00md7vz9rzpucu252je68u9a8qzjheng',
   },
   [Network.PREVIEW]: {
+    scriptHash: '7e69087d98fac5869eac14e13dfb6f98228c41e638aa2a59d1f85e9c',
+    address: 'addr_test1wplxjzranravtp574s2wz00md7vz9rzpucu252je68u9a8qzjheng',
+  },
+  [Network.STAGENET]: {
     scriptHash: '7e69087d98fac5869eac14e13dfb6f98228c41e638aa2a59d1f85e9c',
     address: 'addr_test1wplxjzranravtp574s2wz00md7vz9rzpucu252je68u9a8qzjheng',
   },
@@ -107,10 +122,15 @@ export function mapDustBuildError(message: string): string {
 
 /**
  * Official portal URLs — fallback CTA when the wallet can't sign locally
- * (hardware wallets). No preprod instance exists (probed 2026-07-14:
- * midnight-dust-preprod.nethermind.io unreachable, and the preview portal is
- * network-wired to preview) — on preprod this wallet flow is the only UI, so
- * the portal CTA is hidden there.
+ * (hardware wallets). Keyed by the logged wallet's network. No preprod
+ * instance exists (probed 2026-07-14: midnight-dust-preprod.nethermind.io
+ * unreachable), and no stagenet instance exists either (probed 2026-09-07:
+ * dust.stagenet.shielded.tools does not resolve) — on both, this wallet flow
+ * is the only UI, so the portal CTA is hidden there.
+ *
+ * The preview portal stays listed: it is network-wired to Midnight preview,
+ * which upstream still runs, and this key is now only reachable from a
+ * CARDANO preview wallet (Midnight preview is no longer an offered network).
  */
 export const DUST_PORTAL_URLS: Record<string, string> = {
   [Network.MAINNET]: 'https://midnight-dust-mainnet.nethermind.io/',

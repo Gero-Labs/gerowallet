@@ -39,7 +39,7 @@ import { getNexusAccessToken, reauthenticateNexus } from '@/services/nexusDevice
 import { shouldDiscardCheckpoint } from '@/chains/midnight/midnightDustCheckpoint';
 
 export interface BalanceAndSignUnshieldedTransferArgs {
-  /** SDK network ID — 'mainnet' / 'preview' / 'preprod' / 'testnet'. */
+  /** SDK network ID — 'mainnet' / 'stagenet' / 'preprod' / 'testnet'. */
   readonly sdkNetworkId: string;
   /** Indexer URLs (the BG knows these via midnightConfig). */
   readonly endpoints: MidnightNetworkEndpoints;
