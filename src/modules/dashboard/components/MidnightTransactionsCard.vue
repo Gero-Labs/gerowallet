@@ -31,7 +31,16 @@
           class="recent-tx-row"
         >
           <div class="recent-tx-meta">
-            <div class="recent-tx-status">{{ statusLabel(tx) }}</div>
+            <div class="recent-tx-status">
+              {{ statusLabel(tx) }}
+              <!-- Who paid, inline. A send whose fee came from elsewhere reads
+                   as ordinary otherwise, on the one screen the user actually
+                   scans. -->
+              <span v-if="sponsorFor(tx.hash)" class="tx-chip">
+                <v-icon x-small>mdi-lightning-bolt</v-icon>
+                {{ $t('midnight.sponsor.feeInline', { name: sponsorFor(tx.hash) }) }}
+              </span>
+            </div>
             <div class="recent-tx-time">
               <span v-if="tx.counterparty">{{ shortAddress(tx.counterparty) }} · </span>{{ formatTime(tx.timestamp) }}
             </div>
@@ -54,7 +63,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, toRefs } from 'vue';
+import { computed, onMounted, ref, toRefs, watch } from 'vue';
 import { midnightStore } from '@/stores/midnightStore';
 import { walletStore } from '@/stores/walletStore';
 import { Network } from '@/models/types';
@@ -163,6 +172,28 @@ function formatTime(timestamp: number): string {
   if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
   return `${Math.floor(diffSec / 86400)}d ago`;
 }
+
+/**
+ * Fee attribution by transaction hash, for the rows whose DUST another wallet
+ * paid. Read from storage: gero-sync does not forward the fee payer, and the
+ * sponsor's inputs live in a separate intent, so the chain data cannot say.
+ */
+const sponsoredTxs = ref<Record<string, { sponsorName: string }>>({});
+
+function sponsorFor(hash: string): string {
+  if (!hash) return '';
+  return sponsoredTxs.value[hash.toLowerCase()]?.sponsorName ?? '';
+}
+
+async function loadAttribution(): Promise<void> {
+  const { loadSponsoredTxs } = await import('@/chains/midnight/midnightSponsorLinks');
+  sponsoredTxs.value = await loadSponsoredTxs();
+}
+
+onMounted(loadAttribution);
+// Re-read when the list changes: a send made in this session must show its
+// attribution without a reload.
+watch(() => recent.value.length, loadAttribution);
 </script>
 
 <!-- Style block copied verbatim from RecentTransactionsCard.vue so the two
@@ -245,6 +276,24 @@ function formatTime(timestamp: number): string {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Bordered chip, not loose text: the attribution has to survive being
+   scanned in a dense list. */
+.tx-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+  border-radius: var(--g-r-chip);
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-2);
+  color: var(--g-text-2);
 }
 
 .recent-tx-time {

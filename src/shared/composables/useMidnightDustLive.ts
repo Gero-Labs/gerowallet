@@ -95,9 +95,38 @@ function stop() {
  * module's lifetime. Guard on `consumers` so an identity change before the
  * first `start()` (or after the last `stop()`) is a no-op.
  */
+/**
+ * Forget the previous identity's reading.
+ *
+ * These refs are module-scoped so one poll loop serves every consumer, and
+ * `refreshOnce` deliberately keeps the last successful values when a poll
+ * fails. Together that means a wallet switch used to leave the PREVIOUS
+ * wallet's DUST on screen until a new poll both ran and succeeded — and if the
+ * new wallet's poll returned the hollow all-zero shape, `pathAPollHasSignal()`
+ * rejected it and the stale figure simply stayed.
+ *
+ * Observed on mainnet: a wallet holding no DUST at all displayed a full
+ * 500 DUST battery inherited from the previously-viewed wallet, which sent an
+ * entire debugging session after the wrong wallet. Zeroing `polledAsOfMs`
+ * returns the composable to its honest "no reading yet" state, which falls
+ * back to `midnightStore.dustState` — and that IS reset per wallet by
+ * `setActive`.
+ */
+function forgetPolledIdentity(): void {
+  polledBalance.value = 0n;
+  polledGenerating.value = 0n;
+  polledCap.value = 0n;
+  polledNightRegistered.value = 0n;
+  polledRegistrationStatus.value = 'Unregistered';
+  polledAsOfMs.value = 0;
+}
+
 watch(
   () => `${walletStore.loggedWallet?.network ?? ''}|${midnightStore.addresses?.unshielded ?? ''}`,
   () => {
+    // Clear FIRST, synchronously: the gap between the switch and the next
+    // successful poll is exactly where the stale value used to be shown.
+    forgetPolledIdentity();
     if (consumers <= 0) return;
     void refreshOnce();
   },

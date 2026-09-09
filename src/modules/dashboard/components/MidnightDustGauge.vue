@@ -25,29 +25,15 @@
       </div>
     </div>
 
-    <!-- Battery track: gradient fill + flowing dust particles -->
-    <div class="battery" role="progressbar" :aria-valuenow="pct" aria-valuemin="0" aria-valuemax="100">
-      <div class="battery__cells">
-        <div
-          class="battery__fill"
-          :style="{ width: pct + '%' }"
-        />
-        <!-- Dividers: sand (same family as the dust motes) over the empty
-             track, darker once the fill has passed them. -->
-        <div
-          v-for="n in 11"
-          :key="n"
-          class="battery__divider"
-          :class="{ 'battery__divider--covered': (n * 100 / 12) <= pct }"
-          :style="{ left: (n * 100 / 12) + '%' }"
-        />
-        <!-- Two-zone charge animation: dust drifts right-to-left over the
-             empty track and lands on the fill edge; power streaks flow
-             through the charged section. See DustParticleCanvas. -->
-        <DustParticleCanvas :active="isCharging" :fill-pct="pct" class="battery__dust" />
-      </div>
-      <div class="battery__nub" />
-    </div>
+    <!-- Battery track. The battery itself is MidnightBattery, shared with the
+         fee-wallet strip so the gradient/dividers/nub have one owner; the
+         charge animation is slotted in over it. -->
+    <MidnightBattery :pct="pct" :full="isFull">
+      <!-- Two-zone charge animation: dust drifts right-to-left over the
+           empty track and lands on the fill edge; power streaks flow
+           through the charged section. See DustParticleCanvas. -->
+      <DustParticleCanvas :active="isCharging" :fill-pct="pct" class="battery__dust" />
+    </MidnightBattery>
 
     <!-- Footer stats -->
     <div class="dust-gauge__stats">
@@ -65,11 +51,27 @@
       </div>
     </div>
 
+    <!-- Sponsorship, both directions. Lives on the battery because that is
+         where a user looks to answer "can this wallet pay a fee". -->
+    <MidnightSponsorStatus :revision="sponsorRevision" @choose="feeWalletOpen = true" />
+    <MidnightFeeWalletDialog
+      v-if="loggedWallet"
+      :is-open="feeWalletOpen"
+      :wallet-id="loggedWallet.id"
+      :wallet-name="loggedWallet.name"
+      :network="loggedWallet.network"
+      @close="feeWalletOpen = false"
+      @saved="onSponsorSaved"
+    />
+
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, toRefs, watch } from 'vue';
+import MidnightFeeWalletDialog from '@/modules/dashboard/dialogs/MidnightFeeWalletDialog.vue';
+import MidnightSponsorStatus from '@/modules/dashboard/components/MidnightSponsorStatus.vue';
+import MidnightBattery from '@/modules/dashboard/components/MidnightBattery.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { midnightStore } from '@/stores/midnightStore';
 import { getDustPendingForDestination, reconcileDustPendingForDestination } from '@/shared/composables/useDustPending';
@@ -218,6 +220,22 @@ const timeToFullLabel = computed(() => {
   return `~${Math.floor(secs)}s`;
 });
 
+
+/** The fee-wallet picker, reachable from the strip under the battery. */
+const feeWalletOpen = ref(false);
+const sponsorRevision = ref(0);
+
+/**
+ * Force the strip to re-read after the dialog writes. The strip owns its own
+ * load, so bumping its key is the cheapest way to make it honest immediately
+ * rather than on the next wallet switch.
+ */
+function onSponsorSaved(): void {
+  feeWalletOpen.value = false;
+  // The dialog has already written the link; bump so the strip re-reads it
+  // immediately instead of waiting for a wallet switch.
+  sponsorRevision.value += 1;
+}
 </script>
 
 <style scoped>
@@ -274,52 +292,6 @@ const timeToFullLabel = computed(() => {
 }
 
 /* Battery track */
-.battery {
-  display: flex;
-  align-items: stretch;
-  gap: 3px;
-  height: 22px;
-}
-
-.battery__cells {
-  position: relative;
-  flex: 1;
-  border-radius: 6px;
-  background: rgba(2, 6, 18, 0.55);
-  border: 1px solid rgba(236, 201, 133, 0.12);
-  overflow: hidden;
-}
-
-/* Fill: the dark-blue → sand gradient lives HERE. No tip effects. */
-.battery__fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  height: 100%;
-  border-radius: 5px 0 0 5px;
-  background: linear-gradient(90deg, #2E1065 0%, #7C3AED 45%, #C4A7FC 72%, #ecc985 100%);
-  transition: width 0.9s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.is-full .battery__fill {
-  border-radius: 5px;
-  background: linear-gradient(90deg, #2E1065 0%, #9D7BEA 55%, #ffe9b2 100%);
-}
-
-/* Dividers: sand (matches the dust motes) over the empty track; once the
-   fill passes a divider it flips to a dark notch so the gradient reads. */
-.battery__divider {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: rgba(236, 201, 133, 0.45);
-  transition: background 0.4s ease;
-}
-
-.battery__divider--covered {
-  background: rgba(0, 0, 0, 0.38);
-}
-
 /* The dust itself — canvas sits above fill + dividers */
 .battery__dust {
   position: absolute;
@@ -327,14 +299,6 @@ const timeToFullLabel = computed(() => {
   width: 100%;
   height: 100%;
   pointer-events: none;
-}
-
-.battery__nub {
-  width: 3px;
-  align-self: center;
-  height: 10px;
-  border-radius: 0 2px 2px 0;
-  background: rgba(236, 201, 133, 0.35);
 }
 
 .dust-gauge__stats {

@@ -41,6 +41,34 @@
         <span class="mn-tx-details__value ml-1">—</span>
       </div>
 
+      <!-- Who paid. Only rendered when another wallet covered the DUST, so an
+           ordinary self-paid transaction is unchanged. -->
+      <template v-if="sponsorTx">
+        <div class="mn-tx-details__row">
+          {{ $t('midnight.sponsor.feePaidByLabel') }}:
+          <span class="mn-tx-details__value ml-1">
+            <span class="mn-av">{{ sponsorInitials }}</span>
+            {{ sponsorTx.sponsorName }}
+          </span>
+        </div>
+        <!-- The callout, not just a field: the point is that this wallet was
+             NOT charged, which a bare name does not convey. -->
+        <div class="mn-fee-callout">
+          <span class="mn-av">{{ sponsorInitials }}</span>
+          <span class="mn-fee-callout__body">
+            <span class="mn-fee-callout__title">
+              {{ $t('midnight.sponsor.paidThisFee', { name: sponsorTx.sponsorName }) }}
+            </span>
+            <span class="mn-fee-callout__sub">
+              {{ $t('midnight.sponsor.paidThisFeeSub', {
+                name: sponsorTx.sponsorName,
+                wallet: sponsorTx.sponsoredWalletName || '',
+              }) }}
+            </span>
+          </span>
+        </div>
+      </template>
+
       <div class="mn-tx-details__row">
         {{ $t('transactions.amount') }}:
         <span class="mn-tx-details__amount ml-1" :class="amountClass">
@@ -65,7 +93,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import type { SponsoredTx } from '@/chains/midnight/midnightSponsorLinks';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import MidnightTxUtxos from './MidnightTxUtxos.vue';
 import { walletStore } from '@/stores/walletStore';
@@ -78,6 +107,34 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 const { t } = useTranslation();
 
 const props = defineProps<{ transactionInfo: MidnightTransaction }>();
+
+/**
+ * The wallet that paid this transaction's DUST fee, when it was not this one.
+ *
+ * Read from stored attribution rather than from the transaction: gero-sync
+ * does not forward the fee payer, and the sponsor's inputs are in a separate
+ * intent, so the chain data alone cannot say. Recorded at send time.
+ */
+const sponsorTx = ref<SponsoredTx | null>(null);
+
+const sponsorInitials = computed(() => {
+  const name = sponsorTx.value?.sponsorName ?? '';
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '??';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+});
+
+async function loadSponsorAttribution(): Promise<void> {
+  sponsorTx.value = null;
+  const hash = props.transactionInfo?.hash;
+  if (!hash) return;
+  const { loadSponsoredTxs, sponsoredTxFor } = await import('@/chains/midnight/midnightSponsorLinks');
+  sponsorTx.value = sponsoredTxFor(await loadSponsoredTxs(), hash);
+}
+
+onMounted(loadSponsorAttribution);
+watch(() => props.transactionInfo?.hash, loadSponsorAttribution);
 
 const isMainnet = computed(() => walletStore.loggedWallet?.network === Network.MAINNET);
 
@@ -208,5 +265,41 @@ function shortHash(hash: string): string {
 
 .mn-tx-details__status--pending {
   color: var(--g-warning);
+}
+
+.mn-av {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--g-r-pill);
+  background: var(--g-overlay);
+  border: 1px solid var(--g-hairline-2);
+  color: var(--g-text-2);
+}
+
+.mn-fee-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--g-s-2);
+  margin-top: var(--g-s-2);
+  padding: var(--g-s-2);
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
+}
+
+.mn-fee-callout__body {
+  display: flex;
+  flex-direction: column;
+}
+
+.mn-fee-callout__title {
+  color: var(--g-text-1);
+}
+
+.mn-fee-callout__sub {
+  color: var(--g-text-3);
 }
 </style>
