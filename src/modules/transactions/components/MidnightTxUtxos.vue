@@ -122,6 +122,7 @@ async function load(force = false): Promise<void> {
   if (!force) {
     const cached = getCachedTxUtxos(key);
     if (cached) {
+      loading.value = false;
       data.value = cached;
       error.value = null;
       return;
@@ -129,6 +130,7 @@ async function load(force = false): Promise<void> {
   }
   const network = walletStore.loggedWallet?.network;
   if (!network) {
+    loading.value = false;
     data.value = null;
     error.value = t('midnight.utxoLoadFailed');
     return;
