@@ -154,6 +154,34 @@ export interface MidnightTransactionUtxosDto {
   spentOutputs: MidnightUnshieldedUtxo[];
 }
 
+/** Normalize Nexus's snake_case JSON before the UI or cache can consume it. */
+export function convertTransactionUtxos(value: unknown): MidnightTransactionUtxosDto {
+  const invalid = () => new Error('Invalid Midnight transaction UTxO response');
+  if (!value || typeof value !== 'object') throw invalid();
+  const { tx_hash: txHash, created_outputs: createdOutputs, spent_outputs: spentOutputs } = value as Record<string, unknown>;
+  if (typeof txHash !== 'string' || !Array.isArray(createdOutputs) || !Array.isArray(spentOutputs)) throw invalid();
+
+  const output = (value: unknown): MidnightUnshieldedUtxo => {
+    if (!value || typeof value !== 'object') throw invalid();
+    const { owner, token_type: tokenType, intent_hash: intentHash, initial_nonce: initialNonce,
+      value: amount, output_index: outputIndex, registered_for_dust_generation: registeredForDustGeneration,
+      ctime } = value as Record<string, unknown>;
+    if (typeof owner !== 'string' || typeof tokenType !== 'string' ||
+        typeof intentHash !== 'string' || typeof initialNonce !== 'string' ||
+        typeof amount !== 'string' || !/^\d+$/.test(amount) ||
+        typeof outputIndex !== 'number' || !Number.isSafeInteger(outputIndex) || outputIndex < 0 ||
+        typeof registeredForDustGeneration !== 'boolean' ||
+        (ctime != null && (typeof ctime !== 'number' || !Number.isSafeInteger(ctime) || ctime < 0))) {
+      throw invalid();
+    }
+    return {
+      owner, tokenType, value: BigInt(amount), intentHash, outputIndex,
+      initialNonce, registeredForDustGeneration, ...(typeof ctime === 'number' ? { ctime } : {}),
+    };
+  };
+  return { txHash, createdOutputs: createdOutputs.map(output), spentOutputs: spentOutputs.map(output) };
+}
+
 /**
  * Network info — what `WalletFacade.init({ configuration })` needs.
  */
@@ -564,8 +592,8 @@ export class MidnightApi {
   async getTransactionUtxos(txHash: string): Promise<MidnightTransactionUtxosDto> {
     try {
       const url = nexusMidnightPathFor(this.network, `transactions/${encodeURIComponent(txHash)}/utxos`);
-      const { data, status } = await this.axiosInstance.get<MidnightTransactionUtxosDto>(url);
-      if (status === 200) return data;
+      const { data, status } = await this.axiosInstance.get<unknown>(url);
+      if (status === 200) return convertTransactionUtxos(data);
       throw parseHttpError(data);
     } catch (error) {
       throw parseHttpError(error);
