@@ -13,6 +13,7 @@ on:
       - 'src/services/__tests__/midnightTxPerToken.test.ts'
       - 'src/stores/midnightStore.ts'
       - 'src/stores/midnightStore.spec.ts'
+      - 'src/shared/composables/useMidnightDustLive*'
       - 'src/modules/midnight/ProofServerPage.vue'
       - 'src/types/midnight-v9-shielded.d.ts'
       - 'src/modules/dashboard/components/Midnight*.vue'
@@ -47,6 +48,6 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Test both ledger lines and transaction orchestration
-        run: npx vitest run src/chains/midnight src/services/midnight-tx.ledger.spec.ts src/services/__tests__/midnightTxPerToken.test.ts src/services/crossDevice src/stores/midnightStore.spec.ts
+        run: npx vitest run src/chains/midnight src/services/midnight-tx.ledger.spec.ts src/services/__tests__/midnightTxPerToken.test.ts src/services/crossDevice src/stores/midnightStore.spec.ts src/shared/composables/useMidnightDustLive.spec.ts
       - name: Build every production extension entry point
         run: node scripts/build-isolated-extension.mjs .
