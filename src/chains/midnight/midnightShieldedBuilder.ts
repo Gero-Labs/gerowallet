@@ -34,6 +34,7 @@
 // instead of forking it (WP-SH2).
 
 import type * as ledger from '@midnight-ntwrk/ledger-v8';
+import { requireMidnightLedger8 } from './midnightLedger';
 import type { MidnightNetworkEndpoints } from '@/chains/midnight/midnightConfig';
 import { debugLog } from '@/utils/debug';
 import {
@@ -147,6 +148,7 @@ export class LocalProvingError extends Error {
 export async function buildAndSignShieldedTransfer(
   args: BuildAndSignShieldedTransferArgs,
 ): Promise<BuildAndSignShieldedTransferResult> {
+  requireMidnightLedger8(args.sdkNetworkId, 'Shielded transfer');
   debugLog('🌙 midnight shielded tx-builder: starting', {
     network: args.sdkNetworkId,
     outputCount: args.outputs.length,
@@ -302,6 +304,7 @@ export async function startAndSyncShieldedWallet(
   args: StartAndSyncShieldedWalletArgs,
   zswapKeys: ledger.ZswapSecretKeys,
 ): Promise<ShieldedWalletInstance> {
+  requireMidnightLedger8(args.sdkNetworkId, 'Shielded wallet synchronization');
   const [shieldedMod, abstractionsMod] = await Promise.all([
     import('@midnightntwrk/wallet-sdk-shielded'),
     import('@midnightntwrk/wallet-sdk-abstractions'),

@@ -24,8 +24,7 @@
 
 import * as bip39 from 'bip39';
 import { HDWallet, Roles } from '@midnightntwrk/wallet-sdk-hd';
-import { createKeystore } from '@midnightntwrk/wallet-sdk-unshielded-wallet';
-import { DustSecretKey, ZswapSecretKeys } from '@midnight-ntwrk/ledger-v8';
+import { midnightKeystore, midnightLedgerVersion, schnorrHex } from './midnightLedger';
 import {
   DustAddress,
   MidnightBech32m,
@@ -51,6 +50,27 @@ import {
 } from '@/models/types';
 import { cardanoTwinNetwork } from '@/chains/midnight/midnightConfig';
 import type { MidnightAddresses } from '@/chains/midnight/midnightTypes';
+
+async function encodeViewingKey(network: string, seed: Uint8Array): Promise<string> {
+  if (midnightLedgerVersion(network) === 9) {
+    const [ledger, format] = await Promise.all([
+      import('@midnightntwrk/ledger-v9'), import('midnight-v9-address-format'),
+    ]);
+    const keys = ledger.ZswapSecretKeys.fromSeed(seed);
+    try {
+      return format.ShieldedEncryptionSecretKey.codec.encode(
+        network, new format.ShieldedEncryptionSecretKey(keys.encryptionSecretKey),
+      ).toString();
+    } finally { keys.clear(); }
+  }
+  const ledger = await import('@midnight-ntwrk/ledger-v8');
+  const keys = ledger.ZswapSecretKeys.fromSeed(seed);
+  try {
+    return ShieldedEncryptionSecretKey.codec.encode(
+      network, new ShieldedEncryptionSecretKey(keys.encryptionSecretKey),
+    ).toString();
+  } finally { keys.clear(); }
+}
 
 /**
  * Map our project's `Network` constants to the SDK's NetworkId strings.
@@ -240,10 +260,13 @@ export async function deriveMidnightKeys(
   const zswapSecretKey = zswapRoleKey.key;
 
   const networkId = midnightNetworkId(network);
-  const keystore = createKeystore(unshieldedSecretKey, networkId);
+  const keystore = await midnightKeystore(unshieldedSecretKey, networkId);
+  const { DustSecretKey, ZswapSecretKeys } = midnightLedgerVersion(networkId) === 9
+    ? await import('@midnightntwrk/ledger-v9')
+    : await import('@midnight-ntwrk/ledger-v8');
   const unshieldedAddress = keystore.getBech32Address().toString();
   // These two are needed by the Nexus sidecar for seedless wallet construction.
-  const publicKeyHex = keystore.getPublicKey() as unknown as string;
+  const publicKeyHex = schnorrHex(keystore.getPublicKey());
   const addressHex = keystore.getAddress() as unknown as string;
 
   const dustSk = DustSecretKey.fromSeed(dustSecretKey);
@@ -276,10 +299,7 @@ export async function deriveMidnightKeys(
   // is IndexedDB (extension-scoped). Followup: move to encrypted-at-rest
   // storage alongside the mnemonic.
   const zswapKeys = ZswapSecretKeys.fromSeed(zswapSecretKey);
-  const zswapEsk = new ShieldedEncryptionSecretKey(zswapKeys.encryptionSecretKey);
-  const zswapViewingKey = ShieldedEncryptionSecretKey.codec
-    .encode(networkId, zswapEsk)
-    .toString();
+  const zswapViewingKey = await encodeViewingKey(networkId, zswapSecretKey);
 
   // Shielded receive address (mn_shield-addr_<network>1…): the bech32m encoding
   // of the Zswap coin public key + encryption public key. Construction mirrors

@@ -1,0 +1,40 @@
+name: Midnight ledger compatibility
+
+on:
+  pull_request:
+    branches: [development, main]
+    paths:
+      - 'src/chains/midnight/**'
+      - 'src/chrome/background.ts'
+      - 'src/chrome/walletBg.ts'
+      - 'src/services/midnight-tx*'
+      - 'src/services/walletManager.service.ts'
+      - 'package*.json'
+      - 'vite.config.*'
+      - 'scripts/build-isolated-extension.mjs'
+      - '.github/workflows/midnight-ledger-verify.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: midnight-ledger-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Ledger tests and extension bundles
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '22.11.0'
+          cache: npm
+      - run: npm ci
+      - name: Test both ledger lines and transaction orchestration
+        run: npx vitest run src/chains/midnight src/services/midnight-tx.ledger.spec.ts
+      - name: Build every production extension entry point
+        run: node scripts/build-isolated-extension.mjs .

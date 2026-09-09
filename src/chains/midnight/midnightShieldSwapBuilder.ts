@@ -62,6 +62,7 @@
 // (`swapMode` + `swapAmount`), not just a guess at the plan's design.
 
 import type * as ledger from '@midnight-ntwrk/ledger-v8';
+import { requireMidnightLedger8 } from './midnightLedger';
 import type { MidnightNetworkEndpoints } from '@/chains/midnight/midnightConfig';
 import { debugLog } from '@/utils/debug';
 import { getMidnightApi } from '@/api/midnight-api';
@@ -132,6 +133,7 @@ export interface BuildAndSignShieldArgs {
 export async function buildAndSignShield(
   args: BuildAndSignShieldArgs,
 ): Promise<BuildAndSignShieldResult> {
+  requireMidnightLedger8(args.sdkNetworkId, 'Shield conversion');
   debugLog('🌙 shield-swap builder: starting (shield direction)', {
     network: args.sdkNetworkId,
   });

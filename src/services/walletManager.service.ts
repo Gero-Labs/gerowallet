@@ -51,6 +51,7 @@ import {
   type SigningPolicy,
 } from '@/services/crossDevice/crossDeviceTrust';
 import { PROOF_SERVER_DOCKER_TAG } from '@/chains/midnight/midnightConfig';
+import { requireMidnightLedger8 } from '@/chains/midnight/midnightLedger';
 import type { DeviceInfo } from '@/services/crossDevice/protocol';
 import { mpcSessionCache } from '@/chrome/mpcSessionCache';
 import { mpcLoginShareCache } from '@/chrome/mpcLoginShareCache';
@@ -1580,6 +1581,9 @@ export class WalletManager {
    */
   private async checkLocalProverHealth(): Promise<boolean> {
     try {
+      if (this.walletBg?.chain === Blockchain.MIDNIGHT) {
+        requireMidnightLedger8(this.walletBg.network, 'Cross-device proving');
+      }
       const { checkProofServerHealth } = await import('@/chains/midnight/midnightLocalProver');
       const { midnightStore } = await import('@/stores/midnightStore');
       return await checkProofServerHealth(midnightStore.proofServer.localUrl);
@@ -1596,6 +1600,9 @@ export class WalletManager {
    * hex conversion below must happen — and does — before returning.
    */
   private async proveForPeer(payload: Uint8Array): Promise<Uint8Array> {
+    if (this.walletBg?.chain === Blockchain.MIDNIGHT) {
+      requireMidnightLedger8(this.walletBg.network, 'Cross-device proving');
+    }
     const { proveUnshieldedTransfer } = await import('@/chains/midnight/midnightUnshieldedProver');
     const { midnightStore } = await import('@/stores/midnightStore');
     const { hexToBytes } = await import('@/chains/midnight/midnightTxBuilder');
