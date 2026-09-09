@@ -4800,10 +4800,10 @@ app.addToOptions(MessageTypes.SIGN_MIDNIGHT_SEGMENTS, async (request, sendRespon
   try {
     const walletBg = walletManager.getWallet();
     if (!walletBg) throw new Error('No wallet logged in');
-    const { segments, password, prfSecret } = request.data || {};
+    const { segments, password, prfSecret, unprovenTxHex } = request.data || {};
     if (!Array.isArray(segments)) throw new Error('segments[] is required');
     const prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
-    const signatures = await walletBg.signMidnightSegments(segments, password, prfBytes);
+    const signatures = await walletBg.signMidnightSegments(segments, password, prfBytes, unprovenTxHex);
     sendResponse({
       id: request.id,
       data: { success: true, signatures },

@@ -2230,10 +2230,13 @@ export class WalletBg {
     segments: Array<{ index: number; role: 'NightExternal' | 'Zswap'; dataHex: string }>,
     password?: string,
     prfSecret?: Uint8Array,
+    unprovenTxHex?: string,
   ): Promise<Array<{ index: number; signatureHex: string }>> {
     if (this.chain !== Blockchain.MIDNIGHT) {
       throw new Error('signMidnightSegments called on non-Midnight wallet');
     }
+    const { validateMidnightSigningSegments } = await import('@/chains/midnight/midnightLedger');
+    await validateMidnightSigningSegments(this.network, unprovenTxHex, segments);
     if (segments.length === 0) return [];
 
     // Decrypt the mnemonic once for the batch — we wipe it before returning.
@@ -2268,7 +2271,7 @@ export class WalletBg {
       const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
       const derived = await deriveMidnightKeys(mnemonic, this.network, 0, { skipCardano: true });
 
-      const { createKeystore } = await import('@midnightntwrk/wallet-sdk-unshielded-wallet');
+      const { midnightKeystore, schnorrHex } = await import('@/chains/midnight/midnightLedger');
       // Map our project's `Network` constant to the SDK's NetworkId string.
       // We avoid duplicating the mapping here — `midnightNetworkId` lives in
       // `midnightKeyManager` and is already used during address derivation.
@@ -2282,7 +2285,7 @@ export class WalletBg {
         default: throw new Error(`Unsupported Midnight network: ${this.network}`);
       }
 
-      const keystore = createKeystore(derived.unshieldedSecretKey, networkId);
+      const keystore = await midnightKeystore(derived.unshieldedSecretKey, networkId);
 
       // Sanity: the BG-derived public key must match the one persisted at
       // wallet creation. A mismatch means the BG bundle's HD-derivation chain
@@ -2290,7 +2293,7 @@ export class WalletBg {
       // — see the skipCardano workaround above) and every signature would
       // fail Substrate-side with "Custom error: 1". Fail fast instead of
       // signing garbage; debugLog only (never log key material in prod).
-      const bgPublicKey = keystore.getPublicKey() as unknown as string;
+      const bgPublicKey = schnorrHex(keystore.getPublicKey());
       const storedPublicKey = this.publicKey
         ? (JSON.parse(this.publicKey).publicKeyHex as string | undefined)
         : undefined;
@@ -2316,7 +2319,7 @@ export class WalletBg {
         const signature = keystore.signData(dataBytes);
         // The SDK's `Signature` type is `string` (hex). Pass it through as-is
         // so Nexus can hand it back to `signUnprovenTransaction`.
-        results.push({ index: segment.index, signatureHex: signature as unknown as string });
+        results.push({ index: segment.index, signatureHex: schnorrHex(signature) });
       }
 
       // Best-effort wipe — Uint8Array can be zeroed; the BIP39 string lives
@@ -2383,7 +2386,7 @@ export class WalletBg {
       const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
       const derived = await deriveMidnightKeys(mnemonic, this.network, 0, { skipCardano: true });
 
-      const { createKeystore } = await import('@midnightntwrk/wallet-sdk-unshielded-wallet');
+      const { midnightKeystore, schnorrHex } = await import('@/chains/midnight/midnightLedger');
       const { Network } = await import('@/models/types');
       let networkId: string;
       switch (this.network) {
@@ -2394,9 +2397,9 @@ export class WalletBg {
         default: throw new Error(`Unsupported Midnight network: ${this.network}`);
       }
 
-      const keystore = createKeystore(derived.unshieldedSecretKey, networkId);
+      const keystore = await midnightKeystore(derived.unshieldedSecretKey, networkId);
 
-      const bgPublicKey = keystore.getPublicKey() as unknown as string;
+      const bgPublicKey = schnorrHex(keystore.getPublicKey());
       const storedPublicKey = this.publicKey
         ? (JSON.parse(this.publicKey).publicKeyHex as string | undefined)
         : undefined;
@@ -2418,7 +2421,7 @@ export class WalletBg {
 
       return {
         dataHex: Buffer.from(prefixedBytes).toString('hex'),
-        signatureHex: signature as unknown as string,
+        signatureHex: schnorrHex(signature),
         verifyingKeyHex: bgPublicKey,
       };
     } finally {
