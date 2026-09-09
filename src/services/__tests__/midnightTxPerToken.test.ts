@@ -63,7 +63,8 @@ async function sync(payload: WsSyncMessage): Promise<void> {
   midnightSyncService.start(Network.STAGENET, ADDRESSES);
   const lastCall = h.connect.mock.calls[h.connect.mock.calls.length - 1];
   const handlers = lastCall[4] as CapturedHandlers;
-  await handlers.onSync?.(payload);
+  await handlers.onSync?.({ ...payload, midnight_network: 'midnight-stagenet',
+    midnight_chain_generation: 1, midnight_genesis_hash: '0x' + 'ab'.repeat(32) });
 }
 
 function rowsForHash(hash: string) {

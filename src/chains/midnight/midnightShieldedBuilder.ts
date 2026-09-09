@@ -1,4 +1,4 @@
-// BG-side build + sign for shielded NIGHT transfers.
+// BG-side build + sign for private custom-token transfers.
 //
 // Why this can't follow the unshielded split: shielded notes are encrypted to
 // the user's Zswap encryption key — only the wallet can see them. So the
@@ -27,14 +27,9 @@
 // (using ShieldedWalletClass.restore(serializedState)) this becomes O(notes
 // since last persist).
 //
-// `NIGHT_RAW_TOKEN_TYPE`, `startShieldedWallet`, and `startAndSyncShieldedWallet`
-// are exported (not just used internally) so `midnightShieldSwapBuilder.ts`
-// (WP-SH2, 2026-07-13) can build a shielded `initSwap` output through the
-// exact same wallet-startup/sync/restore pipeline as a plain shielded send,
-// instead of forking it (WP-SH2).
-
 import type * as ledger from '@midnight-ntwrk/ledger-v8';
-import { requireMidnightLedger8 } from './midnightLedger';
+import { midnightLedgerVersion, requireMidnightLedger8 } from './midnightLedger';
+import { validateShieldedTokenType } from './midnightTokenCapabilities';
 import type { MidnightNetworkEndpoints } from '@/chains/midnight/midnightConfig';
 import { debugLog } from '@/utils/debug';
 import {
@@ -43,27 +38,22 @@ import {
   clearWalletState,
 } from '@/chains/midnight/midnightWalletStatePersistence';
 
-/**
- * Native NIGHT is the 32-byte-zero RawTokenType. The SDK accepts any 32-byte
- * hex, but callers use this canonical zero form so they don't need to know
- * the magic value. Shared (not redeclared) by `midnightShieldSwapBuilder.ts`.
- */
-export const NIGHT_RAW_TOKEN_TYPE =
-  '0000000000000000000000000000000000000000000000000000000000000000' as ledger.RawTokenType;
 
 export interface BuildAndSignShieldedTransferOutput {
   /** Hex-encoded shielded address (`mn_shield-addr_…`) of the recipient. */
   readonly receiverAddress: string;
-  /** Amount in base units (NIGHT = 6 decimals). */
+  /** Amount in the custom token's base units. */
   readonly amount: bigint;
-  /**
-   * Raw token type. Native NIGHT is the 32-byte-zero token type; custom
-   * tokens supply their own. Phase 1 callers should pass {@code 'native'}.
-   */
+  /** Explicit private-token color; native NIGHT is not a shielded asset. */
   readonly tokenType: ledger.RawTokenType | 'native';
 }
 
 export interface BuildAndSignShieldedTransferArgs {
+  /** Required on Stagenet: the private-token transfer must also pay its DUST fee. */
+  readonly dustSecretSeed?: Uint8Array;
+  readonly ttl?: Date;
+  readonly dustRegisteredAt?: Date;
+  readonly onDustSyncProgress?: (percent: number, detail: string) => void;
   /** SDK network ID — 'mainnet' / 'stagenet' / 'preprod' / 'testnet'. */
   readonly sdkNetworkId: string;
   /** Indexer URLs (the BG knows these via midnightConfig). */
@@ -148,7 +138,11 @@ export class LocalProvingError extends Error {
 export async function buildAndSignShieldedTransfer(
   args: BuildAndSignShieldedTransferArgs,
 ): Promise<BuildAndSignShieldedTransferResult> {
-  requireMidnightLedger8(args.sdkNetworkId, 'Shielded transfer');
+  args.outputs.forEach(output => validateShieldedTokenType(output.tokenType));
+  if (midnightLedgerVersion(args.sdkNetworkId) === 9) {
+    const { buildAndSignShieldedLedger9Transfer } = await import('./midnightShieldedLedger9');
+    return buildAndSignShieldedLedger9Transfer(args);
+  }
   debugLog('🌙 midnight shielded tx-builder: starting', {
     network: args.sdkNetworkId,
     outputCount: args.outputs.length,
@@ -189,7 +183,7 @@ export async function buildAndSignShieldedTransfer(
 
     // Map our wire outputs into the SDK's TokenTransfer shape.
     const sdkOutputs = args.outputs.map((o) => {
-      const tokenType = o.tokenType === 'native' ? NIGHT_RAW_TOKEN_TYPE : o.tokenType;
+      const tokenType = validateShieldedTokenType(o.tokenType);
       return {
         amount: o.amount,
         type: tokenType,

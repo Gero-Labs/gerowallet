@@ -112,6 +112,7 @@
     "midnight-v9-abstractions": "npm:@midnightntwrk/wallet-sdk-abstractions@3.0.0-beta.0",
     "midnight-v9-address-format": "npm:@midnightntwrk/wallet-sdk-address-format@4.0.0-beta.2",
     "midnight-v9-dust-wallet": "npm:@midnightntwrk/wallet-sdk-dust-wallet@5.0.0-beta.2",
+    "midnight-v9-shielded": "npm:@midnightntwrk/wallet-sdk-shielded@4.0.0-beta.2",
     "midnight-v9-unshielded-wallet": "npm:@midnightntwrk/wallet-sdk-unshielded-wallet@4.0.0-beta.2",
     "multiformats": "^13.3.7",
     "net": "^1.0.2",

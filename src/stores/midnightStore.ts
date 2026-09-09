@@ -1,3 +1,5 @@
+import { MIDNIGHT_PROVING_CONSENT_VERSION, type MidnightProvingConsent, type MidnightRemoteProver } from '@/chains/midnight/midnightProvingConsent';
+import type { MidnightSyncIdentity } from '@/chains/midnight/midnightSyncGeneration';
 /**
  * Midnight Wallet Store
  *
@@ -168,6 +170,8 @@ export interface MidnightStore {
    * history. Null = never applied a tx (fresh install / cleared state).
    */
   lastMidnightTxId: number | null;
+  chainIdentity: MidnightSyncIdentity | null;
+  privateSyncStatus: 'idle' | 'syncing' | 'synced' | 'error';
 
   /**
    * Record of the user's consent to send shielded-tx witness data through
@@ -181,7 +185,7 @@ export interface MidnightStore {
    * through the consent dialog first; cancelling the consent aborts the
    * send. Accepting writes {@code {version, acceptedAt}} here.
    */
-  shieldedProvingConsent: { version: number; acceptedAt: number } | null;
+  shieldedProvingConsent: MidnightProvingConsent | null;
 
   /**
    * Where shielded-tx ZK proofs are generated. {@code remote} (default)
@@ -198,6 +202,8 @@ export interface MidnightStore {
   proofServer: {
     mode: 'remote' | 'local' | 'zkpaas';
     localUrl: string;
+    /** Explicit server circuit family for cross-device proving; legacy by default. */
+    localProfile?: 'legacy' | 'stagenet';
     /** Arkhia endpoint override; '' = derive per network (midnightConfig). */
     zkpaasUrl: string;
     /** Arkhia project API key ('' until the user pastes one). */
@@ -250,12 +256,13 @@ export interface MidnightStore {
  * or the wording around what Gero servers see / log changes). A bump
  * invalidates every existing accepted record and re-prompts on next send.
  */
-export const SHIELDED_PROVING_CONSENT_VERSION = 1;
+export const SHIELDED_PROVING_CONSENT_VERSION = MIDNIGHT_PROVING_CONSENT_VERSION;
 
 const STORE_NAME = 'midnightStore';
 const context = getContextType();
 
 const EMPTY_BALANCES: MidnightBalances = {
+  shieldedTokens: {},
   nightShielded: 0n,
   nightUnshielded: 0n,
   nightRegistered: 0n,
@@ -300,6 +307,7 @@ const EMPTY_TIP: MidnightChainTip = {
  */
 const DEFAULT_PROOF_SERVER: MidnightStore['proofServer'] = {
   mode: 'remote',
+  localProfile: 'legacy',
   localUrl: getMidnightEndpoints(Network.STAGENET)!.defaultProofServerUrl,
   zkpaasUrl: '',
   zkpaasApiKey: '',
@@ -322,6 +330,8 @@ export const midnightStore = Vue.observable<MidnightStore>({
   provingOperations: new Map(),
   provingHistory: [],
   lastMidnightTxId: null,
+  chainIdentity: null,
+  privateSyncStatus: 'idle',
   shieldedProvingConsent: null,
   activeWalletKey: null,
   sendProgress: null,
@@ -371,6 +381,9 @@ function hydrateBalances(stored: unknown): MidnightBalances {
   if (!stored || typeof stored !== 'object') return { ...EMPTY_BALANCES };
   const s = stored as MidnightBalances;
   return {
+    shieldedTokens: Object.fromEntries(Object.entries(s.shieldedTokens ?? {})
+      .filter(([color]) => /^[0-9a-fA-F]{64}$/.test(color) && !/^0+$/.test(color))
+      .map(([color, amount]) => [color.toLowerCase(), toBig(amount)])),
     nightShielded: toBig(s.nightShielded),
     nightUnshielded: toBig(s.nightUnshielded),
     nightRegistered: toBig(s.nightRegistered),
@@ -520,6 +533,7 @@ if (context === 'browser') {
     midnightStore.dustState = hydrateDustState(stored.dustState);
     midnightStore.provingOperations = hydrateProvingOperations(stored.provingOperations);
     midnightStore.provingHistory = hydrateProvingHistory(stored.provingHistory);
+    midnightStore.chainIdentity = stored.chainIdentity ?? null;
     midnightStore.lastMidnightTxId = typeof stored.lastMidnightTxId === 'number'
       ? stored.lastMidnightTxId
       : null;
@@ -575,12 +589,14 @@ if (context === 'background') {
  */
 function hydrateShieldedProvingConsent(
   stored: unknown,
-): { version: number; acceptedAt: number } | null {
+): MidnightProvingConsent | null {
   if (!stored || typeof stored !== 'object') return null;
   const v = (stored as { version?: unknown }).version;
   const at = (stored as { acceptedAt?: unknown }).acceptedAt;
-  if (typeof v !== 'number' || typeof at !== 'number') return null;
-  return { version: v, acceptedAt: at };
+  const provider = (stored as { provider?: unknown }).provider;
+  if (!Number.isSafeInteger(v) || typeof at !== 'number' || !Number.isFinite(at) || at <= 0
+    || (provider !== 'cloud' && provider !== 'zkpaas')) return null;
+  return { version: v as number, acceptedAt: at, provider };
 }
 
 /**
@@ -611,6 +627,7 @@ function hydrateProofServer(stored: unknown): MidnightStore['proofServer'] {
   return {
     mode: mode === 'remote' || mode === 'local' || mode === 'zkpaas' ? mode : DEFAULT_PROOF_SERVER.mode,
     localUrl: isValidProofServerUrl(localUrl) ? localUrl : DEFAULT_PROOF_SERVER.localUrl,
+    localProfile: (stored as { localProfile?: unknown }).localProfile === 'stagenet' ? 'stagenet' : 'legacy',
     // '' is the valid "derive per network" state, distinct from a corrupted
     // value — only non-empty overrides must parse as http(s) URLs.
     zkpaasUrl: zkpaasUrl === '' || isValidProofServerUrl(zkpaasUrl) ? zkpaasUrl as string : '',
@@ -653,7 +670,7 @@ function applyUpdates(updates: Partial<MidnightStore>) {
   }
   // Plain-typed fields — copy directly (no BigInt nesting to handle)
   for (const key of [
-    'isActive', 'lastSync', 'networkStatus', 'tip', 'addresses', 'lastMidnightTxId',
+    'isActive', 'lastSync', 'networkStatus', 'tip', 'addresses', 'lastMidnightTxId', 'chainIdentity', 'privateSyncStatus',
     'shieldedProvingConsent', 'activeWalletKey', 'sendProgress', 'shieldedSyncAvailable',
     'proofServer',
   ] as const) {
@@ -726,6 +743,29 @@ export function isValidMidnightViewingKey(vk: string | undefined | null): boolea
  * trigger them via Chrome messaging if needed.
  */
 export const midnightActions = {
+  setPrivateSyncStatus(privateSyncStatus: MidnightStore['privateSyncStatus']) {
+    midnightStore.privateSyncStatus = privateSyncStatus;
+    broadcastFromBackground({ privateSyncStatus });
+  },
+  applyPrivateSnapshot(shieldedTokens: Record<string, bigint>, transactions: MidnightTransaction[]) {
+    const balances = { ...midnightStore.balances, shieldedTokens, nightShielded: 0n };
+    const pending = midnightStore.transactions.filter(tx => tx.isShielded && tx.status === 'pending'
+      && !transactions.some(confirmed => confirmed.hash === tx.hash && confirmed.token === tx.token));
+    const combined = [...midnightStore.transactions.filter(tx => !tx.isShielded), ...pending, ...transactions]
+      .sort((a, b) => b.timestamp - a.timestamp);
+    Object.assign(midnightStore, { balances, transactions: combined, privateSyncStatus: 'synced' });
+    broadcastFromBackground({ balances, transactions: combined, privateSyncStatus: 'synced' });
+  },
+  resetChainState(identity: MidnightSyncIdentity) {
+    const updates: Partial<MidnightStore> = {
+      chainIdentity: identity, privateSyncStatus: 'syncing', lastSync: null, tip: { ...EMPTY_TIP },
+      balances: { ...EMPTY_BALANCES }, transactions: [], utxos: [], dustState: null,
+      lastMidnightTxId: null, provingOperations: new Map(), sendProgress: null,
+      networkStatus: 'connecting',
+    };
+    Object.assign(midnightStore, updates);
+    broadcastFromBackground(updates, true);
+  },
   /**
    * Mark the wallet as active and seed initial addresses (called when the user
    * logs into a Midnight wallet). Balances/transactions stay empty until
@@ -777,6 +817,8 @@ export const midnightActions = {
         utxos: [],
         dustState: null,
         lastMidnightTxId: null,
+        chainIdentity: null,
+        privateSyncStatus: 'idle',
       });
       debugLog(`🌙 Midnight wallet switch detected (${prevKey.slice(-8)} → ${newKey.slice(-8)}) — cleared stale state`);
     }
@@ -801,6 +843,8 @@ export const midnightActions = {
           utxos: [],
           dustState: null,
           lastMidnightTxId: null,
+          chainIdentity: null,
+          privateSyncStatus: 'idle',
         }
         : { isActive: true, addresses: safeAddresses, activeWalletKey: newKey, networkStatus: 'connecting', shieldedSyncAvailable },
       true,
@@ -846,9 +890,10 @@ export const midnightActions = {
    * dialog's accept button is clicked. Persists immediate so the value
    * survives a SW restart between the consent acceptance and the send.
    */
-  acceptShieldedProvingConsent() {
+  acceptShieldedProvingConsent(provider: MidnightRemoteProver) {
     const consent = {
       version: SHIELDED_PROVING_CONSENT_VERSION,
+      provider,
       acceptedAt: Date.now(),
     };
     bgDurableTouched.shieldedProvingConsent = true;

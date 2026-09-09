@@ -21,6 +21,7 @@
       </div>
 
       <template v-else>
+        <v-btn small text @click="openFullDashboard()">{{ t('midnight.privateBalances.openFullWallet') }}</v-btn>
         <!-- ═══════ STEP 1: RECIPIENT ═══════ -->
         <div class="stepper-step" :class="{ active: step === 1, done: step > 1 }">
           <button type="button" class="step-header" @click="editStep(1)">
@@ -349,6 +350,12 @@
         </div>
       </template>
     </div>
+    <ShieldedProvingConsentDialog
+      :is-open="consentOpen"
+      :provider="consentProvider"
+      @close="cancelConsent"
+      @accepted="acceptConsent"
+    />
   </BottomSheet>
 </template>
 
@@ -366,7 +373,10 @@ import TransactionDetailsCard, {
 } from '@/shared/components/TransactionDetailsCard.vue';
 import midnightLogo from '@/assets/svg/midnight.svg';
 import { walletStore } from '@/stores/walletStore';
+import { hasMidnightProvingConsent } from '@/chains/midnight/midnightProvingConsent';
 import { midnightStore } from '@/stores/midnightStore';
+import ShieldedProvingConsentDialog from '@/modules/dashboard/dialogs/ShieldedProvingConsentDialog.vue';
+import { openFullDashboard } from '@/shared/utils/openFullDashboard';
 import { Network, WalletType } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { midnightTokenBalances } from '@/chains/midnight/midnightTokenBalances';
@@ -655,6 +665,40 @@ async function addOptimisticPendingTx(hash: string) {
   }
 }
 
+const consentOpen = ref(false);
+const consentProvider = ref<'cloud' | 'zkpaas'>('cloud');
+const pendingCredentials = ref<{ password?: string; prfSecret?: Uint8Array } | null>(null);
+function cancelConsent() {
+  consentOpen.value = false;
+  pendingCredentials.value?.prfSecret?.fill(0);
+  pendingCredentials.value = null;
+  spendingPassword.value = '';
+  submitting.value = false;
+}
+async function acceptConsent() {
+  consentOpen.value = false;
+  const credentials = pendingCredentials.value;
+  pendingCredentials.value = null;
+  if (!credentials) return;
+  const mode = midnightStore.proofServer.mode;
+  if (mode !== 'local' && (mode === 'zkpaas' ? 'zkpaas' : 'cloud') !== consentProvider.value) {
+    await routeSend(credentials);
+    return;
+  }
+  await submitSend(credentials);
+}
+async function routeSend(credentials: { password?: string; prfSecret?: Uint8Array }) {
+  const mode = midnightStore.proofServer.mode;
+  if (mode !== 'local' && !hasMidnightProvingConsent(midnightStore.shieldedProvingConsent, mode === 'zkpaas' ? 'zkpaas' : 'cloud')) {
+    pendingCredentials.value = credentials;
+    consentProvider.value = mode === 'zkpaas' ? 'zkpaas' : 'cloud';
+    consentOpen.value = true;
+    submitting.value = false;
+    return;
+  }
+  await submitSend(credentials);
+}
+
 async function submitSend(credentials: { password?: string; prfSecret?: Uint8Array }) {
   const wallet = loggedWallet.value;
   if (!wallet) {
@@ -721,6 +765,7 @@ async function submitSend(credentials: { password?: string; prfSecret?: Uint8Arr
   } catch (e) {
     passwordError.value = e instanceof Error ? e.message : String(e);
   } finally {
+    credentials.prfSecret?.fill(0);
     spendingPassword.value = '';
     submitting.value = false;
     sendStage.value = 'idle';
@@ -729,7 +774,7 @@ async function submitSend(credentials: { password?: string; prfSecret?: Uint8Arr
 
 async function signAndSubmit() {
   if (!spendingPassword.value || submitting.value) return;
-  await submitSend({ password: spendingPassword.value });
+  await routeSend({ password: spendingPassword.value });
 }
 
 // PRF (PassKey) — side panels cannot host WebAuthn directly, so this reuses
@@ -804,7 +849,7 @@ async function signAndSubmitPrf() {
   submitting.value = true;
   try {
     const prfBytes = await requestRawPrf();
-    await submitSend({ prfSecret: prfBytes });
+    await routeSend({ prfSecret: prfBytes });
   } catch (e) {
     passwordError.value = e instanceof Error ? e.message : String(e);
     submitting.value = false;
@@ -824,6 +869,7 @@ function onSheetInput(val: boolean) {
 }
 
 function resetAll() {
+  cancelConsent();
   step.value = 1;
   recipient.value = '';
   amount.value = '';

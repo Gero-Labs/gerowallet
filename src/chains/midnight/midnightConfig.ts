@@ -43,10 +43,10 @@ export interface MidnightNetworkEndpoints {
    * API (`/prove`, `/check`) under this base, so the wallet's hand-rolled
    * ProvingProvider works against it unchanged apart from `x-api-key` /
    * `x-api-secret` auth headers. Arkhia only distinguishes mainnet vs
-   * testnet, so stagenet and preprod share the testnet base — proving is
-   * circuit-level (ledger-generation-coupled), not network-specific, so
-   * that sharing is sound. Users can override per device via
-   * `midnightStore.proofServer.zkpaasUrl`.
+   * testnet in the documented default URLs. Stagenet and Preprod now use
+   * different ledger generations, so a reachable shared URL does not establish
+   * compatibility. Stagenet requires a ledger-9-capable service; override its
+   * URL per device via `midnightStore.proofServer.zkpaasUrl` as needed.
    */
   zkpaasProofServerUrl: string;
   /**
@@ -216,3 +216,12 @@ export function nexusMidnightPathFor(network: string, subpath: string): string {
 export const PROOF_SERVER_DOCKER_TAG = '8.1.0';
 export const PROOF_SERVER_DOCKER_COMMAND =
   `docker run -p 6300:6300 midnightntwrk/proof-server:${PROOF_SERVER_DOCKER_TAG} midnight-proof-server -v`;
+
+/** The Stagenet ledger has different proof circuits from Mainnet/Preprod. */
+export function midnightProofServerTag(network?: string): string {
+  return network?.toLowerCase().replace(/^midnight-/, '') === 'stagenet' ? '9.0.0-rc.6' : PROOF_SERVER_DOCKER_TAG;
+}
+
+export function midnightProofServerCommand(network?: string): string {
+  return `docker run --rm -p 127.0.0.1:6300:6300 midnightntwrk/proof-server:${midnightProofServerTag(network)} midnight-proof-server -v`;
+}

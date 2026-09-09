@@ -33,6 +33,8 @@ export const MIDNIGHT_DECIMALS = {
  * shielded balance locally from the wallet's note tracking.
  */
 export interface MidnightBalances {
+  /** Real private custom-token balances; zero-color NIGHT is never shielded. */
+  shieldedTokens?: Record<string, bigint>;
   /** NIGHT in shielded pool (private, computed locally by the SDK from notes). */
   nightShielded: bigint;
   /** NIGHT in unshielded pool (public, summed from `unshieldedTransactions` events). */
