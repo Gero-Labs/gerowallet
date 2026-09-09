@@ -84,6 +84,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Wallet database and onboarding regressions
+        run: npx vitest run src/db/wallet-db.spec.ts src/modules/welcome/components/WalletOnboarding/steps/StepSecurity.spec.ts
+
       # Design ratchet. Unlike tsc/eslint (see the header note) these gates are
       # green today and may only get greener: audit.mjs fails if any style-debt
       # metric in scripts/design/budgets.json grows, and contrast.mjs fails if a

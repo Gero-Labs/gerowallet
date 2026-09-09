@@ -9,7 +9,7 @@ export const geroDBSchema = {
   provider: '++id, [name+chain+network], baseUrl, apiKey',
 };
 
-export const walletDBVersion: number = 10;
+export const walletDBVersion: number = 11;
 
 export const walletDBSchema = {
   config: 'key, value',
@@ -20,6 +20,9 @@ export const walletDBSchema = {
   rewards: 'epoch, amount, pool_id, type',
   transactions: 'id',
   connected_dapps: '++id, domain, time',
+  // Retain legacy records. Historical openers inherited this table while
+  // fresh-wallet openers omitted it, causing implicit same-version upgrades.
+  multisig: 'id, paymentAddress, stakeAddress, name, signers, cbor, requiredSigners, createdAt',
   portfolio_charts: '++id, address, currency, [address+currency], data, timestamp, expiresAt',
   utxos: '++id', // Persisted UTxOs from server (survives logout)
 };

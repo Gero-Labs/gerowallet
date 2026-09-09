@@ -3,117 +3,39 @@ import {
   walletDBSchema,
   walletDBVersion
 } from '@/db/schema';
-import { debugLog } from '@/utils/debug';
 
-const dbCache: Map<string, Dexie> = new Map();
+const dbCache = new Map<string, Dexie>();
+const pendingOpens = new Map<string, Promise<Dexie | null>>();
 
 export async function getDb(id: number): Promise<Dexie | null> {
-    const dbName = 'wallet-' + id;
+  const dbName = 'wallet-' + id;
+  const cached = dbCache.get(dbName);
+  if (cached?.isOpen()) return cached;
+  dbCache.delete(dbName);
 
-    if (dbCache.has(dbName)) {
-        return dbCache.get(dbName)!;
-    }
+  const pending = pendingOpens.get(dbName);
+  if (pending) return pending;
 
+  // Publish the pending open before any asynchronous initialization. Parallel
+  // background callers must share one connection, including on first login.
+  const opening = Promise.resolve().then(async (): Promise<Dexie | null> => {
+    const db = new Dexie(dbName);
     try {
-        const db: Dexie = new Dexie(dbName);
-
-        // Migration path: Define all historical schema versions for proper upgrade
-        // This ensures wallets from v2.5.3 (version 3) properly migrate to current version
-
-        // Version 3: Original schema (v2.5.3)
-        db.version(3).stores({
-            config: 'key, value',
-            sync: '++id, hash, height, slot, time, epoch, epoch_slot',
-            account: '++id, walletId',
-            addresses: 'address',
-            contacts: 'address, name',
-            rewards: 'epoch, amount, pool_id, type',
-            transactions: 'id',
-            connected_dapps: '++id, domain, time',
-        });
-
-        // Version 4-6: Intermediate versions
-        db.version(4).stores({
-            config: 'key, value',
-            sync: '++id, hash, height, slot, time, epoch, epoch_slot',
-            account: '++id, walletId',
-            addresses: 'address',
-            contacts: 'address, name',
-            rewards: 'epoch, amount, pool_id, type',
-            transactions: 'id',
-            connected_dapps: '++id, domain, time',
-        });
-
-        db.version(5).stores({
-            config: 'key, value',
-            sync: '++id, hash, height, slot, time, epoch, epoch_slot',
-            account: '++id, walletId',
-            addresses: 'address',
-            contacts: 'address, name',
-            rewards: 'epoch, amount, pool_id, type',
-            transactions: 'id',
-            connected_dapps: '++id, domain, time',
-        });
-
-        db.version(6).stores({
-            config: 'key, value',
-            sync: '++id, hash, height, slot, time, epoch, epoch_slot',
-            account: '++id, walletId',
-            addresses: 'address',
-            contacts: 'address, name',
-            rewards: 'epoch, amount, pool_id, type',
-            transactions: 'id',
-            connected_dapps: '++id, domain, time',
-            multisig: 'id, paymentAddress, stakeAddress, name, signers, cbor, requiredSigners, createdAt',
-        });
-
-        // Version 7: Added portfolio_charts table
-        db.version(7).stores({
-            config: 'key, value',
-            sync: '++id, hash, height, slot, time, epoch, epoch_slot',
-            account: '++id, walletId',
-            addresses: 'address',
-            contacts: 'address, name',
-            rewards: 'epoch, amount, pool_id, type',
-            transactions: 'id',
-            connected_dapps: '++id, domain, time',
-            multisig: 'id, paymentAddress, stakeAddress, name, signers, cbor, requiredSigners, createdAt',
-            portfolio_charts: '++id, address, currency, [address+currency], data, timestamp, expiresAt',
-        });
-
-        // Version 8: Continued with portfolio_charts
-        db.version(8).stores({
-            config: 'key, value',
-            sync: '++id, hash, height, slot, time, epoch, epoch_slot',
-            account: '++id, walletId',
-            addresses: 'address',
-            contacts: 'address, name',
-            rewards: 'epoch, amount, pool_id, type',
-            transactions: 'id',
-            connected_dapps: '++id, domain, time',
-            multisig: 'id, paymentAddress, stakeAddress, name, signers, cbor, requiredSigners, createdAt',
-            portfolio_charts: '++id, address, currency, [address+currency], data, timestamp, expiresAt',
-        });
-
-        // Version 9: Current version (multisig removed from schema)
-        db.version(walletDBVersion).stores(walletDBSchema);
-
-        await db.open();
-        dbCache.set(dbName, db);
-        return db;
-    } catch (error: unknown) {
-      debugLog('Database error:', error)
-        if (error['name'] === 'NoSuchDatabaseError') {
-            const db: Dexie = new Dexie(dbName);
-            db.version(walletDBVersion).stores(walletDBSchema);
-            await db.open();
-            dbCache.set(dbName, db);
-            return db;
-        } else {
-            console.error('Error opening database:', error);
-            return null
-        }
+      // All historical changes were additive, with no data transformations.
+      // The complete shared schema upgrades old wallets and retains multisig.
+      db.version(walletDBVersion).stores(walletDBSchema);
+      await db.open();
+      dbCache.set(dbName, db);
+      return db;
+    } catch (error) {
+      db.close();
+      console.error('Error opening database:', error);
+      return null;
     }
+  }).finally(() => pendingOpens.delete(dbName));
+
+  pendingOpens.set(dbName, opening);
+  return opening;
 }
 
 export async function setWalletConfiguration(id: number, key: string, value) {
