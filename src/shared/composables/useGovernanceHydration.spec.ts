@@ -20,6 +20,7 @@ import {
 } from './useGovernanceHydration';
 import { walletStore } from '@/stores/walletStore';
 import { governanceStore } from '@/stores/governanceStore';
+import { extractCip149Compensation } from '@/shared/utils/builder';
 
 /** A confirmed vote delegation carrying a CIP-149 donation rate. */
 function delegationTxWithDonation(bps: number, pending = false) {
@@ -164,5 +165,38 @@ describe('useGovernanceHydration', () => {
 
     expect(getDRepById).toHaveBeenCalledTimes(1);
     expect(governanceStore.currentDRep).toEqual({ registered: true, votes: [] });
+  });
+});
+
+describe('serialized compensation metadata', () => {
+  it('hydrates the same rate after the production Chrome serialization boundary', async () => {
+    getDRepById.mockResolvedValue({ registered: true, votes: [] });
+    walletStore.transactions = JSON.parse(JSON.stringify([delegationTxWithDonation(50)], (_key, value) => {
+      if (typeof value === 'bigint') return value.toString();
+      if (value instanceof Map) return Object.fromEntries(value);
+      return value;
+    }));
+    loginDelegated();
+    await settle();
+    expect(governanceStore.currentCompensationBps).toBe(50);
+  });
+});
+
+describe('compensation metadata input boundaries', () => {
+  it.each([
+    { blob: new Map([[3692n, new Map([['donationBasisPoints', 0n]])]]) },
+    { blob: { '3692': { donationBasisPoints: '0' } } },
+  ])('preserves an explicit zero donation', metadata => {
+    expect(extractCip149Compensation(metadata)).toBe(0);
+  });
+  it.each([
+    undefined, null, {}, { blob: null }, { blob: [] },
+    { blob: { '3692': { donationBasisPoints: true } } },
+    { blob: { '3692': { donationBasisPoints: '' } } },
+    { blob: { '3692': { donationBasisPoints: 'NaN' } } },
+    { blob: { '3692': { donationBasisPoints: -1 } } },
+    { blob: { '3692': { donationBasisPoints: 0.5 } } },
+  ])('ignores missing or malformed metadata without throwing', metadata => {
+    expect(extractCip149Compensation(metadata)).toBeNull();
   });
 });

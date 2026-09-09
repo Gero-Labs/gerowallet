@@ -28,6 +28,13 @@
       </div>
     </section>
 
+    <ErrorState
+      v-else-if="registrationLookupFailed"
+      :message="$t('governance.drepLookupFailed')"
+      retryable
+      @retry="loadRegistration()"
+    />
+
     <!-- Already registered: the retire path -------------------------------- -->
     <section v-else-if="alreadyRegistered" class="become-drep__registered">
       <div class="glass-panel become-drep__panel">
@@ -1079,6 +1086,7 @@ watch(currentAnchor, () => {
 
 const alreadyRegistered = ref(false);
 const checkingRegistration = ref(true);
+const registrationLookupFailed = ref(false);
 
 const DREP_REGISTRATION_CERTS = [
   Cardano.CertificateType.RegisterDelegateRepresentative,
@@ -1109,6 +1117,8 @@ const registrationPending = computed(() =>
 const showSyncing = computed(() => submitted.value || registrationPending.value);
 
 async function loadRegistration(): Promise<void> {
+  checkingRegistration.value = true;
+  registrationLookupFailed.value = false;
   const wallet = loggedWallet.value;
   if (!wallet || !drepIdDisplay.value) {
     checkingRegistration.value = false;
@@ -1121,10 +1131,10 @@ async function loadRegistration(): Promise<void> {
     // panel with no way to register again. See isRegisteredDRep for the polarity.
     alreadyRegistered.value = isRegisteredDRep(record);
   } catch (error) {
-    // A lookup failure is not proof of anything, so stay on the registration
-    // flow rather than claiming the user is or is not registered.
+    // Unknown is neither registered nor unregistered. Keep transaction flows
+    // hidden until a successful read, and allow the user to retry.
     debugLog('BecomeDRep: DRep lookup failed', error);
-    alreadyRegistered.value = false;
+    registrationLookupFailed.value = true;
   } finally {
     checkingRegistration.value = false;
   }

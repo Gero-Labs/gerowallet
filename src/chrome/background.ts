@@ -2871,8 +2871,9 @@ app.addToOptions(MessageTypes.SIGN_TX_WITH_POOL_KEYS, async (request, sendRespon
   }
 });
 
-// SPO Node Monitor — proxy fetch through background (bypasses extension page CSP)
+// SPO Node Monitor — proxy fetch through background (also subject to extension CSP)
 app.addToOptions(MessageTypes.SPO_NODE_FETCH, async (request, sendResponse) => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const { url, timeout, method, body, authToken } = request.data;
     if (!url || typeof url !== 'string') {
@@ -2893,7 +2894,7 @@ app.addToOptions(MessageTypes.SPO_NODE_FETCH, async (request, sendResponse) => {
       throw e instanceof Error && e.message.startsWith('Refusing') ? e : new Error('Invalid URL');
     }
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeout || 10000);
+    timer = setTimeout(() => controller.abort(), timeout || 10000);
     const fetchOpts: RequestInit = { signal: controller.signal };
     const headers: Record<string, string> = {};
     if (method === 'POST') {
@@ -2906,7 +2907,9 @@ app.addToOptions(MessageTypes.SPO_NODE_FETCH, async (request, sendResponse) => {
     if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
     if (Object.keys(headers).length > 0) fetchOpts.headers = headers;
     const response = await fetch(url, fetchOpts);
-    clearTimeout(timer);
+    // An authenticated agent can return JSON for 401/403/5xx too. Do not let
+    // callers interpret those bodies as successful status or operation data.
+    if (!response.ok) throw new Error(`Node request failed (HTTP ${response.status})`);
     const data = await response.json();
     sendResponse({
       id: request.id,
@@ -2921,6 +2924,8 @@ app.addToOptions(MessageTypes.SPO_NODE_FETCH, async (request, sendResponse) => {
       target: TARGET,
       sender: SENDER.extension,
     });
+  } finally {
+    clearTimeout(timer);
   }
 });
 

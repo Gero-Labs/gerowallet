@@ -467,14 +467,24 @@ export function buildCip149AuxiliaryData(donationBasisPoints: number): Cardano.A
  * Extract CIP-0149 donationBasisPoints from transaction auxiliary data.
  * @returns The basis points value, or null if not present
  */
-export function extractCip149Compensation(auxiliaryData?: Cardano.AuxiliaryData): number | null {
-  if (!auxiliaryData?.blob) return null;
+export function extractCip149Compensation(auxiliaryData?: unknown): number | null {
+  if (!auxiliaryData || typeof auxiliaryData !== 'object' || !('blob' in auxiliaryData)) return null;
 
-  const cip149Data = auxiliaryData.blob.get(CIP149_METADATA_LABEL);
-  if (!cip149Data || !(cip149Data instanceof Map)) return null;
+  // Chrome messaging/storage serialize SDK Maps to objects and BigInts to
+  // strings. Read both representations without rewriting transaction data.
+  const entry = (value: unknown, key: string | bigint): unknown => {
+    if (value instanceof Map) return value.get(key);
+    if (value && typeof value === 'object' && !Array.isArray(value) &&
+        Object.prototype.hasOwnProperty.call(value, String(key))) {
+      return (value as Record<string, unknown>)[String(key)];
+    }
+    return undefined;
+  };
+  const cip149Data = entry(auxiliaryData.blob, CIP149_METADATA_LABEL);
+  const bps = entry(cip149Data, 'donationBasisPoints');
+  if (typeof bps !== 'number' && typeof bps !== 'bigint' &&
+      !(typeof bps === 'string' && /^\d+$/.test(bps))) return null;
 
-  const bps = cip149Data.get('donationBasisPoints');
-  if (bps === undefined || bps === null) return null;
-
-  return Number(bps);
+  const rate = Number(bps);
+  return Number.isSafeInteger(rate) && rate >= 0 ? rate : null;
 }
