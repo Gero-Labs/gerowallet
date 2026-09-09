@@ -968,8 +968,13 @@ export const midnightActions = {
   /** New chain tip observed by gero-sync (or Nexus tip query). */
   applyTipUpdate(tip: MidnightChainTip) {
     midnightStore.tip = tip;
+    broadcastFromBackground({ tip });
+  },
+
+  /** A generation-validated wallet sync message was successfully applied. */
+  markSynced() {
     midnightStore.lastSync = Date.now();
-    broadcastFromBackground({ tip, lastSync: midnightStore.lastSync });
+    broadcastFromBackground({ lastSync: midnightStore.lastSync });
   },
 
   /**

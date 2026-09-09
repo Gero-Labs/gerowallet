@@ -12,10 +12,12 @@
  * `midnightLastTxId=136562`. gero-sync answered SYNC_CHECK "caught up" and
  * never replayed, so USDM and NIGHT stayed invisible indefinitely.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Capture every frame the service sends, without a real socket.
 const sent: Array<Record<string, unknown>> = [];
+
+let lastSocket: FakeWebSocket;
 
 class FakeWebSocket {
   static OPEN = 1;
@@ -25,6 +27,7 @@ class FakeWebSocket {
   onerror: ((e: unknown) => void) | null = null;
   onclose: (() => void) | null = null;
   constructor(public url: string) {
+    lastSocket = this;
     // Fire onopen asynchronously, as a real socket would.
     setTimeout(() => this.onopen?.(), 0);
   }
@@ -78,6 +81,8 @@ describe('Midnight resume cursor on SUBSCRIBE', () => {
     ws = (await import('../websocket.service')).default;
   });
 
+  afterEach(() => ws.close());
+
   it('honours a caller null even when the store still holds a cursor', async () => {
     // The exact production state: cursor banked, UTxO set empty.
     midnightStoreMock.lastMidnightTxId = 136562;
@@ -109,4 +114,25 @@ describe('Midnight resume cursor on SUBSCRIBE', () => {
     const frame = await subscribeFrame();
     expect(frame['midnightLastTxId']).toBe(42);
   });
+
+  it('forwards a blockless Midnight acknowledgment for generation validation', async () => {
+    const onSync = vi.fn().mockResolvedValue(undefined);
+    ws.connect('MIDNIGHT', 'midnight-stagenet', 'mn_addr_stagenet1test', 0, { onSync });
+    await flush();
+    const frame = { type: 'SYNC_CHECK_OK', midnight_network: 'midnight-stagenet',
+      midnight_chain_generation: 1, midnight_genesis_hash: '0x' + 'ab'.repeat(32) };
+    lastSocket.onmessage?.({ data: JSON.stringify(frame) });
+    await flush();
+    expect(onSync).toHaveBeenCalledWith({ ...frame, type: 'SYNC' });
+  });
+
+  it('keeps Cardano blockless acknowledgments out of its wallet state handler', async () => {
+    const onSync = vi.fn().mockResolvedValue(undefined);
+    ws.connect('CARDANO', 'preprod', 'stake_test1test', 0, { onSync });
+    await flush();
+    lastSocket.onmessage?.({ data: JSON.stringify({ type: 'SYNC_CHECK_OK' }) });
+    await flush();
+    expect(onSync).not.toHaveBeenCalled();
+  });
+
 });
