@@ -12,6 +12,9 @@ on:
       - 'src/services/websocket.service.ts'
       - 'src/services/__tests__/midnightTxPerToken.test.ts'
       - 'src/stores/midnightStore.ts'
+      - 'src/stores/midnightStore.spec.ts'
+      - 'src/modules/midnight/ProofServerPage.vue'
+      - 'src/types/midnight-v9-shielded.d.ts'
       - 'src/modules/dashboard/components/Midnight*.vue'
       - 'src/modules/dashboard/dialogs/Midnight*.vue'
       - 'src/modules/dashboard/dialogs/Shield*.vue'
@@ -44,6 +47,6 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Test both ledger lines and transaction orchestration
-        run: npx vitest run src/chains/midnight src/services/midnight-tx.ledger.spec.ts src/services/__tests__/midnightTxPerToken.test.ts src/services/crossDevice
+        run: npx vitest run src/chains/midnight src/services/midnight-tx.ledger.spec.ts src/services/__tests__/midnightTxPerToken.test.ts src/services/crossDevice src/stores/midnightStore.spec.ts
       - name: Build every production extension entry point
         run: node scripts/build-isolated-extension.mjs .

@@ -61,6 +61,8 @@ class PrivateSync {
   private readonly owner: string | null;
   private active = true;
   private busy = false;
+  private hasPublished = false;
+  private pendingImmediatePublication = false;
   private timer?: ReturnType<typeof setInterval>;
   private wallet?: Wallet;
   private keys?: ledger.ZswapSecretKeys;
@@ -91,6 +93,7 @@ class PrivateSync {
     this.subscription?.unsubscribe(); this.subscription = undefined;
     const wallet = this.wallet; const keys = this.keys;
     this.wallet = undefined; this.keys = undefined; this.latest = undefined;
+    this.hasPublished = false; this.pendingImmediatePublication = false;
     try { if (wallet) await bounded(wallet.stop()); }
     finally { keys?.clear(); }
   }
@@ -135,7 +138,18 @@ class PrivateSync {
           next: state => {
             if (!this.isCurrent() || this.wallet !== wallet) return;
             this.latest = state;
-            void this.cycle();
+            if (!state.progress.isStrictlyComplete()) {
+              // Cached amounts are retained, but a disconnected or lagging
+              // stream must not remain authoritative for UI/connector reads.
+              if (midnightStore.privateSyncStatus !== 'syncing') midnightActions.setPrivateSyncStatus('syncing');
+              return;
+            }
+            // Publish the first complete snapshot promptly. Later events only
+            // update the candidate; the timer verifies/publishes every 30s.
+            if (!this.hasPublished) {
+              if (this.busy) this.pendingImmediatePublication = true;
+              else void this.cycle();
+            }
           },
           error: () => {
             if (this.isCurrent()) {
@@ -145,6 +159,9 @@ class PrivateSync {
           },
         });
         await bounded(wallet.start(this.keys));
+        // A complete event can arrive while start() is pending. The finally
+        // below queues a fresh verified cycle without losing that first event.
+        return;
       }
       const state = this.latest;
       if (!state?.progress.isStrictlyComplete() || !this.isCurrent() || !this.keys) return;
@@ -162,12 +179,18 @@ class PrivateSync {
         .filter(([color, amount]) => customColor(color) && amount >= 0n)
         .map(([color, amount]) => [color.toLowerCase(), amount]));
       midnightActions.applyPrivateSnapshot(balances, privateHistoryRows(entries));
+      this.hasPublished = true;
       // Secret seed is used only to derive the opaque cache key, never stored.
       await saveWalletState(midnightCheckpointNamespace(identity), 'shielded', this.seed, state.serialize());
     } catch {
       if (this.isCurrent()) midnightActions.setPrivateSyncStatus('error');
       await this.releaseWallet().catch(() => {});
-    } finally { this.busy = false; }
+    } finally {
+      this.busy = false;
+      const publishImmediately = this.pendingImmediatePublication && !this.hasPublished;
+      this.pendingImmediatePublication = false;
+      if (publishImmediately && this.isCurrent()) void this.cycle();
+    }
   }
 }
 
@@ -179,7 +202,9 @@ export async function startMidnightPrivateSync(args: MidnightPrivateSyncArgs): P
   const next = new PrivateSync(args);
   const previous = current;
   current = next;
-  await previous?.stop();
+  // stop() invalidates the old owner before waiting and clears its keys in
+  // finally. An SDK shutdown failure must not strand the replacement session.
+  if (previous) await previous.stop().catch(() => {});
   if (current === next) await next.start();
 }
 
