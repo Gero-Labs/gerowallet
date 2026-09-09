@@ -1,3 +1,4 @@
+import { MidnightGenerationQueue, clearMidnightNetworkCheckpoints } from '@/chains/midnight/midnightSyncGeneration';
 /**
  * Midnight Sync Service
  *
@@ -203,6 +204,8 @@ export function resolveOutputIndex(
 
 class MidnightSyncService {
   private active = false;
+  private readonly generationQueue = new MidnightGenerationQueue();
+  private sessionEpoch = 0;
   private currentNetwork: string | null = null;
   private currentAddresses: MidnightAddresses | null = null;
 
@@ -245,6 +248,7 @@ class MidnightSyncService {
       return;
     }
 
+    const sessionEpoch = ++this.sessionEpoch;
     this.currentNetwork = network;
     this.currentAddresses = addresses;
 
@@ -281,7 +285,7 @@ class MidnightSyncService {
       addresses.unshielded,
       lastSyncedBlock,
       {
-        onSync: this.handleSync.bind(this),
+        onSync: (data) => this.handleSync(data, sessionEpoch),
         onRollback: this.handleRollback.bind(this),
         onForceResync: this.handleForceResync.bind(this),
       },
@@ -323,7 +327,9 @@ class MidnightSyncService {
    */
   private async bootstrapTipFromNexus(network: string): Promise<void> {
     const api = getMidnightApi(network);
+    const sessionEpoch = this.sessionEpoch;
     const block = await api.getLatestBlock();
+    if (!this.active || this.currentNetwork !== network || this.sessionEpoch !== sessionEpoch) return;
     debugLog('🌙 Midnight tip bootstrap response:', block);
     if (typeof block.height !== 'number' || block.height === 0) {
       debugLog('🌙 Midnight tip bootstrap: indexer returned no height — skipping');
@@ -350,6 +356,7 @@ class MidnightSyncService {
     midnightActions.setNetworkStatus('disconnected');
     midnightActions.clear();
     this.active = false;
+    this.sessionEpoch += 1;
     this.currentNetwork = null;
     this.currentAddresses = null;
     debugLog('🌙 Midnight sync stopped');
@@ -400,7 +407,21 @@ class MidnightSyncService {
 
   // ---------------------------------------------------------------- handlers
 
-  private async handleSync(data: WsSyncMessage): Promise<void> {
+  private async handleSync(data: WsSyncMessage, sessionEpoch = this.sessionEpoch): Promise<void> {
+    const network = this.currentNetwork;
+    if (!network) return;
+    const scope = this.currentAddresses?.unshielded;
+    const isActive = () => this.active && this.sessionEpoch === sessionEpoch
+      && this.currentNetwork === network && this.currentAddresses?.unshielded === scope;
+    await this.generationQueue.enqueue(data, toGeroSyncMidnightNetwork(network),
+      () => midnightStore.chainIdentity, isActive,
+      async (identity) => {
+        await clearMidnightNetworkCheckpoints(identity.network);
+        if (isActive()) midnightActions.resetChainState(identity);
+      }, () => this.applySync(data));
+  }
+
+  private async applySync(data: WsSyncMessage): Promise<void> {
     // 1) Tip update
     if (data.block && typeof data.block.height === 'number') {
       midnightActions.applyTipUpdate({

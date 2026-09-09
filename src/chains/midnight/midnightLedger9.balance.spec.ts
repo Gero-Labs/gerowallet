@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   start: vi.fn(), stop: vi.fn(), wait: vi.fn(), balance: vi.fn(), serialize: vi.fn(),
   subscribe: vi.fn(), unsubscribe: vi.fn(), restore: vi.fn(), create: vi.fn(),
   load: vi.fn(), save: vi.fn(), clear: vi.fn(),
+  identity: vi.fn(), recheck: vi.fn(), snapshot: vi.fn(),
 }));
 
 vi.mock('midnight-v9-dust-wallet', () => ({
@@ -15,6 +16,12 @@ vi.mock('midnight-v9-dust-wallet', () => ({
 }));
 vi.mock('./midnightWalletStatePersistence', () => ({
   loadWalletState: mocks.load, saveWalletState: mocks.save, clearWalletState: mocks.clear,
+}));
+vi.mock('./midnightChainIdentity', () => ({
+  readVerifiedMidnightChainIdentity: mocks.identity,
+  assertMidnightChainIdentityUnchanged: mocks.recheck,
+  midnightCheckpointNamespace: () => 'midnight-stagenet-ledger9-rc3-genesis-1',
+  fetchLedger9DustSnapshot: mocks.snapshot,
 }));
 
 function args() {
@@ -50,6 +57,9 @@ describe('Stagenet DUST balancing lifecycle', () => {
     mocks.save.mockResolvedValue(undefined);
     mocks.clear.mockResolvedValue(undefined);
     mocks.balance.mockResolvedValue({ transaction: ledger.Transaction.fromParts('stagenet'), blockData: {} });
+    mocks.identity.mockResolvedValue({ network: 'midnight-stagenet', chain_generation: 1, genesis_hash: `0x${'11'.repeat(32)}` });
+    mocks.recheck.mockResolvedValue(undefined);
+    mocks.snapshot.mockResolvedValue(null);
   });
   afterEach(() => { vi.useRealTimers(); });
 
@@ -58,8 +68,8 @@ describe('Stagenet DUST balancing lifecycle', () => {
     const signed = await balanceAndSignLedger9Transfer(input);
     const tx: ledger.UnprovenTransaction = ledger.Transaction.deserialize('signature', 'pre-proof', 'pre-binding', Buffer.from(signed, 'hex'));
     expect(tx.intents!.get(1)!.guaranteedUnshieldedOffer!.signatures).toHaveLength(1);
-    expect(mocks.load).toHaveBeenCalledWith('stagenet-ledger9-rc3', 'dust', input.dustSecretSeed);
-    expect(mocks.save).toHaveBeenCalledWith('stagenet-ledger9-rc3', 'dust', input.dustSecretSeed, 'ledger9-state');
+    expect(mocks.load).toHaveBeenCalledWith('midnight-stagenet-ledger9-rc3-genesis-1', 'dust', input.dustSecretSeed);
+    expect(mocks.save).toHaveBeenCalledWith('midnight-stagenet-ledger9-rc3-genesis-1', 'dust', input.dustSecretSeed, 'ledger9-state');
     expect(mocks.unsubscribe).toHaveBeenCalledOnce();
     expect(mocks.stop).toHaveBeenCalledOnce();
   });
@@ -81,12 +91,14 @@ describe('Stagenet DUST balancing lifecycle', () => {
 
   it('bounds a non-settling fee operation and still tears down the wallet', async () => {
     vi.useFakeTimers();
+    mocks.load.mockResolvedValue('before-registration');
     mocks.balance.mockImplementation(() => new Promise(() => {}));
     const result = expect(balanceAndSignLedger9Transfer(args())).rejects.toThrow('DUST fee calculation timed out');
     await vi.advanceTimersByTimeAsync(60_000);
     await result;
     expect(mocks.stop).toHaveBeenCalledOnce();
     expect(mocks.unsubscribe).toHaveBeenCalledOnce();
+    expect(mocks.clear).toHaveBeenCalledOnce();
   });
 
   it('rejects mismatched endpoints before starting any wallet', async () => {
@@ -94,5 +106,34 @@ describe('Stagenet DUST balancing lifecycle', () => {
     input.endpoints = getMidnightEndpoints('Preprod')!;
     await expect(balanceAndSignLedger9Transfer(input)).rejects.toThrow('endpoint network mismatch');
     expect(mocks.start).not.toHaveBeenCalled();
+  });
+
+  it('leaves checkpoints untouched when chain identity cannot be verified', async () => {
+    mocks.identity.mockRejectedValue(new Error('Chain identity unknown'));
+    await expect(balanceAndSignLedger9Transfer(args())).rejects.toThrow('unknown');
+    expect(mocks.load).not.toHaveBeenCalled();
+    expect(mocks.clear).not.toHaveBeenCalled();
+    expect(mocks.start).not.toHaveBeenCalled();
+  });
+
+  it('rejects a reset detected after fee balancing instead of returning a signed old-chain transaction', async () => {
+    mocks.recheck.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('Chain changed'));
+    await expect(balanceAndSignLedger9Transfer(args())).rejects.toThrow('Chain changed');
+    expect(mocks.balance).toHaveBeenCalledOnce();
+    expect(mocks.stop).toHaveBeenCalledOnce();
+  });
+
+  it('drops a restored empty checkpoint after insufficient DUST so the next attempt can replay registration', async () => {
+    mocks.load.mockResolvedValue('before-registration');
+    mocks.balance.mockRejectedValue(new Error('Insufficient DUST'));
+    await expect(balanceAndSignLedger9Transfer(args())).rejects.toThrow('Insufficient DUST');
+    expect(mocks.clear).toHaveBeenCalledOnce();
+  });
+
+  it('restores a verified bootstrap snapshot on a local miss', async () => {
+    mocks.snapshot.mockResolvedValue('verified-snapshot');
+    await balanceAndSignLedger9Transfer({ ...args(), dustRegisteredAt: new Date('2026-01-01') });
+    expect(mocks.restore).toHaveBeenCalledWith('verified-snapshot');
+    expect(mocks.create).not.toHaveBeenCalled();
   });
 });

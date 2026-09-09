@@ -94,13 +94,7 @@ import assets from '@/utils/assets';
 
 interface Props {
   isOpen: boolean;
-  /**
-   * Which remote prover this consent is about. Both record the SAME
-   * device-level consent (it covers remote proving generally) but the copy
-   * must name the actual destination of the witness data: `cloud` = Gero
-   * Cloud (default, unchanged behavior), `zkpaas` = the Arkhia zkPaaS
-   * service — Gero never receives the witness on that path.
-   */
+  /** Consent authorizes only this remote witness recipient. */
   provider?: 'cloud' | 'zkpaas';
 }
 const props = withDefaults(defineProps<Props>(), { provider: 'cloud' });
@@ -135,8 +129,8 @@ const errorMessage = ref<string | null>(null);
 // — surprising for the user since the privacy posture is intentionally
 // per-decision rather than a sticky setting.
 watch(
-  () => props.isOpen,
-  (next) => {
+  () => [props.isOpen, props.provider],
+  ([next]) => {
     if (next) {
       acknowledged.value = false;
       errorMessage.value = null;
@@ -156,7 +150,7 @@ async function onAccept() {
     // options shouldn't leave the popup's send dialog still gated.
     const response = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.ACCEPT_MIDNIGHT_SHIELDED_PROVING_CONSENT,
-      data: {},
+      data: { provider: props.provider },
     }) as { data: { success: boolean; error?: string } };
     if (!response?.data?.success) {
       throw new Error(response?.data?.error || 'Failed to record consent');

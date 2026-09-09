@@ -36,6 +36,14 @@ function switchFrom(from: MidnightAddresses, to: MidnightAddresses) {
 }
 
 describe('midnight wallet switch: chain tip', () => {
+  it('retains the explicit device prover profile when switching wallet networks', () => {
+    const original = { ...midnightStore.proofServer };
+    try {
+      midnightActions.setProofServer({ ...original, localProfile: 'stagenet' });
+      switchFrom(STAGENET, MAINNET_A);
+      expect(midnightStore.proofServer.localProfile).toBe('stagenet');
+    } finally { midnightActions.setProofServer(original); }
+  });
   beforeEach(() => {
     midnightStore.activeWalletKey = null;
     midnightStore.tip = { hash: null, height: 0, timestamp: 0 };

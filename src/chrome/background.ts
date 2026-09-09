@@ -1,3 +1,5 @@
+import { validateMidnightConnectorTransfer, syncedMidnightShieldedBalances } from '@/chains/midnight/midnightConnectorTransfer';
+import { captureMidnightSigningSession } from '@/chains/midnight/midnightSigningSession';
 import { Buffer } from 'buffer';
 import Loading from '@/stores/loading';
 import { Messaging } from '@/chrome/messaging';
@@ -4831,13 +4833,21 @@ app.addToOptions(MessageTypes.SIGN_MIDNIGHT_SEGMENTS, async (request, sendRespon
 app.addToOptions(
   MessageTypes.BALANCE_AND_SIGN_MIDNIGHT_UNSHIELDED_TX,
   async (request, sendResponse) => {
+    const secretBuffers: Uint8Array[] = [];
     try {
       const walletBg = walletManager.getWallet();
       if (!walletBg) throw new Error('No wallet logged in');
       if (walletBg.chain !== Blockchain.MIDNIGHT) {
         throw new Error('BALANCE_AND_SIGN_MIDNIGHT_UNSHIELDED_TX called on non-Midnight wallet');
       }
-      const { unprovenTxHex, ttlMs, password, prfSecret, sponsor } = request.data || {};
+      const network = walletBg.network;
+      const { midnightPrivateSessionEpoch } = await import('@/chains/midnight/midnightPrivateSyncSession');
+      const assertSession = captureMidnightSigningSession(walletBg.id, network, () => ({
+        walletId: walletManager.getWallet()?.id, network: walletManager.getWallet()?.network,
+        locked: walletStore.isLocked, epoch: midnightPrivateSessionEpoch(),
+      }));
+      const { unprovenTxHex, ttlMs, password, prfSecret, sponsor, proving } = request.data || {};
+      const provingArg = parseProvingRequest(proving);
       if (typeof unprovenTxHex !== 'string' || unprovenTxHex.length === 0) {
         throw new Error('unprovenTxHex is required');
       }
@@ -4845,6 +4855,7 @@ app.addToOptions(
         throw new Error('ttlMs is required (epoch millis)');
       }
       const prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
+      if (prfBytes) secretBuffers.push(prfBytes);
       // Optional DUST sponsor: another wallet the user owns pays the fee.
       // Crossing the message boundary, so shape-check it here rather than
       // trusting the sender — walletBg re-checks eligibility (chain, network,
@@ -4870,16 +4881,32 @@ app.addToOptions(
           prfSecret: sPrf ? new Uint8Array(sPrf as number[]) : undefined,
         };
       }
-      const signedTxHex = await walletBg.balanceAndSignMidnightUnshieldedTransfer(
+      if (sponsorArg?.prfSecret) secretBuffers.push(sponsorArg.prfSecret);
+      const { getMidnightEndpoints } = await import('@/chains/midnight/midnightConfig');
+      const { readVerifiedMidnightChainIdentity, assertMidnightChainIdentityUnchanged } = await import('@/chains/midnight/midnightChainIdentity');
+      const endpoints = network.toLowerCase() === 'stagenet' ? getMidnightEndpoints(network) : undefined;
+      const identity = endpoints ? await readVerifiedMidnightChainIdentity(endpoints) : undefined;
+      assertSession();
+      let signedTxHex = await walletBg.balanceAndSignMidnightUnshieldedTransfer(
         unprovenTxHex,
         ttlMs,
         password,
         prfBytes,
         sponsorArg,
       );
+      assertSession();
+      if (provingArg) {
+        const { proveUnshieldedTransfer } = await import('@/chains/midnight/midnightUnshieldedProver');
+        const result = await proveUnshieldedTransfer({
+          sdkNetworkId: network.toLowerCase(), signedTxHex, proving: provingArg,
+        });
+        signedTxHex = result.provenTxHex;
+      }
+      if (identity && endpoints) await assertMidnightChainIdentityUnchanged(endpoints, identity);
+      assertSession();
       sendResponse({
         id: request.id,
-        data: { success: true, signedTxHex },
+        data: { success: true, signedTxHex, proven: !!provingArg },
         target: TARGET,
         sender: SENDER.extension,
       });
@@ -4890,7 +4917,7 @@ app.addToOptions(
         target: TARGET,
         sender: SENDER.extension,
       });
-    }
+    } finally { secretBuffers.forEach(bytes => bytes.fill(0)); }
   },
 );
 
@@ -4901,6 +4928,41 @@ app.addToOptions(
  * overrides, ...) into the BG's fetch to the proof server.
  */
 const PROVING_HEADER_ALLOWLIST = new Set(['x-api-key', 'x-api-secret']);
+
+app.addToOptions(MessageTypes.START_MIDNIGHT_PRIVATE_SYNC, async (request, sendResponse) => {
+  let prfBytes: Uint8Array | undefined;
+  try {
+    const wallet = walletManager.getWallet();
+    if (!wallet) throw new Error('No wallet logged in');
+    const { password, prfSecret } = request.data || {};
+    if (password !== undefined && typeof password !== 'string') throw new Error('Invalid spending password');
+    if (prfSecret !== undefined && (!Array.isArray(prfSecret) || prfSecret.length !== 32
+      || !prfSecret.every((byte: unknown) => typeof byte === 'number' && Number.isInteger(byte) && byte >= 0 && byte <= 255))) {
+      throw new Error('Invalid PassKey authorization');
+    }
+    prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
+    await wallet.startMidnightPrivateSync(password, prfBytes);
+    sendResponse({ id: request.id, data: { success: true }, target: TARGET, sender: SENDER.extension });
+  } catch {
+    sendResponse({ id: request.id, data: { success: false, error: 'Unable to unlock private token synchronization' }, target: TARGET, sender: SENDER.extension });
+  } finally { prfBytes?.fill(0); }
+});
+
+function parseMidnightSponsor(value: unknown): { walletId: number; password?: string; prfSecret?: Uint8Array } | undefined {
+  if (value == null) return undefined;
+  if (typeof value !== 'object' || Array.isArray(value)) throw new Error('sponsor must be an object');
+  const sponsor = value as { walletId?: unknown; password?: unknown; prfSecret?: unknown };
+  if (!Number.isSafeInteger(sponsor.walletId) || (sponsor.walletId as number) < 0) throw new Error('Invalid sponsor wallet id');
+  if (sponsor.password !== undefined && typeof sponsor.password !== 'string') throw new Error('Invalid sponsor password');
+  if (sponsor.prfSecret !== undefined && (!Array.isArray(sponsor.prfSecret)
+    || sponsor.prfSecret.length !== 32 || !sponsor.prfSecret.every(byte => Number.isInteger(byte) && byte >= 0 && byte <= 255))) {
+    throw new Error('Invalid sponsor PRF bytes');
+  }
+  return {
+    walletId: sponsor.walletId as number, password: sponsor.password as string | undefined,
+    prfSecret: sponsor.prfSecret ? new Uint8Array(sponsor.prfSecret as number[]) : undefined,
+  };
+}
 
 /**
  * Validate the optional `proving` field on BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX
@@ -4968,13 +5030,14 @@ function parseProvingRequest(value: unknown): { url: string; headers?: Record<st
 app.addToOptions(
   MessageTypes.BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX,
   async (request, sendResponse) => {
+    const secretBuffers: Uint8Array[] = [];
     try {
       const walletBg = walletManager.getWallet();
       if (!walletBg) throw new Error('No wallet logged in');
       if (walletBg.chain !== Blockchain.MIDNIGHT) {
         throw new Error('BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX called on non-Midnight wallet');
       }
-      const { outputs, password, prfSecret, proving } = request.data || {};
+      const { outputs, password, prfSecret, proving, sponsor } = request.data || {};
       if (!Array.isArray(outputs) || outputs.length === 0) {
         throw new Error('outputs is required (non-empty array)');
       }
@@ -5002,12 +5065,16 @@ app.addToOptions(
         };
       });
       const prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
+      if (prfBytes) secretBuffers.push(prfBytes);
       const provingArg = parseProvingRequest(proving);
+      const sponsorArg = parseMidnightSponsor(sponsor);
+      if (sponsorArg?.prfSecret) secretBuffers.push(sponsorArg.prfSecret);
       const { signedTxHex, proven } = await walletBg.buildAndSignMidnightShieldedTransfer(
         parsedOutputs,
         password,
         prfBytes,
         provingArg,
+        sponsorArg,
       );
       sendResponse({
         id: request.id,
@@ -5016,14 +5083,14 @@ app.addToOptions(
         sender: SENDER.extension,
       });
     } catch (error) {
-      console.error('Error building/signing Midnight shielded transfer:', error);
+      // SDK failures may contain private transaction inputs; never log their payloads.
       sendResponse({
         id: request.id,
         data: { success: false, error: getErrorMessage(error) },
         target: TARGET,
         sender: SENDER.extension,
       });
-    }
+    } finally { secretBuffers.forEach(bytes => bytes.fill(0)); }
   },
 );
 
@@ -5096,7 +5163,9 @@ app.addToOptions(
   async (request, sendResponse) => {
     try {
       const { midnightActions } = await import('@/stores/midnightStore');
-      midnightActions.acceptShieldedProvingConsent();
+      const provider = request.data?.provider;
+      if (provider !== 'cloud' && provider !== 'zkpaas') throw new Error('A proving provider is required');
+      midnightActions.acceptShieldedProvingConsent(provider);
       sendResponse({
         id: request.id,
         data: { success: true },
@@ -5169,7 +5238,7 @@ app.addToOptions(
   async (request, sendResponse) => {
     try {
       const {
-        mode, localUrl, zkpaasUrl, zkpaasApiKey, zkpaasApiSecret,
+        mode, localUrl, localProfile, zkpaasUrl, zkpaasApiKey, zkpaasApiSecret,
       } = request.data || {};
       if (mode !== 'remote' && mode !== 'local' && mode !== 'zkpaas') {
         throw new Error('mode must be "remote", "local" or "zkpaas"');
@@ -5185,6 +5254,10 @@ app.addToOptions(
       // Arkhia credentials), while an explicit '' means "clear it" ('' is
       // also the valid "derive the endpoint per network" state for the URL).
       const current = midnightStore.proofServer;
+      const selectedProfile = localProfile === undefined ? (current.localProfile ?? 'legacy') : localProfile;
+      if (selectedProfile !== 'legacy' && selectedProfile !== 'stagenet') {
+        throw new Error('localProfile must be legacy or stagenet');
+      }
       const zkpaasUrlValue = zkpaasUrl === undefined || zkpaasUrl === null
         ? current.zkpaasUrl : zkpaasUrl;
       if (typeof zkpaasUrlValue !== 'string') throw new Error('zkpaasUrl must be a string');
@@ -5196,10 +5269,12 @@ app.addToOptions(
       midnightActions.setProofServer({
         mode,
         localUrl,
+        localProfile: selectedProfile,
         zkpaasUrl: zkpaasUrlValue,
         zkpaasApiKey: zkpaasApiKeyValue,
         zkpaasApiSecret: zkpaasApiSecretValue,
       });
+      await walletManager.refreshCrossDeviceProver();
       sendResponse({
         id: request.id,
         data: { success: true },
@@ -5757,16 +5832,12 @@ app.add(MIDNIGHT_METHOD.getShieldedBalances, async (request, sendResponse) => {
     sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected'), target: TARGET, sender: SENDER.extension });
     return;
   }
-  // Gero only tracks native shielded NIGHT as a scalar today (no per-token
-  // breakdown from a ShieldedWallet state yet — Phase 1 known limitation,
-  // see build plan doc §3 "small gap" note).
-  const night = midnightStore.balances.nightShielded;
-  sendResponse({
-    id: request.id,
-    data: night > 0n ? { [NIGHT_TOKEN_TYPE_NULL]: night.toString() } : {},
-    target: TARGET,
-    sender: SENDER.extension,
-  });
+  try {
+    const data = syncedMidnightShieldedBalances(midnightStore.privateSyncStatus, midnightStore.balances.shieldedTokens);
+    sendResponse({ id: request.id, data, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.InternalError, getErrorMessage(error)), target: TARGET, sender: SENDER.extension });
+  }
 });
 
 app.add(MIDNIGHT_METHOD.getDustBalance, async (request, sendResponse) => {
@@ -5995,79 +6066,14 @@ app.add(MIDNIGHT_METHOD.hintUsage, (request, sendResponse) => {
   sendResponse({ id: request.id, data: undefined, target: TARGET, sender: SENDER.extension });
 });
 
-/** Canonical 32-byte-zero RawTokenType — how the ledger/connector names native
- * NIGHT (see midnightShieldedBuilder.ts NIGHT_RAW_TOKEN_TYPE). */
-const MIDNIGHT_NATIVE_NIGHT_TOKEN_TYPE =
-  '0000000000000000000000000000000000000000000000000000000000000000';
-
-type MakeTransferRequestData = {
-  desiredOutputs?: Array<{ kind?: string; type?: string; value?: string; recipient?: string }>;
-  options?: { payFees?: boolean };
-};
-
-/**
- * Validate a connector makeTransfer request BEFORE prompting the user, so an
- * unsupported/malformed request rejects cleanly without wasting an approval
- * dialog. Phase 2 scope: native-NIGHT UNSHIELDED outputs only, wallet pays DUST
- * fees. Mirrors MidnightSendDialog's per-network address-prefix check
- * (mainnet omits the network segment; others embed it lowercased).
- */
-function validateMakeTransferInputs(
-  data: MakeTransferRequestData | undefined,
-  network: string,
-): { ok: true } | { ok: false; reason: string } {
-  const desiredOutputs = data?.desiredOutputs;
-  if (!Array.isArray(desiredOutputs) || desiredOutputs.length === 0) {
-    return { ok: false, reason: 'desiredOutputs must be a non-empty array' };
-  }
-  // Cap the output count: the array is walked synchronously in the service
-  // worker and rendered in the approval panel, so an unbounded length is a DoS
-  // vector. A real transfer never needs this many outputs (Nexus/tx-size limits
-  // bite far sooner).
-  if (desiredOutputs.length > 100) {
-    return { ok: false, reason: 'too many outputs (max 100 per transfer)' };
-  }
-  if (data?.options?.payFees === false) {
-    return { ok: false, reason: 'payFees:false is not supported in this version (GeroWallet pays DUST fees; fee delegation is planned)' };
-  }
-  const isMain = network === Network.MAINNET;
-  const prefix = isMain ? 'mn_addr1' : `mn_addr_${network.toLowerCase()}1`;
-  for (const o of desiredOutputs) {
-    if (!o || typeof o !== 'object') {
-      return { ok: false, reason: 'each desiredOutput must be an object' };
-    }
-    if (o.kind !== 'unshielded') {
-      return { ok: false, reason: `only unshielded transfers are supported in this version (got kind='${o.kind}')` };
-    }
-    // Native NIGHT only: the canonical 32-byte-zero RawTokenType, or the empty
-    // 'native' shorthand. Any other hex token type is unsupported (Nexus only
-    // builds native NIGHT today).
-    if (o.type !== undefined && o.type !== '' && o.type !== MIDNIGHT_NATIVE_NIGHT_TOKEN_TYPE) {
-      return { ok: false, reason: 'only native NIGHT transfers are supported in this version' };
-    }
-    // value arrives as a decimal string (the page bridge stringifies the bigint).
-    let value: bigint;
-    try {
-      value = BigInt(o.value as string);
-    } catch {
-      return { ok: false, reason: `invalid amount: ${o.value}` };
-    }
-    if (value <= 0n) {
-      return { ok: false, reason: 'amount must be a positive integer' };
-    }
-    if (typeof o.recipient !== 'string' || !o.recipient.startsWith(prefix)) {
-      return { ok: false, reason: `recipient must be a ${prefix}… unshielded address on the connected network` };
-    }
-  }
-  return { ok: true };
-}
+const validateMakeTransferInputs = validateMidnightConnectorTransfer;
 
 /**
  * Opens the makeTransfer approval view in the mini-gero side panel (password/
  * PRF wallets only — Midnight has no hardware-wallet support). Same
  * side-panel-only routing as signData — no popup fallback.
  *
- * Phase 2: native-NIGHT UNSHIELDED transfers only. The panel builds +
+ * Public NIGHT and custom-token transfers. The panel builds +
  * DUST-balances + signs (but does NOT submit) via buildAndSignUnshieldedTransfer
  * and returns `{ tx }`; the dapp submits it via submitTransaction, which
  * proves + binds server-side. Shielded/mixed outputs and payFees:false reject
@@ -6098,13 +6104,13 @@ app.add(MIDNIGHT_METHOD.makeTransfer, (request, sendResponse) => {
     reply({ error: midnightApiError(MidnightErrorCode.InternalError, 'No tab context for this request') });
     return true;
   }
-  const validation = validateMakeTransferInputs(data as MakeTransferRequestData, currentWallet.network);
-  if (!validation.ok) {
+  const validation = validateMakeTransferInputs(data, currentWallet.network);
+  if (validation.ok === false) {
     reply({ error: midnightApiError(MidnightErrorCode.InvalidRequest, validation.reason) });
     return true;
   }
   const favIconUrl = send.tab?.favIconUrl;
-  const makeTransferPayload = { data, website: origin, favIconUrl };
+  const makeTransferPayload = { data: { ...(data as object), desiredOutputs: validation.outputs }, website: origin, favIconUrl };
 
   const sendToPanel = () =>
     sendToMiniGero(MIDNIGHT_METHOD.makeTransfer, makeTransferPayload, tabId)
