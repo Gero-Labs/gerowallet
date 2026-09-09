@@ -28,6 +28,7 @@
 // instead of forking either (WP-SH2).
 
 import type * as ledger from '@midnight-ntwrk/ledger-v8';
+import { midnightLedgerVersion, requireMidnightLedger8 } from './midnightLedger';
 import type { MidnightNetworkEndpoints } from '@/chains/midnight/midnightConfig';
 import { debugLog } from '@/utils/debug';
 import {
@@ -149,6 +150,7 @@ export async function syncDustWalletAndBalanceFees(
   args: SyncDustAndBalanceFeesArgs,
   txs: ledger.UnprovenTransaction[],
 ): Promise<ledger.UnprovenTransaction> {
+  requireMidnightLedger8(args.sdkNetworkId, 'Legacy DUST balancing');
   const [{ DustWallet }, ledgerMod] = await Promise.all([
     import('@midnightntwrk/wallet-sdk-dust-wallet'),
     import('@midnight-ntwrk/ledger-v8'),
@@ -541,6 +543,7 @@ export async function signUnshieldedSegments(
   unshieldedSecretKey: Uint8Array,
   tx: ledger.UnprovenTransaction,
 ): Promise<ledger.UnprovenTransaction> {
+  requireMidnightLedger8(sdkNetworkId, 'Legacy segment signing');
   const [{ UnshieldedWallet, createKeystore }, abstractionsMod] = await Promise.all([
     import('@midnightntwrk/wallet-sdk-unshielded-wallet'),
     import('@midnightntwrk/wallet-sdk-abstractions'),
@@ -598,6 +601,10 @@ export async function signUnshieldedSegments(
 export async function balanceAndSignUnshieldedTransfer(
   args: BalanceAndSignUnshieldedTransferArgs,
 ): Promise<string> {
+  if (midnightLedgerVersion(args.sdkNetworkId) === 9) {
+    const { balanceAndSignLedger9Transfer } = await import('./midnightLedger9');
+    return balanceAndSignLedger9Transfer(args);
+  }
   debugLog('🌙 midnight tx-builder: starting', {
     network: args.sdkNetworkId,
     unprovenBytes: args.unprovenTxHex.length / 2,

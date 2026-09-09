@@ -25,6 +25,7 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { getMidnightApi } from '@/api/midnight-api';
 import { midnightStore } from '@/stores/midnightStore';
 import { resolveZkpaasUrl, buildZkpaasHeaders, isZkpaasConfigured } from '@/chains/midnight/midnightZkpaas';
+import { requireMidnightLedger8 } from '@/chains/midnight/midnightLedger';
 import type {
   BuildMidnightTxRequest,
   MidnightSegmentToSign,
@@ -98,11 +99,13 @@ export async function getWalletKeys(
 export async function signSegments(
   segments: MidnightSegmentToSign[],
   credentials: MidnightSendCredentials,
+  unprovenTxHex?: string,
 ): Promise<SignedSegment[]> {
   const response = await Messaging.sendToBackgroundFromOptions({
     method: MessageTypes.SIGN_MIDNIGHT_SEGMENTS,
     data: {
       segments,
+      unprovenTxHex,
       password: credentials.password,
       prfSecret: credentials.prfSecret ? Array.from(credentials.prfSecret) : undefined,
     },
@@ -341,6 +344,9 @@ function resolveWalletProvingTarget(
   network: string,
 ): { url: string; headers?: Record<string, string>; stage: MidnightSendStage; lenientHealth: boolean } | null {
   const ps = midnightStore.proofServer;
+  if (ps.mode === 'local' || ps.mode === 'zkpaas') {
+    requireMidnightLedger8(network, 'Wallet-side proving');
+  }
   if (ps.mode === 'local') {
     return { url: ps.localUrl, stage: 'provingLocal', lenientHealth: false };
   }
@@ -425,6 +431,7 @@ export async function sendShieldedNight(
   onStage?: (stage: MidnightSendStage) => void,
   forceRemote = false,
 ): Promise<SubmitMidnightTxResponse> {
+  requireMidnightLedger8(network, 'Shielded transfers');
   if (outputs.length === 0) {
     throw new Error('sendShieldedNight: at least one output is required');
   }
@@ -523,6 +530,7 @@ export async function shieldNight(
   onStage?: (stage: MidnightSendStage) => void,
   forceRemote = false,
 ): Promise<SubmitMidnightTxResponse> {
+  requireMidnightLedger8(network, 'Shielding');
   if (amount <= 0n) {
     throw new Error('shieldNight: amount must be positive');
   }
@@ -635,6 +643,7 @@ export async function registerNightForDust(
     const signed = await signSegments(
       [{ index: 1, role: 'NightExternal', dataHex: built.signaturePayloadHex }],
       credentials,
+      built.unprovenTxHex,
     );
     if (signed.length !== 1) {
       throw new Error('Expected exactly one signature for DUST registration');
