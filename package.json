@@ -181,7 +181,7 @@
     "vite-plugin-node-stdlib-browser": "^0.2.1",
     "vite-plugin-top-level-await": "^1.4.4",
     "vite-plugin-wasm": "^3.6.0",
-    "vitest": "^3.2.4",
+    "vitest": "^5.0.0",
     "vue-eslint-parser": "^9.4.2",
     "vue-template-compiler": "^2.7.16",
     "webextension-polyfill": "^0.12.0",
