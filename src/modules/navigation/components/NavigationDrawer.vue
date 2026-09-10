@@ -46,6 +46,9 @@
           :class="['menuItem', { 'nexus-item': item.special }]"
           style="height: 34px"
           :key="index"
+          @mouseenter.native="prefetchItem(item)"
+          @focusin.native="prefetchItem(item)"
+          @pointerdown.native="prefetchItem(item)"
         >
           <v-list-item-avatar tile size="18" :style="item.soon || item.loading || item.underMaintenance ? { filter: 'opacity(0.5)' } : {}">
             <v-badge :value="!!item.notificationDot" dot color="error" overlap bordered>
@@ -239,6 +242,7 @@ import { updateVuetifyTheme } from '@/plugins/vuetify';
 import { debugLog } from '@/utils/debug';
 import { hasNewFeaturesInPath } from '@/shared/composables/useFeatureNotifications';
 import { GOVERNANCE_ITEMS } from '@/modules/navigation/components/governanceNav';
+import { prefetchPage } from '@/modules/navigation/lazyPage';
 
 interface NavigationItem {
   title?: string;
@@ -275,6 +279,12 @@ const vmProxy = getCurrentInstance()!.proxy
 const breakpoint = vmProxy.$vuetify.breakpoint
 const themeDark = vmProxy.$vuetify.theme.dark
 const router = vmProxy.$router
+
+function prefetchItem(item: NavigationItemUnion) {
+  if ('link' in item && item.enabled && !item.soon && !item.loading && !item.underMaintenance) {
+    void prefetchPage(router, item.link);
+  }
+}
 
 // Reactive state
 const version = ref('')

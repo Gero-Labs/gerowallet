@@ -5,7 +5,7 @@ import type { ComponentOptions } from 'vue';
 import Vuetify from 'vuetify';
 import { mount, createLocalVue } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { lazyPage } from './lazyPage';
+import { lazyPage, prefetchPage } from './lazyPage';
 
 Vue.use(Vuetify);
 const localVue = createLocalVue();
@@ -21,8 +21,9 @@ function deferred() {
 function app(loader: () => Promise<{ default: object }>, guard?: Parameters<VueRouter['beforeEach']>[0]) {
   const router = new VueRouter({ mode: 'abstract', routes: [
     { path: '/', name: 'dashboard', component: compileToFunctions('<p>Dashboard content</p>') },
+    { path: '/other', component: compileToFunctions('<p>Other content</p>') },
     { path: '/governance/:id?', name: 'governance', props: true,
-      component: lazyPage('GovernanceTest', 'navigation.governanceMe', async () => {
+      component: lazyPage(async () => {
         const module = await loader();
         const page = module.default as ComponentOptions<Vue>;
         return { default: { ...page, ...compileToFunctions(page.template as string) } };
@@ -40,29 +41,31 @@ function app(loader: () => Promise<{ default: object }>, guard?: Parameters<VueR
 afterEach(() => { wrappers.splice(0).forEach(wrapper => wrapper.destroy()); });
 
 describe('content route loading', () => {
-  it('commits the destination and active link while page code is still pending', async () => {
+  it('retains the current content until the real page is ready, without an intermediate loader', async () => {
     const pending = deferred(); const loader = vi.fn(() => pending.promise);
     const { router, wrapper } = app(loader);
     await router.push('/'); await flush();
     await wrapper.findAll('a').at(1).trigger('click'); await flush();
-    expect(router.currentRoute.name).toBe('governance');
-    expect(wrapper.findAll('a').at(1).classes()).toContain('router-link-active');
-    expect(wrapper.find('[role="status"]').text()).toBe('common.loadingEllipsis');
-    expect(wrapper.find('h1').text()).toBe('navigation.governanceMe');
-    expect(wrapper.text()).not.toContain('Dashboard content');
+    expect(router.currentRoute.name).toBe('dashboard');
+    expect(wrapper.find('[role="status"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="route-page-state"]').exists()).toBe(false);
+    expect(wrapper.text()).toContain('Dashboard content');
     pending.resolve({ default: { template: '<p>Governance content</p>' } }); await flush();
     expect(wrapper.text()).toContain('Governance content');
+    expect(router.currentRoute.name).toBe('governance');
     expect(wrapper.find('[data-testid="route-page-state"]').exists()).toBe(false);
   });
 
   it('allows leaving a loading page without mounting its late result', async () => {
     const pending = deferred(); const mounted = vi.fn();
     const { router, wrapper } = app(() => pending.promise);
-    await router.push('/governance'); await flush();
     await router.push('/'); await flush();
+    const navigation = router.push('/governance').catch(() => undefined); await flush();
+    await router.push('/other'); await flush();
     pending.resolve({ default: { template: '<p>Late page</p>', mounted } }); await flush();
+    await navigation;
     expect(mounted).not.toHaveBeenCalled();
-    expect(wrapper.text()).toContain('Dashboard content');
+    expect(wrapper.text()).toContain('Other content');
     await router.push('/governance'); await flush();
     expect(mounted).toHaveBeenCalledTimes(1);
     expect(wrapper.text()).toContain('Late page');
@@ -95,19 +98,39 @@ describe('content route loading', () => {
     expect(backup).toHaveBeenCalledTimes(1);
   });
 
-  it('offers a document reload after an import fails, because browsers cache failed modules', async () => {
-    const reload = vi.spyOn(window.location, 'reload').mockImplementation(() => {});
-    try {
-      const loader = vi.fn().mockRejectedValue(new Error('network failed'));
-      const { router, wrapper } = app(loader);
-      await router.push('/governance'); await flush();
-      expect(router.currentRoute.name).toBe('governance');
-      expect(wrapper.find('[role="alert"]').text()).toContain('navigation.pageLoadFailed');
-      expect(wrapper.element.querySelector('button')?.textContent).toContain('navigation.reloadPage');
-      (wrapper.element.querySelector('button') as HTMLButtonElement).click(); await Vue.nextTick();
-      expect(reload).toHaveBeenCalledTimes(1);
-      expect(loader).toHaveBeenCalledTimes(1);
-    } finally { reload.mockRestore(); }
+  it('keeps the current page and reports an import failure through the router', async () => {
+    const error = new Error('network failed');
+    const { router, wrapper } = app(vi.fn().mockRejectedValue(error));
+    const onError = vi.fn(); router.onError(onError);
+    await router.push('/'); await flush();
+    await expect(router.push('/governance')).rejects.toBe(error); await flush();
+    expect(router.currentRoute.name).toBe('dashboard');
+    expect(wrapper.text()).toContain('Dashboard content');
+    expect(onError).toHaveBeenCalledWith(error);
+  });
+
+  it('prefetches page code once without mounting or navigating, then opens the real loader', async () => {
+    const mounted = vi.fn();
+    const loader = vi.fn().mockResolvedValue({ default: { template: '<p>Loading governance data</p>', mounted } });
+    const { router, wrapper } = app(loader);
+    await router.push('/'); await flush();
+    await Promise.all([prefetchPage(router, '/governance'), prefetchPage(router, '/governance')]);
+    expect(loader).toHaveBeenCalledTimes(1);
+    expect(mounted).not.toHaveBeenCalled();
+    expect(router.currentRoute.name).toBe('dashboard');
+    await router.push('/governance'); await flush();
+    expect(loader).toHaveBeenCalledTimes(1);
+    expect(mounted).toHaveBeenCalledTimes(1);
+    expect(wrapper.text()).toContain('Loading governance data');
+    expect(wrapper.find('[data-testid="route-page-state"]').exists()).toBe(false);
+  });
+
+  it('ignores failed speculative loads and does not prefetch unmarked route factories', async () => {
+    const { router } = app(vi.fn().mockRejectedValue(new Error('offline')));
+    const signing = vi.fn(); router.addRoute({ path: '/sign', component: signing });
+    await expect(prefetchPage(router, '/governance')).resolves.toBeUndefined();
+    await prefetchPage(router, '/sign');
+    expect(signing).not.toHaveBeenCalled();
   });
 
   it('does not import protected content when a guard redirects', async () => {
