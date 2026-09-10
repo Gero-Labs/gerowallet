@@ -972,8 +972,7 @@ const getPoolByIdFromApi = async (poolId: string) => {
   if (!poolId) return null;
 
   try {
-    await stakingStoreActions.loadPoolById(loggedWallet.value, poolId);
-    return stakingStoreActions.state.currentPool;
+    return await stakingStoreActions.loadPoolById(loggedWallet.value, poolId);
   } catch (error) {
     console.error('Error loading pool by ID:', error);
     return null;
@@ -1015,7 +1014,7 @@ const loadMoreTransactions = async () => {
     }
 
     // Pool metadata enhances the label; it must not hold up rows or pagination.
-    void preloadTransactionStatuses(newTransactions);
+    if (newTransactions.length > 0) void preloadTransactionStatuses(newTransactions);
   } finally {
     isLoadingMore.value = false;
   }
