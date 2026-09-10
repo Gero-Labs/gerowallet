@@ -4,7 +4,7 @@
  *
  * WHY: the dashboard (PortfolioPage) and mini-Gero (sidepanel BalanceSection)
  * each computed their own total and drifted: the sidepanel copy lacked the
- * DexHunter price fallback, so any token priced only there silently dropped
+ * token-registry price fallback, so any token priced only there silently dropped
  * out of the sidepanel's number (user-visible: ₳22,421 on the dashboard vs
  * ₳22,411 in mini-Gero). House rule: mini-Gero must mirror the dashboard's
  * exact logic — so both now consume THIS composable.
@@ -98,7 +98,7 @@ export function useHoldingsValuation() {
       const marketToken = allTokens.value.find(t => t.unit === unit);
       const dhToken = dhTokens[unit];
 
-      // Decimals: registry metadata first, then market/DexHunter fallbacks —
+      // Decimals: registry metadata first, then market/registry fallbacks —
       // on a fresh profile the wallet token can be built before the registry
       // cache exists, and pricing the raw quantity inflates the portfolio by
       // 10^decimals. The same value feeds `decimals` below so balance and
@@ -111,7 +111,7 @@ export function useHoldingsValuation() {
       const rawQuantity = Number(token.quantity);
       const quantity = decimals > 0 ? rawQuantity / Math.pow(10, decimals) : rawQuantity;
 
-      // Price: prefer market API data, then DexHunter fallback
+      // Price: prefer market API data, then token-registry fallback
       let priceUsd = marketToken?.price || 0;
       let priceAda = marketToken?.priceAda || 0;
 

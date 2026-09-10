@@ -300,9 +300,9 @@ interface CatalogToken extends StoredCatalogToken {
  * `balance` (base-units string, from a single held-balance lookup built once
  * via `buildHeldBalanceMap()` rather than re-derived per token). Also ensures
  * ADA/lovelace appears as a catalog entry — it's swap's native currency but
- * isn't part of DexHunter's tradable-token registry.
+ * isn't part of the tradable-token registry.
  */
-// DexHunter's swap-tradable registry (TokenMetadataStore) represents native ADA with
+// The swap-tradable registry (TokenMetadataStore) represents native ADA with
 // its own entry — seen with an empty/`'ada'` unit and/or ticker 'ADA' — distinct from
 // the `'lovelace'` unit this app uses everywhere else. Every such entry must be
 // filtered out before the catalog is built so exactly ONE ADA/lovelace row survives
@@ -322,7 +322,7 @@ function buildTokenCatalog(): CatalogToken[] {
   // app's single source of truth. Use getTokenByUnit(unit)?.img (market logo
   // only, no chainLogo fallback) so an unlisted token shows a letter avatar
   // rather than the ADA logo. `unit` here is the same key `TokenMetadataStore`
-  // is keyed by (DexHunter's token_id) and the same string useSwapTokenResolver.ts's
+  // is keyed by (the registry's token_id) and the same string useSwapTokenResolver.ts's
   // resolveToken() already passes to this same getTokenByUnit() — i.e. the plain
   // Cardano "unit" (policyId + assetNameHex, no separator) used consistently
   // everywhere in this codebase, so no key-format normalization is needed here.
@@ -330,7 +330,7 @@ function buildTokenCatalog(): CatalogToken[] {
     .filter(token => !isAdaLike(token))
     .map(token => {
       // Enrich each entry from market-data (single lookup). Price/priceAda/change
-      // drive the dialog's price + 24h-change columns (the DexHunter store's own
+      // drive the dialog's price + 24h-change columns (the token store's own
       // `price` is often 0/stale, so prefer the market value). Logo falls back to
       // the on-chain asset cache (resolveAsset — a synchronous local lookup) when
       // market-data has no image, so more tokens show a real icon.

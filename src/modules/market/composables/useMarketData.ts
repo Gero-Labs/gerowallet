@@ -103,12 +103,12 @@ const { usdToEurRate: _usdToEurRate, loadExchangeRate: _loadExchangeRate } = use
 _loadExchangeRate();
 let consumerCount = 0;
 
-// --- Helper: enrich API data with store data (DexHunter as fallback) ---
+// --- Helper: enrich API data with store data (token registry as fallback) ---
 
 function enrichWithStores(apiToken: TokenPriceResponse, sparklineMap?: Record<string, number[]>): MarketToken {
   const assetId = apiToken.assetId;
 
-  // DexHunter data as fallback for fields the backend doesn't yet provide
+  // Token-registry data as fallback for fields the backend doesn't yet provide
   const dhToken = (tokenMetadataStore.tokens as Record<string, {
     fingerprint?: string;
     name?: string;
@@ -118,12 +118,12 @@ function enrichWithStores(apiToken: TokenPriceResponse, sparklineMap?: Record<st
     decimals?: number;
   } | undefined>)[assetId];
 
-  // Fingerprint: prefer API, fallback to DexHunter
+  // Fingerprint: prefer API, fallback to the token registry
   const fingerprint = apiToken.fingerprint || dhToken?.fingerprint || '';
 
   // Market cap: trust the backend value. The backend already suppresses implausible /
   // placeholder-supply market caps (isPlausibleMarketCapAda) and returns null for them, so
-  // we surface that null as-is ('—'). DexHunter is metadata-only — no numeric mcap fallback.
+  // we surface that null as-is ('—'). the token registry is metadata-only — no numeric mcap fallback.
   const mcap = apiToken.marketCap ?? null;
 
   // Market rows are built from the price feed, which knows nothing about CIP-113. The
@@ -161,7 +161,7 @@ function enrichWithStores(apiToken: TokenPriceResponse, sparklineMap?: Record<st
     tvl: apiToken.tvl ?? null,
     liquidity: apiToken.liquidity ?? 0,
     // The bulk /api/market/prices endpoint does not return a holders count, so
-    // this is null (renders "—") unless DexHunter happens to have it. Showing 0
+    // this is null (renders "—") unless the token registry happens to have it. Showing 0
     // would be misleading. (A real count needs the backend to add holders to the
     // bulk endpoint, or proxy /api/dex/tokens/{p}/{n}/holders.)
     holders: apiToken.holders ?? dhToken?.holders ?? null,

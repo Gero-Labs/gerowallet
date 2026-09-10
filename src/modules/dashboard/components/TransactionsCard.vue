@@ -1336,6 +1336,10 @@ const isDustRegistration = (item: StoredTransaction): boolean => {
 };
 
 // Detects historical DexHunter swap transactions (pre-aggregator-embed migration).
+// This is read-only on-chain detection of transactions users made before the
+// migration: the wallet reads addresses and metadata already on chain and calls
+// no DexHunter service. Swap routing is Gero's own, via Nexus. See
+// src/modules/swap/components/GeroSwapEmbed.vue.
 // Displayed with the neutral 'transactions.swap' label since DexHunter is no longer
 // the branded swap provider.
 // TODO: add aggregator swap-tx heuristic (order/fee address or metadata) once the

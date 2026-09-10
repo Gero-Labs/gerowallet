@@ -277,7 +277,7 @@ function getTokenPriceInUsd(token: any): number {
     return priceStore.adaUsd?.lastPrice || 0;
   }
 
-  // For other tokens: get price from DexHunter (in ADA), convert to USD
+  // For other tokens: get price from the token registry (in ADA), convert to USD
   const unit = token.unit || fullToken?.unit;
   if (unit && tokenMetadataStore.tokens[unit]) {
     const priceInAda = tokenMetadataStore.tokens[unit].price || 0;
@@ -386,7 +386,7 @@ function getTokenPriceInAda(token: any): number {
     return 1;
   }
 
-  // For other tokens: get price from DexHunter (already in ADA)
+  // For other tokens: get price from the token registry (already in ADA)
   const unit = token.unit || fullToken?.unit;
   if (unit && tokenMetadataStore.tokens[unit]) {
     return tokenMetadataStore.tokens[unit].price || 0;

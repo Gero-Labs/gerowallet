@@ -327,7 +327,7 @@ const tokensList = computed(() => {
       // Live Kraken ticker 24h change for ADA
       token.change = priceStore.adaUsd?.priceChangePercentage;
     } else {
-      // DexHunter prices are in ADA, convert to USD first, then to user's selected currency
+      // Registry prices are in ADA, convert to USD first, then to user's selected currency
       const priceInAda = tokenMetadata.value[token.unit]?.price || 0;
       const adaPriceUsd = priceStore.adaUsd?.lastPrice || 0;
       const priceInUsd = priceInAda * adaPriceUsd;
