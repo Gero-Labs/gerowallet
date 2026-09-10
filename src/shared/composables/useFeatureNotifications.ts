@@ -13,8 +13,8 @@
  * 4. Use computed properties to check if parent levels should show indicators
  */
 
-// Current app version - update this when releasing new features
-const APP_VERSION = '2.7.0';
+// Share the version used by the UI footer and extension manifest.
+import { version as APP_VERSION } from '../../../package.json';
 
 // Feature definitions - add new features here
 export interface FeatureDefinition {

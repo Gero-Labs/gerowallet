@@ -41,7 +41,7 @@ body:
     id: version
     attributes:
       label: Extension version
-      placeholder: e.g. 2.7.0 (see the extension footer or chrome://extensions)
+      placeholder: e.g. 2.7.1 (see the extension footer or chrome://extensions)
     validations:
       required: true
   - type: dropdown
