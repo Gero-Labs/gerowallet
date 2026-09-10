@@ -91,7 +91,7 @@ import { useMarketData } from '@/modules/market/composables/useMarketData';
 const { t } = useTranslation();
 
 // Token rows reach this dialog from several sources (wallet balances, market
-// search results, DexHunter metadata) and carry different field sets, so this
+// search results, registry metadata) and carry different field sets, so this
 // is the union of what the template and the helpers below actually read.
 interface SelectableToken {
   unit?: string;
@@ -122,7 +122,7 @@ const emit = defineEmits(['close', 'input']);
 const { loggedWallet } = toRefs(walletStore);
 const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 
-// Token images come from main-page market data (keyed by unit), not DexHunter.
+// Token images come from main-page market data (keyed by unit), not the token registry.
 const { getTokenImage } = useMarketData();
 const chainLogo = computed(
   () => networks.resolveCurrencyImage(loggedWallet.value?.chain, loggedWallet.value?.network) || '',
@@ -143,7 +143,7 @@ function getTokenPriceInUsd(token: SelectableToken | null): number {
     return priceStore.adaUsd?.lastPrice || 0;
   }
 
-  // For other tokens: get price from DexHunter (in ADA), convert to USD
+  // For other tokens: get price from the token registry (in ADA), convert to USD
   const unit = token.unit;
   if (unit && tokenMetadataStore.tokens[unit]) {
     const priceInAda = tokenMetadataStore.tokens[unit].price || 0;

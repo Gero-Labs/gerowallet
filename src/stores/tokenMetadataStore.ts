@@ -1,6 +1,6 @@
 import Vue from 'vue';
 import { parseHttpError } from '@/shared/utils/parser';
-import dexHunterApi from '@/api/dexhunter-api';
+import swapApi from '@/api/swap-api';
 import { getContextType } from '@/utils/storageSync';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
@@ -114,11 +114,11 @@ export default {
 
   async loadTokens() {
     try {
-      const res = await dexHunterApi.getSwapTokens();
+      const res = await swapApi.getSwapTokens();
       if (res.status === 200) {
         this.setTokens(res.data.reduce(function(map, token) {
           // Images/metadata for display come from market data (useMarketData), keyed by unit.
-          // DexHunter tokens only define what is swappable + provide pricing/routing.
+          // Registry tokens only define what is swappable + provide pricing/routing.
           map[token.token_id] = {
             name: token.token_ascii,
             ticker: token.ticker,
@@ -144,7 +144,7 @@ export default {
     for (const unit of tokensUnits) {
       try {
         if (unit !== 'lovelace') {
-          const res = await dexHunterApi.mCap(unit);
+          const res = await swapApi.mCap(unit);
           if (res.status === 200) {
             const { price, mcap } = res.data;
             await broadcastTokenPatch(unit, { price, mcap });
@@ -158,7 +158,7 @@ export default {
 
   async loadBlacklistPolicies() {
     try {
-      const res = await dexHunterApi.getAllBlacklistPolicies()
+      const res = await swapApi.getAllBlacklistPolicies()
       if (res.status === 200) {
         this.setBlacklistPolicies(res.data)
       } else {
@@ -170,7 +170,7 @@ export default {
   },
 
   async searchTokens(query?: string) {
-    const res = await dexHunterApi.getSwapTokens(query);
+    const res = await swapApi.getSwapTokens(query);
     if (res) {
       // Images/metadata for display come from market data (useMarketData), keyed by unit.
       return res.data.map(token => {

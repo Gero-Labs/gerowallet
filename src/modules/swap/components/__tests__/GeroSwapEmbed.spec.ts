@@ -69,7 +69,7 @@ describe('GeroSwapEmbed', () => {
   });
 
   it('dedupes ADA/lovelace to a single catalog entry even when the registry has its own ADA-ish row', async () => {
-    // DexHunter's swap-tradable registry represents native ADA with its own entry
+    // The swap-tradable registry represents native ADA with its own entry
     // (empty unit, ticker 'ADA') distinct from the 'lovelace' unit this app uses.
     TokenMetadataStore.state.tokens = {
       '': { unit: '', ticker: 'ADA', decimals: 6, verified: true },

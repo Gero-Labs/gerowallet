@@ -755,13 +755,13 @@ export class WalletManager {
 
     // OPTIMIZATION: Load non-critical data in background after wallet is ready
     // This improves perceived performance by not blocking the login flow
-    // DexHunter swap tokens (~17ms), blacklist policies (~9ms), BringCache (~349ms)
+    // Swap tokens (~17ms), blacklist policies (~9ms), BringCache (~349ms)
     setTimeout(async () => {
       if (networks.resolveSwapSupport(walletBg.chain, walletBg.network)) {
-        // Load DexHunter tokens first - this provides verification status
-        await TokenMetadataStore.loadTokens().catch(err => console.warn('Failed to load DexHunter tokens:', err));
+        // Load swap tokens first - this provides verification status
+        await TokenMetadataStore.loadTokens().catch(err => console.warn('Failed to load swap tokens:', err));
 
-        // Re-resolve assets after DexHunter tokens are loaded to update verified status
+        // Re-resolve assets after swap tokens are loaded to update verified status
         const utxos = walletStore.utxos;
         if (utxos && utxos.length > 0) {
           walletBg.setAssets(utxos as Cardano.Utxo[]);

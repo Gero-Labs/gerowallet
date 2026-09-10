@@ -296,7 +296,7 @@ const emit = defineEmits(['input', 'change', 'setMax', 'remove']);
 const { loggedWallet } = toRefs(walletStore);
 const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 
-// Token images come from main-page market data (keyed by unit), not DexHunter.
+// Token images come from main-page market data (keyed by unit), not the token registry.
 const { getTokenImage } = useMarketData();
 const chainLogo = computed(
   () => networks.resolveCurrencyImage(loggedWallet.value?.chain, loggedWallet.value?.network) || '',
@@ -313,7 +313,7 @@ function getTokenPriceInUsd(token: { ticker?: string; policy_id?: string; unit?:
     return priceStore.adaUsd?.lastPrice || 0;
   }
 
-  // For other tokens: get price from DexHunter (in ADA), convert to USD
+  // For other tokens: get price from the token registry (in ADA), convert to USD
   const unit = token.unit;
   if (unit && tokenMetadataStore.tokens[unit]) {
     const priceInAda = tokenMetadataStore.tokens[unit].price || 0;
