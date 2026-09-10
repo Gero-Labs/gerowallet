@@ -4904,6 +4904,8 @@ export default {
   'midnight.cnightDestSelf': '{name} (this wallet, same seed)',
   'midnight.cnightIncomingPending': 'DUST registration incoming from Cardano NIGHT',
   'midnight.dustBatteryPending': 'Registration pending',
+  'midnight.manageDustRegistration': 'Manage DUST registration',
+  'midnight.dustNoNight': 'No NIGHT registered',
   'midnight.cnightTimingNote': 'Registration is free apart from the Cardano network fee. The mapping usually reaches Midnight in about 2.5 hours (sometimes several hours on Mainnet), then allow up to 12 hours for DUST to start accruing.',
   'midnight.cnightHardwareNotice': 'Hardware wallets register through the official Midnight portal. Connect this wallet there to set up DUST generation.',
   'midnight.cnightOpenPortal': 'Open the official DUST portal',

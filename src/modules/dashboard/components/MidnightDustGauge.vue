@@ -7,14 +7,20 @@
           {{ isCharging ? 'mdi-battery-charging-medium' : 'mdi-battery-50' }}
         </v-icon>
         {{ $t('midnight.dustBattery') }}
-        <button v-if="!isRegistered && !isPending" type="button" class="dust-gauge__cta ml-3" @click="$emit('register')">
-          <v-icon x-small left>mdi-shield-star</v-icon>
-          {{ $t('midnight.registerForDust') }}
-        </button>
-        <span v-else-if="isPending" class="dust-gauge__pending ml-3">
+        <span v-if="isPending" class="dust-gauge__pending ml-3">
           <span class="dust-gauge__pending-dot"></span>
           {{ $t('midnight.dustBatteryPending') }}
         </span>
+        <!-- Always reachable. `isRegistered` is derived from two independent
+             signals (Path A poll, Path B mapping UTxO), and either can read
+             true while the wallet still generates nothing — a Path-B mapping
+             whose stake holds no cNIGHT is registered with 0 NIGHT. Hiding
+             the CTA on that boolean left the user with no way to register at
+             all. The label changes; the door never closes. -->
+        <button v-else type="button" class="dust-gauge__cta ml-3" @click="$emit('register')">
+          <v-icon x-small left>mdi-shield-star</v-icon>
+          {{ isRegistered ? $t('midnight.manageDustRegistration') : $t('midnight.registerForDust') }}
+        </button>
       </div>
       <div class="dust-gauge__balance">
         <v-skeleton-loader v-if="midnightLoading" type="text" width="110" />
@@ -100,6 +106,7 @@ const {
   dustGenerating,
   dustCap,
   registrationStatus,
+  nightRegistered,
 } = useMidnightDustLive();
 const { pathBRegistered, pathBStakes, pathBIncomingStakes } = useDustPathB();
 
@@ -206,6 +213,9 @@ const statusClass = computed(() => (isFull.value ? 'v--full' : isCharging.value 
 // Seconds to reach cap at the current rate → coarse human label.
 const timeToFullLabel = computed(() => {
   if (isFull.value) return t('midnight.dustFullyCharged');
+  // Registered but nothing to generate from: a bare dash here reads as "no
+  // data" when we actually know the reason. Say it.
+  if (isRegistered.value && nightRegistered.value <= 0n) return t('midnight.dustNoNight');
   if (!isRegistered.value || dustGenerating.value <= 0n) return '—';
   const remaining = dustCap.value - dustBalance.value;
   if (remaining <= 0n) return t('midnight.dustFullyCharged');
