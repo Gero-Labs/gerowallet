@@ -13,8 +13,8 @@
  * 4. Use computed properties to check if parent levels should show indicators
  */
 
-// Current app version - update this when releasing new features
-const APP_VERSION = '2.7.0';
+// Share the version used by the UI footer and extension manifest.
+import { version as currentAppVersion } from '../../../package.json';
 
 // Feature definitions - add new features here
 export interface FeatureDefinition {
@@ -106,7 +106,7 @@ function loadSeenFeatures(): Record<string, boolean> {
 
     if (stored) {
       const data: FeatureNotificationStorage = JSON.parse(stored);
-      if (data.version === APP_VERSION) {
+      if (data.version === currentAppVersion) {
         return data.seenFeatures || {};
       }
       // Version changed — carry over previously seen features
@@ -115,7 +115,7 @@ function loadSeenFeatures(): Record<string, boolean> {
 
     // Auto-mark features from older versions as seen (only current-version features should show as new)
     for (const feature of FEATURE_DEFINITIONS) {
-      if (feature.version !== APP_VERSION && !seen[feature.id]) {
+      if (feature.version !== currentAppVersion && !seen[feature.id]) {
         seen[feature.id] = true;
       }
     }
@@ -133,7 +133,7 @@ function loadSeenFeatures(): Record<string, boolean> {
 function saveSeenFeatures(seenFeatures: Record<string, boolean>) {
   try {
     const data: FeatureNotificationStorage = {
-      version: APP_VERSION,
+      version: currentAppVersion,
       seenFeatures,
       lastUpdated: new Date().toISOString()
     };
@@ -156,7 +156,7 @@ export function isFeatureNew(featureId: string): boolean {
   // Feature is new only if:
   // 1. It was added in the current version
   // 2. It hasn't been marked as seen
-  if (feature.version !== APP_VERSION) return false;
+  if (feature.version !== currentAppVersion) return false;
   return !seenFeatures.value[featureId];
 }
 
