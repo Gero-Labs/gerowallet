@@ -409,7 +409,8 @@ class WebSocketService {
           //
           // IMPORTANT: type goes AFTER the spread — otherwise data.type ('SYNC_CHECK_OK')
           // overwrites it and setSync's `type === 'SYNC'` guard rejects the message.
-          if (data['utxos'] || data['addresses'] || data['account'] || data['block']) {
+          // Midnight must also validate/record a blockless successful check.
+          if (this.chain === 'MIDNIGHT' || data['utxos'] || data['addresses'] || data['account'] || data['block']) {
             this.handlers.onSync?.({ ...data, type: 'SYNC' } as WsSyncMessage);
           }
           if (this.syncResolve) { this.syncResolve(); this.syncResolve = null; }
