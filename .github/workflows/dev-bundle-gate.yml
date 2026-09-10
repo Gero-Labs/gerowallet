@@ -87,6 +87,9 @@ jobs:
       - name: Wallet database and onboarding regressions
         run: npx vitest run src/db/wallet-db.spec.ts src/modules/welcome/components/WalletOnboarding/steps/StepSecurity.spec.ts
 
+      - name: Navigation loading regressions
+        run: npx vitest run src/modules/navigation/lazyPage.spec.ts src/modules/navigation/components/governanceNav.spec.ts
+
       # Design ratchet. Unlike tsc/eslint (see the header note) these gates are
       # green today and may only get greener: audit.mjs fails if any style-debt
       # metric in scripts/design/budgets.json grows, and contrast.mjs fails if a
