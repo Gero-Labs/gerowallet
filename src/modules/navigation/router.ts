@@ -27,7 +27,6 @@ const GovernanceDReps = () => import('@/modules/governance/views/DRepDirectory.v
 const GovernanceDRepProfile = () => import('@/modules/governance/views/DRepProfile.vue');
 const GovernanceMe = () => import('@/modules/governance/views/MyGovernance.vue');
 const GovernanceRegister = () => import('@/modules/governance/views/BecomeDRep.vue');
-const Dao = () => import('@/modules/dao/Dao.vue');
 const WarningPopUp = () => import('@/popup/modules/views/WarningPopUp.vue');
 const Transactions = () => import('@/modules/transactions/Transactions.vue');
 const Blog = () => import('@/modules/blog/Blog.vue');
@@ -179,15 +178,6 @@ const routes = [
     path: '/governance/dreps/:drepId',
     name: 'governanceDRep',
     component: GovernanceDRepProfile,
-    meta: {
-      layout: ContentLayout,
-      requiresAuth: true,
-    },
-  },
-  {
-    path: '/dao',
-    name: 'dao',
-    component: Dao,
     meta: {
       layout: ContentLayout,
       requiresAuth: true,
@@ -562,7 +552,6 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
       governanceAction: (c, n) => networks.resolveGovernanceSupport(c, n),
       governanceDReps: (c, n) => networks.resolveGovernanceSupport(c, n),
       governanceDRep: (c, n) => networks.resolveGovernanceSupport(c, n),
-      dao: (c, n) => networks.resolveDaoSupport(c, n),
       staking: (c, n) => networks.resolveStakingSupport(c, n),
       // The swap page's route is named 'swap' (‘/market’ is only a redirect, no
       // named route). Keying this guard 'market' left #/swap ungated, so an Apex
