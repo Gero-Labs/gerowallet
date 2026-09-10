@@ -1,5 +1,6 @@
 import VueRouter, { NavigationGuardNext, Route, RouteRecord } from 'vue-router';
 import { Blockchain } from '@/models/types';
+import { lazyPage } from './lazyPage';
 
 // Critical layouts loaded immediately
 import BlankLayout from '@/modules/navigation/layouts/BlankLayout.vue';
@@ -11,42 +12,41 @@ import Welcome from '@/modules/welcome/views/Welcome.vue';
 import PortfolioPage from '@/modules/portfolio/PortfolioPage.vue';
 
 // Lazy loading for other components (saves ~5MB initial load)
-const Staking = () => import("@/modules/staking/Staking.vue");
+const Staking = lazyPage('Staking', 'navigation.staking', () => import("@/modules/staking/Staking.vue"));
 const DappConnect = () => import("@/popup/modules/views/DappConnect.vue");
 const DappSignData = () => import('@/popup/modules/views/DappSignData.vue');
 const SignTx = () => import('@/popup/modules/views/SignTx.vue');
-const Cashback = () => import("@/modules/cashback/Cashback.vue");
-const MediaPlayer = () => import("@/modules/media-player/MediaPlayer.vue");
-const Swap = () => import('@/modules/swap/Swap.vue');
+const Cashback = lazyPage('Cashback', 'navigation.cashback', () => import("@/modules/cashback/Cashback.vue"));
+const MediaPlayer = lazyPage('MediaPlayer', 'navigation.mediaPlayer', () => import("@/modules/media-player/MediaPlayer.vue"));
+const Swap = lazyPage('Swap', 'navigation.swap', () => import('@/modules/swap/Swap.vue'));
 // Market.vue no longer used as standalone route — unified into PortfolioPage
-const DevTools = () => import('@/modules/devTools/DevTools.vue');
-const Governance = () => import('@/modules/governance/Governance.vue');
-const GovernanceActionList = () => import('@/modules/governance/views/ActionList.vue');
-const GovernanceActionDetail = () => import('@/modules/governance/views/ActionDetail.vue');
-const GovernanceDReps = () => import('@/modules/governance/views/DRepDirectory.vue');
-const GovernanceDRepProfile = () => import('@/modules/governance/views/DRepProfile.vue');
-const GovernanceMe = () => import('@/modules/governance/views/MyGovernance.vue');
-const GovernanceRegister = () => import('@/modules/governance/views/BecomeDRep.vue');
+const DevTools = lazyPage('DevTools', 'navigation.devTools', () => import('@/modules/devTools/DevTools.vue'));
+const GovernanceActionList = lazyPage('GovernanceActionList', 'governance.actionsTitle', () => import('@/modules/governance/views/ActionList.vue'));
+const GovernanceActionDetail = lazyPage('GovernanceActionDetail', 'governance.actionsTitle', () => import('@/modules/governance/views/ActionDetail.vue'));
+const GovernanceDReps = lazyPage('GovernanceDReps', 'governance.dReps', () => import('@/modules/governance/views/DRepDirectory.vue'));
+const GovernanceDRepProfile = lazyPage('GovernanceDRepProfile', 'governance.dReps', () => import('@/modules/governance/views/DRepProfile.vue'));
+const GovernanceMe = lazyPage('GovernanceMe', 'navigation.governanceMe', () => import('@/modules/governance/views/MyGovernance.vue'));
+const GovernanceRegister = lazyPage('GovernanceRegister', 'navigation.governance', () => import('@/modules/governance/views/BecomeDRep.vue'));
 const WarningPopUp = () => import('@/popup/modules/views/WarningPopUp.vue');
-const Transactions = () => import('@/modules/transactions/Transactions.vue');
-const Blog = () => import('@/modules/blog/Blog.vue');
-const BlogPost = () => import('@/modules/blog/BlogPost.vue');
-const Card = () => import('@/modules/wallet/GeroCard.vue');
+const Transactions = lazyPage('Transactions', 'navigation.transactions', () => import('@/modules/transactions/Transactions.vue'));
+const Blog = lazyPage('Blog', 'navigation.blog', () => import('@/modules/blog/Blog.vue'));
+const BlogPost = lazyPage('BlogPost', 'navigation.blog', () => import('@/modules/blog/BlogPost.vue'));
+const Card = lazyPage('Card', 'navigation.geroCard', () => import('@/modules/wallet/GeroCard.vue'));
 const PassKeyAuth = () => import('@/modules/authentication/views/PassKeyAuth.vue');
 const LedgerBleSign = () => import('@/modules/authentication/views/LedgerBleSign.vue');
-const GoMining = () => import('@/modules/gomining/GoMining.vue');
-const BabylonStaking = () => import('@/modules/babylon/BabylonStaking.vue');
-const Ordinals = () => import('@/modules/ordinals/Ordinals.vue');
-const ThorchainSwap = () => import('@/modules/thorchain/ThorchainSwap.vue');
-const MempoolExplorer = () => import('@/modules/mempool/MempoolExplorer.vue');
-const LightningLnurl = () => import('@/modules/lightning/LightningLnurl.vue');
+const GoMining = lazyPage('GoMining', 'navigation.goMining', () => import('@/modules/gomining/GoMining.vue'));
+const BabylonStaking = lazyPage('BabylonStaking', 'navigation.babylon', () => import('@/modules/babylon/BabylonStaking.vue'));
+const Ordinals = lazyPage('Ordinals', 'navigation.ordinals', () => import('@/modules/ordinals/Ordinals.vue'));
+const ThorchainSwap = lazyPage('ThorchainSwap', 'navigation.thorchain', () => import('@/modules/thorchain/ThorchainSwap.vue'));
+const MempoolExplorer = lazyPage('MempoolExplorer', 'navigation.mempool', () => import('@/modules/mempool/MempoolExplorer.vue'));
+const LightningLnurl = lazyPage('LightningLnurl', 'navigation.lightning', () => import('@/modules/lightning/LightningLnurl.vue'));
 const BitcoinSignPsbt = () => import('@/popup/modules/views/BitcoinSignPsbt.vue');
 const BitcoinSignMessage = () => import('@/popup/modules/views/BitcoinSignMessage.vue');
 const WCSessionProposal = () => import('@/popup/modules/views/WCSessionProposal.vue');
-const PoolOperator = () => import('@/modules/pool-operator/PoolOperator.vue');
-const RealFi = () => import('@/modules/realfi/RealFi.vue');
-const NexusPage = () => import('@/modules/nexus/NexusPage.vue');
-const ProofServerPage = () => import('@/modules/midnight/ProofServerPage.vue');
+const PoolOperator = lazyPage('PoolOperator', 'navigation.poolOperator', () => import('@/modules/pool-operator/PoolOperator.vue'));
+const RealFi = lazyPage('RealFi', 'navigation.realfi', () => import('@/modules/realfi/RealFi.vue'));
+const NexusPage = lazyPage('NexusPage', 'navigation.nexus', () => import('@/modules/nexus/NexusPage.vue'));
+const ProofServerPage = lazyPage('ProofServerPage', 'navigation.midnightProofServer', () => import('@/modules/midnight/ProofServerPage.vue'));
 
 import WalletStore from '@/stores/walletStore';
 import featureFlagsStore from '@/stores/featureFlagsStore';
@@ -113,7 +113,7 @@ const routes = [
   {
     path: '/governance',
     name: 'governance',
-    component: Governance,
+    redirect: (to: Route) => ({ name: to.query.drep ? 'governanceDReps' : 'governanceMe', query: to.query }),
     meta: {
       layout: ContentLayout,
       requiresAuth: true,
@@ -241,7 +241,7 @@ const routes = [
   {
     path: '/copilot-feed',
     name: 'copilotFeed',
-    component: () => import('@/sidepanel/pages/FeedPage.vue'),
+    component: lazyPage('CopilotFeed', 'navigation.copilotFeed', () => import('@/sidepanel/pages/FeedPage.vue')),
     meta: {
       layout: ContentLayout,
       requiresAuth: true,
