@@ -125,7 +125,7 @@
                       <div><strong>{{ t('navigation.network') }}:</strong> {{ networkDisplay }}</div>
                       <div><strong>{{ t('navigation.lastSync') }}:</strong> {{ lastSyncTimestamp }}</div>
                       <template v-if="isMidnight">
-                        <div><strong>Block:</strong> {{ midnightTip?.height || 'N/A' }}</div>
+                        <div><strong>Block:</strong> {{ midnightTip?.hash ? midnightTip.height : 'N/A' }}</div>
                       </template>
                       <template v-else-if="isBitcoin">
                         <!-- Bitcoin has no epoch — show block height instead. -->
@@ -323,7 +323,7 @@ const { config: geroConfig } = toRefs(geroStore);
 const { tip } = toRefs(networkStore);
 // Midnight uses its own store — `networkStore.tip` is Cardano-shaped (epoch/slot)
 // and stays empty for Midnight wallets.
-const { tip: midnightTip, networkStatus: midnightNetworkStatus } = toRefs(midnightStore);
+const { tip: midnightTip, lastSync: midnightLastSync, networkStatus: midnightNetworkStatus } = toRefs(midnightStore);
 const { musicPlaylist, context } = toRefs(musicStore);
 
 const isMidnight = computed(() => loggedWallet.value?.chain === Blockchain.MIDNIGHT);
@@ -438,8 +438,8 @@ const epochSlotPercentage = computed(() => {
 
 // Format last sync as timestamp (e.g., "2:45:32 PM")
 const lastSyncTimestamp = computed(() => {
-  // Midnight tip carries `timestamp` (unix seconds * 1000 from indexer); Cardano tip carries `time`.
-  const t = isMidnight.value ? midnightTip.value?.timestamp : tip.value?.time;
+  // Midnight records successful wallet sync separately from the chain block timestamp.
+  const t = isMidnight.value ? midnightLastSync.value : tip.value?.time;
   if (!t) {
     return 'N/A';
   }

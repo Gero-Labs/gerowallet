@@ -23,7 +23,7 @@
 
 import assts from '@/utils/assets';
 
-/** Every route in this section shares this prefix. `/dao` is the exception — see below. */
+/** Every route in this section shares this prefix. */
 export const GOVERNANCE_PREFIX = '/governance';
 
 /** A row in the Governance section. `flag` narrows the section's gate, never widens it. */
@@ -44,9 +44,9 @@ export interface GovernanceNavItem {
  * The section, in order.
  *
  * Icons: `assts.governance` stays with My governance, the page it has always
- * meant. `assts.dao` moves onto DReps — it depicts a collective, which is what a
- * body of representatives is — and the Gero mark takes over the DAO row itself,
- * so the one row that IS Gero's own organisation is the one wearing its logo.
+ * meant. `assts.dao` sits on DReps — it depicts a collective, which is what a
+ * body of representatives is. (It no longer competes with a Gero DAO row: that
+ * row and its `/dao` route were retired.)
  */
 export const GOVERNANCE_ITEMS: readonly GovernanceNavItem[] = Object.freeze([
   { titleKey: 'navigation.governanceMe', link: '/governance/me', icon: assts.governance },

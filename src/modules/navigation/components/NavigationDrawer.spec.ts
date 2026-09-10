@@ -191,9 +191,12 @@ describe('NavigationDrawer: the Governance section', () => {
     );
   });
 
-  it('carries the Gero DAO in the section, under its own network gate', () => {
+  // The Gero DAO row was retired along with its route (see router.ts — a direct
+  // #/dao visit now falls through to the catch-all redirect). Kept as a negative
+  // assertion rather than deleted so the row cannot quietly return.
+  it('carries no Gero DAO row — the section was retired', () => {
     wrapper = mountDrawer('/governance/me');
-    expect(rowLinks(wrapper)).toContain('/dao');
+    expect(rowLinks(wrapper)).not.toContain('/dao');
   });
 
   it('drops registration when the voting sub-flag is off', () => {

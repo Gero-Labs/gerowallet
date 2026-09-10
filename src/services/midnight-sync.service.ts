@@ -204,6 +204,8 @@ export function resolveOutputIndex(
 
 class MidnightSyncService {
   private active = false;
+  private tipTimer: ReturnType<typeof setInterval> | null = null;
+  private tipRequest: Promise<void> | null = null;
   private readonly generationQueue = new MidnightGenerationQueue();
   private sessionEpoch = 0;
   private currentNetwork: string | null = null;
@@ -248,6 +250,8 @@ class MidnightSyncService {
       return;
     }
 
+    if (this.tipTimer) clearInterval(this.tipTimer);
+    this.tipRequest = null;
     const sessionEpoch = ++this.sessionEpoch;
     this.currentNetwork = network;
     this.currentAddresses = addresses;
@@ -307,43 +311,43 @@ class MidnightSyncService {
     this.active = true;
     debugLog(`🌙 Midnight sync started for ${addresses.unshielded} on ${network} (gero-sync key: ${geroSyncNetwork})`);
 
-    // Bootstrap the chain tip from Nexus's indexer-backed `/api/blocks/latest`.
-    // gero-sync only sends `block` data inside SYNC messages when there's
-    // something to dispatch; if the wallet's already caught up at startup,
-    // SYNC_CHECK_OK arrives with no `block` field, leaving `midnightStore.tip`
-    // and `lastSync` at their empty defaults — so the navigation status
-    // tooltip would otherwise show "Last Sync: N/A" / "Block: N/A" forever.
-    // Fire-and-forget; a failure here is non-fatal (the tooltip just stays
-    // at N/A until the next SYNC arrives).
-    this.bootstrapTipFromNexus(network).catch((e) => {
-      debugLog('🌙 Midnight tip bootstrap from Nexus failed (non-fatal):', e);
-    });
+    // Keep recovering when startup fails or a generation reset clears the tip.
+    // This is display metadata; fetching it must not mark wallet sync complete.
+    void this.refreshTipFromNexus(network);
+    this.tipTimer = setInterval(() => { void this.refreshTipFromNexus(network); }, 30_000);
   }
 
-  /**
-   * Read the current chain tip from Nexus's `/api/blocks/latest` and seed
-   * {@link midnightStore.tip} + `lastSync`. Used at sync start so the
-   * navigation tooltip has a value before any new blocks have arrived.
-   */
-  private async bootstrapTipFromNexus(network: string): Promise<void> {
-    const api = getMidnightApi(network);
+  private refreshTipFromNexus(network: string): Promise<void> {
+    if (this.tipRequest) return this.tipRequest;
     const sessionEpoch = this.sessionEpoch;
-    const block = await api.getLatestBlock();
-    if (!this.active || this.currentNetwork !== network || this.sessionEpoch !== sessionEpoch) return;
-    debugLog('🌙 Midnight tip bootstrap response:', block);
-    if (typeof block.height !== 'number' || block.height === 0) {
-      debugLog('🌙 Midnight tip bootstrap: indexer returned no height — skipping');
-      return;
-    }
-    midnightActions.applyTipUpdate({
-      hash: block.hash ?? null,
-      height: block.height,
-      // Nexus's BlockDto returns `time` in epoch ms (chain-agnostic; same
-      // shape as Cardano's tip carries). The Midnight tip type already uses
-      // ms semantics for `timestamp` (see midnight-sync handleSync below).
-      timestamp: typeof block.time === 'number' ? block.time : 0,
+    const identity = midnightStore.chainIdentity;
+    const previousTip = midnightStore.tip;
+    const request = Promise.resolve().then(async () => {
+      const block = await getMidnightApi(network).getLatestBlock();
+      // Neither an old session nor a request spanning a reset/new WS tip may
+      // overwrite the current display. The next poll retries after a reset.
+      if (!this.active || this.currentNetwork !== network || this.sessionEpoch !== sessionEpoch
+        || midnightStore.chainIdentity !== identity || midnightStore.tip !== previousTip) return;
+      this.applyBlockTip(block);
+    }).catch((error) => {
+      debugLog('Midnight tip refresh from Nexus failed; will retry:', error);
+    }).finally(() => {
+      if (this.tipRequest === request) this.tipRequest = null;
     });
-    debugLog(`🌙 Midnight tip applied: height=${block.height} timestamp=${block.time}`);
+    this.tipRequest = request;
+    return request;
+  }
+
+  private applyBlockTip(block: { height?: number; hash?: string | null; time?: number }): void {
+    // Height-only catch-up markers are cursors, not observed chain tips.
+    if (!Number.isSafeInteger(block.height) || block.height! < 0
+      || typeof block.hash !== 'string' || !block.hash) return;
+    midnightActions.applyTipUpdate({
+      hash: block.hash,
+      height: block.height!,
+      timestamp: typeof block.time === 'number' && Number.isFinite(block.time) && block.time > 0
+        ? block.time : 0,
+    });
   }
 
   /**
@@ -351,6 +355,9 @@ class MidnightSyncService {
    * Safe to call when not active (no-op).
    */
   stop(): void {
+    if (this.tipTimer) clearInterval(this.tipTimer);
+    this.tipTimer = null;
+    this.tipRequest = null;
     if (!this.active) return;
     webSocketService.close();
     midnightActions.setNetworkStatus('disconnected');
@@ -419,17 +426,12 @@ class MidnightSyncService {
         await clearMidnightNetworkCheckpoints(identity.network);
         if (isActive()) midnightActions.resetChainState(identity);
       }, () => this.applySync(data));
+    if (isActive() && midnightStore.tip.hash === null) void this.refreshTipFromNexus(network);
   }
 
   private async applySync(data: WsSyncMessage): Promise<void> {
     // 1) Tip update
-    if (data.block && typeof data.block.height === 'number') {
-      midnightActions.applyTipUpdate({
-        hash: data.block.hash ?? null,
-        height: data.block.height,
-        timestamp: data.block.time ?? 0,
-      });
-    }
+    if (data.block) this.applyBlockTip(data.block);
 
     // 2) Transactions — UTxO-set model: add created outputs owned by us,
     // remove spent outputs owned by us, idempotently keyed by
@@ -549,6 +551,7 @@ class MidnightSyncService {
       this.applyAccountInfo(data.account);
     }
 
+    midnightActions.markSynced();
     midnightActions.setNetworkStatus('connected');
   }
 

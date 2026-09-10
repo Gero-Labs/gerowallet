@@ -459,15 +459,6 @@ const items = computed((): NavigationItemUnion[] => {
       notificationDot:
         item.link === '/governance/me' && hasNewFeaturesInPath(['navigation', 'governance']),
     })),
-    // Gero's own organisation, so it wears Gero's mark. It keeps its own network
-    // gate: the DAO is not part of Cardano governance and is supported on a
-    // different set of chains.
-    {
-      title: t('navigation.dao'),
-      icon: assts.geroNoText,
-      link: '/dao',
-      enabled: networks.resolveDaoSupport(loggedWallet.value?.chain, loggedWallet.value?.network),
-    },
     { header: t('navigation.activitiesRewards'), enabled: hasActivitiesRewardsItems },
     { title: t('navigation.claimRewards'), icon: assts.infinity, link: '/claim-rewards', enabled: isClaimRewardsEnabled },
     { title: t('navigation.cashback'), icon: assts.cashback, link: '/cashback', enabled: isCashbackEnabled },
