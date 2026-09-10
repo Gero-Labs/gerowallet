@@ -791,6 +791,7 @@ const transactionStatuses = ref<Record<string, string>>({});
 
 // Preload statuses for displayed transactions
 const preloadTransactionStatuses = async (transactions: StoredTransaction[]): Promise<void> => {
+  const version = loadVersion.value;
   const promises = transactions.map(async (item) => {
     const txId = item.id;
 
@@ -811,7 +812,9 @@ const preloadTransactionStatuses = async (transactions: StoredTransaction[]): Pr
 
     addFundTransferStatus(item, statuses);
 
-    transactionStatuses.value[txId] = statuses.join(', ');
+    if (version === loadVersion.value) {
+      transactionStatuses.value = { ...transactionStatuses.value, [txId]: statuses.join(', ') };
+    }
   });
 
   await Promise.all(promises);
@@ -981,15 +984,7 @@ const getPoolByIdFromApi = async (poolId: string) => {
 const loadMoreTransactions = async () => {
   if (isLoadingMore.value || hasReachedEnd.value) return;
 
-  const version = loadVersion.value;
   isLoadingMore.value = true;
-
-  if (props.isFullList) {
-    // Simulate loading delay for better UX
-    await new Promise(resolve => setTimeout(resolve, 300));
-    // Bail out if a new search/reset happened during the delay
-    if (version !== loadVersion.value) return;
-  }
 
   try {
     let newTransactions: StoredTransaction[];
@@ -1019,12 +1014,8 @@ const loadMoreTransactions = async () => {
       }
     }
 
-    // Preload statuses for new transactions and wait for completion
-    if (newTransactions.length > 0) {
-      await preloadTransactionStatuses(newTransactions);
-      // Bail out if a new search/reset happened during preload
-      if (version !== loadVersion.value) return;
-    }
+    // Pool metadata enhances the label; it must not hold up rows or pagination.
+    void preloadTransactionStatuses(newTransactions);
   } finally {
     isLoadingMore.value = false;
   }
@@ -1050,11 +1041,10 @@ const resetInfiniteScroll = async () => {
   if (endIndex >= transactions.value.length) {
     hasReachedEnd.value = true;
   }
-  if (firstBatch.length > 0) {
-    await preloadTransactionStatuses(firstBatch);
-  }
   displayedTransactions.value = firstBatch;
   isLoadingMore.value = false;
+  // Publish pending rows immediately, using the existing basic status fallback.
+  void preloadTransactionStatuses(firstBatch);
 };
 
 // Watch for debounced search term changes to reset infinite scroll
@@ -1735,6 +1725,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  loadVersion.value++;
   if (intersectionObserver.value) {
     intersectionObserver.value.disconnect();
   }
