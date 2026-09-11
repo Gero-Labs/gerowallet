@@ -87,6 +87,9 @@ jobs:
       - name: Wallet database and onboarding regressions
         run: npx vitest run src/db/wallet-db.spec.ts src/modules/welcome/components/WalletOnboarding/steps/StepSecurity.spec.ts
 
+      - name: Pending transaction visibility regressions
+        run: npx vitest run src/chrome/pendingTransactions.spec.ts src/modules/dashboard/components/TransactionsCard.pending.spec.ts
+
       - name: Navigation loading regressions
         run: npx vitest run src/modules/navigation/lazyPage.spec.ts src/modules/navigation/components/governanceNav.spec.ts
 

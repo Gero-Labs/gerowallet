@@ -29,7 +29,19 @@
           @click="handleRowClick(tx)"
         >
           <div class="recent-tx-meta">
-            <div class="recent-tx-status">{{ statusLabel(tx) }}</div>
+            <div class="recent-tx-status">
+              <span class="recent-tx-label">{{ statusLabel(tx) }}</span>
+              <v-progress-circular
+                v-if="tx.pending"
+                indeterminate
+                :size="12"
+                :width="2"
+                color="warning"
+                class="ml-1 flex-shrink-0"
+                :aria-label="t('dashboard.transactionPendingConfirmation')"
+                :title="t('dashboard.transactionPendingConfirmation')"
+              />
+            </div>
             <div class="recent-tx-time">{{ formatTime(tx.tx_timestamp) }}</div>
           </div>
           <div class="recent-tx-amount" :style="{ color: getTransactionColor(tx) }">
@@ -180,10 +192,16 @@ function formatAmount(tx: StoredTransaction): string {
 }
 
 .recent-tx-status {
+  display: flex;
+  align-items: center;
   font-size: 11px;
   font-weight: 500;
   color: #ffffff;
   line-height: 1.2;
+}
+
+.recent-tx-label {
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
