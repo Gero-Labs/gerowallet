@@ -26,8 +26,7 @@ Pinned versions live in `package.json` — don't trust docs' version tables, the
 
 ## Transaction requirements
 
-Keep these boundaries when changing transaction code. See the
-[Stagenet guide](../../../docs/midnight-ledger9.md) for rollout and live testing.
+Keep these boundaries when changing transaction code.
 
 - Unshielded signing: BIP-340 via `keystore.signData` per segment; segments may be
   0x-prefixed (walletBg strips before decoding).

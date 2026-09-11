@@ -192,8 +192,6 @@ This starts development servers for all contexts:
 
 **That's it!** You now have Gero Wallet running locally. 🎉
 
-For detailed setup instructions, troubleshooting, and development guides, see [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md).
-
 ---
 
 ## Development
@@ -276,9 +274,6 @@ gerowallet/
 │   │   ├── composables/     # Vue composables
 │   │   └── components/      # Shared Vue components
 │   └── options/             # Extension UI entry points
-├── docs/                    # Documentation
-│   ├── GETTING_STARTED.md   # Detailed setup guide
-│   └── ...
 ├── ARCHITECTURE.md          # System architecture overview
 ├── CONTRIBUTING.md          # Contribution guidelines
 └── README.md                # This file
@@ -352,7 +347,7 @@ For complete architectural details, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ### For Contributors
 
-- **[Getting Started Guide](docs/GETTING_STARTED.md)** - Detailed setup, development workflow, troubleshooting
+- **[Quick Start](#quick-start)** - Local setup and development environment
 - **[Architecture Overview](ARCHITECTURE.md)** - System design, patterns, data flow
 - **[Contributing Guidelines](CONTRIBUTING.md)** - How to contribute, code standards, PR process
 
@@ -380,7 +375,7 @@ We welcome contributions from the community! Gero Wallet is a financial applicat
 
 1. Read the [Contributing Guidelines](CONTRIBUTING.md)
 2. Review the [Architecture Overview](ARCHITECTURE.md)
-3. Set up your development environment using the [Getting Started Guide](docs/GETTING_STARTED.md)
+3. Set up your development environment using the [Quick Start](#quick-start)
 
 ### Contribution Workflow
 

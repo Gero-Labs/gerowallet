@@ -990,7 +990,7 @@ await blockchainApi.submitTx(finalTx);
 Gero Wallet's architecture prioritizes **security**, **performance**, and **extensibility**. The multi-context design isolates sensitive operations, the modular structure enables feature additions without coupling, and the real-time communication provides instant updates.
 
 For detailed implementation guides, see:
-- **Getting Started**: `docs/GETTING_STARTED.md`
+- **Getting Started**: [Quick Start](README.md#quick-start)
 - **Development Guide**: `CLAUDE.md`
 - **Contributing**: `CONTRIBUTING.md`
 - **Security**: see the Security section of [README](README.md)
