@@ -238,6 +238,11 @@ async function getManifest() {
       'cookies',
       'unlimitedStorage',
       'webNavigation',
+      // Required by @bringweb3/chrome-extension-kit >=1.8.0: bringInitBackground()
+      // throws unless storage/tabs/webNavigation/webRequest are all granted. The SDK
+      // uses webRequest.onBeforeRedirect (observational only) to follow affiliate
+      // redirect chains. Without it cashback silently fails to initialize.
+      'webRequest',
       'notifications',
       'identity',
       'sidePanel',

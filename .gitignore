@@ -65,7 +65,7 @@ graphify-out/
 scripts/translate-*.js
 scripts/merge-translations.js
 # Catalyst / milestone deliverables + local write-ups (kept local).
-# docs/catalyst/ is covered by the docs/ allowlist below.
+# docs/catalyst/ is covered by /docs/ below.
 CloseOut_Video_Script.md
 Milestone4_Proof_of_Achievement.md
 MEDIUM_ARTICLE_*.md
@@ -82,20 +82,8 @@ email-templates/
 .claude/
 .superpowers/
 
-# ── docs/ : allowlist, not blocklist ─────────────────────────────────────────
-# Everything under docs/ is ignored BY DEFAULT so local-only planning, handoff,
-# research, and demo notes can never reach the public repo via `git add .`.
-# This replaced a per-file blocklist that only listed notes we happened to
-# remember — every new local doc leaked until someone added a line.
-#
-# This does NOT hide the docs already published: .gitignore has no effect on
-# files git already tracks, so every committed doc under docs/ continues to
-# stage, diff, and commit as normal.
-#
-# To publish a NEW doc, opt in deliberately:
-#     git add -f docs/path/to/doc.md
-# Renaming a published doc makes the new path ignored again — re-add with -f.
-docs/**
+# Local planning and working documents stay on this machine.
+/docs/
 
 # Local MCP config + worktrees must never be committed
 .mcp.json.local
