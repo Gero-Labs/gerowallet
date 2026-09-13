@@ -36,6 +36,26 @@ updates:
     ignore:
       - dependency-name: "@zxing/browser"
       - dependency-name: "@zxing/library"
+      # Exact peer pin: @babylonlabs-io/btc-staking-ts declares
+      # `peerDependencies: { "bitcoinjs-lib": "6.1.7" }` — a single version, not
+      # a range — so nothing above 6.1.7 is installable while BTC staking is a
+      # dependency. A bump makes the tree unresolvable and every CI job dies in
+      # `npm ci` with ERESOLVE, which looks exactly like ordinary lockfile drift
+      # but is not fixed by re-locking (see PR 1077). Lift this once Babylon
+      # widens its peer range.
+      - dependency-name: "bitcoinjs-lib"
+        versions: [">6.1.7"]
+      # vitest 5 requires Vite 6.4+ (and Node 22, which CI already runs). We are
+      # on Vite 4, so resolution pulls Vite 8 and collides with
+      # @vitejs/plugin-vue2 — `npm ci` fails with ERESOLVE and every required
+      # check dies. These are named explicitly because the catch-all major rule
+      # below did not stop the coupled "vitest + @vitest/ui" PR that dependabot
+      # opens as a multi-dependency update. Drop both entries as part of the
+      # Vite 4 -> 6+ migration, not before.
+      - dependency-name: "vitest"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@vitest/ui"
+        update-types: ["version-update:semver-major"]
       # Suppress all npm major-version bumps. We never auto-adopt them — every
       # major (vue-router, @vueuse, vitest, cbor/cborg, eslint, etc.) is closed
       # on sight because the Vue 2 / Cardano-serialization stack needs a manual,
