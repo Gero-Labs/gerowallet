@@ -90,7 +90,7 @@
     "axios": "^1.20.0",
     "bech32": "^2.0.0",
     "bip39": "^3.1.0",
-    "bitcoinjs-lib": "^6.1.8",
+    "bitcoinjs-lib": "^6.1.7",
     "blake2b": "^2.1.4",
     "blakejs": "^1.2.1",
     "cbor": "^9.0.2",
