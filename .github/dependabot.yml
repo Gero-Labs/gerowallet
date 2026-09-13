@@ -36,6 +36,15 @@ updates:
     ignore:
       - dependency-name: "@zxing/browser"
       - dependency-name: "@zxing/library"
+      # Exact peer pin: @babylonlabs-io/btc-staking-ts declares
+      # `peerDependencies: { "bitcoinjs-lib": "6.1.7" }` — a single version, not
+      # a range — so nothing above 6.1.7 is installable while BTC staking is a
+      # dependency. A bump makes the tree unresolvable and every CI job dies in
+      # `npm ci` with ERESOLVE, which looks exactly like ordinary lockfile drift
+      # but is not fixed by re-locking (see PR 1077). Lift this once Babylon
+      # widens its peer range.
+      - dependency-name: "bitcoinjs-lib"
+        versions: [">6.1.7"]
       # Suppress all npm major-version bumps. We never auto-adopt them — every
       # major (vue-router, @vueuse, vitest, cbor/cborg, eslint, etc.) is closed
       # on sight because the Vue 2 / Cardano-serialization stack needs a manual,
