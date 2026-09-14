@@ -2,7 +2,7 @@
   <BaseDialog
     :isOpen="isOpen"
     :title="t('governance.rationaleDialogTitle')"
-    :subtitle="actionTitle || undefined"
+    :subtitle="subtitle || undefined"
     icon="mdi-message-text-outline"
     size="lg"
     :min-height="RATIONALE_DIALOG_HEIGHT"
@@ -26,30 +26,40 @@
           <span class="t-caption rationale-dialog__note">{{ $t('governance.rationaleFetching') }}</span>
         </div>
 
-        <template v-else-if="result && result.status === 'verified'">
-          <div class="rationale-dialog__banner rationale-dialog__banner--verified">
-            <v-icon size="16" color="var(--g-success)">mdi-shield-check-outline</v-icon>
+        <template v-else-if="shown">
+          <!-- The banner is the trust statement. Green: these bytes hash to what
+               the vote recorded. Amber: the words are shown, but the wallet does
+               not vouch for them — and says why. -->
+          <div
+            class="rationale-dialog__banner"
+            :class="verified ? 'rationale-dialog__banner--verified' : 'rationale-dialog__banner--doubt'"
+          >
+            <v-icon size="16" :color="verified ? 'var(--g-success)' : 'var(--g-warning)'">
+              {{ verified ? 'mdi-shield-check-outline' : 'mdi-alert-outline' }}
+            </v-icon>
             <span class="t-body-sm rationale-dialog__banner-text">
-              {{ $t('governance.anchorVerified') }}
-              <span class="rationale-dialog__banner-note">{{ $t('governance.rationaleVerifiedNote') }}</span>
+              {{ $t(bannerTitleKey) }}
+              <span class="rationale-dialog__banner-note">{{ $t(bannerNoteKey) }}</span>
             </span>
           </div>
 
-          <!-- v-html is safe here and ONLY here: every section goes through
-               renderMarkdown, which HTML-escapes the author's bytes before it
-               applies a single markdown rule. Nothing fetched reaches the DOM as
-               markup. See renderMarkdown's header before changing this. -->
-          <section v-for="(section, i) in result.sections" :key="i" class="rationale-dialog__section">
+          <!-- v-html is safe here and ONLY here: every prose section goes
+               through renderMarkdown, which HTML-escapes the author's bytes
+               before it applies a single markdown rule. A json section is
+               interpolated as text. Nothing fetched reaches the DOM as markup.
+               See renderMarkdown's header before changing this. -->
+          <section v-for="(section, i) in shown.sections" :key="i" class="rationale-dialog__section">
             <span v-if="section.labelKey" class="t-label">{{ $t(section.labelKey) }}</span>
-            <div class="g-prose" v-html="rendered[i]"></div>
+            <pre v-if="section.kind === 'json'" class="rationale-dialog__json g-mono t-caption">{{ section.text }}</pre>
+            <div v-else class="g-prose" v-html="rendered[i]"></div>
           </section>
         </template>
 
-        <!-- Nothing verified, so nothing rendered. The reader gets the reason and
-             a way to read the document themselves, in their own browser. -->
-        <div v-else class="rationale-dialog__problem" :class="`rationale-dialog__problem--${tone}`">
-          <span class="rationale-dialog__problem-glyph" :class="`rationale-dialog__problem-glyph--${tone}`">
-            <v-icon size="20">{{ glyph }}</v-icon>
+        <!-- Nothing arrived worth rendering. The reader gets the reason and a
+             way to read the document themselves, in their own browser. -->
+        <div v-else class="rationale-dialog__problem">
+          <span class="rationale-dialog__problem-glyph">
+            <v-icon size="20">mdi-file-question-outline</v-icon>
           </span>
           <span class="t-heading">{{ $t(problemTitleKey) }}</span>
           <p class="t-body-sm rationale-dialog__problem-body">{{ $t(problemBodyKey) }}</p>
@@ -79,14 +89,17 @@
  * A vote's published rationale, read-only and hash-checked.
  *
  * The wallet fetches the CIP-136 anchor, hashes the RAW BYTES, and renders the
- * prose only when that hash equals the one recorded on chain with the vote.
- * Anything else — a mismatch, a missing hash, an oversized response, a host the
- * extension cannot reach — renders NO content and offers the link instead.
- * `loadRationale` owns that decision table; this component owns the copy.
+ * document under a banner that says whether that hash equals the one recorded
+ * on chain with the vote. Verified is green; a mismatch or a missing hash keeps
+ * the text on screen under an amber banner that says the wallet cannot vouch
+ * for it. An oversized response, an empty file or a host the extension cannot
+ * reach renders NO content and offers the link instead. `loadRationale` owns
+ * that decision table; this component owns the copy.
  *
  * The one `v-html` in here is fed exclusively by `renderMarkdown`, which escapes
- * every author byte before applying any markdown rule. That ordering is the
- * whole safety argument for showing a document nobody in this codebase wrote.
+ * every author byte before applying any markdown rule; the JSON fallback is
+ * text-interpolated. That ordering is the whole safety argument for showing a
+ * document nobody in this codebase wrote, whatever the hash said about it.
  */
 import { computed, ref, watch } from 'vue';
 
@@ -124,8 +137,8 @@ const props = defineProps({
     type: String,
     default: null,
   },
-  /** The governance action this vote was cast on, for the dialog subtitle. */
-  actionTitle: {
+  /** Whose rationale, or on what: the action title or the voter's name. */
+  subtitle: {
     type: String,
     default: null,
   },
@@ -141,46 +154,58 @@ const result = ref<RationaleResult | null>(null);
 /** Always available, whatever the fetch did: the reader can open it themselves. */
 const externalHref = computed(() => toExternalHref(props.url));
 
+/** The document on screen, verified or not; null while loading or failed. */
+const shown = computed(() =>
+  result.value && result.value.status !== 'failed' ? result.value : null,
+);
+
+const verified = computed(() => shown.value?.status === 'verified');
+
 const rendered = computed(() =>
   // `emphasis: true` — a rationale is prose, and authors use `_word_` freely.
-  // See renderMarkdown's word-boundary guard for why this stays safe.
-  result.value?.status === 'verified'
-    ? result.value.sections.map(section => renderMarkdown(section.text, { emphasis: true }))
-    : [],
+  // See renderMarkdown's word-boundary guard for why this stays safe. A json
+  // section is never rendered as markdown; its slot here is simply unused.
+  (shown.value?.sections ?? []).map(section =>
+    section.kind === 'prose' ? renderMarkdown(section.text, { emphasis: true }) : '',
+  ),
 );
 
 /**
  * A mismatch is a warning about the DOCUMENT, not about the voter: an author's
- * host may simply have been re-deployed. It is amber, and the content stays
- * hidden either way.
+ * host may simply have been re-deployed. The banner is amber, and the text is
+ * shown beneath it so the reader can weigh it for themselves.
  */
-const TONE: Record<string, string> = {
-  mismatch: 'warning',
-  unverifiable: 'warning',
-  oversize: 'neutral',
-  network: 'neutral',
-  empty: 'neutral',
+const DOUBT_TITLE_KEYS: Record<string, string> = {
+  mismatch: 'governance.anchorMismatch',
+  unverifiable: 'governance.rationaleNoHash',
 };
+
+const DOUBT_NOTE_KEYS: Record<string, string> = {
+  mismatch: 'governance.rationaleMismatchNote',
+  unverifiable: 'governance.rationaleNoHashNote',
+};
+
+const bannerTitleKey = computed(() =>
+  shown.value?.status === 'unverified'
+    ? DOUBT_TITLE_KEYS[shown.value.reason]
+    : 'governance.anchorVerified',
+);
+
+const bannerNoteKey = computed(() =>
+  shown.value?.status === 'unverified'
+    ? DOUBT_NOTE_KEYS[shown.value.reason]
+    : 'governance.rationaleVerifiedNote',
+);
 
 const failure = computed(() => (result.value?.status === 'failed' ? result.value.reason : null));
 
-const tone = computed(() => (failure.value ? TONE[failure.value] ?? 'neutral' : 'neutral'));
-
-const glyph = computed(() =>
-  tone.value === 'warning' ? 'mdi-alert-outline' : 'mdi-file-question-outline',
-);
-
 const TITLE_KEYS: Record<string, string> = {
-  mismatch: 'governance.anchorMismatch',
-  unverifiable: 'governance.rationaleNoHash',
   oversize: 'governance.rationaleTooLarge',
   network: 'governance.anchorFetchFailed',
   empty: 'governance.rationaleEmpty',
 };
 
 const BODY_KEYS: Record<string, string> = {
-  mismatch: 'governance.rationaleMismatchBody',
-  unverifiable: 'governance.rationaleNoHashBody',
   oversize: 'governance.rationaleTooLargeBody',
   network: 'governance.rationaleFetchFailedBody',
   empty: 'governance.rationaleEmptyBody',
@@ -264,6 +289,10 @@ watch(() => [props.isOpen, props.url, props.hash], () => void load(), { immediat
   background: var(--g-success-fill);
   border-color: var(--g-success-line);
 }
+.rationale-dialog__banner--doubt {
+  background: var(--g-warning-fill);
+  border-color: var(--g-warning-line);
+}
 .rationale-dialog__banner-text {
   color: var(--g-text-1);
   min-width: 0;
@@ -277,6 +306,18 @@ watch(() => [props.isOpen, props.url, props.hash], () => void load(), { immediat
   flex-direction: column;
   gap: var(--g-s-2);
 }
+/* The document as published, when it carries no CIP-136 prose to lift out.
+   Same box as the action detail's raw JSON, so the two read as one thing. */
+.rationale-dialog__json {
+  margin: 0;
+  padding: var(--g-s-3);
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-card);
+  color: var(--g-text-2);
+  overflow-x: auto;
+  white-space: pre;
+}
 
 .rationale-dialog__problem {
   display: flex;
@@ -288,9 +329,6 @@ watch(() => [props.isOpen, props.url, props.hash], () => void load(), { immediat
   background: var(--g-raised);
   border: 1px solid var(--g-hairline-1);
 }
-.rationale-dialog__problem--warning {
-  border-color: var(--g-warning-line);
-}
 .rationale-dialog__problem-glyph {
   display: flex;
   align-items: center;
@@ -300,10 +338,6 @@ watch(() => [props.isOpen, props.url, props.hash], () => void load(), { immediat
   border-radius: var(--g-r-control);
   background: var(--g-overlay);
   color: var(--g-text-3);
-}
-.rationale-dialog__problem-glyph--warning {
-  background: var(--g-warning-fill);
-  color: var(--g-warning);
 }
 .rationale-dialog__problem-glyph .v-icon {
   color: inherit;

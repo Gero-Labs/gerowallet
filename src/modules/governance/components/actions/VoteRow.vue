@@ -50,16 +50,18 @@
       <span class="vote-row__sr-only">{{ votedOnLabel }}</span>
     </time>
 
-    <a
-      v-if="row.rationaleHref"
+    <!-- A button, not a link: the rationale opens in-app, fetched and
+         hash-checked by RationaleDialog, which also handles ipfs:// through the
+         proxy — so every published rationale gets the affordance. -->
+    <button
+      v-if="row.hasRationale"
+      type="button"
       class="t-caption vote-row__rationale"
-      :href="row.rationaleHref"
-      target="_blank"
-      rel="noopener noreferrer"
+      @click="emit('rationale', row)"
     >
       {{ $t('governance.readWhy') }}
-      <v-icon x-small class="ml-1">mdi-open-in-new</v-icon>
-    </a>
+      <v-icon x-small class="ml-1">mdi-message-text-outline</v-icon>
+    </button>
   </div>
 </template>
 
@@ -84,7 +86,10 @@ const props = defineProps({
   route: { type: Object as PropType<Record<string, unknown> | null>, default: null },
 });
 
-const emit = defineEmits<{ (e: 'open', route: Record<string, unknown>): void }>();
+const emit = defineEmits<{
+  (e: 'open', route: Record<string, unknown>): void;
+  (e: 'rationale', row: PositionRow): void;
+}>();
 
 const { t } = useTranslation();
 
@@ -262,9 +267,14 @@ function openVoter(): void {
   align-items: center;
   min-height: 24px;
   min-width: 24px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
   color: var(--g-accent);
   text-decoration: none;
   white-space: nowrap;
+  cursor: pointer;
 }
 .vote-row__rationale:hover {
   text-decoration: underline;

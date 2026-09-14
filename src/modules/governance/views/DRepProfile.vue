@@ -145,17 +145,16 @@
                 <span v-else class="t-body-sm drep-profile__vote-title">{{ vote.title }}</span>
                 <span class="t-caption drep-profile__vote-meta">{{ vote.meta }}</span>
               </div>
-              <!-- Rationale documents are author hosted. We state that one exists
-                   and link out; the wallet never fetches an author URL. -->
-              <a
-                v-if="vote.rationaleHref"
+              <!-- Rationale documents are author hosted. The dialog fetches one
+                   on click only, hash-checks it, and says how far to trust it. -->
+              <button
+                v-if="vote.rationaleUrl"
+                type="button"
                 class="t-caption drep-profile__rationale"
-                :href="vote.rationaleHref"
-                target="_blank"
-                rel="noopener noreferrer"
+                @click="openRationale(vote)"
               >
-                {{ $t('governance.rationaleAttached') }}<v-icon x-small class="ml-1">mdi-open-in-new</v-icon>
-              </a>
+                {{ $t('governance.readWhy') }}<v-icon x-small class="ml-1">mdi-message-text-outline</v-icon>
+              </button>
             </div>
           </div>
 
@@ -225,6 +224,16 @@
       :tx="tx"
       @close="closeDialog()"
     ></DRepDelegateDialog>
+    <!-- Mounted only while open: opening it is what sends the request, and a
+         request to an author's host must follow a click, never a render. -->
+    <RationaleDialog
+      v-if="rationaleVote"
+      :is-open="true"
+      :url="rationaleVote.rationaleUrl"
+      :hash="rationaleVote.rationaleHash"
+      :subtitle="rationaleVote.title"
+      @close="rationaleVote = null"
+    />
   </div>
 </template>
 
@@ -254,7 +263,7 @@ import {
   loadDRepRecord,
 } from '@/shared/composables/useGovernanceHydration';
 import { parseGovActionId, type GovActionId } from '@/shared/utils/govActionId';
-import { safeExternalHref, toSafeLinks } from '@/shared/utils/externalLink';
+import { toSafeLinks } from '@/shared/utils/externalLink';
 import { formatInt } from '@/shared/utils/format';
 import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
@@ -265,6 +274,7 @@ import EmptyState from '@/shared/components/feedback/EmptyState.vue';
 import ErrorState from '@/shared/components/feedback/ErrorState.vue';
 import AsOf from '@/modules/governance/components/actions/AsOf.vue';
 import DRepDelegateDialog from '@/modules/governance/dialogs/DRepDelegateDialog.vue';
+import RationaleDialog from '@/modules/governance/dialogs/RationaleDialog.vue';
 import { useDRepDelegation } from '@/modules/governance/composables/useDRepDelegation';
 
 /**
@@ -296,6 +306,13 @@ const error = ref<string | null>(null);
 const fetchedAt = ref<number | null>(null);
 const voteFilter = ref<'all' | 'rationale'>('all');
 const showAll = ref(false);
+
+/** The vote whose rationale is open, or null. The dialog mounts off this. */
+const rationaleVote = ref<VoteRow | null>(null);
+
+function openRationale(vote: VoteRow): void {
+  rationaleVote.value = vote;
+}
 
 const actionsState = governanceActionsStore.state;
 const currentEpoch = computed(() => NetworkStore.getCurrentEpoch());
@@ -493,7 +510,9 @@ interface VoteRow {
   tone: string;
   title: string;
   meta: string;
-  rationaleHref: string | undefined;
+  /** The CIP-136 anchor pair, for the rationale dialog; null when none was attached. */
+  rationaleUrl: string | null;
+  rationaleHash: string | null;
   /** Set only when the proposal id parses as a governance action id. */
   actionRoute: GovActionId | null;
 }
@@ -524,14 +543,15 @@ const allVotes = computed<VoteRow[]>(() => {
         tone: CHOICE_TONE[choice] ?? 'abstain',
         title: action?.title || truncate(id),
         meta: parts.join(' · '),
-        rationaleHref: safeExternalHref(vote.meta_url),
+        rationaleUrl: typeof vote.meta_url === 'string' && vote.meta_url.trim() ? vote.meta_url.trim() : null,
+        rationaleHash: typeof vote.meta_hash === 'string' && vote.meta_hash.trim() ? vote.meta_hash.trim() : null,
         actionRoute: parseGovActionId(id),
       };
     });
 });
 
 const filteredVotes = computed(() =>
-  voteFilter.value === 'rationale' ? allVotes.value.filter(vote => !!vote.rationaleHref) : allVotes.value,
+  voteFilter.value === 'rationale' ? allVotes.value.filter(vote => !!vote.rationaleUrl) : allVotes.value,
 );
 
 const visibleVotes = computed(() =>
@@ -768,8 +788,19 @@ async function onDelegate(): Promise<void> {
   flex: none;
 }
 .drep-profile__rationale {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
   color: var(--g-accent);
   align-self: flex-start;
+  cursor: pointer;
+}
+.drep-profile__rationale:hover {
+  text-decoration: underline;
 }
 .drep-profile__more {
   display: flex;

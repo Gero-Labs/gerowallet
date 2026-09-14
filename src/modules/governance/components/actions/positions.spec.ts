@@ -61,16 +61,23 @@ describe('toPositionRows', () => {
     // to carry any of the four extras.
     const [row] = toPositionRows([vote()]);
     expect(row.votedAt).toBeNull();
-    expect(row.rationaleHref).toBeUndefined();
+    expect(row.rationaleUrl).toBeNull();
+    expect(row.rationaleHash).toBeNull();
     expect(row.hasScript).toBe(false);
   });
 
   it('reads the extras through when the projection does carry them', () => {
     const [row] = toPositionRows([
-      vote({ votedAt: 1787463005, rationaleUrl: 'https://example.test/why.json', hasScript: true }),
+      vote({
+        votedAt: 1787463005,
+        rationaleUrl: 'https://example.test/why.json',
+        rationaleHash: 'ab'.repeat(32),
+        hasScript: true,
+      }),
     ]);
     expect(row.votedAt).toBe(1787463005);
-    expect(row.rationaleHref).toBe('https://example.test/why.json');
+    expect(row.rationaleUrl).toBe('https://example.test/why.json');
+    expect(row.rationaleHash).toBe('ab'.repeat(32));
     expect(row.hasScript).toBe(true);
   });
 
@@ -79,32 +86,33 @@ describe('toPositionRows', () => {
     expect(toPositionRows([vote({ votedAt: 0 })])[0].votedAt).toBeNull();
   });
 
-  it('drops a rationale link that is not a safe http(s) url', () => {
+  it('carries the anchor through untouched, whatever its scheme', () => {
     // Rationale anchors are author-controlled, so the scheme is theirs to pick.
+    // The row does not judge it: the dialog's loader decides what can be
+    // fetched (ipfs through the proxy) and `toInAppUrl` refuses the rest.
     const rows = toPositionRows([
       vote({ rationaleUrl: 'javascript:alert(1)' }),
-      vote({ rationaleUrl: 'ipfs://QmSomething' }),
-    ]);
-    expect(rows[0].rationaleHref).toBeUndefined();
-    expect(rows[1].rationaleHref).toBeUndefined();
-  });
-
-  it('still records that an unlinkable rationale EXISTS', () => {
-    // About a quarter of published rationales are ipfs://. Withholding the link
-    // is right; reporting the voter as having published nothing is not.
-    const rows = toPositionRows([
       vote({ rationaleUrl: 'ipfs://QmSomething' }),
       vote({ rationaleUrl: 'https://a.test/why.json' }),
       vote({ rationaleUrl: '   ' }),
       vote(),
     ]);
-    expect(rows.map(row => row.hasRationale)).toEqual([true, true, false, false]);
-    expect(rows.map(row => row.rationaleHref)).toEqual([
-      undefined,
+    expect(rows.map(row => row.hasRationale)).toEqual([true, true, true, false, false]);
+    expect(rows.map(row => row.rationaleUrl)).toEqual([
+      'javascript:alert(1)',
+      'ipfs://QmSomething',
       'https://a.test/why.json',
-      undefined,
-      undefined,
+      null,
+      null,
     ]);
+  });
+
+  it('treats a blank hash as no hash', () => {
+    const rows = toPositionRows([
+      vote({ rationaleUrl: 'https://a.test/why.json', rationaleHash: '   ' }),
+      vote({ rationaleUrl: 'https://a.test/why.json', rationaleHash: null }),
+    ]);
+    expect(rows.map(row => row.rationaleHash)).toEqual([null, null]);
   });
 
   it('only claims a script voter on an explicit true', () => {
@@ -305,8 +313,8 @@ describe('summarizePositions', () => {
     expect(some.anyVotedAt).toBe(true);
   });
 
-  it('counts rationales that exist apart from rationales that can be opened', () => {
-    // The head count is about the voters; the link count is about this wallet.
+  it('counts every published rationale, ipfs included', () => {
+    // The head count is about the voters, not about what this wallet can open.
     const summary = summarizePositions(
       toPositionRows([
         vote({ rationaleUrl: 'ipfs://QmSomething' }),
@@ -315,7 +323,6 @@ describe('summarizePositions', () => {
       ]),
     );
     expect(summary.withRationale).toBe(2);
-    expect(summary.withRationaleLink).toBe(1);
   });
 
   it('reports a list that mixes dated and undated rows', () => {

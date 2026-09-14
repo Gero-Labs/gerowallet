@@ -439,7 +439,7 @@
       :is-open="rationaleOpen"
       :url="rationaleUrl"
       :hash="rationaleHash"
-      :action-title="rationaleTitle"
+      :subtitle="rationaleTitle"
       @close="closeRationale()"
     />
   </div>
