@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite';
 import { sharedConfig } from './vite.config.mjs';
-import { isDev, r } from './scripts/utils';
+import { extensionDirName, isDev, r } from './scripts/utils';
 import packageJson from './package.json';
 
 // bundling the content script using Vite
@@ -24,7 +24,7 @@ export default defineConfig({
           ignored: ['**/DumpStack.log.tmp', '**/DumpStack.log', '**/*.tmp', '**/node_modules/**', '**/.git/**']
         }
       : undefined,
-    outDir: r('extension/content'),
+    outDir: r(`${extensionDirName}/content`),
     cssCodeSplit: false,
     emptyOutDir: false,
     sourcemap: isDev ? 'inline' : false,

@@ -1,5 +1,5 @@
 import fs from 'fs-extra'
-import { isDev, isFirefox, log, r } from './utils';
+import { extensionDirName, isDev, isFirefox, log, r } from './utils';
 import type PkgType from '../package.json';
 import type { Manifest } from 'webextension-polyfill';
 import dotenv from 'dotenv';
@@ -29,6 +29,79 @@ const key = process.env.MANIFEST_KEY;
 const client_id = process.env.GOOGLE_CLIENT_ID;
 //@ts-ignore
 const isBeta: boolean = process.env.VITE_IS_BETA === 'true';
+
+// ── Firefox manifest transform ────────────────────────────────────────────
+//
+// Mirrors gerowallet-e2e-tests's scripts/firefox-manifest.mjs `toFirefoxManifest()`
+// (a pure, unit-tested reference implementation written against a real Chrome
+// manifest.json fixture) — keep the two in sync. Platform facts are recorded
+// in that repo's docs/superpowers/specs/2026-09-14-firefox-support-design.md.
+
+const FIREFOX_EXTENSION_ID = 'gero-wallet@gerowallet.io';
+const FIREFOX_STRICT_MIN_VERSION = '128.0';
+
+/** Permissions Chrome accepts that Firefox rejects as unknown. */
+const CHROME_ONLY_PERMISSIONS = new Set(['favicon', 'sidePanel']);
+
+/**
+ * Firefox permits only 'self' and 'wasm-unsafe-eval' in script-src. Every
+ * other directive (in particular the long connect-src list) is preserved
+ * verbatim.
+ */
+function narrowScriptSrcForFirefox(csp: string): string {
+  return csp
+    .split(';')
+    .map((directive) => directive.trim())
+    .filter(Boolean)
+    .map((directive) =>
+      directive.startsWith('script-src ') ? "script-src 'self' 'wasm-unsafe-eval'" : directive
+    )
+    .join('; ');
+}
+
+function toFirefoxManifest(manifest: ManifestWithOAuth2): ManifestWithOAuth2 {
+  const fx: ManifestWithOAuth2 = { ...manifest };
+
+  // Meaningless/rejected by Firefox.
+  delete fx.key;
+  delete fx.oauth2;
+
+  // Firefox has no background.service_worker (bug 1573659); MV3 uses a
+  // non-persistent event page instead. `persistent` is invalid under MV3 —
+  // omit it entirely (an earlier version of this file emitted `persistent:
+  // true` alongside a background script filename the bundler never actually
+  // produces — both wrong; fixed here).
+  fx.background = { scripts: ['background/index.js'] };
+
+  if (fx.side_panel) {
+    fx.sidebar_action = {
+      default_panel: fx.side_panel.default_path,
+      default_title: fx.action?.default_title ?? fx.name,
+      ...(fx.action?.default_icon ? { default_icon: fx.action.default_icon } : {}),
+    };
+    delete fx.side_panel;
+  }
+
+  if (Array.isArray(fx.permissions)) {
+    fx.permissions = fx.permissions.filter((p) => !CHROME_ONLY_PERMISSIONS.has(p as string));
+  }
+
+  fx.browser_specific_settings = {
+    gecko: {
+      id: FIREFOX_EXTENSION_ID,
+      strict_min_version: FIREFOX_STRICT_MIN_VERSION,
+    },
+  };
+
+  if (fx.content_security_policy?.extension_pages) {
+    fx.content_security_policy = {
+      ...fx.content_security_policy,
+      extension_pages: narrowScriptSrcForFirefox(fx.content_security_policy.extension_pages),
+    };
+  }
+
+  return fx;
+}
 
 // ── Content Security Policy (organized by category) ──────────────────────────
 
@@ -218,16 +291,14 @@ async function getManifest() {
         }
       }
       : {}),
-    background: isFirefox
-      ? {
-        scripts: ['background/_virtual_index.js'],
-        persistent: true,
-      }
-      : {
-        service_worker: './background/index.js',
-        // Note: We build with format: 'iife', not ES modules, so don't use type: 'module'
-        // This was causing "Failed to resolve module specifier" errors
-      },
+    // Always build the Chrome shape here; toFirefoxManifest() below rewrites
+    // it (background, permissions, CSP, sidebar, etc.) for isFirefox in one
+    // place instead of scattering isFirefox branches through this object.
+    background: {
+      service_worker: './background/index.js',
+      // Note: We build with format: 'iife', not ES modules, so don't use type: 'module'
+      // This was causing "Failed to resolve module specifier" errors
+    },
     permissions: [
       'tabs',
       'activeTab',
@@ -303,11 +374,11 @@ async function getManifest() {
     manifest.permissions?.push('webNavigation')
   }
 
-  return manifest
+  return isFirefox ? toFirefoxManifest(manifest) : manifest
 }
 
 export async function writeManifest() {
-  await fs.writeJSON(r('extension/manifest.json'), await getManifest(), { spaces: 2 })
+  await fs.writeJSON(r(`${extensionDirName}/manifest.json`), await getManifest(), { spaces: 2 })
   log('PRE', 'write manifest.json')
 }
 

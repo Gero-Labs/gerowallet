@@ -4,7 +4,7 @@ import Vue from '@vitejs/plugin-vue2';
 import { VuetifyResolver } from 'unplugin-vue-components/resolvers';
 import Components from 'unplugin-vue-components/vite';
 import AutoImport from 'unplugin-auto-import/vite';
-import { isDev, port, r } from './scripts/utils';
+import { extensionDirName, isDev, port, r } from './scripts/utils';
 import packageJson from './package.json';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import copy from 'rollup-plugin-copy';
@@ -293,7 +293,7 @@ export default defineConfig(({ command }) => {
       minify: false, // Disable minification for speed
       target: 'es2022',
       watch: isDev ? {} : undefined,
-      outDir: r('extension'),
+      outDir: r(extensionDirName),
       assetsDir: 'assets',
       emptyOutDir: false,
       sourcemap: false, // Always disable sourcemaps
@@ -344,12 +344,12 @@ export default defineConfig(({ command }) => {
         plugins: [
           copy({
             targets: [
-              { src: 'src/assets/public/*', dest: 'extension/public', flatten: true },
-              { src: 'src/assets/notifications/*', dest: 'extension/public/notifications', flatten: true },
+              { src: 'src/assets/public/*', dest: `${extensionDirName}/public`, flatten: true },
+              { src: 'src/assets/notifications/*', dest: `${extensionDirName}/public/notifications`, flatten: true },
               // Skip large images for faster build
               {
                 src: 'src/assets/!(emptyState|welcome|cashbackcarousel|cardanoBg|apex|bg-dapp).*',
-                dest: 'extension/assets'
+                dest: `${extensionDirName}/assets`
               },
               // Only the JS loader (+ README) belongs in the runtime vendor dir — the CSS is
               // NOT loaded from here at runtime. It's a Vite build INPUT (see the <link
@@ -359,7 +359,7 @@ export default defineConfig(({ command }) => {
               // ~196KB dead duplicate that nothing ever loads.
               {
                 src: ['src/vendor/gero-swap/gero-swap.js', 'src/vendor/gero-swap/README.md'],
-                dest: 'extension/vendor/gero-swap',
+                dest: `${extensionDirName}/vendor/gero-swap`,
                 flatten: true,
               },
             ],

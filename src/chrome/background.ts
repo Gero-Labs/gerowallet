@@ -6457,4 +6457,19 @@ const openUI = async () => {
 
 chrome.action.onClicked.addListener(openUI);
 
+// TODO(firefox defect 2, UNVERIFIED hypothesis — separate from the WASM-URL
+// fix in vite.config.background.mts): even with the background reliably
+// reaching this line and registering its listener, real onboarding in
+// Firefox still intermittently fails to deliver CHECK_AUTO_LOCK/LOGIN to it —
+// see gerowallet-e2e-tests's
+// .superpowers/sdd/2026-09-14-firefox-harness-selenium/diagnosis-report.md
+// ("Round 4", point 5) for the evidence trail. Leading hypothesis: MV3 wants
+// onMessage listeners registered SYNCHRONOUSLY during a service
+// worker/event page's initial evaluation so the browser can wake it and
+// still deliver the very message that woke it; this call sits at the end of
+// a ~6,000-line async body, so on a wake-triggered restart the listener
+// registers late and Firefox drops the waking message (Chrome appears to
+// buffer until the service worker finishes evaluating, masking the same
+// class of race). Not verified, and NOT to be "fixed" by restructuring this
+// file speculatively — that needs its own investigation task.
 app.listen();

@@ -20,6 +20,7 @@ node_modules
 # Build outputs
 /dist
 extension/
+extension-firefox/
 *.d.ts
 !components.d.ts
 !src/types/*.d.ts

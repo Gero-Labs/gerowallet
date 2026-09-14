@@ -2,20 +2,20 @@
 import { execSync } from 'node:child_process'
 import fs from 'fs-extra'
 import chokidar from 'chokidar'
-import { isDev, log, port, r } from './utils'
+import { extensionDirName, isDev, log, port, r } from './utils'
 
 /**
  * Copy assets that are needed during development
  */
 async function copyDevAssets() {
   // Ensure directories exist
-  await fs.ensureDir(r('extension/public'))
+  await fs.ensureDir(r(`${extensionDirName}/public`))
 
   // Copy public assets
   const publicAssets = r('src/assets/public')
   if (await fs.pathExists(publicAssets)) {
     try {
-      await fs.copy(publicAssets, r('extension/public'), { overwrite: true })
+      await fs.copy(publicAssets, r(`${extensionDirName}/public`), { overwrite: true })
       log('PRE', 'copied public assets')
     } catch (error) {
       console.warn('Failed to copy public assets:', error)
@@ -26,7 +26,7 @@ async function copyDevAssets() {
   const notificationAssets = r('src/assets/notifications')
   if (await fs.pathExists(notificationAssets)) {
     try {
-      await fs.copy(notificationAssets, r('extension/public/'), { overwrite: true })
+      await fs.copy(notificationAssets, r(`${extensionDirName}/public/`), { overwrite: true })
       log('PRE', 'copied notification assets')
     } catch (error) {
       console.warn('Failed to copy notification assets:', error)
@@ -41,7 +41,7 @@ async function copyDevAssets() {
   const geroSwapVendor = r('src/vendor/gero-swap')
   if (await fs.pathExists(geroSwapVendor)) {
     try {
-      await fs.copy(geroSwapVendor, r('extension/vendor/gero-swap'), { overwrite: true })
+      await fs.copy(geroSwapVendor, r(`${extensionDirName}/vendor/gero-swap`), { overwrite: true })
       log('PRE', 'copied gero-swap vendor')
     } catch (error) {
       console.warn('Failed to copy gero-swap vendor:', error)
@@ -58,16 +58,16 @@ async function stubIndexHtml() {
   optionsData = optionsData
     .replace('"./main.ts"', `"http://localhost:${port}/options/main.ts"`)
     .replace('<div id="app"></div>', '<div id="app">Vite server did not start</div>')
-  await fs.writeFile(r(`extension/index.html`), optionsData, 'utf-8')
+  await fs.writeFile(r(`${extensionDirName}/index.html`), optionsData, 'utf-8')
   log('PRE', `stub options`)
 
   // Stub sidepanel → extension/sidepanel/index.html
-  await fs.ensureDir(r('extension/sidepanel'))
+  await fs.ensureDir(r(`${extensionDirName}/sidepanel`))
   let sidepanelData = await fs.readFile(r(`src/sidepanel/index.html`), 'utf-8')
   sidepanelData = sidepanelData
     .replace('"./main.ts"', `"http://localhost:${port}/sidepanel/main.ts"`)
     .replace('<div id="app"></div>', '<div id="app">Vite server did not start</div>')
-  await fs.writeFile(r(`extension/sidepanel/index.html`), sidepanelData, 'utf-8')
+  await fs.writeFile(r(`${extensionDirName}/sidepanel/index.html`), sidepanelData, 'utf-8')
   log('PRE', `stub sidepanel`)
 }
 
@@ -99,14 +99,14 @@ if (isDev) {
 
     // Move options/index.html to extension root and fix paths
     log('PRE', 'stub options')
-    await fs.ensureDir(r(`extension/options`))
-    let data = await fs.readFile(r(`extension/options/index.html`), 'utf-8')
+    await fs.ensureDir(r(`${extensionDirName}/options`))
+    let data = await fs.readFile(r(`${extensionDirName}/options/index.html`), 'utf-8')
     data = fixBrokenPaths(data, './')  // root-level: ./assets/, ./js/
-    await fs.writeFile(r(`extension/index.html`), data, 'utf-8')
-    await fs.remove(r(`extension/options`))
+    await fs.writeFile(r(`${extensionDirName}/index.html`), data, 'utf-8')
+    await fs.remove(r(`${extensionDirName}/options`))
 
     // Fix sidepanel asset paths (stays in subdirectory)
-    const sidepanelHtml = r('extension/sidepanel/index.html')
+    const sidepanelHtml = r(`${extensionDirName}/sidepanel/index.html`)
     if (await fs.pathExists(sidepanelHtml)) {
       let spData = await fs.readFile(sidepanelHtml, 'utf-8')
       spData = fixBrokenPaths(spData, '../')  // subdirectory: ../assets/, ../js/

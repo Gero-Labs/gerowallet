@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { defineConfig } from 'vite';
 import { sharedConfig } from './vite.config.mts';
-import { isDev, r } from './scripts/utils';
+import { extensionDirName, isDev, r } from './scripts/utils';
 import packageJson from './package.json';
 import rollupTla from 'rollup-plugin-tla';
 import commonjs from '@rollup/plugin-commonjs';
@@ -271,8 +271,48 @@ const bundleTdzGuard = {
   },
 };
 
+/**
+ * WASM asset URLs — Firefox defect fix (see gerowallet-e2e-tests's
+ * .superpowers/sdd/2026-09-14-firefox-harness-selenium/diagnosis-report.md,
+ * "Round 4" for the full evidence trail).
+ *
+ * `vite-plugin-wasm` fetches each `.wasm` file via an `import __vite__wasmUrl
+ * from '<id>?url'`. For this bundle's output format (`iife`), Vite's default
+ * runtime URL construction resolves that import against `self.location.href`
+ * (via the `document.currentScript`/`document.baseURI` → `self.location.href`
+ * rewrite below, needed for MV3 service-worker compatibility generally).
+ *
+ * That's fine in Chrome, where the background is a service worker and
+ * `self.location.href` IS `.../background/index.js` — the relative `.wasm`
+ * name resolves into `background/` correctly. It's broken in Firefox, where
+ * MV3 has no service worker and the background is a non-persistent event
+ * page: `self.location.href` is `.../_generated_background_page.html`, which
+ * lives at the extension ROOT, not `background/` — so the same relative name
+ * resolves to a URL with no file behind it, `fetch()` rejects with
+ * `NetworkError`, and — because this whole bundle is one `rollup-plugin-tla`
+ * `!async function(){...}()` with no enclosing try/catch — that unhandled
+ * rejection aborts the rest of the file's evaluation before `app.listen()`
+ * ever runs, so NO onMessage listener gets registered in Firefox, ever.
+ *
+ * Fix: use `experimental.renderBuiltUrl` to emit `.wasm` asset references as
+ * a `chrome.runtime.getURL(...)` call instead of a `self.location.href`-
+ * relative one. `chrome.runtime.getURL()` resolves correctly against the
+ * extension root regardless of what page/context calls it or what
+ * `self.location` happens to be — correct under both `chrome-extension://`
+ * (service worker) and `moz-extension://` (event page) with no browser
+ * branching needed. This changes WHERE assets are looked up, not what gets
+ * built or shipped — no duplicate files, no two-copy hack.
+ */
+const backgroundAssetRuntimeUrl = {
+  renderBuiltUrl(filename: string, { hostType }: { hostType: 'js' | 'css' | 'html' }) {
+    if (hostType !== 'js') return undefined;
+    return { runtime: `chrome.runtime.getURL(${JSON.stringify(`background/${filename}`)})` };
+  },
+};
+
 export default defineConfig({
   ...sharedConfig,
+  experimental: backgroundAssetRuntimeUrl,
   plugins: [
     ...(Array.isArray(sharedConfig.plugins) ? sharedConfig.plugins : []),
     cjsInteropPlugin,
@@ -357,7 +397,7 @@ export default defineConfig({
         }
       } : {})
     } : undefined,
-    outDir: r('extension/background'),
+    outDir: r(`${extensionDirName}/background`),
     cssCodeSplit: false,
     emptyOutDir: false,
     sourcemap: false, // Disabled — background bundle has 3000+ modules (WC SDK); sourcemaps cause OOM
@@ -443,6 +483,41 @@ export default pbkdf2Browser;
           generateBundle(options, bundle) {
             for (const [fileName, chunk] of Object.entries(bundle)) {
               if (chunk.type === 'chunk' && fileName === 'index.js') {
+                // Startup failure hardening (Firefox defect 1 — see
+                // diagnosis-report.md "Round 3c"/"Round 4"): the whole bundle
+                // body is one `!async function(){...}()` (rollup-plugin-tla)
+                // with no enclosing try/catch, so an uncaught error/rejection
+                // ANYWHERE during startup (a WASM init failure being the
+                // observed case, but not the only conceivable one) silently
+                // kills every top-level statement after it — including
+                // `app.listen()` — with nothing surfaced anywhere, which is
+                // how the whole extension went mute: no listener, no error,
+                // no signal at all. This must be the literal first thing the
+                // file does (prepended ahead of everything else, including
+                // the addEventListener patch below) so it is wired before any
+                // module's own top-level code — WASM init included — gets a
+                // chance to run and fail.
+                //
+                // This does not (and structurally cannot, from a global
+                // handler alone — see the diagnosis report) resume execution
+                // past the failure point; a real "keep going after a specific
+                // dependency's init fails" fix would mean restructuring how
+                // this bundle sequences top-level await across modules, which
+                // is out of scope here. What this guarantees is that the
+                // failure is never silent again: it is always logged to the
+                // background context's own console, which is what makes it
+                // debuggable at all instead of presenting as "the extension
+                // just doesn't respond to anything."
+                const startupErrorGuardCode = `
+(function() {
+  self.addEventListener('error', function(e) {
+    try { console.error('[gero-background] uncaught error during startup', e && (e.error || e.message) || e); } catch (_) {}
+  });
+  self.addEventListener('unhandledrejection', function(e) {
+    try { console.error('[gero-background] unhandled rejection during startup', e && e.reason); } catch (_) {}
+  });
+})();
+`;
                 // Prepend addEventListener monkey-patch to suppress Chrome's service worker warnings
                 // Chrome warns when addEventListener('online'/'offline') is not called during initial evaluation
                 const suppressionCode = `
@@ -460,7 +535,7 @@ export default pbkdf2Browser;
   };
 })();
 `;
-                chunk.code = suppressionCode + chunk.code;
+                chunk.code = startupErrorGuardCode + suppressionCode + chunk.code;
 
                 // Replace document.currentScript references for service worker compatibility
                 chunk.code = chunk.code.replace(
