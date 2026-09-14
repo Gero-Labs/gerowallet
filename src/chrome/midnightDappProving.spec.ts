@@ -111,6 +111,21 @@ describe('ProvingUploadStore', () => {
     expect(text(store.take(OTHER_ORIGIN, 'shared-id').preimage)).toBe('theirs');
   });
 
+  it('drops every in-flight upload of a disconnected origin and nothing else', () => {
+    const store = new ProvingUploadStore();
+    store.addChunk(ORIGIN, { uploadId: 'a', part: 'proverKey', index: 0, total: 3, chunk: encodeBase64(bytes('x')) });
+    uploadPart(store, ORIGIN, 'b', 'preimage', bytes('p'));
+    uploadPart(store, OTHER_ORIGIN, 'c', 'preimage', bytes('q'));
+
+    store.dropOrigin(ORIGIN);
+
+    expect(store.size).toBe(1);
+    expect(() => store.take(ORIGIN, 'b')).toThrow(/not found or expired/);
+    expect(text(store.take(OTHER_ORIGIN, 'c').preimage)).toBe('q');
+    // Idempotent on an origin with nothing in flight.
+    expect(() => store.dropOrigin(ORIGIN)).not.toThrow();
+  });
+
   it('refuses to hand back a part with missing chunks', () => {
     const store = new ProvingUploadStore();
     store.addChunk(ORIGIN, { uploadId: 'u', part: 'preimage', index: 0, total: 2, chunk: encodeBase64(bytes('a')) });
