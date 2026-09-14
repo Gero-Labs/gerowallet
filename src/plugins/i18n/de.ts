@@ -3967,6 +3967,7 @@ export default {
   'market.copyFailed': 'Kopieren fehlgeschlagen',
   'market.time': 'Zeit',
   'market.type': 'Typ',
+  'market.dex': 'DEX',
   'market.depth': 'Tiefe',
   'market.noDepthData': 'Keine Tiefendaten verfügbar',
   'market.noOrderBookData': 'Keine Orderbuchdaten verfügbar',

@@ -24,8 +24,8 @@ import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { getMidnightApi } from '@/api/midnight-api';
 import { midnightStore } from '@/stores/midnightStore';
-import { resolveZkpaasUrl, buildZkpaasHeaders, isZkpaasConfigured } from '@/chains/midnight/midnightZkpaas';
 import { assertNativeNightConversionSupported, validateShieldedTokenType } from '@/chains/midnight/midnightTokenCapabilities';
+import { resolveProvingTarget } from '@/chains/midnight/midnightProvingTarget';
 import type {
   BuildMidnightTxRequest,
   MidnightSegmentToSign,
@@ -363,22 +363,19 @@ export class ProofServerUnreachableError extends Error {
 function resolveWalletProvingTarget(
   network: string,
 ): { url: string; headers?: Record<string, string>; stage: MidnightSendStage; lenientHealth: boolean } | null {
-  const ps = midnightStore.proofServer;
-  if (ps.mode === 'local') {
-    const requiredProfile = network.toLowerCase().replace(/^midnight-/, '') === 'stagenet' ? 'stagenet' : 'legacy';
-    if ((ps.localProfile ?? 'legacy') !== requiredProfile) throw new ProofServerUnreachableError(ps.localUrl);
-    return { url: ps.localUrl, stage: 'provingLocal', lenientHealth: false };
+  // `unconfigured` covers both zkPaaS-without-a-key and a local server whose
+  // circuit family doesn't match the network (see resolveProvingTarget).
+  const target = resolveProvingTarget(network, midnightStore.proofServer);
+  if (target.kind === 'unconfigured') {
+    throw new ProofServerUnreachableError(target.url);
   }
-  if (ps.mode === 'zkpaas') {
-    const url = resolveZkpaasUrl(network, ps);
-    if (!isZkpaasConfigured(ps) || !url) {
-      throw new ProofServerUnreachableError(url);
-    }
-    return {
-      url, headers: buildZkpaasHeaders(ps), stage: 'provingZkpaas', lenientHealth: true,
-    };
-  }
-  return null;
+  if (target.kind === 'cloud') return null;
+  return {
+    url: target.url,
+    headers: target.headers,
+    stage: target.mode === 'zkpaas' ? 'provingZkpaas' : 'provingLocal',
+    lenientHealth: target.lenientHealth,
+  };
 }
 
 /**

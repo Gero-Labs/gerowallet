@@ -3655,6 +3655,7 @@ export default {
   'market.copyFailed': 'Failed to copy',
   'market.time': 'Time',
   'market.type': 'Type',
+  'market.dex': 'DEX',
   'market.depth': 'Depth',
   'market.noDepthData': 'No depth data available',
   'market.noOrderBookData': 'No order book data available',
