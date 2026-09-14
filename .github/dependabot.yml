@@ -78,6 +78,16 @@ updates:
     labels:
       - "github-actions"
       - "automated"
+    # Mirror of the npm major suppression above, which only covers that
+    # ecosystem — without this, Actions majors arrive unfiltered (seen with
+    # actions/checkout 5 -> 7 and actions/setup-node 5 -> 7 on the same day).
+    # An Actions major can change the action's Node runtime or drop inputs, and
+    # these workflows are the merge gates, so each one gets a deliberate review:
+    # confirm the pinned SHA really is the claimed tag, and diff the action's
+    # inputs before adopting it. Minor/patch still flow.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     commit-message:
       prefix: "ci"
       include: "scope"
