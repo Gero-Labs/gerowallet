@@ -42,6 +42,7 @@ export default [
             'node_modules/**',
             'dist/**',
             'extension/**',
+            'extension-firefox/**',
             'build/**',
             '*.config.js',
             '*.config.mjs',

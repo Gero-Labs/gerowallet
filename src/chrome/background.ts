@@ -6472,4 +6472,11 @@ chrome.action.onClicked.addListener(openUI);
 // buffer until the service worker finishes evaluating, masking the same
 // class of race). Not verified, and NOT to be "fixed" by restructuring this
 // file speculatively — that needs its own investigation task.
+//
+// Note: the startup error/unhandledrejection guard prepended in
+// vite.config.background.mts (defect 1's hardening) is diagnostic only — it
+// logs a failure so it is no longer silent, it does NOT resume execution
+// past it and does NOT register this listener any earlier. The actual fix
+// for a dropped waking message, if this hypothesis holds, is registering
+// app.listen() synchronously/early — that is this TODO, not the guard.
 app.listen();
