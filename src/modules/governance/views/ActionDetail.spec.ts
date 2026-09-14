@@ -48,9 +48,6 @@ vi.mock('vue-router/composables', () => ({
 // Every child that would drag a store, an API or a dialog in. Each factory is
 // spelled out rather than sharing a helper: vi.mock factories are hoisted above
 // every binding in this file, so a shared `stubSfc` would not exist yet.
-vi.mock('@/modules/governance/dialogs/CastVoteDialog.vue', () => ({
-  default: { name: 'CastVoteDialog', props: ['isOpen', 'actions'], render: () => null },
-}));
 vi.mock('@/modules/governance/components/actions/PositionsPanel.vue', () => ({
   default: { name: 'PositionsPanel', props: ['presetRole', 'committeeNames', 'votes'], render: () => null },
 }));
@@ -65,9 +62,6 @@ vi.mock('@/modules/governance/components/actions/BodyTallyCard.vue', () => ({
       return h('div', { class: 'body-card' });
     },
   },
-}));
-vi.mock('@/modules/governance/components/actions/VoteCta.vue', () => ({
-  default: { name: 'VoteCta', props: ['action'], render: () => null },
 }));
 vi.mock('@/modules/governance/components/actions/StatusPill.vue', () => ({
   default: { name: 'StatusPill', props: ['status'], render: () => null },
