@@ -286,9 +286,12 @@ import { useDRepDelegation } from '@/modules/governance/composables/useDRepDeleg
  *  - The verification chip is TRI-state. `is_valid: true` is verified,
  *    `is_valid: false` is a real mismatch, and an absent flag is "unverified" —
  *    a DRep nobody has checked has not failed anything.
- *  - Rationale documents live on the author's own host. The wallet says one is
- *    attached and links out; it never fetches an author URL, which would leak
- *    the user's IP and browse arbitrary remote content on their behalf.
+ *  - Rationale documents live on the author's own host. The wallet fetches one
+ *    ONLY when the reader clicks "Read why" — never on render, so a row cannot
+ *    leak the user's IP to an author just by existing — and RationaleDialog
+ *    hash-checks the bytes against the on-chain anchor and says how far to
+ *    trust them. `ipfs://` anchors go through gero-backend's proxy; http(s)
+ *    ones are fetched directly, read-only, without credentials.
  */
 
 const HEAD_VOTES = 4;
