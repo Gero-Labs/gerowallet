@@ -52,6 +52,21 @@ updates:
       # below did not stop the coupled "vitest + @vitest/ui" PR that dependabot
       # opens as a multi-dependency update. Drop both entries as part of the
       # Vite 4 -> 6+ migration, not before.
+      # Coupled WASM pin, and it fails QUIETLY. Four sibling packages —
+      # wallet-sdk-address-format, -dust-wallet, -shielded and
+      # -unshielded-wallet, aliased here as midnight-v9-* — each declare
+      # `"@midnightntwrk/ledger-v9": "1.0.0-rc.3"` as an exact dependency, so
+      # npm cannot dedupe them. Bumping the root alone does not move them; it
+      # nests a second copy, and ledger-v9 ships a wasm-bindgen module. Two
+      # instances means two linear memories and two sets of generated classes,
+      # so objects minted by one fail `instanceof` inside the other:
+      # midnightLedger9.ts and midnightPrivateSync.ts import both sides, and
+      # the real-SDK shielded suite then fails 12/12 with "expected instance of
+      # ZswapSecretKeys" (PR 1084). Unlike the bitcoinjs-lib peer pin above,
+      # this is a regular dependency, so npm nests silently instead of raising
+      # ERESOLVE — and the only job that catches it is not a required check.
+      # Bump all five together once the betas repin, then drop this entry.
+      - dependency-name: "@midnightntwrk/ledger-v9"
       - dependency-name: "vitest"
         update-types: ["version-update:semver-major"]
       - dependency-name: "@vitest/ui"
