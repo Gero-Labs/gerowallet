@@ -6068,6 +6068,131 @@ app.add(MIDNIGHT_METHOD.hintUsage, (request, sendResponse) => {
 
 const validateMakeTransferInputs = validateMidnightConnectorTransfer;
 
+// ─── Proving delegation (`getProvingProvider`) ───────────────────────────
+//
+// The page builds the ProvingProvider object itself (midnightProvingBridge.ts)
+// and streams each proof's preimage + the dapp's circuit key material here
+// in chunks; these handlers store the chunks, then prove against the user's
+// configured proof server (local docker / Arkhia zkPaaS / the network
+// default when on Gero Cloud) via midnightDappProving.ts. The dapp never
+// sees the server URL or credentials. All four re-check the origin's
+// whitelist server-side (requireMidnightProvingOrigin) like every other
+// post-connect handler — the content relay's pre-check alone would leave a
+// window across a multi-chunk upload if the user disconnects the dapp.
+
+type MidnightDappProvingModule = typeof import('@/chrome/midnightDappProving');
+let midnightProvingUploads: InstanceType<MidnightDappProvingModule['ProvingUploadStore']> | undefined;
+
+async function loadMidnightDappProving(): Promise<{
+  mod: MidnightDappProvingModule;
+  store: NonNullable<typeof midnightProvingUploads>;
+}> {
+  const mod = await import('@/chrome/midnightDappProving');
+  if (!midnightProvingUploads) midnightProvingUploads = new mod.ProvingUploadStore();
+  return { mod, store: midnightProvingUploads };
+}
+
+type MidnightProvingRequest = Parameters<Parameters<typeof app.add>[1]>[0];
+type MidnightProvingReply = Parameters<Parameters<typeof app.add>[1]>[1];
+
+/**
+ * Common gate for the proving handlers: the origin must still be connected
+ * (server-side whitelist re-check, defense-in-depth like the other
+ * post-connect handlers) AND the active wallet must be an unlocked Midnight
+ * wallet. Sends the Disconnected reply itself and returns null when either
+ * fails. A refused origin also loses any uploads it had in flight, so a
+ * disconnect mid-upload stops the buffering immediately rather than at the
+ * TTL sweep.
+ */
+function requireMidnightProvingOrigin(
+  request: MidnightProvingRequest,
+  sendResponse: MidnightProvingReply,
+): { wallet: NonNullable<ReturnType<typeof requireMidnightWallet>>; origin: string } | null {
+  const refuse = (reason: string): null => {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, reason), target: TARGET, sender: SENDER.extension });
+    return null;
+  };
+  const origin = request.origin;
+  if (!origin || !WalletStore.isWhitelisted(origin)) {
+    if (origin) midnightProvingUploads?.dropOrigin(origin);
+    return refuse('Not connected — call connect() first');
+  }
+  const wallet = requireMidnightWallet();
+  if (!wallet) return refuse('No Midnight wallet connected');
+  return { wallet, origin };
+}
+
+app.add(MIDNIGHT_METHOD.getProvingProvider, async (request, sendResponse) => {
+  const gate = requireMidnightProvingOrigin(request, sendResponse);
+  if (!gate) return;
+  const { wallet, origin } = gate;
+  try {
+    const [{ mod }, { midnightStore }] = await Promise.all([
+      loadMidnightDappProving(),
+      import('@/stores/midnightStore'),
+    ]);
+    const source = mod.assertDappProvingAvailable({
+      origin,
+      network: wallet.network,
+      sdkNetworkId: midnightSdkNetworkId(wallet.network),
+      proofServer: midnightStore.proofServer,
+    });
+    debugLog('🌙 connector getProvingProvider', { origin, source });
+    sendResponse({ id: request.id, data: undefined, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.InternalError, getErrorMessage(error)), target: TARGET, sender: SENDER.extension });
+  }
+});
+
+app.add(MIDNIGHT_METHOD.provingUpload, async (request, sendResponse) => {
+  const gate = requireMidnightProvingOrigin(request, sendResponse);
+  if (!gate) return;
+  try {
+    const { store } = await loadMidnightDappProving();
+    store.addChunk(gate.origin, request.data);
+    sendResponse({ id: request.id, data: undefined, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.InvalidRequest, getErrorMessage(error)), target: TARGET, sender: SENDER.extension });
+  }
+});
+
+/** Shared body of the `/check` and `/prove` handlers — they differ only in which runner they call. */
+async function handleMidnightDappProving(
+  op: 'runDappProvingCheck' | 'runDappProvingProve',
+  request: MidnightProvingRequest,
+  sendResponse: MidnightProvingReply,
+): Promise<void> {
+  const gate = requireMidnightProvingOrigin(request, sendResponse);
+  if (!gate) return;
+  const { wallet, origin } = gate;
+  let errorCode: (error: unknown) => string = () => MidnightErrorCode.InternalError;
+  try {
+    const [{ mod, store }, { makeLocalProvingProvider }, { midnightStore }] = await Promise.all([
+      loadMidnightDappProving(),
+      import('@/chains/midnight/midnightLocalProver'),
+      import('@/stores/midnightStore'),
+    ]);
+    errorCode = mod.dappProvingErrorCode;
+    const reply = await mod[op](
+      store,
+      { makeProvider: makeLocalProvingProvider },
+      {
+        origin,
+        network: wallet.network,
+        sdkNetworkId: midnightSdkNetworkId(wallet.network),
+        proofServer: midnightStore.proofServer,
+      },
+      request.data,
+    );
+    sendResponse({ id: request.id, data: reply, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, error: midnightApiError(errorCode(error), getErrorMessage(error)), target: TARGET, sender: SENDER.extension });
+  }
+}
+
+app.add(MIDNIGHT_METHOD.provingCheck, (request, sendResponse) => handleMidnightDappProving('runDappProvingCheck', request, sendResponse));
+app.add(MIDNIGHT_METHOD.provingProve, (request, sendResponse) => handleMidnightDappProving('runDappProvingProve', request, sendResponse));
+
 /**
  * Opens the makeTransfer approval view in the mini-gero side panel (password/
  * PRF wallets only — Midnight has no hardware-wallet support). Same

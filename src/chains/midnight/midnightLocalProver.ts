@@ -48,12 +48,36 @@ function delay(ms: number): Promise<void> {
  * Optional per-request extras: `headers` carries gateway auth
  * (`x-api-key`/`x-api-secret` for Arkhia zkPaaS); absent for the plain
  * localhost docker server.
+ *
+ * `resolveKeyMaterial` supplies the circuit artifacts (prover key,
+ * verifier key, ZKIR) for a proof's `keyLocation`. The proof server ships
+ * the protocol's own built-in circuits (`midnight/zswap/*`,
+ * `midnight/dust/*`), so the wallet's own transfers never need this and
+ * the resolver defaults to "none". DApp-delegated proving
+ * (`midnightDappProving.ts`) uses it to attach the dapp's contract-circuit
+ * material to the payload — the same split `midnight-js`'s
+ * `httpClientProvingProvider` makes. Resolving to `undefined` means "let the
+ * server use its built-in key". `/check` only needs the ZKIR, so a partial
+ * `{ ir }` is enough there; `/prove` needs all three and rejects a partial
+ * result rather than silently proving without it.
  */
 export interface ProverRequestOptions {
   headers?: Record<string, string>;
   sdkNetworkId?: string;
   /** Covers response headers and the complete binary response body. */
   timeoutMs?: number;
+  resolveKeyMaterial?: (keyLocation: string) => Promise<Partial<ledger.ProvingKeyMaterial> | undefined>;
+}
+
+/** Full material for `/prove`, or `undefined` when the server has the key built in. */
+function requireFullKeyMaterial(
+  keyLocation: string,
+  partial: Partial<ledger.ProvingKeyMaterial> | undefined,
+): ledger.ProvingKeyMaterial | undefined {
+  if (!partial) return undefined;
+  const { proverKey, verifierKey, ir } = partial;
+  if (proverKey && verifierKey && ir) return { proverKey, verifierKey, ir };
+  throw new Error(`incomplete key material for circuit '${keyLocation}' (prover key, verifier key and ZKIR are all required)`);
 }
 
 /**
@@ -152,17 +176,28 @@ export function makeLocalProvingProvider(
   options?: ProverRequestOptions,
 ): ledger.ProvingProvider & ledger9.ProvingProvider {
   const runtime = midnightLedgerVersion(options?.sdkNetworkId ?? 'mainnet') === 9 ? ledger9 : ledger;
+  const resolveKeyMaterial = options?.resolveKeyMaterial ?? (async () => undefined);
   return {
     // Built-in transfer and DUST circuits are supplied by the native server.
-    // Contract-specific key material must be provided by a separate contract flow.
+    // Contract-specific key material reaches the payload through
+    // `resolveKeyMaterial` (dapp-delegated proving); this hook only exists
+    // because ledger 9's ProvingProvider shape asks for it.
     lookupKey: async () => undefined,
-    check: async (serializedPreimage, _keyLocation) => {
-      const payload = runtime.createCheckPayload(serializedPreimage);
+    check: async (serializedPreimage, keyLocation) => {
+      const ir = (await resolveKeyMaterial(keyLocation))?.ir;
+      // Both ledgers take the optional artifact as a trailing argument; only
+      // pass it when present so the built-in path stays a plain 1-arg call.
+      const payload = ir
+        ? runtime.createCheckPayload(serializedPreimage, ir)
+        : runtime.createCheckPayload(serializedPreimage);
       const result = await postToProver(baseUrl, '/check', payload, options);
       return runtime.parseCheckResult(result);
     },
-    prove: async (serializedPreimage, _keyLocation, overwriteBindingInput) => {
-      const payload = runtime.createProvingPayload(serializedPreimage, overwriteBindingInput);
+    prove: async (serializedPreimage, keyLocation, overwriteBindingInput) => {
+      const keyMaterial = requireFullKeyMaterial(keyLocation, await resolveKeyMaterial(keyLocation));
+      const payload = keyMaterial
+        ? runtime.createProvingPayload(serializedPreimage, overwriteBindingInput, keyMaterial)
+        : runtime.createProvingPayload(serializedPreimage, overwriteBindingInput);
       return postToProver(baseUrl, '/prove', payload, options);
     },
   };
