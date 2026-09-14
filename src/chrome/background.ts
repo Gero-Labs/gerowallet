@@ -6068,6 +6068,107 @@ app.add(MIDNIGHT_METHOD.hintUsage, (request, sendResponse) => {
 
 const validateMakeTransferInputs = validateMidnightConnectorTransfer;
 
+// ─── Proving delegation (`getProvingProvider`) ───────────────────────────
+//
+// The page builds the ProvingProvider object itself (midnightProvingBridge.ts)
+// and streams each proof's preimage + the dapp's circuit key material here
+// in chunks; these handlers store the chunks, then prove against the user's
+// configured proof server (local docker / Arkhia zkPaaS / the network
+// default when on Gero Cloud) via midnightDappProving.ts. The dapp never
+// sees the server URL or credentials. All four are behind the content
+// relay's whitelist gate, so only origins the user approved in `connect`
+// reach them.
+
+type MidnightDappProvingModule = typeof import('@/chrome/midnightDappProving');
+let midnightProvingUploads: InstanceType<MidnightDappProvingModule['ProvingUploadStore']> | undefined;
+
+async function loadMidnightDappProving(): Promise<{
+  mod: MidnightDappProvingModule;
+  store: NonNullable<typeof midnightProvingUploads>;
+}> {
+  const mod = await import('@/chrome/midnightDappProving');
+  if (!midnightProvingUploads) midnightProvingUploads = new mod.ProvingUploadStore();
+  return { mod, store: midnightProvingUploads };
+}
+
+app.add(MIDNIGHT_METHOD.getProvingProvider, async (request, sendResponse) => {
+  const wallet = requireMidnightWallet();
+  if (!wallet) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
+  try {
+    const [{ mod }, { midnightStore }] = await Promise.all([
+      loadMidnightDappProving(),
+      import('@/stores/midnightStore'),
+    ]);
+    const source = mod.assertDappProvingAvailable({
+      origin: request.origin ?? '',
+      network: wallet.network,
+      sdkNetworkId: midnightSdkNetworkId(wallet.network),
+      proofServer: midnightStore.proofServer,
+    });
+    debugLog('🌙 connector getProvingProvider', { origin: request.origin, source });
+    sendResponse({ id: request.id, data: undefined, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.InternalError, getErrorMessage(error)), target: TARGET, sender: SENDER.extension });
+  }
+});
+
+app.add(MIDNIGHT_METHOD.provingUpload, async (request, sendResponse) => {
+  const wallet = requireMidnightWallet();
+  if (!wallet || !request.origin) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
+  try {
+    const { store } = await loadMidnightDappProving();
+    store.addChunk(request.origin, request.data);
+    sendResponse({ id: request.id, data: undefined, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.InvalidRequest, getErrorMessage(error)), target: TARGET, sender: SENDER.extension });
+  }
+});
+
+/** Shared body of the `/check` and `/prove` handlers — they differ only in which runner they call. */
+async function handleMidnightDappProving(
+  op: 'runDappProvingCheck' | 'runDappProvingProve',
+  request: Parameters<Parameters<typeof app.add>[1]>[0],
+  sendResponse: Parameters<Parameters<typeof app.add>[1]>[1],
+): Promise<void> {
+  const wallet = requireMidnightWallet();
+  if (!wallet || !request.origin) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
+  let errorCode: (error: unknown) => string = () => MidnightErrorCode.InternalError;
+  try {
+    const [{ mod, store }, { makeLocalProvingProvider }, { midnightStore }] = await Promise.all([
+      loadMidnightDappProving(),
+      import('@/chains/midnight/midnightLocalProver'),
+      import('@/stores/midnightStore'),
+    ]);
+    errorCode = mod.dappProvingErrorCode;
+    const reply = await mod[op](
+      store,
+      { makeProvider: makeLocalProvingProvider },
+      {
+        origin: request.origin,
+        network: wallet.network,
+        sdkNetworkId: midnightSdkNetworkId(wallet.network),
+        proofServer: midnightStore.proofServer,
+      },
+      request.data,
+    );
+    sendResponse({ id: request.id, data: reply, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, error: midnightApiError(errorCode(error), getErrorMessage(error)), target: TARGET, sender: SENDER.extension });
+  }
+}
+
+app.add(MIDNIGHT_METHOD.provingCheck, (request, sendResponse) => handleMidnightDappProving('runDappProvingCheck', request, sendResponse));
+app.add(MIDNIGHT_METHOD.provingProve, (request, sendResponse) => handleMidnightDappProving('runDappProvingProve', request, sendResponse));
+
 /**
  * Opens the makeTransfer approval view in the mini-gero side panel (password/
  * PRF wallets only — Midnight has no hardware-wallet support). Same
