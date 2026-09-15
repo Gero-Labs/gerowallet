@@ -181,6 +181,24 @@ export const midnightHintUsage = async (
 };
 
 /**
+ * Hand a proven, unbalanced (`signature / proof / pre-binding`) tx to the
+ * wallet to fund and fee-pay. The wallet prompts the user in its side panel
+ * with what it will contribute, then returns the SEALED tx hex, which the
+ * dapp submits through `submitTransaction`. `payFees:false` rejects with
+ * InvalidRequest (GeroWallet pays DUST fees; fee delegation is planned).
+ */
+export const midnightBalanceUnsealedTransaction = async (
+  tx: string,
+  options?: { payFees?: boolean },
+): Promise<{ tx: string }> => {
+  const result = (await Messaging.sendToContent({
+    method: MIDNIGHT_METHOD.balanceUnsealedTransaction,
+    data: { tx, options, userGesture: navigator.userActivation?.isActive },
+  })) as ContentReply<{ tx: string }>;
+  return result.data;
+};
+
+/**
  * Proving delegation (`getProvingProvider`). One validation round-trip up
  * front — so a locked / non-Midnight wallet or an unusable proof-server
  * preference rejects here, at the dapp's connect time, instead of deep
@@ -207,4 +225,4 @@ function bigintRecord(raw: Record<string, string>): Record<TokenType, bigint> {
 }
 
 // Phase 3 remainder (not yet implemented server-side — see build plan §4):
-// makeIntent, balanceUnsealedTransaction, balanceSealedTransaction.
+// makeIntent, balanceSealedTransaction.
