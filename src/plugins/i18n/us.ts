@@ -4852,6 +4852,7 @@ export default {
   'midnight.siteActivity.stepSubmit': 'Submit',
   'midnight.siteActivity.provingLocal': 'Proving circuit {n} on your local server',
   'midnight.siteActivity.provingZkpaas': 'Proving circuit {n} via Arkhia',
+  'midnight.siteActivity.proofsDone': '{n} proofs done · waiting for the site',
   'midnight.siteActivity.funding': 'Fund and pay fees is waiting for your approval',
   'midnight.siteActivity.submitting': 'Submitting to {network}…',
   'midnight.siteActivity.submitted': 'Submitted to {network}',

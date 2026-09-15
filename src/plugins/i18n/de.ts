@@ -4748,6 +4748,7 @@ export default {
   'midnight.siteActivity.stepSubmit': 'Senden',
   'midnight.siteActivity.provingLocal': 'Beweis für Circuit {n} auf deinem lokalen Server',
   'midnight.siteActivity.provingZkpaas': 'Beweis für Circuit {n} über Arkhia',
+  'midnight.siteActivity.proofsDone': '{n} Beweise fertig · warte auf die Seite',
   'midnight.siteActivity.funding': '„Finanzieren und Gebühren zahlen“ wartet auf deine Freigabe',
   'midnight.siteActivity.submitting': 'Wird an {network} gesendet…',
   'midnight.siteActivity.submitted': 'An {network} gesendet',
