@@ -202,6 +202,13 @@ export interface MidnightDustLive {
   readonly registrationStatus: ComputedRef<string>;
   /** True if at least one poll has succeeded — UI can show a skeleton until then. */
   readonly hasData: ComputedRef<boolean>;
+  /**
+   * True once BOTH paths have reported. `hasData` is an OR and flips as soon
+   * as Path A's store has any value — including the zero-filled one — while
+   * Path B is still in flight. Anything that would REFUSE an action on a
+   * zero balance must wait for this instead.
+   */
+  readonly settled: ComputedRef<boolean>;
 }
 
 export function useMidnightDustLive(): MidnightDustLive {
@@ -274,5 +281,6 @@ export function useMidnightDustLive(): MidnightDustLive {
     // like DustRegistrationDialog fall back to stale/empty store values
     // forever even though the battery itself is showing real Path-B charge.
     hasData: computed(() => polledAsOfMs.value !== 0 || midnightStore.dustState != null || pathBAsOfMs.value !== 0),
+    settled: computed(() => (polledAsOfMs.value !== 0 || midnightStore.dustState != null) && pathBAsOfMs.value !== 0),
   };
 }

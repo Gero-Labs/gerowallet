@@ -459,7 +459,8 @@ import { isLedger9Network } from '@/chains/midnight/midnightConfig';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { midnightTokenBalances } from '@/chains/midnight/midnightTokenBalances';
 import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
-import { blocksMidnightSend } from '@/chains/midnight/midnightFeeCapacity';
+import { blocksMidnightSendLive } from '@/chains/midnight/midnightFeeCapacity';
+import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
 import {
   formatTokenAmount,
   parseTokenAmount,
@@ -555,8 +556,17 @@ const amountStep = computed(() =>
   * No spendable DUST means no fee can be paid, so the send cannot succeed.
   * Caught here rather than four steps later inside the SDK's
   * `balanceTransactions`, which neither returns nor throws in that state.
+  *
+  * Judged on the MERGED live balance (Path A + Path B) — the figure the
+  * battery shows — not the store's Path-A `dustState`, which reads zero for a
+  * wallet whose DUST comes entirely from a Cardano cNIGHT registration.
+  * `unknown` (either path not yet reported) never blocks.
   */
-const noFeeCapacity = computed(() => blocksMidnightSend(midnightStore.dustState));
+const dustLive = useMidnightDustLive();
+const noFeeCapacity = computed(() => blocksMidnightSendLive({
+  dustBalance: dustLive.dustBalance.value,
+  settled: dustLive.settled.value,
+}));
 
 /**
  * Wallet chosen to pay this send's DUST fee, or null to pay from this wallet.

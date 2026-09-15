@@ -1,17 +1,23 @@
 import Vue, { nextTick, reactive, ref } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ get: vi.fn(), log: vi.fn() }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), log: vi.fn(), pathBAsOfMs: { value: 0 } as { value: number } }));
 vi.mock('@/api/midnight-api', () => ({ getMidnightApi: () => ({ getDustAccountState: mocks.get }) }));
 vi.mock('@/utils/debug', () => ({ debugLog: mocks.log }));
 vi.mock('@/stores/walletStore', () => ({ walletStore: reactive({ loggedWallet: { network: 'Stagenet' } }) }));
 vi.mock('@/stores/midnightStore', () => ({ midnightStore: reactive({
   addresses: { unshielded: 'wallet-a' }, dustState: null, balances: {},
 }) }));
-vi.mock('@/shared/composables/useDustPathB', () => ({ useDustPathB: () => ({
-  pathBBalance: ref(0n), pathBCap: ref(0n), pathBRate: ref(0n), pathBNight: ref(0n),
-  pathBRegistered: ref(false), pathBAsOfMs: ref(0),
-}) }));
+vi.mock('@/shared/composables/useDustPathB', () => {
+  // A real ref, so the composable's computeds react when a test moves it.
+  // Handed back through the hoisted object so tests can drive it.
+  const pathBAsOfMs = ref(0);
+  mocks.pathBAsOfMs = pathBAsOfMs;
+  return { useDustPathB: () => ({
+    pathBBalance: ref(0n), pathBCap: ref(0n), pathBRate: ref(0n), pathBNight: ref(0n),
+    pathBRegistered: ref(false), pathBAsOfMs,
+  }) };
+});
 import { midnightStore } from '@/stores/midnightStore';
 import { useMidnightDustLive, type MidnightDustLive } from './useMidnightDustLive';
 
@@ -109,5 +115,37 @@ describe('DUST account-state polling', () => {
     const reopened = mount();
     await settle();
     expect(reopened.dustBalance.value).toBe(42n);
+  });
+
+  describe('settled — both paths have reported', () => {
+    beforeEach(() => { mocks.pathBAsOfMs.value = 0; });
+
+    it('stays false after Path A answers while Path B is still in flight, even though hasData is true', async () => {
+      // This is the window the send guard must not block in: a Path-B
+      // wallet reads 0 DUST from Path A until its Cardano-side poll lands.
+      mocks.pathBAsOfMs.value = 0;
+      mocks.get.mockResolvedValue(state('0'));
+      const live = mount();
+      await settle();
+      expect(live.hasData.value).toBe(true);
+      expect(live.settled.value).toBe(false);
+    });
+
+    it('becomes true once Path B has reported too', async () => {
+      mocks.get.mockResolvedValue(state('0'));
+      const live = mount();
+      await settle();
+      expect(live.settled.value).toBe(false);
+      mocks.pathBAsOfMs.value = Date.now();
+      await nextTick();
+      expect(live.settled.value).toBe(true);
+    });
+
+    it('stays false when Path B has reported but Path A has not', () => {
+      mocks.pathBAsOfMs.value = Date.now();
+      mocks.get.mockReturnValue(new Promise(() => {})); // Path A never answers
+      const live = mount();
+      expect(live.settled.value).toBe(false);
+    });
   });
 });
