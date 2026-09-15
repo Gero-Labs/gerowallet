@@ -122,3 +122,18 @@ describe('private sync hydration (dashboard cold start)', () => {
     expect(hydratePrivateSyncProgress(undefined)).toBeNull();
   });
 });
+
+// resetChainState runs on every chain-identity change, including the first
+// sync after a service-worker restart. It starts no private scan, so it must
+// not report one: a PassKey wallet would otherwise show "Synchronizing private
+// notes…" with no counter forever, and the connector prompt would offer
+// "Share when done" instead of the unlock.
+describe('resetChainState and the private scan', () => {
+  it('does not claim a private scan is running', () => {
+    midnightStore.privateSyncStatus = 'synced';
+    midnightStore.privateSyncProgress = { applied: 1, highest: 2, connected: true };
+    midnightActions.resetChainState({ network: 'midnight-preprod', generation: 2, genesisHash: 'abc' } as Parameters<typeof midnightActions.resetChainState>[0]);
+    expect(midnightStore.privateSyncStatus).toBe('idle');
+    expect(midnightStore.privateSyncProgress).toBeNull();
+  });
+});

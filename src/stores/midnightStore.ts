@@ -810,8 +810,13 @@ export const midnightActions = {
     broadcastFromBackground({ balances, transactions: combined, privateSyncStatus: 'synced' });
   },
   resetChainState(identity: MidnightSyncIdentity) {
+    // `idle`, not `syncing`: this runs on every identity change, including the
+    // first sync after a service-worker restart, and it starts no private
+    // scan. A loop that IS running re-asserts `syncing` on its next sample;
+    // a PassKey wallet has nothing running and must be offered the unlock,
+    // not a "Synchronizing private notes…" line with no counter behind it.
     const updates: Partial<MidnightStore> = {
-      chainIdentity: identity, privateSyncStatus: 'syncing', lastSync: null, tip: { ...EMPTY_TIP },
+      chainIdentity: identity, privateSyncStatus: 'idle', privateSyncProgress: null, lastSync: null, tip: { ...EMPTY_TIP },
       balances: { ...EMPTY_BALANCES }, transactions: [], utxos: [], dustState: null,
       lastMidnightTxId: null, provingOperations: new Map(), sendProgress: null,
       networkStatus: 'connecting',
