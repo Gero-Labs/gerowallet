@@ -42,6 +42,7 @@
 import { computed, ref, watch } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { midnightStore } from '@/stores/midnightStore';
+import { Blockchain } from '@/models/types';
 import { MessageTypes } from '@/models/MessageTypes';
 import { Messaging } from '@/chrome/messaging';
 import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
@@ -53,7 +54,7 @@ const { t } = useTranslation();
 const wallet = computed(() => walletStore.loggedWallet);
 // Private balances sync on every Midnight network now (ledger 9 on Stagenet,
 // ledger 8 elsewhere — see midnightPrivateSyncSession.ts).
-const isMidnight = computed(() => wallet.value?.chain === 'Midnight');
+const isMidnight = computed(() => wallet.value?.chain === Blockchain.MIDNIGHT);
 const isPrf = computed(() => wallet.value?.encryptionMethod === 'prf');
 const syncing = computed(() => midnightStore.privateSyncStatus === 'syncing');
 const tokens = computed(() => Object.entries(midnightStore.privateSyncStatus === 'synced'
