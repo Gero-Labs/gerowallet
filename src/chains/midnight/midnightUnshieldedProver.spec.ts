@@ -39,6 +39,9 @@ describe('real ledger-specific proving envelope', () => {
   it('shows the matching circuit server and binds its port to loopback', () => {
     expect(midnightProofServerCommand('Stagenet')).toContain('proof-server:9.0.0-rc.6');
     expect(midnightProofServerCommand('Preprod')).toContain('proof-server:8.1.0');
-    expect(midnightProofServerCommand('Stagenet')).toContain('127.0.0.1:6300:6300');
+    // One host port per ledger (#1114) so both servers can run at once; each
+    // binds to loopback only. The container side is always 6300.
+    expect(midnightProofServerCommand('Stagenet')).toContain('127.0.0.1:6301:6300');
+    expect(midnightProofServerCommand('Preprod')).toContain('127.0.0.1:6300:6300');
   });
 });
