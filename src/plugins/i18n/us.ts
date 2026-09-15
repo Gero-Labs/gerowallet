@@ -3747,6 +3747,7 @@ export default {
   'dapp.suspiciousHostname': "This site's address uses unusual characters. Verify it carefully.",
   'miniGero.signDataRequest': 'Sign Data Request',
   'miniGero.transferRequest': 'Transfer Request',
+  'miniGero.balanceRequest': 'Fund Transaction',
   'miniGero.signTxRequest': 'Sign Transaction',
   'signTx.transactionDetails': 'Tx Details',
   'signTx.toRecipient': 'To',
@@ -4866,6 +4867,9 @@ export default {
   'midnight.connector.walletTypeUnsupported': 'This wallet type cannot sign Midnight transactions here.',
   'midnight.connector.transferTitle': 'Approve transfer',
   'midnight.connector.transferFeesNote': 'Network fees are paid by your wallet in DUST.',
+  'midnight.connector.balanceTitle': 'Fund and pay fees',
+  'midnight.connector.balanceBody': 'This site asks your wallet to add the funds below to a transaction it built, and to pay its network fee.',
+  'midnight.connector.balanceNothing': 'No funds are needed; your wallet only pays the network fee.',
   // Shielded proving consent dialog
   'midnight.consent.title': "Transaction proving privacy",
   'midnight.consent.subtitle': "Choose who receives your proof inputs",

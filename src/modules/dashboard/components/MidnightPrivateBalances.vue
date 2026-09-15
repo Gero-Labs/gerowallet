@@ -1,5 +1,5 @@
 <template>
-  <section v-if="isStagenet" class="my-3">
+  <section v-if="isMidnight" class="my-3">
     <div class="d-flex align-center">
       <span class="t-label">{{ t('midnight.privateBalances.title') }}</span>
       <v-spacer />
@@ -42,7 +42,7 @@
 import { computed, ref, watch } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { midnightStore } from '@/stores/midnightStore';
-import { Network } from '@/models/types';
+import { Blockchain } from '@/models/types';
 import { MessageTypes } from '@/models/MessageTypes';
 import { Messaging } from '@/chrome/messaging';
 import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
@@ -52,7 +52,9 @@ import TransactionAuthSection from '@/shared/components/TransactionAuthSection.v
 
 const { t } = useTranslation();
 const wallet = computed(() => walletStore.loggedWallet);
-const isStagenet = computed(() => wallet.value?.network === Network.STAGENET);
+// Private balances sync on every Midnight network now (ledger 9 on Stagenet,
+// ledger 8 elsewhere — see midnightPrivateSyncSession.ts).
+const isMidnight = computed(() => wallet.value?.chain === Blockchain.MIDNIGHT);
 const isPrf = computed(() => wallet.value?.encryptionMethod === 'prf');
 const syncing = computed(() => midnightStore.privateSyncStatus === 'syncing');
 const tokens = computed(() => Object.entries(midnightStore.privateSyncStatus === 'synced'

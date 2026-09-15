@@ -567,6 +567,7 @@ export const Messaging = {
         request.method === METHOD.signData ||
         request.method === MIDNIGHT_METHOD.signData ||
         request.method === MIDNIGHT_METHOD.makeTransfer ||
+        request.method === MIDNIGHT_METHOD.balanceUnsealedTransaction ||
         request.method === BITCOIN_METHOD.signPsbt ||
         request.method === BITCOIN_METHOD.signPsbts ||
         request.method === BITCOIN_METHOD.signMessage

@@ -255,6 +255,30 @@ export async function buildAndSignUnshieldedTransfer(
 }
 
 /**
+ * DApp-connector `balanceUnsealedTransaction`: the background funds,
+ * fee-pays, signs and SEALS the dapp's proven, unbound tx. The dapp submits
+ * the returned hex through the connector's own `submitTransaction`, which
+ * routes a sealed tx to Nexus's submit-proven relay.
+ */
+export async function balanceConnectorTransaction(
+  tx: string,
+  credentials: MidnightSendCredentials,
+): Promise<{ tx: string }> {
+  const response = await Messaging.sendToBackgroundFromOptions({
+    method: MessageTypes.BALANCE_MIDNIGHT_CONNECTOR_TX,
+    data: {
+      tx,
+      password: credentials.password,
+      prfSecret: credentials.prfSecret ? Array.from(credentials.prfSecret) : undefined,
+    },
+  }) as { data: { success: boolean; tx?: string; error?: string } };
+  if (!response?.data?.success || !response.data.tx) {
+    throw new Error(response?.data?.error || 'Midnight balancing failed');
+  }
+  return { tx: response.data.tx };
+}
+
+/**
  * Optimistically insert a just-submitted tx into the store as `pending` so it
  * shows in history immediately, before gero-sync indexes and pushes it back.
  * Best-effort: a failure here is silent (gero-sync backfills the confirmed
