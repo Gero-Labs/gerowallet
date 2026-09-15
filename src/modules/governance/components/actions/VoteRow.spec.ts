@@ -1,7 +1,7 @@
 // WCAG 2.2 target size (minimum) is 24x24 CSS px, and a vote row carries two
-// controls that only just clear it: the voter name, which is a button rather
-// than a link because it routes in-app, and the rationale link, whose visible
-// content is a short caption plus a tiny icon. Both floors are in the
+// controls that only just clear it: the voter name and the rationale control,
+// both buttons rather than links because they open in-app, the latter with a
+// short caption plus a tiny icon for visible content. Both floors are in the
 // stylesheet, and nothing pinned them — a later tidy-up of the scoped styles
 // could take either one back out and no test would notice.
 //
@@ -40,7 +40,8 @@ function row(over: Partial<PositionRow> = {}): PositionRow {
     vote: 'Yes',
     votedAt: 1787463005,
     hasRationale: true,
-    rationaleHref: 'https://example.test/why.json',
+    rationaleUrl: 'https://example.test/why.json',
+    rationaleHash: 'ab'.repeat(32),
     hasScript: false,
     isDRep: true,
     ...over,
@@ -61,7 +62,8 @@ function committeeRow(over: Partial<PositionRow> = {}): PositionRow {
     drepId: null,
     isDRep: false,
     hasRationale: false,
-    rationaleHref: undefined,
+    rationaleUrl: null,
+    rationaleHash: null,
     ...over,
   });
 }
@@ -103,12 +105,12 @@ describe('VoteRow target size', () => {
     wrapper.destroy();
   });
 
-  it('keeps a 24px floor on both axes of the rationale link', () => {
+  it('keeps a 24px floor on both axes of the rationale button', () => {
     const wrapper = mountRow();
     const rationale = wrapper.find('.vote-row__rationale');
 
     expect(rationale.exists()).toBe(true);
-    expect(rationale.element.tagName).toBe('A');
+    expect(rationale.element.tagName).toBe('BUTTON');
     expect(pxOf('.vote-row__rationale', 'min-height')).toBeGreaterThanOrEqual(24);
     // This one can shrink on both axes: its content is a short caption and an
     // x-small icon, so the width floor is load-bearing too.
@@ -131,7 +133,11 @@ describe('VoteRow target size', () => {
   it('renders the name as plain text, and no control at all, when nothing routes', () => {
     // The floor only has to hold where a control exists: an unnamed or
     // unroutable voter is text, not a 24px button with nothing behind it.
-    const wrapper = mountRow({ name: null, route: null, row: row({ rationaleHref: undefined }) });
+    const wrapper = mountRow({
+      name: null,
+      route: null,
+      row: row({ hasRationale: false, rationaleUrl: null, rationaleHash: null }),
+    });
 
     expect(wrapper.find('.vote-row__name--link').exists()).toBe(false);
     expect(wrapper.findAll('button, a')).toHaveLength(0);
@@ -241,7 +247,27 @@ describe('VoteRow layout', () => {
     wrapper.destroy();
   });
 
-  it('renders the choice, the date and the rationale link in that order', () => {
+  it('opens the rationale in-app, handing the row up rather than linking out', async () => {
+    // The anchor is a JSON document; a raw link to it is unreadable. The row
+    // emits, and the panel above mounts RationaleDialog for it.
+    const wrapper = mountRow();
+    await wrapper.find('.vote-row__rationale').trigger('click');
+
+    expect(wrapper.emitted('rationale')?.[0]?.[0]).toMatchObject({
+      rationaleUrl: 'https://example.test/why.json',
+      rationaleHash: 'ab'.repeat(32),
+    });
+    expect(wrapper.find('.vote-row__rationale').attributes('href')).toBeUndefined();
+    wrapper.destroy();
+  });
+
+  it('offers the rationale for an ipfs anchor too, since the dialog proxies it', () => {
+    const wrapper = mountRow({ row: row({ rationaleUrl: 'ipfs://QmSomething' }) });
+    expect(wrapper.find('.vote-row__rationale').exists()).toBe(true);
+    wrapper.destroy();
+  });
+
+  it('renders the choice, the date and the rationale control in that order', () => {
     const wrapper = mountRow();
     const cells = wrapper.findAll('.vote-row > *');
     const classes = cells.wrappers.map(cell => cell.classes().join(' '));

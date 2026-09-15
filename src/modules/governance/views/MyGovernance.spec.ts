@@ -37,7 +37,7 @@ vi.mock('@/modules/governance/dialogs/WithdrawGateDialog.vue', () => ({
 // The rationale dialog fetches an author's document; opening it is what this
 // page is asserted on, not what the dialog then does with it.
 vi.mock('@/modules/governance/dialogs/RationaleDialog.vue', () => ({
-  default: { name: 'RationaleDialog', props: ['isOpen', 'url', 'hash', 'actionTitle'], render: () => null },
+  default: { name: 'RationaleDialog', props: ['isOpen', 'url', 'hash', 'subtitle'], render: () => null },
 }));
 
 // Same reason DRepDirectory.spec mocks it: the real dialog pulls the hardware
@@ -613,7 +613,7 @@ describe('MyGovernance', () => {
       expect(dialog.props('isOpen')).toBe(true);
       expect(dialog.props('url')).toBe('https://author.test/r.json');
       expect(dialog.props('hash')).toBe(RATIONALE_HASH);
-      expect(dialog.props('actionTitle')).toBe('Increase maxBlockExUnits');
+      expect(dialog.props('subtitle')).toBe('Increase maxBlockExUnits');
     });
 
     it('loads the action list once, unfiltered, when a record arrives with votes', async () => {

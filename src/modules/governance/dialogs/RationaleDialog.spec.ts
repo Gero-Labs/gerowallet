@@ -1,7 +1,9 @@
 // A rationale is a document on a host nobody in this codebase controls, so the
-// only thing that makes it renderable is the blake2b-256 recorded on chain with
-// the vote. Every assertion here is about that: text appears ONLY when the hash
-// matches, and every other outcome shows a reason plus a way out to the browser.
+// only thing that says whether it is what the voter published is the
+// blake2b-256 recorded on chain with the vote. Every assertion here is about
+// that: the banner vouches ONLY when the hash matches, a document that cannot
+// be vouched for is shown under an amber warning rather than hidden, and a
+// document that never arrived shows a reason plus a way out to the browser.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, type Wrapper } from '@vue/test-utils';
 import Vue from 'vue';
@@ -111,7 +113,7 @@ describe('RationaleDialog', () => {
     expect(wrapper.html()).toContain('&lt;img');
   });
 
-  it('shows nothing but a warning when the file does not match its hash', async () => {
+  it('shows the text under an amber warning when the file does not match its hash', async () => {
     const doc = document({ comment: 'Rewritten after the vote.' });
     fetchMock.mockResolvedValue(response(doc.bytes));
 
@@ -120,21 +122,60 @@ describe('RationaleDialog', () => {
 
     const html = wrapper.html();
     expect(html).toContain('governance.anchorMismatch');
-    expect(html).toContain('governance.rationaleMismatchBody');
-    // The text is discarded, not rendered with a caveat.
-    expect(html).not.toContain('Rewritten after the vote.');
-    expect(wrapper.find('.g-prose').exists()).toBe(false);
+    expect(html).toContain('governance.rationaleMismatchNote');
+    expect(html).not.toContain('governance.anchorVerified');
+    expect(wrapper.find('.rationale-dialog__banner--doubt').exists()).toBe(true);
+    // The words are on screen, flagged — never vouched for, never hidden.
+    expect(html).toContain('Rewritten after the vote.');
+    expect(wrapper.find('.g-prose').exists()).toBe(true);
     // And the reader can still go and look for themselves.
     expect(wrapper.find('a').attributes('href')).toBe('https://author.test/r.json');
   });
 
-  it('refuses a document with no on-chain hash to check it against', async () => {
+  it('shows a document with no on-chain hash the same way, flagged as unverifiable', async () => {
+    const doc = document({ comment: 'Nobody hashed this.' });
+    fetchMock.mockResolvedValue(response(doc.bytes));
+
     wrapper = render({ url: 'https://author.test/r.json', hash: null });
     await settle();
 
-    expect(wrapper.html()).toContain('governance.rationaleNoHash');
-    // Nothing left the machine: unverifiable is decided before the request.
-    expect(fetchMock).not.toHaveBeenCalled();
+    const html = wrapper.html();
+    expect(html).toContain('governance.rationaleNoHash');
+    expect(html).toContain('governance.rationaleNoHashNote');
+    expect(html).not.toContain('governance.anchorVerified');
+    expect(html).toContain('Nobody hashed this.');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('still escapes markup in a document it could not verify', async () => {
+    // The hash decides what the banner SAYS. It never decides whether the
+    // author's bytes may reach the DOM as markup: they may not, in any state.
+    const doc = document({ comment: '<img src=x onerror=alert(1)>' });
+    fetchMock.mockResolvedValue(response(doc.bytes));
+
+    wrapper = render({ url: 'https://author.test/r.json', hash: 'a'.repeat(64) });
+    await settle();
+
+    expect(wrapper.find('.g-prose').element.querySelector('img')).toBeNull();
+    expect(wrapper.html()).toContain('&lt;img');
+  });
+
+  it('pretty-prints a document that carries none of the CIP-136 prose fields', async () => {
+    // An anchor is JSON by definition. One whose shape is unknown is shown as
+    // the JSON it is — indented, as text — rather than reported as empty.
+    const doc = document({ internalVote: { constitutional: 3, unconstitutional: 0 } });
+    fetchMock.mockResolvedValue(response(doc.bytes));
+
+    wrapper = render({ url: 'https://author.test/r.json', hash: doc.hash });
+    await settle();
+
+    const pre = wrapper.find('.rationale-dialog__json');
+    expect(pre.exists()).toBe(true);
+    expect(pre.element.tagName).toBe('PRE');
+    expect(pre.text()).toContain('"constitutional": 3');
+    expect(pre.text()).toMatch(/\n {2}"body": \{\n {4}"internalVote"/);
+    expect(wrapper.find('.g-prose').exists()).toBe(false);
+    expect(wrapper.html()).toContain('governance.anchorVerified');
   });
 
   it('refuses an oversized document on its declared length, before reading a byte', async () => {

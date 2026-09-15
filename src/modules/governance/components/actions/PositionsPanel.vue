@@ -156,6 +156,7 @@
             :is-yours="isYourRow(row, identity)"
             :route="routeFor(row)"
             @open="openVoter"
+            @rationale="openRationale"
           />
         </div>
 
@@ -178,7 +179,7 @@
         <p class="t-caption positions__note">{{ $t('governance.positionsLatestOnly') }}</p>
         <!-- Only where a rationale can actually be OPENED: with every anchor on
              ipfs://, nothing on this tab opens anywhere. -->
-        <p v-if="summary.withRationaleLink" class="t-caption positions__note">
+        <p v-if="summary.withRationale" class="t-caption positions__note">
           {{ $t('governance.rationaleExternalNote') }}
         </p>
         <!-- The ordering sentence follows the ordering. It used to assert
@@ -191,6 +192,17 @@
         <p class="t-caption positions__note">{{ $t('governance.positionsNeutrality') }}</p>
       </div>
     </template>
+
+    <!-- Mounted only while open: opening it is what sends the request, and a
+         request to an author's host must follow a click, never a render. -->
+    <RationaleDialog
+      v-if="rationaleRow"
+      :is-open="true"
+      :url="rationaleRow.rationaleUrl"
+      :hash="rationaleRow.rationaleHash"
+      :subtitle="rationaleSubtitle"
+      @close="rationaleRow = null"
+    />
   </div>
 </template>
 
@@ -198,10 +210,12 @@
 import { computed, onMounted, ref, shallowRef, watch } from 'vue';
 import type { PropType } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import filters from '@/shared/utils/filters';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import EmptyState from '@/shared/components/feedback/EmptyState.vue';
 import ErrorState from '@/shared/components/feedback/ErrorState.vue';
 import VoteRow from '@/modules/governance/components/actions/VoteRow.vue';
+import RationaleDialog from '@/modules/governance/dialogs/RationaleDialog.vue';
 import YourPositionCard from '@/modules/governance/components/actions/YourPositionCard.vue';
 import { loadDRepNameIndex } from '@/modules/governance/components/actions/drepNames';
 import type { DRepNameIndex } from '@/modules/governance/components/actions/drepNames';
@@ -440,6 +454,20 @@ function routeFor(row: PositionRow): Record<string, unknown> | null {
 
 function openVoter(route: Record<string, unknown>): void {
   emit('open-drep', String(route['drepId'] ?? ''));
+}
+
+/** The row whose rationale is open, or null. The dialog mounts off this. */
+const rationaleRow = ref<PositionRow | null>(null);
+
+/** The voter, named where a name is published and by id otherwise. */
+const rationaleSubtitle = computed(() => {
+  const row = rationaleRow.value;
+  if (!row) return null;
+  return nameOf(row) ?? filters.truncate(row.id) ?? row.id;
+});
+
+function openRationale(row: PositionRow): void {
+  rationaleRow.value = row;
 }
 
 function clearFilters(): void {
