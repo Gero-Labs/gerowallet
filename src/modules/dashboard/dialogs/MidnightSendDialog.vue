@@ -452,6 +452,7 @@ import {
   midnightStore,
 } from '@/stores/midnightStore';
 import type { MidnightSendStage } from '@/services/midnight-tx.service';
+import type { ProvingUnconfiguredTarget } from '@/chains/midnight/midnightProvingTarget';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain, Network, WalletType } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
@@ -826,7 +827,7 @@ const proverFallbackText = computed(() => {
     : t('midnight.proofServer.notDetectedSend');
 });
 // Reason carried by the ProofServerUnreachableError that tripped the fallback.
-const proverFallbackReason = ref<'zkpaas-unconfigured' | 'local-profile-mismatch' | undefined>(undefined);
+const proverFallbackReason = ref<ProvingUnconfiguredTarget['reason'] | undefined>(undefined);
 // True once a local-mode shielded send's preflight (or, on the rare race
 // where the server drops between preflight and build, the BG call itself)
 // finds the local proof server unreachable. Renders the two-action fallback
@@ -1243,7 +1244,7 @@ async function sendShielded(credentials: { password?: string; prfSecret?: Uint8A
     // that preflight and this call. Same fallback either way.
     if (e instanceof Error && e.name === 'ProofServerUnreachableError') {
       pendingCredentials.value = credentials;
-      proverFallbackReason.value = (e as { reason?: typeof proverFallbackReason.value }).reason;
+      proverFallbackReason.value = (e as { reason?: ProvingUnconfiguredTarget['reason'] }).reason;
       localProverUnavailable.value = true;
     } else {
       errorMessage.value = e instanceof Error ? e.message : String(e);

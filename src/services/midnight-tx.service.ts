@@ -366,11 +366,16 @@ async function buildAndSignShieldedInBg(
  */
 export class ProofServerUnreachableError extends Error {
   /**
-   * @param reason Why the configured prover cannot be used, when known. The
-   *   dialogs key their fallback copy and actions off this: a stagenet send
-   *   with Gero Cloud selected is not "unreachable", it is misconfigured, and
-   *   offering "use Gero Cloud once" there would route the send into exactly
-   *   the prover that cannot serve it.
+   * @param reason Why the configured prover was refused before any health
+   *   check ran, when that is what happened. Set only for the `unconfigured`
+   *   resolver outcomes: `zkpaas-unconfigured` (no API key and no override
+   *   URL) and `local-profile-mismatch` (a local server started for the other
+   *   ledger line — running and answering, just not for this network). Omitted
+   *   when a server was actually contacted and failed its health check. The
+   *   send dialog keys its fallback copy off this so a profile mismatch says
+   *   "switch the profile" rather than "start the server". Never set for Gero
+   *   Cloud: `remote` mode resolves to `{ kind: 'cloud' }` and does not reach
+   *   this error at all.
    */
   constructor(
     public readonly url: string,
