@@ -811,11 +811,22 @@ const checkingLocalProver = ref(false);
 // including the one-off "use Gero Cloud" fallback).
 const consentProvider = ref<'cloud' | 'zkpaas'>('cloud');
 // Fallback-note copy tracks the mode that failed its preflight.
-const proverFallbackText = computed(() => (
-  midnightStore.proofServer.mode === 'zkpaas'
+// Keyed off WHY the prover was refused, not just which mode is selected. A
+// local server started for the other circuit family (ledger 8 vs 9) is not
+// "not detected" — it is running and answering, just for the wrong network —
+// and telling the user to "start it" sends them in circles. Name the
+// mismatch and the profile to switch to. Gero Cloud stays on offer: the
+// sidecar proves both ledger lines, so it is a valid way through.
+const proverFallbackText = computed(() => {
+  if (proverFallbackReason.value === 'local-profile-mismatch') {
+    return t('midnight.proofServer.localProfileMismatchSend');
+  }
+  return midnightStore.proofServer.mode === 'zkpaas'
     ? t('midnight.proofServer.zkpaasNotReachableSend')
-    : t('midnight.proofServer.notDetectedSend')
-));
+    : t('midnight.proofServer.notDetectedSend');
+});
+// Reason carried by the ProofServerUnreachableError that tripped the fallback.
+const proverFallbackReason = ref<'zkpaas-unconfigured' | 'local-profile-mismatch' | undefined>(undefined);
 // True once a local-mode shielded send's preflight (or, on the rare race
 // where the server drops between preflight and build, the BG call itself)
 // finds the local proof server unreachable. Renders the two-action fallback
@@ -1031,8 +1042,16 @@ async function routeWalletProvedShielded(credentials: { password?: string; prfSe
   checkingLocalProver.value = true;
   try {
     const { checkWalletProvingPreflight } = await import('@/services/midnight-tx.service');
-    const ok = await checkWalletProvingPreflight(loggedWallet.value?.network ?? '');
+    const network = loggedWallet.value?.network ?? '';
+    const ok = await checkWalletProvingPreflight(network);
     if (!ok) {
+      // The preflight collapses "unconfigured" and "unreachable" into one
+      // boolean; recover the reason so the fallback can name the actual
+      // problem (a local server on the wrong ledger profile is running and
+      // answering — "start it" is the wrong instruction).
+      const { resolveProvingTarget } = await import('@/chains/midnight/midnightProvingTarget');
+      const target = resolveProvingTarget(network, midnightStore.proofServer);
+      proverFallbackReason.value = target.kind === 'unconfigured' ? target.reason : undefined;
       pendingCredentials.value = credentials;
       localProverUnavailable.value = true;
       return;
@@ -1224,6 +1243,7 @@ async function sendShielded(credentials: { password?: string; prfSecret?: Uint8A
     // that preflight and this call. Same fallback either way.
     if (e instanceof Error && e.name === 'ProofServerUnreachableError') {
       pendingCredentials.value = credentials;
+      proverFallbackReason.value = (e as { reason?: typeof proverFallbackReason.value }).reason;
       localProverUnavailable.value = true;
     } else {
       errorMessage.value = e instanceof Error ? e.message : String(e);

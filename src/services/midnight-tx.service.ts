@@ -25,7 +25,7 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { getMidnightApi } from '@/api/midnight-api';
 import { midnightStore } from '@/stores/midnightStore';
 import { assertNativeNightConversionSupported, validateShieldedTokenType } from '@/chains/midnight/midnightTokenCapabilities';
-import { resolveProvingTarget } from '@/chains/midnight/midnightProvingTarget';
+import { resolveProvingTarget, type ProvingUnconfiguredTarget } from '@/chains/midnight/midnightProvingTarget';
 import type {
   BuildMidnightTxRequest,
   MidnightSegmentToSign,
@@ -365,7 +365,17 @@ async function buildAndSignShieldedInBg(
  * "Use Gero Cloud for this transaction") instead of a generic failure toast.
  */
 export class ProofServerUnreachableError extends Error {
-  constructor(public readonly url: string) {
+  /**
+   * @param reason Why the configured prover cannot be used, when known. The
+   *   dialogs key their fallback copy and actions off this: a stagenet send
+   *   with Gero Cloud selected is not "unreachable", it is misconfigured, and
+   *   offering "use Gero Cloud once" there would route the send into exactly
+   *   the prover that cannot serve it.
+   */
+  constructor(
+    public readonly url: string,
+    public readonly reason?: ProvingUnconfiguredTarget['reason'],
+  ) {
     super('Proof server not reachable or incompatible with the selected network');
     this.name = 'ProofServerUnreachableError';
   }
@@ -391,7 +401,7 @@ function resolveWalletProvingTarget(
   // circuit family doesn't match the network (see resolveProvingTarget).
   const target = resolveProvingTarget(network, midnightStore.proofServer);
   if (target.kind === 'unconfigured') {
-    throw new ProofServerUnreachableError(target.url);
+    throw new ProofServerUnreachableError(target.url, target.reason);
   }
   if (target.kind === 'cloud') return null;
   return {
