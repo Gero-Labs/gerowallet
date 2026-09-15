@@ -6,7 +6,8 @@ import packageJson from './package.json';
 import rollupTla from 'rollup-plugin-tla';
 import commonjs from '@rollup/plugin-commonjs';
 import wasm from 'vite-plugin-wasm';
-import { readFileSync } from 'fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { dirname } from 'node:path';
 import { createRequire } from 'module';
 
 const _require = createRequire(import.meta.url);
@@ -254,11 +255,27 @@ export const AssertionError = assert.AssertionError;
  * that easy to disturb.
  *
  * `onwarn`/CIRCULAR_DEPENDENCY cannot catch it: there is no cycle. The check
- * runs against the emitted artifact, in `writeBundle`, so it fires on every
- * build including watch rebuilds. It is baselined, so only NEW offenders fail.
+ * runs in `writeBundle`, so it fires on every build including watch rebuilds.
+ * It is baselined, so only NEW offenders fail.
+ *
+ * It analyses the chunk as it stood BEFORE minification, captured here in
+ * `renderChunk` (a normal-group plugin's hook runs ahead of `vite:terser`).
+ * Terser mangles the namespace consts to `IFt`/`PFt`/…, which change on every
+ * build, so the shipped file cannot be keyed against a baseline; the
+ * pre-minify code carries Rollup's readable names in both modes, so one
+ * baseline serves dev and production. The capture is written under
+ * node_modules/.cache, never into extension/.
  */
+const TDZ_PREMINIFY_CAPTURE = r('node_modules/.cache/gero/background.pre-minify.js');
+
 const bundleTdzGuard = {
   name: 'gero-bundle-tdz-guard',
+  renderChunk(code: string, chunk: { isEntry: boolean }) {
+    if (!chunk.isEntry) return null;
+    mkdirSync(dirname(TDZ_PREMINIFY_CAPTURE), { recursive: true });
+    writeFileSync(TDZ_PREMINIFY_CAPTURE, code);
+    return null;
+  },
   writeBundle() {
     const result = spawnSync(process.execPath, [r('scripts/check-bundle-tdz.mjs')], {
       stdio: 'inherit',

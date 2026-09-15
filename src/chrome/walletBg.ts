@@ -85,8 +85,22 @@ import { signDataCip8 } from '@/chrome/serialization';
 // module's declaration later in the emitted bundle, which is exactly the
 // temporal-dead-zone shape `scripts/check-bundle-tdz.mjs` guards against
 // (it once threw "Cannot access 'midnightSync_service' before initialization"
-// and broke login). The module's own heavy dependencies stay lazy inside it.
+// and broke login). The modules' own heavy dependencies stay lazy inside them
+// (midnightLedger keeps the ledger wasm packages dynamic: it is shared with the
+// options bundle, where that import does split a 10 MB chunk).
 import { deriveSponsorDustSeed } from '@/chains/midnight/midnightSponsorKeys';
+import {
+  activateMidnightPrivateSession,
+  midnightPrivateSessionEpoch,
+  prepareMidnightPrivateSession,
+} from '@/chains/midnight/midnightPrivateSyncSession';
+import { resolveDappProvingTarget } from '@/chains/midnight/midnightProvingTarget';
+import { balanceDappTransaction } from '@/chains/midnight/midnightDappBalancer';
+import { midnightKeystore, schnorrHex, validateMidnightSigningSegments } from '@/chains/midnight/midnightLedger';
+import {
+  assertNativeNightConversionSupported,
+  validateShieldedTokenType,
+} from '@/chains/midnight/midnightTokenCapabilities';
 
 let blockchainDb: Dexie = null;
 
@@ -2248,7 +2262,6 @@ export class WalletBg {
 
     const network = this.network;
     const { walletStore } = await import('@/stores/walletStore');
-    const { midnightPrivateSessionEpoch } = await import('@/chains/midnight/midnightPrivateSyncSession');
     const assertSession = captureMidnightSigningSession(this.id, network, () => ({
       walletId: walletStore.loggedWallet?.id, network: walletStore.loggedWallet?.network,
       locked: walletStore.isLocked, epoch: midnightPrivateSessionEpoch(),
@@ -2273,9 +2286,7 @@ export class WalletBg {
     try {
       const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
       const { getMidnightEndpoints } = await import('@/chains/midnight/midnightConfig');
-      const { resolveDappProvingTarget } = await import('@/chains/midnight/midnightProvingTarget');
       const { midnightStore } = await import('@/stores/midnightStore');
-      const { balanceDappTransaction } = await import('@/chains/midnight/midnightDappBalancer');
       // skipCardano: same BG-bundle pbkdf2 workaround as the other Midnight paths.
       const derived = await deriveMidnightKeys(mnemonic, network, 0, { skipCardano: true });
       try {
@@ -2314,7 +2325,6 @@ export class WalletBg {
       throw new Error('Private token synchronization requires a Midnight wallet');
     }
     const { walletStore } = await import('@/stores/walletStore');
-    const { midnightPrivateSessionEpoch, prepareMidnightPrivateSession, activateMidnightPrivateSession } = await import('@/chains/midnight/midnightPrivateSyncSession');
     const epoch = midnightPrivateSessionEpoch();
     const network = this.network;
     const isCurrent = () => !walletStore.isLocked && walletStore.loggedWallet?.id === this.id
@@ -2353,7 +2363,6 @@ export class WalletBg {
     if (this.chain !== Blockchain.MIDNIGHT) {
       throw new Error('signMidnightSegments called on non-Midnight wallet');
     }
-    const { validateMidnightSigningSegments } = await import('@/chains/midnight/midnightLedger');
     await validateMidnightSigningSegments(this.network, unprovenTxHex, segments);
     if (segments.length === 0) return [];
 
@@ -2389,7 +2398,6 @@ export class WalletBg {
       const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
       const derived = await deriveMidnightKeys(mnemonic, this.network, 0, { skipCardano: true });
 
-      const { midnightKeystore, schnorrHex } = await import('@/chains/midnight/midnightLedger');
       // Map our project's `Network` constant to the SDK's NetworkId string.
       // We avoid duplicating the mapping here — `midnightNetworkId` lives in
       // `midnightKeyManager` and is already used during address derivation.
@@ -2504,7 +2512,6 @@ export class WalletBg {
       const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
       const derived = await deriveMidnightKeys(mnemonic, this.network, 0, { skipCardano: true });
 
-      const { midnightKeystore, schnorrHex } = await import('@/chains/midnight/midnightLedger');
       const { Network } = await import('@/models/types');
       let networkId: string;
       switch (this.network) {
@@ -2595,7 +2602,6 @@ export class WalletBg {
 
     const network = this.network;
     const { walletStore } = await import('@/stores/walletStore');
-    const { midnightPrivateSessionEpoch } = await import('@/chains/midnight/midnightPrivateSyncSession');
     const assertSession = captureMidnightSigningSession(this.id, network, () => ({
       walletId: walletStore.loggedWallet?.id, network: walletStore.loggedWallet?.network,
       locked: walletStore.isLocked, epoch: midnightPrivateSessionEpoch(),
@@ -2793,12 +2799,10 @@ export class WalletBg {
     }
     const network = this.network;
     const { walletStore } = await import('@/stores/walletStore');
-    const { midnightPrivateSessionEpoch } = await import('@/chains/midnight/midnightPrivateSyncSession');
     const assertSession = captureMidnightSigningSession(this.id, network, () => ({
       walletId: walletStore.loggedWallet?.id, network: walletStore.loggedWallet?.network,
       locked: walletStore.isLocked, epoch: midnightPrivateSessionEpoch(),
     }));
-    const { validateShieldedTokenType } = await import('@/chains/midnight/midnightTokenCapabilities');
     for (const output of outputs) validateShieldedTokenType(output.tokenType ?? '');
 
     // Decrypt mnemonic — same pattern as the unshielded path. PRF wallets
@@ -2946,7 +2950,6 @@ export class WalletBg {
     _prfSecret?: Uint8Array,
     _proving?: { url: string; headers?: Record<string, string> },
   ): Promise<{ signedTxHex: string; proven: boolean }> {
-    const { assertNativeNightConversionSupported } = await import('@/chains/midnight/midnightTokenCapabilities');
     return assertNativeNightConversionSupported();
   }
   /**
