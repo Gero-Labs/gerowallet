@@ -140,6 +140,22 @@ describe('PrivateBalanceGate', () => {
     expect(h.gate.size).toBe(0);
   });
 
+  it('awaitSyncedAll starts every waiting group polling, once', () => {
+    const h = harness({ status: 'syncing', balances: { aa: 2n } });
+    const a = collector();
+    const b = collector();
+    h.gate.join('site-a', 1, a.waiter);
+    h.gate.join('site-b', 2, b.waiter);
+    h.gate.awaitSyncedAll();
+    h.gate.awaitSyncedAll();
+    expect(h.timers.size).toBe(2);
+    h.state.status = 'synced';
+    h.tick();
+    expect(a.outcomes).toEqual([{ ok: true, balances: { aa: '2' } }]);
+    expect(b.outcomes).toEqual([{ ok: true, balances: { aa: '2' } }]);
+    expect(h.timers.size).toBe(0);
+  });
+
   it('settle is idempotent and a throwing waiter does not starve the others', () => {
     const h = harness({ status: 'syncing' });
     const bad = vi.fn(() => { throw new Error('boom'); });

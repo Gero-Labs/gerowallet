@@ -5007,6 +5007,10 @@ app.addToOptions(MessageTypes.START_MIDNIGHT_PRIVATE_SYNC, async (request, sendR
     }
     prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
     await wallet.startMidnightPrivateSync(password, prfBytes);
+    // Parked connector balance reads follow the scan from here, whichever
+    // surface started it — the prompt may stay open to show progress, or be
+    // closed; either way the dApp is answered when the store reports synced.
+    privateBalanceGate?.awaitSyncedAll();
     sendResponse({ id: request.id, data: { success: true }, target: TARGET, sender: SENDER.extension });
   } catch {
     sendResponse({ id: request.id, data: { success: false, error: 'Unable to unlock private token synchronization' }, target: TARGET, sender: SENDER.extension });
