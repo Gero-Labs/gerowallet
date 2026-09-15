@@ -5783,18 +5783,16 @@ app.add(MIDNIGHT_METHOD.getShieldedAddresses, async (request, sendResponse) => {
     return;
   }
   try {
-    const { ShieldedAddress, MidnightBech32m } = await import('@midnightntwrk/wallet-sdk-address-format');
-    const decoded = ShieldedAddress.codec.decode(
-      midnightSdkNetworkId(wallet.network),
-      MidnightBech32m.parse(shieldedAddress),
-    );
+    // Spec: the address AND both public keys are bech32m. The hex
+    // `coinPublicKeyString()` form broke dapps that decode the keys
+    // (midnight-js decodeShieldedCoinPublicKey: "Invalid checksum in <hex>").
+    const [codecs, { connectorShieldedAddresses }] = await Promise.all([
+      import('@midnightntwrk/wallet-sdk-address-format'),
+      import('@/chains/midnight/midnightConnectorAddresses'),
+    ]);
     sendResponse({
       id: request.id,
-      data: {
-        shieldedAddress,
-        shieldedCoinPublicKey: decoded.coinPublicKeyString(),
-        shieldedEncryptionPublicKey: decoded.encryptionPublicKeyString(),
-      },
+      data: connectorShieldedAddresses(codecs, midnightSdkNetworkId(wallet.network), shieldedAddress),
       target: TARGET,
       sender: SENDER.extension,
     });
