@@ -4,7 +4,7 @@ import { getMidnightEndpoints } from '@/chains/midnight/midnightConfig';
 import {
   DappProvingUnavailableError,
   describeDappProvingFailure,
-  localProfileForNetwork,
+  localUrlForNetwork,
   resolveDappProvingTarget,
   resolveProvingTarget,
 } from './midnightProvingTarget';
@@ -13,6 +13,7 @@ import type { ProofServerPreference } from './midnightProvingTarget';
 const base: ProofServerPreference = {
   mode: 'remote',
   localUrl: 'http://localhost:6300',
+  localUrlLedger9: 'http://localhost:6301',
   zkpaasUrl: '',
   zkpaasApiKey: '',
   zkpaasApiSecret: '',
@@ -39,16 +40,29 @@ describe('resolveProvingTarget', () => {
       .toMatchObject({ kind: 'unconfigured', mode: 'zkpaas', reason: 'zkpaas-unconfigured' });
   });
 
-  it('refuses a local server whose circuit family does not match the network', () => {
-    // Stagenet proofs need a ledger-9 server; a legacy (default) profile can't serve them, and vice versa.
+  it('picks the local server by the network’s ledger, with nothing to switch', () => {
+    // One server per circuit family. The network chooses; there is no profile
+    // a user can leave on the wrong setting.
     expect(resolveProvingTarget(Network.STAGENET, { ...base, mode: 'local' }))
-      .toMatchObject({ kind: 'unconfigured', mode: 'local', reason: 'local-profile-mismatch', url: base.localUrl });
-    expect(resolveProvingTarget(Network.PREPROD, { ...base, mode: 'local', localProfile: 'stagenet' }))
-      .toMatchObject({ kind: 'unconfigured', reason: 'local-profile-mismatch' });
-    expect(resolveProvingTarget(Network.STAGENET, { ...base, mode: 'local', localProfile: 'stagenet' }))
-      .toMatchObject({ kind: 'server', mode: 'local' });
-    expect(localProfileForNetwork('midnight-stagenet')).toBe('stagenet');
-    expect(localProfileForNetwork(Network.MAINNET)).toBe('legacy');
+      .toMatchObject({ kind: 'server', mode: 'local', url: 'http://localhost:6301' });
+    expect(resolveProvingTarget(Network.MAINNET, { ...base, mode: 'local' }))
+      .toMatchObject({ kind: 'server', mode: 'local', url: 'http://localhost:6300' });
+    expect(resolveProvingTarget(Network.PREPROD, { ...base, mode: 'local' }))
+      .toMatchObject({ kind: 'server', mode: 'local', url: 'http://localhost:6300' });
+    expect(localUrlForNetwork('midnight-stagenet', base)).toBe('http://localhost:6301');
+    expect(localUrlForNetwork(Network.MAINNET, base)).toBe('http://localhost:6300');
+  });
+
+  it('reports a missing ledger-9 URL as unconfigured rather than falling back to the ledger-8 server', () => {
+    // A ledger-8 server cannot prove stagenet; silently using it would fail
+    // late with an opaque prover error instead of early with a clear one.
+    expect(resolveProvingTarget(Network.STAGENET, { ...base, mode: 'local', localUrlLedger9: '' }))
+      .toMatchObject({ kind: 'unconfigured', mode: 'local', reason: 'local-url-missing' });
+    expect(resolveProvingTarget(Network.STAGENET, { ...base, mode: 'local', localUrlLedger9: undefined }))
+      .toMatchObject({ kind: 'unconfigured', reason: 'local-url-missing' });
+    // Ledger 8 is unaffected by the ledger-9 slot.
+    expect(resolveProvingTarget(Network.MAINNET, { ...base, mode: 'local', localUrlLedger9: '' }))
+      .toMatchObject({ kind: 'server', url: 'http://localhost:6300' });
   });
 
   it('maps remote mode to Gero Cloud', () => {
@@ -89,9 +103,14 @@ describe('resolveDappProvingTarget', () => {
     expect(() => resolveDappProvingTarget('not-a-midnight-network', base)).toThrow(DappProvingUnavailableError);
   });
 
-  it('explains a local circuit-family mismatch in terms of the setting to change', () => {
-    expect(() => resolveDappProvingTarget(Network.STAGENET, { ...base, mode: 'local' }))
-      .toThrow(/legacy circuit family.*needs the stagenet one.*proof-server profile/);
+  it('delegates stagenet dapp proofs to the ledger-9 local server', () => {
+    expect(resolveDappProvingTarget(Network.STAGENET, { ...base, mode: 'local' }))
+      .toMatchObject({ url: 'http://localhost:6301', source: 'local' });
+  });
+
+  it('explains a missing ledger-9 URL in terms of the setting to add', () => {
+    expect(() => resolveDappProvingTarget(Network.STAGENET, { ...base, mode: 'local', localUrlLedger9: '' }))
+      .toThrow(/no local proof server URL for the ledger-9.*proof-server settings/);
   });
 });
 

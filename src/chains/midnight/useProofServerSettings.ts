@@ -19,9 +19,9 @@ import {
  * importing this composable, which pulls in Vue, snackbar and the stores.
  */
 export { PROOF_SERVER_DOCKER_TAG, PROOF_SERVER_DOCKER_COMMAND } from '@/chains/midnight/midnightConfig';
-import { midnightProofServerCommand } from '@/chains/midnight/midnightConfig';
+import { isLedger9Network, midnightProofServerCommand } from '@/chains/midnight/midnightConfig';
+import { localUrlForNetwork } from '@/chains/midnight/midnightProvingTarget';
 
-import type { LocalProverProfile } from '@/services/crossDevice/localProverProfile';
 
 export type ProofServerMode = 'remote' | 'local' | 'zkpaas';
 
@@ -102,13 +102,10 @@ export function useMidnightProofServer() {
 
   // ── Drafts: field edits buffer locally and persist on blur ──────────────
 
-  const localProverProfile = computed<LocalProverProfile>({
-    get: () => proofServer.value.localProfile ?? 'legacy',
-    set: (localProfile) => { void saveProofServer({ localProfile }); },
-  });
-
   const localUrlDraft = ref(proofServer.value.localUrl);
   const localUrlError = ref('');
+  const localUrlLedger9Draft = ref(proofServer.value.localUrlLedger9);
+  const localUrlLedger9Error = ref('');
   const zkpaasUrlDraft = ref(proofServer.value.zkpaasUrl);
   const zkpaasUrlError = ref('');
   const zkpaasKeyDraft = ref(proofServer.value.zkpaasApiKey);
@@ -117,6 +114,7 @@ export function useMidnightProofServer() {
   // Keep the drafts in sync with externally-applied changes (another open
   // surface, or our own save round-tripping back through the store broadcast).
   watch(() => proofServer.value.localUrl, (next) => { localUrlDraft.value = next; });
+  watch(() => proofServer.value.localUrlLedger9, (next) => { localUrlLedger9Draft.value = next; });
   watch(() => proofServer.value.zkpaasUrl, (next) => { zkpaasUrlDraft.value = next; });
   watch(() => proofServer.value.zkpaasApiKey, (next) => { zkpaasKeyDraft.value = next; });
   watch(() => proofServer.value.zkpaasApiSecret, (next) => { zkpaasSecretDraft.value = next; });
@@ -141,6 +139,16 @@ export function useMidnightProofServer() {
     if (error) return;
     if (value === proofServer.value.localUrl) return;
     await saveProofServer({ localUrl: value });
+    restartHealthPollingIfActive();
+  }
+
+  async function onLocalUrlLedger9Blur() {
+    const value = localUrlLedger9Draft.value.trim();
+    const error = validateProofServerUrl(value);
+    localUrlLedger9Error.value = error;
+    if (error) return;
+    if (value === proofServer.value.localUrlLedger9) return;
+    await saveProofServer({ localUrlLedger9: value });
     restartHealthPollingIfActive();
   }
 
@@ -204,7 +212,10 @@ export function useMidnightProofServer() {
    */
   function currentHealthTarget(): { url: string; headers?: Record<string, string>; acceptNotFound?: boolean } | null {
     const ps = proofServer.value;
-    if (ps.mode === 'local') return { url: ps.localUrl };
+    // The server for the active wallet's ledger — the one a send from this
+    // wallet would actually use — so the status pill answers the question
+    // the user is asking.
+    if (ps.mode === 'local') return { url: localUrlForNetwork(walletNetwork.value ?? '', ps) };
     if (ps.mode === 'zkpaas') {
       const url = zkpaasEffectiveUrl.value;
       if (!zkpaasConfigured.value || !url) return null;
@@ -258,6 +269,10 @@ export function useMidnightProofServer() {
     if (proofServer.value.mode !== 'remote') startHealthPolling();
   }
 
+  // Switching wallets across ledgers changes which local server is relevant,
+  // so re-check rather than keep showing the other server's status.
+  watch(() => isLedger9Network(walletNetwork.value), () => { restartHealthPollingIfActive(); });
+
   async function testConnection() {
     testingConnection.value = true;
     try {
@@ -296,10 +311,14 @@ export function useMidnightProofServer() {
     proofServer,
     proofServerMode,
     proofServerSaving,
-    localProverProfile,
     localUrlDraft,
     localUrlError,
     onLocalUrlBlur,
+    localUrlLedger9Draft,
+    localUrlLedger9Error,
+    onLocalUrlLedger9Blur,
+    /** Which ledger the active wallet is on, so the page can label the relevant server. */
+    activeLedger9: computed(() => isLedger9Network(walletNetwork.value)),
     zkpaasUrlDraft,
     zkpaasUrlError,
     onZkpaasUrlBlur,

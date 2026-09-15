@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({
   send: vi.fn(),
   api: vi.fn(),
   health: vi.fn(),
-  proofServer: { mode: 'remote', localUrl: 'http://localhost:6300', localProfile: 'stagenet' },
+  proofServer: { mode: 'remote', localUrl: 'http://localhost:6300', localUrlLedger9: 'http://localhost:6301' },
 }));
 vi.mock('@/chrome/messaging', () => ({ Messaging: { sendToBackgroundFromOptions: mocks.send } }));
 vi.mock('@/api/midnight-api', () => ({ getMidnightApi: mocks.api }));
@@ -23,7 +23,7 @@ describe('Midnight ledger-specific orchestration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.proofServer.mode = 'remote';
-    mocks.proofServer.localProfile = 'stagenet';
+    mocks.proofServer.localUrlLedger9 = 'http://localhost:6301';
     mocks.health.mockResolvedValue(true);
   });
 
@@ -43,7 +43,6 @@ describe('Midnight ledger-specific orchestration', () => {
   it.each(['local', 'zkpaas'])('checks the configured wallet-side prover for both ledger stacks (%s)', async mode => {
     mocks.proofServer.mode = mode;
     expect(await checkWalletProvingPreflight('Stagenet')).toBe(true);
-    mocks.proofServer.localProfile = 'legacy';
     expect(await checkWalletProvingPreflight('Preprod')).toBe(true);
     expect(mocks.health).toHaveBeenCalledTimes(2);
   });
@@ -76,7 +75,8 @@ describe('Midnight ledger-specific orchestration', () => {
     mocks.send.mockResolvedValueOnce({ data: { success: true, publicKeyHex: '11', addressHex: '22' } })
       .mockResolvedValueOnce({ data: { success: true, signedTxHex: 'bb', proven: true } });
     await sendUnshieldedNight('Stagenet', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {});
-    expect(mocks.send.mock.calls[1][0].data.proving.url).toBe(mode === 'local' ? 'http://localhost:6300' : 'https://prover.example');
+    // Stagenet is ledger 9, so local mode reaches the ledger-9 server — not the ledger-8 one at :6300.
+    expect(mocks.send.mock.calls[1][0].data.proving.url).toBe(mode === 'local' ? 'http://localhost:6301' : 'https://prover.example');
     expect(submitProven).toHaveBeenCalledOnce();
     expect(cloud).not.toHaveBeenCalled();
   });
@@ -90,8 +90,8 @@ describe('Midnight ledger-specific orchestration', () => {
     expect(mocks.api).not.toHaveBeenCalled();
   });
 
-  it('rejects the declared legacy local server for Stagenet even when its health endpoint is reachable', async () => {
-    mocks.proofServer.mode = 'local'; mocks.proofServer.localProfile = 'legacy';
+  it('fails before authorization when no ledger-9 URL is set for Stagenet, without touching the ledger-8 server', async () => {
+    mocks.proofServer.mode = 'local'; mocks.proofServer.localUrlLedger9 = '';
     expect(await checkWalletProvingPreflight('Stagenet')).toBe(false);
     expect(mocks.health).not.toHaveBeenCalled();
   });

@@ -217,11 +217,31 @@ export const PROOF_SERVER_DOCKER_TAG = '8.1.0';
 export const PROOF_SERVER_DOCKER_COMMAND =
   `docker run -p 6300:6300 midnightntwrk/proof-server:${PROOF_SERVER_DOCKER_TAG} midnight-proof-server -v`;
 
-/** The Stagenet ledger has different proof circuits from Mainnet/Preprod. */
-export function midnightProofServerTag(network?: string): string {
-  return network?.toLowerCase().replace(/^midnight-/, '') === 'stagenet' ? '9.0.0-rc.6' : PROOF_SERVER_DOCKER_TAG;
+/** True for the ledger-9 network. Accepts the wallet `Network` value or a `midnight-<id>` slug. */
+export function isLedger9Network(network?: string): boolean {
+  return network?.toLowerCase().replace(/^midnight-/, '') === 'stagenet';
 }
 
+/** The Stagenet ledger has different proof circuits from Mainnet/Preprod. */
+export function midnightProofServerTag(network?: string): string {
+  return isLedger9Network(network) ? '9.0.0-rc.6' : PROOF_SERVER_DOCKER_TAG;
+}
+
+/**
+ * Host port each ledger's local proof server binds by default. Deliberately
+ * different so a user can run both at once — the ledger-8 and ledger-9
+ * servers are different circuit families and one server cannot serve both.
+ * The wallet picks the URL by the active wallet's network, so there is no
+ * profile to switch when moving between networks.
+ */
+export function midnightProofServerPort(network?: string): number {
+  return isLedger9Network(network) ? 6301 : 6300;
+}
+
+export const DEFAULT_LOCAL_PROOF_SERVER_URL = 'http://localhost:6300';
+export const DEFAULT_LOCAL_PROOF_SERVER_URL_LEDGER9 = 'http://localhost:6301';
+
 export function midnightProofServerCommand(network?: string): string {
-  return `docker run --rm -p 127.0.0.1:6300:6300 midnightntwrk/proof-server:${midnightProofServerTag(network)} midnight-proof-server -v`;
+  const port = midnightProofServerPort(network);
+  return `docker run --rm -p 127.0.0.1:${port}:6300 midnightntwrk/proof-server:${midnightProofServerTag(network)} midnight-proof-server -v`;
 }
