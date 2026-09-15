@@ -3,7 +3,7 @@
        glass-card anatomy as mini-dust / mini-ps. Appears with the site's first
        proof request and leaves 60 s after Submit or a failure (the visibility
        rule lives in midnightSiteActivity.ts). -->
-  <v-card v-if="visible && activity" flat class="liquid-glass mini-act" role="status">
+  <v-card v-if="visible && activity" flat class="glass-liquid mini-act" role="status">
     <div class="mini-act__row">
       <span class="mini-act__label t-label">
         <v-icon x-small class="mr-1" color="var(--g-text-3)">mdi-web</v-icon>

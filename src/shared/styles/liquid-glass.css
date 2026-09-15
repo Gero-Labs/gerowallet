@@ -1,11 +1,12 @@
 /* ============================================================
    Glass canon: glass means "this floats above content".
-   Exactly 4 materials. Static cards must NOT use these classes;
+   Exactly 5 materials. Static cards must NOT use these classes;
    they are solid var(--g-raised) with a hairline border.
    (Material 4 "panel" is the exception that proves the rule: the
    in-page hero panels were already glass ad hoc — see PortfolioChart /
    RecentTransactionsCard — so it names that recipe instead of letting
-   a third copy drift.)
+   a third copy drift. Material 5 "liquid" is for cards that sit directly
+   on imagery — the welcome wallet rows, mini-Gero's Midnight cards.)
 
    The legacy class names are kept as aliases so ~107 existing
    template usages keep working; sweeps migrate them to the
@@ -102,6 +103,40 @@
   border-radius: var(--g-r-card) !important;
 }
 
+/* Material 5: liquid (cards sitting directly on imagery: the welcome
+   wallet rows over the chain backdrop, mini-Gero's Midnight cards over the
+   star field). Apple's Liquid Glass translated to the web: a visibly
+   see-through pane — a light dark tint so text stays legible over a bright
+   backdrop, a diagonal sheen that reads as refraction, and a bright top
+   edge where light catches the material. Depth comes from the blur + that
+   edge, never a glow. The .v-card variant exists for the same reason as
+   Material 4's (see the specificity note above). */
+.glass-liquid {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0.02) 45%, rgba(255, 255, 255, 0.06) 100%),
+    rgba(12, 15, 21, 0.42);
+  backdrop-filter: blur(22px) saturate(1.5);
+  -webkit-backdrop-filter: blur(22px) saturate(1.5);
+  border: 1px solid var(--g-hairline-3);
+  border-radius: var(--g-r-card);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.04),
+    var(--g-shadow-menu);
+}
+
+.v-card.glass-liquid {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0.02) 45%, rgba(255, 255, 255, 0.06) 100%),
+    rgba(12, 15, 21, 0.42) !important;
+  border: 1px solid var(--g-hairline-3) !important;
+  border-radius: var(--g-r-card) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.04),
+    var(--g-shadow-menu) !important;
+}
+
 /* No-blur fallback: go opaque */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .glass-chrome, .liquid-glass-nav-drawer,
@@ -113,17 +148,19 @@
   /* Unflagged: base .glass-panel is unflagged too, so source order wins. */
   .glass-panel { background: var(--g-surface); }
   .v-card.glass-panel { background: var(--g-surface) !important; }
+  .glass-liquid { background: var(--g-raised); }
+  .v-card.glass-liquid { background: var(--g-raised) !important; }
 }
 
 /* User preference: no transparency */
 @media (prefers-reduced-transparency: reduce) {
   .glass-chrome, .liquid-glass-nav-drawer,
   .glass-overlay, .liquid-glass-dialog,
-  .glass-popover, .liquid-glass, .liquid-glass-subtle, .liquid-glass-compact, .glass-panel,
+  .glass-popover, .liquid-glass, .liquid-glass-subtle, .liquid-glass-compact, .glass-panel, .glass-liquid,
   .v-navigation-drawer.liquid-glass-nav-drawer,
   .v-card.liquid-glass-dialog,
   .v-card.liquid-glass, .v-card.liquid-glass-subtle, .v-card.liquid-glass-compact,
-  .v-card.glass-panel {
+  .v-card.glass-panel, .v-card.glass-liquid {
     background: var(--g-overlay) !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
@@ -134,11 +171,11 @@
 @media (prefers-contrast: more) {
   .glass-chrome, .liquid-glass-nav-drawer,
   .glass-overlay, .liquid-glass-dialog,
-  .glass-popover, .liquid-glass, .liquid-glass-subtle, .liquid-glass-compact, .glass-panel,
+  .glass-popover, .liquid-glass, .liquid-glass-subtle, .liquid-glass-compact, .glass-panel, .glass-liquid,
   .v-navigation-drawer.liquid-glass-nav-drawer,
   .v-card.liquid-glass-dialog,
   .v-card.liquid-glass, .v-card.liquid-glass-subtle, .v-card.liquid-glass-compact,
-  .v-card.glass-panel {
+  .v-card.glass-panel, .v-card.glass-liquid {
     background: var(--g-overlay) !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
