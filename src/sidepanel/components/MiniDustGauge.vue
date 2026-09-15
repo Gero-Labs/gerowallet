@@ -2,7 +2,7 @@
   <!-- Compact DUST battery for mini-Gero — same data + visual language as the
        dashboard's MidnightDustGauge (gradient fill, sand dividers, living
        dust), shrunk to a single row + slim bar. -->
-  <v-card flat class="liquid-glass mini-dust" :class="{ 'is-charging': isCharging, 'is-full': isFull }">
+  <v-card flat class="glass-liquid mini-dust" :class="{ 'is-charging': isCharging, 'is-full': isFull }">
     <div class="mini-dust__row">
       <span class="mini-dust__label">
         <v-icon x-small class="mr-1" :color="isCharging || isFull ? '#ecc985' : '#888'">
@@ -192,7 +192,7 @@ function onSponsorSaved(): void {
 </script>
 
 <style scoped>
-/* Background/border/radius come from the global .liquid-glass card styles
+/* Background/border/radius come from the shared .glass-liquid material
    (sidepanel imports shared/styles/liquid-glass.css). */
 .mini-dust {
   margin: 0 16px 12px;

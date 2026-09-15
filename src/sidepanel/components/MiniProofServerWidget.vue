@@ -2,7 +2,7 @@
   <!-- Compact proof-server card for mini-Gero - same composable + mode/health
        state as the dashboard's MidnightProofServerWidget (never a separate
        copy of the logic), shrunk to mini-dust's single-card layout. -->
-  <v-card flat class="liquid-glass mini-ps">
+  <v-card flat class="glass-liquid mini-ps">
     <div class="mini-ps__row">
       <span class="mini-ps__label t-label">
         <v-icon x-small class="mr-1" color="var(--g-text-3)">mdi-server-security</v-icon>
@@ -94,7 +94,7 @@ function openFullPage() {
 </script>
 
 <style scoped>
-/* Background/border/radius come from the global .liquid-glass card styles,
+/* Background/border/radius come from the shared .glass-liquid material,
    same as mini-dust. */
 .mini-ps {
   margin: 0 16px 12px;

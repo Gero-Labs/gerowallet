@@ -59,7 +59,7 @@
             :fallback-tolerance="4" :scroll-sensitivity="80" :scroll-speed="16" :empty-insert-threshold="24"
             ghost-class="library-wallet--ghost" fallback-class="library-wallet--fallback"
             @start="dragging = true" @end="dragging = false" @change="reordered($event, group)">
-              <li v-for="(wallet, index) in (group.expanded ? group.wallets : [])" :key="wallet.id" class="library-wallet"
+              <li v-for="(wallet, index) in (group.expanded ? group.wallets : [])" :key="wallet.id" class="library-wallet glass-liquid"
                 :data-wallet-id="wallet.id" :class="{ 'library-wallet--locked': wallet.id === lockedWalletId }">
                 <button type="button" class="wallet-drag" :disabled="filtering || !ready"
                   :aria-label="t('walletLibrary.reorderWallet', { name: wallet.name })" :title="t('walletLibrary.keyboardHint')"
@@ -225,10 +225,13 @@ function reordered(event: { added?: { element: LibraryWallet; newIndex: number }
 .group-toggle .v-icon { color: var(--g-text-2); }
 .group-name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .library-wallets { list-style: none; padding: 0; margin: 0; }
-.library-wallet { display: flex; align-items: center; gap: var(--g-s-1); min-height: 80px; margin-bottom: var(--g-s-1); padding: var(--g-s-2) var(--g-s-1); background: var(--g-raised); border: 1px solid var(--g-hairline-1); border-radius: var(--g-r-control); transition: border-color var(--g-dur-fast) ease; }
+/* Surface (background, blur, border, radius, edge light) is the shared
+   Material 5 "liquid" glass (liquid-glass.css); only layout + the
+   accent border states live here. */
+.library-wallet { display: flex; align-items: center; gap: var(--g-s-1); min-height: 80px; margin-bottom: var(--g-s-2); padding: var(--g-s-2) var(--g-s-1); transition: border-color var(--g-dur-fast) ease; }
 .library-wallet:hover, .library-wallet:focus-within, .library-wallet--locked { border-color: var(--g-accent); }
 .library-wallet--ghost { opacity: 0.3; border-color: var(--g-accent); }
-.library-wallet--fallback { opacity: 0.95; box-shadow: var(--g-shadow-menu); pointer-events: none; }
+.library-wallet--fallback { opacity: 0.95; pointer-events: none; }
 .library-wallets--target { min-height: 48px; border-radius: var(--g-r-control); outline: 1px dashed var(--g-accent); }
 .wallet-library--sorting { user-select: none; }
 .wallet-library--sorting .wallet-open { pointer-events: none; }
