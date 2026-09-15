@@ -16,8 +16,23 @@ describe('isOwnExtensionPageSender', () => {
     expect(isOwnExtensionPageSender(sender, OWN)).toBe(true);
   });
 
+  it('accepts an own extension page on Firefox (moz-extension:// url), even in a tab', () => {
+    const sender = { id: OWN, url: `moz-extension://${OWN}/options.html`, tab: { id: 7 } } as unknown as S;
+    expect(isOwnExtensionPageSender(sender, OWN)).toBe(true);
+  });
+
+  it('accepts by moz-extension:// origin when url is absent', () => {
+    const sender = { id: OWN, origin: `moz-extension://${OWN}` } as unknown as S;
+    expect(isOwnExtensionPageSender(sender, OWN)).toBe(true);
+  });
+
   it('rejects a content script (own id + tab, but http page url)', () => {
     const sender = { id: OWN, url: 'https://evil.example/', tab: { id: 7 } } as unknown as S;
+    expect(isOwnExtensionPageSender(sender, OWN)).toBe(false);
+  });
+
+  it('rejects a url that merely embeds an extension scheme rather than starting with one', () => {
+    const sender = { id: OWN, url: `https://evil.example/?next=moz-extension://${OWN}/a`, tab: { id: 7 } } as unknown as S;
     expect(isOwnExtensionPageSender(sender, OWN)).toBe(false);
   });
 

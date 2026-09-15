@@ -6457,26 +6457,29 @@ const openUI = async () => {
 
 chrome.action.onClicked.addListener(openUI);
 
-// TODO(firefox defect 2, UNVERIFIED hypothesis — separate from the WASM-URL
-// fix in vite.config.background.mts): even with the background reliably
-// reaching this line and registering its listener, real onboarding in
-// Firefox still intermittently fails to deliver CHECK_AUTO_LOCK/LOGIN to it —
-// see gerowallet-e2e-tests's
-// .superpowers/sdd/2026-09-14-firefox-harness-selenium/diagnosis-report.md
-// ("Round 4", point 5) for the evidence trail. Leading hypothesis: MV3 wants
-// onMessage listeners registered SYNCHRONOUSLY during a service
-// worker/event page's initial evaluation so the browser can wake it and
-// still deliver the very message that woke it; this call sits at the end of
-// a ~6,000-line async body, so on a wake-triggered restart the listener
-// registers late and Firefox drops the waking message (Chrome appears to
-// buffer until the service worker finishes evaluating, masking the same
-// class of race). Not verified, and NOT to be "fixed" by restructuring this
-// file speculatively — that needs its own investigation task.
+// Firefox defect 2 — wallet creation completes but the UI never reaches the
+// dashboard — is STILL OPEN. Do not read the surrounding fixes as closing it.
 //
-// Note: the startup error/unhandledrejection guard prepended in
-// vite.config.background.mts (defect 1's hardening) is diagnostic only — it
-// logs a failure so it is no longer silent, it does NOT resume execution
-// past it and does NOT register this listener any earlier. The actual fix
-// for a dropped waking message, if this hypothesis holds, is registering
-// app.listen() synchronously/early — that is this TODO, not the guard.
+// What IS established, by direct background-side instrumentation (see
+// gerowallet-e2e-tests's
+// .superpowers/sdd/2026-09-14-firefox-harness-selenium/diagnosis-report.md):
+//   - app.listen() registers on every observed background lifecycle, and
+//     CHECK_AUTO_LOCK/LOGIN were entered AND answered. The earlier "late
+//     onMessage registration on wake" hypothesis documented here is REFUTED;
+//     do not re-derive it, and do not restructure this file for it.
+//   - broadcastUpdate was observed with connectedPorts: 0 throughout a real
+//     onboarding run, i.e. the page's store-sync port never opened — which is
+//     why getContextType() in src/utils/storageSync.ts was corrected to accept
+//     'moz-extension:'. That correction is right on its own merits.
+//
+// What is NOT established: that any of it resolves defect 2. Verified against
+// a real build of this branch — with the getContextType and senderTrust fixes
+// compiled in, tests/firefox/onboarding.test.ts STILL fails identically,
+// timing out on the dashboard sidebar link. A prior revision of this comment
+// claimed the defect was resolved and cited a report that was never written;
+// that claim was unverified and has been removed.
+//
+// Next concrete step: instrument the PAGE side (does the store-sync port open
+// now, and what does the router guard see) rather than the background side,
+// which has already been cleared.
 app.listen();

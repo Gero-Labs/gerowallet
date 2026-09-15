@@ -52,7 +52,12 @@ let windowOpenPatchedForTrezor = false;
 const TREZOR_MANIFEST = {
   appName: 'Gero Dashboard',
   appIcon: 'https://raw.githubusercontent.com/Gero-Labs/staking-pool/refs/heads/main/logo-64.png',
-  appUrl: `chrome-extension://${chrome.runtime.id}`,
+  // Built from the runtime rather than hardcoding 'chrome-extension://': on
+  // Firefox this extension's own origin is moz-extension://<uuid>, and
+  // chrome.runtime.id is the gecko id, so the hardcoded form produced a URL
+  // that does not exist. getURL('') yields the correct origin in both browsers;
+  // the trailing slash is trimmed because Trezor Connect expects a bare origin.
+  appUrl: chrome.runtime.getURL('').replace(/\/$/, ''),
   email: 'support@gerowallet.io',
 };
 

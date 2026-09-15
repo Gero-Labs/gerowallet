@@ -10,10 +10,10 @@
  */
 class DebouncedStorageWriter {
   private writeTimers = new Map<string, NodeJS.Timeout>();
-  private pendingWrites = new Map<string, any>();
+  private pendingWrites = new Map<string, unknown>();
   private readonly DEBOUNCE_MS = 100;
 
-  write(key: string, value: any): Promise<void> {
+  write(key: string, value: unknown): Promise<void> {
     return new Promise((resolve, reject) => {
       // Cancel existing timer for this key
       const existingTimer = this.writeTimers.get(key);
@@ -51,14 +51,14 @@ export const debouncedWriter = new DebouncedStorageWriter();
 /**
  * Smart storage persist function that uses debounced writing
  */
-export async function smartPersist(key: string, value: any): Promise<void> {
+export async function smartPersist(key: string, value: unknown): Promise<void> {
   return debouncedWriter.write(key, value);
 }
 
 /**
  * Hydrate a store from storage with proper error handling
  */
-export async function hydrateStore(storeName: string, store: Record<string, any>): Promise<void> {
+export async function hydrateStore(storeName: string, store: Record<string, unknown>): Promise<void> {
   try {
     const result = await chrome.storage.local.get(storeName);
     const storedData = result[storeName];
@@ -83,7 +83,19 @@ export async function hydrateStore(storeName: string, store: Record<string, any>
  */
 export function getContextType(): 'background' | 'browser' | 'content' {
   if (typeof window === 'undefined') return 'background';
-  if (window.location.protocol === 'chrome-extension:') {
+  // Extension UI pages (options, popup, etc.) report the browser's own
+  // extension-page protocol: 'chrome-extension:' in Chrome/Chromium,
+  // 'moz-extension:' in Firefox. Checking only the Chrome form here left
+  // Firefox's extension pages falling through to 'content', which meant
+  // storeMessaging.service.ts's initialize() (gated on context === 'browser')
+  // never called connect() — the store-sync port to the background was never
+  // opened, so WalletStore.state.loggedWallet (and every other store) never
+  // synced to the page. LOGIN would succeed in the background and the router
+  // guard would still see isLoggedIn === false forever, keeping the UI stuck
+  // on #/welcome even after a fully successful login. Verified directly via
+  // background-side instrumentation: `broadcastUpdate` observed
+  // `connectedPorts: 0` on every call throughout a real onboarding run.
+  if (window.location.protocol === 'chrome-extension:' || window.location.protocol === 'moz-extension:') {
     // All extension UI pages (options, popup, etc.) are considered 'browser' context
     return 'browser';
   }

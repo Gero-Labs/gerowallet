@@ -30,13 +30,22 @@ export const EXTENSION_PAGE_ONLY_METHODS = new Set<string>([
 /**
  * True only for a message from one of this extension's own pages (popup, options,
  * side panel, in a tab or not). The reliable distinguisher from a content script
- * is the URL scheme: an extension page reports a chrome-extension:// URL/origin,
- * whereas a content script reports the http(s) page URL even though its
- * sender.id is the extension id. (sender.tab is NOT a distinguisher — an
- * extension page opened in a tab, e.g. the dashboard, also carries one.)
+ * is the URL scheme: an extension page reports an extension URL/origin, whereas
+ * a content script reports the http(s) page URL even though its sender.id is the
+ * extension id. (sender.tab is NOT a distinguisher — an extension page opened in
+ * a tab, e.g. the dashboard, also carries one.)
+ *
+ * Both browsers' schemes are accepted: Chrome/Chromium pages report
+ * chrome-extension://, Firefox pages report moz-extension://. Matching only the
+ * Chrome form rejected every own page on Firefox, which fails closed — safe, but
+ * it made all EXTENSION_PAGE_ONLY_METHODS (CIP-45 sessions, cross-device signing,
+ * support-chat auth) unusable there. The security property is unchanged: content
+ * scripts report http(s) in both browsers, so neither scheme is forgeable by one.
  *
  * `ownId` is passed in (chrome.runtime.id at the call site) so this stays pure.
  */
+const EXTENSION_PAGE_SCHEMES = ['chrome-extension://', 'moz-extension://'] as const;
+
 export function isOwnExtensionPageSender(
   sender: chrome.runtime.MessageSender | undefined,
   ownId: string | undefined,
@@ -46,5 +55,7 @@ export function isOwnExtensionPageSender(
   const origin = typeof (sender as { origin?: string }).origin === 'string'
     ? (sender as { origin?: string }).origin as string
     : '';
-  return url.startsWith('chrome-extension://') || origin.startsWith('chrome-extension://');
+  return EXTENSION_PAGE_SCHEMES.some(
+    (scheme) => url.startsWith(scheme) || origin.startsWith(scheme),
+  );
 }
