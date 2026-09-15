@@ -431,7 +431,7 @@
 <script setup lang="ts">
 import { hasMidnightProvingConsent, type MidnightRemoteProver } from '@/chains/midnight/midnightProvingConsent';
 import MidnightPrivateBalances from '@/modules/dashboard/components/MidnightPrivateBalances.vue';
-import { computed, onMounted, ref, toRefs, watch } from 'vue';
+import { computed, ref, toRefs, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
 import TransactionAuthSection from '@/shared/components/TransactionAuthSection.vue';
@@ -459,7 +459,8 @@ import { isLedger9Network } from '@/chains/midnight/midnightConfig';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { midnightTokenBalances } from '@/chains/midnight/midnightTokenBalances';
 import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
-import { blocksMidnightSend } from '@/chains/midnight/midnightFeeCapacity';
+import { blocksMidnightSendLive } from '@/chains/midnight/midnightFeeCapacity';
+import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
 import {
   formatTokenAmount,
   parseTokenAmount,
@@ -555,8 +556,17 @@ const amountStep = computed(() =>
   * No spendable DUST means no fee can be paid, so the send cannot succeed.
   * Caught here rather than four steps later inside the SDK's
   * `balanceTransactions`, which neither returns nor throws in that state.
+  *
+  * Judged on the MERGED live balance (Path A + Path B) — the figure the
+  * battery shows — not the store's Path-A `dustState`, which reads zero for a
+  * wallet whose DUST comes entirely from a Cardano cNIGHT registration.
+  * `unknown` (either path not yet reported) never blocks.
   */
-const noFeeCapacity = computed(() => blocksMidnightSend(midnightStore.dustState));
+const dustLive = useMidnightDustLive();
+const noFeeCapacity = computed(() => blocksMidnightSendLive({
+  dustBalance: dustLive.dustBalance.value,
+  settled: dustLive.settled.value,
+}));
 
 /**
  * Wallet chosen to pay this send's DUST fee, or null to pay from this wallet.
@@ -615,9 +625,19 @@ async function restoreSponsorPreference(): Promise<void> {
   if (!wallet) return;
   const { linkFor, loadSponsorLinks } = await import('@/chains/midnight/midnightSponsorLinks');
   const link = linkFor(await loadSponsorLinks(), wallet.id, wallet.network);
-  sponsorWalletId.value = link?.sponsorWalletId ?? null;
+  // Re-check: the capacity may have flipped while the links were loading.
+  sponsorWalletId.value = noFeeCapacity.value ? (link?.sponsorWalletId ?? null) : null;
 }
-onMounted(restoreSponsorPreference);
+// A saved sponsor is restored only while this wallet actually needs one, and
+// dropped the moment it does not. `sponsorWalletId` is otherwise only written
+// by the picker, which is hidden whenever `noFeeCapacity` is false — so
+// without this, a wallet that saved a sponsor back when the guard wrongly
+// refused it (a Path-B wallet, before the merged-balance fix) would send
+// sponsored with no in-dialog way to opt out.
+watch(noFeeCapacity, (needsSponsor) => {
+  if (needsSponsor) void restoreSponsorPreference();
+  else sponsorWalletId.value = null;
+}, { immediate: true });
 
 /**
  * The sponsor argument for `sendUnshieldedNight`, collecting that wallet's own
