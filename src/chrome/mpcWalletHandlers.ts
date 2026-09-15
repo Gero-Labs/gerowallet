@@ -273,7 +273,7 @@ export async function unlockMpcWalletFlow(
       }
     }
     if (primaryErr instanceof MpcValidationError) {
-      throw new Error('Recovery data mismatch — unable to unlock this wallet with Google');
+      throw new Error('Recovery data mismatch. Unable to unlock this wallet with Google');
     }
     throw primaryErr;
   }
@@ -535,7 +535,7 @@ export async function revealMpcSrpFlow(
     return { mnemonic: entropyToMnemonic(entropy) };
   } catch (err) {
     if (err instanceof MpcValidationError) {
-      throw new Error('Recovery data mismatch — unable to reveal the seed phrase for this wallet');
+      throw new Error('Recovery data mismatch. Unable to reveal the seed phrase for this wallet');
     }
     throw err;
   }

@@ -228,7 +228,7 @@ export class ProvingUploadStore {
     this.sweep();
     const key = ProvingUploadStore.key(origin, requireUploadId(uploadId));
     const state = this.uploads.get(key);
-    if (!state) throw new ProvingUploadError('proof upload not found or expired — retry the proof');
+    if (!state) throw new ProvingUploadError('proof upload not found or expired. Retry the proof');
     this.uploads.delete(key);
     const assembled: AssembledUpload = {};
     for (const [part, partState] of state.parts) {

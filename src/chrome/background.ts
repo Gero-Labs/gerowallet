@@ -1963,7 +1963,7 @@ app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET, async (request, sendResponse) =
     if (!idToken && !hasCachedLoginShare) {
       // No fresh Google token and no cached session (e.g. the service worker
       // restarted). Surface guidance the UI can show and fall back to Google.
-      throw new Error('MPC session expired — sign in with Google');
+      throw new Error('MPC session expired. Sign in with Google');
     }
     const { secret } = buildDeviceShareSecret(request.data);
 
@@ -1986,7 +1986,7 @@ app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET, async (request, sendResponse) =
         }
       : async (): Promise<string> => {
           const cached = await mpcLoginShareCache.get(walletId);
-          if (!cached) throw new Error('MPC session expired — sign in with Google');
+          if (!cached) throw new Error('MPC session expired. Sign in with Google');
           return cached;
         };
 
@@ -2287,7 +2287,7 @@ app.addToOptions(MessageTypes.REVEAL_MPC_SRP, async (request, sendResponse) => {
     // this session must be present (device secret alone is below threshold).
     const hasCachedLoginShare = await mpcLoginShareCache.has(walletId);
     if (!idToken && !hasCachedLoginShare) {
-      throw new Error('MPC session expired — sign in with Google');
+      throw new Error('MPC session expired. Sign in with Google');
     }
     const { secret } = buildDeviceShareSecret(request.data);
 
@@ -2300,7 +2300,7 @@ app.addToOptions(MessageTypes.REVEAL_MPC_SRP, async (request, sendResponse) => {
       ? async (idTok: string, ch: string, net: string): Promise<string> => api.mpc.getLoginShare(idTok, ch, net)
       : async (): Promise<string> => {
           const cached = await mpcLoginShareCache.get(walletId);
-          if (!cached) throw new Error('MPC session expired — sign in with Google');
+          if (!cached) throw new Error('MPC session expired. Sign in with Google');
           return cached;
         };
 
@@ -6173,7 +6173,7 @@ app.add(MIDNIGHT_METHOD.signData, (request, sendResponse) => {
   // gesture survives to sidePanel.open(); enforce the connect-first
   // requirement here instead of in that pre-check round-trip.
   if (!WalletStore.isWhitelisted(origin)) {
-    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'Not connected — call connect() first') });
+    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'Not connected. Call connect() first') });
     return true;
   }
   const tabId = send.tab?.id;
@@ -6245,7 +6245,7 @@ app.add(MIDNIGHT_METHOD.balanceUnsealedTransaction, (request, sendResponse) => {
     return true;
   }
   if (!WalletStore.isWhitelisted(origin)) {
-    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'Not connected — call connect() first') });
+    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'Not connected. Call connect() first') });
     return true;
   }
   const tabId = send.tab?.id;
@@ -6343,7 +6343,7 @@ function requireMidnightProvingOrigin(
   const origin = request.origin;
   if (!origin || !WalletStore.isWhitelisted(origin)) {
     if (origin) midnightProvingUploads?.dropOrigin(origin);
-    return refuse('Not connected — call connect() first');
+    return refuse('Not connected. Call connect() first');
   }
   const wallet = requireMidnightWallet();
   if (!wallet) return refuse('No Midnight wallet connected');
@@ -6488,7 +6488,7 @@ app.add(MIDNIGHT_METHOD.makeTransfer, (request, sendResponse) => {
   // Fast-pathed past the content whitelist pre-check (to keep the user gesture
   // alive for sidePanel.open()), so enforce connect-first here — same as signData.
   if (!WalletStore.isWhitelisted(origin)) {
-    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'Not connected — call connect() first') });
+    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'Not connected. Call connect() first') });
     return true;
   }
   const tabId = send.tab?.id;
@@ -6549,7 +6549,7 @@ app.addToOptions(MessageTypes.SIGN_MIDNIGHT_CONNECTOR_DATA, async (request, send
       throw new Error(`Unsupported encoding: ${encoding}`);
     }
     if (options?.keyType !== 'unshielded') {
-      throw new Error(`Unsupported keyType: ${options?.keyType} — only 'unshielded' is implemented`);
+      throw new Error(`Unsupported keyType: ${options?.keyType}. Only 'unshielded' is implemented`);
     }
     // Strict decode — shared with the approval popup's preview (see
     // midnightSignDataCodec.ts) so what the user is shown can never diverge

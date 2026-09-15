@@ -132,7 +132,7 @@
             <v-card class="spo-dialog">
               <v-card-title class="spo-dialog-title">
                 <v-icon color="info" class="mr-2">mdi-lan</v-icon>
-                {{ $t('poolOperator.networkPeers') }} — {{ peersNode?.name }}
+                {{ $t('poolOperator.networkPeers') }}: {{ peersNode?.name }}
                 <v-spacer />
                 <v-btn icon small @click="showPeersDialog = false"><v-icon small>mdi-close</v-icon></v-btn>
               </v-card-title>

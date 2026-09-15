@@ -131,7 +131,7 @@ export function useStrikeDeposit() {
     // Authenticated endpoint — without a loaded API-wallet key this would be sent
     // unauthenticated and 401. Surface a clear prompt instead of a silent failure.
     if (!hasStrikeApiKeys()) {
-      error.value = 'Connect to Strike first — open the Vaults tab and tap "Connect to Strike".';
+      error.value = 'Connect to Strike first. Open the Vaults tab and tap "Connect to Strike".';
       status.value = 'error';
       return;
     }
@@ -177,7 +177,7 @@ export function useStrikeDeposit() {
       );
       error.value = extractStrikeError(
         e,
-        'Strike could not quote this deposit. Try a larger amount — there may be a minimum.',
+        'Strike could not quote this deposit. There may be a minimum, so try a larger amount.',
       );
       status.value = 'error';
     }
@@ -216,7 +216,7 @@ export function useStrikeDeposit() {
     const utxos = walletStore.utxos as Cardano.Utxo[];
     const keys = walletStore.keys;
     if (!wallet || !keys?.payment?.[0]?.address) {
-      error.value = 'No active wallet — cannot build deposit transaction.';
+      error.value = "No active wallet. Can't build the deposit transaction.";
       status.value = 'error';
       return false;
     }
@@ -228,7 +228,7 @@ export function useStrikeDeposit() {
     // address. Re-check auth HERE — before any funds move on-chain — and abort
     // cleanly instead of sending ADA Strike can't credit.
     if (!hasStrikeApiKeys()) {
-      error.value = 'Strike session is not unlocked — reconnect to Strike before depositing (no funds were moved).';
+      error.value = 'Strike session is not unlocked. Reconnect to Strike before depositing (no funds were moved).';
       status.value = 'error';
       return false;
     }
