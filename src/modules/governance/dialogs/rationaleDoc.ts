@@ -1,24 +1,33 @@
 /**
- * Fetch a CIP-136 vote rationale and prove it is the document that was voted on.
+ * Fetch a CIP-136 vote rationale and say how far it can be trusted.
  *
- * ## What makes this safe to render
+ * ## What the hash proves, and what the dialog does with it
  *
  * The anchor on a vote is a PAIR: a URL and a blake2b-256 of the bytes at that
  * URL, both recorded on chain. The URL is author-controlled and its host is not,
  * so bytes that come back are worth nothing on their own — the hash is what ties
- * them to the vote. This module therefore refuses to produce text unless the
- * hash of the RAW BYTES matches, byte for byte, exactly as `cip119.ts` describes
- * for DRep anchors: hash the octets as downloaded, never a re-serialized or
+ * them to the vote. This module hashes the RAW BYTES exactly as `cip119.ts`
+ * describes for DRep anchors: the octets as downloaded, never a re-serialized or
  * canonicalized form.
  *
- * Four failure shapes, kept apart because they mean different things to the
- * reader and the dialog says something different about each:
+ * The document is shown either way; the hash decides what the wallet SAYS about
+ * it. A verified document gets a green banner. Two kinds of doubt keep the text
+ * but flag it amber, because a reader who clicked "Read why" is better served by
+ * the words plus a warning than by a warning alone:
  *
- *  - `mismatch` — the document at the link is NOT the one that was voted on. The
- *    text is discarded, never rendered. Showing it would let anyone rewrite
- *    their published reasoning after the fact and have the wallet vouch for it.
+ *  - `mismatch` — the document at the link is NOT the one that was voted on. It
+ *    may have been edited after the vote, and the banner says so. The wallet
+ *    does not vouch for it.
  *  - `unverifiable` — no on-chain hash reached us, so there is nothing to check
- *    against. Same outcome as a mismatch: link out, render nothing.
+ *    against. Same banner: shown, not vouched for.
+ *
+ * None of that is an XSS question: every byte goes through `renderMarkdown`'s
+ * escaping (or Vue text interpolation, for the JSON fallback) before it reaches
+ * the DOM, whatever the hash said.
+ *
+ * Three failures produce no text at all, kept apart because the dialog says
+ * something different about each:
+ *
  *  - `oversize` — past {@link MAX_RATIONALE_BYTES}. The URL is attacker-chosen,
  *    so the response size is attacker-chosen; the cap is checked against the
  *    declared length AND against what actually arrived.
@@ -27,6 +36,7 @@
  *    not on it; IPFS anchors go through gero-backend's proxy, which is). All of
  *    those are the same fact to a reader: the wallet could not get the file, and
  *    the browser can.
+ *  - `empty` — the file arrived and carries nothing to show.
  *
  * Nothing here touches the DOM and the fetch is injectable, so the whole
  * decision table is testable without a network.
@@ -46,18 +56,27 @@ export const RATIONALE_TIMEOUT_MS = 10_000;
 export const MAX_RATIONALE_BYTES = 512 * 1024;
 
 /** Why no text is being shown. Each maps to its own line of copy. */
-export type RationaleFailure = 'mismatch' | 'unverifiable' | 'oversize' | 'network' | 'empty';
+export type RationaleFailure = 'oversize' | 'network' | 'empty';
+
+/** Why text IS shown but not vouched for. Each maps to its own banner. */
+export type RationaleDoubt = 'mismatch' | 'unverifiable';
 
 /** One labelled block of the document, in the order CIP-136 lists them. */
 export interface RationaleSection {
   /** i18n key for the heading, or null for a document with no known structure. */
   labelKey: string | null;
-  /** Raw markdown, to be rendered ONLY through `renderMarkdown`. */
+  /**
+   * `prose` is raw markdown, to be rendered ONLY through `renderMarkdown`.
+   * `json` is the pretty-printed document itself, for one that parses but
+   * carries none of the CIP-136 prose fields — rendered as text, never as HTML.
+   */
+  kind: 'prose' | 'json';
   text: string;
 }
 
 export type RationaleResult =
   | { status: 'verified'; sections: RationaleSection[]; hash: string }
+  | { status: 'unverified'; reason: RationaleDoubt; sections: RationaleSection[]; hash: string }
   | { status: 'failed'; reason: RationaleFailure };
 
 /**
@@ -84,14 +103,23 @@ function cipValue(value: unknown): string {
   return '';
 }
 
+/** A parsed document with anything in it at all — `{}`, `[]` and scalars are not. */
+function hasContent(parsed: unknown): boolean {
+  if (Array.isArray(parsed)) return parsed.length > 0;
+  return !!parsed && typeof parsed === 'object' && Object.keys(parsed as object).length > 0;
+}
+
 /**
- * The prose inside a verified document.
+ * What to show from the document.
  *
  * A document that does not parse as JSON is still returned as ONE unlabelled
- * section rather than discarded: its bytes hashed correctly, so it is exactly
- * what the voter published, and `renderMarkdown` escapes every byte of it before
- * anything reaches the DOM. Refusing to show a verified document because its
- * shape surprised us would hide the voter's own words.
+ * prose section rather than discarded: it is what sits at the voter's anchor,
+ * and `renderMarkdown` escapes every byte of it before anything reaches the
+ * DOM. One that parses but carries none of the CIP-136 prose fields comes back
+ * pretty-printed as a single `json` section: an anchor is by definition a JSON
+ * document, and "the shape surprised us" must not read as "nothing here".
+ * Refusing to show a document because of its shape would hide the voter's own
+ * words.
  */
 export function extractRationaleSections(raw: string): RationaleSection[] {
   let parsed: unknown;
@@ -99,7 +127,7 @@ export function extractRationaleSections(raw: string): RationaleSection[] {
     parsed = JSON.parse(raw);
   } catch {
     const text = raw.trim();
-    return text ? [{ labelKey: null, text }] : [];
+    return text ? [{ labelKey: null, kind: 'prose', text }] : [];
   }
 
   const root = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
@@ -109,7 +137,10 @@ export function extractRationaleSections(raw: string): RationaleSection[] {
   const sections: RationaleSection[] = [];
   for (const [field, labelKey] of SECTION_FIELDS) {
     const text = cipValue(body[field]);
-    if (text) sections.push({ labelKey, text });
+    if (text) sections.push({ labelKey, kind: 'prose', text });
+  }
+  if (sections.length === 0 && hasContent(parsed)) {
+    sections.push({ labelKey: null, kind: 'json', text: JSON.stringify(parsed, null, 2) });
   }
   return sections;
 }
@@ -130,7 +161,7 @@ function failed(reason: RationaleFailure): RationaleResult {
 }
 
 /**
- * Fetch, verify, extract. Never throws: every path returns a result the dialog
+ * Fetch, extract, verify. Never throws: every path returns a result the dialog
  * can render, because a rejected promise here would surface as an unhandled
  * error on a page the user opened by clicking a link.
  */
@@ -138,10 +169,10 @@ export async function loadRationale(options: LoadRationaleOptions): Promise<Rati
   const target = toInAppUrl(options.url);
   if (!target) return failed('network');
 
+  // Nothing to check against is NOT "probably fine": the document is still
+  // fetched and shown, but it is flagged, never vouched for.
   const expected = String(options.hash ?? '').trim().toLowerCase();
-  // Nothing to check against is NOT "probably fine": an unverified document from
-  // an author-controlled host is exactly what the hash exists to catch.
-  if (!/^[0-9a-f]{64}$/.test(expected)) return failed('unverifiable');
+  const verifiable = /^[0-9a-f]{64}$/.test(expected);
 
   const maxBytes = options.maxBytes ?? MAX_RATIONALE_BYTES;
   const doFetch = options.fetchImpl ?? globalThis.fetch;
@@ -169,13 +200,13 @@ export async function loadRationale(options: LoadRationaleOptions): Promise<Rati
     if (bytes.byteLength > maxBytes) return failed('oversize');
     if (bytes.byteLength === 0) return failed('empty');
 
-    // The bytes as downloaded — the only form the on-chain hash is over.
-    const hash = anchorHashOfBytes(bytes);
-    if (hash !== expected) return failed('mismatch');
-
     const sections = extractRationaleSections(new TextDecoder('utf-8').decode(bytes));
     if (sections.length === 0) return failed('empty');
 
+    // The bytes as downloaded — the only form the on-chain hash is over.
+    const hash = anchorHashOfBytes(bytes);
+    if (!verifiable) return { status: 'unverified', reason: 'unverifiable', sections, hash };
+    if (hash !== expected) return { status: 'unverified', reason: 'mismatch', sections, hash };
     return { status: 'verified', sections, hash };
   } catch {
     // Aborted, offline, CORS, CSP: one fact for the reader either way.

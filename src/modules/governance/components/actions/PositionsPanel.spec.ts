@@ -11,6 +11,12 @@ import { mount, type Wrapper } from '@vue/test-utils';
 import Vue from 'vue';
 
 const getDRepsPaginated = vi.fn();
+// The dialog fetches from an author's host; these cases are about the panel,
+// so it is a stub that records its props.
+vi.mock('@/modules/governance/dialogs/RationaleDialog.vue', () => ({
+  default: { name: 'RationaleDialog', props: ['isOpen', 'url', 'hash', 'subtitle'], render: () => null },
+}));
+
 vi.mock('@/api/blockchain-api', () => ({
   default: { getDRepsPaginated: (...args: unknown[]) => getDRepsPaginated(...args) },
 }));
@@ -149,9 +155,10 @@ describe('PositionsPanel summary', () => {
     expect(html).not.toContain('governance.positionsCapped:{');
   });
 
-  it('counts an ipfs:// rationale as published while offering no link', async () => {
-    // The count is about the voters. The link is about what this wallet can
-    // safely open, and the external-fetch note only applies where one exists.
+  it('offers an ipfs:// rationale like any other, since the dialog proxies it', async () => {
+    // About a quarter of published rationales are ipfs://. The dialog fetches
+    // those through gero-backend's proxy, so the affordance and the fetch note
+    // apply to every published rationale, not only the http(s) ones.
     wrapper = mountPanel({
       votes: [vote({ rationaleUrl: 'ipfs://QmSomething' }), vote({ drepId: DREP_B })],
       total: 2,
@@ -160,8 +167,35 @@ describe('PositionsPanel summary', () => {
 
     const html = wrapper.html();
     expect(html).toContain('governance.rationaleCoverage:{"n":1,"total":2}');
-    expect(html).not.toContain('governance.readWhy');
-    expect(html).not.toContain('governance.rationaleExternalNote');
+    expect(html).toContain('governance.readWhy');
+    expect(html).toContain('governance.rationaleExternalNote');
+  });
+
+  it('mounts the rationale dialog for the clicked row only, and only once clicked', async () => {
+    // A request to an author's host must follow a click, never a render.
+    wrapper = mountPanel({
+      votes: [
+        vote({ rationaleUrl: 'https://example.test/why.json', rationaleHash: 'ab'.repeat(32) }),
+        vote({ drepId: DREP_B }),
+      ],
+      total: 2,
+    });
+    await settle();
+    expect(wrapper.findComponent({ name: 'RationaleDialog' }).exists()).toBe(false);
+
+    await wrapper.find('.vote-row__rationale').trigger('click');
+    await Vue.nextTick();
+
+    const dialog = wrapper.findComponent({ name: 'RationaleDialog' });
+    expect(dialog.exists()).toBe(true);
+    expect(dialog.props('url')).toBe('https://example.test/why.json');
+    expect(dialog.props('hash')).toBe('ab'.repeat(32));
+    // No published name in this fixture, so the voter is named by id.
+    expect(String(dialog.props('subtitle'))).toContain(DREP_A.slice(0, 6));
+
+    dialog.vm.$emit('close');
+    await Vue.nextTick();
+    expect(wrapper.findComponent({ name: 'RationaleDialog' }).exists()).toBe(false);
   });
 });
 

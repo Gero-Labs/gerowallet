@@ -1,6 +1,7 @@
 // The decision table behind the rationale dialog, tested without a DOM.
-// Everything here is a refusal rule: what has to be true before a document a
-// stranger hosts is allowed to become text on a wallet screen.
+// Two kinds of rule: what the hash lets the wallet SAY about a document a
+// stranger hosts (verified, or shown with a warning), and what stops the
+// document being shown at all (too big, unreachable, nothing in it).
 import { describe, it, expect, vi } from 'vitest';
 import { blake2bHex } from 'blakejs';
 
@@ -38,16 +39,28 @@ describe('loadRationale', () => {
 
     const reserialized = hashOf(bytesOf(JSON.stringify(JSON.parse(raw))));
     const bad = await loadRationale({ url: 'https://a.test/r.json', hash: reserialized, fetchImpl: fetching(bytes) });
-    expect(bad).toEqual({ status: 'failed', reason: 'mismatch' });
+    // The text survives a mismatch; the verdict does not.
+    expect(bad).toEqual({
+      status: 'unverified',
+      reason: 'mismatch',
+      sections: [{ labelKey: null, kind: 'prose', text: 'Because.' }],
+      hash: hashOf(bytes),
+    });
   });
 
-  it('treats a missing or malformed hash as unverifiable and never asks the host', async () => {
-    const fetchImpl = vi.fn() as unknown as typeof fetch;
+  it('still fetches and shows a document with a missing or malformed hash, flagged unverifiable', async () => {
+    const bytes = bytesOf('{"body":{"comment":"hi"}}');
     for (const hash of [null, undefined, '', 'not-a-hash', 'ab'.repeat(10)]) {
+      const fetchImpl = fetching(bytes);
       const result = await loadRationale({ url: 'https://a.test/r.json', hash, fetchImpl });
-      expect(result).toEqual({ status: 'failed', reason: 'unverifiable' });
+      expect(result).toEqual({
+        status: 'unverified',
+        reason: 'unverifiable',
+        sections: [{ labelKey: null, kind: 'prose', text: 'hi' }],
+        hash: hashOf(bytes),
+      });
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
     }
-    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it('accepts an uppercase hash, which is the same hash', async () => {
@@ -127,8 +140,8 @@ describe('loadRationale', () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
-  it('calls a verified but wordless document empty rather than showing a blank card', async () => {
-    const bytes = bytesOf('{"body":{"internalVote":{"yes":3}}}');
+  it('calls a verified but contentless document empty rather than showing a blank card', async () => {
+    const bytes = bytesOf('{}');
     const result = await loadRationale({
       url: 'https://a.test/r.json',
       hash: hashOf(bytes),
@@ -159,25 +172,36 @@ describe('extractRationaleSections', () => {
 
   it('unwraps a JSON-LD {"@value"} the same way the DRep surfaces do', () => {
     const sections = extractRationaleSections(JSON.stringify({ body: { comment: { '@value': 'Because.' } } }));
-    expect(sections).toEqual([{ labelKey: null, text: 'Because.' }]);
+    expect(sections).toEqual([{ labelKey: null, kind: 'prose', text: 'Because.' }]);
   });
 
-  it('keeps a verified document whose shape is not CIP-136 at all', () => {
-    // It hashed correctly, so it IS what the voter published. Hiding their own
-    // words because the JSON surprised us would be the worse failure, and
-    // renderMarkdown escapes every byte of it downstream.
+  it('keeps a document that is not JSON at all, as prose', () => {
+    // It is what sits at the voter's anchor. Hiding their own words because
+    // the shape surprised us would be the worse failure, and renderMarkdown
+    // escapes every byte of it downstream.
     const sections = extractRationaleSections('We voted no, and here is why.');
-    expect(sections).toEqual([{ labelKey: null, text: 'We voted no, and here is why.' }]);
+    expect(sections).toEqual([{ labelKey: null, kind: 'prose', text: 'We voted no, and here is why.' }]);
   });
 
   it('tolerates a body-less document by reading the top level', () => {
     expect(extractRationaleSections(JSON.stringify({ comment: 'Flat.' }))).toEqual([
-      { labelKey: null, text: 'Flat.' },
+      { labelKey: null, kind: 'prose', text: 'Flat.' },
     ]);
   });
 
-  it('returns nothing for a document with no prose in it', () => {
+  it('pretty-prints JSON that carries none of the prose fields, as one text section', () => {
+    // Two-space indent, keys in the author's order: the document as published,
+    // made readable — never handed to the markdown renderer.
+    const sections = extractRationaleSections('{"body":{"internalVote":{"yes":3}}}');
+    expect(sections).toEqual([
+      { labelKey: null, kind: 'json', text: '{\n  "body": {\n    "internalVote": {\n      "yes": 3\n    }\n  }\n}' },
+    ]);
+  });
+
+  it('returns nothing for a document with nothing in it', () => {
     expect(extractRationaleSections('{}')).toEqual([]);
+    expect(extractRationaleSections('[]')).toEqual([]);
+    expect(extractRationaleSections('null')).toEqual([]);
     expect(extractRationaleSections('   ')).toEqual([]);
   });
 });
