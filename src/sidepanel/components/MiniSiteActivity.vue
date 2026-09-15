@@ -26,7 +26,7 @@
       </template>
     </div>
 
-    <div v-if="activity.step === 'proving'" class="mini-act__bar" aria-hidden="true">
+    <div v-if="activity.step === 'proving' && !proofsDone" class="mini-act__bar" aria-hidden="true">
       <div class="mini-act__sweep" />
     </div>
 
@@ -74,6 +74,14 @@ const domain = computed(() => {
 });
 
 const network = computed(() => walletStore.loggedWallet?.network ?? '');
+
+// Every proof the site asked for has come back, and the site has not made its
+// next call yet: the wallet is waiting on the site, and the card says so
+// rather than pretending a proof is still running.
+const proofsDone = computed(() => {
+  const a = activity.value;
+  return !!a && a.step === 'proving' && a.circuitsStarted > 0 && a.circuitsDone >= a.circuitsStarted;
+});
 const elapsedSeconds = computed(() => Math.max(0, Math.floor((now.value - (activity.value?.startedAt ?? now.value)) / 1000)));
 
 const steps = computed(() => [
@@ -128,6 +136,7 @@ const statusText = computed(() => {
   if (!a) return '';
   switch (a.step) {
     case 'proving':
+      if (proofsDone.value) return t('midnight.siteActivity.proofsDone', { n: a.circuitsDone });
       return t(midnightStore.proofServer.mode === 'zkpaas' ? 'midnight.siteActivity.provingZkpaas' : 'midnight.siteActivity.provingLocal',
         { n: Math.max(1, a.circuitsStarted) });
     case 'funding':
