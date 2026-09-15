@@ -44,6 +44,25 @@ jobs:
       # Guards the failure in issue #1053: the action can exit 0 having left
       # only an unfinished progress comment. Record what exists now so the
       # verification step below can tell a finished review from that.
+      # claude-code-action refuses to run when the PR edits this workflow file
+      # ("the workflow file must [...] have identical content to the version on
+      # the repository's default branch") — a deliberate guard against a PR
+      # rewriting the reviewer that reviews it. The action then exits 0 having
+      # posted nothing, which is indistinguishable from the #1053 failure the
+      # gate below looks for. Detect that case instead of red-flagging it.
+      - name: Does this PR change the review workflow itself?
+        id: selfedit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh pr diff ${{ github.event.pull_request.number }} --name-only \
+               | grep -qx '.github/workflows/claude-code-review.yml'; then
+            echo "skip_gate=true" >> "$GITHUB_OUTPUT"
+            echo "This PR edits the review workflow, so the action will skip itself; the completion gate cannot apply."
+          else
+            echo "skip_gate=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Snapshot review comments before the run
         id: before
         env:
@@ -124,6 +143,7 @@ jobs:
       # findings. A green check has to mean a review was actually posted, so
       # assert that here rather than trusting the action's exit code.
       - name: Verify a finished review was posted
+        if: steps.selfedit.outputs.skip_gate != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
