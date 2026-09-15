@@ -1,17 +1,32 @@
 import Vue, { nextTick, reactive, ref } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ get: vi.fn(), log: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  get: vi.fn(), log: vi.fn(),
+  pathBAsOfMs: { value: 0 } as { value: number },
+  pathBBatchAsOfMs: { value: 0 } as { value: number },
+  pathBBalance: { value: 0n } as { value: bigint },
+}));
 vi.mock('@/api/midnight-api', () => ({ getMidnightApi: () => ({ getDustAccountState: mocks.get }) }));
 vi.mock('@/utils/debug', () => ({ debugLog: mocks.log }));
 vi.mock('@/stores/walletStore', () => ({ walletStore: reactive({ loggedWallet: { network: 'Stagenet' } }) }));
 vi.mock('@/stores/midnightStore', () => ({ midnightStore: reactive({
   addresses: { unshielded: 'wallet-a' }, dustState: null, balances: {},
 }) }));
-vi.mock('@/shared/composables/useDustPathB', () => ({ useDustPathB: () => ({
-  pathBBalance: ref(0n), pathBCap: ref(0n), pathBRate: ref(0n), pathBNight: ref(0n),
-  pathBRegistered: ref(false), pathBAsOfMs: ref(0),
-}) }));
+vi.mock('@/shared/composables/useDustPathB', () => {
+  // A real ref, so the composable's computeds react when a test moves it.
+  // Handed back through the hoisted object so tests can drive it.
+  const pathBAsOfMs = ref(0);
+  const pathBBatchAsOfMs = ref(0);
+  const pathBBalance = ref(0n);
+  mocks.pathBAsOfMs = pathBAsOfMs;
+  mocks.pathBBatchAsOfMs = pathBBatchAsOfMs;
+  mocks.pathBBalance = pathBBalance;
+  return { useDustPathB: () => ({
+    pathBBalance, pathBCap: ref(0n), pathBRate: ref(0n), pathBNight: ref(0n),
+    pathBRegistered: ref(false), pathBAsOfMs, pathBBatchAsOfMs,
+  }) };
+});
 import { midnightStore } from '@/stores/midnightStore';
 import { useMidnightDustLive, type MidnightDustLive } from './useMidnightDustLive';
 
@@ -109,5 +124,81 @@ describe('DUST account-state polling', () => {
     const reopened = mount();
     await settle();
     expect(reopened.dustBalance.value).toBe(42n);
+  });
+
+  describe('settled — both paths have definitively reported', () => {
+    beforeEach(() => {
+      mocks.pathBAsOfMs.value = 0;
+      mocks.pathBBatchAsOfMs.value = 0;
+      mocks.pathBBalance.value = 0n;
+    });
+
+    it('stays false after Path A answers while Path B is still in flight, even though hasData is true', async () => {
+      // This is the window the send guard must not block in: a Path-B
+      // wallet reads 0 DUST from Path A until its Cardano-side poll lands.
+      mocks.get.mockResolvedValue(state('0'));
+      const live = mount();
+      await settle();
+      expect(live.hasData.value).toBe(true);
+      expect(live.settled.value).toBe(false);
+    });
+
+    it('becomes true once a Path B batch poll has succeeded', async () => {
+      mocks.get.mockResolvedValue(state('0'));
+      const live = mount();
+      await settle();
+      expect(live.settled.value).toBe(false);
+      mocks.pathBAsOfMs.value = Date.now();
+      mocks.pathBBatchAsOfMs.value = mocks.pathBAsOfMs.value;
+      await nextTick();
+      expect(live.settled.value).toBe(true);
+    });
+
+    it('does NOT settle on the "no enumerable stakes" exit, which stamps pathBAsOfMs but is not a definitive zero', async () => {
+      // The extension can only enumerate stakes it holds. A wallet fed by a
+      // stake registered from the portal or another wallet has no enumerable
+      // stakes and real DUST; refusing it would be the original bug.
+      mocks.get.mockResolvedValue(state('0'));
+      const live = mount();
+      await settle();
+      mocks.pathBAsOfMs.value = Date.now(); // the no-stakes exit does this…
+      await nextTick();
+      expect(live.hasData.value).toBe(true); // …display treats it as a reading…
+      expect(live.settled.value).toBe(false); // …but nothing may be refused on it.
+    });
+
+    it('stays false when Path B has reported but Path A has not', () => {
+      mocks.pathBAsOfMs.value = Date.now();
+      mocks.pathBBatchAsOfMs.value = mocks.pathBAsOfMs.value;
+      mocks.get.mockReturnValue(new Promise(() => {})); // Path A never answers
+      const live = mount();
+      expect(live.settled.value).toBe(false);
+    });
+
+    it('counts Path A as reported via the store dustState alone, before any poll returns', () => {
+      // A brand-new wallet gets the zero-filled dustState from gero-sync
+      // AccountInfo before the composable's own poll answers.
+      midnightStore.dustState = { current: 0n } as never;
+      mocks.pathBBatchAsOfMs.value = Date.now();
+      mocks.get.mockReturnValue(new Promise(() => {}));
+      const live = mount();
+      expect(live.settled.value).toBe(true);
+      midnightStore.dustState = null;
+    });
+  });
+
+  describe('dustBalance includes Path B', () => {
+    it('sums the Cardano-registered DUST into the balance the guard reads', async () => {
+      // The motivating mainnet case: Path A reads 0 (no native NIGHT), all
+      // 3,381 DUST comes from a cNIGHT registration.
+      mocks.get.mockResolvedValue(state('0'));
+      mocks.pathBBalance.value = 3_381_912_800n;
+      mocks.pathBAsOfMs.value = Date.now();
+      mocks.pathBBatchAsOfMs.value = mocks.pathBAsOfMs.value;
+      const live = mount();
+      await settle();
+      expect(live.dustBalance.value).toBe(3_381_912_800n);
+      expect(live.settled.value).toBe(true);
+    });
   });
 });

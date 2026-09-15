@@ -37,6 +37,18 @@ const pathBRegistered = ref<boolean>(false);
 const pathBStakes = ref<string[]>([]);
 const pathBAsOfMs = ref<number>(0);
 /**
+ * Stamped ONLY by a successful `dust/status/batch` poll — never by the
+ * "no enumerable stakes" exit. That exit stamps `pathBAsOfMs` so extrapolation
+ * and `hasData` treat it as a current reading, which is right for display.
+ * But it is not a definitive zero: the extension can only enumerate stakes it
+ * holds, and a wallet whose DUST is credited by a stake registered from the
+ * portal or another wallet has NO enumerable stakes and plenty of DUST.
+ * Anything that would REFUSE an action on "Path B is zero" must key off this,
+ * where "no stakes" stays unknown — the same call
+ * `midnightSponsorEligibility` already makes.
+ */
+const pathBBatchAsOfMs = ref<number>(0);
+/**
  * Stakes carrying a live registration UTxO on CARDANO that points at this
  * wallet's dust address, but which the Midnight indexer hasn't relayed yet.
  *
@@ -76,6 +88,7 @@ function resetPathBState(): void {
   pathBStakes.value = [];
   pathBIncomingStakes.value = [];
   pathBAsOfMs.value = 0;
+  pathBBatchAsOfMs.value = 0;
 }
 
 function toBig(v?: string): bigint {
@@ -156,6 +169,7 @@ async function refreshOnce() {
   pathBRegistered.value = kept.length > 0;
   pathBStakes.value = kept.map((r) => r.cardanoRewardAddress);
   pathBAsOfMs.value = Date.now();
+  pathBBatchAsOfMs.value = pathBAsOfMs.value;
 
   // Nothing live yet for this wallet: check CONFIRMED Cardano state for a
   // registration that's still relaying, so the dashboard can say "pending"
@@ -266,6 +280,8 @@ export interface DustPathB {
   readonly pathBIncomingStakes: ComputedRef<string[]>;
   /** Wall-clock ms of the last successful poll (0 = never). */
   readonly pathBAsOfMs: ComputedRef<number>;
+  /** Last SUCCESSFUL batch poll; 0 until one has completed. See the ref's doc. */
+  readonly pathBBatchAsOfMs: ComputedRef<number>;
 }
 
 export function useDustPathB(): DustPathB {
@@ -290,5 +306,6 @@ export function useDustPathB(): DustPathB {
     pathBStakes: computed(() => pathBStakes.value),
     pathBIncomingStakes: computed(() => pathBIncomingStakes.value),
     pathBAsOfMs: computed(() => pathBAsOfMs.value),
+    pathBBatchAsOfMs: computed(() => pathBBatchAsOfMs.value),
   };
 }
