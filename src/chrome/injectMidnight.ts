@@ -15,6 +15,7 @@ import { MidnightErrorCode } from './config';
 import type {
   ConnectedAPI,
   InitialAPI,
+  KeyMaterialProvider,
 } from '@midnight-ntwrk/dapp-connector-api';
 
 // Must match the pinned npm package version exactly — dapps semver-match
@@ -37,7 +38,15 @@ function apiError(code: string, reason: string): Error & { type: string; code: s
   return err;
 }
 
-/** Methods whose server-side implementation is Phase 2/3 (see build plan §4). */
+function isKeyMaterialProvider(value: unknown): value is KeyMaterialProvider {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate['getZKIR'] === 'function'
+    && typeof candidate['getProverKey'] === 'function'
+    && typeof candidate['getVerifierKey'] === 'function';
+}
+
+/** Methods whose server-side implementation is still Phase 3 (see build plan §4). */
 function notYetImplemented(methodName: string): () => Promise<never> {
   return () => Promise.reject(apiError(
     MidnightErrorCode.InternalError,
@@ -64,16 +73,35 @@ function buildConnectedAPI(): ConnectedAPI {
     // proves+binds server-side. Shielded/mixed outputs and payFees:false
     // reject with InvalidRequest (see midnightWebpage + background handler).
     makeTransfer: (desiredOutputs, options) => bridge.midnightMakeTransfer(desiredOutputs, options),
-    // Phase 3 — contract dapps (proving-delegation + circuit-artifact gated).
-    // Present (so the object stays structurally assignable to the real
-    // ConnectedAPI type real dapps import) but reject until implemented.
-    // Spec prose: "The connected API consists of a couple of parts, each
-    // always present" — omitting them would both break that contract and
-    // TypeScript structural compatibility for dapps typed against the SDK.
-    balanceUnsealedTransaction: notYetImplemented('balanceUnsealedTransaction'),
+    // Phase 3 — proving delegation. The dapp's KeyMaterialProvider stays in
+    // the page (it is the dapp's own code); the wallet proves in the
+    // background against the user's proof server. See midnightProvingBridge.
+    getProvingProvider: (keyMaterialProvider) => {
+      if (!isKeyMaterialProvider(keyMaterialProvider)) {
+        return Promise.reject(apiError(
+          MidnightErrorCode.InvalidRequest,
+          'keyMaterialProvider must implement getZKIR, getProverKey and getVerifierKey',
+        ));
+      }
+      return bridge.midnightGetProvingProvider(keyMaterialProvider);
+    },
+    // Phase 3 — fund + fee-pay a dapp's proven, unbound tx (ledger-8
+    // networks; the background rejects Stagenet and payFees:false with
+    // InvalidRequest before any prompt). Returns the sealed tx.
+    balanceUnsealedTransaction: (tx, options) => {
+      if (typeof tx !== 'string' || tx.length === 0) {
+        return Promise.reject(apiError(MidnightErrorCode.InvalidRequest, 'tx must be a non-empty hex string'));
+      }
+      return bridge.midnightBalanceUnsealedTransaction(tx, options);
+    },
+    // Phase 3 remainder — sealed-tx balancing / intents. Present (so the
+    // object stays structurally assignable to the real ConnectedAPI type
+    // real dapps import) but reject until implemented. Spec prose: "The
+    // connected API consists of a couple of parts, each always present" —
+    // omitting them would both break that contract and TypeScript structural
+    // compatibility for dapps typed against the SDK.
     balanceSealedTransaction: notYetImplemented('balanceSealedTransaction'),
     makeIntent: notYetImplemented('makeIntent'),
-    getProvingProvider: notYetImplemented('getProvingProvider'),
   };
   return Object.freeze(api);
 }

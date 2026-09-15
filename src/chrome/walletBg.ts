@@ -2228,9 +2228,90 @@ export class WalletBg {
   }
 
   /** Unlock a private balance session without persisting a spending key or submitting a transaction. */
+  /**
+   * DApp Connector `balanceUnsealedTransaction`: fund + fee-pay a dapp's
+   * proven, unbound tx and return the SEALED hex. Same credential handling
+   * and key hygiene as balanceAndSignMidnightUnshieldedTransfer; the DUST fee
+   * proof is generated wallet-side against the user's proof-server
+   * preference (resolveDappProvingTarget), never through Gero Cloud, so the
+   * dapp's contract proofs and the wallet's witness stay off our servers.
+   */
+  async balanceMidnightConnectorTransaction(
+    txHex: string,
+    password?: string,
+    prfSecret?: Uint8Array,
+  ): Promise<{ tx: string }> {
+    if (this.chain !== Blockchain.MIDNIGHT) {
+      throw new Error('balanceMidnightConnectorTransaction called on non-Midnight wallet');
+    }
+    if (typeof txHex !== 'string' || txHex.length === 0) throw new Error('tx is required');
+
+    const network = this.network;
+    const { walletStore } = await import('@/stores/walletStore');
+    const { midnightPrivateSessionEpoch } = await import('@/chains/midnight/midnightPrivateSyncSession');
+    const assertSession = captureMidnightSigningSession(this.id, network, () => ({
+      walletId: walletStore.loggedWallet?.id, network: walletStore.loggedWallet?.network,
+      locked: walletStore.isLocked, epoch: midnightPrivateSessionEpoch(),
+    }));
+
+    const { decrypt } = await import('@/shared/utils/crypto');
+    let mnemonic: string;
+    if (this.encryptionMethod === 'prf') {
+      if (!this.prfEncryptedMnemonic) throw new Error('PRF wallet has no encrypted mnemonic');
+      if (!prfSecret) throw new Error('PRF secret is required for PRF wallet signing');
+      if (!this.webAuthnCredentialId) throw new Error('PRF wallet missing credential ID');
+      const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
+      mnemonic = await decryptMnemonicWithPrfOutput(
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.id.toString(),
+      );
+    } else {
+      if (!password) throw new Error('Password is required for password wallet signing');
+      if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
+      mnemonic = decrypt(this.encryptedMnemonic, password);
+    }
+
+    try {
+      const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
+      const { getMidnightEndpoints } = await import('@/chains/midnight/midnightConfig');
+      const { resolveDappProvingTarget } = await import('@/chains/midnight/midnightProvingTarget');
+      const { midnightStore } = await import('@/stores/midnightStore');
+      const { balanceDappTransaction } = await import('@/chains/midnight/midnightDappBalancer');
+      // skipCardano: same BG-bundle pbkdf2 workaround as the other Midnight paths.
+      const derived = await deriveMidnightKeys(mnemonic, network, 0, { skipCardano: true });
+      try {
+        assertSession();
+        const endpoints = getMidnightEndpoints(network);
+        if (!endpoints) throw new Error(`No Midnight endpoints configured for network ${network}`);
+        const target = resolveDappProvingTarget(network, midnightStore.proofServer);
+        // Registration lower bound for the dust snapshot bootstrap (see
+        // balanceAndSignMidnightUnshieldedTransfer): creation time, else a
+        // conservative 90-day lookback.
+        const createdMs = this.createdAt ? Date.parse(this.createdAt) : NaN;
+        const result = await balanceDappTransaction({
+          sdkNetworkId: endpoints.sdkNetworkId,
+          endpoints,
+          txHex,
+          unshieldedSecretKey: derived.unshieldedSecretKey,
+          dustSecretSeed: derived.dustSecretKey,
+          dustRegisteredAt: Number.isFinite(createdMs)
+            ? new Date(createdMs)
+            : new Date(Date.now() - 90 * 24 * 3_600_000),
+          proving: { url: target.url, headers: target.headers },
+        });
+        assertSession();
+        return { tx: result.txHex };
+      } finally {
+        derived.unshieldedSecretKey.fill(0); derived.dustSecretKey.fill(0);
+        derived.zswapSecretKey.fill(0); derived.seed.fill(0);
+      }
+    } finally {
+      mnemonic = '';
+    }
+  }
+
   async startMidnightPrivateSync(password?: string, prfSecret?: Uint8Array): Promise<void> {
-    if (this.chain !== Blockchain.MIDNIGHT || this.network.toLowerCase() !== 'stagenet') {
-      throw new Error('Private token synchronization requires a Midnight Stagenet wallet');
+    if (this.chain !== Blockchain.MIDNIGHT) {
+      throw new Error('Private token synchronization requires a Midnight wallet');
     }
     const { walletStore } = await import('@/stores/walletStore');
     const { midnightPrivateSessionEpoch, prepareMidnightPrivateSession, activateMidnightPrivateSession } = await import('@/chains/midnight/midnightPrivateSyncSession');

@@ -97,7 +97,18 @@ export const MIDNIGHT_METHOD = {
   submitTransaction: 'midnight_submitTransaction',
   signData: 'midnight_signData',
   makeTransfer: 'midnight_makeTransfer',
+  // Funds + fee-pays a dapp's proven, unbound tx after side-panel approval
+  // (midnightConnectorBalance.ts / midnightDappBalancer.ts).
+  balanceUnsealedTransaction: 'midnight_balanceUnsealedTransaction',
   hintUsage: 'midnight_hintUsage',
+  // Proving delegation (`getProvingProvider`): the page streams each proof's
+  // preimage + circuit key material to the background in chunks, then asks
+  // it to run `/check` or `/prove` against the user's proof server. See
+  // `midnightProvingBridge.ts` (page) and `midnightDappProving.ts` (BG).
+  getProvingProvider: 'midnight_getProvingProvider',
+  provingUpload: 'midnight_provingUpload',
+  provingCheck: 'midnight_provingCheck',
+  provingProve: 'midnight_provingProve',
 };
 
 // Error codes from `@midnight-ntwrk/dapp-connector-api`'s `ErrorCodes` —

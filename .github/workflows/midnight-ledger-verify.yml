@@ -1,32 +1,16 @@
 name: Midnight ledger compatibility
 
 on:
+  # Deliberately NOT path-filtered. This job is a required check, and a
+  # path-filtered workflow never reports a status on PRs that miss its filter —
+  # GitHub then waits forever for a check that will never arrive, leaving those
+  # PRs permanently unmergeable. It also has to run everywhere to be worth
+  # requiring: the break it caught most recently (PR 1084, a lockfile-only
+  # dependency bump that split the ledger WASM module in two) passed npm ci,
+  # the production bundle and ESLint while the shielded send path was broken.
+  # Keep the trigger broad; the cost is one job on PRs that cannot fail it.
   pull_request:
     branches: [development, main]
-    paths:
-      - 'src/chains/midnight/**'
-      - 'src/chrome/background.ts'
-      - 'src/chrome/walletBg.ts'
-      - 'src/services/midnight-tx*'
-      - 'src/services/midnight-sync.service.ts'
-      - 'src/services/websocket.service.ts'
-      - 'src/services/__tests__/midnight*.test.ts'
-      - 'src/modules/navigation/layouts/ContentLayout.vue'
-      - 'src/stores/midnightStore.ts'
-      - 'src/stores/midnightStore.spec.ts'
-      - 'src/shared/composables/useMidnightDustLive*'
-      - 'src/modules/midnight/ProofServerPage.vue'
-      - 'src/types/midnight-v9-shielded.d.ts'
-      - 'src/modules/dashboard/components/Midnight*.vue'
-      - 'src/modules/dashboard/dialogs/Midnight*.vue'
-      - 'src/modules/dashboard/dialogs/Shield*.vue'
-      - 'src/sidepanel/components/flows/MidnightSendSheet.vue'
-      - 'src/services/walletManager.service.ts'
-      - 'src/services/crossDevice/localProverProfile*'
-      - 'package*.json'
-      - 'vite.config.*'
-      - 'scripts/build-isolated-extension.mjs'
-      - '.github/workflows/midnight-ledger-verify.yml'
   workflow_dispatch:
 
 permissions:
@@ -42,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22.11.0'

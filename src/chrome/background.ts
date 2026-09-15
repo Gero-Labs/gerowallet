@@ -4929,6 +4929,35 @@ app.addToOptions(
  */
 const PROVING_HEADER_ALLOWLIST = new Set(['x-api-key', 'x-api-secret']);
 
+/**
+ * Side panel → background for the DApp Connector's balanceUnsealedTransaction
+ * (the panel has already shown the user what the wallet will add and taken
+ * the credential). Returns the sealed tx hex.
+ */
+app.addToOptions(MessageTypes.BALANCE_MIDNIGHT_CONNECTOR_TX, async (request, sendResponse) => {
+  let prfBytes: Uint8Array | undefined;
+  try {
+    const walletBg = walletManager.getWallet();
+    if (!walletBg) throw new Error('No wallet logged in');
+    if (walletBg.chain !== Blockchain.MIDNIGHT) throw new Error('BALANCE_MIDNIGHT_CONNECTOR_TX called on non-Midnight wallet');
+    const { tx, password, prfSecret } = request.data || {};
+    if (typeof tx !== 'string' || tx.length === 0) throw new Error('tx is required');
+    if (password !== undefined && typeof password !== 'string') throw new Error('Invalid spending password');
+    if (prfSecret !== undefined && (!Array.isArray(prfSecret) || prfSecret.length !== 32
+      || !prfSecret.every((byte: unknown) => typeof byte === 'number' && Number.isInteger(byte) && byte >= 0 && byte <= 255))) {
+      throw new Error('Invalid PassKey authorization');
+    }
+    prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
+    const result = await walletBg.balanceMidnightConnectorTransaction(tx, password, prfBytes);
+    sendResponse({ id: request.id, data: { success: true, tx: result.tx }, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, data: { success: false, error: getErrorMessage(error) }, target: TARGET, sender: SENDER.extension });
+  } finally {
+    prfBytes?.fill(0);
+  }
+  return true;
+});
+
 app.addToOptions(MessageTypes.START_MIDNIGHT_PRIVATE_SYNC, async (request, sendResponse) => {
   let prfBytes: Uint8Array | undefined;
   try {
@@ -5982,8 +6011,16 @@ app.add(MIDNIGHT_METHOD.submitTransaction, async (request, sendResponse) => {
   }
   try {
     const { getMidnightApi } = await import('@/api/midnight-api');
+    const { isSealedMidnightTransaction } = await import('@/chains/midnight/midnightConnectorBalance');
     const api = getMidnightApi(wallet.network);
-    await api.submitMidnightTx({ signedTxHex: tx, waitFor: 'Submitted' });
+    // A sealed tx (balanceUnsealedTransaction's output, or anything the dapp
+    // proved and bound itself) is already final: the sidecar's finalize relay
+    // would try to prove it again and throw. Route it to submit-proven.
+    if (await isSealedMidnightTransaction(tx, midnightSdkNetworkId(wallet.network))) {
+      await api.submitProvenMidnightTx({ signedTxHex: tx, waitFor: 'Submitted' });
+    } else {
+      await api.submitMidnightTx({ signedTxHex: tx, waitFor: 'Submitted' });
+    }
     sendResponse({ id: request.id, data: undefined, target: TARGET, sender: SENDER.extension });
   } catch (error) {
     sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.InvalidRequest, getErrorMessage(error)), target: TARGET, sender: SENDER.extension });
@@ -6066,7 +6103,201 @@ app.add(MIDNIGHT_METHOD.hintUsage, (request, sendResponse) => {
   sendResponse({ id: request.id, data: undefined, target: TARGET, sender: SENDER.extension });
 });
 
+/**
+ * DApp Connector balanceUnsealedTransaction: the dapp hands over a proven,
+ * unbound tx; the wallet funds it, pays the DUST fee, signs and seals it.
+ * Validation and the contribution summary happen BEFORE the user is prompted
+ * (a malformed or unsupported request never opens the panel); the approval
+ * view lists exactly what the wallet will add. Same side-panel-only routing
+ * and fast-path/whitelist split as makeTransfer.
+ */
+app.add(MIDNIGHT_METHOD.balanceUnsealedTransaction, (request, sendResponse) => {
+  const { id, origin, send, data } = request;
+  const reply = (opts: ReplyOpts) => {
+    sendResponse({ id, ...opts, target: TARGET, sender: SENDER.extension });
+  };
+  const currentWallet = walletManager.getWallet();
+  if (!currentWallet || currentWallet.chain !== Blockchain.MIDNIGHT) {
+    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected') });
+    return true;
+  }
+  if (walletStore.isLocked) {
+    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'Wallet is locked') });
+    return true;
+  }
+  if (!WalletStore.isWhitelisted(origin)) {
+    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'Not connected — call connect() first') });
+    return true;
+  }
+  const tabId = send.tab?.id;
+  if (typeof tabId !== 'number') {
+    reply({ error: midnightApiError(MidnightErrorCode.InternalError, 'No tab context for this request') });
+    return true;
+  }
+  void (async () => {
+    const { validateConnectorBalanceRequest, decodeUnboundTransaction, summarizeContributions } =
+      await import('@/chains/midnight/midnightConnectorBalance');
+    const validation = validateConnectorBalanceRequest(data, currentWallet.network);
+    if (validation.ok === false) {
+      reply({ error: midnightApiError(MidnightErrorCode.InvalidRequest, validation.reason) });
+      return;
+    }
+    let contributions;
+    try {
+      contributions = summarizeContributions(
+        await decodeUnboundTransaction(validation.tx, midnightSdkNetworkId(currentWallet.network)),
+      );
+    } catch {
+      reply({ error: midnightApiError(MidnightErrorCode.InvalidRequest, 'tx is not a valid unsealed transaction for the connected network') });
+      return;
+    }
+    const payload = { data: { tx: validation.tx, contributions }, website: origin, favIconUrl: send.tab?.favIconUrl };
+    const sendToPanel = () =>
+      sendToMiniGero(MIDNIGHT_METHOD.balanceUnsealedTransaction, payload, tabId)
+        .then((response: BackgroundResponse) => reply({ data: response.data })) // response.data === { tx }
+        .catch(err => reply({
+          error: parseMidnightMiniGeroError(err, MidnightErrorCode.InternalError, 'Failed to complete the balancing request'),
+        }));
+    if (miniGeroPorts.has(tabId)) {
+      sendToPanel();
+      return;
+    }
+    openSidebar(tabId, 'sidepanel/index.html')
+      .then(() => waitForMiniGeroPort(5000, tabId))
+      .then(() => sendToPanel())
+      .catch(err => reply({
+        error: midnightApiError(MidnightErrorCode.InternalError, `Failed to open the wallet's approval panel: ${getErrorMessage(err)}`),
+      }));
+  })();
+  return true;
+});
+
 const validateMakeTransferInputs = validateMidnightConnectorTransfer;
+
+// ─── Proving delegation (`getProvingProvider`) ───────────────────────────
+//
+// The page builds the ProvingProvider object itself (midnightProvingBridge.ts)
+// and streams each proof's preimage + the dapp's circuit key material here
+// in chunks; these handlers store the chunks, then prove against the user's
+// configured proof server (local docker / Arkhia zkPaaS / the network
+// default when on Gero Cloud) via midnightDappProving.ts. The dapp never
+// sees the server URL or credentials. All four re-check the origin's
+// whitelist server-side (requireMidnightProvingOrigin) like every other
+// post-connect handler — the content relay's pre-check alone would leave a
+// window across a multi-chunk upload if the user disconnects the dapp.
+
+type MidnightDappProvingModule = typeof import('@/chrome/midnightDappProving');
+let midnightProvingUploads: InstanceType<MidnightDappProvingModule['ProvingUploadStore']> | undefined;
+
+async function loadMidnightDappProving(): Promise<{
+  mod: MidnightDappProvingModule;
+  store: NonNullable<typeof midnightProvingUploads>;
+}> {
+  const mod = await import('@/chrome/midnightDappProving');
+  if (!midnightProvingUploads) midnightProvingUploads = new mod.ProvingUploadStore();
+  return { mod, store: midnightProvingUploads };
+}
+
+type MidnightProvingRequest = Parameters<Parameters<typeof app.add>[1]>[0];
+type MidnightProvingReply = Parameters<Parameters<typeof app.add>[1]>[1];
+
+/**
+ * Common gate for the proving handlers: the origin must still be connected
+ * (server-side whitelist re-check, defense-in-depth like the other
+ * post-connect handlers) AND the active wallet must be an unlocked Midnight
+ * wallet. Sends the Disconnected reply itself and returns null when either
+ * fails. A refused origin also loses any uploads it had in flight, so a
+ * disconnect mid-upload stops the buffering immediately rather than at the
+ * TTL sweep.
+ */
+function requireMidnightProvingOrigin(
+  request: MidnightProvingRequest,
+  sendResponse: MidnightProvingReply,
+): { wallet: NonNullable<ReturnType<typeof requireMidnightWallet>>; origin: string } | null {
+  const refuse = (reason: string): null => {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, reason), target: TARGET, sender: SENDER.extension });
+    return null;
+  };
+  const origin = request.origin;
+  if (!origin || !WalletStore.isWhitelisted(origin)) {
+    if (origin) midnightProvingUploads?.dropOrigin(origin);
+    return refuse('Not connected — call connect() first');
+  }
+  const wallet = requireMidnightWallet();
+  if (!wallet) return refuse('No Midnight wallet connected');
+  return { wallet, origin };
+}
+
+app.add(MIDNIGHT_METHOD.getProvingProvider, async (request, sendResponse) => {
+  const gate = requireMidnightProvingOrigin(request, sendResponse);
+  if (!gate) return;
+  const { wallet, origin } = gate;
+  try {
+    const [{ mod }, { midnightStore }] = await Promise.all([
+      loadMidnightDappProving(),
+      import('@/stores/midnightStore'),
+    ]);
+    const source = mod.assertDappProvingAvailable({
+      origin,
+      network: wallet.network,
+      sdkNetworkId: midnightSdkNetworkId(wallet.network),
+      proofServer: midnightStore.proofServer,
+    });
+    debugLog('🌙 connector getProvingProvider', { origin, source });
+    sendResponse({ id: request.id, data: undefined, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.InternalError, getErrorMessage(error)), target: TARGET, sender: SENDER.extension });
+  }
+});
+
+app.add(MIDNIGHT_METHOD.provingUpload, async (request, sendResponse) => {
+  const gate = requireMidnightProvingOrigin(request, sendResponse);
+  if (!gate) return;
+  try {
+    const { store } = await loadMidnightDappProving();
+    store.addChunk(gate.origin, request.data);
+    sendResponse({ id: request.id, data: undefined, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.InvalidRequest, getErrorMessage(error)), target: TARGET, sender: SENDER.extension });
+  }
+});
+
+/** Shared body of the `/check` and `/prove` handlers — they differ only in which runner they call. */
+async function handleMidnightDappProving(
+  op: 'runDappProvingCheck' | 'runDappProvingProve',
+  request: MidnightProvingRequest,
+  sendResponse: MidnightProvingReply,
+): Promise<void> {
+  const gate = requireMidnightProvingOrigin(request, sendResponse);
+  if (!gate) return;
+  const { wallet, origin } = gate;
+  let errorCode: (error: unknown) => string = () => MidnightErrorCode.InternalError;
+  try {
+    const [{ mod, store }, { makeLocalProvingProvider }, { midnightStore }] = await Promise.all([
+      loadMidnightDappProving(),
+      import('@/chains/midnight/midnightLocalProver'),
+      import('@/stores/midnightStore'),
+    ]);
+    errorCode = mod.dappProvingErrorCode;
+    const reply = await mod[op](
+      store,
+      { makeProvider: makeLocalProvingProvider },
+      {
+        origin,
+        network: wallet.network,
+        sdkNetworkId: midnightSdkNetworkId(wallet.network),
+        proofServer: midnightStore.proofServer,
+      },
+      request.data,
+    );
+    sendResponse({ id: request.id, data: reply, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, error: midnightApiError(errorCode(error), getErrorMessage(error)), target: TARGET, sender: SENDER.extension });
+  }
+}
+
+app.add(MIDNIGHT_METHOD.provingCheck, (request, sendResponse) => handleMidnightDappProving('runDappProvingCheck', request, sendResponse));
+app.add(MIDNIGHT_METHOD.provingProve, (request, sendResponse) => handleMidnightDappProving('runDappProvingProve', request, sendResponse));
 
 /**
  * Opens the makeTransfer approval view in the mini-gero side panel (password/

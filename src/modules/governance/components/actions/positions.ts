@@ -22,7 +22,6 @@
 
 import type { CommitteeMember, GovVote } from '@/api/governance.types';
 import { KEYWORD_DREPS, parseDRepId, sameDRep } from '@/shared/utils/drepId';
-import { safeExternalHref } from '@/shared/utils/externalLink';
 
 /** Whose position the callout is about. Mirrors the store's `VoterIdentityKind`. */
 export type PositionOwner = 'self' | 'delegated';
@@ -64,14 +63,15 @@ export interface PositionRow {
   vote: string;
   /** Unix seconds, or null when the projection does not carry a block time. */
   votedAt: number | null;
-  /**
-   * Did this voter publish a rationale at all? True for `ipfs://` and every
-   * other scheme this wallet will not link to — the anchor is on chain either
-   * way, and only the LINK is withheld.
-   */
+  /** Did this voter publish a rationale at all? The anchor URL is non-empty. */
   hasRationale: boolean;
-  /** Safe http(s) href of that rationale, or undefined when it is not linkable. */
-  rationaleHref: string | undefined;
+  /**
+   * The CIP-136 anchor as recorded on chain, for the rationale dialog to fetch
+   * (http(s) directly, `ipfs://` through the backend proxy) and hash-check.
+   * Scheme-checking is the dialog's job, not the row's.
+   */
+  rationaleUrl: string | null;
+  rationaleHash: string | null;
   /** Only ever true from an explicit `true`. Unknown is not "not a script". */
   hasScript: boolean;
   isDRep: boolean;
@@ -84,10 +84,8 @@ export interface PositionSummary {
   abstain: number;
   /** Counts per role, in a fixed order, omitting roles with no rows. */
   byRole: Array<{ role: string; count: number }>;
-  /** Voters who published a rationale, linkable or not. This is the head count. */
+  /** Voters who published a rationale. This is the head count. */
   withRationale: number;
-  /** Of those, the ones this wallet can open. Drives the affordance, never the count. */
-  withRationaleLink: number;
   /** True when at least one row carries a block time, so ordering by date means something. */
   anyVotedAt: boolean;
   /** True when at least one row does NOT, so "newest first" needs a caveat. */
@@ -226,7 +224,8 @@ export function toPositionRows(votes: GovVote[]): PositionRow[] {
       vote: String(vote.vote ?? ''),
       votedAt: toVotedAt(vote.votedAt),
       hasRationale: toHasRationale(vote.rationaleUrl),
-      rationaleHref: safeExternalHref(vote.rationaleUrl),
+      rationaleUrl: toHasRationale(vote.rationaleUrl) ? String(vote.rationaleUrl).trim() : null,
+      rationaleHash: typeof vote.rationaleHash === 'string' && vote.rationaleHash.trim() ? vote.rationaleHash.trim() : null,
       hasScript: vote.hasScript === true,
       isDRep,
     };
@@ -246,7 +245,6 @@ export function summarizePositions(rows: PositionRow[]): PositionSummary {
   let no = 0;
   let abstain = 0;
   let withRationale = 0;
-  let withRationaleLink = 0;
   let anyVotedAt = false;
   let anyMissingVotedAt = false;
 
@@ -254,9 +252,7 @@ export function summarizePositions(rows: PositionRow[]): PositionSummary {
     if (row.vote === 'Yes') yes += 1;
     else if (row.vote === 'No') no += 1;
     else if (row.vote === 'Abstain') abstain += 1;
-    // Published, not linkable: an `ipfs://` anchor is a rationale that exists.
     if (row.hasRationale) withRationale += 1;
-    if (row.rationaleHref) withRationaleLink += 1;
     if (row.votedAt !== null) anyVotedAt = true;
     else anyMissingVotedAt = true;
     if (row.role) byRole.set(row.role, (byRole.get(row.role) ?? 0) + 1);
@@ -271,7 +267,6 @@ export function summarizePositions(rows: PositionRow[]): PositionSummary {
       .map(([role, count]) => ({ role, count }))
       .sort((a, b) => roleRank(a.role) - roleRank(b.role)),
     withRationale,
-    withRationaleLink,
     anyVotedAt,
     anyMissingVotedAt,
   };

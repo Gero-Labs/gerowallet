@@ -10,12 +10,15 @@
 
 import { MIDNIGHT_METHOD } from '@/chrome/config';
 import { Messaging } from '@/chrome/messaging';
+import { createDappProvingProvider } from '@/chrome/midnightProvingBridge';
 import type {
   ConnectedAPI,
   Configuration,
   ConnectionStatus,
   DesiredOutput,
   HistoryEntry,
+  KeyMaterialProvider,
+  ProvingProvider,
   Signature,
   SignDataOptions,
   TokenType,
@@ -177,6 +180,43 @@ export const midnightHintUsage = async (
   void result;
 };
 
+/**
+ * Hand a proven, unbalanced (`signature / proof / pre-binding`) tx to the
+ * wallet to fund and fee-pay. The wallet prompts the user in its side panel
+ * with what it will contribute, then returns the SEALED tx hex, which the
+ * dapp submits through `submitTransaction`. `payFees:false` rejects with
+ * InvalidRequest (GeroWallet pays DUST fees; fee delegation is planned).
+ */
+export const midnightBalanceUnsealedTransaction = async (
+  tx: string,
+  options?: { payFees?: boolean },
+): Promise<{ tx: string }> => {
+  const result = (await Messaging.sendToContent({
+    method: MIDNIGHT_METHOD.balanceUnsealedTransaction,
+    data: { tx, options, userGesture: navigator.userActivation?.isActive },
+  })) as ContentReply<{ tx: string }>;
+  return result.data;
+};
+
+/**
+ * Proving delegation (`getProvingProvider`). One validation round-trip up
+ * front — so a locked / non-Midnight wallet or an unusable proof-server
+ * preference rejects here, at the dapp's connect time, instead of deep
+ * inside its first proof — then a page-side `ProvingProvider` that streams
+ * each proof's preimage + circuit key material to the background, which
+ * proves against the user's configured proof server. The page never learns
+ * that server's URL or credentials. See `midnightProvingBridge.ts`.
+ */
+export const midnightGetProvingProvider = async (
+  keyMaterialProvider: KeyMaterialProvider,
+): Promise<ProvingProvider> => {
+  await Messaging.sendToContent({ method: MIDNIGHT_METHOD.getProvingProvider, data: {} });
+  return createDappProvingProvider(keyMaterialProvider, async (method, data) => {
+    const reply = (await Messaging.sendToContent({ method, data })) as ContentReply<unknown>;
+    return reply.data;
+  });
+};
+
 /** Chrome messaging can't carry BigInt — background sends decimal strings. */
 function bigintRecord(raw: Record<string, string>): Record<TokenType, bigint> {
   const out: Record<TokenType, bigint> = {};
@@ -184,6 +224,5 @@ function bigintRecord(raw: Record<string, string>): Record<TokenType, bigint> {
   return out;
 }
 
-// Phase 2/3 (not yet implemented server-side — see build plan §4):
-// makeTransfer, makeIntent, balanceUnsealedTransaction,
-// balanceSealedTransaction, getProvingProvider.
+// Phase 3 remainder (not yet implemented server-side — see build plan §4):
+// makeIntent, balanceSealedTransaction.

@@ -178,7 +178,7 @@
         <polyline
           :points="sparklinePoints(item.sparkline)"
           fill="none"
-          :stroke="sparklineColor(item.sparkline)"
+          :stroke="sparklineColor(item.sparkline, item.change7d)"
           stroke-width="1.5"
           stroke-linejoin="round"
           stroke-linecap="round"
@@ -688,10 +688,18 @@ function sparklinePoints(series: number[]): string {
     .join(' ');
 }
 
-/** Green if the series ends up vs starts, red if down */
-function sparklineColor(series: number[]): string {
+/**
+ * Colour follows the 7D change column when it is known, so the line and the number beside it
+ * can never disagree. The backend series starts at the first hourly candle *inside* the window,
+ * while the 7D % is measured from the daily close *before* it; for a sparse token the two can
+ * have opposite signs (GERO: line down 0.85%, column +0.47%). Falls back to first-vs-last only
+ * when the change is unknown or exactly zero.
+ */
+function sparklineColor(series: number[], change7d?: number | null): string {
   if (!series || series.length < 2) return '#A3A3A3';
-  return series[series.length - 1] >= series[0] ? '#47CD89' : '#F97066';
+  const hasChange = change7d != null && Number.isFinite(change7d) && change7d !== 0;
+  const up = hasChange ? change7d > 0 : series[series.length - 1] >= series[0];
+  return up ? '#47CD89' : '#F97066';
 }
 
 function changeIcon(change: number): string {
