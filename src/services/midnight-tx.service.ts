@@ -25,7 +25,7 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { getMidnightApi } from '@/api/midnight-api';
 import { midnightStore } from '@/stores/midnightStore';
 import { assertNativeNightConversionSupported, validateShieldedTokenType } from '@/chains/midnight/midnightTokenCapabilities';
-import { resolveProvingTarget } from '@/chains/midnight/midnightProvingTarget';
+import { resolveProvingTarget, type ProvingUnconfiguredTarget } from '@/chains/midnight/midnightProvingTarget';
 import type {
   BuildMidnightTxRequest,
   MidnightSegmentToSign,
@@ -365,7 +365,22 @@ async function buildAndSignShieldedInBg(
  * "Use Gero Cloud for this transaction") instead of a generic failure toast.
  */
 export class ProofServerUnreachableError extends Error {
-  constructor(public readonly url: string) {
+  /**
+   * @param reason Why the configured prover was refused before any health
+   *   check ran, when that is what happened. Set only for the `unconfigured`
+   *   resolver outcomes: `zkpaas-unconfigured` (no API key and no override
+   *   URL) and `local-profile-mismatch` (a local server started for the other
+   *   ledger line — running and answering, just not for this network). Omitted
+   *   when a server was actually contacted and failed its health check. The
+   *   send dialog keys its fallback copy off this so a profile mismatch says
+   *   "switch the profile" rather than "start the server". Never set for Gero
+   *   Cloud: `remote` mode resolves to `{ kind: 'cloud' }` and does not reach
+   *   this error at all.
+   */
+  constructor(
+    public readonly url: string,
+    public readonly reason?: ProvingUnconfiguredTarget['reason'],
+  ) {
     super('Proof server not reachable or incompatible with the selected network');
     this.name = 'ProofServerUnreachableError';
   }
@@ -391,7 +406,7 @@ function resolveWalletProvingTarget(
   // circuit family doesn't match the network (see resolveProvingTarget).
   const target = resolveProvingTarget(network, midnightStore.proofServer);
   if (target.kind === 'unconfigured') {
-    throw new ProofServerUnreachableError(target.url);
+    throw new ProofServerUnreachableError(target.url, target.reason);
   }
   if (target.kind === 'cloud') return null;
   return {

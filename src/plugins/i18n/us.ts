@@ -5032,6 +5032,7 @@ export default {
   'midnight.proofServer.testConnection': 'Test connection',
   // Send-dialog local-prover fallback (WP-P5)
   'midnight.proofServer.notDetectedSend': 'Local proof server not detected. Start it, or use Gero Cloud for this transaction.',
+  'midnight.proofServer.localProfileMismatchSend': 'Your local proof server is set to the other network profile. Stagenet needs the Stagenet (ledger 9) profile, Mainnet and Preprod need Mainnet / Preprod. Switch it in the proof server settings, or use Gero Cloud for this transaction.',
   'midnight.proofServer.useCloudOnce': 'Use Gero Cloud for this transaction',
   'midnight.proofServer.openSettings': 'Open settings',
   // Arkhia zkPaaS (hosted Midnight prover behind the Arkhia gateway)
