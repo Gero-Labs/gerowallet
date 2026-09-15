@@ -70,7 +70,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import AnimatedQRCode from '@/shared/components/AnimatedQRCode.vue';
 import AnimatedQRScanner from '@/shared/components/AnimatedQRScanner.vue';
@@ -86,13 +86,20 @@ interface Props {
   urTypes?: string[];
 }
 
-withDefaults(defineProps<Props>(), {
+const props = withDefaults(defineProps<Props>(), {
   urTypes: () => ['cardano-signature'],
 });
 const emit = defineEmits(['close', 'scan', 'error', 'progress']);
 
 const { t } = useTranslation();
 const keystoneScan = ref(false);
+
+// Callers that keep this mounted close it by flipping `isOpen` (SendSheet does
+// so after a successful scan and on every error path), which never runs
+// handleClose — so without this the next open would land on the camera step
+// with no QR for the device to read. Reset on the way in rather than relying on
+// each caller remembering a v-if.
+watch(() => props.isOpen, (open) => { if (open) keystoneScan.value = false; });
 
 // The side panel is user-resizable and can be narrower than the QR's 350px
 // default, which is what made the old dialog overflow. Size both camera surfaces
