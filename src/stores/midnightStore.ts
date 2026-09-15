@@ -860,7 +860,7 @@ export const midnightActions = {
   applyPrivateSnapshot(shieldedTokens: Record<string, bigint>, transactions: MidnightTransaction[]) {
     const balances = { ...midnightStore.balances, shieldedTokens, nightShielded: 0n };
     const pending = midnightStore.transactions.filter(tx => tx.isShielded && tx.status === 'pending'
-      && !transactions.some(confirmed => confirmed.hash === tx.hash && confirmed.token === tx.token));
+      && !transactions.some(confirmed => normalizeMidnightTxHash(confirmed.hash) === normalizeMidnightTxHash(tx.hash) && confirmed.token === tx.token));
     const combined = [...midnightStore.transactions.filter(tx => !tx.isShielded), ...pending, ...transactions]
       .sort((a, b) => b.timestamp - a.timestamp);
     Object.assign(midnightStore, { balances, transactions: combined, privateSyncStatus: 'synced' });

@@ -252,4 +252,12 @@ describe('history: the optimistic pending row and the confirmed row', () => {
 
     expect(midnightStore.transactions).toHaveLength(2);
   });
+
+  it('drops a shielded pending row once the private scan confirms it, whatever the prefix or case', () => {
+    midnightActions.applyTransaction(row({ hash: `0x${LEDGER.toUpperCase()}`, isShielded: true }));
+    midnightActions.applyPrivateSnapshot({}, [row({ status: 'confirmed', isShielded: true })]);
+
+    expect(midnightStore.transactions.filter(t => t.isShielded)).toHaveLength(1);
+    expect(midnightStore.transactions[0].status).toBe('confirmed');
+  });
 });

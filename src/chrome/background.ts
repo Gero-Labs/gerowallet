@@ -6145,8 +6145,10 @@ app.add(MIDNIGHT_METHOD.submitTransaction, async (request, sendResponse) => {
     const submitted = await isSealedMidnightTransaction(tx, midnightSdkNetworkId(wallet.network))
       ? await api.submitProvenMidnightTx({ signedTxHex: tx, waitFor: 'Submitted' })
       : await api.submitMidnightTx({ signedTxHex: tx, waitFor: 'Submitted' });
-    // Shown to the user as the tx id — the ledger hash when the relay reports
-    // one, so it matches the hash history will show (see midnightTxHash.ts).
+    // Shown to the user as the tx id. The ledger hash when the relay reports
+    // one (the finalize path), so it matches what history will show; a sealed
+    // tx goes through submit-proven, which never reports one, and falls back
+    // to the extrinsic hash (see midnightTxHash.ts).
     const { historyHashForSubmittedTx } = await import('@/chains/midnight/midnightTxHash');
     midnightActions.recordSiteActivity(origin, { type: 'submitted', txId: submitted ? historyHashForSubmittedTx(submitted) : undefined });
     sendResponse({ id: request.id, data: undefined, target: TARGET, sender: SENDER.extension });
