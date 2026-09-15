@@ -66,6 +66,17 @@ import { mpcLoginShareCache } from '@/chrome/mpcLoginShareCache';
 // cannot bloat that bundle. scripts/check-bundle-tdz.mjs fails the build if a
 // namespace const regresses behind its first reader.
 import midnightSyncService, { NIGHT_TOKEN_TYPE_NULL } from '@/services/midnight-sync.service';
+// Same reasoning, same guard. Each of these is background-only (absent from the
+// options graph) and none reaches back to this module. Their own ledger wasm
+// imports stay lazy inside them.
+import { MidnightBech32m, ShieldedAddress } from '@midnightntwrk/wallet-sdk-address-format';
+import {
+  decodeUnboundTransaction,
+  isSealedMidnightTransaction,
+  summarizeContributions,
+  validateConnectorBalanceRequest,
+} from '@/chains/midnight/midnightConnectorBalance';
+import * as midnightDappProving from '@/chrome/midnightDappProving';
 import {
   createMpcGoogleWalletFlow,
   unlockMpcWalletFlow,
@@ -5783,7 +5794,6 @@ app.add(MIDNIGHT_METHOD.getShieldedAddresses, async (request, sendResponse) => {
     return;
   }
   try {
-    const { ShieldedAddress, MidnightBech32m } = await import('@midnightntwrk/wallet-sdk-address-format');
     const decoded = ShieldedAddress.codec.decode(
       midnightSdkNetworkId(wallet.network),
       MidnightBech32m.parse(shieldedAddress),
@@ -6011,7 +6021,6 @@ app.add(MIDNIGHT_METHOD.submitTransaction, async (request, sendResponse) => {
   }
   try {
     const { getMidnightApi } = await import('@/api/midnight-api');
-    const { isSealedMidnightTransaction } = await import('@/chains/midnight/midnightConnectorBalance');
     const api = getMidnightApi(wallet.network);
     // A sealed tx (balanceUnsealedTransaction's output, or anything the dapp
     // proved and bound itself) is already final: the sidecar's finalize relay
@@ -6135,8 +6144,6 @@ app.add(MIDNIGHT_METHOD.balanceUnsealedTransaction, (request, sendResponse) => {
     return true;
   }
   void (async () => {
-    const { validateConnectorBalanceRequest, decodeUnboundTransaction, summarizeContributions } =
-      await import('@/chains/midnight/midnightConnectorBalance');
     const validation = validateConnectorBalanceRequest(data, currentWallet.network);
     if (validation.ok === false) {
       reply({ error: midnightApiError(MidnightErrorCode.InvalidRequest, validation.reason) });
@@ -6186,16 +6193,17 @@ const validateMakeTransferInputs = validateMidnightConnectorTransfer;
 // post-connect handler — the content relay's pre-check alone would leave a
 // window across a multi-chunk upload if the user disconnects the dapp.
 
-type MidnightDappProvingModule = typeof import('@/chrome/midnightDappProving');
+type MidnightDappProvingModule = typeof midnightDappProving;
 let midnightProvingUploads: InstanceType<MidnightDappProvingModule['ProvingUploadStore']> | undefined;
 
-async function loadMidnightDappProving(): Promise<{
+// The module is a static import now (see the note on the import block); what
+// stays lazy is the upload store, created on first use rather than at load.
+function loadMidnightDappProving(): {
   mod: MidnightDappProvingModule;
   store: NonNullable<typeof midnightProvingUploads>;
-}> {
-  const mod = await import('@/chrome/midnightDappProving');
-  if (!midnightProvingUploads) midnightProvingUploads = new mod.ProvingUploadStore();
-  return { mod, store: midnightProvingUploads };
+} {
+  if (!midnightProvingUploads) midnightProvingUploads = new midnightDappProving.ProvingUploadStore();
+  return { mod: midnightDappProving, store: midnightProvingUploads };
 }
 
 type MidnightProvingRequest = Parameters<Parameters<typeof app.add>[1]>[0];

@@ -14,6 +14,12 @@ import NetworkStore from '@/stores/networkStore';
 import { debugLog } from '@/utils/debug';
 import { Cardano } from '@cardano-sdk/core';
 import { bootstrapCrossDeviceSigning } from '@/services/crossDevice/crossDeviceBootstrap';
+// Static, not dynamic: both land in the same background iife, so a dynamic
+// import buys no code splitting — it only pushes the module's declaration later
+// in the emitted bundle, the temporal-dead-zone shape
+// scripts/check-bundle-tdz.mjs guards against. Its ledger imports stay lazy
+// inside it; nothing it reaches imports this service.
+import { createLocalProverServingOptions, localProverProfile } from '@/services/crossDevice/localProverProfile';
 import type { CrossDeviceSigning } from '@/services/crossDevice/crossDeviceSigning.service';
 import {
   loadRemoteSigningSettings,
@@ -1666,7 +1672,6 @@ export class WalletManager {
   private async createCrossDeviceBridge(serverFlagOn: boolean) {
     if (!this.crossDeviceIdentity) return null;
     const { midnightStore } = await import('@/stores/midnightStore');
-    const { createLocalProverServingOptions, localProverProfile } = await import('@/services/crossDevice/localProverProfile');
     // Capture one server profile and URL for the bridge lifetime. A settings
     // change disposes this bridge before advertising the replacement.
     const profile = localProverProfile(midnightStore.proofServer.localProfile);
