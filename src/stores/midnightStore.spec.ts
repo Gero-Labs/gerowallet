@@ -11,7 +11,7 @@
 // So retention is gated on the address HRP, and these cases exist to keep that
 // gate from quietly widening.
 import { describe, it, expect, beforeEach } from 'vitest';
-import { midnightStore, midnightActions, hydratePrivateSyncProgress, hydratePrivateSyncStatus } from './midnightStore';
+import { midnightStore, midnightActions, hydrateChainIdentity, hydratePrivateSyncProgress, hydratePrivateSyncStatus } from './midnightStore';
 import type { MidnightAddresses } from '@/chains/midnight/midnightTypes';
 
 /** A bech32m unshielded address; the data part deliberately carries no `1`. */
@@ -135,5 +135,25 @@ describe('resetChainState and the private scan', () => {
     midnightActions.resetChainState({ network: 'midnight-preprod', generation: 2, genesisHash: 'abc' } as Parameters<typeof midnightActions.resetChainState>[0]);
     expect(midnightStore.privateSyncStatus).toBe('idle');
     expect(midnightStore.privateSyncProgress).toBeNull();
+  });
+});
+
+// The background restores the chain identity after a service-worker restart;
+// without it the first sync message reads as a generation change and the
+// private-note checkpoints are wiped (a full rescan after every reload).
+describe('chain identity hydration (background restart)', () => {
+  const identity = { network: 'midnight-preprod', generation: 3, genesisHash: `0x${'ab'.repeat(32)}` };
+
+  it('keeps an exact, well-formed identity', () => {
+    expect(hydrateChainIdentity(identity)).toEqual(identity);
+  });
+
+  it('drops anything that is not the persisted shape', () => {
+    expect(hydrateChainIdentity(null)).toBeNull();
+    expect(hydrateChainIdentity({ ...identity, network: 'cardano-mainnet' })).toBeNull();
+    expect(hydrateChainIdentity({ ...identity, generation: 0 })).toBeNull();
+    expect(hydrateChainIdentity({ ...identity, generation: '3' })).toBeNull();
+    expect(hydrateChainIdentity({ ...identity, genesisHash: 'abc' })).toBeNull();
+    expect(hydrateChainIdentity({ ...identity, genesisHash: `0x${'AB'.repeat(32)}` })).toBeNull();
   });
 });
