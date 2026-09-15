@@ -28,13 +28,38 @@ jobs:
         with:
           fetch-depth: 1
 
+      # Without node_modules the reviewer can only READ code: every attempt to
+      # run vitest or eslint dies, and the review silently degrades into "I
+      # couldn't execute anything, trusting the PR description". Install first
+      # so its verdicts are backed by runs (matches dev-bundle-gate.yml).
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22.11.0'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Guards the failure in issue #1053: the action can exit 0 having left
+      # only an unfinished progress comment. Record what exists now so the
+      # verification step below can tell a finished review from that.
+      - name: Snapshot review comments before the run
+        id: before
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          latest=$(gh api "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
+            --jq '[.[] | select(.user.login | test("claude"; "i")) | .id] | max // 0')
+          echo "latest_id=${latest}" >> "$GITHUB_OUTPUT"
+
       - name: Run Claude Code Review
         uses: anthropics/claude-code-action@56cf60fde42f7b19c3abfd5c9c48b69a1288461f # v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           track_progress: true
           claude_args: |
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(git diff:*),Bash(git log:*),Read,Glob,Grep,Agent"
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(git diff:*),Bash(git log:*),Bash(npx vitest run:*),Bash(npx eslint:*),Bash(node scripts/design/audit.mjs:*),Bash(node scripts/design/contrast.mjs:*),Read,Glob,Grep"
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
@@ -43,6 +68,22 @@ jobs:
             Read CLAUDE.md first for project conventions and architecture.
 
             Focus ONLY on the files changed in this PR. Do NOT review the entire codebase.
+
+            Do the whole review yourself, in this session. Do NOT delegate to
+            subagents: their results are not awaited here, which has produced
+            runs that exited green having posted only a half-written comment.
+
+            VERIFY, DON'T ASSUME. Dependencies are installed, so run the checks
+            that bear on the changed files and report what you actually observed:
+            - `npx vitest run <spec paths>` for specs covering the changed code
+              (pass explicit paths; do not run the whole suite)
+            - `npx eslint <changed files>` for changed .ts/.vue files
+            - `node scripts/design/audit.mjs` and `node scripts/design/contrast.mjs`
+              when styles, tokens or .vue files changed
+            Never state that something passes without having run it, and never
+            accept the PR description's reported results in place of running
+            them. If a command is denied or fails to run, say so explicitly in
+            your comment rather than reviewing around it.
 
             Review the PR changes focusing on:
 
@@ -77,3 +118,38 @@ jobs:
             Use `gh pr comment` for top-level feedback.
             Use `mcp__github_inline_comment__create_inline_comment` (with `confirmed: true`) to highlight specific code issues.
             Only post GitHub comments - don't submit review text as messages.
+
+      # Issue #1053: the action reported success while the review was still
+      # unfinished, leaving a progress comment with unticked boxes and no
+      # findings. A green check has to mean a review was actually posted, so
+      # assert that here rather than trusting the action's exit code.
+      - name: Verify a finished review was posted
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          latest=$(gh api "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
+            --jq '[.[] | select(.user.login | test("claude"; "i"))] | last // {}')
+          id=$(printf '%s' "$latest" | jq -r '.id // 0')
+          body=$(printf '%s' "$latest" | jq -r '.body // ""')
+
+          if [ -z "$body" ]; then
+            echo "::error::Claude review job finished without posting any comment."
+            exit 1
+          fi
+
+          # A comment left over from an earlier run must not satisfy this gate:
+          # require one created by THIS run.
+          if [ "$id" -le "${{ steps.before.outputs.latest_id }}" ]; then
+            echo "::error::No new review comment from this run (newest id ${id} predates it). Failing rather than reporting a review that did not happen."
+            exit 1
+          fi
+
+          # The tracking comment renders its todo list as markdown checkboxes.
+          # Any still unticked means the run stopped mid-review.
+          if printf '%s' "$body" | grep -qE '^[[:space:]]*-[[:space:]]\[[[:space:]]\]'; then
+            echo "::error::Review comment still has unfinished items - the review did not complete."
+            printf '%s\n' "$body" | grep -E '^[[:space:]]*-[[:space:]]\[[[:space:]]\]' || true
+            exit 1
+          fi
+
+          echo "Finished review comment present ($(printf '%s' "$body" | wc -c) bytes)."
