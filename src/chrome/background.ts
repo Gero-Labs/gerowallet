@@ -69,7 +69,8 @@ import midnightSyncService, { NIGHT_TOKEN_TYPE_NULL } from '@/services/midnight-
 // Same reasoning, same guard. Each of these is background-only (absent from the
 // options graph) and none reaches back to this module. Their own ledger wasm
 // imports stay lazy inside them.
-import { MidnightBech32m, ShieldedAddress } from '@midnightntwrk/wallet-sdk-address-format';
+import * as shieldedAddressCodecs from '@midnightntwrk/wallet-sdk-address-format';
+import { connectorShieldedAddresses } from '@/chains/midnight/midnightConnectorAddresses';
 import {
   decodeUnboundTransaction,
   isSealedMidnightTransaction,
@@ -5794,17 +5795,12 @@ app.add(MIDNIGHT_METHOD.getShieldedAddresses, async (request, sendResponse) => {
     return;
   }
   try {
-    const decoded = ShieldedAddress.codec.decode(
-      midnightSdkNetworkId(wallet.network),
-      MidnightBech32m.parse(shieldedAddress),
-    );
+    // Spec: the address AND both public keys are bech32m. The hex
+    // `coinPublicKeyString()` form broke dapps that decode the keys
+    // (midnight-js decodeShieldedCoinPublicKey: "Invalid checksum in <hex>").
     sendResponse({
       id: request.id,
-      data: {
-        shieldedAddress,
-        shieldedCoinPublicKey: decoded.coinPublicKeyString(),
-        shieldedEncryptionPublicKey: decoded.encryptionPublicKeyString(),
-      },
+      data: connectorShieldedAddresses(shieldedAddressCodecs, midnightSdkNetworkId(wallet.network), shieldedAddress),
       target: TARGET,
       sender: SENDER.extension,
     });
