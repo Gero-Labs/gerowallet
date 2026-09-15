@@ -44,6 +44,21 @@ const FIREFOX_STRICT_MIN_VERSION = '128.0';
 const CHROME_ONLY_PERMISSIONS = new Set(['favicon', 'sidePanel']);
 
 /**
+ * Permissions Firefox needs that Chrome does not.
+ *
+ * `declarativeNetRequestWithHostAccess` is what lets a DNR rule use the
+ * `modifyHeaders` action. Chrome allows `modifyHeaders` under plain
+ * `declarativeNetRequest`; Firefox does not, and gates it behind this
+ * permission plus host access for the matched URL. public/dnr_rules.json is
+ * entirely one `modifyHeaders` rule — it strips content-security-policy and
+ * x-frame-options off moonpay.com sub-frames so the buy-crypto iframe can
+ * render. Without this the rule is simply never applied on Firefox: no error,
+ * no warning, the iframe silently refuses to frame and the fiat on-ramp is
+ * dead. Add it alongside, not instead of, `declarativeNetRequest`.
+ */
+const FIREFOX_ONLY_PERMISSIONS = ['declarativeNetRequestWithHostAccess'];
+
+/**
  * Firefox permits only 'self' and 'wasm-unsafe-eval' in script-src. Every
  * other directive (in particular the long connect-src list) is preserved
  * verbatim.
@@ -83,7 +98,9 @@ function toFirefoxManifest(manifest: ManifestWithOAuth2): ManifestWithOAuth2 {
   }
 
   if (Array.isArray(fx.permissions)) {
-    fx.permissions = fx.permissions.filter((p) => !CHROME_ONLY_PERMISSIONS.has(p as string));
+    const kept = fx.permissions.filter((p) => !CHROME_ONLY_PERMISSIONS.has(p as string));
+    const missing = FIREFOX_ONLY_PERMISSIONS.filter((p) => !kept.includes(p as never));
+    fx.permissions = [...kept, ...missing] as typeof fx.permissions;
   }
 
   fx.browser_specific_settings = {
