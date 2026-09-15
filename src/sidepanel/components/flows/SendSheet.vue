@@ -532,8 +532,8 @@
       @scan="onQRScan"
     />
 
-    <!-- Keystone Sign Dialog -->
-    <KeystoneSignDialog
+    <!-- Keystone sign sheet -->
+    <KeystoneSignSheet
       :isOpen="showKeystoneDialog"
       :keystoneType="keystoneType"
       :keystoneCbor="keystoneCbor"
@@ -553,6 +553,7 @@ import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
+import { getErrorMessage } from '@/shared/utils/errorHandler';
 import { nexusTxApi, walletUtxosToNexusInputs, txOutToNexusOutput, type BuildTxRequest } from '@/api/nexus-tx-api';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { computeMinimumCoinQuantity } from '@cardano-sdk/tx-construction';
@@ -561,7 +562,7 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { applyTokenImageOverride } from '@/shared/utils/resolver';
 import { Blockchain, Network, WalletType } from '@/models/types';
 import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
-import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
+import KeystoneSignSheet from '../KeystoneSignSheet.vue';
 import ledgerUtils from '@/shared/utils/ledger';
 import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
 import { createKeystoneSignRequest, KeystoneSignRequestResponse, parseSignature } from '@/shared/utils/keystone';
@@ -587,6 +588,53 @@ const emit = defineEmits<{ (e: 'input', value: boolean): void }>();
 const { loggedWallet, utxos, tokens: resolvedAssets, keys, contacts, collections: resolvedCollections, config: _config } = toRefs(walletStore);
 const { tip, epochParams } = toRefs(networkStore);
 
+// walletStore exposes `tokens` / `collections` as untyped bags, and contacts carry
+// two historical field spellings. These describe only what this flow reads.
+interface WalletTokenRow {
+  unit?: string;
+  name?: string;
+  ticker?: string;
+  img?: string;
+  quantity?: string | number;
+  policy_id?: string;
+  verified?: boolean;
+  isScam?: boolean;
+  metadata?: { name?: string; ticker?: string; decimals?: number };
+}
+
+/** A token as the picker and the review list render it, plus the amount being sent. */
+interface SendToken extends WalletTokenRow {
+  balance?: string | number;
+  decimals?: number;
+  sendAmount?: string;
+}
+
+interface NftRow {
+  unit?: string;
+  name?: string;
+  img?: string;
+  collection?: string;
+  toSendQuantity?: number;
+}
+
+interface CollectionRow {
+  name?: string;
+  items?: NftRow[];
+}
+
+interface ContactRow {
+  name?: string;
+  label?: string;
+  address?: string;
+  addr?: string;
+}
+
+/** Resolved $handle shown next to the recipient field. */
+interface HandleAsset {
+  name: string;
+  img: string;
+}
+
 // ── State ──
 const step = ref(1);
 const stepperEl = ref<HTMLElement | null>(null);
@@ -597,7 +645,7 @@ const paymentAddress = ref('');
 const addressError = ref('');
 const handleLoading = ref(false);
 const handleResolved = ref<boolean | undefined>(undefined);
-const handleAsset = ref<any>(null);
+const handleAsset = ref<HandleAsset | null>(null);
 const handleName = ref('');
 const showContacts = ref(false);
 const showQR = ref(false);
@@ -605,8 +653,8 @@ const showQR = ref(false);
 // Step 2: Assets
 const adaAmount = ref('');
 const adaError = ref('');
-const extraTokens = ref<any[]>([]);
-const selectedNfts = ref<any[]>([]);
+const extraTokens = ref<SendToken[]>([]);
+const selectedNfts = ref<NftRow[]>([]);
 const showTokenPicker = ref(false);
 const showNfts = ref(false);
 const tokenSearch = ref('');
@@ -679,10 +727,10 @@ const requiresRemoteForSend = computed(() =>
 const contactsList = computed(() => {
   const c = contacts.value;
   if (!c || typeof c !== 'object') return [];
-  return Object.values(c).map((item: any) => ({
+  return Object.values(c as Record<string, ContactRow>).map((item) => ({
     name: item.name || item.label || 'Contact',
     address: item.address || item.addr || '',
-  })).filter((item: any) => item.address);
+  })).filter((item) => item.address);
 });
 
 const hasContacts = computed(() => contactsList.value.length > 0);
@@ -704,7 +752,7 @@ const adaBalance = computed(() => {
 // All wallet tokens mapped for send flow (same as dashboard)
 const allTokens = computed(() => {
   if (!resolvedAssets.value) return [];
-  return Object.values(resolvedAssets.value).map((token: any) => ({
+  return Object.values(resolvedAssets.value as Record<string, WalletTokenRow>).map((token): SendToken => ({
     ...token,
     name: token.metadata?.name || token.name,
     ticker: token.metadata?.ticker || token.ticker || token.name,
@@ -740,8 +788,8 @@ const filteredAvailableTokens = computed(() => {
 
 const collectiblesList = computed(() => {
   if (!resolvedCollections.value) return [];
-  const items: any[] = [];
-  for (const collection of Object.values(resolvedCollections.value) as any[]) {
+  const items: NftRow[] = [];
+  for (const collection of Object.values(resolvedCollections.value as Record<string, CollectionRow>)) {
     if (collection.items) {
       const collectionName = collection.name || '';
       for (const item of collection.items) {
@@ -755,7 +803,7 @@ const collectiblesList = computed(() => {
 const filteredNfts = computed(() => {
   if (!nftSearch.value) return collectiblesList.value;
   const q = nftSearch.value.toLowerCase();
-  return collectiblesList.value.filter((nft: any) =>
+  return collectiblesList.value.filter((nft) =>
     (nft.name || '').toLowerCase().includes(q) ||
     (nft.collection || '').toLowerCase().includes(q)
   );
@@ -766,7 +814,7 @@ const visibleNfts = computed(() => filteredNfts.value.slice(0, nftDisplayCount.v
 const isAssetsValid = computed(() => {
   const ada = parseFloat(adaAmount.value);
   const hasAda = !isNaN(ada) && ada > 0;
-  const hasTokens = extraTokens.value.some(t => parseFloat(t.sendAmount) > 0);
+  const hasTokens = extraTokens.value.some(t => parseFloat(t.sendAmount ?? '') > 0);
   const hasNfts = selectedNfts.value.length > 0;
   return hasAda || hasTokens || hasNfts;
 });
@@ -776,7 +824,7 @@ const assetsSummary = computed(() => {
   const ada = parseFloat(adaAmount.value);
   if (!isNaN(ada) && ada > 0) parts.push(`${ada} ADA`);
   for (const t of extraTokens.value) {
-    if (parseFloat(t.sendAmount) > 0) parts.push(`${t.sendAmount} ${t.ticker}`);
+    if (parseFloat(t.sendAmount ?? '') > 0) parts.push(`${t.sendAmount} ${t.ticker}`);
   }
   if (selectedNfts.value.length > 0) parts.push(`${selectedNfts.value.length} NFT${selectedNfts.value.length > 1 ? 's' : ''}`);
   return parts.join(', ') || 'No assets';
@@ -829,7 +877,7 @@ const resolveAdaHandle = debounce(async (val: string) => {
   }
 }, 1000);
 
-function selectContact(contact: any) {
+function selectContact(contact: { address: string }) {
   address.value = contact.address;
   showContacts.value = false;
   onAddressInput(contact.address);
@@ -852,7 +900,7 @@ async function pasteFromClipboard() {
 }
 
 // ── Step 2: Assets logic ──
-function addToken(token: any) {
+function addToken(token: SendToken) {
   extraTokens.value.push({ ...token, sendAmount: '' });
   showTokenPicker.value = false;
   tokenSearch.value = '';
@@ -885,11 +933,11 @@ function setTokenMax(idx: number) {
   token.sendAmount = String(amount);
 }
 
-function isNftSelected(nft: any) {
+function isNftSelected(nft: NftRow) {
   return selectedNfts.value.some(n => n.unit === nft.unit);
 }
 
-function toggleNft(nft: any) {
+function toggleNft(nft: NftRow) {
   const idx = selectedNfts.value.findIndex(n => n.unit === nft.unit);
   if (idx >= 0) {
     selectedNfts.value.splice(idx, 1);
@@ -902,11 +950,11 @@ function formatBalance(lovelace: number): string {
   return filters.toCurrency(lovelace);
 }
 
-function getTokenImg(token: any): string {
+function getTokenImg(token: SendToken): string {
   return applyTokenImageOverride(token.ticker || token.name, token.img || '');
 }
 
-function formatTokenBalance(token: any): string {
+function formatTokenBalance(token: SendToken): string {
   const bal = Number(token.balance);
   const dec = token.decimals || 0;
   const amount = dec > 0 ? bal / Math.pow(10, dec) : bal;
@@ -950,7 +998,7 @@ async function buildTransaction() {
 
     // Extra tokens
     for (const token of extraTokens.value) {
-      const amt = parseFloat(token.sendAmount);
+      const amt = parseFloat(token.sendAmount ?? '');
       if (isNaN(amt) || amt <= 0) continue;
       const quantity = BigInt(Math.floor(amt * Math.pow(10, token.decimals || 0)));
       assetsMap.set(token.unit as Cardano.AssetId, quantity);
@@ -995,8 +1043,8 @@ async function buildTransaction() {
 
     txFee.value = tx.value.body.fee;
     txBuilt.value = true;
-  } catch (e: any) {
-    const msg = typeof e === 'string' ? e : (e?.message || String(e));
+  } catch (e: unknown) {
+    const msg = typeof e === 'string' ? e : (getErrorMessage(e, String(e)) || String(e));
     if (msg.includes('Insufficient input')) {
       txBuildError.value = 'Insufficient balance to cover this transaction + fees.';
     } else if (msg.includes('less than the minimum UTXO value')) {
@@ -1024,7 +1072,7 @@ function recalcMinAda() {
 
   const assetsMap = new Map<Cardano.AssetId, bigint>();
   for (const token of extraTokens.value) {
-    const amt = parseFloat(token.sendAmount);
+    const amt = parseFloat(token.sendAmount ?? '');
     if (!isNaN(amt) && amt > 0) {
       assetsMap.set(token.unit as Cardano.AssetId, BigInt(Math.floor(amt * Math.pow(10, token.decimals || 0))));
     }
@@ -1105,9 +1153,9 @@ async function signAndSubmit() {
     txId.value = submitResult.data.txId || '';
     txSuccess.value = true;
     snackbar.fireSuccess(i18n.t('miniGero.txSubmitted') as string);
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('Sign/submit error:', e);
-    passwordError.value = e?.message || 'Transaction failed';
+    passwordError.value = getErrorMessage(e, 'Transaction failed') || 'Transaction failed';
   } finally {
     spendingPassword.value = '';
     submitting.value = false;
@@ -1143,9 +1191,10 @@ async function signOnAnotherDevice() {
     } else {
       passwordError.value = i18n.t('crossDevice.requestRejected') as string;
     }
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('Cross-device sign error:', e);
-    passwordError.value = e?.message || (i18n.t('crossDevice.requestRejected') as string);
+    const rejected = i18n.t('crossDevice.requestRejected') as string;
+    passwordError.value = getErrorMessage(e, rejected) || rejected;
   } finally {
     submitting.value = false;
   }
@@ -1183,9 +1232,9 @@ async function onPassKeySuccess(pkBytes: Uint8Array) {
 
     // Auto-submit
     await submitSignedTx();
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('PRF sign/submit error:', e);
-    passwordError.value = e?.message || 'Transaction failed';
+    passwordError.value = getErrorMessage(e, 'Transaction failed') || 'Transaction failed';
   } finally {
     submitting.value = false;
   }
@@ -1217,9 +1266,9 @@ async function signLedger() {
     const transactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({ signatures });
     txWitnesses.value = transactionWitnessSet.toCbor();
     await submitSignedTx();
-  } catch (e: any) {
+  } catch (e: unknown) {
     ledgerUtils.ledgerErrorHandling(e);
-    passwordError.value = e?.message || 'Ledger signing failed';
+    passwordError.value = getErrorMessage(e, 'Ledger signing failed') || 'Ledger signing failed';
   } finally {
     submitting.value = false;
     hardwareLoading.end();
@@ -1260,7 +1309,7 @@ async function signTrezor() {
     const transactionWitnessSet = Serialization.TransactionWitnessSet.fromCore({ signatures });
     txWitnesses.value = transactionWitnessSet.toCbor();
     await submitSignedTx();
-  } catch (e: any) {
+  } catch (e: unknown) {
     if (e instanceof Error) {
       if (e.message.includes('Failure_ActionCancelled') || e.message.includes('cancelled') || e.message.includes('aborted')) {
         passwordError.value = 'Transaction cancelled on Trezor';
@@ -1282,7 +1331,7 @@ function signKeystone() {
   passwordError.value = '';
   try {
     txCbor.value = serializeCardanoJsSdkTx(tx.value);
-    const txSerialized = Serialization.Transaction.fromCbor(txCbor.value as any);
+    const txSerialized = Serialization.Transaction.fromCbor(HexBlob(txCbor.value));
     const signRequestResponse: KeystoneSignRequestResponse = createKeystoneSignRequest(
       txSerialized, loggedWallet.value, utxos.value, keys.value
     );
@@ -1290,9 +1339,9 @@ function signKeystone() {
     keystoneCbor.value = signRequestResponse.ur.cbor.toString('hex');
     keystoneUseHash.value = signRequestResponse.useHash;
     showKeystoneDialog.value = true;
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('Keystone sign request error:', e);
-    passwordError.value = e?.message || 'Failed to create Keystone sign request';
+    passwordError.value = getErrorMessage(e, 'Failed to create Keystone sign request') || 'Failed to create Keystone sign request';
   }
 }
 
@@ -1306,9 +1355,9 @@ async function onKeystoneScan(ur: UR) {
     showKeystoneDialog.value = false;
     submitting.value = true;
     await submitSignedTx();
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('[Keystone] Error processing QR code:', e);
-    passwordError.value = e?.message || 'Keystone QR scan error';
+    passwordError.value = getErrorMessage(e, 'Keystone QR scan error') || 'Keystone QR scan error';
     showKeystoneDialog.value = false;
   } finally {
     submitting.value = false;

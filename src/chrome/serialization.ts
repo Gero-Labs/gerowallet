@@ -132,6 +132,31 @@ export function toStakeAddress(addressBech32: string, networkId: Cardano.Network
     .toBech32();
 }
 
+/**
+ * True when the address pays to a SCRIPT rather than to a key the wallet could hold.
+ *
+ * `toStakeAddress` deliberately resolves `BasePaymentScriptStakeKey` addresses too, so a
+ * stake-credential match alone says "shares my stake key", not "is mine": a DeFi deposit
+ * (Strike, DEX orders, CIP-113 programmable-logic-base) is a script address carrying the
+ * depositor's own stake credential. Ownership checks that mean "spendable by this wallet"
+ * must exclude those — see the sent/received accounting in walletLoader.
+ *
+ * Returns false for anything unparseable: callers pair this with a positive ownership
+ * test, so an unknown address stays governed by that test rather than by this one.
+ */
+export function hasScriptPaymentCredential(addressBech32: string): boolean {
+  if (!addressBech32) return false;
+  try {
+    const type = Cardano.Address.fromString(addressBech32)?.getType();
+    return type === Cardano.AddressType.BasePaymentScriptStakeKey
+      || type === Cardano.AddressType.BasePaymentScriptStakeScript
+      || type === Cardano.AddressType.PointerScript
+      || type === Cardano.AddressType.EnterpriseScript;
+  } catch {
+    return false;
+  }
+}
+
 export function toPaymentCredential(address: Cardano.Address): Cardano.Credential {
   try {
     const baseAddress: Cardano.BaseAddress = Cardano.BaseAddress.fromAddress(address)
