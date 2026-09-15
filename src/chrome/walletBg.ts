@@ -2790,7 +2790,7 @@ export class WalletBg {
     prfSecret?: Uint8Array,
     proving?: { url: string; headers?: Record<string, string> },
     sponsor?: { walletId: number; password?: string; prfSecret?: Uint8Array },
-  ): Promise<{ signedTxHex: string; proven: boolean }> {
+  ): Promise<{ signedTxHex: string; proven: boolean; ledgerTxHash?: string }> {
     if (this.chain !== Blockchain.MIDNIGHT) {
       throw new Error('buildAndSignMidnightShieldedTransfer called on non-Midnight wallet');
     }
@@ -2925,7 +2925,7 @@ export class WalletBg {
           });
         }
         assertSession();
-        return { signedTxHex: built.txHex, proven: built.proven };
+        return { signedTxHex: built.txHex, proven: built.proven, ledgerTxHash: built.ledgerTxHash };
       }
       } finally {
         midnightActions.setSendProgress(null);

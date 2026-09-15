@@ -112,4 +112,48 @@ describe('Midnight ledger-specific orchestration', () => {
     expect(result).toEqual({ status: 'failed', message: 'Signing payload mismatch' });
     expect(submit).not.toHaveBeenCalled();
   });
+
+  // ── which side names the ledger hash ─────────────────────────────────────
+  //
+  // The relay's txHash is the Substrate extrinsic hash; history is keyed on
+  // the ledger hash. Exactly one side can produce it per path: the sidecar
+  // on the remote paths, the wallet's own prover on the proven path.
+
+  it('surfaces the sidecar ledger hash on a remote public send', async () => {
+    mocks.api.mockReturnValue({ buildUnshieldedTx: async () => ({ unprovenTxHex: 'aa', txHash: 'built' }),
+      submitMidnightTx: vi.fn().mockResolvedValue({ txHash: '0xextrinsic', status: 'InBlock', ledgerTxHash: '0xledger' }) });
+    mocks.send.mockResolvedValueOnce({ data: { success: true, publicKeyHex: '11', addressHex: '22' } })
+      .mockResolvedValueOnce({ data: { success: true, signedTxHex: 'bb', proven: false } });
+    const result = await sendUnshieldedNight('Preprod', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {});
+    expect(result).toEqual({ txHash: '0xextrinsic', status: 'InBlock', ledgerTxHash: '0xledger' });
+  });
+
+  it('carries the wallet-proved ledger hash onto a submit-proven result that has none', async () => {
+    mocks.proofServer.mode = 'local';
+    mocks.api.mockReturnValue({ buildUnshieldedTx: async () => ({ unprovenTxHex: 'aa', txHash: 'built' }),
+      submitProvenMidnightTx: vi.fn().mockResolvedValue({ txHash: '0xextrinsic', status: 'InBlock' }) });
+    mocks.send.mockResolvedValueOnce({ data: { success: true, publicKeyHex: '11', addressHex: '22' } })
+      .mockResolvedValueOnce({ data: { success: true, signedTxHex: 'bb', proven: true, ledgerTxHash: 'ledger-from-bg' } });
+    const result = await sendUnshieldedNight('Stagenet', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {});
+    expect(result.ledgerTxHash).toBe('ledger-from-bg');
+    expect(result.txHash).toBe('0xextrinsic');
+  });
+
+  it('carries the wallet-proved ledger hash for a locally proven shielded send', async () => {
+    mocks.proofServer.mode = 'local';
+    mocks.api.mockReturnValue({ submitProvenMidnightTx: vi.fn().mockResolvedValue({ txHash: '0xextrinsic', status: 'InBlock' }) });
+    mocks.send.mockResolvedValue({ data: { success: true, signedTxHex: 'aabb', proven: true, ledgerTxHash: 'ledger-from-bg' } });
+    const result = await sendShieldedNight('Stagenet', [{ receiverAddress: 'shielded-recipient', amount: 7n, tokenType: '12'.repeat(32) }], {});
+    expect(result.ledgerTxHash).toBe('ledger-from-bg');
+  });
+
+  it('leaves the result without a ledger hash when neither side had one (older Nexus)', async () => {
+    mocks.api.mockReturnValue({ buildUnshieldedTx: async () => ({ unprovenTxHex: 'aa', txHash: 'built' }),
+      submitMidnightTx: vi.fn().mockResolvedValue({ txHash: '0xextrinsic', status: 'InBlock' }) });
+    mocks.send.mockResolvedValueOnce({ data: { success: true, publicKeyHex: '11', addressHex: '22' } })
+      .mockResolvedValueOnce({ data: { success: true, signedTxHex: 'bb', proven: false } });
+    const result = await sendUnshieldedNight('Preprod', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {});
+    expect(result).toEqual({ txHash: '0xextrinsic', status: 'InBlock' });
+    expect('ledgerTxHash' in result).toBe(false);
+  });
 });

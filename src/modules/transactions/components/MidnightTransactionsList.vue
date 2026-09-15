@@ -248,6 +248,8 @@ import { Network } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import type { MidnightTransaction, MidnightTransactionType } from '@/chains/midnight/midnightTypes';
 import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
+import { sponsoredTxFor } from '@/chains/midnight/midnightSponsorLinks';
+import type { SponsoredTxMap } from '@/chains/midnight/midnightSponsorLinks';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import snackbar from '@/plugins/snackbar';
 
@@ -552,11 +554,10 @@ async function copyHash(hash: string): Promise<void> {
  * forward the fee payer, and the sponsor's inputs sit in a separate intent, so
  * the chain data cannot say who paid.
  */
-const sponsoredTxs = ref<Record<string, { sponsorName: string }>>({});
+const sponsoredTxs = ref<SponsoredTxMap>({});
 
 function sponsorFor(hash: string): string {
-  if (!hash) return '';
-  return sponsoredTxs.value[hash.toLowerCase()]?.sponsorName ?? '';
+  return sponsoredTxFor(sponsoredTxs.value, hash)?.sponsorName ?? '';
 }
 
 async function loadSponsorAttribution(): Promise<void> {

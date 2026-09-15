@@ -382,6 +382,7 @@ import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { midnightTokenBalances } from '@/chains/midnight/midnightTokenBalances';
 import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
 import { blocksMidnightSendLive } from '@/chains/midnight/midnightFeeCapacity';
+import { historyHashForSubmittedTx } from '@/chains/midnight/midnightTxHash';
 import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
 import {
   formatTokenAmount,
@@ -736,8 +737,12 @@ async function submitSend(credentials: { password?: string; prfSecret?: Uint8Arr
       (stage) => { sendStage.value = stage; },
       await buildSponsorArg(),
     );
-    debugLog('🌙 mini-Gero Midnight unshielded tx submitted:', result.txHash, 'status:', result.status,
-      'sponsor:', sponsorWalletId.value ?? 'none');
+    debugLog('🌙 mini-Gero Midnight unshielded tx submitted:', result.txHash, 'ledger:', result.ledgerTxHash ?? 'n/a',
+      'status:', result.status, 'sponsor:', sponsorWalletId.value ?? 'none');
+    // The hash history will know this tx by — the ledger hash, not the
+    // extrinsic hash in txHash (see midnightTxHash.ts). Everything that must
+    // match the row later keys on it.
+    const historyHash = historyHashForSubmittedTx(result);
 
     // Remember who paid, for the battery indicator on both wallets and the
     // transaction details screen. Best effort — never fail a submitted tx.
@@ -754,7 +759,7 @@ async function submitSend(credentials: { password?: string; prfSecret?: Uint8Arr
           at,
         });
         await recordSponsoredTx({
-          txHash: result.txHash,
+          txHash: historyHash,
           sponsorWalletId: paying.id,
           sponsorName: paying.name,
           at,
@@ -768,8 +773,8 @@ async function submitSend(credentials: { password?: string; prfSecret?: Uint8Arr
       }
     }
     // Show it in history right away — gero-sync backfills the confirmed entry.
-    void addOptimisticPendingTx(result.txHash);
-    txId.value = result.txHash;
+    void addOptimisticPendingTx(historyHash);
+    txId.value = historyHash;
     txSuccess.value = true;
     snackbar.fireSuccess(t('miniGero.txSubmitted'));
   } catch (e) {

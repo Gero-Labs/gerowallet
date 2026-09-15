@@ -41,6 +41,7 @@ import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 import { debugLog } from '@/utils/debug';
 import { DEFAULT_LOCAL_PROOF_SERVER_URL, DEFAULT_LOCAL_PROOF_SERVER_URL_LEDGER9 } from '@/chains/midnight/midnightConfig';
 import { isNativeNight } from '@/chains/midnight/midnightTokenBalances';
+import { normalizeMidnightTxHash } from '@/chains/midnight/midnightTxHash';
 import type {
   MidnightBalances,
   MidnightAddresses,
@@ -385,12 +386,6 @@ function serializeValue(_key: string, value: unknown): unknown {
   return value;
 }
 
-/** Canonical tx-hash key for dedup: lowercase, no leading `0x`. */
-function normalizeTxHash(hash: string): string {
-  const h = (hash || '').toLowerCase();
-  return h.startsWith('0x') ? h.slice(2) : h;
-}
-
 /**
  * Dedup key for a transaction row: hash + token. A single indexer tx that
  * moves more than one color now produces multiple `MidnightTransaction`
@@ -402,7 +397,7 @@ function normalizeTxHash(hash: string): string {
  * distinct colors of the same tx coexist.
  */
 function txRowKey(tx: MidnightTransaction): string {
-  return `${normalizeTxHash(tx.hash)}::${tx.token}`;
+  return `${normalizeMidnightTxHash(tx.hash)}::${tx.token}`;
 }
 
 // ---------------------------------------------------------------- hydration
