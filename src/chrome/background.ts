@@ -6268,16 +6268,13 @@ app.add(MIDNIGHT_METHOD.balanceUnsealedTransaction, (request, sendResponse) => {
         .catch(err => reply({
           error: parseMidnightMiniGeroError(err, MidnightErrorCode.InternalError, 'Failed to complete the balancing request'),
         }));
-    if (miniGeroPorts.has(tabId)) {
-      sendToPanel();
-      return;
-    }
-    openSidebar(tabId, 'sidepanel/index.html')
-      .then(() => waitForMiniGeroPort(5000, tabId))
-      .then(() => sendToPanel())
-      .catch(err => reply({
-        error: midnightApiError(MidnightErrorCode.InternalError, `Failed to open the wallet's approval panel: ${getErrorMessage(err)}`),
-      }));
+    // The dapp calls this after its (async) proving, so there is no user
+    // gesture left to open the panel with. Park the request instead of
+    // failing it: the badge shows it and it is delivered when the user opens
+    // the panel — same treatment as the private-balance and proof-server
+    // prompts. With the panel already open it is shown immediately.
+    sendToPanel();
+    if (!miniGeroPorts.has(tabId)) void openSidebar(tabId, 'sidepanel/index.html').catch(() => undefined);
   })();
   return true;
 });
