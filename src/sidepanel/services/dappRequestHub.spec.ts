@@ -226,4 +226,15 @@ describe('dappRequestHub', () => {
       expect.objectContaining({ requestId: 'r2', error: 'user_rejected' })
     );
   });
+
+  it('accepts the private-balance and proving-server prompts as valid methods', async () => {
+    const { initDappRequestHub, hub } = await import('./dappRequestHub');
+    await initDappRequestHub();
+    hub.setOverlayReady(true);
+    port._fire({ type: 'dapp-request', method: 'midnight_privateBalanceAccess', requestId: 'p1', payload: { website: 'https://dapp.example' } });
+    port._fire({ type: 'dapp-request', method: 'midnight_provingServer', requestId: 'p2', payload: { website: 'https://dapp.example' } });
+    expect(hub.currentRequest.value?.requestId).toBe('p1');
+    expect(hub.requestQueue.value.map((r) => r.requestId)).toEqual(['p2']);
+    expect(port.postMessage).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'dapp-nack' }));
+  });
 });

@@ -7,6 +7,7 @@ import { getErrorMessage } from '@/shared/utils/errorHandler';
 import { isStakeKeyRegistered } from '@/shared/utils/stakeRegistration';
 import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, POPUP, SENDER, TARGET, TxSendError, TxSignError } from '@/chrome/config';
 import { toDappError } from '@/chrome/dappError';
+import { applyDappRequestBadge } from '@/chrome/dappRequestBadge';
 import { bringInitBackground } from '@bringweb3/chrome-extension-kit';
 import {
   focusOrCreatePopup,
@@ -310,6 +311,11 @@ type PendingDAppEntry = {
 };
 const pendingDAppRequests = new Map<string, PendingDAppEntry>();
 
+/** The toolbar badge mirrors how many dApp prompts are parked (see dappRequestBadge.ts). */
+function syncDappRequestBadge(): void {
+  applyDappRequestBadge(pendingDAppRequests.size);
+}
+
 function redeliverParkedRequests(tabId: number, port: chrome.runtime.Port) {
   for (const [requestId, entry] of pendingDAppRequests.entries()) {
     const matchesTab = entry.tabId === tabId || Number.isNaN(entry.tabId);
@@ -362,9 +368,11 @@ chrome.runtime.onConnect.addListener((port) => {
         entry.resolve(message);
       }
       pendingDAppRequests.delete(message.requestId);
+      syncDappRequestBadge();
     } else if (message.type === 'dapp-nack') {
       entry.resolve({ error: String(message.error || 'unsupported_method') });
       pendingDAppRequests.delete(message.requestId);
+      syncDappRequestBadge();
     }
   });
 
@@ -410,6 +418,7 @@ function sendToMiniGero(method: string, payload: unknown, tabId?: number): Promi
         else resolve(response);
       },
     });
+    syncDappRequestBadge();
     if (port) {
       try {
         port.postMessage({ type: 'dapp-request', method, requestId, payload });
@@ -448,6 +457,19 @@ function waitForMiniGeroPort(timeoutMs = 5000, tabId?: number): Promise<void> {
       reject(new Error('mini-gero port connection timeout'));
     }, timeoutMs);
   });
+}
+
+/**
+ * Park a Midnight request that may arrive without a user gesture (a balance
+ * read on page load, a proof after async work). Unlike the connect/sign
+ * handlers, a refused `sidePanel.open()` is not a failure: the entry stays
+ * parked, the badge shows it, and `redeliverParkedRequests` delivers it when
+ * the user opens the panel.
+ */
+function parkMidnightRequest(method: string, payload: unknown, tabId: number): Promise<BackgroundResponse> {
+  const pending = sendToMiniGero(method, payload, tabId);
+  if (!miniGeroPorts.has(tabId)) void openSidebar(tabId, 'sidepanel/index.html').catch(() => undefined);
+  return pending;
 }
 
 const processedDomains: Set<string> = new Set<string>();
@@ -5574,8 +5596,27 @@ function parseMidnightMiniGeroError(
  * not one per request, to avoid a listener leak across many declines.
  */
 const midnightDeclinedMethodsByTab = new Map<number, Set<string>>();
+
+// Parked-prompt state for the two gesture-less connector paths (created lazily
+// by loadPrivateBalanceGate / loadMidnightProvingPark below).
+type PrivateBalanceGateModule = typeof import('@/chrome/midnightPrivateBalanceGate');
+let privateBalanceGate: InstanceType<PrivateBalanceGateModule['PrivateBalanceGate']> | undefined;
+type ProvingParkModule = typeof import('@/chrome/midnightProvingPark');
+let midnightProvingPark: InstanceType<ProvingParkModule['ProvingPark']> | undefined;
+
 chrome.tabs?.onRemoved?.addListener((tabId) => {
   midnightDeclinedMethodsByTab.delete(tabId);
+  privateBalanceGate?.clearTab(tabId);
+  privateBalanceGate?.dropTab(tabId);
+  midnightProvingPark?.cancelTab(tabId);
+  // A parked prompt for a closed tab can never be answered to anyone.
+  let removed = false;
+  for (const [requestId, entry] of pendingDAppRequests) {
+    if (entry.tabId !== tabId) continue;
+    pendingDAppRequests.delete(requestId);
+    removed = true;
+  }
+  if (removed) syncDappRequestBadge();
 });
 
 function hasMidnightPermissionDenial(tabId: number | undefined, method: string): boolean {
@@ -5853,6 +5894,26 @@ app.add(MIDNIGHT_METHOD.getUnshieldedBalances, async (request, sendResponse) => 
   sendResponse({ id: request.id, data, target: TARGET, sender: SENDER.extension });
 });
 
+async function loadPrivateBalanceGate() {
+  const [mod, { midnightStore }] = await Promise.all([
+    import('@/chrome/midnightPrivateBalanceGate'),
+    import('@/stores/midnightStore'),
+  ]);
+  if (!privateBalanceGate) {
+    privateBalanceGate = new mod.PrivateBalanceGate({
+      status: () => midnightStore.privateSyncStatus,
+      balances: () => midnightStore.balances.shieldedTokens ?? {},
+      identity: () => {
+        const wallet = WalletStore.state.loggedWallet as { id?: string; network?: string } | null;
+        return wallet?.id && wallet.network && !walletStore.isLocked ? `${wallet.id}:${wallet.network}` : undefined;
+      },
+      setInterval: (fn, ms) => setInterval(fn, ms),
+      clearInterval: (handle) => clearInterval(handle as ReturnType<typeof setInterval>),
+    });
+  }
+  return { mod, gate: privateBalanceGate, midnightStore };
+}
+
 app.add(MIDNIGHT_METHOD.getShieldedBalances, async (request, sendResponse) => {
   // Server-side whitelist gate (defense-in-depth): only a connected origin may
   // read wallet data. Mirrors the Cardano reads; a non-connected origin gets
@@ -5861,17 +5922,58 @@ app.add(MIDNIGHT_METHOD.getShieldedBalances, async (request, sendResponse) => {
     sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'Not connected'), target: TARGET, sender: SENDER.extension });
     return;
   }
-  const { midnightStore } = await import('@/stores/midnightStore');
   const wallet = requireMidnightWallet();
   if (!wallet) {
     sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected'), target: TARGET, sender: SENDER.extension });
     return;
   }
+  const reply = (data?: unknown, error?: ReturnType<typeof midnightApiError>) =>
+    sendResponse({ id: request.id, data, error, target: TARGET, sender: SENDER.extension });
   try {
-    const data = syncedMidnightShieldedBalances(midnightStore.privateSyncStatus, midnightStore.balances.shieldedTokens);
-    sendResponse({ id: request.id, data, target: TARGET, sender: SENDER.extension });
+    const { mod, gate, midnightStore } = await loadPrivateBalanceGate();
+    if (midnightStore.privateSyncStatus === 'synced') {
+      reply(syncedMidnightShieldedBalances(midnightStore.privateSyncStatus, midnightStore.balances.shieldedTokens));
+      return;
+    }
+    // Not synced yet: park the read and prompt the user in the side panel; the
+    // gate answers every call from this site once the scan completes
+    // (midnightPrivateBalanceGate.ts). A declined tab fails fast until closed.
+    const tabId = request.send?.tab?.id;
+    const origin = request.origin as string;
+    if (typeof tabId !== 'number') {
+      reply(undefined, midnightApiError(MidnightErrorCode.InternalError, 'No tab context for this request'));
+      return;
+    }
+    if (gate.isDeclined(tabId)) {
+      reply(undefined, midnightApiError(MidnightErrorCode.Rejected, mod.GATE_REASON_DECLINED));
+      return;
+    }
+    const key = `${wallet.id}:${origin}`;
+    const { first } = gate.join(key, tabId, (outcome) => {
+      // `=== false`: this tsconfig does not narrow a boolean discriminant in an else branch.
+      if (outcome.ok === false) {
+        reply(undefined, midnightApiError(outcome.code, outcome.reason));
+        return;
+      }
+      reply(outcome.balances);
+    });
+    if (!first) return;
+    const payload = {
+      website: origin,
+      status: midnightStore.privateSyncStatus,
+      progress: midnightStore.privateSyncProgress,
+    };
+    debugLog('🌙 connector getShieldedBalances: parked until the private sync completes', { origin, status: payload.status });
+    parkMidnightRequest('midnight_privateBalanceAccess', payload, tabId)
+      .then(() => gate.awaitSynced(key))
+      .catch((error: unknown) => {
+        const { code, reason } = parseMidnightMiniGeroError(error, MidnightErrorCode.Disconnected, mod.GATE_REASON_WALLET_CHANGED);
+        const declined = code === MidnightErrorCode.Rejected;
+        if (declined) gate.declineTab(tabId);
+        gate.settle(key, { ok: false, code: declined ? code : MidnightErrorCode.Disconnected, reason });
+      });
   } catch (error) {
-    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.InternalError, getErrorMessage(error)), target: TARGET, sender: SENDER.extension });
+    reply(undefined, midnightApiError(MidnightErrorCode.InternalError, getErrorMessage(error)));
   }
 });
 
@@ -6266,6 +6368,28 @@ app.add(MIDNIGHT_METHOD.provingUpload, async (request, sendResponse) => {
   }
 });
 
+/**
+ * "Proof server needed" prompt for dApp proofs whose server does not answer
+ * (midnightProvingPark.ts): health preflight, then a parked side-panel
+ * request whose approve means retry and whose reject means cancel.
+ */
+async function loadMidnightProvingPark() {
+  const [mod, { checkProofServerHealth, isProverNetworkError }] = await Promise.all([
+    import('@/chrome/midnightProvingPark'),
+    import('@/chains/midnight/midnightLocalProver'),
+  ]);
+  if (!midnightProvingPark) {
+    midnightProvingPark = new mod.ProvingPark({
+      preflight: (target) => checkProofServerHealth(target.url, { headers: target.headers, acceptNotFound: target.source === 'zkpaas' }),
+      prompt: (ctx, payload) => parkMidnightRequest('midnight_provingServer', payload, ctx.tabId)
+        .then((): 'retry' => 'retry', (): 'cancel' => 'cancel'),
+      isUnreachable: isProverNetworkError,
+      now: Date.now,
+    });
+  }
+  return midnightProvingPark;
+}
+
 /** Shared body of the `/check` and `/prove` handlers — they differ only in which runner they call. */
 async function handleMidnightDappProving(
   op: 'runDappProvingCheck' | 'runDappProvingProve',
@@ -6277,20 +6401,22 @@ async function handleMidnightDappProving(
   const { wallet, origin } = gate;
   let errorCode: (error: unknown) => string = () => MidnightErrorCode.InternalError;
   try {
-    const [{ mod, store }, { makeLocalProvingProvider }, { midnightStore }] = await Promise.all([
+    const [{ mod, store }, { makeLocalProvingProvider }, { midnightStore }, park] = await Promise.all([
       loadMidnightDappProving(),
       import('@/chains/midnight/midnightLocalProver'),
       import('@/stores/midnightStore'),
+      loadMidnightProvingPark(),
     ]);
     errorCode = mod.dappProvingErrorCode;
     const reply = await mod[op](
       store,
-      { makeProvider: makeLocalProvingProvider },
+      { makeProvider: makeLocalProvingProvider, park },
       {
         origin,
         network: wallet.network,
         sdkNetworkId: midnightSdkNetworkId(wallet.network),
         proofServer: midnightStore.proofServer,
+        tabId: request.send?.tab?.id,
       },
       request.data,
     );
@@ -6462,3 +6588,5 @@ const openUI = async () => {
 chrome.action.onClicked.addListener(openUI);
 
 app.listen();
+// A badge left over from a previous service-worker life would point at nothing.
+syncDappRequestBadge();

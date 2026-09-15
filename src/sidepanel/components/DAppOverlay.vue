@@ -822,6 +822,104 @@
         </template>
       </div>
 
+      <!-- Midnight: the dapp needs shielded balances; the private-note scan must run first -->
+      <div v-else-if="currentRequest.method === 'midnight_privateBalanceAccess'" class="dapp-sign-data">
+        <div class="dapp-identity mb-4">
+          <div class="favicon-wrapper">
+            <img :src="faviconUrl" class="favicon-img" @error="onFaviconError" v-if="!faviconFailed" />
+            <v-icon v-else size="32" :color="primaryColor">mdi-eye-off-outline</v-icon>
+          </div>
+          <div class="dapp-domain-info">
+            <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('miniGero.privateBalanceRequest') }}</h3>
+            <span class="dapp-url"><span class="dapp-sub">{{ splitHost(makeTransferDomain).sub }}</span><b class="dapp-root">{{ splitHost(makeTransferDomain).root }}</b></span>
+          </div>
+        </div>
+
+        <div class="sign-data-message">
+          <p class="t-body mb-1">{{ $t('midnight.connector.privateBalanceLead', { domain: makeTransferDomain }) }}</p>
+          <p class="grey--text text-caption mb-0">{{ $t('midnight.connector.privateBalanceWhy') }}</p>
+          <template v-if="privateBalanceMode === 'syncing'">
+            <v-progress-linear :value="privateSyncPercentValue" height="6" rounded class="mt-3 mb-2" />
+            <p class="grey--text text-caption mb-0 g-num">{{ $t('midnight.connector.privateBalanceSyncing', { percent: privateSyncPercentValue }) }}</p>
+          </template>
+          <p v-else-if="privateSyncStatus === 'error'" class="error--text text-caption mt-3 mb-0">{{ $t('midnight.connector.privateBalanceFailed') }}</p>
+        </div>
+
+        <template v-if="privateBalanceMode === 'syncing'">
+          <div class="action-buttons">
+            <v-btn outlined rounded dark @click="rejectMidnightPrivateBalance">{{ $t('midnight.connector.privateBalanceDecline') }}</v-btn>
+            <v-btn class="geroButton" rounded depressed @click="continueMidnightPrivateBalance">{{ $t('midnight.connector.privateBalanceContinue') }}</v-btn>
+          </div>
+        </template>
+
+        <template v-else-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
+          <v-text-field
+            v-model="spendingPassword"
+            :type="showPassword ? 'text' : 'password'"
+            :label="$t('miniGero.spendingPassword')"
+            :append-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+            :error-messages="signError"
+            outlined dense dark
+            class="password-input"
+            @click:append="showPassword = !showPassword"
+            @keyup.enter="unlockMidnightPrivateBalanceNormal"
+          />
+          <div class="action-buttons">
+            <v-btn outlined rounded dark @click="rejectMidnightPrivateBalance">{{ $t('midnight.connector.privateBalanceDecline') }}</v-btn>
+            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="!spendingPassword" @click="unlockMidnightPrivateBalanceNormal">
+              {{ $t('midnight.connector.privateBalanceUnlock') }}
+            </v-btn>
+          </div>
+        </template>
+
+        <template v-else-if="isPrfWallet">
+          <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('midnight.connector.privateBalancePassKey') }}</p>
+          <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
+          <div class="action-buttons">
+            <v-btn outlined rounded dark @click="rejectMidnightPrivateBalance">{{ $t('midnight.connector.privateBalanceDecline') }}</v-btn>
+            <v-btn class="geroButton" rounded depressed :loading="signing" @click="unlockMidnightPrivateBalancePrf">
+              {{ $t('midnight.connector.privateBalanceUnlock') }}
+            </v-btn>
+          </div>
+        </template>
+
+        <template v-else>
+          <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('midnight.connector.walletTypeUnsupported') }}</p>
+          <div class="action-buttons">
+            <v-btn outlined rounded dark block @click="rejectMidnightPrivateBalance">{{ $t('miniGero.reject') }}</v-btn>
+          </div>
+        </template>
+      </div>
+
+      <!-- Midnight: a dapp proof found no proof server -->
+      <div v-else-if="currentRequest.method === 'midnight_provingServer'" class="dapp-sign-data">
+        <div class="dapp-identity mb-4">
+          <div class="favicon-wrapper">
+            <img :src="faviconUrl" class="favicon-img" @error="onFaviconError" v-if="!faviconFailed" />
+            <v-icon v-else size="32" :color="primaryColor">mdi-server-off</v-icon>
+          </div>
+          <div class="dapp-domain-info">
+            <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('miniGero.provingServerRequest') }}</h3>
+            <span class="dapp-url"><span class="dapp-sub">{{ splitHost(makeTransferDomain).sub }}</span><b class="dapp-root">{{ splitHost(makeTransferDomain).root }}</b></span>
+          </div>
+        </div>
+
+        <div class="sign-data-message">
+          <p class="grey--text text-caption mb-2">{{ $t(provingServerBodyKey, { domain: makeTransferDomain, url: provingServerPayload.url }) }}</p>
+          <p v-if="(provingServerPayload.attempt || 1) > 1" class="grey--text text-caption mb-2">{{ $t('midnight.connector.provingServerStillDown', { url: provingServerPayload.url }) }}</p>
+          <p class="grey--text text-caption mb-2">{{ $t('midnight.connector.provingServerHint') }}</p>
+          <v-btn text small class="px-0" :color="primaryColor" @click="openProofServerSettings">
+            {{ $t('midnight.proofServer.openSettings') }}
+            <v-icon size="14" class="ml-1">mdi-open-in-new</v-icon>
+          </v-btn>
+        </div>
+
+        <div class="action-buttons">
+          <v-btn outlined rounded dark @click="cancelMidnightProving">{{ $t('common.cancel') }}</v-btn>
+          <v-btn class="geroButton" rounded depressed @click="retryMidnightProving">{{ $t('midnight.connector.provingServerRetry') }}</v-btn>
+        </div>
+      </div>
+
       <!-- WalletConnect: session proposal (pairing) -->
       <div v-else-if="currentRequest.method === 'wcSessionProposal'" class="dapp-connect">
         <div class="dapp-identity mb-4">
@@ -1005,6 +1103,8 @@ import { MidnightErrorCode } from '@/chrome/config';
 import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
 import { toAmountInput } from '@/chains/midnight/midnightAmount';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
+import { privateSyncPercent } from '@/chains/midnight/midnightPrivateSyncProgress';
+import { midnightStore } from '@/stores/midnightStore';
 import { resolveGeroChain } from '@/services/walletConnect/chainUtils';
 
 interface BackgroundResponse<T> { data: T }
@@ -2799,6 +2899,10 @@ function onEscapeReject() {
     rejectMidnightMakeTransfer();
   } else if (currentRequest.value?.method === 'midnight_balanceUnsealedTransaction') {
     rejectMidnightBalance();
+  } else if (currentRequest.value?.method === 'midnight_privateBalanceAccess') {
+    rejectMidnightPrivateBalance();
+  } else if (currentRequest.value?.method === 'midnight_provingServer') {
+    cancelMidnightProving();
   } else {
     reject();
   }
@@ -3065,6 +3169,131 @@ async function signMidnightBalancePrf() {
   } finally {
     signing.value = false;
   }
+}
+
+// ── Midnight DApp Connector: private balance access ───────────────────────
+// The dapp asked for shielded balances before the private-note scan was
+// done (background: midnightPrivateBalanceGate.ts). The panel starts the scan
+// with the user's credentials (password / passkey) exactly like the
+// dashboard's "Unlock private balances" button, then approves; the
+// background answers the dapp's call itself once the store reports synced.
+const privateSyncStatus = computed(() => midnightStore.privateSyncStatus);
+const privateSyncPercentValue = computed(() => privateSyncPercent(midnightStore.privateSyncProgress));
+const privateBalanceMode = computed<'syncing' | 'auth'>(() => (privateSyncStatus.value === 'syncing' ? 'syncing' : 'auth'));
+
+watch([privateSyncStatus, () => currentRequest.value?.method], ([status, method]) => {
+  // The scan finished while the prompt was open: nothing left to ask.
+  if (method === 'midnight_privateBalanceAccess' && status === 'synced') approve({ started: true });
+});
+
+function rejectMidnightPrivateBalance() {
+  spendingPassword.value = '';
+  signError.value = '';
+  reject(midnightError(MidnightErrorCode.Rejected, 'User declined to share private balances'));
+}
+
+function continueMidnightPrivateBalance() {
+  approve({ started: true });
+}
+
+/** Cross-window PassKey popup (WebAuthn is unreliable inside the side panel's own window). */
+function awaitRawPrfFromPopup(): Promise<Uint8Array> {
+  const popupUrl = chrome.runtime.getURL('index.html?mode=rawPrf#/passkey-auth');
+  window.open(popupUrl, 'PassKeyAuth', 'width=400,height=500,popup=1');
+  return new Promise<Uint8Array>((resolve, rejectPromise) => {
+    const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
+    const handler = (event: MessageEvent) => {
+      if (event.origin !== extensionOrigin) return;
+      if (event.data.type === 'PASSKEY_AUTH_RESULT') {
+        window.removeEventListener('message', handler);
+        const { success, prfOutput, error } = event.data.payload;
+        if (success && prfOutput) resolve(new Uint8Array(prfOutput));
+        else rejectPromise(new Error(error || 'PassKey authentication failed'));
+      }
+    };
+    window.addEventListener('message', handler);
+    setTimeout(() => {
+      window.removeEventListener('message', handler);
+      rejectPromise(new Error('PassKey authentication timed out'));
+    }, 60000);
+  });
+}
+
+async function startPrivateSyncFromPanel(credentials: { password?: string; prfSecret?: Uint8Array }): Promise<void> {
+  const response = await Messaging.sendToBackgroundFromOptions({
+    method: MessageTypes.START_MIDNIGHT_PRIVATE_SYNC,
+    data: {
+      password: credentials.password,
+      prfSecret: credentials.prfSecret ? Array.from(credentials.prfSecret) : undefined,
+    },
+  }) as { data?: { success?: boolean; error?: string } };
+  if (!response?.data?.success) throw new Error(response?.data?.error || 'Unable to unlock private token synchronization');
+}
+
+async function unlockMidnightPrivateBalanceNormal() {
+  if (!currentRequest.value || !spendingPassword.value) return;
+  const reqId = currentRequest.value.requestId;
+  signing.value = true;
+  signError.value = '';
+  try {
+    await startPrivateSyncFromPanel({ password: spendingPassword.value });
+    if (currentRequest.value?.requestId !== reqId) return;
+    approve({ started: true });
+    spendingPassword.value = '';
+  } catch (e) {
+    console.error('[DApp] Midnight private balance unlock error:', e);
+    signError.value = (e as Error)?.message || 'Unlock failed';
+  } finally {
+    signing.value = false;
+  }
+}
+
+async function unlockMidnightPrivateBalancePrf() {
+  if (!currentRequest.value) return;
+  const reqId = currentRequest.value.requestId;
+  signing.value = true;
+  signError.value = '';
+  try {
+    const prfBytes = await awaitRawPrfFromPopup();
+    await startPrivateSyncFromPanel({ prfSecret: prfBytes });
+    if (currentRequest.value?.requestId !== reqId) return;
+    approve({ started: true });
+  } catch (e) {
+    console.error('[DApp] Midnight PRF private balance unlock error:', e);
+    signError.value = (e as Error)?.message || 'PassKey authentication failed';
+  } finally {
+    signing.value = false;
+  }
+}
+
+// ── Midnight DApp Connector: proof server needed ──────────────────────────
+// A dapp proof found no proof server (background: midnightProvingPark.ts).
+// Retry re-runs the parked proof with the payload the background kept;
+// Cancel fails the dapp's call with the usual "could not generate the proof".
+interface ProvingServerPayload {
+  website?: string;
+  url?: string;
+  source?: 'default' | 'local' | 'zkpaas';
+  detail?: string;
+  attempt?: number;
+}
+const provingServerPayload = computed<ProvingServerPayload>(() => (currentRequest.value?.payload ?? {}) as ProvingServerPayload);
+const provingServerBodyKey = computed(() => ({
+  default: 'midnight.connector.provingServerBodyDefault',
+  local: 'midnight.connector.provingServerBodyLocal',
+  zkpaas: 'midnight.connector.provingServerBodyZkpaas',
+}[provingServerPayload.value.source ?? 'default']));
+
+function retryMidnightProving() {
+  approve({ action: 'retry' });
+}
+
+function cancelMidnightProving() {
+  reject(midnightError(MidnightErrorCode.Rejected, 'User cancelled proving because no proof server was available'));
+}
+
+function openProofServerSettings() {
+  window.open(chrome.runtime.getURL('index.html#/proof-server'), '_blank');
 }
 
 // ── WalletConnect: session proposal (pairing) ──────────────────────────────
