@@ -836,12 +836,13 @@
         </div>
 
         <div class="sign-data-message">
-          <p class="grey--text text-caption mb-3">{{ $t('midnight.connector.privateBalanceBody', { domain: makeTransferDomain }) }}</p>
+          <p class="t-body mb-1">{{ $t('midnight.connector.privateBalanceLead', { domain: makeTransferDomain }) }}</p>
+          <p class="grey--text text-caption mb-0">{{ $t('midnight.connector.privateBalanceWhy') }}</p>
           <template v-if="privateBalanceMode === 'syncing'">
-            <v-progress-linear :value="privateSyncPercentValue" height="6" rounded class="mb-2" />
+            <v-progress-linear :value="privateSyncPercentValue" height="6" rounded class="mt-3 mb-2" />
             <p class="grey--text text-caption mb-0 g-num">{{ $t('midnight.connector.privateBalanceSyncing', { percent: privateSyncPercentValue }) }}</p>
           </template>
-          <p v-else-if="privateSyncStatus === 'error'" class="grey--text text-caption mb-0">{{ $t('midnight.connector.privateBalanceFailed') }}</p>
+          <p v-else-if="privateSyncStatus === 'error'" class="error--text text-caption mt-3 mb-0">{{ $t('midnight.connector.privateBalanceFailed') }}</p>
         </div>
 
         <template v-if="privateBalanceMode === 'syncing'">
@@ -872,7 +873,7 @@
         </template>
 
         <template v-else-if="isPrfWallet">
-          <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('miniGero.passKeyRequired') }}</p>
+          <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('midnight.connector.privateBalancePassKey') }}</p>
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
           <div class="action-buttons">
             <v-btn outlined rounded dark @click="rejectMidnightPrivateBalance">{{ $t('midnight.connector.privateBalanceDecline') }}</v-btn>
