@@ -18,7 +18,7 @@
     <div class="mini-act__steps">
       <template v-for="(step, i) in steps">
         <span :key="step.key" class="mini-act__step" :class="stepClass(i)">
-          <v-icon v-if="i < activeIndex" size="12" class="mini-act__check">mdi-check</v-icon>
+          <v-icon v-if="i < doneCount" size="12" class="mini-act__check">mdi-check</v-icon>
           <span v-else class="mini-act__dot" />
           {{ step.label }}
         </span>
@@ -90,21 +90,31 @@ const steps = computed(() => [
   { key: 'submit', label: t('midnight.siteActivity.stepSubmit') },
 ]);
 
-// Index of the step in progress; 3 = everything done. A failure keeps the
-// step it happened in so the stepper marks it.
-const activeIndex = computed(() => {
+// Stepper state: how many steps are complete, which one is in progress (-1:
+// none — every proof is back and the wallet is waiting for the site, or the
+// transaction is finished), and where a failure happened.
+const stepper = computed(() => {
   const a = activity.value;
-  if (!a) return 0;
-  if (a.step === 'failed') return { proving: 0, funding: 1, submitting: 2 }[a.failedAt ?? 'proving'];
-  return { proving: 0, funding: 1, submitting: 2, submitted: 3 }[a.step];
+  if (!a) return { done: 0, active: 0, failed: -1 };
+  switch (a.step) {
+    case 'proving': return proofsDone.value ? { done: 1, active: -1, failed: -1 } : { done: 0, active: 0, failed: -1 };
+    case 'funding': return { done: 1, active: 1, failed: -1 };
+    case 'submitting': return { done: 2, active: 2, failed: -1 };
+    case 'submitted': return { done: 3, active: -1, failed: -1 };
+    case 'failed': {
+      const at = { proving: 0, funding: 1, submitting: 2 }[a.failedAt ?? 'proving'];
+      return { done: at, active: -1, failed: at };
+    }
+    default: return { done: 0, active: 0, failed: -1 };
+  }
 });
+const doneCount = computed(() => stepper.value.done);
 
 function stepClass(i: number) {
-  const failedHere = activity.value?.step === 'failed' && i === activeIndex.value;
   return {
-    'mini-act__step--done': i < activeIndex.value,
-    'mini-act__step--active': i === activeIndex.value && !failedHere,
-    'mini-act__step--failed': failedHere,
+    'mini-act__step--done': i < stepper.value.done,
+    'mini-act__step--active': i === stepper.value.active,
+    'mini-act__step--failed': i === stepper.value.failed,
   };
 }
 
