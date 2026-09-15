@@ -157,3 +157,21 @@ describe('chain identity hydration (background restart)', () => {
     expect(hydrateChainIdentity({ ...identity, genesisHash: `0x${'AB'.repeat(32)}` })).toBeNull();
   });
 });
+
+// The site-activity record is what mini-Gero's tracker renders; the store
+// only folds events through the pure reducer and clears it on a wallet switch.
+describe('site activity', () => {
+  it('records events into one replaceable record and clears it on a wallet switch', () => {
+    midnightStore.siteActivity = null;
+    midnightActions.recordSiteActivity('https://dapp.example', { type: 'prove-start' });
+    midnightActions.recordSiteActivity('https://dapp.example', { type: 'prove-done' });
+    expect(midnightStore.siteActivity).toMatchObject({ origin: 'https://dapp.example', step: 'proving', circuitsStarted: 1, circuitsDone: 1 });
+    midnightStore.activeWalletKey = null;
+    switchFrom(MAINNET_A, MAINNET_B);
+    expect(midnightStore.siteActivity).toBeNull();
+    midnightActions.recordSiteActivity('https://dapp.example', { type: 'funding' });
+    expect(midnightStore.siteActivity?.step).toBe('funding');
+    midnightActions.clearSiteActivity();
+    expect(midnightStore.siteActivity).toBeNull();
+  });
+});

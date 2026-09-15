@@ -6122,19 +6122,22 @@ app.add(MIDNIGHT_METHOD.submitTransaction, async (request, sendResponse) => {
     sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.InvalidRequest, 'tx is required'), target: TARGET, sender: SENDER.extension });
     return;
   }
+  const origin = request.origin as string;
+  const { midnightActions } = await import('@/stores/midnightStore');
+  midnightActions.recordSiteActivity(origin, { type: 'submit-start' });
   try {
     const { getMidnightApi } = await import('@/api/midnight-api');
     const api = getMidnightApi(wallet.network);
     // A sealed tx (balanceUnsealedTransaction's output, or anything the dapp
     // proved and bound itself) is already final: the sidecar's finalize relay
     // would try to prove it again and throw. Route it to submit-proven.
-    if (await isSealedMidnightTransaction(tx, midnightSdkNetworkId(wallet.network))) {
-      await api.submitProvenMidnightTx({ signedTxHex: tx, waitFor: 'Submitted' });
-    } else {
-      await api.submitMidnightTx({ signedTxHex: tx, waitFor: 'Submitted' });
-    }
+    const submitted = await isSealedMidnightTransaction(tx, midnightSdkNetworkId(wallet.network))
+      ? await api.submitProvenMidnightTx({ signedTxHex: tx, waitFor: 'Submitted' })
+      : await api.submitMidnightTx({ signedTxHex: tx, waitFor: 'Submitted' });
+    midnightActions.recordSiteActivity(origin, { type: 'submitted', txId: submitted?.txHash });
     sendResponse({ id: request.id, data: undefined, target: TARGET, sender: SENDER.extension });
   } catch (error) {
+    midnightActions.recordSiteActivity(origin, { type: 'submit-failed', reason: 'other' });
     sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.InvalidRequest, getErrorMessage(error)), target: TARGET, sender: SENDER.extension });
   }
 });
@@ -6267,11 +6270,21 @@ app.add(MIDNIGHT_METHOD.balanceUnsealedTransaction, (request, sendResponse) => {
     // failing it (badge; delivered when the user opens the panel; immediate
     // when it is already open) — same treatment as the private-balance and
     // proof-server prompts.
+    const { midnightActions } = await import('@/stores/midnightStore');
+    midnightActions.recordSiteActivity(origin, { type: 'funding' });
     parkMidnightRequest(MIDNIGHT_METHOD.balanceUnsealedTransaction, payload, tabId)
-      .then((response: BackgroundResponse) => reply({ data: response.data })) // response.data === { tx }
-      .catch(err => reply({
-        error: parseMidnightMiniGeroError(err, MidnightErrorCode.InternalError, 'Failed to complete the balancing request'),
-      }));
+      .then((response: BackgroundResponse) => {
+        midnightActions.recordSiteActivity(origin, { type: 'funding-done' });
+        reply({ data: response.data }); // response.data === { tx }
+      })
+      .catch(err => {
+        const error = parseMidnightMiniGeroError(err, MidnightErrorCode.InternalError, 'Failed to complete the balancing request');
+        midnightActions.recordSiteActivity(origin, {
+          type: 'funding-failed',
+          reason: error.code === MidnightErrorCode.Rejected ? 'declined' : 'other',
+        });
+        reply({ error });
+      });
   })();
   return true;
 });
@@ -6400,26 +6413,41 @@ async function handleMidnightDappProving(
   const { wallet, origin } = gate;
   let errorCode: (error: unknown) => string = () => MidnightErrorCode.InternalError;
   try {
-    const [{ mod, store }, { makeLocalProvingProvider }, { midnightStore }, park] = await Promise.all([
+    const [{ mod, store }, { makeLocalProvingProvider }, { midnightStore, midnightActions }, park] = await Promise.all([
       loadMidnightDappProving(),
       import('@/chains/midnight/midnightLocalProver'),
       import('@/stores/midnightStore'),
       loadMidnightProvingPark(),
     ]);
     errorCode = mod.dappProvingErrorCode;
-    const reply = await mod[op](
-      store,
-      { makeProvider: makeLocalProvingProvider, park },
-      {
-        origin,
-        network: wallet.network,
-        sdkNetworkId: midnightSdkNetworkId(wallet.network),
-        proofServer: midnightStore.proofServer,
-        tabId: request.send?.tab?.id,
-      },
-      request.data,
-    );
-    sendResponse({ id: request.id, data: reply, target: TARGET, sender: SENDER.extension });
+    // The site-activity card (mini-Gero) follows each /prove; /check is fast
+    // and not worth a step of its own.
+    const proving = op === 'runDappProvingProve';
+    if (proving) midnightActions.recordSiteActivity(origin, { type: 'prove-start' });
+    try {
+      const reply = await mod[op](
+        store,
+        { makeProvider: makeLocalProvingProvider, park },
+        {
+          origin,
+          network: wallet.network,
+          sdkNetworkId: midnightSdkNetworkId(wallet.network),
+          proofServer: midnightStore.proofServer,
+          tabId: request.send?.tab?.id,
+        },
+        request.data,
+      );
+      if (proving) midnightActions.recordSiteActivity(origin, { type: 'prove-done' });
+      sendResponse({ id: request.id, data: reply, target: TARGET, sender: SENDER.extension });
+    } catch (error) {
+      if (proving) {
+        midnightActions.recordSiteActivity(origin, {
+          type: 'prove-failed',
+          reason: error instanceof mod.DappProvingFailedError ? 'proof-server' : 'other',
+        });
+      }
+      throw error;
+    }
   } catch (error) {
     sendResponse({ id: request.id, error: midnightApiError(errorCode(error), getErrorMessage(error)), target: TARGET, sender: SENDER.extension });
   }

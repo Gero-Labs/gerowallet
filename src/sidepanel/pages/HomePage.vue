@@ -26,6 +26,8 @@
 
       <QuickActions @action="handleAction" />
 
+      <!-- Midnight: a connected site's transaction in flight (Prove → Fund → Submit) -->
+      <MiniSiteActivity v-if="isMidnight" />
       <!-- Midnight: compact DUST battery replaces the (Cardano-centric) carousel -->
       <MiniDustGauge v-if="isMidnight" />
       <MiniProofServerWidget v-if="isMidnight" />
@@ -136,6 +138,7 @@ import QuickActions from '../components/QuickActions.vue';
 import FeaturedCarousel from '../components/FeaturedCarousel.vue';
 import MiniDustGauge from '../components/MiniDustGauge.vue';
 import MiniProofServerWidget from '../components/MiniProofServerWidget.vue';
+import MiniSiteActivity from '../components/MiniSiteActivity.vue';
 import TokenList from '../components/TokenList.vue';
 import BottomSheet from '../components/BottomSheet.vue';
 import SendSheet from '../components/flows/SendSheet.vue';
