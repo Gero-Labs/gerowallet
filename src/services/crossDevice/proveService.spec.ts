@@ -19,7 +19,6 @@ import type {
   ProveInit,
   ProveMessage,
   ProveReject,
-  ProveResult,
 } from './proveProtocol';
 
 const PHONE = 'phone-dev';
@@ -40,12 +39,29 @@ function makeTransport() {
     send: (msg) => { sent.push(msg); },
     onMessage: (fn) => { cb = fn; return () => { cb = null; }; },
   };
+  const lastOf = <T extends ProveMessage['type']>(type: T) =>
+    [...sent].reverse().find((m) => m.type === type) as Extract<ProveMessage, { type: T }> | undefined;
   return {
     transport,
     sent,
     deliver: (raw: unknown) => cb?.(raw),
-    lastOf: <T extends ProveMessage['type']>(type: T) =>
-      [...sent].reverse().find((m) => m.type === type) as Extract<ProveMessage, { type: T }> | undefined,
+    lastOf,
+    /**
+     * Settle until the desktop has actually sent `type`, then hand it back.
+     *
+     * Every frame in this file is Ed25519-signed, and @noble/ed25519 hashes via
+     * WebCrypto, so "the service has responded" is reached after an unknowable
+     * number of event-loop turns — more of them on a loaded CI runner than on an
+     * idle laptop. Waiting for the frame instead of for a fixed number of turns
+     * is what keeps that load-dependent, and it returns as soon as the frame
+     * lands, which matters: the job-timeout tests assert on state that a slow
+     * settle would have already torn down.
+     */
+    waitUntilSent: async <T extends ProveMessage['type']>(type: T) => {
+      const found = await waitFor(() => lastOf(type));
+      if (!found) throw new Error(`timed out waiting for the desktop to send ${type}`);
+      return found;
+    },
   };
 }
 
@@ -112,14 +128,62 @@ async function makePhone(reqId = 'req-1', payload = PAYLOAD, over: Partial<Prove
 }
 
 /**
- * Let the service settle. Must yield real MACROTASKS, not just microtasks:
- * @noble/ed25519's signAsync/verifyAsync hash via WebCrypto, which a bare
- * `Promise.resolve()` loop does not drain — every frame in this file is signed,
- * so a microtask-only flush observes a service that has not sent anything yet.
+ * Yield one real MACROTASK. Microtasks are not enough: @noble/ed25519's
+ * signAsync/verifyAsync hash via WebCrypto, which a bare `Promise.resolve()`
+ * loop does not drain, and every frame in this file is signed.
  */
-const flush = async () => {
-  for (let i = 0; i < 6; i++) await new Promise((r) => { setTimeout(r, 0); });
+const tick = () => new Promise((r) => { setTimeout(r, 0); });
+
+/**
+ * Poll `predicate` across macrotasks until it returns something truthy.
+ *
+ * Returns undefined on expiry rather than throwing, so callers decide whether a
+ * miss is a failure. The budget is deliberately far larger than the work needs;
+ * it is a stuck-test backstop, not a timing assumption. Nothing waits for the
+ * whole budget in the passing case — each call returns on the turn the
+ * condition first holds.
+ */
+async function waitFor<T>(predicate: () => T, budgetMs = 5000): Promise<T | undefined> {
+  const deadline = Date.now() + budgetMs;
+  for (;;) {
+    const value = predicate();
+    if (value) return value;
+    if (Date.now() >= deadline) return undefined;
+    await tick();
+  }
+}
+
+/**
+ * Give the service a fair chance to react, for the cases that assert it did
+ * NOTHING. A negative assertion cannot wait on a condition — there is no frame
+ * to wait for — so this is an intentional fixed settle, and the only place in
+ * this file where a turn count is a judgement call rather than a fact.
+ * Everything that expects a frame uses `t.waitUntilSent` instead.
+ */
+const settle = async () => {
+  for (let i = 0; i < 6; i++) await tick();
 };
+
+/**
+ * Wait until the desktop has stopped sending, so a count taken afterwards is a
+ * stable baseline. Accepting a job is not the end of its output — it also
+ * reports status — so waiting for one named frame still banks a baseline that
+ * the same job then walks past.
+ */
+async function waitUntilQuiet(t: { sent: ProveMessage[] }, quietTicks = 6, budgetMs = 5000) {
+  const deadline = Date.now() + budgetMs;
+  let seen = -1;
+  let quiet = 0;
+  while (Date.now() < deadline) {
+    if (t.sent.length === seen) {
+      if (++quiet >= quietTicks) return;
+    } else {
+      seen = t.sent.length;
+      quiet = 0;
+    }
+    await tick();
+  }
+}
 
 describe('createProveService — happy path', () => {
   it('proves a job and streams back a decryptable finalized tx', async () => {
@@ -128,18 +192,14 @@ describe('createProveService — happy path', () => {
     const phone = await makePhone();
 
     t.deliver(phone.init);
-    await flush();
 
-    const accept = t.lastOf('PROVE_ACCEPT');
-    expect(accept).toBeDefined();
+    const accept = await t.waitUntilSent('PROVE_ACCEPT');
     expect(accept!.ledgerVersion).toBe(LEDGER);
     phone.onAccept(accept!);
 
     for (const c of phone.chunks()) t.deliver(c);
-    await flush();
 
-    const result = t.lastOf('PROVE_RESULT') as ProveResult;
-    expect(result).toBeDefined();
+    const result = await t.waitUntilSent('PROVE_RESULT');
     expect(result.byteLen).toBe(PROVEN.length);
     expect(result.provenDigest).toBe(provePayloadDigest(PROVEN));
 
@@ -166,10 +226,9 @@ describe('createProveService — happy path', () => {
     const phone = await makePhone('req-big', big);
 
     t.deliver(phone.init);
-    await flush();
-    phone.onAccept(t.lastOf('PROVE_ACCEPT')!);
+    phone.onAccept(await t.waitUntilSent('PROVE_ACCEPT'));
     for (const c of phone.chunks()) t.deliver(c);
-    await flush();
+    await settle();
 
     expect(calls).toBe(1);
     // Multi-chunk payload reassembled byte-for-byte, in order.
@@ -185,10 +244,9 @@ describe('createProveService — happy path', () => {
     const svc = createProveService(deps);
     const phone = await makePhone();
     t.deliver(phone.init);
-    await flush();
-    phone.onAccept(t.lastOf('PROVE_ACCEPT')!);
+    phone.onAccept(await t.waitUntilSent('PROVE_ACCEPT'));
     for (const c of phone.chunks()) t.deliver(c);
-    await flush();
+    await settle();
     expect(captured).not.toBeNull();
     expect(captured!.every((b) => b === 0)).toBe(true);
     svc.dispose();
@@ -199,10 +257,9 @@ describe('createProveService — happy path', () => {
     const svc = createProveService(deps);
     const phone = await makePhone();
     t.deliver(phone.init);
-    await flush();
-    phone.onAccept(t.lastOf('PROVE_ACCEPT')!);
+    phone.onAccept(await t.waitUntilSent('PROVE_ACCEPT'));
     for (const c of phone.chunks()) t.deliver(c);
-    await flush();
+    await settle();
     const states = t.sent.filter((m) => m.type === 'PROVE_STATUS').map((m) => (m as { state: string }).state);
     expect(states).toEqual(['queued', 'proving']);
     svc.dispose();
@@ -218,7 +275,7 @@ describe('gate order', () => {
     svc = createProveService(deps);
     const phone = await makePhone('req-1', PAYLOAD, initOver);
     t.deliver(initOver.sig ? { ...phone.init, ...initOver } : phone.init);
-    await flush();
+    await settle();
     return t;
   }
 
@@ -230,17 +287,17 @@ describe('gate order', () => {
 
   it('rejects serving_off when the toggle is off', async () => {
     const t = await run({ isServingEnabled: () => false });
-    expect((t.lastOf('PROVE_REJECT') as ProveReject).reason).toBe('serving_off');
+    expect((await t.waitUntilSent('PROVE_REJECT')).reason).toBe('serving_off');
   });
 
   it('rejects ledger_mismatch on version skew', async () => {
     const t = await run({ ledgerVersion: '9.0.0' });
-    expect((t.lastOf('PROVE_REJECT') as ProveReject).reason).toBe('ledger_mismatch');
+    expect((await t.waitUntilSent('PROVE_REJECT')).reason).toBe('ledger_mismatch');
   });
 
   it('rejects prover_unhealthy when the local proof server is down', async () => {
     const t = await run({ checkProverHealth: async () => false });
-    expect((t.lastOf('PROVE_REJECT') as ProveReject).reason).toBe('prover_unhealthy');
+    expect((await t.waitUntilSent('PROVE_REJECT')).reason).toBe('prover_unhealthy');
   });
 
   it('rejects too_large above the payload cap', async () => {
@@ -248,8 +305,7 @@ describe('gate order', () => {
     svc = createProveService(deps);
     const phone = await makePhone('req-1', PAYLOAD, { byteLen: 99_000_000 });
     t.deliver(phone.init);
-    await flush();
-    expect((t.lastOf('PROVE_REJECT') as ProveReject).reason).toBe('too_large');
+    expect((await t.waitUntilSent('PROVE_REJECT')).reason).toBe('too_large');
   });
 
   it('never starts a prover for a gated job', async () => {
@@ -268,8 +324,7 @@ describe('gate order', () => {
     // All-zero: valid 32-byte hex, passes the shape guard, low-order point.
     const phone = await makePhone('req-lo', PAYLOAD, { ephPub: '00'.repeat(32) });
     t.deliver(phone.init);
-    await flush();
-    expect((t.lastOf('PROVE_REJECT') as ProveReject).reason).toBe('decrypt_failed');
+    expect((await t.waitUntilSent('PROVE_REJECT')).reason).toBe('decrypt_failed');
     expect(svc!.isBusy()).toBe(false);
   });
 
@@ -278,7 +333,7 @@ describe('gate order', () => {
     svc = createProveService(deps);
     const phone = await makePhone('req-1', PAYLOAD, { to: 'other-desk' });
     t.deliver(phone.init);
-    await flush();
+    await settle();
     expect(t.sent).toHaveLength(0);
   });
 
@@ -291,7 +346,7 @@ describe('gate order', () => {
       byteLen: 4, chunkCount: 1, expiresAt: 2000, payloadDigest: provePayloadDigest(PAYLOAD),
     }, strangerKp.privKeyHex);
     t.deliver(forged);
-    await flush();
+    await settle();
     expect(t.sent).toHaveLength(0);
   });
 
@@ -300,7 +355,7 @@ describe('gate order', () => {
     svc = createProveService(deps);
     const phone = await makePhone('req-old', PAYLOAD, { expiresAt: 999 }); // now = 1000s
     t.deliver(phone.init);
-    await flush();
+    await settle();
     expect(t.sent).toHaveLength(0);
   });
 
@@ -309,10 +364,15 @@ describe('gate order', () => {
     svc = createProveService(deps);
     const phone = await makePhone();
     t.deliver(phone.init);
-    await flush();
+    // Let the FIRST job finish talking before snapshotting. Anything shorter
+    // banks a baseline the same job then walks past — it sends PROVE_ACCEPT and
+    // then PROVE_STATUS — and the late frame gets counted against the replay.
+    // The replay was being dropped correctly the whole time; the baseline was
+    // what moved.
+    await waitUntilQuiet(t);
     const afterFirst = t.sent.length;
     t.deliver(phone.init); // byte-identical replay
-    await flush();
+    await settle();
     expect(t.sent).toHaveLength(afterFirst);
   });
 
@@ -328,15 +388,15 @@ describe('gate order', () => {
     for (let i = 0; i < 2; i++) {
       const p = await makePhone(`req-${i}`);
       t.deliver(p.init);
-      await flush();
+      await settle();
       // Free the single-job slot so the rate limit is what bites, not `busy`.
       const cancel = await signProveMessage<ProveCancel>({
         type: 'PROVE_CANCEL', reqId: `req-${i}`, nonce: `c${i}`, from: PHONE, to: 'desk-dev',
       }, phoneKp.privKeyHex);
       t.deliver(cancel);
-      await flush();
+      await settle();
     }
-    expect((t.lastOf('PROVE_REJECT') as ProveReject).reason).toBe('rate_limited');
+    expect((await t.waitUntilSent('PROVE_REJECT')).reason).toBe('rate_limited');
   });
 });
 
@@ -346,13 +406,12 @@ describe('single-job queue', () => {
     const svc = createProveService(deps);
     const first = await makePhone('req-1');
     t.deliver(first.init);
-    await flush();
+    await settle();
     expect(svc.isBusy()).toBe(true);
 
     const second = await makePhone('req-2');
     t.deliver(second.init);
-    await flush();
-    expect((t.lastOf('PROVE_REJECT') as ProveReject).reason).toBe('busy');
+    expect((await t.waitUntilSent('PROVE_REJECT')).reason).toBe('busy');
     svc.dispose();
   });
 
@@ -373,7 +432,12 @@ describe('single-job queue', () => {
     t.deliver(a.init);
     t.deliver(b.init);
     release!();
-    await flush();
+    // Both frames, in either order: the loser is rejected as soon as the winner
+    // takes the slot, but the winner's accept is still being signed, so which
+    // lands first is not fixed. Settle afterwards to give a second accept — the
+    // bug this guards against — a fair chance to show up.
+    await waitFor(() => t.lastOf('PROVE_ACCEPT') && t.lastOf('PROVE_REJECT'));
+    await settle();
 
     expect(t.sent.filter((m) => m.type === 'PROVE_ACCEPT')).toHaveLength(1);
     expect((t.lastOf('PROVE_REJECT') as ProveReject).reason).toBe('busy');
@@ -387,8 +451,7 @@ describe('chunk handling', () => {
     const svc = createProveService(deps);
     const phone = await makePhone(reqId, payload);
     t.deliver(phone.init);
-    await flush();
-    phone.onAccept(t.lastOf('PROVE_ACCEPT')!);
+    phone.onAccept(await t.waitUntilSent('PROVE_ACCEPT'));
     return { t, svc, phone };
   }
 
@@ -396,8 +459,7 @@ describe('chunk handling', () => {
     const { t, svc, phone } = await accepted();
     const [c] = phone.chunks();
     t.deliver({ ...c, ciphertextB64: btoa('garbage-that-is-not-a-valid-seal') });
-    await flush();
-    expect((t.lastOf('PROVE_REJECT') as ProveReject).reason).toBe('decrypt_failed');
+    expect((await t.waitUntilSent('PROVE_REJECT')).reason).toBe('decrypt_failed');
     expect(svc.isBusy()).toBe(false);
     svc.dispose();
   });
@@ -409,15 +471,14 @@ describe('chunk handling', () => {
       type: 'PROVE_CHUNK', reqId: 'req-1', to: 'desk-dev', seq: 0, count: 1,
       nonceHex: sealed.nonceHex, ciphertextB64: sealed.ciphertextB64,
     });
-    await flush();
-    expect((t.lastOf('PROVE_REJECT') as ProveReject).reason).toBe('decrypt_failed');
+    expect((await t.waitUntilSent('PROVE_REJECT')).reason).toBe('decrypt_failed');
     svc.dispose();
   });
 
   it('ignores a chunk for an unknown job without failing the live one', async () => {
     const { t, svc, phone } = await accepted();
     t.deliver({ ...phone.chunks()[0], reqId: 'other-req' });
-    await flush();
+    await settle();
     expect(t.lastOf('PROVE_REJECT')).toBeUndefined();
     expect(svc.isBusy()).toBe(true);
     svc.dispose();
@@ -426,7 +487,7 @@ describe('chunk handling', () => {
   it('ignores an out-of-range seq', async () => {
     const { t, svc, phone } = await accepted();
     t.deliver({ ...phone.chunks()[0], seq: 5 });
-    await flush();
+    await settle();
     expect(t.lastOf('PROVE_REJECT')).toBeUndefined();
     svc.dispose();
   });
@@ -437,7 +498,7 @@ describe('chunk handling', () => {
     const [first] = phone.chunks();
     t.deliver(first);
     t.deliver(first);
-    await flush();
+    await settle();
     // Two chunks expected; a double-counted duplicate would have completed the job.
     expect(t.lastOf('PROVE_RESULT')).toBeUndefined();
     expect(svc.isBusy()).toBe(true);
@@ -450,16 +511,14 @@ describe('chunk handling', () => {
     // Phone signs a digest for PAYLOAD but ships different bytes of equal length.
     const phone = await makePhone('req-1', PAYLOAD);
     t.deliver(phone.init);
-    await flush();
-    phone.onAccept(t.lastOf('PROVE_ACCEPT')!);
+    phone.onAccept(await t.waitUntilSent('PROVE_ACCEPT'));
     const other = new Uint8Array(PAYLOAD.length).fill(0x41);
     const sealed = sealChunk(phone.keys().send, other, chunkAad('req-1', 'p2d', 0, 1));
     t.deliver({
       type: 'PROVE_CHUNK', reqId: 'req-1', to: 'desk-dev', seq: 0, count: 1,
       nonceHex: sealed.nonceHex, ciphertextB64: sealed.ciphertextB64,
     });
-    await flush();
-    expect((t.lastOf('PROVE_REJECT') as ProveReject).reason).toBe('digest_mismatch');
+    expect((await t.waitUntilSent('PROVE_REJECT')).reason).toBe('digest_mismatch');
     svc.dispose();
   });
 });
@@ -470,12 +529,12 @@ describe('cancel, timeout, failure, dispose', () => {
     const svc = createProveService(deps);
     const phone = await makePhone();
     t.deliver(phone.init);
-    await flush();
+    await settle();
     const cancel = await signProveMessage<ProveCancel>({
       type: 'PROVE_CANCEL', reqId: 'req-1', nonce: 'c1', from: PHONE, to: 'desk-dev',
     }, phoneKp.privKeyHex);
     t.deliver(cancel);
-    await flush();
+    await settle();
     expect(svc.isBusy()).toBe(false);
     svc.dispose();
   });
@@ -485,12 +544,12 @@ describe('cancel, timeout, failure, dispose', () => {
     const svc = createProveService(deps);
     const phone = await makePhone();
     t.deliver(phone.init);
-    await flush();
+    await settle();
     const cancel = await signProveMessage<ProveCancel>({
       type: 'PROVE_CANCEL', reqId: 'other', nonce: 'c1', from: PHONE, to: 'desk-dev',
     }, phoneKp.privKeyHex);
     t.deliver(cancel);
-    await flush();
+    await settle();
     expect(svc.isBusy()).toBe(true);
     svc.dispose();
   });
@@ -503,11 +562,10 @@ describe('cancel, timeout, failure, dispose', () => {
     const svc = createProveService(deps);
     const phone = await makePhone();
     t.deliver(phone.init);
-    await flush();
+    await settle();
     expect(svc.isBusy()).toBe(true);
     await new Promise((r) => { setTimeout(r, 80); });
-    await flush();
-    expect((t.lastOf('PROVE_REJECT') as ProveReject).reason).toBe('timeout');
+    expect((await t.waitUntilSent('PROVE_REJECT')).reason).toBe('timeout');
     expect(svc.isBusy()).toBe(false);
     svc.dispose();
   });
@@ -522,11 +580,10 @@ describe('cancel, timeout, failure, dispose', () => {
     const svc = createProveService(deps);
     const phone = await makePhone('req-ttl', PAYLOAD, { expiresAt: 1001 });
     t.deliver(phone.init);
-    await flush();
+    await settle();
     expect(svc.isBusy()).toBe(true);
     await new Promise((r) => { setTimeout(r, 160); });
-    await flush();
-    expect((t.lastOf('PROVE_REJECT') as ProveReject).reason).toBe('timeout');
+    expect((await t.waitUntilSent('PROVE_REJECT')).reason).toBe('timeout');
     expect(svc.isBusy()).toBe(false);
     svc.dispose();
   });
@@ -536,11 +593,9 @@ describe('cancel, timeout, failure, dispose', () => {
     const svc = createProveService(deps);
     const phone = await makePhone();
     t.deliver(phone.init);
-    await flush();
-    phone.onAccept(t.lastOf('PROVE_ACCEPT')!);
+    phone.onAccept(await t.waitUntilSent('PROVE_ACCEPT'));
     for (const c of phone.chunks()) t.deliver(c);
-    await flush();
-    expect((t.lastOf('PROVE_REJECT') as ProveReject).reason).toBe('prove_failed');
+    expect((await t.waitUntilSent('PROVE_REJECT')).reason).toBe('prove_failed');
     expect(svc.isBusy()).toBe(false);
     svc.dispose();
   });
@@ -551,7 +606,7 @@ describe('cancel, timeout, failure, dispose', () => {
     svc.dispose();
     const phone = await makePhone();
     t.deliver(phone.init);
-    await flush();
+    await settle();
     expect(t.sent).toHaveLength(0);
   });
 });
