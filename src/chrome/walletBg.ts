@@ -2229,8 +2229,8 @@ export class WalletBg {
 
   /** Unlock a private balance session without persisting a spending key or submitting a transaction. */
   async startMidnightPrivateSync(password?: string, prfSecret?: Uint8Array): Promise<void> {
-    if (this.chain !== Blockchain.MIDNIGHT || this.network.toLowerCase() !== 'stagenet') {
-      throw new Error('Private token synchronization requires a Midnight Stagenet wallet');
+    if (this.chain !== Blockchain.MIDNIGHT) {
+      throw new Error('Private token synchronization requires a Midnight wallet');
     }
     const { walletStore } = await import('@/stores/walletStore');
     const { midnightPrivateSessionEpoch, prepareMidnightPrivateSession, activateMidnightPrivateSession } = await import('@/chains/midnight/midnightPrivateSyncSession');
