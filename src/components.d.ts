@@ -16,6 +16,7 @@ declare module 'vue' {
     VAutocomplete: typeof import('vuetify/lib')['VAutocomplete']
     VAvatar: typeof import('vuetify/lib')['VAvatar']
     VBadge: typeof import('vuetify/lib')['VBadge']
+    VBottomSheet: typeof import('vuetify/lib')['VBottomSheet']
     VBtn: typeof import('vuetify/lib')['VBtn']
     VBtnToggle: typeof import('vuetify/lib')['VBtnToggle']
     VCard: typeof import('vuetify/lib')['VCard']
