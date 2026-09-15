@@ -70,6 +70,13 @@ npm run lint             # ESLint
 npm run pack             # Package .zip/.crx/.xpi
 ```
 
+## Release Process
+- **No `release/*` branches.** Releases are **tagged at release time**, on the commit actually built and submitted to the store. Don't cut a release branch, and don't recreate one referenced in older notes — the last (`release/2.7.1`) was deleted 2026-09-15 after never diverging from `development`.
+- A `chore(release): bump wallet version to x.y.z` commit on `development` is the marker that a release is being prepared. The tag is what records what shipped.
+- **Hotfix a shipped version** by branching from its tag at the moment you need it: `git switch -c hotfix/x.y.z vX.Y.Z`. That is the only thing a release branch provided, and a tag gives it on demand without carrying a branch.
+- The store build is triggered deliberately — `ci-cd.yml` runs on `main` plus manual `workflow_dispatch`, never off a release branch.
+- Deleting any remote branch: confirm it is a strict ancestor of `development` (`git merge-base --is-ancestor <branch> origin/development`) and that no open PR references it, or commits become unreachable.
+
 ## Key Rules
 
 ### ESLint
@@ -215,4 +222,4 @@ Use these slash commands when working on this project:
 - `/simplify` — Review changed code for quality and efficiency
 
 ---
-**Last Updated**: 2026-07-29
+**Last Updated**: 2026-09-15
