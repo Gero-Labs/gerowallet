@@ -5307,7 +5307,7 @@ app.addToOptions(
   async (request, sendResponse) => {
     try {
       const {
-        mode, localUrl, localProfile, zkpaasUrl, zkpaasApiKey, zkpaasApiSecret,
+        mode, localUrl, localUrlLedger9, zkpaasUrl, zkpaasApiKey, zkpaasApiSecret,
       } = request.data || {};
       if (mode !== 'remote' && mode !== 'local' && mode !== 'zkpaas') {
         throw new Error('mode must be "remote", "local" or "zkpaas"');
@@ -5323,10 +5323,14 @@ app.addToOptions(
       // Arkhia credentials), while an explicit '' means "clear it" ('' is
       // also the valid "derive the endpoint per network" state for the URL).
       const current = midnightStore.proofServer;
-      const selectedProfile = localProfile === undefined ? (current.localProfile ?? 'legacy') : localProfile;
-      if (selectedProfile !== 'legacy' && selectedProfile !== 'stagenet') {
-        throw new Error('localProfile must be legacy or stagenet');
+      // Optional like the zkPaaS fields: absent keeps the stored ledger-9 URL
+      // so older call sites that only send mode+localUrl cannot wipe it.
+      const localUrlLedger9Value = localUrlLedger9 === undefined || localUrlLedger9 === null
+        ? current.localUrlLedger9 : localUrlLedger9;
+      if (typeof localUrlLedger9Value !== 'string' || localUrlLedger9Value.length === 0) {
+        throw new Error('localUrlLedger9 must be a non-empty string');
       }
+      validateProofServerUrlField('localUrlLedger9', localUrlLedger9Value);
       const zkpaasUrlValue = zkpaasUrl === undefined || zkpaasUrl === null
         ? current.zkpaasUrl : zkpaasUrl;
       if (typeof zkpaasUrlValue !== 'string') throw new Error('zkpaasUrl must be a string');
@@ -5338,7 +5342,7 @@ app.addToOptions(
       midnightActions.setProofServer({
         mode,
         localUrl,
-        localProfile: selectedProfile,
+        localUrlLedger9: localUrlLedger9Value,
         zkpaasUrl: zkpaasUrlValue,
         zkpaasApiKey: zkpaasApiKeyValue,
         zkpaasApiSecret: zkpaasApiSecretValue,

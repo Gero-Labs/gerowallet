@@ -87,14 +87,11 @@
             <!-- Local setup guide -->
             <div v-if="proofServerMode === 'local'" class="ps-card">
               <h2 class="t-heading mb-3">{{ t('midnight.proofServerPage.setupTitle') }}</h2>
-              <v-select
-                v-model="localProverProfile"
-                :items="localProverProfiles"
-                :label="t('midnight.proofServer.localProfileLabel')"
-                :disabled="proofServerSaving"
-                outlined dense attach hide-details="auto"
-              />
-              <p class="t-caption mt-2 mb-4">{{ t('midnight.proofServer.localProfileHint') }}</p>
+              <!-- No profile to choose: the active wallet's network picks the
+                   server. Say which one so the steps below make sense. -->
+              <p class="t-caption mb-4">
+                {{ activeLedger9 ? t('midnight.proofServer.activeServerLedger9') : t('midnight.proofServer.activeServerLedger8') }}
+              </p>
 
               <div class="ps-step">
                 <div class="ps-step-badge">1</div>
@@ -171,7 +168,7 @@
                   <v-expansion-panel-content>
                     <v-text-field
                       v-model="localUrlDraft"
-                      :label="t('midnight.proofServer.urlLabel')"
+                      :label="t('midnight.proofServer.urlLabelLedger8')"
                       outlined
                       dense
                       hide-details="auto"
@@ -180,6 +177,18 @@
                       :disabled="proofServerSaving"
                       @blur="onLocalUrlBlur"
                     />
+                    <v-text-field
+                      v-model="localUrlLedger9Draft"
+                      :label="t('midnight.proofServer.urlLabelLedger9')"
+                      outlined
+                      dense
+                      hide-details="auto"
+                      class="mt-2 proof-server-url-field"
+                      :error-messages="localUrlLedger9Error ? [localUrlLedger9Error] : []"
+                      :disabled="proofServerSaving"
+                      @blur="onLocalUrlLedger9Blur"
+                    />
+                    <p class="t-caption mt-2">{{ t('midnight.proofServer.urlPerLedgerHint') }}</p>
                   </v-expansion-panel-content>
                 </v-expansion-panel>
               </v-expansion-panels>
@@ -407,10 +416,13 @@ const isMidnight = computed(() => loggedWallet.value?.chain === Blockchain.MIDNI
 const {
   proofServerMode,
   proofServerSaving,
-  localProverProfile,
   localUrlDraft,
   localUrlError,
   onLocalUrlBlur,
+  localUrlLedger9Draft,
+  localUrlLedger9Error,
+  onLocalUrlLedger9Blur,
+  activeLedger9,
   zkpaasUrlDraft,
   zkpaasUrlError,
   onZkpaasUrlBlur,
@@ -430,11 +442,6 @@ const {
   lastCheckLatencyMs,
   provingHistory,
 } = useMidnightProofServer();
-
-const localProverProfiles = computed(() => ([
-  { value: 'legacy', text: t('midnight.proofServer.localProfileLegacy') },
-  { value: 'stagenet', text: t('midnight.proofServer.localProfileStagenet') },
-]));
 
 const showZkpaasKey = ref(false);
 const showZkpaasSecret = ref(false);

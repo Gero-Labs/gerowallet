@@ -10,25 +10,33 @@
  * statically.
  */
 
-import { getMidnightEndpoints } from '@/chains/midnight/midnightConfig';
+import { getMidnightEndpoints, isLedger9Network } from '@/chains/midnight/midnightConfig';
 import { resolveZkpaasUrl, buildZkpaasHeaders, isZkpaasConfigured } from '@/chains/midnight/midnightZkpaas';
 import type { ZkpaasSettings } from '@/chains/midnight/midnightZkpaas';
 
 /** The slice of `midnightStore.proofServer` target resolution needs. */
 export interface ProofServerPreference extends ZkpaasSettings {
   mode: 'remote' | 'local' | 'zkpaas';
+  /** Local proof server for the ledger-8 networks (mainnet, preprod). */
   localUrl: string;
-  /** Circuit family the user's local server was started for; legacy (ledger 8) by default. */
-  localProfile?: 'legacy' | 'stagenet';
+  /**
+   * Local proof server for the ledger-9 network (stagenet). A separate URL
+   * rather than a "which ledger is my server" toggle: the two circuit
+   * families need two different servers, and keying the choice off the
+   * active wallet's network means there is nothing to switch when the user
+   * moves between networks. Absent on preferences stored before this field
+   * existed; callers fall back to the ledger-9 default.
+   */
+  localUrlLedger9?: string;
 }
 
 /**
- * Circuit family a network's proofs need. Ledger 8 networks (mainnet,
- * preprod) use the legacy proof server; Stagenet runs ledger 9. Accepts both
- * the wallet `Network` value and a `midnight-<id>` slug.
+ * The local proof-server URL for a network's circuit family. Ledger 8
+ * (mainnet, preprod) → `localUrl`; ledger 9 (stagenet) → `localUrlLedger9`.
+ * Accepts both the wallet `Network` value and a `midnight-<id>` slug.
  */
-export function localProfileForNetwork(network: string): 'legacy' | 'stagenet' {
-  return network.toLowerCase().replace(/^midnight-/, '') === 'stagenet' ? 'stagenet' : 'legacy';
+export function localUrlForNetwork(network: string, ps: Pick<ProofServerPreference, 'localUrl' | 'localUrlLedger9'>): string {
+  return isLedger9Network(network) ? (ps.localUrlLedger9 ?? '') : ps.localUrl;
 }
 
 /** A proof server the wallet can POST `/prove` + `/check` payloads to. */
@@ -55,8 +63,8 @@ export interface ProvingUnconfiguredTarget {
   reason:
     /** zkPaaS selected but no API key and no override URL — nothing to talk to. */
     | 'zkpaas-unconfigured'
-    /** Local server started for the other circuit family (ledger 8 vs 9). */
-    | 'local-profile-mismatch';
+    /** Local mode, but no URL is stored for this network's circuit family. */
+    | 'local-url-missing';
 }
 
 export type ProvingTarget =
@@ -72,10 +80,16 @@ export type ProvingTarget =
  */
 export function resolveProvingTarget(network: string, ps: ProofServerPreference): ProvingTarget {
   if (ps.mode === 'local') {
-    if ((ps.localProfile ?? 'legacy') !== localProfileForNetwork(network)) {
-      return { kind: 'unconfigured', mode: 'local', url: ps.localUrl, reason: 'local-profile-mismatch' };
+    // The network chooses the server. A missing URL is the only way local
+    // mode can be unusable before a health check; a server that is up but
+    // for the other ledger simply fails its health/prove and surfaces as
+    // "not detected" for THIS network's server, with the matching docker
+    // command on the settings page.
+    const url = localUrlForNetwork(network, ps);
+    if (!url) {
+      return { kind: 'unconfigured', mode: 'local', url: '', reason: 'local-url-missing' };
     }
-    return { kind: 'server', mode: 'local', url: ps.localUrl, lenientHealth: false };
+    return { kind: 'server', mode: 'local', url, lenientHealth: false };
   }
   if (ps.mode === 'zkpaas') {
     const url = resolveZkpaasUrl(network, ps);
@@ -132,11 +146,10 @@ export function resolveDappProvingTarget(network: string, ps: ProofServerPrefere
     return { url: target.url, headers: target.headers, source: target.mode };
   }
   if (target.kind === 'unconfigured') {
-    if (target.reason === 'local-profile-mismatch') {
-      const needed = localProfileForNetwork(network);
+    if (target.reason === 'local-url-missing') {
       throw new DappProvingUnavailableError(
-        `GeroWallet's local proof server is set up for the ${needed === 'stagenet' ? 'legacy' : 'Stagenet'} circuit family, `
-        + `but the connected wallet needs the ${needed} one. Pick the matching proof-server profile in GeroWallet's Midnight settings.`,
+        `GeroWallet has no local proof server URL for the ${isLedger9Network(network) ? 'ledger-9 (Stagenet)' : 'ledger-8'} `
+        + "circuit family. Set one in GeroWallet's Midnight proof-server settings.",
       );
     }
     throw new DappProvingUnavailableError(

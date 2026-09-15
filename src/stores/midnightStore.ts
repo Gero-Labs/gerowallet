@@ -39,9 +39,8 @@ import { getContextType } from '@/utils/storageSync';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 import { debugLog } from '@/utils/debug';
-import { getMidnightEndpoints } from '@/chains/midnight/midnightConfig';
+import { DEFAULT_LOCAL_PROOF_SERVER_URL, DEFAULT_LOCAL_PROOF_SERVER_URL_LEDGER9 } from '@/chains/midnight/midnightConfig';
 import { isNativeNight } from '@/chains/midnight/midnightTokenBalances';
-import { Network } from '@/models/types';
 import type {
   MidnightBalances,
   MidnightAddresses,
@@ -226,9 +225,16 @@ export interface MidnightStore {
    */
   proofServer: {
     mode: 'remote' | 'local' | 'zkpaas';
+    /** Local proof server for the ledger-8 networks (mainnet, preprod). */
     localUrl: string;
-    /** Explicit server circuit family for cross-device proving; legacy by default. */
-    localProfile?: 'legacy' | 'stagenet';
+    /**
+     * Local proof server for the ledger-9 network (stagenet). One URL per
+     * circuit family, chosen by the active wallet's network — replaces the
+     * old device-global `localProfile` toggle, which had to be flipped by
+     * hand on every network switch and, left on the wrong setting, made a
+     * running server look like a missing one.
+     */
+    localUrlLedger9: string;
     /** Arkhia endpoint override; '' = derive per network (midnightConfig). */
     zkpaasUrl: string;
     /** Arkhia project API key ('' until the user pastes one). */
@@ -332,8 +338,8 @@ const EMPTY_TIP: MidnightChainTip = {
  */
 const DEFAULT_PROOF_SERVER: MidnightStore['proofServer'] = {
   mode: 'remote',
-  localProfile: 'legacy',
-  localUrl: getMidnightEndpoints(Network.STAGENET)!.defaultProofServerUrl,
+  localUrl: DEFAULT_LOCAL_PROOF_SERVER_URL,
+  localUrlLedger9: DEFAULT_LOCAL_PROOF_SERVER_URL_LEDGER9,
   zkpaasUrl: '',
   zkpaasApiKey: '',
   zkpaasApiSecret: '',
@@ -691,15 +697,28 @@ export function hydratePrivateSyncProgress(stored: unknown): MidnightPrivateSync
   return { applied, highest, connected: connected === true };
 }
 
-function hydrateProofServer(stored: unknown): MidnightStore['proofServer'] {
+export function hydrateProofServer(stored: unknown): MidnightStore['proofServer'] {
   if (!stored || typeof stored !== 'object') return { ...DEFAULT_PROOF_SERVER };
   const mode = (stored as { mode?: unknown }).mode;
   const localUrl = (stored as { localUrl?: unknown }).localUrl;
   const zkpaasUrl = (stored as { zkpaasUrl?: unknown }).zkpaasUrl;
+  const storedLedger9 = (stored as { localUrlLedger9?: unknown }).localUrlLedger9;
+  // Migration from the retired `localProfile` toggle. A stored 'stagenet'
+  // profile meant "the server at localUrl is ledger 9", so that URL moves to
+  // the ledger-9 slot and the ledger-8 slot returns to its default — where a
+  // missing server now reads as "not detected" for THAT network rather than
+  // as a profile mismatch. The default profile ('legacy') needs no move.
+  const legacyProfileWasStagenet = storedLedger9 === undefined
+    && (stored as { localProfile?: unknown }).localProfile === 'stagenet'
+    && isValidProofServerUrl(localUrl);
   return {
     mode: mode === 'remote' || mode === 'local' || mode === 'zkpaas' ? mode : DEFAULT_PROOF_SERVER.mode,
-    localUrl: isValidProofServerUrl(localUrl) ? localUrl : DEFAULT_PROOF_SERVER.localUrl,
-    localProfile: (stored as { localProfile?: unknown }).localProfile === 'stagenet' ? 'stagenet' : 'legacy',
+    localUrl: legacyProfileWasStagenet
+      ? DEFAULT_PROOF_SERVER.localUrl
+      : (isValidProofServerUrl(localUrl) ? localUrl : DEFAULT_PROOF_SERVER.localUrl),
+    localUrlLedger9: legacyProfileWasStagenet
+      ? localUrl as string
+      : (isValidProofServerUrl(storedLedger9) ? storedLedger9 : DEFAULT_PROOF_SERVER.localUrlLedger9),
     // '' is the valid "derive per network" state, distinct from a corrupted
     // value — only non-empty overrides must parse as http(s) URLs.
     zkpaasUrl: zkpaasUrl === '' || isValidProofServerUrl(zkpaasUrl) ? zkpaasUrl as string : '',

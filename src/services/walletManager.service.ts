@@ -1674,7 +1674,10 @@ export class WalletManager {
     const { midnightStore } = await import('@/stores/midnightStore');
     // Capture one server profile and URL for the bridge lifetime. A settings
     // change disposes this bridge before advertising the replacement.
-    const profile = localProverProfile(midnightStore.proofServer.localProfile);
+    // Cross-device serving advertises the device's ledger-8 server; the
+    // ledger-9 URL is send-path only for now (serving both would need the
+    // bridge to advertise two provers).
+    const profile = localProverProfile('legacy');
     const localUrl = midnightStore.proofServer.localUrl;
     return bootstrapCrossDeviceSigning({
       label: 'Gero Extension',

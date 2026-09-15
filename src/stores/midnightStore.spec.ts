@@ -11,7 +11,7 @@
 // So retention is gated on the address HRP, and these cases exist to keep that
 // gate from quietly widening.
 import { describe, it, expect, beforeEach } from 'vitest';
-import { midnightStore, midnightActions, hydrateChainIdentity, hydratePrivateSyncProgress, hydratePrivateSyncStatus } from './midnightStore';
+import { midnightStore, midnightActions, hydrateChainIdentity, hydratePrivateSyncProgress, hydratePrivateSyncStatus, hydrateProofServer } from './midnightStore';
 import type { MidnightAddresses } from '@/chains/midnight/midnightTypes';
 
 /** A bech32m unshielded address; the data part deliberately carries no `1`. */
@@ -39,9 +39,9 @@ describe('midnight wallet switch: chain tip', () => {
   it('retains the explicit device prover profile when switching wallet networks', () => {
     const original = { ...midnightStore.proofServer };
     try {
-      midnightActions.setProofServer({ ...original, localProfile: 'stagenet' });
+      midnightActions.setProofServer({ ...original, localUrlLedger9: 'http://localhost:6399' });
       switchFrom(STAGENET, MAINNET_A);
-      expect(midnightStore.proofServer.localProfile).toBe('stagenet');
+      expect(midnightStore.proofServer.localUrlLedger9).toBe('http://localhost:6399');
     } finally { midnightActions.setProofServer(original); }
   });
   beforeEach(() => {
@@ -173,5 +173,43 @@ describe('site activity', () => {
     expect(midnightStore.siteActivity?.step).toBe('funding');
     midnightActions.clearSiteActivity();
     expect(midnightStore.siteActivity).toBeNull();
+  });
+});
+
+describe('proof server hydration: one local URL per ledger', () => {
+  const LEDGER8 = 'http://localhost:6300';
+  const LEDGER9 = 'http://localhost:6301';
+
+  it('defaults both ledger URLs when nothing is stored', () => {
+    const ps = hydrateProofServer(undefined);
+    expect(ps.localUrl).toBe(LEDGER8);
+    expect(ps.localUrlLedger9).toBe(LEDGER9);
+  });
+
+  it('keeps a stored ledger-9 URL and ignores the retired localProfile once the new field exists', () => {
+    const ps = hydrateProofServer({ mode: 'local', localUrl: LEDGER8, localUrlLedger9: 'http://localhost:7000', localProfile: 'stagenet' });
+    expect(ps.localUrl).toBe(LEDGER8);
+    expect(ps.localUrlLedger9).toBe('http://localhost:7000');
+  });
+
+  it('migrates a stored "stagenet" profile: that server moves to the ledger-9 slot', () => {
+    // Before this field, localProfile: 'stagenet' meant "the server at
+    // localUrl is ledger 9". Keep serving that user's stagenet sends from the
+    // same server; the ledger-8 slot returns to its default, where a missing
+    // server now reads as "not detected" for THAT network.
+    const ps = hydrateProofServer({ mode: 'local', localUrl: 'http://localhost:6300', localProfile: 'stagenet' });
+    expect(ps.localUrlLedger9).toBe('http://localhost:6300');
+    expect(ps.localUrl).toBe(LEDGER8);
+  });
+
+  it('leaves a stored "legacy" profile alone: the server stays in the ledger-8 slot', () => {
+    const ps = hydrateProofServer({ mode: 'local', localUrl: 'http://localhost:6400', localProfile: 'legacy' });
+    expect(ps.localUrl).toBe('http://localhost:6400');
+    expect(ps.localUrlLedger9).toBe(LEDGER9);
+  });
+
+  it('falls back to the ledger-9 default when the stored value is not a URL', () => {
+    const ps = hydrateProofServer({ mode: 'local', localUrl: LEDGER8, localUrlLedger9: 'not a url' });
+    expect(ps.localUrlLedger9).toBe(LEDGER9);
   });
 });

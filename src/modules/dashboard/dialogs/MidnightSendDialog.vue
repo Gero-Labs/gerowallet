@@ -455,6 +455,7 @@ import type { MidnightSendStage } from '@/services/midnight-tx.service';
 import type { ProvingUnconfiguredTarget } from '@/chains/midnight/midnightProvingTarget';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain, Network, WalletType } from '@/models/types';
+import { isLedger9Network } from '@/chains/midnight/midnightConfig';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { midnightTokenBalances } from '@/chains/midnight/midnightTokenBalances';
 import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
@@ -812,18 +813,16 @@ const checkingLocalProver = ref(false);
 // including the one-off "use Gero Cloud" fallback).
 const consentProvider = ref<'cloud' | 'zkpaas'>('cloud');
 // Fallback-note copy tracks the mode that failed its preflight.
-// Keyed off WHY the prover was refused, not just which mode is selected. A
-// local server started for the other circuit family (ledger 8 vs 9) is not
-// "not detected" — it is running and answering, just for the wrong network —
-// and telling the user to "start it" sends them in circles. Name the
-// mismatch and the profile to switch to. Gero Cloud stays on offer: the
-// sidecar proves both ledger lines, so it is a valid way through.
+// Name the server that was not found. Each ledger has its own local server
+// (different circuit families, different default ports), and the wallet
+// picks by network — so "not detected" must say WHICH one, or a user with
+// the ledger-8 server running on stagenet is told to start something that
+// is already up. Gero Cloud stays on offer: the sidecar proves both lines.
 const proverFallbackText = computed(() => {
-  if (proverFallbackReason.value === 'local-profile-mismatch') {
-    return t('midnight.proofServer.localProfileMismatchSend');
-  }
-  return midnightStore.proofServer.mode === 'zkpaas'
-    ? t('midnight.proofServer.zkpaasNotReachableSend')
+  if (midnightStore.proofServer.mode === 'zkpaas') return t('midnight.proofServer.zkpaasNotReachableSend');
+  if (proverFallbackReason.value === 'local-url-missing') return t('midnight.proofServer.localUrlMissingSend');
+  return isLedger9Network(loggedWallet.value?.network)
+    ? t('midnight.proofServer.notDetectedSendLedger9')
     : t('midnight.proofServer.notDetectedSend');
 });
 // Reason carried by the ProofServerUnreachableError that tripped the fallback.
