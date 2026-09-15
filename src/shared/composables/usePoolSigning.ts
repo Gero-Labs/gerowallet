@@ -529,7 +529,7 @@ export function usePoolSigning(options: {
       const onChainVrf = pool?.vrf_key_hash as string | undefined;
       if (!onChainVrf) {
         throw new Error(
-          "Could not fetch the pool's on-chain VRF key hash to verify the update — aborting for safety.",
+          "Could not fetch the pool's on-chain VRF key hash to verify the update. Aborting for safety.",
         );
       }
       const validation = validateAssembledUpdate({

@@ -74,7 +74,7 @@
             <div class="amount-meta">
               <span v-if="amountError" class="field-error-msg">{{ amountError }}</span>
               <span v-else class="field-hint">
-                Min: {{ formatBtc(props.params?.min_staking_amount ?? 0) }} —
+                Min: {{ formatBtc(props.params?.min_staking_amount ?? 0) }} ·
                 Max: {{ formatBtc(props.params?.max_staking_amount ?? 0) }} BTC
               </span>
             </div>

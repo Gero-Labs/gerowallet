@@ -86,7 +86,7 @@ export function useVoting() {
     // derived a DRep key has an empty one — guard it, don't index blindly.
     const drepId = keys.value?.drep129?.[0]?.address;
     if (!drepId) {
-      throw new Error('This wallet has no DRep key — register as a DRep before voting');
+      throw new Error('This wallet has no DRep key. Register as a DRep before voting');
     }
 
     if (!epochParams.value) {

@@ -2425,7 +2425,7 @@ export class WalletBg {
         : undefined;
       if (storedPublicKey && bgPublicKey !== storedPublicKey) {
         debugLog('[MidnightSign] BG-derived pubkey does not match stored pubkey — aborting sign');
-        throw new Error('Midnight signing key mismatch — please re-add this wallet');
+        throw new Error('Midnight signing key mismatch. Re-add this wallet');
       }
 
       const results: Array<{ index: number; signatureHex: string }> = [];
@@ -2530,7 +2530,7 @@ export class WalletBg {
         : undefined;
       if (storedPublicKey && bgPublicKey !== storedPublicKey) {
         debugLog('[MidnightConnector signData] BG-derived pubkey does not match stored pubkey — aborting sign');
-        throw new Error('Midnight signing key mismatch — please re-add this wallet');
+        throw new Error('Midnight signing key mismatch. Re-add this wallet');
       }
 
       const prefix = Buffer.from(`midnight_signed_message:${dataBytes.length}:`, 'utf-8');
@@ -2672,7 +2672,7 @@ export class WalletBg {
           const livePublicKeyHex = derived.publicKeyHex;
           if (livePublicKeyHex !== storedPublicKeyHex) {
             throw new Error(
-              `Midnight key derivation mismatch — BG-derived publicKey ` +
+              `Midnight key derivation mismatch: BG-derived publicKey ` +
               `(${livePublicKeyHex.slice(0, 16)}…) doesn't match the wallet record's ` +
               `stored publicKey (${storedPublicKeyHex.slice(0, 16)}…). The wallet ` +
               `was created with a different bundle's bip39/HD derivation than the ` +
@@ -2861,7 +2861,7 @@ export class WalletBg {
         const storedViewingKey = parsed?.zswapViewingKey;
         if (storedViewingKey && storedViewingKey !== derived.zswapViewingKey) {
           throw new Error(
-            `Midnight viewing-key mismatch — BG-derived viewing key ` +
+            `Midnight viewing-key mismatch: BG-derived viewing key ` +
             `(${derived.zswapViewingKey.slice(0, 16)}…) doesn't match the ` +
             `wallet record's stored viewing key (${storedViewingKey.slice(0, 16)}…). ` +
             `Sync was running against the wrong key; the local note set is unsound.`,
@@ -2996,7 +2996,7 @@ export class WalletBg {
       parsed = null;
     }
     if (!parsed?.publicKeyHex || !parsed?.addressHex) {
-      throw new Error('Midnight wallet record is missing derived keys — recreate the wallet.');
+      throw new Error('Midnight wallet record is missing derived keys. Recreate the wallet.');
     }
     return {
       publicKeyHex: parsed.publicKeyHex,
