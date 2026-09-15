@@ -97,6 +97,27 @@ function progressOf(state: SdkState): MidnightPrivateSyncProgress {
   };
 }
 
+type SdkModules = [
+  typeof import('@midnight-ntwrk/ledger-v8'),
+  typeof import('@midnightntwrk/wallet-sdk-shielded'),
+  typeof import('@midnightntwrk/wallet-sdk-abstractions'),
+  typeof import('@midnightntwrk/wallet-sdk-address-format'),
+];
+let sdkModules: Promise<SdkModules> | undefined;
+
+/** Loaded once per worker; a stall-restart must not pay the import cost again. */
+function loadSdkModules(): Promise<SdkModules> {
+  if (!sdkModules) {
+    sdkModules = Promise.all([
+      import('@midnight-ntwrk/ledger-v8'),
+      import('@midnightntwrk/wallet-sdk-shielded'),
+      import('@midnightntwrk/wallet-sdk-abstractions'),
+      import('@midnightntwrk/wallet-sdk-address-format'),
+    ]);
+  }
+  return sdkModules;
+}
+
 let current: PrivateSync8 | undefined;
 
 class PrivateSync8 {
@@ -118,6 +139,8 @@ class PrivateSync8 {
   private appliedAtAttemptStart = -1;
   private restarts = 0;
   private barrenRestarts = 0;
+  /** Set once the restart caps are hit: `error` is then terminal until a new session starts. */
+  private gaveUp = false;
 
   constructor(readonly args: MidnightPrivateSync8Args) {
     this.seed = args.seed.slice();
@@ -161,12 +184,7 @@ class PrivateSync8 {
   }
 
   private async openWallet(): Promise<void> {
-    const [ledgerMod, shieldedMod, abstractionsMod, addressMod] = await Promise.all([
-      import('@midnight-ntwrk/ledger-v8'),
-      import('@midnightntwrk/wallet-sdk-shielded'),
-      import('@midnightntwrk/wallet-sdk-abstractions'),
-      import('@midnightntwrk/wallet-sdk-address-format'),
-    ]);
+    const [ledgerMod, shieldedMod, abstractionsMod, addressMod] = await loadSdkModules();
     if (!this.isCurrent()) return;
     const sdkNetworkId = this.args.endpoints.sdkNetworkId;
     this.keys = ledgerMod.ZswapSecretKeys.fromSeed(this.seed);
@@ -258,13 +276,19 @@ class PrivateSync8 {
     });
     await this.releaseWallet();
     if (this.barrenRestarts >= PRIVATE_SYNC_MAX_BARREN_RESTARTS || this.restarts > PRIVATE_SYNC_MAX_RESTARTS) {
+      // Terminal: no more scheduled cycles, so `error` sticks until the user
+      // re-triggers sync (unlock / "Unlock private balances" / wallet switch),
+      // which builds a fresh session with fresh counters.
+      this.gaveUp = true;
+      if (this.timer) clearInterval(this.timer);
+      this.timer = undefined;
       throw new Error('Private balance synchronization is not receiving events');
     }
     await this.openWallet();
   }
 
   private async cycle(): Promise<void> {
-    if (this.busy || !this.isCurrent()) return;
+    if (this.busy || this.gaveUp || !this.isCurrent()) return;
     this.busy = true;
     try {
       if (!this.wallet) {

@@ -173,6 +173,14 @@ describe('ledger-8 private sync', () => {
     expect(h.start).toHaveBeenCalledTimes(PRIVATE_SYNC_MAX_BARREN_RESTARTS);
     expect(h.status).toHaveBeenLastCalledWith('error');
     expect(h.save).not.toHaveBeenCalled(); // nothing to bank: no state ever arrived
+
+    // `error` is terminal: later ticks must not reopen the wallet or flip back to `syncing`.
+    const startsAtGiveUp = h.start.mock.calls.length;
+    const statusCallsAtGiveUp = h.status.mock.calls.length;
+    await advance(180_000);
+    expect(h.start).toHaveBeenCalledTimes(startsAtGiveUp);
+    expect(h.status.mock.calls.length).toBe(statusCallsAtGiveUp);
+    expect(h.store.privateSyncStatus).toBe('error');
   });
 
   it('stops the SDK wallet and reports idle on stop', async () => {
