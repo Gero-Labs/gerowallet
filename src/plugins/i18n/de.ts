@@ -4945,6 +4945,7 @@ export default {
   'midnight.proofServer.testConnection': 'Verbindung testen',
   // Fallback im Sendedialog bei lokalem Prover (WP-P5)
   'midnight.proofServer.notDetectedSend': 'Lokaler Proof-Server nicht erkannt. Starte ihn oder nutze Gero Cloud für diese Transaktion.',
+  'midnight.proofServer.localProfileMismatchSend': 'Dein lokaler Proof-Server ist auf das andere Netzwerkprofil eingestellt. Stagenet braucht das Stagenet-Profil (Ledger 9), Mainnet und Preprod brauchen Mainnet / Preprod. Wechsle es in den Proof-Server-Einstellungen oder nutze Gero Cloud für diese Transaktion.',
   'midnight.proofServer.useCloudOnce': 'Gero Cloud für diese Transaktion nutzen',
   'midnight.proofServer.openSettings': 'Einstellungen öffnen',
   // Arkhia zkPaaS (gehosteter Midnight-Prover hinter dem Arkhia-Gateway)
