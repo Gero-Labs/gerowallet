@@ -4733,6 +4733,7 @@ export default {
   'midnight.privateBalances.refresh': 'Private Guthaben entsperren',
   'midnight.privateBalances.explanation': 'Private Token-Guthaben werden auf diesem Gerät synchronisiert. NIGHT bleibt öffentlich.',
   'midnight.privateBalances.syncing': 'Private Notizen werden synchronisiert…',
+  'midnight.privateBalances.progress': '{applied} / {highest} Ereignisse angewendet',
   'midnight.privateBalances.locked': 'Entsperren, um Ihre privaten Token zu synchronisieren.',
   'midnight.privateBalances.empty': 'Keine privaten Token gefunden.',
   'midnight.privateBalances.baseUnits': 'Basiseinheiten',

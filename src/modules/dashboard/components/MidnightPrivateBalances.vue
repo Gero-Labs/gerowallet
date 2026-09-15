@@ -9,7 +9,10 @@
     </div>
     <p class="t-caption text--secondary">{{ t('midnight.privateBalances.explanation') }}</p>
     <p v-if="midnightStore.privateSyncStatus !== 'synced'" class="t-caption">
-      {{ t(syncing ? 'midnight.privateBalances.syncing' : 'midnight.privateBalances.locked') }}
+      {{ t(syncing ? 'midnight.privateBalances.syncing' : failed ? 'midnight.privateBalances.failed' : 'midnight.privateBalances.locked') }}
+      <span v-if="syncing && progress" class="g-num">
+        {{ t('midnight.privateBalances.progress', { applied: progress.applied, highest: progress.highest }) }}
+      </span>
     </p>
     <p v-else-if="!tokens.length" class="t-caption">{{ t('midnight.privateBalances.empty') }}</p>
     <div v-for="token in tokens" :key="token.color" class="d-flex justify-space-between t-caption g-num">
@@ -57,6 +60,8 @@ const wallet = computed(() => walletStore.loggedWallet);
 const isMidnight = computed(() => wallet.value?.chain === Blockchain.MIDNIGHT);
 const isPrf = computed(() => wallet.value?.encryptionMethod === 'prf');
 const syncing = computed(() => midnightStore.privateSyncStatus === 'syncing');
+const failed = computed(() => midnightStore.privateSyncStatus === 'error');
+const progress = computed(() => midnightStore.privateSyncProgress);
 const tokens = computed(() => Object.entries(midnightStore.privateSyncStatus === 'synced'
   ? (midnightStore.balances.shieldedTokens ?? {}) : {}).map(([color, amount]) => ({
   color, label: midnightTokenMeta(color)?.symbol ?? `${color.slice(0, 8)}…${color.slice(-6)}`, amount: amount.toString(),

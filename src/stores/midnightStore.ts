@@ -103,6 +103,21 @@ export interface MidnightProvingLogEntry {
  * (authorize → build → sync → sign → submit) locally via its onStage
  * callback and attaches this percentage to whichever phase is active.
  */
+/**
+ * Live progress of the background private (shielded) sync, broadcast from
+ * the ledger-8 loop so the dashboard can show a cold sync moving instead of
+ * an indeterminate "Synchronizing…". Indexer event indices, not notes.
+ * Transient like {@link MidnightSendProgress}; `null` when not syncing.
+ */
+export interface MidnightPrivateSyncProgress {
+  /** Highest indexer event index the wallet has applied. */
+  applied: number;
+  /** Highest indexer event index known to be relevant to this wallet. */
+  highest: number;
+  /** Whether the SDK reports its indexer subscription as connected. */
+  connected: boolean;
+}
+
 export interface MidnightSendProgress {
   /** Which background phase this refers to (e.g. 'syncingDust'). */
   phase: 'syncingDust';
@@ -172,6 +187,8 @@ export interface MidnightStore {
   lastMidnightTxId: number | null;
   chainIdentity: MidnightSyncIdentity | null;
   privateSyncStatus: 'idle' | 'syncing' | 'synced' | 'error';
+  /** See {@link MidnightPrivateSyncProgress}; only meaningful while `privateSyncStatus` is `syncing`. */
+  privateSyncProgress: MidnightPrivateSyncProgress | null;
 
   /**
    * Record of the user's consent to send shielded-tx witness data through
@@ -332,6 +349,7 @@ export const midnightStore = Vue.observable<MidnightStore>({
   lastMidnightTxId: null,
   chainIdentity: null,
   privateSyncStatus: 'idle',
+  privateSyncProgress: null,
   shieldedProvingConsent: null,
   activeWalletKey: null,
   sendProgress: null,
@@ -671,7 +689,7 @@ function applyUpdates(updates: Partial<MidnightStore>) {
   // Plain-typed fields — copy directly (no BigInt nesting to handle)
   for (const key of [
     'isActive', 'lastSync', 'networkStatus', 'tip', 'addresses', 'lastMidnightTxId', 'chainIdentity', 'privateSyncStatus',
-    'shieldedProvingConsent', 'activeWalletKey', 'sendProgress', 'shieldedSyncAvailable',
+    'shieldedProvingConsent', 'activeWalletKey', 'sendProgress', 'privateSyncProgress', 'shieldedSyncAvailable',
     'proofServer',
   ] as const) {
     if (key in updates) {
@@ -745,7 +763,19 @@ export function isValidMidnightViewingKey(vk: string | undefined | null): boolea
 export const midnightActions = {
   setPrivateSyncStatus(privateSyncStatus: MidnightStore['privateSyncStatus']) {
     midnightStore.privateSyncStatus = privateSyncStatus;
-    broadcastFromBackground({ privateSyncStatus });
+    if (privateSyncStatus === 'syncing') {
+      broadcastFromBackground({ privateSyncStatus });
+      return;
+    }
+    // Progress counters only mean something mid-sync; drop them with the state.
+    midnightStore.privateSyncProgress = null;
+    broadcastFromBackground({ privateSyncStatus, privateSyncProgress: null });
+  },
+
+  /** Live cold-sync counters from the ledger-8 private loop (sampled, transient). */
+  setPrivateSyncProgress(privateSyncProgress: MidnightPrivateSyncProgress | null) {
+    midnightStore.privateSyncProgress = privateSyncProgress;
+    broadcastFromBackground({ privateSyncProgress });
   },
   applyPrivateSnapshot(shieldedTokens: Record<string, bigint>, transactions: MidnightTransaction[]) {
     const balances = { ...midnightStore.balances, shieldedTokens, nightShielded: 0n };
@@ -819,6 +849,7 @@ export const midnightActions = {
         lastMidnightTxId: null,
         chainIdentity: null,
         privateSyncStatus: 'idle',
+        privateSyncProgress: null,
       });
       debugLog(`🌙 Midnight wallet switch detected (${prevKey.slice(-8)} → ${newKey.slice(-8)}) — cleared stale state`);
     }
@@ -845,6 +876,7 @@ export const midnightActions = {
           lastMidnightTxId: null,
           chainIdentity: null,
           privateSyncStatus: 'idle',
+          privateSyncProgress: null,
         }
         : { isActive: true, addresses: safeAddresses, activeWalletKey: newKey, networkStatus: 'connecting', shieldedSyncAvailable },
       true,
