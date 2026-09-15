@@ -109,7 +109,14 @@
     </v-row>
 
     <UnstakeDialog :is-open="unstakeDialog" @close="closeUnstakeDialog" :tx="unstakeTxData"></UnstakeDialog>
-    <WithdrawalDialog :is-open="withdrawalDialog" @close="closeWithdrawalDialog" :tx="withdrawalTxData"
+    <!-- Two withdrawal surfaces, one open at a time.
+         CIP-1694 blocks a bare withdrawal until the stake key has delegated its
+         vote, and `useWithdrawal` raises `withdrawalBlocked` on that branch with
+         NO transaction built. The old dialog has nothing to show in that state,
+         so the gate takes over: it explains the rule and offers both ways out.
+         The unblocked path is untouched. -->
+    <WithdrawGateDialog :is-open="withdrawalBlocked" @close="closeWithdrawalDialog" />
+    <WithdrawalDialog :is-open="withdrawalDialog && !withdrawalBlocked" @close="closeWithdrawalDialog" :tx="withdrawalTxData"
       :compensation-info="compensationInfo" :skip-compensation="skipCompensation"
       @update:skipCompensation="skipCompensation = $event"
     ></WithdrawalDialog>
@@ -124,6 +131,7 @@ import filters from '@/shared/utils/filters';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import UnstakeDialog from '@/modules/staking/dialogs/UnstakeDialog.vue';
 import WithdrawalDialog from '@/modules/staking/dialogs/WithdrawalDialog.vue';
+import WithdrawGateDialog from '@/modules/governance/dialogs/WithdrawGateDialog.vue';
 import networks from '@/utils/networks';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
@@ -133,7 +141,7 @@ import { Blockchain } from '@/models/types';
 
 // Use the unstake and withdrawal composables
 const { txData: unstakeTxData, unstakeDialog, unstake, closeUnstakeDialog } = useUnstake();
-const { txData: withdrawalTxData, withdrawalDialog, withdraw, closeWithdrawalDialog, skipCompensation, compensationInfo } = useWithdrawal();
+const { txData: withdrawalTxData, withdrawalDialog, withdrawalBlocked, withdraw, closeWithdrawalDialog, skipCompensation, compensationInfo } = useWithdrawal();
 
 const { loggedWallet, rewards, account } = toRefs(walletStore);
 const { loadingTxs } = toRefs(loadingState);

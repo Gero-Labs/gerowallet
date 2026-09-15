@@ -170,6 +170,7 @@
   </v-form>
 </template>
 <script setup lang="ts">
+import { validateCip45Signing } from '@/services/cip45/signingAuthorization';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, getCurrentInstance, onMounted, ref, toRefs } from 'vue';
 import rules from '@/utils/rules';
@@ -251,6 +252,12 @@ const decline = async () => {
 };
 
 const confirm = async () => {
+  try {
+    await validateCip45Signing(request.value?.data);
+  } catch {
+    await decline();
+    return;
+  }
   await controller.value.returnData({ data: signature.value, error: undefined });
   window.close();
 };
@@ -258,6 +265,7 @@ const confirm = async () => {
 const signDataLocallyWithPrf = async () => {
   loading.value = true;
   try {
+    await validateCip45Signing(request.value?.data);
     const address = request.value.data.address;
     const payload = request.value.data.payload;
 
@@ -375,6 +383,7 @@ const signDataLocallyWithPrf = async () => {
     }
 
     // Step 5: Sign with proper COSE format
+    await validateCip45Signing(request.value?.data);
     signature.value = buildSignatureAndCoseKey(addressBytes, payload, signingKey);
 
     if (txAutoSubmit.value) {
@@ -398,12 +407,14 @@ const signAndReturnTx = async () => {
   // Normal wallets: Send to background for signing
   loading.value = true;
   try {
+    await validateCip45Signing(request.value?.data);
     const address = request.value.data.address;
     const payload = request.value.data.payload;
 
     const res = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SIGN_DATA,
       data: {
+        cip45Authorization: request.value?.data?.cip45Authorization,
         address,
         payload,
         password: spendingPassword.value,
@@ -460,6 +471,7 @@ const sign = async () => {
     const address = request.value.data.address;
     const payload = request.value.data.payload;
     try {
+      await validateCip45Signing(request.value?.data);
       // Create known addresses from wallet keys for Ledger signing
       const network = networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network);
       const knownAddresses = ledger.createKnownAddressesFromKeys(keys.value, network);
@@ -511,8 +523,10 @@ const sign = async () => {
     const address = request.value.data.address;
     const payload = request.value.data.payload;
     try {
+      await validateCip45Signing(request.value?.data);
       const data = {
         method: 'signData',
+        cip45Authorization: request.value?.data?.cip45Authorization,
         address,
         payload,
         accountIndex: 0
@@ -555,6 +569,8 @@ const sign = async () => {
     }
 
     try {
+
+      await validateCip45Signing(request.value?.data);
       const address = request.value.data.address;
       const payload = request.value.data.payload;
 
@@ -631,6 +647,7 @@ const sign = async () => {
 
 const onKeystoneScan = async (ur: UR) => {
   try {
+    await validateCip45Signing(request.value?.data);
     console.log('[Keystone] Received UR object:', ur);
     console.log('[Keystone] UR type:', ur?.type);
     console.log('[Keystone] UR cbor type:', typeof ur?.cbor);

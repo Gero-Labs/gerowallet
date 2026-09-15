@@ -1,6 +1,10 @@
 import Vue from 'vue';
 import featureFlagService from '@/services/featureFlag.service';
 
+// Build-time default for the CIP-45 flag (dev/test only); a flag-service value still wins.
+const CIP45_DEFAULT_ENABLED =
+  (import.meta as { env?: Record<string, unknown> }).env?.['VITE_CIP45_DEFAULT_ENABLED'] === 'true';
+
 export interface FeatureFlags {
   swapEnabled: boolean;
   isGeroCardEnabled: boolean;
@@ -14,6 +18,19 @@ export interface FeatureFlags {
   // Master gate for the daemon-free Trezor WebUSB signing path.
   isTrezorWebUsbEnabled: boolean;
   isPoolOperatorEnabled: boolean;
+  // Master gate for the Cardano on-chain governance surface (CIP-1694): the
+  // /governance route, its nav item and the global-search DRep results. Default
+  // OFF and ships dark. Network support is a SEPARATE gate —
+  // `networks.resolveGovernanceSupport` — so both must pass before the route or
+  // the nav item appears.
+  isGovernanceEnabled: boolean;
+  // Sub-gate for CASTING governance votes (the CastVoteDialog / VoteCta surface).
+  // Default OFF and ships dark, SEPARATELY from `isGovernanceEnabled`: voting is a
+  // value-moving surface (signed, irreversible on-chain statements), so the read
+  // surface can go live while vote casting is still being verified on preprod.
+  // Callers must AND it with `isGovernanceEnabled` — a vote affordance only makes
+  // sense on a visible governance surface.
+  isGovernanceVotingEnabled: boolean;
   // Master gate for the RealFi Earn surface (USDr / sUSDr yield). Default OFF and
   // ships dark: RealFi is a value-moving surface, so it is enabled deliberately via
   // gero-sync, never by a flag-service outage. Network support is a SEPARATE gate —
@@ -48,6 +65,18 @@ export interface FeatureFlags {
   // and the Connected dApps UI hides the WalletConnect section until flipped ON
   // via gero-sync — acts as a remote KILL-SWITCH.
   isWalletConnectEnabled: boolean;
+  // Master gate for the CIP-45 (WebRTC dApp bridge) pairing/signing surface.
+  // Default OFF: the peerjs signaling connection and the Connected dApps CIP-45
+  // section stay dark until flipped ON via gero-sync — acts as a remote
+  // KILL-SWITCH, mirroring isWalletConnectEnabled.
+  isCip45Enabled: boolean;
+  // Master gate for CIP-113 programmable-token support (display only in Stage 1).
+  // Default OFF and ships dark. The per-network deployment list in
+  // `cip113Deployments.ts` is a SEPARATE gate — both must pass — but that one is a
+  // build-time constant, so this flag is the only kill-switch that does not need a
+  // rebuild and a Web Store review. Read in the background through the
+  // chrome.storage mirror; see src/chrome/cip113Flag.ts.
+  isCip113Enabled: boolean;
   /**
    * Origins allowed to draw from the Nexus shared-pool collateral. A dApp must be
    * on this Gero-curated list AND already connected by the user before the wallet
@@ -78,6 +107,8 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
     isBitcoinEnabled: false,
     isTrezorWebUsbEnabled: false,
     isPoolOperatorEnabled: false,
+    isGovernanceEnabled: false,
+    isGovernanceVotingEnabled: false,
     isRealFiEnabled: false,
     isNexusWithdrawalEnabled: false,
     isNexusUnstakeEnabled: false,
@@ -89,7 +120,9 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
     isMidnightConvertEnabled: false,
     isGoogleWalletEnabled: false,
     isWalletConnectEnabled: false,
+    isCip45Enabled: CIP45_DEFAULT_ENABLED,
     isLiveChatEnabled: false,
+    isCip113Enabled: false,
     collateralTrustedDapps: [],
   },
   isInitialized: false,
@@ -147,6 +180,8 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isBitcoinEnabled = featureFlagService.getFlag('isBitcoinEnabled', false);
     featureFlagsState.flags.isTrezorWebUsbEnabled = featureFlagService.getFlag('isTrezorWebUsbEnabled', false);
     featureFlagsState.flags.isPoolOperatorEnabled = featureFlagService.getFlag('isPoolOperatorEnabled', false);
+    featureFlagsState.flags.isGovernanceEnabled = featureFlagService.getFlag('isGovernanceEnabled', false);
+    featureFlagsState.flags.isGovernanceVotingEnabled = featureFlagService.getFlag('isGovernanceVotingEnabled', false);
     featureFlagsState.flags.isRealFiEnabled = featureFlagService.getFlag('isRealFiEnabled', false);
     featureFlagsState.flags.isNexusWithdrawalEnabled = featureFlagService.getFlag('isNexusWithdrawalEnabled', false);
     featureFlagsState.flags.isNexusUnstakeEnabled = featureFlagService.getFlag('isNexusUnstakeEnabled', false);
@@ -162,8 +197,13 @@ export const featureFlagsStore = {
     // WalletConnect ships DARK (default false); the background reads this mirror
     // to decide whether to init WalletKit at all.
     featureFlagsState.flags.isWalletConnectEnabled = featureFlagService.getFlag('isWalletConnectEnabled', false);
+    // CIP-45 ships DARK (default false); mirrors isWalletConnectEnabled's gating pattern.
+    featureFlagsState.flags.isCip45Enabled = featureFlagService.getFlag('isCip45Enabled', CIP45_DEFAULT_ENABLED);
     // Live support chat ships DARK (default false) until the Chatwoot inbox is staffed.
     featureFlagsState.flags.isLiveChatEnabled = featureFlagService.getFlag('isLiveChatEnabled', false);
+    // CIP-113 ships DARK (default false); the background reads this mirror to decide
+    // whether to partition UTxOs at all.
+    featureFlagsState.flags.isCip113Enabled = featureFlagService.getFlag('isCip113Enabled', false);
     featureFlagsState.flags.collateralTrustedDapps = featureFlagService.getFlag<string[]>('collateralTrustedDapps', []);
     persistFlagsForBackground();
   },
@@ -192,6 +232,12 @@ export const featureFlagsStore = {
     });
     featureFlagService.onFlagChange('isPoolOperatorEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isPoolOperatorEnabled', newValue);
+    });
+    featureFlagService.onFlagChange('isGovernanceEnabled', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'isGovernanceEnabled', newValue);
+    });
+    featureFlagService.onFlagChange('isGovernanceVotingEnabled', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'isGovernanceVotingEnabled', newValue);
     });
     featureFlagService.onFlagChange('isRealFiEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isRealFiEnabled', newValue);
@@ -232,8 +278,18 @@ export const featureFlagsStore = {
       // Mirror the live flip so the background picks it up on next login/init.
       persistFlagsForBackground();
     });
+    featureFlagService.onFlagChange('isCip45Enabled', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'isCip45Enabled', newValue);
+      // Mirror the live flip so the background picks it up on next login/init.
+      persistFlagsForBackground();
+    });
     featureFlagService.onFlagChange('isLiveChatEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isLiveChatEnabled', newValue);
+    });
+    featureFlagService.onFlagChange('isCip113Enabled', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'isCip113Enabled', newValue);
+      // Mirror the live flip so the background gate picks it up without a re-login.
+      persistFlagsForBackground();
     });
     featureFlagService.onFlagChange('collateralTrustedDapps', (newValue) => {
       Vue.set(featureFlagsState.flags, 'collateralTrustedDapps', Array.isArray(newValue) ? newValue : []);
@@ -292,6 +348,30 @@ export const featureFlagsStore = {
    */
   isPoolOperatorEnabled(): boolean {
     return featureFlagsState.flags.isPoolOperatorEnabled;
+  },
+
+  /**
+   * Whether the Cardano governance surface is enabled.
+   *
+   * This is only the MASTER gate. Callers must AND it with
+   * `networks.resolveGovernanceSupport(chain, network)` — see router.ts,
+   * NavigationDrawer.vue and useGlobalSearch.ts, which all apply both.
+   */
+  isGovernanceEnabled(): boolean {
+    return featureFlagsState.flags.isGovernanceEnabled;
+  },
+
+  /**
+   * Whether CASTING governance votes is enabled — the CastVoteDialog and the
+   * VoteCta on the action detail. Ships DARK (default false), separately from
+   * {@link isGovernanceEnabled}: voting is a value-moving surface (a vote is a
+   * signed, irreversible on-chain statement), so the read surface can go live
+   * while vote casting is still being verified. Callers must AND this with
+   * `isGovernanceEnabled` — the vote affordance only exists on a visible
+   * governance surface.
+   */
+  isGovernanceVotingEnabled(): boolean {
+    return featureFlagsState.flags.isGovernanceVotingEnabled;
   },
 
   /**
@@ -401,6 +481,17 @@ export const featureFlagsStore = {
   },
 
   /**
+   * Check if CIP-45 (WebRTC dApp bridge) pairing/signing is enabled.
+   * Ships DARK (default false), mirroring {@link isWalletConnectEnabled}: the
+   * peerjs signaling connection stays uninitialized and the Connected dApps UI
+   * hides the CIP-45 section until this is flipped ON, so gero-sync can hold or
+   * kill CIP-45 without a client release.
+   */
+  isCip45Enabled(): boolean {
+    return featureFlagsState.flags.isCip45Enabled;
+  },
+
+  /**
    * Check if the non-custodial live support chat is enabled.
    * Ships DARK (default false). The caller is the UI that renders the support
    * entry point: while it is hidden nothing calls the chat composable, so no
@@ -419,6 +510,17 @@ export const featureFlagsStore = {
   },
 
   /**
+   * Check if CIP-113 programmable-token support is enabled.
+   *
+   * Network support is a SEPARATE gate (`networks.resolveProgrammableTokenSupport`), so
+   * both must pass. Background code reads the chrome.storage mirror via
+   * `isCip113Enabled()` in src/chrome/cip113Flag.ts instead of this getter.
+   */
+  isCip113Enabled(): boolean {
+    return featureFlagsState.flags.isCip113Enabled;
+  },
+
+  /**
    * Reset flags (disable all until re-initialized).
    */
   reset(): void {
@@ -430,6 +532,8 @@ export const featureFlagsStore = {
       isGoMiningEnabled: false,
       isBitcoinEnabled: false,
       isPoolOperatorEnabled: false,
+      isGovernanceEnabled: false,
+      isGovernanceVotingEnabled: false,
       isRealFiEnabled: false,
       isNexusWithdrawalEnabled: false,
       isNexusUnstakeEnabled: false,
@@ -441,7 +545,9 @@ export const featureFlagsStore = {
       isMidnightConvertEnabled: false,
       isGoogleWalletEnabled: false,
       isWalletConnectEnabled: false,
+      isCip45Enabled: CIP45_DEFAULT_ENABLED,
       isLiveChatEnabled: false,
+      isCip113Enabled: false,
       collateralTrustedDapps: [],
     });
     featureFlagsState.isInitialized = false;

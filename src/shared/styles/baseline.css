@@ -90,6 +90,34 @@ html .v-application .display-3, html .v-application .display-4 {
   color: var(--g-text-3) !important;
 }
 
+/* ---- Tooltip ----
+   Vuetify ships `.v-tooltip__content` at `opacity: .9` over a translucent grey,
+   so the page beneath shows THROUGH the tooltip's own text and the two sets of
+   glyphs interleave. On a dark canvas that is not "slightly transparent", it is
+   unreadable. Given an opaque surface, a hairline and the primary text tone
+   instead.
+
+   `.menuable__content__active` is (0,2,0) and re-asserts the opacity while the
+   tooltip is shown, so the override has to carry both that class and the `html`
+   prefix to reach (0,2,1) and win on specificity rather than by forcing it.
+
+   The descendant rule is the other half of the bug: tooltip bodies are written
+   with `.t-caption`, whose colour is `--g-text-3` — a dim grey chosen to recede
+   against the CANVAS, not to be read on a raised overlay. */
+html .v-tooltip__content,
+html .v-tooltip__content.menuable__content__active {
+  background: var(--g-overlay);
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-control);
+  color: var(--g-text-1);
+  opacity: 1;
+  padding: var(--g-s-2) var(--g-s-3);
+}
+html .v-tooltip__content .t-caption,
+html .v-tooltip__content .t-body-sm {
+  color: var(--g-text-1);
+}
+
 /* ---- Skeleton: the one sanctioned shimmer (1.4s). Reduced-motion is handled
    by the global block at the bottom of this file, so no per-use override. ---- */
 .g-skeleton {
@@ -173,3 +201,139 @@ html .v-application .display-3, html .v-application .display-4 {
     scroll-behavior: auto !important;
   }
 }
+
+/* ---- Rendered markdown (`renderMarkdown` output, injected via v-html).
+   ONE global recipe rather than a scoped block: Vue 2 scoped styles attach the
+   [data-v] attribute to the last selector, and v-html children never receive
+   it, so `.prose h3` would compile to something that cannot match. Global also
+   means the agent dock and the changelog can adopt the same prose instead of a
+   second copy drifting away from this one.
+
+   Every font-size below is a declaration string already present elsewhere in
+   src/, so the ratchet's fontSizeDistinct metric does not move. ---- */
+.g-prose {
+  color: var(--g-text-2);
+  font-size: 14px;
+  line-height: 1.7;
+  max-width: 72ch;
+  overflow-wrap: anywhere;
+}
+.g-prose > :first-child { margin-top: 0; }
+.g-prose > :last-child { margin-bottom: 0; }
+
+/* Headings arrive as `.md-h.md-hN` divs, not <h*> tags: the renderer never
+   emits real heading elements, so a proposal cannot inject itself into the
+   page outline above the section heading that contains it. */
+/* Six levels, six distinct steps. A proposal that uses both h1 and h2 (or both
+   h5 and h6) has to keep its hierarchy, so no two levels share a size. The top
+   step is 18px, one below `.t-heading` (20px): the prose is nested INSIDE a
+   section whose own title is a `.t-heading`, and a proposal's h1 must not
+   outrank the page's own heading for it. */
+.g-prose .md-h { color: var(--g-text-1); letter-spacing: -0.01em; }
+.g-prose .md-h1 { font-size: 18px; font-weight: 620; margin: var(--g-s-5) 0 var(--g-s-3); }
+.g-prose .md-h2 { font-size: 16px; font-weight: 600; margin: var(--g-s-5) 0 var(--g-s-2); }
+.g-prose .md-h3 { font-size: 15px; font-weight: 600; margin: var(--g-s-4) 0 var(--g-s-2); }
+.g-prose .md-h4 { font-size: 14px; font-weight: 600; margin: var(--g-s-4) 0 var(--g-s-1); }
+.g-prose .md-h5 { font-size: 13px; font-weight: 600; margin: var(--g-s-3) 0 var(--g-s-1); }
+.g-prose .md-h6 {
+  font-size: 12px; font-weight: 550; color: var(--g-text-2);
+  margin: var(--g-s-2) 0 var(--g-s-1);
+}
+
+.g-prose p { margin: 0 0 var(--g-s-3); }
+.g-prose ul, .g-prose ol { margin: 0 0 var(--g-s-3); padding-left: var(--g-s-5); }
+.g-prose li { margin-bottom: var(--g-s-1); }
+.g-prose li::marker { color: var(--g-text-3); }
+.g-prose li > ul, .g-prose li > ol { margin: var(--g-s-1) 0 0; }
+
+.g-prose blockquote {
+  margin: var(--g-s-3) 0;
+  padding: var(--g-s-2) var(--g-s-4);
+  border-left: 2px solid var(--g-hairline-3);
+  color: var(--g-text-3);
+}
+
+.g-prose code {
+  font-family: var(--g-font-mono);
+  font-size: 12.5px;
+  padding: 0 var(--g-s-1);
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-chip);
+}
+
+/* Underlined ALWAYS, not on hover. An in-text link that differs from the prose
+   around it by hue alone fails WCAG 1.4.1 — accent against --g-text-2 is about
+   1.07:1, nowhere near the 3:1 a colour-only cue would need. The underline is
+   the non-colour cue; hover only thickens it. */
+.g-prose a {
+  color: var(--g-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.g-prose a:hover { text-decoration-thickness: 2px; }
+
+/* Inline reference markers, e.g. [1]. A BUTTON, not a link: this app's router
+   is hash-mode, so a `#gov-ref-2` href would rewrite the route rather than
+   scroll, and a reload of that address would land on the wallet home. The view
+   owns the jump (see ActionDetail.vue); these rules only undo the UA button
+   chrome. The brackets are themselves a non-colour cue, and focus is the
+   baseline ring — nothing here removes an outline. */
+.g-prose .md-ref {
+  font-size: 12px;
+  font-family: inherit;
+  vertical-align: super;
+  line-height: 1;
+  margin: 0 1px;
+  padding: 0 var(--g-s-1);
+  background: none;
+  border: 0;
+  border-radius: var(--g-r-chip);
+  color: var(--g-accent);
+  cursor: pointer;
+}
+.g-prose .md-ref:hover { background: var(--g-raised); }
+
+.g-prose hr { margin: var(--g-s-5) 0; border: 0; border-top: 1px solid var(--g-hairline-1); }
+.g-prose strong, .g-prose b { color: var(--g-text-1); font-weight: 600; }
+
+/* Wide content scrolls in its own box; the page body never scrolls sideways
+   because a treasury proposal shipped an eight-column budget table.
+
+   Cells WRAP. `white-space: nowrap` plus `width: max-content` turned any table
+   carrying a prose column (a "Deliverable" or "Notes" cell is normal in a
+   budget breakdown) into a scroll bar hundreds of pixels long instead of a
+   readable block. Auto layout still pushes past the container when the columns
+   genuinely cannot fit, and `.md-table` catches that — so a real eight-column
+   table still scrolls, and a two-column one now wraps. */
+.g-prose .md-table { overflow-x: auto; margin: 0 0 var(--g-s-3); }
+.g-prose table { border-collapse: collapse; min-width: 100%; }
+.g-prose th, .g-prose td {
+  padding: var(--g-s-2) var(--g-s-3);
+  border-bottom: 1px solid var(--g-hairline-1);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.g-prose th { color: var(--g-text-1); font-weight: 600; }
+
+/* ---- Compact prose: the same recipe at chat scale.
+   The agent dock is a 320px column, so the document type ramp and the 72ch
+   measure would both overflow it. This modifier is what lets the dock adopt
+   `.g-prose` (as `class="g-prose g-prose--compact"`) instead of keeping — and
+   drifting — a second copy of the rules for tables, quotes, rules and h4-h6.
+   Same-specificity as the block above and deliberately placed after it, so
+   every declaration here wins on source order. ---- */
+.g-prose--compact { font-size: 14px; line-height: 1.6; max-width: none; }
+.g-prose--compact p { margin: 0 0 var(--g-s-2); }
+.g-prose--compact ul, .g-prose--compact ol { margin: 0 0 var(--g-s-2); padding-left: var(--g-s-4); }
+.g-prose--compact .md-h { letter-spacing: 0; }
+.g-prose--compact .md-h1 { font-size: 16px; font-weight: 700; margin: var(--g-s-3) 0 var(--g-s-1); }
+.g-prose--compact .md-h2 { font-size: 15px; font-weight: 700; margin: var(--g-s-3) 0 var(--g-s-1); }
+.g-prose--compact .md-h3 { font-size: 14px; font-weight: 700; margin: var(--g-s-2) 0 var(--g-s-1); }
+.g-prose--compact .md-h4 { font-size: 13px; font-weight: 700; margin: var(--g-s-2) 0 var(--g-s-1); }
+.g-prose--compact .md-h5 { font-size: 12px; font-weight: 600; margin: var(--g-s-2) 0 var(--g-s-1); }
+.g-prose--compact .md-h6 { font-size: 11px; font-weight: 600; margin: var(--g-s-2) 0 var(--g-s-1); }
+.g-prose--compact blockquote { margin: var(--g-s-2) 0; padding: var(--g-s-1) var(--g-s-3); }
+.g-prose--compact hr { margin: var(--g-s-3) 0; }
+.g-prose--compact th, .g-prose--compact td { padding: var(--g-s-1) var(--g-s-2); }

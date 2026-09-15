@@ -243,9 +243,69 @@ export async function isCredentialPrfEnabled(credentialId: string): Promise<bool
  * @returns Promise<ArrayBuffer> - 32-byte PRF output
  * @throws Error if PRF evaluation fails or user cancels
  */
+/**
+ * The transports an authenticator reported at REGISTRATION, if it reported any.
+ *
+ * `getTransports()` is the authoritative answer to "where does this credential
+ * live" — `["internal"]` for Windows Hello or Touch ID, `["usb"]` for a security
+ * key, `["hybrid"]` for a phone. It exists only on a registration response; an
+ * assertion cannot be asked.
+ */
+export function readTransports(credential: PublicKeyCredential): AuthenticatorTransport[] | null {
+  const response = credential.response as AuthenticatorAttestationResponse & {
+    getTransports?: () => string[];
+  };
+  if (typeof response?.getTransports !== 'function') return null;
+  try {
+    const transports = response.getTransports();
+    return Array.isArray(transports) && transports.length
+      ? (transports as AuthenticatorTransport[])
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The `allowCredentials` entry for a stored credential.
+ *
+ * WHY THE TRANSPORTS MATTER, and why omitting them is not the neutral choice it
+ * looks like: they tell the browser WHERE to look. Given `["internal"]`, Chrome
+ * goes straight to Windows Hello. Given nothing, it cannot know the credential is
+ * on this device, so it offers every route it supports — phone, security key,
+ * this device — and the user has to find the right one in a list that mostly
+ * does not apply to them. That was this file's behaviour, under the comment
+ * "let the browser decide".
+ *
+ * NOTHING IS GUESSED. A wallet registered before transports were recorded has
+ * none stored, and this returns an entry without them — the old picker, which is
+ * inconvenient but always works. Asserting `["internal"]` for a credential that
+ * actually lives on a security key would tell Chrome to search a device the key
+ * is not on, and a PRF wallet has no password to fall back to.
+ */
+export function allowCredentialFor(
+  credentialId: string,
+  transports?: readonly AuthenticatorTransport[] | null,
+): PublicKeyCredentialDescriptor {
+  const descriptor: PublicKeyCredentialDescriptor = {
+    id: base64ToArrayBuffer(credentialId),
+    type: 'public-key',
+  };
+  if (transports?.length) descriptor.transports = [...transports];
+  return descriptor;
+}
+
 export async function evaluatePrfForWallet(
   credentialId: string,
-  walletId: string
+  walletId: string,
+  transports?: readonly AuthenticatorTransport[] | null,
+  /**
+   * Called when this ceremony REVEALED where the credential lives and nothing
+   * was stored. Lets a wallet registered before transports were recorded learn
+   * its own answer from the one prompt it had to show a picker for, so the next
+   * one goes straight to the right authenticator.
+   */
+  onLearnedTransports?: (learned: AuthenticatorTransport[]) => void
 ): Promise<ArrayBuffer> {
   debugLog('[PRF] Evaluating PRF for wallet:', walletId);
 
@@ -258,18 +318,16 @@ export async function evaluatePrfForWallet(
 
   try {
     // Authenticate with PRF extension
-    // Note: Don't restrict transports or rpId - let browser use same context as registration
+    // rpId still omitted on purpose — it defaults to the current domain, which is
+    // the context registration used. The TRANSPORTS are passed when we know them:
+    // see allowCredentialFor for why omitting them is what produced a phone /
+    // security-key picker in front of a Windows Hello credential.
     const assertion = await navigator.credentials.get({
       publicKey: {
         challenge,
-        allowCredentials: [{
-          id: base64ToArrayBuffer(credentialId),
-          type: 'public-key'
-          // Omit transports - let browser decide
-        }],
+        allowCredentials: [allowCredentialFor(credentialId, transports)],
         timeout: 60000,
         userVerification: 'required',
-        // Omit rpId - defaults to current domain (same as registration)
         extensions: {
           prf: {
             eval: {
@@ -279,6 +337,21 @@ export async function evaluatePrfForWallet(
         }
       }
     }) as PublicKeyCredential;
+
+    // What the ceremony revealed, when we went in blind. `authenticatorAttachment`
+    // is the only signal an assertion carries about WHERE the credential was, and
+    // only the platform case is safe to act on: it maps to exactly one transport.
+    // "cross-platform" could be usb, nfc, ble or hybrid, and narrowing it to the
+    // wrong one would send the browser looking at a device the key is not on —
+    // so that case learns nothing and keeps the picker.
+    if (!transports?.length && onLearnedTransports) {
+      const attachment = (assertion as PublicKeyCredential & { authenticatorAttachment?: string })
+        .authenticatorAttachment;
+      if (attachment === 'platform') {
+        debugLog('[PRF] Credential is on this device; recording internal transport');
+        onLearnedTransports(['internal']);
+      }
+    }
 
     // Extract PRF results with type safety
     const extensionResults = assertion.getClientExtensionResults();
@@ -331,7 +404,17 @@ export async function evaluatePrfForWallet(
 export async function registerWebAuthnCredentialWithPrf(
   walletId: string,
   walletName: string
-): Promise<{ credentialId: string; prfEnabled: boolean; prfOutput: ArrayBuffer | null }> {
+): Promise<{
+  credentialId: string;
+  prfEnabled: boolean;
+  prfOutput: ArrayBuffer | null;
+  /**
+   * Where this credential lives, as the authenticator reported it. Null when the
+   * browser did not say — store it and the next prompt goes straight to the
+   * right authenticator instead of offering a picker.
+   */
+  transports: AuthenticatorTransport[] | null;
+}> {
   debugLog('[PRF] Registering credential with PRF evaluation for wallet:', walletId);
 
   // Check WebAuthn support
@@ -443,7 +526,10 @@ export async function registerWebAuthnCredentialWithPrf(
     return {
       credentialId,
       prfEnabled,
-      prfOutput
+      prfOutput,
+      // Recorded now because this is the only moment it can be: an assertion
+      // response carries no transports.
+      transports: readTransports(credential)
     };
   } catch (error) {
     const err = error as Error;

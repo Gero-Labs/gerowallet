@@ -92,7 +92,7 @@
               <v-icon small class="pr-1">
                 mdi-filter-remove
               </v-icon>
-              {{ $t('assets.clearFilters') }}
+              {{ $t('common.clearFilters') }}
             </v-btn>
           </v-card-actions>
         </v-card>
@@ -151,9 +151,27 @@ const { t } = useTranslation();
 const { loggedWallet, config, collections, tokens } = toRefs(walletStore);
 const { loadingTxs } = toRefs(loadingState);
 
+/**
+ * The fields this table actually reads off a wallet collection.
+ * `walletStore.collections` is declared `{}`, so the shape has to be named
+ * locally — the alternative was an `any` on every callback parameter.
+ */
+interface CollectionRow {
+  name?: string;
+  description?: string | string[];
+  isScam?: boolean;
+  items: Array<{ metadata?: unknown }>;
+}
+
+/** Mirrors TokensTab's own `sortOptions` prop type. */
+interface SortOptions {
+  by: string;
+  desc: boolean;
+}
+
 const hideScam = ref<boolean>(false);
 const hideUnverified = ref<boolean>(false);
-const sortOptions = ref<any>({
+const sortOptions = ref<SortOptions>({
   by: 'allocation',
   desc: true
 })
@@ -229,7 +247,7 @@ const tokensCount = computed(() => {
 const collectiblesLength = computed(() => {
   let amount = 0;
   if (collectibles.value.length > 0) {
-    collectibles.value.forEach((collection: any) => {
+    collectibles.value.forEach((collection) => {
       if (collection.items) {
         amount += collection.items.length
       }
@@ -246,7 +264,7 @@ const sharedContainerHeight = computed(() => {
   const assetsHeight = (assetsRows * 40); // header + rows
 
   // Calculate height needed for collectible tab
-  const filteredCollectibles = collectibles.value.filter((collection: any) => {
+  const filteredCollectibles = collectibles.value.filter((collection) => {
     if (currentTab.value === 1 && searchTerm.value?.trim()) {
       const search = searchTerm.value.toLowerCase().trim();
       const nameMatch = collection.name?.toLowerCase().includes(search);
@@ -290,10 +308,14 @@ const sharedContainerHeight = computed(() => {
 })
 
 
-const collectibles = computed(() => {
-  let res = Object.values(collections.value).filter((collection: any) => collection.items.every(item => !item.metadata))
+const collectibles = computed<CollectionRow[]>(() => {
+  // `walletStore.collections` is declared `{}`, so Object.values() yields
+  // unknown[]. The cast is where that untyped store value becomes the shape
+  // this component reads — every callback below then infers from here.
+  let res = (Object.values(collections.value) as CollectionRow[])
+    .filter(collection => collection.items.every(item => !item.metadata))
   if (res && hideScam.value) {
-    res = res.filter((collection: any) => !collection.isScam)
+    res = res.filter(collection => !collection.isScam)
   }
   return res
 })

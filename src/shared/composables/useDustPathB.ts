@@ -36,6 +36,21 @@ const pathBNight = ref<bigint>(0n);
 const pathBRegistered = ref<boolean>(false);
 const pathBStakes = ref<string[]>([]);
 const pathBAsOfMs = ref<number>(0);
+/**
+ * Stakes carrying a live registration UTxO on CARDANO that points at this
+ * wallet's dust address, but which the Midnight indexer hasn't relayed yet.
+ *
+ * This is the window the Midnight side used to be blind in. `dust/status`
+ * proxies the indexer, which lags Cardano by the ~2.5h relay, so a
+ * registration that is already confirmed on Cardano reads `registered:false`
+ * here and contributes nothing to the sums above. The only other signal was
+ * the `gero.dustPending` localStorage marker, which is written at submit time
+ * — so a registration made from the Cardano wallet's own dialog, the official
+ * portal, or another browser profile produced NO indication on Midnight at
+ * all, and the dashboard sat on a "Register for DUST" prompt while a perfectly
+ * good registration was relaying.
+ */
+const pathBIncomingStakes = ref<string[]>([]);
 
 let consumers = 0;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -59,6 +74,7 @@ function resetPathBState(): void {
   pathBNight.value = 0n;
   pathBRegistered.value = false;
   pathBStakes.value = [];
+  pathBIncomingStakes.value = [];
   pathBAsOfMs.value = 0;
 }
 
@@ -98,6 +114,7 @@ async function refreshOnce() {
     // returning, so extrapolation/hasData treat it as a current reading
     // instead of silently leaving behind whatever the previous identity
     // (already zeroed above) or a not-yet-run poll left in place.
+    pathBIncomingStakes.value = [];
     pathBAsOfMs.value = Date.now();
     return;
   }
@@ -139,6 +156,55 @@ async function refreshOnce() {
   pathBRegistered.value = kept.length > 0;
   pathBStakes.value = kept.map((r) => r.cardanoRewardAddress);
   pathBAsOfMs.value = Date.now();
+
+  // Nothing live yet for this wallet: check CONFIRMED Cardano state for a
+  // registration that's still relaying, so the dashboard can say "pending"
+  // instead of "register" (see `pathBIncomingStakes`). Skipped entirely once
+  // anything is live, which is the steady state — so this costs nothing on a
+  // wallet that's already generating.
+  if (kept.length > 0) {
+    pathBIncomingStakes.value = [];
+    return;
+  }
+  const incoming = await findIncomingRegistrations(network, dustAddress, stakes);
+  if (key !== committedKey) return; // superseded while the lookups resolved
+  pathBIncomingStakes.value = incoming;
+}
+
+/**
+ * Stakes whose live Cardano registration UTxO carries THIS wallet's dust
+ * address in its datum. Compared as the same hex the wallet writes at
+ * registration time (`dustAddressToHex`), not as bech32m — `dust/registrations`
+ * reports the raw datum bytes.
+ *
+ * Best-effort throughout: a failure anywhere leaves the stake out rather than
+ * inventing a pending state, so the worst case is the pre-existing behaviour.
+ */
+async function findIncomingRegistrations(
+  network: string, dustAddress: string, stakes: string[],
+): Promise<string[]> {
+  let dustHex: string;
+  try {
+    const { dustAddressToHex } = await import('@/chains/midnight/midnightKeyManager');
+    dustHex = dustAddressToHex(dustAddress).toLowerCase();
+  } catch (e) {
+    debugLog('🌙 could not derive dust address hex for Path-B incoming check', e);
+    return [];
+  }
+  const api = getMidnightApi(network);
+  const results = await Promise.all(stakes.map(async (stake) => {
+    try {
+      const registrations = await api.getDustRegistrations(stake);
+      // A stake with duplicates generates nothing for anyone — it is not
+      // "incoming", it needs consolidation on the Cardano side.
+      if (registrations.length !== 1) return null;
+      return registrations[0].dustAddressHex.toLowerCase() === dustHex ? stake : null;
+    } catch (e) {
+      debugLog('🌙 dust/registrations failed for', stake, e);
+      return null;
+    }
+  }));
+  return results.filter((stake): stake is string => stake !== null);
 }
 
 function start() {
@@ -196,6 +262,8 @@ export interface DustPathB {
   readonly pathBRegistered: ComputedRef<boolean>;
   /** Stake addresses kept in the sums above (Task C's pending-reconcile needs these). */
   readonly pathBStakes: ComputedRef<string[]>;
+  /** Stakes registered to this wallet on Cardano but not yet relayed to Midnight. */
+  readonly pathBIncomingStakes: ComputedRef<string[]>;
   /** Wall-clock ms of the last successful poll (0 = never). */
   readonly pathBAsOfMs: ComputedRef<number>;
 }
@@ -220,6 +288,7 @@ export function useDustPathB(): DustPathB {
     pathBNight: computed(() => pathBNight.value),
     pathBRegistered: computed(() => pathBRegistered.value),
     pathBStakes: computed(() => pathBStakes.value),
+    pathBIncomingStakes: computed(() => pathBIncomingStakes.value),
     pathBAsOfMs: computed(() => pathBAsOfMs.value),
   };
 }

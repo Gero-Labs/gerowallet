@@ -115,7 +115,7 @@
         <v-icon size="40" color="var(--g-text-3)">mdi-safe-square-outline</v-icon>
         <div class="text-body-2 grey--text mt-3 text-center">{{ $t('vaults.noVaultsFound') }}</div>
         <v-btn x-small text :color="primaryColor" class="mt-2" @click="clearFilters()">
-          {{ $t('vaults.clearFilters') }}
+          {{ $t('common.clearFilters') }}
         </v-btn>
       </div>
 

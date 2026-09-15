@@ -3,19 +3,6 @@
               :subtitle="t('staking.withdrawSubtitle')">
     <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
       <v-alert
-        v-if="!account?.drep_id && loggedWallet?.chain === Blockchain.CARDANO"
-        border="left"
-        color="warning"
-        type="warning"
-        prominent
-        class="text-left mb-3"
-      >
-        <strong>{{ $t('staking.drepDelegationRequiredTitle') }}</strong>
-        <p class="mb-0 mt-2">
-          {{ $t('staking.drepDelegationRequiredDesc') }}
-        </p>
-      </v-alert>
-      <v-alert
         border="left"
         color="primary"
         type="info"
@@ -97,12 +84,7 @@
             <h4>{{ $t('common.total') }}</h4>
             <h4><strong>{{ toCurrency(netWithdrawal) }}</strong></h4>
           </v-col>
-          <v-col cols="12" class="pt-6" v-if="!account?.drep_id && loggedWallet?.chain === Blockchain.CARDANO">
-            <v-btn color="primary" elevation="2" block to="/governance" class="mx-2">
-              {{ $t('staking.goToGovernanceDelegate') }}
-            </v-btn>
-          </v-col>
-          <v-col cols="12" class="pt-6" v-else style="display: flex; justify-content: space-evenly;">
+          <v-col cols="12" class="pt-6" style="display: flex; justify-content: space-evenly;">
             <!-- Transaction Authentication Section -->
             <TransactionAuthSection
               :wallet-type="loggedWallet?.type"
@@ -183,7 +165,7 @@ import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import TransactionAuthSection from '@/shared/components/TransactionAuthSection.vue';
 import filters from '@/shared/utils/filters';
 import { Cardano } from '@cardano-sdk/core';
-import { WalletType, Blockchain } from '@/models/types';
+import { WalletType } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
 import { clearWithdrawableAmount } from '@/shared/utils/autoWithdraw';
 

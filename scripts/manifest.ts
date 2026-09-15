@@ -57,8 +57,6 @@ function buildCSP(dev: boolean): string {
     'https://api.coingecko.com',
     'https://analytics-snekfun.splash.trade',
     'https://www.googleapis.com',
-    // Contentful blog (Content Delivery API; images are https and covered by img-src)
-    'https://cdn.contentful.com',
     'https://api.handle.me/',
     'https://media.bringweb3.io/',
     'https://api.bringweb3.io/',
@@ -83,6 +81,11 @@ function buildCSP(dev: boolean): string {
     // (https://rpc.preview.midnight.network, etc).
     'https://*.midnight.network',
     'wss://*.midnight.network',
+    // Stagenet moved off midnight.network; keep the direct SDK endpoints usable.
+    'https://rpc.stagenet.shielded.tools',
+    'wss://rpc.stagenet.shielded.tools',
+    'https://indexer.stagenet.shielded.tools',
+    'wss://indexer.stagenet.shielded.tools',
     // Arkhia zkPaaS (hosted Midnight proof server) — extension-page health
     // checks + BG proving fetches. Wildcard covers the starter tier plus any
     // other plan subdomain a user's project lands on; .network is Arkhia's
@@ -99,6 +102,11 @@ function buildCSP(dev: boolean): string {
     'https://*.walletconnect.com',
     'wss://*.walletconnect.com',
     'https://*.reown.com',
+    // CIP-45 peerjs signaling (CF primary + public-cloud fallback).
+    'https://peerjs.dev.ecosyseng.cf-deployments.org',
+    'wss://peerjs.dev.ecosyseng.cf-deployments.org',
+    'https://0.peerjs.com',
+    'wss://0.peerjs.com',
     // Dev-only
     ...(dev
       ? [
@@ -178,7 +186,8 @@ async function getManifest() {
     name: (pkg.displayName || pkg.name) + (isBeta ? ' (Beta)' : '') ,
     version: pkg.version,
     description: pkg.description,
-    key,
+    // Include key only when set — Chrome rejects an empty key.
+    ...(key ? { key } : {}),
     // options_ui: {
     //   page: './dist/options/index.html',
     //   open_in_tab: true,
@@ -196,14 +205,19 @@ async function getManifest() {
       },
       default_title: "Gero Dashboard | A Multi-chain Light Wallet Merging Web2 and Web3"
     },
-    oauth2: {
-      client_id,
-      scopes:[
-        "openid",
-        "profile",
-        "email"
-      ]
-    },
+    // Omit oauth2 unless GOOGLE_CLIENT_ID is set — Chrome rejects an empty client_id.
+    ...(client_id
+      ? {
+        oauth2: {
+          client_id,
+          scopes: [
+            "openid",
+            "profile",
+            "email"
+          ]
+        }
+      }
+      : {}),
     background: isFirefox
       ? {
         scripts: ['background/_virtual_index.js'],
@@ -224,6 +238,11 @@ async function getManifest() {
       'cookies',
       'unlimitedStorage',
       'webNavigation',
+      // Required by @bringweb3/chrome-extension-kit >=1.8.0: bringInitBackground()
+      // throws unless storage/tabs/webNavigation/webRequest are all granted. The SDK
+      // uses webRequest.onBeforeRedirect (observational only) to follow affiliate
+      // redirect chains. Without it cashback silently fails to initialize.
+      'webRequest',
       'notifications',
       'identity',
       'sidePanel',
@@ -267,7 +286,7 @@ async function getManifest() {
     },
   }
 
-  if (!isDev) {
+  if (!isDev && process.env['MANIFEST_KEY']) {
     manifest['key'] = process.env['MANIFEST_KEY']
   }
 

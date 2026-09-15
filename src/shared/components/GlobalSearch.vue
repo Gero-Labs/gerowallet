@@ -98,12 +98,14 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 const { t } = useTranslation();
 const { isOpen, query, results, searching, close } = useGlobalSearch();
 
-const vmProxy = getCurrentInstance()?.proxy as any;
-const searchInput = ref<any>(null);
+const vmProxy = getCurrentInstance()?.proxy;
+// The Vuetify text field, narrowed to the one method this component calls.
+const searchInput = ref<{ focus?: () => void } | null>(null);
 const selectedIndex = ref(0);
 
-// All category types for grouping labels
-const allTypes: SearchResultType[] = ['setting', 'token', 'nft', 'transaction', 'pool', 'drep', 'retailer', 'contact'];
+// All category types for grouping labels. A type missing from this list is
+// dropped from `groupedResults` entirely, so every new source must land here.
+const allTypes: SearchResultType[] = ['setting', 'page', 'token', 'nft', 'transaction', 'pool', 'drep', 'govAction', 'retailer', 'contact'];
 
 // Flat list sorted by relevance score, with indices for keyboard navigation
 const flatResults = computed(() => {
@@ -133,6 +135,8 @@ function groupLabel(type: SearchResultType): string {
     nft: t('search.nftCollections'),
     pool: t('search.stakePools'),
     drep: t('search.dreps'),
+    govAction: t('governance.actionsTitle'),
+    page: t('search.pages'),
     retailer: t('search.cashbackStores'),
     contact: t('search.contacts'),
     setting: t('search.settings'),
@@ -173,7 +177,15 @@ function navigateTo(result: SearchResult) {
       router.push({ path: '/staking', query: { pool: result.data?.ticker || result.data?.name || result.id } }).catch(() => {});
       break;
     case 'drep':
-      router.push({ path: '/governance', query: { drep: result.data?.name || result.id } }).catch(() => {});
+      // Straight to the DRep's own record. The old `/governance?drep=` deep link
+      // only pre-filled the directory's search box, which made the user pick
+      // their result a second time; it stays as the fallback for a row that
+      // somehow carries no id.
+      if (result.id) {
+        router.push({ name: 'governanceDRep', params: { drepId: result.id } }).catch(() => {});
+      } else {
+        router.push({ path: '/governance/dreps', query: { drep: result.data?.name || result.title } }).catch(() => {});
+      }
       break;
     case 'retailer':
       router.push({ path: '/cashback', query: { store: result.title } }).catch(() => {});

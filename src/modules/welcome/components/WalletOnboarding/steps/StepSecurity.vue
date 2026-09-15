@@ -11,7 +11,7 @@
         filled
         :label="$t('welcome.walletName')"
         :placeholder="$t('welcome.walletNamePlaceholder')"
-        :rules="[rules.required(), rules.minCharacters(1), rules.maxCharacters(50)]"
+        :rules="[value => rules.required()(value.trim()), rules.maxCharacters(50)]"
         class="mb-3"
       ></v-text-field>
 
@@ -159,7 +159,8 @@ onMounted(async () => {
 });
 
 const handleContinue = (): void => {
-  emit('select', selectedSecurityMethod.value, name.value);
+  if (!canContinue.value || !name.value.trim()) return;
+  emit('select', selectedSecurityMethod.value, name.value.trim());
   emit('next');
 };
 </script>

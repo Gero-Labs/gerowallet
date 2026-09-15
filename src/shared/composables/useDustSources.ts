@@ -35,6 +35,7 @@ import { walletStore } from '@/stores/walletStore';
 import { midnightStore } from '@/stores/midnightStore';
 import { Blockchain, CoinTypes, HARDENED, Wallet, WalletTypePurpose } from '@/models/types';
 import {
+  DustRegistrationUtxoDto,
   getMidnightApi,
   MidnightDustRegistrationStatusDto,
 } from '@/api/midnight-api';
@@ -50,11 +51,54 @@ export interface DustSource extends CardanoStakeIdentity {
   /** Raw cNIGHT base units; null while loading / on query failure. */
   nightBalance: bigint | null;
   status: MidnightDustRegistrationStatusDto | null;
+  /** True once `dust/status` has answered for this row. A FAILED batch must
+   *  not read as "unregistered" — see `rowState`'s 'unknown' branch. */
+  statusLoaded: boolean;
+  /** Live registration UTxOs for this stake credential (`dust/registrations`),
+   *  the only view of CONFIRMED Cardano state. `dust/status` proxies the
+   *  Midnight indexer, which lags the Cardano chain by the ~2.5h relay and
+   *  reports `registered:false` for a stake that already carries a live
+   *  registration — so this list, not the boolean, is what decides whether a
+   *  Register CTA may be offered at all. */
+  registrations: DustRegistrationUtxoDto[];
+  /** True once `dust/registrations` has answered, so an EMPTY list can be
+   *  trusted as "no live registration" rather than "not loaded". */
+  registrationsLoaded: boolean;
   /** Wallet-local "submitted, not yet relayed" marker. Nexus's `dust/status`
    *  carries no status-string field (only `registered`), so this row-level
    *  flag — not a field on the DTO — is what the UI renders as "Pending". */
   pendingLocal: boolean;
 }
+
+/**
+ * What a source row may offer, mirroring `useCnightDustRegistration`'s
+ * `registrationStatus` on the Cardano side so the two DUST surfaces agree on
+ * the same chain facts:
+ *
+ *  - `generatingHere`  live-registered to THIS wallet's dust address.
+ *  - `duplicated`      >1 live registration UTxO — protocol-invalid, the whole
+ *                      set generates nothing until it is back down to one.
+ *                      Consolidation lives on the Cardano wallet's own dialog.
+ *  - `registeredElsewhere` exactly one live registration, pointed somewhere
+ *                      else (or not yet relayed, so the destination is not
+ *                      known here). Offer Redirect, never Register.
+ *  - `pending`         we submitted a register/redirect from this profile and
+ *                      the chain has not caught up yet.
+ *  - `readOnly`        no local keys (hardware / watch-only).
+ *  - `unknown`         the chain queries did not answer. FAIL CLOSED: no CTA,
+ *                      because "unregistered" and "query failed" are the same
+ *                      shape on the wire and guessing wrong invites a
+ *                      duplicate registration.
+ *  - `unregistered`    confirmed clear — the only state that offers Register.
+ */
+export type DustSourceRowState =
+  | 'generatingHere'
+  | 'duplicated'
+  | 'registeredElsewhere'
+  | 'pending'
+  | 'readOnly'
+  | 'unknown'
+  | 'unregistered';
 
 export type DustSourceActionResult =
   | { status: 'submitted'; txHash: string }
@@ -76,6 +120,76 @@ const REGISTER_SIZE_THRESHOLD = 16000;
 const ISOLATION_POLL_MS = 15_000;
 const ISOLATION_MAX_POLLS = 24;
 
+/**
+ * The single decision point for what a source row may do, shared by the dialog
+ * template and by `registerSource`'s own pre-flight guard so the button and the
+ * action can never disagree.
+ *
+ * Order matters, and mirrors `useCnightDustRegistration`'s `registrationStatus`:
+ * confirmed CARDANO state (`registrations`) outranks the lagging Midnight
+ * indexer (`status.registered`), which outranks the local pending marker.
+ * Anything we could not read fails CLOSED to 'unknown'.
+ */
+export function dustSourceRowState(
+  source: DustSource,
+  ownDustAddress: string,
+  /** This wallet's dust address as the raw datum hex `dust/registrations`
+   *  reports. Optional: when it hasn't been derived yet the row simply falls
+   *  back to the indexer's (lagging) view. */
+  ownDustAddressHex = '',
+): DustSourceRowState {
+  // Duplicated wins over everything: the protocol invalidates the whole set the
+  // moment a second live registration UTxO exists, so neither Register nor
+  // Redirect is meaningful until it's back down to one.
+  if (source.registrations.length > 1) return 'duplicated';
+
+  // Live-registered to THIS wallet — the indexer knows the destination.
+  if (source.status?.registered
+    && !!source.status.dustAddress
+    && !!ownDustAddress
+    && source.status.dustAddress.toLowerCase() === ownDustAddress.toLowerCase()) {
+    return 'generatingHere';
+  }
+
+  // Confirmed on Cardano as pointing HERE, but the indexer hasn't relayed it.
+  // Without this the row offered "Redirect here" for a registration that is
+  // already ours — a second signature and network fee that changes nothing.
+  // Compared as datum hex because that's what `dust/registrations` reports.
+  if (source.registrations.length === 1
+    && !!ownDustAddressHex
+    && source.registrations[0].dustAddressHex.toLowerCase() === ownDustAddressHex.toLowerCase()) {
+    return 'pending';
+  }
+
+  // We submitted a register/redirect from this profile that the chain hasn't
+  // caught up with yet. Ranked above `registeredElsewhere` (as the template
+  // always has) so an in-flight redirect reads as pending rather than
+  // re-offering the button that started it — safe either way, since 'pending'
+  // offers no Register CTA.
+  if (source.pendingLocal) return 'pending';
+
+  // Exactly one live registration UTxO on Cardano. Valid regardless of whether
+  // the indexer has relayed it yet, and regardless of where it points — either
+  // way the answer is Redirect, never Register. This is the case that used to
+  // fall through to a Register CTA and create a duplicate.
+  if (source.registrations.length === 1 || source.status?.registered) {
+    return source.canSign ? 'registeredElsewhere' : 'readOnly';
+  }
+
+  // Both chain reads must have actually answered before a row may claim to be
+  // clear. "Unregistered" and "the query failed" look identical on the wire.
+  //
+  // Ranked ABOVE the read-only fallback: a watch-only row whose lookup failed
+  // is still a failed lookup, and labelling it "read only" states we know its
+  // registration when we do not. Neither label offers a CTA, so this only
+  // changes what the row claims — which is the point.
+  if (!source.registrationsLoaded || !source.statusLoaded) return 'unknown';
+
+  if (!source.canSign) return 'readOnly';
+
+  return 'unregistered';
+}
+
 /** Progress stage for the two-step (isolate → wait → register) flow. */
 export type DustSourceStage = 'registering' | 'isolating' | 'waitingIsolation';
 
@@ -86,6 +200,9 @@ export function useDustSources() {
 
   const network = computed<string>(() => walletStore.loggedWallet?.network ?? '');
   const ownDustAddress = computed<string>(() => midnightStore.addresses?.dust ?? '');
+  /** `ownDustAddress` as the raw datum hex, so rows can be matched against
+   *  `dust/registrations`. Derived once per refresh (pure decode, no keys). */
+  const ownDustAddressHex = ref('');
   const isSupported = computed(() =>
     walletStore.loggedWallet?.chain === Blockchain.MIDNIGHT && !!CNIGHT_ASSETS[network.value]);
 
@@ -102,6 +219,9 @@ export function useDustSources() {
       ...identity,
       nightBalance: null,
       status: null,
+      statusLoaded: false,
+      registrations: [],
+      registrationsLoaded: false,
       pendingLocal: false,
     }));
   }
@@ -140,9 +260,16 @@ export function useDustSources() {
         const statuses = await api.getDustStatusBatch(chunk.map(s => s.stakeAddress));
         for (const st of statuses) {
           const source = chunk.find(s => s.stakeAddress === st.cardanoRewardAddress);
-          if (source) source.status = st;
+          if (!source) continue;
+          source.status = st;
+          // Only a row Nexus actually answered for is "loaded". A row missing
+          // from the response is as unknown as a thrown batch — never a clear.
+          source.statusLoaded = true;
         }
       } catch (e) {
+        // Leave `statusLoaded` false on every row in this chunk: the dialog
+        // renders them as 'unknown' (no CTA) rather than inviting a duplicate
+        // registration on top of a live one it simply could not see.
         debugLog('[DustSources] status batch failed:', e);
       }
     }
@@ -172,6 +299,50 @@ export function useDustSources() {
     }
   }
 
+  /**
+   * Live registration UTxOs per source (`dust/registrations`) — CONFIRMED
+   * Cardano state, the counterpart to `dust/status`'s indexer view.
+   *
+   * This is the guard the Midnight side was missing. `dust/status` proxies the
+   * Midnight indexer, which lags the Cardano chain by the ~2.5h relay, so a
+   * stake that already carries a live registration — made from the Cardano
+   * wallet's own dialog, the official portal, another browser profile, or for
+   * a DIFFERENT Midnight wallet — reads `registered:false` here. The local
+   * `gero.dustPending` marker only covers submissions from this profile, so
+   * without this call the row rendered a Register CTA and a second live
+   * registration UTxO could be created, which invalidates the whole set
+   * (exactly one live registration per stake credential is valid).
+   *
+   * Per-address GET, run in parallel like `loadBalances`. A failure leaves
+   * `registrationsLoaded` false so the row falls to 'unknown' (no CTA) rather
+   * than to 'unregistered'.
+   */
+  async function loadRegistrations(list: DustSource[]): Promise<void> {
+    if (list.length === 0) return;
+    const api = getMidnightApi(network.value);
+    await Promise.all(list.map(async (source) => {
+      try {
+        source.registrations = await api.getDustRegistrations(source.stakeAddress);
+        source.registrationsLoaded = true;
+      } catch (e) {
+        debugLog('[DustSources] registrations query failed for', source.stakeAddress, e);
+      }
+    }));
+  }
+
+  async function deriveOwnDustAddressHex(): Promise<void> {
+    const address = ownDustAddress.value;
+    if (!address) { ownDustAddressHex.value = ''; return; }
+    try {
+      const { dustAddressToHex } = await import('@/chains/midnight/midnightKeyManager');
+      ownDustAddressHex.value = dustAddressToHex(address);
+    } catch (e) {
+      // Non-fatal: rows fall back to the indexer's view of the destination.
+      debugLog('[DustSources] could not derive own dust address hex', e);
+      ownDustAddressHex.value = '';
+    }
+  }
+
   async function refresh(): Promise<void> {
     if (!isSupported.value) {
       sources.value = [];
@@ -179,9 +350,10 @@ export function useDustSources() {
     }
     loading.value = true;
     try {
+      await deriveOwnDustAddressHex();
       const list = await enumerate();
       sources.value = list;
-      await Promise.all([loadBalances(list), loadStatuses(list)]);
+      await Promise.all([loadBalances(list), loadStatuses(list), loadRegistrations(list)]);
       // Reassign to poke reactivity after in-place mutation of row fields.
       sources.value = [...list];
     } finally {
@@ -410,6 +582,14 @@ export function useDustSources() {
     if (!ownDustAddress.value) {
       return { status: 'error', message: 'This wallet has no DUST address yet' };
     }
+    // Re-check against the same derivation the button rendered from, so a
+    // status that landed between render and click (or a row the template
+    // enabled by mistake) can never build a SECOND registration on a stake
+    // that already has one — which would invalidate the whole set.
+    const state = dustSourceRowState(source, ownDustAddress.value, ownDustAddressHex.value);
+    if (state !== 'unregistered') {
+      return { status: 'error', message: 'ALREADY_REGISTERED' };
+    }
     working.value = true;
     try {
       const mnemonic = await decryptSourceMnemonic(source, credentials);
@@ -457,10 +637,19 @@ export function useDustSources() {
     source: DustSource, credentials: SourceCredentials,
     onStage?: (stage: DustSourceStage) => void,
   ): Promise<DustSourceActionResult> {
-    const txHash = source.status?.registrationUtxoTxHash;
-    const outputIndex = source.status?.registrationUtxoOutputIndex;
+    // Prefer the CONFIRMED Cardano registration UTxO over the indexer's copy:
+    // during the ~2.5h relay `dust/status` carries no outpoint at all, and
+    // that's exactly when a user wants to re-point a registration they can
+    // already see on Cardano. Falling back to `status` keeps registrations
+    // made before `dust/registrations` existed working.
+    const live = source.registrations.length === 1 ? source.registrations[0] : null;
+    const txHash = live?.txHash ?? source.status?.registrationUtxoTxHash;
+    const outputIndex = live ? live.outputIndex : source.status?.registrationUtxoOutputIndex;
     if (!ownDustAddress.value) {
       return { status: 'error', message: 'This wallet has no DUST address yet' };
+    }
+    if (source.registrations.length > 1) {
+      return { status: 'error', message: 'DUPLICATE_REGISTRATIONS' };
     }
     if (!txHash || outputIndex === null || outputIndex === undefined) {
       return { status: 'error', message: 'Registration UTxO not known yet. Refresh and try again.' };
@@ -515,6 +704,7 @@ export function useDustSources() {
     working,
     isSupported,
     ownDustAddress,
+    ownDustAddressHex,
     refresh,
     registerSource,
     redirectSource,

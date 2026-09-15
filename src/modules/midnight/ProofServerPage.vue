@@ -87,6 +87,14 @@
             <!-- Local setup guide -->
             <div v-if="proofServerMode === 'local'" class="ps-card">
               <h2 class="t-heading mb-3">{{ t('midnight.proofServerPage.setupTitle') }}</h2>
+              <v-select
+                v-model="localProverProfile"
+                :items="localProverProfiles"
+                :label="t('midnight.proofServer.localProfileLabel')"
+                :disabled="proofServerSaving"
+                outlined dense attach hide-details="auto"
+              />
+              <p class="t-caption mt-2 mb-4">{{ t('midnight.proofServer.localProfileHint') }}</p>
 
               <div class="ps-step">
                 <div class="ps-step-badge">1</div>
@@ -399,6 +407,7 @@ const isMidnight = computed(() => loggedWallet.value?.chain === Blockchain.MIDNI
 const {
   proofServerMode,
   proofServerSaving,
+  localProverProfile,
   localUrlDraft,
   localUrlError,
   onLocalUrlBlur,
@@ -421,6 +430,11 @@ const {
   lastCheckLatencyMs,
   provingHistory,
 } = useMidnightProofServer();
+
+const localProverProfiles = computed(() => ([
+  { value: 'legacy', text: t('midnight.proofServer.localProfileLegacy') },
+  { value: 'stagenet', text: t('midnight.proofServer.localProfileStagenet') },
+]));
 
 const showZkpaasKey = ref(false);
 const showZkpaasSecret = ref(false);

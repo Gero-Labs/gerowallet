@@ -286,7 +286,10 @@ const selectDRep = (drep: PendingDRep) => {
 // freshly created dashboard tab reads the handoff on mount.
 const handOffDelegation = async (pending: Omit<PendingDRepDelegation, 'createdAt'>) => {
   await setPendingDRepDelegation(pending);
-  await openFullDashboard('#/governance', true);
+  // The DRep directory is the consumer, so hand off straight to it. `#/governance`
+  // now redirects to `governanceMe`, which does not read the handoff -- sending
+  // the user there parked a delegation nobody would ever claim.
+  await openFullDashboard('#/governance/dreps', true);
   snackbar.fireSuccess(t('miniGero.continueInDashboard'));
 };
 

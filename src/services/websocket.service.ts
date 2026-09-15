@@ -192,8 +192,15 @@ class WebSocketService {
       // wallet's `applyUtxoDeltas` may have advanced `lastMidnightTxId` since
       // the last SUBSCRIBE (auto-reconnect after a transient WS drop, network
       // hiccup, BG SW wake-up). Stale cursor = needless replay on every drop.
+      //
+      // A NULL cursor from the caller is an instruction, not a missing value:
+      // midnight-sync.service passes null to force a full replay when the
+      // wallet has a cursor but no preserved UTxOs. Live-reading over the top
+      // of it re-sent the stale cursor, gero-sync answered SYNC_CHECK "caught
+      // up", and the balance stayed empty forever. Only refresh a cursor the
+      // caller actually supplied.
       let liveMidnightCursor: number | null = this.midnightLastTxId;
-      if (this.chain === 'MIDNIGHT') {
+      if (this.chain === 'MIDNIGHT' && this.midnightLastTxId != null) {
         const live = (midnightStore as { lastMidnightTxId?: number | null }).lastMidnightTxId;
         if (typeof live === 'number' && live >= 0) liveMidnightCursor = live;
       }
@@ -231,6 +238,8 @@ class WebSocketService {
           // Midnight shielded-only: pair of fields that opt this WS session
           // into gero-sync's shielded-tx subscription. Both null → unshielded-
           // only sync (today's default).
+          midnightChainGeneration: midnightStore.chainIdentity?.network === this.network
+            ? midnightStore.chainIdentity.generation : null,
           midnightShieldedViewingKey: this.midnightShieldedViewingKey,
           midnightShieldedLastIndex: this.midnightShieldedLastIndex,
         });
@@ -303,6 +312,13 @@ class WebSocketService {
 
       switch (type) {
         case 'SYNC': {
+          // Midnight streams carry independent transaction cursors. Deduplicating
+          // by block hash drops every transaction after the first in a block;
+          // batching across generations can relabel an old chain's events.
+          if (this.chain === 'MIDNIGHT') {
+            void this.handlers.onSync?.(data)?.catch((error) => debugLog('Midnight sync failed', error));
+            break;
+          }
           const txCount = Array.isArray(data['transactions']) ? data['transactions'].length : 0;
           const blockHeight = data.block?.height || 0;
           debugLog(`📥 SYNC received: ${txCount} tx(s), block ${blockHeight}`);
@@ -338,6 +354,15 @@ class WebSocketService {
         }
 
         case 'CATCH_UP_COMPLETE': {
+          if (this.chain === 'MIDNIGHT') {
+            // Midnight history arrives through the generation-stamped streams.
+            // Generic catch-up snapshots have no generation and cannot replace it.
+            this.pendingTxBatches = [];
+            this.catchingUp = false;
+            LoadingState.setProgress(100);
+            if (this.syncResolve) { this.syncResolve(); this.syncResolve = null; }
+            break;
+          }
           LoadingState.setProgress(95);
           LoadingState.setText('Processing transactions...');
           const block = data.block as { height: number; hash: string; slot: number; epoch: number; time: number } | undefined;
@@ -384,7 +409,8 @@ class WebSocketService {
           //
           // IMPORTANT: type goes AFTER the spread — otherwise data.type ('SYNC_CHECK_OK')
           // overwrites it and setSync's `type === 'SYNC'` guard rejects the message.
-          if (data['utxos'] || data['addresses'] || data['account'] || data['block']) {
+          // Midnight must also validate/record a blockless successful check.
+          if (this.chain === 'MIDNIGHT' || data['utxos'] || data['addresses'] || data['account'] || data['block']) {
             this.handlers.onSync?.({ ...data, type: 'SYNC' } as WsSyncMessage);
           }
           if (this.syncResolve) { this.syncResolve(); this.syncResolve = null; }
@@ -477,8 +503,10 @@ class WebSocketService {
     // Live-read the Midnight cursor for resubscribe too — same reason as the
     // initial connect path: store may have advanced since the last SUBSCRIBE.
     // Only consumed by the non-BTC send below; the BITCOIN branch returns first.
+    // Same null-means-replay rule as openConnection: never live-read over a
+    // caller-supplied null, or a forced resync silently resumes instead.
     let liveMidnightCursor: number | null = this.midnightLastTxId;
-    if (this.chain === 'MIDNIGHT') {
+    if (this.chain === 'MIDNIGHT' && this.midnightLastTxId != null) {
       const live = (midnightStore as { lastMidnightTxId?: number | null }).lastMidnightTxId;
       if (typeof live === 'number' && live >= 0) liveMidnightCursor = live;
     }
@@ -513,7 +541,9 @@ class WebSocketService {
       // Mirror the connect-path payload so a force-resync doesn't accidentally
       // strip Midnight-only resume cursors and re-trigger full replay.
       midnightLastTxId: liveMidnightCursor,
-      midnightShieldedViewingKey: this.midnightShieldedViewingKey,
+      midnightChainGeneration: midnightStore.chainIdentity?.network === this.network
+            ? midnightStore.chainIdentity.generation : null,
+          midnightShieldedViewingKey: this.midnightShieldedViewingKey,
       midnightShieldedLastIndex: this.midnightShieldedLastIndex,
     });
   }

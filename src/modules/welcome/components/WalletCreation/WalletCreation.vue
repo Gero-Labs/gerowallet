@@ -1,25 +1,17 @@
 <template>
   <div class="welcome-glass-panel">
     <div class="welcome-content">
-      <div class="logo-container">
-        <div
-          class="logo"
-          :style="{
-            backgroundImage: `url(${logo})`,
-            backgroundSize: 'contain',
-            backgroundRepeat: 'no-repeat',
-            width: '122px',
-            height: '138px',
-          }"
-        />
-      </div>
-
-      <div class="welcome-heading">
-        <div class="welcome-title">{{ $t('welcome.welcomeMessage') }}</div>
-        <!-- "Choose a wallet to sign in" only makes sense when there is a wallet
-             to choose. With an empty list the right-column hero + Get Started CTA
-             is the create-first-wallet path, so drop the sign-in subtitle. -->
-        <div v-if="hasWallets" class="welcome-subtitle">{{ $t('welcome.chooseAWallet') }}</div>
+      <div class="welcome-header">
+        <div class="logo-container">
+          <div
+            class="logo"
+            :style="{
+              backgroundImage: `url(${logo})`,
+              backgroundSize: 'contain',
+              backgroundRepeat: 'no-repeat',
+            }"
+          />
+        </div>
       </div>
 
       <!-- The zero-wallet case never reaches this panel: Welcome.vue swaps the
@@ -49,8 +41,7 @@ const onNetworkChange = (n: NetworkInfo): void => {
   emit('network-change', n);
 };
 
-// Shared eligibility rule, so the heading stays in sync with what the list
-// actually renders.
+// Use the same eligibility rule as the shared wallet list.
 const { hasWallets } = useAvailableWallets();
 
 // Logo reacts to the selected network's brand colors.
@@ -95,6 +86,8 @@ const logo = computed(() => {
 
 .welcome-content {
   flex: 1;
+  width: 100%;
+  align-self: center;
   /* Without min-height:0 this flex item grows to its content height (the full
      wallet list), so the list child never gets a bounded height to scroll in.
      This is the load-bearing line for the list's internal scroll. */
@@ -102,39 +95,23 @@ const logo = computed(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start; /* logo, heading, list stack from the top */
+  justify-content: flex-start;
   padding: 18px;
   position: relative;
   z-index: 2;
   max-width: 428px;
 }
 
+.welcome-header { display: flex; flex-direction: column; align-items: center; flex: none; width: 100%; }
+.logo { width: 72px; height: 81px; }
+
 .logo-container {
-  margin-top: 56px; /* bring the logo down from the top edge */
-  margin-bottom: 16px;
-}
-
-.welcome-heading {
-  text-align: center;
-  margin-bottom: 20px;
-}
-
-.welcome-title {
-  font-size: 32px;
-  font-weight: 700;
-  color: var(--g-text-1);
-  line-height: 1.2;
-}
-
-.welcome-subtitle {
-  font-size: 16px;
-  color: var(--g-text-3);
-  margin-top: 4px;
+  margin: 8px 0 12px;
 }
 
 .wallet-list-block {
   width: 100%;
-  /* Fill the space between the heading and the footer and let the list scroll
+  /* Fill the space between the logo and the footer and let the list scroll
      inside it, instead of a fixed height that overflows the page on shorter
      viewports (min-height:0 lets a flex child actually shrink + scroll). */
   flex: 1 1 auto;

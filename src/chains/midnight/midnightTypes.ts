@@ -33,6 +33,8 @@ export const MIDNIGHT_DECIMALS = {
  * shielded balance locally from the wallet's note tracking.
  */
 export interface MidnightBalances {
+  /** Real private custom-token balances; zero-color NIGHT is never shielded. */
+  shieldedTokens?: Record<string, bigint>;
   /** NIGHT in shielded pool (private, computed locally by the SDK from notes). */
   nightShielded: bigint;
   /** NIGHT in unshielded pool (public, summed from `unshieldedTransactions` events). */
@@ -148,8 +150,11 @@ export interface MidnightTransaction {
   hash: string;
   /** High-level UI category. */
   type: MidnightTransactionType;
-  /** Which token moved. */
-  token: 'NIGHT' | 'DUST';
+  /**
+   * What moved. Native NIGHT and DUST keep their names; anything else is the
+   * 32-byte token color, resolved for display through midnightTokenMeta().
+   */
+  token: 'NIGHT' | 'DUST' | (string & {});
   /** Token amount (base units; divide by `MIDNIGHT_DECIMALS[token]`). */
   amount: bigint;
   /** Counterparty address (sender or recipient depending on `type`). */

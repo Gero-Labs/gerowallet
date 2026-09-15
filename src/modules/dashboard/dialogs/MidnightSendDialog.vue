@@ -6,7 +6,7 @@
       :title="t('wallet.quickSend')"
       :loading="false"
       :min-height="0"
-      :subtitle="t('wallet.quickSendSubtitle', { currency: nightCurrency })"
+      :subtitle="t('wallet.quickSendSubtitle', { currency: selectedTicker })"
       :persistent="sending"
       :img="assets.sendSvg"
       :width="sending ? 468 : 428"
@@ -44,7 +44,7 @@
         <!-- ── Send-in-progress: left summary + right stage timeline ── -->
         <div v-if="sending" class="midnight-progress-view">
           <div class="mpv-summary">
-            <div class="mpv-summary-amount">{{ amount || '0' }} {{ nightCurrency }}</div>
+            <div class="mpv-summary-amount">{{ amount || '0' }} {{ selectedTicker }}</div>
             <div class="mpv-summary-to">
               <span class="mpv-summary-to-label">{{ t('common.to') }}</span>
               <span class="mpv-summary-to-addr">{{ truncate(recipient.trim()) }}</span>
@@ -62,42 +62,7 @@
             </div>
           </div>
 
-          <div class="mpv-timeline">
-            <div
-              v-for="(node, i) in timelineNodes"
-              :key="node.key"
-              class="mpv-node"
-              :class="node.state"
-            >
-              <div class="mpv-node-marker">
-                <div class="mpv-dot">
-                  <v-icon v-if="node.state === 'done'" size="13" color="var(--g-surface)">mdi-check</v-icon>
-                  <span v-else-if="node.state === 'active'" class="mpv-pulse"></span>
-                </div>
-                <div
-                  v-if="i < timelineNodes.length - 1"
-                  class="mpv-connector"
-                  :class="{ filled: node.state === 'done' }"
-                ></div>
-              </div>
-              <div class="mpv-node-body">
-                <div class="mpv-node-label">{{ node.label }}</div>
-                <div
-                  v-if="node.state === 'active' && node.showBar"
-                  class="mpv-node-bar"
-                  :class="{ indeterminate: node.percent == null || node.percent < 0 }"
-                >
-                  <div
-                    class="mpv-node-bar-fill"
-                    :style="node.percent != null && node.percent >= 0 ? { width: node.percent + '%' } : {}"
-                  ></div>
-                </div>
-                <div v-if="node.state === 'active' && node.detail" class="mpv-node-detail">
-                  {{ node.detail }}
-                </div>
-              </div>
-            </div>
-          </div>
+          <MidnightSendTimeline class="mpv-timeline" :nodes="timelineNodes" />
         </div>
 
         <CustomStepper v-else :currentStep="currentStep" :steps="steps">
@@ -182,16 +147,34 @@
                     <div class="assets-section">
                       <div class="token-row">
                         <div class="token-row__left">
-                          <v-avatar size="20" class="mr-1">
-                            <img :src="midnightLogo" alt="NIGHT" />
-                          </v-avatar>
-                          <span class="token-ticker">{{ nightCurrency }}</span>
-                          <v-icon
-                            x-small
-                            color="var(--g-accent)"
-                            class="ml-1"
-                            style="margin-top: -1px; font-size: 11px;"
-                          >mdi-check-decagram</v-icon>
+                          <!-- Only a picker once there is a genuine choice; a
+                               NIGHT-only wallet keeps the original chip. -->
+                          <v-select
+                            v-if="assetOptions.length > 1"
+                            v-model="selectedToken"
+                            :items="assetOptions"
+                            item-value="value"
+                            item-text="ticker"
+                            dense
+                            outlined
+                            hide-details
+                            attach
+                            class="asset-select"
+                            :disabled="sending"
+                            :aria-label="t('common.asset')"
+                          />
+                          <template v-else>
+                            <v-avatar size="20" class="mr-1">
+                              <img :src="midnightLogo" :alt="nightCurrency" />
+                            </v-avatar>
+                            <span class="token-ticker">{{ selectedTicker }}</span>
+                            <v-icon
+                              x-small
+                              color="var(--g-accent)"
+                              class="ml-1"
+                              style="margin-top: -1px; font-size: 11px;"
+                            >mdi-check-decagram</v-icon>
+                          </template>
                           <span class="token-balance">{{ formattedAvailable }}</span>
                         </div>
                         <div class="token-row__right">
@@ -199,7 +182,7 @@
                             v-model="amount"
                             type="number"
                             min="0"
-                            step="0.000001"
+                            :step="amountStep"
                             outlined
                             dense
                             hide-details="auto"
@@ -222,6 +205,55 @@
                         <v-icon x-small color="var(--g-text-3)" class="mr-1">mdi-information-outline</v-icon>
                         {{ t('midnight.send.shieldedBalanceNote') }}
                       </div>
+                      <div v-if="noFeeCapacity" class="token-info">
+                        <v-icon x-small color="var(--g-warning)" class="mr-1">mdi-alert-outline</v-icon>
+                        {{ t('midnight.send.noDustFee') }}
+                      </div>
+                      <MidnightSponsorPicker
+                        v-if="noFeeCapacity && loggedWallet"
+                        :value="sponsorWalletId"
+                        :sender-wallet-id="loggedWallet.id"
+                        :network="loggedWallet.network"
+                        @input="sponsorWalletId = $event"
+                      />
+                      <!-- Unlock block for the chosen sponsor. Both branches name
+                           BOTH wallets: the single likeliest mistake here is
+                           entering the sending wallet's credential. -->
+                      <div v-if="sponsorWallet" class="sponsor-unlock">
+                        <template v-if="sponsorNeedsPassword">
+                          <v-text-field
+                            v-model="sponsorPassword"
+                            type="password"
+                            autocomplete="off"
+                            dense
+                            outlined
+                            hide-details="auto"
+                            :label="t('midnight.sponsor.passwordLabel', { name: sponsorWallet.name })"
+                          />
+                          <div class="sponsor-unlock__warn">
+                            {{ t('midnight.sponsor.notSenderPassword', {
+                              sender: loggedWallet ? loggedWallet.name : '',
+                            }) }}
+                          </div>
+                        </template>
+                        <!-- A PassKey sponsor used to show NOTHING here: the first
+                             sign of a second credential was the browser's own
+                             prompt, mid-send. -->
+                        <div v-else class="sponsor-unlock__passkey">
+                          <v-icon small class="mr-2">mdi-fingerprint</v-icon>
+                          <span>
+                            {{ t('midnight.sponsor.passkeyNotice', {
+                              name: sponsorWallet.name,
+                              sender: loggedWallet ? loggedWallet.name : '',
+                            }) }}
+                          </span>
+                        </div>
+
+                      </div>
+                      <div v-else-if="rawUnits" class="token-info">
+                        <v-icon x-small color="var(--g-text-3)" class="mr-1">mdi-information-outline</v-icon>
+                        {{ t('midnight.send.rawUnitsNote') }}
+                      </div>
                     </div>
                   </div>
                 </v-form>
@@ -235,11 +267,12 @@
                   <div class="global-total__row global-total__total-row">
                     <span class="global-total__label">{{ t('common.total') }}</span>
                     <div>
-                      <span class="global-total__ada">{{ amount }} {{ nightCurrency }}</span>
+                      <span class="global-total__ada">{{ amount }} {{ selectedTicker }}</span>
                     </div>
                   </div>
                 </div>
 
+                <MidnightPrivateBalances />
                 <div v-if="!shieldedAvailable" class="text-caption text--secondary text-center mt-3">
                   {{ t('midnight.shieldedSendComingNote') }}
                 </div>
@@ -253,7 +286,7 @@
               <TransactionDetailsCard
                 :outputs="reviewOutputs"
                 :totals="reviewTotals"
-                :unit="nightCurrency"
+                :unit="selectedTicker"
                 :fee-unit="dustCurrency"
                 :fee-label="t('midnight.send.estimatedNetworkFee')"
               />
@@ -262,6 +295,24 @@
               <div v-if="!isShielded" class="midnight-info-note mt-3">
                 <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-eye-outline</v-icon>
                 <span>{{ t('midnight.send.publicTxNote') }}</span>
+              </div>
+              <!-- Sponsored sends carry a second, different disclosure: an
+                   honest unknown about on-chain linkability, not a promise. -->
+              <div v-if="sponsorWallet" class="midnight-info-note mt-2">
+                <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-link-variant</v-icon>
+                <span>{{ t('midnight.sponsor.disclosureLinkability') }}</span>
+              </div>
+              <!-- Who is unlocked for this send, with a way back to the picker. -->
+              <div v-if="sponsorWallet" class="sponsor-review mt-2">
+                <span class="sponsor-review__av">{{ initialsOf(sponsorWallet.name) }}</span>
+                <span class="sponsor-review__body">
+                  <span class="sponsor-review__name">{{ sponsorWallet.name }}</span>
+                  <span class="sponsor-review__sub">{{ t('midnight.sponsor.feeWalletUnlocked') }}</span>
+                </span>
+                <span class="grow"></span>
+                <button type="button" class="sponsor-review__change" @click="currentStep = 1">
+                  {{ t('midnight.sponsor.change') }}
+                </button>
               </div>
               <!-- DUST fee note (fee is ~1 Speck; sending does NOT reset DUST —
                    verified on preprod, the old "reset" was an estimator bug).
@@ -378,7 +429,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, toRefs, watch } from 'vue';
+import { hasMidnightProvingConsent, type MidnightRemoteProver } from '@/chains/midnight/midnightProvingConsent';
+import MidnightPrivateBalances from '@/modules/dashboard/components/MidnightPrivateBalances.vue';
+import { computed, onMounted, ref, toRefs, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
 import TransactionAuthSection from '@/shared/components/TransactionAuthSection.vue';
@@ -390,15 +443,26 @@ import ShieldedProvingConsentDialog from '@/modules/dashboard/dialogs/ShieldedPr
 import QRAddressScannerDialog from '@/modules/dashboard/dialogs/QRAddressScannerDialog.vue';
 import midnightLogo from '@/assets/svg/midnight.svg';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import MidnightSponsorPicker from '@/modules/dashboard/dialogs/MidnightSponsorPicker.vue';
+import { geroStore } from '@/stores/geroStore';
+import MidnightSendTimeline from '@/shared/components/MidnightSendTimeline.vue';
+import { chargePercent, type SponsorCandidate } from '@/chains/midnight/midnightSponsorEligibility';
 import { settingsNavRequest } from '@/shared/composables/useGlobalSearch';
 import {
   midnightStore,
-  SHIELDED_PROVING_CONSENT_VERSION,
 } from '@/stores/midnightStore';
 import type { MidnightSendStage } from '@/services/midnight-tx.service';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain, Network, WalletType } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
+import { midnightTokenBalances } from '@/chains/midnight/midnightTokenBalances';
+import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
+import { blocksMidnightSend } from '@/chains/midnight/midnightFeeCapacity';
+import {
+  formatTokenAmount,
+  parseTokenAmount,
+  toAmountInput,
+} from '@/chains/midnight/midnightAmount';
 import { debugLog } from '@/utils/debug';
 import rules from '@/utils/rules';
 import assets from '@/utils/assets';
@@ -431,23 +495,162 @@ const shakeError = ref(false);
 // kept out of midnightStore (see midnightStore.setActive) — the UI only needs
 // to know whether shielded sync is available, which the store publishes as a
 // boolean derived from the same `mn_shield-esk_` validity check.
-const shieldedAvailable = computed(() => midnightStore.shieldedSyncAvailable);
+const shieldedAvailable = computed(() => midnightStore.privateSyncStatus === 'synced'
+  && Object.keys(midnightStore.balances.shieldedTokens ?? {}).length > 0);
 
 const activeTab = ref(0);
 const isShielded = computed(() => activeTab.value === 1);
 
-const NIGHT_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.NIGHT);
-const available = computed(() =>
-  isShielded.value
-    ? (midnightStore.balances?.nightShielded ?? 0n)
-    : (midnightStore.balances?.nightUnshielded ?? 0n));
+/** `NIGHT` for the native token, otherwise a 32-byte colour as hex. */
+const selectedToken = ref<string>('NIGHT');
+
+/** Per-colour unshielded balances derived from the wallet's own UTxO set. */
+const tokenBalances = computed(() => midnightTokenBalances(midnightStore.utxos ?? []));
+
+interface AssetOption {
+  value: string;
+  ticker: string;
+  /**
+   * Decimal exponent, or null when the token isn't in the registry. null means
+   * "unknown", NOT zero-with-a-shrug: amounts are then entered and shown as raw
+   * base units and the UI says so. Guessing 6 here could send 1000x too much.
+   */
+  decimals: number | null;
+}
+
+const assetOptions = computed<AssetOption[]>(() => {
+  const night: AssetOption = {
+    value: 'NIGHT',
+    ticker: nightCurrency.value,
+    decimals: MIDNIGHT_DECIMALS.NIGHT,
+  };
+  const tokens = Object.entries(isShielded.value ? (midnightStore.balances.shieldedTokens ?? {}) : tokenBalances.value).map(([color, _bal]) => {
+    const meta = midnightTokenMeta(color);
+    return {
+      value: color,
+      ticker: meta?.symbol ?? `${color.slice(0, 8)}\u2026${color.slice(-6)}`,
+      decimals: meta?.decimals ?? null,
+    } as AssetOption;
+  });
+  return isShielded.value ? tokens : [night, ...tokens];
+});
+
+const selectedAsset = computed<AssetOption>(
+  () => assetOptions.value.find((o) => o.value === selectedToken.value) ?? assetOptions.value[0] ?? { value: '', ticker: t('midnight.shielded') as string, decimals: null },
+);
+watch(assetOptions, options => {
+  if (!options.some(option => option.value === selectedToken.value)) selectedToken.value = options[0]?.value ?? '';
+}, { immediate: true });
+/** null decimals => raw base units, so the divisor is 1 and nothing is scaled. */
+const selectedDecimals = computed(() => selectedAsset.value.decimals);
+const selectedTicker = computed(() => selectedAsset.value.ticker);
+const rawUnits = computed(() => selectedDecimals.value === null);
+const amountStep = computed(() =>
+  rawUnits.value ? '1' : `0.${'0'.repeat((selectedDecimals.value ?? 1) - 1)}1`,
+);
+
+/**
+  * No spendable DUST means no fee can be paid, so the send cannot succeed.
+  * Caught here rather than four steps later inside the SDK's
+  * `balanceTransactions`, which neither returns nor throws in that state.
+  */
+const noFeeCapacity = computed(() => blocksMidnightSend(midnightStore.dustState));
+
+/**
+ * Wallet chosen to pay this send's DUST fee, or null to pay from this wallet.
+ * Only set while `noFeeCapacity` holds — the picker is the only writer.
+ */
+const sponsorWalletId = ref<number | null>(null);
+
+/**
+ * A missing DUST balance only blocks the send when nothing else will pay for
+ * it. With a sponsor chosen the fee comes from that wallet, so the step-1 guard
+ * must stand down — otherwise the feature is unreachable from the one screen
+ * that needs it.
+ */
+const blockedByFee = computed(() => noFeeCapacity.value && sponsorWalletId.value == null);
+
+/** The chosen sponsor's stored record, for deciding how to unlock it. */
+const sponsorWallet = computed(() => (
+  sponsorWalletId.value == null ? null : (geroStore.wallets?.[sponsorWalletId.value] ?? null)
+));
+
+/**
+ * A PassKey sponsor is unlocked by a prompt; a password sponsor needs its OWN
+ * password. Never the sender's — the two wallets are independently encrypted.
+ */
+const sponsorNeedsPassword = computed(() => (
+  !!sponsorWallet.value && sponsorWallet.value.encryptionMethod !== 'prf'
+));
+const sponsorPassword = ref('');
+
+/**
+ * Live state for the chosen sponsor — its DUST charge drives the progress
+ * battery and the review card. Resolved from live registrations, never from
+ * the dashboard battery (which can carry a previous wallet's figure).
+ */
+const sponsorCandidate = ref<SponsorCandidate | null>(null);
+
+async function refreshSponsorCandidate(): Promise<void> {
+  sponsorCandidate.value = null;
+  const wallet = loggedWallet.value;
+  const id = sponsorWalletId.value;
+  if (!wallet || id == null) return;
+  const { loadSponsorCandidates } = await import('@/chains/midnight/midnightSponsorLookup');
+  const { candidates } = await loadSponsorCandidates(wallet.id, wallet.network);
+  sponsorCandidate.value = candidates.find((c) => c.walletId === id) ?? null;
+}
+watch(() => sponsorWalletId.value, refreshSponsorCandidate);
+
+/**
+ * Restore the wallet's stored sponsor preference when the dialog opens. The
+ * picker still re-resolves whether that wallet can actually pay — a stale
+ * preference degrades to "not ready" there rather than producing a failing
+ * send.
+ */
+async function restoreSponsorPreference(): Promise<void> {
+  const wallet = loggedWallet.value;
+  if (!wallet) return;
+  const { linkFor, loadSponsorLinks } = await import('@/chains/midnight/midnightSponsorLinks');
+  const link = linkFor(await loadSponsorLinks(), wallet.id, wallet.network);
+  sponsorWalletId.value = link?.sponsorWalletId ?? null;
+}
+onMounted(restoreSponsorPreference);
+
+/**
+ * The sponsor argument for `sendUnshieldedNight`, collecting that wallet's own
+ * credential. Returns undefined for an unsponsored send.
+ *
+ * The PassKey prompt happens HERE rather than inside the send so the second
+ * approval is raised before any network work starts — the review step warns
+ * the user to expect two.
+ */
+async function buildSponsorArg() {
+  const sponsor = sponsorWallet.value;
+  if (!sponsor) return undefined;
+
+  if (sponsor.encryptionMethod === 'prf') {
+    if (!sponsor.webAuthnCredentialId) throw new Error(t('midnight.sponsor.unlockFailed') as string);
+    const { evaluateWalletPrf } = await import('@/shared/utils/passkeyPrf');
+    const buf = await evaluateWalletPrf({
+      id: sponsor.id,
+      webAuthnCredentialId: sponsor.webAuthnCredentialId,
+      webAuthnTransports: sponsor.webAuthnTransports,
+    });
+    return { walletId: sponsor.id, prfSecret: new Uint8Array(buf) };
+  }
+
+  if (!sponsorPassword.value) throw new Error(t('midnight.sponsor.passwordRequired') as string);
+  return { walletId: sponsor.id, password: sponsorPassword.value };
+}
+
+const available = computed(() => {
+  if (isShielded.value) return midnightStore.balances.shieldedTokens?.[selectedToken.value] ?? 0n;
+  if (selectedToken.value === 'NIGHT') return midnightStore.balances?.nightUnshielded ?? 0n;
+  return tokenBalances.value[selectedToken.value] ?? 0n;
+});
 const formattedAvailable = computed(() => {
-  const value = available.value;
-  const whole = value / NIGHT_DIVISOR;
-  const remainder = value % NIGHT_DIVISOR;
-  const remainderStr = remainder.toString().padStart(NIGHT_DIVISOR.toString().length - 1, '0');
-  const fraction = remainderStr.slice(0, 2).padEnd(2, '0');
-  return `${whole.toLocaleString('en-US')}.${fraction}`;
+  return formatTokenAmount(available.value, selectedDecimals.value);
 });
 
 // Network fees on Midnight are paid in DUST and are negligible (~1 Speck
@@ -542,7 +745,11 @@ const timelineNodes = computed<TimelineNode[]>(() => {
     },
     {
       key: 'sync',
-      label: provingActive ? provingLabel : t('midnight.send.stageSync'),
+      label: provingActive
+        ? provingLabel
+        : (sponsorWallet.value
+          ? t('midnight.send.stageSyncNamed', { name: sponsorWallet.value.name })
+          : t('midnight.send.stageSync')),
       state: rank > 3 || signActive ? 'done' : (syncActive || provingActive) ? 'active' : 'pending',
       showBar: true,
       percent: provingActive ? null : (syncActive ? pct : undefined),
@@ -564,6 +771,15 @@ const timelineNodes = computed<TimelineNode[]>(() => {
 // Compact DUST battery for the progress summary (current / cap), so the user
 // sees their DUST level while the send runs and the reset note has context.
 const dustBattery = computed<{ percent: number } | null>(() => {
+  // A sponsored send draws down the SPONSOR's DUST, so that is the bar to
+  // show. Reading midnightStore.dustState here is the sender's state, which
+  // for a sponsored send is empty by definition (that is why a sponsor was
+  // needed) — so cap is 0, this returns null, and the whole block used to
+  // disappear at exactly the moment it mattered most.
+  if (sponsorWalletId.value != null) {
+    const pct = sponsorCandidate.value ? chargePercent(sponsorCandidate.value) : null;
+    return pct === null ? null : { percent: pct };
+  }
   const ds = midnightStore.dustState;
   if (!ds || ds.cap <= 0n) return null;
   const raw = Number((ds.current * 10000n) / ds.cap) / 100;
@@ -657,28 +873,24 @@ const addressRules = computed(() => {
 
 const amountRules = computed(() => [
   (v: string) => !!v || t('midnight.send.amountRequired'),
-  (v: string) => {
-    const n = Number(v);
-    return (Number.isFinite(n) && n > 0) || t('send.amountMustBePositive');
-  },
+  // Positivity is judged by the SAME parser that builds the transaction.
+  // Number() disagreed with it in two ways that both submitted a 0-unit tx:
+  //   - Number('1e2') is 100, but exponential notation isn't a plain decimal
+  //     so parseTokenAmount returns 0n — and <input type="number"> accepts it
+  //   - an amount below one base unit ('0.0000001' at 6 decimals) truncates
+  //     to 0n while Number() still calls it positive
+  // The balance rule below is an upper bound only, so nothing else caught 0n.
+  (v: string) => parseAmount(v) > 0n || t('send.amountMustBePositive'),
   (v: string) => parseAmount(v) <= available.value || t('errors.insufficientBalance'),
 ]);
 
+/** Scales against the SELECTED token's decimals — see midnightAmount.ts. */
 function parseAmount(input: string): bigint {
-  if (!input) return 0n;
-  const [whole = '0', fractionRaw = ''] = input.trim().split('.');
-  const fraction = (fractionRaw + '0'.repeat(MIDNIGHT_DECIMALS.NIGHT))
-    .slice(0, MIDNIGHT_DECIMALS.NIGHT);
-  try { return BigInt(whole) * NIGHT_DIVISOR + BigInt(fraction || '0'); }
-  catch { return 0n; }
+  return parseTokenAmount(input, selectedDecimals.value);
 }
 
 function setMax() {
-  const value = available.value;
-  const whole = value / NIGHT_DIVISOR;
-  const remainder = value % NIGHT_DIVISOR;
-  const remainderStr = remainder.toString().padStart(NIGHT_DIVISOR.toString().length - 1, '0');
-  amount.value = remainder === 0n ? whole.toString() : `${whole}.${remainderStr.replace(/0+$/, '')}`;
+  amount.value = toAmountInput(available.value, selectedDecimals.value);
 }
 
 // ── Review-step model (fed to the shared TransactionDetailsCard) ──
@@ -709,12 +921,34 @@ const reviewTotals = computed<TxDetailsTotals>(() => ({
   // amount — we don't sum a NIGHT amount with a DUST fee.
   youPayAda: amount.value || '0',
   isInternal: isSelfSend.value,
+  // Split the single "You pay" line when another wallet covers the fee, so
+  // the DUST cost is never shown without naming whose DUST it is.
+  sponsor: sponsorWallet.value && loggedWallet.value
+    ? {
+      senderName: loggedWallet.value.name,
+      senderInitials: initialsOf(loggedWallet.value.name),
+      sponsorName: sponsorWallet.value.name,
+      sponsorInitials: initialsOf(sponsorWallet.value.name),
+    }
+    : undefined,
 }));
+
+/** Two-letter monogram for the attributed summary rows. */
+function initialsOf(name: string): string {
+  const parts = (name || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '??';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
 
 // ── Step navigation ──
 function nextStep() {
   errorMessage.value = null;
   if (currentStep.value === 1) {
+    if (blockedByFee.value) {
+      errorMessage.value = t('midnight.send.noDustFee');
+      return;
+    }
     if (!step1FormRef.value?.validate()) {
       shakeError.value = true;
       setTimeout(() => { shakeError.value = false; }, 400);
@@ -739,9 +973,8 @@ function preflight(): boolean {
   return true;
 }
 
-function hasFreshConsent(): boolean {
-  const consent = midnightStore.shieldedProvingConsent;
-  return !!consent && consent.version === SHIELDED_PROVING_CONSENT_VERSION;
+function hasFreshConsent(provider: MidnightRemoteProver): boolean {
+  return hasMidnightProvingConsent(midnightStore.shieldedProvingConsent, provider);
 }
 
 async function submitWithPassword() {
@@ -759,10 +992,6 @@ function onPasskeyError(error: Error) {
 }
 
 async function routeSend(credentials: { password?: string; prfSecret?: Uint8Array }) {
-  if (!isShielded.value) {
-    await sendUnshielded(credentials);
-    return;
-  }
   const mode = midnightStore.proofServer.mode;
   // Local proof-server mode never needs cloud consent — witness data stays
   // on the user's machine — so it skips the consent dialog entirely and
@@ -774,12 +1003,12 @@ async function routeSend(credentials: { password?: string; prfSecret?: Uint8Arra
     await routeWalletProvedShielded(credentials);
     return;
   }
-  if (hasFreshConsent()) {
+  if (hasFreshConsent(mode === 'zkpaas' ? 'zkpaas' : 'cloud')) {
     if (mode === 'zkpaas') {
       await routeWalletProvedShielded(credentials);
       return;
     }
-    await sendShielded(credentials);
+    await dispatchSend(credentials);
     return;
   }
   pendingCredentials.value = credentials;
@@ -811,7 +1040,7 @@ async function routeWalletProvedShielded(credentials: { password?: string; prfSe
   } finally {
     checkingLocalProver.value = false;
   }
-  await sendShielded(credentials);
+  await dispatchSend(credentials);
 }
 
 /** "Open settings" fallback action — navigates to Settings > Advanced (the
@@ -834,9 +1063,9 @@ function useCloudForThisTransaction() {
   if (!credentials) return;
   localProverUnavailable.value = false;
   forceRemoteForNextSend.value = true;
-  if (hasFreshConsent()) {
+  if (hasFreshConsent('cloud')) {
     pendingCredentials.value = null;
-    void sendShielded(credentials);
+    void dispatchSend(credentials);
     return;
   }
   // pendingCredentials stays set — onConsentAccepted below reads it once the
@@ -857,6 +1086,12 @@ async function onConsentAccepted() {
   const credentials = pendingCredentials.value;
   pendingCredentials.value = null;
   if (!credentials) return;
+  const mode = midnightStore.proofServer.mode;
+  const recipient = forceRemoteForNextSend.value || mode !== 'zkpaas' ? 'cloud' : 'zkpaas';
+  if (!forceRemoteForNextSend.value && mode !== 'local' && recipient !== consentProvider.value) {
+    await routeSend(credentials);
+    return;
+  }
   // A freshly-consented zkPaaS send still needs its preflight; the one-off
   // "use Gero Cloud" fallback (forceRemoteForNextSend) goes straight to the
   // remote path instead — sendShielded consumes that flag.
@@ -864,12 +1099,20 @@ async function onConsentAccepted() {
     await routeWalletProvedShielded(credentials);
     return;
   }
-  await sendShielded(credentials);
+  await dispatchSend(credentials);
+}
+
+async function dispatchSend(credentials: { password?: string; prfSecret?: Uint8Array }) {
+  if (isShielded.value) await sendShielded(credentials);
+  else await sendUnshielded(credentials);
 }
 
 async function sendUnshielded(credentials: { password?: string; prfSecret?: Uint8Array }) {
   const wallet = loggedWallet.value;
   if (!wallet) return;
+  const forceRemote = forceRemoteForNextSend.value;
+  forceRemoteForNextSend.value = false;
+  localProverUnavailable.value = false;
   sending.value = true;
   sendStage.value = 'authorizing';
   try {
@@ -881,14 +1124,47 @@ async function sendUnshielded(credentials: { password?: string; prfSecret?: Uint
         outputs: [{
           address: recipient.value.trim(),
           amount: parseAmount(amount.value).toString(),
-          token: 'NIGHT',
+          token: selectedToken.value,
         }],
         ttlMs: Date.now() + 5 * 60_000,
       },
       credentials,
       (stage) => { sendStage.value = stage; },
+      await buildSponsorArg(),
+      forceRemote,
     );
-    debugLog('🌙 Midnight unshielded tx submitted:', result.txHash, 'status:', result.status);
+    debugLog('🌙 Midnight unshielded tx submitted:', result.txHash, 'status:', result.status,
+      'sponsor:', sponsorWalletId.value ?? 'none');
+
+    // Remember who paid — for the dashboard indicator on BOTH wallets, and so
+    // the transaction details screen can say the fee came from elsewhere.
+    // Best effort: a storage failure must never fail a submitted transaction.
+    if (sponsorWallet.value) {
+      const paying = sponsorWallet.value;
+      try {
+        const { recordSponsoredTx, saveSponsorLink } = await import('@/chains/midnight/midnightSponsorLinks');
+        const at = Date.now();
+        await saveSponsorLink({
+          walletId: wallet.id,
+          sponsorWalletId: paying.id,
+          sponsorName: paying.name,
+          network: wallet.network,
+          at,
+        });
+        await recordSponsoredTx({
+          txHash: result.txHash,
+          sponsorWalletId: paying.id,
+          sponsorName: paying.name,
+          at,
+          sponsoredWalletId: wallet.id,
+          sponsoredWalletName: wallet.name,
+          amountLabel: `${amount.value} ${selectedToken.value === 'NIGHT' ? 'NIGHT' : shortToken(selectedToken.value)}`,
+          recipient: recipient.value.trim(),
+        });
+      } catch (e) {
+        debugLog('🌙 could not record sponsorship for this tx', e);
+      }
+    }
     // Show it in history right away — gero-sync backfills the confirmed entry.
     void addOptimisticPendingTx(result.txHash);
     // Brief completed-state hold so the user sees the timeline finish.
@@ -925,11 +1201,13 @@ async function sendShielded(credentials: { password?: string; prfSecret?: Uint8A
       [{
         receiverAddress: recipient.value.trim(),
         amount: parseAmount(amount.value),
+        tokenType: selectedToken.value,
       }],
       credentials,
       'InBlock',
       (stage) => { sendStage.value = stage; },
       forceRemote,
+      await buildSponsorArg(),
     );
     debugLog('🌙 Midnight shielded tx submitted:', result.txHash, 'status:', result.status);
     void addOptimisticPendingTx(result.txHash, true);
@@ -961,9 +1239,11 @@ async function sendShielded(credentials: { password?: string; prfSecret?: Uint8A
 async function addOptimisticPendingTx(hash: string, shielded = false) {
   const amountBig = parseAmount(amount.value);
   const to = recipient.value.trim();
+  // Preserve the selected public or private custom token in pending history.
+  const token = selectedToken.value;
   try {
     const { addPendingMidnightTx } = await import('@/services/midnight-tx.service');
-    await addPendingMidnightTx(hash, amountBig, to, shielded);
+    await addPendingMidnightTx(hash, amountBig, to, shielded, token);
   } catch {
     /* non-fatal — gero-sync backfills the confirmed entry */
   }
@@ -985,6 +1265,8 @@ function onDialogClose() {
 function resetForm() {
   recipient.value = '';
   amount.value = '';
+  // Back to NIGHT: a fresh send shouldn't inherit the last session's asset.
+  selectedToken.value = 'NIGHT';
   password.value = '';
   currentStep.value = 1;
   sendStage.value = 'idle';
@@ -997,6 +1279,11 @@ watch(
   () => currentStep.value,
   () => { errorMessage.value = null; },
 );
+
+/** Token colours are 64-char hex; show the head so a label stays readable. */
+function shortToken(colour: string): string {
+  return colour.length > 12 ? `${colour.slice(0, 6)}…` : colour;
+}
 </script>
 
 <style scoped>
@@ -1216,6 +1503,13 @@ watch(
   color: var(--g-text-1);
   white-space: nowrap;
 }
+/* Vuetify's `dense` already gives the control its compact height; only the
+   width needs constraining so the balance keeps its place in the row. */
+.asset-select {
+  max-width: 140px;
+  flex: 0 0 auto;
+}
+
 .token-balance {
   font-size: 11px;
   color: var(--g-text-3);
@@ -1425,102 +1719,83 @@ watch(
   display: flex;
   flex-direction: column;
 }
-.mpv-node {
-  display: flex;
-  gap: 12px;
-  min-height: 54px;
+
+.sponsor-unlock {
+  margin-top: var(--g-s-2);
 }
-.mpv-node:last-child {
-  min-height: auto;
+
+.sponsor-unlock__warn {
+  margin-top: var(--g-s-1);
+  font-size: 11px;
+  color: var(--g-warning);
 }
-.mpv-node-marker {
+
+.sponsor-unlock__passkey {
   display: flex;
-  flex-direction: column;
+  align-items: flex-start;
+  padding: var(--g-s-2);
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-control);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--g-text-2);
+}
+
+.sponsor-unlock__note {
+  margin-top: var(--g-s-1);
+  font-size: 11px;
+  color: var(--g-text-3);
+}
+
+.sponsor-review {
+  display: flex;
   align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-control);
 }
-.mpv-dot {
+
+.sponsor-review .grow {
+  flex: 1 1 auto;
+}
+
+.sponsor-review__av {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 22px;
   height: 22px;
   border-radius: 50%;
+  background: var(--g-overlay);
+  border: 1px solid var(--g-hairline-2);
+  color: var(--g-text-1);
+  font-size: 9px;
+  font-weight: 600;
   flex-shrink: 0;
+}
+
+.sponsor-review__body {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--g-raised);
-  transition: background-color 0.35s ease, box-shadow 0.35s ease;
+  flex-direction: column;
 }
-.mpv-node.done .mpv-dot {
-  background: var(--g-accent);
-}
-.mpv-node.active .mpv-dot {
-  background: transparent;
-  box-shadow: 0 0 0 2px var(--g-accent);
-}
-.mpv-pulse {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--g-accent);
-  animation: mpv-pulse 1.2s ease-in-out infinite;
-}
-@keyframes mpv-pulse {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.55); opacity: 0.5; }
-}
-.mpv-connector {
-  width: 2px;
-  flex: 1;
-  min-height: 20px;
-  margin: 3px 0;
-  background: var(--g-raised);
-  transition: background-color 0.4s ease;
-}
-.mpv-connector.filled {
-  background: var(--g-accent);
-}
-.mpv-node-body {
-  flex: 1;
-  min-width: 0;
-  padding-top: 2px;
-}
-.mpv-node-label {
+
+.sponsor-review__name {
   font-size: 13px;
   font-weight: 600;
-  color: var(--g-text-3);
-  transition: color 0.3s ease;
-}
-.mpv-node.active .mpv-node-label {
   color: var(--g-text-1);
 }
-.mpv-node.done .mpv-node-label {
-  color: var(--g-text-2);
-}
-.mpv-node-bar {
-  margin-top: 7px;
-  height: 4px;
-  max-width: 190px;
-  border-radius: 4px;
-  background: var(--g-hairline-1);
-  overflow: hidden;
-}
-.mpv-node-bar-fill {
-  height: 100%;
-  width: 0;
-  border-radius: 4px;
-  background: var(--g-accent);
-  transition: width 0.45s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.mpv-node-bar.indeterminate .mpv-node-bar-fill {
-  width: 40%;
-  animation: mpv-indet 1.1s ease-in-out infinite;
-}
-@keyframes mpv-indet {
-  0% { transform: translateX(-120%); }
-  100% { transform: translateX(320%); }
-}
-.mpv-node-detail {
-  margin-top: 5px;
+
+.sponsor-review__sub {
   font-size: 11px;
   color: var(--g-text-3);
+}
+
+.sponsor-review__change {
+  color: var(--g-accent);
+  font-size: 11px;
+  font-weight: 600;
 }
 </style>

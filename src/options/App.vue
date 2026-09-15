@@ -51,14 +51,22 @@ import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import AgentDock from '@/sidepanel/components/AgentDock.vue';
+import ContentLayout from '@/modules/navigation/layouts/ContentLayout.vue';
 import HardwareSignPrompt from '@/shared/components/HardwareSignPrompt.vue';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
+import { agentDockPrefsStore } from '@/stores/agentDockPrefsStore';
 import { useChainAccent } from '@/shared/composables/useChainAccent';
+import { useGovernanceHydration } from '@/shared/composables/useGovernanceHydration';
+import { debugLog } from '@/utils/debug';
 
 // Bootstrap the single chain-accent writer at the dashboard root. It lives here
 // rather than in ContentLayout because ContentLayout unmounts on the welcome
 // route, which would strand the module-level latch as a permanent no-op.
 useChainAccent();
+// Same root, same reason: the CIP-149 hydration must be live from login, not
+// from the first governance-view mount, so a withdrawal built on the dashboard
+// still carries the committed donation.
+useGovernanceHydration();
 
 const { loading, isRestoring, text, progress } = toRefs(loadingState);
 const geroConfig = toRefs(geroStore).config;
@@ -71,12 +79,26 @@ const isLoading = computed(() => {
   return loading.value || isRestoring.value;
 });
 
+// The dock belongs to the full-page dashboard and nowhere else. This options
+// entry also renders the dApp popup windows (PopupLayout: connect / sign-tx /
+// sign-data / WC proposal) and the standalone BlankLayout screens (welcome,
+// passkey-auth, ledger-ble-sign) — all of them small, single-purpose windows
+// where a floating FAB is pure obstruction, and where it sat on top of signing
+// content. Comparing against the layout COMPONENT (not a route name list) is
+// what keeps a future route correct by default: it inherits the right answer
+// from the layout it already declares in router.ts.
+const isDashboardShell = computed(() => vmProxy.$route?.meta?.['layout'] === ContentLayout);
+
 const isAgentVisible = computed(() => {
   // Gero Companion mounts on EITHER flag: isCopilotEnabled alone (legacy
   // copilot-only dock) or isLiveChatEnabled alone (support-only dock, Assistant
   // tab visible but disabled) — see featureFlagsStore's doc blocks for both.
   return (featureFlagsStore.isCopilotEnabled() || featureFlagsStore.isLiveChatEnabled())
-    && !!walletStore.loggedWallet && !walletStore.isLocked;
+    && !!walletStore.loggedWallet && !walletStore.isLocked
+    && isDashboardShell.value
+    // Wait for the persisted preference before the first render, otherwise a
+    // user who hid the dock sees it flash on every dashboard load.
+    && agentDockPrefsStore.hydrated && !agentDockPrefsStore.hidden;
 });
 
 // Check auto-lock immediately when page loads/becomes visible
@@ -89,6 +111,24 @@ onMounted(async () => {
   } catch (error) {
     console.error('❌ Failed to trigger auto-lock check on mount:', error);
   }
+
+  // CIP-45: bring the discovery peer up so paired dApps can reconnect (deferred, non-critical).
+  setTimeout(async () => {
+    const { featureFlagsStore } = await import('@/stores/featureFlagsStore');
+    if (!featureFlagsStore.isCip45Enabled()) return;
+    // Only the dashboard hosts the peer — approval popups are separate app
+    // instances whose empty session state would clobber the dashboard's UI.
+    try {
+      const currentWindow = await chrome.windows.getCurrent();
+      if (currentWindow?.type === 'popup') return;
+    } catch {
+      // If the window type can't be read, fall through and host as before.
+    }
+    const { cip45Service } = await import('@/services/cip45/cip45.service');
+    cip45Service.resumeIfPaired().catch((error) => {
+      debugLog('CIP-45: resumeIfPaired failed', error);
+    });
+  }, 3000);
 });
 
 // Watch geroStore for locale changes (global preference) instead of walletStore

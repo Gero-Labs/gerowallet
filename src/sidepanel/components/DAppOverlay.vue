@@ -667,16 +667,16 @@
             </div>
             <div class="d-flex justify-space-between mt-1">
               <span class="grey--text text-caption">{{ $t('common.amount') }}</span>
-              <span class="white--text text-caption font-weight-bold">{{ formatNightBase(o.value) }} {{ nightCurrency }}</span>
+              <span class="white--text text-caption font-weight-bold">{{ outputAmountDisplay(o) }} {{ outputTicker(o) }}</span>
             </div>
           </div>
           <div
-            v-if="makeTransferOutputs.length > 1"
+            v-if="makeTransferOutputs.length > 1 && makeTransferSingleToken"
             class="d-flex justify-space-between pt-2"
             style="border-top: 1px solid var(--g-hairline-1);"
           >
             <span class="white--text text-body-2 font-weight-bold">{{ $t('common.total') }}</span>
-            <span class="white--text text-body-2 font-weight-bold">{{ makeTransferTotalDisplay }} {{ nightCurrency }}</span>
+            <span class="white--text text-body-2 font-weight-bold">{{ makeTransferTotalDisplay }} {{ makeTransferTotalTicker }}</span>
           </div>
           <div class="d-flex align-start mt-2">
             <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-eye-outline</v-icon>
@@ -885,6 +885,8 @@
 </template>
 
 <script setup lang="ts">
+import type { Cip45Authorization } from '@/services/cip45/types';
+import { validateCip45Signing } from '@/services/cip45/signingAuthorization';
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { getDomain } from 'tldts';
 import { Cardano, Serialization } from '@cardano-sdk/core';
@@ -900,6 +902,7 @@ import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import WalletStore from '@/stores/walletStore';
 import { networkStore, isBitcoinTip } from '@/stores/networkStore';
+import { priceStore } from '@/stores/priceStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { WalletType, Network, Blockchain } from '@/models/types';
@@ -919,6 +922,8 @@ import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { decodedPayloadHexPreview, decodeSignDataPayload, type MidnightSignDataEncoding } from '@/chrome/midnightSignDataCodec';
 import { MidnightErrorCode } from '@/chrome/config';
+import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
+import { toAmountInput } from '@/chains/midnight/midnightAmount';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { resolveGeroChain } from '@/services/walletConnect/chainUtils';
 
@@ -961,13 +966,12 @@ const primaryColor = computed(() => themeColors.value.primary);
 
 // Fiat approximation for the tx total — "≈ $5,620" when you meant $56 is
 // instantly visible where "12482.1 ADA" is not. Reads the already-cached
-// price straight off the observable state (populated by background sync — no
-// new API call here; the getAdaPrice() helper lives on the store's default
-// export, not this named state import) and the existing display-currency
-// conversion, so this is pure presentation over data the app already has.
+// price straight off the live Kraken ticker in priceStore, plus the existing
+// display-currency conversion, so this is pure presentation over data the app
+// already has.
 const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 function formatFiatFromAda(adaAmountStr: string): string | null {
-  const adaPrice = networkStore.price?.lastPrice || 0;
+  const adaPrice = priceStore.adaUsd?.lastPrice || 0;
   if (!adaPrice) return null; // no price data yet — omit rather than show a stale/zero amount
   const ada = parseFloat(adaAmountStr);
   if (!Number.isFinite(ada)) return null;
@@ -1087,24 +1091,72 @@ const makeTransferOutputs = computed<ConnectorDesiredOutput[]>(() => {
   return Array.isArray(data?.desiredOutputs) ? (data!.desiredOutputs as ConnectorDesiredOutput[]) : [];
 });
 
-const NIGHT_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.NIGHT);
-// Format base-unit NIGHT (bigint or decimal string) for display. Mirrors
-// MidnightSendDialog.formattedAvailable — a chain-specific unit conversion, not
-// a fork of the canonical price formatters in shared/utils/format.
-function formatNightBase(baseUnits: string | bigint): string {
+/**
+ * The colour a connector output moves. `type` absent, or an all-zero token
+ * type, means native NIGHT; anything else is a 32-byte colour as hex.
+ */
+function outputToken(o: ConnectorDesiredOutput): string {
+  const t = o.type ?? '';
+  return !t || /^0+$/.test(t) ? 'NIGHT' : t;
+}
+
+/** Decimal exponent for a connector output, or null when it isn't known. */
+function outputDecimals(o: ConnectorDesiredOutput): number | null {
+  const token = outputToken(o);
+  if (token === 'NIGHT') return MIDNIGHT_DECIMALS.NIGHT;
+  return midnightTokenMeta(token)?.decimals ?? null;
+}
+
+/** Ticker to show beside the amount. Never claims NIGHT for a token. */
+function outputTicker(o: ConnectorDesiredOutput): string {
+  const token = outputToken(o);
+  if (token === 'NIGHT') return nightCurrency.value;
+  const meta = midnightTokenMeta(token);
+  return meta?.symbol ?? `${token.slice(0, 8)}\u2026${token.slice(-6)}`;
+}
+
+/**
+ * Amount as the user will actually send it.
+ *
+ * This is a SIGNING PROMPT: it previously formatted every output with NIGHT's
+ * 6 decimals and labelled it NIGHT, so a dApp requesting a token transfer
+ * showed an amount scaled by the wrong exponent under the wrong ticker — the
+ * user would approve something other than what they read. Unknown decimals
+ * render as raw base units rather than being guessed.
+ */
+function outputAmountDisplay(o: ConnectorDesiredOutput): string {
   let value: bigint;
   try {
-    value = typeof baseUnits === 'bigint' ? baseUnits : BigInt(baseUnits);
+    value = BigInt(o.value);
   } catch {
     return '0';
   }
-  const whole = value / NIGHT_DIVISOR;
-  const remainder = value % NIGHT_DIVISOR;
-  const frac = remainder.toString().padStart(MIDNIGHT_DECIMALS.NIGHT, '0').replace(/0+$/, '');
-  return frac ? `${whole.toLocaleString('en-US')}.${frac}` : whole.toLocaleString('en-US');
+  return toAmountInput(value, outputDecimals(o));
 }
 
+/**
+ * The one colour every output shares, or null when they differ. A single
+ * summed total across two colours would be a fabricated number, so the total
+ * row is hidden in that case rather than shown wrong.
+ */
+const makeTransferSingleToken = computed<ConnectorDesiredOutput | null>(() => {
+  const outs = makeTransferOutputs.value;
+  if (outs.length === 0) return null;
+  const first = outputToken(outs[0]);
+  return outs.every((o) => outputToken(o) === first) ? outs[0] : null;
+});
+
+/** Ticker for the total row. A computed, not a template call with a non-null
+ * assertion: Vue 2 template expressions are parsed as plain JS, so TS syntax
+ * there is a build-time SyntaxError that typecheck and lint both let through. */
+const makeTransferTotalTicker = computed(() => {
+  const sample = makeTransferSingleToken.value;
+  return sample ? outputTicker(sample) : '';
+});
+
 const makeTransferTotalDisplay = computed(() => {
+  const sample = makeTransferSingleToken.value;
+  if (!sample) return '';
   let total = 0n;
   for (const o of makeTransferOutputs.value) {
     try {
@@ -1113,7 +1165,7 @@ const makeTransferTotalDisplay = computed(() => {
       /* skip unparseable — BG already validated, this is display-only */
     }
   }
-  return formatNightBase(total);
+  return toAmountInput(total, outputDecimals(sample));
 });
 
 // Network-aware ticker — mirror MidnightSendDialog's nightCurrency (mainnet
@@ -1555,6 +1607,22 @@ const assetInfoLookup = computed<Map<string, KnownAssetInfo>>(() => {
   const tokens = WalletStore.state.tokens as Record<string, { metadata?: { ticker?: string; name?: string; decimals?: number } }> | undefined;
   if (tokens) {
     for (const [unit, info] of Object.entries(tokens)) {
+      const candidates = [info?.metadata?.ticker, info?.metadata?.name].filter(
+        (n): n is string => !!n && !looksLikeHex(n)
+      );
+      if (candidates.length > 0) {
+        const decimals = typeof info?.metadata?.decimals === 'number' ? info.metadata.decimals : 0;
+        map.set(unit, { name: candidates[0], decimals });
+      }
+    }
+  }
+
+  // CIP-113 programmable holdings live in their own store map (never in `tokens`, so
+  // nothing that selects inputs can reach them), but they need the same name/decimals
+  // resolution — without this a 6-decimal programmable token renders 10^6 times too large.
+  const programmable = WalletStore.state.programmableTokens as Record<string, { metadata?: { ticker?: string; name?: string; decimals?: number } }> | undefined;
+  if (programmable) {
+    for (const [unit, info] of Object.entries(programmable)) {
       const candidates = [info?.metadata?.ticker, info?.metadata?.name].filter(
         (n): n is string => !!n && !looksLikeHex(n)
       );
@@ -2045,6 +2113,7 @@ const showKeystoneDialog = ref(false);
 const keystoneType = ref('');
 const keystoneCbor = ref('');
 const keystoneUseHash = ref(false);
+let keystoneSigningRequest: DAppRequest | null = null;
 
 // NOTE: walletType / isPrfWallet / loggedWallet / keys / utxos / isBT are
 // declared EARLY (right after signDataDomain) — a `watch(loggedWallet)` and
@@ -2053,6 +2122,8 @@ const keystoneUseHash = ref(false);
 
 // Reset state when request changes
 watch(currentRequest, () => {
+  showKeystoneDialog.value = false;
+  keystoneSigningRequest = null;
   spendingPassword.value = '';
   showPassword.value = false;
   signing.value = false;
@@ -2070,24 +2141,23 @@ function rejectSign() {
   reject('user_rejected');
 }
 
-function getTxCbor(): string {
-  return currentRequest.value?.payload?.tx;
-}
-
 // ── Normal wallet: password signing ──
 // MPC (Google) wallets reach here too — they carry no spending password (the
 // background resolves the session-cached key), so only require one for non-MPC.
 async function signNormal() {
+  const signingRequest = currentRequest.value;
   if (!currentRequest.value) return;
   if (!isMpcWallet.value && !spendingPassword.value) return;
   signing.value = true;
   signError.value = '';
 
   try {
-    const payload = currentRequest.value.payload;
+    await validateCip45Signing(signingRequest?.payload);
+    const payload = signingRequest.payload;
     const witnessResult = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SIGN_TX,
       data: {
+        cip45Authorization: signingRequest?.payload?.cip45Authorization,
         txCbor: payload.tx,
         partialSign: payload.partialSign,
         password: spendingPassword.value,
@@ -2099,6 +2169,8 @@ async function signNormal() {
     }) as { data: { witnesses?: string; error?: string } };
 
     if (witnessResult.data.error) throw new Error(witnessResult.data.error);
+    await validateCip45Signing(signingRequest?.payload);
+    if (currentRequest.value !== signingRequest) return;
     approve(witnessResult.data.witnesses);
     spendingPassword.value = '';
   } catch (e: unknown) {
@@ -2111,11 +2183,13 @@ async function signNormal() {
 
 // ── PRF wallet: PassKey signing ──
 async function signPrf() {
+  const signingRequest = currentRequest.value;
   if (!currentRequest.value) return;
   signing.value = true;
   signError.value = '';
 
   try {
+    await validateCip45Signing(signingRequest?.payload);
     const popupUrl = chrome.runtime.getURL('index.html?mode=privateKey#/passkey-auth');
     window.open(popupUrl, 'PassKeyAuth', 'width=400,height=500,popup=1');
 
@@ -2137,10 +2211,11 @@ async function signPrf() {
       }, 60000);
     });
 
-    const payload = currentRequest.value.payload;
+    const payload = signingRequest.payload;
     const witnessResult = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SIGN_TX,
       data: {
+        cip45Authorization: signingRequest?.payload?.cip45Authorization,
         txCbor: payload.tx,
         partialSign: payload.partialSign,
         password: '',
@@ -2153,6 +2228,8 @@ async function signPrf() {
     }) as { data: { witnesses?: string; error?: string } };
 
     if (witnessResult.data.error) throw new Error(witnessResult.data.error);
+    await validateCip45Signing(signingRequest?.payload);
+    if (currentRequest.value !== signingRequest) return;
     approve(witnessResult.data.witnesses);
   } catch (e: unknown) {
     console.error('[DApp] PRF sign error:', e);
@@ -2185,7 +2262,7 @@ async function signPrf() {
  * checked to come from an extension page (not a content script on some web
  * page) and from this exact tab.
  */
-async function signLedgerViaBleWindow(txCbor: string): Promise<string> {
+async function signLedgerViaBleWindow(txCbor: string, cip45Authorization?: Cip45Authorization): Promise<string> {
   const url = chrome.runtime.getURL('index.html#/ledger-ble-sign');
   const win = await chrome.windows.create({
     url,
@@ -2217,7 +2294,7 @@ async function signLedgerViaBleWindow(txCbor: string): Promise<string> {
       if (!sender.url?.startsWith(extensionBase) || sender.tab?.id !== tabId) return;
 
       if (msg?.type === 'LEDGER_BLE_READY') {
-        sendResponse({ txCbor });
+        sendResponse({ txCbor, cip45Authorization });
         return;
       }
 
@@ -2255,15 +2332,20 @@ async function signLedgerViaBleWindow(txCbor: string): Promise<string> {
 
 // ── Ledger wallet signing ──
 async function signLedger() {
+  const signingRequest = currentRequest.value;
   if (!currentRequest.value || !loggedWallet.value) return;
   signing.value = true;
   signError.value = '';
 
   try {
-    const txCbor = getTxCbor();
+    await validateCip45Signing(signingRequest?.payload);
+    const txCbor = signingRequest.payload.tx;
 
     if (isBT.value) {
-      approve(await signLedgerViaBleWindow(txCbor));
+      const bleWitnesses = await signLedgerViaBleWindow(txCbor, signingRequest.payload.cip45Authorization);
+      await validateCip45Signing(signingRequest?.payload);
+      if (currentRequest.value !== signingRequest) return;
+      approve(bleWitnesses);
       return;
     }
 
@@ -2282,6 +2364,8 @@ async function signLedger() {
     );
 
     const witnessSet = Serialization.TransactionWitnessSet.fromCore({ signatures });
+    await validateCip45Signing(signingRequest?.payload);
+    if (currentRequest.value !== signingRequest) return;
     approve(witnessSet.toCbor());
   } catch (e: unknown) {
     ledgerUtils.ledgerErrorHandling(e);
@@ -2295,6 +2379,7 @@ async function signLedger() {
 
 // ── Trezor wallet signing ──
 async function signTrezor() {
+  const signingRequest = currentRequest.value;
   if (!currentRequest.value) return;
   signing.value = true;
   signError.value = '';
@@ -2303,8 +2388,9 @@ async function signTrezor() {
   // call — connecting through the confirmation the device is waiting on.
   hardwareLoading.begin('Trezor', t('wallet.confirmOnTrezor') as string);
   try {
-    const txCbor = getTxCbor();
-    const data = { method: 'signTx', txCbor };
+    await validateCip45Signing(signingRequest?.payload);
+    const txCbor = signingRequest.payload.tx;
+    const data = { method: 'signTx', txCbor, cip45Authorization: signingRequest?.payload?.cip45Authorization };
     const response = (featureFlagsStore.state.flags.isTrezorWebUsbEnabled
       ? await dispatchTrezor(data)
       : await Messaging.sendToBackgroundFromOptions({
@@ -2319,6 +2405,8 @@ async function signTrezor() {
     const signaturesArray = response.data.signatures as unknown as Array<[string, string]>;
     const signatures: Cardano.Signatures = new Map(signaturesArray);
     const witnessSet = Serialization.TransactionWitnessSet.fromCore({ signatures });
+    await validateCip45Signing(signingRequest?.payload);
+    if (currentRequest.value !== signingRequest) return;
     approve(witnessSet.toCbor());
   } catch (e: unknown) {
     console.error('[DApp] Trezor sign error:', e);
@@ -2335,12 +2423,14 @@ async function signTrezor() {
 }
 
 // ── Keystone wallet signing ──
-function signKeystone() {
+async function signKeystone() {
+  const signingRequest = currentRequest.value;
   if (!currentRequest.value || !loggedWallet.value) return;
   signError.value = '';
 
   try {
-    const txCbor = getTxCbor();
+    await validateCip45Signing(signingRequest?.payload);
+    const txCbor = signingRequest.payload.tx;
     const txSerialized = Serialization.Transaction.fromCbor(HexBlob(txCbor));
     const signRequestResponse: KeystoneSignRequestResponse = createKeystoneSignRequest(
       txSerialized, loggedWallet.value, utxos.value, keys.value
@@ -2348,6 +2438,7 @@ function signKeystone() {
     keystoneType.value = signRequestResponse.ur.type;
     keystoneCbor.value = signRequestResponse.ur.cbor.toString('hex');
     keystoneUseHash.value = signRequestResponse.useHash;
+    keystoneSigningRequest = signingRequest;
     showKeystoneDialog.value = true;
   } catch (e: unknown) {
     console.error('[DApp] Keystone sign error:', e);
@@ -2356,12 +2447,17 @@ function signKeystone() {
 }
 
 async function onKeystoneScan(ur: UR) {
+  const signingRequest = keystoneSigningRequest;
+  if (!signingRequest || signingRequest !== currentRequest.value) return;
   try {
+    await validateCip45Signing(signingRequest?.payload);
     const signature = parseSignature(ur);
     if (!signature?.witnessSet || typeof signature.witnessSet !== 'string') {
       throw new Error('Invalid Keystone signature');
     }
     showKeystoneDialog.value = false;
+    await validateCip45Signing(signingRequest?.payload);
+    if (currentRequest.value !== signingRequest) return;
     approve(signature.witnessSet);
   } catch (e: unknown) {
     console.error('[DApp] Keystone scan error:', e);
@@ -2377,6 +2473,7 @@ function onKeystoneError(error: string) {
 
 // ── Sign Data: Normal wallet (password) ──
 async function signDataNormal() {
+  const signingRequest = currentRequest.value;
   // MPC (Google) wallets reach here with no spending password (session-cached key).
   if (!currentRequest.value) return;
   if (!isMpcWallet.value && !spendingPassword.value) return;
@@ -2384,10 +2481,12 @@ async function signDataNormal() {
   signError.value = '';
 
   try {
-    const { address, payload } = currentRequest.value.payload;
+    await validateCip45Signing(signingRequest?.payload);
+    const { address, payload } = signingRequest.payload;
     const res = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SIGN_DATA,
       data: {
+        cip45Authorization: signingRequest?.payload?.cip45Authorization,
         address,
         payload,
         password: spendingPassword.value,
@@ -2405,6 +2504,10 @@ async function signDataNormal() {
       throw new Error('Wallet returned an empty signature payload');
     }
 
+    await validateCip45Signing(signingRequest?.payload);
+
+    if (currentRequest.value !== signingRequest) return;
+
     approve(res.data);
     spendingPassword.value = '';
   } catch (e: unknown) {
@@ -2417,11 +2520,13 @@ async function signDataNormal() {
 
 // ── Sign Data: PRF wallet (PassKey) ──
 async function signDataPrf() {
+  const signingRequest = currentRequest.value;
   if (!currentRequest.value) return;
   signing.value = true;
   signError.value = '';
 
   try {
+    await validateCip45Signing(signingRequest?.payload);
     const popupUrl = chrome.runtime.getURL('index.html?mode=privateKey#/passkey-auth');
     window.open(popupUrl, 'PassKeyAuth', 'width=400,height=500,popup=1');
 
@@ -2443,7 +2548,7 @@ async function signDataPrf() {
       }, 60000);
     });
 
-    const { address, payload } = currentRequest.value.payload;
+    const { address, payload } = signingRequest.payload;
     const { buildSignatureAndCoseKey } = await import('@/shared/utils/converter');
     const { Bip32PrivateKey } = await import('@cardano-sdk/crypto');
 
@@ -2476,7 +2581,10 @@ async function signDataPrf() {
       ? Buffer.from(Cardano.Address.fromBech32(address).toBytes(), 'hex')
       : Buffer.from(address, 'hex');
 
+    await validateCip45Signing(signingRequest?.payload);
     const signatureData = buildSignatureAndCoseKey(addressBytes, payload, signingKey);
+    await validateCip45Signing(signingRequest?.payload);
+    if (currentRequest.value !== signingRequest) return;
     approve(signatureData);
   } catch (e: unknown) {
     console.error('[DApp] PRF sign data error:', e);
@@ -2488,6 +2596,7 @@ async function signDataPrf() {
 
 // ── Sign Data: Hardware wallet (Ledger/Trezor via background) ──
 async function signDataHw() {
+  const signingRequest = currentRequest.value;
   if (!currentRequest.value) return;
   signing.value = true;
   signError.value = '';
@@ -2502,7 +2611,8 @@ async function signDataHw() {
   );
 
   try {
-    const { address, payload } = currentRequest.value.payload;
+    await validateCip45Signing(signingRequest?.payload);
+    const { address, payload } = signingRequest.payload;
 
     // Trezor: route through the Trezor handler (WebUSB when isTrezorWebUsbEnabled
     // is on, else the SW bridge), exactly like the popup DappSignData view. The
@@ -2510,7 +2620,7 @@ async function signDataHw() {
     // a spending-password sign — which is why Trezor signData failed with
     // "Wrong password". Maps the Trezor response's signatureData -> { signature, key }.
     if (walletType.value === WalletType.Trezor) {
-      const data = { method: 'signData', address, payload, accountIndex: 0 };
+      const data = { method: 'signData', address, payload, accountIndex: 0, cip45Authorization: signingRequest?.payload?.cip45Authorization };
       const response = (featureFlagsStore.state.flags.isTrezorWebUsbEnabled
         ? await dispatchTrezor(data)
         : await Messaging.sendToBackgroundFromOptions({
@@ -2521,6 +2631,8 @@ async function signDataHw() {
       if (!response.data.success || !response.data.signatureData) {
         throw new Error(response.data.error || 'Trezor signing failed');
       }
+      await validateCip45Signing(signingRequest?.payload);
+      if (currentRequest.value !== signingRequest) return;
       approve({
         signature: response.data.signatureData.signatureHex,
         key: response.data.signatureData.signingPublicKeyHex,
@@ -2532,6 +2644,7 @@ async function signDataHw() {
     const res = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SIGN_DATA,
       data: {
+        cip45Authorization: signingRequest?.payload?.cip45Authorization,
         address,
         payload,
         password: '',
@@ -2544,6 +2657,10 @@ async function signDataHw() {
     if (!res?.data?.signature || !res?.data?.key) {
       throw new Error('Wallet returned an empty signature payload');
     }
+
+    await validateCip45Signing(signingRequest?.payload);
+
+    if (currentRequest.value !== signingRequest) return;
 
     approve(res.data);
   } catch (e: unknown) {
@@ -2693,7 +2810,9 @@ async function buildMidnightTransferTx(
   const outputs = makeTransferOutputs.value.map((o) => ({
     address: o.recipient,
     amount: o.value, // already base units (decimal string) from the connector
-    token: 'NIGHT' as const,
+    // The colour the dApp asked for. Hardcoding NIGHT here silently sent the
+    // native token for a request that named a different one.
+    token: outputToken(o),
   }));
   const { buildAndSignUnshieldedTransfer } = await import('@/services/midnight-tx.service');
   return buildAndSignUnshieldedTransfer(

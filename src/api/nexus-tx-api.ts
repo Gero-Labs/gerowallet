@@ -163,6 +163,40 @@ export interface BuildVoteDelegationTxRequest {
   ttl?: number;
 }
 
+/**
+ * DRep registration / retirement build request. Matches nexus
+ * `BuildDRepRegistrationTxRequest`.
+ *
+ * Takes the raw 28-byte credential (`drepCredentialHash`, exactly 56 hex chars)
+ * plus a `scriptCredential` flag — NOT a bech32 drep id, unlike
+ * BuildVoteDelegationTxRequest. Use `parseDRepId()` (or `walletStore.keys.drep129[0].cred`)
+ * to get it.
+ *
+ * `deregister: true` emits `UnregDRepCert` and folds the deposit REFUND in as a
+ * negative implicit deposit; otherwise `RegDRepCert` locks the deposit. Either
+ * way the deposit comes from the server's own protocol params, so no amount is
+ * sent from the client.
+ *
+ * The anchor is attached only when BOTH `anchorUrl` and `anchorDataHash` are
+ * present. Server-side validation: `anchorUrl` must match `^https?://.*` and be
+ * at most 128 characters (so an `ipfs://` URI must be given as a gateway URL),
+ * and `anchorDataHash` must be exactly 64 hex characters. There is no
+ * `certificateEncoding` on this endpoint — the certs it emits are single, not
+ * combined, so there is nothing to split for Trezor.
+ */
+export interface BuildDRepRegistrationTxRequest {
+  drepCredentialHash: string;
+  changeAddress: string;
+  scriptCredential?: boolean;
+  anchorUrl?: string;
+  anchorDataHash?: string;
+  deregister?: boolean;
+  utxos?: NexusTxInput[];
+  senderAddress?: string;
+  network?: 'MAINNET' | 'PREPROD';
+  ttl?: number;
+}
+
 // ── Axios client ──
 
 const nexusTxClient = axios.create({
@@ -432,6 +466,25 @@ export const nexusTxApi = {
     const url = nexusNetwork
       ? `/api/tx/build/vote-delegation?network=${nexusNetwork}`
       : '/api/tx/build/vote-delegation';
+    const { data } = await nexusTxClient.post<BuildTxResponse>(url, request);
+    return data;
+  },
+
+  /**
+   * Build an unsigned DRep registration or retirement transaction via nexus
+   * (`/api/tx/build/drep-registration`). Server emits `RegDRepCert` (deposit
+   * locked) or, with `deregister: true`, `UnregDRepCert` (deposit refunded);
+   * the deposit amount comes from the server's protocol params either way.
+   * Returns CBOR for client signing.
+   */
+  async buildDRepRegistrationTx(
+    request: BuildDRepRegistrationTxRequest,
+    network?: string
+  ): Promise<BuildTxResponse> {
+    const nexusNetwork = toNexusNetwork(network);
+    const url = nexusNetwork
+      ? `/api/tx/build/drep-registration?network=${nexusNetwork}`
+      : '/api/tx/build/drep-registration';
     const { data } = await nexusTxClient.post<BuildTxResponse>(url, request);
     return data;
   },

@@ -36,6 +36,11 @@ export class SyncService {
   // ~20s tip push.
   private cborHealAttempted = new Set<string>();
   private lastCborHealAt = 0;
+  private rewardsRefreshInFlight: Promise<void> | null = null;
+  private lastRewardsAttemptAt: number | null = null;
+  private lastRewardsRefreshAt: number | null = null;
+  private lastRewardsEpoch: number | undefined;
+  private lastRewardsSum: string | undefined;
 
   constructor(walletBg: WalletBg) {
     this.walletBg = walletBg;
@@ -375,6 +380,10 @@ export class SyncService {
           epoch_slot: syncObject.block.epoch_slot || 0,
         });
       }
+      // gero-sync pushes the reward balance, but no reward history. Refresh
+      // independently of transactions and the persisted account balance so
+      // wallets with already-stale history also recover on their next sync.
+      void this.refreshAccountRewards(syncObject.block?.epoch, syncObject.account?.rewards_sum);
     }
   }
 
@@ -530,6 +539,10 @@ export class SyncService {
    * stored account. Used when a SYNC push omits `account` (unregistered stake), so
    * balance + empty-state reflect on-chain funds immediately instead of waiting for
    * delegation. Preserves rewards/withdrawable/pool/drep from the previous account.
+   *
+   * The `account` row holds the stake-level total the provider would report, which the
+   * store then reduces by the CIP-113 locked share. `utxos` is already the spendable
+   * partition, so the locked lovelace is added back here to keep the row on that meaning.
    */
   private async reconcileControlledAmountFromUtxos(): Promise<void> {
     try {
@@ -539,7 +552,7 @@ export class SyncService {
         const coins = u?.[1]?.value?.coins;
         if (coins != null) sum += BigInt(coins);
       }
-      const controlled = sum.toString();
+      const controlled = (sum + BigInt(WalletStore.state.programmableLockedLovelace || '0')).toString();
       const prev = (await this.walletBg.getAccountInfo()) || {};
       if (prev.controlled_amount === controlled) return; // no change — skip a redundant write
       await this.walletBg.setAccountInfo({
@@ -604,20 +617,58 @@ export class SyncService {
   }
 
   /**
+   * Refresh history on first sync, epoch/reward changes, and hourly while open.
+   * The periodic check covers providers whose reward indexing trails the epoch
+   * boundary. Failed requests retry after a minute; block pushes share one fetch.
+   */
+  private async refreshAccountRewards(epoch?: number, rewardsSum?: string): Promise<void> {
+    if (
+      ![Blockchain.CARDANO, Blockchain.APEX_PRIME, Blockchain.APEX_VECTOR].includes(this.walletBg.chain)
+      || !this.walletBg.stakeAddress
+      || this.walletBg.isEnterpriseAddress()
+    ) return;
+    if (this.rewardsRefreshInFlight) return this.rewardsRefreshInFlight;
+
+    const now = Date.now();
+    if (this.lastRewardsAttemptAt !== null && now - this.lastRewardsAttemptAt < 60_000) return;
+    const needsRefresh = this.lastRewardsRefreshAt === null
+      || now - this.lastRewardsRefreshAt >= 3_600_000
+      || (epoch !== undefined && epoch !== this.lastRewardsEpoch)
+      || (rewardsSum !== undefined && rewardsSum !== this.lastRewardsSum);
+    if (!needsRefresh) return;
+
+    this.lastRewardsAttemptAt = now;
+    this.rewardsRefreshInFlight = (async () => {
+      if (await this.syncAccountRewards()) {
+        this.lastRewardsRefreshAt = Date.now();
+        this.lastRewardsEpoch = epoch ?? this.lastRewardsEpoch;
+        this.lastRewardsSum = rewardsSum ?? this.lastRewardsSum;
+      }
+    })();
+    try {
+      await this.rewardsRefreshInFlight;
+    } finally {
+      this.rewardsRefreshInFlight = null;
+    }
+  }
+
+  /**
    * Sync account rewards
    */
-  async syncAccountRewards(): Promise<void> {
+  async syncAccountRewards(): Promise<boolean> {
     try {
       if (this.walletBg.isEnterpriseAddress()) {
-        return;
+        return false;
       }
       const res = await this.api.getAccountRewards(this.walletBg.stakeAddress);
-      if (res) {
+      if (Array.isArray(res)) {
         await this.walletBg.setAccountRewards(res);
+        return true;
       }
     } catch (e) {
-      // console.log(e);
+      console.warn('Failed to refresh account reward history; a later sync will retry.');
     }
+    return false;
   }
 
   /**
@@ -759,10 +810,17 @@ export class SyncService {
     }
 
     type AssetRow = { asset: string } & Record<string, unknown>;
+    const ASSET_METADATA_RETRY_TTL_MS = 24 * 60 * 60 * 1000;
     const blockchainDB: Dexie = await this.walletBg.getBlockchainDb();
     const assetsTable: Table<AssetRow, IndexableType> = blockchainDB.table('assets');
     const existingRows = await assetsTable.bulkGet(uniqueUnits);
-    const units = uniqueUnits.filter((unit, idx) => !existingRows[idx]);
+    const now = Date.now();
+    const units = uniqueUnits.filter((unit, idx) => {
+      const row = existingRows[idx] as (AssetRow & { metadata?: unknown; metadataFetchedAt?: number }) | undefined;
+      if (!row) return true;
+      if (row.metadata) return false; // registered rows are permanent
+      return now - (row.metadataFetchedAt ?? 0) > ASSET_METADATA_RETRY_TTL_MS; // unstamped legacy rows qualify immediately
+    });
     const promises: Promise<AssetRow[] | null>[] = [];
     const smallerArrays: string[][] = chunkArray({ input: units, bytesSize: 4000 });
     smallerArrays.forEach((smallerArray: string[]) => {
@@ -770,13 +828,9 @@ export class SyncService {
     });
     const resAll = await Promise.all(promises);
     const assets = resAll.flat().filter((res): res is AssetRow => !!res);
-    debugLog(`🔬 syncAssets: requested=${uniqueUnits.length} alreadyInDb=${uniqueUnits.length - units.length} fetched=${assets.length}`);
-    if (assets.length > 0) {
-      const sample = assets[0] as { asset?: string; metadata?: { decimals?: number } };
-      debugLog(`🔬 syncAssets sample fetched row: asset=${sample.asset} hasMetadata=${!!sample.metadata} decimals=${sample.metadata?.decimals}`);
-    }
     if (assets.length === 0) return;
-    await assetsTable.bulkPut(assets);
+    const stamped = assets.map((a) => (a['metadata'] ? a : { ...a, metadataFetchedAt: now }));
+    await assetsTable.bulkPut(stamped);
     // Publish the fresh rows into the in-memory map SYNCHRONOUSLY, not just the
     // DB: applyUtxos awaits this method and immediately resolves token metadata
     // through NetworkStore.state.assets. On a fresh profile the assets liveQuery
@@ -785,7 +839,7 @@ export class SyncService {
     // (undivided-by-decimals) balances until the next login rebuilds them.
     NetworkStore.setAssets({
       ...NetworkStore.state.assets,
-      ...Object.fromEntries(assets.map(a => [a.asset, a])),
+      ...Object.fromEntries(stamped.map(a => [a.asset, a])),
     });
   }
 

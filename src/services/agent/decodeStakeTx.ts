@@ -19,7 +19,7 @@
 // add credential filtering in the orchestration layer (useAgentStaking) when wiring the
 // Guardrail, passing the wallet's stake key hash for comparison.
 
-import type { DecodedStakeTx, StakeCert, StakeWithdrawal, StakeOutput } from './stakingGuardrail';
+import type { DecodedStakeTx, GovVote, StakeCert, StakeWithdrawal, StakeOutput } from './stakingGuardrail';
 
 /** Minimal structural shape of a certificate inside a deserialized Cardano.Tx body. */
 interface RawCert {
@@ -45,13 +45,34 @@ interface RawOutput {
   value: RawValue;
 }
 
+/** Minimal structural shape of one vote inside a voter group (Conway). */
+interface RawVotingProcedureVote {
+  actionId: { id: string; actionIndex: number };
+  votingProcedure: { vote: number };
+}
+
+/** Minimal structural shape of one voter group in body.votingProcedures. */
+interface RawVoterGroup {
+  votes: RawVotingProcedureVote[];
+}
+
 /** Minimal structural shape of the body of a deserialized Cardano.Tx. */
 interface RawTxBody {
   certificates?: RawCert[];
   withdrawals?: RawWithdrawal[];
   outputs: RawOutput[];
   fee: bigint;
+  /** Conway voting procedures — absent on pre-Conway transactions. */
+  votingProcedures?: RawVoterGroup[];
 }
+
+/**
+ * The SDK's Cardano.Vote numeric enum: no = 0, yes = 1, abstain = 2. Mapped to
+ * the Guardrail's string form; an unknown value maps to its decimal string so a
+ * future enum member is still visible (and rejectable) rather than silently
+ * normalized.
+ */
+const VOTE_NAMES: Record<number, string> = { 0: 'No', 1: 'Yes', 2: 'Abstain' };
 
 /** Structural shape expected by toDecodedStakeTx -- mirrors Cardano.Tx from @cardano-sdk/core. */
 export interface CardanoTxLike {
@@ -88,10 +109,25 @@ export function toDecodedStakeTx(tx: CardanoTxLike): DecodedStakeTx {
     }),
   );
 
+  // Flatten {voter, votes[]} groups into the Guardrail's GovVote[] shape.
+  // Without this mapping, rejectVotesUnderStakingIntent() can never fire on a
+  // real transaction — the guardrail would only ever see hand-built fixtures.
+  // actionId uses the display form `txHash#index`, matching what the vote flow
+  // declares in VoteExpectation.declaredActionIds.
+  const votingProcedures: GovVote[] = (tx.body.votingProcedures ?? []).flatMap((group) =>
+    (group.votes ?? []).map(
+      (v): GovVote => ({
+        actionId: `${v.actionId.id}#${v.actionId.actionIndex}`,
+        vote: VOTE_NAMES[v.votingProcedure.vote] ?? String(v.votingProcedure.vote),
+      }),
+    ),
+  );
+
   return {
     certificates,
     withdrawals,
     outputs,
     fee: tx.body.fee,
+    ...(votingProcedures.length > 0 ? { votingProcedures } : {}),
   };
 }

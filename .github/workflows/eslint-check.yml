@@ -41,11 +41,9 @@ concurrency:
 jobs:
   eslint-config:
     name: ESLint flat config loads
-    # Same-repo guard (matches lockfile-check.yml / dev-bundle-gate.yml): don't
-    # run PR-controlled trees on shared infra. Dependabot branches are same-repo.
-    if: >-
-      github.event_name == 'push' ||
-      github.event.pull_request.head.repo.full_name == github.repository
+    # Fork PRs run here too — see the note in dev-bundle-gate.yml for why the
+    # same-repo guard was dropped. Nothing runs on shared infra any more: this is
+    # a disposable hosted runner with a read-only token.
     # GitHub-hosted: the repo is public and the self-hosted arc-private runner
     # group forbids public-repo jobs (allows_public_repositories:false).
     runs-on: ubuntu-latest

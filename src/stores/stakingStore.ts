@@ -1,10 +1,15 @@
 import Vue from 'vue';
 import blockchainApi from '@/api/blockchain-api';
 import { PaginatedResponse, PaginationParams, PaginationMeta } from '@/models/types';
+import { getErrorMessage } from '@/shared/utils/errorHandler';
+
+// Keep the store aligned with the backend's pool response shape.
+type Pool = NonNullable<Awaited<ReturnType<typeof blockchainApi.getPoolById>>>;
+type PoolWallet = { chain: string; network: string };
 
 export interface StakingStore {
-  pools: any[];
-  currentPool: any | null;
+  pools: Pool[];
+  currentPool: Pool | null;
   paginationMeta: PaginationMeta | null;
   loading: boolean;
   poolLoading: boolean;
@@ -33,7 +38,7 @@ export const stakingStore = Vue.observable<StakingStore>({
 });
 
 const stakingStoreActions = {
-  async loadPoolsPaginated(wallet: any, params: PaginationParams = {}) {
+  async loadPoolsPaginated(wallet: PoolWallet, params: PaginationParams = {}) {
     stakingStore.loading = true;
     stakingStore.error = null;
 
@@ -50,7 +55,7 @@ const stakingStoreActions = {
         sort_direction: params.sort_direction,
       };
 
-      const response: PaginatedResponse<any> = await blockchainApi.getPoolsPaginated(
+      const response: PaginatedResponse<Pool> = await blockchainApi.getPoolsPaginated(
         requestParams,
         wallet.chain,
         wallet.network
@@ -60,15 +65,15 @@ const stakingStoreActions = {
       stakingStore.pools = response.items || [];
 
       stakingStore.paginationMeta = response.meta;
-    } catch (error: any) {
-      stakingStore.error = error?.message || 'Failed to load pools';
+    } catch (error) {
+      stakingStore.error = getErrorMessage(error, 'Failed to load pools');
       console.error('Error loading paginated pools:', error);
     } finally {
       stakingStore.loading = false;
     }
   },
 
-  async loadPoolById(wallet: any, poolId: string) {
+  async loadPoolById(wallet: PoolWallet, poolId: string): Promise<Pool | null> {
     stakingStore.poolLoading = true;
     stakingStore.poolError = null;
 
@@ -77,12 +82,14 @@ const stakingStoreActions = {
 
       if (pool) {
         stakingStore.currentPool = pool;
-      } else {
-        stakingStore.poolError = 'Pool not found';
+        return pool;
       }
-    } catch (error: any) {
-      stakingStore.poolError = error?.message || 'Failed to load pool';
+      stakingStore.poolError = 'Pool not found';
+      return null;
+    } catch (error) {
+      stakingStore.poolError = getErrorMessage(error, 'Failed to load pool');
       console.error('Error loading pool by ID:', error);
+      return null;
     } finally {
       stakingStore.poolLoading = false;
     }
@@ -98,7 +105,7 @@ const stakingStoreActions = {
     stakingStore.error = null;
   },
 
-  setPools(pools: any[]) {
+  setPools(pools: Pool[]) {
     stakingStore.pools = pools;
   },
 
@@ -114,7 +121,7 @@ const stakingStoreActions = {
     stakingStore.error = error;
   },
 
-  setCurrentPool(pool: any | null) {
+  setCurrentPool(pool: Pool | null) {
     stakingStore.currentPool = pool;
   },
 

@@ -155,17 +155,15 @@
 </template>
 
 <script setup lang="ts">
+import '@/shared/styles/compact-pagination.css';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, toRefs, watch } from 'vue';
 import filters from '@/shared/utils/filters';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
-import { networkStore } from '@/stores/networkStore';
 import { tokenMetadataStore } from '@/stores/tokenMetadataStore';
-import { realFiStore } from '@/stores/realFiStore';
 import { coinGeckoStore } from '@/stores/coinGeckoStore';
 import { priceStore } from '@/stores/priceStore';
-import { get24hChange } from '@/shared/utils/resolver';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import TokenDetailPanel from '@/modules/market/components/TokenDetailPanel.vue';
 import type { MarketToken } from '@/modules/market/composables/useMarketData';
@@ -195,10 +193,8 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits(['update:sortOptions']);
 const { t } = useTranslation();
 // Store references
-const { price } = toRefs(networkStore);
 const { loggedWallet, tokens } = toRefs(walletStore);
 const { tokens: tokenMetadata } = toRefs(tokenMetadataStore);
-const { tokens: realFiTokens } = toRefs(realFiStore);
 const { cache } = toRefs(coinGeckoStore);
 
 const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
@@ -311,16 +307,16 @@ const customSort = (items: TokenRow[], sortBy: string[], sortDesc: boolean[]) =>
 const tokensList = computed(() => {
   let res = Object.values(tokens.value).map((token: TokenRow) => {
     if (token.policy_id === '') {
-      // Use Kraken WebSocket price for ADA, fallback to network store price (in USD)
+      // Live Kraken ticker price for ADA (in USD)
       // Convert to user's selected currency (USD or EUR)
-      const usdPrice = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
+      const usdPrice = priceStore.adaUsd?.lastPrice || 0;
       token.price = convertFiat(usdPrice);
       let coinGeckoCurrency = 'cardano';
       if (token.name === 'Cardano') {
         coinGeckoCurrency = 'cardano';
       } else if (token.name === 'Apex Fusion') {
         coinGeckoCurrency = 'apex-4';
-        token.price = convertFiat(price.value?.lastPrice || 0);
+        token.price = convertFiat(cache.value['apex-4']?.usd || 0);
       }
       token.mcap = convertFiat(cache.value[coinGeckoCurrency]?.usd_market_cap);
       const quantity = Number(
@@ -328,12 +324,12 @@ const tokensList = computed(() => {
       );
       token.value = quantity * token.price;
       token.allocation = token.value;
-      // Use Kraken WebSocket price change for ADA, fallback to network store
-      token.change = priceStore.adaUsd?.priceChangePercentage || price.value?.priceChangePercent;
+      // Live Kraken ticker 24h change for ADA
+      token.change = priceStore.adaUsd?.priceChangePercentage;
     } else {
-      // DexHunter prices are in ADA, convert to USD first, then to user's selected currency
+      // Registry prices are in ADA, convert to USD first, then to user's selected currency
       const priceInAda = tokenMetadata.value[token.unit]?.price || 0;
-      const adaPriceUsd = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
+      const adaPriceUsd = priceStore.adaUsd?.lastPrice || 0;
       const priceInUsd = priceInAda * adaPriceUsd;
       token.price = convertFiat(priceInUsd);
       token.mcap = convertFiat(tokenMetadata.value[token.unit]?.mcap);
@@ -342,7 +338,8 @@ const tokensList = computed(() => {
       );
       token.value = quantity * token.price;
       token.allocation = token.value;
-      token.change = get24hChange(realFiTokens.value[token.unit])?.percentChange;
+      // No 24h change for native tokens: the legacy price-candles feed was removed and
+      // never had a producer. The row hides the delta while token.change is undefined.
     }
     if (isNaN(token.allocation)) {
       token.allocation = 0;
@@ -421,7 +418,7 @@ const showTokenDetail = ref(false);
 const selectedToken = ref<MarketToken | null>(null);
 
 const handleTokenRowClick = (row: TokenRow) => {
-  const _adaPrice = priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0;
+  const _adaPrice = priceStore.adaUsd?.lastPrice || 0;
   const isAda = row.policy_id === '' && (row.name === 'Cardano' || row.unit === 'lovelace');
   const dexToken = tokenMetadata.value[row.unit];
   const priceInAda = isAda ? 1 : (dexToken?.price || 0);
@@ -489,40 +486,8 @@ watch(
   margin-right: 10px;
 }
 
-.compact-pagination >>> .v-pagination__item {
-  width: 24px !important;
-  height: 24px !important;
-  min-width: 24px !important;
-  font-size: 12px !important;
-  margin: 0 4px !important;
-}
-
-.compact-pagination >>> .v-pagination__item .v-btn {
-  display: flex !important;
-  align-items: flex-end !important;
-  justify-content: center !important;
-  min-height: 24px !important;
-  height: 24px !important;
-}
-
-.compact-pagination >>> .v-pagination__navigation {
-  width: 24px !important;
-  height: 24px !important;
-  min-width: 24px !important;
-  margin: 0 8px !important;
-}
-
-.compact-pagination >>> .v-pagination__navigation .v-btn {
-  display: flex !important;
-  align-items: flex-end !important;
-  justify-content: center !important;
-  min-height: 24px !important;
-  height: 24px !important;
-}
-
-.compact-pagination >>> .v-pagination__navigation .v-icon {
-  font-size: 16px !important;
-}
+/* .compact-pagination is the shared recipe in
+   src/shared/styles/compact-pagination.css (imported in the script block). */
 
 /* Remove hover effect and margins from pagination row */
 .no-hover:hover {
@@ -534,10 +499,6 @@ watch(
   margin: 0 !important;
   position: relative;
   height: 44px !important;
-}
-
-.compact-pagination.ma-0 {
-  margin: 0 !important;
 }
 
 .token-description-content {

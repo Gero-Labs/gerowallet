@@ -1,6 +1,6 @@
 // src/services/agent/stakingGuardrail.spec.ts
 import { describe, it, expect } from 'vitest';
-import { verifyDelegateTx, verifyWithdrawTx, type DecodedStakeTx } from './stakingGuardrail';
+import { verifyDelegateTx, verifyWithdrawTx, verifyVoteTx, type DecodedStakeTx } from './stakingGuardrail';
 
 const OWN = 'addr_own';
 const FOREIGN = 'addr_foreign';
@@ -63,5 +63,42 @@ describe('verifyWithdrawTx', () => {
   it('FAILS when a governance vote-delegation cert is sneaked into a withdraw', () => {
     const v = verifyWithdrawTx(wTx({ certificates: [{ kind: 'VoteDelegation' }] }), exp);
     expect(v.ok).toBe(false);
+  });
+});
+
+describe('verifyVoteTx', () => {
+  const ACTION_A = 'a'.repeat(64) + '#0';
+  const ACTION_B = 'b'.repeat(64) + '#2';
+  const UNDECLARED = 'c'.repeat(64) + '#1';
+  const exp = { ownAddresses: [OWN], declaredActionIds: [ACTION_A, ACTION_B], maxFeeLovelace: 1_000000n };
+  const voteTx = (extra: Partial<DecodedStakeTx> = {}): DecodedStakeTx => ({
+    certificates: [], withdrawals: [],
+    outputs: [{ address: OWN, lovelace: 9_000000n, hasAssets: false }],
+    fee: 200000n,
+    votingProcedures: [{ actionId: ACTION_A, vote: 'yes' }],
+    ...extra,
+  });
+  it('passes when every voted action id was declared in the vote intent', () => {
+    const both = voteTx({ votingProcedures: [{ actionId: ACTION_A, vote: 'yes' }, { actionId: ACTION_B, vote: 'no' }] });
+    expect(verifyVoteTx(both, exp).ok).toBe(true);
+  });
+  it('FAILS when a vote targets an action id that was not declared', () => {
+    const v = verifyVoteTx(voteTx({ votingProcedures: [{ actionId: UNDECLARED, vote: 'yes' }] }), exp);
+    expect(v.ok).toBe(false);
+    expect(v.reasons.join(' ')).toMatch(/did not ask/i);
+  });
+  it('FAILS a vote transaction under a staking intent — both delegation and withdrawal', () => {
+    const votes = [{ actionId: ACTION_A, vote: 'yes' }];
+    const d = verifyDelegateTx(delegTx('pool1good', { votingProcedures: votes }),
+      { ownAddresses: [OWN], targetPoolId: 'pool1good', maxFeeLovelace: 2_000000n });
+    expect(d.ok).toBe(false);
+    expect(d.reasons.join(' ')).toMatch(/governance vote/i);
+    const w = verifyWithdrawTx({
+      certificates: [], withdrawals: [{ stakeAddress: STAKE, quantity: 5_000000n }],
+      outputs: [{ address: OWN, lovelace: 12_000000n, hasAssets: false }], fee: 200000n,
+      votingProcedures: votes,
+    }, { ownAddresses: [OWN], stakeAddress: STAKE, withdrawableAmount: 5_000000n, maxFeeLovelace: 1_000000n });
+    expect(w.ok).toBe(false);
+    expect(w.reasons.join(' ')).toMatch(/governance vote/i);
   });
 });

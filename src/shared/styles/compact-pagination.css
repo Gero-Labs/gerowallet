@@ -1,0 +1,36 @@
+/* ============================================================
+   Compact pagination — THE shared recipe for a <v-pagination>
+   rendered inside a dense card or table (24px controls).
+
+   Usage: put class="compact-pagination" on the <v-pagination>
+   and `import '@/shared/styles/compact-pagination.css';` in the
+   consumer's script block. Extracted from three duplicated
+   per-component copies (TokensTab, CollectiblesTab,
+   TransactionsCard); EpochHistory and MarketTokenTable already
+   carried the class and now pick up the recipe too.
+
+   `width: auto` + `min-width` keeps a single-digit page at 24px
+   while letting multi-digit pages widen instead of clipping.
+   !important is carried over from the extracted copies: Vuetify
+   sizes these elements itself and its stylesheet is emitted
+   twice (see the project_vuetify_css_cascade note), so the
+   originals relied on it and parity matters more than purity.
+   ============================================================ */
+.compact-pagination .v-pagination__item {
+  width: auto !important;
+  height: 24px !important;
+  min-width: 24px !important;
+  font-size: 12px !important;
+  margin: 0 var(--g-s-1) !important;
+}
+
+.compact-pagination .v-pagination__navigation {
+  width: 24px !important;
+  height: 24px !important;
+  min-width: 24px !important;
+  margin: 0 var(--g-s-2) !important;
+}
+
+.compact-pagination .v-pagination__navigation .v-icon {
+  font-size: 16px !important;
+}

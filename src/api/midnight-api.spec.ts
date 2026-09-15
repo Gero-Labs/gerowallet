@@ -1,5 +1,39 @@
 import { describe, it, expect } from 'vitest';
-import { convertDustStatus } from './midnight-api';
+import { convertDustStatus, convertTransactionUtxos } from './midnight-api';
+
+describe('convertTransactionUtxos', () => {
+  const output = { owner: 'mn_addr1fixture', token_type: '0'.repeat(64), value: '9007199254740993',
+    intent_hash: 'ab'.repeat(32), output_index: 0, initial_nonce: 'cd'.repeat(32),
+    registered_for_dust_generation: false, ctime: 1787759076 };
+  const wire = { tx_hash: 'ef'.repeat(32), created_outputs: [output], spent_outputs: [output] };
+
+  it('maps the actual Nexus field names and preserves integer precision in both output sets', () => {
+    const result = convertTransactionUtxos(wire);
+    expect(result.txHash).toBe(wire.tx_hash);
+    expect(result.createdOutputs[0]).toEqual({ owner: output.owner, tokenType: output.token_type,
+      value: 9007199254740993n, intentHash: output.intent_hash, outputIndex: 0,
+      initialNonce: output.initial_nonce, registeredForDustGeneration: false, ctime: output.ctime });
+    expect(result.spentOutputs).toEqual(result.createdOutputs);
+    expect(wire.created_outputs[0].value).toBe('9007199254740993');
+  });
+
+  it('preserves zero and omits a nullable creation timestamp', () => {
+    const result = convertTransactionUtxos({ ...wire, created_outputs: [{ ...output, value: '0', ctime: null }], spent_outputs: [] });
+    expect(result.createdOutputs[0].value).toBe(0n);
+    expect(result.createdOutputs[0]).not.toHaveProperty('ctime');
+    expect(result.spentOutputs).toEqual([]);
+  });
+
+  it.each([null, {}, { tx_hash: 'ab', created_outputs: null, spent_outputs: [] }])('rejects a malformed envelope: %j', value => {
+    expect(() => convertTransactionUtxos(value)).toThrow('Invalid Midnight transaction UTxO response');
+  });
+
+  it.each([null, { value: 9007199254740992 }, { value: '-1' }, { value: '1.5' },
+    { value: '' }, { token_type: null }, { output_index: -1 }, { ctime: '123' }])('rejects malformed output fields: %j', patch => {
+    expect(() => convertTransactionUtxos({ ...wire, created_outputs: [patch === null ? null : { ...output, ...patch }] }))
+      .toThrow('Invalid Midnight transaction UTxO response');
+  });
+});
 
 describe('convertDustStatus', () => {
   // Captured shape of a real Nexus `dust/status` response (mainnet, verified

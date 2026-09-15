@@ -14,7 +14,9 @@ export interface MonitoredNode {
   url: string;                        // Tunnel URL (https://xxx.trycloudflare.com)
   connected: boolean;
   lastSeen: number | null;            // Unix timestamp
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- free-form /status JSON, read field-wise across the dashboard
   data: any | null;                   // Last status response
+  authToken?: string;                 // Bearer token for this agent, if it requires one
 }
 
 export interface PoolOperatorState {
@@ -32,6 +34,7 @@ export interface PoolOperatorState {
   isRegistered: boolean;
   isRetiring: boolean;
   retirementEpoch: number | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- free-form on-chain pool params
   registeredParams: any | null;
 
   // KES state
@@ -126,7 +129,7 @@ export async function saveNodes(walletId: number): Promise<void> {
   const { setWalletConfiguration } = await import('@/db/wallet-db');
   // Strip runtime data before saving
   const toSave = poolOperatorStore.nodes.map(n => ({
-    id: n.id, name: n.name, type: n.type, url: n.url,
+    id: n.id, name: n.name, type: n.type, url: n.url, authToken: n.authToken,
     connected: false, lastSeen: null, data: null,
   }));
   await setWalletConfiguration(walletId, 'spo_nodes', JSON.stringify(toSave));

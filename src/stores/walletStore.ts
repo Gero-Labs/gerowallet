@@ -58,7 +58,12 @@ function clearWalletSpecificAlarms() {
 export interface Account {
   active: boolean;
   active_epoch: number;
+  /** Spendable lovelace. The provider reports a stake-level total; setAccount() subtracts
+   *  the CIP-113 locked share before the value reaches any consumer. */
   controlled_amount: string;
+  /** The provider's unadjusted stake-level total, carried so setAccount() stays idempotent.
+   *  Derived in the store only — never written to the `account` table. */
+  controlled_amount_total?: string;
   drep_id: string;
   id: number;
   pool_id: string;
@@ -83,6 +88,20 @@ export interface WalletStore {
   keys: Keys | null;
   tokens: {};
   collections: {};
+  // CIP-113: display-only balances. NOT itself the spend/disclosure guard — that is
+  // applyUtxos() keeping programmable UTxOs out of `utxos`, which is what input selection
+  // and the CIP-30/WalletConnect getBalance handlers actually read.
+  //
+  // Kept apart from `tokens` because ~9 other consumers (SendSheet, SwapCard,
+  // useCopilotFeed, useAgentDock, HomePage, MarketPage, popup TransactionCard,
+  // useCnightDustRegistration, DAppOverlay) read `tokens` for balance and spend-adjacent
+  // logic. Separate means they stay spendable-only by default; merged would mean each of
+  // them has to remember to opt out, and a forgotten one counts locked tokens as
+  // spendable. Fails toward a missing display row rather than an overstated balance.
+  programmableTokens: {};
+  /** Lovelace locked in CIP-113 UTxOs: owned but not Gero-spendable — kept out of `utxos`
+   *  and adaBalance, yet priced and counted in portfolio totals (see useHoldingsValuation). */
+  programmableLockedLovelace: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- config is a dynamic settings bag (~20 varied fields read/written across the app); see GeroStore.config
   config: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- reward history entries come straight from the provider payload
@@ -92,6 +111,46 @@ export interface WalletStore {
   connectedDapps?: any[];
   // Bitcoin-specific state
   bitcoinBalance?: IBalance;  // Bitcoin balance (available, total, locked)
+}
+
+/**
+ * `controlled_amount` is reported per stake address, and CIP-113 UTxOs sit at the shared
+ * programmable-logic-base script address carrying that same stake credential, so their
+ * lovelace is part of the reported total. Consumers read the field as spendable ADA
+ * (max-send, swap sizing, delegation), so the locked share comes off here, at the single
+ * point the account enters the store, rather than at each of them.
+ */
+export function spendableControlledAmount(total: string | number | null | undefined): string {
+  if (total == null) return '0';
+  try {
+    const remaining = BigInt(total) - BigInt(walletStore.programmableLockedLovelace || '0');
+    return (remaining > 0n ? remaining : 0n).toString();
+  } catch {
+    return String(total);
+  }
+}
+
+/**
+ * True when this wallet holds lovelace locked in CIP-113 UTxOs.
+ *
+ * Exists so the empty-state gates don't each hand-roll a `BigInt()` parse: they run
+ * inside render computeds, where a throw on a malformed stored value takes the whole
+ * page down rather than mis-reporting one number.
+ */
+export function hasProgrammableLockedLovelace(): boolean {
+  try {
+    return BigInt(walletStore.programmableLockedLovelace || '0') > 0n;
+  } catch {
+    return false;
+  }
+}
+
+/** Re-derive `controlled_amount` from the provider total, tolerating repeated application. */
+function withSpendableControlledAmount(account: Account | null): Account | null {
+  if (!account) return account;
+  const total = account.controlled_amount_total ?? account.controlled_amount;
+  if (total == null) return account;
+  return { ...account, controlled_amount: spendableControlledAmount(total), controlled_amount_total: total };
 }
 
 // Create observable state
@@ -106,6 +165,8 @@ export const walletStore = Vue.observable<WalletStore>({
   keys: null,
   tokens: {},
   collections: {},
+  programmableTokens: {},
+  programmableLockedLovelace: '0',
   config: {
     tokenAllocationSort: {
       by: 'allocation',
@@ -268,8 +329,9 @@ export default {
   },
 
   setAccount(account: Account | null) {
-    walletStore.account = account;
-    broadcastFromBackground({ account });
+    const adjusted = withSpendableControlledAmount(account);
+    walletStore.account = adjusted;
+    broadcastFromBackground({ account: adjusted });
   },
 
   setTransactions(transactions: WalletStore['transactions']) {
@@ -327,6 +389,17 @@ export default {
   setCollections(collections: {}) {
     walletStore.collections = collections;
     broadcastFromBackground({ collections });
+  },
+
+  // Kept out of `tokens` on purpose: the send pickers read `tokens`, so these can only
+  // appear where a surface has explicitly opted in to showing locked holdings.
+  setProgrammableTokens(programmableTokens: {}, programmableLockedLovelace = '0') {
+    walletStore.programmableTokens = programmableTokens;
+    walletStore.programmableLockedLovelace = programmableLockedLovelace;
+    broadcastFromBackground({ programmableTokens, programmableLockedLovelace });
+    // A SYNC push carries the account and the UTxOs together, so the account can land
+    // before this partition is known. Re-derive it against the locked total just set.
+    this.setAccount(walletStore.account);
   },
 
   setConfig(config: {}) {
@@ -463,6 +536,8 @@ export default {
       keys: null,
       tokens: {},
       collections: {},
+      programmableTokens: {},
+      programmableLockedLovelace: '0',
       config: {},
       rewards: [],
       connectedDapps: [],
@@ -496,6 +571,8 @@ export default {
       keys: null,
       tokens: {},
       collections: {},
+      programmableTokens: {},
+      programmableLockedLovelace: '0',
       rewards: [],
       contacts: {},
       connectedDapps: [],

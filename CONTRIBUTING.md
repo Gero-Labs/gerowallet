@@ -26,9 +26,10 @@ Please read and follow our [Code of Conduct](CODE_OF_CONDUCT.md).
    ```bash
    npm install
    ```
-4. Copy environment template:
+4. Create your environment file (see the README's "Configure Environment"
+   for the three variables it needs):
    ```bash
-   cp .env.example .env.development
+   touch .env.development
    ```
 5. Start development server:
    ```bash

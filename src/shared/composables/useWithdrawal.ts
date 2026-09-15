@@ -23,6 +23,15 @@ export function useWithdrawal() {
 
   const txData = ref<Cardano.Tx | null>(null);
   const withdrawalDialog = ref(false);
+  /**
+   * CIP-1694 blocked the withdrawal: the stake key has taken no voting
+   * position, so the node would reject a bare withdrawal. Hosts render
+   * WithdrawGateDialog off this instead of leaving the user at a dead end,
+   * since there are two ways out (pick a DRep, or bundle always-abstain into
+   * the same transaction) and neither is reachable from a withdrawal dialog
+   * that has no transaction in it.
+   */
+  const withdrawalBlocked = ref(false);
   /** CIP-0149: Whether user chose to skip donation for this withdrawal */
   const skipCompensation = ref(false);
 
@@ -51,10 +60,14 @@ export function useWithdrawal() {
       const isCardano = loggedWallet.value?.chain === Blockchain.CARDANO;
       if (isCardano && !account.value?.drep_id) {
         console.warn('Cannot withdraw: DRep delegation required');
-        // Dialog will still open and show the warning with "Go to Governance" button
+        // Raise the gate. Hosts that render WithdrawGateDialog offer the two
+        // ways out; the legacy flag stays set so hosts that don't keep their
+        // existing "Go to Governance" warning.
+        withdrawalBlocked.value = true;
         withdrawalDialog.value = true;
         return;
       }
+      withdrawalBlocked.value = false;
 
       // Prepare withdrawals if there are any rewards
       const withdrawals: Cardano.Withdrawal[] = [];
@@ -131,6 +144,7 @@ export function useWithdrawal() {
    */
   const closeWithdrawalDialog = () => {
     withdrawalDialog.value = false;
+    withdrawalBlocked.value = false;
     txData.value = null;
     skipCompensation.value = false;
   };
@@ -139,6 +153,7 @@ export function useWithdrawal() {
     // State
     txData,
     withdrawalDialog,
+    withdrawalBlocked,
     skipCompensation,
     compensationInfo,
 

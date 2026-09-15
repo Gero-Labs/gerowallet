@@ -114,6 +114,7 @@
 </template>
 
 <script setup lang="ts">
+import '@/shared/styles/compact-pagination.css';
 import { ref, computed, toRefs, onMounted, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { poolOperatorStore } from '@/stores/poolOperatorStore';
@@ -138,9 +139,34 @@ const paginatedItems = computed(() => {
 });
 
 const showBlockDetail = ref(false);
-const selectedEpoch = ref<any>(null);
+const selectedEpoch = ref<{ epoch: number } | null>(null);
 const epochBlocks = ref<PoolBlock[]>([]);
 const blocksLoading = ref(false);
+
+/**
+ * Minimal Highcharts callback contexts — just what the formatters below read,
+ * without pulling in the full Highcharts type surface.
+ */
+interface AxisLabelCtx { value: number }
+interface PointCtx { color: string; y: number; series: { name: string } }
+
+/**
+ * Raw pool-history row from the backend: Koios snake_case, with legacy
+ * camelCase fallbacks for older proxy deployments.
+ */
+type RawPoolHistoryRow = Partial<PoolEpochHistory> & {
+  epochNo?: number;
+  activeStake?: string;
+  activeStakePct?: number | null;
+  saturationPct?: number;
+  blockCnt?: number;
+  delegatorCnt?: number;
+  fixedCost?: string;
+  poolFees?: string;
+  delegRewards?: string;
+  memberRewards?: string | null;
+  epochRos?: number;
+};
 
 const headers = computed(() => [
   { text: t('poolOperator.epoch'), value: 'epoch', sortable: true },
@@ -249,7 +275,7 @@ const chartOptions = computed(() => {
       },
       { // 1: Stake (ADA)
         title: { text: undefined },
-        labels: { style: { color: 'rgba(253,176,34,0.6)', fontSize: '9px' }, formatter() { return formatAda(String((this as any).value * 1_000_000)); } },
+        labels: { style: { color: 'rgba(253,176,34,0.6)', fontSize: '9px' }, formatter(this: AxisLabelCtx) { return formatAda(String(this.value * 1_000_000)); } },
         opposite: true,
         gridLineWidth: 0,
         min: 0,
@@ -309,7 +335,7 @@ const chartOptions = computed(() => {
         fillColor: { linearGradient: { x1: 0, y1: 0, x2: 0, y2: 1 }, stops: [[0, 'rgba(253,176,34,0.15)'], [1, 'rgba(253,176,34,0)']] },
         lineWidth: 1.5,
         marker: { enabled: false },
-        tooltip: { pointFormatter() { return `<span style="color:${(this as any).color}">BULLET_TMP</span> ${(this as any).series.name}: <b>${formatAda(String((this as any).y * 1_000_000))} ADA</b><br/>`; } },
+        tooltip: { pointFormatter(this: PointCtx) { return `<span style="color:${this.color}">BULLET_TMP</span> ${this.series.name}: <b>${formatAda(String(this.y * 1_000_000))} ADA</b><br/>`; } },
       },
       {
         name: t('poolOperator.delegators'),
@@ -328,7 +354,7 @@ const chartOptions = computed(() => {
         data: spoRewardsData,
         color: 'rgba(253,176,34,0.5)',
         stack: 'rewards',
-        tooltip: { pointFormatter() { return `<span style="color:${(this as any).color}">BULLET_TMP</span> ${(this as any).series.name}: <b>${formatAda(String(Math.round((this as any).y * 1_000_000)), 6)} ADA</b><br/>`; } },
+        tooltip: { pointFormatter(this: PointCtx) { return `<span style="color:${this.color}">BULLET_TMP</span> ${this.series.name}: <b>${formatAda(String(Math.round(this.y * 1_000_000)), 6)} ADA</b><br/>`; } },
       },
       {
         name: t('poolOperator.delegatorRewards'),
@@ -337,7 +363,7 @@ const chartOptions = computed(() => {
         data: delegRewardsData,
         color: 'rgba(117,224,167,0.35)',
         stack: 'rewards',
-        tooltip: { pointFormatter() { return `<span style="color:${(this as any).color}">BULLET_TMP</span> ${(this as any).series.name}: <b>${formatAda(String(Math.round((this as any).y * 1_000_000)), 6)} ADA</b><br/>`; } },
+        tooltip: { pointFormatter(this: PointCtx) { return `<span style="color:${this.color}">BULLET_TMP</span> ${this.series.name}: <b>${formatAda(String(Math.round(this.y * 1_000_000)), 6)} ADA</b><br/>`; } },
       },
     ],
   };
@@ -397,7 +423,7 @@ async function fetchHistory() {
   try {
     const data = await blockchainApi.getPoolHistory(poolId.value, loggedWallet.value.chain, loggedWallet.value.network);
     // Backend returns snake_case fields directly (Koios format)
-    history.value = (data || []).map((h: any) => ({
+    history.value = (data || []).map((h: RawPoolHistoryRow) => ({
       epoch_no: h.epoch_no ?? h.epochNo,
       active_stake: h.active_stake ?? h.activeStake,
       active_stake_pct: h.active_stake_pct ?? h.activeStakePct,
@@ -418,13 +444,13 @@ async function fetchHistory() {
   }
 }
 
-async function selectEpoch(item: any) {
-  const epoch = item._raw || item;
-  selectedEpoch.value = { epoch: epoch.epoch_no || item.epoch };
+async function selectEpoch(item: { epoch: number; _raw?: PoolEpochHistory }) {
+  const epochNo = item._raw?.epoch_no || item.epoch;
+  selectedEpoch.value = { epoch: epochNo };
   showBlockDetail.value = true;
   blocksLoading.value = true;
   try {
-    epochBlocks.value = await spoApi.getPoolBlocks(poolId.value!, loggedWallet.value!.network, selectedEpoch.value.epoch);
+    epochBlocks.value = await spoApi.getPoolBlocks(poolId.value!, loggedWallet.value!.network, epochNo);
   } catch {
     epochBlocks.value = [];
   } finally {

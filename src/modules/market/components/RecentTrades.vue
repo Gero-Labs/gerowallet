@@ -50,6 +50,7 @@
         <span>{{ $t('market.type') }}</span>
         <span class="text-right">{{ $t('market.price') }} ({{ currencySymbol }})</span>
         <span class="text-right">Vol ({{ currencySymbol }})</span>
+        <span class="text-right">{{ $t('market.dex') }}</span>
       </div>
       <div class="trades-body">
         <div
@@ -73,6 +74,9 @@
           >{{ trade.type === 'BUY' ? $t('market.buy') : $t('market.sell') }}</span>
           <span class="text-right">{{ formatTradePrice(trade.priceAda) }}</span>
           <span class="text-right">{{ formatCompact(trade.volumeAda) }}</span>
+          <!-- Each row's price is the post-swap spot of the pool it hit; the chart is priced
+               from the dominant pool only. Naming the DEX lets a reader reconcile the two. -->
+          <span class="text-right trade-dex" :title="trade.dex">{{ formatDexName(trade.dex) }}</span>
         </div>
       </div>
     </template>
@@ -196,6 +200,12 @@ function formatTradePrice(price: number | null | undefined): string {
   return price.toFixed(8);
 }
 
+/** 'MINSWAP_V2' → 'Minswap v2' (same rendering as the cross-DEX and order-book panels). */
+function formatDexName(dex: string | null | undefined): string {
+  if (!dex) return '—';
+  return dex.replace(/_/g, ' ').replace(/V(\d)/g, ' v$1').replace(/\b\w/g, l => l.toUpperCase());
+}
+
 function formatCompact(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return '—';
   if (value >= 1e6) return (value / 1e6).toFixed(1) + 'M';
@@ -233,7 +243,7 @@ onBeforeUnmount(() => {
 
 .trades-header {
   display: grid;
-  grid-template-columns: 1fr 0.6fr 1fr 1fr;
+  grid-template-columns: 1fr 0.6fr 1fr 0.8fr 1fr;
   gap: 4px;
   padding: 4px 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -249,7 +259,7 @@ onBeforeUnmount(() => {
 
 .trade-row {
   display: grid;
-  grid-template-columns: 1fr 0.6fr 1fr 1fr;
+  grid-template-columns: 1fr 0.6fr 1fr 0.8fr 1fr;
   gap: 4px;
   padding: 3px 0;
   font-size: 12px;
@@ -278,6 +288,13 @@ onBeforeUnmount(() => {
   font-weight: 600;
   text-transform: uppercase;
   font-size: 11px;
+}
+
+.trade-dex {
+  color: var(--g-text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .trade-row.own-trade {

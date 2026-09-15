@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { defineConfig, configDefaults } from 'vitest/config';
 import { resolve } from 'path';
 import wasm from 'vite-plugin-wasm';
 import topLevelAwait from 'vite-plugin-top-level-await';
@@ -32,7 +32,19 @@ export default defineConfig({
     // real-timer suites (crossDeviceSigning's WAKE_PENDING polls) starve each
     // other and flake. Four worktrees present when this was added turned 251
     // crossDevice tests into 807.
-    exclude: ['**/node_modules/**', '**/dist/**', '**/.claude/**'],
+    //
+    // `.worktrees/*` (.gitignore:102) is the same hazard from a plain
+    // `git worktree add` at the repo root instead of under `.claude/`.
+    //
+    // Spread `configDefaults.exclude` rather than hand-listing node_modules and
+    // dist: `exclude` REPLACES the defaults rather than merging, so naming only
+    // those two silently dropped the rest (cypress, `.{idea,git,cache,output,
+    // temp}`, and the *.config.* files).
+    exclude: [
+      ...configDefaults.exclude,
+      '**/.claude/**',
+      '**/.worktrees/**',
+    ],
   },
   resolve: {
     alias: {

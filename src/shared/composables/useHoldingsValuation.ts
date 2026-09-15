@@ -4,7 +4,7 @@
  *
  * WHY: the dashboard (PortfolioPage) and mini-Gero (sidepanel BalanceSection)
  * each computed their own total and drifted: the sidepanel copy lacked the
- * DexHunter price fallback, so any token priced only there silently dropped
+ * token-registry price fallback, so any token priced only there silently dropped
  * out of the sidepanel's number (user-visible: ₳22,421 on the dashboard vs
  * ₳22,411 in mini-Gero). House rule: mini-Gero must mirror the dashboard's
  * exact logic — so both now consume THIS composable.
@@ -15,9 +15,9 @@
  * mainnet-Cardano page concern, not part of valuation.
  */
 import { computed, toRefs } from 'vue';
+import { tokenRowKey } from '@/shared/utils/tokenRowKey';
 import { walletStore } from '@/stores/walletStore';
 import { priceStore } from '@/stores/priceStore';
-import { networkStore } from '@/stores/networkStore';
 import { coinGeckoStore } from '@/stores/coinGeckoStore';
 import { tokenMetadataStore } from '@/stores/tokenMetadataStore';
 import { Blockchain } from '@/models/types';
@@ -28,8 +28,7 @@ import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter'
 import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
 
 export function useHoldingsValuation() {
-  const { loggedWallet, utxos, collateral, tokens: walletTokens } = toRefs(walletStore);
-  const { price } = toRefs(networkStore);
+  const { loggedWallet, utxos, collateral, tokens: walletTokens, programmableTokens, programmableLockedLovelace } = toRefs(walletStore);
   const { allTokens } = useMarketData();
   const { usdToEurRate } = useCurrencyConverter();
   const { currencyName: nativeCurrencyName, currencyTicker: nativeCurrencyTicker } = useNativeCurrency();
@@ -55,7 +54,7 @@ export function useHoldingsValuation() {
       return coinGeckoStore.cache['apex-4']?.usd ?? 0;
     }
     const marketAdaPrice = allTokens.value.find(t => t.unit === 'lovelace')?.price;
-    return marketAdaPrice || Number(price.value?.lastPrice) || 0;
+    return marketAdaPrice || 0;
   });
 
   /**
@@ -66,27 +65,53 @@ export function useHoldingsValuation() {
     const tokens = walletTokens.value || {};
     const adaPriceUsd = isApex.value
       ? (coinGeckoStore.cache['apex-4']?.usd ?? 0)
-      : (priceStore.adaUsd?.lastPrice || Number(price.value?.lastPrice) || 0);
+      : (priceStore.adaUsd?.lastPrice || 0);
     const dhTokens = tokenMetadataStore.tokens || {};
     const rows: MarketToken[] = [];
 
-    Object.entries(tokens).forEach(([unit, token]: [string, { quantity?: number | string; amount?: string; name?: string; policy_id?: string; metadata?: { name?: string; ticker?: string; decimals?: number } }]) => {
+    // Programmable tokens live in their own store map so nothing that selects
+    // transaction inputs can reach them; merged here because this composable is the
+    // one place both the dashboard and mini-Gero read holdings from.
+    type HoldingEntry = [string, { quantity?: number | string; amount?: string; name?: string; policy_id?: string; metadata?: { name?: string; ticker?: string; decimals?: number } }, boolean];
+    const entries: HoldingEntry[] = [
+      ...Object.entries(tokens).map(([unit, token]) => [unit, token, false] as HoldingEntry),
+      ...Object.entries(programmableTokens.value || {}).map(([unit, token]) => [unit, token, true] as HoldingEntry),
+    ];
+
+    // ADA riding along in the programmable UTxOs. It is the user's, but Gero cannot
+    // spend it, so it gets its own locked row instead of joining adaBalance, keyed apart
+    // from the spendable row via tokenRowKey() ('lovelace#locked'). Unlike locked CIP-113
+    // tokens, this row keeps its real price and counts toward totals — see below.
+    const lockedLovelace = Number(programmableLockedLovelace.value || '0');
+    if (lockedLovelace > 0) {
+      entries.push(['lovelace', {
+        quantity: lockedLovelace,
+        name: nativeCurrencyName.value,
+        metadata: { name: nativeCurrencyName.value, ticker: nativeCurrencyTicker.value, decimals: 6 },
+      }, true] as HoldingEntry);
+    }
+
+    entries.forEach(([unit, token, isProgrammable]: HoldingEntry) => {
       if (!token.quantity || Number(token.quantity) <= 0) return;
 
       // Find in market data for enrichment
       const marketToken = allTokens.value.find(t => t.unit === unit);
       const dhToken = dhTokens[unit];
 
-      // Decimals: registry metadata first, then market/DexHunter fallbacks —
+      // Decimals: registry metadata first, then market/registry fallbacks —
       // on a fresh profile the wallet token can be built before the registry
       // cache exists, and pricing the raw quantity inflates the portfolio by
       // 10^decimals. The same value feeds `decimals` below so balance and
-      // formatting can never disagree.
-      const decimals = token.metadata?.decimals ?? marketToken?.decimals ?? dhToken?.decimals ?? 0;
+      // formatting can never disagree. When none of the three sources know
+      // the decimals, fall back to 0 (raw units) but flag the row via
+      // `decimalsUnknown` instead of silently presenting a wrong balance
+      // (issue 1003).
+      const decimalsResolved = token.metadata?.decimals ?? marketToken?.decimals ?? dhToken?.decimals;
+      const decimals = decimalsResolved ?? 0;
       const rawQuantity = Number(token.quantity);
       const quantity = decimals > 0 ? rawQuantity / Math.pow(10, decimals) : rawQuantity;
 
-      // Price: prefer market API data, then DexHunter fallback
+      // Price: prefer market API data, then token-registry fallback
       let priceUsd = marketToken?.price || 0;
       let priceAda = marketToken?.priceAda || 0;
 
@@ -99,12 +124,33 @@ export function useHoldingsValuation() {
         priceUsd = priceAda * adaPriceUsd;
       }
 
+      // Locked CIP-113 TOKENS stay unpriced: sitting at the programmable address is not
+      // evidence the token is registered or legitimate (anyone can send an asset there),
+      // so there is no price source worth trusting and a wrong one is worse than none.
+      //
+      // Locked ADA is different. It is the native currency at the native price, and it is
+      // genuinely the user's — it just cannot be spent through Gero. Zeroing it would
+      // understate what they hold, so it keeps its real price and counts toward the
+      // portfolio total. Spendable figures are unaffected: `adaBalance` is derived from
+      // walletStore.utxos, which programmable UTxOs never enter.
+      if (isProgrammable && !isNativeToken) {
+        priceUsd = 0;
+        priceAda = 0;
+      }
+
       const value = quantity * priceUsd;
 
       rows.push({
         unit,
         name: marketToken?.name || token.name || token.metadata?.name || (isNativeToken ? nativeCurrencyName.value : unit),
-        ticker: marketToken?.ticker || token.metadata?.ticker || (isNativeToken ? nativeCurrencyTicker.value : ''),
+        // The table renders `ticker` as the row label, so an empty one leaves a
+        // nameless row. Tokens with no registry entry and no market data have none,
+        // so fall back to the asset name resolveAsset() already decoded.
+        ticker: marketToken?.ticker
+          || token.metadata?.ticker
+          || (isNativeToken ? nativeCurrencyTicker.value : '')
+          || token.name
+          || '',
         img: marketToken?.img || (token as { img?: string }).img || '',
         verified: marketToken?.verified ?? dhToken?.verified ?? isNativeToken,
         // Graduated snek.fun tokens are unverified but legit — carry the market
@@ -112,6 +158,9 @@ export function useHoldingsValuation() {
         // badge renders (mirrors the market list). Missing here = held snek
         // tokens silently stripped by verified-only.
         isSnekFun: marketToken?.isSnekFun ?? false,
+        isProgrammable,
+        rowKey: tokenRowKey(unit, isProgrammable),
+        isScam: (token as { isScam?: boolean }).isScam ?? false,
         price: priceUsd,
         priceAda,
         priceEur: marketToken?.priceEur ?? 0,
@@ -133,6 +182,7 @@ export function useHoldingsValuation() {
         policyLocked: true,
         fingerprint: marketToken?.fingerprint || dhToken?.fingerprint || '',
         decimals,
+        decimalsUnknown: !isNativeToken && decimalsResolved === undefined,
         balance: quantity,
         value,
         allocation: value,
@@ -143,14 +193,6 @@ export function useHoldingsValuation() {
         isNative: isNativeToken,
       });
     });
-
-    {
-      const suspicious = rows.filter(r => !r.isNative && (r.decimals ?? 0) === 0 && (r.balance ?? 0) > 1e6);
-      if (suspicious.length > 0) {
-        // eslint-disable-next-line no-console -- temporary diagnostic for the fresh-restore decimals bug
-        console.log(`🔬 valuation: ${suspicious.length}/${rows.length} tokens resolved decimals=0 with balance>1e6; sample unit=${suspicious[0].unit?.slice(0, 20)}… hasWalletMeta=${!!(tokens[suspicious[0].unit ?? ''] as { metadata?: unknown })?.metadata} marketDecimals=${allTokens.value.find(t => t.unit === suspicious[0].unit)?.decimals} dhDecimals=${dhTokens[suspicious[0].unit ?? '']?.decimals}`);
-      }
-    }
 
     // Sort: native token pinned to top, then by value descending
     rows.sort((a, b) => {

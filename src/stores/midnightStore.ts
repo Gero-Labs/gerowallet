@@ -1,3 +1,5 @@
+import { MIDNIGHT_PROVING_CONSENT_VERSION, type MidnightProvingConsent, type MidnightRemoteProver } from '@/chains/midnight/midnightProvingConsent';
+import type { MidnightSyncIdentity } from '@/chains/midnight/midnightSyncGeneration';
 /**
  * Midnight Wallet Store
  *
@@ -36,6 +38,7 @@ import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 import { debugLog } from '@/utils/debug';
 import { getMidnightEndpoints } from '@/chains/midnight/midnightConfig';
+import { isNativeNight } from '@/chains/midnight/midnightTokenBalances';
 import { Network } from '@/models/types';
 import type {
   MidnightBalances,
@@ -53,7 +56,13 @@ import type {
 export interface MidnightChainTip {
   hash: string | null;
   height: number;
-  timestamp: number; // Unix seconds
+  /**
+   * Epoch MILLISECONDS. Both writers pass ms (midnight-sync's tip bootstrap
+   * documents Nexus's BlockDto as epoch ms) and ContentLayout feeds it
+   * straight to `new Date()`. The old `// Unix seconds` note here was the
+   * only claim to the contrary and would have cost someone an afternoon.
+   */
+  timestamp: number;
 }
 
 /**
@@ -161,6 +170,8 @@ export interface MidnightStore {
    * history. Null = never applied a tx (fresh install / cleared state).
    */
   lastMidnightTxId: number | null;
+  chainIdentity: MidnightSyncIdentity | null;
+  privateSyncStatus: 'idle' | 'syncing' | 'synced' | 'error';
 
   /**
    * Record of the user's consent to send shielded-tx witness data through
@@ -174,7 +185,7 @@ export interface MidnightStore {
    * through the consent dialog first; cancelling the consent aborts the
    * send. Accepting writes {@code {version, acceptedAt}} here.
    */
-  shieldedProvingConsent: { version: number; acceptedAt: number } | null;
+  shieldedProvingConsent: MidnightProvingConsent | null;
 
   /**
    * Where shielded-tx ZK proofs are generated. {@code remote} (default)
@@ -191,6 +202,8 @@ export interface MidnightStore {
   proofServer: {
     mode: 'remote' | 'local' | 'zkpaas';
     localUrl: string;
+    /** Explicit server circuit family for cross-device proving; legacy by default. */
+    localProfile?: 'legacy' | 'stagenet';
     /** Arkhia endpoint override; '' = derive per network (midnightConfig). */
     zkpaasUrl: string;
     /** Arkhia project API key ('' until the user pastes one). */
@@ -243,12 +256,13 @@ export interface MidnightStore {
  * or the wording around what Gero servers see / log changes). A bump
  * invalidates every existing accepted record and re-prompts on next send.
  */
-export const SHIELDED_PROVING_CONSENT_VERSION = 1;
+export const SHIELDED_PROVING_CONSENT_VERSION = MIDNIGHT_PROVING_CONSENT_VERSION;
 
 const STORE_NAME = 'midnightStore';
 const context = getContextType();
 
 const EMPTY_BALANCES: MidnightBalances = {
+  shieldedTokens: {},
   nightShielded: 0n,
   nightUnshielded: 0n,
   nightRegistered: 0n,
@@ -261,6 +275,20 @@ const EMPTY_ADDRESSES: MidnightAddresses = {
   shielded: '',
   unshielded: '',
 };
+
+/**
+ * The network a Midnight unshielded address belongs to, as its bech32m HRP.
+ *
+ * `mn_addr1…` is mainnet and `mn_addr_<network>1…` is everything else (see the
+ * prefix built in background.ts), and the bech32 data part cannot contain `1`,
+ * so the separator is unambiguous. Returns null for anything unparseable, which
+ * callers must treat as "not the same network".
+ */
+function midnightNetworkOf(address: string | null): string | null {
+  if (!address) return null;
+  const separator = address.lastIndexOf('1');
+  return separator > 0 ? address.slice(0, separator) : null;
+}
 
 const EMPTY_TIP: MidnightChainTip = {
   hash: null,
@@ -279,7 +307,8 @@ const EMPTY_TIP: MidnightChainTip = {
  */
 const DEFAULT_PROOF_SERVER: MidnightStore['proofServer'] = {
   mode: 'remote',
-  localUrl: getMidnightEndpoints(Network.PREVIEW)!.defaultProofServerUrl,
+  localProfile: 'legacy',
+  localUrl: getMidnightEndpoints(Network.STAGENET)!.defaultProofServerUrl,
   zkpaasUrl: '',
   zkpaasApiKey: '',
   zkpaasApiSecret: '',
@@ -301,6 +330,8 @@ export const midnightStore = Vue.observable<MidnightStore>({
   provingOperations: new Map(),
   provingHistory: [],
   lastMidnightTxId: null,
+  chainIdentity: null,
+  privateSyncStatus: 'idle',
   shieldedProvingConsent: null,
   activeWalletKey: null,
   sendProgress: null,
@@ -327,6 +358,20 @@ function normalizeTxHash(hash: string): string {
   return h.startsWith('0x') ? h.slice(2) : h;
 }
 
+/**
+ * Dedup key for a transaction row: hash + token. A single indexer tx that
+ * moves more than one color now produces multiple `MidnightTransaction`
+ * rows sharing one hash (one per color) — keying on hash alone would make
+ * the second `applyTransaction` call overwrite the first instead of adding
+ * a second row. Keying on hash+token keeps the original single-row dedup
+ * behavior for NIGHT/DUST-only txs (including the optimistic pending-send
+ * insert in background.ts, which is hardcoded to 'NIGHT') while letting
+ * distinct colors of the same tx coexist.
+ */
+function txRowKey(tx: MidnightTransaction): string {
+  return `${normalizeTxHash(tx.hash)}::${tx.token}`;
+}
+
 // ---------------------------------------------------------------- hydration
 
 // Persisted shapes mirror the store's interfaces with BigInts serialized as
@@ -336,6 +381,9 @@ function hydrateBalances(stored: unknown): MidnightBalances {
   if (!stored || typeof stored !== 'object') return { ...EMPTY_BALANCES };
   const s = stored as MidnightBalances;
   return {
+    shieldedTokens: Object.fromEntries(Object.entries(s.shieldedTokens ?? {})
+      .filter(([color]) => /^[0-9a-fA-F]{64}$/.test(color) && !/^0+$/.test(color))
+      .map(([color, amount]) => [color.toLowerCase(), toBig(amount)])),
     nightShielded: toBig(s.nightShielded),
     nightUnshielded: toBig(s.nightUnshielded),
     nightRegistered: toBig(s.nightRegistered),
@@ -485,6 +533,7 @@ if (context === 'browser') {
     midnightStore.dustState = hydrateDustState(stored.dustState);
     midnightStore.provingOperations = hydrateProvingOperations(stored.provingOperations);
     midnightStore.provingHistory = hydrateProvingHistory(stored.provingHistory);
+    midnightStore.chainIdentity = stored.chainIdentity ?? null;
     midnightStore.lastMidnightTxId = typeof stored.lastMidnightTxId === 'number'
       ? stored.lastMidnightTxId
       : null;
@@ -540,12 +589,14 @@ if (context === 'background') {
  */
 function hydrateShieldedProvingConsent(
   stored: unknown,
-): { version: number; acceptedAt: number } | null {
+): MidnightProvingConsent | null {
   if (!stored || typeof stored !== 'object') return null;
   const v = (stored as { version?: unknown }).version;
   const at = (stored as { acceptedAt?: unknown }).acceptedAt;
-  if (typeof v !== 'number' || typeof at !== 'number') return null;
-  return { version: v, acceptedAt: at };
+  const provider = (stored as { provider?: unknown }).provider;
+  if (!Number.isSafeInteger(v) || typeof at !== 'number' || !Number.isFinite(at) || at <= 0
+    || (provider !== 'cloud' && provider !== 'zkpaas')) return null;
+  return { version: v as number, acceptedAt: at, provider };
 }
 
 /**
@@ -576,6 +627,7 @@ function hydrateProofServer(stored: unknown): MidnightStore['proofServer'] {
   return {
     mode: mode === 'remote' || mode === 'local' || mode === 'zkpaas' ? mode : DEFAULT_PROOF_SERVER.mode,
     localUrl: isValidProofServerUrl(localUrl) ? localUrl : DEFAULT_PROOF_SERVER.localUrl,
+    localProfile: (stored as { localProfile?: unknown }).localProfile === 'stagenet' ? 'stagenet' : 'legacy',
     // '' is the valid "derive per network" state, distinct from a corrupted
     // value — only non-empty overrides must parse as http(s) URLs.
     zkpaasUrl: zkpaasUrl === '' || isValidProofServerUrl(zkpaasUrl) ? zkpaasUrl as string : '',
@@ -618,7 +670,7 @@ function applyUpdates(updates: Partial<MidnightStore>) {
   }
   // Plain-typed fields — copy directly (no BigInt nesting to handle)
   for (const key of [
-    'isActive', 'lastSync', 'networkStatus', 'tip', 'addresses', 'lastMidnightTxId',
+    'isActive', 'lastSync', 'networkStatus', 'tip', 'addresses', 'lastMidnightTxId', 'chainIdentity', 'privateSyncStatus',
     'shieldedProvingConsent', 'activeWalletKey', 'sendProgress', 'shieldedSyncAvailable',
     'proofServer',
   ] as const) {
@@ -691,6 +743,29 @@ export function isValidMidnightViewingKey(vk: string | undefined | null): boolea
  * trigger them via Chrome messaging if needed.
  */
 export const midnightActions = {
+  setPrivateSyncStatus(privateSyncStatus: MidnightStore['privateSyncStatus']) {
+    midnightStore.privateSyncStatus = privateSyncStatus;
+    broadcastFromBackground({ privateSyncStatus });
+  },
+  applyPrivateSnapshot(shieldedTokens: Record<string, bigint>, transactions: MidnightTransaction[]) {
+    const balances = { ...midnightStore.balances, shieldedTokens, nightShielded: 0n };
+    const pending = midnightStore.transactions.filter(tx => tx.isShielded && tx.status === 'pending'
+      && !transactions.some(confirmed => confirmed.hash === tx.hash && confirmed.token === tx.token));
+    const combined = [...midnightStore.transactions.filter(tx => !tx.isShielded), ...pending, ...transactions]
+      .sort((a, b) => b.timestamp - a.timestamp);
+    Object.assign(midnightStore, { balances, transactions: combined, privateSyncStatus: 'synced' });
+    broadcastFromBackground({ balances, transactions: combined, privateSyncStatus: 'synced' });
+  },
+  resetChainState(identity: MidnightSyncIdentity) {
+    const updates: Partial<MidnightStore> = {
+      chainIdentity: identity, privateSyncStatus: 'syncing', lastSync: null, tip: { ...EMPTY_TIP },
+      balances: { ...EMPTY_BALANCES }, transactions: [], utxos: [], dustState: null,
+      lastMidnightTxId: null, provingOperations: new Map(), sendProgress: null,
+      networkStatus: 'connecting',
+    };
+    Object.assign(midnightStore, updates);
+    broadcastFromBackground(updates, true);
+  },
   /**
    * Mark the wallet as active and seed initial addresses (called when the user
    * logs into a Midnight wallet). Balances/transactions stay empty until
@@ -717,6 +792,17 @@ export const midnightActions = {
     const prevKey = midnightStore.activeWalletKey;
     const isSwitch = !!prevKey && !!newKey && prevKey !== newKey;
 
+    // The chain tip is a property of the NETWORK, not of the wallet: moving
+    // between two wallets on the same Midnight network does not make the last
+    // observed block untrue. Wiping it here left the network tooltip reading
+    // "Block: N/A" and "Last Sync: N/A" until the first tip event arrived —
+    // the same gap the Cardano side had before walletManager began seeding
+    // NetworkStore.tip from the wallet's sync checkpoint. A NETWORK switch is
+    // a different chain, so there the tip really is unknown and must clear.
+    const prevNetwork = midnightNetworkOf(prevKey);
+    const sameNetwork = prevNetwork !== null && prevNetwork === midnightNetworkOf(newKey);
+    const carriedTip: MidnightChainTip = sameNetwork ? midnightStore.tip : { ...EMPTY_TIP };
+
     if (isSwitch) {
       // Wipe per-wallet state that belongs to the PREVIOUS wallet/network so
       // a stale NIGHT balance / UTxO set / cursor can't leak across the
@@ -725,12 +811,14 @@ export const midnightActions = {
       // activeWalletKey are set below to the new wallet.
       Object.assign(midnightStore, {
         lastSync: null,
-        tip: { ...EMPTY_TIP },
+        tip: carriedTip,
         balances: { ...EMPTY_BALANCES },
         transactions: [],
         utxos: [],
         dustState: null,
         lastMidnightTxId: null,
+        chainIdentity: null,
+        privateSyncStatus: 'idle',
       });
       debugLog(`🌙 Midnight wallet switch detected (${prevKey.slice(-8)} → ${newKey.slice(-8)}) — cleared stale state`);
     }
@@ -749,12 +837,14 @@ export const midnightActions = {
           networkStatus: 'connecting',
           shieldedSyncAvailable,
           lastSync: null,
-          tip: { ...EMPTY_TIP },
+          tip: carriedTip,
           balances: { ...EMPTY_BALANCES },
           transactions: [],
           utxos: [],
           dustState: null,
           lastMidnightTxId: null,
+          chainIdentity: null,
+          privateSyncStatus: 'idle',
         }
         : { isActive: true, addresses: safeAddresses, activeWalletKey: newKey, networkStatus: 'connecting', shieldedSyncAvailable },
       true,
@@ -800,9 +890,10 @@ export const midnightActions = {
    * dialog's accept button is clicked. Persists immediate so the value
    * survives a SW restart between the consent acceptance and the send.
    */
-  acceptShieldedProvingConsent() {
+  acceptShieldedProvingConsent(provider: MidnightRemoteProver) {
     const consent = {
       version: SHIELDED_PROVING_CONSENT_VERSION,
+      provider,
       acceptedAt: Date.now(),
     };
     bgDurableTouched.shieldedProvingConsent = true;
@@ -877,8 +968,13 @@ export const midnightActions = {
   /** New chain tip observed by gero-sync (or Nexus tip query). */
   applyTipUpdate(tip: MidnightChainTip) {
     midnightStore.tip = tip;
+    broadcastFromBackground({ tip });
+  },
+
+  /** A generation-validated wallet sync message was successfully applied. */
+  markSynced() {
     midnightStore.lastSync = Date.now();
-    broadcastFromBackground({ tip, lastSync: midnightStore.lastSync });
+    broadcastFromBackground({ lastSync: midnightStore.lastSync });
   },
 
   /**
@@ -891,9 +987,11 @@ export const midnightActions = {
     // Normalize (strip 0x, lowercase) so an optimistic pending entry inserted
     // right after submit — whose hash may carry a `0x` prefix or different
     // case than gero-sync's later confirmed hash — is replaced in place rather
-    // than duplicated when the confirmed event arrives.
-    const key = normalizeTxHash(tx.hash);
-    const existing = midnightStore.transactions.findIndex(t => normalizeTxHash(t.hash) === key);
+    // than duplicated when the confirmed event arrives. Keyed on hash+token
+    // (see txRowKey) so a multi-color tx's rows land as separate entries
+    // instead of clobbering each other.
+    const key = txRowKey(tx);
+    const existing = midnightStore.transactions.findIndex(t => txRowKey(t) === key);
     if (existing >= 0) {
       midnightStore.transactions.splice(existing, 1, tx);
     } else {
@@ -936,10 +1034,13 @@ export const midnightActions = {
    * `(intentHash, outputIndex)` — re-deliveries of the same tx during history
    * replay are no-ops on both the set and the derived balance.
    *
-   * Performance: O(|added| + |removed|), independent of the steady-state
-   * UTxO set size. A wallet with 50k lifetime txs replays in N×k ops, not
-   * N×|set| ops — the previous full re-sum would have been ~25M ops at
-   * |set|=500 vs ~50k here.
+   * Performance: O(|set| + |added| + |removed|) per call, NOT independent of
+   * the steady-state UTxO set size — `byKey` below is rebuilt from the
+   * ENTIRE current `midnightStore.utxos` on every invocation (and written
+   * back in full at the end), so every transaction applied pays a
+   * map-rebuild proportional to |set| on top of the delta work itself.
+   * Deltas are applied per-transaction (see midnight-sync.service.ts), so a
+   * batch of N txs against a |set|=500 wallet costs N×500+ ops, not N×k.
    */
   applyUtxoDeltas(deltas: {
     added: MidnightUnshieldedUtxo[];
@@ -947,16 +1048,20 @@ export const midnightActions = {
     /** Highest indexer txId seen in this batch — advances the resume cursor. */
     maxTxId?: number;
   }) {
+    let balanceDelta = 0n;
+    const isNight = (u: MidnightUnshieldedUtxo) => isNativeNight(u.tokenType);
+
     const byKey = new Map<string, MidnightUnshieldedUtxo>();
     for (const u of midnightStore.utxos) {
-      byKey.set(`${u.intentHash}:${u.outputIndex}`, u);
+      const key = `${u.intentHash}:${u.outputIndex}`;
+      const collided = byKey.get(key);
+      // `setUtxos` stores an array and does NOT dedup, so a persisted set can
+      // hold two entries under one key. Folding them into the map here drops
+      // one of them; without this its value would stay in nightUnshielded
+      // while it vanished from the set.
+      if (collided && isNight(collided)) balanceDelta -= collided.value;
+      byKey.set(key, u);
     }
-
-    let balanceDelta = 0n;
-    const isNight = (u: MidnightUnshieldedUtxo) => {
-      const tt = u.tokenType ?? '';
-      return tt === '' || /^0+$/.test(tt);
-    };
 
     // ORDER MATTERS: removals BEFORE additions, and callers apply deltas
     // PER TRANSACTION. DUST registration flags a UTxO in place — the tx
@@ -975,13 +1080,19 @@ export const midnightActions = {
     }
     for (const u of deltas.added) {
       const key = `${u.intentHash}:${u.outputIndex}`;
-      if (byKey.has(key)) {
-        // Duplicate replay — refresh metadata (e.g. registeredForDustGeneration)
-        // without touching the balance.
-        byKey.set(key, u);
-        continue;
-      }
+      const replaced = byKey.get(key);
       byKey.set(key, u);
+      // A duplicate replay carries the same color and value, so the two
+      // adjustments below cancel out and the balance is untouched — that is
+      // the long-standing behaviour, which exists so a re-delivery can refresh
+      // metadata like registeredForDustGeneration. They only bite when the key
+      // collides between genuinely DIFFERENT UTxOs, which a malformed payload
+      // can cause (see resolveOutputIndex in midnight-sync.service.ts). The
+      // bare overwrite dropped the previous entry from the set while leaving
+      // its value in nightUnshielded, and the eventual spend then decremented
+      // against the wrong color — a permanent overstatement. Keep the balance
+      // tied to whatever actually survives in the set.
+      if (replaced && isNight(replaced)) balanceDelta -= replaced.value;
       if (isNight(u)) balanceDelta += u.value;
     }
 

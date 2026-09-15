@@ -17,6 +17,11 @@ const WalletType = {
 type WalletTypeValue = typeof WalletType[keyof typeof WalletType];
 
 export interface Wallet {
+  order?: number;
+  isFavorite?: boolean;
+  categoryId?: string | null;
+  baseAddress?: string;
+  stakeAddress?: string;
   id: number;
   name: string;
   chain: string;
@@ -31,6 +36,19 @@ export interface Wallet {
   prfEncryptedPrivateKey?: string; // Private key encrypted with PRF (hex)
   prfEncryptedMnemonic?: string; // Mnemonic encrypted with PRF (hex)
   webAuthnCredentialId?: string; // WebAuthn credential ID (base64)
+  /**
+   * Where that credential lives, as the authenticator reported it at
+   * registration ("internal" for Windows Hello / Touch ID, "usb" for a security
+   * key, "hybrid" for a phone).
+   *
+   * Replayed in `allowCredentials` so the browser prompts for the RIGHT
+   * authenticator. Without it Chrome cannot tell an on-device passkey from one
+   * on a phone and offers all of them, which is what put a phone / security-key
+   * picker in front of Windows Hello users. Undefined for wallets registered
+   * before this was recorded — those keep the picker rather than being told to
+   * look somewhere the credential may not be.
+   */
+  webAuthnTransports?: AuthenticatorTransport[];
   mpcPrfSaltId?: string; // MPC passkey PRF salt id (stable, non-secret)
   prfSpendingPassword?: string; // Optional spending password hash (PBKDF2-HMAC-SHA512)
   publicKey?: string; // Account xpub (bech32)
@@ -127,6 +145,9 @@ const Network = {
   PREVIEW: 'Preview',
   PREPROD: 'Preprod',
   TESTNET: 'Testnet',
+  // Midnight-only. Nexus retired `midnight-preview` on 2026-09-06; stagenet is
+  // the network that replaced it. No Cardano network carries this name.
+  STAGENET: 'Stagenet',
 };
 
 const ERROR = {

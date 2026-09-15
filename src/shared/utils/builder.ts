@@ -16,6 +16,7 @@ import {
 import type { BuildTx } from '@cardano-sdk/tx-construction';
 import { BrowserTxConstruction } from '@/chrome/cardanoJsSdkCbor';
 import { filterOutCollateralFromUTxOs } from '@/chrome/serialization';
+import { Keys } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
 import { debugLog } from '@/utils/debug';
 
@@ -78,6 +79,7 @@ export function getPayAndReceiveTokens(diff) {
  */
 export async function buildCardanoTransaction({
   certificates = [],
+  votingProcedures,
   withdrawals = [],
   outputs = [],
   utxos,
@@ -90,15 +92,23 @@ export async function buildCardanoTransaction({
   excludeCollateral = true
 }: {
   certificates?: Cardano.Certificate[];
+  votingProcedures?: Cardano.VotingProcedures;
   withdrawals?: Cardano.Withdrawal[];
   outputs?: Cardano.TxOut[];
   utxos: Cardano.Utxo[];
-  epochParams: any;
+  /** Only the input-selection subset is read; the store's full ProtocolParameters satisfies it. */
+  epochParams: ProtocolParametersForInputSelection;
   changeAddress: string;
-  tip: any;
+  /**
+   * Only `slot` is read. Optional so the store's Cardano/Bitcoin tip union stays
+   * assignable; `time` exists on both tip shapes and keeps this from being an
+   * all-optional "weak" type the union could not satisfy.
+   */
+  tip: { slot?: number | string; time?: number };
   implicitCoin?: bigint; // For deposits (positive) or deposit returns (negative)
   walletContext?: {
-    keys: any;
+    /** `Keys | null` because callers pass the store's nullable keys straight through. */
+    keys: Keys | null;
     stakeAddress: string;
     accountIndex: number;
   };
@@ -163,7 +173,13 @@ export async function buildCardanoTransaction({
       // The issue is that during fee estimation, the fee might be underestimated, causing
       // changeAmount to appear negative or zero. But we still need to create the change output
       // so the actual fee calculation (with witness overhead) includes its size.
-      const isCertificateOrWithdrawalOnly = (certificates.length > 0 || withdrawals.length > 0) && selectionSkeleton.outputs.size === 0;
+      // Vote-only transactions have no certificates, no withdrawals and no
+      // outputs, so they need the same forced change output — without it the
+      // changeAmount <= 0 branch returns [] and serializeCardanoJsSdkTx throws
+      // on empty outputs.
+      const hasVotes = !!votingProcedures && votingProcedures.length > 0;
+      const isCertificateOrWithdrawalOnly =
+        (certificates.length > 0 || withdrawals.length > 0 || hasVotes) && selectionSkeleton.outputs.size === 0;
 
       // Only skip change output if:
       // 1. There's definitely no change (negative or zero)
@@ -232,6 +248,13 @@ export async function buildCardanoTransaction({
       txBody.certificates = certificates;
     }
 
+    // Conway voting procedures. MUST be mirrored at the pre-selected-inputs
+    // txBody site below — setting it in only one place makes votes silently
+    // vanish on the other path, with no error.
+    if (votingProcedures && votingProcedures.length > 0) {
+      txBody.votingProcedures = votingProcedures;
+    }
+
     // Add withdrawals if provided
     if (withdrawals.length > 0) {
       txBody.withdrawals = withdrawals;
@@ -269,8 +292,15 @@ export async function buildCardanoTransaction({
     // Convert selection skeleton inputs to resolved UTXOs for fee calculation
     const resolvedInputs = Array.from(selectionSkeleton.inputs);
 
-    // Use our witness-aware fee calculation with wallet context for accurate signature estimation
-    const fee = BrowserTxConstruction.minFee(tx, resolvedInputs, protocolParams, walletContext);
+    // Use our witness-aware fee calculation with wallet context for accurate signature estimation.
+    // minFee declares non-null keys; runtime has always tolerated the store's nullable keys here,
+    // so the assertion preserves the exact pre-typing behavior.
+    const fee = BrowserTxConstruction.minFee(
+      tx,
+      resolvedInputs,
+      protocolParams,
+      walletContext as Parameters<typeof BrowserTxConstruction.minFee>[3]
+    );
 
     return { fee };
   };
@@ -301,7 +331,7 @@ export async function buildCardanoTransaction({
   }
 
   // Convert UTXOs to proper format with BigInt values and ensure assets is always a Map
-  const formattedUtxos: Cardano.Utxo[] = inputUtxos.map((utxo: any) => {
+  const formattedUtxos: Cardano.Utxo[] = inputUtxos.map(utxo => {
 
     // Ensure assets is always a Map (not undefined or null)
     let assets: Map<Cardano.AssetId, bigint>;
@@ -312,7 +342,7 @@ export async function buildCardanoTransaction({
       // Handle case where assets might be an object instead of Map
       assets = new Map();
       Object.entries(utxo[1].value.assets).forEach(([assetId, quantity]) => {
-        assets.set(assetId as Cardano.AssetId, BigInt(quantity as any));
+        assets.set(assetId as Cardano.AssetId, BigInt(quantity as string | number | bigint));
       });
     } else {
       assets = new Map();
@@ -392,6 +422,11 @@ export async function buildCardanoTransaction({
     txBody.certificates = certificates;
   }
 
+  // Mirrors the coin-selection path above — keep the two textually identical.
+  if (votingProcedures && votingProcedures.length > 0) {
+    txBody.votingProcedures = votingProcedures;
+  }
+
   // Add withdrawals if provided
   if (withdrawals.length > 0) {
     txBody.withdrawals = withdrawals;
@@ -432,14 +467,24 @@ export function buildCip149AuxiliaryData(donationBasisPoints: number): Cardano.A
  * Extract CIP-0149 donationBasisPoints from transaction auxiliary data.
  * @returns The basis points value, or null if not present
  */
-export function extractCip149Compensation(auxiliaryData?: Cardano.AuxiliaryData): number | null {
-  if (!auxiliaryData?.blob) return null;
+export function extractCip149Compensation(auxiliaryData?: unknown): number | null {
+  if (!auxiliaryData || typeof auxiliaryData !== 'object' || !('blob' in auxiliaryData)) return null;
 
-  const cip149Data = auxiliaryData.blob.get(CIP149_METADATA_LABEL);
-  if (!cip149Data || !(cip149Data instanceof Map)) return null;
+  // Chrome messaging/storage serialize SDK Maps to objects and BigInts to
+  // strings. Read both representations without rewriting transaction data.
+  const entry = (value: unknown, key: string | bigint): unknown => {
+    if (value instanceof Map) return value.get(key);
+    if (value && typeof value === 'object' && !Array.isArray(value) &&
+        Object.prototype.hasOwnProperty.call(value, String(key))) {
+      return (value as Record<string, unknown>)[String(key)];
+    }
+    return undefined;
+  };
+  const cip149Data = entry(auxiliaryData.blob, CIP149_METADATA_LABEL);
+  const bps = entry(cip149Data, 'donationBasisPoints');
+  if (typeof bps !== 'number' && typeof bps !== 'bigint' &&
+      !(typeof bps === 'string' && /^\d+$/.test(bps))) return null;
 
-  const bps = cip149Data.get('donationBasisPoints');
-  if (bps === undefined || bps === null) return null;
-
-  return Number(bps);
+  const rate = Number(bps);
+  return Number.isSafeInteger(rate) && rate >= 0 ? rate : null;
 }

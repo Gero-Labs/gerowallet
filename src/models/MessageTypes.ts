@@ -67,6 +67,11 @@ export enum MessageTypes {
   WC_REJECT_SESSION = 'WC_REJECT_SESSION',
   WC_DISCONNECT_SESSION = 'WC_DISCONNECT_SESSION',
   WC_GET_SESSIONS = 'WC_GET_SESSIONS',
+  CIP45_INVOKE = 'CIP45_INVOKE',
+  CIP45_BEGIN_SESSION = 'CIP45_BEGIN_SESSION',
+  CIP45_END_SESSION = 'CIP45_END_SESSION',
+  CIP45_VALIDATE_SESSION = 'CIP45_VALIDATE_SESSION',
+  CIP45_UPDATE_SESSION = 'CIP45_UPDATE_SESSION',
   WC_RESPOND_REQUEST = 'WC_RESPOND_REQUEST',
   // Midnight: persist a re-derived publicKey JSON (3 addresses) for an existing
   // Midnight wallet. Used by the legacy-wallet upgrade path when the persisted
@@ -96,6 +101,7 @@ export enum MessageTypes {
   // to this spend. Caller (UI) must surface the explicit consent for routing
   // it through Gero Cloud proving — see ShieldedProvingConsentDialog.
   BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX = 'BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX',
+  START_MIDNIGHT_PRIVATE_SYNC = 'START_MIDNIGHT_PRIVATE_SYNC',
   // Midnight: build + sign the SHIELD direction of a shield/unshield
   // conversion (public NIGHT -> private/shielded NIGHT, always between the
   // wallet's OWN two addresses — no recipient field). BG merges a
@@ -133,7 +139,7 @@ export enum MessageTypes {
   //   2. Derives the Cardano payment key at CIP-1852 / 1815' / account / 0 / 0.
   //   3. Signs the supplied Cardano tx CBOR with that key.
   //   4. Submits the signed tx to the Cardano network corresponding to the
-  //      Midnight wallet's network (midnight-preview → cardano-preview, etc.).
+  //      Midnight wallet's network (midnight-stagenet → cardano-preprod, etc.).
   // Returns the tx hash. Used by `DustRegistrationDialog` for native registration.
   SIGN_AND_SUBMIT_DUST_REGISTRATION_TX = 'SIGN_AND_SUBMIT_DUST_REGISTRATION_TX',
   // Midnight: force a full re-sync from block 0. Clears both halves of the warm

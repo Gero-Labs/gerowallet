@@ -4,10 +4,41 @@ import WalletStore from '@/stores/walletStore';
 import { toStakeAddress } from '@/chrome/serialization';
 import networks from '@/utils/networks';
 import Loading from '@/stores/loading';
-import { StoredTransaction } from '@/models/transaction.types';
+import { StoredTransaction, TxAsset } from '@/models/transaction.types';
 
 /** Loose UTxO shape used for input token-amount resolution (see resolveInputAmounts). */
 type ResolvableUtxo = { tx_hash?: string; output_index?: number; address?: string; amount?: unknown[] };
+
+/** One entry of a UTxO's `amount` array — lovelace, or a native asset. */
+interface UtxoAmount {
+  unit: string;
+  quantity: string | number;
+}
+
+/**
+ * The UTxO fields the sent/received accounting reads. Structurally satisfied by
+ * both `UtxoInput` and `UtxoOutput`, which is why it is spelled out here rather
+ * than imported: the accounting treats the two identically.
+ *
+ * `datum_hash` is optional because the received-side guard reads it — but note
+ * that neither stored shape carries that key; both spell it `data_hash`. The
+ * guard has therefore never fired. Typed as optional to keep the behaviour
+ * exactly as it is rather than silently change transaction accounting.
+ */
+interface AccountedUtxo {
+  address?: string;
+  amount?: UtxoAmount[];
+  data_hash?: string | null;
+  datum_hash?: string | null;
+}
+
+/**
+ * One asset accumulated across a transaction's UTxOs, its quantity summed.
+ *
+ * This is the model's own `TxAsset`. The single assertion needed to produce one
+ * lives in `updateAssetMap`, and is explained there.
+ */
+type AccountedAsset = TxAsset;
 
 /**
  * Loader for wallet account information
@@ -20,12 +51,23 @@ export class AccountLoader extends BaseLoader {
     super('account');
   }
 
-  async load(): Promise<any> {
+  async load(): Promise<unknown> {
     const walletDB = await this.getDb();
 
     return this.createSubscription(
       () => walletDB.table('account').where({ walletId: this.walletId }).first(),
       (account) => {
+        // Every emission is passed through, including an empty one.
+        //
+        // A `if (!account) return` guard lived here briefly. It was added on a
+        // hunch while chasing an unrelated flicker, did not fix that flicker,
+        // and changed what a wallet SWITCH looks like: the new wallet's loader
+        // subscribes with no row of its own yet, and swallowing that emission
+        // leaves the store holding whatever the last write left behind until
+        // something writes the account table again — which, on a wallet already
+        // at the tip, is not until the next SYNC_CHECK_OK carries an account.
+        // An empty answer about the current wallet is information; withholding
+        // it only makes the gap silent.
         WalletStore.setAccount(account);
       },
       (error) => {
@@ -43,7 +85,7 @@ export class ContactsLoader extends BaseLoader {
     super('contacts');
   }
 
-  async load(): Promise<any> {
+  async load(): Promise<unknown> {
     const walletDB = await this.getDb();
 
     return this.createSubscription(
@@ -70,7 +112,7 @@ export class ConfigLoader extends BaseLoader {
     super('config');
   }
 
-  async load(): Promise<any> {
+  async load(): Promise<unknown> {
     const walletDB = await this.getDb();
 
     return this.createSubscription(
@@ -93,7 +135,7 @@ export class RewardsLoader extends BaseLoader {
     super('rewards');
   }
 
-  async load(): Promise<any> {
+  async load(): Promise<unknown> {
     const db = await this.getDb();
 
     return this.createSubscription(
@@ -113,7 +155,7 @@ export class ConnectedDappsLoader extends BaseLoader {
     super('dapps');
   }
 
-  async load(): Promise<any> {
+  async load(): Promise<unknown> {
     const walletDB = await this.getDb();
 
     return this.createSubscription(
@@ -148,7 +190,7 @@ export class TransactionsLoader extends BaseLoader {
     super('transactions');
   }
 
-  async load(): Promise<any> {
+  async load(): Promise<unknown> {
     const walletDB = await this.getDb();
 
     return this.createSubscription(
@@ -184,7 +226,7 @@ export class TransactionsLoader extends BaseLoader {
             // events ship only the input ref). Build an index of every produced output
             // we have synced, then backfill missing input.address/amount before sentAmount
             // accounting. Without this, sends look like "received" because sentAmount=0.
-            const outputIndex = new Map<string, { address?: string; amount?: any[] }>();
+            const outputIndex = new Map<string, { address?: string; amount?: unknown[] }>();
             for (const tx of newTransactions) {
               const outs = tx.utxo?.outputs;
               if (!outs?.length) continue;
@@ -201,8 +243,8 @@ export class TransactionsLoader extends BaseLoader {
             transactions = newTransactions.map((tx) => {
               let sentAmount = 0;
               let receivedAmount = 0;
-              const sentAssets = new Map<string, any>();
-              const receivedAssets = new Map<string, any>();
+              const sentAssets = new Map<string, AccountedAsset>();
+              const receivedAssets = new Map<string, AccountedAsset>();
 
               // Resolve each input's amount from its producing output so sentAsset
               // accounting sees the input's FULL value, incl. native tokens (see
@@ -267,7 +309,7 @@ export class TransactionsLoader extends BaseLoader {
           Loading.setLoadingTxs(false);
         }
       },
-      (error: any) => {
+      (error: unknown) => {
         console.error('Failed to fetch transactions:', error);
       }
     );
@@ -300,12 +342,12 @@ export class TransactionsLoader extends BaseLoader {
   }
 
   private processUtxos(
-    utxos: any[] | undefined,
+    utxos: AccountedUtxo[] | undefined,
     currentAddress: string,
     currentStake: string,
     networkId: number,
     isSent: boolean,
-    assetsMap: Map<string, any>,
+    assetsMap: Map<string, AccountedAsset>,
     addLovelace: (amount: number) => void
   ): void {
     if (!utxos?.length) return;
@@ -333,20 +375,30 @@ export class TransactionsLoader extends BaseLoader {
     }
   }
 
-  private updateAssetMap(assetsMap: Map<string, any>, asset: any): void {
+  private updateAssetMap(assetsMap: Map<string, AccountedAsset>, asset: UtxoAmount): void {
     const existing = assetsMap.get(asset.unit);
     if (existing) {
       existing.quantity += Number(asset.quantity);
     } else {
+      // Asserted, not inferred. `TxAsset` declares policy_id, asset_name and
+      // metadata, while the `TxAmount` entries this is summed from declare only
+      // unit and quantity. The stored rows DO carry the richer fields —
+      // blockchain-api enriches them on the way in — so the spread produces a
+      // whole TxAsset at runtime; the two declarations simply disagree, and an
+      // `any` here used to hide that. Narrowing `TxAmount` is the real fix, and
+      // it is a change to the transaction model rather than to this loader.
       assetsMap.set(asset.unit, {
         ...asset,
         quantity: Number(asset.quantity)
-      });
+      } as AccountedAsset);
     }
   }
 
-  private calculateFinalAssets(sentAssets: Map<string, any>, receivedAssets: Map<string, any>): any[] {
-    const finalAssets: any[] = [];
+  private calculateFinalAssets(
+    sentAssets: Map<string, AccountedAsset>,
+    receivedAssets: Map<string, AccountedAsset>
+  ): AccountedAsset[] {
+    const finalAssets: AccountedAsset[] = [];
     const processedUnits = new Set<string>();
 
     sentAssets.forEach((sentAsset, unit) => {
@@ -378,7 +430,7 @@ export class TransactionsLoader extends BaseLoader {
    * @param transactions - Array of transaction objects to check
    * @returns Promise<boolean> - true if migration was triggered, false otherwise
    */
-  private async detectAndHandleOldTransactionFormat(transactions: any[]): Promise<boolean> {
+  private async detectAndHandleOldTransactionFormat(transactions: object[]): Promise<boolean> {
     if (!transactions?.length) {
       return false;
     }

@@ -60,6 +60,7 @@
 </template>
 
 <script setup lang="ts">
+import '@/shared/styles/compact-pagination.css';
 import { ref, computed, toRefs, watch, onMounted, onUnmounted } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import TokensDialog from '@/modules/assets/dialogs/TokensDialog.vue';
@@ -85,16 +86,30 @@ defineEmits(['rowClick']);
 // Store references
 const { collections } = toRefs(walletStore);
 
+/**
+ * Shape of a walletStore collection as this tab consumes it. The store keeps
+ * the bag untyped ({}), so the contract is pinned here at the consumer.
+ */
+interface CollectionEntry {
+  id?: string;
+  name: string;
+  img?: string;
+  description?: string | string[];
+  quantity?: number;
+  isScam?: boolean;
+  items: { metadata?: unknown }[];
+}
+
 // Advanced Gallery Features
 const collectiblesPage = ref<number>(1);
-const dialogData = ref(null);
+const dialogData = ref<CollectionEntry | null>(null);
 const screenWidth = ref<number>(window.innerWidth);
 
 // Pagination settings
 const itemsPerPage = 14; // 2 rows of 7 items
 
 // Methods
-const handleOnRowClick = (collection: any) => {
+const handleOnRowClick = (collection: CollectionEntry) => {
   dialogData.value = collection;
 };
 
@@ -103,12 +118,12 @@ const closeDialog = () => {
 };
 
 // Computed properties
-const collectibles = computed(() => {
-  let res = Object.values(collections.value).filter((collection: any) =>
+const collectibles = computed<CollectionEntry[]>(() => {
+  let res = Object.values(collections.value as Record<string, CollectionEntry>).filter((collection) =>
     collection.items.every(item => !item.metadata)
   );
   if (res && props.hideScam) {
-    res = res.filter((collection: any) => !collection.isScam);
+    res = res.filter((collection) => !collection.isScam);
   }
   return res;
 });
@@ -147,12 +162,12 @@ const containerHeight = computed(() => props.containerHeight);
 const sortedCollectibles = computed(() => {
   if (!collectibles.value) return [];
 
-  let sorted: any[] = [...collectibles.value];
+  let sorted: CollectionEntry[] = [...collectibles.value];
 
   // Apply search filter using prop instead of local ref
   if (props.searchTerm && props.searchTerm.trim()) {
     const searchTerm = props.searchTerm.toLowerCase().trim();
-    sorted = sorted.filter((collection: any) => {
+    sorted = sorted.filter((collection) => {
       // Search in name
       if (collection.name && collection.name.toLowerCase().includes(searchTerm)) {
         return true;
@@ -193,7 +208,7 @@ const sortedCollectibles = computed(() => {
   return sorted;
 });
 
-const paginatedCollectibles: any = computed(() => {
+const paginatedCollectibles = computed(() => {
   const start = (collectiblesPage.value - 1) * dynamicItemsPerPage.value;
   const end = start + dynamicItemsPerPage.value;
   return sortedCollectibles.value.slice(start, end);
@@ -473,24 +488,8 @@ onUnmounted(() => {
   z-index: 1;
 }
 
-.compact-pagination >>> .v-pagination__item {
-  width: 24px !important;
-  height: 24px !important;
-  min-width: 24px !important;
-  font-size: 12px !important;
-  margin: 0 4px !important;
-}
-
-.compact-pagination >>> .v-pagination__navigation {
-  width: 24px !important;
-  height: 24px !important;
-  min-width: 24px !important;
-  margin: 0 8px !important;
-}
-
-.compact-pagination >>> .v-pagination__navigation .v-icon {
-  font-size: 16px !important;
-}
+/* .compact-pagination is the shared recipe in
+   src/shared/styles/compact-pagination.css (imported in the script block). */
 </style>
 
 <style>

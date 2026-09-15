@@ -1,3 +1,10 @@
+/**
+ * The one refusal message every CIP-113 signing path reports. Defined here so the four
+ * background.ts call sites, WalletBg.signTx and friendlyTxError() cannot drift apart —
+ * friendlyTxError matches on this exact string to localise it before it reaches a snackbar.
+ */
+export const CIP113_SIGN_REFUSAL_MESSAGE = 'Gero cannot sign transfers of CIP-113 programmable tokens';
+
 export const TARGET = 'gerowallet';
 export const SENDER = {
   extension: 'extension',
@@ -91,6 +98,14 @@ export const MIDNIGHT_METHOD = {
   signData: 'midnight_signData',
   makeTransfer: 'midnight_makeTransfer',
   hintUsage: 'midnight_hintUsage',
+  // Proving delegation (`getProvingProvider`): the page streams each proof's
+  // preimage + circuit key material to the background in chunks, then asks
+  // it to run `/check` or `/prove` against the user's proof server. See
+  // `midnightProvingBridge.ts` (page) and `midnightDappProving.ts` (BG).
+  getProvingProvider: 'midnight_getProvingProvider',
+  provingUpload: 'midnight_provingUpload',
+  provingCheck: 'midnight_provingCheck',
+  provingProve: 'midnight_provingProve',
 };
 
 // Error codes from `@midnight-ntwrk/dapp-connector-api`'s `ErrorCodes` —

@@ -17,7 +17,7 @@
 
 import axios, { AxiosError, AxiosInstance, AxiosRequestConfig } from 'axios';
 import { parseHttpError } from '@/shared/utils/parser';
-import { getMidnightEndpoints, nexusMidnightPathFor } from '@/chains/midnight/midnightConfig';
+import { cardanoTwinNetwork, getMidnightEndpoints, nexusMidnightPathFor } from '@/chains/midnight/midnightConfig';
 import { getNexusAccessToken, reauthenticateNexus } from '@/services/nexusDevice.service';
 import { debugLog } from '@/utils/debug';
 import type { MidnightUnshieldedUtxo } from '@/chains/midnight/midnightTypes';
@@ -152,6 +152,34 @@ export interface MidnightTransactionUtxosDto {
   txHash: string;
   createdOutputs: MidnightUnshieldedUtxo[];
   spentOutputs: MidnightUnshieldedUtxo[];
+}
+
+/** Normalize Nexus's snake_case JSON before the UI or cache can consume it. */
+export function convertTransactionUtxos(value: unknown): MidnightTransactionUtxosDto {
+  const invalid = () => new Error('Invalid Midnight transaction UTxO response');
+  if (!value || typeof value !== 'object') throw invalid();
+  const { tx_hash: txHash, created_outputs: createdOutputs, spent_outputs: spentOutputs } = value as Record<string, unknown>;
+  if (typeof txHash !== 'string' || !Array.isArray(createdOutputs) || !Array.isArray(spentOutputs)) throw invalid();
+
+  const output = (value: unknown): MidnightUnshieldedUtxo => {
+    if (!value || typeof value !== 'object') throw invalid();
+    const { owner, token_type: tokenType, intent_hash: intentHash, initial_nonce: initialNonce,
+      value: amount, output_index: outputIndex, registered_for_dust_generation: registeredForDustGeneration,
+      ctime } = value as Record<string, unknown>;
+    if (typeof owner !== 'string' || typeof tokenType !== 'string' ||
+        typeof intentHash !== 'string' || typeof initialNonce !== 'string' ||
+        typeof amount !== 'string' || !/^\d+$/.test(amount) ||
+        typeof outputIndex !== 'number' || !Number.isSafeInteger(outputIndex) || outputIndex < 0 ||
+        typeof registeredForDustGeneration !== 'boolean' ||
+        (ctime != null && (typeof ctime !== 'number' || !Number.isSafeInteger(ctime) || ctime < 0))) {
+      throw invalid();
+    }
+    return {
+      owner, tokenType, value: BigInt(amount), intentHash, outputIndex,
+      initialNonce, registeredForDustGeneration, ...(typeof ctime === 'number' ? { ctime } : {}),
+    };
+  };
+  return { txHash, createdOutputs: createdOutputs.map(output), spentOutputs: spentOutputs.map(output) };
 }
 
 /**
@@ -295,8 +323,15 @@ export interface MidnightTxOutput {
   address: string;
   /** Token amount in base units (NIGHT = 6 decimals; DUST = 15 decimals). */
   amount: string;
-  /** Token type — `NIGHT` for native NIGHT (only currently supported asset). */
-  token: 'NIGHT';
+  /**
+   * What to send: the literal `NIGHT` for the native token, or a 32-byte token
+   * colour as 64-char hex. Nexus validates the shape and maps `NIGHT` to the
+   * chain's native raw token type.
+   *
+   * `amount` is always in that token's own base units — the wallet owns the
+   * decimal scaling, the chain has no concept of it.
+   */
+  token: 'NIGHT' | (string & {});
 }
 
 /** A single 32-byte intent hash that needs a BIP-340 signature from the wallet. */
@@ -472,11 +507,24 @@ export class MidnightApi {
     );
   }
 
-  /** The Nexus `?network=` slug for chain-agnostic endpoints (`midnight-preview` etc.). */
+  /** The Nexus `?network=` slug for chain-agnostic endpoints (`midnight-stagenet` etc.). */
   private get nexusNetworkSlug(): string {
     return getMidnightEndpoints(this.network)!.sdkNetworkId === 'mainnet'
       ? 'midnight-mainnet'
       : `midnight-${getMidnightEndpoints(this.network)!.sdkNetworkId}`;
+  }
+
+  /**
+   * The Nexus `?network=` slug for the CARDANO side of this Midnight network —
+   * where cNIGHT lives and where DUST registration transactions are submitted.
+   *
+   * Not derivable from `sdkNetworkId`: there is no `cardano-stagenet`. The
+   * pairing goes through `cardanoTwinNetwork` (stagenet → Cardano preprod),
+   * whose result is always a real Cardano network name, and Nexus's Cardano
+   * slugs are just that name lowercased.
+   */
+  private get cardanoNetworkSlug(): string {
+    return `cardano-${cardanoTwinNetwork(this.network).toLowerCase()}`;
   }
 
   // ---------------------------------------------------------------- Blocks
@@ -544,8 +592,8 @@ export class MidnightApi {
   async getTransactionUtxos(txHash: string): Promise<MidnightTransactionUtxosDto> {
     try {
       const url = nexusMidnightPathFor(this.network, `transactions/${encodeURIComponent(txHash)}/utxos`);
-      const { data, status } = await this.axiosInstance.get<MidnightTransactionUtxosDto>(url);
-      if (status === 200) return data;
+      const { data, status } = await this.axiosInstance.get<unknown>(url);
+      if (status === 200) return convertTransactionUtxos(data);
       throw parseHttpError(data);
     } catch (error) {
       throw parseHttpError(error);
@@ -624,7 +672,7 @@ export class MidnightApi {
     try {
       const endpoints = getMidnightEndpoints(this.network);
       if (!endpoints) throw new Error(`Unknown Midnight network: ${this.network}`);
-      const url = `${endpoints.nexusBaseUrl}/api/transactions/submit?network=cardano-${endpoints.sdkNetworkId}`;
+      const url = `${endpoints.nexusBaseUrl}/api/transactions/submit?network=${this.cardanoNetworkSlug}`;
       const { data, status } = await this.axiosInstance.post<string>(url, signedTxCborHex, {
         headers: { 'Content-Type': 'text/plain' },
       });
@@ -647,7 +695,7 @@ export class MidnightApi {
     const endpoints = getMidnightEndpoints(this.network);
     if (!endpoints) throw new Error(`Unknown Midnight network: ${this.network}`);
     const url = `${endpoints.nexusBaseUrl}/api/transactions/${encodeURIComponent(txHash)}/utxos`
-      + `?network=cardano-${endpoints.sdkNetworkId}`;
+      + `?network=${this.cardanoNetworkSlug}`;
     const { status } = await this.axiosInstance.get(url, {
       validateStatus: (s) => s === 200 || s === 404,
     });
@@ -663,7 +711,7 @@ export class MidnightApi {
     try {
       const endpoints = getMidnightEndpoints(this.network);
       if (!endpoints) throw new Error(`Unknown Midnight network: ${this.network}`);
-      const url = `${endpoints.nexusBaseUrl}/api/transactions/evaluate?network=cardano-${endpoints.sdkNetworkId}`;
+      const url = `${endpoints.nexusBaseUrl}/api/transactions/evaluate?network=${this.cardanoNetworkSlug}`;
       const { data } = await this.axiosInstance.post(url, { cbor: txCborHex });
       return data;
     } catch (error) {
@@ -767,7 +815,7 @@ export class MidnightApi {
       const endpoints = getMidnightEndpoints(this.network);
       if (!endpoints) throw new Error(`Unknown Midnight network: ${this.network}`);
       const url = `${endpoints.nexusBaseUrl}/api/addresses/${encodeURIComponent(address)}`
-        + `/utxos/${assetUnit}?network=cardano-${endpoints.sdkNetworkId}&pageSize=100`;
+        + `/utxos/${assetUnit}?network=${this.cardanoNetworkSlug}&pageSize=100`;
       const { data, status } = await this.axiosInstance.get(url);
       if (status === 200) return data ?? [];
       throw parseHttpError(data);

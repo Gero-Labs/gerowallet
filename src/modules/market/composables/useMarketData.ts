@@ -35,6 +35,10 @@ export interface MarketToken {
   policyLocked: boolean;
   fingerprint: string;
   decimals: number;
+  // True when decimals could not be resolved from registry metadata or any
+  // market fallback, so `decimals`/`balance` above fell back to raw units
+  // instead of a wrong divided-by-decimals value (issue 1003).
+  decimalsUnknown?: boolean;
   description?: string;
   // Populated when cross-referencing with wallet holdings
   balance?: number;
@@ -49,6 +53,14 @@ export interface MarketToken {
   unrealizedPnl?: number | null;
   isNative?: boolean;
   isSnekFun?: boolean;
+  // Visible but not sendable. Carry it wherever isSnekFun travels — missing here
+  // means the verified-only filter silently strips the row.
+  isProgrammable?: boolean;
+  // Stable row identity: a unit can appear twice (spendable + locked), and `unit`
+  // alone collides as a v-data-table item-key.
+  rowKey?: string;
+  // Carried so the programmable exemption cannot override a hide-scam preference.
+  isScam?: boolean;
 }
 
 export interface CandlestickDataPoint {
@@ -91,12 +103,12 @@ const { usdToEurRate: _usdToEurRate, loadExchangeRate: _loadExchangeRate } = use
 _loadExchangeRate();
 let consumerCount = 0;
 
-// --- Helper: enrich API data with store data (DexHunter as fallback) ---
+// --- Helper: enrich API data with store data (token registry as fallback) ---
 
 function enrichWithStores(apiToken: TokenPriceResponse, sparklineMap?: Record<string, number[]>): MarketToken {
   const assetId = apiToken.assetId;
 
-  // DexHunter data as fallback for fields the backend doesn't yet provide
+  // Token-registry data as fallback for fields the backend doesn't yet provide
   const dhToken = (tokenMetadataStore.tokens as Record<string, {
     fingerprint?: string;
     name?: string;
@@ -106,16 +118,28 @@ function enrichWithStores(apiToken: TokenPriceResponse, sparklineMap?: Record<st
     decimals?: number;
   } | undefined>)[assetId];
 
-  // Fingerprint: prefer API, fallback to DexHunter
+  // Fingerprint: prefer API, fallback to the token registry
   const fingerprint = apiToken.fingerprint || dhToken?.fingerprint || '';
 
   // Market cap: trust the backend value. The backend already suppresses implausible /
   // placeholder-supply market caps (isPlausibleMarketCapAda) and returns null for them, so
-  // we surface that null as-is ('—'). DexHunter is metadata-only — no numeric mcap fallback.
+  // we surface that null as-is ('—'). the token registry is metadata-only — no numeric mcap fallback.
   const mcap = apiToken.marketCap ?? null;
+
+  // Market rows are built from the price feed, which knows nothing about CIP-113. The
+  // wallet does: a unit held at the programmable-logic-base address is one Gero refuses
+  // to move, so the badge and — more importantly — the swap-widget suppression in
+  // TokenDetailPanel have to hold for the row opened from Market too, not just for the
+  // holdings rows useHoldingsValuation stamps.
+  const isProgrammable = Object.prototype.hasOwnProperty.call(
+    walletStore.programmableTokens || {},
+    assetId,
+  );
 
   return {
     unit: assetId,
+    rowKey: assetId,
+    isProgrammable,
     name: apiToken.name || dhToken?.name || apiToken.assetNameAscii || assetId,
     ticker: apiToken.ticker || dhToken?.ticker || apiToken.assetNameAscii || '',
     img: apiToken.logo || '',
@@ -137,7 +161,7 @@ function enrichWithStores(apiToken: TokenPriceResponse, sparklineMap?: Record<st
     tvl: apiToken.tvl ?? null,
     liquidity: apiToken.liquidity ?? 0,
     // The bulk /api/market/prices endpoint does not return a holders count, so
-    // this is null (renders "—") unless DexHunter happens to have it. Showing 0
+    // this is null (renders "—") unless the token registry happens to have it. Showing 0
     // would be misleading. (A real count needs the backend to add holders to the
     // bulk endpoint, or proxy /api/dex/tokens/{p}/{n}/holders.)
     holders: apiToken.holders ?? dhToken?.holders ?? null,
@@ -247,6 +271,7 @@ async function fetchAllTokens(silent = false): Promise<void> {
     const nativeImg = networks.resolveCurrencyImage(chain, walletStore.loggedWallet?.network) || '';
     const nativeToken: MarketToken = {
       unit: 'lovelace',
+      rowKey: 'lovelace',
       name: nativeName,
       ticker: nativeTicker,
       img: nativeImg,

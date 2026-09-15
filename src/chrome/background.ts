@@ -1,9 +1,11 @@
+import { validateMidnightConnectorTransfer, syncedMidnightShieldedBalances } from '@/chains/midnight/midnightConnectorTransfer';
+import { captureMidnightSigningSession } from '@/chains/midnight/midnightSigningSession';
 import { Buffer } from 'buffer';
 import Loading from '@/stores/loading';
 import { Messaging } from '@/chrome/messaging';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
 import { isStakeKeyRegistered } from '@/shared/utils/stakeRegistration';
-import { APIError, BITCOIN_METHOD, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, POPUP, SENDER, TARGET, TxSendError } from '@/chrome/config';
+import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, POPUP, SENDER, TARGET, TxSendError, TxSignError } from '@/chrome/config';
 import { toDappError } from '@/chrome/dappError';
 import { bringInitBackground } from '@bringweb3/chrome-extension-kit';
 import {
@@ -22,7 +24,7 @@ import {
   submitTx,
   urlScan,
 } from '@/chrome/serialization';
-import { Blockchain, coin_type, ERROR, Network, purpose } from '@/models/types';
+import { Blockchain, coin_type, ERROR, Network, Paginate, purpose } from '@/models/types';
 import networks from '@/utils/networks';
 import coinGeckoStore from '@/stores/coinGeckoStore';
 import { getDomain } from 'tldts';
@@ -36,6 +38,12 @@ import { nexusCollateralApi } from '@/api/nexus-collateral-api';
 import { toNexusNetwork } from '@/api/nexus-tx-api';
 import { debugLog } from '@/utils/debug';
 import type { walletConnectService } from '@/services/walletConnect/walletConnect.service';
+import type { Cip45Session } from '@/services/cip45/types';
+import type { Cip45Authorization, Cip45WalletContext } from '@/services/cip45/types';
+import { Cip45AuthorizationRegistry, walletContext } from '@/services/cip45/authorization';
+import { watch } from 'vue';
+// The background is one IIFE; import the store statically to preserve initialization order.
+import Cip45Store from '@/stores/cip45Store';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { HexBlob } from '@cardano-sdk/util';
@@ -43,6 +51,21 @@ import trezor from '@/shared/utils/trezor';
 import type { IUnifiedUtxo } from '@/chains/common/interfaces';
 import { mpcSessionCache } from '@/chrome/mpcSessionCache';
 import { mpcLoginShareCache } from '@/chrome/mpcLoginShareCache';
+// Static, deliberately. The background is bundled as ONE iife
+// (vite.config.background.mts: format 'iife', manualChunks undefined), so a
+// dynamic `import()` here cannot produce a separate chunk — Rollup inlines the
+// module and hands back a namespace `const` declared wherever that module lands
+// in the emitted order. `midnightSync_service` was landing ~90k lines AFTER the
+// code that read it, so an evaluation that reached a reader before the
+// declaration threw `Cannot access 'midnightSync_service' before
+// initialization` and killed wallet login. A static import makes the order a
+// guarantee rather than a coincidence: an imported module is fully evaluated
+// before its importer's body. Verified safe: nothing this module reaches
+// imports walletManager (no cycle), its top level only constructs a
+// field-initialised singleton, and it is absent from the options graph, so it
+// cannot bloat that bundle. scripts/check-bundle-tdz.mjs fails the build if a
+// namespace const regresses behind its first reader.
+import midnightSyncService, { NIGHT_TOKEN_TYPE_NULL } from '@/services/midnight-sync.service';
 import {
   createMpcGoogleWalletFlow,
   unlockMpcWalletFlow,
@@ -125,12 +148,23 @@ loadWallets().then(async () => {
 });
 
 (async () => {
-  await bringInitBackground({
-    isEnabledByDefault: true,
-    identifier: import.meta.env['VITE_CASHBACK_IDENTIFIER'],
-    apiEndpoint: import.meta.env['VITE_CASHBACK_ENVIRONMENT'],
-    cashbackPagePath: '/index.html#/cashback'
-  })
+  // Skip cashback init without its env vars — the SDK throws on missing config.
+  const cashbackIdentifier = import.meta.env['VITE_CASHBACK_IDENTIFIER'];
+  const cashbackEnvironment = import.meta.env['VITE_CASHBACK_ENVIRONMENT'];
+  if (!cashbackIdentifier || !cashbackEnvironment) {
+    debugLog('Bring cashback disabled: VITE_CASHBACK_* not configured in this build');
+    return;
+  }
+  try {
+    await bringInitBackground({
+      isEnabledByDefault: true,
+      identifier: cashbackIdentifier,
+      apiEndpoint: cashbackEnvironment,
+      cashbackPagePath: '/index.html#/cashback'
+    })
+  } catch (e) {
+    console.warn('⚠️ Bring cashback init failed:', e);
+  }
 })();
 
 // Initialize background store messaging (the import alone initializes it)
@@ -418,6 +452,23 @@ chrome.storage.local.get(['processedDomains', 'lastCleared'], (result) => {
   domains.forEach((domain: string) => processedDomains.add(domain));
 });
 
+// Cleanup: drop the orphaned `realFiStore` key. It cached price candles for the removed
+// legacy price-candles store; nothing reads or writes it now, but existing installs still
+// carry a per-token candle blob under this key. Read first so the common case — an MV3
+// service-worker restart long after the key is gone — costs a read instead of a pointless
+// write, and so the log only fires on a real removal. Same shape as
+// removeLegacyPassKeyMasterKey() in shared/utils/security.ts.
+chrome.storage.local.get('realFiStore', (result) => {
+  if (chrome.runtime.lastError || !result['realFiStore']) return;
+  chrome.storage.local.remove('realFiStore', () => {
+    if (chrome.runtime.lastError) {
+      debugLog('Failed to remove legacy realFiStore key:', chrome.runtime.lastError);
+    } else {
+      debugLog('🗑️ Removed orphaned realFiStore key from chrome.storage.local');
+    }
+  });
+});
+
 function clearProcessedDomains() {
   processedDomains.clear();
   chrome.storage.local.remove(['processedDomains', 'lastCleared'], () => {
@@ -516,6 +567,23 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 let lastFullscreenTabId = -1;
 
 const app = Messaging.createBackgroundController();
+const cip45Authorization = new Cip45AuthorizationRegistry();
+// Invalidate in the authoritative context, synchronously, including A -> logout -> A.
+watch(() => [walletStore.loggedWallet?.id, walletStore.loggedWallet?.chain,
+  walletStore.loggedWallet?.network, walletStore.isLocked], () => {
+  if (cip45Authorization.setWallet(walletStore.isLocked ? null : walletContext(walletStore.loggedWallet))) {
+    Cip45Store.clear();
+  }
+}, { immediate: true, flush: 'sync' });
+
+function cip45Owner(sender: chrome.runtime.MessageSender): string {
+  // documentId distinguishes reloads in the same tab. The tab fallback supports older Chrome.
+  return sender.documentId || `tab:${sender.tab?.id}:${sender.url}`;
+}
+
+function assertCip45SigningRequest(data: { cip45Authorization?: Cip45Authorization }): void {
+  if (data.cip45Authorization) cip45Authorization.assert(data.cip45Authorization);
+}
 
 async function handleBlacklisted(request: { id: string; origin: string }, tabId: number) {
   // Check if website protection is enabled
@@ -1204,6 +1272,38 @@ app.add(METHOD.signData, (request, sendResponse) => {
   }
 });
 
+/**
+ * CIP-113 preflight: refuse to sign a transaction spending one of this wallet's
+ * programmable UTxOs. Keeping them out of walletStore.utxos already stops Gero
+ * selecting or disclosing them, but a caller that derives the address itself can
+ * still hand over a complete transaction.
+ *
+ * Runs at REQUEST ENTRY, before the approval UI, so it covers every downstream signer
+ * for anything already known to be programmable. It is NOT a signature-time check: a
+ * UTxO first learned while the prompt is open is re-checked by WalletBg.signTx on the
+ * software path, but not by the hardware paths, which sign in document context.
+ *
+ * Returns a reason string when the transaction must be refused, else null.
+ */
+function refusalForProgrammableInputs(txCbor: unknown): string | null {
+  if (typeof txCbor !== 'string' || !txCbor) return null;
+  const wallet = walletManager.getWallet();
+  if (!wallet?.findProgrammableInputs) return null;
+  // Before the parse, not after: an empty index cannot produce a refusal, and every
+  // signTx on a network without a CIP-113 deployment (mainnet included) takes this
+  // branch. deserializeCardanoJsSdkTx() on the request path is not free.
+  if (wallet.hasProgrammableInputs && !wallet.hasProgrammableInputs()) return null;
+  try {
+    const hits = wallet.findProgrammableInputs(deserializeCardanoJsSdkTx(txCbor));
+    if (hits.length === 0) return null;
+    return `CIP-113: refusing to sign, transaction spends programmable-token UTxOs ${hits.join(', ')}`;
+  } catch (e) {
+    // Unparseable here means the signer would fail anyway — don't refuse spuriously.
+    debugLog('CIP-113 preflight could not parse transaction:', e);
+    return null;
+  }
+}
+
 app.add(METHOD.signTx, async (request, sendResponse) => {
   const signTxReply = (opts: ReplyOpts) => {
     sendResponse({ id: request.id, ...opts, target: TARGET, sender: SENDER.extension });
@@ -1216,6 +1316,14 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
   // and never reaches this handler.)
   if (!WalletStore.isWhitelisted(request.origin)) {
     return signTxReply({ error: APIError.Refused });
+  }
+
+  const programmableRefusal = refusalForProgrammableInputs(request.data?.tx);
+  if (programmableRefusal) {
+    debugLog(programmableRefusal);
+    // Refused, like the whitelist check above: this returns before the approval UI opens
+    // and Gero does hold the key, so the wallet is declining by policy.
+    return signTxReply({ error: { code: APIError.Refused.code, info: CIP113_SIGN_REFUSAL_MESSAGE } });
   }
 
   const signTxPayload = { ...request.data, website: request.origin, favIconUrl: request.send?.tab?.favIconUrl };
@@ -1413,6 +1521,7 @@ app.add(METHOD.getPubDRepKey, async (request, sendResponse) => {
       target: TARGET,
       sender: SENDER.extension,
     });
+    return;
   }
   try {
     const key = getDrepKey(loggedWallet.publicKey, 0);
@@ -1443,6 +1552,7 @@ app.add(METHOD.getRegisteredPubStakeKeys, async (request, sendResponse) => {
         target: TARGET,
         sender: SENDER.extension,
       });
+      return;
     }
     if (isStakeKeyRegistered(account)) {
       const loggedWallet = WalletStore.state.loggedWallet;
@@ -1453,6 +1563,7 @@ app.add(METHOD.getRegisteredPubStakeKeys, async (request, sendResponse) => {
           target: TARGET,
           sender: SENDER.extension,
         });
+        return;
       }
       const key: string = getStakeKey(loggedWallet.publicKey, 0).hex()
       if (key) {
@@ -1470,9 +1581,18 @@ app.add(METHOD.getRegisteredPubStakeKeys, async (request, sendResponse) => {
           sender: SENDER.extension,
         });
       }
+    } else {
+      // CIP-95: an unregistered stake key simply means there are no
+      // registered keys to report — an empty array is the correct answer.
+      sendResponse({
+        id: request.id,
+        data: [],
+        target: TARGET,
+        sender: SENDER.extension,
+      });
     }
   } catch (error) {
-    console.error("Error in getUnregisteredPubStakeKeys:", error);
+    console.error("Error in getRegisteredPubStakeKeys:", error);
     sendResponse({
       id: request.id,
       error: APIError.InternalError,
@@ -1492,8 +1612,9 @@ app.add(METHOD.getUnregisteredPubStakeKeys, async (request, sendResponse) => {
         target: TARGET,
         sender: SENDER.extension,
       });
+      return;
     }
-    if (isStakeKeyRegistered(account)) {
+    if (!isStakeKeyRegistered(account)) {
       const loggedWallet = WalletStore.state.loggedWallet;
       if (!loggedWallet || !loggedWallet.publicKey) {
         sendResponse({
@@ -1502,23 +1623,33 @@ app.add(METHOD.getUnregisteredPubStakeKeys, async (request, sendResponse) => {
           target: TARGET,
           sender: SENDER.extension,
         });
+        return;
       }
       const key: string = getStakeKey(loggedWallet.publicKey, 0).hex()
       if (key) {
-        sendResponse({
-          id: request.id,
-          data: [],
-          target: TARGET,
-          sender: SENDER.extension,
-        });
-      } else {
         sendResponse({
           id: request.id,
           data: [key],
           target: TARGET,
           sender: SENDER.extension,
         });
+      } else {
+        sendResponse({
+          id: request.id,
+          data: [],
+          target: TARGET,
+          sender: SENDER.extension,
+        });
       }
+    } else {
+      // CIP-95: the stake key is registered, so there are no unregistered
+      // keys to report — an empty array is the correct answer.
+      sendResponse({
+        id: request.id,
+        data: [],
+        target: TARGET,
+        sender: SENDER.extension,
+      });
     }
   } catch (error) {
     console.error("Error in getUnregisteredPubStakeKeys:", error);
@@ -2249,6 +2380,7 @@ app.addToOptions(MessageTypes.VERIFY_SPENDING_PASSWORD, async (request, sendResp
 
 app.addToOptions(MessageTypes.SIGN_DATA, async (request, sendResponse) => {
   try {
+    assertCip45SigningRequest(request.data);
     // Note: Never log request - contains password
     const walletBg = walletManager.getWallet();
     if (walletBg) {
@@ -2266,7 +2398,9 @@ app.addToOptions(MessageTypes.SIGN_DATA, async (request, sendResponse) => {
         request.data.accountIndex || 0,
         WalletStore.state.keys,
         privateKeyBytes, // Pass pre-decrypted root key for PRF wallets
+        () => assertCip45SigningRequest(request.data),
       );
+      assertCip45SigningRequest(request.data);
       sendResponse({
         id: request.id,
         data: res,
@@ -2337,6 +2471,7 @@ app.addToOptions(MessageTypes.MARK_NEXUS_LENT, async (request, sendResponse) => 
 
 app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
   try {
+    assertCip45SigningRequest(request.data);
     // Note: Never log request - contains password
     const walletBg = walletManager.getWallet();
     if (walletBg) {
@@ -2367,7 +2502,10 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
         request.data.utxos,
         request.data.addresses,
         privateKeyBytes, // Pass pre-decrypted private key for PRF wallets
+        () => assertCip45SigningRequest(request.data),
       );
+
+      assertCip45SigningRequest(request.data);
 
       // Nexus shared-pool collateral co-sign. If the tx's collateralInputs include
       // any UTxO from the Nexus enterprise pool, request the hot wallet's witness
@@ -2408,6 +2546,7 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
         }
       }
 
+      assertCip45SigningRequest(request.data);
       sendResponse({
         id: request.id,
         data: witnessResult,
@@ -2451,6 +2590,19 @@ app.addToOptions(MessageTypes.REQUEST_CROSS_DEVICE_SIGNATURE, async (request, se
     }
 
     const { unsignedCbor, intent, stakeAddress, ttlMs } = request.data;
+
+    // The relay only forwards CBOR, so the receiving device never sees our index.
+    const crossDeviceRefusal = refusalForProgrammableInputs(unsignedCbor);
+    if (crossDeviceRefusal) {
+      debugLog(crossDeviceRefusal);
+      sendResponse({
+        id: request.id,
+        data: { decision: 'rejected', reason: CIP113_SIGN_REFUSAL_MESSAGE },
+        target: TARGET,
+        sender: SENDER.extension,
+      });
+      return;
+    }
     // Route to a specific device when the caller named one, else to the sole
     // online trusted signer; null => broadcast (backward-compatible).
     const to = (typeof request.data?.to === 'string' && request.data.to)
@@ -2721,23 +2873,45 @@ app.addToOptions(MessageTypes.SIGN_TX_WITH_POOL_KEYS, async (request, sendRespon
   }
 });
 
-// SPO Node Monitor — proxy fetch through background (bypasses extension page CSP)
+// SPO Node Monitor — proxy fetch through background (also subject to extension CSP)
 app.addToOptions(MessageTypes.SPO_NODE_FETCH, async (request, sendResponse) => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const { url, timeout, method, body } = request.data;
+    const { url, timeout, method, body, authToken } = request.data;
     if (!url || typeof url !== 'string') {
       throw new Error('Invalid URL');
     }
+    // The monitor is reached over https:// in every real deployment (cloudflare
+    // tunnel) or http://localhost when the operator runs it locally. Refuse to
+    // put a bearer token on a plaintext request to anywhere else — that would
+    // hand the agent's token to anyone on the path.
+    let isLocal = false;
+    try {
+      const parsed = new URL(url);
+      isLocal = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1' || parsed.hostname === '[::1]';
+      if (authToken && parsed.protocol !== 'https:' && !isLocal) {
+        throw new Error('Refusing to send auth token over an insecure connection');
+      }
+    } catch (e) {
+      throw e instanceof Error && e.message.startsWith('Refusing') ? e : new Error('Invalid URL');
+    }
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeout || 10000);
+    timer = setTimeout(() => controller.abort(), timeout || 10000);
     const fetchOpts: RequestInit = { signal: controller.signal };
+    const headers: Record<string, string> = {};
     if (method === 'POST') {
       fetchOpts.method = 'POST';
-      fetchOpts.headers = { 'Content-Type': 'application/json' };
+      headers['Content-Type'] = 'application/json';
       if (body) fetchOpts.body = body;
     }
+    // Never logged: the catch below reports errorMessage(error), and fetch
+    // failures do not carry request headers.
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+    if (Object.keys(headers).length > 0) fetchOpts.headers = headers;
     const response = await fetch(url, fetchOpts);
-    clearTimeout(timer);
+    // An authenticated agent can return JSON for 401/403/5xx too. Do not let
+    // callers interpret those bodies as successful status or operation data.
+    if (!response.ok) throw new Error(`Node request failed (HTTP ${response.status})`);
     const data = await response.json();
     sendResponse({
       id: request.id,
@@ -2752,6 +2926,8 @@ app.addToOptions(MessageTypes.SPO_NODE_FETCH, async (request, sendResponse) => {
       target: TARGET,
       sender: SENDER.extension,
     });
+  } finally {
+    clearTimeout(timer);
   }
 });
 
@@ -3366,6 +3542,7 @@ app.addToOptions(MessageTypes.REMOVE_PENDING_TRANSACTION, async (request, sendRe
 
 app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
   try {
+    assertCip45SigningRequest(request.data);
     if (request.data.method === 'initTrezor') {
       const network = networks.resolveNetwork(request.data.chain, request.data.network);
 
@@ -3409,6 +3586,7 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
         addressFieldHex: string;
       } = await trezor.signData(address, payload, network.networkId, accountIndex, WalletStore.state.keys);
 
+      assertCip45SigningRequest(request.data);
       sendResponse({
         id: request.id,
         data: { success: true, signatureData },
@@ -3417,6 +3595,13 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
       });
     } else if (request.data.method === 'signTx') {
       const { txCbor } = request.data;
+
+      // Trezor signs here rather than through WalletBg.signTx, so it needs its own check.
+      const trezorRefusal = refusalForProgrammableInputs(txCbor);
+      if (trezorRefusal) {
+        debugLog(trezorRefusal);
+        throw new Error(CIP113_SIGN_REFUSAL_MESSAGE);
+      }
 
       const tx = deserializeCardanoJsSdkTx(txCbor);
 
@@ -3456,6 +3641,7 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
       const signaturesArray = Array.from(signatures.entries());
       console.log('[TREZOR Background] Signatures array:', signaturesArray);
 
+      assertCip45SigningRequest(request.data);
       sendResponse({
         id: request.id,
         data: { success: true, signatures: signaturesArray },
@@ -4203,9 +4389,16 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
           }
           case 'cardano_signTx': {
             const wcParams = wcRequest.params || {};
+            const wcTx = wcParams.tx || wcParams;
+            const wcProgrammableRefusal = refusalForProgrammableInputs(wcTx);
+            if (wcProgrammableRefusal) {
+              debugLog(wcProgrammableRefusal);
+              await wcService.respondError(topic, id, 4100, CIP113_SIGN_REFUSAL_MESSAGE);
+              return;
+            }
             await routeWcSigningRequest(
               'signTx',
-              { tx: wcParams.tx || wcParams, partialSign: wcParams.partialSign, origin: 'WalletConnect' },
+              { tx: wcTx, partialSign: wcParams.partialSign, origin: 'WalletConnect' },
               topic, id, POPUP.signTx, [470, 852],
             );
             return;
@@ -4329,6 +4522,221 @@ app.addToOptions(MessageTypes.WC_GET_SESSIONS, async (request, sendResponse) => 
   }
 });
 
+// ====== CIP-45 (peer-to-peer dApp bridge) ======
+
+async function isCip45Enabled(): Promise<boolean> {
+  // Build-time default; an explicit value in the mirror still wins.
+  const buildDefault = import.meta.env['VITE_CIP45_DEFAULT_ENABLED'] === 'true';
+  try {
+    const stored = await chrome.storage.local.get('featureFlags');
+    const flags = (stored?.['featureFlags'] as Record<string, unknown>) ?? {};
+    if (typeof flags['isCip45Enabled'] === 'boolean') {
+      return flags['isCip45Enabled'];
+    }
+    return buildDefault;
+  } catch {
+    return buildDefault;
+  }
+}
+
+app.addToOptions(MessageTypes.CIP45_UPDATE_SESSION, async (request, sendResponse) => {
+  try {
+    const { status, session } = request.data as { status: 'idle' | 'connecting' | 'connected' | 'disconnected'; session?: Cip45Session };
+    if (status !== 'connected' || !session) throw new Error('Missing CIP-45 session');
+    cip45Authorization.activate(cip45Owner(request.send), session.authorization);
+    Cip45Store.setSession(status, session ?? null);
+    sendResponse({ id: request.id, data: { success: true }, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, data: { success: false, error: getErrorMessage(error) }, target: TARGET, sender: SENDER.extension });
+  }
+  return true;
+});
+
+app.addToOptions(MessageTypes.CIP45_BEGIN_SESSION, async (request, sendResponse) => {
+  let authorization: Cip45Authorization | undefined;
+  try {
+    const { context, dappPeerId } = request.data as { context: Cip45WalletContext; dappPeerId: string };
+    authorization = cip45Authorization.begin(cip45Owner(request.send), context, dappPeerId);
+    if (!(await isCip45Enabled())) throw new Error('CIP-45 is disabled');
+    cip45Authorization.assert(authorization, cip45Owner(request.send), false);
+    sendResponse({ data: { success: true, authorization } });
+  } catch (error) {
+    if (authorization) cip45Authorization.revoke(cip45Owner(request.send), authorization);
+    sendResponse({ data: { success: false, error: getErrorMessage(error) } });
+  }
+  return true;
+});
+
+app.addToOptions(MessageTypes.CIP45_END_SESSION, (request, sendResponse) => {
+  cip45Authorization.revoke(cip45Owner(request.send), request.data.authorization);
+  Cip45Store.clearSession(request.data.authorization?.sessionId);
+  sendResponse({ data: { success: true } });
+});
+
+app.addToOptions(MessageTypes.CIP45_VALIDATE_SESSION, async (request, sendResponse) => {
+  try {
+    if (!(await isCip45Enabled())) throw new Error('CIP-45 is disabled');
+    cip45Authorization.assert(request.data.authorization);
+    sendResponse({ data: { success: true } });
+  } catch (error) {
+    sendResponse({ data: { success: false, error: getErrorMessage(error) } });
+  }
+  return true;
+});
+
+/**
+ * Route one CIP-45 signing request through the mini-gero panel if connected
+ * (tabless, exactly like WalletConnect's routeWcSigningRequest), else the
+ * standalone approval popup. Returns the approval result; throws on rejection.
+ */
+async function routeCip45SigningRequest(
+  portMethod: 'signTx' | 'signData',
+  data: Record<string, unknown>,
+  popupRoute: string,
+  popupSize: [number, number],
+): Promise<unknown> {
+  assertCip45SigningRequest(data);
+  if (miniGeroPorts.size > 0) {
+    const response = await sendToMiniGero(portMethod, data, undefined);
+    return response.data;
+  }
+
+  const fakeRequest = { id: `cip45-${crypto.randomUUID()}`, data, origin: 'CIP-45', send: { tab: { id: -1 } } };
+  const website = String((data as { website?: unknown }).website ?? 'CIP-45');
+  const popupURL = chrome.runtime.getURL(`index.html#/${popupRoute}?website=${encodeURIComponent(website)}`);
+  const tab = await focusOrCreatePopup(popupURL, popupSize[0], popupSize[1]);
+  const response = await Messaging.sendToPopupInternal(tab.id, fakeRequest) as BackgroundResponse;
+  if (response.data !== undefined) return response.data;
+  const errInfo = (response.error as { info?: string } | undefined)?.info;
+  throw new Error(errInfo || 'User rejected');
+}
+
+app.addToOptions(MessageTypes.CIP45_INVOKE, async (request, sendResponse) => {
+  const reply = (data: { success: boolean; result?: unknown; error?: unknown }) => {
+    if (data.success) cip45Authorization.assert(request.data.authorization, cip45Owner(request.send));
+    sendResponse({ id: request.id, data, target: TARGET, sender: SENDER.extension });
+  };
+  const fail = (code: number, info: string) => reply({ success: false, error: { code, info } });
+
+  try {
+    if (!(await isCip45Enabled())) {
+      fail(APIError.Refused.code, 'CIP-45 is disabled');
+      return true;
+    }
+
+    const { method, params = {}, dapp, authorization } = request.data as {
+      authorization: Cip45Authorization;
+      method: string;
+      params?: {
+        amount?: string;
+        paginate?: Paginate;
+        tx?: string;
+        partialSign?: boolean;
+        addr?: string;
+        payload?: string;
+      };
+      dapp?: { name?: string; url?: string };
+    };
+
+    cip45Authorization.assert(authorization, cip45Owner(request.send));
+
+    const loggedWallet = WalletStore.state.loggedWallet;
+    if (!loggedWallet) {
+      fail(APIError.Refused.code, 'No wallet logged in');
+      return true;
+    }
+    // CIP-45 is a Cardano dApp bridge — allow Cardano-family chains only.
+    if (loggedWallet.chain !== Blockchain.CARDANO
+      && loggedWallet.chain !== 'Apex Prime'
+      && loggedWallet.chain !== 'Apex Vector') {
+      fail(APIError.Refused.code, 'CIP-45 supports Cardano wallets only');
+      return true;
+    }
+
+    switch (method) {
+      case 'getNetworkId': {
+        reply({ success: true, result: networks.resolveNetworkId(loggedWallet.chain, loggedWallet.network) });
+        break;
+      }
+      case 'getBalance': {
+        const balance = getBalance(WalletStore.state.utxos as Cardano.Utxo[], WalletStore.state.collateral);
+        reply({ success: true, result: balance.toCbor() });
+        break;
+      }
+      case 'getUtxos': {
+        const converted = getUtxos(params.amount, params.paginate, WalletStore.state.utxos as Cardano.Utxo[], WalletStore.state.collateral);
+        reply({ success: true, result: converted ? converted.map(u => u.toCbor()) : null });
+        break;
+      }
+      case 'getCollateral': {
+        const result = await getCollateral(params, WalletStore.state.utxos as Cardano.Utxo[], { allowNexusFallback: false });
+        reply({ success: true, result });
+        break;
+      }
+      case 'getUsedAddresses': {
+        reply({ success: true, result: getUsedAddresses(WalletStore.state.keys, params.paginate) });
+        break;
+      }
+      case 'getUnusedAddresses': {
+        reply({ success: true, result: getUnusedAddresses(loggedWallet.publicKey, loggedWallet.chain, loggedWallet.network, WalletStore.state.keys) });
+        break;
+      }
+      case 'getChangeAddress': {
+        reply({ success: true, result: Cardano.Address.fromBech32(loggedWallet.baseAddress).toBytes() });
+        break;
+      }
+      case 'getRewardAddresses': {
+        const address = getRewardAddress(loggedWallet.publicKey, loggedWallet.chain, loggedWallet.network);
+        reply({ success: true, result: [address.toBytes()] });
+        break;
+      }
+      case 'submitTx': {
+        const response = await submitTx(params.tx, loggedWallet.chain, loggedWallet.network);
+        if (response.ok) {
+          reply({ success: true, result: await response.text() });
+        } else {
+          fail(TxSendError.Failure.code, `Submit failed: ${response.statusText}`);
+        }
+        break;
+      }
+      case 'signTx': {
+        try {
+          const result = await routeCip45SigningRequest(
+            'signTx',
+            { tx: params.tx, partialSign: params.partialSign, cip45Authorization: authorization, origin: 'CIP-45', website: dapp?.url || 'CIP-45' },
+            POPUP.signTx, [470, 852],
+          );
+          cip45Authorization.assert(authorization, cip45Owner(request.send));
+          reply({ success: true, result });
+        } catch (err) {
+          fail(TxSignError.UserDeclined.code, getErrorMessage(err) || TxSignError.UserDeclined.info);
+        }
+        break;
+      }
+      case 'signData': {
+        try {
+          const result = await routeCip45SigningRequest(
+            'signData',
+            { address: params.addr, payload: params.payload, cip45Authorization: authorization, origin: 'CIP-45', website: dapp?.url || 'CIP-45' },
+            POPUP.dappSignData, [470, 600],
+          );
+          cip45Authorization.assert(authorization, cip45Owner(request.send));
+          reply({ success: true, result });
+        } catch (err) {
+          fail(DataSignError.UserDeclined.code, getErrorMessage(err) || DataSignError.UserDeclined.info);
+        }
+        break;
+      }
+      default:
+        fail(APIError.InternalError.code, `Method not supported: ${method}`);
+    }
+  } catch (e) {
+    console.error('❌ CIP-45 invoke failed:', e);
+    fail(APIError.InternalError.code, getErrorMessage(e));
+  }
+  return true;
+});
+
 /**
  * Persist a re-derived Midnight publicKey JSON for an existing Midnight wallet.
  * The browser context runs the SDK derivation (ledger-v8 WASM doesn't run in
@@ -4394,10 +4802,10 @@ app.addToOptions(MessageTypes.SIGN_MIDNIGHT_SEGMENTS, async (request, sendRespon
   try {
     const walletBg = walletManager.getWallet();
     if (!walletBg) throw new Error('No wallet logged in');
-    const { segments, password, prfSecret } = request.data || {};
+    const { segments, password, prfSecret, unprovenTxHex } = request.data || {};
     if (!Array.isArray(segments)) throw new Error('segments[] is required');
     const prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
-    const signatures = await walletBg.signMidnightSegments(segments, password, prfBytes);
+    const signatures = await walletBg.signMidnightSegments(segments, password, prfBytes, unprovenTxHex);
     sendResponse({
       id: request.id,
       data: { success: true, signatures },
@@ -4425,13 +4833,21 @@ app.addToOptions(MessageTypes.SIGN_MIDNIGHT_SEGMENTS, async (request, sendRespon
 app.addToOptions(
   MessageTypes.BALANCE_AND_SIGN_MIDNIGHT_UNSHIELDED_TX,
   async (request, sendResponse) => {
+    const secretBuffers: Uint8Array[] = [];
     try {
       const walletBg = walletManager.getWallet();
       if (!walletBg) throw new Error('No wallet logged in');
       if (walletBg.chain !== Blockchain.MIDNIGHT) {
         throw new Error('BALANCE_AND_SIGN_MIDNIGHT_UNSHIELDED_TX called on non-Midnight wallet');
       }
-      const { unprovenTxHex, ttlMs, password, prfSecret } = request.data || {};
+      const network = walletBg.network;
+      const { midnightPrivateSessionEpoch } = await import('@/chains/midnight/midnightPrivateSyncSession');
+      const assertSession = captureMidnightSigningSession(walletBg.id, network, () => ({
+        walletId: walletManager.getWallet()?.id, network: walletManager.getWallet()?.network,
+        locked: walletStore.isLocked, epoch: midnightPrivateSessionEpoch(),
+      }));
+      const { unprovenTxHex, ttlMs, password, prfSecret, sponsor, proving } = request.data || {};
+      const provingArg = parseProvingRequest(proving);
       if (typeof unprovenTxHex !== 'string' || unprovenTxHex.length === 0) {
         throw new Error('unprovenTxHex is required');
       }
@@ -4439,15 +4855,58 @@ app.addToOptions(
         throw new Error('ttlMs is required (epoch millis)');
       }
       const prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
-      const signedTxHex = await walletBg.balanceAndSignMidnightUnshieldedTransfer(
+      if (prfBytes) secretBuffers.push(prfBytes);
+      // Optional DUST sponsor: another wallet the user owns pays the fee.
+      // Crossing the message boundary, so shape-check it here rather than
+      // trusting the sender — walletBg re-checks eligibility (chain, network,
+      // not-self) before any decryption happens.
+      let sponsorArg: { walletId: number; password?: string; prfSecret?: Uint8Array } | undefined;
+      if (sponsor !== undefined && sponsor !== null) {
+        if (typeof sponsor !== 'object') throw new Error('sponsor must be an object');
+        const walletId = (sponsor as { walletId?: unknown }).walletId;
+        if (typeof walletId !== 'number' || !Number.isInteger(walletId)) {
+          throw new Error('sponsor.walletId is required (integer wallet id)');
+        }
+        const sPassword = (sponsor as { password?: unknown }).password;
+        const sPrf = (sponsor as { prfSecret?: unknown }).prfSecret;
+        if (sPassword !== undefined && typeof sPassword !== 'string') {
+          throw new Error('sponsor.password must be a string');
+        }
+        if (sPrf !== undefined && !Array.isArray(sPrf)) {
+          throw new Error('sponsor.prfSecret must be a byte array');
+        }
+        sponsorArg = {
+          walletId,
+          password: sPassword as string | undefined,
+          prfSecret: sPrf ? new Uint8Array(sPrf as number[]) : undefined,
+        };
+      }
+      if (sponsorArg?.prfSecret) secretBuffers.push(sponsorArg.prfSecret);
+      const { getMidnightEndpoints } = await import('@/chains/midnight/midnightConfig');
+      const { readVerifiedMidnightChainIdentity, assertMidnightChainIdentityUnchanged } = await import('@/chains/midnight/midnightChainIdentity');
+      const endpoints = network.toLowerCase() === 'stagenet' ? getMidnightEndpoints(network) : undefined;
+      const identity = endpoints ? await readVerifiedMidnightChainIdentity(endpoints) : undefined;
+      assertSession();
+      let signedTxHex = await walletBg.balanceAndSignMidnightUnshieldedTransfer(
         unprovenTxHex,
         ttlMs,
         password,
         prfBytes,
+        sponsorArg,
       );
+      assertSession();
+      if (provingArg) {
+        const { proveUnshieldedTransfer } = await import('@/chains/midnight/midnightUnshieldedProver');
+        const result = await proveUnshieldedTransfer({
+          sdkNetworkId: network.toLowerCase(), signedTxHex, proving: provingArg,
+        });
+        signedTxHex = result.provenTxHex;
+      }
+      if (identity && endpoints) await assertMidnightChainIdentityUnchanged(endpoints, identity);
+      assertSession();
       sendResponse({
         id: request.id,
-        data: { success: true, signedTxHex },
+        data: { success: true, signedTxHex, proven: !!provingArg },
         target: TARGET,
         sender: SENDER.extension,
       });
@@ -4458,7 +4917,7 @@ app.addToOptions(
         target: TARGET,
         sender: SENDER.extension,
       });
-    }
+    } finally { secretBuffers.forEach(bytes => bytes.fill(0)); }
   },
 );
 
@@ -4469,6 +4928,41 @@ app.addToOptions(
  * overrides, ...) into the BG's fetch to the proof server.
  */
 const PROVING_HEADER_ALLOWLIST = new Set(['x-api-key', 'x-api-secret']);
+
+app.addToOptions(MessageTypes.START_MIDNIGHT_PRIVATE_SYNC, async (request, sendResponse) => {
+  let prfBytes: Uint8Array | undefined;
+  try {
+    const wallet = walletManager.getWallet();
+    if (!wallet) throw new Error('No wallet logged in');
+    const { password, prfSecret } = request.data || {};
+    if (password !== undefined && typeof password !== 'string') throw new Error('Invalid spending password');
+    if (prfSecret !== undefined && (!Array.isArray(prfSecret) || prfSecret.length !== 32
+      || !prfSecret.every((byte: unknown) => typeof byte === 'number' && Number.isInteger(byte) && byte >= 0 && byte <= 255))) {
+      throw new Error('Invalid PassKey authorization');
+    }
+    prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
+    await wallet.startMidnightPrivateSync(password, prfBytes);
+    sendResponse({ id: request.id, data: { success: true }, target: TARGET, sender: SENDER.extension });
+  } catch {
+    sendResponse({ id: request.id, data: { success: false, error: 'Unable to unlock private token synchronization' }, target: TARGET, sender: SENDER.extension });
+  } finally { prfBytes?.fill(0); }
+});
+
+function parseMidnightSponsor(value: unknown): { walletId: number; password?: string; prfSecret?: Uint8Array } | undefined {
+  if (value == null) return undefined;
+  if (typeof value !== 'object' || Array.isArray(value)) throw new Error('sponsor must be an object');
+  const sponsor = value as { walletId?: unknown; password?: unknown; prfSecret?: unknown };
+  if (!Number.isSafeInteger(sponsor.walletId) || (sponsor.walletId as number) < 0) throw new Error('Invalid sponsor wallet id');
+  if (sponsor.password !== undefined && typeof sponsor.password !== 'string') throw new Error('Invalid sponsor password');
+  if (sponsor.prfSecret !== undefined && (!Array.isArray(sponsor.prfSecret)
+    || sponsor.prfSecret.length !== 32 || !sponsor.prfSecret.every(byte => Number.isInteger(byte) && byte >= 0 && byte <= 255))) {
+    throw new Error('Invalid sponsor PRF bytes');
+  }
+  return {
+    walletId: sponsor.walletId as number, password: sponsor.password as string | undefined,
+    prfSecret: sponsor.prfSecret ? new Uint8Array(sponsor.prfSecret as number[]) : undefined,
+  };
+}
 
 /**
  * Validate the optional `proving` field on BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX
@@ -4536,13 +5030,14 @@ function parseProvingRequest(value: unknown): { url: string; headers?: Record<st
 app.addToOptions(
   MessageTypes.BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX,
   async (request, sendResponse) => {
+    const secretBuffers: Uint8Array[] = [];
     try {
       const walletBg = walletManager.getWallet();
       if (!walletBg) throw new Error('No wallet logged in');
       if (walletBg.chain !== Blockchain.MIDNIGHT) {
         throw new Error('BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX called on non-Midnight wallet');
       }
-      const { outputs, password, prfSecret, proving } = request.data || {};
+      const { outputs, password, prfSecret, proving, sponsor } = request.data || {};
       if (!Array.isArray(outputs) || outputs.length === 0) {
         throw new Error('outputs is required (non-empty array)');
       }
@@ -4570,12 +5065,16 @@ app.addToOptions(
         };
       });
       const prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
+      if (prfBytes) secretBuffers.push(prfBytes);
       const provingArg = parseProvingRequest(proving);
+      const sponsorArg = parseMidnightSponsor(sponsor);
+      if (sponsorArg?.prfSecret) secretBuffers.push(sponsorArg.prfSecret);
       const { signedTxHex, proven } = await walletBg.buildAndSignMidnightShieldedTransfer(
         parsedOutputs,
         password,
         prfBytes,
         provingArg,
+        sponsorArg,
       );
       sendResponse({
         id: request.id,
@@ -4584,14 +5083,14 @@ app.addToOptions(
         sender: SENDER.extension,
       });
     } catch (error) {
-      console.error('Error building/signing Midnight shielded transfer:', error);
+      // SDK failures may contain private transaction inputs; never log their payloads.
       sendResponse({
         id: request.id,
         data: { success: false, error: getErrorMessage(error) },
         target: TARGET,
         sender: SENDER.extension,
       });
-    }
+    } finally { secretBuffers.forEach(bytes => bytes.fill(0)); }
   },
 );
 
@@ -4664,7 +5163,9 @@ app.addToOptions(
   async (request, sendResponse) => {
     try {
       const { midnightActions } = await import('@/stores/midnightStore');
-      midnightActions.acceptShieldedProvingConsent();
+      const provider = request.data?.provider;
+      if (provider !== 'cloud' && provider !== 'zkpaas') throw new Error('A proving provider is required');
+      midnightActions.acceptShieldedProvingConsent(provider);
       sendResponse({
         id: request.id,
         data: { success: true },
@@ -4737,7 +5238,7 @@ app.addToOptions(
   async (request, sendResponse) => {
     try {
       const {
-        mode, localUrl, zkpaasUrl, zkpaasApiKey, zkpaasApiSecret,
+        mode, localUrl, localProfile, zkpaasUrl, zkpaasApiKey, zkpaasApiSecret,
       } = request.data || {};
       if (mode !== 'remote' && mode !== 'local' && mode !== 'zkpaas') {
         throw new Error('mode must be "remote", "local" or "zkpaas"');
@@ -4753,6 +5254,10 @@ app.addToOptions(
       // Arkhia credentials), while an explicit '' means "clear it" ('' is
       // also the valid "derive the endpoint per network" state for the URL).
       const current = midnightStore.proofServer;
+      const selectedProfile = localProfile === undefined ? (current.localProfile ?? 'legacy') : localProfile;
+      if (selectedProfile !== 'legacy' && selectedProfile !== 'stagenet') {
+        throw new Error('localProfile must be legacy or stagenet');
+      }
       const zkpaasUrlValue = zkpaasUrl === undefined || zkpaasUrl === null
         ? current.zkpaasUrl : zkpaasUrl;
       if (typeof zkpaasUrlValue !== 'string') throw new Error('zkpaasUrl must be a string');
@@ -4764,10 +5269,12 @@ app.addToOptions(
       midnightActions.setProofServer({
         mode,
         localUrl,
+        localProfile: selectedProfile,
         zkpaasUrl: zkpaasUrlValue,
         zkpaasApiKey: zkpaasApiKeyValue,
         zkpaasApiSecret: zkpaasApiSecretValue,
       });
+      await walletManager.refreshCrossDeviceProver();
       sendResponse({
         id: request.id,
         data: { success: true },
@@ -4895,7 +5402,6 @@ app.addToOptions(MessageTypes.RESYNC_MIDNIGHT, async (request, sendResponse) => 
     if (walletBg.chain !== Blockchain.MIDNIGHT) {
       throw new Error('RESYNC_MIDNIGHT called on non-Midnight wallet');
     }
-    const { default: midnightSyncService } = await import('@/services/midnight-sync.service');
     if (!midnightSyncService.isActive()) {
       throw new Error('Midnight sync service is not active');
     }
@@ -4931,7 +5437,7 @@ app.addToOptions(MessageTypes.ADD_MIDNIGHT_PENDING_TX, async (request, sendRespo
     if (walletBg.chain !== Blockchain.MIDNIGHT) {
       throw new Error('ADD_MIDNIGHT_PENDING_TX called on non-Midnight wallet');
     }
-    const { hash, amount, counterparty, isShielded } = request.data || {};
+    const { hash, amount, counterparty, isShielded, token } = request.data || {};
     if (typeof hash !== 'string' || !hash) throw new Error('hash is required');
     const { midnightActions } = await import('@/stores/midnightStore');
     let amountBig = 0n;
@@ -4939,7 +5445,10 @@ app.addToOptions(MessageTypes.ADD_MIDNIGHT_PENDING_TX, async (request, sendRespo
     midnightActions.applyTransaction({
       hash,
       type: 'send',
-      token: 'NIGHT',
+      // Colour of what was actually sent. Defaulted rather than required so
+      // older callers (and the shielded path) keep their NIGHT behaviour; a
+      // hardcoded 'NIGHT' here would label a USDM send as NIGHT in history.
+      token: typeof token === 'string' && token ? token : 'NIGHT',
       amount: amountBig,
       counterparty: typeof counterparty === 'string' ? counterparty : '',
       timestamp: Date.now(),
@@ -5048,7 +5557,7 @@ function recordMidnightPermissionDenial(tabId: number | undefined, method: strin
 function midnightSdkNetworkId(network: string): string {
   switch (network) {
     case Network.MAINNET: return 'mainnet';
-    case Network.PREVIEW: return 'preview';
+    case Network.STAGENET: return 'stagenet';
     case Network.PREPROD: return 'preprod';
     case Network.TESTNET: return 'testnet';
     default: throw new Error(`Unsupported Midnight network: ${network}`);
@@ -5107,11 +5616,11 @@ app.add(MIDNIGHT_METHOD.connect, (request, sendResponse) => {
   // The connector spec only formally standardizes 'mainnet' as a well-known
   // network id (SPECIFICATION.md §Initial API point 13) — non-mainnet ids
   // aren't governed by a canonical registry across dapps/wallets. But our
-  // own SDK networkId vocabulary ('mainnet'/'preview'/'preprod'/'testnet',
+  // own SDK networkId vocabulary ('mainnet'/'stagenet'/'preprod'/'testnet',
   // via midnightSdkNetworkId) is exactly what a Gero-aware dapp — or any
   // dapp using the same SDK convention — would send. Reject on ANY mismatch
   // against the active wallet's actual network, not just a mainnet-specific
-  // special case: silently accepting e.g. a 'preview' request while the
+  // special case: silently accepting e.g. a 'stagenet' request while the
   // wallet is on 'preprod' would connect the dapp to the wrong chain without
   // it ever knowing. Better to over-reject an unusual-but-valid networkId
   // string than to silently cross-connect networks.
@@ -5274,28 +5783,39 @@ app.add(MIDNIGHT_METHOD.getUnshieldedBalances, async (request, sendResponse) => 
     return;
   }
   const { midnightStore } = await import('@/stores/midnightStore');
-  const { NIGHT_TOKEN_TYPE_NULL } = await import('@/services/midnight-sync.service');
   const wallet = requireMidnightWallet();
   if (!wallet) {
     sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected'), target: TARGET, sender: SENDER.extension });
     return;
   }
-  // midnightStore.utxos only ever carries NIGHT-type outputs today (the sync
-  // layer filters non-native tokenTypes out — see midnight-sync.service.ts's
-  // isNightOutput), so this record has at most one key. Normalize an empty
-  // tokenType (Gero's internal "native NIGHT" convention) to the canonical
-  // 32-byte-zero hex a dapp checking nativeToken().raw would expect.
+  // midnightStore.utxos now carries every token color the wallet holds — the
+  // sync layer (midnight-sync.service.ts's CATCH_UP snapshot and per-tx delta
+  // paths) no longer filters non-native tokenTypes out. The check below is
+  // deliberately the LOOSE native-NIGHT predicate (any all-zero tokenType,
+  // not just the canonical 64-hex-zero string) — the same one
+  // `midnightTokenBalances()` uses below to decide what counts as a token —
+  // so NIGHT and the token map partition the UTxO set with no gap: an
+  // all-zero color of non-canonical length (e.g. 63 zeros, or `'0'`) would
+  // otherwise satisfy neither predicate and vanish from a dapp's view
+  // entirely. It still normalizes to the canonical 32-byte-zero hex a dapp
+  // checking nativeToken().raw would expect.
+  const { midnightTokenBalances, isNativeNight } = await import('@/chains/midnight/midnightTokenBalances');
   let night = 0n;
   for (const u of midnightStore.utxos) {
     const tt = u.tokenType ?? '';
-    if (tt === '' || tt === NIGHT_TOKEN_TYPE_NULL) night += u.value;
+    if (isNativeNight(tt)) night += u.value;
   }
-  sendResponse({
-    id: request.id,
-    data: night > 0n ? { [NIGHT_TOKEN_TYPE_NULL]: night.toString() } : {},
-    target: TARGET,
-    sender: SENDER.extension,
-  });
+  // Every non-native color the wallet holds, alongside NIGHT. Keys are the raw
+  // 32-byte token colors; NIGHT is reported under the canonical zero key above.
+  // Null-prototype (not `{}`): mirrors the map `midnightTokenBalances()`
+  // returns, so a token color equal to `'__proto__'` can't hit
+  // Object.prototype's setter and get silently dropped from the response.
+  const data: Record<string, string> = Object.create(null);
+  if (night > 0n) data[NIGHT_TOKEN_TYPE_NULL] = night.toString();
+  for (const [color, amount] of Object.entries(midnightTokenBalances(midnightStore.utxos))) {
+    data[color] = amount.toString();
+  }
+  sendResponse({ id: request.id, data, target: TARGET, sender: SENDER.extension });
 });
 
 app.add(MIDNIGHT_METHOD.getShieldedBalances, async (request, sendResponse) => {
@@ -5307,22 +5827,17 @@ app.add(MIDNIGHT_METHOD.getShieldedBalances, async (request, sendResponse) => {
     return;
   }
   const { midnightStore } = await import('@/stores/midnightStore');
-  const { NIGHT_TOKEN_TYPE_NULL } = await import('@/services/midnight-sync.service');
   const wallet = requireMidnightWallet();
   if (!wallet) {
     sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected'), target: TARGET, sender: SENDER.extension });
     return;
   }
-  // Gero only tracks native shielded NIGHT as a scalar today (no per-token
-  // breakdown from a ShieldedWallet state yet — Phase 1 known limitation,
-  // see build plan doc §3 "small gap" note).
-  const night = midnightStore.balances.nightShielded;
-  sendResponse({
-    id: request.id,
-    data: night > 0n ? { [NIGHT_TOKEN_TYPE_NULL]: night.toString() } : {},
-    target: TARGET,
-    sender: SENDER.extension,
-  });
+  try {
+    const data = syncedMidnightShieldedBalances(midnightStore.privateSyncStatus, midnightStore.balances.shieldedTokens);
+    sendResponse({ id: request.id, data, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.InternalError, getErrorMessage(error)), target: TARGET, sender: SENDER.extension });
+  }
 });
 
 app.add(MIDNIGHT_METHOD.getDustBalance, async (request, sendResponse) => {
@@ -5551,79 +6066,139 @@ app.add(MIDNIGHT_METHOD.hintUsage, (request, sendResponse) => {
   sendResponse({ id: request.id, data: undefined, target: TARGET, sender: SENDER.extension });
 });
 
-/** Canonical 32-byte-zero RawTokenType — how the ledger/connector names native
- * NIGHT (see midnightShieldedBuilder.ts NIGHT_RAW_TOKEN_TYPE). */
-const MIDNIGHT_NATIVE_NIGHT_TOKEN_TYPE =
-  '0000000000000000000000000000000000000000000000000000000000000000';
+const validateMakeTransferInputs = validateMidnightConnectorTransfer;
 
-type MakeTransferRequestData = {
-  desiredOutputs?: Array<{ kind?: string; type?: string; value?: string; recipient?: string }>;
-  options?: { payFees?: boolean };
-};
+// ─── Proving delegation (`getProvingProvider`) ───────────────────────────
+//
+// The page builds the ProvingProvider object itself (midnightProvingBridge.ts)
+// and streams each proof's preimage + the dapp's circuit key material here
+// in chunks; these handlers store the chunks, then prove against the user's
+// configured proof server (local docker / Arkhia zkPaaS / the network
+// default when on Gero Cloud) via midnightDappProving.ts. The dapp never
+// sees the server URL or credentials. All four re-check the origin's
+// whitelist server-side (requireMidnightProvingOrigin) like every other
+// post-connect handler — the content relay's pre-check alone would leave a
+// window across a multi-chunk upload if the user disconnects the dapp.
+
+type MidnightDappProvingModule = typeof import('@/chrome/midnightDappProving');
+let midnightProvingUploads: InstanceType<MidnightDappProvingModule['ProvingUploadStore']> | undefined;
+
+async function loadMidnightDappProving(): Promise<{
+  mod: MidnightDappProvingModule;
+  store: NonNullable<typeof midnightProvingUploads>;
+}> {
+  const mod = await import('@/chrome/midnightDappProving');
+  if (!midnightProvingUploads) midnightProvingUploads = new mod.ProvingUploadStore();
+  return { mod, store: midnightProvingUploads };
+}
+
+type MidnightProvingRequest = Parameters<Parameters<typeof app.add>[1]>[0];
+type MidnightProvingReply = Parameters<Parameters<typeof app.add>[1]>[1];
 
 /**
- * Validate a connector makeTransfer request BEFORE prompting the user, so an
- * unsupported/malformed request rejects cleanly without wasting an approval
- * dialog. Phase 2 scope: native-NIGHT UNSHIELDED outputs only, wallet pays DUST
- * fees. Mirrors MidnightSendDialog's per-network address-prefix check
- * (mainnet omits the network segment; others embed it lowercased).
+ * Common gate for the proving handlers: the origin must still be connected
+ * (server-side whitelist re-check, defense-in-depth like the other
+ * post-connect handlers) AND the active wallet must be an unlocked Midnight
+ * wallet. Sends the Disconnected reply itself and returns null when either
+ * fails. A refused origin also loses any uploads it had in flight, so a
+ * disconnect mid-upload stops the buffering immediately rather than at the
+ * TTL sweep.
  */
-function validateMakeTransferInputs(
-  data: MakeTransferRequestData | undefined,
-  network: string,
-): { ok: true } | { ok: false; reason: string } {
-  const desiredOutputs = data?.desiredOutputs;
-  if (!Array.isArray(desiredOutputs) || desiredOutputs.length === 0) {
-    return { ok: false, reason: 'desiredOutputs must be a non-empty array' };
+function requireMidnightProvingOrigin(
+  request: MidnightProvingRequest,
+  sendResponse: MidnightProvingReply,
+): { wallet: NonNullable<ReturnType<typeof requireMidnightWallet>>; origin: string } | null {
+  const refuse = (reason: string): null => {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, reason), target: TARGET, sender: SENDER.extension });
+    return null;
+  };
+  const origin = request.origin;
+  if (!origin || !WalletStore.isWhitelisted(origin)) {
+    if (origin) midnightProvingUploads?.dropOrigin(origin);
+    return refuse('Not connected — call connect() first');
   }
-  // Cap the output count: the array is walked synchronously in the service
-  // worker and rendered in the approval panel, so an unbounded length is a DoS
-  // vector. A real transfer never needs this many outputs (Nexus/tx-size limits
-  // bite far sooner).
-  if (desiredOutputs.length > 100) {
-    return { ok: false, reason: 'too many outputs (max 100 per transfer)' };
-  }
-  if (data?.options?.payFees === false) {
-    return { ok: false, reason: 'payFees:false is not supported in this version (GeroWallet pays DUST fees; fee delegation is planned)' };
-  }
-  const isMain = network === Network.MAINNET;
-  const prefix = isMain ? 'mn_addr1' : `mn_addr_${network.toLowerCase()}1`;
-  for (const o of desiredOutputs) {
-    if (!o || typeof o !== 'object') {
-      return { ok: false, reason: 'each desiredOutput must be an object' };
-    }
-    if (o.kind !== 'unshielded') {
-      return { ok: false, reason: `only unshielded transfers are supported in this version (got kind='${o.kind}')` };
-    }
-    // Native NIGHT only: the canonical 32-byte-zero RawTokenType, or the empty
-    // 'native' shorthand. Any other hex token type is unsupported (Nexus only
-    // builds native NIGHT today).
-    if (o.type !== undefined && o.type !== '' && o.type !== MIDNIGHT_NATIVE_NIGHT_TOKEN_TYPE) {
-      return { ok: false, reason: 'only native NIGHT transfers are supported in this version' };
-    }
-    // value arrives as a decimal string (the page bridge stringifies the bigint).
-    let value: bigint;
-    try {
-      value = BigInt(o.value as string);
-    } catch {
-      return { ok: false, reason: `invalid amount: ${o.value}` };
-    }
-    if (value <= 0n) {
-      return { ok: false, reason: 'amount must be a positive integer' };
-    }
-    if (typeof o.recipient !== 'string' || !o.recipient.startsWith(prefix)) {
-      return { ok: false, reason: `recipient must be a ${prefix}… unshielded address on the connected network` };
-    }
-  }
-  return { ok: true };
+  const wallet = requireMidnightWallet();
+  if (!wallet) return refuse('No Midnight wallet connected');
+  return { wallet, origin };
 }
+
+app.add(MIDNIGHT_METHOD.getProvingProvider, async (request, sendResponse) => {
+  const gate = requireMidnightProvingOrigin(request, sendResponse);
+  if (!gate) return;
+  const { wallet, origin } = gate;
+  try {
+    const [{ mod }, { midnightStore }] = await Promise.all([
+      loadMidnightDappProving(),
+      import('@/stores/midnightStore'),
+    ]);
+    const source = mod.assertDappProvingAvailable({
+      origin,
+      network: wallet.network,
+      sdkNetworkId: midnightSdkNetworkId(wallet.network),
+      proofServer: midnightStore.proofServer,
+    });
+    debugLog('🌙 connector getProvingProvider', { origin, source });
+    sendResponse({ id: request.id, data: undefined, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.InternalError, getErrorMessage(error)), target: TARGET, sender: SENDER.extension });
+  }
+});
+
+app.add(MIDNIGHT_METHOD.provingUpload, async (request, sendResponse) => {
+  const gate = requireMidnightProvingOrigin(request, sendResponse);
+  if (!gate) return;
+  try {
+    const { store } = await loadMidnightDappProving();
+    store.addChunk(gate.origin, request.data);
+    sendResponse({ id: request.id, data: undefined, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.InvalidRequest, getErrorMessage(error)), target: TARGET, sender: SENDER.extension });
+  }
+});
+
+/** Shared body of the `/check` and `/prove` handlers — they differ only in which runner they call. */
+async function handleMidnightDappProving(
+  op: 'runDappProvingCheck' | 'runDappProvingProve',
+  request: MidnightProvingRequest,
+  sendResponse: MidnightProvingReply,
+): Promise<void> {
+  const gate = requireMidnightProvingOrigin(request, sendResponse);
+  if (!gate) return;
+  const { wallet, origin } = gate;
+  let errorCode: (error: unknown) => string = () => MidnightErrorCode.InternalError;
+  try {
+    const [{ mod, store }, { makeLocalProvingProvider }, { midnightStore }] = await Promise.all([
+      loadMidnightDappProving(),
+      import('@/chains/midnight/midnightLocalProver'),
+      import('@/stores/midnightStore'),
+    ]);
+    errorCode = mod.dappProvingErrorCode;
+    const reply = await mod[op](
+      store,
+      { makeProvider: makeLocalProvingProvider },
+      {
+        origin,
+        network: wallet.network,
+        sdkNetworkId: midnightSdkNetworkId(wallet.network),
+        proofServer: midnightStore.proofServer,
+      },
+      request.data,
+    );
+    sendResponse({ id: request.id, data: reply, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, error: midnightApiError(errorCode(error), getErrorMessage(error)), target: TARGET, sender: SENDER.extension });
+  }
+}
+
+app.add(MIDNIGHT_METHOD.provingCheck, (request, sendResponse) => handleMidnightDappProving('runDappProvingCheck', request, sendResponse));
+app.add(MIDNIGHT_METHOD.provingProve, (request, sendResponse) => handleMidnightDappProving('runDappProvingProve', request, sendResponse));
 
 /**
  * Opens the makeTransfer approval view in the mini-gero side panel (password/
  * PRF wallets only — Midnight has no hardware-wallet support). Same
  * side-panel-only routing as signData — no popup fallback.
  *
- * Phase 2: native-NIGHT UNSHIELDED transfers only. The panel builds +
+ * Public NIGHT and custom-token transfers. The panel builds +
  * DUST-balances + signs (but does NOT submit) via buildAndSignUnshieldedTransfer
  * and returns `{ tx }`; the dapp submits it via submitTransaction, which
  * proves + binds server-side. Shielded/mixed outputs and payFees:false reject
@@ -5654,13 +6229,13 @@ app.add(MIDNIGHT_METHOD.makeTransfer, (request, sendResponse) => {
     reply({ error: midnightApiError(MidnightErrorCode.InternalError, 'No tab context for this request') });
     return true;
   }
-  const validation = validateMakeTransferInputs(data as MakeTransferRequestData, currentWallet.network);
-  if (!validation.ok) {
+  const validation = validateMakeTransferInputs(data, currentWallet.network);
+  if (validation.ok === false) {
     reply({ error: midnightApiError(MidnightErrorCode.InvalidRequest, validation.reason) });
     return true;
   }
   const favIconUrl = send.tab?.favIconUrl;
-  const makeTransferPayload = { data, website: origin, favIconUrl };
+  const makeTransferPayload = { data: { ...(data as object), desiredOutputs: validation.outputs }, website: origin, favIconUrl };
 
   const sendToPanel = () =>
     sendToMiniGero(MIDNIGHT_METHOD.makeTransfer, makeTransferPayload, tabId)

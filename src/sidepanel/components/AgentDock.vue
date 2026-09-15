@@ -65,13 +65,22 @@
             >{{ $t('support.toggle.copilot') }}</button>
           </div>
 
-          <button
-            class="agent-dock__close"
-            :aria-label="$t('copilot.close')"
-            @click="dock.close()"
-          >
-            <v-icon size="18" color="var(--g-text-2)">mdi-close</v-icon>
-          </button>
+          <div class="agent-dock__head-actions">
+            <button
+              class="agent-dock__head-btn"
+              :aria-label="$t('support.hide.action')"
+              @click="hideConfirmOpen = true"
+            >
+              <v-icon size="18" color="var(--g-text-2)">mdi-eye-off-outline</v-icon>
+            </button>
+            <button
+              class="agent-dock__head-btn agent-dock__close"
+              :aria-label="$t('copilot.close')"
+              @click="dock.close()"
+            >
+              <v-icon size="18" color="var(--g-text-2)">mdi-close</v-icon>
+            </button>
+          </div>
         </header>
 
         <div
@@ -112,10 +121,14 @@
               >
                 <div v-if="m.role === 'assistant'" class="agent-dock__avatar">G</div>
                 <div class="agent-dock__bubble">
-                  <!-- assistant replies are markdown (escaped-first, then rendered); user text stays plain -->
+                  <!-- assistant replies are markdown (escaped-first, then rendered); user text stays plain.
+                       `g-prose` is the shared recipe for that renderer's output (baseline.css) — the dock
+                       needs it because the renderer emits tables, blockquotes and rules too, and those had
+                       no styles here at all. `g-prose--compact` is what keeps the document type ramp and
+                       the 72ch measure out of a 320px column. -->
                   <div
                     v-if="m.role === 'assistant'"
-                    class="agent-dock__md"
+                    class="agent-dock__md g-prose g-prose--compact"
                     v-html="renderMarkdown(m.text)"
                   ></div>
                   <p v-else class="agent-dock__text">{{ m.text }}</p>
@@ -300,6 +313,26 @@
           </button>
         </footer>
         <p v-if="activeMode === 'copilot'" class="agent-dock__disclaimer">{{ $t('copilot.disclaimer') }}</p>
+
+        <!-- Hiding is one click from an always-on-screen control, so it asks
+             first — and the ask is the only place the user is told where the
+             dock went and how to bring it back. A transient toast would be the
+             lighter pattern, but it is exactly the thing a user who just made
+             the UI disappear can miss. Kept LAST in the panel deliberately: it
+             shares the same stacking level as every other panel child, so being
+             last is what paints it over them (see the note on its rule). -->
+        <div v-if="hideConfirmOpen" class="agent-dock__hide-confirm">
+          <p class="agent-dock__hide-title">{{ $t('support.hide.title') }}</p>
+          <p class="agent-dock__hide-body">{{ $t('support.hide.body') }}</p>
+          <div class="agent-dock__hide-actions">
+            <button class="agent-dock__hide-btn" @click="hideConfirmOpen = false">
+              {{ $t('common.cancel') }}
+            </button>
+            <button class="agent-dock__hide-btn is-primary" @click="hideDock()">
+              {{ $t('support.hide.confirm') }}
+            </button>
+          </div>
+        </div>
       </div>
     </transition>
 
@@ -314,7 +347,7 @@
 <script lang="ts">
 import { computed, defineComponent, nextTick, ref, watch } from 'vue';
 import { agentDock } from '@/sidepanel/composables/useAgentDock';
-import { renderMarkdown } from '@/services/agent/renderMarkdown';
+import { renderMarkdown } from '@/shared/utils/renderMarkdown';
 import { useSheetVisibility } from '@/sidepanel/composables/useSheetVisibility';
 import {
   supportChat,
@@ -322,6 +355,7 @@ import {
   type SupportAttachment,
 } from '@/sidepanel/composables/useSupportChat';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
+import { agentDockPrefsStore } from '@/stores/agentDockPrefsStore';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain } from '@/models/types';
 import { debugWarn } from '@/utils/debug';
@@ -356,6 +390,20 @@ export default defineComponent({
     const dock = agentDock;
     const scroll = ref<HTMLElement | null>(null);
     const { isAnySheetOpen } = useSheetVisibility();
+
+    // Whether the "you can get it back in Settings" confirmation is showing.
+    // Local to this instance: the dock is a singleton on screen, and a
+    // half-answered confirmation should not survive an unmount.
+    const hideConfirmOpen = ref(false);
+
+    // Persisting `hidden` is what actually unmounts this component (the
+    // dashboard root gates on the same store), so close the panel first —
+    // otherwise the dock reappears mid-open the next time it is unhidden.
+    function hideDock(): void {
+      hideConfirmOpen.value = false;
+      dock.close();
+      agentDockPrefsStore.setHidden(true);
+    }
 
     // Mirrors NavigationDrawer.vue's navLogo derivation exactly (same
     // walletStore.loggedWallet?.chain source, same Blockchain members) so the
@@ -718,6 +766,8 @@ export default defineComponent({
       triggerFilePicker,
       onFilesPicked,
       removePendingFile,
+      hideConfirmOpen,
+      hideDock,
     };
   },
 });
@@ -924,7 +974,13 @@ export default defineComponent({
   background: var(--g-accent);
 }
 
-.agent-dock__close {
+.agent-dock__head-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.agent-dock__head-btn {
   width: 28px;
   height: 28px;
   display: flex;
@@ -938,15 +994,79 @@ export default defineComponent({
 }
 
 /* With the toggle in play the header is a flex-start row (see
-   .agent-dock__head--with-toggle above), so the close button needs its own
+   .agent-dock__head--with-toggle above), so the trailing buttons need their own
    push-to-the-end instead of relying on justify-content: space-between. */
-.agent-dock__head--with-toggle .agent-dock__close {
+.agent-dock__head--with-toggle .agent-dock__head-actions {
   margin-left: auto;
   flex-shrink: 0;
 }
 
-.agent-dock__close:hover :deep(.v-icon) {
+.agent-dock__head-btn:hover :deep(.v-icon) {
   color: var(--g-text-1) !important;
+}
+
+/* ── Hide confirmation ────────────────────────────────────────────────── */
+/* Overlays the panel body rather than replacing it: the thread underneath keeps
+   its scroll position and its component state while the user decides. It sits on
+   the SAME stacking level as the head/messages/input rather than outbidding them
+   with a new one — being the panel's last child is what puts it on top, which is
+   also why the audit's z-index budget doesn't move. */
+.agent-dock__hide-confirm {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--g-s-2);
+  padding: var(--g-s-4);
+  text-align: left;
+  background: var(--surface);
+}
+
+.agent-dock__hide-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--g-text-1);
+}
+
+.agent-dock__hide-body {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--g-text-2);
+}
+
+.agent-dock__hide-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--g-s-2);
+  margin-top: var(--g-s-2);
+}
+
+.agent-dock__hide-btn {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--input-border);
+  border-radius: var(--g-r-control);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--g-text-2);
+  cursor: pointer;
+  transition: color var(--g-dur-fast) ease, border-color var(--g-dur-fast) ease;
+}
+
+.agent-dock__hide-btn:hover {
+  color: var(--g-text-1);
+  border-color: var(--accent-35);
+}
+
+.agent-dock__hide-btn.is-primary {
+  border-color: var(--accent-35);
+  background: var(--accent-14);
+  color: var(--g-accent);
 }
 
 /* ── Messages ─────────────────────────────────────────────────────────── */
@@ -1062,38 +1182,20 @@ export default defineComponent({
   white-space: pre-wrap;
 }
 
-/* ── Rendered markdown (assistant replies; v-html, so children need :deep) ─ */
+/* ── Rendered markdown (assistant replies; v-html, so children need :deep) ──
+   Structure, spacing and the type ramp all come from `.g-prose.g-prose--compact`
+   in baseline.css, which is the ONLY copy of those rules — a scoped block here
+   could not style v-html children anyway (Vue 2 never stamps [data-v] on them,
+   so `.agent-dock__md p` compiles to a selector that cannot match; `:deep()` is
+   the workaround, and a second copy of the recipe behind it is exactly what
+   drifted). What is left below is only what the DOCK renders differently from a
+   document: accent-tinted code and list markers. */
 .agent-dock__md {
   margin: 0;
   word-break: break-word;
-}
-
-.agent-dock__md :deep(p) {
-  margin: 0 0 8px;
-}
-
-.agent-dock__md :deep(p:last-child) {
-  margin-bottom: 0;
-}
-
-.agent-dock__md :deep(strong) {
-  font-weight: 700;
-  color: var(--g-text-1);
-}
-
-.agent-dock__md :deep(ul),
-.agent-dock__md :deep(ol) {
-  margin: 4px 0 8px;
-  padding-left: 18px;
-}
-
-.agent-dock__md :deep(ul:last-child),
-.agent-dock__md :deep(ol:last-child) {
-  margin-bottom: 0;
-}
-
-.agent-dock__md :deep(li) {
-  margin: 3px 0;
+  /* `.g-prose` sets body prose to --g-text-2; a chat reply is the bubble's
+     primary content, so the dock keeps its own tone. */
+  color: var(--text-primary);
 }
 
 .agent-dock__md :deep(li::marker) {
@@ -1108,34 +1210,6 @@ export default defineComponent({
   padding: 1px 5px;
   border-radius: var(--g-r-chip);
   word-break: break-all;
-}
-
-.agent-dock__md :deep(a) {
-  color: var(--accent);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.agent-dock__md :deep(.md-h) {
-  font-weight: 700;
-  color: var(--g-text-1);
-  margin: 8px 0 4px;
-}
-
-.agent-dock__md :deep(.md-h:first-child) {
-  margin-top: 0;
-}
-
-.agent-dock__md :deep(.md-h1) {
-  font-size: 16px;
-}
-
-.agent-dock__md :deep(.md-h2) {
-  font-size: 14px;
-}
-
-.agent-dock__md :deep(.md-h3) {
-  font-size: 13px;
 }
 
 .agent-dock__card {

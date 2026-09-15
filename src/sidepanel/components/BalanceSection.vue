@@ -77,7 +77,7 @@ const { adaData } = useMarketData();
 
 // Portfolio value comes from the SAME composable the dashboard uses —
 // mini-Gero must mirror the dashboard's numbers exactly (house rule). The
-// old local re-implementation here lacked the DexHunter price fallback and
+// old local re-implementation here lacked the token-registry price fallback and
 // drifted from the dashboard whenever a token was only priced there.
 const { totals, adaBalance } = useHoldingsValuation();
 

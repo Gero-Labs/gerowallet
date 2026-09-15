@@ -1,70 +1,21 @@
-<template>
-  <v-layout>
-    <v-row no-gutters>
-      <v-col cols="12" class="pa-2">
-        <v-card class="transparent" flat>
-          <v-tabs v-model="tab" centered icons-and-text background-color="transparent">
-            <v-tab>
-              {{ $t('governance.cardanoGovernance') }}
-              <v-avatar size="24">
-                <v-img
-                  :src="assets.cardanoSvg"
-                  :style="
-                    tab === 0
-                      ? {
-                          filter:
-                            'brightness(0) saturate(100%) invert(53%) sepia(8%) saturate(3265%) hue-rotate(140deg) brightness(98%) contrast(93%)',
-                        }
-                      : {
-                          filter:
-                            'brightness(0) saturate(100%) invert(100%) sepia(0%) saturate(0%) hue-rotate(93deg) brightness(103%) contrast(103%)',
-                          opacity: 0.6,
-                        }
-                  "
-                  alt=""
-                />
-              </v-avatar>
-            </v-tab>
-            <v-tab>
-              {{ $t('governance.geroDAO') }}
-              <v-avatar size="24">
-                <v-img
-                  :src="assets.dao"
-                  :style="
-                    tab === 1
-                      ? {
-                          filter:
-                            'brightness(0) saturate(100%) invert(53%) sepia(8%) saturate(3265%) hue-rotate(140deg) brightness(98%) contrast(93%)',
-                        }
-                      : {
-                          filter:
-                            'brightness(0) saturate(100%) invert(100%) sepia(0%) saturate(0%) hue-rotate(93deg) brightness(103%) contrast(103%)',
-                          opacity: 0.6,
-                        }
-                  "
-                  alt=""
-                />
-              </v-avatar>
-            </v-tab>
-          </v-tabs>
-          <v-tabs-items v-model="tab" class="transparent">
-            <v-tab-item>
-              <CardanoGovernance />
-            </v-tab-item>
-            <v-tab-item>
-              <DAO />
-            </v-tab-item>
-          </v-tabs-items>
-        </v-card>
-      </v-col>
-    </v-row>
-  </v-layout>
-</template>
-<script setup lang="ts">
-import assets from '@/utils/assets';
-import DAO from '@/modules/governance/components/DAO.vue';
-import CardanoGovernance from '@/modules/governance/components/CardanoGovernance.vue';
+<template><div></div></template>
 
-const tab = ref(0);
+<script setup lang="ts">
+import { onMounted } from 'vue';
+import { useRoute, useRouter } from 'vue-router/composables';
+
+// /governance lands on My governance — the hub's home, which answers "what is
+// my stake doing" before the chain-wide surfaces. This shell only exists so the
+// existing route name (and its gates) keep working. The global-search deep link
+// `?drep=<id>` predates the split and targets the DRep directory (delegate
+// flow), so it is forwarded there with its query intact.
+const route = useRoute();
+const router = useRouter();
+onMounted(() => {
+  if (route.query.drep) {
+    router.replace({ name: 'governanceDReps', query: route.query });
+  } else {
+    router.replace({ name: 'governanceMe', query: route.query });
+  }
+});
 </script>
-<style scoped></style>

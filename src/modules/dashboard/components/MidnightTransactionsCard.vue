@@ -27,17 +27,34 @@
       <div v-else class="recent-tx-list flex-grow-1">
         <div
           v-for="tx in recent"
-          :key="tx.hash"
+          :key="`${tx.hash}-${tx.token}`"
           class="recent-tx-row"
         >
           <div class="recent-tx-meta">
-            <div class="recent-tx-status">{{ statusLabel(tx) }}</div>
+            <div class="recent-tx-status">
+              {{ statusLabel(tx) }}
+              <!-- Who paid, inline. A send whose fee came from elsewhere reads
+                   as ordinary otherwise, on the one screen the user actually
+                   scans. -->
+              <span v-if="sponsorFor(tx.hash)" class="tx-chip">
+                <v-icon x-small>mdi-lightning-bolt</v-icon>
+                {{ $t('midnight.sponsor.feeInline', { name: sponsorFor(tx.hash) }) }}
+              </span>
+            </div>
             <div class="recent-tx-time">
               <span v-if="tx.counterparty">{{ shortAddress(tx.counterparty) }} · </span>{{ formatTime(tx.timestamp) }}
             </div>
           </div>
-          <div class="recent-tx-amount" :style="{ color: amountColor(tx.type) }">
-            {{ formatAmountSigned(tx) }}
+          <div class="recent-tx-amount-wrap">
+            <span class="recent-tx-amount" :style="{ color: amountColor(tx.type) }">
+              {{ formatAmountSigned(tx) }}
+            </span>
+            <v-tooltip v-if="isUnscaled(tx.token)" top content-class="custom-tooltip">
+              <template v-slot:activator="{ on, attrs }">
+                <v-icon x-small color="warning" v-bind="attrs" v-on="on">mdi-help-circle-outline</v-icon>
+              </template>
+              {{ $t('midnight.rawBalanceNotice') }}
+            </v-tooltip>
           </div>
         </div>
       </div>
@@ -46,12 +63,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, toRefs } from 'vue';
+import { computed, onMounted, ref, toRefs, watch } from 'vue';
 import { midnightStore } from '@/stores/midnightStore';
 import { walletStore } from '@/stores/walletStore';
 import { Network } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import type { MidnightTransaction, MidnightTransactionType } from '@/chains/midnight/midnightTypes';
+import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
 import { useTranslation } from '@/shared/composables/useTranslation';
 
 const { t } = useTranslation();
@@ -81,9 +99,31 @@ function formatBigDecimal(value: bigint, divisor: bigint, fractionDigits: number
   return `${whole.toLocaleString('en-US')}.${fraction}`;
 }
 
-function currencySymbol(token: 'NIGHT' | 'DUST'): string {
-  if (isMainnet.value) return token;
-  return token === 'NIGHT' ? 'tNIGHT' : 'tDUST';
+function currencySymbol(token: string): string {
+  if (token === 'NIGHT' || token === 'DUST') {
+    return isMainnet.value ? token : `t${token}`;
+  }
+  // A real token color (not NIGHT/DUST). Fall back to a head+tail truncation
+  // — not a prefix, so a malicious issuer can't grind a colliding prefix and
+  // impersonate a listed token (same reasoning as MidnightHoldingsTable.vue).
+  return midnightTokenMeta(token)?.symbol ?? `${token.slice(0, 8)}…${token.slice(-6)}`;
+}
+
+/** Base-unit divisor for a token, or null when its decimals aren't known. */
+function tokenDivisor(token: string): bigint | null {
+  if (token === 'NIGHT') return NIGHT_DIVISOR;
+  if (token === 'DUST') return DUST_DIVISOR;
+  const meta = midnightTokenMeta(token);
+  return meta ? 10n ** BigInt(meta.decimals) : null;
+}
+
+/**
+ * True when the token's decimals are unknown, so the amount shown is the raw
+ * base-unit integer rather than a scaled value. Never guess an exponent —
+ * a wrong balance is worse than an obviously-unscaled one (see e0af42bc).
+ */
+function isUnscaled(token: string): boolean {
+  return tokenDivisor(token) === null;
 }
 
 function statusLabel(tx: MidnightTransaction): string {
@@ -106,9 +146,13 @@ function amountColor(type: MidnightTransactionType): string {
 }
 
 function formatAmountSigned(tx: MidnightTransaction): string {
-  const divisor = tx.token === 'NIGHT' ? NIGHT_DIVISOR : DUST_DIVISOR;
-  const fractionDigits = tx.token === 'NIGHT' ? 2 : 4;
   const sign = tx.type === 'receive' ? '+' : tx.type === 'send' ? '−' : '';
+  const divisor = tokenDivisor(tx.token);
+  if (divisor === null) {
+    // Unknown color: raw base units, no guessed exponent (see e0af42bc).
+    return `${sign}${tx.amount.toString()} ${currencySymbol(tx.token)}`;
+  }
+  const fractionDigits = tx.token === 'DUST' ? 4 : 2;
   return `${sign}${formatBigDecimal(tx.amount, divisor, fractionDigits)} ${currencySymbol(tx.token)}`;
 }
 
@@ -128,6 +172,28 @@ function formatTime(timestamp: number): string {
   if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
   return `${Math.floor(diffSec / 86400)}d ago`;
 }
+
+/**
+ * Fee attribution by transaction hash, for the rows whose DUST another wallet
+ * paid. Read from storage: gero-sync does not forward the fee payer, and the
+ * sponsor's inputs live in a separate intent, so the chain data cannot say.
+ */
+const sponsoredTxs = ref<Record<string, { sponsorName: string }>>({});
+
+function sponsorFor(hash: string): string {
+  if (!hash) return '';
+  return sponsoredTxs.value[hash.toLowerCase()]?.sponsorName ?? '';
+}
+
+async function loadAttribution(): Promise<void> {
+  const { loadSponsoredTxs } = await import('@/chains/midnight/midnightSponsorLinks');
+  sponsoredTxs.value = await loadSponsoredTxs();
+}
+
+onMounted(loadAttribution);
+// Re-read when the list changes: a send made in this session must show its
+// attribution without a reload.
+watch(() => recent.value.length, loadAttribution);
 </script>
 
 <!-- Style block copied verbatim from RecentTransactionsCard.vue so the two
@@ -212,20 +278,45 @@ function formatTime(timestamp: number): string {
   text-overflow: ellipsis;
 }
 
+/* Bordered chip, not loose text: the attribution has to survive being
+   scanned in a dense list. */
+.tx-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+  border-radius: var(--g-r-chip);
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-2);
+  color: var(--g-text-2);
+}
+
 .recent-tx-time {
   font-size: 10px;
   color: #8a8a8a;
   line-height: 1;
 }
 
-.recent-tx-amount {
+.recent-tx-amount-wrap {
+  display: flex;
+  align-items: center;
+  gap: 2px;
   flex: 0 0 auto;
+  max-width: 45%;
+}
+
+.recent-tx-amount {
   font-size: 11px;
   font-weight: 600;
   line-height: 1;
   text-align: right;
   white-space: nowrap;
-  max-width: 45%;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }

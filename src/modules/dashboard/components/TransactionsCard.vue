@@ -208,7 +208,7 @@
               @click="clearAllFilters()"
             >
               <v-icon small class="mr-2">mdi-close-circle-outline</v-icon>
-              {{ $t('transactions.clearFilters') }}
+              {{ $t('common.clearFilters') }}
             </v-btn>
           </v-card-text>
         </v-card>
@@ -499,6 +499,7 @@
   </v-card>
 </template>
 <script setup lang="ts">
+import '@/shared/styles/compact-pagination.css';
 import { computed, getCurrentInstance, nextTick, onMounted, onUnmounted, ref, toRefs, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import StackedTokens from '@/modules/dashboard/components/StackedTokens.vue';
@@ -537,7 +538,6 @@ const props = defineProps({
 const emit = defineEmits(['row-click']);
 
 const { transactions: txs, loggedWallet, keys, contacts } = toRefs(walletStore);
-const { price } = toRefs(networkStore);
 const { assets } = toRefs(networkStore);
 const { loadingTxs } = toRefs(loadingState);
 
@@ -545,8 +545,8 @@ const isBitcoin = computed(() => loggedWallet.value?.chain === Blockchain.BITCOI
 
 const hideBalances = computed(() => walletStore.config?.hideBalances || false);
 
-// Use Kraken WebSocket price for ADA, fallback to network store price
-const adaPrice = computed(() => priceStore.adaUsd?.lastPrice || price.value?.lastPrice || 0);
+// Live Kraken ticker price for ADA
+const adaPrice = computed(() => priceStore.adaUsd?.lastPrice || 0);
 
 const activityHeaders = computed(() => [
   { text: t('transactions.activity'), align: 'start overflow-x', sortable: true, value: 'tx_timestamp' },
@@ -791,6 +791,7 @@ const transactionStatuses = ref<Record<string, string>>({});
 
 // Preload statuses for displayed transactions
 const preloadTransactionStatuses = async (transactions: StoredTransaction[]): Promise<void> => {
+  const version = loadVersion.value;
   const promises = transactions.map(async (item) => {
     const txId = item.id;
 
@@ -811,7 +812,9 @@ const preloadTransactionStatuses = async (transactions: StoredTransaction[]): Pr
 
     addFundTransferStatus(item, statuses);
 
-    transactionStatuses.value[txId] = statuses.join(', ');
+    if (version === loadVersion.value) {
+      transactionStatuses.value = { ...transactionStatuses.value, [txId]: statuses.join(', ') };
+    }
   });
 
   await Promise.all(promises);
@@ -969,8 +972,7 @@ const getPoolByIdFromApi = async (poolId: string) => {
   if (!poolId) return null;
 
   try {
-    await stakingStoreActions.loadPoolById(loggedWallet.value, poolId);
-    return stakingStoreActions.state.currentPool;
+    return await stakingStoreActions.loadPoolById(loggedWallet.value, poolId);
   } catch (error) {
     console.error('Error loading pool by ID:', error);
     return null;
@@ -981,15 +983,7 @@ const getPoolByIdFromApi = async (poolId: string) => {
 const loadMoreTransactions = async () => {
   if (isLoadingMore.value || hasReachedEnd.value) return;
 
-  const version = loadVersion.value;
   isLoadingMore.value = true;
-
-  if (props.isFullList) {
-    // Simulate loading delay for better UX
-    await new Promise(resolve => setTimeout(resolve, 300));
-    // Bail out if a new search/reset happened during the delay
-    if (version !== loadVersion.value) return;
-  }
 
   try {
     let newTransactions: StoredTransaction[];
@@ -1019,12 +1013,8 @@ const loadMoreTransactions = async () => {
       }
     }
 
-    // Preload statuses for new transactions and wait for completion
-    if (newTransactions.length > 0) {
-      await preloadTransactionStatuses(newTransactions);
-      // Bail out if a new search/reset happened during preload
-      if (version !== loadVersion.value) return;
-    }
+    // Pool metadata enhances the label; it must not hold up rows or pagination.
+    if (newTransactions.length > 0) void preloadTransactionStatuses(newTransactions);
   } finally {
     isLoadingMore.value = false;
   }
@@ -1050,11 +1040,10 @@ const resetInfiniteScroll = async () => {
   if (endIndex >= transactions.value.length) {
     hasReachedEnd.value = true;
   }
-  if (firstBatch.length > 0) {
-    await preloadTransactionStatuses(firstBatch);
-  }
   displayedTransactions.value = firstBatch;
   isLoadingMore.value = false;
+  // Publish pending rows immediately, using the existing basic status fallback.
+  void preloadTransactionStatuses(firstBatch);
 };
 
 // Watch for debounced search term changes to reset infinite scroll
@@ -1336,6 +1325,10 @@ const isDustRegistration = (item: StoredTransaction): boolean => {
 };
 
 // Detects historical DexHunter swap transactions (pre-aggregator-embed migration).
+// This is read-only on-chain detection of transactions users made before the
+// migration: the wallet reads addresses and metadata already on chain and calls
+// no DexHunter service. Swap routing is Gero's own, via Nexus. See
+// src/modules/swap/components/GeroSwapEmbed.vue.
 // Displayed with the neutral 'transactions.swap' label since DexHunter is no longer
 // the branded swap provider.
 // TODO: add aggregator swap-tx heuristic (order/fee address or metadata) once the
@@ -1731,6 +1724,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  loadVersion.value++;
   if (intersectionObserver.value) {
     intersectionObserver.value.disconnect();
   }
@@ -2152,92 +2146,8 @@ onUnmounted(() => {
   width: 100%;
 }
 
-/* Compact pagination styling */
-.transactions-table .compact-pagination .v-pagination__item {
-  width: auto !important;
-  height: 24px !important;
-  min-width: 24px !important;
-  max-height: 24px !important;
-  font-size: 12px !important;
-  margin: 0 4px !important;
-}
-
-.transactions-table .compact-pagination .v-pagination__item .v-btn {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  min-height: 24px !important;
-  height: 24px !important;
-  width: auto !important;
-  min-width: 24px !important;
-  max-height: 24px !important;
-  padding: 0 4px !important;
-  font-size: 12px !important;
-  white-space: nowrap !important;
-}
-
-.transactions-table .compact-pagination .v-pagination__navigation {
-  width: 24px !important;
-  height: 24px !important;
-  min-width: 24px !important;
-  max-width: 24px !important;
-  max-height: 24px !important;
-  margin: 0 8px !important;
-}
-
-.transactions-table .compact-pagination .v-pagination__navigation .v-btn {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  min-height: 24px !important;
-  height: 24px !important;
-  width: 24px !important;
-  min-width: 24px !important;
-  max-width: 24px !important;
-  max-height: 24px !important;
-  padding: 0 !important;
-}
-
-.transactions-table .compact-pagination .v-pagination__navigation .v-icon {
-  font-size: 16px !important;
-}
-
-/* Additional fallback with deep selectors */
-.compact-pagination >>> .v-pagination__item {
-  width: auto !important;
-  height: 24px !important;
-  min-width: 24px !important;
-  font-size: 12px !important;
-  margin: 0 4px !important;
-}
-
-.compact-pagination >>> .v-pagination__item .v-btn {
-  width: auto !important;
-  height: 24px !important;
-  min-width: 24px !important;
-  min-height: 24px !important;
-  padding: 0 4px !important;
-  font-size: 12px !important;
-  white-space: nowrap !important;
-}
-
-.compact-pagination >>> .v-pagination__navigation {
-  width: 24px !important;
-  height: 24px !important;
-  margin: 0 8px !important;
-}
-
-.compact-pagination >>> .v-pagination__navigation .v-btn {
-  width: 24px !important;
-  height: 24px !important;
-  min-width: 24px !important;
-  min-height: 24px !important;
-  padding: 0 !important;
-}
-
-.compact-pagination.ma-0 {
-  margin: 0 !important;
-}
+/* .compact-pagination is the shared recipe in
+   src/shared/styles/compact-pagination.css (imported in the script block). */
 
 .top-level-search.v-text-field {
   background: transparent !important;

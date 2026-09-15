@@ -270,6 +270,10 @@ export default defineConfig(({ command }) => {
         usePolling: true,
         interval: 1000,
         ignored: [
+          // envDir is the checkout root, so Vite also watches its nested worktrees.
+          // Anchor these paths to this checkout to preserve HMR when it is itself a worktree.
+          r('.worktrees/**').replace(/\\/g, '/'),
+          r('.claude/worktrees/**').replace(/\\/g, '/'),
           '**/DumpStack.log.tmp',
           '**/DumpStack.log*',
           '**/*.tmp',

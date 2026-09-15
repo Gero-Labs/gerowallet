@@ -40,15 +40,33 @@ const nowTickMs = ref<number>(Date.now());
 let consumers = 0;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let tickTimer: ReturnType<typeof setInterval> | null = null;
+let inFlight: object | null = null;
+let unavailableIdentity: string | null = null;
+
+function pollIdentity(): string {
+  return `${walletStore.loggedWallet?.network ?? ''}|${midnightStore.addresses?.unshielded ?? ''}`;
+}
+
+function isUnavailable(error: unknown): boolean {
+  // MidnightApi preserves HTTP errors as JSON strings via parseHttpError.
+  try {
+    const parsed = typeof error === 'string' ? JSON.parse(error) : error;
+    return parsed?.status === 501 || parsed?.response?.status === 501;
+  } catch { return false; }
+}
 
 async function refreshOnce() {
   // Read network + address fresh each tick — the active wallet can change.
   const network = walletStore.loggedWallet?.network;
   const address = midnightStore.addresses?.unshielded;
-  if (!network || !address) return;
+  const identity = pollIdentity();
+  if (!network || !address || inFlight || unavailableIdentity === identity) return;
+  const request = {};
+  inFlight = request;
   try {
     const api = getMidnightApi(network);
     const res = await api.getDustAccountState(address);
+    if (inFlight !== request || identity !== pollIdentity()) return;
     polledBalance.value = BigInt(res.dust_balance ?? '0');
     polledGenerating.value = BigInt(res.dust_generating ?? '0');
     polledCap.value = BigInt(res.dust_cap ?? '0');
@@ -56,21 +74,33 @@ async function refreshOnce() {
     polledRegistrationStatus.value = res.dust_registration_status ?? 'Unregistered';
     polledAsOfMs.value = Date.now();
   } catch (e) {
+    if (inFlight !== request || identity !== pollIdentity()) return;
+    if (isUnavailable(e)) {
+      unavailableIdentity = identity;
+      forgetPolledIdentity();
+      debugLog('🌙 DUST account-state unavailable; polling paused until the wallet or view changes', network);
+      return;
+    }
     // Keep last successful values; extrapolation continues until next success.
     // Log it — a silently-failing poll once masqueraded as "wallet stopped
     // generating DUST" (it was an auth-base 404 loop).
     debugLog('🌙 dust account-state poll failed', e);
+  } finally {
+    if (inFlight === request) inFlight = null;
   }
 }
 
 function start() {
   if (pollTimer) return;
+  unavailableIdentity = null;
   void refreshOnce();
   pollTimer = setInterval(refreshOnce, 5_000);
   tickTimer = setInterval(() => { nowTickMs.value = Date.now(); }, 1_000);
 }
 
 function stop() {
+  inFlight = null;
+  unavailableIdentity = null;
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
   if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
   // Don't zero out polledBalance — keep the last value visible until next start
@@ -95,12 +125,44 @@ function stop() {
  * module's lifetime. Guard on `consumers` so an identity change before the
  * first `start()` (or after the last `stop()`) is a no-op.
  */
+/**
+ * Forget the previous identity's reading.
+ *
+ * These refs are module-scoped so one poll loop serves every consumer, and
+ * `refreshOnce` deliberately keeps the last successful values when a poll
+ * fails. Together that means a wallet switch used to leave the PREVIOUS
+ * wallet's DUST on screen until a new poll both ran and succeeded — and if the
+ * new wallet's poll returned the hollow all-zero shape, `pathAPollHasSignal()`
+ * rejected it and the stale figure simply stayed.
+ *
+ * Observed on mainnet: a wallet holding no DUST at all displayed a full
+ * 500 DUST battery inherited from the previously-viewed wallet, which sent an
+ * entire debugging session after the wrong wallet. Zeroing `polledAsOfMs`
+ * returns the composable to its honest "no reading yet" state, which falls
+ * back to `midnightStore.dustState` — and that IS reset per wallet by
+ * `setActive`.
+ */
+function forgetPolledIdentity(): void {
+  polledBalance.value = 0n;
+  polledGenerating.value = 0n;
+  polledCap.value = 0n;
+  polledNightRegistered.value = 0n;
+  polledRegistrationStatus.value = 'Unregistered';
+  polledAsOfMs.value = 0;
+}
+
 watch(
-  () => `${walletStore.loggedWallet?.network ?? ''}|${midnightStore.addresses?.unshielded ?? ''}`,
+  pollIdentity,
   () => {
+    inFlight = null;
+    unavailableIdentity = null;
+    // Clear FIRST, synchronously: the gap between the switch and the next
+    // successful poll is exactly where the stale value used to be shown.
+    forgetPolledIdentity();
     if (consumers <= 0) return;
     void refreshOnce();
   },
+  { flush: 'sync' },
 );
 
 /**

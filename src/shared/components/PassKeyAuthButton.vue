@@ -56,7 +56,8 @@ async function authenticate() {
   try {
     // Dynamic imports to reduce bundle size
     const { walletStore } = await import('@/stores/walletStore');
-    const { decryptPrivateKeyWithPrf, evaluatePrfForWallet } = await import('@/shared/utils/webauthn-prf');
+    const { decryptPrivateKeyWithPrf } = await import('@/shared/utils/webauthn-prf');
+    const { evaluateWalletPrf } = await import('@/shared/utils/passkeyPrf');
 
     const loggedWallet = walletStore.loggedWallet;
     if (!loggedWallet) {
@@ -85,10 +86,7 @@ async function authenticate() {
       // decrypt the mnemonic; Cardano consumers ignore the event) can
       // reuse the same gesture instead of prompting twice. Then pass the
       // pre-evaluated PRF into the Cardano private-key decryptor.
-      const prfBuffer = await evaluatePrfForWallet(
-        loggedWallet.webAuthnCredentialId,
-        loggedWallet.id.toString(),
-      );
+      const prfBuffer = await evaluateWalletPrf(loggedWallet);
       emit('prf-output', new Uint8Array(prfBuffer));
       privateKeyBytes = await decryptPrivateKeyWithPrf(
         loggedWallet.prfEncryptedPrivateKey,
@@ -108,7 +106,8 @@ async function authenticate() {
   }
 }
 
-async function authenticateInPopup(_wallet: any): Promise<Uint8Array> {
+/** The wallet is unused here — the popup re-reads it from the store. */
+async function authenticateInPopup(_wallet: unknown): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
     // Open small popup for PassKey authentication
     const popupUrl = chrome.runtime.getURL('index.html?mode=privateKey#/passkey-auth');

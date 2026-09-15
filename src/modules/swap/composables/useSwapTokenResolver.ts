@@ -77,7 +77,7 @@ export function buildHeldBalanceMap(): Map<string, string> {
  * token metadata sources.
  *
  * Decimals source decision:
- * - Primary: `tokenMetadataStore` (DexHunter's swap-tradable token registry,
+ * - Primary: `tokenMetadataStore` (the swap-tradable token registry,
  *   populated via `loadTokens()`). Every token that can actually be swapped is
  *   keyed by unit here with decimals/verified/price/ticker already resolved —
  *   this is the cleanest, most complete source and needs no async on-chain work.
@@ -98,7 +98,7 @@ export function buildHeldBalanceMap(): Map<string, string> {
  *
  * Hydration race (see `walletManager.service.ts` / `loadTokens()`):
  * `tokenMetadataStore.state.tokens` is populated asynchronously (~100ms after
- * login, via a DexHunter network fetch) and is `{}` right after login/reload.
+ * login, via a backend network fetch) and is `{}` right after login/reload.
  * If we resolved "not stored and not held" to `null` immediately, we'd wrongly
  * block a swap into any token the wallet doesn't already hold — i.e. most
  * "buy" tokens — during that window. So before concluding a token is
@@ -113,7 +113,7 @@ export function buildHeldBalanceMap(): Map<string, string> {
  * picked up normally, since the `stored` lookup above always runs first.
  *
  * img: store entries (see `loadTokens()` above) never carry an image field
- * themselves — DexHunter's swap-tradable registry only has name/ticker/
+ * themselves. The swap-tradable registry only has name/ticker/
  * decimals/verified/price. `resolveAsset({unit})` is synchronous and reads
  * from the already-in-memory `NetworkStore.state.assets` cache (populated by
  * `AssetsLoader` from the local blockchain DB), so calling it for `.img` on

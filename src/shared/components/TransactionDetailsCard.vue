@@ -143,7 +143,25 @@
         v-if="!totals.isInternal || totals.withdrawalAda"
         class="tx-details-divider my-1"
       />
-      <div class="tx-summary-row tx-summary-total">
+      <!-- Sponsored: the cost splits across two wallets, so a single
+           "You pay" row would hide who is actually paying the fee. -->
+      <template v-if="totals.sponsor">
+        <div class="tx-summary-row tx-summary-total">
+          <span class="tx-sum-total-label">
+            <span class="tx-sum-av">{{ totals.sponsor.senderInitials }}</span>
+            {{ t('midnight.sponsor.paysRow', { name: totals.sponsor.senderName }) }}
+          </span>
+          <span class="tx-sum-total-value g-num">{{ totals.youPayAda }} {{ unit }}</span>
+        </div>
+        <div class="tx-summary-row tx-summary-total tx-summary-total--small">
+          <span class="tx-sum-total-label">
+            <span class="tx-sum-av">{{ totals.sponsor.sponsorInitials }}</span>
+            {{ t('midnight.sponsor.paysRow', { name: totals.sponsor.sponsorName }) }}
+          </span>
+          <span class="tx-sum-total-value g-num">{{ totals.feeAda }} {{ resolvedFeeUnit }}</span>
+        </div>
+      </template>
+      <div v-else class="tx-summary-row tx-summary-total">
         <span class="tx-sum-total-label">{{ t('signTx.youPay') }}</span>
         <span class="tx-sum-total-value g-num">{{ totals.youPayAda }} {{ unit }}</span>
       </div>
@@ -192,6 +210,17 @@ export interface TxDetailsTotals {
   withdrawalAda?: string;
   youPayAda: string;
   isInternal: boolean;
+  /**
+   * Set when another wallet pays this transaction's fee. Splits the single
+   * "You pay" line into an attributed row per wallet, so the fee is never
+   * shown without saying whose it is.
+   */
+  sponsor?: {
+    senderName: string;
+    senderInitials: string;
+    sponsorName: string;
+    sponsorInitials: string;
+  };
 }
 
 export interface TxDetailsRiskBadge {
@@ -387,5 +416,26 @@ function tooltipKeyForKind(kind: TxOutputKind): string {
 
 .tx-summary-total {
   margin-top: 2px;
+}
+
+.tx-summary-total--small .tx-sum-total-label,
+.tx-summary-total--small .tx-sum-total-value {
+  font-size: 12px;
+  color: var(--g-text-2);
+}
+
+.tx-sum-av {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--g-overlay);
+  border: 1px solid var(--g-hairline-2);
+  color: var(--g-text-2);
+  font-size: 8px;
+  font-weight: 600;
 }
 </style>

@@ -22,13 +22,23 @@ import { ref } from 'vue';
 export const dustPendingRevision = ref(0);
 
 const KEY = 'gero.dustPending';
-/** Relay is ~2.5h, occasionally several hours on mainnet; keep the pending
- *  guard generous so a slow relay never re-exposes the register button, but
- *  expire well short of 24h — with no reconciliation, 24h was long enough
- *  for a single failed/rolled-back submission to read as a full day of
- *  phantom "REGISTRATION PENDING" on a wallet that was never registered. 6h
- *  still covers 2-3x the normal relay window. */
-const TTL_MS = 6 * 60 * 60 * 1000;
+/**
+ * Relay is ~2.5h, occasionally several hours on mainnet; keep the pending
+ * guard generous so a slow relay never re-exposes the register button.
+ *
+ * This was 6h, chosen when the TTL was the ONLY way a record could ever go
+ * away — expiry had to double as failure handling, so it was kept short
+ * ("24h was long enough for a single failed/rolled-back submission to read as
+ * a full day of phantom REGISTRATION PENDING"). Both reconcilers below now
+ * settle a record against chain truth within `DUST_PENDING_GRACE_MS`, so
+ * expiry no longer has to guess, and 6h was actively harmful: on a slow
+ * mainnet relay the Midnight dashboard dropped its "pending" pill and reverted
+ * to a "Register for DUST" prompt hours before `useDustPathB` could see the
+ * registration — the window where a real, in-flight registration is invisible
+ * on both sides. 18h covers the worst observed relay with margin; a genuinely
+ * failed submission still clears ~10 minutes after it was made.
+ */
+const TTL_MS = 18 * 60 * 60 * 1000;
 
 export interface DustPendingRecord {
   dustAddress: string;

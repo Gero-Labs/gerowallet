@@ -70,6 +70,8 @@
  * automatically on mount.
  */
 import { ref, reactive, onMounted } from 'vue';
+import type { Cip45Authorization } from '@/services/cip45/types';
+import { validateCip45Signing } from '@/services/cip45/signingAuthorization';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import WalletStore from '@/stores/walletStore';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
@@ -93,6 +95,7 @@ const error = ref('');
 const bleUnavailable = ref(false);
 
 const txCbor = ref('');
+let cip45Authorization: Cip45Authorization | undefined;
 
 // Guards the close path: the side panel must receive exactly one result, and
 // must never be left waiting out its timeout because this tab went away.
@@ -147,6 +150,7 @@ async function startSigning() {
     if (!(await checkBluetoothAvailable())) {
       throw new Error(t('wallet.ledgerBleUnavailable'));
     }
+    await validateCip45Signing({ cip45Authorization });
 
     status.value = t('wallet.ledgerConnectingDevice');
     const tx: Cardano.Tx = deserializeCardanoJsSdkTx(txCbor.value);
@@ -162,6 +166,7 @@ async function startSigning() {
     );
 
     const witnessSet = Serialization.TransactionWitnessSet.fromCore({ signatures });
+    await validateCip45Signing({ cip45Authorization });
     reportToPanel({ success: true, witnessCbor: witnessSet.toCbor() });
     setTimeout(() => { void closeSelf(); }, 300);
   } catch (e: unknown) {
@@ -210,6 +215,7 @@ onMounted(async () => {
       error.value = t('wallet.ledgerBleSignNoTx');
     } else {
       txCbor.value = cbor;
+      cip45Authorization = response.cip45Authorization;
       ready.value = true;
     }
   } catch {

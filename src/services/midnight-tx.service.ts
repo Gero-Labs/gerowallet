@@ -24,7 +24,8 @@ import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { getMidnightApi } from '@/api/midnight-api';
 import { midnightStore } from '@/stores/midnightStore';
-import { resolveZkpaasUrl, buildZkpaasHeaders, isZkpaasConfigured } from '@/chains/midnight/midnightZkpaas';
+import { assertNativeNightConversionSupported, validateShieldedTokenType } from '@/chains/midnight/midnightTokenCapabilities';
+import { resolveProvingTarget } from '@/chains/midnight/midnightProvingTarget';
 import type {
   BuildMidnightTxRequest,
   MidnightSegmentToSign,
@@ -98,11 +99,13 @@ export async function getWalletKeys(
 export async function signSegments(
   segments: MidnightSegmentToSign[],
   credentials: MidnightSendCredentials,
+  unprovenTxHex?: string,
 ): Promise<SignedSegment[]> {
   const response = await Messaging.sendToBackgroundFromOptions({
     method: MessageTypes.SIGN_MIDNIGHT_SEGMENTS,
     data: {
       segments,
+      unprovenTxHex,
       password: credentials.password,
       prfSecret: credentials.prfSecret ? Array.from(credentials.prfSecret) : undefined,
     },
@@ -133,21 +136,34 @@ async function balanceAndSignInBg(
   unprovenTxHex: string,
   ttlMs: number,
   credentials: MidnightSendCredentials,
-): Promise<string> {
+  sponsor?: MidnightSponsor,
+  proving?: { url: string; headers?: Record<string, string> },
+): Promise<{ signedTxHex: string; proven: boolean }> {
   const response = await Messaging.sendToBackgroundFromOptions({
     method: MessageTypes.BALANCE_AND_SIGN_MIDNIGHT_UNSHIELDED_TX,
     data: {
       unprovenTxHex,
       ttlMs,
+      proving,
       password: credentials.password,
       prfSecret: credentials.prfSecret ? Array.from(credentials.prfSecret) : undefined,
+      // Uint8Array can't cross Chrome messaging; the sponsor's PRF output goes
+      // as a plain array, same as the sender's above.
+      sponsor: sponsor
+        ? {
+          walletId: sponsor.walletId,
+          password: sponsor.password,
+          prfSecret: sponsor.prfSecret ? Array.from(sponsor.prfSecret) : undefined,
+        }
+        : undefined,
     },
-  }) as { data: { success: boolean; signedTxHex?: string; error?: string } };
+  }) as { data: { success: boolean; signedTxHex?: string; proven?: boolean; error?: string } };
 
   if (!response?.data?.success || !response.data.signedTxHex) {
     throw new Error(response?.data?.error || 'Midnight balance/sign failed');
   }
-  return response.data.signedTxHex;
+  if (proving && !response.data.proven) throw new Error('Wallet-side proving requested but BG returned an unproven tx');
+  return { signedTxHex: response.data.signedTxHex, proven: !!response.data.proven };
 }
 
 /**
@@ -171,20 +187,47 @@ async function submitSignedTx(
  *   3. balanceAndSignInBg → BG adds DUST fee inputs + signs each input
  *   4. submitSignedTx     → Nexus relays to sidecar /tx/finalize (prove + submit)
  */
+/**
+ * Another wallet the user owns, paying this transaction's DUST fee.
+ *
+ * The credential is that wallet's own — never the sender's — and is used once
+ * in the background to derive a DUST seed. Nothing is retained between sends.
+ */
+export interface MidnightSponsor {
+  readonly walletId: number;
+  readonly password?: string;
+  readonly prfSecret?: Uint8Array;
+}
+
 export async function sendUnshieldedNight(
   network: string,
   baseRequest: Omit<BuildMidnightTxRequest, 'publicKeyHex' | 'addressHex'>,
   credentials: MidnightSendCredentials,
   onStage?: (stage: MidnightSendStage) => void,
+  sponsor?: MidnightSponsor,
+  forceRemote = false,
 ): Promise<SubmitMidnightTxResponse> {
+  const target = forceRemote ? null : resolveWalletProvingTarget(network);
+  if (target) {
+    const { checkProofServerHealth } = await import('@/chains/midnight/midnightLocalProver');
+    if (!await checkProofServerHealth(target.url, { headers: target.headers, acceptNotFound: target.lenientHealth })) {
+      throw new ProofServerUnreachableError(target.url);
+    }
+  }
   onStage?.('authorizing');
   const { publicKeyHex, addressHex } = await getWalletKeys(credentials);
   onStage?.('building');
   const built = await buildUnshielded(network, { ...baseRequest, publicKeyHex, addressHex });
   onStage?.('working');
-  const signedTxHex = await balanceAndSignInBg(built.unprovenTxHex, baseRequest.ttlMs, credentials);
+  if (target) onStage?.(target.stage);
+  const { signedTxHex, proven } = await balanceAndSignInBg(
+    built.unprovenTxHex, baseRequest.ttlMs, credentials, sponsor,
+    target ? { url: target.url, headers: target.headers } : undefined,
+  );
   onStage?.('submitting');
-  const result = await submitSignedTx(network, signedTxHex);
+  const result = proven
+    ? await getMidnightApi(network).submitProvenMidnightTx({ signedTxHex, waitFor: 'InBlock' })
+    : await submitSignedTx(network, signedTxHex);
   onStage?.('done');
   return result;
 }
@@ -207,7 +250,7 @@ export async function buildAndSignUnshieldedTransfer(
 ): Promise<{ tx: string }> {
   const { publicKeyHex, addressHex } = await getWalletKeys(credentials);
   const built = await buildUnshielded(network, { ...baseRequest, publicKeyHex, addressHex });
-  const signedTxHex = await balanceAndSignInBg(built.unprovenTxHex, baseRequest.ttlMs, credentials);
+  const { signedTxHex } = await balanceAndSignInBg(built.unprovenTxHex, baseRequest.ttlMs, credentials);
   return { tx: signedTxHex };
 }
 
@@ -222,11 +265,12 @@ export async function addPendingMidnightTx(
   amount: bigint,
   counterparty: string,
   isShielded: boolean,
+  token: string = 'NIGHT',
 ): Promise<void> {
   try {
     await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.ADD_MIDNIGHT_PENDING_TX,
-      data: { hash, amount: amount.toString(), counterparty, isShielded },
+      data: { hash, amount: amount.toString(), counterparty, isShielded, token },
     });
   } catch {
     /* optimistic-only — gero-sync will deliver the confirmed entry anyway */
@@ -236,7 +280,7 @@ export async function addPendingMidnightTx(
 // ─── Shielded NIGHT send ──────────────────────────────────────────────────────
 
 /**
- * Shielded recipient + amount. `tokenType` defaults to native NIGHT.
+ * Shielded recipient + amount. A shielded asset requires its explicit token color.
  * Outputs are serialised as decimal strings on the wire because Chrome
  * messaging can't carry BigInt; BG re-parses to bigint.
  */
@@ -262,6 +306,7 @@ async function buildAndSignShieldedInBg(
   outputs: ReadonlyArray<ShieldedTransferOutput>,
   credentials: MidnightSendCredentials,
   proving?: { url: string; headers?: Record<string, string> },
+  sponsor?: MidnightSponsor,
 ): Promise<{ signedTxHex: string; proven: boolean }> {
   const response = await Messaging.sendToBackgroundFromOptions({
     method: MessageTypes.BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX,
@@ -274,6 +319,10 @@ async function buildAndSignShieldedInBg(
       password: credentials.password,
       prfSecret: credentials.prfSecret ? Array.from(credentials.prfSecret) : undefined,
       proving,
+      sponsor: sponsor ? {
+        walletId: sponsor.walletId, password: sponsor.password,
+        prfSecret: sponsor.prfSecret ? Array.from(sponsor.prfSecret) : undefined,
+      } : undefined,
     },
   }) as { data: { success: boolean; signedTxHex?: string; proven?: boolean; error?: string } };
 
@@ -293,7 +342,7 @@ async function buildAndSignShieldedInBg(
  */
 export class ProofServerUnreachableError extends Error {
   constructor(public readonly url: string) {
-    super(`Proof server not reachable at ${url || '(not configured)'}`);
+    super('Proof server not reachable or incompatible with the selected network');
     this.name = 'ProofServerUnreachableError';
   }
 }
@@ -314,20 +363,19 @@ export class ProofServerUnreachableError extends Error {
 function resolveWalletProvingTarget(
   network: string,
 ): { url: string; headers?: Record<string, string>; stage: MidnightSendStage; lenientHealth: boolean } | null {
-  const ps = midnightStore.proofServer;
-  if (ps.mode === 'local') {
-    return { url: ps.localUrl, stage: 'provingLocal', lenientHealth: false };
+  // `unconfigured` covers both zkPaaS-without-a-key and a local server whose
+  // circuit family doesn't match the network (see resolveProvingTarget).
+  const target = resolveProvingTarget(network, midnightStore.proofServer);
+  if (target.kind === 'unconfigured') {
+    throw new ProofServerUnreachableError(target.url);
   }
-  if (ps.mode === 'zkpaas') {
-    const url = resolveZkpaasUrl(network, ps);
-    if (!isZkpaasConfigured(ps) || !url) {
-      throw new ProofServerUnreachableError(url);
-    }
-    return {
-      url, headers: buildZkpaasHeaders(ps), stage: 'provingZkpaas', lenientHealth: true,
-    };
-  }
-  return null;
+  if (target.kind === 'cloud') return null;
+  return {
+    url: target.url,
+    headers: target.headers,
+    stage: target.mode === 'zkpaas' ? 'provingZkpaas' : 'provingLocal',
+    lenientHealth: target.lenientHealth,
+  };
 }
 
 /**
@@ -398,10 +446,12 @@ export async function sendShieldedNight(
   waitFor: 'Submitted' | 'InBlock' | 'Finalized' = 'InBlock',
   onStage?: (stage: MidnightSendStage) => void,
   forceRemote = false,
+  sponsor?: MidnightSponsor,
 ): Promise<SubmitMidnightTxResponse> {
   if (outputs.length === 0) {
     throw new Error('sendShieldedNight: at least one output is required');
   }
+  for (const output of outputs) validateShieldedTokenType(output.tokenType ?? '');
   const api = getMidnightApi(network);
 
   const target = forceRemote ? null : resolveWalletProvingTarget(network);
@@ -416,7 +466,7 @@ export async function sendShieldedNight(
     }
     onStage?.(target.stage);
     const { signedTxHex, proven } = await buildAndSignShieldedInBg(
-      outputs, credentials, { url: target.url, headers: target.headers },
+      outputs, credentials, { url: target.url, headers: target.headers }, sponsor,
     );
     if (!proven) {
       // Defensive: the BG only skips proving when `proving` is absent from
@@ -432,7 +482,7 @@ export async function sendShieldedNight(
   }
 
   onStage?.('working');
-  const { signedTxHex } = await buildAndSignShieldedInBg(outputs, credentials);
+  const { signedTxHex } = await buildAndSignShieldedInBg(outputs, credentials, undefined, sponsor);
   onStage?.('submitting');
   const result = await api.proveAndSubmitMidnightTx({ signedTxHex, waitFor });
   onStage?.('done');
@@ -446,128 +496,19 @@ export async function sendShieldedNight(
 // no real shield has succeeded on-chain yet, so there is
 // nothing to unshield to test against.
 
-/**
- * BG builds + signs the SHIELD direction of a shield/unshield conversion —
- * moves `amount` of public NIGHT into a brand-new shielded output at the
- * wallet's own shielded address (`buildAndSignMidnightShield` in
- * walletBg.ts / `buildAndSignShield` in midnightShieldSwapBuilder.ts). No
- * recipient: shield always moves value between the wallet's own two
- * addresses. Same response shape as {@link buildAndSignShieldedInBg} —
- * reused rather than forked.
- */
-async function buildAndSignShieldInBg(
-  amount: bigint,
-  credentials: MidnightSendCredentials,
-  proving?: { url: string; headers?: Record<string, string> },
-): Promise<{ signedTxHex: string; proven: boolean }> {
-  const response = await Messaging.sendToBackgroundFromOptions({
-    method: MessageTypes.BUILD_AND_SIGN_MIDNIGHT_SHIELD_TX,
-    data: {
-      amount: amount.toString(),
-      password: credentials.password,
-      prfSecret: credentials.prfSecret ? Array.from(credentials.prfSecret) : undefined,
-      proving,
-    },
-  }) as { data: { success: boolean; signedTxHex?: string; proven?: boolean; error?: string } };
-
-  if (!response?.data?.success || !response.data.signedTxHex) {
-    throw new Error(response?.data?.error || 'Midnight shield build/sign failed');
-  }
-  return { signedTxHex: response.data.signedTxHex, proven: !!response.data.proven };
-}
-
-/**
- * Shield conversion (public NIGHT -> private/shielded NIGHT), branching on
- * the user's proof-server preference exactly like {@link sendShieldedNight}
- * — shield's shielded half proves through the identical ShieldedWallet
- * pipeline as a plain shielded send (see midnightShieldSwapBuilder.ts's file
- * header), so the same local/zkPaaS/remote routing, health preflight, and
- * `ProofServerUnreachableError` fallback apply unchanged. No recipient or
- * output list: the amount always moves from the wallet's own public address
- * to its own shielded address.
- *
- * `forceRemote` mirrors sendShieldedNight's one-off "use Gero Cloud for this
- * transaction" fallback (WP-P5) — same meaning, same caller contract.
- */
+/** Compatibility entry point: fail before credentials or network calls. */
 export async function shieldNight(
-  network: string,
-  amount: bigint,
-  credentials: MidnightSendCredentials,
-  waitFor: 'Submitted' | 'InBlock' | 'Finalized' = 'InBlock',
-  onStage?: (stage: MidnightSendStage) => void,
-  forceRemote = false,
+  _network: string,
+  _amount: bigint,
+  _credentials: MidnightSendCredentials,
+  _waitFor: 'Submitted' | 'InBlock' | 'Finalized' = 'InBlock',
+  _onStage?: (stage: MidnightSendStage) => void,
+  _forceRemote = false,
 ): Promise<SubmitMidnightTxResponse> {
-  if (amount <= 0n) {
-    throw new Error('shieldNight: amount must be positive');
-  }
-  const api = getMidnightApi(network);
-
-  const target = forceRemote ? null : resolveWalletProvingTarget(network);
-  if (target) {
-    const { checkProofServerHealth } = await import('@/chains/midnight/midnightLocalProver');
-    const healthy = await checkProofServerHealth(target.url, {
-      headers: target.headers,
-      acceptNotFound: target.lenientHealth,
-    });
-    if (!healthy) {
-      throw new ProofServerUnreachableError(target.url);
-    }
-    onStage?.(target.stage);
-    const { signedTxHex, proven } = await buildAndSignShieldInBg(
-      amount, credentials, { url: target.url, headers: target.headers },
-    );
-    if (!proven) {
-      // Defensive: mirrors sendShieldedNight's identical guard — should be
-      // unreachable since `proving` is always set on this branch.
-      throw new Error('Wallet-side proving requested but BG returned an unproven tx');
-    }
-    onStage?.('submitting');
-    const result = await api.submitProvenMidnightTx({ signedTxHex, waitFor });
-    onStage?.('done');
-    return result;
-  }
-
-  onStage?.('working');
-  const { signedTxHex } = await buildAndSignShieldInBg(amount, credentials);
-  onStage?.('submitting');
-  const result = await api.proveAndSubmitMidnightTx({ signedTxHex, waitFor });
-  onStage?.('done');
-  return result;
+  return assertNativeNightConversionSupported();
 }
 
-// ─── Path A — NIGHT-for-DUST registration ─────────────────────────────────────
-//
-// Registers the wallet's own NIGHT UTxOs to generate DUST for the wallet's
-// own dust address. Signed locally with the NightExternal key (same key
-// used for unshielded sends). No Cardano interaction.
-//
-// Flow:
-//   1. getWalletKeys → publicKeyHex + addressHex (cached or slow-path)
-//   2. buildNightDustRegistrationTx → Nexus sidecar builds via DustWallet,
-//      returns unproven tx + a single signature payload (intent #1, segment 1)
-//   3. signSegments → BG signs the payload with NightExternal (same path as send)
-//   4. submitNightDustRegistrationTx → Nexus splices the signature + submits
-//      to substrate
-
-/**
- * Discriminated outcome of a DUST-registration attempt. Modelled after the
- * Dynamic.xyz Midnight SDK's `registerDust()` status enum
- * (`registered | already_registered | already_has_dust | no_utxos`), which
- * turns the raw "No NIGHT UTxOs available" 400 into a state the UI can render
- * as a helpful next-step instead of a scary error toast. We surface the two
- * states our nexus registration call can distinguish cleanly:
- *   - `registered`     — the tx was built, signed, and submitted
- *   - `no_night_utxos` — the wallet holds no unshielded NIGHT; it must be
- *                        funded before DUST can be generated (this is the
- *                        exact 400 we hit on a freshly-created preprod wallet)
- *   - `failed`         — any other error; `message` carries the detail
- *
- * "already registered" / "already has dust" aren't distinguished here because
- * nexus doesn't return a distinct code for them on the build call; the dialog
- * already knows the on-chain registration status separately (its status pill)
- * and gates the CTA on it, so a re-register attempt is prevented upstream.
- */
-export type DustRegistrationStatus = 'registered' | 'no_night_utxos' | 'failed';
+/** Result of native NIGHT registration for DUST generation. */export type DustRegistrationStatus = 'registered' | 'no_night_utxos' | 'failed';
 
 export interface DustRegistrationOutcome {
   status: DustRegistrationStatus;
@@ -609,6 +550,7 @@ export async function registerNightForDust(
     const signed = await signSegments(
       [{ index: 1, role: 'NightExternal', dataHex: built.signaturePayloadHex }],
       credentials,
+      built.unprovenTxHex,
     );
     if (signed.length !== 1) {
       throw new Error('Expected exactly one signature for DUST registration');

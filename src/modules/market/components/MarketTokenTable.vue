@@ -4,7 +4,7 @@
     class="transparent tokens-table market-token-table"
     :headers="activeHeaders"
     :items="paginatedTokens"
-    item-key="unit"
+    item-key="rowKey"
     :sort-by.sync="sortBy"
     :sort-desc.sync="sortDesc"
     :custom-sort="customSort"
@@ -62,8 +62,20 @@
             <img v-else-if="chainLogo" :src="chainLogo" :alt="`${item.ticker} Logo`" style="opacity: 0.5" />
             <v-icon v-else>mdi-circle-outline</v-icon>
           </v-avatar>
+          <v-tooltip v-if="isProgrammableRow(item)" top :open-delay="300" content-class="custom-tooltip">
+            <template v-slot:activator="{ on, attrs }">
+              <v-icon
+                color="var(--g-warning)"
+                class="programmable-badge"
+                style="position: absolute; right: -3px; bottom: -3px; font-size: 13px; background: var(--g-surface); border-radius: 50%;"
+                v-bind="attrs"
+                v-on="on"
+              >mdi-lock-outline</v-icon>
+            </template>
+            {{ $t(programmableTooltipKey(item.unit)) }}
+          </v-tooltip>
           <v-icon
-            v-if="item.isSnekFun"
+            v-else-if="item.isSnekFun"
             class="snek-badge"
             style="position: absolute; right: -4px; bottom: -4px; font-size: 14px; color: #A3E635; background: var(--g-surface); border-radius: 50%;"
             title="snek.fun"
@@ -81,6 +93,14 @@
           </template>
           {{ item.name }}
         </v-tooltip>
+        <v-chip
+          v-if="isProgrammableRow(item)"
+          x-small label
+          class="ml-1 flex-shrink-0"
+          style="height: 16px; font-size: 10px; padding: 0 5px; color: var(--g-warning); background: var(--g-warning-fill); border: 1px solid var(--g-warning-line);"
+        >
+          {{ $t('programmableTokens.badge') }}
+        </v-chip>
         <v-chip
           v-if="showOwnedBadge && ownedUnits.has(item.unit)"
           x-small label
@@ -158,7 +178,7 @@
         <polyline
           :points="sparklinePoints(item.sparkline)"
           fill="none"
-          :stroke="sparklineColor(item.sparkline)"
+          :stroke="sparklineColor(item.sparkline, item.change7d)"
           stroke-width="1.5"
           stroke-linejoin="round"
           stroke-linecap="round"
@@ -233,13 +253,23 @@
 
     <!-- Holdings columns (when showHoldingsColumns) -->
     <template v-slot:[`item.balance`]="{ item }">
-      <v-tooltip v-if="item.balance" top content-class="custom-tooltip">
-        <template v-slot:activator="{ on, attrs }">
-          <span v-bind="attrs" v-on="on" style="font-size: 12px">{{ hideBalances ? '••••••' : formatBalance(item.balance) }}</span>
-        </template>
-        {{ hideBalances ? '••••••' : item.balance.toLocaleString('en-US', { maximumFractionDigits: 20 }) }}
-      </v-tooltip>
-      <span v-else style="font-size: 12px">—</span>
+      <div class="d-flex align-center" style="gap: 4px;">
+        <v-tooltip v-if="item.balance" top content-class="custom-tooltip">
+          <template v-slot:activator="{ on, attrs }">
+            <span v-bind="attrs" v-on="on" style="font-size: 12px">{{ hideBalances ? '••••••' : formatBalance(item.balance) }}</span>
+          </template>
+          {{ hideBalances ? '••••••' : item.balance.toLocaleString('en-US', { maximumFractionDigits: 20 }) }}
+        </v-tooltip>
+        <span v-else style="font-size: 12px">—</span>
+        <!-- Decimals couldn't be resolved from any source — the balance above is
+             raw units, not divided by decimals (issue 1003). -->
+        <v-tooltip v-if="item.decimalsUnknown" top content-class="custom-tooltip">
+          <template v-slot:activator="{ on, attrs }">
+            <v-icon x-small color="warning" v-bind="attrs" v-on="on">mdi-help-circle-outline</v-icon>
+          </template>
+          {{ $t('market.decimalsUnknown') }}
+        </v-tooltip>
+      </div>
     </template>
 
     <template v-slot:[`item.value`]="{ item }">
@@ -396,7 +426,9 @@
 </template>
 
 <script setup lang="ts">
+import '@/shared/styles/compact-pagination.css';
 import { ref, computed, watch, onMounted } from 'vue';
+import { programmableTooltipKey, isProgrammableRow } from '@/shared/utils/programmableTokenDisplay';
 import assets from '@/utils/assets';
 import { useWatchlist } from '@/modules/market/composables/useWatchlist';
 import { useColumnPreferences } from '@/modules/market/composables/useColumnPreferences';
@@ -656,10 +688,18 @@ function sparklinePoints(series: number[]): string {
     .join(' ');
 }
 
-/** Green if the series ends up vs starts, red if down */
-function sparklineColor(series: number[]): string {
+/**
+ * Colour follows the 7D change column when it is known, so the line and the number beside it
+ * can never disagree. The backend series starts at the first hourly candle *inside* the window,
+ * while the 7D % is measured from the daily close *before* it; for a sparse token the two can
+ * have opposite signs (GERO: line down 0.85%, column +0.47%). Falls back to first-vs-last only
+ * when the change is unknown or exactly zero.
+ */
+function sparklineColor(series: number[], change7d?: number | null): string {
   if (!series || series.length < 2) return '#A3A3A3';
-  return series[series.length - 1] >= series[0] ? '#47CD89' : '#F97066';
+  const hasChange = change7d != null && Number.isFinite(change7d) && change7d !== 0;
+  const up = hasChange ? change7d > 0 : series[series.length - 1] >= series[0];
+  return up ? '#47CD89' : '#F97066';
 }
 
 function changeIcon(change: number): string {

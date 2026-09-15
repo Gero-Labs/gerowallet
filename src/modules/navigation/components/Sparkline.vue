@@ -14,9 +14,8 @@
   </div>
 </template>
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, toRefs, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import cryptoApi from '@/api/crypto-api';
-import { networkStore } from '@/stores/networkStore';
 import { priceStore } from '@/stores/priceStore';
 
 
@@ -31,18 +30,13 @@ const autoLineWidth = ref<boolean>(false);
 const chart = ref<number[]>([]);
 const intervalId = ref<number>(null);
 
-const { price } = toRefs(networkStore)
 
 const priceChange = computed(() => {
-  // Use Kraken WebSocket price change, fallback to network store
+  // Live Kraken ticker 24h change
   const krakenChange = priceStore.adaUsd?.priceChange;
-  const networkChange = price.value?.priceChange;
   
   if (krakenChange !== undefined && krakenChange !== null) {
     return Number(krakenChange);
-  }
-  if (networkChange) {
-    return Number(networkChange);
   }
   return 0;
 })

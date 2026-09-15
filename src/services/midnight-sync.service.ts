@@ -1,3 +1,4 @@
+import { MidnightGenerationQueue, clearMidnightNetworkCheckpoints } from '@/chains/midnight/midnightSyncGeneration';
 /**
  * Midnight Sync Service
  *
@@ -34,25 +35,33 @@ import { midnightActions, midnightStore } from '@/stores/midnightStore';
 import { debugLog } from '@/utils/debug';
 import { Network } from '@/models/types';
 import { getMidnightApi } from '@/api/midnight-api';
+import { isNativeNight } from '@/chains/midnight/midnightTokenBalances';
 import type {
   MidnightAddresses,
   MidnightBalances,
   MidnightTransaction,
   MidnightUnshieldedUtxo,
+  DustGenerationStatus,
+  DustRegistrationStatus,
 } from '@/chains/midnight/midnightTypes';
 
 /**
  * Map our project's `Network` constants to gero-sync's Midnight network keys.
  *
- * gero-sync's `MidnightSyncProvider.getSupportedNetworks()` returns
- * `["midnight-mainnet", "midnight-preprod", "midnight-preview"]` — the wallet
- * sends one of `Network.MAINNET | PREVIEW | PREPROD` ("Mainnet" / "Preview" /
- * "Preprod"), and the backend would otherwise reject with WS code 1011.
+ * The wallet sends one of `Network.MAINNET | STAGENET | PREPROD` ("Mainnet" /
+ * "Stagenet" / "Preprod"); anything gero-sync doesn't list is rejected with WS
+ * code 1011.
+ *
+ * NOTE: gero-sync only accepts `midnight-stagenet` once Gero-Labs/gero-sync#57
+ * lands (it swaps preview for stagenet in
+ * `MidnightSyncProvider.getSupportedNetworks()`, closing gero-sync#56). Until
+ * it merges and deploys, live tip/tx push on stagenet is refused with WS 1011;
+ * the Nexus-backed REST reads are unaffected.
  */
 function toGeroSyncMidnightNetwork(network: string): string {
   switch (network) {
     case Network.MAINNET: return 'midnight-mainnet';
-    case Network.PREVIEW: return 'midnight-preview';
+    case Network.STAGENET: return 'midnight-stagenet';
     case Network.PREPROD: return 'midnight-preprod';
     default:
       // Already in gero-sync form, or an unknown value — pass through and let
@@ -81,6 +90,29 @@ interface WsMidnightOutput {
   intent_hash?: string;
   outputIndex?: number;
   output_index?: number;
+  registeredForDustGeneration?: boolean;
+  registered_for_dust_generation?: boolean;
+}
+
+/**
+ * Raw entry shape for the CATCH_UP snapshot's `utxos` array — like
+ * {@link WsMidnightOutput} but also carries `ctime` / `initialNonce`, which
+ * the per-tx created/spent payloads don't. Fields are optional because the
+ * payload is unvalidated JSON off the wire; {@link MidnightSyncService.parseUtxos}
+ * defends against missing/malformed entries at runtime regardless of this type.
+ */
+interface WsMidnightUtxoSnapshot {
+  owner?: string;
+  value?: string | number;
+  tokenType?: string;
+  token_type?: string;
+  intentHash?: string;
+  intent_hash?: string;
+  outputIndex?: number;
+  output_index?: number;
+  ctime?: number;
+  initialNonce?: string;
+  initial_nonce?: string;
   registeredForDustGeneration?: boolean;
   registered_for_dust_generation?: boolean;
 }
@@ -142,13 +174,40 @@ interface WsSyncMessage {
   block?: WsSyncBlock;
   transactions?: WsSyncTx[];
   account?: WsAccountInfo;
-  utxos?: any[];
+  utxos?: WsMidnightUtxoSnapshot[];
   addresses?: string[];
   [key: string]: unknown;
 }
 
+/**
+ * An output's index within its transaction, or `null` when the payload didn't
+ * carry a usable one.
+ *
+ * Do NOT default a missing index to `0`. The UTxO set is deduped on
+ * `${intentHash}:${outputIndex}` (see `applyUtxoDeltas`), so defaulting buckets
+ * every index-less output of a transaction under the same key — two genuinely
+ * different UTxOs then collapse into one entry and the balance stops matching
+ * the set.
+ *
+ * Skipping cannot drop a legitimate index 0: gero-sync selects `outputIndex`
+ * in its GraphQL subscription and forwards the indexer's map verbatim, and the
+ * Nexus-bound records serialize it as a boxed `Integer` under
+ * `@JsonInclude(NON_NULL)` — so index 0 arrives as `0`, which is an integer and
+ * passes this check. Only a missing, null, or non-numeric value returns `null`.
+ */
+export function resolveOutputIndex(
+  o: { outputIndex?: number; output_index?: number },
+): number | null {
+  const raw = o.outputIndex ?? o.output_index;
+  return Number.isInteger(raw) ? (raw as number) : null;
+}
+
 class MidnightSyncService {
   private active = false;
+  private tipTimer: ReturnType<typeof setInterval> | null = null;
+  private tipRequest: Promise<void> | null = null;
+  private readonly generationQueue = new MidnightGenerationQueue();
+  private sessionEpoch = 0;
   private currentNetwork: string | null = null;
   private currentAddresses: MidnightAddresses | null = null;
 
@@ -158,7 +217,7 @@ class MidnightSyncService {
    * disconnects + reconnects via {@link webSocketService.connect}'s built-in
    * handover (`close()` → fresh `openConnection()`).
    *
-   * @param network        Midnight network identifier (`Network.PREVIEW` etc.)
+   * @param network        Midnight network identifier (`Network.STAGENET` etc.)
    * @param addresses      The wallet's three Midnight addresses; `unshielded` is
    *                       the one gero-sync uses to filter `unshieldedTransactions`
    * @param lastSyncedBlock Block height the wallet last saw — gero-sync resumes
@@ -191,6 +250,9 @@ class MidnightSyncService {
       return;
     }
 
+    if (this.tipTimer) clearInterval(this.tipTimer);
+    this.tipRequest = null;
+    const sessionEpoch = ++this.sessionEpoch;
     this.currentNetwork = network;
     this.currentAddresses = addresses;
 
@@ -227,7 +289,7 @@ class MidnightSyncService {
       addresses.unshielded,
       lastSyncedBlock,
       {
-        onSync: this.handleSync.bind(this),
+        onSync: (data) => this.handleSync(data, sessionEpoch),
         onRollback: this.handleRollback.bind(this),
         onForceResync: this.handleForceResync.bind(this),
       },
@@ -249,41 +311,43 @@ class MidnightSyncService {
     this.active = true;
     debugLog(`🌙 Midnight sync started for ${addresses.unshielded} on ${network} (gero-sync key: ${geroSyncNetwork})`);
 
-    // Bootstrap the chain tip from Nexus's indexer-backed `/api/blocks/latest`.
-    // gero-sync only sends `block` data inside SYNC messages when there's
-    // something to dispatch; if the wallet's already caught up at startup,
-    // SYNC_CHECK_OK arrives with no `block` field, leaving `midnightStore.tip`
-    // and `lastSync` at their empty defaults — so the navigation status
-    // tooltip would otherwise show "Last Sync: N/A" / "Block: N/A" forever.
-    // Fire-and-forget; a failure here is non-fatal (the tooltip just stays
-    // at N/A until the next SYNC arrives).
-    this.bootstrapTipFromNexus(network).catch((e) => {
-      debugLog('🌙 Midnight tip bootstrap from Nexus failed (non-fatal):', e);
-    });
+    // Keep recovering when startup fails or a generation reset clears the tip.
+    // This is display metadata; fetching it must not mark wallet sync complete.
+    void this.refreshTipFromNexus(network);
+    this.tipTimer = setInterval(() => { void this.refreshTipFromNexus(network); }, 30_000);
   }
 
-  /**
-   * Read the current chain tip from Nexus's `/api/blocks/latest` and seed
-   * {@link midnightStore.tip} + `lastSync`. Used at sync start so the
-   * navigation tooltip has a value before any new blocks have arrived.
-   */
-  private async bootstrapTipFromNexus(network: string): Promise<void> {
-    const api = getMidnightApi(network);
-    const block = await api.getLatestBlock();
-    debugLog('🌙 Midnight tip bootstrap response:', block);
-    if (typeof block.height !== 'number' || block.height === 0) {
-      debugLog('🌙 Midnight tip bootstrap: indexer returned no height — skipping');
-      return;
-    }
-    midnightActions.applyTipUpdate({
-      hash: block.hash ?? null,
-      height: block.height,
-      // Nexus's BlockDto returns `time` in epoch ms (chain-agnostic; same
-      // shape as Cardano's tip carries). The Midnight tip type already uses
-      // ms semantics for `timestamp` (see midnight-sync handleSync below).
-      timestamp: typeof block.time === 'number' ? block.time : 0,
+  private refreshTipFromNexus(network: string): Promise<void> {
+    if (this.tipRequest) return this.tipRequest;
+    const sessionEpoch = this.sessionEpoch;
+    const identity = midnightStore.chainIdentity;
+    const previousTip = midnightStore.tip;
+    const request = Promise.resolve().then(async () => {
+      const block = await getMidnightApi(network).getLatestBlock();
+      // Neither an old session nor a request spanning a reset/new WS tip may
+      // overwrite the current display. The next poll retries after a reset.
+      if (!this.active || this.currentNetwork !== network || this.sessionEpoch !== sessionEpoch
+        || midnightStore.chainIdentity !== identity || midnightStore.tip !== previousTip) return;
+      this.applyBlockTip(block);
+    }).catch((error) => {
+      debugLog('Midnight tip refresh from Nexus failed; will retry:', error);
+    }).finally(() => {
+      if (this.tipRequest === request) this.tipRequest = null;
     });
-    debugLog(`🌙 Midnight tip applied: height=${block.height} timestamp=${block.time}`);
+    this.tipRequest = request;
+    return request;
+  }
+
+  private applyBlockTip(block: { height?: number; hash?: string | null; time?: number }): void {
+    // Height-only catch-up markers are cursors, not observed chain tips.
+    if (!Number.isSafeInteger(block.height) || block.height! < 0
+      || typeof block.hash !== 'string' || !block.hash) return;
+    midnightActions.applyTipUpdate({
+      hash: block.hash,
+      height: block.height!,
+      timestamp: typeof block.time === 'number' && Number.isFinite(block.time) && block.time > 0
+        ? block.time : 0,
+    });
   }
 
   /**
@@ -291,11 +355,15 @@ class MidnightSyncService {
    * Safe to call when not active (no-op).
    */
   stop(): void {
+    if (this.tipTimer) clearInterval(this.tipTimer);
+    this.tipTimer = null;
+    this.tipRequest = null;
     if (!this.active) return;
     webSocketService.close();
     midnightActions.setNetworkStatus('disconnected');
     midnightActions.clear();
     this.active = false;
+    this.sessionEpoch += 1;
     this.currentNetwork = null;
     this.currentAddresses = null;
     debugLog('🌙 Midnight sync stopped');
@@ -346,15 +414,24 @@ class MidnightSyncService {
 
   // ---------------------------------------------------------------- handlers
 
-  private async handleSync(data: WsSyncMessage): Promise<void> {
+  private async handleSync(data: WsSyncMessage, sessionEpoch = this.sessionEpoch): Promise<void> {
+    const network = this.currentNetwork;
+    if (!network) return;
+    const scope = this.currentAddresses?.unshielded;
+    const isActive = () => this.active && this.sessionEpoch === sessionEpoch
+      && this.currentNetwork === network && this.currentAddresses?.unshielded === scope;
+    await this.generationQueue.enqueue(data, toGeroSyncMidnightNetwork(network),
+      () => midnightStore.chainIdentity, isActive,
+      async (identity) => {
+        await clearMidnightNetworkCheckpoints(identity.network);
+        if (isActive()) midnightActions.resetChainState(identity);
+      }, () => this.applySync(data));
+    if (isActive() && midnightStore.tip.hash === null) void this.refreshTipFromNexus(network);
+  }
+
+  private async applySync(data: WsSyncMessage): Promise<void> {
     // 1) Tip update
-    if (data.block && typeof data.block.height === 'number') {
-      midnightActions.applyTipUpdate({
-        hash: data.block.hash ?? null,
-        height: data.block.height,
-        timestamp: data.block.time ?? 0,
-      });
-    }
+    if (data.block) this.applyBlockTip(data.block);
 
     // 2) Transactions — UTxO-set model: add created outputs owned by us,
     // remove spent outputs owned by us, idempotently keyed by
@@ -370,8 +447,10 @@ class MidnightSyncService {
     if (Array.isArray(data.transactions) && data.transactions.length > 0) {
       const myUnshielded = this.currentAddresses?.unshielded ?? '';
       for (const rawTx of data.transactions) {
-        const tx = this.parseTx(rawTx, myUnshielded);
-        if (tx) midnightActions.applyTransaction(tx);
+        // One row per token color moved for us — a tx can carry NIGHT and a
+        // custom color (e.g. USDM) at once, and each needs its own amount.
+        const txs = this.parseTx(rawTx, myUnshielded);
+        for (const tx of txs) midnightActions.applyTransaction(tx);
         // gero-sync's per-tx WS payload carries `midnight_tx_id` (snake-cased
         // from SyncPayload.TxData.midnightTxId). Advancing the cursor per tx
         // is safe — the store only moves it forward.
@@ -387,17 +466,53 @@ class MidnightSyncService {
         const removed: Array<{ intentHash: string; outputIndex: number }> = [];
         for (const o of this.readOutputs(rawTx, 'created')) {
           if (o.owner !== myUnshielded) continue;
-          if (!this.isNightOutput(o)) continue;
-          added.push(this.outputToUtxo(o));
+          // Mirrors the removal loop's guard below: a created output with no
+          // intentHash would key into the store's byKey map as `":<index>"`,
+          // sharing that bucket with every other intentHash-less output at
+          // the same index — and since the removal loop also refuses to
+          // enqueue a removal without an intentHash, that entry could never
+          // be targeted for removal again.
+          const intentHash = o.intentHash ?? o.intent_hash ?? '';
+          if (!intentHash) {
+            // Unproven premise: no in-repo fixture confirms `intent_hash` is
+            // always present in the wire payload. Log so a real drop is
+            // observable instead of silent — owner truncated, no key material.
+            debugLog(`🌙 Midnight delta: created output missing intentHash, skipped — owner=${o.owner.slice(0, 12)}… tokenType=${o.tokenType ?? o.token_type ?? ''}`);
+            continue;
+          }
+          // The index half of that same key, guarded the same way. Defaulting a
+          // missing index to 0 buckets every index-less output of this tx under
+          // `<intentHash>:0`, and the store's dedup then collapses genuinely
+          // different UTxOs into one entry. With every color admitted below,
+          // that silently swaps a NIGHT holding for a token one and leaves the
+          // NIGHT value stranded in `nightUnshielded`. See resolveOutputIndex.
+          const outputIndex = resolveOutputIndex(o);
+          if (outputIndex === null) {
+            debugLog(`🌙 Midnight delta: created output missing outputIndex, skipped — owner=${o.owner.slice(0, 12)}… tokenType=${o.tokenType ?? o.token_type ?? ''}`);
+            continue;
+          }
+          // Admit every token color, matching the CATCH_UP snapshot path
+          // (parseUtxos applies no token filter). Without this the delta path
+          // removed spent token UTxOs but never re-added received ones, so
+          // token balances decayed toward zero over a live session.
+          //
+          // `nightUnshielded` stays native-only: the delta path filters via
+          // isNight() before touching balanceDelta, and the snapshot re-sum
+          // below applies its own native check.
+          added.push(this.outputToUtxo(o, outputIndex));
         }
         for (const o of this.readOutputs(rawTx, 'spent')) {
           if (o.owner !== myUnshielded) continue;
-          // tokenType filter not needed for removal — if the wallet had it,
-          // the matching add went through the NIGHT filter; if it didn't,
+          // tokenType filter not needed for removal — the created loop above
+          // now admits every color too, so any owned UTxO we could spend has
+          // a matching key to remove; if we somehow never saw it created,
           // the remove is a no-op against an absent key.
           const intentHash = o.intentHash ?? o.intent_hash ?? '';
-          const outputIndex = o.outputIndex ?? o.output_index ?? 0;
-          if (intentHash) removed.push({ intentHash, outputIndex });
+          const outputIndex = resolveOutputIndex(o);
+          // Same reasoning as the created loop: a fabricated index would target
+          // an unrelated UTxO for removal. The matching add was skipped for the
+          // same reason, so there is nothing in the set to remove anyway.
+          if (intentHash && outputIndex !== null) removed.push({ intentHash, outputIndex });
         }
         if (added.length > 0 || removed.length > 0 || maxTxId !== undefined) {
           midnightActions.applyUtxoDeltas({ added, removed, maxTxId });
@@ -423,7 +538,7 @@ class MidnightSyncService {
       let night = 0n;
       for (const u of parsed) {
         const tt = u.tokenType ?? '';
-        if (tt === '' || /^0+$/.test(tt)) night += u.value;
+        if (isNativeNight(tt)) night += u.value;
       }
       midnightActions.updateBalances({ nightUnshielded: night });
     }
@@ -436,6 +551,7 @@ class MidnightSyncService {
       this.applyAccountInfo(data.account);
     }
 
+    midnightActions.markSynced();
     midnightActions.setNetworkStatus('connected');
   }
 
@@ -458,84 +574,134 @@ class MidnightSyncService {
 
   // ---------------------------------------------------------------- parsers
 
-  private parseTx(raw: WsSyncTx, myUnshielded: string): MidnightTransaction | null {
+  /**
+   * One row PER TOKEN COLOR moved for our address in this tx — a single tx
+   * can carry NIGHT and a custom color (e.g. USDM) at once, and each needs
+   * its own net amount, its own send/receive classification and its own
+   * counterparty. (Previously this hardcoded `token: 'NIGHT'` and summed
+   * only native outputs, so a USDM-only tx rendered as "Received +0.00
+   * NIGHT" — wrong token AND wrong amount.)
+   *
+   * A tx that doesn't touch our address on either side (created or spent)
+   * yields no rows at all, rather than a phantom net-zero "receive".
+   */
+  private parseTx(raw: WsSyncTx, myUnshielded: string): MidnightTransaction[] {
     const hash = raw.txHash ?? raw.tx_hash;
-    if (!hash) return null;
+    if (!hash) return [];
 
-    // Categorize as send / receive from outputs: if any unshielded output's
-    // owner matches our address, it's a receive (or self-send change). If
-    // there are spent outputs owned by us but no created ones, it's a pure send.
     const created = this.readOutputs(raw, 'created');
     const spent = this.readOutputs(raw, 'spent');
-    const receivedAmount = this.sumOutputsForOwner(created, myUnshielded);
-    const spentAmount = this.sumOutputsForOwner(spent, myUnshielded);
-    const netAmount = receivedAmount - spentAmount;
 
-    let type: MidnightTransaction['type'] = 'receive';
-    if (netAmount < 0n) type = 'send';
-    else if (netAmount === 0n && spentAmount > 0n) type = 'send'; // pure forward to others
-
-    // DUST registration: net-zero self-respend where every created output we
-    // own comes back flagged registeredForDustGeneration. Without this it
-    // renders as a confusing "Sent −0.00".
-    if (netAmount === 0n && spentAmount > 0n) {
-      const ownCreated = created.filter((o) => o?.owner === myUnshielded);
-      const allRegistered = ownCreated.length > 0 && ownCreated.every(
-        (o) => (o.registeredForDustGeneration ?? o.registered_for_dust_generation) === true,
-      );
-      if (allRegistered) type = 'register_dust';
+    // Every color touched by an output we own, on either side. Canonicalized
+    // through isNativeNight so an all-zero color of non-canonical length and
+    // an empty string collapse into the SAME "NIGHT" bucket instead of
+    // spuriously splitting into two rows.
+    const colors = new Set<string>();
+    for (const o of created) {
+      if (o?.owner === myUnshielded) colors.add(this.canonicalColor(o));
     }
+    for (const o of spent) {
+      if (o?.owner === myUnshielded) colors.add(this.canonicalColor(o));
+    }
+    if (colors.size === 0) return [];
 
-    // For sends, surface the recipient (largest NIGHT output NOT owned by us)
-    // so history can render "To: mn_addr_…". A receive can't reliably name the
-    // sender from a per-address unshielded subscription — the spent inputs
-    // aren't ours to inspect — so counterparty stays empty there.
-    let counterparty = '';
-    if (type === 'send') {
-      let best = 0n;
-      for (const o of created) {
-        if (!o || o.owner === myUnshielded) continue;
-        const tt = o.tokenType ?? o.token_type ?? '';
-        if (tt && tt !== NIGHT_TOKEN_TYPE_NULL) continue;
-        const v = this.toBig(o.value);
-        if (v > best) { best = v; counterparty = o.owner; }
+    const timestamp = raw.txTimestamp ?? raw.tx_timestamp ?? 0;
+    const blockHeight = raw.blockHeight ?? raw.block_height;
+    const rawHex = raw.raw ?? raw.cbor;
+
+    const rows: MidnightTransaction[] = [];
+    for (const color of colors) {
+      const isNight = isNativeNight(color);
+
+      // Categorize as send / receive from outputs of THIS color: if any
+      // matching output's owner is us, it's a receive (or self-send change).
+      // If there are spent outputs of this color owned by us but no created
+      // ones, it's a pure send.
+      const receivedAmount = this.sumOutputsForOwnerAndColor(created, myUnshielded, color);
+      const spentAmount = this.sumOutputsForOwnerAndColor(spent, myUnshielded, color);
+      const netAmount = receivedAmount - spentAmount;
+
+      let type: MidnightTransaction['type'] = 'receive';
+      if (netAmount < 0n) type = 'send';
+      else if (netAmount === 0n && spentAmount > 0n) type = 'send'; // pure forward to others
+
+      // DUST registration: net-zero NIGHT self-respend where every created
+      // NIGHT output we own comes back flagged registeredForDustGeneration.
+      // Without this it renders as a confusing "Sent −0.00". Registration
+      // only ever concerns NIGHT (the mapping validator), so this never
+      // fires for a custom color's row.
+      if (isNight && netAmount === 0n && spentAmount > 0n) {
+        const ownCreated = created.filter(
+          (o) => o?.owner === myUnshielded && this.canonicalColor(o) === color,
+        );
+        const allRegistered = ownCreated.length > 0 && ownCreated.every(
+          (o) => (o.registeredForDustGeneration ?? o.registered_for_dust_generation) === true,
+        );
+        if (allRegistered) type = 'register_dust';
       }
+
+      // For sends, surface the recipient (largest output of THIS color NOT
+      // owned by us) so history can render "To: mn_addr_…". Picking from the
+      // matching color, not always NIGHT, is what keeps a USDM send from
+      // showing whatever NIGHT change output happened to be largest. A
+      // receive can't reliably name the sender from a per-address unshielded
+      // subscription — the spent inputs aren't ours to inspect — so
+      // counterparty stays empty there.
+      let counterparty = '';
+      if (type === 'send') {
+        let best = 0n;
+        for (const o of created) {
+          if (!o || o.owner === myUnshielded) continue;
+          if (this.canonicalColor(o) !== color) continue;
+          const v = this.toBig(o.value);
+          if (v > best) { best = v; counterparty = o.owner; }
+        }
+      }
+
+      rows.push({
+        hash,
+        type,
+        token: isNight ? 'NIGHT' : color,
+        // Net amount in base units. Positive = received, negative = sent.
+        // The UI displays absolute value with a +/- sign based on `type`.
+        amount: netAmount < 0n ? -netAmount : netAmount,
+        counterparty,
+        timestamp,
+        status: 'confirmed',
+        // Midnight fees are paid in DUST, not NIGHT/other colors, and the
+        // unshielded subscription doesn't carry the DUST fee — leave 0 until
+        // gero-sync forwards it (tracked as a tx-history followup).
+        fee: 0n,
+        blockHeight,
+        isShielded: false, // gero-sync's per-address subscription delivers unshielded only
+        raw: rawHex,
+      });
     }
-
-    return {
-      hash,
-      type,
-      token: 'NIGHT',
-      // Net amount in NIGHT base units. Positive = received, negative = sent.
-      // The UI displays absolute value with a +/- sign based on `type`.
-      amount: netAmount < 0n ? -netAmount : netAmount,
-      counterparty,
-      timestamp: raw.txTimestamp ?? raw.tx_timestamp ?? 0,
-      status: 'confirmed',
-      // Midnight fees are paid in DUST, not NIGHT, and the unshielded
-      // subscription doesn't carry the DUST fee — leave 0 until gero-sync
-      // forwards it (tracked as a tx-history followup).
-      fee: 0n,
-      blockHeight: raw.blockHeight ?? raw.block_height,
-      isShielded: false, // gero-sync's per-address subscription delivers unshielded only
-      raw: raw.raw ?? raw.cbor,
-    };
+    return rows;
   }
 
-  /** Empty token type or 32-byte-zero token type both mean native NIGHT. */
-  private isNightOutput(o: WsMidnightOutput): boolean {
+  /** Canonical color key for an output: NIGHT_TOKEN_TYPE_NULL for any native-NIGHT
+   * spelling (see isNativeNight), the raw color hex otherwise. */
+  private canonicalColor(o: WsMidnightOutput): string {
     const tt = o.tokenType ?? o.token_type ?? '';
-    return tt === '' || tt === NIGHT_TOKEN_TYPE_NULL;
+    return isNativeNight(tt) ? NIGHT_TOKEN_TYPE_NULL : tt;
   }
 
-  /** Map a gero-sync WS output payload to the wallet's UTxO record. */
-  private outputToUtxo(o: WsMidnightOutput): MidnightUnshieldedUtxo {
+  /**
+   * Map a gero-sync WS output payload to the wallet's UTxO record.
+   *
+   * `outputIndex` is resolved and validated by the caller (see
+   * `resolveOutputIndex`), which skips the output entirely when it has none —
+   * so the record this builds always carries a real dedup key rather than a
+   * fabricated `0`.
+   */
+  private outputToUtxo(o: WsMidnightOutput, outputIndex: number): MidnightUnshieldedUtxo {
     return {
       owner: o.owner,
       tokenType: o.tokenType ?? o.token_type ?? '',
       value: this.toBig(o.value),
       intentHash: o.intentHash ?? o.intent_hash ?? '',
-      outputIndex: o.outputIndex ?? o.output_index ?? 0,
+      outputIndex,
       ctime: undefined,
       initialNonce: '',
       registeredForDustGeneration:
@@ -552,20 +718,18 @@ class MidnightSyncService {
     return u.unshieldedSpentOutputs ?? u.unshielded_spent_outputs ?? [];
   }
 
-  private sumOutputsForOwner(outputs: WsMidnightOutput[], owner: string): bigint {
+  /** Sum outputs owned by `owner` whose canonical color matches `color` (see {@link canonicalColor}). */
+  private sumOutputsForOwnerAndColor(outputs: WsMidnightOutput[], owner: string, color: string): bigint {
     let sum = 0n;
     for (const o of outputs) {
       if (!o || o.owner !== owner) continue;
-      const tokenType = o.tokenType ?? o.token_type ?? '';
-      // Only count NIGHT (null token type). Non-null tokenTypes would be
-      // custom assets we don't track in `nightUnshielded`.
-      if (tokenType && tokenType !== NIGHT_TOKEN_TYPE_NULL) continue;
+      if (this.canonicalColor(o) !== color) continue;
       sum += this.toBig(o.value);
     }
     return sum;
   }
 
-  private parseUtxos(raw: any[]): MidnightUnshieldedUtxo[] {
+  private parseUtxos(raw: WsMidnightUtxoSnapshot[]): MidnightUnshieldedUtxo[] {
     return raw
       .map((u): MidnightUnshieldedUtxo | null => {
         if (!u || typeof u !== 'object') return null;
@@ -615,12 +779,12 @@ class MidnightSyncService {
     const dustRegStatus = account.dust_registration_status;
     if (dustGenStatus || dustRegStatus) {
       midnightActions.setDustState({
-        status: (dustGenStatus as any) ?? 'empty',
+        status: (dustGenStatus as DustGenerationStatus) ?? 'empty',
         current: this.toBig(account.dust_balance),
         cap: this.toBig(account.dust_cap),
         generationRate: this.toBig(account.dust_generating),
         timeRemainingSeconds: account.dust_time_remaining_seconds ?? null,
-        registrationStatus: (dustRegStatus as any) ?? 'Unregistered',
+        registrationStatus: (dustRegStatus as DustRegistrationStatus) ?? 'Unregistered',
       });
     }
   }

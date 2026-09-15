@@ -420,21 +420,24 @@ const tabs = computed(() => {
       info: t('wallet.rewardAddressInfo'),
       enabled: true,
     },
+    // Watch wallets have no DRep keys — walletBg returns `drep105: []` and
+    // `drep129: []` for WalletType.Watch, so indexing [0] threw here. Guard
+    // the access and hide the tab when the key is absent.
     {
       label: t('wallet.drepId105'),
-      value: keys.value.drep105[0].address,
-      path: keys.value.drep105[0].path,
-      cred: keys.value.drep105[0].cred,
+      value: keys.value.drep105?.[0]?.address ?? '',
+      path: keys.value.drep105?.[0]?.path ?? '',
+      cred: keys.value.drep105?.[0]?.cred ?? '',
       info: t('wallet.drepIdInfo'),
-      enabled: networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network),
+      enabled: !!keys.value.drep105?.[0] && networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network),
     },
     {
       label: t('wallet.drepId129'),
-      value: keys.value.drep129[0].address,
-      path: keys.value.drep129[0].path,
-      cred: keys.value.drep129[0].cred,
+      value: keys.value.drep129?.[0]?.address ?? '',
+      path: keys.value.drep129?.[0]?.path ?? '',
+      cred: keys.value.drep129?.[0]?.cred ?? '',
       info: t('wallet.drepIdInfo'),
-      enabled: networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network),
+      enabled: !!keys.value.drep129?.[0] && networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network),
     },
   ]
 });

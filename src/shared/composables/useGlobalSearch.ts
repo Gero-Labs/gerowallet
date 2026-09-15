@@ -7,9 +7,25 @@ import { useMarketData, type MarketToken } from '@/modules/market/composables/us
 import { useNftMarketData } from '@/modules/market/composables/useNftMarketData';
 import blockchainApi from '@/api/blockchain-api';
 import cashbackApi from '@/api/cashback-api';
+import governanceApi from '@/api/governance-api';
+import governanceActionsStore from '@/stores/governanceActionsStore';
 import networks from '@/utils/networks';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
+import { scoreMatch } from '@/shared/utils/searchScore';
+import { drepResults, governanceActionResults, governancePageResults } from '@/shared/utils/governanceSearch';
+import type { GovProposal } from '@/api/governance.types';
 
-export type SearchResultType = 'token' | 'transaction' | 'nft' | 'pool' | 'drep' | 'retailer' | 'contact' | 'setting';
+export type SearchResultType =
+  | 'token'
+  | 'transaction'
+  | 'nft'
+  | 'pool'
+  | 'drep'
+  | 'govAction'
+  | 'page'
+  | 'retailer'
+  | 'contact'
+  | 'setting';
 
 export interface SearchResult {
   type: SearchResultType;
@@ -18,7 +34,10 @@ export interface SearchResult {
   subtitle: string;
   icon?: string;
   route?: string;
-  data?: any; // Original object for navigation handlers
+  // Original object for navigation handlers — a grab-bag by design (token, pool,
+  // DRep, contact or settings target), consumed untyped by GlobalSearch.vue.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  data?: any;
   _score?: number; // Relevance score for sorting (higher = better match)
 }
 
@@ -33,14 +52,79 @@ let retailerCache: { name: string; id: string; icon: string }[] = [];
 let retailerCacheLoaded = false;
 let searchWatcherRegistered = false;
 
+/** Rows per governance-action page fetched for the search cache. */
+const GOV_ACTION_CACHE_PAGE_SIZE = 50;
+
+// Cached governance actions for local search. Same shape of deal as the
+// retailers: fetched once when the dialog opens, then filtered in memory.
+let govActionCache: GovProposal[] = [];
+let govActionCacheNetwork: string | null = null;
+let govActionCacheRequest: Promise<void> | null = null;
+
+/**
+ * Governance actions to search over.
+ *
+ * The store's list wins when the user has already been on the actions board:
+ * that is the page they just paged and filtered, so it is the set they mean.
+ * Otherwise this falls back to the cache below.
+ */
+function govActionPool(): GovProposal[] {
+  const loaded = governanceActionsStore.state.actions;
+  return loaded?.length ? loaded : govActionCache;
+}
+
+/**
+ * Fill `govActionCache` for `network`, once.
+ *
+ * Two pages are fetched, not one: `status: 'active'` first, because an open
+ * action is the one a user can still act on, plus an unfiltered page so a
+ * concluded action stays findable by name. Nexus has no title/search parameter
+ * on `/api/governance/proposals`, so the fetched rows ARE the searchable set
+ * and the matching itself happens client-side in `governanceActionResults`.
+ *
+ * Failures are swallowed and leave the cache empty. Governance is one source
+ * among several, and an outage here must not cost the user their token,
+ * transaction or settings results.
+ */
+function loadGovActionCache(network: string | undefined): Promise<void> {
+  if (!network) return Promise.resolve();
+  // A wallet switch invalidates the cache: actions are per-network.
+  if (govActionCacheNetwork !== network) {
+    govActionCacheNetwork = network;
+    govActionCache = [];
+    govActionCacheRequest = null;
+  }
+  if (govActionCacheRequest) return govActionCacheRequest;
+
+  govActionCacheRequest = (async () => {
+    const pages = await Promise.allSettled([
+      governanceApi.listProposals({ network, status: 'active', page: 1, pageSize: GOV_ACTION_CACHE_PAGE_SIZE }),
+      governanceApi.listProposals({ network, page: 1, pageSize: GOV_ACTION_CACHE_PAGE_SIZE }),
+    ]);
+    const byId = new Map<string, GovProposal>();
+    for (const page of pages) {
+      if (page.status !== 'fulfilled') continue;
+      for (const action of page.value?.items ?? []) {
+        if (action?.govActionId) byId.set(action.govActionId, action);
+      }
+    }
+    govActionCache = [...byId.values()];
+    // A failed pair leaves the cache empty AND retryable, so the next open tries
+    // again rather than reporting "no governance actions" forever.
+    if (!govActionCache.length) govActionCacheRequest = null;
+  })();
+
+  return govActionCacheRequest;
+}
+
 async function loadRetailerCache() {
   if (retailerCacheLoaded) return;
   try {
     const res = await cashbackApi.retailers(null, undefined, 0);
-    const items = res?.items || [];
-    const iconBase = res?.retailerIconBasePath || '';
-    const iconQuery = res?.iconQueryParam || '';
-    retailerCache = items.map((r: any) => ({
+    const items = res?.['items'] || [];
+    const iconBase = res?.['retailerIconBasePath'] || '';
+    const iconQuery = res?.['iconQueryParam'] || '';
+    retailerCache = items.map((r) => ({
       name: r.name,
       id: r.id,
       icon: (iconBase && r.iconPath) ? (iconBase + r.iconPath + iconQuery) : 'mdi-shopping',
@@ -96,8 +180,15 @@ export function useGlobalSearch() {
   // Resolve feature support for the active wallet's chain/network
   const wallet = computed(() => walletStore.loggedWallet);
   const hasCashback = computed(() => networks.resolveCashbackSupport(wallet.value?.chain, wallet.value?.network));
-  const hasGovernance = computed(() => networks.resolveGovernanceSupport(wallet.value?.chain, wallet.value?.network));
+  const hasGovernance = computed(
+    () =>
+      networks.resolveGovernanceSupport(wallet.value?.chain, wallet.value?.network) &&
+      featureFlagsStore.isGovernanceEnabled(),
+  );
   const hasStaking = computed(() => networks.resolveStakingSupport(wallet.value?.chain, wallet.value?.network));
+  // Registration rides the voting sub-flag on top of the master gate, exactly as
+  // the router's `governanceRegister` case and the nav drawer's child item do.
+  const hasGovernanceVoting = computed(() => hasGovernance.value && featureFlagsStore.isGovernanceVotingEnabled());
 
   function open() {
     isOpen.value = true;
@@ -105,6 +196,9 @@ export function useGlobalSearch() {
     results.value = [];
     // Lazy-load retailer cache on first open (only if chain supports cashback)
     if (!retailerCacheLoaded && hasCashback.value) loadRetailerCache();
+    // Same for governance actions: the list has no server-side search, so the
+    // rows have to be here before the user finishes typing.
+    if (hasGovernance.value) void loadGovActionCache(wallet.value?.network);
   }
 
   function close() {
@@ -118,28 +212,11 @@ export function useGlobalSearch() {
     else open();
   }
 
-  // ── DRep display name helper ─────────────────────────────────────────────
-  function getDRepName(d: any): string {
-    const givenName = d.metadata?.meta_json?.body?.givenName;
-    if (givenName) {
-      return givenName['@value'] || givenName;
-    }
-    return d.name || '';
-  }
-
-  // ── Scoring helper ────────────────────────────────────────────────────────
-  // Returns a relevance score: exact match > starts-with > contains
-  function scoreMatch(text: string | undefined, query: string): number {
-    if (!text) return 0;
-    const t = text.toLowerCase();
-    if (t === query) return 100;           // exact match
-    if (t.startsWith(query)) return 80;    // starts with query
-    const words = t.split(/[\s\-_]+/);
-    if (words.some(w => w === query)) return 70;  // exact word match
-    if (words.some(w => w.startsWith(query))) return 60; // word starts with
-    if (t.includes(query)) return 30;      // substring
-    return 0;
-  }
+  /** Shared options for the governance sources in `src/shared/utils/governanceSearch.ts`. */
+  const govSearchOptions = () => ({
+    t: (key: string) => String(t(key)),
+    currencySymbol: networks.resolveCurrencySymbol(wallet.value?.chain, wallet.value?.network),
+  });
 
   // ── In-memory search (instant) ──────────────────────────────────────────────
 
@@ -171,9 +248,9 @@ export function useGlobalSearch() {
       const txs = walletStore.transactions || [];
       const txArr = Array.isArray(txs) ? txs : [];
       const txMatches = txArr
-        .filter((tx: any) => tx.id?.toLowerCase().includes(lower))
+        .filter((tx) => tx.id?.toLowerCase().includes(lower))
         .slice(0, 5)
-        .map((tx: any) => ({
+        .map((tx) => ({
           type: 'transaction' as const,
           id: tx.id,
           title: `${tx.id.slice(0, 12)}...${tx.id.slice(-8)}`,
@@ -205,7 +282,7 @@ export function useGlobalSearch() {
 
     // 4. Contacts — from wallet contacts
     const contacts = walletStore.contacts || {};
-    const contactEntries = Object.entries(contacts) as [string, any][];
+    const contactEntries = Object.entries(contacts) as [string, { name?: string; img?: string }][];
     const contactMatches = contactEntries
       .filter(([address, contact]) =>
         contact.name?.toLowerCase().includes(lower) ||
@@ -229,13 +306,13 @@ export function useGlobalSearch() {
         const pools = stakingStore.pools || [];
         if (pools.length > 0) {
           const poolMatches = pools
-            .filter((p: any) =>
+            .filter((p) =>
               p.name?.toLowerCase().includes(lower) ||
               p.ticker?.toLowerCase().includes(lower) ||
               (lower.length >= 8 && p.pool_id_bech32?.toLowerCase().includes(lower))
             )
             .slice(0, 5)
-            .map((p: any) => ({
+            .map((p) => ({
               type: 'pool' as const,
               id: p.pool_id_bech32 || p.poolId,
               title: p.ticker ? `[${p.ticker}] ${p.name}` : p.name || p.pool_id_bech32,
@@ -252,35 +329,16 @@ export function useGlobalSearch() {
       }
     }
 
-    // 6. DReps — from in-memory store (only if chain supports governance)
+    // 6. Governance: DReps, actions and the hub's own pages. One gate for all
+    //    three: no governance result may appear when the chain does not support
+    //    governance or the master feature flag is off.
     if (hasGovernance.value) {
       try {
-        const dreps = governanceStore.dreps || [];
-        if (dreps.length > 0) {
-          const drepMatches = dreps
-            .filter((d: any) => {
-              const name = getDRepName(d);
-              return name?.toLowerCase().includes(lower) ||
-                (lower.length >= 8 && d.drep_id?.toLowerCase().includes(lower));
-            })
-            .slice(0, 5)
-            .map((d: any) => {
-              const name = getDRepName(d);
-              return {
-                type: 'drep' as const,
-                id: d.drep_id,
-                title: name || d.drep_id?.slice(0, 20) + '...',
-                subtitle: t('search.dreps'),
-                icon: 'mdi-vote',
-                route: `/governance?drep=${d.drep_id}`,
-                data: d,
-                _score: scoreMatch(name, lower),
-              };
-            });
-          found.push(...drepMatches);
-        }
+        found.push(...drepResults(governanceStore.dreps, q, govSearchOptions()));
+        found.push(...governanceActionResults(govActionPool(), q, govSearchOptions()));
+        found.push(...governancePageResults(q, { ...govSearchOptions(), votingEnabled: hasGovernanceVoting.value }));
       } catch {
-        // governanceStore not available
+        // governance stores not available
       }
     }
 
@@ -362,7 +420,7 @@ export function useGlobalSearch() {
     if (hasStaking.value) {
       apiSearches.push(
         blockchainApi.getPoolsPaginated({ search: q, page: 1, per_page: 5 }, chain, network)
-          .then((res: any) => {
+          .then((res) => {
             const items = res?.items || [];
             for (const p of items) {
               found.push({
@@ -381,27 +439,29 @@ export function useGlobalSearch() {
       );
     }
 
-    // DReps — only if chain supports governance
+    // Governance: only if chain supports it AND the master flag is on
     if (hasGovernance.value) {
+      // DReps: `/api/dreps` filters server-side on `search` (verified in
+      // blockchain-api.ts, which also falls back to filtering an unpaginated
+      // response itself), so the query goes over the wire rather than locally.
       apiSearches.push(
         blockchainApi.getDRepsPaginated({ search: q, page: 1, per_page: 5 }, chain, network)
-        .then((res: any) => {
-          const items = res?.items || [];
-          for (const d of items) {
-            const name = getDRepName(d);
-            found.push({
-              type: 'drep',
-              id: d.drep_id,
-              title: name || d.drep_id?.slice(0, 20) + '...',
-              subtitle: t('search.dreps'),
-              icon: 'mdi-vote',
-              route: `/governance?drep=${d.drep_id}`,
-              data: d,
-              _score: scoreMatch(name, q.toLowerCase()),
-            });
-          }
+        .then((res) => {
+          found.push(...drepResults(res?.items, q, govSearchOptions()));
         })
         .catch(() => {})
+      );
+
+      // Governance actions: no server-side search exists, so the async phase
+      // waits for the cached pages and then filters them in memory. This is what
+      // makes an action findable when the dialog was opened and typed into
+      // before the fetch landed.
+      apiSearches.push(
+        loadGovActionCache(network)
+          .then(() => {
+            found.push(...governanceActionResults(govActionPool(), q, govSearchOptions()));
+          })
+          .catch(() => {})
       );
     }
 

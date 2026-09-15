@@ -38,6 +38,7 @@ import { geroStore } from '@/stores/geroStore';
 import { walletStore } from '@/stores/walletStore';
 import { midnightStore } from '@/stores/midnightStore';
 import { Blockchain, Wallet } from '@/models/types';
+import { cardanoTwinNetwork } from '@/chains/midnight/midnightConfig';
 import { debugLog } from '@/utils/debug';
 
 export interface CardanoStakeIdentity {
@@ -110,13 +111,21 @@ async function stakeIdentityFromRecord(
 }
 
 /**
- * Every Cardano identity the logged Midnight wallet can see on
- * `cardanoNetwork`: the same-seed twin (if fully derivable) plus imported
- * Cardano wallet records on that network, deduped by stake address.
+ * Every Cardano identity the logged Midnight wallet can see on the Cardano
+ * network that pairs with `network`: the same-seed twin (if fully derivable)
+ * plus imported Cardano wallet records on that network, deduped by stake
+ * address.
+ *
+ * Callers pass the LOGGED wallet's network, which on a Midnight wallet is a
+ * Midnight network. Those names used to double as Cardano ones; stagenet does
+ * not, so the pairing goes through `cardanoTwinNetwork` (stagenet's cNIGHT
+ * lives on Cardano preprod). It is the identity function for every Cardano
+ * network, so a Cardano-network argument still behaves as before.
  */
 export async function enumerateCardanoStakeIdentities(
-  cardanoNetwork: string,
+  network: string,
 ): Promise<CardanoStakeIdentity[]> {
+  const cardanoNetwork = cardanoTwinNetwork(network);
   const list: CardanoStakeIdentity[] = [];
   const twin = twinStakeIdentity();
   if (twin) list.push(twin);

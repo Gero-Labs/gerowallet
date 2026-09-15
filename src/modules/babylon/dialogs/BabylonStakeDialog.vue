@@ -372,6 +372,7 @@ const amountError = ref('');
 // Derived
 const availableBalance = computed(() => {
   if (!utxos.value || utxos.value.length === 0) return BigInt(0);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- walletStore.utxos is a chain-agnostic union (bigint | IUnifiedUtxo | Utxo); annotating a shape here type-errors rather than describes it
   return utxos.value.reduce((sum: bigint, u: any) => sum + BigInt(u.value), BigInt(0));
 });
 
@@ -452,14 +453,12 @@ async function authenticateWithPassKey() {
   if (!loggedWallet.value?.webAuthnCredentialId) return;
   loading.value = true;
   try {
-    const { evaluatePrfForWallet } = await import('@/shared/utils/webauthn-prf');
-    const prfOutput = await evaluatePrfForWallet(
-      loggedWallet.value.webAuthnCredentialId,
-      loggedWallet.value.id.toString()
-    );
+    const { evaluateWalletPrf } = await import('@/shared/utils/passkeyPrf');
+    const prfOutput = await evaluateWalletPrf(loggedWallet.value);
     privateKeyBytes.value = new Uint8Array(prfOutput);
-  } catch (err: any) {
-    txStatus.value = { type: 'error', message: err.message || t('security.passKeyAuthFailed') };
+  } catch (error: unknown) {
+    const message = (error as { message?: string })?.message;
+    txStatus.value = { type: 'error', message: message || t('security.passKeyAuthFailed') };
   } finally {
     loading.value = false;
   }
@@ -483,13 +482,14 @@ async function confirmStake() {
       stakingTimelock: timelockBlocks.value,
       stakingAmountSat: stakingAmountSats.value,
       feeRate: feeEstimates.value[selectedFeePriority.value],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- walletStore.utxos is a chain-agnostic union (bigint | IUnifiedUtxo | Utxo); annotating a shape here type-errors rather than describes it
       utxos: (utxos.value || []) as any,
       params: props.params,
       network: loggedWallet.value?.network || 'Mainnet',
     });
 
     // Send pre-built PSBT to background for signing + broadcast only.
-    const payload: Record<string, any> = { psbtHex };
+    const payload: Record<string, unknown> = { psbtHex };
 
     if (isPrfWallet.value && privateKeyBytes.value) {
       payload['privateKeyBytes'] = Array.from(privateKeyBytes.value);
@@ -497,6 +497,7 @@ async function confirmStake() {
       payload['password'] = password.value;
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- sendToBackgroundFromOptions resolves an untyped messaging envelope
     const response: any = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.BABYLON_STAKE,
       data: payload,
@@ -512,8 +513,9 @@ async function confirmStake() {
       message: `${t('babylon.stakeDialog.stakeSuccess')} ${response.data.txId.slice(0, 16)}…`,
     };
     emit('staked', response.data.txId);
-  } catch (err: any) {
-    txStatus.value = { type: 'error', message: err.message || t('send.transactionFailed') };
+  } catch (error: unknown) {
+    const message = (error as { message?: string })?.message;
+    txStatus.value = { type: 'error', message: message || t('send.transactionFailed') };
   } finally {
     loading.value = false;
   }
