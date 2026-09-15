@@ -1,5 +1,7 @@
 import { MIDNIGHT_PROVING_CONSENT_VERSION, type MidnightProvingConsent, type MidnightRemoteProver } from '@/chains/midnight/midnightProvingConsent';
 import type { MidnightSyncIdentity } from '@/chains/midnight/midnightSyncGeneration';
+import { hydrateSiteActivity, reduceSiteActivity } from '@/chains/midnight/midnightSiteActivity';
+import type { MidnightSiteActivity, SiteActivityEvent } from '@/chains/midnight/midnightSiteActivity';
 /**
  * Midnight Wallet Store
  *
@@ -189,6 +191,12 @@ export interface MidnightStore {
   privateSyncStatus: 'idle' | 'syncing' | 'synced' | 'error';
   /** See {@link MidnightPrivateSyncProgress}; only meaningful while `privateSyncStatus` is `syncing`. */
   privateSyncProgress: MidnightPrivateSyncProgress | null;
+  /**
+   * What a connected site's transaction is doing inside the wallet
+   * (Prove → Fund → Submit), rendered by mini-Gero's site-activity card.
+   * See `midnightSiteActivity.ts`; null when no site has been active.
+   */
+  siteActivity: MidnightSiteActivity | null;
 
   /**
    * Record of the user's consent to send shielded-tx witness data through
@@ -350,6 +358,7 @@ export const midnightStore = Vue.observable<MidnightStore>({
   chainIdentity: null,
   privateSyncStatus: 'idle',
   privateSyncProgress: null,
+  siteActivity: null,
   shieldedProvingConsent: null,
   activeWalletKey: null,
   sendProgress: null,
@@ -566,6 +575,9 @@ if (context === 'browser') {
     // to unlock a scan the background already completed.
     midnightStore.privateSyncStatus = hydratePrivateSyncStatus(stored.privateSyncStatus);
     midnightStore.privateSyncProgress = hydratePrivateSyncProgress(stored.privateSyncProgress);
+    // A site's transaction may be mid-flight when the panel opens; the card
+    // applies its own staleness window, so restoring the record is safe.
+    midnightStore.siteActivity = hydrateSiteActivity(stored.siteActivity);
   });
 }
 
@@ -731,7 +743,7 @@ function applyUpdates(updates: Partial<MidnightStore>) {
   // Plain-typed fields — copy directly (no BigInt nesting to handle)
   for (const key of [
     'isActive', 'lastSync', 'networkStatus', 'tip', 'addresses', 'lastMidnightTxId', 'chainIdentity', 'privateSyncStatus',
-    'shieldedProvingConsent', 'activeWalletKey', 'sendProgress', 'privateSyncProgress', 'shieldedSyncAvailable',
+    'shieldedProvingConsent', 'activeWalletKey', 'sendProgress', 'privateSyncProgress', 'shieldedSyncAvailable', 'siteActivity',
     'proofServer',
   ] as const) {
     if (key in updates) {
@@ -819,6 +831,18 @@ export const midnightActions = {
     midnightStore.privateSyncProgress = privateSyncProgress;
     broadcastFromBackground({ privateSyncProgress });
   },
+
+  /** One connector event from a site's transaction (proving / balancing / submit). */
+  recordSiteActivity(origin: string, event: SiteActivityEvent) {
+    const siteActivity = reduceSiteActivity(midnightStore.siteActivity, origin, event, Date.now());
+    midnightStore.siteActivity = siteActivity;
+    broadcastFromBackground({ siteActivity });
+  },
+
+  clearSiteActivity() {
+    midnightStore.siteActivity = null;
+    broadcastFromBackground({ siteActivity: null });
+  },
   applyPrivateSnapshot(shieldedTokens: Record<string, bigint>, transactions: MidnightTransaction[]) {
     const balances = { ...midnightStore.balances, shieldedTokens, nightShielded: 0n };
     const pending = midnightStore.transactions.filter(tx => tx.isShielded && tx.status === 'pending'
@@ -899,6 +923,7 @@ export const midnightActions = {
         chainIdentity: null,
         privateSyncStatus: 'idle',
         privateSyncProgress: null,
+        siteActivity: null,
       });
       debugLog(`🌙 Midnight wallet switch detected (${prevKey.slice(-8)} → ${newKey.slice(-8)}) — cleared stale state`);
     }
@@ -926,6 +951,7 @@ export const midnightActions = {
           chainIdentity: null,
           privateSyncStatus: 'idle',
           privateSyncProgress: null,
+          siteActivity: null,
         }
         : { isActive: true, addresses: safeAddresses, activeWalletKey: newKey, networkStatus: 'connecting', shieldedSyncAvailable },
       true,
