@@ -742,6 +742,86 @@
         </template>
       </div>
 
+      <!-- Midnight DApp Connector: balanceUnsealedTransaction — fund + fee-pay a dapp-built tx -->
+      <div v-else-if="currentRequest.method === 'midnight_balanceUnsealedTransaction'" class="dapp-sign-data">
+        <div class="dapp-identity mb-4">
+          <div class="favicon-wrapper">
+            <img :src="faviconUrl" class="favicon-img" @error="onFaviconError" v-if="!faviconFailed" />
+            <v-icon v-else size="32" :color="primaryColor">mdi-scale-balance</v-icon>
+          </div>
+          <div class="dapp-domain-info">
+            <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('midnight.connector.balanceTitle') }}</h3>
+            <span class="dapp-url"><span class="dapp-sub">{{ splitHost(makeTransferDomain).sub }}</span><b class="dapp-root">{{ splitHost(makeTransferDomain).root }}</b></span>
+          </div>
+        </div>
+
+        <div class="sign-data-message">
+          <p class="grey--text text-caption mb-3">{{ $t('midnight.connector.balanceBody') }}</p>
+          <div v-for="(c, i) in balanceContributions" :key="i" class="d-flex justify-space-between mb-2">
+            <span class="grey--text text-caption">{{ $t('common.amount') }}</span>
+            <span class="white--text text-caption font-weight-bold">{{ contributionDisplay(c) }} {{ contributionTicker(c) }}</span>
+          </div>
+          <p v-if="balanceContributions.length === 0" class="grey--text text-caption mb-2">{{ $t('midnight.connector.balanceNothing') }}</p>
+          <div class="d-flex align-start mt-2">
+            <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-eye-outline</v-icon>
+            <span class="grey--text text-caption">{{ $t('midnight.send.publicTxNote') }}</span>
+          </div>
+          <p class="grey--text text-caption mt-2 mb-0">{{ $t('midnight.connector.transferFeesNote') }}</p>
+        </div>
+
+        <template v-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
+          <v-text-field
+            v-model="spendingPassword"
+            :type="showPassword ? 'text' : 'password'"
+            :label="$t('miniGero.spendingPassword')"
+            :append-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+            :error-messages="signError"
+            outlined dense dark
+            class="password-input"
+            @click:append="showPassword = !showPassword"
+            @keyup.enter="signMidnightBalanceNormal"
+          />
+          <div class="action-buttons">
+            <v-btn outlined rounded dark @click="rejectMidnightBalance">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn
+              class="geroButton"
+              rounded
+              depressed
+              :loading="signing"
+              :disabled="!spendingPassword"
+              @click="signMidnightBalanceNormal"
+            >
+              {{ $t('miniGero.approve') }}
+            </v-btn>
+          </div>
+        </template>
+
+        <template v-else-if="isPrfWallet">
+          <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('miniGero.passKeyRequired') }}</p>
+          <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
+          <div class="action-buttons">
+            <v-btn outlined rounded dark @click="rejectMidnightBalance">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn
+              class="geroButton"
+              rounded
+              depressed
+              :loading="signing"
+              @click="signMidnightBalancePrf"
+            >
+              {{ $t('miniGero.approve') }}
+            </v-btn>
+          </div>
+        </template>
+
+        <!-- Midnight has no hardware-wallet signing support — decline only. -->
+        <template v-else>
+          <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('midnight.connector.walletTypeUnsupported') }}</p>
+          <div class="action-buttons">
+            <v-btn outlined rounded dark block @click="rejectMidnightBalance">{{ $t('miniGero.reject') }}</v-btn>
+          </div>
+        </template>
+      </div>
+
       <!-- WalletConnect: session proposal (pairing) -->
       <div v-else-if="currentRequest.method === 'wcSessionProposal'" class="dapp-connect">
         <div class="dapp-identity mb-4">
@@ -956,6 +1036,7 @@ function queuedItemLabel(item: DAppRequest): string {
     midnight_connect: 'miniGero.connectRequest',
     midnight_signData: 'miniGero.signDataRequest',
     midnight_makeTransfer: 'miniGero.transferRequest',
+    midnight_balanceUnsealedTransaction: 'miniGero.balanceRequest',
     wcSessionProposal: 'miniGero.connectRequest',
   };
   const methodLabel = methodKeys[item.method] ? t(methodKeys[item.method]) : item.method;
@@ -1076,6 +1157,8 @@ const isBT = ref(false);
 // arrive as base-unit decimal STRINGS (the page bridge stringifies the bigint);
 // display them in NIGHT for the user.
 type ConnectorDesiredOutput = { kind: string; type?: string; value: string; recipient: string };
+/** Mirrors `ConnectorContribution` in chains/midnight/midnightConnectorBalance.ts (kept local: that module loads the ledger WASM). */
+type ConnectorContribution = { token: string; amount: string };
 
 const makeTransferDomain = computed(() => {
   const website = currentRequest.value?.payload?.website || '';
@@ -2019,6 +2102,7 @@ watch(loggedWallet, (newWallet, oldWallet) => {
   if (currentRequest.value.method === 'midnight_connect') rejectMidnightConnect();
   else if (currentRequest.value.method === 'midnight_signData') rejectMidnightSignData();
   else if (currentRequest.value.method === 'midnight_makeTransfer') rejectMidnightMakeTransfer();
+  else if (currentRequest.value.method === 'midnight_balanceUnsealedTransaction') rejectMidnightBalance();
   else reject('wallet_changed');
 });
 
@@ -2713,6 +2797,8 @@ function onEscapeReject() {
     rejectMidnightSignData();
   } else if (currentRequest.value?.method === 'midnight_makeTransfer') {
     rejectMidnightMakeTransfer();
+  } else if (currentRequest.value?.method === 'midnight_balanceUnsealedTransaction') {
+    rejectMidnightBalance();
   } else {
     reject();
   }
@@ -2882,6 +2968,99 @@ async function signMidnightTransferPrf() {
     approve({ tx });
   } catch (e) {
     console.error('[DApp] Midnight PRF makeTransfer error:', e);
+    signError.value = (e as Error)?.message || 'PassKey signing failed';
+  } finally {
+    signing.value = false;
+  }
+}
+
+// ── Midnight DApp Connector: balanceUnsealedTransaction ───────────────────
+// The dapp built and proved the transaction; the wallet adds the funds listed
+// in `balanceContributions`, pays the DUST fee, signs and seals it. The panel
+// only passes credentials; keys and the tx bytes never leave the background.
+const balanceContributions = computed<ConnectorContribution[]>(() => {
+  const data = currentRequest.value?.payload?.data as { contributions?: ConnectorContribution[] } | undefined;
+  return Array.isArray(data?.contributions) ? (data!.contributions as ConnectorContribution[]) : [];
+});
+
+/** A contribution rendered through the same colour-aware helpers as transfer outputs. */
+function contributionAsOutput(c: ConnectorContribution): ConnectorDesiredOutput {
+  return { kind: 'unshielded', type: c.token, value: c.amount, recipient: '' };
+}
+function contributionDisplay(c: ConnectorContribution): string {
+  return outputAmountDisplay(contributionAsOutput(c));
+}
+function contributionTicker(c: ConnectorContribution): string {
+  return outputTicker(contributionAsOutput(c));
+}
+
+function rejectMidnightBalance() {
+  spendingPassword.value = '';
+  signError.value = '';
+  reject(midnightError(MidnightErrorCode.Rejected, 'User declined the balancing request'));
+}
+
+async function buildMidnightBalanceTx(
+  credentials: { password?: string; prfSecret?: Uint8Array },
+): Promise<{ tx: string }> {
+  const data = currentRequest.value?.payload?.data as { tx?: string } | undefined;
+  if (typeof data?.tx !== 'string' || !data.tx) throw new Error('No transaction to balance');
+  const { balanceConnectorTransaction } = await import('@/services/midnight-tx.service');
+  return balanceConnectorTransaction(data.tx, credentials);
+}
+
+async function signMidnightBalanceNormal() {
+  if (!currentRequest.value || !spendingPassword.value) return;
+  // Capture the request identity BEFORE the multi-second balance round-trip
+  // (see signMidnightTransferNormal): never deliver this tx to a superseded request.
+  const reqId = currentRequest.value.requestId;
+  signing.value = true;
+  signError.value = '';
+  try {
+    const { tx } = await buildMidnightBalanceTx({ password: spendingPassword.value });
+    if (currentRequest.value?.requestId !== reqId) return;
+    approve({ tx });
+    spendingPassword.value = '';
+  } catch (e) {
+    console.error('[DApp] Midnight balanceUnsealedTransaction error:', e);
+    signError.value = (e as Error)?.message || 'Balancing failed';
+  } finally {
+    signing.value = false;
+  }
+}
+
+async function signMidnightBalancePrf() {
+  if (!currentRequest.value) return;
+  const reqId = currentRequest.value.requestId;
+  signing.value = true;
+  signError.value = '';
+  try {
+    // Same cross-window PassKey popup as signMidnightTransferPrf: WebAuthn
+    // doesn't reliably work from inside the side panel's own window.
+    const popupUrl = chrome.runtime.getURL('index.html?mode=rawPrf#/passkey-auth');
+    window.open(popupUrl, 'PassKeyAuth', 'width=400,height=500,popup=1');
+    const prfBytes = await new Promise<Uint8Array>((resolve, rejectPromise) => {
+      const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
+      const handler = (event: MessageEvent) => {
+        if (event.origin !== extensionOrigin) return;
+        if (event.data.type === 'PASSKEY_AUTH_RESULT') {
+          window.removeEventListener('message', handler);
+          const { success, prfOutput, error } = event.data.payload;
+          if (success && prfOutput) resolve(new Uint8Array(prfOutput));
+          else rejectPromise(new Error(error || 'PassKey authentication failed'));
+        }
+      };
+      window.addEventListener('message', handler);
+      setTimeout(() => {
+        window.removeEventListener('message', handler);
+        rejectPromise(new Error('PassKey authentication timed out'));
+      }, 60000);
+    });
+    const { tx } = await buildMidnightBalanceTx({ prfSecret: prfBytes });
+    if (currentRequest.value?.requestId !== reqId) return;
+    approve({ tx });
+  } catch (e) {
+    console.error('[DApp] Midnight PRF balanceUnsealedTransaction error:', e);
     signError.value = (e as Error)?.message || 'PassKey signing failed';
   } finally {
     signing.value = false;

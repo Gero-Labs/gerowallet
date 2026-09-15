@@ -146,9 +146,18 @@ async function fetchDustBootstrapSnapshot(
  * WP-SH2, 2026-07-13) — both need the identical DUST-ledger sync behavior;
  * do not fork this logic.
  */
+/**
+ * What the DUST wallet can price: the wallet's own unproven txs, or a dapp's
+ * proven-but-unbound tx (DApp Connector balancing) — both are members of the
+ * SDK's `AnyTransaction`.
+ */
+export type DustBalanceableTransaction =
+  | ledger.UnprovenTransaction
+  | ledger.Transaction<ledger.SignatureEnabled, ledger.Proof, ledger.PreBinding>;
+
 export async function syncDustWalletAndBalanceFees(
   args: SyncDustAndBalanceFeesArgs,
-  txs: ledger.UnprovenTransaction[],
+  txs: ReadonlyArray<DustBalanceableTransaction>,
 ): Promise<ledger.UnprovenTransaction> {
   requireMidnightLedger8(args.sdkNetworkId, 'Legacy DUST balancing');
   const [{ DustWallet }, ledgerMod] = await Promise.all([
@@ -543,6 +552,42 @@ export async function signUnshieldedSegments(
   unshieldedSecretKey: Uint8Array,
   tx: ledger.UnprovenTransaction,
 ): Promise<ledger.UnprovenTransaction> {
+  // signUnprovenTransaction walks the tx's segments directly; it doesn't
+  // read UTxO state. start() is enough; we skip waitForSyncedState.
+  const { wallet: unshieldedWallet, keystore } = await startUnshieldedWalletForKey(
+    sdkNetworkId, endpoints, unshieldedSecretKey,
+  );
+
+  try {
+    const signSegment = (data: Uint8Array): ledger.Signature =>
+      keystore.signData(data);
+    const signedTx = await unshieldedWallet.signUnprovenTransaction(tx, signSegment);
+    debugLog('🌙 unshielded segments signed');
+    return signedTx;
+  } finally {
+    try { await unshieldedWallet.stop(); } catch { /* swallow */ }
+  }
+}
+
+/**
+ * A STARTED (not synced) ledger-8 unshielded SDK wallet for
+ * `unshieldedSecretKey`, plus its keystore. `start()` opens the indexer
+ * subscription; callers that need UTxO state (coin selection in
+ * `midnightDappBalancer.ts`) must additionally `waitForSyncedState()`;
+ * signing-only callers ({@link signUnshieldedSegments}) need not. The caller
+ * owns `wallet.stop()`.
+ *
+ * Shared by the wallet's own segment signing and the DApp Connector's
+ * balancing path — do not fork the builder setup.
+ */
+export async function startUnshieldedWalletForKey(
+  sdkNetworkId: string,
+  endpoints: MidnightNetworkEndpoints,
+  unshieldedSecretKey: Uint8Array,
+): Promise<{
+  wallet: Awaited<ReturnType<typeof unshieldedBuilderStart>>;
+  keystore: ReturnType<typeof import('@midnightntwrk/wallet-sdk-unshielded-wallet').createKeystore>;
+}> {
   requireMidnightLedger8(sdkNetworkId, 'Legacy segment signing');
   const [{ UnshieldedWallet, createKeystore }, abstractionsMod] = await Promise.all([
     import('@midnightntwrk/wallet-sdk-unshielded-wallet'),
@@ -557,8 +602,6 @@ export async function signUnshieldedSegments(
     TransactionHistoryStorage: { TransactionHistoryCommonSchema: unknown };
   }).TransactionHistoryStorage;
 
-  // signUnprovenTransaction walks the tx's segments directly; it doesn't
-  // read UTxO state. start() is enough; we skip waitForSyncedState.
   const keystore = createKeystore(unshieldedSecretKey, sdkNetworkId);
   const publicKey = {
     publicKey: keystore.getPublicKey(),
@@ -580,17 +623,8 @@ export async function signUnshieldedSegments(
       typeof UnshieldedWallet
     >[0]['txHistoryStorage'],
   });
-  const unshieldedWallet = await unshieldedBuilderStart(unshieldedBuilder, publicKey);
-
-  try {
-    const signSegment = (data: Uint8Array): ledger.Signature =>
-      keystore.signData(data);
-    const signedTx = await unshieldedWallet.signUnprovenTransaction(tx, signSegment);
-    debugLog('🌙 unshielded segments signed');
-    return signedTx;
-  } finally {
-    try { await unshieldedWallet.stop(); } catch { /* swallow */ }
-  }
+  const wallet = await unshieldedBuilderStart(unshieldedBuilder, publicKey);
+  return { wallet, keystore };
 }
 
 /**
