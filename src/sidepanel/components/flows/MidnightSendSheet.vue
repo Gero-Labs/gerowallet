@@ -360,7 +360,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, nextTick, toRefs } from 'vue';
+import { ref, computed, watch, nextTick, toRefs } from 'vue';
 import { geroStore } from '@/stores/geroStore';
 import { useMidnightSendTimeline } from '@/shared/composables/useMidnightSendTimeline';
 import MidnightSendTimeline from '@/shared/components/MidnightSendTimeline.vue';
@@ -849,9 +849,19 @@ async function restoreSponsorPreference() {
   if (!wallet) return;
   const { linkFor, loadSponsorLinks } = await import('@/chains/midnight/midnightSponsorLinks');
   const link = linkFor(await loadSponsorLinks(), wallet.id, wallet.network);
-  sponsorWalletId.value = link?.sponsorWalletId ?? null;
+  // Re-check: the capacity may have flipped while the links were loading.
+  sponsorWalletId.value = noFeeCapacity.value ? (link?.sponsorWalletId ?? null) : null;
 }
-onMounted(restoreSponsorPreference);
+// A saved sponsor is restored only while this wallet actually needs one, and
+// dropped the moment it does not. `sponsorWalletId` is otherwise only written
+// by the picker, which is hidden whenever `noFeeCapacity` is false — so
+// without this, a wallet that saved a sponsor back when the guard wrongly
+// refused it (a Path-B wallet, before the merged-balance fix) would send
+// sponsored with no in-dialog way to opt out.
+watch(noFeeCapacity, (needsSponsor) => {
+  if (needsSponsor) void restoreSponsorPreference();
+  else sponsorWalletId.value = null;
+}, { immediate: true });
 
 async function signAndSubmitPrf() {
   if (submitting.value) return;
