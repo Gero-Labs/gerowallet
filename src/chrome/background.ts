@@ -79,6 +79,8 @@ import {
   validateConnectorBalanceRequest,
 } from '@/chains/midnight/midnightConnectorBalance';
 import * as midnightDappProving from '@/chrome/midnightDappProving';
+import * as privateBalanceGateModule from '@/chrome/midnightPrivateBalanceGate';
+import * as provingParkModule from '@/chrome/midnightProvingPark';
 import {
   createMpcGoogleWalletFlow,
   unlockMpcWalletFlow,
@@ -5598,10 +5600,11 @@ function parseMidnightMiniGeroError(
 const midnightDeclinedMethodsByTab = new Map<number, Set<string>>();
 
 // Parked-prompt state for the two gesture-less connector paths (created lazily
-// by loadPrivateBalanceGate / loadMidnightProvingPark below).
-type PrivateBalanceGateModule = typeof import('@/chrome/midnightPrivateBalanceGate');
+// by loadPrivateBalanceGate / loadMidnightProvingPark below). The modules are
+// static imports (see the note on the import block); the instances stay lazy.
+type PrivateBalanceGateModule = typeof privateBalanceGateModule;
 let privateBalanceGate: InstanceType<PrivateBalanceGateModule['PrivateBalanceGate']> | undefined;
-type ProvingParkModule = typeof import('@/chrome/midnightProvingPark');
+type ProvingParkModule = typeof provingParkModule;
 let midnightProvingPark: InstanceType<ProvingParkModule['ProvingPark']> | undefined;
 
 chrome.tabs?.onRemoved?.addListener((tabId) => {
@@ -5895,10 +5898,8 @@ app.add(MIDNIGHT_METHOD.getUnshieldedBalances, async (request, sendResponse) => 
 });
 
 async function loadPrivateBalanceGate() {
-  const [mod, { midnightStore }] = await Promise.all([
-    import('@/chrome/midnightPrivateBalanceGate'),
-    import('@/stores/midnightStore'),
-  ]);
+  const mod = privateBalanceGateModule;
+  const { midnightStore } = await import('@/stores/midnightStore');
   if (!privateBalanceGate) {
     privateBalanceGate = new mod.PrivateBalanceGate({
       status: () => midnightStore.privateSyncStatus,
@@ -6374,10 +6375,10 @@ app.add(MIDNIGHT_METHOD.provingUpload, async (request, sendResponse) => {
  * request whose approve means retry and whose reject means cancel.
  */
 async function loadMidnightProvingPark() {
-  const [mod, { checkProofServerHealth, isProverNetworkError }] = await Promise.all([
-    import('@/chrome/midnightProvingPark'),
-    import('@/chains/midnight/midnightLocalProver'),
-  ]);
+  const mod = provingParkModule;
+  // midnightLocalProver stays dynamic: it is shared with the options bundle
+  // (useProofServerSettings), where that import splits the ledger chunk.
+  const { checkProofServerHealth, isProverNetworkError } = await import('@/chains/midnight/midnightLocalProver');
   if (!midnightProvingPark) {
     midnightProvingPark = new mod.ProvingPark({
       preflight: (target) => checkProofServerHealth(target.url, { headers: target.headers, acceptNotFound: target.source === 'zkpaas' }),

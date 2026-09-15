@@ -32,6 +32,12 @@
  * stable across reorders, and still distinct for the eight unrelated packages
  * that all bundle as `index$N`.
  *
+ * The export list is only there to tell same-named modules apart. When a base
+ * name occurs exactly once in the baseline and exactly once in the build, it is
+ * the same module whatever its exports now are — a pinned module that gained a
+ * function must not read as a new hazard. That case is reported as a key that
+ * needs re-pinning, not as a failure.
+ *
  * ## Which file is analysed
  *
  * Production runs terser, which mangles every namespace const to a short name
@@ -156,8 +162,34 @@ const known = existsSync(BASELINE)
   ? new Set(JSON.parse(readFileSync(BASELINE, 'utf8')).known)
   : new Set();
 
-const introduced = found.filter(entry => !known.has(entry.key));
-const fixed = [...known].filter(key => !foundKeys.includes(key)).sort();
+const baseOf = key => key.replace(/\{.*$/, '');
+const countBases = keys => {
+  const counts = new Map();
+  for (const key of keys) counts.set(baseOf(key), (counts.get(baseOf(key)) ?? 0) + 1);
+  return counts;
+};
+const knownBases = countBases(known);
+const foundBases = countBases(foundKeys);
+
+/** Same module, different exports: unique base name on both sides. */
+const drifted = entry =>
+  !known.has(entry.key)
+  && knownBases.get(baseOf(entry.key)) === 1
+  && foundBases.get(baseOf(entry.key)) === 1;
+
+const introduced = found.filter(entry => !known.has(entry.key) && !drifted(entry));
+const driftedKeys = found.filter(drifted).map(entry => entry.key);
+const fixed = [...known]
+  .filter(key => !foundKeys.includes(key))
+  .filter(key => !driftedKeys.some(next => baseOf(next) === baseOf(key)))
+  .sort();
+
+if (driftedKeys.length > 0) {
+  console.log(
+    `check-bundle-tdz: ${driftedKeys.length} known offender(s) changed exports (${driftedKeys.join(', ')}).`
+    + ' Same module, still pinned — re-pin with --write to update the key.',
+  );
+}
 
 if (fixed.length > 0) {
   console.log(
