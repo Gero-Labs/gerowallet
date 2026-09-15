@@ -6262,19 +6262,16 @@ app.add(MIDNIGHT_METHOD.balanceUnsealedTransaction, (request, sendResponse) => {
       return;
     }
     const payload = { data: { tx: validation.tx, contributions }, website: origin, favIconUrl: send.tab?.favIconUrl };
-    const sendToPanel = () =>
-      sendToMiniGero(MIDNIGHT_METHOD.balanceUnsealedTransaction, payload, tabId)
-        .then((response: BackgroundResponse) => reply({ data: response.data })) // response.data === { tx }
-        .catch(err => reply({
-          error: parseMidnightMiniGeroError(err, MidnightErrorCode.InternalError, 'Failed to complete the balancing request'),
-        }));
     // The dapp calls this after its (async) proving, so there is no user
     // gesture left to open the panel with. Park the request instead of
-    // failing it: the badge shows it and it is delivered when the user opens
-    // the panel — same treatment as the private-balance and proof-server
-    // prompts. With the panel already open it is shown immediately.
-    sendToPanel();
-    if (!miniGeroPorts.has(tabId)) void openSidebar(tabId, 'sidepanel/index.html').catch(() => undefined);
+    // failing it (badge; delivered when the user opens the panel; immediate
+    // when it is already open) — same treatment as the private-balance and
+    // proof-server prompts.
+    parkMidnightRequest(MIDNIGHT_METHOD.balanceUnsealedTransaction, payload, tabId)
+      .then((response: BackgroundResponse) => reply({ data: response.data })) // response.data === { tx }
+      .catch(err => reply({
+        error: parseMidnightMiniGeroError(err, MidnightErrorCode.InternalError, 'Failed to complete the balancing request'),
+      }));
   })();
   return true;
 });
