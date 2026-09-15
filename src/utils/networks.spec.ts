@@ -14,11 +14,16 @@ async function loadNetworks(deployments: {
   mainnet?: readonly string[];
   preprod?: readonly string[];
   preview?: readonly string[];
+  allowed?: readonly string[];
 } = {}) {
   vi.doMock('@/utils/cip113Deployments', () => ({
     CIP113_BASE_MAINNET: deployments.mainnet ?? [],
     CIP113_BASE_PREPROD: deployments.preprod ?? [],
     CIP113_BASE_PREVIEW: deployments.preview ?? [],
+    // Defaulted WIDE on purpose: the hash parsing/normalization cases below run through
+    // preprod and are not about the allowlist. The value actually shipped is pinned by
+    // its own test against the real module.
+    CIP113_ALLOWED_NETWORKS: deployments.allowed ?? [Network.MAINNET, Network.PREPROD, Network.PREVIEW],
   }));
   const mod = await import('./networks');
   return mod.default;
@@ -127,5 +132,44 @@ describe('cip68Label — CIP-67 prefix decoding', () => {
     expect(cip68Label('000643ff54657374313233')).toBeNull();
     expect(cip68Label('')).toBeNull();
     expect(cip68Label(undefined)).toBeNull();
+  });
+});
+
+// The network allowlist is a second gate, independent of the hash lists and of the global
+// `isCip113Enabled` flag. It exists so that recording a newly-deployed hash cannot, by
+// itself, bring a network live while that flag happens to be on.
+describe('networks — CIP-113 network allowlist', () => {
+  beforeEach(() => {
+    vi.doUnmock('@/utils/cip113Deployments');
+    vi.resetModules();
+  });
+
+  it('refuses a network that is not allowlisted, even with a valid hash configured', async () => {
+    const networks = await loadNetworks({ mainnet: [VALID_PREPROD], allowed: [Network.PREVIEW] });
+
+    expect(networks.resolveProgrammableLogicBaseScriptHashes(Blockchain.CARDANO, Network.MAINNET)).toEqual([]);
+    expect(networks.resolveProgrammableTokenSupport(Blockchain.CARDANO, Network.MAINNET)).toBe(false);
+  });
+
+  it('still resolves a network that is allowlisted', async () => {
+    const networks = await loadNetworks({ preview: [VALID_PREPROD], allowed: [Network.PREVIEW] });
+
+    expect(networks.resolveProgrammableLogicBaseScriptHashes(Blockchain.CARDANO, Network.PREVIEW)).toEqual([VALID_PREPROD]);
+    expect(networks.resolveProgrammableTokenSupport(Blockchain.CARDANO, Network.PREVIEW)).toBe(true);
+  });
+
+  // Pins what actually ships. Changing either of these is the deliberate act of enabling
+  // CIP-113 somewhere new, and should not pass review as a drive-by edit.
+  it('ships allowing preview only', async () => {
+    const { CIP113_ALLOWED_NETWORKS } = await import('./cip113Deployments');
+
+    expect([...CIP113_ALLOWED_NETWORKS]).toEqual([Network.PREVIEW]);
+  });
+
+  it('ships mainnet and preprod with no deployment configured', async () => {
+    const deployments = await import('./cip113Deployments');
+
+    expect([...deployments.CIP113_BASE_MAINNET]).toEqual([]);
+    expect([...deployments.CIP113_BASE_PREPROD]).toEqual([]);
   });
 });
