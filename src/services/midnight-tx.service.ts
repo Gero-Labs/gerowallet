@@ -130,7 +130,8 @@ async function buildUnshielded(
 /**
  * Step 3: BG DUST-balances the unproven tx (needs the user's dust secret to
  * derive spend nullifiers) and signs each unshielded input. Returns the
- * signed-but-unproven hex ready for the sidecar's prove+submit step.
+ * signed-but-unproven hex ready for the sidecar's prove+submit step. With `proving`, BG
+ * also proves + binds locally and can then name the tx's ledger hash.
  */
 async function balanceAndSignInBg(
   unprovenTxHex: string,
@@ -138,7 +139,7 @@ async function balanceAndSignInBg(
   credentials: MidnightSendCredentials,
   sponsor?: MidnightSponsor,
   proving?: { url: string; headers?: Record<string, string> },
-): Promise<{ signedTxHex: string; proven: boolean }> {
+): Promise<{ signedTxHex: string; proven: boolean; ledgerTxHash?: string }> {
   const response = await Messaging.sendToBackgroundFromOptions({
     method: MessageTypes.BALANCE_AND_SIGN_MIDNIGHT_UNSHIELDED_TX,
     data: {
@@ -157,13 +158,13 @@ async function balanceAndSignInBg(
         }
         : undefined,
     },
-  }) as { data: { success: boolean; signedTxHex?: string; proven?: boolean; error?: string } };
+  }) as { data: { success: boolean; signedTxHex?: string; proven?: boolean; ledgerTxHash?: string; error?: string } };
 
   if (!response?.data?.success || !response.data.signedTxHex) {
     throw new Error(response?.data?.error || 'Midnight balance/sign failed');
   }
   if (proving && !response.data.proven) throw new Error('Wallet-side proving requested but BG returned an unproven tx');
-  return { signedTxHex: response.data.signedTxHex, proven: !!response.data.proven };
+  return { signedTxHex: response.data.signedTxHex, proven: !!response.data.proven, ledgerTxHash: response.data.ledgerTxHash };
 }
 
 /**
@@ -178,6 +179,19 @@ async function submitSignedTx(
 ): Promise<SubmitMidnightTxResponse> {
   const api = getMidnightApi(network);
   return api.submitMidnightTx({ signedTxHex, waitFor });
+}
+
+/**
+ * Attach the ledger hash the wallet's own prover produced when the relay did
+ * not report one. Exactly one side ever has it: the sidecar on the remote
+ * paths (`/tx/submit`, `/tx/prove-and-submit`), the wallet on the proven path
+ * (`/tx/submit-proven` forwards the bytes unparsed). A Nexus that predates the
+ * field leaves the remote result without one — callers then fall back to the
+ * extrinsic hash (see historyHashForSubmittedTx).
+ */
+function withLedgerTxHash(result: SubmitMidnightTxResponse, local: string | undefined): SubmitMidnightTxResponse {
+  const ledgerTxHash = result.ledgerTxHash || local;
+  return ledgerTxHash ? { ...result, ledgerTxHash } : result;
 }
 
 /**
@@ -220,7 +234,7 @@ export async function sendUnshieldedNight(
   const built = await buildUnshielded(network, { ...baseRequest, publicKeyHex, addressHex });
   onStage?.('working');
   if (target) onStage?.(target.stage);
-  const { signedTxHex, proven } = await balanceAndSignInBg(
+  const { signedTxHex, proven, ledgerTxHash } = await balanceAndSignInBg(
     built.unprovenTxHex, baseRequest.ttlMs, credentials, sponsor,
     target ? { url: target.url, headers: target.headers } : undefined,
   );
@@ -229,7 +243,7 @@ export async function sendUnshieldedNight(
     ? await getMidnightApi(network).submitProvenMidnightTx({ signedTxHex, waitFor: 'InBlock' })
     : await submitSignedTx(network, signedTxHex);
   onStage?.('done');
-  return result;
+  return withLedgerTxHash(result, ledgerTxHash);
 }
 
 /**
@@ -331,7 +345,7 @@ async function buildAndSignShieldedInBg(
   credentials: MidnightSendCredentials,
   proving?: { url: string; headers?: Record<string, string> },
   sponsor?: MidnightSponsor,
-): Promise<{ signedTxHex: string; proven: boolean }> {
+): Promise<{ signedTxHex: string; proven: boolean; ledgerTxHash?: string }> {
   const response = await Messaging.sendToBackgroundFromOptions({
     method: MessageTypes.BUILD_AND_SIGN_MIDNIGHT_SHIELDED_TX,
     data: {
@@ -348,12 +362,12 @@ async function buildAndSignShieldedInBg(
         prfSecret: sponsor.prfSecret ? Array.from(sponsor.prfSecret) : undefined,
       } : undefined,
     },
-  }) as { data: { success: boolean; signedTxHex?: string; proven?: boolean; error?: string } };
+  }) as { data: { success: boolean; signedTxHex?: string; proven?: boolean; ledgerTxHash?: string; error?: string } };
 
   if (!response?.data?.success || !response.data.signedTxHex) {
     throw new Error(response?.data?.error || 'Midnight shielded build/sign failed');
   }
-  return { signedTxHex: response.data.signedTxHex, proven: !!response.data.proven };
+  return { signedTxHex: response.data.signedTxHex, proven: !!response.data.proven, ledgerTxHash: response.data.ledgerTxHash };
 }
 
 /**
@@ -504,7 +518,7 @@ export async function sendShieldedNight(
       throw new ProofServerUnreachableError(target.url);
     }
     onStage?.(target.stage);
-    const { signedTxHex, proven } = await buildAndSignShieldedInBg(
+    const { signedTxHex, proven, ledgerTxHash } = await buildAndSignShieldedInBg(
       outputs, credentials, { url: target.url, headers: target.headers }, sponsor,
     );
     if (!proven) {
@@ -517,7 +531,7 @@ export async function sendShieldedNight(
     onStage?.('submitting');
     const result = await api.submitProvenMidnightTx({ signedTxHex, waitFor });
     onStage?.('done');
-    return result;
+    return withLedgerTxHash(result, ledgerTxHash);
   }
 
   onStage?.('working');

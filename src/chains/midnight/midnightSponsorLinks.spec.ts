@@ -96,6 +96,15 @@ describe('transaction attribution', () => {
     expect(sponsoredTxFor(map, 'ABC123')?.sponsorName).toBe('Cyber Nexus');
   });
 
+  it('matches a hash regardless of the 0x prefix', () => {
+    // Recorded at submit time from the relay's spelling, looked up later by
+    // the history row's spelling (the indexer hands hashes out bare) — the
+    // attribution must survive the transaction confirming.
+    const prefixed = withSponsoredTx({}, { ...record, txHash: '0xAbC123' });
+    expect(sponsoredTxFor(prefixed, 'abc123')?.sponsorName).toBe('Cyber Nexus');
+    expect(sponsoredTxFor(withSponsoredTx({}, record), '0xABC123')?.sponsorName).toBe('Cyber Nexus');
+  });
+
   it('returns null for a transaction the wallet paid itself', () => {
     expect(sponsoredTxFor(withSponsoredTx({}, record), 'other')).toBeNull();
   });

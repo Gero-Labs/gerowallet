@@ -31,6 +31,7 @@ import type * as ledger from '@midnight-ntwrk/ledger-v8';
 import { midnightLedgerVersion, requireMidnightLedger8 } from './midnightLedger';
 import { validateShieldedTokenType } from './midnightTokenCapabilities';
 import type { MidnightNetworkEndpoints } from '@/chains/midnight/midnightConfig';
+import { finalizedLedgerTxHash } from '@/chains/midnight/midnightTxHash';
 import { debugLog } from '@/utils/debug';
 import {
   loadWalletState,
@@ -101,6 +102,14 @@ export interface BuildAndSignShieldedTransferResult {
    * populate {@link MidnightProvingLogEntry} — see {@code walletBg.ts}.
    */
   readonly proveDurationMs?: number;
+  /**
+   * Ledger hash of the finalized tx — the indexer's identifier for it, which
+   * the wallet keys its pending history row on (see midnightTxHash.ts). Only
+   * on the proven path (the remote path never holds a finalized object; the
+   * sidecar reports the hash instead), and absent when the SDK object could
+   * not produce one — never a failure.
+   */
+  readonly ledgerTxHash?: string;
 }
 
 /**
@@ -229,12 +238,14 @@ export async function buildAndSignShieldedTransfer(
         debugLog(`🌙 shielded tx: wallet-side proof failed after ${durationMs}ms`, message);
         throw new LocalProvingError(message, durationMs, { cause: err });
       }
-      const boundBytes = proven.bind().serialize();
+      const bound = proven.bind();
+      const boundBytes = bound.serialize();
+      const ledgerTxHash = finalizedLedgerTxHash(bound);
       const proveDurationMs = Date.now() - proveStartMs;
       debugLog(`🌙 shielded tx: wallet-side proof + bind complete (${proveDurationMs}ms)`);
       const txHex = Buffer.from(boundBytes).toString('hex');
       debugLog('🌙 shielded tx serialized (proven)', { bytes: boundBytes.length });
-      return { txHex, proven: true, proveDurationMs };
+      return { txHex, proven: true, proveDurationMs, ledgerTxHash };
     }
 
     const signedBytes = (unprovenTx as unknown as { serialize: () => Uint8Array }).serialize();

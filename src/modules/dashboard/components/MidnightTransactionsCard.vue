@@ -70,6 +70,8 @@ import { Network } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import type { MidnightTransaction, MidnightTransactionType } from '@/chains/midnight/midnightTypes';
 import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
+import { sponsoredTxFor } from '@/chains/midnight/midnightSponsorLinks';
+import type { SponsoredTxMap } from '@/chains/midnight/midnightSponsorLinks';
 import { useTranslation } from '@/shared/composables/useTranslation';
 
 const { t } = useTranslation();
@@ -178,11 +180,10 @@ function formatTime(timestamp: number): string {
  * paid. Read from storage: gero-sync does not forward the fee payer, and the
  * sponsor's inputs live in a separate intent, so the chain data cannot say.
  */
-const sponsoredTxs = ref<Record<string, { sponsorName: string }>>({});
+const sponsoredTxs = ref<SponsoredTxMap>({});
 
 function sponsorFor(hash: string): string {
-  if (!hash) return '';
-  return sponsoredTxs.value[hash.toLowerCase()]?.sponsorName ?? '';
+  return sponsoredTxFor(sponsoredTxs.value, hash)?.sponsorName ?? '';
 }
 
 async function loadAttribution(): Promise<void> {

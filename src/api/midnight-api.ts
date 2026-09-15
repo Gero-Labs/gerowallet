@@ -401,7 +401,17 @@ export interface SubmitMidnightTxRequest {
 }
 
 export interface SubmitMidnightTxResponse {
+  /** Substrate extrinsic hash of the `sendMnTransaction` wrapper (`0x…`). */
   txHash: string;
+  /**
+   * Midnight ledger hash — the identifier the indexer, gero-sync and every
+   * confirmed history row use for this transaction (see midnightTxHash.ts).
+   * Reported by the sidecar for `/tx/submit` and `/tx/prove-and-submit`;
+   * absent on `/tx/submit-proven` (the sidecar forwards those bytes unparsed
+   * — the wallet that proved the tx hashes it itself) and on a Nexus that
+   * predates the field.
+   */
+  ledgerTxHash?: string;
   status: 'Submitted' | 'InBlock' | 'Finalized';
   blockHash?: string;
   blockHeight?: number;

@@ -4865,6 +4865,9 @@ app.addToOptions(MessageTypes.SIGN_MIDNIGHT_SEGMENTS, async (request, sendRespon
  *
  * Request shape: `{ unprovenTxHex: string, ttlMs: number,
  *                   password?: string, prfSecret?: number[] }`.
+ * Response: `{ success: true, signedTxHex, proven, ledgerTxHash? }` —
+ * `ledgerTxHash` only when `proving` made this handler prove + bind locally,
+ * since only then is the finalized object in hand (see midnightTxHash.ts).
  */
 app.addToOptions(
   MessageTypes.BALANCE_AND_SIGN_MIDNIGHT_UNSHIELDED_TX,
@@ -4931,18 +4934,22 @@ app.addToOptions(
         sponsorArg,
       );
       assertSession();
+      // Only the wallet-proved path can name the ledger hash here: the proven
+      // object is in hand. On the remote path the sidecar reports it instead.
+      let ledgerTxHash: string | undefined;
       if (provingArg) {
         const { proveUnshieldedTransfer } = await import('@/chains/midnight/midnightUnshieldedProver');
         const result = await proveUnshieldedTransfer({
           sdkNetworkId: network.toLowerCase(), signedTxHex, proving: provingArg,
         });
         signedTxHex = result.provenTxHex;
+        ledgerTxHash = result.ledgerTxHash;
       }
       if (identity && endpoints) await assertMidnightChainIdentityUnchanged(endpoints, identity);
       assertSession();
       sendResponse({
         id: request.id,
-        data: { success: true, signedTxHex, proven: !!provingArg },
+        data: { success: true, signedTxHex, proven: !!provingArg, ledgerTxHash },
         target: TARGET,
         sender: SENDER.extension,
       });
@@ -5138,7 +5145,7 @@ app.addToOptions(
       const provingArg = parseProvingRequest(proving);
       const sponsorArg = parseMidnightSponsor(sponsor);
       if (sponsorArg?.prfSecret) secretBuffers.push(sponsorArg.prfSecret);
-      const { signedTxHex, proven } = await walletBg.buildAndSignMidnightShieldedTransfer(
+      const { signedTxHex, proven, ledgerTxHash } = await walletBg.buildAndSignMidnightShieldedTransfer(
         parsedOutputs,
         password,
         prfBytes,
@@ -5147,7 +5154,7 @@ app.addToOptions(
       );
       sendResponse({
         id: request.id,
-        data: { success: true, signedTxHex, proven },
+        data: { success: true, signedTxHex, proven, ledgerTxHash },
         target: TARGET,
         sender: SENDER.extension,
       });
@@ -6138,7 +6145,12 @@ app.add(MIDNIGHT_METHOD.submitTransaction, async (request, sendResponse) => {
     const submitted = await isSealedMidnightTransaction(tx, midnightSdkNetworkId(wallet.network))
       ? await api.submitProvenMidnightTx({ signedTxHex: tx, waitFor: 'Submitted' })
       : await api.submitMidnightTx({ signedTxHex: tx, waitFor: 'Submitted' });
-    midnightActions.recordSiteActivity(origin, { type: 'submitted', txId: submitted?.txHash });
+    // Shown to the user as the tx id. The ledger hash when the relay reports
+    // one (the finalize path), so it matches what history will show; a sealed
+    // tx goes through submit-proven, which never reports one, and falls back
+    // to the extrinsic hash (see midnightTxHash.ts).
+    const { historyHashForSubmittedTx } = await import('@/chains/midnight/midnightTxHash');
+    midnightActions.recordSiteActivity(origin, { type: 'submitted', txId: submitted ? historyHashForSubmittedTx(submitted) : undefined });
     sendResponse({ id: request.id, data: undefined, target: TARGET, sender: SENDER.extension });
   } catch (error) {
     midnightActions.recordSiteActivity(origin, { type: 'submit-failed', reason: 'other' });

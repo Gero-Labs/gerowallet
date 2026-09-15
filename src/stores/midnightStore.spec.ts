@@ -12,7 +12,7 @@
 // gate from quietly widening.
 import { describe, it, expect, beforeEach } from 'vitest';
 import { midnightStore, midnightActions, hydrateChainIdentity, hydratePrivateSyncProgress, hydratePrivateSyncStatus, hydrateProofServer } from './midnightStore';
-import type { MidnightAddresses } from '@/chains/midnight/midnightTypes';
+import type { MidnightAddresses, MidnightTransaction } from '@/chains/midnight/midnightTypes';
 
 /** A bech32m unshielded address; the data part deliberately carries no `1`. */
 const addr = (hrp: string, body: string): MidnightAddresses =>
@@ -211,5 +211,53 @@ describe('proof server hydration: one local URL per ledger', () => {
   it('falls back to the ledger-9 default when the stored value is not a URL', () => {
     const ps = hydrateProofServer({ mode: 'local', localUrl: LEDGER8, localUrlLedger9: 'not a url' });
     expect(ps.localUrlLedger9).toBe(LEDGER9);
+  });
+});
+
+describe('history: the optimistic pending row and the confirmed row', () => {
+  // The mainnet send of 2026-09-16: the node answered with the Substrate
+  // extrinsic hash, the indexer later reported the ledger hash. Two spellings
+  // of two DIFFERENT values — only a row keyed on the ledger hash can be
+  // replaced in place when gero-sync delivers the confirmed entry.
+  const LEDGER = '608a95f738c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7';
+  const EXTRINSIC = '0xb12f2a03e5b1a7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2';
+  const USDM = 'aa'.repeat(32);
+
+  const row = (over: Partial<MidnightTransaction>): MidnightTransaction => ({
+    hash: LEDGER, type: 'send', token: USDM, amount: 2_000_000n, counterparty: 'mn_addr1self',
+    timestamp: 1_758_000_000_000, status: 'pending', fee: 0n, isShielded: false, ...over,
+  });
+
+  beforeEach(() => midnightActions.setTransactions([]));
+
+  it('replaces a pending row keyed on the ledger hash with the confirmed one, whatever the prefix or case', () => {
+    midnightActions.applyTransaction(row({ hash: `0x${LEDGER.toUpperCase()}` }));
+    midnightActions.applyTransaction(row({ status: 'confirmed', blockHeight: 2_598_770, amount: 0n }));
+
+    expect(midnightStore.transactions).toHaveLength(1);
+    expect(midnightStore.transactions[0].status).toBe('confirmed');
+    expect(midnightStore.transactions[0].blockHeight).toBe(2_598_770);
+  });
+
+  it('cannot reconcile a pending row keyed on the extrinsic hash: that is the two-row bug', () => {
+    midnightActions.applyTransaction(row({ hash: EXTRINSIC }));
+    midnightActions.applyTransaction(row({ status: 'confirmed', blockHeight: 2_598_770 }));
+
+    expect(midnightStore.transactions.map(t => t.status).sort()).toEqual(['confirmed', 'pending']);
+  });
+
+  it('keeps rows of two colors from one transaction apart', () => {
+    midnightActions.applyTransaction(row({ token: 'NIGHT' }));
+    midnightActions.applyTransaction(row({ token: USDM }));
+
+    expect(midnightStore.transactions).toHaveLength(2);
+  });
+
+  it('drops a shielded pending row once the private scan confirms it, whatever the prefix or case', () => {
+    midnightActions.applyTransaction(row({ hash: `0x${LEDGER.toUpperCase()}`, isShielded: true }));
+    midnightActions.applyPrivateSnapshot({}, [row({ status: 'confirmed', isShielded: true })]);
+
+    expect(midnightStore.transactions.filter(t => t.isShielded)).toHaveLength(1);
+    expect(midnightStore.transactions[0].status).toBe('confirmed');
   });
 });

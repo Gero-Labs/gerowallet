@@ -23,6 +23,21 @@ describe('real ledger-specific proving envelope', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it.each(['mainnet', 'preprod', 'stagenet'])('reports the ledger hash of the exact %s bytes it hands back', async network => {
+    // The hash the pending history row is keyed on must be the one the
+    // indexer will compute from the submitted bytes: transactionHash() of the
+    // deserialized finalized tx, bare and lowercase (the indexer's spelling).
+    const runtime = network === 'stagenet' ? ledger9 : ledger8;
+    const signedTxHex = Buffer.from(runtime.Transaction.fromParts(network).serialize()).toString('hex');
+    vi.stubGlobal('fetch', vi.fn());
+    const { provenTxHex, ledgerTxHash } = await proveUnshieldedTransfer({ sdkNetworkId: network, signedTxHex, proving: { url: 'http://localhost:6300' } });
+    const decoded = network === 'stagenet'
+      ? ledger9.Transaction.deserialize('signature', 'proof', 'binding', Buffer.from(provenTxHex, 'hex'))
+      : ledger8.Transaction.deserialize('signature', 'proof', 'binding', Buffer.from(provenTxHex, 'hex'));
+    expect(ledgerTxHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(ledgerTxHash).toBe(decoded.transactionHash().toLowerCase().replace(/^0x/, ''));
+  });
+
   it('rejects a valid legacy envelope supplied as Stagenet before contacting the prover', async () => {
     const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
     const signedTxHex = Buffer.from(ledger8.Transaction.fromParts('preprod').serialize()).toString('hex');

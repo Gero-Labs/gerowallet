@@ -20,6 +20,8 @@
  * than producing a failing send.
  */
 
+import { normalizeMidnightTxHash } from '@/chains/midnight/midnightTxHash';
+
 /** Storage key for the wallet→sponsor preferences. */
 export const SPONSOR_LINK_KEY = 'midnightSponsorLinks';
 /** Storage key for per-transaction attribution. */
@@ -125,14 +127,17 @@ export function sponsoredByWallet(
 
 // ─── transaction attribution ───────────────────────────────────────────────
 
+// Keyed on the normalized ledger hash — the same key the history row carries
+// before AND after confirmation (see midnightTxHash.ts). Case and `0x` are
+// folded on both sides so a lookup by any spelling of the hash still lands.
 export function withSponsoredTx(map: SponsoredTxMap, record: SponsoredTx): SponsoredTxMap {
-  return { ...map, [record.txHash.toLowerCase()]: record };
+  return { ...map, [normalizeMidnightTxHash(record.txHash)]: record };
 }
 
 /** Attribution for a transaction, or null when this wallet paid its own fee. */
 export function sponsoredTxFor(map: SponsoredTxMap, txHash: string): SponsoredTx | null {
   if (!txHash) return null;
-  return map[txHash.toLowerCase()] ?? null;
+  return map[normalizeMidnightTxHash(txHash)] ?? null;
 }
 
 // ─── storage ───────────────────────────────────────────────────────────────

@@ -460,6 +460,7 @@ import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { midnightTokenBalances } from '@/chains/midnight/midnightTokenBalances';
 import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
 import { blocksMidnightSendLive } from '@/chains/midnight/midnightFeeCapacity';
+import { historyHashForSubmittedTx } from '@/chains/midnight/midnightTxHash';
 import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
 import {
   formatTokenAmount,
@@ -1172,8 +1173,12 @@ async function sendUnshielded(credentials: { password?: string; prfSecret?: Uint
       await buildSponsorArg(),
       forceRemote,
     );
-    debugLog('🌙 Midnight unshielded tx submitted:', result.txHash, 'status:', result.status,
-      'sponsor:', sponsorWalletId.value ?? 'none');
+    debugLog('🌙 Midnight unshielded tx submitted:', result.txHash, 'ledger:', result.ledgerTxHash ?? 'n/a',
+      'status:', result.status, 'sponsor:', sponsorWalletId.value ?? 'none');
+    // The hash history will know this tx by — the ledger hash, not the
+    // extrinsic hash in txHash (see midnightTxHash.ts). Everything that must
+    // match the row later keys on it.
+    const historyHash = historyHashForSubmittedTx(result);
 
     // Remember who paid — for the dashboard indicator on BOTH wallets, and so
     // the transaction details screen can say the fee came from elsewhere.
@@ -1191,7 +1196,7 @@ async function sendUnshielded(credentials: { password?: string; prfSecret?: Uint
           at,
         });
         await recordSponsoredTx({
-          txHash: result.txHash,
+          txHash: historyHash,
           sponsorWalletId: paying.id,
           sponsorName: paying.name,
           at,
@@ -1205,7 +1210,7 @@ async function sendUnshielded(credentials: { password?: string; prfSecret?: Uint
       }
     }
     // Show it in history right away — gero-sync backfills the confirmed entry.
-    void addOptimisticPendingTx(result.txHash);
+    void addOptimisticPendingTx(historyHash);
     // Brief completed-state hold so the user sees the timeline finish.
     await new Promise((r) => setTimeout(r, 550));
     resetForm();
@@ -1248,8 +1253,8 @@ async function sendShielded(credentials: { password?: string; prfSecret?: Uint8A
       forceRemote,
       await buildSponsorArg(),
     );
-    debugLog('🌙 Midnight shielded tx submitted:', result.txHash, 'status:', result.status);
-    void addOptimisticPendingTx(result.txHash, true);
+    debugLog('🌙 Midnight shielded tx submitted:', result.txHash, 'ledger:', result.ledgerTxHash ?? 'n/a', 'status:', result.status);
+    void addOptimisticPendingTx(historyHashForSubmittedTx(result), true);
     await new Promise((r) => setTimeout(r, 550));
     resetForm();
     emit('close');
