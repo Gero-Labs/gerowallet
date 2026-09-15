@@ -3305,7 +3305,17 @@ async function signMidnightBalancePrf() {
 // background answers the dapp's call itself once the store reports synced.
 const privateSyncStatus = computed(() => midnightStore.privateSyncStatus);
 const privateSyncPercentValue = computed(() => privateSyncPercent(midnightStore.privateSyncProgress));
-const privateBalanceMode = computed<'syncing' | 'auth'>(() => (privateSyncStatus.value === 'syncing' ? 'syncing' : 'auth'));
+// Set once this prompt's unlock has started the scan: the view switches to
+// progress right away rather than waiting for the store's first `syncing`
+// broadcast, and stays there until the scan reports, completes, or fails.
+const privateScanStarted = ref(false);
+const privateBalanceMode = computed<'syncing' | 'auth'>(() => (
+  privateSyncStatus.value === 'syncing' || (privateScanStarted.value && privateSyncStatus.value !== 'error')
+    ? 'syncing'
+    : 'auth'
+));
+
+watch(() => currentRequest.value?.requestId, () => { privateScanStarted.value = false; });
 
 watch([privateSyncStatus, () => currentRequest.value?.method], ([status, method]) => {
   // The scan finished while the prompt was open: nothing left to ask.
@@ -3315,6 +3325,7 @@ watch([privateSyncStatus, () => currentRequest.value?.method], ([status, method]
 function rejectMidnightPrivateBalance() {
   spendingPassword.value = '';
   signError.value = '';
+  privateScanStarted.value = false;
   reject(midnightError(MidnightErrorCode.Rejected, 'User declined to share private balances'));
 }
 
@@ -3364,7 +3375,9 @@ async function unlockMidnightPrivateBalanceNormal() {
   try {
     await startPrivateSyncFromPanel({ password: spendingPassword.value });
     if (currentRequest.value?.requestId !== reqId) return;
-    approve({ started: true });
+    // Stay open in the progress view (design: "Scanning… / Share when done");
+    // the background already answers the dApp when the scan completes.
+    privateScanStarted.value = true;
     spendingPassword.value = '';
   } catch (e) {
     console.error('[DApp] Midnight private balance unlock error:', e);
@@ -3383,7 +3396,7 @@ async function unlockMidnightPrivateBalancePrf() {
     const prfBytes = await awaitRawPrfFromPopup();
     await startPrivateSyncFromPanel({ prfSecret: prfBytes });
     if (currentRequest.value?.requestId !== reqId) return;
-    approve({ started: true });
+    privateScanStarted.value = true;
   } catch (e) {
     console.error('[DApp] Midnight PRF private balance unlock error:', e);
     signError.value = (e as Error)?.message || 'PassKey authentication failed';

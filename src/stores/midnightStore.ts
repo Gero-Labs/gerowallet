@@ -579,6 +579,7 @@ const bgDurableTouched = {
   proofServer: false,
   shieldedProvingConsent: false,
   provingHistory: false,
+  chainIdentity: false,
 };
 
 // The background service worker's in-memory store starts at defaults on
@@ -602,6 +603,14 @@ if (context === 'background') {
     }
     if (!bgDurableTouched.provingHistory) {
       midnightStore.provingHistory = hydrateProvingHistory(stored.provingHistory);
+    }
+    // The chain identity is what the generation queue compares the next sync
+    // message against. Left at null after a worker restart, the first message
+    // looks like a generation change and clearMidnightNetworkCheckpoints wipes
+    // the private-note scan state — a full 1.5M-event rescan on Preprod after
+    // every extension reload.
+    if (!bgDurableTouched.chainIdentity) {
+      midnightStore.chainIdentity = hydrateChainIdentity(stored.chainIdentity);
     }
   });
 }
@@ -643,6 +652,16 @@ function isValidProofServerUrl(value: unknown): value is string {
  * localhost:6300) rather than discarding the whole record, so a corrupted
  * `mode` does not throw away an otherwise-valid custom `localUrl`.
  */
+/** Persisted chain identity; only the exact `{network, generation, genesisHash}` shape survives. */
+export function hydrateChainIdentity(stored: unknown): MidnightSyncIdentity | null {
+  if (!stored || typeof stored !== 'object') return null;
+  const { network, generation, genesisHash } = stored as Record<string, unknown>;
+  if (typeof network !== 'string' || !/^midnight-(mainnet|preprod|stagenet)$/.test(network)) return null;
+  if (!Number.isSafeInteger(generation) || (generation as number) < 1) return null;
+  if (typeof genesisHash !== 'string' || !/^0x[0-9a-f]{64}$/.test(genesisHash)) return null;
+  return { network, generation: generation as number, genesisHash };
+}
+
 const PRIVATE_SYNC_STATUSES: ReadonlyArray<MidnightStore['privateSyncStatus']> = ['idle', 'syncing', 'synced', 'error'];
 
 /** Persisted private-sync status; anything unknown boots as `idle`. */
@@ -815,6 +834,7 @@ export const midnightActions = {
     // scan. A loop that IS running re-asserts `syncing` on its next sample;
     // a PassKey wallet has nothing running and must be offered the unlock,
     // not a "Synchronizing private notes…" line with no counter behind it.
+    bgDurableTouched.chainIdentity = true;
     const updates: Partial<MidnightStore> = {
       chainIdentity: identity, privateSyncStatus: 'idle', privateSyncProgress: null, lastSync: null, tip: { ...EMPTY_TIP },
       balances: { ...EMPTY_BALANCES }, transactions: [], utxos: [], dustState: null,
@@ -867,6 +887,7 @@ export const midnightActions = {
       // switch. Without this the old balance lingers until the first sync
       // event, and a no-matching-owner tx never clears it. Addresses +
       // activeWalletKey are set below to the new wallet.
+      bgDurableTouched.chainIdentity = true;
       Object.assign(midnightStore, {
         lastSync: null,
         tip: carriedTip,
