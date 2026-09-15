@@ -95,6 +95,16 @@ function joinProverUrl(baseUrl: string, path: string): URL {
 class RetryableProverError extends Error {}
 
 /**
+ * True for what {@link postToProver} gives up with after its retries: the
+ * server was unreachable or answered 502/503/504. Any other failure (400,
+ * 401, 500, a malformed reply) is not "no server", and callers must not
+ * treat it as one.
+ */
+export function isProverNetworkError(error: unknown): boolean {
+  return error instanceof RetryableProverError;
+}
+
+/**
  * One HTTP attempt against the proof server. Throws
  * {@link RetryableProverError} for failures worth retrying, a plain
  * {@link Error} for anything else (e.g. 400/401/404/500 — retrying those
