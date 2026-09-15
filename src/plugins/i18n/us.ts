@@ -4837,6 +4837,7 @@ export default {
   'midnight.privateBalances.refresh': 'Unlock private balances',
   'midnight.privateBalances.explanation': 'Private token balances are synchronized on this device. NIGHT remains public.',
   'midnight.privateBalances.syncing': 'Synchronizing private notes…',
+  'midnight.privateBalances.progress': '{applied} / {highest} events applied',
   'midnight.privateBalances.locked': 'Unlock to synchronize your private tokens.',
   'midnight.privateBalances.empty': 'No private tokens found.',
   'midnight.privateBalances.baseUnits': 'base units',
