@@ -50,7 +50,11 @@
             {{ $t('governance.approxExpiryDate', { date: expiresOn }) }}
           </span>
         </div>
-        <VoteCta :action="action" @vote="voteDialogOpen = true" />
+        <!-- The single-action vote CTA is withheld in 2.7.1: it gated on the
+             wallet HAVING a DRep key rather than on that DRep being registered
+             on chain, so unregistered wallets could build a vote the node
+             rejects ("unknown voters"). Batch voting on the list keeps its
+             registration lookup. Restore once VoteCta checks registration. -->
       </div>
 
       <div class="action-detail__tabs" role="tablist">
@@ -218,12 +222,6 @@
         <EmptyState v-if="action.govAction === null" :message="$t('common.notAvailable')" />
         <pre v-else class="action-detail__json g-mono t-caption">{{ formattedGovAction }}</pre>
       </div>
-
-      <CastVoteDialog
-        :is-open="voteDialogOpen"
-        :actions="action ? [action] : []"
-        @close="voteDialogOpen = false"
-      />
     </template>
   </div>
 </template>
@@ -255,7 +253,6 @@ import StatusPill from '@/modules/governance/components/actions/StatusPill.vue';
 import AnchorBadge from '@/modules/governance/components/actions/AnchorBadge.vue';
 import AsOf from '@/modules/governance/components/actions/AsOf.vue';
 import BodyTallyCard from '@/modules/governance/components/actions/BodyTallyCard.vue';
-import VoteCta from '@/modules/governance/components/actions/VoteCta.vue';
 import PositionsPanel from '@/modules/governance/components/actions/PositionsPanel.vue';
 import { committeeNameIndex } from '@/modules/governance/components/actions/positions';
 import type { PositionIdentity } from '@/modules/governance/components/actions/positions';
@@ -264,7 +261,6 @@ import {
   referenceElementId,
   toReferenceLinks,
 } from '@/modules/governance/components/actions/references';
-import CastVoteDialog from '@/modules/governance/dialogs/CastVoteDialog.vue';
 import EmptyState from '@/shared/components/feedback/EmptyState.vue';
 import ErrorState from '@/shared/components/feedback/ErrorState.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
@@ -295,8 +291,6 @@ const govActionId = computed(() =>
 const action = computed(() => state.currentAction);
 const summary = computed(() => state.currentSummary);
 const isInfoAction = computed(() => action.value?.type === 'InfoAction');
-
-const voteDialogOpen = ref(false);
 
 const tab = computed(() => {
   const value = String(route.query['tab'] ?? 'overview');
