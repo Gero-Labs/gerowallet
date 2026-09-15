@@ -4741,6 +4741,7 @@ export default {
   'midnight.privateBalances.baseUnits': 'Basiseinheiten',
   'midnight.privateBalances.unlock': 'Entsperren Sie Ihre Wallet, um private Token-Guthaben zu lesen. Die Synchronisierung endet beim Sperren oder Wechseln der Wallet.',
   'midnight.privateBalances.failed': 'Die Synchronisierung privater Guthaben konnte nicht gestartet werden.',
+  'midnight.privateBalances.miniScanning': 'Private Notes werden gesucht · {percent}%',
   'midnight.shieldConvert.nativeNightPublic': 'NIGHT ist öffentlich',
   'midnight.shieldConvert.nativeConversionUnsupported': 'NIGHT ist ein öffentlicher Token. Um seinen Wert in einen privaten Token zu übertragen, ist ein Anwendungsvertrag erforderlich; die Wallet kann NIGHT nicht direkt umwandeln.',
   'midnight.shieldConvert.title': 'NIGHT umwandeln',

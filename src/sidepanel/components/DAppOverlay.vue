@@ -405,6 +405,21 @@
           </div>
         </template>
 
+        <!-- Keystone wallet: CIP-8 data signing over the QR channel -->
+        <template v-else-if="walletType === WalletType.Keystone">
+          <div class="hw-notice pa-3 mb-3 mt-3">
+            <v-icon :color="primaryColor" class="mb-2">mdi-qrcode-scan</v-icon>
+            <p class="white--text text-body-2 text-center">{{ $t('miniGero.keystoneSign') }}</p>
+          </div>
+          <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
+          <div class="action-buttons">
+            <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signDataDecodeError" @click="signDataKeystone">
+              {{ $t('miniGero.sign') }}
+            </v-btn>
+          </div>
+        </template>
+
         <!-- Fallback -->
         <template v-else>
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
@@ -969,14 +984,15 @@
     </div>
 
     <!-- Keystone QR dialog -->
-    <KeystoneSignDialog
+    <KeystoneSignSheet
       v-if="showKeystoneDialog"
       :isOpen="showKeystoneDialog"
       :keystoneType="keystoneType"
       :keystoneCbor="keystoneCbor"
+      :urTypes="keystoneUrTypes"
       @scan="onKeystoneScan"
       @error="onKeystoneError"
-      @close="showKeystoneDialog = false"
+      @close="onKeystoneClose"
     />
 
     <!-- Sticky footer: signTx's action buttons + TTL countdown pinned below
@@ -1092,11 +1108,11 @@ import { DappScore, type TxScanResponse } from '@/models/cardano-shield-types';
 import ledgerUtils from '@/shared/utils/ledger';
 import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
-import { createKeystoneSignRequest, KeystoneSignRequestResponse, parseSignature } from '@/shared/utils/keystone';
+import { createKeystoneDataSignRequest, createKeystoneSignRequest, KeystoneSignRequestResponse, parseDataSignature, parseSignature } from '@/shared/utils/keystone';
 import { UR } from '@keystonehq/keystone-sdk';
 import networks from '@/utils/networks';
 import hardwareLoading from '@/plugins/hardwareLoading';
-import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
+import KeystoneSignSheet from './KeystoneSignSheet.vue';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { decodedPayloadHexPreview, decodeSignDataPayload, type MidnightSignDataEncoding } from '@/chrome/midnightSignDataCodec';
 import { MidnightErrorCode } from '@/chrome/config';
@@ -2298,6 +2314,15 @@ const keystoneType = ref('');
 const keystoneCbor = ref('');
 const keystoneUseHash = ref(false);
 let keystoneSigningRequest: DAppRequest | null = null;
+// CIP-8 data signing reuses the same dialog, but the device answers with a
+// different UR type and the COSE structures have to be finished off the
+// builder created when the request was generated.
+const keystoneDataMode = ref(false);
+let keystoneDataBuilder: unknown = null;
+let keystoneDataAddressBytes: Uint8Array | null = null;
+const keystoneUrTypes = computed(() => (
+  keystoneDataMode.value ? ['cardano-sign-data-signature'] : ['cardano-signature']
+));
 
 // NOTE: walletType / isPrfWallet / loggedWallet / keys / utxos / isBT are
 // declared EARLY (right after signDataDomain) — a `watch(loggedWallet)` and
@@ -2308,6 +2333,9 @@ let keystoneSigningRequest: DAppRequest | null = null;
 watch(currentRequest, () => {
   showKeystoneDialog.value = false;
   keystoneSigningRequest = null;
+  keystoneDataMode.value = false;
+  keystoneDataBuilder = null;
+  keystoneDataAddressBytes = null;
   spendingPassword.value = '';
   showPassword.value = false;
   signing.value = false;
@@ -2633,6 +2661,10 @@ async function signKeystone() {
 async function onKeystoneScan(ur: UR) {
   const signingRequest = keystoneSigningRequest;
   if (!signingRequest || signingRequest !== currentRequest.value) return;
+  if (keystoneDataMode.value) {
+    await onKeystoneDataScan(ur, signingRequest);
+    return;
+  }
   try {
     await validateCip45Signing(signingRequest?.payload);
     const signature = parseSignature(ur);
@@ -2650,9 +2682,103 @@ async function onKeystoneScan(ur: UR) {
   }
 }
 
+function onKeystoneClose() {
+  showKeystoneDialog.value = false;
+  keystoneDataMode.value = false;
+  keystoneDataBuilder = null;
+  keystoneDataAddressBytes = null;
+}
+
 function onKeystoneError(error: string) {
   signError.value = error || 'Keystone scan error';
-  showKeystoneDialog.value = false;
+  onKeystoneClose();
+}
+
+// ── Sign Data: Keystone wallet (CIP-8 over QR) ──
+// Mirrors the popup path (DappSignData.vue). Without this branch a Keystone
+// wallet fell through to signDataNormal(), which returns immediately on an
+// empty spending password — the Sign button did nothing at all.
+async function signDataKeystone() {
+  const signingRequest = currentRequest.value;
+  if (!signingRequest || !loggedWallet.value) return;
+  signError.value = '';
+
+  try {
+    await validateCip45Signing(signingRequest?.payload);
+    const { address, payload } = signingRequest.payload as { address: string; payload: string };
+
+    // The dApp may hand us either bech32 or a hex-encoded address; the key
+    // lookup below is keyed on the bech32 form.
+    const addressBech32 = (address.startsWith('addr') || address.startsWith('stake'))
+      ? address
+      : Cardano.Address.fromBytes(HexBlob(address)).toBech32();
+
+    const foundKey = keys.value.payment.find((k) => k.address === addressBech32)
+      || keys.value.change.find((k) => k.address === addressBech32)
+      || keys.value.stake.find((k) => k.address === addressBech32);
+
+    if (!foundKey?.path) throw new Error(t('wallet.addressNotFound'));
+
+    const xfp = loggedWallet.value.xfp ?? '';
+    const xpubBech32 = loggedWallet.value.publicKey ?? '';
+    if (!xpubBech32) throw new Error(t('wallet.xpubNotFound'));
+
+    // m/1852'/1815'/account'/role/index
+    const pathParts = foundKey.path.split('/');
+    const role = parseInt(pathParts[4].replace(/'/g, ''), 10);
+    const keyIndex = parseInt(pathParts[5].replace(/'/g, ''), 10);
+
+    const { getPaymentKeyExternal, getPaymentKeyInternal, getStakeKey } = await import('@/chrome/serialization');
+    let derivedKey;
+    if (role === 0) {
+      derivedKey = getPaymentKeyExternal(xpubBech32, keyIndex);
+    } else if (role === 1) {
+      derivedKey = getPaymentKeyInternal(xpubBech32, keyIndex);
+    } else if (role === 2) {
+      derivedKey = getStakeKey(xpubBech32, keyIndex);
+    } else {
+      throw new Error(`Unknown derivation role: ${role}`);
+    }
+
+    const { ur, builder, addressBytes } = createKeystoneDataSignRequest(
+      address, payload, xfp, derivedKey.hex(), foundKey.path
+    );
+
+    keystoneDataBuilder = builder;
+    keystoneDataAddressBytes = addressBytes;
+    keystoneDataMode.value = true;
+    keystoneType.value = ur.type;
+    keystoneCbor.value = ur.cbor.toString('hex');
+    keystoneSigningRequest = signingRequest;
+    showKeystoneDialog.value = true;
+  } catch (e: unknown) {
+    console.error('[DApp] Keystone sign data error:', e);
+    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || t('wallet.keystoneSigningFailed');
+  }
+}
+
+async function onKeystoneDataScan(ur: UR, signingRequest: DAppRequest) {
+  try {
+    await validateCip45Signing(signingRequest?.payload);
+    if (!keystoneDataBuilder || !keystoneDataAddressBytes) {
+      throw new Error('Missing builder or address bytes');
+    }
+    const signatureData = parseDataSignature(ur, keystoneDataBuilder, keystoneDataAddressBytes);
+    // parseDataSignature frees the builder internally — never reuse it.
+    keystoneDataBuilder = null;
+    keystoneDataAddressBytes = null;
+
+    showKeystoneDialog.value = false;
+    keystoneDataMode.value = false;
+    await validateCip45Signing(signingRequest?.payload);
+    if (currentRequest.value !== signingRequest) return;
+    approve({ signature: signatureData.signature, key: signatureData.key });
+  } catch (e: unknown) {
+    console.error('[DApp] Keystone sign data scan error:', e);
+    signError.value = (e instanceof Error ? e.message : '') || t('wallet.keystoneQRScanError');
+    showKeystoneDialog.value = false;
+    keystoneDataMode.value = false;
+  }
 }
 
 // ── Sign Data: Normal wallet (password) ──
@@ -3179,7 +3305,17 @@ async function signMidnightBalancePrf() {
 // background answers the dapp's call itself once the store reports synced.
 const privateSyncStatus = computed(() => midnightStore.privateSyncStatus);
 const privateSyncPercentValue = computed(() => privateSyncPercent(midnightStore.privateSyncProgress));
-const privateBalanceMode = computed<'syncing' | 'auth'>(() => (privateSyncStatus.value === 'syncing' ? 'syncing' : 'auth'));
+// Set once this prompt's unlock has started the scan: the view switches to
+// progress right away rather than waiting for the store's first `syncing`
+// broadcast, and stays there until the scan reports, completes, or fails.
+const privateScanStarted = ref(false);
+const privateBalanceMode = computed<'syncing' | 'auth'>(() => (
+  privateSyncStatus.value === 'syncing' || (privateScanStarted.value && privateSyncStatus.value !== 'error')
+    ? 'syncing'
+    : 'auth'
+));
+
+watch(() => currentRequest.value?.requestId, () => { privateScanStarted.value = false; });
 
 watch([privateSyncStatus, () => currentRequest.value?.method], ([status, method]) => {
   // The scan finished while the prompt was open: nothing left to ask.
@@ -3189,6 +3325,7 @@ watch([privateSyncStatus, () => currentRequest.value?.method], ([status, method]
 function rejectMidnightPrivateBalance() {
   spendingPassword.value = '';
   signError.value = '';
+  privateScanStarted.value = false;
   reject(midnightError(MidnightErrorCode.Rejected, 'User declined to share private balances'));
 }
 
@@ -3238,7 +3375,9 @@ async function unlockMidnightPrivateBalanceNormal() {
   try {
     await startPrivateSyncFromPanel({ password: spendingPassword.value });
     if (currentRequest.value?.requestId !== reqId) return;
-    approve({ started: true });
+    // Stay open in the progress view (design: "Scanning… / Share when done");
+    // the background already answers the dApp when the scan completes.
+    privateScanStarted.value = true;
     spendingPassword.value = '';
   } catch (e) {
     console.error('[DApp] Midnight private balance unlock error:', e);
@@ -3257,7 +3396,7 @@ async function unlockMidnightPrivateBalancePrf() {
     const prfBytes = await awaitRawPrfFromPopup();
     await startPrivateSyncFromPanel({ prfSecret: prfBytes });
     if (currentRequest.value?.requestId !== reqId) return;
-    approve({ started: true });
+    privateScanStarted.value = true;
   } catch (e) {
     console.error('[DApp] Midnight PRF private balance unlock error:', e);
     signError.value = (e as Error)?.message || 'PassKey authentication failed';

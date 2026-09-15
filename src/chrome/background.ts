@@ -5007,6 +5007,10 @@ app.addToOptions(MessageTypes.START_MIDNIGHT_PRIVATE_SYNC, async (request, sendR
     }
     prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
     await wallet.startMidnightPrivateSync(password, prfBytes);
+    // Parked connector balance reads follow the scan from here, whichever
+    // surface started it — the prompt may stay open to show progress, or be
+    // closed; either way the dApp is answered when the store reports synced.
+    privateBalanceGate?.awaitSyncedAll();
     sendResponse({ id: request.id, data: { success: true }, target: TARGET, sender: SENDER.extension });
   } catch {
     sendResponse({ id: request.id, data: { success: false, error: 'Unable to unlock private token synchronization' }, target: TARGET, sender: SENDER.extension });
@@ -6258,21 +6262,15 @@ app.add(MIDNIGHT_METHOD.balanceUnsealedTransaction, (request, sendResponse) => {
       return;
     }
     const payload = { data: { tx: validation.tx, contributions }, website: origin, favIconUrl: send.tab?.favIconUrl };
-    const sendToPanel = () =>
-      sendToMiniGero(MIDNIGHT_METHOD.balanceUnsealedTransaction, payload, tabId)
-        .then((response: BackgroundResponse) => reply({ data: response.data })) // response.data === { tx }
-        .catch(err => reply({
-          error: parseMidnightMiniGeroError(err, MidnightErrorCode.InternalError, 'Failed to complete the balancing request'),
-        }));
-    if (miniGeroPorts.has(tabId)) {
-      sendToPanel();
-      return;
-    }
-    openSidebar(tabId, 'sidepanel/index.html')
-      .then(() => waitForMiniGeroPort(5000, tabId))
-      .then(() => sendToPanel())
+    // The dapp calls this after its (async) proving, so there is no user
+    // gesture left to open the panel with. Park the request instead of
+    // failing it (badge; delivered when the user opens the panel; immediate
+    // when it is already open) — same treatment as the private-balance and
+    // proof-server prompts.
+    parkMidnightRequest(MIDNIGHT_METHOD.balanceUnsealedTransaction, payload, tabId)
+      .then((response: BackgroundResponse) => reply({ data: response.data })) // response.data === { tx }
       .catch(err => reply({
-        error: midnightApiError(MidnightErrorCode.InternalError, `Failed to open the wallet's approval panel: ${getErrorMessage(err)}`),
+        error: parseMidnightMiniGeroError(err, MidnightErrorCode.InternalError, 'Failed to complete the balancing request'),
       }));
   })();
   return true;

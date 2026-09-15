@@ -4845,6 +4845,7 @@ export default {
   'midnight.privateBalances.baseUnits': 'base units',
   'midnight.privateBalances.unlock': 'Unlock your wallet to read private token balances. Synchronization stops when you lock or switch wallets.',
   'midnight.privateBalances.failed': 'Private balance synchronization could not start.',
+  'midnight.privateBalances.miniScanning': 'Scanning private notes · {percent}%',
   'midnight.shieldConvert.nativeNightPublic': 'NIGHT is public',
   'midnight.shieldConvert.nativeConversionUnsupported': 'NIGHT is a public token. Moving value into a private token requires an application contract; the wallet cannot convert NIGHT directly.',
   'midnight.shieldConvert.title': 'Convert NIGHT',

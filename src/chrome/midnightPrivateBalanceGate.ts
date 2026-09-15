@@ -97,6 +97,15 @@ export class PrivateBalanceGate {
     }
   }
 
+  /**
+   * A scan has started (from the prompt or the dashboard): every waiting
+   * group polls from now on, so the dApp is answered when the scan completes
+   * even if the panel that showed the prompt is closed before then.
+   */
+  awaitSyncedAll(): void {
+    for (const key of [...this.groups.keys()]) this.awaitSynced(key);
+  }
+
   /** Start polling the store for `key` (after the user approved the prompt). */
   awaitSynced(key: string): void {
     const group = this.groups.get(key);

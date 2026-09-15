@@ -1,7 +1,7 @@
 import Dexie from 'dexie';
 import { BaseLoader } from './base';
 import WalletStore from '@/stores/walletStore';
-import { toStakeAddress } from '@/chrome/serialization';
+import { hasScriptPaymentCredential, toStakeAddress } from '@/chrome/serialization';
 import networks from '@/utils/networks';
 import Loading from '@/stores/loading';
 import { StoredTransaction, TxAsset } from '@/models/transaction.types';
@@ -22,8 +22,10 @@ interface UtxoAmount {
  *
  * `datum_hash` is optional because the received-side guard reads it — but note
  * that neither stored shape carries that key; both spell it `data_hash`. The
- * guard has therefore never fired. Typed as optional to keep the behaviour
- * exactly as it is rather than silently change transaction accounting.
+ * guard has therefore never fired, and it is left dead on purpose: an output to
+ * an address of OURS that merely carries a datum is still ours, so reviving it
+ * would drop real receipts. Script outputs — the thing that guard was reaching
+ * for — are excluded by the payment-credential check in `processUtxos` instead.
  */
 interface AccountedUtxo {
   address?: string;
@@ -354,8 +356,16 @@ export class TransactionsLoader extends BaseLoader {
 
     for (let i = 0; i < utxos.length; i++) {
       const utxo = utxos[i];
+      // A stake-credential match means "shares my stake key", not "is mine": a DeFi
+      // deposit (Strike, DEX orders, CIP-113 programmable UTxOs) pays a SCRIPT address
+      // that carries the depositor's own stake credential. Counting those as received
+      // made a send net out to just the fee — mainnet
+      // daf2524d4a30e201e6c678f10f43d8934e0e0709550e6ce3e64e7bafcd2a8dce showed a
+      // 104 ADA deposit as -₳0.22. Script-payment addresses are never spendable here,
+      // so they are foreign to this accounting whatever stake key they carry.
       const isOwnAddress = utxo.address === currentAddress ||
-        toStakeAddress(utxo.address, networkId) === currentStake;
+        (toStakeAddress(utxo.address, networkId) === currentStake &&
+          !hasScriptPaymentCredential(utxo.address));
 
       if (!isOwnAddress || (isSent && utxo.data_hash) || (!isSent && utxo.datum_hash)) {
         continue;
