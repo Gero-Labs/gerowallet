@@ -560,6 +560,12 @@ if (context === 'browser') {
       ? stored.activeWalletKey
       : null;
     midnightStore.proofServer = hydrateProofServer(stored.proofServer);
+    // The private-note scan can start and finish while no dashboard is open
+    // (the side panel's dApp prompt starts it). Without these two the
+    // dashboard's "Private tokens" section boots at `idle` and tells the user
+    // to unlock a scan the background already completed.
+    midnightStore.privateSyncStatus = hydratePrivateSyncStatus(stored.privateSyncStatus);
+    midnightStore.privateSyncProgress = hydratePrivateSyncProgress(stored.privateSyncProgress);
   });
 }
 
@@ -637,6 +643,23 @@ function isValidProofServerUrl(value: unknown): value is string {
  * localhost:6300) rather than discarding the whole record, so a corrupted
  * `mode` does not throw away an otherwise-valid custom `localUrl`.
  */
+const PRIVATE_SYNC_STATUSES: ReadonlyArray<MidnightStore['privateSyncStatus']> = ['idle', 'syncing', 'synced', 'error'];
+
+/** Persisted private-sync status; anything unknown boots as `idle`. */
+export function hydratePrivateSyncStatus(stored: unknown): MidnightStore['privateSyncStatus'] {
+  return (PRIVATE_SYNC_STATUSES as readonly unknown[]).includes(stored)
+    ? stored as MidnightStore['privateSyncStatus']
+    : 'idle';
+}
+
+/** Persisted scan counters; only a well-formed pair of numbers is kept. */
+export function hydratePrivateSyncProgress(stored: unknown): MidnightPrivateSyncProgress | null {
+  if (!stored || typeof stored !== 'object') return null;
+  const { applied, highest, connected } = stored as Record<string, unknown>;
+  if (typeof applied !== 'number' || typeof highest !== 'number') return null;
+  return { applied, highest, connected: connected === true };
+}
+
 function hydrateProofServer(stored: unknown): MidnightStore['proofServer'] {
   if (!stored || typeof stored !== 'object') return { ...DEFAULT_PROOF_SERVER };
   const mode = (stored as { mode?: unknown }).mode;

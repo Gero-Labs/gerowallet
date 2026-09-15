@@ -11,7 +11,7 @@
 // So retention is gated on the address HRP, and these cases exist to keep that
 // gate from quietly widening.
 import { describe, it, expect, beforeEach } from 'vitest';
-import { midnightStore, midnightActions } from './midnightStore';
+import { midnightStore, midnightActions, hydratePrivateSyncProgress, hydratePrivateSyncStatus } from './midnightStore';
 import type { MidnightAddresses } from '@/chains/midnight/midnightTypes';
 
 /** A bech32m unshielded address; the data part deliberately carries no `1`. */
@@ -97,5 +97,28 @@ describe('midnight wallet switch: chain tip', () => {
     expect(midnightStore.utxos).toEqual([]);
     expect(midnightStore.lastMidnightTxId).toBeNull();
     expect(midnightStore.lastSync).toBeNull();
+  });
+});
+
+// The dashboard hydrates its store copy from chrome.storage on cold start. The
+// private-note scan can start and finish while no dashboard is open (the side
+// panel's dApp prompt starts it), so the status and counters must come back
+// from storage too, or the "Private tokens" section boots at `idle` and asks
+// the user to unlock a scan that already completed.
+describe('private sync hydration (dashboard cold start)', () => {
+  it('keeps a known status and boots as idle for anything else', () => {
+    expect(hydratePrivateSyncStatus('synced')).toBe('synced');
+    expect(hydratePrivateSyncStatus('syncing')).toBe('syncing');
+    expect(hydratePrivateSyncStatus('error')).toBe('error');
+    expect(hydratePrivateSyncStatus(undefined)).toBe('idle');
+    expect(hydratePrivateSyncStatus('done')).toBe('idle');
+  });
+
+  it('keeps only well-formed progress counters', () => {
+    expect(hydratePrivateSyncProgress({ applied: 5, highest: 9, connected: true })).toEqual({ applied: 5, highest: 9, connected: true });
+    expect(hydratePrivateSyncProgress({ applied: 5, highest: 9 })).toEqual({ applied: 5, highest: 9, connected: false });
+    expect(hydratePrivateSyncProgress({ applied: '5', highest: 9 })).toBeNull();
+    expect(hydratePrivateSyncProgress(null)).toBeNull();
+    expect(hydratePrivateSyncProgress(undefined)).toBeNull();
   });
 });
