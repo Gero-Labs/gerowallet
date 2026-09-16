@@ -5028,6 +5028,7 @@ export default {
   'midnight.utxoOutputs': 'Outputs',
   'midnight.thisWallet': 'This wallet',
   'midnight.utxoLoadFailed': 'Failed to load inputs and outputs for this transaction.',
+  'midnight.utxosPendingHint': 'Inputs and outputs appear once the transaction is confirmed.',
   // UTxOs tab detail pane: a Midnight UTxO's reference is intentHash:outputIndex,
   // not a transaction hash — a distinct field from transactions.transactionId.
   'midnight.intentHash': 'Intent Hash',

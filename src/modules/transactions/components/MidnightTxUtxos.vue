@@ -5,6 +5,10 @@
       <span>{{ $t('common.loadingEllipsis') }}</span>
     </div>
 
+    <div v-else-if="pending" class="mn-tx-utxos__state">
+      <span>{{ $t('midnight.utxosPendingHint') }}</span>
+    </div>
+
     <ErrorState
       v-else-if="error"
       :message="error"
@@ -98,6 +102,13 @@ const { t } = useTranslation();
 
 const props = defineProps<{
   txHash: string;
+  /**
+   * The row's settlement status. A pending tx is not in the indexer yet, so
+   * fetching it can only fail; the pane says so instead, and fetches once the
+   * row confirms (Transactions.vue swaps the confirmed row in under the same
+   * hash+token).
+   */
+  txStatus?: 'confirmed' | 'pending' | 'failed';
   /** Only used to derive a receive's counterparty from spentOutputs (Step 4). */
   txType?: MidnightTransactionType;
   txToken?: string;
@@ -112,6 +123,7 @@ const error = ref<string | null>(null);
 const data = ref<MidnightTransactionUtxosDto | null>(null);
 
 const isMainnet = computed(() => walletStore.loggedWallet?.network === Network.MAINNET);
+const pending = computed(() => props.txStatus === 'pending');
 
 function cacheKey(): string {
   return `${walletStore.loggedWallet?.network ?? ''}:${props.txHash}`;
@@ -119,6 +131,12 @@ function cacheKey(): string {
 
 async function load(force = false): Promise<void> {
   const key = cacheKey();
+  if (pending.value) {
+    loading.value = false;
+    data.value = null;
+    error.value = null;
+    return;
+  }
   if (!force) {
     const cached = getCachedTxUtxos(key);
     if (cached) {
@@ -163,7 +181,7 @@ async function load(force = false): Promise<void> {
 }
 
 onMounted(() => load());
-watch(() => props.txHash, () => load());
+watch(() => [props.txHash, props.txStatus], () => load());
 
 function isMine(owner: string): boolean {
   const own = midnightStore.addresses?.unshielded;

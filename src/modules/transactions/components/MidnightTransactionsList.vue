@@ -249,6 +249,7 @@ import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import type { MidnightTransaction, MidnightTransactionType } from '@/chains/midnight/midnightTypes';
 import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
 import { sponsoredTxFor } from '@/chains/midnight/midnightSponsorLinks';
+import { midnightTxRowKey } from '@/chains/midnight/midnightTxHash';
 import type { SponsoredTxMap } from '@/chains/midnight/midnightSponsorLinks';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import snackbar from '@/plugins/snackbar';
@@ -447,9 +448,7 @@ const sorted = computed<MidnightTransaction[]>(() => {
 // detail pane alongside this list. Compared on hash+token (not hash alone),
 // matching the v-for key, so a multi-token tx's rows highlight independently.
 function isSelected(tx: MidnightTransaction): boolean {
-  return !!props.selectedTransaction
-    && props.selectedTransaction.hash === tx.hash
-    && props.selectedTransaction.token === tx.token;
+  return !!props.selectedTransaction && midnightTxRowKey(props.selectedTransaction) === midnightTxRowKey(tx);
 }
 
 function selectRow(tx: MidnightTransaction): void {

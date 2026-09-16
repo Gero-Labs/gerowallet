@@ -4923,6 +4923,7 @@ export default {
   'midnight.utxoOutputs': 'Ausgänge',
   'midnight.thisWallet': 'Dieses Wallet',
   'midnight.utxoLoadFailed': 'Ein- und Ausgänge für diese Transaktion konnten nicht geladen werden.',
+  'midnight.utxosPendingHint': 'Ein- und Ausgänge erscheinen, sobald die Transaktion bestätigt ist.',
   // UTxOs-Tab-Detailbereich: Die Referenz eines Midnight-UTxO ist intentHash:outputIndex,
   // ein eigenes Feld, verschieden von transactions.transactionId.
   'midnight.intentHash': 'Intent-Hash',

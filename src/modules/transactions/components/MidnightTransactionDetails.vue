@@ -85,6 +85,7 @@
 
     <MidnightTxUtxos
       :tx-hash="transactionInfo.hash"
+      :tx-status="transactionInfo.status"
       :tx-type="transactionInfo.type"
       :tx-token="transactionInfo.token"
       :tx-counterparty="transactionInfo.counterparty"
