@@ -392,10 +392,15 @@ function serializeValue(_key: string, value: unknown): unknown {
  * and which the change (see `MidnightTransactionType`). The optimistic pending
  * row it replaces was built from what the user typed, so it is the one record
  * that knows — keep that amount rather than confirm the row as "0.00".
+ *
+ * The carry has to survive its own replacement, too: gero-sync replays history
+ * on reconnects and full re-syncs, delivering the same confirmed row again.
+ * A confirmed `self` row with a non-zero amount can only have come from an
+ * earlier carry, so it is kept just like the pending row was.
  */
 function withPendingAmount(previous: MidnightTransaction, incoming: MidnightTransaction): MidnightTransaction {
-  const carry = incoming.type === 'self' && incoming.amount === 0n
-    && previous.status === 'pending' && previous.amount > 0n;
+  if (incoming.type !== 'self' || incoming.amount !== 0n || previous.amount <= 0n) return incoming;
+  const carry = previous.status === 'pending' || previous.type === 'self';
   return carry ? { ...incoming, amount: previous.amount } : incoming;
 }
 

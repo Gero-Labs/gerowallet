@@ -10,6 +10,15 @@ const Clock = defineComponent({
   },
 });
 
+// The options router view sits inside <keep-alive>, so a card is deactivated
+// rather than destroyed when the user navigates away.
+const Host = defineComponent({
+  props: { show: { type: Boolean, default: true } },
+  setup(props) {
+    return () => h('keep-alive', [props.show ? h(Clock) : null]);
+  },
+});
+
 describe('useNow', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
@@ -27,5 +36,20 @@ describe('useNow', () => {
     wrapper.destroy();
     expect(clear).toHaveBeenCalledTimes(1);
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('pauses while kept alive off screen and resumes with a fresh value', async () => {
+    vi.setSystemTime(1_000_000);
+    const wrapper = mount(Host as unknown as Parameters<typeof mount>[0]);
+    expect(vi.getTimerCount()).toBe(1);
+
+    await wrapper.setProps({ show: false });
+    expect(vi.getTimerCount()).toBe(0);
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    await wrapper.setProps({ show: true });
+    expect(vi.getTimerCount()).toBe(1);
+    expect(wrapper.text()).toBe('1060000');
+    wrapper.destroy();
   });
 });

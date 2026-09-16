@@ -5537,7 +5537,10 @@ app.addToOptions(MessageTypes.ADD_MIDNIGHT_PENDING_TX, async (request, sendRespo
       // hardcoded 'NIGHT' here would label a USDM send as NIGHT in history.
       token: typeof token === 'string' && token ? token : 'NIGHT',
       amount: amountBig,
-      counterparty: typeof counterparty === 'string' ? counterparty : '',
+      // A self-transfer names no counterparty, matching the confirmed row
+      // gero-sync will deliver — otherwise our own address would show for a
+      // moment and then vanish on confirmation.
+      counterparty: !toSelf && typeof counterparty === 'string' ? counterparty : '',
       timestamp: Date.now(),
       status: 'pending',
       fee: 0n,

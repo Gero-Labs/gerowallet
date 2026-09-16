@@ -300,4 +300,15 @@ describe('history: a self-transfer keeps the amount the wallet typed', () => {
     midnightActions.applyTransaction(row({}));
     expect(midnightStore.transactions[0]).toMatchObject({ type: 'self', amount: 0n });
   });
+
+  it('keeps the carried amount when gero-sync replays the same confirmed row', () => {
+    // Reconnects and full re-syncs deliver history again; the replayed row
+    // arrives with amount 0 like the first one did.
+    midnightActions.applyTransaction(row({ status: 'pending', amount: 2_000_000n }));
+    midnightActions.applyTransaction(row({ blockHeight: 2_599_815 }));
+    midnightActions.applyTransaction(row({ blockHeight: 2_599_815 }));
+
+    expect(midnightStore.transactions).toHaveLength(1);
+    expect(midnightStore.transactions[0]).toMatchObject({ type: 'self', status: 'confirmed', amount: 2_000_000n });
+  });
 });

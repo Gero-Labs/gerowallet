@@ -13,7 +13,7 @@
           :key="tx.hash"
           class="tx-item"
         >
-          <div class="tx-icon-wrapper" :class="tx.type === 'receive' ? 'icon-receive' : 'icon-send'">
+          <div class="tx-icon-wrapper" :class="tx.type === 'receive' ? 'icon-receive' : tx.type === 'send' ? 'icon-send' : 'icon-neutral'">
             <v-icon size="18" color="white">
               {{ tx.type === 'receive' ? 'mdi-arrow-bottom-left' : tx.type === 'register_dust' ? 'mdi-shield-star' : tx.type === 'self' ? 'mdi-swap-horizontal' : 'mdi-arrow-top-right' }}
             </v-icon>
@@ -25,7 +25,7 @@
           <div class="tx-amount-col text-right">
             <div
               class="text-body-2 font-weight-medium"
-              :class="tx.type === 'receive' ? 'accent-text' : 'error-text'"
+              :class="tx.type === 'receive' ? 'accent-text' : tx.type === 'send' ? 'error-text' : 'grey--text'"
             >
               {{ formatMidnightAmount(tx) }}
             </div>
@@ -87,6 +87,8 @@ import { walletStore } from '@/stores/walletStore';
 import { midnightStore } from '@/stores/midnightStore';
 import { Blockchain, Network } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
+import { formatTokenAmount } from '@/chains/midnight/midnightAmount';
+import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
 import type { MidnightTransaction } from '@/chains/midnight/midnightTypes';
 import type { StoredTransaction, TxAsset } from '@/models/transaction.types';
 import { isCardanoTx } from '@/models/transaction.types';
@@ -104,8 +106,6 @@ const loading = computed(() => !walletStore.transactions);
 // ── Midnight branch ───────────────────────────────────────────────────────────
 const isMidnight = computed(() => walletStore.loggedWallet?.chain === Blockchain.MIDNIGHT);
 const isMidnightMainnet = computed(() => isMidnight.value && walletStore.loggedWallet?.network === Network.MAINNET);
-const MN_NIGHT_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.NIGHT);
-const MN_DUST_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.DUST);
 
 const midnightTxs = computed<MidnightTransaction[]>(() =>
   [...midnightStore.transactions].sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0)));
@@ -123,15 +123,18 @@ function midnightTxLabel(tx: MidnightTransaction): string {
   }
 }
 
+// Same token rules as the dashboard card: NIGHT and DUST by name, any other
+// colour through the registry, and a colour the registry does not know shown
+// as raw base units rather than scaled by a guessed exponent.
 function formatMidnightAmount(tx: MidnightTransaction): string {
-  const divisor = tx.token === 'NIGHT' ? MN_NIGHT_DIVISOR : MN_DUST_DIVISOR;
-  const digits = tx.token === 'NIGHT' ? 2 : 4;
-  const whole = tx.amount / divisor;
-  const frac = (tx.amount % divisor).toString().padStart(divisor.toString().length - 1, '0').slice(0, digits);
-  const base = tx.token === 'DUST' ? 'DUST' : 'NIGHT';
-  const ticker = isMidnightMainnet.value ? base : `t${base}`;
   const sign = tx.type === 'receive' ? '+' : tx.type === 'send' ? '−' : '';
-  return `${sign}${whole.toLocaleString('en-US')}.${frac} ${ticker}`;
+  if (tx.token === 'NIGHT' || tx.token === 'DUST') {
+    const ticker = isMidnightMainnet.value ? tx.token : `t${tx.token}`;
+    return `${sign}${formatTokenAmount(tx.amount, MIDNIGHT_DECIMALS[tx.token], tx.token === 'DUST' ? 4 : 2)} ${ticker}`;
+  }
+  const meta = midnightTokenMeta(tx.token);
+  const ticker = meta?.symbol ?? `${tx.token.slice(0, 8)}…${tx.token.slice(-6)}`;
+  return `${sign}${formatTokenAmount(tx.amount, meta?.decimals ?? null)} ${ticker}`;
 }
 
 interface TxGroup {
@@ -296,6 +299,10 @@ function openTxDetail(tx: StoredTransaction) {
 
 .icon-stake {
   background: color-mix(in srgb, var(--g-info) 15%, transparent);
+}
+
+.icon-neutral {
+  background: color-mix(in srgb, var(--g-text-3) 20%, transparent);
 }
 
 .tx-info {
