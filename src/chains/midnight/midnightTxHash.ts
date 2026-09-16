@@ -55,3 +55,13 @@ export function finalizedLedgerTxHash(tx: unknown): string | undefined {
 export function historyHashForSubmittedTx(result: { txHash: string; ledgerTxHash?: string }): string {
   return normalizeMidnightTxHash(result.ledgerTxHash || result.txHash);
 }
+
+/**
+ * Identity of a history row: normalized hash + token. One indexer tx that
+ * moves several colors yields one row per color sharing a hash, so the hash
+ * alone is not a key; the optimistic pending row and the confirmed row that
+ * later replaces it share exactly this key (see `midnightStore.applyTransaction`).
+ */
+export function midnightTxRowKey(tx: { hash: string; token: string }): string {
+  return `${normalizeMidnightTxHash(tx.hash)}::${tx.token}`;
+}

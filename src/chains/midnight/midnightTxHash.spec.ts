@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { finalizedLedgerTxHash, historyHashForSubmittedTx, normalizeMidnightTxHash } from './midnightTxHash';
+import { finalizedLedgerTxHash, historyHashForSubmittedTx, midnightTxRowKey, normalizeMidnightTxHash } from './midnightTxHash';
 
 // The two hashes from the mainnet send that produced two history rows on
 // 2026-09-16: the extrinsic hash the node returned, and the ledger hash the
@@ -57,5 +57,12 @@ describe('historyHashForSubmittedTx', () => {
     // that spelling for the confirmed row to replace it in place.
     expect(historyHashForSubmittedTx({ txHash: EXTRINSIC, ledgerTxHash: `0x${LEDGER.toUpperCase()}` }))
       .toBe(normalizeMidnightTxHash(LEDGER));
+  });
+});
+
+describe('midnightTxRowKey', () => {
+  it('folds the hash but keeps the token verbatim, so two colors of one tx stay distinct', () => {
+    expect(midnightTxRowKey({ hash: `0x${LEDGER.toUpperCase()}`, token: 'NIGHT' })).toBe(`${LEDGER}::NIGHT`);
+    expect(midnightTxRowKey({ hash: LEDGER, token: 'NIGHT' })).not.toBe(midnightTxRowKey({ hash: LEDGER, token: 'aa'.repeat(32) }));
   });
 });

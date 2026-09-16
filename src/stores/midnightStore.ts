@@ -41,7 +41,7 @@ import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 import { debugLog } from '@/utils/debug';
 import { DEFAULT_LOCAL_PROOF_SERVER_URL, DEFAULT_LOCAL_PROOF_SERVER_URL_LEDGER9 } from '@/chains/midnight/midnightConfig';
 import { isNativeNight } from '@/chains/midnight/midnightTokenBalances';
-import { normalizeMidnightTxHash } from '@/chains/midnight/midnightTxHash';
+import { midnightTxRowKey, normalizeMidnightTxHash } from '@/chains/midnight/midnightTxHash';
 import type {
   MidnightBalances,
   MidnightAddresses,
@@ -415,7 +415,7 @@ function withPendingAmount(previous: MidnightTransaction, incoming: MidnightTran
  * distinct colors of the same tx coexist.
  */
 function txRowKey(tx: MidnightTransaction): string {
-  return `${normalizeMidnightTxHash(tx.hash)}::${tx.token}`;
+  return midnightTxRowKey(tx);
 }
 
 // ---------------------------------------------------------------- hydration
