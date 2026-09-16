@@ -194,7 +194,7 @@
       </div>
 
       <div class="mn-tx-list__rows">
-        <div v-for="tx in sorted" :key="`${tx.hash}-${tx.token}`" class="mn-tx-row-wrap">
+        <div v-for="tx in sorted" :key="midnightTxRowKey(tx)" class="mn-tx-row-wrap">
           <button
             type="button"
             class="mn-tx-row"
@@ -445,8 +445,9 @@ const sorted = computed<MidnightTransaction[]>(() => {
 
 // Row selection — mirrors TransactionsCard.vue's row-click contract: clicking
 // a row emits it to the parent (Transactions.vue), which renders it in the
-// detail pane alongside this list. Compared on hash+token (not hash alone),
-// matching the v-for key, so a multi-token tx's rows highlight independently.
+// detail pane alongside this list. Compared on the same normalized hash+token
+// identity the v-for is keyed on (not hash alone), so a multi-token tx's rows
+// highlight independently.
 function isSelected(tx: MidnightTransaction): boolean {
   return !!props.selectedTransaction && midnightTxRowKey(props.selectedTransaction) === midnightTxRowKey(tx);
 }
