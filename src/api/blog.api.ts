@@ -29,9 +29,13 @@ export interface BlogPost {
   content: Document | null;
   publishDate: string;
   readingTime: number;
-  /** Card thumbnail. */
+  /**
+   * 480x300 thumbnail, centre-cropped by the backend out of `heroImage`. The crop cuts
+   * the edges off artwork that is not centre-composed, so the views prefer `heroImage`
+   * and only fall back to this.
+   */
   image?: string;
-  /** Full-width hero, already sized by the backend. Do not strip its query. */
+  /** Full-width 1200x630 hero, already sized by the backend. Do not strip its query. */
   heroImage?: string;
   tags: string[];
   /** Assets embedded in the rich-text body, by id. Empty in list responses. */
