@@ -176,10 +176,13 @@ onMounted(load);
 
 .post-hero {
   width: 100%;
-  aspect-ratio: 16 / 9;
+  /* The backend renders every hero at 1200x630; a 16:9 box cropped ~3% off each side. */
+  aspect-ratio: 40 / 21;
   border-radius: var(--g-r-card);
   background-color: var(--g-surface);
-  background-size: cover;
+  /* Never crop: an off-ratio hero letterboxes on the surface tone instead. */
+  background-size: contain;
+  background-repeat: no-repeat;
   background-position: center;
   border: 1px solid var(--g-hairline-1);
   margin-bottom: var(--g-s-5);
