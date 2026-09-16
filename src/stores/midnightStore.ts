@@ -387,6 +387,19 @@ function serializeValue(_key: string, value: unknown): unknown {
 }
 
 /**
+ * A confirmed self-transfer arrives from gero-sync with amount 0: every output
+ * of the color came back to us, and the chain cannot say which was the payment
+ * and which the change (see `MidnightTransactionType`). The optimistic pending
+ * row it replaces was built from what the user typed, so it is the one record
+ * that knows — keep that amount rather than confirm the row as "0.00".
+ */
+function withPendingAmount(previous: MidnightTransaction, incoming: MidnightTransaction): MidnightTransaction {
+  const carry = incoming.type === 'self' && incoming.amount === 0n
+    && previous.status === 'pending' && previous.amount > 0n;
+  return carry ? { ...incoming, amount: previous.amount } : incoming;
+}
+
+/**
  * Dedup key for a transaction row: hash + token. A single indexer tx that
  * moves more than one color now produces multiple `MidnightTransaction`
  * rows sharing one hash (one per color) — keying on hash alone would make
@@ -1114,7 +1127,7 @@ export const midnightActions = {
     const key = txRowKey(tx);
     const existing = midnightStore.transactions.findIndex(t => txRowKey(t) === key);
     if (existing >= 0) {
-      midnightStore.transactions.splice(existing, 1, tx);
+      midnightStore.transactions.splice(existing, 1, withPendingAmount(midnightStore.transactions[existing], tx));
     } else {
       midnightStore.transactions.unshift(tx);
     }

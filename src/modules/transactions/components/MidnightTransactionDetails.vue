@@ -204,6 +204,7 @@ function typeLabel(type: MidnightTransactionType): string {
   switch (type) {
     case 'send': return t('transactions.sent');
     case 'receive': return t('transactions.received');
+    case 'self': return t('midnight.txSelf');
     case 'register_dust': return t('midnight.txRegisterDust');
     case 'deregister_dust': return t('midnight.txDeregisterDust');
     case 'shield': return t('midnight.txShield');

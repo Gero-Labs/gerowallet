@@ -15,7 +15,7 @@
         >
           <div class="tx-icon-wrapper" :class="tx.type === 'receive' ? 'icon-receive' : 'icon-send'">
             <v-icon size="18" color="white">
-              {{ tx.type === 'receive' ? 'mdi-arrow-bottom-left' : tx.type === 'register_dust' ? 'mdi-shield-star' : 'mdi-arrow-top-right' }}
+              {{ tx.type === 'receive' ? 'mdi-arrow-bottom-left' : tx.type === 'register_dust' ? 'mdi-shield-star' : tx.type === 'self' ? 'mdi-swap-horizontal' : 'mdi-arrow-top-right' }}
             </v-icon>
           </div>
           <div class="tx-info">
@@ -88,6 +88,8 @@ import { midnightStore } from '@/stores/midnightStore';
 import { Blockchain, Network } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import type { MidnightTransaction } from '@/chains/midnight/midnightTypes';
+import type { StoredTransaction, TxAsset } from '@/models/transaction.types';
+import { isCardanoTx } from '@/models/transaction.types';
 import filters from '@/shared/utils/filters';
 import TxDetailSheet from '../components/flows/TxDetailSheet.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
@@ -95,7 +97,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 const { t } = useTranslation();
 
 const showTxDetail = ref(false);
-const selectedTx = ref<any>(null);
+const selectedTx = ref<StoredTransaction | null>(null);
 
 const loading = computed(() => !walletStore.transactions);
 
@@ -112,6 +114,7 @@ function midnightTxLabel(tx: MidnightTransaction): string {
   switch (tx.type) {
     case 'send': return t('transactions.sent');
     case 'receive': return t('transactions.received');
+    case 'self': return t('midnight.txSelf');
     case 'register_dust': return t('midnight.txRegisterDust');
     case 'deregister_dust': return t('midnight.txDeregisterDust');
     case 'shield': return t('midnight.txShield');
@@ -133,7 +136,7 @@ function formatMidnightAmount(tx: MidnightTransaction): string {
 
 interface TxGroup {
   label: string;
-  transactions: any[];
+  transactions: StoredTransaction[];
 }
 
 const groupedTransactions = computed<TxGroup[]>(() => {
@@ -143,7 +146,7 @@ const groupedTransactions = computed<TxGroup[]>(() => {
   // Sort by timestamp descending
   const sorted = [...txs].sort((a, b) => b.tx_timestamp - a.tx_timestamp);
 
-  const groups: Map<string, any[]> = new Map();
+  const groups: Map<string, StoredTransaction[]> = new Map();
   const now = new Date();
   const todayStr = now.toDateString();
   const yesterday = new Date(now);
@@ -175,34 +178,45 @@ const groupedTransactions = computed<TxGroup[]>(() => {
   }));
 });
 
-function getTxIcon(tx: any): string {
+// Only a Cardano row carries a body; an Apex row never has certificates.
+function hasCertificates(tx: StoredTransaction): boolean {
+  return isCardanoTx(tx) && (tx.body.certificates?.length ?? 0) > 0;
+}
+
+function receivedTokens(assets?: TxAsset[]): boolean {
+  return assets?.some((a) => a.unit !== 'lovelace' && a.quantity > 0) ?? false;
+}
+
+function sentTokens(assets?: TxAsset[]): boolean {
+  return assets?.some((a) => a.unit !== 'lovelace' && a.quantity < 0) ?? false;
+}
+
+function getTxIcon(tx: StoredTransaction): string {
   const adaAmount = Number(tx.ada);
-  if (tx.body?.certificates?.length > 0) return 'mdi-vote';
+  if (hasCertificates(tx)) return 'mdi-vote';
   if (adaAmount > 0) return 'mdi-arrow-bottom-left';
   if (adaAmount < 0) return 'mdi-arrow-top-right';
   // Token-only
-  const hasReceivedTokens = tx.assets?.some((a: any) => a.unit !== 'lovelace' && a.quantity > 0);
-  if (hasReceivedTokens) return 'mdi-arrow-bottom-left';
+  if (receivedTokens(tx.assets)) return 'mdi-arrow-bottom-left';
   return 'mdi-arrow-top-right';
 }
 
-function getTxIconClass(tx: any): string {
+function getTxIconClass(tx: StoredTransaction): string {
   const adaAmount = Number(tx.ada);
-  if (tx.body?.certificates?.length > 0) return 'icon-stake';
+  if (hasCertificates(tx)) return 'icon-stake';
   if (adaAmount > 0) return 'icon-receive';
   if (adaAmount < 0) return 'icon-send';
-  const hasReceivedTokens = tx.assets?.some((a: any) => a.unit !== 'lovelace' && a.quantity > 0);
-  if (hasReceivedTokens) return 'icon-receive';
+  if (receivedTokens(tx.assets)) return 'icon-receive';
   return 'icon-send';
 }
 
-function getTxLabel(tx: any): string {
-  if (tx.body?.certificates?.length > 0) {
+function getTxLabel(tx: StoredTransaction): string {
+  if (hasCertificates(tx)) {
     return 'Staking Operation';
   }
   const adaAmount = Number(tx.ada);
-  const hasSentTokens = tx.assets?.some((a: any) => a.unit !== 'lovelace' && a.quantity < 0);
-  const hasReceivedTokens = tx.assets?.some((a: any) => a.unit !== 'lovelace' && a.quantity > 0);
+  const hasSentTokens = sentTokens(tx.assets);
+  const hasReceivedTokens = receivedTokens(tx.assets);
 
   if (adaAmount > 0 && hasReceivedTokens) return t('transactions.receivedFundsAndTokens');
   if (adaAmount < 0 && hasSentTokens) return t('transactions.sentFundsAndTokens');
@@ -222,7 +236,7 @@ function formatTimestamp(timestamp: number): string {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function openTxDetail(tx: any) {
+function openTxDetail(tx: StoredTransaction) {
   selectedTx.value = tx;
   showTxDetail.value = true;
 }

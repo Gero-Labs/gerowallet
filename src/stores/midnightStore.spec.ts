@@ -261,3 +261,43 @@ describe('history: the optimistic pending row and the confirmed row', () => {
     expect(midnightStore.transactions[0].status).toBe('confirmed');
   });
 });
+
+describe('history: a self-transfer keeps the amount the wallet typed', () => {
+  // The chain reports a transfer to our own address as net zero — the 2.00
+  // payment and the 7.99 change are both just outputs we own — so the synced
+  // row arrives with amount 0. The pending row this wallet inserted at send
+  // time is the only record of the 2.00.
+  const LEDGER = '58d446313ec1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5e450';
+  const USDM = 'aa'.repeat(32);
+  const row = (over: Partial<MidnightTransaction>): MidnightTransaction => ({
+    hash: LEDGER, type: 'self', token: USDM, amount: 0n, counterparty: '',
+    timestamp: 1_758_000_000_000, status: 'confirmed', fee: 0n, isShielded: false, ...over,
+  });
+
+  beforeEach(() => midnightActions.setTransactions([]));
+
+  it('carries the pending amount into the confirmed self-transfer row', () => {
+    midnightActions.applyTransaction(row({ status: 'pending', amount: 2_000_000n, counterparty: 'mn_addr1self' }));
+    midnightActions.applyTransaction(row({ blockHeight: 2_599_815 }));
+
+    expect(midnightStore.transactions).toHaveLength(1);
+    expect(midnightStore.transactions[0]).toMatchObject({ type: 'self', status: 'confirmed', amount: 2_000_000n, blockHeight: 2_599_815 });
+  });
+
+  it('also carries it when the pending row was typed as a plain send (older builds)', () => {
+    midnightActions.applyTransaction(row({ type: 'send', status: 'pending', amount: 2_000_000n }));
+    midnightActions.applyTransaction(row({}));
+
+    expect(midnightStore.transactions[0]).toMatchObject({ type: 'self', amount: 2_000_000n });
+  });
+
+  it('never overrides a real amount, and has nothing to carry without a pending row', () => {
+    midnightActions.applyTransaction(row({ type: 'send', status: 'pending', amount: 2_000_000n }));
+    midnightActions.applyTransaction(row({ type: 'send', amount: 2_000_000n, counterparty: 'mn_addr1other' }));
+    expect(midnightStore.transactions[0]).toMatchObject({ type: 'send', amount: 2_000_000n, counterparty: 'mn_addr1other' });
+
+    midnightActions.setTransactions([]);
+    midnightActions.applyTransaction(row({}));
+    expect(midnightStore.transactions[0]).toMatchObject({ type: 'self', amount: 0n });
+  });
+});
