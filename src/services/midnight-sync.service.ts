@@ -623,11 +623,17 @@ class MidnightSyncService {
 
       let type: MidnightTransaction['type'] = 'receive';
       if (netAmount < 0n) type = 'send';
-      else if (netAmount === 0n && spentAmount > 0n) type = 'send'; // pure forward to others
+      // Net zero with value spent: everything of this color we put in came
+      // back to us, i.e. a transfer to our own address. Not a send — nothing
+      // left the wallet — and the row cannot name the amount: the payment and
+      // the change are both just outputs we own, in canonical order.
+      // applyTransaction keeps the amount the pending row recorded at send
+      // time, which is the one thing that does know it.
+      else if (netAmount === 0n && spentAmount > 0n) type = 'self';
 
       // DUST registration: net-zero NIGHT self-respend where every created
       // NIGHT output we own comes back flagged registeredForDustGeneration.
-      // Without this it renders as a confusing "Sent −0.00". Registration
+      // Without this it would render as a plain self-transfer. Registration
       // only ever concerns NIGHT (the mapping validator), so this never
       // fires for a custom color's row.
       if (isNight && netAmount === 0n && spentAmount > 0n) {

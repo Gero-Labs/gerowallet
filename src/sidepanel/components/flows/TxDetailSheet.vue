@@ -130,7 +130,9 @@ type TxDetail = {
   tx_timestamp: number;
   block_height?: number;
   epoch_no?: number;
-  body?: { fee?: number | string; certificates?: unknown[] };
+  // A stored Cardano row carries the SDK's TxBody, whose fee is a bigint;
+  // formatAda coerces through Number() either way.
+  body?: { fee?: number | string | bigint; certificates?: unknown[] };
   assets?: TxAsset[];
 };
 
@@ -203,7 +205,7 @@ const txAssets = computed(() => {
   return props.tx.assets.filter((a: TxAsset) => a.unit !== 'lovelace');
 });
 
-function formatAda(lovelace: number | string): string {
+function formatAda(lovelace: number | string | bigint): string {
   return filters.toCurrency(Number(lovelace));
 }
 

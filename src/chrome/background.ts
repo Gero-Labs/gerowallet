@@ -5519,18 +5519,28 @@ app.addToOptions(MessageTypes.ADD_MIDNIGHT_PENDING_TX, async (request, sendRespo
     }
     const { hash, amount, counterparty, isShielded, token } = request.data || {};
     if (typeof hash !== 'string' || !hash) throw new Error('hash is required');
-    const { midnightActions } = await import('@/stores/midnightStore');
+    const { midnightActions, midnightStore } = await import('@/stores/midnightStore');
     let amountBig = 0n;
     try { amountBig = BigInt(amount ?? '0'); } catch { amountBig = 0n; }
+    // A public send to our own unshielded address is a self-transfer from the
+    // start: nothing leaves the wallet, and the amount typed here is the only
+    // record of it — the confirmed row cannot tell payment from change and
+    // keeps this one (see midnightStore.withPendingAmount).
+    const own = midnightStore.addresses?.unshielded;
+    const toSelf = !isShielded && typeof counterparty === 'string' && !!own
+      && counterparty.trim().toLowerCase() === own.toLowerCase();
     midnightActions.applyTransaction({
       hash,
-      type: 'send',
+      type: toSelf ? 'self' : 'send',
       // Colour of what was actually sent. Defaulted rather than required so
       // older callers (and the shielded path) keep their NIGHT behaviour; a
       // hardcoded 'NIGHT' here would label a USDM send as NIGHT in history.
       token: typeof token === 'string' && token ? token : 'NIGHT',
       amount: amountBig,
-      counterparty: typeof counterparty === 'string' ? counterparty : '',
+      // A self-transfer names no counterparty, matching the confirmed row
+      // gero-sync will deliver — otherwise our own address would show for a
+      // moment and then vanish on confirmation.
+      counterparty: !toSelf && typeof counterparty === 'string' ? counterparty : '',
       timestamp: Date.now(),
       status: 'pending',
       fee: 0n,

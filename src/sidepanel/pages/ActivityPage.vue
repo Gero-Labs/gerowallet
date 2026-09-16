@@ -13,9 +13,9 @@
           :key="tx.hash"
           class="tx-item"
         >
-          <div class="tx-icon-wrapper" :class="tx.type === 'receive' ? 'icon-receive' : 'icon-send'">
+          <div class="tx-icon-wrapper" :class="tx.type === 'receive' ? 'icon-receive' : tx.type === 'send' ? 'icon-send' : 'icon-neutral'">
             <v-icon size="18" color="white">
-              {{ tx.type === 'receive' ? 'mdi-arrow-bottom-left' : tx.type === 'register_dust' ? 'mdi-shield-star' : 'mdi-arrow-top-right' }}
+              {{ tx.type === 'receive' ? 'mdi-arrow-bottom-left' : tx.type === 'register_dust' ? 'mdi-shield-star' : tx.type === 'self' ? 'mdi-swap-horizontal' : 'mdi-arrow-top-right' }}
             </v-icon>
           </div>
           <div class="tx-info">
@@ -25,7 +25,7 @@
           <div class="tx-amount-col text-right">
             <div
               class="text-body-2 font-weight-medium"
-              :class="tx.type === 'receive' ? 'accent-text' : 'error-text'"
+              :class="tx.type === 'receive' ? 'accent-text' : tx.type === 'send' ? 'error-text' : 'grey--text'"
             >
               {{ formatMidnightAmount(tx) }}
             </div>
@@ -87,7 +87,11 @@ import { walletStore } from '@/stores/walletStore';
 import { midnightStore } from '@/stores/midnightStore';
 import { Blockchain, Network } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
+import { formatTokenAmount } from '@/chains/midnight/midnightAmount';
+import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
 import type { MidnightTransaction } from '@/chains/midnight/midnightTypes';
+import type { StoredTransaction, TxAsset } from '@/models/transaction.types';
+import { isCardanoTx } from '@/models/transaction.types';
 import filters from '@/shared/utils/filters';
 import TxDetailSheet from '../components/flows/TxDetailSheet.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
@@ -95,15 +99,13 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 const { t } = useTranslation();
 
 const showTxDetail = ref(false);
-const selectedTx = ref<any>(null);
+const selectedTx = ref<StoredTransaction | null>(null);
 
 const loading = computed(() => !walletStore.transactions);
 
 // ── Midnight branch ───────────────────────────────────────────────────────────
 const isMidnight = computed(() => walletStore.loggedWallet?.chain === Blockchain.MIDNIGHT);
 const isMidnightMainnet = computed(() => isMidnight.value && walletStore.loggedWallet?.network === Network.MAINNET);
-const MN_NIGHT_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.NIGHT);
-const MN_DUST_DIVISOR = 10n ** BigInt(MIDNIGHT_DECIMALS.DUST);
 
 const midnightTxs = computed<MidnightTransaction[]>(() =>
   [...midnightStore.transactions].sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0)));
@@ -112,6 +114,7 @@ function midnightTxLabel(tx: MidnightTransaction): string {
   switch (tx.type) {
     case 'send': return t('transactions.sent');
     case 'receive': return t('transactions.received');
+    case 'self': return t('midnight.txSelf');
     case 'register_dust': return t('midnight.txRegisterDust');
     case 'deregister_dust': return t('midnight.txDeregisterDust');
     case 'shield': return t('midnight.txShield');
@@ -120,20 +123,23 @@ function midnightTxLabel(tx: MidnightTransaction): string {
   }
 }
 
+// Same token rules as the dashboard card: NIGHT and DUST by name, any other
+// colour through the registry, and a colour the registry does not know shown
+// as raw base units rather than scaled by a guessed exponent.
 function formatMidnightAmount(tx: MidnightTransaction): string {
-  const divisor = tx.token === 'NIGHT' ? MN_NIGHT_DIVISOR : MN_DUST_DIVISOR;
-  const digits = tx.token === 'NIGHT' ? 2 : 4;
-  const whole = tx.amount / divisor;
-  const frac = (tx.amount % divisor).toString().padStart(divisor.toString().length - 1, '0').slice(0, digits);
-  const base = tx.token === 'DUST' ? 'DUST' : 'NIGHT';
-  const ticker = isMidnightMainnet.value ? base : `t${base}`;
   const sign = tx.type === 'receive' ? '+' : tx.type === 'send' ? '−' : '';
-  return `${sign}${whole.toLocaleString('en-US')}.${frac} ${ticker}`;
+  if (tx.token === 'NIGHT' || tx.token === 'DUST') {
+    const ticker = isMidnightMainnet.value ? tx.token : `t${tx.token}`;
+    return `${sign}${formatTokenAmount(tx.amount, MIDNIGHT_DECIMALS[tx.token], tx.token === 'DUST' ? 4 : 2)} ${ticker}`;
+  }
+  const meta = midnightTokenMeta(tx.token);
+  const ticker = meta?.symbol ?? `${tx.token.slice(0, 8)}…${tx.token.slice(-6)}`;
+  return `${sign}${formatTokenAmount(tx.amount, meta?.decimals ?? null)} ${ticker}`;
 }
 
 interface TxGroup {
   label: string;
-  transactions: any[];
+  transactions: StoredTransaction[];
 }
 
 const groupedTransactions = computed<TxGroup[]>(() => {
@@ -143,7 +149,7 @@ const groupedTransactions = computed<TxGroup[]>(() => {
   // Sort by timestamp descending
   const sorted = [...txs].sort((a, b) => b.tx_timestamp - a.tx_timestamp);
 
-  const groups: Map<string, any[]> = new Map();
+  const groups: Map<string, StoredTransaction[]> = new Map();
   const now = new Date();
   const todayStr = now.toDateString();
   const yesterday = new Date(now);
@@ -175,34 +181,45 @@ const groupedTransactions = computed<TxGroup[]>(() => {
   }));
 });
 
-function getTxIcon(tx: any): string {
+// Only a Cardano row carries a body; an Apex row never has certificates.
+function hasCertificates(tx: StoredTransaction): boolean {
+  return isCardanoTx(tx) && (tx.body.certificates?.length ?? 0) > 0;
+}
+
+function receivedTokens(assets?: TxAsset[]): boolean {
+  return assets?.some((a) => a.unit !== 'lovelace' && a.quantity > 0) ?? false;
+}
+
+function sentTokens(assets?: TxAsset[]): boolean {
+  return assets?.some((a) => a.unit !== 'lovelace' && a.quantity < 0) ?? false;
+}
+
+function getTxIcon(tx: StoredTransaction): string {
   const adaAmount = Number(tx.ada);
-  if (tx.body?.certificates?.length > 0) return 'mdi-vote';
+  if (hasCertificates(tx)) return 'mdi-vote';
   if (adaAmount > 0) return 'mdi-arrow-bottom-left';
   if (adaAmount < 0) return 'mdi-arrow-top-right';
   // Token-only
-  const hasReceivedTokens = tx.assets?.some((a: any) => a.unit !== 'lovelace' && a.quantity > 0);
-  if (hasReceivedTokens) return 'mdi-arrow-bottom-left';
+  if (receivedTokens(tx.assets)) return 'mdi-arrow-bottom-left';
   return 'mdi-arrow-top-right';
 }
 
-function getTxIconClass(tx: any): string {
+function getTxIconClass(tx: StoredTransaction): string {
   const adaAmount = Number(tx.ada);
-  if (tx.body?.certificates?.length > 0) return 'icon-stake';
+  if (hasCertificates(tx)) return 'icon-stake';
   if (adaAmount > 0) return 'icon-receive';
   if (adaAmount < 0) return 'icon-send';
-  const hasReceivedTokens = tx.assets?.some((a: any) => a.unit !== 'lovelace' && a.quantity > 0);
-  if (hasReceivedTokens) return 'icon-receive';
+  if (receivedTokens(tx.assets)) return 'icon-receive';
   return 'icon-send';
 }
 
-function getTxLabel(tx: any): string {
-  if (tx.body?.certificates?.length > 0) {
+function getTxLabel(tx: StoredTransaction): string {
+  if (hasCertificates(tx)) {
     return 'Staking Operation';
   }
   const adaAmount = Number(tx.ada);
-  const hasSentTokens = tx.assets?.some((a: any) => a.unit !== 'lovelace' && a.quantity < 0);
-  const hasReceivedTokens = tx.assets?.some((a: any) => a.unit !== 'lovelace' && a.quantity > 0);
+  const hasSentTokens = sentTokens(tx.assets);
+  const hasReceivedTokens = receivedTokens(tx.assets);
 
   if (adaAmount > 0 && hasReceivedTokens) return t('transactions.receivedFundsAndTokens');
   if (adaAmount < 0 && hasSentTokens) return t('transactions.sentFundsAndTokens');
@@ -222,7 +239,7 @@ function formatTimestamp(timestamp: number): string {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function openTxDetail(tx: any) {
+function openTxDetail(tx: StoredTransaction) {
   selectedTx.value = tx;
   showTxDetail.value = true;
 }
@@ -282,6 +299,10 @@ function openTxDetail(tx: any) {
 
 .icon-stake {
   background: color-mix(in srgb, var(--g-info) 15%, transparent);
+}
+
+.icon-neutral {
+  background: color-mix(in srgb, var(--g-text-3) 20%, transparent);
 }
 
 .tx-info {

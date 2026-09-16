@@ -5018,6 +5018,7 @@ export default {
   'midnight.dustCapReached': 'Status',
   'midnight.dustFullyCharged': 'Fully charged',
   // Transaction type labels (history list)
+  'midnight.txSelf': 'Sent to yourself',
   'midnight.txRegisterDust': 'Registered for DUST',
   'midnight.txDeregisterDust': 'Deregistered DUST',
   'midnight.txShield': 'Shielded NIGHT',

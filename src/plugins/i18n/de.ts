@@ -4913,6 +4913,7 @@ export default {
   'midnight.dustCapReached': 'Status',
   'midnight.dustFullyCharged': 'Voll geladen',
   // Transaktionstypen (Verlauf)
+  'midnight.txSelf': 'An dich selbst gesendet',
   'midnight.txRegisterDust': 'Für DUST registriert',
   'midnight.txDeregisterDust': 'DUST-Registrierung aufgehoben',
   'midnight.txShield': 'NIGHT verschleiert',
