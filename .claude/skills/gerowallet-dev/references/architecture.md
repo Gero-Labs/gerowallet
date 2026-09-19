@@ -30,7 +30,7 @@ Method-name constants live in two places: dApp-facing CIP-30 / Bitcoin / Midnigh
 Index the surface:
 
 ```bash
-grep -n 'app.addToOptions(MessageTypes\.' src/chrome/background.ts    # ~110 internal handlers
+grep -n 'app.addToOptions(MessageTypes\.' src/chrome/background.ts    # 71 matches; 76 registrations in all (5 wrap the constant onto the next line)
 grep -nE 'app.add\((METHOD|BITCOIN_METHOD|MIDNIGHT_METHOD)\.' src/chrome/background.ts   # dApp-reachable handlers
 ```
 
@@ -48,7 +48,7 @@ if (res?.data?.error) { /* handler-level failure */ }
 
 The exported `BackgroundResponse<T>` type is narrower than what is actually sent (no `id`, no `error`) - do not treat it as the contract.
 
-**`return true` in a handler does nothing.** `BackgroundHandler` is typed to return void and the value is discarded; the wrapper inside `listen()` already returns `true` unconditionally. What matters is calling `sendResponse` exactly once on every path, including every error path. CLAUDE.md's template is cargo cult here.
+**`return true` in a handler does nothing.** `BackgroundHandler` is typed to return void and the value is discarded; the wrapper inside `listen()` returns `true` itself for every message it dispatches to a registered handler (it returns `false` only when nothing matched, deliberately closing the channel). What matters is calling `sendResponse` exactly once on every path, including every error path. CLAUDE.md's template is cargo cult here.
 
 ### Ports
 

@@ -26,12 +26,13 @@ npm run test:watch
 
 ## A red full-suite run is probably not you
 
-On an unmodified tree the suite currently exits 1 with two known timing flakes:
+On an idle machine the suite is green: 245 files, 2871 tests, ~37s, exit 0. Under load it is a different story - several specs are timing-sensitive and fail intermittently:
 
-- `src/services/crossDevice/proveService.spec.ts` (real timers)
-- `src/chains/midnight/midnightKeyManager.ledger.spec.ts` (a `beforeAll` deriving Midnight HD keys for 3 networks, ~9.4s against a 10s hook timeout)
+- `src/services/crossDevice/*.spec.ts` (real timers)
+- `src/chains/midnight/midnightKeyManager.ledger.spec.ts` (a `beforeAll` deriving Midnight HD keys for 3 networks, ~9.4s against a **10s** hook timeout)
+- `src/shared/utils/renderMarkdown.spec.ts`
 
-Both pass in isolation. **Re-run the failing file alone before calling it a regression.** A clean full run also happens, so a green run is not proof the flake is fixed.
+All pass in isolation. **Re-run the failing file alone before calling it a regression**, and expect a different one to fail next time. Conversely, a green run under load is not proof a flake is fixed.
 
 ```bash
 npx vitest run src/services/crossDevice/proveService.spec.ts
@@ -88,7 +89,7 @@ Under happy-dom, `getContextType()` returns `'content'` (a `window` exists, prot
 ```bash
 npx vite --config test/wallet-library/vite.config.mts
 PLAYWRIGHT_MODULE=/abs/path/to/node_modules/playwright node test/wallet-library/browser.cjs        # 1100x1400
-PLAYWRIGHT_MODULE=/abs/path/to/node_modules/playwright node test/wallet-library/browser-mini.cjs   # 375x812
+PLAYWRIGHT_MODULE=/abs/path/to/node_modules/playwright node test/wallet-library/browser-mini.cjs   # 375x820
 ```
 
 Its config lacks the three `@noble/*` `.js` aliases that `vite.config.mts` and `vitest.config.mts` carry; copy them across or the dep pre-scan errors.
@@ -97,4 +98,4 @@ This is the general technique for any component you cannot render in the full ap
 
 ## Don't run this locally
 
-`scripts/build-isolated-extension.mjs` refuses to run in a checkout that already has `.env*` or `extension/manifest.json`, because it synthesizes its own. It is for a clean disposable clone. Use `build:web` instead.
+`scripts/build-isolated-extension.mjs` refuses to run in a checkout that already has `.env`, `.env.local`, `.env.production`, `.env.production.local` or `extension/manifest.json`, because it synthesizes its own. It is for a clean disposable clone. Note `.env.development` is **not** on that guard list, so a normal dev checkout will happily start the whole five-target production build - that is a long wait, not a safe check. Use `build:web` instead.

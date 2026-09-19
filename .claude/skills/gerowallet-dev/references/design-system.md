@@ -72,7 +72,7 @@ Surfaces: `--g-canvas` #000, `--g-surface`, `--g-raised`, `--g-overlay`, with ha
 
 ## Chain accent
 
-The chain accent is the only per-chain colour. `useChainAccent()` is the **sole writer** of `--g-accent`, `--g-grad-1/2`, `--g-on-grad` and the legacy `--chain-*` aliases. It is bootstrapped exactly once per page (`src/options/App.vue`, and the side panel via `useChainContext`); a module-level latch makes a second call a no-op. Palettes live in `src/config/themes.ts` (`chainAccents`, `chainKeyFor`).
+The chain accent is the only per-chain colour. `applyChainAccent()` in `src/shared/composables/useChainAccent.ts` is the **sole writer** of `--g-accent`, `--g-grad-1/2`, `--g-on-grad` and the legacy `--chain-*` aliases - a new accent slot only ever needs adding there. `useChainAccent()` is the logged-in wrapper around it: it watches the logged wallet's chain and is bootstrapped exactly once per page (`src/options/App.vue`, and the side panel via `useChainContext`), with a module-level latch that makes a second call a no-op. To drive the accent from something other than the logged wallet - the pre-login network preview is the existing case - call `applyChainAccent()` directly, as `Welcome.vue` does. Palettes live in `src/config/themes.ts` (`chainAccents`, `chainKeyFor`).
 
 Never hardcode a chain hex. Gradients belong only on sanctioned slots: the primary CTA, the active nav indicator, the chain dot, the header hairline.
 

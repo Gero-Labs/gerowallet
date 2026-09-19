@@ -23,7 +23,7 @@ README.md and ARCHITECTURE.md are broadly reliable on structure and intent. CLAU
 | "`api/` - data clients routed through gero-backend/Nexus: ... spo-api" | `spo-api.ts` has a hardcoded per-network Koios URL map and no env var |
 | "Sync throttled to every 2 min when locked" | No locked-state throttle exists. The only `2 * 60_000` is a mutex acquisition timeout |
 | Route gating via `isRouteUnderMaintenance()` | Correct, but incomplete: that check is skipped until flags initialize, so a dark feature also needs the live flag ANDed into `routeNetworkGuards` |
-| "When adding keys to `us.ts`, always add corresponding German in `de.ts`" | Correct rule, but nothing enforces it - no spec, no script, no CI, no lint rule |
+| "When adding keys to `us.ts`, always add corresponding German in `de.ts`" | Correct rule, unenforced everywhere except `copilot.*`: `src/services/copilot/noAdvice.spec.ts` asserts EN/DE parity for the `copilot.onboarding`/`vibe`/`category`/`settings` prefixes and non-empty `copilot.feed.*` narration. No script, CI job or lint rule covers any other namespace, and that spec is not in a required check's path list |
 | "Gates wired into the pre-commit hook" | Correct, but it is **yorkie** via `package.json` `gitHooks`, not husky. There is no `.husky/` directory, and `.git/hooks/pre-commit` is a generated shim |
 
 ## ARCHITECTURE.md
@@ -38,11 +38,11 @@ README.md and ARCHITECTURE.md are broadly reliable on structure and intent. CLAU
 
 | Says | Reality |
 |---|---|
-| `npm run test:e2e` under Testing | Playwright is not a dependency and there is no config. The E2E suite is a separate repo |
 | Its Testing section | It is about manually using the Preprod testnet, not unit tests. Testing is undocumented in both README.md and CLAUDE.md |
 
 ## Not a drift, but surprising
 
+- `package.json` still exposes `npm run test:e2e` (`playwright test`), but Playwright is in neither `dependencies` nor `devDependencies` and there is no Playwright config. The E2E suite is a separate repo. Neither README.md nor CLAUDE.md mentions it.
 - `.env.example` does not exist and is not coming back (it carried `MANIFEST_KEY`). `.gitignore` keeps a `!.env.example` negation for a file that is not committed. Enumerate variables with `grep -rhoE 'VITE_[A-Z0-9_]+' src/ scripts/ | sort -u`.
 - `.prettierrc` exists, but prettier is not a dependency, has no script, and appears nowhere in CI. Do not run it - a reformat diff collides with the design ratchet's per-file metrics. Match the surrounding style; `.editorconfig` is the practical guide.
 - `ci-cd.yml` is legacy: its `publish` job would fail today (it reads a `src/manifest.json` that does not exist, requires `semver` which is not a dependency, and uses the removed `::set-output`). PR validation comes entirely from the four `ubuntu-latest` workflows.

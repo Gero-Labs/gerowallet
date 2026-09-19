@@ -4,7 +4,7 @@
 
 ```bash
 git clone https://github.com/Gero-Labs/gerowallet.git && cd gerowallet
-npm install          # NOT npm ci - npm install is what installs the yorkie pre-commit hook
+npm install          # npm ci works too; both run yorkie's install script, which writes the hook
 touch .env.development
 ```
 

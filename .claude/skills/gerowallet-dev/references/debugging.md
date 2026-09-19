@@ -4,7 +4,7 @@
 
 512 log statements in this codebase go through `debugLog()` in `src/utils/debug.ts`, which is bound to a no-op unless `VITE_DEBUG_STORES === 'true'` **at build time**. The entire gero-sync WebSocket trace (connect, SUBSCRIBE, SYNC, CATCH_UP_COMPLETE, rollback, reconnect) and the whole store-sync port lifecycle are `debugLog`-only. With the flag off, a sync failure produces **zero console output**, which reads as "sync is fine".
 
-The variable appears in exactly one file and in no documentation. Do this before debugging anything:
+It is read in exactly one source file and appears in no documentation - but `ci-cd.yml` also passes it through from a repo variable, so a release build can be produced with it on (see the logging rule in `security.md`). Do this before debugging anything:
 
 ```bash
 printf 'VITE_DEBUG_STORES=true\n' >> .env.development
@@ -43,7 +43,7 @@ Chrome runtime error in sendToBackground:
 These are raw `console.warn`, so they appear even with debug logging off. Then check:
 
 1. **Wrong registry.** `sendToBackground` stamps `sender:'webpage'` and only reaches `app.add()` (CIP-30) handlers. `sendToBackgroundFromOptions` stamps `sender:'options'` and only reaches `app.addToOptions()` (`MessageTypes.*`) handlers. A `MessageTypes.*` call sent with `sendToBackground` matches nothing and silently never returns.
-2. **The handler threw asynchronously.** The wrapper's try/catch only catches synchronous throws, so an async handler that rejects never calls `sendResponse` and the caller hangs until the port closes. Adding `return true` does nothing - `listen()` already returns `true` unconditionally.
+2. **The handler threw asynchronously.** The wrapper's try/catch only catches synchronous throws, so an async handler that rejects never calls `sendResponse` and the caller hangs until the port closes. Adding `return true` does nothing - `listen()` already returns `true` for every message it dispatches to a registered handler, and `false` only when nothing matched.
 3. **The wallet was not there.** `walletManager.getWallet()` returns `null` during the async boot re-login after a worker restart.
 
 ### UI is stale but the data is fine

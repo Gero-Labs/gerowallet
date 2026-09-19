@@ -48,7 +48,7 @@ The reason is written into the code: the entry-point check runs before the appro
 - CIP-30 `signTx` refuses non-whitelisted origins **before anything else**, using only the relay-stamped `request.origin`. **Never trust `request.data.origin`** - the page controls it.
 - The only writer of `request.origin` is the content-script proxy, which sets it from `window.origin` after rejecting any message where `e.source !== window`.
 - `enable`, `isEnabled` and every sign method bypass the relay's whitelist pre-check on purpose (to keep the user gesture alive for `chrome.sidePanel.open()`), so the **background** enforces the whitelist for them. Any new handler on that fast path must re-check `WalletStore.isWhitelisted(request.origin)` itself.
-- Every read handler re-checks the whitelist independently, as defence in depth. Match that.
+- **Most** read handlers re-check the whitelist independently, as defence in depth (`getBalance`, `getUtxos`, `getCollateral`, `getNetworkId`, `getRewardAddresses`, the address getters). **Five do not**: `getPubDRepKey`, `getRegisteredPubStakeKeys`, `getUnregisteredPubStakeKeys`, `getAccountPub` and `getNetworkMagic` (`background.ts:1551-1730`) have no background-side check at all and rely entirely on the content relay. Match the majority, not those five - and if you touch one of them, add the check.
 - The `sender` string is forgeable by a content script; sensitive options-only methods are gated on the real `MessageSender` being an own extension page (`src/chrome/senderTrust.ts`).
 
 ## Crypto
@@ -66,7 +66,7 @@ Import note: use `blake2b` as a direct dependency - `@noble/hashes/blake2` does 
 
 ## Non-negotiables for any change in this area
 
-- **Never log key material, mnemonics, addresses, or transaction contents.** Use `debugLog()`, which compiles out unless `VITE_DEBUG_STORES=true`. Strip ad-hoc `console.log` before committing. This is an open-source wallet; a stray log ships to production consoles.
+- **Never log key material, mnemonics, addresses, or transaction contents.** Use `debugLog()`, which compiles out unless `VITE_DEBUG_STORES=true`. Strip ad-hoc `console.log` before committing. This is an open-source wallet; a stray log ships to production consoles. Note `debugLog` is **not** an unconditional safety net: `ci-cd.yml` passes `VITE_DEBUG_STORES` through from a repo variable, so a release build can be produced with debug logging on. Write every log as if it will ship.
 - **Never widen a refusal.** If you add a signing path, add its preflight.
 - **Validate at the boundary.** Escape data you serialize. The existing CSV export quotes naively and escapes nothing, and the rows carry attacker-influenced strings (asset names, ADA Handles, metadata) - do not copy that into a new exporter without fixing the formula-injection surface.
 - **URL safety has one SSOT**: `parseSafeUrl()` in `src/shared/utils/externalLink.ts`. It parses with `new URL()`, allows only http/https, and matches brands on the parsed `hostname` exactly or as a subdomain. **Never** `url.includes('github.com')` - `https://evil.example/?github.com` satisfies it.

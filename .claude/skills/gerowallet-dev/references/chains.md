@@ -4,7 +4,7 @@ Gero is multi-chain by a runtime data table plus explicit per-chain branches, **
 
 ## The table
 
-`src/utils/networks.ts` (there is no `src/config/networks*`) holds 10 entries keyed by `(blockchain, network)`: Cardano Mainnet/Preprod/Preview, Apex Prime Mainnet, Apex Vector Mainnet, Bitcoin Mainnet/Testnet4, Midnight Stagenet/Preprod/Mainnet. Each carries a flat boolean capability matrix, protocol params, currency metadata and a default provider, read through ~22 `resolveXSupport(chain, network)` helpers.
+`src/utils/networks.ts` (there is no `src/config/networks*`) holds 10 entries keyed by `(blockchain, network)`: Cardano Mainnet/Preprod/Preview, Apex Prime Mainnet, Apex Vector Mainnet, Bitcoin Mainnet/Testnet4, Midnight Stagenet/Preprod/Mainnet. Each carries a flat boolean capability matrix, protocol params, currency metadata and a default provider, read through 28 `resolve*(chain, network)` helpers, 17 of them boolean capability gates (`resolveStakingSupport`, `resolveSwapSupport`, ...).
 
 `resolveNetwork(chain, network)` returns `undefined` for an unknown pair, and every caller must handle that.
 
@@ -12,7 +12,7 @@ Gero is multi-chain by a runtime data table plus explicit per-chain branches, **
 
 **`Blockchain` and `Network` are const objects of display strings, not enums.** `CARDANO = 'Cardano'`, `APEX_PRIME = 'Apex Fusion Prime'`, `APEX_VECTOR = 'Apex Fusion Vector'`, `BITCOIN = 'Bitcoin'`, `MIDNIGHT = 'Midnight'`. Consequences:
 
-- `switch (chain)` is **never exhaustiveness-checked**. A new chain silently falls into the Cardano `default:` with no compile error. Every chain switch in the tree has one.
+- `switch (chain)` is **never exhaustiveness-checked**. A new chain silently falls into whatever `default:` the switch happens to have, with no compile error. Most default to Cardano; two do not - `getExplorerUrl()` in `src/shared/utils/explorer.ts` returns `''` (which is why Midnight explorer links render empty) and `getDefaultAddressType()` in `src/db/gero-db.ts` returns `'unknown'`. Grep every `switch` on a chain when adding one.
 - Comparing against literals is a live bug source. `'Apex Prime'` is not a value; the real one is `'Apex Fusion Prime'`. Always compare against `Blockchain.APEX_PRIME`.
 - **The wire protocol does not use these strings.** Every backend and WebSocket call reverse-looks-up the uppercase enum key: `Object.keys(Blockchain).find(k => Blockchain[k] === chain)` -> `'CARDANO'`/`'BITCOIN'`/`'MIDNIGHT'`. Sending the display string gives a backend 4xx or a gero-sync close.
 
@@ -37,7 +37,7 @@ Two consequences that catch people:
 
 ## Feature gating per chain
 
-- **`isBitcoinEnabled`** (default **false**) is the master visibility gate for Bitcoin, enforced in exactly three kinds of place: the onboarding family tile, six router guards, and the matching NavigationDrawer items. It is always ANDed with the per-network capability, never used alone.
+- **`isBitcoinEnabled`** (default **false**) is the master visibility gate for Bitcoin, enforced in exactly three kinds of place: the onboarding family tile, six router guards, and the matching NavigationDrawer items. It is ANDed with the per-network capability in the six router guards and the six NavigationDrawer items. The onboarding family tile is the exception - `NetworkSelector.vue` checks the flag against the chain name alone.
 - **`isBitcoinGeroSyncEnabled`** defaults to **true** and is a kill-switch, not an enablement flag: false switches to the 60s Esplora poller.
 - **There is no `isMidnightEnabled`.** Midnight Mainnet is already selectable by ordinary users. Only Bitcoin is release-gated.
 - **CIP-113 has three gates**, not the two CLAUDE.md describes: `CIP113_ALLOWED_NETWORKS` (Preview only, checked first), the per-network script-hash list, and the runtime `isCip113Enabled` flag.
