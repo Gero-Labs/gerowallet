@@ -194,7 +194,7 @@
       </div>
 
       <div class="mn-tx-list__rows">
-        <div v-for="tx in sorted" :key="`${tx.hash}-${tx.token}`" class="mn-tx-row-wrap">
+        <div v-for="tx in sorted" :key="midnightTxRowKey(tx)" class="mn-tx-row-wrap">
           <button
             type="button"
             class="mn-tx-row"
@@ -248,6 +248,9 @@ import { Network } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import type { MidnightTransaction, MidnightTransactionType } from '@/chains/midnight/midnightTypes';
 import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
+import { sponsoredTxFor } from '@/chains/midnight/midnightSponsorLinks';
+import { midnightTxRowKey } from '@/chains/midnight/midnightTxHash';
+import type { SponsoredTxMap } from '@/chains/midnight/midnightSponsorLinks';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import snackbar from '@/plugins/snackbar';
 
@@ -442,12 +445,11 @@ const sorted = computed<MidnightTransaction[]>(() => {
 
 // Row selection — mirrors TransactionsCard.vue's row-click contract: clicking
 // a row emits it to the parent (Transactions.vue), which renders it in the
-// detail pane alongside this list. Compared on hash+token (not hash alone),
-// matching the v-for key, so a multi-token tx's rows highlight independently.
+// detail pane alongside this list. Compared on the same normalized hash+token
+// identity the v-for is keyed on (not hash alone), so a multi-token tx's rows
+// highlight independently.
 function isSelected(tx: MidnightTransaction): boolean {
-  return !!props.selectedTransaction
-    && props.selectedTransaction.hash === tx.hash
-    && props.selectedTransaction.token === tx.token;
+  return !!props.selectedTransaction && midnightTxRowKey(props.selectedTransaction) === midnightTxRowKey(tx);
 }
 
 function selectRow(tx: MidnightTransaction): void {
@@ -495,6 +497,7 @@ function typeLabel(type: MidnightTransactionType): string {
   switch (type) {
     case 'send': return t('transactions.sent');
     case 'receive': return t('transactions.received');
+    case 'self': return t('midnight.txSelf');
     case 'register_dust': return t('midnight.txRegisterDust');
     case 'deregister_dust': return t('midnight.txDeregisterDust');
     case 'shield': return t('midnight.txShield');
@@ -552,11 +555,10 @@ async function copyHash(hash: string): Promise<void> {
  * forward the fee payer, and the sponsor's inputs sit in a separate intent, so
  * the chain data cannot say who paid.
  */
-const sponsoredTxs = ref<Record<string, { sponsorName: string }>>({});
+const sponsoredTxs = ref<SponsoredTxMap>({});
 
 function sponsorFor(hash: string): string {
-  if (!hash) return '';
-  return sponsoredTxs.value[hash.toLowerCase()]?.sponsorName ?? '';
+  return sponsoredTxFor(sponsoredTxs.value, hash)?.sponsorName ?? '';
 }
 
 async function loadSponsorAttribution(): Promise<void> {

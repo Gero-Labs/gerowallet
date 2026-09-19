@@ -350,6 +350,7 @@ For complete architectural details, see [ARCHITECTURE.md](ARCHITECTURE.md).
 - **[Quick Start](#quick-start)** - Local setup and development environment
 - **[Architecture Overview](ARCHITECTURE.md)** - System design, patterns, data flow
 - **[Contributing Guidelines](CONTRIBUTING.md)** - How to contribute, code standards, PR process
+- **[Contributor Skill](.claude/skills/gerowallet-dev/SKILL.md)** - Working guide to the codebase: build loop, execution contexts, state, design ratchet, i18n, chains, signing, and which checks actually gate a merge
 
 ### For Developers
 

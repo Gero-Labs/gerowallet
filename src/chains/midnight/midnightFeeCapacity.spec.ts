@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { blocksMidnightSend, midnightFeeCapacity } from './midnightFeeCapacity';
+import { blocksMidnightSend, blocksMidnightSendLive, midnightFeeCapacity, midnightFeeCapacityLive } from './midnightFeeCapacity';
 import type { MidnightDustState } from './midnightTypes';
 
 function dust(current: bigint): MidnightDustState {
@@ -45,5 +45,34 @@ describe('midnightFeeCapacity', () => {
     // 1 base unit is certainly too little for a real fee, but we have no fee
     // estimate at this point — inventing a floor would reject valid sends.
     expect(midnightFeeCapacity(dust(1n))).toBe('ok');
+  });
+});
+
+describe('midnightFeeCapacityLive — the guard the send surfaces use', () => {
+  it('reports ok for a wallet whose DUST comes entirely from a Cardano cNIGHT registration', () => {
+    // The mainnet case that motivated this: Path-A dustState reads 0 (no
+    // native NIGHT registered), but the merged live balance is 3,381 DUST.
+    // The old guard refused the send with "You need NIGHT".
+    expect(midnightFeeCapacityLive({ dustBalance: 3_381_912_800n, settled: true })).toBe('ok');
+    expect(blocksMidnightSendLive({ dustBalance: 3_381_912_800n, settled: true })).toBe(false);
+  });
+
+  it('reports none only when both paths have reported and the merged balance is zero', () => {
+    expect(midnightFeeCapacityLive({ dustBalance: 0n, settled: true })).toBe('none');
+    expect(blocksMidnightSendLive({ dustBalance: 0n, settled: true })).toBe(true);
+  });
+
+  it('never blocks while either path is still in flight', () => {
+    // A zero merged balance before Path B has answered is exactly what a
+    // Path-B wallet looks like for the length of one poll. Refusing here would
+    // re-create the bug for a moment on every open.
+    expect(midnightFeeCapacityLive({ dustBalance: 0n, settled: false })).toBe('unknown');
+    expect(blocksMidnightSendLive({ dustBalance: 0n, settled: false })).toBe(false);
+    expect(blocksMidnightSendLive(null)).toBe(false);
+    expect(blocksMidnightSendLive(undefined)).toBe(false);
+  });
+
+  it('does not judge whether the balance covers this particular fee', () => {
+    expect(midnightFeeCapacityLive({ dustBalance: 1n, settled: true })).toBe('ok');
   });
 });

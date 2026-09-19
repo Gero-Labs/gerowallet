@@ -158,6 +158,10 @@ export enum MessageTypes {
   // sign the dapp's data with the mandatory midnight_signed_message: prefix.
   // See walletBg.signMidnightConnectorData.
   SIGN_MIDNIGHT_CONNECTOR_DATA = 'SIGN_MIDNIGHT_CONNECTOR_DATA',
+  // DApp Connector balanceUnsealedTransaction: the side panel hands the
+  // dapp's proven, unbound tx + the user's credential to the background,
+  // which funds, fee-pays, signs and seals it (walletBg.balanceMidnightConnectorTransaction).
+  BALANCE_MIDNIGHT_CONNECTOR_TX = 'BALANCE_MIDNIGHT_CONNECTOR_TX',
   // Sent by ChangePasswordDialog after a spending-password change. The DB
   // ciphertext is rotated, but the in-memory copies still hold the OLD blob:
   // the background WalletBg (used to sign) and walletStore.loggedWallet (used to

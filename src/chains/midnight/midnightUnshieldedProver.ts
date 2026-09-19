@@ -54,6 +54,7 @@ import type * as ledger from '@midnight-ntwrk/ledger-v8';
 import { debugLog } from '@/utils/debug';
 import { LocalProvingError } from '@/chains/midnight/midnightShieldedBuilder';
 import { hexToBytes } from '@/chains/midnight/midnightTxBuilder';
+import { finalizedLedgerTxHash } from '@/chains/midnight/midnightTxHash';
 import { midnightLedgerVersion } from './midnightLedger';
 
 export interface ProveUnshieldedTransferArgs {
@@ -82,6 +83,12 @@ export interface ProveUnshieldedTransferResult {
   readonly provenTxHex: string;
   /** Wall-clock time in prove() + bind(), for proving-history + XDP budgeting. */
   readonly proveDurationMs: number;
+  /**
+   * Ledger hash of the finalized tx — the indexer's identifier for it, which
+   * the wallet keys its pending history row on (see midnightTxHash.ts).
+   * Absent when the SDK object could not produce one; never a failure.
+   */
+  readonly ledgerTxHash?: string;
 }
 
 /**
@@ -174,6 +181,7 @@ export async function proveUnshieldedTransfer(
   debugLog('🌙 unshielded prove: proving wallet-side', { network });
   const proveStartMs = Date.now();
   let boundBytes: Uint8Array;
+  let ledgerTxHash: string | undefined;
   try {
     const { makeLocalProvingProvider } = await import('@/chains/midnight/midnightLocalProver');
     const provider = makeLocalProvingProvider(args.proving.url, { headers: args.proving.headers, sdkNetworkId: network });
@@ -183,7 +191,9 @@ export async function proveUnshieldedTransfer(
     // bind() is INSIDE the try (the shielded path leaves it outside): a bind
     // failure is still a local-proving failure the user should see in proving
     // history with its real duration, not an untyped throw.
-    boundBytes = proven.bind().serialize();
+    const bound = proven.bind();
+    boundBytes = bound.serialize();
+    ledgerTxHash = finalizedLedgerTxHash(bound);
   } catch (err) {
     const durationMs = Date.now() - proveStartMs;
     const message = 'Midnight local proving failed';
@@ -199,5 +209,6 @@ export async function proveUnshieldedTransfer(
   return {
     provenTxHex: Buffer.from(boundBytes).toString('hex'),
     proveDurationMs,
+    ledgerTxHash,
   };
 }

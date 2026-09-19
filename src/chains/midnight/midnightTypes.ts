@@ -136,6 +136,13 @@ export type DustGenerationStatus =
 export type MidnightTransactionType =
   | 'send'
   | 'receive'
+  /**
+   * A transfer to our own address: every output of the color came back to us.
+   * The chain cannot say how much was the payment and how much the change
+   * (UnshieldedOffer.new canonicalises output order), so a synced row carries
+   * amount 0 unless the wallet's own pending row supplied it at send time.
+   */
+  | 'self'
   | 'register_dust'
   | 'deregister_dust'
   | 'shield'         // Move public NIGHT into the shielded pool

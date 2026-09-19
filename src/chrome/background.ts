@@ -7,6 +7,7 @@ import { getErrorMessage } from '@/shared/utils/errorHandler';
 import { isStakeKeyRegistered } from '@/shared/utils/stakeRegistration';
 import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, POPUP, SENDER, TARGET, TxSendError, TxSignError } from '@/chrome/config';
 import { toDappError } from '@/chrome/dappError';
+import { applyDappRequestBadge } from '@/chrome/dappRequestBadge';
 import { bringInitBackground } from '@bringweb3/chrome-extension-kit';
 import {
   focusOrCreatePopup,
@@ -66,6 +67,20 @@ import { mpcLoginShareCache } from '@/chrome/mpcLoginShareCache';
 // cannot bloat that bundle. scripts/check-bundle-tdz.mjs fails the build if a
 // namespace const regresses behind its first reader.
 import midnightSyncService, { NIGHT_TOKEN_TYPE_NULL } from '@/services/midnight-sync.service';
+// Same reasoning, same guard. Each of these is background-only (absent from the
+// options graph) and none reaches back to this module. Their own ledger wasm
+// imports stay lazy inside them.
+import * as shieldedAddressCodecs from '@midnightntwrk/wallet-sdk-address-format';
+import { connectorShieldedAddresses } from '@/chains/midnight/midnightConnectorAddresses';
+import {
+  decodeUnboundTransaction,
+  isSealedMidnightTransaction,
+  summarizeContributions,
+  validateConnectorBalanceRequest,
+} from '@/chains/midnight/midnightConnectorBalance';
+import * as midnightDappProving from '@/chrome/midnightDappProving';
+import * as privateBalanceGateModule from '@/chrome/midnightPrivateBalanceGate';
+import * as provingParkModule from '@/chrome/midnightProvingPark';
 import {
   createMpcGoogleWalletFlow,
   unlockMpcWalletFlow,
@@ -298,6 +313,11 @@ type PendingDAppEntry = {
 };
 const pendingDAppRequests = new Map<string, PendingDAppEntry>();
 
+/** The toolbar badge mirrors how many dApp prompts are parked (see dappRequestBadge.ts). */
+function syncDappRequestBadge(): void {
+  applyDappRequestBadge(pendingDAppRequests.size);
+}
+
 function redeliverParkedRequests(tabId: number, port: chrome.runtime.Port) {
   for (const [requestId, entry] of pendingDAppRequests.entries()) {
     const matchesTab = entry.tabId === tabId || Number.isNaN(entry.tabId);
@@ -350,9 +370,11 @@ chrome.runtime.onConnect.addListener((port) => {
         entry.resolve(message);
       }
       pendingDAppRequests.delete(message.requestId);
+      syncDappRequestBadge();
     } else if (message.type === 'dapp-nack') {
       entry.resolve({ error: String(message.error || 'unsupported_method') });
       pendingDAppRequests.delete(message.requestId);
+      syncDappRequestBadge();
     }
   });
 
@@ -398,6 +420,7 @@ function sendToMiniGero(method: string, payload: unknown, tabId?: number): Promi
         else resolve(response);
       },
     });
+    syncDappRequestBadge();
     if (port) {
       try {
         port.postMessage({ type: 'dapp-request', method, requestId, payload });
@@ -436,6 +459,19 @@ function waitForMiniGeroPort(timeoutMs = 5000, tabId?: number): Promise<void> {
       reject(new Error('mini-gero port connection timeout'));
     }, timeoutMs);
   });
+}
+
+/**
+ * Park a Midnight request that may arrive without a user gesture (a balance
+ * read on page load, a proof after async work). Unlike the connect/sign
+ * handlers, a refused `sidePanel.open()` is not a failure: the entry stays
+ * parked, the badge shows it, and `redeliverParkedRequests` delivers it when
+ * the user opens the panel.
+ */
+function parkMidnightRequest(method: string, payload: unknown, tabId: number): Promise<BackgroundResponse> {
+  const pending = sendToMiniGero(method, payload, tabId);
+  if (!miniGeroPorts.has(tabId)) void openSidebar(tabId, 'sidepanel/index.html').catch(() => undefined);
+  return pending;
 }
 
 const processedDomains: Set<string> = new Set<string>();
@@ -1927,7 +1963,7 @@ app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET, async (request, sendResponse) =
     if (!idToken && !hasCachedLoginShare) {
       // No fresh Google token and no cached session (e.g. the service worker
       // restarted). Surface guidance the UI can show and fall back to Google.
-      throw new Error('MPC session expired — sign in with Google');
+      throw new Error('MPC session expired. Sign in with Google');
     }
     const { secret } = buildDeviceShareSecret(request.data);
 
@@ -1950,7 +1986,7 @@ app.addToOptions(MessageTypes.UNLOCK_MPC_WALLET, async (request, sendResponse) =
         }
       : async (): Promise<string> => {
           const cached = await mpcLoginShareCache.get(walletId);
-          if (!cached) throw new Error('MPC session expired — sign in with Google');
+          if (!cached) throw new Error('MPC session expired. Sign in with Google');
           return cached;
         };
 
@@ -2251,7 +2287,7 @@ app.addToOptions(MessageTypes.REVEAL_MPC_SRP, async (request, sendResponse) => {
     // this session must be present (device secret alone is below threshold).
     const hasCachedLoginShare = await mpcLoginShareCache.has(walletId);
     if (!idToken && !hasCachedLoginShare) {
-      throw new Error('MPC session expired — sign in with Google');
+      throw new Error('MPC session expired. Sign in with Google');
     }
     const { secret } = buildDeviceShareSecret(request.data);
 
@@ -2264,7 +2300,7 @@ app.addToOptions(MessageTypes.REVEAL_MPC_SRP, async (request, sendResponse) => {
       ? async (idTok: string, ch: string, net: string): Promise<string> => api.mpc.getLoginShare(idTok, ch, net)
       : async (): Promise<string> => {
           const cached = await mpcLoginShareCache.get(walletId);
-          if (!cached) throw new Error('MPC session expired — sign in with Google');
+          if (!cached) throw new Error('MPC session expired. Sign in with Google');
           return cached;
         };
 
@@ -4829,6 +4865,9 @@ app.addToOptions(MessageTypes.SIGN_MIDNIGHT_SEGMENTS, async (request, sendRespon
  *
  * Request shape: `{ unprovenTxHex: string, ttlMs: number,
  *                   password?: string, prfSecret?: number[] }`.
+ * Response: `{ success: true, signedTxHex, proven, ledgerTxHash? }` —
+ * `ledgerTxHash` only when `proving` made this handler prove + bind locally,
+ * since only then is the finalized object in hand (see midnightTxHash.ts).
  */
 app.addToOptions(
   MessageTypes.BALANCE_AND_SIGN_MIDNIGHT_UNSHIELDED_TX,
@@ -4895,18 +4934,22 @@ app.addToOptions(
         sponsorArg,
       );
       assertSession();
+      // Only the wallet-proved path can name the ledger hash here: the proven
+      // object is in hand. On the remote path the sidecar reports it instead.
+      let ledgerTxHash: string | undefined;
       if (provingArg) {
         const { proveUnshieldedTransfer } = await import('@/chains/midnight/midnightUnshieldedProver');
         const result = await proveUnshieldedTransfer({
           sdkNetworkId: network.toLowerCase(), signedTxHex, proving: provingArg,
         });
         signedTxHex = result.provenTxHex;
+        ledgerTxHash = result.ledgerTxHash;
       }
       if (identity && endpoints) await assertMidnightChainIdentityUnchanged(endpoints, identity);
       assertSession();
       sendResponse({
         id: request.id,
-        data: { success: true, signedTxHex, proven: !!provingArg },
+        data: { success: true, signedTxHex, proven: !!provingArg, ledgerTxHash },
         target: TARGET,
         sender: SENDER.extension,
       });
@@ -4929,6 +4972,35 @@ app.addToOptions(
  */
 const PROVING_HEADER_ALLOWLIST = new Set(['x-api-key', 'x-api-secret']);
 
+/**
+ * Side panel → background for the DApp Connector's balanceUnsealedTransaction
+ * (the panel has already shown the user what the wallet will add and taken
+ * the credential). Returns the sealed tx hex.
+ */
+app.addToOptions(MessageTypes.BALANCE_MIDNIGHT_CONNECTOR_TX, async (request, sendResponse) => {
+  let prfBytes: Uint8Array | undefined;
+  try {
+    const walletBg = walletManager.getWallet();
+    if (!walletBg) throw new Error('No wallet logged in');
+    if (walletBg.chain !== Blockchain.MIDNIGHT) throw new Error('BALANCE_MIDNIGHT_CONNECTOR_TX called on non-Midnight wallet');
+    const { tx, password, prfSecret } = request.data || {};
+    if (typeof tx !== 'string' || tx.length === 0) throw new Error('tx is required');
+    if (password !== undefined && typeof password !== 'string') throw new Error('Invalid spending password');
+    if (prfSecret !== undefined && (!Array.isArray(prfSecret) || prfSecret.length !== 32
+      || !prfSecret.every((byte: unknown) => typeof byte === 'number' && Number.isInteger(byte) && byte >= 0 && byte <= 255))) {
+      throw new Error('Invalid PassKey authorization');
+    }
+    prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
+    const result = await walletBg.balanceMidnightConnectorTransaction(tx, password, prfBytes);
+    sendResponse({ id: request.id, data: { success: true, tx: result.tx }, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, data: { success: false, error: getErrorMessage(error) }, target: TARGET, sender: SENDER.extension });
+  } finally {
+    prfBytes?.fill(0);
+  }
+  return true;
+});
+
 app.addToOptions(MessageTypes.START_MIDNIGHT_PRIVATE_SYNC, async (request, sendResponse) => {
   let prfBytes: Uint8Array | undefined;
   try {
@@ -4942,6 +5014,10 @@ app.addToOptions(MessageTypes.START_MIDNIGHT_PRIVATE_SYNC, async (request, sendR
     }
     prfBytes = prfSecret ? new Uint8Array(prfSecret) : undefined;
     await wallet.startMidnightPrivateSync(password, prfBytes);
+    // Parked connector balance reads follow the scan from here, whichever
+    // surface started it — the prompt may stay open to show progress, or be
+    // closed; either way the dApp is answered when the store reports synced.
+    privateBalanceGate?.awaitSyncedAll();
     sendResponse({ id: request.id, data: { success: true }, target: TARGET, sender: SENDER.extension });
   } catch {
     sendResponse({ id: request.id, data: { success: false, error: 'Unable to unlock private token synchronization' }, target: TARGET, sender: SENDER.extension });
@@ -5069,7 +5145,7 @@ app.addToOptions(
       const provingArg = parseProvingRequest(proving);
       const sponsorArg = parseMidnightSponsor(sponsor);
       if (sponsorArg?.prfSecret) secretBuffers.push(sponsorArg.prfSecret);
-      const { signedTxHex, proven } = await walletBg.buildAndSignMidnightShieldedTransfer(
+      const { signedTxHex, proven, ledgerTxHash } = await walletBg.buildAndSignMidnightShieldedTransfer(
         parsedOutputs,
         password,
         prfBytes,
@@ -5078,7 +5154,7 @@ app.addToOptions(
       );
       sendResponse({
         id: request.id,
-        data: { success: true, signedTxHex, proven },
+        data: { success: true, signedTxHex, proven, ledgerTxHash },
         target: TARGET,
         sender: SENDER.extension,
       });
@@ -5238,7 +5314,7 @@ app.addToOptions(
   async (request, sendResponse) => {
     try {
       const {
-        mode, localUrl, localProfile, zkpaasUrl, zkpaasApiKey, zkpaasApiSecret,
+        mode, localUrl, localUrlLedger9, zkpaasUrl, zkpaasApiKey, zkpaasApiSecret,
       } = request.data || {};
       if (mode !== 'remote' && mode !== 'local' && mode !== 'zkpaas') {
         throw new Error('mode must be "remote", "local" or "zkpaas"');
@@ -5254,10 +5330,14 @@ app.addToOptions(
       // Arkhia credentials), while an explicit '' means "clear it" ('' is
       // also the valid "derive the endpoint per network" state for the URL).
       const current = midnightStore.proofServer;
-      const selectedProfile = localProfile === undefined ? (current.localProfile ?? 'legacy') : localProfile;
-      if (selectedProfile !== 'legacy' && selectedProfile !== 'stagenet') {
-        throw new Error('localProfile must be legacy or stagenet');
+      // Optional like the zkPaaS fields: absent keeps the stored ledger-9 URL
+      // so older call sites that only send mode+localUrl cannot wipe it.
+      const localUrlLedger9Value = localUrlLedger9 === undefined || localUrlLedger9 === null
+        ? current.localUrlLedger9 : localUrlLedger9;
+      if (typeof localUrlLedger9Value !== 'string' || localUrlLedger9Value.length === 0) {
+        throw new Error('localUrlLedger9 must be a non-empty string');
       }
+      validateProofServerUrlField('localUrlLedger9', localUrlLedger9Value);
       const zkpaasUrlValue = zkpaasUrl === undefined || zkpaasUrl === null
         ? current.zkpaasUrl : zkpaasUrl;
       if (typeof zkpaasUrlValue !== 'string') throw new Error('zkpaasUrl must be a string');
@@ -5269,7 +5349,7 @@ app.addToOptions(
       midnightActions.setProofServer({
         mode,
         localUrl,
-        localProfile: selectedProfile,
+        localUrlLedger9: localUrlLedger9Value,
         zkpaasUrl: zkpaasUrlValue,
         zkpaasApiKey: zkpaasApiKeyValue,
         zkpaasApiSecret: zkpaasApiSecretValue,
@@ -5439,18 +5519,28 @@ app.addToOptions(MessageTypes.ADD_MIDNIGHT_PENDING_TX, async (request, sendRespo
     }
     const { hash, amount, counterparty, isShielded, token } = request.data || {};
     if (typeof hash !== 'string' || !hash) throw new Error('hash is required');
-    const { midnightActions } = await import('@/stores/midnightStore');
+    const { midnightActions, midnightStore } = await import('@/stores/midnightStore');
     let amountBig = 0n;
     try { amountBig = BigInt(amount ?? '0'); } catch { amountBig = 0n; }
+    // A public send to our own unshielded address is a self-transfer from the
+    // start: nothing leaves the wallet, and the amount typed here is the only
+    // record of it — the confirmed row cannot tell payment from change and
+    // keeps this one (see midnightStore.withPendingAmount).
+    const own = midnightStore.addresses?.unshielded;
+    const toSelf = !isShielded && typeof counterparty === 'string' && !!own
+      && counterparty.trim().toLowerCase() === own.toLowerCase();
     midnightActions.applyTransaction({
       hash,
-      type: 'send',
+      type: toSelf ? 'self' : 'send',
       // Colour of what was actually sent. Defaulted rather than required so
       // older callers (and the shielded path) keep their NIGHT behaviour; a
       // hardcoded 'NIGHT' here would label a USDM send as NIGHT in history.
       token: typeof token === 'string' && token ? token : 'NIGHT',
       amount: amountBig,
-      counterparty: typeof counterparty === 'string' ? counterparty : '',
+      // A self-transfer names no counterparty, matching the confirmed row
+      // gero-sync will deliver — otherwise our own address would show for a
+      // moment and then vanish on confirmation.
+      counterparty: !toSelf && typeof counterparty === 'string' ? counterparty : '',
       timestamp: Date.now(),
       status: 'pending',
       fee: 0n,
@@ -5533,8 +5623,28 @@ function parseMidnightMiniGeroError(
  * not one per request, to avoid a listener leak across many declines.
  */
 const midnightDeclinedMethodsByTab = new Map<number, Set<string>>();
+
+// Parked-prompt state for the two gesture-less connector paths (created lazily
+// by loadPrivateBalanceGate / loadMidnightProvingPark below). The modules are
+// static imports (see the note on the import block); the instances stay lazy.
+type PrivateBalanceGateModule = typeof privateBalanceGateModule;
+let privateBalanceGate: InstanceType<PrivateBalanceGateModule['PrivateBalanceGate']> | undefined;
+type ProvingParkModule = typeof provingParkModule;
+let midnightProvingPark: InstanceType<ProvingParkModule['ProvingPark']> | undefined;
+
 chrome.tabs?.onRemoved?.addListener((tabId) => {
   midnightDeclinedMethodsByTab.delete(tabId);
+  privateBalanceGate?.clearTab(tabId);
+  privateBalanceGate?.dropTab(tabId);
+  midnightProvingPark?.cancelTab(tabId);
+  // A parked prompt for a closed tab can never be answered to anyone.
+  let removed = false;
+  for (const [requestId, entry] of pendingDAppRequests) {
+    if (entry.tabId !== tabId) continue;
+    pendingDAppRequests.delete(requestId);
+    removed = true;
+  }
+  if (removed) syncDappRequestBadge();
 });
 
 function hasMidnightPermissionDenial(tabId: number | undefined, method: string): boolean {
@@ -5754,18 +5864,12 @@ app.add(MIDNIGHT_METHOD.getShieldedAddresses, async (request, sendResponse) => {
     return;
   }
   try {
-    const { ShieldedAddress, MidnightBech32m } = await import('@midnightntwrk/wallet-sdk-address-format');
-    const decoded = ShieldedAddress.codec.decode(
-      midnightSdkNetworkId(wallet.network),
-      MidnightBech32m.parse(shieldedAddress),
-    );
+    // Spec: the address AND both public keys are bech32m. The hex
+    // `coinPublicKeyString()` form broke dapps that decode the keys
+    // (midnight-js decodeShieldedCoinPublicKey: "Invalid checksum in <hex>").
     sendResponse({
       id: request.id,
-      data: {
-        shieldedAddress,
-        shieldedCoinPublicKey: decoded.coinPublicKeyString(),
-        shieldedEncryptionPublicKey: decoded.encryptionPublicKeyString(),
-      },
+      data: connectorShieldedAddresses(shieldedAddressCodecs, midnightSdkNetworkId(wallet.network), shieldedAddress),
       target: TARGET,
       sender: SENDER.extension,
     });
@@ -5818,6 +5922,24 @@ app.add(MIDNIGHT_METHOD.getUnshieldedBalances, async (request, sendResponse) => 
   sendResponse({ id: request.id, data, target: TARGET, sender: SENDER.extension });
 });
 
+async function loadPrivateBalanceGate() {
+  const mod = privateBalanceGateModule;
+  const { midnightStore } = await import('@/stores/midnightStore');
+  if (!privateBalanceGate) {
+    privateBalanceGate = new mod.PrivateBalanceGate({
+      status: () => midnightStore.privateSyncStatus,
+      balances: () => midnightStore.balances.shieldedTokens ?? {},
+      identity: () => {
+        const wallet = WalletStore.state.loggedWallet as { id?: string; network?: string } | null;
+        return wallet?.id && wallet.network && !walletStore.isLocked ? `${wallet.id}:${wallet.network}` : undefined;
+      },
+      setInterval: (fn, ms) => setInterval(fn, ms),
+      clearInterval: (handle) => clearInterval(handle as ReturnType<typeof setInterval>),
+    });
+  }
+  return { mod, gate: privateBalanceGate, midnightStore };
+}
+
 app.add(MIDNIGHT_METHOD.getShieldedBalances, async (request, sendResponse) => {
   // Server-side whitelist gate (defense-in-depth): only a connected origin may
   // read wallet data. Mirrors the Cardano reads; a non-connected origin gets
@@ -5826,17 +5948,58 @@ app.add(MIDNIGHT_METHOD.getShieldedBalances, async (request, sendResponse) => {
     sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'Not connected'), target: TARGET, sender: SENDER.extension });
     return;
   }
-  const { midnightStore } = await import('@/stores/midnightStore');
   const wallet = requireMidnightWallet();
   if (!wallet) {
     sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected'), target: TARGET, sender: SENDER.extension });
     return;
   }
+  const reply = (data?: unknown, error?: ReturnType<typeof midnightApiError>) =>
+    sendResponse({ id: request.id, data, error, target: TARGET, sender: SENDER.extension });
   try {
-    const data = syncedMidnightShieldedBalances(midnightStore.privateSyncStatus, midnightStore.balances.shieldedTokens);
-    sendResponse({ id: request.id, data, target: TARGET, sender: SENDER.extension });
+    const { mod, gate, midnightStore } = await loadPrivateBalanceGate();
+    if (midnightStore.privateSyncStatus === 'synced') {
+      reply(syncedMidnightShieldedBalances(midnightStore.privateSyncStatus, midnightStore.balances.shieldedTokens));
+      return;
+    }
+    // Not synced yet: park the read and prompt the user in the side panel; the
+    // gate answers every call from this site once the scan completes
+    // (midnightPrivateBalanceGate.ts). A declined tab fails fast until closed.
+    const tabId = request.send?.tab?.id;
+    const origin = request.origin as string;
+    if (typeof tabId !== 'number') {
+      reply(undefined, midnightApiError(MidnightErrorCode.InternalError, 'No tab context for this request'));
+      return;
+    }
+    if (gate.isDeclined(tabId)) {
+      reply(undefined, midnightApiError(MidnightErrorCode.Rejected, mod.GATE_REASON_DECLINED));
+      return;
+    }
+    const key = `${wallet.id}:${origin}`;
+    const { first } = gate.join(key, tabId, (outcome) => {
+      // `=== false`: this tsconfig does not narrow a boolean discriminant in an else branch.
+      if (outcome.ok === false) {
+        reply(undefined, midnightApiError(outcome.code, outcome.reason));
+        return;
+      }
+      reply(outcome.balances);
+    });
+    if (!first) return;
+    const payload = {
+      website: origin,
+      status: midnightStore.privateSyncStatus,
+      progress: midnightStore.privateSyncProgress,
+    };
+    debugLog('🌙 connector getShieldedBalances: parked until the private sync completes', { origin, status: payload.status });
+    parkMidnightRequest('midnight_privateBalanceAccess', payload, tabId)
+      .then(() => gate.awaitSynced(key))
+      .catch((error: unknown) => {
+        const { code, reason } = parseMidnightMiniGeroError(error, MidnightErrorCode.Disconnected, mod.GATE_REASON_WALLET_CHANGED);
+        const declined = code === MidnightErrorCode.Rejected;
+        if (declined) gate.declineTab(tabId);
+        gate.settle(key, { ok: false, code: declined ? code : MidnightErrorCode.Disconnected, reason });
+      });
   } catch (error) {
-    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.InternalError, getErrorMessage(error)), target: TARGET, sender: SENDER.extension });
+    reply(undefined, midnightApiError(MidnightErrorCode.InternalError, getErrorMessage(error)));
   }
 });
 
@@ -5980,12 +6143,27 @@ app.add(MIDNIGHT_METHOD.submitTransaction, async (request, sendResponse) => {
     sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.InvalidRequest, 'tx is required'), target: TARGET, sender: SENDER.extension });
     return;
   }
+  const origin = request.origin as string;
+  const { midnightActions } = await import('@/stores/midnightStore');
+  midnightActions.recordSiteActivity(origin, { type: 'submit-start' });
   try {
     const { getMidnightApi } = await import('@/api/midnight-api');
     const api = getMidnightApi(wallet.network);
-    await api.submitMidnightTx({ signedTxHex: tx, waitFor: 'Submitted' });
+    // A sealed tx (balanceUnsealedTransaction's output, or anything the dapp
+    // proved and bound itself) is already final: the sidecar's finalize relay
+    // would try to prove it again and throw. Route it to submit-proven.
+    const submitted = await isSealedMidnightTransaction(tx, midnightSdkNetworkId(wallet.network))
+      ? await api.submitProvenMidnightTx({ signedTxHex: tx, waitFor: 'Submitted' })
+      : await api.submitMidnightTx({ signedTxHex: tx, waitFor: 'Submitted' });
+    // Shown to the user as the tx id. The ledger hash when the relay reports
+    // one (the finalize path), so it matches what history will show; a sealed
+    // tx goes through submit-proven, which never reports one, and falls back
+    // to the extrinsic hash (see midnightTxHash.ts).
+    const { historyHashForSubmittedTx } = await import('@/chains/midnight/midnightTxHash');
+    midnightActions.recordSiteActivity(origin, { type: 'submitted', txId: submitted ? historyHashForSubmittedTx(submitted) : undefined });
     sendResponse({ id: request.id, data: undefined, target: TARGET, sender: SENDER.extension });
   } catch (error) {
+    midnightActions.recordSiteActivity(origin, { type: 'submit-failed', reason: 'other' });
     sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.InvalidRequest, getErrorMessage(error)), target: TARGET, sender: SENDER.extension });
   }
 });
@@ -6017,7 +6195,7 @@ app.add(MIDNIGHT_METHOD.signData, (request, sendResponse) => {
   // gesture survives to sidePanel.open(); enforce the connect-first
   // requirement here instead of in that pre-check round-trip.
   if (!WalletStore.isWhitelisted(origin)) {
-    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'Not connected — call connect() first') });
+    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'Not connected. Call connect() first') });
     return true;
   }
   const tabId = send.tab?.id;
@@ -6066,6 +6244,77 @@ app.add(MIDNIGHT_METHOD.hintUsage, (request, sendResponse) => {
   sendResponse({ id: request.id, data: undefined, target: TARGET, sender: SENDER.extension });
 });
 
+/**
+ * DApp Connector balanceUnsealedTransaction: the dapp hands over a proven,
+ * unbound tx; the wallet funds it, pays the DUST fee, signs and seals it.
+ * Validation and the contribution summary happen BEFORE the user is prompted
+ * (a malformed or unsupported request never opens the panel); the approval
+ * view lists exactly what the wallet will add. Same side-panel-only routing
+ * and fast-path/whitelist split as makeTransfer.
+ */
+app.add(MIDNIGHT_METHOD.balanceUnsealedTransaction, (request, sendResponse) => {
+  const { id, origin, send, data } = request;
+  const reply = (opts: ReplyOpts) => {
+    sendResponse({ id, ...opts, target: TARGET, sender: SENDER.extension });
+  };
+  const currentWallet = walletManager.getWallet();
+  if (!currentWallet || currentWallet.chain !== Blockchain.MIDNIGHT) {
+    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected') });
+    return true;
+  }
+  if (walletStore.isLocked) {
+    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'Wallet is locked') });
+    return true;
+  }
+  if (!WalletStore.isWhitelisted(origin)) {
+    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'Not connected. Call connect() first') });
+    return true;
+  }
+  const tabId = send.tab?.id;
+  if (typeof tabId !== 'number') {
+    reply({ error: midnightApiError(MidnightErrorCode.InternalError, 'No tab context for this request') });
+    return true;
+  }
+  void (async () => {
+    const validation = validateConnectorBalanceRequest(data, currentWallet.network);
+    if (validation.ok === false) {
+      reply({ error: midnightApiError(MidnightErrorCode.InvalidRequest, validation.reason) });
+      return;
+    }
+    let contributions;
+    try {
+      contributions = summarizeContributions(
+        await decodeUnboundTransaction(validation.tx, midnightSdkNetworkId(currentWallet.network)),
+      );
+    } catch {
+      reply({ error: midnightApiError(MidnightErrorCode.InvalidRequest, 'tx is not a valid unsealed transaction for the connected network') });
+      return;
+    }
+    const payload = { data: { tx: validation.tx, contributions }, website: origin, favIconUrl: send.tab?.favIconUrl };
+    // The dapp calls this after its (async) proving, so there is no user
+    // gesture left to open the panel with. Park the request instead of
+    // failing it (badge; delivered when the user opens the panel; immediate
+    // when it is already open) — same treatment as the private-balance and
+    // proof-server prompts.
+    const { midnightActions } = await import('@/stores/midnightStore');
+    midnightActions.recordSiteActivity(origin, { type: 'funding' });
+    parkMidnightRequest(MIDNIGHT_METHOD.balanceUnsealedTransaction, payload, tabId)
+      .then((response: BackgroundResponse) => {
+        midnightActions.recordSiteActivity(origin, { type: 'funding-done' });
+        reply({ data: response.data }); // response.data === { tx }
+      })
+      .catch(err => {
+        const error = parseMidnightMiniGeroError(err, MidnightErrorCode.InternalError, 'Failed to complete the balancing request');
+        midnightActions.recordSiteActivity(origin, {
+          type: 'funding-failed',
+          reason: error.code === MidnightErrorCode.Rejected ? 'declined' : 'other',
+        });
+        reply({ error });
+      });
+  })();
+  return true;
+});
+
 const validateMakeTransferInputs = validateMidnightConnectorTransfer;
 
 // ─── Proving delegation (`getProvingProvider`) ───────────────────────────
@@ -6080,16 +6329,17 @@ const validateMakeTransferInputs = validateMidnightConnectorTransfer;
 // post-connect handler — the content relay's pre-check alone would leave a
 // window across a multi-chunk upload if the user disconnects the dapp.
 
-type MidnightDappProvingModule = typeof import('@/chrome/midnightDappProving');
+type MidnightDappProvingModule = typeof midnightDappProving;
 let midnightProvingUploads: InstanceType<MidnightDappProvingModule['ProvingUploadStore']> | undefined;
 
-async function loadMidnightDappProving(): Promise<{
+// The module is a static import now (see the note on the import block); what
+// stays lazy is the upload store, created on first use rather than at load.
+function loadMidnightDappProving(): {
   mod: MidnightDappProvingModule;
   store: NonNullable<typeof midnightProvingUploads>;
-}> {
-  const mod = await import('@/chrome/midnightDappProving');
-  if (!midnightProvingUploads) midnightProvingUploads = new mod.ProvingUploadStore();
-  return { mod, store: midnightProvingUploads };
+} {
+  if (!midnightProvingUploads) midnightProvingUploads = new midnightDappProving.ProvingUploadStore();
+  return { mod: midnightDappProving, store: midnightProvingUploads };
 }
 
 type MidnightProvingRequest = Parameters<Parameters<typeof app.add>[1]>[0];
@@ -6115,7 +6365,7 @@ function requireMidnightProvingOrigin(
   const origin = request.origin;
   if (!origin || !WalletStore.isWhitelisted(origin)) {
     if (origin) midnightProvingUploads?.dropOrigin(origin);
-    return refuse('Not connected — call connect() first');
+    return refuse('Not connected. Call connect() first');
   }
   const wallet = requireMidnightWallet();
   if (!wallet) return refuse('No Midnight wallet connected');
@@ -6156,6 +6406,28 @@ app.add(MIDNIGHT_METHOD.provingUpload, async (request, sendResponse) => {
   }
 });
 
+/**
+ * "Proof server needed" prompt for dApp proofs whose server does not answer
+ * (midnightProvingPark.ts): health preflight, then a parked side-panel
+ * request whose approve means retry and whose reject means cancel.
+ */
+async function loadMidnightProvingPark() {
+  const mod = provingParkModule;
+  // midnightLocalProver stays dynamic: it is shared with the options bundle
+  // (useProofServerSettings), where that import splits the ledger chunk.
+  const { checkProofServerHealth, isProverNetworkError } = await import('@/chains/midnight/midnightLocalProver');
+  if (!midnightProvingPark) {
+    midnightProvingPark = new mod.ProvingPark({
+      preflight: (target) => checkProofServerHealth(target.url, { headers: target.headers, acceptNotFound: target.source === 'zkpaas' }),
+      prompt: (ctx, payload) => parkMidnightRequest('midnight_provingServer', payload, ctx.tabId)
+        .then((): 'retry' => 'retry', (): 'cancel' => 'cancel'),
+      isUnreachable: isProverNetworkError,
+      now: Date.now,
+    });
+  }
+  return midnightProvingPark;
+}
+
 /** Shared body of the `/check` and `/prove` handlers — they differ only in which runner they call. */
 async function handleMidnightDappProving(
   op: 'runDappProvingCheck' | 'runDappProvingProve',
@@ -6167,24 +6439,41 @@ async function handleMidnightDappProving(
   const { wallet, origin } = gate;
   let errorCode: (error: unknown) => string = () => MidnightErrorCode.InternalError;
   try {
-    const [{ mod, store }, { makeLocalProvingProvider }, { midnightStore }] = await Promise.all([
+    const [{ mod, store }, { makeLocalProvingProvider }, { midnightStore, midnightActions }, park] = await Promise.all([
       loadMidnightDappProving(),
       import('@/chains/midnight/midnightLocalProver'),
       import('@/stores/midnightStore'),
+      loadMidnightProvingPark(),
     ]);
     errorCode = mod.dappProvingErrorCode;
-    const reply = await mod[op](
-      store,
-      { makeProvider: makeLocalProvingProvider },
-      {
-        origin,
-        network: wallet.network,
-        sdkNetworkId: midnightSdkNetworkId(wallet.network),
-        proofServer: midnightStore.proofServer,
-      },
-      request.data,
-    );
-    sendResponse({ id: request.id, data: reply, target: TARGET, sender: SENDER.extension });
+    // The site-activity card (mini-Gero) follows each /prove; /check is fast
+    // and not worth a step of its own.
+    const proving = op === 'runDappProvingProve';
+    if (proving) midnightActions.recordSiteActivity(origin, { type: 'prove-start' });
+    try {
+      const reply = await mod[op](
+        store,
+        { makeProvider: makeLocalProvingProvider, park },
+        {
+          origin,
+          network: wallet.network,
+          sdkNetworkId: midnightSdkNetworkId(wallet.network),
+          proofServer: midnightStore.proofServer,
+          tabId: request.send?.tab?.id,
+        },
+        request.data,
+      );
+      if (proving) midnightActions.recordSiteActivity(origin, { type: 'prove-done' });
+      sendResponse({ id: request.id, data: reply, target: TARGET, sender: SENDER.extension });
+    } catch (error) {
+      if (proving) {
+        midnightActions.recordSiteActivity(origin, {
+          type: 'prove-failed',
+          reason: error instanceof mod.DappProvingFailedError ? 'proof-server' : 'other',
+        });
+      }
+      throw error;
+    }
   } catch (error) {
     sendResponse({ id: request.id, error: midnightApiError(errorCode(error), getErrorMessage(error)), target: TARGET, sender: SENDER.extension });
   }
@@ -6221,7 +6510,7 @@ app.add(MIDNIGHT_METHOD.makeTransfer, (request, sendResponse) => {
   // Fast-pathed past the content whitelist pre-check (to keep the user gesture
   // alive for sidePanel.open()), so enforce connect-first here — same as signData.
   if (!WalletStore.isWhitelisted(origin)) {
-    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'Not connected — call connect() first') });
+    reply({ error: midnightApiError(MidnightErrorCode.Disconnected, 'Not connected. Call connect() first') });
     return true;
   }
   const tabId = send.tab?.id;
@@ -6282,7 +6571,7 @@ app.addToOptions(MessageTypes.SIGN_MIDNIGHT_CONNECTOR_DATA, async (request, send
       throw new Error(`Unsupported encoding: ${encoding}`);
     }
     if (options?.keyType !== 'unshielded') {
-      throw new Error(`Unsupported keyType: ${options?.keyType} — only 'unshielded' is implemented`);
+      throw new Error(`Unsupported keyType: ${options?.keyType}. Only 'unshielded' is implemented`);
     }
     // Strict decode — shared with the approval popup's preview (see
     // midnightSignDataCodec.ts) so what the user is shown can never diverge
@@ -6352,3 +6641,5 @@ const openUI = async () => {
 chrome.action.onClicked.addListener(openUI);
 
 app.listen();
+// A badge left over from a previous service-worker life would point at nothing.
+syncDappRequestBadge();

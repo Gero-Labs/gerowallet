@@ -25,6 +25,7 @@ import {
 } from '@/chains/midnight/midnightProvingTarget';
 import type { DappProvingTarget, ProofServerPreference } from '@/chains/midnight/midnightProvingTarget';
 import { MidnightErrorCode } from '@/chrome/config';
+import type { ProvingPark } from '@/chrome/midnightProvingPark';
 import { PROVING_UPLOAD_PARTS, decodeBase64, encodeBase64 } from '@/chrome/midnightProvingWire';
 import type {
   ProvingCheckReply,
@@ -227,7 +228,7 @@ export class ProvingUploadStore {
     this.sweep();
     const key = ProvingUploadStore.key(origin, requireUploadId(uploadId));
     const state = this.uploads.get(key);
-    if (!state) throw new ProvingUploadError('proof upload not found or expired — retry the proof');
+    if (!state) throw new ProvingUploadError('proof upload not found or expired. Retry the proof');
     this.uploads.delete(key);
     const assembled: AssembledUpload = {};
     for (const [part, partState] of state.parts) {
@@ -262,11 +263,15 @@ export interface DappProvingContext {
   /** SDK network id (`mainnet` / `preprod` / `stagenet`) — selects the ledger 8 vs 9 payload codec. */
   sdkNetworkId: string;
   proofServer: ProofServerPreference;
+  /** Sender tab; needed to park a "proof server needed" prompt. Absent → no parking. */
+  tabId?: number;
 }
 
 /** Injected so tests (and a future in-extension WASM prover) can swap the transport. */
 export interface DappProvingDeps {
   makeProvider: (baseUrl: string, options?: ProverRequestOptions) => ledger.ProvingProvider;
+  /** When present (and the context has a tab), an unreachable server prompts instead of failing. */
+  park?: ProvingPark;
 }
 
 /**
@@ -299,8 +304,14 @@ function keyMaterialFor(upload: AssembledUpload, keyLocation: string): Partial<l
   throw new ProvingUploadError(`incomplete key material for circuit '${keyLocation}' (prover key, verifier key and ZKIR are all required)`);
 }
 
+/** Zero the assembled buffers when a proof is given up (a parked retry may have held them for minutes): preimages are the private inputs. */
+function wipeUpload(upload: AssembledUpload): void {
+  for (const part of PROVING_UPLOAD_PARTS) upload[part]?.fill(0);
+}
+
 async function withProvingTarget<T>(
   ctx: DappProvingContext,
+  deps: DappProvingDeps,
   op: 'check' | 'prove',
   keyLocation: string,
   run: (target: DappProvingTarget) => Promise<T>,
@@ -309,7 +320,12 @@ async function withProvingTarget<T>(
   const startedAt = Date.now();
   debugLog(`🌙 connector ${op}: start`, { origin: ctx.origin, keyLocation, source: target.source });
   try {
-    const result = await run(target);
+    // With a park and a tab, an unreachable server prompts the user (retry /
+    // cancel) instead of failing; ProvingParkCancelled carries the last
+    // failure detail as its message, so the wording below stays the same.
+    const result = deps.park && typeof ctx.tabId === 'number'
+      ? await deps.park.run({ origin: ctx.origin, tabId: ctx.tabId, target }, () => run(target))
+      : await run(target);
     debugLog(`🌙 connector ${op}: ok (${Date.now() - startedAt}ms)`, { origin: ctx.origin, keyLocation });
     return result;
   } catch (error) {
@@ -332,7 +348,7 @@ export async function runDappProvingCheck(
   const upload = store.take(ctx.origin, request['uploadId']);
   if (!upload.preimage) throw new ProvingUploadError('preimage was not uploaded');
   const ir = upload.ir;
-  return withProvingTarget(ctx, 'check', keyLocation, async (target) => {
+  return withProvingTarget(ctx, deps, 'check', keyLocation, async (target) => {
     const provider = deps.makeProvider(target.url, {
       headers: target.headers,
       sdkNetworkId: ctx.sdkNetworkId,
@@ -341,6 +357,9 @@ export async function runDappProvingCheck(
     });
     const result = await provider.check(upload.preimage!, keyLocation);
     return { result: result.map((value) => (value === undefined ? null : value.toString())) };
+  }).catch((error: unknown) => {
+    wipeUpload(upload);
+    throw error;
   });
 }
 
@@ -364,7 +383,7 @@ export async function runDappProvingProve(
   const upload = store.take(ctx.origin, request['uploadId']);
   if (!upload.preimage) throw new ProvingUploadError('preimage was not uploaded');
   const keyMaterial = keyMaterialFor(upload, keyLocation);
-  return withProvingTarget(ctx, 'prove', keyLocation, async (target) => {
+  return withProvingTarget(ctx, deps, 'prove', keyLocation, async (target) => {
     const provider = deps.makeProvider(target.url, {
       headers: target.headers,
       sdkNetworkId: ctx.sdkNetworkId,
@@ -373,5 +392,8 @@ export async function runDappProvingProve(
     });
     const proof = await provider.prove(upload.preimage!, keyLocation, overwriteBindingInput);
     return { proof: encodeBase64(proof) };
+  }).catch((error: unknown) => {
+    wipeUpload(upload);
+    throw error;
   });
 }

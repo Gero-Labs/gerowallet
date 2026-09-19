@@ -37,6 +37,12 @@
     <div v-if="isMidnight && showNightBreakdown" class="balance-breakdown t-caption g-num">
       {{ hideBalances ? '••••••' : nightBreakdownText }}
     </div>
+    <!-- The private-note scan runs in the background; once a dApp prompt or
+         the dashboard has started it, this is where mini-Gero shows it moving. -->
+    <div v-if="isMidnight && privateScanning" class="private-scan t-caption g-num" role="status">
+      <div class="private-scan-bar"><div class="private-scan-fill" :style="{ width: `${privateScanPercent}%` }"></div></div>
+      <span>{{ $t('midnight.privateBalances.miniScanning', { percent: privateScanPercent }) }}</span>
+    </div>
     <v-btn
       v-if="showBuySell"
       rounded
@@ -58,6 +64,7 @@ import { useMarketData } from '@/modules/market/composables/useMarketData';
 import { useHoldingsValuation } from '@/shared/composables/useHoldingsValuation';
 import { useMidnightLoading } from '@/shared/composables/useMidnightLoading';
 import { useNightFiat } from '@/shared/composables/useNightFiat';
+import { privateSyncPercent } from '@/chains/midnight/midnightPrivateSyncProgress';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { midnightStore } from '@/stores/midnightStore';
 import { Blockchain, Network } from '@/models/types';
@@ -125,6 +132,12 @@ const nightBreakdownText = computed(() => {
   return `${t('midnight.common.public')} ${pub} / ${t('midnight.common.private')} ${priv}`;
 });
 
+// The private-note scan (started by a dApp prompt or the dashboard) is the
+// only thing that can change the "Private" figure above, so its progress
+// belongs right under it.
+const privateScanning = computed(() => midnightStore.privateSyncStatus === 'syncing');
+const privateScanPercent = computed(() => privateSyncPercent(midnightStore.privateSyncProgress));
+
 const formattedBalance = computed(() => {
   if (isMidnight.value) {
     const night = formatUnits(totalNight.value, NIGHT_DIVISOR, 2);
@@ -184,6 +197,31 @@ const changeColor = computed(() => {
 
 .balance-breakdown {
   margin-top: var(--g-s-1);
+}
+
+.private-scan {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--g-s-1);
+  width: 100%;
+  max-width: 220px;
+  margin-top: var(--g-s-2);
+  color: var(--g-text-3);
+  text-align: center;
+}
+
+.private-scan-bar {
+  height: 3px;
+  border-radius: var(--g-r-pill);
+  background: var(--g-hairline-2);
+  overflow: hidden;
+}
+
+.private-scan-fill {
+  height: 100%;
+  background: var(--g-accent);
+  transition: width var(--g-dur-base) var(--g-ease);
 }
 
 .green-change {

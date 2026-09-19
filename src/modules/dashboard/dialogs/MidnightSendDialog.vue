@@ -431,7 +431,7 @@
 <script setup lang="ts">
 import { hasMidnightProvingConsent, type MidnightRemoteProver } from '@/chains/midnight/midnightProvingConsent';
 import MidnightPrivateBalances from '@/modules/dashboard/components/MidnightPrivateBalances.vue';
-import { computed, onMounted, ref, toRefs, watch } from 'vue';
+import { computed, ref, toRefs, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import CustomStepper from '@/shared/components/CustomStepper.vue';
 import TransactionAuthSection from '@/shared/components/TransactionAuthSection.vue';
@@ -452,12 +452,16 @@ import {
   midnightStore,
 } from '@/stores/midnightStore';
 import type { MidnightSendStage } from '@/services/midnight-tx.service';
+import type { ProvingUnconfiguredTarget } from '@/chains/midnight/midnightProvingTarget';
 import { walletStore } from '@/stores/walletStore';
 import { Blockchain, Network, WalletType } from '@/models/types';
+import { isLedger9Network } from '@/chains/midnight/midnightConfig';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { midnightTokenBalances } from '@/chains/midnight/midnightTokenBalances';
 import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
-import { blocksMidnightSend } from '@/chains/midnight/midnightFeeCapacity';
+import { blocksMidnightSendLive } from '@/chains/midnight/midnightFeeCapacity';
+import { historyHashForSubmittedTx } from '@/chains/midnight/midnightTxHash';
+import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
 import {
   formatTokenAmount,
   parseTokenAmount,
@@ -553,8 +557,17 @@ const amountStep = computed(() =>
   * No spendable DUST means no fee can be paid, so the send cannot succeed.
   * Caught here rather than four steps later inside the SDK's
   * `balanceTransactions`, which neither returns nor throws in that state.
+  *
+  * Judged on the MERGED live balance (Path A + Path B) — the figure the
+  * battery shows — not the store's Path-A `dustState`, which reads zero for a
+  * wallet whose DUST comes entirely from a Cardano cNIGHT registration.
+  * `unknown` (either path not yet reported) never blocks.
   */
-const noFeeCapacity = computed(() => blocksMidnightSend(midnightStore.dustState));
+const dustLive = useMidnightDustLive();
+const noFeeCapacity = computed(() => blocksMidnightSendLive({
+  dustBalance: dustLive.dustBalance.value,
+  settled: dustLive.settled.value,
+}));
 
 /**
  * Wallet chosen to pay this send's DUST fee, or null to pay from this wallet.
@@ -613,9 +626,19 @@ async function restoreSponsorPreference(): Promise<void> {
   if (!wallet) return;
   const { linkFor, loadSponsorLinks } = await import('@/chains/midnight/midnightSponsorLinks');
   const link = linkFor(await loadSponsorLinks(), wallet.id, wallet.network);
-  sponsorWalletId.value = link?.sponsorWalletId ?? null;
+  // Re-check: the capacity may have flipped while the links were loading.
+  sponsorWalletId.value = noFeeCapacity.value ? (link?.sponsorWalletId ?? null) : null;
 }
-onMounted(restoreSponsorPreference);
+// A saved sponsor is restored only while this wallet actually needs one, and
+// dropped the moment it does not. `sponsorWalletId` is otherwise only written
+// by the picker, which is hidden whenever `noFeeCapacity` is false — so
+// without this, a wallet that saved a sponsor back when the guard wrongly
+// refused it (a Path-B wallet, before the merged-balance fix) would send
+// sponsored with no in-dialog way to opt out.
+watch(noFeeCapacity, (needsSponsor) => {
+  if (needsSponsor) void restoreSponsorPreference();
+  else sponsorWalletId.value = null;
+}, { immediate: true });
 
 /**
  * The sponsor argument for `sendUnshieldedNight`, collecting that wallet's own
@@ -811,11 +834,20 @@ const checkingLocalProver = ref(false);
 // including the one-off "use Gero Cloud" fallback).
 const consentProvider = ref<'cloud' | 'zkpaas'>('cloud');
 // Fallback-note copy tracks the mode that failed its preflight.
-const proverFallbackText = computed(() => (
-  midnightStore.proofServer.mode === 'zkpaas'
-    ? t('midnight.proofServer.zkpaasNotReachableSend')
-    : t('midnight.proofServer.notDetectedSend')
-));
+// Name the server that was not found. Each ledger has its own local server
+// (different circuit families, different default ports), and the wallet
+// picks by network — so "not detected" must say WHICH one, or a user with
+// the ledger-8 server running on stagenet is told to start something that
+// is already up. Gero Cloud stays on offer: the sidecar proves both lines.
+const proverFallbackText = computed(() => {
+  if (midnightStore.proofServer.mode === 'zkpaas') return t('midnight.proofServer.zkpaasNotReachableSend');
+  if (proverFallbackReason.value === 'local-url-missing') return t('midnight.proofServer.localUrlMissingSend');
+  return isLedger9Network(loggedWallet.value?.network)
+    ? t('midnight.proofServer.notDetectedSendLedger9')
+    : t('midnight.proofServer.notDetectedSend');
+});
+// Reason carried by the ProofServerUnreachableError that tripped the fallback.
+const proverFallbackReason = ref<ProvingUnconfiguredTarget['reason'] | undefined>(undefined);
 // True once a local-mode shielded send's preflight (or, on the rare race
 // where the server drops between preflight and build, the BG call itself)
 // finds the local proof server unreachable. Renders the two-action fallback
@@ -1031,8 +1063,16 @@ async function routeWalletProvedShielded(credentials: { password?: string; prfSe
   checkingLocalProver.value = true;
   try {
     const { checkWalletProvingPreflight } = await import('@/services/midnight-tx.service');
-    const ok = await checkWalletProvingPreflight(loggedWallet.value?.network ?? '');
+    const network = loggedWallet.value?.network ?? '';
+    const ok = await checkWalletProvingPreflight(network);
     if (!ok) {
+      // The preflight collapses "unconfigured" and "unreachable" into one
+      // boolean; recover the reason so the fallback can name the actual
+      // problem (a local server on the wrong ledger profile is running and
+      // answering — "start it" is the wrong instruction).
+      const { resolveProvingTarget } = await import('@/chains/midnight/midnightProvingTarget');
+      const target = resolveProvingTarget(network, midnightStore.proofServer);
+      proverFallbackReason.value = target.kind === 'unconfigured' ? target.reason : undefined;
       pendingCredentials.value = credentials;
       localProverUnavailable.value = true;
       return;
@@ -1133,8 +1173,12 @@ async function sendUnshielded(credentials: { password?: string; prfSecret?: Uint
       await buildSponsorArg(),
       forceRemote,
     );
-    debugLog('🌙 Midnight unshielded tx submitted:', result.txHash, 'status:', result.status,
-      'sponsor:', sponsorWalletId.value ?? 'none');
+    debugLog('🌙 Midnight unshielded tx submitted:', result.txHash, 'ledger:', result.ledgerTxHash ?? 'n/a',
+      'status:', result.status, 'sponsor:', sponsorWalletId.value ?? 'none');
+    // The hash history will know this tx by — the ledger hash, not the
+    // extrinsic hash in txHash (see midnightTxHash.ts). Everything that must
+    // match the row later keys on it.
+    const historyHash = historyHashForSubmittedTx(result);
 
     // Remember who paid — for the dashboard indicator on BOTH wallets, and so
     // the transaction details screen can say the fee came from elsewhere.
@@ -1152,7 +1196,7 @@ async function sendUnshielded(credentials: { password?: string; prfSecret?: Uint
           at,
         });
         await recordSponsoredTx({
-          txHash: result.txHash,
+          txHash: historyHash,
           sponsorWalletId: paying.id,
           sponsorName: paying.name,
           at,
@@ -1166,7 +1210,7 @@ async function sendUnshielded(credentials: { password?: string; prfSecret?: Uint
       }
     }
     // Show it in history right away — gero-sync backfills the confirmed entry.
-    void addOptimisticPendingTx(result.txHash);
+    void addOptimisticPendingTx(historyHash);
     // Brief completed-state hold so the user sees the timeline finish.
     await new Promise((r) => setTimeout(r, 550));
     resetForm();
@@ -1209,8 +1253,8 @@ async function sendShielded(credentials: { password?: string; prfSecret?: Uint8A
       forceRemote,
       await buildSponsorArg(),
     );
-    debugLog('🌙 Midnight shielded tx submitted:', result.txHash, 'status:', result.status);
-    void addOptimisticPendingTx(result.txHash, true);
+    debugLog('🌙 Midnight shielded tx submitted:', result.txHash, 'ledger:', result.ledgerTxHash ?? 'n/a', 'status:', result.status);
+    void addOptimisticPendingTx(historyHashForSubmittedTx(result), true);
     await new Promise((r) => setTimeout(r, 550));
     resetForm();
     emit('close');
@@ -1224,6 +1268,7 @@ async function sendShielded(credentials: { password?: string; prfSecret?: Uint8A
     // that preflight and this call. Same fallback either way.
     if (e instanceof Error && e.name === 'ProofServerUnreachableError') {
       pendingCredentials.value = credentials;
+      proverFallbackReason.value = (e as { reason?: ProvingUnconfiguredTarget['reason'] }).reason;
       localProverUnavailable.value = true;
     } else {
       errorMessage.value = e instanceof Error ? e.message : String(e);

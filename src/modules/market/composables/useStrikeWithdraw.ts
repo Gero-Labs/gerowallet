@@ -119,7 +119,7 @@ export function decodeWithdrawMessageForDisplay(message: string): string {
 async function signCip8(message: string, password: string, pkBytes?: Uint8Array): Promise<string> {
   const signingAddress = getWithdrawSigningAddress();
   if (!signingAddress) {
-    throw new Error('No active wallet — cannot sign withdrawal message.');
+    throw new Error("No active wallet. Can't sign the withdrawal message.");
   }
 
   const payloadHex = toSignDataPayloadHex(message);
@@ -170,7 +170,7 @@ async function signWithdrawTx(
   const utxos = walletStore.utxos as Cardano.Utxo[];
   const keys = walletStore.keys;
   if (!keys?.payment?.[0]?.address) {
-    throw new Error('No active Cardano wallet — cannot sign the withdrawal transaction.');
+    throw new Error("No active Cardano wallet. Can't sign the withdrawal transaction.");
   }
 
   const signResult = (await Messaging.sendToBackgroundFromOptions({
@@ -244,7 +244,7 @@ export function useStrikeWithdraw() {
     // Authenticated endpoint — guard against an unauthenticated 401 when no
     // API-wallet key is loaded.
     if (!hasStrikeApiKeys()) {
-      error.value = 'Connect to Strike first — open the Vaults tab and tap "Connect to Strike".';
+      error.value = 'Connect to Strike first. Open the Vaults tab and tap "Connect to Strike".';
       status.value = 'error';
       return;
     }
@@ -300,7 +300,7 @@ export function useStrikeWithdraw() {
       return false;
     }
     if (quote.value.expiresAtMs && Date.now() > quote.value.expiresAtMs) {
-      error.value = 'Quote expired — please request a new one.';
+      error.value = 'Quote expired. Request a new one.';
       status.value = 'error';
       return false;
     }

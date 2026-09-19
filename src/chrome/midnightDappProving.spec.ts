@@ -351,3 +351,67 @@ describe('assertDappProvingAvailable / dappProvingErrorCode', () => {
     expect(dappProvingErrorCode(new Error('x'))).toBe(MidnightErrorCode.InternalError);
   });
 });
+
+describe('runDappProvingProve with a proving park', () => {
+  it('retries an unreachable prover after the user says retry', async () => {
+    const { ProvingPark } = await import('./midnightProvingPark');
+    const store = new ProvingUploadStore();
+    uploadPart(store, ORIGIN, 'u1', 'preimage', bytes('pre'));
+    let calls = 0;
+    const { deps } = fakeDeps({
+      prove: async () => {
+        calls += 1;
+        if (calls === 1) throw new Error('down');
+        return new Uint8Array([7]);
+      },
+    });
+    const prompts: number[] = [];
+    deps.park = new ProvingPark({
+      preflight: async () => true,
+      prompt: async (_c, payload) => { prompts.push(payload.attempt); return 'retry'; },
+      isUnreachable: (e) => e instanceof Error && e.message === 'down',
+      now: Date.now,
+    });
+
+    const reply = await runDappProvingProve(store, deps, { ...ctx, tabId: 5 }, { uploadId: 'u1', keyLocation: 'midnight/x' });
+
+    expect(decodeBase64(reply.proof)).toEqual(new Uint8Array([7]));
+    expect(prompts).toEqual([1]);
+  });
+
+  it('cancel fails with the same message a dapp sees today and wipes the upload', async () => {
+    const { ProvingPark } = await import('./midnightProvingPark');
+    const store = new ProvingUploadStore();
+    uploadPart(store, ORIGIN, 'u1', 'preimage', bytes('pre'));
+    const seen: Uint8Array[] = [];
+    const { deps } = fakeDeps({
+      prove: async (preimage) => { seen.push(preimage); throw new Error('network error contacting proof server /prove'); },
+    });
+    deps.park = new ProvingPark({
+      preflight: async () => true,
+      prompt: async () => 'cancel',
+      isUnreachable: () => true,
+      now: Date.now,
+    });
+
+    const err = await runDappProvingProve(store, deps, { ...ctx, tabId: 5 }, { uploadId: 'u1', keyLocation: 'midnight/x' }).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(DappProvingFailedError);
+    expect((err as Error).message).toMatch(/could not generate the proof \(network error contacting proof server \/prove\)/);
+    expect((err as Error).message).toMatch(/Make sure the proof server is running/);
+    expect(seen).toHaveLength(1);
+    expect(Array.from(seen[0])).toEqual([0, 0, 0]);
+  });
+
+  it('is bypassed without a tab id', async () => {
+    const { ProvingPark } = await import('./midnightProvingPark');
+    const store = new ProvingUploadStore();
+    uploadPart(store, ORIGIN, 'u1', 'preimage', bytes('pre'));
+    const { deps } = fakeDeps({ prove: async () => { throw new Error('down'); } });
+    const prompt = vi.fn(async (): Promise<'retry'> => 'retry');
+    deps.park = new ProvingPark({ preflight: async () => true, prompt, isUnreachable: () => true, now: Date.now });
+
+    await expect(runDappProvingProve(store, deps, ctx, { uploadId: 'u1', keyLocation: 'midnight/x' })).rejects.toBeInstanceOf(DappProvingFailedError);
+    expect(prompt).not.toHaveBeenCalled();
+  });
+});

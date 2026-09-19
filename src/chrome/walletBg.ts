@@ -85,8 +85,22 @@ import { signDataCip8 } from '@/chrome/serialization';
 // module's declaration later in the emitted bundle, which is exactly the
 // temporal-dead-zone shape `scripts/check-bundle-tdz.mjs` guards against
 // (it once threw "Cannot access 'midnightSync_service' before initialization"
-// and broke login). The module's own heavy dependencies stay lazy inside it.
+// and broke login). The modules' own heavy dependencies stay lazy inside them
+// (midnightLedger keeps the ledger wasm packages dynamic: it is shared with the
+// options bundle, where that import does split a 10 MB chunk).
 import { deriveSponsorDustSeed } from '@/chains/midnight/midnightSponsorKeys';
+import {
+  activateMidnightPrivateSession,
+  midnightPrivateSessionEpoch,
+  prepareMidnightPrivateSession,
+} from '@/chains/midnight/midnightPrivateSyncSession';
+import { resolveDappProvingTarget } from '@/chains/midnight/midnightProvingTarget';
+import { balanceDappTransaction } from '@/chains/midnight/midnightDappBalancer';
+import { midnightKeystore, schnorrHex, validateMidnightSigningSegments } from '@/chains/midnight/midnightLedger';
+import {
+  assertNativeNightConversionSupported,
+  validateShieldedTokenType,
+} from '@/chains/midnight/midnightTokenCapabilities';
 
 let blockchainDb: Dexie = null;
 
@@ -2228,12 +2242,89 @@ export class WalletBg {
   }
 
   /** Unlock a private balance session without persisting a spending key or submitting a transaction. */
+  /**
+   * DApp Connector `balanceUnsealedTransaction`: fund + fee-pay a dapp's
+   * proven, unbound tx and return the SEALED hex. Same credential handling
+   * and key hygiene as balanceAndSignMidnightUnshieldedTransfer; the DUST fee
+   * proof is generated wallet-side against the user's proof-server
+   * preference (resolveDappProvingTarget), never through Gero Cloud, so the
+   * dapp's contract proofs and the wallet's witness stay off our servers.
+   */
+  async balanceMidnightConnectorTransaction(
+    txHex: string,
+    password?: string,
+    prfSecret?: Uint8Array,
+  ): Promise<{ tx: string }> {
+    if (this.chain !== Blockchain.MIDNIGHT) {
+      throw new Error('balanceMidnightConnectorTransaction called on non-Midnight wallet');
+    }
+    if (typeof txHex !== 'string' || txHex.length === 0) throw new Error('tx is required');
+
+    const network = this.network;
+    const { walletStore } = await import('@/stores/walletStore');
+    const assertSession = captureMidnightSigningSession(this.id, network, () => ({
+      walletId: walletStore.loggedWallet?.id, network: walletStore.loggedWallet?.network,
+      locked: walletStore.isLocked, epoch: midnightPrivateSessionEpoch(),
+    }));
+
+    const { decrypt } = await import('@/shared/utils/crypto');
+    let mnemonic: string;
+    if (this.encryptionMethod === 'prf') {
+      if (!this.prfEncryptedMnemonic) throw new Error('PRF wallet has no encrypted mnemonic');
+      if (!prfSecret) throw new Error('PRF secret is required for PRF wallet signing');
+      if (!this.webAuthnCredentialId) throw new Error('PRF wallet missing credential ID');
+      const { decryptMnemonicWithPrfOutput } = await import('@/shared/utils/webauthn-prf');
+      mnemonic = await decryptMnemonicWithPrfOutput(
+        this.prfEncryptedMnemonic, prfSecret, this.webAuthnCredentialId, this.id.toString(),
+      );
+    } else {
+      if (!password) throw new Error('Password is required for password wallet signing');
+      if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
+      mnemonic = decrypt(this.encryptedMnemonic, password);
+    }
+
+    try {
+      const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
+      const { getMidnightEndpoints } = await import('@/chains/midnight/midnightConfig');
+      const { midnightStore } = await import('@/stores/midnightStore');
+      // skipCardano: same BG-bundle pbkdf2 workaround as the other Midnight paths.
+      const derived = await deriveMidnightKeys(mnemonic, network, 0, { skipCardano: true });
+      try {
+        assertSession();
+        const endpoints = getMidnightEndpoints(network);
+        if (!endpoints) throw new Error(`No Midnight endpoints configured for network ${network}`);
+        const target = resolveDappProvingTarget(network, midnightStore.proofServer);
+        // Registration lower bound for the dust snapshot bootstrap (see
+        // balanceAndSignMidnightUnshieldedTransfer): creation time, else a
+        // conservative 90-day lookback.
+        const createdMs = this.createdAt ? Date.parse(this.createdAt) : NaN;
+        const result = await balanceDappTransaction({
+          sdkNetworkId: endpoints.sdkNetworkId,
+          endpoints,
+          txHex,
+          unshieldedSecretKey: derived.unshieldedSecretKey,
+          dustSecretSeed: derived.dustSecretKey,
+          dustRegisteredAt: Number.isFinite(createdMs)
+            ? new Date(createdMs)
+            : new Date(Date.now() - 90 * 24 * 3_600_000),
+          proving: { url: target.url, headers: target.headers },
+        });
+        assertSession();
+        return { tx: result.txHex };
+      } finally {
+        derived.unshieldedSecretKey.fill(0); derived.dustSecretKey.fill(0);
+        derived.zswapSecretKey.fill(0); derived.seed.fill(0);
+      }
+    } finally {
+      mnemonic = '';
+    }
+  }
+
   async startMidnightPrivateSync(password?: string, prfSecret?: Uint8Array): Promise<void> {
-    if (this.chain !== Blockchain.MIDNIGHT || this.network.toLowerCase() !== 'stagenet') {
-      throw new Error('Private token synchronization requires a Midnight Stagenet wallet');
+    if (this.chain !== Blockchain.MIDNIGHT) {
+      throw new Error('Private token synchronization requires a Midnight wallet');
     }
     const { walletStore } = await import('@/stores/walletStore');
-    const { midnightPrivateSessionEpoch, prepareMidnightPrivateSession, activateMidnightPrivateSession } = await import('@/chains/midnight/midnightPrivateSyncSession');
     const epoch = midnightPrivateSessionEpoch();
     const network = this.network;
     const isCurrent = () => !walletStore.isLocked && walletStore.loggedWallet?.id === this.id
@@ -2272,7 +2363,6 @@ export class WalletBg {
     if (this.chain !== Blockchain.MIDNIGHT) {
       throw new Error('signMidnightSegments called on non-Midnight wallet');
     }
-    const { validateMidnightSigningSegments } = await import('@/chains/midnight/midnightLedger');
     await validateMidnightSigningSegments(this.network, unprovenTxHex, segments);
     if (segments.length === 0) return [];
 
@@ -2308,7 +2398,6 @@ export class WalletBg {
       const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
       const derived = await deriveMidnightKeys(mnemonic, this.network, 0, { skipCardano: true });
 
-      const { midnightKeystore, schnorrHex } = await import('@/chains/midnight/midnightLedger');
       // Map our project's `Network` constant to the SDK's NetworkId string.
       // We avoid duplicating the mapping here — `midnightNetworkId` lives in
       // `midnightKeyManager` and is already used during address derivation.
@@ -2336,7 +2425,7 @@ export class WalletBg {
         : undefined;
       if (storedPublicKey && bgPublicKey !== storedPublicKey) {
         debugLog('[MidnightSign] BG-derived pubkey does not match stored pubkey — aborting sign');
-        throw new Error('Midnight signing key mismatch — please re-add this wallet');
+        throw new Error('Midnight signing key mismatch. Re-add this wallet');
       }
 
       const results: Array<{ index: number; signatureHex: string }> = [];
@@ -2423,7 +2512,6 @@ export class WalletBg {
       const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
       const derived = await deriveMidnightKeys(mnemonic, this.network, 0, { skipCardano: true });
 
-      const { midnightKeystore, schnorrHex } = await import('@/chains/midnight/midnightLedger');
       const { Network } = await import('@/models/types');
       let networkId: string;
       switch (this.network) {
@@ -2442,7 +2530,7 @@ export class WalletBg {
         : undefined;
       if (storedPublicKey && bgPublicKey !== storedPublicKey) {
         debugLog('[MidnightConnector signData] BG-derived pubkey does not match stored pubkey — aborting sign');
-        throw new Error('Midnight signing key mismatch — please re-add this wallet');
+        throw new Error('Midnight signing key mismatch. Re-add this wallet');
       }
 
       const prefix = Buffer.from(`midnight_signed_message:${dataBytes.length}:`, 'utf-8');
@@ -2514,7 +2602,6 @@ export class WalletBg {
 
     const network = this.network;
     const { walletStore } = await import('@/stores/walletStore');
-    const { midnightPrivateSessionEpoch } = await import('@/chains/midnight/midnightPrivateSyncSession');
     const assertSession = captureMidnightSigningSession(this.id, network, () => ({
       walletId: walletStore.loggedWallet?.id, network: walletStore.loggedWallet?.network,
       locked: walletStore.isLocked, epoch: midnightPrivateSessionEpoch(),
@@ -2585,7 +2672,7 @@ export class WalletBg {
           const livePublicKeyHex = derived.publicKeyHex;
           if (livePublicKeyHex !== storedPublicKeyHex) {
             throw new Error(
-              `Midnight key derivation mismatch — BG-derived publicKey ` +
+              `Midnight key derivation mismatch: BG-derived publicKey ` +
               `(${livePublicKeyHex.slice(0, 16)}…) doesn't match the wallet record's ` +
               `stored publicKey (${storedPublicKeyHex.slice(0, 16)}…). The wallet ` +
               `was created with a different bundle's bip39/HD derivation than the ` +
@@ -2703,7 +2790,7 @@ export class WalletBg {
     prfSecret?: Uint8Array,
     proving?: { url: string; headers?: Record<string, string> },
     sponsor?: { walletId: number; password?: string; prfSecret?: Uint8Array },
-  ): Promise<{ signedTxHex: string; proven: boolean }> {
+  ): Promise<{ signedTxHex: string; proven: boolean; ledgerTxHash?: string }> {
     if (this.chain !== Blockchain.MIDNIGHT) {
       throw new Error('buildAndSignMidnightShieldedTransfer called on non-Midnight wallet');
     }
@@ -2712,12 +2799,10 @@ export class WalletBg {
     }
     const network = this.network;
     const { walletStore } = await import('@/stores/walletStore');
-    const { midnightPrivateSessionEpoch } = await import('@/chains/midnight/midnightPrivateSyncSession');
     const assertSession = captureMidnightSigningSession(this.id, network, () => ({
       walletId: walletStore.loggedWallet?.id, network: walletStore.loggedWallet?.network,
       locked: walletStore.isLocked, epoch: midnightPrivateSessionEpoch(),
     }));
-    const { validateShieldedTokenType } = await import('@/chains/midnight/midnightTokenCapabilities');
     for (const output of outputs) validateShieldedTokenType(output.tokenType ?? '');
 
     // Decrypt mnemonic — same pattern as the unshielded path. PRF wallets
@@ -2776,7 +2861,7 @@ export class WalletBg {
         const storedViewingKey = parsed?.zswapViewingKey;
         if (storedViewingKey && storedViewingKey !== derived.zswapViewingKey) {
           throw new Error(
-            `Midnight viewing-key mismatch — BG-derived viewing key ` +
+            `Midnight viewing-key mismatch: BG-derived viewing key ` +
             `(${derived.zswapViewingKey.slice(0, 16)}…) doesn't match the ` +
             `wallet record's stored viewing key (${storedViewingKey.slice(0, 16)}…). ` +
             `Sync was running against the wrong key; the local note set is unsound.`,
@@ -2840,7 +2925,7 @@ export class WalletBg {
           });
         }
         assertSession();
-        return { signedTxHex: built.txHex, proven: built.proven };
+        return { signedTxHex: built.txHex, proven: built.proven, ledgerTxHash: built.ledgerTxHash };
       }
       } finally {
         midnightActions.setSendProgress(null);
@@ -2865,7 +2950,6 @@ export class WalletBg {
     _prfSecret?: Uint8Array,
     _proving?: { url: string; headers?: Record<string, string> },
   ): Promise<{ signedTxHex: string; proven: boolean }> {
-    const { assertNativeNightConversionSupported } = await import('@/chains/midnight/midnightTokenCapabilities');
     return assertNativeNightConversionSupported();
   }
   /**
@@ -2912,7 +2996,7 @@ export class WalletBg {
       parsed = null;
     }
     if (!parsed?.publicKeyHex || !parsed?.addressHex) {
-      throw new Error('Midnight wallet record is missing derived keys — recreate the wallet.');
+      throw new Error('Midnight wallet record is missing derived keys. Recreate the wallet.');
     }
     return {
       publicKeyHex: parsed.publicKeyHex,

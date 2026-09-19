@@ -1,5 +1,7 @@
 import { MIDNIGHT_PROVING_CONSENT_VERSION, type MidnightProvingConsent, type MidnightRemoteProver } from '@/chains/midnight/midnightProvingConsent';
 import type { MidnightSyncIdentity } from '@/chains/midnight/midnightSyncGeneration';
+import { hydrateSiteActivity, reduceSiteActivity } from '@/chains/midnight/midnightSiteActivity';
+import type { MidnightSiteActivity, SiteActivityEvent } from '@/chains/midnight/midnightSiteActivity';
 /**
  * Midnight Wallet Store
  *
@@ -37,9 +39,9 @@ import { getContextType } from '@/utils/storageSync';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 import { debugLog } from '@/utils/debug';
-import { getMidnightEndpoints } from '@/chains/midnight/midnightConfig';
+import { DEFAULT_LOCAL_PROOF_SERVER_URL, DEFAULT_LOCAL_PROOF_SERVER_URL_LEDGER9 } from '@/chains/midnight/midnightConfig';
 import { isNativeNight } from '@/chains/midnight/midnightTokenBalances';
-import { Network } from '@/models/types';
+import { midnightTxRowKey, normalizeMidnightTxHash } from '@/chains/midnight/midnightTxHash';
 import type {
   MidnightBalances,
   MidnightAddresses,
@@ -103,6 +105,21 @@ export interface MidnightProvingLogEntry {
  * (authorize → build → sync → sign → submit) locally via its onStage
  * callback and attaches this percentage to whichever phase is active.
  */
+/**
+ * Live progress of the background private (shielded) sync, broadcast from
+ * the ledger-8 loop so the dashboard can show a cold sync moving instead of
+ * an indeterminate "Synchronizing…". Indexer event indices, not notes.
+ * Transient like {@link MidnightSendProgress}; `null` when not syncing.
+ */
+export interface MidnightPrivateSyncProgress {
+  /** Highest indexer event index the wallet has applied. */
+  applied: number;
+  /** Highest indexer event index known to be relevant to this wallet. */
+  highest: number;
+  /** Whether the SDK reports its indexer subscription as connected. */
+  connected: boolean;
+}
+
 export interface MidnightSendProgress {
   /** Which background phase this refers to (e.g. 'syncingDust'). */
   phase: 'syncingDust';
@@ -172,6 +189,14 @@ export interface MidnightStore {
   lastMidnightTxId: number | null;
   chainIdentity: MidnightSyncIdentity | null;
   privateSyncStatus: 'idle' | 'syncing' | 'synced' | 'error';
+  /** See {@link MidnightPrivateSyncProgress}; only meaningful while `privateSyncStatus` is `syncing`. */
+  privateSyncProgress: MidnightPrivateSyncProgress | null;
+  /**
+   * What a connected site's transaction is doing inside the wallet
+   * (Prove → Fund → Submit), rendered by mini-Gero's site-activity card.
+   * See `midnightSiteActivity.ts`; null when no site has been active.
+   */
+  siteActivity: MidnightSiteActivity | null;
 
   /**
    * Record of the user's consent to send shielded-tx witness data through
@@ -201,9 +226,16 @@ export interface MidnightStore {
    */
   proofServer: {
     mode: 'remote' | 'local' | 'zkpaas';
+    /** Local proof server for the ledger-8 networks (mainnet, preprod). */
     localUrl: string;
-    /** Explicit server circuit family for cross-device proving; legacy by default. */
-    localProfile?: 'legacy' | 'stagenet';
+    /**
+     * Local proof server for the ledger-9 network (stagenet). One URL per
+     * circuit family, chosen by the active wallet's network — replaces the
+     * old device-global `localProfile` toggle, which had to be flipped by
+     * hand on every network switch and, left on the wrong setting, made a
+     * running server look like a missing one.
+     */
+    localUrlLedger9: string;
     /** Arkhia endpoint override; '' = derive per network (midnightConfig). */
     zkpaasUrl: string;
     /** Arkhia project API key ('' until the user pastes one). */
@@ -307,8 +339,8 @@ const EMPTY_TIP: MidnightChainTip = {
  */
 const DEFAULT_PROOF_SERVER: MidnightStore['proofServer'] = {
   mode: 'remote',
-  localProfile: 'legacy',
-  localUrl: getMidnightEndpoints(Network.STAGENET)!.defaultProofServerUrl,
+  localUrl: DEFAULT_LOCAL_PROOF_SERVER_URL,
+  localUrlLedger9: DEFAULT_LOCAL_PROOF_SERVER_URL_LEDGER9,
   zkpaasUrl: '',
   zkpaasApiKey: '',
   zkpaasApiSecret: '',
@@ -332,6 +364,8 @@ export const midnightStore = Vue.observable<MidnightStore>({
   lastMidnightTxId: null,
   chainIdentity: null,
   privateSyncStatus: 'idle',
+  privateSyncProgress: null,
+  siteActivity: null,
   shieldedProvingConsent: null,
   activeWalletKey: null,
   sendProgress: null,
@@ -352,10 +386,22 @@ function serializeValue(_key: string, value: unknown): unknown {
   return value;
 }
 
-/** Canonical tx-hash key for dedup: lowercase, no leading `0x`. */
-function normalizeTxHash(hash: string): string {
-  const h = (hash || '').toLowerCase();
-  return h.startsWith('0x') ? h.slice(2) : h;
+/**
+ * A confirmed self-transfer arrives from gero-sync with amount 0: every output
+ * of the color came back to us, and the chain cannot say which was the payment
+ * and which the change (see `MidnightTransactionType`). The optimistic pending
+ * row it replaces was built from what the user typed, so it is the one record
+ * that knows — keep that amount rather than confirm the row as "0.00".
+ *
+ * The carry has to survive its own replacement, too: gero-sync replays history
+ * on reconnects and full re-syncs, delivering the same confirmed row again.
+ * A confirmed `self` row with a non-zero amount can only have come from an
+ * earlier carry, so it is kept just like the pending row was.
+ */
+function withPendingAmount(previous: MidnightTransaction, incoming: MidnightTransaction): MidnightTransaction {
+  if (incoming.type !== 'self' || incoming.amount !== 0n || previous.amount <= 0n) return incoming;
+  const carry = previous.status === 'pending' || previous.type === 'self';
+  return carry ? { ...incoming, amount: previous.amount } : incoming;
 }
 
 /**
@@ -369,7 +415,7 @@ function normalizeTxHash(hash: string): string {
  * distinct colors of the same tx coexist.
  */
 function txRowKey(tx: MidnightTransaction): string {
-  return `${normalizeTxHash(tx.hash)}::${tx.token}`;
+  return midnightTxRowKey(tx);
 }
 
 // ---------------------------------------------------------------- hydration
@@ -542,6 +588,15 @@ if (context === 'browser') {
       ? stored.activeWalletKey
       : null;
     midnightStore.proofServer = hydrateProofServer(stored.proofServer);
+    // The private-note scan can start and finish while no dashboard is open
+    // (the side panel's dApp prompt starts it). Without these two the
+    // dashboard's "Private tokens" section boots at `idle` and tells the user
+    // to unlock a scan the background already completed.
+    midnightStore.privateSyncStatus = hydratePrivateSyncStatus(stored.privateSyncStatus);
+    midnightStore.privateSyncProgress = hydratePrivateSyncProgress(stored.privateSyncProgress);
+    // A site's transaction may be mid-flight when the panel opens; the card
+    // applies its own staleness window, so restoring the record is safe.
+    midnightStore.siteActivity = hydrateSiteActivity(stored.siteActivity);
   });
 }
 
@@ -555,6 +610,7 @@ const bgDurableTouched = {
   proofServer: false,
   shieldedProvingConsent: false,
   provingHistory: false,
+  chainIdentity: false,
 };
 
 // The background service worker's in-memory store starts at defaults on
@@ -578,6 +634,14 @@ if (context === 'background') {
     }
     if (!bgDurableTouched.provingHistory) {
       midnightStore.provingHistory = hydrateProvingHistory(stored.provingHistory);
+    }
+    // The chain identity is what the generation queue compares the next sync
+    // message against. Left at null after a worker restart, the first message
+    // looks like a generation change and clearMidnightNetworkCheckpoints wipes
+    // the private-note scan state — a full 1.5M-event rescan on Preprod after
+    // every extension reload.
+    if (!bgDurableTouched.chainIdentity) {
+      midnightStore.chainIdentity = hydrateChainIdentity(stored.chainIdentity);
     }
   });
 }
@@ -619,15 +683,55 @@ function isValidProofServerUrl(value: unknown): value is string {
  * localhost:6300) rather than discarding the whole record, so a corrupted
  * `mode` does not throw away an otherwise-valid custom `localUrl`.
  */
-function hydrateProofServer(stored: unknown): MidnightStore['proofServer'] {
+/** Persisted chain identity; only the exact `{network, generation, genesisHash}` shape survives. */
+export function hydrateChainIdentity(stored: unknown): MidnightSyncIdentity | null {
+  if (!stored || typeof stored !== 'object') return null;
+  const { network, generation, genesisHash } = stored as Record<string, unknown>;
+  if (typeof network !== 'string' || !/^midnight-(mainnet|preprod|stagenet)$/.test(network)) return null;
+  if (!Number.isSafeInteger(generation) || (generation as number) < 1) return null;
+  if (typeof genesisHash !== 'string' || !/^0x[0-9a-f]{64}$/.test(genesisHash)) return null;
+  return { network, generation: generation as number, genesisHash };
+}
+
+const PRIVATE_SYNC_STATUSES: ReadonlyArray<MidnightStore['privateSyncStatus']> = ['idle', 'syncing', 'synced', 'error'];
+
+/** Persisted private-sync status; anything unknown boots as `idle`. */
+export function hydratePrivateSyncStatus(stored: unknown): MidnightStore['privateSyncStatus'] {
+  return (PRIVATE_SYNC_STATUSES as readonly unknown[]).includes(stored)
+    ? stored as MidnightStore['privateSyncStatus']
+    : 'idle';
+}
+
+/** Persisted scan counters; only a well-formed pair of numbers is kept. */
+export function hydratePrivateSyncProgress(stored: unknown): MidnightPrivateSyncProgress | null {
+  if (!stored || typeof stored !== 'object') return null;
+  const { applied, highest, connected } = stored as Record<string, unknown>;
+  if (typeof applied !== 'number' || typeof highest !== 'number') return null;
+  return { applied, highest, connected: connected === true };
+}
+
+export function hydrateProofServer(stored: unknown): MidnightStore['proofServer'] {
   if (!stored || typeof stored !== 'object') return { ...DEFAULT_PROOF_SERVER };
   const mode = (stored as { mode?: unknown }).mode;
   const localUrl = (stored as { localUrl?: unknown }).localUrl;
   const zkpaasUrl = (stored as { zkpaasUrl?: unknown }).zkpaasUrl;
+  const storedLedger9 = (stored as { localUrlLedger9?: unknown }).localUrlLedger9;
+  // Migration from the retired `localProfile` toggle. A stored 'stagenet'
+  // profile meant "the server at localUrl is ledger 9", so that URL moves to
+  // the ledger-9 slot and the ledger-8 slot returns to its default — where a
+  // missing server now reads as "not detected" for THAT network rather than
+  // as a profile mismatch. The default profile ('legacy') needs no move.
+  const legacyProfileWasStagenet = storedLedger9 === undefined
+    && (stored as { localProfile?: unknown }).localProfile === 'stagenet'
+    && isValidProofServerUrl(localUrl);
   return {
     mode: mode === 'remote' || mode === 'local' || mode === 'zkpaas' ? mode : DEFAULT_PROOF_SERVER.mode,
-    localUrl: isValidProofServerUrl(localUrl) ? localUrl : DEFAULT_PROOF_SERVER.localUrl,
-    localProfile: (stored as { localProfile?: unknown }).localProfile === 'stagenet' ? 'stagenet' : 'legacy',
+    localUrl: legacyProfileWasStagenet
+      ? DEFAULT_PROOF_SERVER.localUrl
+      : (isValidProofServerUrl(localUrl) ? localUrl : DEFAULT_PROOF_SERVER.localUrl),
+    localUrlLedger9: legacyProfileWasStagenet
+      ? localUrl as string
+      : (isValidProofServerUrl(storedLedger9) ? storedLedger9 : DEFAULT_PROOF_SERVER.localUrlLedger9),
     // '' is the valid "derive per network" state, distinct from a corrupted
     // value — only non-empty overrides must parse as http(s) URLs.
     zkpaasUrl: zkpaasUrl === '' || isValidProofServerUrl(zkpaasUrl) ? zkpaasUrl as string : '',
@@ -671,7 +775,7 @@ function applyUpdates(updates: Partial<MidnightStore>) {
   // Plain-typed fields — copy directly (no BigInt nesting to handle)
   for (const key of [
     'isActive', 'lastSync', 'networkStatus', 'tip', 'addresses', 'lastMidnightTxId', 'chainIdentity', 'privateSyncStatus',
-    'shieldedProvingConsent', 'activeWalletKey', 'sendProgress', 'shieldedSyncAvailable',
+    'shieldedProvingConsent', 'activeWalletKey', 'sendProgress', 'privateSyncProgress', 'shieldedSyncAvailable', 'siteActivity',
     'proofServer',
   ] as const) {
     if (key in updates) {
@@ -745,20 +849,50 @@ export function isValidMidnightViewingKey(vk: string | undefined | null): boolea
 export const midnightActions = {
   setPrivateSyncStatus(privateSyncStatus: MidnightStore['privateSyncStatus']) {
     midnightStore.privateSyncStatus = privateSyncStatus;
-    broadcastFromBackground({ privateSyncStatus });
+    if (privateSyncStatus === 'syncing') {
+      broadcastFromBackground({ privateSyncStatus });
+      return;
+    }
+    // Progress counters only mean something mid-sync; drop them with the state.
+    midnightStore.privateSyncProgress = null;
+    broadcastFromBackground({ privateSyncStatus, privateSyncProgress: null });
+  },
+
+  /** Live cold-sync counters from the ledger-8 private loop (sampled, transient). */
+  setPrivateSyncProgress(privateSyncProgress: MidnightPrivateSyncProgress | null) {
+    midnightStore.privateSyncProgress = privateSyncProgress;
+    broadcastFromBackground({ privateSyncProgress });
+  },
+
+  /** One connector event from a site's transaction (proving / balancing / submit). */
+  recordSiteActivity(origin: string, event: SiteActivityEvent) {
+    const siteActivity = reduceSiteActivity(midnightStore.siteActivity, origin, event, Date.now());
+    midnightStore.siteActivity = siteActivity;
+    broadcastFromBackground({ siteActivity });
+  },
+
+  clearSiteActivity() {
+    midnightStore.siteActivity = null;
+    broadcastFromBackground({ siteActivity: null });
   },
   applyPrivateSnapshot(shieldedTokens: Record<string, bigint>, transactions: MidnightTransaction[]) {
     const balances = { ...midnightStore.balances, shieldedTokens, nightShielded: 0n };
     const pending = midnightStore.transactions.filter(tx => tx.isShielded && tx.status === 'pending'
-      && !transactions.some(confirmed => confirmed.hash === tx.hash && confirmed.token === tx.token));
+      && !transactions.some(confirmed => normalizeMidnightTxHash(confirmed.hash) === normalizeMidnightTxHash(tx.hash) && confirmed.token === tx.token));
     const combined = [...midnightStore.transactions.filter(tx => !tx.isShielded), ...pending, ...transactions]
       .sort((a, b) => b.timestamp - a.timestamp);
     Object.assign(midnightStore, { balances, transactions: combined, privateSyncStatus: 'synced' });
     broadcastFromBackground({ balances, transactions: combined, privateSyncStatus: 'synced' });
   },
   resetChainState(identity: MidnightSyncIdentity) {
+    // `idle`, not `syncing`: this runs on every identity change, including the
+    // first sync after a service-worker restart, and it starts no private
+    // scan. A loop that IS running re-asserts `syncing` on its next sample;
+    // a PassKey wallet has nothing running and must be offered the unlock,
+    // not a "Synchronizing private notes…" line with no counter behind it.
+    bgDurableTouched.chainIdentity = true;
     const updates: Partial<MidnightStore> = {
-      chainIdentity: identity, privateSyncStatus: 'syncing', lastSync: null, tip: { ...EMPTY_TIP },
+      chainIdentity: identity, privateSyncStatus: 'idle', privateSyncProgress: null, lastSync: null, tip: { ...EMPTY_TIP },
       balances: { ...EMPTY_BALANCES }, transactions: [], utxos: [], dustState: null,
       lastMidnightTxId: null, provingOperations: new Map(), sendProgress: null,
       networkStatus: 'connecting',
@@ -809,6 +943,7 @@ export const midnightActions = {
       // switch. Without this the old balance lingers until the first sync
       // event, and a no-matching-owner tx never clears it. Addresses +
       // activeWalletKey are set below to the new wallet.
+      bgDurableTouched.chainIdentity = true;
       Object.assign(midnightStore, {
         lastSync: null,
         tip: carriedTip,
@@ -819,6 +954,8 @@ export const midnightActions = {
         lastMidnightTxId: null,
         chainIdentity: null,
         privateSyncStatus: 'idle',
+        privateSyncProgress: null,
+        siteActivity: null,
       });
       debugLog(`🌙 Midnight wallet switch detected (${prevKey.slice(-8)} → ${newKey.slice(-8)}) — cleared stale state`);
     }
@@ -845,6 +982,8 @@ export const midnightActions = {
           lastMidnightTxId: null,
           chainIdentity: null,
           privateSyncStatus: 'idle',
+          privateSyncProgress: null,
+          siteActivity: null,
         }
         : { isActive: true, addresses: safeAddresses, activeWalletKey: newKey, networkStatus: 'connecting', shieldedSyncAvailable },
       true,
@@ -993,7 +1132,7 @@ export const midnightActions = {
     const key = txRowKey(tx);
     const existing = midnightStore.transactions.findIndex(t => txRowKey(t) === key);
     if (existing >= 0) {
-      midnightStore.transactions.splice(existing, 1, tx);
+      midnightStore.transactions.splice(existing, 1, withPendingAmount(midnightStore.transactions[existing], tx));
     } else {
       midnightStore.transactions.unshift(tx);
     }

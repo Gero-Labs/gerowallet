@@ -11,6 +11,63 @@
 import i18n from '@/plugins/i18n';
 import { CIP113_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
 
+type JsonRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function tryParseJsonObject(text: string): JsonRecord | undefined {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return isRecord(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function firstSentence(text: string): string {
+  const trimmed = text.trim();
+  const match = /^(.*?[.!?])(?:\s|$)/.exec(trimmed);
+  return match ? match[1] : trimmed;
+}
+
+/**
+ * "Ogmios rejected transaction (400 BAD_REQUEST): {json}" → the node's own
+ * `error.message`, cut to its first sentence (the rest is a protocol essay and,
+ * for value-size rejections, every asset in the offending output).
+ */
+function unwrapOgmiosRejection(message: string): string {
+  const brace = message.indexOf('{');
+  if (brace < 0) return message;
+  const inner = tryParseJsonObject(message.slice(brace));
+  const error = inner ? inner['error'] : undefined;
+  const nodeMessage = isRecord(error) ? error['message'] : undefined;
+  return typeof nodeMessage === 'string' && nodeMessage.trim() ? firstSentence(nodeMessage) : message;
+}
+
+/**
+ * Recover the human sentence from a Nexus error that reached the UI as raw JSON.
+ *
+ * `parseHttpError` stringifies the whole axios response (`{data, headers, status}`)
+ * and Nexus wraps provider errors in its own envelope, so a node rejection can reach
+ * a dialog as kilobytes of nested JSON — a customer registering for DUST on
+ * 2026-09-15 saw Ogmios 3120 ("Some output values in the transaction are too large")
+ * followed by every asset in the rejected output. Walk back down to the message:
+ * the Nexus `message` (or a plain-text body), then the embedded node message for an
+ * Ogmios rejection. Anything that isn't such an envelope is returned unchanged.
+ */
+export function extractNexusErrorMessage(raw: string): string {
+  const envelope = tryParseJsonObject(raw);
+  if (!envelope) return raw;
+  const data = envelope['data'];
+  if (typeof data === 'string' && data.trim()) return data;
+  const body = isRecord(data) ? data : envelope;
+  const message = [body['message'], body['error'], envelope['message']]
+    .find((v): v is string => typeof v === 'string' && v.trim().length > 0);
+  return message ? unwrapOgmiosRejection(message) : raw;
+}
+
 /**
  * True when the error is the user lacking a pure-ADA UTxO for script collateral.
  * Single source of truth for the pattern — DUST's mapDustBuildError() delegates
@@ -43,7 +100,7 @@ export function isInsufficientAdaError(message: string): boolean {
  * original message unchanged when it isn't a collateral / insufficient-ADA error.
  */
 export function friendlyTxError(raw: unknown): string {
-  const message = raw instanceof Error ? raw.message : String(raw ?? '');
+  const message = extractNexusErrorMessage(raw instanceof Error ? raw.message : String(raw ?? ''));
   const l = message.toLowerCase();
 
   // The CIP-113 signing refusal is thrown from the background as a fixed English

@@ -97,11 +97,11 @@ async function requestChallenge(stakeAddress: string): Promise<{ nonce: string; 
   // Constrain the one server-chosen component BEFORE it is folded into a string
   // the stake key will sign (see the module note on the two guards).
   if (!NONCE_PATTERN.test(nonce)) {
-    throw new Error('Support challenge nonce malformed — refusing to sign');
+    throw new Error('Support challenge nonce malformed. Refusing to sign');
   }
   // Never sign a server-chosen payload: the subject must be exactly what we expect.
   if (message !== buildSupportChallengeSubject(stakeAddress, nonce)) {
-    throw new Error('Support challenge subject mismatch — refusing to sign');
+    throw new Error('Support challenge subject mismatch. Refusing to sign');
   }
   return { nonce, message };
 }

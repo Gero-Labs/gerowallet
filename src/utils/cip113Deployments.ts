@@ -1,3 +1,5 @@
+import { Network } from '@/models/types';
+
 // CIP-113 `programmable_logic_base` script hashes, per network.
 //
 // Every CIP-113 UTxO on a network sits at this payment credential, with the owner in the
@@ -47,3 +49,20 @@ export const CIP113_BASE_PREPROD: readonly string[] = [];
 export const CIP113_BASE_PREVIEW: readonly string[] = [
   '698c48a630206282690774aebcfa9410895c09f85bc103b19f9888dc',
 ];
+
+/**
+ * Networks where CIP-113 may run at all — a SECOND per-network gate, independent of both
+ * the hash lists above and the `isCip113Enabled` flag.
+ *
+ * Why this exists rather than relying on an empty array: `isCip113Enabled` is a single
+ * GLOBAL boolean with no network in it, so once it is on, adding a hash to one of the
+ * arrays above is by itself enough to bring that network live on the next build. That
+ * collapses two intended approvals into one edit, by someone whose intent was only "record
+ * the deployment that now exists". Keeping the allowlist separate means enabling a network
+ * is always a deliberate two-line change here, reviewed together.
+ *
+ * Preview only. CIP-113 is still a candidate — PR #444 against cardano-foundation/CIPs,
+ * with no CIP-0113 directory merged — and the reference implementation was last seen at
+ * `0.5.0-alpha.4` with a `programmable_logic_base` hash not yet deployed on any network.
+ */
+export const CIP113_ALLOWED_NETWORKS: readonly string[] = [Network.PREVIEW];

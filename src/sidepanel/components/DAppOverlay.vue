@@ -405,6 +405,21 @@
           </div>
         </template>
 
+        <!-- Keystone wallet: CIP-8 data signing over the QR channel -->
+        <template v-else-if="walletType === WalletType.Keystone">
+          <div class="hw-notice pa-3 mb-3 mt-3">
+            <v-icon :color="primaryColor" class="mb-2">mdi-qrcode-scan</v-icon>
+            <p class="white--text text-body-2 text-center">{{ $t('miniGero.keystoneSign') }}</p>
+          </div>
+          <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
+          <div class="action-buttons">
+            <v-btn outlined rounded dark @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="signDataDecodeError" @click="signDataKeystone">
+              {{ $t('miniGero.sign') }}
+            </v-btn>
+          </div>
+        </template>
+
         <!-- Fallback -->
         <template v-else>
           <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
@@ -742,6 +757,184 @@
         </template>
       </div>
 
+      <!-- Midnight DApp Connector: balanceUnsealedTransaction — fund + fee-pay a dapp-built tx -->
+      <div v-else-if="currentRequest.method === 'midnight_balanceUnsealedTransaction'" class="dapp-sign-data">
+        <div class="dapp-identity mb-4">
+          <div class="favicon-wrapper">
+            <img :src="faviconUrl" class="favicon-img" @error="onFaviconError" v-if="!faviconFailed" />
+            <v-icon v-else size="32" :color="primaryColor">mdi-scale-balance</v-icon>
+          </div>
+          <div class="dapp-domain-info">
+            <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('midnight.connector.balanceTitle') }}</h3>
+            <span class="dapp-url"><span class="dapp-sub">{{ splitHost(makeTransferDomain).sub }}</span><b class="dapp-root">{{ splitHost(makeTransferDomain).root }}</b></span>
+          </div>
+        </div>
+
+        <div class="sign-data-message">
+          <p class="grey--text text-caption mb-3">{{ $t('midnight.connector.balanceBody') }}</p>
+          <div v-for="(c, i) in balanceContributions" :key="i" class="d-flex justify-space-between mb-2">
+            <span class="grey--text text-caption">{{ $t('common.amount') }}</span>
+            <span class="white--text text-caption font-weight-bold">{{ contributionDisplay(c) }} {{ contributionTicker(c) }}</span>
+          </div>
+          <p v-if="balanceContributions.length === 0" class="grey--text text-caption mb-2">{{ $t('midnight.connector.balanceNothing') }}</p>
+          <div class="d-flex align-start mt-2">
+            <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-eye-outline</v-icon>
+            <span class="grey--text text-caption">{{ $t('midnight.send.publicTxNote') }}</span>
+          </div>
+          <p class="grey--text text-caption mt-2 mb-0">{{ $t('midnight.connector.transferFeesNote') }}</p>
+        </div>
+
+        <template v-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
+          <v-text-field
+            v-model="spendingPassword"
+            :type="showPassword ? 'text' : 'password'"
+            :label="$t('miniGero.spendingPassword')"
+            :append-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+            :error-messages="signError"
+            outlined dense dark
+            class="password-input"
+            @click:append="showPassword = !showPassword"
+            @keyup.enter="signMidnightBalanceNormal"
+          />
+          <div class="action-buttons">
+            <v-btn outlined rounded dark @click="rejectMidnightBalance">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn
+              class="geroButton"
+              rounded
+              depressed
+              :loading="signing"
+              :disabled="!spendingPassword"
+              @click="signMidnightBalanceNormal"
+            >
+              {{ $t('miniGero.approve') }}
+            </v-btn>
+          </div>
+        </template>
+
+        <template v-else-if="isPrfWallet">
+          <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('miniGero.passKeyRequired') }}</p>
+          <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
+          <div class="action-buttons">
+            <v-btn outlined rounded dark @click="rejectMidnightBalance">{{ $t('miniGero.reject') }}</v-btn>
+            <v-btn
+              class="geroButton"
+              rounded
+              depressed
+              :loading="signing"
+              @click="signMidnightBalancePrf"
+            >
+              {{ $t('miniGero.approve') }}
+            </v-btn>
+          </div>
+        </template>
+
+        <!-- Midnight has no hardware-wallet signing support — decline only. -->
+        <template v-else>
+          <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('midnight.connector.walletTypeUnsupported') }}</p>
+          <div class="action-buttons">
+            <v-btn outlined rounded dark block @click="rejectMidnightBalance">{{ $t('miniGero.reject') }}</v-btn>
+          </div>
+        </template>
+      </div>
+
+      <!-- Midnight: the dapp needs shielded balances; the private-note scan must run first -->
+      <div v-else-if="currentRequest.method === 'midnight_privateBalanceAccess'" class="dapp-sign-data">
+        <div class="dapp-identity mb-4">
+          <div class="favicon-wrapper">
+            <img :src="faviconUrl" class="favicon-img" @error="onFaviconError" v-if="!faviconFailed" />
+            <v-icon v-else size="32" :color="primaryColor">mdi-eye-off-outline</v-icon>
+          </div>
+          <div class="dapp-domain-info">
+            <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('miniGero.privateBalanceRequest') }}</h3>
+            <span class="dapp-url"><span class="dapp-sub">{{ splitHost(makeTransferDomain).sub }}</span><b class="dapp-root">{{ splitHost(makeTransferDomain).root }}</b></span>
+          </div>
+        </div>
+
+        <div class="sign-data-message">
+          <p class="t-body mb-1">{{ $t('midnight.connector.privateBalanceLead', { domain: makeTransferDomain }) }}</p>
+          <p class="grey--text text-caption mb-0">{{ $t('midnight.connector.privateBalanceWhy') }}</p>
+          <template v-if="privateBalanceMode === 'syncing'">
+            <v-progress-linear :value="privateSyncPercentValue" height="6" rounded class="mt-3 mb-2" />
+            <p class="grey--text text-caption mb-0 g-num">{{ $t('midnight.connector.privateBalanceSyncing', { percent: privateSyncPercentValue }) }}</p>
+          </template>
+          <p v-else-if="privateSyncStatus === 'error'" class="error--text text-caption mt-3 mb-0">{{ $t('midnight.connector.privateBalanceFailed') }}</p>
+        </div>
+
+        <template v-if="privateBalanceMode === 'syncing'">
+          <div class="action-buttons">
+            <v-btn outlined rounded dark @click="rejectMidnightPrivateBalance">{{ $t('midnight.connector.privateBalanceDecline') }}</v-btn>
+            <v-btn class="geroButton" rounded depressed @click="continueMidnightPrivateBalance">{{ $t('midnight.connector.privateBalanceContinue') }}</v-btn>
+          </div>
+        </template>
+
+        <template v-else-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
+          <v-text-field
+            v-model="spendingPassword"
+            :type="showPassword ? 'text' : 'password'"
+            :label="$t('miniGero.spendingPassword')"
+            :append-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+            :error-messages="signError"
+            outlined dense dark
+            class="password-input"
+            @click:append="showPassword = !showPassword"
+            @keyup.enter="unlockMidnightPrivateBalanceNormal"
+          />
+          <div class="action-buttons">
+            <v-btn outlined rounded dark @click="rejectMidnightPrivateBalance">{{ $t('midnight.connector.privateBalanceDecline') }}</v-btn>
+            <v-btn class="geroButton" rounded depressed :loading="signing" :disabled="!spendingPassword" @click="unlockMidnightPrivateBalanceNormal">
+              {{ $t('midnight.connector.privateBalanceUnlock') }}
+            </v-btn>
+          </div>
+        </template>
+
+        <template v-else-if="isPrfWallet">
+          <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('midnight.connector.privateBalancePassKey') }}</p>
+          <p v-if="signError" class="error--text text-caption text-center mb-2">{{ signError }}</p>
+          <div class="action-buttons">
+            <v-btn outlined rounded dark @click="rejectMidnightPrivateBalance">{{ $t('midnight.connector.privateBalanceDecline') }}</v-btn>
+            <v-btn class="geroButton" rounded depressed :loading="signing" @click="unlockMidnightPrivateBalancePrf">
+              {{ $t('midnight.connector.privateBalanceUnlock') }}
+            </v-btn>
+          </div>
+        </template>
+
+        <template v-else>
+          <p class="grey--text text-body-2 text-center mb-2 mt-3">{{ $t('midnight.connector.walletTypeUnsupported') }}</p>
+          <div class="action-buttons">
+            <v-btn outlined rounded dark block @click="rejectMidnightPrivateBalance">{{ $t('miniGero.reject') }}</v-btn>
+          </div>
+        </template>
+      </div>
+
+      <!-- Midnight: a dapp proof found no proof server -->
+      <div v-else-if="currentRequest.method === 'midnight_provingServer'" class="dapp-sign-data">
+        <div class="dapp-identity mb-4">
+          <div class="favicon-wrapper">
+            <img :src="faviconUrl" class="favicon-img" @error="onFaviconError" v-if="!faviconFailed" />
+            <v-icon v-else size="32" :color="primaryColor">mdi-server-off</v-icon>
+          </div>
+          <div class="dapp-domain-info">
+            <h3 class="white--text text-subtitle-1 font-weight-bold mb-0">{{ $t('miniGero.provingServerRequest') }}</h3>
+            <span class="dapp-url"><span class="dapp-sub">{{ splitHost(makeTransferDomain).sub }}</span><b class="dapp-root">{{ splitHost(makeTransferDomain).root }}</b></span>
+          </div>
+        </div>
+
+        <div class="sign-data-message">
+          <p class="grey--text text-caption mb-2">{{ $t(provingServerBodyKey, { domain: makeTransferDomain, url: provingServerPayload.url }) }}</p>
+          <p v-if="(provingServerPayload.attempt || 1) > 1" class="grey--text text-caption mb-2">{{ $t('midnight.connector.provingServerStillDown', { url: provingServerPayload.url }) }}</p>
+          <p class="grey--text text-caption mb-2">{{ $t('midnight.connector.provingServerHint') }}</p>
+          <v-btn text small class="px-0" :color="primaryColor" @click="openProofServerSettings">
+            {{ $t('midnight.proofServer.openSettings') }}
+            <v-icon size="14" class="ml-1">mdi-open-in-new</v-icon>
+          </v-btn>
+        </div>
+
+        <div class="action-buttons">
+          <v-btn outlined rounded dark @click="cancelMidnightProving">{{ $t('common.cancel') }}</v-btn>
+          <v-btn class="geroButton" rounded depressed @click="retryMidnightProving">{{ $t('midnight.connector.provingServerRetry') }}</v-btn>
+        </div>
+      </div>
+
       <!-- WalletConnect: session proposal (pairing) -->
       <div v-else-if="currentRequest.method === 'wcSessionProposal'" class="dapp-connect">
         <div class="dapp-identity mb-4">
@@ -791,14 +984,15 @@
     </div>
 
     <!-- Keystone QR dialog -->
-    <KeystoneSignDialog
+    <KeystoneSignSheet
       v-if="showKeystoneDialog"
       :isOpen="showKeystoneDialog"
       :keystoneType="keystoneType"
       :keystoneCbor="keystoneCbor"
+      :urTypes="keystoneUrTypes"
       @scan="onKeystoneScan"
       @error="onKeystoneError"
-      @close="showKeystoneDialog = false"
+      @close="onKeystoneClose"
     />
 
     <!-- Sticky footer: signTx's action buttons + TTL countdown pinned below
@@ -914,17 +1108,19 @@ import { DappScore, type TxScanResponse } from '@/models/cardano-shield-types';
 import ledgerUtils from '@/shared/utils/ledger';
 import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
-import { createKeystoneSignRequest, KeystoneSignRequestResponse, parseSignature } from '@/shared/utils/keystone';
+import { createKeystoneDataSignRequest, createKeystoneSignRequest, KeystoneSignRequestResponse, parseDataSignature, parseSignature } from '@/shared/utils/keystone';
 import { UR } from '@keystonehq/keystone-sdk';
 import networks from '@/utils/networks';
 import hardwareLoading from '@/plugins/hardwareLoading';
-import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
+import KeystoneSignSheet from './KeystoneSignSheet.vue';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { decodedPayloadHexPreview, decodeSignDataPayload, type MidnightSignDataEncoding } from '@/chrome/midnightSignDataCodec';
 import { MidnightErrorCode } from '@/chrome/config';
 import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
 import { toAmountInput } from '@/chains/midnight/midnightAmount';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
+import { privateSyncPercent } from '@/chains/midnight/midnightPrivateSyncProgress';
+import { midnightStore } from '@/stores/midnightStore';
 import { resolveGeroChain } from '@/services/walletConnect/chainUtils';
 
 interface BackgroundResponse<T> { data: T }
@@ -956,6 +1152,7 @@ function queuedItemLabel(item: DAppRequest): string {
     midnight_connect: 'miniGero.connectRequest',
     midnight_signData: 'miniGero.signDataRequest',
     midnight_makeTransfer: 'miniGero.transferRequest',
+    midnight_balanceUnsealedTransaction: 'miniGero.balanceRequest',
     wcSessionProposal: 'miniGero.connectRequest',
   };
   const methodLabel = methodKeys[item.method] ? t(methodKeys[item.method]) : item.method;
@@ -1076,6 +1273,8 @@ const isBT = ref(false);
 // arrive as base-unit decimal STRINGS (the page bridge stringifies the bigint);
 // display them in NIGHT for the user.
 type ConnectorDesiredOutput = { kind: string; type?: string; value: string; recipient: string };
+/** Mirrors `ConnectorContribution` in chains/midnight/midnightConnectorBalance.ts (kept local: that module loads the ledger WASM). */
+type ConnectorContribution = { token: string; amount: string };
 
 const makeTransferDomain = computed(() => {
   const website = currentRequest.value?.payload?.website || '';
@@ -2019,6 +2218,7 @@ watch(loggedWallet, (newWallet, oldWallet) => {
   if (currentRequest.value.method === 'midnight_connect') rejectMidnightConnect();
   else if (currentRequest.value.method === 'midnight_signData') rejectMidnightSignData();
   else if (currentRequest.value.method === 'midnight_makeTransfer') rejectMidnightMakeTransfer();
+  else if (currentRequest.value.method === 'midnight_balanceUnsealedTransaction') rejectMidnightBalance();
   else reject('wallet_changed');
 });
 
@@ -2114,6 +2314,15 @@ const keystoneType = ref('');
 const keystoneCbor = ref('');
 const keystoneUseHash = ref(false);
 let keystoneSigningRequest: DAppRequest | null = null;
+// CIP-8 data signing reuses the same dialog, but the device answers with a
+// different UR type and the COSE structures have to be finished off the
+// builder created when the request was generated.
+const keystoneDataMode = ref(false);
+let keystoneDataBuilder: unknown = null;
+let keystoneDataAddressBytes: Uint8Array | null = null;
+const keystoneUrTypes = computed(() => (
+  keystoneDataMode.value ? ['cardano-sign-data-signature'] : ['cardano-signature']
+));
 
 // NOTE: walletType / isPrfWallet / loggedWallet / keys / utxos / isBT are
 // declared EARLY (right after signDataDomain) — a `watch(loggedWallet)` and
@@ -2124,6 +2333,9 @@ let keystoneSigningRequest: DAppRequest | null = null;
 watch(currentRequest, () => {
   showKeystoneDialog.value = false;
   keystoneSigningRequest = null;
+  keystoneDataMode.value = false;
+  keystoneDataBuilder = null;
+  keystoneDataAddressBytes = null;
   spendingPassword.value = '';
   showPassword.value = false;
   signing.value = false;
@@ -2449,6 +2661,10 @@ async function signKeystone() {
 async function onKeystoneScan(ur: UR) {
   const signingRequest = keystoneSigningRequest;
   if (!signingRequest || signingRequest !== currentRequest.value) return;
+  if (keystoneDataMode.value) {
+    await onKeystoneDataScan(ur, signingRequest);
+    return;
+  }
   try {
     await validateCip45Signing(signingRequest?.payload);
     const signature = parseSignature(ur);
@@ -2466,9 +2682,103 @@ async function onKeystoneScan(ur: UR) {
   }
 }
 
+function onKeystoneClose() {
+  showKeystoneDialog.value = false;
+  keystoneDataMode.value = false;
+  keystoneDataBuilder = null;
+  keystoneDataAddressBytes = null;
+}
+
 function onKeystoneError(error: string) {
   signError.value = error || 'Keystone scan error';
-  showKeystoneDialog.value = false;
+  onKeystoneClose();
+}
+
+// ── Sign Data: Keystone wallet (CIP-8 over QR) ──
+// Mirrors the popup path (DappSignData.vue). Without this branch a Keystone
+// wallet fell through to signDataNormal(), which returns immediately on an
+// empty spending password — the Sign button did nothing at all.
+async function signDataKeystone() {
+  const signingRequest = currentRequest.value;
+  if (!signingRequest || !loggedWallet.value) return;
+  signError.value = '';
+
+  try {
+    await validateCip45Signing(signingRequest?.payload);
+    const { address, payload } = signingRequest.payload as { address: string; payload: string };
+
+    // The dApp may hand us either bech32 or a hex-encoded address; the key
+    // lookup below is keyed on the bech32 form.
+    const addressBech32 = (address.startsWith('addr') || address.startsWith('stake'))
+      ? address
+      : Cardano.Address.fromBytes(HexBlob(address)).toBech32();
+
+    const foundKey = keys.value.payment.find((k) => k.address === addressBech32)
+      || keys.value.change.find((k) => k.address === addressBech32)
+      || keys.value.stake.find((k) => k.address === addressBech32);
+
+    if (!foundKey?.path) throw new Error(t('wallet.addressNotFound'));
+
+    const xfp = loggedWallet.value.xfp ?? '';
+    const xpubBech32 = loggedWallet.value.publicKey ?? '';
+    if (!xpubBech32) throw new Error(t('wallet.xpubNotFound'));
+
+    // m/1852'/1815'/account'/role/index
+    const pathParts = foundKey.path.split('/');
+    const role = parseInt(pathParts[4].replace(/'/g, ''), 10);
+    const keyIndex = parseInt(pathParts[5].replace(/'/g, ''), 10);
+
+    const { getPaymentKeyExternal, getPaymentKeyInternal, getStakeKey } = await import('@/chrome/serialization');
+    let derivedKey;
+    if (role === 0) {
+      derivedKey = getPaymentKeyExternal(xpubBech32, keyIndex);
+    } else if (role === 1) {
+      derivedKey = getPaymentKeyInternal(xpubBech32, keyIndex);
+    } else if (role === 2) {
+      derivedKey = getStakeKey(xpubBech32, keyIndex);
+    } else {
+      throw new Error(`Unknown derivation role: ${role}`);
+    }
+
+    const { ur, builder, addressBytes } = createKeystoneDataSignRequest(
+      address, payload, xfp, derivedKey.hex(), foundKey.path
+    );
+
+    keystoneDataBuilder = builder;
+    keystoneDataAddressBytes = addressBytes;
+    keystoneDataMode.value = true;
+    keystoneType.value = ur.type;
+    keystoneCbor.value = ur.cbor.toString('hex');
+    keystoneSigningRequest = signingRequest;
+    showKeystoneDialog.value = true;
+  } catch (e: unknown) {
+    console.error('[DApp] Keystone sign data error:', e);
+    signError.value = (e instanceof Error ? friendlyTxError(e) : '') || t('wallet.keystoneSigningFailed');
+  }
+}
+
+async function onKeystoneDataScan(ur: UR, signingRequest: DAppRequest) {
+  try {
+    await validateCip45Signing(signingRequest?.payload);
+    if (!keystoneDataBuilder || !keystoneDataAddressBytes) {
+      throw new Error('Missing builder or address bytes');
+    }
+    const signatureData = parseDataSignature(ur, keystoneDataBuilder, keystoneDataAddressBytes);
+    // parseDataSignature frees the builder internally — never reuse it.
+    keystoneDataBuilder = null;
+    keystoneDataAddressBytes = null;
+
+    showKeystoneDialog.value = false;
+    keystoneDataMode.value = false;
+    await validateCip45Signing(signingRequest?.payload);
+    if (currentRequest.value !== signingRequest) return;
+    approve({ signature: signatureData.signature, key: signatureData.key });
+  } catch (e: unknown) {
+    console.error('[DApp] Keystone sign data scan error:', e);
+    signError.value = (e instanceof Error ? e.message : '') || t('wallet.keystoneQRScanError');
+    showKeystoneDialog.value = false;
+    keystoneDataMode.value = false;
+  }
 }
 
 // ── Sign Data: Normal wallet (password) ──
@@ -2713,6 +3023,12 @@ function onEscapeReject() {
     rejectMidnightSignData();
   } else if (currentRequest.value?.method === 'midnight_makeTransfer') {
     rejectMidnightMakeTransfer();
+  } else if (currentRequest.value?.method === 'midnight_balanceUnsealedTransaction') {
+    rejectMidnightBalance();
+  } else if (currentRequest.value?.method === 'midnight_privateBalanceAccess') {
+    rejectMidnightPrivateBalance();
+  } else if (currentRequest.value?.method === 'midnight_provingServer') {
+    cancelMidnightProving();
   } else {
     reject();
   }
@@ -2886,6 +3202,237 @@ async function signMidnightTransferPrf() {
   } finally {
     signing.value = false;
   }
+}
+
+// ── Midnight DApp Connector: balanceUnsealedTransaction ───────────────────
+// The dapp built and proved the transaction; the wallet adds the funds listed
+// in `balanceContributions`, pays the DUST fee, signs and seals it. The panel
+// only passes credentials; keys and the tx bytes never leave the background.
+const balanceContributions = computed<ConnectorContribution[]>(() => {
+  const data = currentRequest.value?.payload?.data as { contributions?: ConnectorContribution[] } | undefined;
+  return Array.isArray(data?.contributions) ? (data!.contributions as ConnectorContribution[]) : [];
+});
+
+/** A contribution rendered through the same colour-aware helpers as transfer outputs. */
+function contributionAsOutput(c: ConnectorContribution): ConnectorDesiredOutput {
+  return { kind: 'unshielded', type: c.token, value: c.amount, recipient: '' };
+}
+function contributionDisplay(c: ConnectorContribution): string {
+  return outputAmountDisplay(contributionAsOutput(c));
+}
+function contributionTicker(c: ConnectorContribution): string {
+  return outputTicker(contributionAsOutput(c));
+}
+
+function rejectMidnightBalance() {
+  spendingPassword.value = '';
+  signError.value = '';
+  reject(midnightError(MidnightErrorCode.Rejected, 'User declined the balancing request'));
+}
+
+async function buildMidnightBalanceTx(
+  credentials: { password?: string; prfSecret?: Uint8Array },
+): Promise<{ tx: string }> {
+  const data = currentRequest.value?.payload?.data as { tx?: string } | undefined;
+  if (typeof data?.tx !== 'string' || !data.tx) throw new Error('No transaction to balance');
+  const { balanceConnectorTransaction } = await import('@/services/midnight-tx.service');
+  return balanceConnectorTransaction(data.tx, credentials);
+}
+
+async function signMidnightBalanceNormal() {
+  if (!currentRequest.value || !spendingPassword.value) return;
+  // Capture the request identity BEFORE the multi-second balance round-trip
+  // (see signMidnightTransferNormal): never deliver this tx to a superseded request.
+  const reqId = currentRequest.value.requestId;
+  signing.value = true;
+  signError.value = '';
+  try {
+    const { tx } = await buildMidnightBalanceTx({ password: spendingPassword.value });
+    if (currentRequest.value?.requestId !== reqId) return;
+    approve({ tx });
+    spendingPassword.value = '';
+  } catch (e) {
+    console.error('[DApp] Midnight balanceUnsealedTransaction error:', e);
+    signError.value = (e as Error)?.message || 'Balancing failed';
+  } finally {
+    signing.value = false;
+  }
+}
+
+async function signMidnightBalancePrf() {
+  if (!currentRequest.value) return;
+  const reqId = currentRequest.value.requestId;
+  signing.value = true;
+  signError.value = '';
+  try {
+    // Same cross-window PassKey popup as signMidnightTransferPrf: WebAuthn
+    // doesn't reliably work from inside the side panel's own window.
+    const popupUrl = chrome.runtime.getURL('index.html?mode=rawPrf#/passkey-auth');
+    window.open(popupUrl, 'PassKeyAuth', 'width=400,height=500,popup=1');
+    const prfBytes = await new Promise<Uint8Array>((resolve, rejectPromise) => {
+      const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
+      const handler = (event: MessageEvent) => {
+        if (event.origin !== extensionOrigin) return;
+        if (event.data.type === 'PASSKEY_AUTH_RESULT') {
+          window.removeEventListener('message', handler);
+          const { success, prfOutput, error } = event.data.payload;
+          if (success && prfOutput) resolve(new Uint8Array(prfOutput));
+          else rejectPromise(new Error(error || 'PassKey authentication failed'));
+        }
+      };
+      window.addEventListener('message', handler);
+      setTimeout(() => {
+        window.removeEventListener('message', handler);
+        rejectPromise(new Error('PassKey authentication timed out'));
+      }, 60000);
+    });
+    const { tx } = await buildMidnightBalanceTx({ prfSecret: prfBytes });
+    if (currentRequest.value?.requestId !== reqId) return;
+    approve({ tx });
+  } catch (e) {
+    console.error('[DApp] Midnight PRF balanceUnsealedTransaction error:', e);
+    signError.value = (e as Error)?.message || 'PassKey signing failed';
+  } finally {
+    signing.value = false;
+  }
+}
+
+// ── Midnight DApp Connector: private balance access ───────────────────────
+// The dapp asked for shielded balances before the private-note scan was
+// done (background: midnightPrivateBalanceGate.ts). The panel starts the scan
+// with the user's credentials (password / passkey) exactly like the
+// dashboard's "Unlock private balances" button, then approves; the
+// background answers the dapp's call itself once the store reports synced.
+const privateSyncStatus = computed(() => midnightStore.privateSyncStatus);
+const privateSyncPercentValue = computed(() => privateSyncPercent(midnightStore.privateSyncProgress));
+// Set once this prompt's unlock has started the scan: the view switches to
+// progress right away rather than waiting for the store's first `syncing`
+// broadcast, and stays there until the scan reports, completes, or fails.
+const privateScanStarted = ref(false);
+const privateBalanceMode = computed<'syncing' | 'auth'>(() => (
+  privateSyncStatus.value === 'syncing' || (privateScanStarted.value && privateSyncStatus.value !== 'error')
+    ? 'syncing'
+    : 'auth'
+));
+
+watch(() => currentRequest.value?.requestId, () => { privateScanStarted.value = false; });
+
+watch([privateSyncStatus, () => currentRequest.value?.method], ([status, method]) => {
+  // The scan finished while the prompt was open: nothing left to ask.
+  if (method === 'midnight_privateBalanceAccess' && status === 'synced') approve({ started: true });
+});
+
+function rejectMidnightPrivateBalance() {
+  spendingPassword.value = '';
+  signError.value = '';
+  privateScanStarted.value = false;
+  reject(midnightError(MidnightErrorCode.Rejected, 'User declined to share private balances'));
+}
+
+function continueMidnightPrivateBalance() {
+  approve({ started: true });
+}
+
+/** Cross-window PassKey popup (WebAuthn is unreliable inside the side panel's own window). */
+function awaitRawPrfFromPopup(): Promise<Uint8Array> {
+  const popupUrl = chrome.runtime.getURL('index.html?mode=rawPrf#/passkey-auth');
+  window.open(popupUrl, 'PassKeyAuth', 'width=400,height=500,popup=1');
+  return new Promise<Uint8Array>((resolve, rejectPromise) => {
+    const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
+    const handler = (event: MessageEvent) => {
+      if (event.origin !== extensionOrigin) return;
+      if (event.data.type === 'PASSKEY_AUTH_RESULT') {
+        window.removeEventListener('message', handler);
+        const { success, prfOutput, error } = event.data.payload;
+        if (success && prfOutput) resolve(new Uint8Array(prfOutput));
+        else rejectPromise(new Error(error || 'PassKey authentication failed'));
+      }
+    };
+    window.addEventListener('message', handler);
+    setTimeout(() => {
+      window.removeEventListener('message', handler);
+      rejectPromise(new Error('PassKey authentication timed out'));
+    }, 60000);
+  });
+}
+
+async function startPrivateSyncFromPanel(credentials: { password?: string; prfSecret?: Uint8Array }): Promise<void> {
+  const response = await Messaging.sendToBackgroundFromOptions({
+    method: MessageTypes.START_MIDNIGHT_PRIVATE_SYNC,
+    data: {
+      password: credentials.password,
+      prfSecret: credentials.prfSecret ? Array.from(credentials.prfSecret) : undefined,
+    },
+  }) as { data?: { success?: boolean; error?: string } };
+  if (!response?.data?.success) throw new Error(response?.data?.error || 'Unable to unlock private token synchronization');
+}
+
+async function unlockMidnightPrivateBalanceNormal() {
+  if (!currentRequest.value || !spendingPassword.value) return;
+  const reqId = currentRequest.value.requestId;
+  signing.value = true;
+  signError.value = '';
+  try {
+    await startPrivateSyncFromPanel({ password: spendingPassword.value });
+    if (currentRequest.value?.requestId !== reqId) return;
+    // Stay open in the progress view (design: "Scanning… / Share when done");
+    // the background already answers the dApp when the scan completes.
+    privateScanStarted.value = true;
+    spendingPassword.value = '';
+  } catch (e) {
+    console.error('[DApp] Midnight private balance unlock error:', e);
+    signError.value = (e as Error)?.message || 'Unlock failed';
+  } finally {
+    signing.value = false;
+  }
+}
+
+async function unlockMidnightPrivateBalancePrf() {
+  if (!currentRequest.value) return;
+  const reqId = currentRequest.value.requestId;
+  signing.value = true;
+  signError.value = '';
+  try {
+    const prfBytes = await awaitRawPrfFromPopup();
+    await startPrivateSyncFromPanel({ prfSecret: prfBytes });
+    if (currentRequest.value?.requestId !== reqId) return;
+    privateScanStarted.value = true;
+  } catch (e) {
+    console.error('[DApp] Midnight PRF private balance unlock error:', e);
+    signError.value = (e as Error)?.message || 'PassKey authentication failed';
+  } finally {
+    signing.value = false;
+  }
+}
+
+// ── Midnight DApp Connector: proof server needed ──────────────────────────
+// A dapp proof found no proof server (background: midnightProvingPark.ts).
+// Retry re-runs the parked proof with the payload the background kept;
+// Cancel fails the dapp's call with the usual "could not generate the proof".
+interface ProvingServerPayload {
+  website?: string;
+  url?: string;
+  source?: 'default' | 'local' | 'zkpaas';
+  detail?: string;
+  attempt?: number;
+}
+const provingServerPayload = computed<ProvingServerPayload>(() => (currentRequest.value?.payload ?? {}) as ProvingServerPayload);
+const provingServerBodyKey = computed(() => ({
+  default: 'midnight.connector.provingServerBodyDefault',
+  local: 'midnight.connector.provingServerBodyLocal',
+  zkpaas: 'midnight.connector.provingServerBodyZkpaas',
+}[provingServerPayload.value.source ?? 'default']));
+
+function retryMidnightProving() {
+  approve({ action: 'retry' });
+}
+
+function cancelMidnightProving() {
+  reject(midnightError(MidnightErrorCode.Rejected, 'User cancelled proving because no proof server was available'));
+}
+
+function openProofServerSettings() {
+  window.open(chrome.runtime.getURL('index.html#/proof-server'), '_blank');
 }
 
 // ── WalletConnect: session proposal (pairing) ──────────────────────────────

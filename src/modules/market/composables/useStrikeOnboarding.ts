@@ -249,7 +249,7 @@ async function unlock(password: string): Promise<boolean> {
     const stored = await loadKeysForWallet(walletId);
     if (!stored) {
       hasStoredKeys.value = false;
-      error.value = 'No Strike keys found for this wallet — generate a new key pair first';
+      error.value = 'No Strike keys found for this wallet. Generate a new key pair first';
       return false;
     }
 
@@ -503,7 +503,7 @@ onStrikeAuthFailure(() => {
   isConnected.value = false;
   hasStoredKeys.value = false;
   publicKey.value = null;
-  error.value = 'Strike rejected the stored API keys — please reconnect.';
+  error.value = 'Strike rejected the stored API keys. Reconnect to continue.';
   useStrikeTrading().reset();
   if (walletId) {
     void removeKeysForWallet(walletId);

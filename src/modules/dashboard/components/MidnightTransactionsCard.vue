@@ -70,7 +70,10 @@ import { Network } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import type { MidnightTransaction, MidnightTransactionType } from '@/chains/midnight/midnightTypes';
 import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
+import { sponsoredTxFor } from '@/chains/midnight/midnightSponsorLinks';
+import type { SponsoredTxMap } from '@/chains/midnight/midnightSponsorLinks';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import { useNow } from '@/shared/composables/useNow';
 
 const { t } = useTranslation();
 
@@ -130,6 +133,7 @@ function statusLabel(tx: MidnightTransaction): string {
   switch (tx.type) {
     case 'send': return t('transactions.sent');
     case 'receive': return t('transactions.received');
+    case 'self': return t('midnight.txSelf');
     case 'register_dust': return t('midnight.txRegisterDust');
     case 'deregister_dust': return t('midnight.txDeregisterDust');
     case 'shield': return t('midnight.txShield');
@@ -164,9 +168,13 @@ function shortAddress(addr: string): string {
   return `${prefix}…${addr.slice(-4)}`;
 }
 
+// Relative labels read the ticking clock, not Date.now(), so "13s ago" keeps
+// moving on a screen nothing else re-renders (see useNow).
+const now = useNow();
+
 function formatTime(timestamp: number): string {
   if (!timestamp) return '';
-  const diffSec = Math.floor((Date.now() - timestamp) / 1000);
+  const diffSec = Math.max(0, Math.floor((now.value - timestamp) / 1000));
   if (diffSec < 60) return `${diffSec}s ago`;
   if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
   if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
@@ -178,11 +186,10 @@ function formatTime(timestamp: number): string {
  * paid. Read from storage: gero-sync does not forward the fee payer, and the
  * sponsor's inputs live in a separate intent, so the chain data cannot say.
  */
-const sponsoredTxs = ref<Record<string, { sponsorName: string }>>({});
+const sponsoredTxs = ref<SponsoredTxMap>({});
 
 function sponsorFor(hash: string): string {
-  if (!hash) return '';
-  return sponsoredTxs.value[hash.toLowerCase()]?.sponsorName ?? '';
+  return sponsoredTxFor(sponsoredTxs.value, hash)?.sponsorName ?? '';
 }
 
 async function loadAttribution(): Promise<void> {

@@ -588,7 +588,7 @@ const sortOptions = computed(() => [
 
 const providerCols = computed(() => [
   { key: 'fee', label: 'Fee', tooltip: 'Commission percentage charged on your staking rewards' },
-  { key: 'tvl', label: 'TVL', tooltip: 'Total Value Locked — BTC currently delegated to this provider' },
+  { key: 'tvl', label: 'TVL', tooltip: 'Total Value Locked: BTC currently delegated to this provider' },
   { key: 'stakers', label: 'Stakers', tooltip: 'Number of active staking delegations to this provider' },
 ]);
 

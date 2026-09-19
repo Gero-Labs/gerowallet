@@ -69,11 +69,16 @@ Please read and follow our [Code of Conduct](CODE_OF_CONDUCT.md).
    ```
 2. Make your changes following our coding standards
 3. Write or update tests as needed
-4. Ensure all tests pass:
+4. Verify your change. Note that `npm run typecheck` and `npm run lint`
+   report hundreds of pre-existing errors on a clean checkout and are not
+   merge gates - lint only the files you touched:
    ```bash
-   npm run typecheck
-   npm run lint
+   npx eslint <files you changed>          # what the pre-commit hook enforces
+   npm run design:check                    # design ratchet + WCAG contrast
+   npx vitest run <specs near your change>
+   npm run build:web -- --mode production  # the real buildability gate
    ```
+   For anything user-visible, run `npm run dev` and try it in the browser.
 5. Commit with clear messages:
    ```bash
    git commit -m "feat: add new feature description"
@@ -134,6 +139,16 @@ src/
 ├── api/             # External API integrations
 └── shared/          # Reusable utilities
 ```
+
+## Working with an AI assistant
+
+The repo ships a contributor skill at
+[`.claude/skills/gerowallet-dev/`](.claude/skills/gerowallet-dev/SKILL.md). Claude Code
+picks it up automatically on a fresh clone; you can also invoke it with
+`/gerowallet-dev`. It covers the build loop, the extension's execution contexts,
+stores and IndexedDB, the design ratchet, i18n, the three chains, signing and
+security invariants, and which of this repo's checks actually gate a merge.
+It is plain Markdown, so it reads fine without any AI tooling.
 
 ## Need Help?
 

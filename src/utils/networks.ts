@@ -1,5 +1,6 @@
 import { Blockchain, Network, Provider } from '@/models/types';
 import {
+  CIP113_ALLOWED_NETWORKS,
   CIP113_BASE_MAINNET as CIP113_DEPLOYMENTS_MAINNET,
   CIP113_BASE_PREPROD as CIP113_DEPLOYMENTS_PREPROD,
   CIP113_BASE_PREVIEW as CIP113_DEPLOYMENTS_PREVIEW,
@@ -696,6 +697,12 @@ export default {
   // Support is derived from the configured hashes rather than tracked separately.
   resolveProgrammableLogicBaseScriptHashes(chain: string, network: string): string[] {
     if (!chain || !network) {
+      return []
+    }
+    // Allowlist first, before the configured hashes are even consulted: a hash list on its
+    // own must never be enough to bring a network up, because the flag that would also
+    // have to be on is global and may already be. See CIP113_ALLOWED_NETWORKS.
+    if (!CIP113_ALLOWED_NETWORKS.includes(network)) {
       return []
     }
     return this.resolveNetwork(chain, network)?.programmableLogicBaseScriptHashes || []

@@ -360,7 +360,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, nextTick, toRefs } from 'vue';
+import { ref, computed, watch, nextTick, toRefs } from 'vue';
 import { geroStore } from '@/stores/geroStore';
 import { useMidnightSendTimeline } from '@/shared/composables/useMidnightSendTimeline';
 import MidnightSendTimeline from '@/shared/components/MidnightSendTimeline.vue';
@@ -381,7 +381,9 @@ import { Network, WalletType } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { midnightTokenBalances } from '@/chains/midnight/midnightTokenBalances';
 import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
-import { blocksMidnightSend } from '@/chains/midnight/midnightFeeCapacity';
+import { blocksMidnightSendLive } from '@/chains/midnight/midnightFeeCapacity';
+import { historyHashForSubmittedTx } from '@/chains/midnight/midnightTxHash';
+import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
 import {
   formatTokenAmount,
   parseTokenAmount,
@@ -514,8 +516,17 @@ const recipientError = computed(() => {
 /**
   * No spendable DUST means no fee can be paid. Surfaced on the amount step so
   * the user learns it before authorizing, not after the SDK stalls.
+  *
+  * Judged on the MERGED live balance (Path A + Path B) — the figure the
+  * battery shows — not the store's Path-A `dustState`, which reads zero for a
+  * wallet whose DUST comes entirely from a Cardano cNIGHT registration.
+  * `unknown` (either path not yet reported) never blocks.
   */
-const noFeeCapacity = computed(() => blocksMidnightSend(midnightStore.dustState));
+const dustLive = useMidnightDustLive();
+const noFeeCapacity = computed(() => blocksMidnightSendLive({
+  dustBalance: dustLive.dustBalance.value,
+  settled: dustLive.settled.value,
+}));
 
 /**
  * Wallet chosen to pay this send's DUST fee, mirroring the options-page dialog.
@@ -726,8 +737,12 @@ async function submitSend(credentials: { password?: string; prfSecret?: Uint8Arr
       (stage) => { sendStage.value = stage; },
       await buildSponsorArg(),
     );
-    debugLog('🌙 mini-Gero Midnight unshielded tx submitted:', result.txHash, 'status:', result.status,
-      'sponsor:', sponsorWalletId.value ?? 'none');
+    debugLog('🌙 mini-Gero Midnight unshielded tx submitted:', result.txHash, 'ledger:', result.ledgerTxHash ?? 'n/a',
+      'status:', result.status, 'sponsor:', sponsorWalletId.value ?? 'none');
+    // The hash history will know this tx by — the ledger hash, not the
+    // extrinsic hash in txHash (see midnightTxHash.ts). Everything that must
+    // match the row later keys on it.
+    const historyHash = historyHashForSubmittedTx(result);
 
     // Remember who paid, for the battery indicator on both wallets and the
     // transaction details screen. Best effort — never fail a submitted tx.
@@ -744,7 +759,7 @@ async function submitSend(credentials: { password?: string; prfSecret?: Uint8Arr
           at,
         });
         await recordSponsoredTx({
-          txHash: result.txHash,
+          txHash: historyHash,
           sponsorWalletId: paying.id,
           sponsorName: paying.name,
           at,
@@ -758,8 +773,8 @@ async function submitSend(credentials: { password?: string; prfSecret?: Uint8Arr
       }
     }
     // Show it in history right away — gero-sync backfills the confirmed entry.
-    void addOptimisticPendingTx(result.txHash);
-    txId.value = result.txHash;
+    void addOptimisticPendingTx(historyHash);
+    txId.value = historyHash;
     txSuccess.value = true;
     snackbar.fireSuccess(t('miniGero.txSubmitted'));
   } catch (e) {
@@ -839,9 +854,19 @@ async function restoreSponsorPreference() {
   if (!wallet) return;
   const { linkFor, loadSponsorLinks } = await import('@/chains/midnight/midnightSponsorLinks');
   const link = linkFor(await loadSponsorLinks(), wallet.id, wallet.network);
-  sponsorWalletId.value = link?.sponsorWalletId ?? null;
+  // Re-check: the capacity may have flipped while the links were loading.
+  sponsorWalletId.value = noFeeCapacity.value ? (link?.sponsorWalletId ?? null) : null;
 }
-onMounted(restoreSponsorPreference);
+// A saved sponsor is restored only while this wallet actually needs one, and
+// dropped the moment it does not. `sponsorWalletId` is otherwise only written
+// by the picker, which is hidden whenever `noFeeCapacity` is false — so
+// without this, a wallet that saved a sponsor back when the guard wrongly
+// refused it (a Path-B wallet, before the merged-balance fix) would send
+// sponsored with no in-dialog way to opt out.
+watch(noFeeCapacity, (needsSponsor) => {
+  if (needsSponsor) void restoreSponsorPreference();
+  else sponsorWalletId.value = null;
+}, { immediate: true });
 
 async function signAndSubmitPrf() {
   if (submitting.value) return;

@@ -85,13 +85,21 @@ function buildConnectedAPI(): ConnectedAPI {
       }
       return bridge.midnightGetProvingProvider(keyMaterialProvider);
     },
-    // Phase 3 remainder — dapp-supplied tx balancing / intents. Present (so
-    // the object stays structurally assignable to the real ConnectedAPI type
+    // Phase 3 — fund + fee-pay a dapp's proven, unbound tx (ledger-8
+    // networks; the background rejects Stagenet and payFees:false with
+    // InvalidRequest before any prompt). Returns the sealed tx.
+    balanceUnsealedTransaction: (tx, options) => {
+      if (typeof tx !== 'string' || tx.length === 0) {
+        return Promise.reject(apiError(MidnightErrorCode.InvalidRequest, 'tx must be a non-empty hex string'));
+      }
+      return bridge.midnightBalanceUnsealedTransaction(tx, options);
+    },
+    // Phase 3 remainder — sealed-tx balancing / intents. Present (so the
+    // object stays structurally assignable to the real ConnectedAPI type
     // real dapps import) but reject until implemented. Spec prose: "The
     // connected API consists of a couple of parts, each always present" —
     // omitting them would both break that contract and TypeScript structural
     // compatibility for dapps typed against the SDK.
-    balanceUnsealedTransaction: notYetImplemented('balanceUnsealedTransaction'),
     balanceSealedTransaction: notYetImplemented('balanceSealedTransaction'),
     makeIntent: notYetImplemented('makeIntent'),
   };

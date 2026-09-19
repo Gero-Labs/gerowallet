@@ -91,6 +91,7 @@ import MidnightUtxosTable from '@/modules/transactions/components/MidnightUtxosT
 import MidnightUtxoDetail from '@/modules/transactions/components/MidnightUtxoDetail.vue';
 import { walletStore } from '@/stores/walletStore';
 import { midnightStore } from '@/stores/midnightStore';
+import { liveMidnightRow } from '@/modules/transactions/components/midnightTxSelection';
 import { Blockchain } from '@/models/types';
 import { isFeatureNew, markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
 
@@ -181,6 +182,16 @@ watch(() => walletStore.transactions, (transactions) => {
     });
   }
 }, { immediate: true });
+
+// Midnight rows are replaced, not mutated (see liveMidnightRow): a pane holding
+// the clicked object kept rendering the dead pending row — "Pending", and a
+// UTxO fetch that failed while the tx was still unindexed — after the list had
+// moved on. Follow the row by key on every list change.
+watch(() => midnightStore.transactions, (transactions) => {
+  if (!isMidnight.value || !transactionInfo.value) return;
+  const live = liveMidnightRow(transactionInfo.value, transactions);
+  if (live !== transactionInfo.value) transactionInfo.value = live;
+});
 
 onMounted(() => {
   const queryParams = route.query;

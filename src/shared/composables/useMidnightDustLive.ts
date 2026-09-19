@@ -202,6 +202,18 @@ export interface MidnightDustLive {
   readonly registrationStatus: ComputedRef<string>;
   /** True if at least one poll has succeeded — UI can show a skeleton until then. */
   readonly hasData: ComputedRef<boolean>;
+  /**
+   * True once BOTH paths have DEFINITIVELY reported. `hasData` is an OR and
+   * flips as soon as Path A's store has any value — including the zero-filled
+   * one — while Path B is still in flight. Anything that would REFUSE an
+   * action on a zero balance must wait for this instead.
+   *
+   * Path B counts only after a successful batch poll. "No enumerable stakes"
+   * is NOT definitive — the extension can only see stakes it holds, and a
+   * wallet fed by a stake registered elsewhere has none enumerable and real
+   * DUST — so that case stays unsettled and nothing is refused on it.
+   */
+  readonly settled: ComputedRef<boolean>;
 }
 
 export function useMidnightDustLive(): MidnightDustLive {
@@ -218,7 +230,7 @@ export function useMidnightDustLive(): MidnightDustLive {
   // registered at module load, above — see its comment.
 
   const {
-    pathBBalance, pathBCap, pathBRate, pathBNight, pathBRegistered, pathBAsOfMs,
+    pathBBalance, pathBCap, pathBRate, pathBNight, pathBRegistered, pathBAsOfMs, pathBBatchAsOfMs,
   } = useDustPathB();
 
   const pathABalance = computed<bigint>(() => {
@@ -274,5 +286,6 @@ export function useMidnightDustLive(): MidnightDustLive {
     // like DustRegistrationDialog fall back to stale/empty store values
     // forever even though the battery itself is showing real Path-B charge.
     hasData: computed(() => polledAsOfMs.value !== 0 || midnightStore.dustState != null || pathBAsOfMs.value !== 0),
+    settled: computed(() => (polledAsOfMs.value !== 0 || midnightStore.dustState != null) && pathBBatchAsOfMs.value !== 0),
   };
 }
