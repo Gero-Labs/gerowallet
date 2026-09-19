@@ -78,8 +78,13 @@ email-templates/
 *.rar
 *.zip
 
-# Per-developer Claude / superpowers state
-.claude/
+# Per-developer Claude / superpowers state stays local. The shared contributor
+# skill under .claude/skills/gerowallet-dev/ is the one exception: it ships with
+# the repo so `claude` picks it up on a fresh clone.
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/gerowallet-dev/
 .superpowers/
 
 # Local planning and working documents stay on this machine.
