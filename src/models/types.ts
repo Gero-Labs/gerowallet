@@ -199,9 +199,7 @@ export type WalletInstance = {
   getBalance(): Promise<string>;
   // The extensions enabled for this instance (CIP-30 api.getExtensions). Decided
   // per enable() call, so it is not the same list as supportedExtensions.
-  // Typed as it behaves: CIP-30 declares `Promise<Extension[]>`, the provider
-  // returns the array synchronously.
-  getExtensions(): Extension[];
+  getExtensions(): Promise<Extension[]>;
   getChangeAddress(): Promise<string>;
   getNetworkId(): Promise<number>;
   getRewardAddresses(): Promise<string[]>;

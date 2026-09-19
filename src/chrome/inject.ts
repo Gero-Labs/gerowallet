@@ -72,7 +72,9 @@ const geroCardanoProvider = {
         getChangeAddress: () => getAddress(),
         // Derived from what attachExtension() actually attached, and rebuilt on
         // every call so a dApp that mutates the result cannot corrupt later ones.
-        getExtensions: () => enabledCips.map(cip => ({ cip })),
+        // Async because CIP-30 declares `api.getExtensions(): Promise<Extension[]>`
+        // — returning the array bare made `api.getExtensions().then(...)` throw.
+        getExtensions: async () => enabledCips.map(cip => ({ cip })),
         getNetworkId: () => getNetworkId(),
         getRewardAddresses: () => getRewardAddresses(),
         getUnusedAddresses: () => getUnusedAddresses(),
@@ -118,8 +120,10 @@ const geroCardanoProvider = {
   },
   apiVersion: '2.0.0',
   name: 'GeroWallet',
+  // The extensions a dApp may ask for in enable(). CIP-30 itself is the base API
+  // every provider exposes, not an extension of itself, so it is not listed here
+  // and not reported by api.getExtensions().
   supportedExtensions: [
-    { cip: 30 },
     { cip: 95 },
     { cip: 104 },
     { cip: 142 }
