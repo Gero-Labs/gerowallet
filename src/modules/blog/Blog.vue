@@ -51,9 +51,9 @@
             >
               <div
                 class="blog-card__media"
-                :style="post.image ? { backgroundImage: `url(${post.image})` } : null"
+                :style="cardImage(post) ? { backgroundImage: `url(${cardImage(post)})` } : null"
               >
-                <v-icon v-if="!post.image" size="32" class="blog-card__media-fallback">mdi-newspaper-variant-outline</v-icon>
+                <v-icon v-if="!cardImage(post)" size="32" class="blog-card__media-fallback">mdi-newspaper-variant-outline</v-icon>
               </div>
               <div class="blog-card__body">
                 <p class="t-caption g-num blog-card__meta">
@@ -149,6 +149,12 @@ const formatDate = (iso: string): string => {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString();
 };
 
+// The backend derives `image` (480x300) from the 1200x630 hero by centre-cropping, which
+// cuts the edges off artwork that is not centre-composed (the 2.7.0 release banner lost its
+// "2"). Draw the uncropped hero instead; it is cached immutably for a year, so the extra
+// bytes are paid once. The thumbnail is only a fallback for a post without a hero.
+const cardImage = (post: BlogPost): string => post.heroImage ?? post.image ?? '';
+
 const openPost = (post: BlogPost): void => {
   router.push({ name: 'blog-post', params: { slug: post.slug } }).catch(() => { /* duplicate nav */ });
 };
@@ -209,7 +215,11 @@ onUnmounted(() => { /* observer stops with the component */ });
   flex: 0 0 200px;
   min-height: 160px;
   background-color: var(--g-surface);
-  background-size: cover;
+  /* The column's height follows the text beside it, so no fixed aspect ratio can match
+     the artwork. `contain` keeps the whole picture in frame and letterboxes on the
+     surface tone instead of cropping the edges. */
+  background-size: contain;
+  background-repeat: no-repeat;
   background-position: center;
   display: flex;
   align-items: center;
@@ -263,6 +273,7 @@ onUnmounted(() => { /* observer stops with the component */ });
 
 @media (max-width: 640px) {
   .blog-card { flex-direction: column; }
-  .blog-card__media { flex-basis: 160px; width: 100%; }
+  /* Stacked: the media spans the card, so size it to the hero's own 1200x630 ratio. */
+  .blog-card__media { flex-basis: auto; min-height: 0; width: 100%; aspect-ratio: 40 / 21; }
 }
 </style>
