@@ -166,7 +166,7 @@ export type Cardano = {
     name: string;
     icon: string;
     apiVersion: string;
-    enable: (extensions: Extensions) => Promise<WalletInstance>;
+    enable: (extensions?: Extensions) => Promise<WalletInstance>;
     isEnabled: () => Promise<boolean>;
     supportedExtensions: Extension[];
   };
@@ -197,6 +197,9 @@ export type CollateralParams = {
 export type WalletInstance = {
   experimental: ExperimentalFeatures;
   getBalance(): Promise<string>;
+  // The extensions enabled for this instance (CIP-30 api.getExtensions). Decided
+  // per enable() call, so it is not the same list as supportedExtensions.
+  getExtensions(): Promise<Extension[]>;
   getChangeAddress(): Promise<string>;
   getNetworkId(): Promise<number>;
   getRewardAddresses(): Promise<string[]>;
