@@ -165,7 +165,7 @@ const emit = defineEmits(['close']);
 // Translation
 const { t } = useTranslation();
 
-import { READY_LANGUAGES } from '@/plugins/i18n/config';
+import { READY_LANGUAGES } from '@/plugins/i18n.config';
 
 // Feature notifications for new German language
 const hasNewLanguage = computed(() => isFeatureNew('settings.profile.germanLanguage'));
@@ -182,8 +182,12 @@ const availableLanguages = computed(() => {
 const { loggedWallet } = toRefs(walletStore);
 const { wallets } = toRefs(geroStore);
 
-// Access Vue instance for i18n
-const vmProxy = getCurrentInstance()!.proxy as any;
+// Access Vue instance for i18n. Narrowed to the two members used below rather
+// than `any`: $i18n is added by the plugin and is not on the public instance type.
+const vmProxy = getCurrentInstance()!.proxy as unknown as {
+  $i18n: { locale: string };
+  $nextTick: () => Promise<void>;
+};
 
 // Reactive data
 const currencies = ref([
@@ -217,8 +221,8 @@ const profilePicDialog = ref<InstanceType<typeof ProfilePictureDialog>>();
 // Computed properties
 const otherWalletNames = computed(() => {
   return Object.values(wallets.value)
-    .filter((wallet: any) => wallet.name !== loggedWallet.value?.name)
-    .map((wallet: any) => wallet.name);
+    .filter(wallet => wallet.name !== loggedWallet.value?.name)
+    .map(wallet => wallet.name);
 });
 
 const avatar = computed(() => {

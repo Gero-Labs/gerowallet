@@ -14,6 +14,16 @@ name: Dev Bundle Gate
 # essentially all Vue SFCs live. background/content/inject are TS entrypoints
 # with ~no SFCs, so this keeps the SFC-syntax coverage while fitting the runner.
 #
+# The other three entry points are NOT uncovered, and adding them here would be
+# duplicate work: midnight-ledger-verify.yml's `Ledger tests and extension
+# bundles` job — also a required check on `development` — runs
+# scripts/build-isolated-extension.mjs, which builds background, content, inject
+# and web at `--mode production` with NODE_ENV=production. That is what exercises
+# the background-only production gates, the bundle TDZ guard
+# (scripts/check-bundle-tdz.mjs) included; its logs carry the
+# `check-bundle-tdz: OK — N known offender(s)` line. Look there before concluding
+# that a production background break could reach `development` unnoticed.
+#
 # Why build-only (no tsc/eslint step): `npm run typecheck` (plain tsc) is
 # systemically red against this repo — tsc doesn't resolve unplugin-auto-imports
 # (`computed`, `ref`, ...) or the `browser` global, so it reports hundreds of
@@ -92,6 +102,15 @@ jobs:
 
       - name: Navigation loading regressions
         run: npx vitest run src/modules/navigation/lazyPage.spec.ts src/modules/navigation/components/governanceNav.spec.ts
+
+      # The bundle TDZ guard runs against a built artifact (in the workflow
+      # named above), so a hole in its own logic passes silently — it already
+      # shipped one: it read the emitted, minified bundle with a
+      # whitespace-sensitive regex and reported "0 known offenders" for every
+      # production build. These cover how it locates a namespace declaration,
+      # which is the part that decides whether a hazard is reported at all.
+      - name: Bundle TDZ guard logic
+        run: npx vitest run scripts/check-bundle-tdz.spec.mjs
 
       # Design ratchet. Unlike tsc/eslint (see the header note) these gates are
       # green today and may only get greener: audit.mjs fails if any style-debt

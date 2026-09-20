@@ -29,7 +29,7 @@ import { geroStore } from '@/stores/geroStore';
 import GeroStore from '@/stores/geroStore';
 import languages from '@/plugins/languages';
 import { loadLanguage } from '@/plugins/i18n';
-import { READY_LANGUAGES } from '@/plugins/i18n/config';
+import { READY_LANGUAGES } from '@/plugins/i18n.config';
 
 const selectedLang = ref(-1);
 const instance = getCurrentInstance();
