@@ -1283,6 +1283,7 @@ export default {
   'errors.insufficientBalance': 'Unzureichendes Guthaben',
   'errors.noCollateral': 'Diese Transaktion führt einen Smart Contract aus und benötigt einen kleinen reinen ADA-UTxO als Collateral, aber deine gesamte ADA ist mit Tokens gebündelt. Sende etwa 6 ADA an deine eigene Wallet-Adresse, um einen zu erstellen, und versuche es dann erneut.',
   'errors.insufficientAdaForTx': 'Nicht genug ADA, um diese Transaktion nach Netzwerkgebühren und dem Minimum pro Ausgabe abzuschließen. Füge etwas mehr ADA hinzu und versuche es erneut.',
+  'errors.submitUnavailable': 'Der Dienst zum Senden von Transaktionen war nicht erreichbar. Deine Transaktion wurde nicht gesendet. Bitte versuche es gleich noch einmal.',
   'errors.collateralPoolEmpty': 'Der gemeinsame Collateral-Dienst ist vorübergehend nicht verfügbar. Bitte versuche es gleich noch einmal.',
   'errors.invalidAddress': 'Ungültige Adresse',
   'errors.invalidAmount': 'Ungültiger Betrag. Bitte überprüfen Sie den Zahlungsbetrag und versuchen Sie es erneut.',

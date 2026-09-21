@@ -2776,6 +2776,7 @@ export default {
   'errors.insufficientBalance': 'Insufficient balance',
   'errors.noCollateral': 'This transaction runs a smart contract, which needs a small ADA-only UTxO for collateral, but all your ADA is bundled with tokens. Send about 6 ADA to your own wallet address to create one, then try again.',
   'errors.insufficientAdaForTx': 'Not enough ADA to complete this transaction once network fees and the minimum per-output are covered. Add a little more ADA and try again.',
+  'errors.submitUnavailable': 'Could not reach the transaction submission service. Your transaction was not sent. Please try again in a moment.',
   'errors.collateralPoolEmpty': 'The shared collateral service is temporarily unavailable. Please try again in a moment.',
   'errors.invalidAddress': 'Invalid address',
   'errors.invalidOrder': 'Invalid order data',

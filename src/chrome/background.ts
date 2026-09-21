@@ -5,6 +5,7 @@ import Loading from '@/stores/loading';
 import { Messaging } from '@/chrome/messaging';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
 import { isStakeKeyRegistered } from '@/shared/utils/stakeRegistration';
+import { dappSubmitError } from '@/chrome/submitErrors';
 import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, POPUP, SENDER, TARGET, TxSendError, TxSignError } from '@/chrome/config';
 import { toDappError } from '@/chrome/dappError';
 import { applyDappRequestBadge } from '@/chrome/dappRequestBadge';
@@ -25,7 +26,7 @@ import {
   submitTx,
   urlScan,
 } from '@/chrome/serialization';
-import { Blockchain, coin_type, ERROR, Network, Paginate, purpose } from '@/models/types';
+import { Blockchain, coin_type, Network, Paginate, purpose } from '@/models/types';
 import networks from '@/utils/networks';
 import coinGeckoStore from '@/stores/coinGeckoStore';
 import { getDomain } from 'tldts';
@@ -1470,23 +1471,11 @@ app.add(METHOD.submitTx, async (request, sendResponse) => {
     }
     const response = await submitTx(request.data.tx, loggedWallet['chain'], loggedWallet['network'])
     if (!response.ok) {
-      let error: unknown;
-      switch (response.status) {
-        case 400:
-          error = { ...TxSendError.Failure, message: response.statusText };
-          break;
-        case 500:
-          error = APIError.InternalError;
-          break;
-        case 429:
-          error = TxSendError.Refused;
-          break;
-        case 425:
-          error = ERROR.fullMempool;
-          break;
-        default:
-          error = APIError.InvalidRequest;
-      }
+      // The node's rejection reason is in the BODY, not in statusText -- reading it is
+      // the difference between "value not conserved" and a bare "Bad Request". Never
+      // let a failed read of it mask the real failure.
+      const body = await response.text().catch(() => '');
+      const error = dappSubmitError(response.status, body);
       console.error("Error in submitTx:", error);
       sendResponse({
         id: request.id,
@@ -1494,6 +1483,9 @@ app.add(METHOD.submitTx, async (request, sendResponse) => {
         target: TARGET,
         sender: SENDER.extension,
       });
+      // Without this the handler fell through to response.text() on a consumed body
+      // and answered a second time on the same request id.
+      return;
     }
     const txCbor = request.data.tx
     const txIdResponse = await response.text();

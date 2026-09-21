@@ -4,7 +4,8 @@ import { type StoredTransaction } from '@/models/transaction.types';
 import { Api } from '@/api/api';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
-import { APIError, CIP113_SIGN_REFUSAL_MESSAGE, TxSendError } from '@/chrome/config';
+import { CIP113_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
+import { describeSubmitFailure } from '@/chrome/submitErrors';
 import networks from '@/utils/networks';
 import { blockChainDBSchema, blockChainDBVersion } from '@/db/schema';
 import {
@@ -2187,18 +2188,11 @@ export class WalletBg {
     } catch (error) {
       console.error('Transaction submission error:', error);
 
-      // Handle different error types
-      if (error['response']?.status === 400) {
-        throw new Error(TxSendError.Failure.info.concat('', ' ', JSON.stringify(error['response'].data)));
-      } else if (error['response']?.status === 500) {
-        throw new Error(APIError.InternalError.info);
-      } else if (error['response']?.status === 429) {
-        throw new Error(TxSendError.Refused.info);
-      } else if (error['response']?.status === 425) {
-        throw new Error(ERROR.fullMempool);
-      } else {
-        throw new Error(APIError.InvalidRequest.info.concat('', ' ', JSON.stringify(error)));
-      }
+      // A rejection carries the node's reason in the body; a 5xx (or no response at
+      // all) is our submission path being down. describeSubmitFailure keeps the two
+      // apart so neither is reported as the other -- see submitErrors.ts.
+      const response = error?.['response'];
+      throw new Error(describeSubmitFailure(response?.status, response?.data));
     }
   }
 

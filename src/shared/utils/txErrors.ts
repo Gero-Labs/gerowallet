@@ -9,7 +9,7 @@
  * the user's locale is active). Anything not recognized is returned unchanged.
  */
 import i18n from '@/plugins/i18n';
-import { CIP113_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
+import { CIP113_SIGN_REFUSAL_MESSAGE, TX_SUBMIT_UNAVAILABLE_MESSAGE } from '@/chrome/config';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -44,6 +44,23 @@ function unwrapOgmiosRejection(message: string): string {
   const error = inner ? inner['error'] : undefined;
   const nodeMessage = isRecord(error) ? error['message'] : undefined;
   return typeof nodeMessage === 'string' && nodeMessage.trim() ? firstSentence(nodeMessage) : message;
+}
+
+/**
+ * The backend answers a rejected submission with plain text, not JSON:
+ * `Ogmios rejected tx: Invalid transaction; It looks like ...`. Keep the node's own
+ * sentence and drop our prefix; only cut to the first sentence when the remainder is
+ * one of Ogmios's protocol essays, so a short rejection keeps the numbers in it.
+ */
+const OGMIOS_PLAIN_PREFIX = 'Ogmios rejected tx:';
+const OGMIOS_FULL_TEXT_LIMIT = 300;
+
+function unwrapPlainOgmiosRejection(message: string): string {
+  const at = message.indexOf(OGMIOS_PLAIN_PREFIX);
+  if (at < 0) return message;
+  const reason = message.slice(at + OGMIOS_PLAIN_PREFIX.length).trim();
+  if (!reason) return message;
+  return reason.length <= OGMIOS_FULL_TEXT_LIMIT ? reason : firstSentence(reason);
 }
 
 /**
@@ -100,12 +117,18 @@ export function isInsufficientAdaError(message: string): boolean {
  * original message unchanged when it isn't a collateral / insufficient-ADA error.
  */
 export function friendlyTxError(raw: unknown): string {
-  const message = extractNexusErrorMessage(raw instanceof Error ? raw.message : String(raw ?? ''));
+  const message = unwrapPlainOgmiosRejection(
+    extractNexusErrorMessage(raw instanceof Error ? raw.message : String(raw ?? '')),
+  );
   const l = message.toLowerCase();
 
   // The CIP-113 signing refusal is thrown from the background as a fixed English
   // string, so it has to be mapped back to a key here or a non-English user sees it raw.
   if (message === CIP113_SIGN_REFUSAL_MESSAGE) return i18n.t('programmableTokens.signRefused') as string;
+
+  // Submission infrastructure down (5xx / no response), not a rejection of this tx.
+  // Same fixed-English-string contract as the CIP-113 refusal above.
+  if (message.startsWith(TX_SUBMIT_UNAVAILABLE_MESSAGE)) return i18n.t('errors.submitUnavailable') as string;
 
   // Nexus's shared collateral pool is exhausted — transient infra, retryable.
   if (l.includes('collateral pool')) return i18n.t('errors.collateralPoolEmpty') as string;
