@@ -5,7 +5,11 @@ import Loading from '@/stores/loading';
 import { Messaging } from '@/chrome/messaging';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
 import { isStakeKeyRegistered } from '@/shared/utils/stakeRegistration';
-import { dappSubmitError, describeSubmitFailure } from '@/chrome/submitErrors';
+import {
+  dappSubmitError,
+  describeSubmitFailure,
+  describeUnexpectedSubmitResponse,
+} from '@/chrome/submitErrors';
 import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, POPUP, SENDER, TARGET, TxSendError, TxSignError } from '@/chrome/config';
 import { toDappError } from '@/chrome/dappError';
 import { applyDappRequestBadge } from '@/chrome/dappRequestBadge';
@@ -1499,10 +1503,14 @@ app.add(METHOD.submitTx, async (request, sendResponse) => {
       console.error(txIdResponse);
       sendResponse({
         id: request.id,
-        error: txIdResponse,
+        error: { ...TxSendError.Failure, info: describeUnexpectedSubmitResponse(txIdResponse) },
         target: TARGET,
         sender: SENDER.extension,
       });
+      // Third missing return in this handler. Without it an unexpected 200 body was
+      // deserialized as if confirmed, written to the wallet DB as a pending tx keyed
+      // by the error text, and answered a second time claiming success.
+      return;
     }
 
     if (txIdResponse) {
