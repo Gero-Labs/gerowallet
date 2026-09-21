@@ -15,7 +15,7 @@
  *  - 4xx — the node rejected THIS transaction; surface its reason verbatim.
  *  - 5xx / no response — our submission path is down; say so, and say it's retryable.
  */
-import { APIError, TX_SUBMIT_UNAVAILABLE_MESSAGE, TxSendError } from '@/chrome/config';
+import { APIError, TX_SUBMIT_UNCONFIRMED_MESSAGE, TxSendError } from '@/chrome/config';
 import { ERROR } from '@/models/types';
 
 /**
@@ -48,7 +48,7 @@ function isInfrastructureFailure(status: number | undefined): boolean {
 /**
  * Message for the wallet's own UI. English by design: this runs in the background
  * worker, which has no i18n — `friendlyTxError()` localizes it on the way to the
- * snackbar, keying off {@link TX_SUBMIT_UNAVAILABLE_MESSAGE}.
+ * snackbar, keying off {@link TX_SUBMIT_UNCONFIRMED_MESSAGE}.
  *
  * @param status HTTP status, or `undefined` when the request never got a response.
  * @param body   Response body (string or parsed JSON), if any.
@@ -58,8 +58,11 @@ export function describeSubmitFailure(status: number | undefined, body: unknown)
   if (status === 425) return ERROR.fullMempool;
   if (status === 429) return TxSendError.Refused.info;
   if (isInfrastructureFailure(status)) {
+    // Deliberately not "was not sent": the node may have accepted the transaction
+    // before its answer was lost, so the only honest statement is that we don't know.
     const where = status === undefined ? '' : ` (HTTP ${status})`;
-    return `${TX_SUBMIT_UNAVAILABLE_MESSAGE}${where}. Please try again in a moment.`;
+    return `${TX_SUBMIT_UNCONFIRMED_MESSAGE}${where}. It may still have reached the network, `
+      + 'so check your transaction history before sending it again.';
   }
   return detail ? `${TxSendError.Failure.info} ${detail}` : TxSendError.Failure.info;
 }
@@ -95,14 +98,19 @@ export function isUnexpectedSubmitResponseError(error: unknown): boolean {
  * existing mapping for 400/425/429/500; the change is that a 502/503/504 no longer
  * claims `APIError.InvalidRequest` (code -1, "inputs do not conform to this spec"),
  * which blamed the dApp's transaction for our gateway being down.
+ *
+ * The reason goes in `info`, because that is the field CIP-30 defines and the one a
+ * conforming dApp renders; `message` carries the same text for callers that already
+ * read it. Spreading TxSendError.Failure alone left `info` as the generic sentence,
+ * so the detail never reached the user (PR #1129 review).
  */
 export function dappSubmitError(status: number | undefined, body: unknown): unknown {
   const detail = submitFailureDetail(body);
   if (status === 425) return ERROR.fullMempool;
   if (status === 429) return TxSendError.Refused;
   if (status === 500) return APIError.InternalError;
-  if (isInfrastructureFailure(status)) {
-    return { ...TxSendError.Failure, message: describeSubmitFailure(status, body) };
-  }
-  return { ...TxSendError.Failure, message: detail || TxSendError.Failure.info };
+  const info = isInfrastructureFailure(status)
+    ? describeSubmitFailure(status, body)
+    : detail || TxSendError.Failure.info;
+  return { ...TxSendError.Failure, info, message: info };
 }

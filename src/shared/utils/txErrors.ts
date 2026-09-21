@@ -9,7 +9,7 @@
  * the user's locale is active). Anything not recognized is returned unchanged.
  */
 import i18n from '@/plugins/i18n';
-import { CIP113_SIGN_REFUSAL_MESSAGE, TX_SUBMIT_UNAVAILABLE_MESSAGE } from '@/chrome/config';
+import { CIP113_SIGN_REFUSAL_MESSAGE, TX_SUBMIT_UNCONFIRMED_MESSAGE } from '@/chrome/config';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -126,9 +126,10 @@ export function friendlyTxError(raw: unknown): string {
   // string, so it has to be mapped back to a key here or a non-English user sees it raw.
   if (message === CIP113_SIGN_REFUSAL_MESSAGE) return i18n.t('programmableTokens.signRefused') as string;
 
-  // Submission infrastructure down (5xx / no response), not a rejection of this tx.
+  // We never learned the transaction's fate (5xx / no response), which is NOT the
+  // same as it being rejected -- the localized copy has to keep that uncertainty.
   // Same fixed-English-string contract as the CIP-113 refusal above.
-  if (message.startsWith(TX_SUBMIT_UNAVAILABLE_MESSAGE)) return i18n.t('errors.submitUnavailable') as string;
+  if (message.startsWith(TX_SUBMIT_UNCONFIRMED_MESSAGE)) return i18n.t('errors.submitUnconfirmed') as string;
 
   // Nexus's shared collateral pool is exhausted — transient infra, retryable.
   if (l.includes('collateral pool')) return i18n.t('errors.collateralPoolEmpty') as string;

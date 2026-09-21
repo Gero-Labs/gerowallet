@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { extractNexusErrorMessage, friendlyTxError, isCollateralError, isInsufficientAdaError } from './txErrors';
-import { TX_SUBMIT_UNAVAILABLE_MESSAGE } from '@/chrome/config';
+import { TX_SUBMIT_UNCONFIRMED_MESSAGE } from '@/chrome/config';
 
 describe('isCollateralError', () => {
   it('matches a genuine missing-collateral error', () => {
@@ -84,10 +84,11 @@ describe('friendlyTxError on submit failures', () => {
   // Regression: the background used to hand the UI the CIP-30 boilerplate
   // "Inputs do not conform to this spec or are otherwise invalid." for an HTTP 502,
   // so a backend outage read as a malformed transaction (ticket, 2026-09-21).
-  it('localizes the submission-unavailable marker', () => {
-    const localized = friendlyTxError(new Error(`${TX_SUBMIT_UNAVAILABLE_MESSAGE} (HTTP 502). Please try again in a moment.`));
-    expect(localized).not.toContain(TX_SUBMIT_UNAVAILABLE_MESSAGE);
-    expect(localized.toLowerCase()).toContain('submission');
+  it('localizes the unconfirmed-submission marker without claiming the tx failed', () => {
+    const localized = friendlyTxError(new Error(`${TX_SUBMIT_UNCONFIRMED_MESSAGE} (HTTP 502). It may still have reached the network.`));
+    expect(localized).not.toContain(TX_SUBMIT_UNCONFIRMED_MESSAGE);
+    expect(localized.toLowerCase()).toContain('could not confirm');
+    expect(localized.toLowerCase()).not.toContain('was not sent');
   });
 
   it('drops our prefix from a plain-text node rejection', () => {

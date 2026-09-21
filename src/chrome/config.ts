@@ -6,8 +6,8 @@
 export const CIP113_SIGN_REFUSAL_MESSAGE = 'Gero cannot sign transfers of CIP-113 programmable tokens';
 
 /**
- * Fixed marker for "the submission endpoint itself failed" (5xx, or no response at
- * all) as opposed to the node rejecting the transaction (4xx, where the node's own
+ * Fixed marker for "we never learned what happened to this transaction" (5xx, or no
+ * response at all) as opposed to the node rejecting it (4xx, where the node's own
  * reason is the useful part). The background has no i18n, so — like
  * CIP113_SIGN_REFUSAL_MESSAGE above — it emits this exact English prefix and
  * friendlyTxError() maps it to a localized message before it reaches a snackbar.
@@ -15,8 +15,12 @@ export const CIP113_SIGN_REFUSAL_MESSAGE = 'Gero cannot sign transfers of CIP-11
  * Before this existed, a 502 from submit-tx fell through to APIError.InvalidRequest
  * and users were told "Inputs do not conform to this spec" for what was a backend
  * outage (support ticket, mainnet withdrawals, 2026-09-21).
+ *
+ * It says "not confirmed", never "not sent": a node can accept a transaction and
+ * then have its response lost to a timeout, reset or gateway failure, so telling the
+ * user it failed invites a second send of a payment that is already on chain.
  */
-export const TX_SUBMIT_UNAVAILABLE_MESSAGE = 'Transaction submission is temporarily unavailable';
+export const TX_SUBMIT_UNCONFIRMED_MESSAGE = 'Transaction submission could not be confirmed';
 
 export const TARGET = 'gerowallet';
 export const SENDER = {
