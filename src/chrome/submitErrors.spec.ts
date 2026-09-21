@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { describeSubmitFailure, dappSubmitError, submitFailureDetail } from './submitErrors';
+import {
+  describeSubmitFailure,
+  dappSubmitError,
+  describeUnexpectedSubmitResponse,
+  isUnexpectedSubmitResponseError,
+  submitFailureDetail,
+  unexpectedSubmitResponseError,
+} from './submitErrors';
 import { APIError, TX_SUBMIT_UNAVAILABLE_MESSAGE, TxSendError } from '@/chrome/config';
 import { ERROR } from '@/models/types';
 
@@ -64,5 +71,26 @@ describe('dappSubmitError', () => {
     expect(dappSubmitError(500, '')).toBe(APIError.InternalError);
     expect(dappSubmitError(429, '')).toBe(TxSendError.Refused);
     expect(dappSubmitError(425, '')).toBe(ERROR.fullMempool);
+  });
+});
+
+describe('unexpected 200 body', () => {
+  // A 200 whose body is not a tx id is NOT an outage: the endpoint answered. Saying
+  // "try again in a moment" there would be a guess, and it threw away what was said
+  // (PR #1129 review).
+  it('keeps what the endpoint actually returned', () => {
+    const message = describeUnexpectedSubmitResponse('maintenance in progress');
+    expect(message).toContain('maintenance in progress');
+    expect(message).not.toContain(TX_SUBMIT_UNAVAILABLE_MESSAGE);
+  });
+
+  it('still says something when the body is empty', () => {
+    expect(describeUnexpectedSubmitResponse('')).toContain(TxSendError.Failure.info);
+  });
+
+  it('tags its error so a shared catch can rethrow it untouched', () => {
+    expect(isUnexpectedSubmitResponseError(unexpectedSubmitResponseError('nope'))).toBe(true);
+    expect(isUnexpectedSubmitResponseError(new Error('nope'))).toBe(false);
+    expect(isUnexpectedSubmitResponseError(undefined)).toBe(false);
   });
 });

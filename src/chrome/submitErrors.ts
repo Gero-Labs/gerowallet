@@ -65,6 +65,32 @@ export function describeSubmitFailure(status: number | undefined, body: unknown)
 }
 
 /**
+ * A 200 whose body is not a 64-char tx id: the endpoint answered, we just don't
+ * understand the answer. Distinct from {@link describeSubmitFailure}'s
+ * `status === undefined` branch, which means the request never got a response at
+ * all -- only that one is an outage, and claiming "try again in a moment" for a
+ * successful HTTP response would be a guess (PR #1129 review).
+ */
+export function describeUnexpectedSubmitResponse(body: unknown): string {
+  const detail = submitFailureDetail(body);
+  const suffix = detail ? `: ${detail}` : '.';
+  return `${TxSendError.Failure.info} The submission endpoint returned an unexpected response${suffix}`;
+}
+
+/** Marks the error above so a shared catch can rethrow it untouched. */
+export const UNEXPECTED_SUBMIT_RESPONSE = 'submitResponseUnexpected';
+
+export function unexpectedSubmitResponseError(body: unknown): Error {
+  const error = new Error(describeUnexpectedSubmitResponse(body));
+  (error as Error & { [UNEXPECTED_SUBMIT_RESPONSE]?: true })[UNEXPECTED_SUBMIT_RESPONSE] = true;
+  return error;
+}
+
+export function isUnexpectedSubmitResponseError(error: unknown): boolean {
+  return Boolean((error as Record<string, unknown> | null)?.[UNEXPECTED_SUBMIT_RESPONSE]);
+}
+
+/**
  * CIP-30 error object for dApp callers. Keeps the spec's `{code, info}` shape and the
  * existing mapping for 400/425/429/500; the change is that a 502/503/504 no longer
  * claims `APIError.InvalidRequest` (code -1, "inputs do not conform to this spec"),

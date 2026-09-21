@@ -5,7 +5,11 @@ import { Api } from '@/api/api';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import { CIP113_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
-import { describeSubmitFailure } from '@/chrome/submitErrors';
+import {
+  describeSubmitFailure,
+  isUnexpectedSubmitResponseError,
+  unexpectedSubmitResponseError,
+} from '@/chrome/submitErrors';
 import networks from '@/utils/networks';
 import { blockChainDBSchema, blockChainDBVersion } from '@/db/schema';
 import {
@@ -2162,7 +2166,9 @@ export class WalletBg {
       const isValidTxId = /^[a-f0-9]{64}$/i.test(txIdResponse);
       if (!isValidTxId) {
         console.error(txIdResponse);
-        throw new Error(txIdResponse);
+        // Tagged, so the catch below reports what the endpoint actually said instead
+        // of mapping a status-less error onto "submission is temporarily unavailable".
+        throw unexpectedSubmitResponseError(txIdResponse);
       }
       // Create transaction record using sync service pattern
       const txDeserialized: Cardano.Tx = Serialization.TxCBOR.deserialize(Serialization.TxCBOR(txCbor));
@@ -2191,6 +2197,7 @@ export class WalletBg {
       // A rejection carries the node's reason in the body; a 5xx (or no response at
       // all) is our submission path being down. describeSubmitFailure keeps the two
       // apart so neither is reported as the other -- see submitErrors.ts.
+      if (isUnexpectedSubmitResponseError(error)) throw error;
       const response = error?.['response'];
       throw new Error(describeSubmitFailure(response?.status, response?.data));
     }
