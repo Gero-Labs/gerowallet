@@ -107,6 +107,7 @@ import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import snackbar from '@/plugins/snackbar';
+import { getErrorMessage } from '@/shared/utils/errorHandler';
 
 const { t } = useTranslation();
 const { coldKeySource } = toRefs(poolOperatorStore);
@@ -211,8 +212,8 @@ async function rotateKes() {
     poolOperatorStore.kesCounter = newCounter;
     showOutput.value = true;
     snackbar.fireSuccess(t('poolOperator.kesKeysGenerated'));
-  } catch (e: any) {
-    snackbar.setError(e.message || t('errors.unknownError'));
+  } catch (e) {
+    snackbar.setError(getErrorMessage(e, t('errors.unknownError')));
   } finally {
     loading.value = false;
   }
