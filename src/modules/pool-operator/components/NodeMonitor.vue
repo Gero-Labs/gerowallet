@@ -409,7 +409,7 @@ watch(() => poolOperatorStore.nodes.length, (len) => {
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .node-monitor { margin-top: 12px; }
 
 .section-header {
@@ -688,7 +688,7 @@ watch(() => poolOperatorStore.nodes.length, (len) => {
 
 /* Dialog */
 .dialog-card {
-  background: var(--g-raised) !important;
+  @include g-glass-overlay(true);
   border: 1px solid var(--g-hairline-1);
 }
 
@@ -733,7 +733,7 @@ watch(() => poolOperatorStore.nodes.length, (len) => {
   background: var(--g-hairline-1);
 }
 
-.glass-input >>> .v-input__slot {
+.glass-input ::v-deep .v-input__slot {
   background: var(--g-hairline-1) !important;
   border-color: var(--g-hairline-1) !important;
 }

@@ -281,9 +281,9 @@ onMounted(load);
 }
 
 .realfi-hero {
+  @include g-glass-panel(false);
   padding: var(--g-s-5);
   margin-bottom: var(--g-s-4);
-  background: var(--g-raised);
   border: 1px solid var(--g-hairline-2);
   border-radius: var(--g-r-card);
 }
@@ -338,8 +338,8 @@ onMounted(load);
 }
 
 .realfi-card {
+  @include g-glass-panel(false);
   padding: var(--g-s-4);
-  background: var(--g-raised);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-card);
 }

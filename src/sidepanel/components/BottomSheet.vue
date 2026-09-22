@@ -380,7 +380,7 @@ onBeforeUnmount(() => {
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .bottom-sheet-overlay {
   position: fixed;
   top: 0;
@@ -396,8 +396,8 @@ onBeforeUnmount(() => {
 }
 
 .bottom-sheet-container {
+  @include g-glass-overlay(false);
   width: 100%;
-  background: var(--g-overlay);
   border-radius: var(--g-r-sheet) var(--g-r-sheet) 0 0;
   border: 1px solid var(--g-hairline-3);
   border-bottom: none;

@@ -237,7 +237,7 @@ function openExplorer() {
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .tx-detail {
   padding-bottom: 16px;
 }
@@ -266,7 +266,7 @@ function openExplorer() {
 }
 
 .tx-details-list {
-  background: var(--g-raised);
+  @include g-glass-tier(false);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-card);
   padding: 12px 16px;
@@ -308,8 +308,8 @@ function openExplorer() {
 }
 
 .tx-assets-section {
+  @include g-glass-tier(false);
   margin-top: 16px;
-  background: var(--g-raised);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-card);
   padding: 12px 16px;
@@ -339,12 +339,12 @@ function openExplorer() {
 }
 
 .mn-fee-callout {
+  @include g-glass-tier(false);
   display: flex;
   align-items: flex-start;
   gap: var(--g-s-2);
   margin-top: var(--g-s-2);
   padding: var(--g-s-2);
-  background: var(--g-raised);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-control);
 }

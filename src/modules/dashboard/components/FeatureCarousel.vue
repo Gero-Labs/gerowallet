@@ -271,13 +271,13 @@ onUnmounted(() => {
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .carousel-wrapper {
+  @include g-glass-panel(false);
   position: relative;
   height: 100%;
   border-radius: var(--g-r-card);
   overflow: hidden;
-  background-color: var(--g-raised);
   border: 1px solid var(--g-hairline-2);
   transition: background-color var(--g-dur-slow) ease, border-color var(--g-dur-slow) ease, transform var(--g-dur-slow) ease;
   cursor: pointer;
@@ -285,7 +285,7 @@ onUnmounted(() => {
 }
 
 .carousel-wrapper:hover {
-  background-color: var(--g-overlay);
+  @include g-glass-tier-hover(false);
   border: 1px solid var(--g-hairline-3);
   transform: scale(1.01);
 }

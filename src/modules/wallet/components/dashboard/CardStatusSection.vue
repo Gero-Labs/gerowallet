@@ -395,13 +395,13 @@ const currentOrderNeedsPayment = computed(() => {
 }
 
 .order-card-section {
+  @include g-glass-panel(false);
   max-width: 600px;
   width: 100%;
   min-height: 180px;
   margin: 0 auto;
   text-align: center;
   padding: 24px;
-  background: var(--g-surface);
   border-radius: var(--g-r-sheet);
   border: 1px solid var(--g-hairline-1);
   position: relative;
@@ -546,11 +546,11 @@ const currentOrderNeedsPayment = computed(() => {
 }
 
 .waiting-status-card {
+  @include g-glass-panel(false);
   max-width: 600px;
   width: 100%;
   margin: 0 auto;
   position: relative;
-  background: var(--g-surface);
   border: 1px solid var(--g-hairline-1) !important;
   border-radius: var(--g-r-sheet);
   overflow: hidden;

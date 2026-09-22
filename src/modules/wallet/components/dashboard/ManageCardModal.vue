@@ -156,7 +156,7 @@ const handleConfirmBlock = async () => {
 }
 
 .manage-card-dialog {
-  background: var(--g-surface) !important;
+  @include g-glass-overlay(true);
   border-radius: var(--g-r-card) !important;
   overflow: hidden;
   width: 100%;

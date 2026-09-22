@@ -176,22 +176,22 @@ const voteLabel = computed(() => {
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .action-row {
+  @include g-glass-tier(false);
   display: flex;
   align-items: center;
   gap: var(--g-s-3);
   width: 100%;
   text-align: left;
   padding: var(--g-s-3) var(--g-s-4);
-  background: var(--g-surface);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-card);
   cursor: pointer;
   transition: border-color var(--g-dur-fast) var(--g-ease), background var(--g-dur-fast) var(--g-ease);
 }
 .action-row:hover {
-  background: var(--g-raised);
+  @include g-glass-tier-hover(false);
   border-color: var(--g-hairline-2);
 }
 /* Concluded: a flatter surface, a hairline instead of a filled card, and one

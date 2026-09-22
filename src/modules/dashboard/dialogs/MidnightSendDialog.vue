@@ -1331,7 +1331,7 @@ function shortToken(colour: string): string {
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 /* ─── Content / stepper / total / buttons — copied verbatim from the Cardano
    SendDialog so the two dialogs are visually identical. ─── */
 .send-dialog-content {
@@ -1529,9 +1529,9 @@ function shortToken(colour: string): string {
 }
 
 .token-row {
+  @include g-glass-tier(false);
   display: flex;
   align-items: center;
-  background: var(--g-raised);
   border-radius: var(--g-r-control);
   padding: 6px 10px;
   gap: 6px;
@@ -1657,13 +1657,13 @@ function shortToken(colour: string): string {
   border-color: var(--g-error-line);
 }
 .midnight-info-note {
+  @include g-glass-tier(false);
   display: flex;
   align-items: flex-start;
   gap: 2px;
   font-size: 11px;
   line-height: 1.4;
   color: var(--g-text-2);
-  background: var(--g-raised);
   border: 1px solid var(--g-hairline-2);
   border-radius: var(--g-r-control);
   padding: 8px 10px;
@@ -1794,11 +1794,11 @@ function shortToken(colour: string): string {
 }
 
 .sponsor-review {
+  @include g-glass-tier(false);
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
-  background: var(--g-raised);
   border: 1px solid var(--g-hairline-2);
   border-radius: var(--g-r-control);
 }

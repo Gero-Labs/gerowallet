@@ -144,19 +144,19 @@ function openVoter(): void {
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 /* Slim density: one line of content, the table row height rather than the panel
    one, and 4px of vertical padding. Both controls keep their own 24px floors
    (pinned in VoteRow.spec.ts), so the row can shrink without the targets doing
    the same. */
 .vote-row {
+  @include g-glass-tier(false);
   display: grid;
   grid-template-columns: auto 84px minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: var(--g-s-3);
   min-height: var(--g-row-h-table);
   padding: var(--g-s-1) var(--g-s-3);
-  background: var(--g-surface);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-control);
 }

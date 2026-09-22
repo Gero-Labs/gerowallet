@@ -500,13 +500,17 @@ function onLogoError(e: Event) {
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 /* ═══════════════════════════════════════════════════════════════════════════
    TERMINAL LAYOUT
    ═══════════════════════════════════════════════════════════════════════════ */
 
+/* Justified solid (readability): the terminal is a full-screen dialog over the
+   dashboard token table — on the see-through panel material the rows bled
+   through the candle chart and order book. Overlay = the near-opaque floating
+   material every other dialog uses. */
 .perps-terminal {
-  background: var(--g-surface) !important;
+  @include g-glass-overlay(true);
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -516,13 +520,13 @@ function onLogoError(e: Event) {
 /* ── Symbol tabs bar ──────────────────────────────────────────────────── */
 
 .symbol-tabs-bar {
+  @include g-glass-tier(false);
   display: flex;
   align-items: center;
   height: 36px;
   padding: 0 8px;
   border-bottom: 1px solid var(--g-raised);
   flex-shrink: 0;
-  background: var(--g-surface);
 }
 
 .symbol-tabs-scroll {
@@ -559,13 +563,13 @@ function onLogoError(e: Event) {
 /* ── Price info bar ───────────────────────────────────────────────────── */
 
 .price-info-bar {
+  @include g-glass-tier(false);
   display: flex;
   align-items: center;
   gap: 16px;
   padding: 4px 12px;
   border-bottom: 1px solid var(--g-raised);
   flex-shrink: 0;
-  background: var(--g-surface);
   overflow-x: auto;
 }
 
@@ -772,7 +776,7 @@ function onLogoError(e: Event) {
   font-weight: 600;
 }
 
-.chart-area >>> .trading-view-chart-container {
+.chart-area ::v-deep .trading-view-chart-container {
   flex: 1;
   min-height: 300px;
   background: transparent;
@@ -788,11 +792,11 @@ function onLogoError(e: Event) {
 
 /* Footer */
 .terminal-footer {
+  @include g-glass-tier(false);
   display: flex;
   align-items: center;
   padding: 3px 12px;
   border-top: 1px solid var(--g-raised);
-  background: var(--g-surface);
   flex-shrink: 0;
 }
 

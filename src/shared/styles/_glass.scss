@@ -1,0 +1,80 @@
+// Glass materials as mixins — for SFC rules that own a selector and cannot
+// put a class on the element (`.pool-card`, `.action-row`, `.blog-card`...).
+// Each mixin is a MIRROR of the class of the same name in liquid-glass.css
+// and carries the same accessibility fallbacks, so an @include and a class
+// always render identically. Change both together.
+// Auto-injected into every SFC <style lang="scss"> via _tokens.scss.
+
+@mixin g-glass-fallbacks($solid) {
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    background: $solid;
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    background: var(--g-overlay);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  @media (prefers-contrast: more) {
+    background: var(--g-overlay);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-color: var(--g-hairline-3);
+  }
+}
+
+// Material 4: panel — the default in-page card.
+@mixin g-glass-panel($important: false) {
+  $i: if($important, '!important', '');
+  background: rgba(0, 0, 0, 0.4) #{$i};
+  backdrop-filter: blur(20px) saturate(1.8) #{$i};
+  -webkit-backdrop-filter: blur(20px) saturate(1.8) #{$i};
+  border: 1px solid var(--g-hairline-1) #{$i};
+  border-radius: var(--g-r-card);
+  @include g-glass-fallbacks(var(--g-surface));
+}
+
+// Material 6: tier — a card nested inside another glass surface.
+@mixin g-glass-tier($important: false) {
+  $i: if($important, '!important', '');
+  background: rgba(18, 21, 28, 0.3) #{$i};
+  backdrop-filter: blur(14px) saturate(1.25) #{$i};
+  -webkit-backdrop-filter: blur(14px) saturate(1.25) #{$i};
+  border: 1px solid var(--g-hairline-1) #{$i};
+  border-radius: var(--g-r-card);
+  @include g-glass-fallbacks(var(--g-raised));
+}
+
+// Interactive tier states. Hover lifts the edge (never a solid repaint);
+// active/selected deepens the tint so the state survives on any backdrop.
+@mixin g-glass-tier-hover($important: false) {
+  $i: if($important, '!important', '');
+  background: rgba(18, 21, 28, 0.5) #{$i};
+  border-color: var(--g-hairline-3) #{$i};
+}
+
+@mixin g-glass-tier-active($important: false) {
+  $i: if($important, '!important', '');
+  background: rgba(18, 21, 28, 0.62) #{$i};
+  border-color: color-mix(in srgb, var(--g-accent) 45%, transparent) #{$i};
+}
+
+// Material 2: overlay — sheets and dialog cards that float above the page
+// (side-panel bottom sheets, ad-hoc v-dialog cards). Mirror of .glass-overlay.
+@mixin g-glass-overlay($important: false) {
+  $i: if($important, '!important', '');
+  background: rgba(18, 21, 28, 0.975) #{$i};
+  backdrop-filter: blur(44px) saturate(1.3) #{$i};
+  -webkit-backdrop-filter: blur(44px) saturate(1.3) #{$i};
+  border: 1px solid var(--g-hairline-2) #{$i};
+  @include g-glass-fallbacks(rgba(18, 21, 28, 0.98));
+}
+
+// Material 1: chrome — the app frame (side-panel header / bottom nav).
+// Mirror of .glass-chrome minus its right-edge hairline (callers own edges).
+@mixin g-glass-chrome($important: false) {
+  $i: if($important, '!important', '');
+  background: rgba(0, 0, 0, 0) #{$i};
+  backdrop-filter: blur(30px) saturate(1.3) #{$i};
+  -webkit-backdrop-filter: blur(30px) saturate(1.3) #{$i};
+  @include g-glass-fallbacks(rgba(0, 0, 0, 0.96));
+}

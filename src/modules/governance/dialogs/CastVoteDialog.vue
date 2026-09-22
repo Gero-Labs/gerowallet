@@ -418,19 +418,19 @@ watch(
 );
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .cast-vote {
   display: flex;
   flex-direction: column;
   gap: var(--g-s-3);
 }
 .cast-vote__banner {
+  @include g-glass-tier(false);
   display: flex;
   align-items: center;
   padding: var(--g-s-2) var(--g-s-3);
   border-radius: var(--g-r-control);
   border: 1px solid var(--g-hairline-2);
-  background: var(--g-raised);
   color: var(--g-text-2);
 }
 .cast-vote__banner--blocked {
@@ -445,11 +445,11 @@ watch(
   text-align: center;
 }
 .cast-vote__action {
+  @include g-glass-tier(false);
   display: flex;
   flex-direction: column;
   gap: var(--g-s-2);
   padding: var(--g-s-3);
-  background: var(--g-surface);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-card);
 }
@@ -501,12 +501,12 @@ watch(
   gap: var(--g-s-2);
 }
 .cast-vote__summary-row {
+  @include g-glass-tier(false);
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: var(--g-s-3);
   padding: var(--g-s-2) var(--g-s-3);
-  background: var(--g-surface);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-control);
 }

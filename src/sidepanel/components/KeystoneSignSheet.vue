@@ -146,7 +146,7 @@ const handleProgress = (progress: number) => {
 <!-- Unscoped on purpose: content-class lands on Vuetify's detached dialog
      root, which no scoped selector can reach. The class name is unique to this
      component, so nothing else can pick the rule up. -->
-<style>
+<style lang="scss">
 .ks-sheet-dialog.v-dialog {
   margin: 0;
   width: 100%;
@@ -156,9 +156,9 @@ const handleProgress = (progress: number) => {
 }
 </style>
 
-<style scoped>
+<style scoped lang="scss">
 .ks-sheet {
-  background: var(--g-overlay);
+  @include g-glass-overlay(false);
   border: 1px solid var(--g-hairline-3);
   border-bottom: none;
   border-radius: var(--g-r-sheet) var(--g-r-sheet) 0 0;

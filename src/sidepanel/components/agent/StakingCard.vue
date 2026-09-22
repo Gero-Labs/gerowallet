@@ -403,11 +403,11 @@ export default defineComponent({
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .staking-card {
+  @include g-glass-panel(false);
   border-radius: var(--g-r-card);
   padding: 10px;
-  background: var(--g-raised);
   font-size: 13px;
 }
 

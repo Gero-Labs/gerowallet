@@ -1,30 +1,48 @@
 /* ============================================================
-   Glass canon: glass means "this floats above content".
-   Exactly 5 materials. Static cards must NOT use these classes;
-   they are solid var(--g-raised) with a hairline border.
-   (Material 4 "panel" is the exception that proves the rule: the
-   in-page hero panels were already glass ad hoc — see PortfolioChart /
-   RecentTransactionsCard — so it names that recipe instead of letting
-   a third copy drift. Material 5 "liquid" is for cards that sit directly
-   on imagery — the welcome wallet rows, mini-Gero's Midnight cards.)
+   Glass canon (design-system, 2026-09-22): glass is the BASELINE.
+   Every surface — page cards, nested cards, rows, tiles, dialog
+   internals — is a see-through material by default. A solid surface
+   is the exception and needs a UX justification (readability or
+   accessibility) in a comment where it is declared. The sanctioned
+   exceptions are:
+     - menus / tooltips / dropdowns (Material 3): float over dense
+       numeric tables and must stay legible;
+     - controls, not surfaces: inputs, chips, pills, avatars, progress
+       tracks, code/JSON blocks (glass on them is noise and each one is
+       another compositing layer);
+     - table ROWS: the enclosing card carries the material; 50 blurred
+       rows inside a blurred card is a real GPU cost;
+     - the prefers-reduced-transparency / prefers-contrast fallbacks
+       below, which go opaque for everyone at once.
 
-   The legacy class names are kept as aliases so ~107 existing
-   template usages keep working; sweeps migrate them to the
-   glass-* names.
+   Six materials, two families:
+     floating (chrome, overlay, popover) — "this floats above content";
+     surface (panel, tier, liquid) — the in-page cards themselves.
+   Nested cards go on `glass-tier`, never on a solid token: a card
+   inside a glass panel is a lighter pane over it, not an opaque slab.
+   SFC styles that can't put a class on the element reach the same
+   recipes through the mixins in _glass.scss (auto-injected) so the
+   material — and its accessibility fallbacks — never gets forked.
+
+   The legacy class names (liquid-glass, -subtle, -compact) are kept
+   as aliases of the PANEL material. They used to alias the popover
+   material, which at 97% opacity rendered every "liquid-glass" card
+   solid; the ~70 template usages now read as the glass they claim.
+   Menus that relied on the old alias moved to `glass-popover`.
 
    SPECIFICITY NOTE: src/options/App.vue declares an unscoped
    `.v-card { background-color: ... !important }` (0,1,0). SFC styles are
-   injected AFTER these imported stylesheets, so a bare `.liquid-glass`
-   (also 0,1,0 !important) would LOSE the tie on source order and every
-   glass v-card would render solid. The `.v-card.<alias>` selectors below
+   injected AFTER these imported stylesheets, so a bare `.glass-panel`
+   (also 0,1,0) would LOSE the tie on source order and every glass
+   v-card would render solid. The `.v-card.<class>` selectors below
    (0,2,0) exist purely to outrank it. When that global rule is deleted,
    the `.v-card.` variants can go too.
    ============================================================ */
 
-/* Readability pass (design-system, 2026-07-14): every glass material had its
-   opacity + blur raised so small/mono content stays legible over busy pages
-   (dense portfolios, token lists). The two floating materials share one cool
-   tint (18,21,28) that separates the sheet from the black canvas without
+/* Readability pass (design-system, 2026-07-14): the floating materials had
+   their opacity + blur raised so small/mono content stays legible over busy
+   pages (dense portfolios, token lists). The two floating materials share one
+   cool tint (18,21,28) that separates the sheet from the black canvas without
    reading as a colored panel; chrome stays black as the app frame. */
 
 /* Material 1: chrome (nav drawer, app bar when content scrolls under) */
@@ -52,12 +70,11 @@
   box-shadow: var(--g-shadow-sheet) !important;
 }
 
-/* Solid variant (opt-in via BaseDialog :solid). Opaque surface, blur disabled,
-   for dialogs that reopen: the glass re-composites lighter on the 2nd open
-   (Vuetify keeps the card mounted; the blur re-evaluates over a lighter/stacked
-   backdrop). var(--g-surface) matches the near-black the glass already renders
-   on the 1st open, so it looks identical and stays put. Higher specificity
-   (0,3,0) + later source order to beat the base rule. */
+/* Solid variant (opt-in via BaseDialog :solid). Opaque surface, blur disabled.
+   Under the glass baseline a caller must state a readability need to use it.
+   It was introduced as a workaround for the glass re-compositing lighter on a
+   dialog's second open; at the overlay's current 97.5% opacity that shift is
+   imperceptible, so the two callers were moved back to the glass overlay. */
 .liquid-glass-dialog--solid,
 .v-card.liquid-glass-dialog.liquid-glass-dialog--solid {
   background: var(--g-surface) !important;
@@ -65,15 +82,10 @@
   -webkit-backdrop-filter: none !important;
 }
 
-/* Material 3: popover (menus, tooltips; lightest) */
+/* Material 3: popover (menus, tooltips, dropdowns; near-opaque on purpose —
+   these float over dense numeric tables and must stay legible). */
 .glass-popover,
-.liquid-glass,
-.liquid-glass-subtle,
-.liquid-glass-compact,
-.v-card.glass-popover,
-.v-card.liquid-glass,
-.v-card.liquid-glass-subtle,
-.v-card.liquid-glass-compact {
+.v-card.glass-popover {
   background: rgba(18, 21, 28, 0.97) !important;
   backdrop-filter: blur(26px) saturate(1.25) !important;
   -webkit-backdrop-filter: blur(26px) saturate(1.25) !important;
@@ -82,14 +94,16 @@
   box-shadow: var(--g-shadow-menu) !important;
 }
 
-/* Material 4: panel (in-page hero panels + table/widget cards; the visibly
-   see-through one). Same recipe PortfolioChart + RecentTransactionsCard used
-   to carry locally. Base rule stays unflagged for plain-div consumers; the
-   flagged .v-card variant below exists because the 2026-07-15 table migration
-   put v-cards on this material (see specificity note above — App.vue's global
-   .v-card background would repaint them solid, and Vuetify's .v-sheet.v-card
-   radius/border would win the tie otherwise). */
-.glass-panel {
+/* Material 4: panel — THE default in-page card (hero panels, table/widget
+   cards, page sections). Visibly see-through. Base rule stays unflagged for
+   plain-div consumers; the flagged .v-card variant exists because of the
+   specificity note above (App.vue's global .v-card background would repaint
+   them solid, and Vuetify's .v-sheet.v-card radius/border would win the tie).
+   Mirror of `g-glass-panel` in _glass.scss — change both together. */
+.glass-panel,
+.liquid-glass,
+.liquid-glass-subtle,
+.liquid-glass-compact {
   background: rgba(0, 0, 0, 0.4);
   backdrop-filter: blur(20px) saturate(1.8);
   -webkit-backdrop-filter: blur(20px) saturate(1.8);
@@ -97,7 +111,10 @@
   border-radius: var(--g-r-card);
 }
 
-.v-card.glass-panel {
+.v-card.glass-panel,
+.v-card.liquid-glass,
+.v-card.liquid-glass-subtle,
+.v-card.liquid-glass-compact {
   background: rgba(0, 0, 0, 0.4) !important;
   border: 1px solid var(--g-hairline-1) !important;
   border-radius: var(--g-r-card) !important;
@@ -137,30 +154,54 @@
     var(--g-shadow-menu) !important;
 }
 
+/* Material 6: tier — a card nested inside another glass surface (pool cards
+   in the staking panel, governance action rows, blog cards, choice cards and
+   summary boxes inside dialogs). A lighter pane over the parent: cooler tint
+   than the panel, shorter blur so it reads as a second sheet rather than a
+   second wall. Interactive tiers lift the hairline to the accent on hover
+   (see `g-glass-tier-hover`); the selected state deepens the tint
+   (`g-glass-tier-active`) instead of painting a solid token.
+   Mirror of `g-glass-tier` in _glass.scss — change both together. */
+.glass-tier {
+  background: rgba(18, 21, 28, 0.3);
+  backdrop-filter: blur(14px) saturate(1.25);
+  -webkit-backdrop-filter: blur(14px) saturate(1.25);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-card);
+}
+
+.v-card.glass-tier {
+  background: rgba(18, 21, 28, 0.3) !important;
+  border: 1px solid var(--g-hairline-1) !important;
+  border-radius: var(--g-r-card) !important;
+}
+
 /* No-blur fallback: go opaque */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .glass-chrome, .liquid-glass-nav-drawer,
   .v-navigation-drawer.liquid-glass-nav-drawer { background: rgba(0, 0, 0, 0.96) !important; }
   .glass-overlay, .liquid-glass-dialog,
   .v-card.liquid-glass-dialog { background: rgba(18, 21, 28, 0.98) !important; }
-  .glass-popover, .liquid-glass, .liquid-glass-subtle, .liquid-glass-compact,
-  .v-card.liquid-glass, .v-card.liquid-glass-subtle, .v-card.liquid-glass-compact { background: rgba(18, 21, 28, 0.98) !important; }
-  /* Unflagged: base .glass-panel is unflagged too, so source order wins. */
-  .glass-panel { background: var(--g-surface); }
-  .v-card.glass-panel { background: var(--g-surface) !important; }
+  .glass-popover, .v-card.glass-popover { background: rgba(18, 21, 28, 0.98) !important; }
+  /* Unflagged: the base surface rules are unflagged too, so source order wins. */
+  .glass-panel, .liquid-glass, .liquid-glass-subtle, .liquid-glass-compact { background: var(--g-surface); }
+  .v-card.glass-panel, .v-card.liquid-glass, .v-card.liquid-glass-subtle, .v-card.liquid-glass-compact { background: var(--g-surface) !important; }
   .glass-liquid { background: var(--g-raised); }
   .v-card.glass-liquid { background: var(--g-raised) !important; }
+  .glass-tier { background: var(--g-raised); }
+  .v-card.glass-tier { background: var(--g-raised) !important; }
 }
 
 /* User preference: no transparency */
 @media (prefers-reduced-transparency: reduce) {
   .glass-chrome, .liquid-glass-nav-drawer,
   .glass-overlay, .liquid-glass-dialog,
-  .glass-popover, .liquid-glass, .liquid-glass-subtle, .liquid-glass-compact, .glass-panel, .glass-liquid,
+  .glass-popover, .glass-panel, .liquid-glass, .liquid-glass-subtle, .liquid-glass-compact, .glass-liquid, .glass-tier,
   .v-navigation-drawer.liquid-glass-nav-drawer,
   .v-card.liquid-glass-dialog,
-  .v-card.liquid-glass, .v-card.liquid-glass-subtle, .v-card.liquid-glass-compact,
-  .v-card.glass-panel, .v-card.glass-liquid {
+  .v-card.glass-popover,
+  .v-card.glass-panel, .v-card.liquid-glass, .v-card.liquid-glass-subtle, .v-card.liquid-glass-compact,
+  .v-card.glass-liquid, .v-card.glass-tier {
     background: var(--g-overlay) !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
@@ -171,11 +212,12 @@
 @media (prefers-contrast: more) {
   .glass-chrome, .liquid-glass-nav-drawer,
   .glass-overlay, .liquid-glass-dialog,
-  .glass-popover, .liquid-glass, .liquid-glass-subtle, .liquid-glass-compact, .glass-panel, .glass-liquid,
+  .glass-popover, .glass-panel, .liquid-glass, .liquid-glass-subtle, .liquid-glass-compact, .glass-liquid, .glass-tier,
   .v-navigation-drawer.liquid-glass-nav-drawer,
   .v-card.liquid-glass-dialog,
-  .v-card.liquid-glass, .v-card.liquid-glass-subtle, .v-card.liquid-glass-compact,
-  .v-card.glass-panel, .v-card.glass-liquid {
+  .v-card.glass-popover,
+  .v-card.glass-panel, .v-card.liquid-glass, .v-card.liquid-glass-subtle, .v-card.liquid-glass-compact,
+  .v-card.glass-liquid, .v-card.glass-tier {
     background: var(--g-overlay) !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
