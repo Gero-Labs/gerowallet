@@ -147,14 +147,14 @@
 import { ref, computed, toRefs, watch, onMounted } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import stakingStoreActions, { stakingStore as stakingStoreState, StakingStore } from '@/stores/stakingStore';
-
-// Element type of the store's paginated pool list, so this view tracks the backend pool shape.
-type Pool = StakingStore['pools'][number];
 import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
 import BottomSheet from '../../components/BottomSheet.vue';
 import { useChainContext } from '../../composables/useChainContext';
 import debounce from 'lodash/debounce';
+
+// Element type of the store's paginated pool list, so this view tracks the backend pool shape.
+type Pool = StakingStore['pools'][number];
 
 const { themeColors } = useChainContext();
 const primaryColor = computed(() => themeColors.value.primary);
