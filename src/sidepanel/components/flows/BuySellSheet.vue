@@ -26,35 +26,8 @@
         </div>
       </div>
 
-      <!-- ═══════ STEP 2: PROVIDER ═══════ -->
-      <div v-else-if="step === 2" class="step-content">
-        <div class="provider-list">
-          <div
-            v-for="p in providers"
-            :key="p.name"
-            class="provider-item"
-            @click="chooseProvider(p.name)"
-          >
-            <img :src="p.image" class="provider-logo" />
-            <div v-if="p.subtitle" class="text-caption grey--text mt-1">
-              {{ p.subtitle }}
-            </div>
-          </div>
-        </div>
-        <v-btn
-          text
-          small
-          :color="primaryColor"
-          class="mt-4"
-          @click="step = 1"
-        >
-          <v-icon small left>mdi-arrow-left</v-icon>
-          {{ $t('common.back') }}
-        </v-btn>
-      </div>
-
-      <!-- ═══════ STEP 3: IFRAME WIDGET ═══════ -->
-      <div v-else-if="step === 3" class="step-content iframe-step">
+      <!-- ═══════ STEP 2: MOONPAY WIDGET ═══════ -->
+      <div v-else class="step-content iframe-step">
         <v-progress-circular
           v-if="iframeLoading"
           size="48"
@@ -75,7 +48,7 @@
           small
           :color="primaryColor"
           class="back-btn"
-          @click="goBackToProviders"
+          @click="goBack"
         >
           <v-icon small left>mdi-arrow-left</v-icon>
           {{ $t('common.back') }}
@@ -91,7 +64,6 @@ import { ref, computed, watch, toRefs } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { walletStore } from '@/stores/walletStore';
 import moonPayApi from '@/api/moonpay-api';
-import assets from '@/utils/assets';
 import BottomSheet from '../BottomSheet.vue';
 import { useChainContext } from '../../composables/useChainContext';
 
@@ -99,7 +71,6 @@ const { themeColors } = useChainContext();
 const primaryColor = computed(() => themeColors.value.primary);
 
 const moonPayApiKey = import.meta.env.VITE_MOONPAY_API_KEY;
-const guardarianApiKey = import.meta.env.VITE_GUARDARIAN_API_KEY;
 
 const props = defineProps<{ value: boolean }>();
 const emit = defineEmits<{ (e: 'input', v: boolean): void }>();
@@ -112,60 +83,42 @@ const method = ref<'BUY' | 'SELL' | null>(null);
 const iframeUrl = ref('');
 const iframeLoading = ref(true);
 
-const providers = [
-  { name: 'guardarian', image: assets.guardarian, subtitle: t('wallet.guardarianOffer') },
-  { name: 'moonpay', image: assets.moonpay, subtitle: '' },
-];
+// MoonPay is the only fiat on/off-ramp (Guardarian was removed 2026-09), so
+// choosing Buy or Sell loads the widget directly — no provider step.
+const title = computed(() => (step.value === 1 ? t('wallet.buySell') : t('wallet.finalize')));
 
-const title = computed(() => {
-  if (step.value === 1) return t('wallet.buySell');
-  if (step.value === 2) return t('wallet.provider');
-  return t('wallet.finalize');
-});
-
-function chooseMethod(m: 'BUY' | 'SELL') {
+async function chooseMethod(m: 'BUY' | 'SELL') {
   method.value = m;
-  step.value = 2;
-}
-
-async function chooseProvider(name: string) {
   iframeLoading.value = true;
   iframeUrl.value = '';
   const address = loggedWallet.value?.baseAddress?.value || '';
 
-  if (method.value === 'BUY') {
-    if (name === 'moonpay') {
-      try {
-        iframeUrl.value = await moonPayApi.moonPaySign(
-          `https://buy.moonpay.com/?apiKey=${moonPayApiKey}&enabledPaymentMethods=credit_debit_card&theme=dark&currencyCode=ada&walletAddress=${address}&colorCode=%232f9cac&baseCurrencyCode=usd`
-        );
-      } catch (e) {
-        console.error('[BuySell] Moonpay sign error:', e);
-      }
-    } else if (name === 'guardarian') {
-      iframeUrl.value = `https://guardarian.com/calculator/v1?partner_api_token=${guardarianApiKey}&theme=blue&type=narrow&swap_enabled=true&default_from_amount=100&default_fiat_currency=USD&default_crypto_currency=ADA&crypto_currencies_list=%5B%7B%22ticker%22%3A%22ADA%22%2C%22network%22%3A%22ADA%22%7D%5D&default_side=buy_crypto&side_toggle_disabled=true&body_background=transparent&button_background=hex_2f9cac&calc_background=hex_000000&select_background=rgb(47,156,172)&button_background_disabled=hex_2f9cac&submit_button_color=white&widget_height=390`;
+  if (m === 'BUY') {
+    try {
+      iframeUrl.value = await moonPayApi.moonPaySign(
+        `https://buy.moonpay.com/?apiKey=${moonPayApiKey}&enabledPaymentMethods=credit_debit_card&theme=dark&currencyCode=ada&walletAddress=${address}&colorCode=%232f9cac&baseCurrencyCode=usd`
+      );
+    } catch (e) {
+      console.error('[BuySell] Moonpay sign error:', e);
     }
-  } else if (method.value === 'SELL') {
-    if (name === 'moonpay') {
-      try {
-        iframeUrl.value = await moonPayApi.moonPaySign(
-          `https://sell.moonpay.com/?apiKey=${moonPayApiKey}&paymentMethod=credit_debit_card&theme=dark&currencyCode=ada&refundWalletAddress=${address}&colorCode=%232f9cac&baseCurrencyCode=eur`
-        );
-      } catch (e) {
-        console.error('[BuySell] Moonpay sign error:', e);
-      }
-    } else if (name === 'guardarian') {
-      iframeUrl.value = `https://guardarian.com/calculator/v1?partner_api_token=${guardarianApiKey}&theme=blue&type=narrow&swap_enabled=true&default_from_amount=100&default_fiat_currency=USD&default_crypto_currency=ADA&crypto_currencies_list=%5B%7B%22ticker%22%3A%22ADA%22%2C%22network%22%3A%22ADA%22%7D%5D&default_side=sell_crypto&side_toggle_disabled=true&body_background=transparent&button_background=hex_2f9cac&calc_background=hex_000000&select_background=rgb(47,156,172)&button_background_disabled=hex_2f9cac&submit_button_color=white&widget_height=390`;
+  } else {
+    try {
+      iframeUrl.value = await moonPayApi.moonPaySign(
+        `https://sell.moonpay.com/?apiKey=${moonPayApiKey}&paymentMethod=credit_debit_card&theme=dark&currencyCode=ada&refundWalletAddress=${address}&colorCode=%232f9cac&baseCurrencyCode=eur`
+      );
+    } catch (e) {
+      console.error('[BuySell] Moonpay sign error:', e);
     }
   }
 
-  step.value = 3;
+  step.value = 2;
 }
 
-function goBackToProviders() {
+function goBack() {
   iframeUrl.value = '';
   iframeLoading.value = true;
-  step.value = 2;
+  method.value = null;
+  step.value = 1;
 }
 
 function onClose(v: boolean) {
@@ -183,7 +136,7 @@ watch(() => props.value, (open) => {
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .buy-sell-sheet {
   display: flex;
   flex-direction: column;
@@ -208,6 +161,7 @@ watch(() => props.value, (open) => {
 }
 
 .choice-card {
+  @include g-glass-tier(false);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -217,7 +171,6 @@ watch(() => props.value, (open) => {
   /* Solid raised surface so the white "Buy/Sell ADA" label and description
      always read at full contrast (was a 5%-white translucent tint that went
      low-contrast over lighter backdrops). */
-  background: var(--g-raised);
   border: 1px solid var(--g-hairline-1);
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
@@ -243,39 +196,7 @@ watch(() => props.value, (open) => {
   color: var(--g-text-2);
 }
 
-/* ── Step 2: Provider list ── */
-.provider-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  width: 100%;
-  margin-top: 16px;
-}
-
-.provider-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-  border-radius: var(--g-r-card);
-  border: 1px solid var(--g-hairline-2);
-  background: rgba(255, 255, 255, 0.04);
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-
-.provider-item:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: color-mix(in srgb, var(--g-accent) 30%, transparent);
-}
-
-.provider-logo {
-  height: 28px;
-  object-fit: contain;
-}
-
-/* ── Step 3: iframe ── */
+/* ── Step 2: iframe ── */
 .iframe-step {
   position: relative;
   flex: 1;
