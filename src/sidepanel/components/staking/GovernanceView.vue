@@ -350,9 +350,9 @@ onMounted(async () => {
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .governance-info-card {
-  background: var(--g-surface);
+  @include g-glass-panel(false);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-control);
   padding: 12px 14px;
@@ -393,12 +393,12 @@ onMounted(async () => {
   flex: 1;
 }
 
-.delegation-select >>> .v-input__slot {
+.delegation-select ::v-deep .v-input__slot {
   background: var(--g-surface) !important;
   min-height: 36px !important;
 }
 
-.delegation-select >>> .v-input__slot fieldset {
+.delegation-select ::v-deep .v-input__slot fieldset {
   border-color: var(--g-hairline-1) !important;
 }
 
@@ -415,12 +415,12 @@ onMounted(async () => {
   color: var(--g-text-1) !important;
 }
 
-.drep-search >>> .v-input__slot {
+.drep-search ::v-deep .v-input__slot {
   background: var(--g-surface) !important;
   min-height: 36px !important;
 }
 
-.drep-search >>> .v-input__slot fieldset {
+.drep-search ::v-deep .v-input__slot fieldset {
   border-color: var(--g-hairline-1) !important;
 }
 
@@ -433,7 +433,7 @@ onMounted(async () => {
 }
 
 .drep-item {
-  background: var(--g-surface);
+  @include g-glass-tier(false);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-control);
   padding: 10px 12px;
@@ -445,7 +445,7 @@ onMounted(async () => {
 }
 
 .drep-item:hover {
-  background: var(--g-raised);
+  @include g-glass-tier-hover(false);
 }
 
 .drep-item-left {
@@ -495,7 +495,7 @@ onMounted(async () => {
 
 /* Delegate confirmation */
 .confirm-drep-info {
-  background: var(--g-surface);
+  @include g-glass-tier(false);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-control);
   padding: 14px;

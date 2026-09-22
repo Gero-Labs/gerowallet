@@ -597,7 +597,7 @@ async function confirmRegistration() {
 void props;
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 /* ── Status pill ─────────────────────────────────────────────────────────────
    Compact one-liner replacing the previous full-bleed alert. Color-coded dot
    communicates state at a glance without dominating the dialog. */
@@ -816,7 +816,7 @@ void props;
 /* ── Generation stats (post-registration) ──────────────────────────────────── */
 
 .generation-stats {
-  background: var(--g-surface);
+  @include g-glass-tier(false);
   border-radius: var(--g-r-control);
   padding: 12px 14px;
   margin-top: 8px;

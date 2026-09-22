@@ -614,7 +614,7 @@ async function onDelegate(): Promise<void> {
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .drep-profile {
   display: flex;
   flex-direction: column;
@@ -740,11 +740,11 @@ async function onDelegate(): Promise<void> {
   gap: var(--g-s-2);
 }
 .drep-profile__vote {
+  @include g-glass-tier(false);
   display: flex;
   flex-direction: column;
   gap: var(--g-s-2);
   padding: var(--g-s-3);
-  background: var(--g-raised);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-control);
 }

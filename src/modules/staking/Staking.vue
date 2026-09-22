@@ -711,7 +711,7 @@ onBeforeUnmount(() => {
   stakingStore.clearCurrentPool();
 });
 </script>
-<style scoped>
+<style scoped lang="scss">
 .v-progress-linear__determinate {
   background: var(--g-accent);
 }
@@ -827,12 +827,11 @@ onBeforeUnmount(() => {
   color: var(--g-text-1);
 }
 
-/* Pool cards: a raised card with a hairline that lifts to the chain accent on
-   hover. The label/value tone gap is the hierarchy (both were text-1 before).
-   Translucent fill (not solid cardBackground): these sit INSIDE the glass-panel
-   container, and nested tiers over glass are tints, not opaque slabs. */
+/* Pool cards: a glass tier (Material 6) nested in the glass-panel container —
+   a lighter pane over it, never a solid slab — with a hairline that lifts to
+   the chain accent on hover. The label/value tone gap is the hierarchy. */
 .pool-card {
-  background: var(--g-hairline-1) !important;
+  @include g-glass-tier(true);
   border-radius: var(--g-r-card);
   border: 1px solid var(--g-hairline-1) !important;
   transition: border-color var(--g-dur-fast) ease, transform var(--g-dur-fast) ease,

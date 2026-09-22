@@ -572,7 +572,7 @@ watch(() => props.params, (p) => {
 }, { immediate: true });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 /* ── Step Progress ── */
 .step-track {
   display: flex;
@@ -773,8 +773,8 @@ watch(() => props.params, (p) => {
 }
 
 .fee-card {
+  @include g-glass-tier(false);
   padding: 14px 12px;
-  background: var(--g-raised);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-card);
   cursor: pointer;
@@ -782,7 +782,7 @@ watch(() => props.params, (p) => {
 }
 
 .fee-card:hover {
-  background: var(--g-overlay);
+  @include g-glass-tier-hover(false);
   transform: translateY(-1px);
 }
 
@@ -831,7 +831,7 @@ watch(() => props.params, (p) => {
 
 /* ── Summary ── */
 .tx-summary {
-  background: var(--g-raised);
+  @include g-glass-tier(false);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-card);
   padding: 14px 16px;
@@ -866,7 +866,7 @@ watch(() => props.params, (p) => {
 
 /* ── Confirm panel ── */
 .confirm-panel {
-  background: var(--g-raised);
+  @include g-glass-tier(false);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-card);
   padding: 20px 20px 16px;

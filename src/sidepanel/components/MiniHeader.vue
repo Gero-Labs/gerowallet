@@ -147,8 +147,9 @@ function openFullDashboard() {
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .mini-header {
+  @include g-glass-chrome(false);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -157,7 +158,6 @@ function openFullDashboard() {
   position: sticky;
   top: 0;
   z-index: var(--g-z-sticky);
-  background: var(--g-surface);
   border-bottom: 1px solid var(--g-hairline-1);
   flex-shrink: 0;
 }

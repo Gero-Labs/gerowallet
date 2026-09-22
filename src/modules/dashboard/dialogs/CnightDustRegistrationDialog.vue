@@ -746,7 +746,7 @@ watch(() => props.isOpen, (open) => {
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 /* Status pill + flow diagram mirror DustRegistrationDialog so the DUST
    feature reads identically from the Midnight and Cardano sides. */
 
@@ -808,7 +808,7 @@ watch(() => props.isOpen, (open) => {
 /* ── Holdings card ─────────────────────────────────────────────────────────── */
 
 .holdings-card {
-  background: var(--g-surface);
+  @include g-glass-tier(false);
   border: 1px solid var(--g-hairline-2);
   border-radius: var(--g-r-card);
   padding: 14px 16px;
@@ -967,12 +967,12 @@ watch(() => props.isOpen, (open) => {
 }
 
 .manage-note {
+  @include g-glass-tier(false);
   font-size: 12px;
   color: var(--g-text-2);
   line-height: 1.5;
   padding: 10px 12px;
   border-radius: var(--g-r-control);
-  background: var(--g-surface);
   border: 1px solid var(--g-hairline-2);
 }
 
@@ -1009,13 +1009,13 @@ watch(() => props.isOpen, (open) => {
 }
 
 .replicate-row {
+  @include g-glass-tier(false);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   padding: 10px 12px;
   border-radius: var(--g-r-control);
-  background: var(--g-surface);
   border: 1px solid var(--g-hairline-2);
 }
 

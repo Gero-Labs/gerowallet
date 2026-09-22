@@ -152,7 +152,7 @@ function copyAddress() {
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .receive-sheet {
   display: flex;
   flex-direction: column;
@@ -202,7 +202,7 @@ function copyAddress() {
 }
 
 .address-box {
-  background: var(--g-raised);
+  @include g-glass-tier(false);
   border-radius: var(--g-r-card);
   padding: 12px 16px;
   display: flex;

@@ -455,7 +455,7 @@ const faqs = computed(() => ([
 ]));
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .proof-server-page {
   max-width: 760px;
   margin: 0 auto;
@@ -488,7 +488,7 @@ const faqs = computed(() => ([
 }
 
 .ps-card {
-  background: var(--g-surface);
+  @include g-glass-panel(false);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-sheet);
   padding: var(--g-s-5);
@@ -519,11 +519,11 @@ const faqs = computed(() => ([
 }
 
 .ps-mode-card {
+  @include g-glass-tier(false);
   display: flex;
   align-items: flex-start;
   gap: var(--g-s-3);
   text-align: left;
-  background: var(--g-surface);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-sheet);
   padding: var(--g-s-4);

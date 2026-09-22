@@ -46,13 +46,13 @@ function onTab(tab: NavTab) {
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .bottom-nav {
+  @include g-glass-chrome(false);
   display: flex;
   justify-content: space-around;
   align-items: center;
   height: 56px;
-  background: var(--g-surface);
   border-top: 1px solid var(--g-hairline-1);
   padding: 0 8px;
   flex-shrink: 0;

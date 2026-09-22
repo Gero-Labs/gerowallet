@@ -245,7 +245,7 @@ function openTxDetail(tx: StoredTransaction) {
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .activity-page {
   min-height: 100%;
 }
@@ -271,11 +271,11 @@ function openTxDetail(tx: StoredTransaction) {
 }
 
 .tx-item:hover {
-  background: var(--g-raised);
+  @include g-glass-tier-hover(false);
 }
 
 .tx-item:active {
-  background: var(--g-overlay);
+  @include g-glass-tier-active(false);
 }
 
 .tx-icon-wrapper {

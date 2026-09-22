@@ -78,7 +78,7 @@
             </v-badge>
           </v-btn>
         </template>
-        <v-card class="liquid-glass-compact" dark>
+        <v-card class="glass-popover" dark>
           <v-card-text class="pa-3">
             <!-- Date range -->
             <div class="filter-section-label t-label">{{ $t('transactions.dateRange') }}</div>

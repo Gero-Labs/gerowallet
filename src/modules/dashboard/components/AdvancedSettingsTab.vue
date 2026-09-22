@@ -362,7 +362,7 @@ onMounted(() => {
   });
 });
 </script>
-<style scoped>
+<style scoped lang="scss">
 .custom-loader {
   animation: loader 1s infinite;
   display: flex;
@@ -403,10 +403,10 @@ onMounted(() => {
 /* ── Midnight proof server (at-a-glance summary; full UI on its own page) ── */
 
 .proof-server-summary {
+  @include g-glass-tier(false);
   display: flex;
   align-items: center;
   gap: 12px;
-  background: var(--g-surface);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-card);
   padding: 12px 14px;

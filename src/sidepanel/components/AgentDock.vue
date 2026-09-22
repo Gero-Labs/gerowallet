@@ -773,7 +773,7 @@ export default defineComponent({
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .agent-dock {
   --surface: var(--g-overlay);
   --surface-border: color-mix(in srgb, var(--g-accent) 22%, transparent);
@@ -1103,11 +1103,11 @@ export default defineComponent({
    see the template comment where it's placed — so margin (not the messages
    flex-column's gap) provides the spacing on each side. */
 .agent-dock__notice {
+  @include g-glass-tier(false);
   flex-shrink: 0;
   margin: 0 12px 10px;
   padding: 8px 10px;
   border-radius: var(--g-r-chip);
-  background: var(--g-raised);
   border: 1px solid var(--g-hairline-2);
   color: var(--g-text-2);
   font-size: 12px;

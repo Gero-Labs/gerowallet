@@ -251,7 +251,7 @@ watch(isConnected, (val) => {
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .onboarding-wrap {
   display: flex;
   align-items: center;
@@ -261,13 +261,13 @@ watch(isConnected, (val) => {
 }
 
 .onboarding-card {
+  @include g-glass-panel(false);
   width: 100%;
   max-width: 300px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 16px;
-  background: var(--g-surface);
   border-radius: var(--g-r-sheet);
   border: 1px solid var(--g-hairline-2);
   padding: 28px 20px 24px;
@@ -390,12 +390,12 @@ watch(isConnected, (val) => {
 }
 
 .hw-notice {
+  @include g-glass-tier(false);
   display: flex;
   align-items: flex-start;
   padding: var(--g-s-3);
   border: 1px solid var(--g-hairline-2);
   border-radius: var(--g-r-control);
-  background: var(--g-raised);
   color: var(--g-text-2);
   font-size: 12px;
   line-height: 1.45;
@@ -440,22 +440,22 @@ watch(isConnected, (val) => {
   width: 100%;
 }
 
-.password-field >>> .v-input__slot {
+.password-field ::v-deep .v-input__slot {
   background: var(--g-raised) !important;
   border-radius: var(--g-r-control) !important;
   min-height: 42px;
 }
 
-.password-field >>> fieldset {
+.password-field ::v-deep fieldset {
   border-color: var(--g-hairline-2) !important;
 }
 
-.password-field >>> input {
+.password-field ::v-deep input {
   color: var(--g-text-1) !important;
   font-size: 13px !important;
 }
 
-.password-field >>> .v-label {
+.password-field ::v-deep .v-label {
   font-size: 12px !important;
   color: var(--g-text-3) !important;
 }

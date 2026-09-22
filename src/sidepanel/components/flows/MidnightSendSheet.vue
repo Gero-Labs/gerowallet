@@ -939,7 +939,7 @@ const timelineLabels = computed(() => ({
 const timelineNodes = useMidnightSendTimeline(computed(() => sendStage.value), timelineLabels);
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .midnight-send-sheet {
   display: flex;
   flex-direction: column;
@@ -1096,13 +1096,13 @@ const timelineNodes = useMidnightSendTimeline(computed(() => sendStage.value), t
 /* ─── Public-tx / DUST notes — same tokens and structure as
    MidnightSendDialog.vue so the disclosure reads identically. ─── */
 .midnight-info-note {
+  @include g-glass-tier(false);
   display: flex;
   align-items: flex-start;
   gap: 2px;
   font-size: 11px;
   line-height: 1.4;
   color: var(--g-text-2);
-  background: var(--g-raised);
   border: 1px solid var(--g-hairline-2);
   border-radius: var(--g-r-control);
   padding: 8px 10px;
@@ -1164,13 +1164,13 @@ input[type='number'] {
 }
 
 .success-sponsor {
+  @include g-glass-tier(false);
   display: inline-flex;
   align-items: center;
   gap: 6px;
   margin-top: 8px;
   padding: 3px 10px;
   border-radius: var(--g-r-pill);
-  background: var(--g-raised);
   border: 1px solid var(--g-hairline-2);
   font-size: 11px;
   color: var(--g-text-2);

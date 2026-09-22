@@ -1,7 +1,6 @@
 <template>
   <BaseDialog
     :is-open="isOpen"
-    solid
     size="md"
     icon="mdi-lightning-bolt-outline"
     :title="t('midnight.sponsor.feeWallet')"
@@ -221,12 +220,12 @@ watch(() => props.isOpen, (open) => { if (open) void refresh(); }, { immediate: 
 }
 
 .fwd-row {
+  @include g-glass-tier(false);
   display: flex;
   align-items: center;
   gap: var(--g-s-2);
   width: 100%;
   padding: var(--g-s-2);
-  background: var(--g-surface);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-control);
   color: var(--g-text-1);

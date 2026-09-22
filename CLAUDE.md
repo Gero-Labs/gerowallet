@@ -187,6 +187,11 @@ One token layer, four surfaces, scarce chain accent, motion as feedback, enforce
 ### Primitives
 - `GButton` (four tiers) and the `.geroButton` gradient CTA. `BaseDialog` is THE modal primitive (`size` prop, tokenized surface, esc-to-close, house transition). Formatting: import from `src/shared/utils/format.ts` — do NOT fork `formatPrice`/`formatSignedChange`/etc. (the audit counts forks). Deltas use `formatSignedChange()` (glyph carries direction) + `delta-up`/`delta-down`, never a colored chip.
 
+### Glass (surfaces)
+- **Glass is the baseline.** Every surface — page cards, nested cards/rows/tiles, dialog internals — is a see-through material; a solid token (`--g-raised/--g-surface/--g-overlay`) on a surface needs a UX justification in a comment (readability/accessibility). Justified solids: menus/tooltips (`glass-popover`), controls (inputs, chips, pills, avatars, tracks, code blocks), `<table>` rows (the card carries the material), QR boxes.
+- Materials live in `src/shared/styles/liquid-glass.css` (classes) and are mirrored as mixins in `src/shared/styles/_glass.scss` (auto-injected into every SFC `<style lang="scss">`): `glass-panel` = default in-page card; `glass-tier` = a card nested inside another glass surface (`g-glass-tier-hover` / `-active` for states); `glass-overlay` = dialogs/sheets; `glass-chrome` = app frame; `glass-liquid` = cards directly on imagery. Change a class and its mixin together. The legacy `liquid-glass` / `-subtle` / `-compact` names alias the PANEL material.
+- Never write `backdrop-filter` in a component — use the class or `@include g-glass-<material>(<important?>)`; the `backdropFilters` ratchet counts raw occurrences.
+
 ### Gates (run before every commit; wired into the pre-commit hook)
 ```bash
 node scripts/design/audit.mjs            # ratchet: 15 metrics vs scripts/design/budgets.json
@@ -200,7 +205,7 @@ node scripts/design/contrast.mjs         # 56 WCAG checks against the real token
 Motion is feedback, not decoration. Keep spinners, ~1.4s skeleton shimmers, typing/dot indicators, and status/sync/connection pulses. Delete decorative loops (glow/breathe/float/aurora/color-shift). Durations resolve to `--g-dur-*`; prefer explicit `transition` property lists over `transition: all` (and never comma-list properties with a single trailing duration — that only animates the last one).
 
 ## External Integrations
-Data layer: **Nexus** (via gero-backend) — blockchain data, prices, DeFi/swap routing, and risk scores are all brokered server-side; the client carries no third-party data keys. Real-time: **Gero Sync** (WebSocket push). Fiat on-ramp: MoonPay, Guardarian. Other: ADA Handle, Bring Cashback. Hardware: Ledger, Trezor, Keystone.
+Data layer: **Nexus** (via gero-backend) — blockchain data, prices, DeFi/swap routing, and risk scores are all brokered server-side; the client carries no third-party data keys. Real-time: **Gero Sync** (WebSocket push). Fiat on-ramp: MoonPay (Guardarian removed 2026-09). Other: ADA Handle, Bring Cashback. Hardware: Ledger, Trezor, Keystone.
 
 ## Relevant Skills
 Use these slash commands when working on this project:

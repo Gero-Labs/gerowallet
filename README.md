@@ -57,7 +57,7 @@ Mini-Gero is a focused subset of the dashboard. Anything not in the side panel i
 - Perpetuals trading via Strike Finance: order book, market and limit orders, TWAP orders, positions and order history
 - Vaults via Strike Finance: deposit into yield vaults and track positions
 - Portfolio tracking, analytics, and real-time price feeds
-- Fiat on-ramp via MoonPay and Guardarian
+- Fiat on-ramp via MoonPay
 
 **🎁 Rewards**
 - Cashback via the Bring portal (on supported networks)
