@@ -104,6 +104,12 @@ import { ref, watch, computed } from 'vue';
 import walletStore from '@/stores/walletStore';
 import cardStore from '@/stores/modules/card';
 
+/** Shape of an entry in `walletStore.tokens`, as set by `walletBg.ts`'s `setAssets()`; only the fields read here. */
+interface HeldToken {
+  quantity?: string | number;
+  metadata?: { ticker?: string; name?: string };
+}
+
 const { t } = useTranslation();
 
 // Props
@@ -135,8 +141,7 @@ const geroBalance = computed(() => {
   const tokens = walletStore.state.tokens;
   if (tokens) {
     // Find GERO token by checking metadata ticker
-    for (const [, token] of Object.entries(tokens)) {
-      const tok: any = token;
+    for (const tok of Object.values(tokens as Record<string, HeldToken>)) {
       if (tok.metadata?.ticker === 'GERO' || tok.metadata?.name === 'GERO') {
         // Convert from smallest unit to display unit (assuming 6 decimals)
         const balance = Number(tok.quantity || 0) / 1_000_000;
