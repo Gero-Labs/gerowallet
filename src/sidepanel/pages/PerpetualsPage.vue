@@ -585,7 +585,7 @@ watch(isConnected, (connected) => {
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .perps-page {
   min-height: 100%;
   padding-bottom: 80px;
@@ -593,10 +593,10 @@ watch(isConnected, (connected) => {
 }
 
 .perps-header {
+  @include g-glass-chrome(false);
   position: sticky;
   top: 0;
   z-index: var(--g-z-sticky);
-  background: var(--g-surface);
   border-bottom: 1px solid var(--g-hairline-1);
   padding-bottom: 8px !important;
 }
@@ -675,7 +675,7 @@ watch(isConnected, (connected) => {
 }
 
 .position-card {
-  background: var(--g-surface);
+  @include g-glass-panel(false);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-card);
   padding: 12px;

@@ -688,7 +688,7 @@ watch(
 );
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .qr-container {
   border-radius: var(--g-r-control);
 }
@@ -773,7 +773,7 @@ watch(
 }
 
 .content-container {
-  background-color: var(--g-surface);
+  @include g-glass-tier(false);
   border-top: 1px solid var(--g-hairline-1);
 }
 

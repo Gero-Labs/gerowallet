@@ -774,7 +774,7 @@ async function placeOrderAction() {
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 /* ── Right column layout ─────────────────────────────────────────────── */
 
 .col-right {
@@ -812,7 +812,7 @@ async function placeOrderAction() {
 /* ── Perps modal dialogs ─────────────────────────────────────────────── */
 
 .perps-modal {
-  background: var(--g-surface) !important;
+  @include g-glass-overlay(true);
   border-radius: var(--g-r-card) !important;
   padding: 24px !important;
   border: 1px solid var(--g-raised);
@@ -996,13 +996,13 @@ async function placeOrderAction() {
   font-size: 12px !important;
 }
 
-.of-input >>> .v-input__slot {
+.of-input ::v-deep .v-input__slot {
   min-height: 32px !important;
   background: var(--g-raised) !important;
   border-color: var(--g-raised) !important;
 }
 
-.of-input >>> input {
+.of-input ::v-deep input {
   font-family: var(--g-font-mono) !important;
   font-size: 12px !important;
   color: var(--g-text-1) !important;
@@ -1149,12 +1149,12 @@ async function placeOrderAction() {
   margin: 0 !important;
   padding: 0 !important;
 }
-.of-checkbox >>> .v-label {
+.of-checkbox ::v-deep .v-label {
   font-size: 11px !important;
   color: var(--g-text-1) !important;
   font-weight: 700 !important;
 }
-.of-checkbox >>> .v-input--selection-controls__input {
+.of-checkbox ::v-deep .v-input--selection-controls__input {
   margin-right: 4px !important;
 }
 
@@ -1198,7 +1198,7 @@ async function placeOrderAction() {
   line-height: 1.4 !important;
 }
 
-.of-slippage-alert >>> .v-icon {
+.of-slippage-alert ::v-deep .v-icon {
   font-size: 14px !important;
   margin-right: 4px !important;
 }
@@ -1223,17 +1223,17 @@ async function placeOrderAction() {
 
 /* ── Custom slider ───────────────────────────────────────────────────── */
 
-.custom-slider >>> .v-slider__tick {
+.custom-slider ::v-deep .v-slider__tick {
   background-color: var(--g-hairline-3)!important;
   border-radius: 50%;
 }
-.custom-slider >>> .v-slider__thumb {
+.custom-slider ::v-deep .v-slider__thumb {
   background-color: var(--g-canvas) !important;
   border: 1px solid var(--g-success) !important;
   width: 14px!important;
   height: 14px!important;
 }
-.custom-slider >>> .v-slider--horizontal .v-slider__track-container {
+.custom-slider ::v-deep .v-slider--horizontal .v-slider__track-container {
   height: 6px !important;
 }
 </style>

@@ -294,7 +294,7 @@ watch(
 );
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .withdraw-gate {
   position: relative;
   z-index: 1;
@@ -304,12 +304,12 @@ watch(
   padding: 0 var(--g-s-2) var(--g-s-2);
 }
 .withdraw-gate__amount {
+  @include g-glass-tier(false);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--g-s-3);
   padding: var(--g-s-4) var(--g-s-5);
-  background: var(--g-raised);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-control);
 }
@@ -357,11 +357,11 @@ watch(
   gap: var(--g-s-3);
 }
 .withdraw-gate__summary-cell {
+  @include g-glass-tier(false);
   display: flex;
   flex-direction: column;
   gap: var(--g-s-1);
   padding: var(--g-s-3) var(--g-s-4);
-  background: var(--g-raised);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-control);
 }

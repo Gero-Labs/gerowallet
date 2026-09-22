@@ -344,7 +344,7 @@ onMounted(() => {
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .vaults-page {
   min-height: 100%;
   padding-bottom: 80px;
@@ -353,10 +353,10 @@ onMounted(() => {
 
 /* ── Header ── */
 .vaults-header {
+  @include g-glass-chrome(false);
   position: sticky;
   top: 0;
   z-index: var(--g-z-sticky);
-  background: var(--g-surface);
   border-bottom: 1px solid var(--g-hairline-1);
   padding-bottom: 8px !important;
 }
@@ -443,9 +443,9 @@ onMounted(() => {
 }
 
 .position-mini-card {
+  @include g-glass-tier(false);
   flex-shrink: 0;
   width: 112px;
-  background: var(--g-raised);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-control);
   padding: 10px 12px;

@@ -247,9 +247,9 @@ async function submit(): Promise<void> {
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .twap-dialog {
-  background: var(--g-overlay);
+  @include g-glass-overlay(false);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-card);
   padding: 18px;

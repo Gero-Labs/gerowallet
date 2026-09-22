@@ -70,7 +70,7 @@ export default defineComponent({
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .feed-page {
   padding: 12px 16px;
 }
@@ -111,9 +111,9 @@ export default defineComponent({
 }
 
 .feed-page__item {
+  @include g-glass-tier(false);
   padding: 10px 12px;
   border-radius: var(--g-r-card);
-  background: var(--g-surface);
 }
 
 .feed-page__time {

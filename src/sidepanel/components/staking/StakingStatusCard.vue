@@ -119,9 +119,9 @@ const delegatingTo = computed(() => {
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .status-card {
-  background: var(--g-raised);
+  @include g-glass-panel(false);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-card);
   padding: 12px 14px;

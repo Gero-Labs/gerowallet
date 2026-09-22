@@ -79,7 +79,6 @@ import geroLogoVector from '@/assets/svg/gero-logo-vector.svg'
 import geroDashboardText from '@/assets/gero-dashboard.svg'
 import geroText from '@/assets/svg/gero-text.svg'
 import apexBackground from '@/assets/background2.png'
-import guardarian from '@/modules/dashboard/assets/guardarian.svg'
 import moonpay from '@/modules/dashboard/assets/moonpay.svg'
 import welcomeImage from '@/shared/assets/welcome/welcome.png'
 import improvedUxSS from '@/shared/assets/welcome/improved_ux.png'
@@ -226,7 +225,6 @@ export default {
   apexBackground,
   cardanoBackground,
   geroDashboardApex,
-  guardarian,
   moonpay,
   welcomeImage,
   dao,

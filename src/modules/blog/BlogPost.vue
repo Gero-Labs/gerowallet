@@ -150,7 +150,7 @@ watch(() => props.slug, load);
 onMounted(load);
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .post-page {
   max-width: 760px;
   margin: 0 auto;
@@ -175,10 +175,10 @@ onMounted(load);
 .post-title { margin: 0 0 var(--g-s-4); word-break: break-word; }
 
 .post-hero {
+  @include g-glass-panel(false);
   width: 100%;
   aspect-ratio: 16 / 9;
   border-radius: var(--g-r-card);
-  background-color: var(--g-surface);
   background-size: cover;
   background-position: center;
   border: 1px solid var(--g-hairline-1);
@@ -193,7 +193,7 @@ onMounted(load);
 
 <!-- Unscoped: rich-text body is injected via v-html, so scoped [data-v] would
      never reach it. Kept narrow to .g-longform. -->
-<style>
+<style lang="scss">
 .g-longform {
   color: var(--g-text-2);
   font-size: 16px;

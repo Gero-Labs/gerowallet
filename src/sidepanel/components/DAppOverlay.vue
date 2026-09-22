@@ -3477,7 +3477,7 @@ function approveWcSession() {
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .dapp-overlay {
   display: flex;
   flex-direction: column;
@@ -3585,8 +3585,8 @@ function approveWcSession() {
 }
 
 .permissions-section {
+  @include g-glass-tier(false);
   padding: var(--g-s-3);
-  background: var(--g-raised);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-control);
 }

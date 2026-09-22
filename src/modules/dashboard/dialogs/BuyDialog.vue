@@ -22,7 +22,7 @@
         >
           {{ signingError }}
         </v-alert>
-        <v-stepper v-model="step" outlined style="background-color: transparent" >
+        <v-stepper v-model="step" flat style="background-color: transparent">
           <v-stepper-header style="box-shadow: unset">
             <v-stepper-step
               :complete="step > 1"
@@ -32,14 +32,7 @@
             </v-stepper-step>
             <v-divider></v-divider>
             <v-stepper-step
-              :complete="step > 2"
               step="2"
-            >
-              {{ $t('wallet.provider') }}
-            </v-stepper-step>
-            <v-divider></v-divider>
-            <v-stepper-step
-              step="3"
             >
               {{ $t('wallet.finalize') }}
             </v-stepper-step>
@@ -69,31 +62,6 @@
             </v-stepper-content>
             <v-stepper-content class="overflow-visible pa-0" step="2" style="height: 400px">
               <v-card
-                flat
-                class="transparent text-center justify-center"
-                style="height: 100%;align-content: center;"
-              >
-                <v-list class="transparent" outlined rounded style="max-width: 400px; margin: auto">
-                  <v-list-item
-                    v-for="(provider, index) in providers"
-                    :key="index"
-                    style="border: 1px solid #454545"
-                    @click="chooseProvider(provider.name)"
-                  >
-                    <v-list-item-content>
-                      <v-list-item-title style="height: 42px; align-content: center;" class="justify-center text-center">
-                        <v-img :src="provider.image" max-height="32" contain style="margin: auto"></v-img>
-                      </v-list-item-title>
-                      <v-list-item-subtitle v-if="provider.subtitle">
-                        {{ provider.subtitle }}
-                      </v-list-item-subtitle>
-                    </v-list-item-content>
-                  </v-list-item>
-                </v-list>
-              </v-card>
-            </v-stepper-content>
-            <v-stepper-content class="overflow-visible pa-0" step="3" style="height: 400px">
-              <v-card
                 class="transparent fill-height"
                 flat
               >
@@ -101,7 +69,7 @@
                   class="text-center justify-center py-0" style="align-content: center; margin: auto; overflow-y: clip; width: 400px; height: 391px"
                 >
                   <v-progress-circular size="60" color="primary" indeterminate v-show="loading" />
-                  <iframe v-if="provider && method" v-show="!loading"
+                  <iframe v-if="url && method" v-show="!loading"
                     style="border-radius: 24px; border: 1px solid #454545"
                     allow="accelerometer; autoplay; camera; gyroscope; payment"
                     height="100%"
@@ -141,8 +109,6 @@ import { Blockchain } from '@/models/types';
 
 //@ts-ignore
 const moonPayApiKey = import.meta.env.VITE_MOONPAY_API_KEY;
-//@ts-ignore
-const guardarianApiKey = import.meta.env.VITE_GUARDARIAN_API_KEY;
 
 const props = defineProps({
   isOpen: {
@@ -169,12 +135,9 @@ const buyDescription = computed(() => isBitcoin.value ? t('wallet.buyBTCDescript
 const sellLabel = computed(() => isBitcoin.value ? t('wallet.sellBTC') : t('wallet.sellADA'));
 const sellDescription = computed(() => isBitcoin.value ? t('wallet.sellBTCDescription') : t('wallet.sellADADescription'));
 
-const providers = [
-  {name: 'guardarian', image: assets.guardarian, subtitle: t('wallet.guardarianOffer') },
-  {name: 'moonpay', image: assets.moonpay },
-];
+// MoonPay is the only fiat on/off-ramp (Guardarian was removed 2026-09), so
+// choosing Buy or Sell loads the widget directly — no provider step.
 const method = ref<string | undefined>(undefined);
-const provider = ref<string | undefined>(undefined);
 const loading = ref(true);
 const signingError = ref('');
 
@@ -182,100 +145,77 @@ const onIframeLoad = () => {
   loading.value = false;
 };
 
-const chooseBuy = () => {
-  method.value = methods.BUY;
-  step.value++;
-};
+const chooseBuy = () => loadMoonPay(methods.BUY);
+const chooseSell = () => loadMoonPay(methods.SELL);
 
-const chooseSell = () => {
-  method.value = methods.SELL;
-  step.value++;
-};
+// A slow signing request must not be overwritten by a later pick: each call
+// takes a ticket, and only the newest one is allowed to commit its URL.
+let signTicket = 0;
 
-const chooseProvider = async (name: string) => {
-  provider.value = name;
+const loadMoonPay = async (chosen: string) => {
+  const ticket = ++signTicket;
+  method.value = chosen;
+  url.value = '';
+  loading.value = true;
+  signingError.value = '';
+  // Leave the choice screen at once so a second click cannot start a rival
+  // request while the first is still signing.
+  step.value = 2;
 
   const btc = isBitcoin.value;
   const currencyCode = btc ? 'btc' : 'ada';
-  const guardarianTicker = btc ? 'BTC' : 'ADA';
-  const guardarianNetwork = btc ? 'BTC' : 'ADA';
-  const guardarianColor = btc ? 'hex_F7931A' : 'hex_2f9cac';
-  const guardarianSelectBg = btc ? 'rgb(247,147,26)' : 'rgb(47,156,172)';
   const moonpayColor = btc ? '%23F7931A' : '%232f9cac';
   const walletAddress = btc
     ? loggedWallet.value?.baseAddress
     : loggedWallet.value?.baseAddress?.value ?? loggedWallet.value?.baseAddress;
-  const guardarianCurrencyList = encodeURIComponent(JSON.stringify([{ ticker: guardarianTicker, network: guardarianNetwork }]));
 
-  if (method.value === methods.BUY) {
-    if (name === 'moonpay') {
-      try {
-        const paymentMethodsParam = btc ? '' : '&enabledPaymentMethods=credit_debit_card';
-        const unsigned = `https://buy.moonpay.com/?apiKey=${moonPayApiKey}${paymentMethodsParam}&theme=dark&currencyCode=${currencyCode}&walletAddress=${walletAddress}&colorCode=${moonpayColor}&baseCurrencyCode=usd`;
-        const signed = await moonPayApi.moonPaySign(unsigned);
-        console.log('🌙 MoonPay signed URL:', signed);
-        if (typeof signed === 'string' && signed.includes('signature=')) {
-          url.value = signed;
-          signingError.value = '';
-        } else {
-          console.warn('🌙 MoonPay signing failed — loading unsigned URL. Response:', signed);
-          url.value = unsigned;
-          signingError.value = t('wallet.moonpaySigningWarning');
-        }
-      } catch (error) {
-        console.error(error);
-      }
-    } else if (name === 'guardarian') {
-      const defaultFiat = btc ? 'EUR' : 'USD';
-      const fiatListParam = btc ? '' : '&fiat_currencies_list=%5B%7B%22ticker%22%3A%22USD%22%2C%22network%22%3A%22USD%22%7D%5D';
-      url.value = `https://guardarian.com/calculator/v1?partner_api_token=${guardarianApiKey}&theme=blue&type=narrow&swap_enabled=true&default_from_amount=100&default_fiat_currency=${defaultFiat}${fiatListParam}&default_crypto_currency=${guardarianTicker}&crypto_currencies_list=${guardarianCurrencyList}&default_side=buy_crypto&side_toggle_disabled=true&body_background=transparent&button_background=${guardarianColor}&calc_background=hex_000000&select_background=${guardarianSelectBg}&button_background_disabled=${guardarianColor}&submit_button_color=white&widget_height=390`;
+  const paymentMethodsParam = btc ? '' : '&enabledPaymentMethods=credit_debit_card';
+  const unsigned = chosen === methods.BUY
+    ? `https://buy.moonpay.com/?apiKey=${moonPayApiKey}${paymentMethodsParam}&theme=dark&currencyCode=${currencyCode}&walletAddress=${walletAddress}&colorCode=${moonpayColor}&baseCurrencyCode=usd`
+    : `https://sell.moonpay.com/?apiKey=${moonPayApiKey}&paymentMethod=credit_debit_card&theme=dark&currencyCode=${currencyCode}&refundWalletAddress=${walletAddress}&colorCode=${moonpayColor}&baseCurrencyCode=eur`;
+
+  try {
+    const signed = await moonPayApi.moonPaySign(unsigned);
+    if (ticket !== signTicket) return;
+    if (typeof signed === 'string' && signed.includes('signature=')) {
+      url.value = signed;
+    } else {
+      console.warn('MoonPay signing failed - loading the unsigned widget.');
+      url.value = unsigned;
+      signingError.value = t('wallet.moonpaySigningWarning');
     }
-  } else if (method.value === methods.SELL) {
-    if (name === 'moonpay') {
-      try {
-        const unsigned = `https://sell.moonpay.com/?apiKey=${moonPayApiKey}&paymentMethod=credit_debit_card&theme=dark&currencyCode=${currencyCode}&refundWalletAddress=${walletAddress}&colorCode=${moonpayColor}&baseCurrencyCode=eur`;
-        const signed = await moonPayApi.moonPaySign(unsigned);
-        console.log('🌙 MoonPay sell signed URL:', signed);
-        if (typeof signed === 'string' && signed.includes('signature=')) {
-          url.value = signed;
-          signingError.value = '';
-        } else {
-          console.warn('🌙 MoonPay sell signing failed — loading unsigned URL. Response:', signed);
-          url.value = unsigned;
-          signingError.value = t('wallet.moonpaySigningWarning');
-        }
-      } catch (error) {
-        console.error(error);
-      }
-    } else if (name === 'guardarian') {
-      const defaultFiat = btc ? 'EUR' : 'USD';
-      url.value = `https://guardarian.com/calculator/v1?partner_api_token=${guardarianApiKey}&theme=blue&type=narrow&swap_enabled=true&default_from_amount=100&default_fiat_currency=${defaultFiat}&default_crypto_currency=${guardarianTicker}&crypto_currencies_list=${guardarianCurrencyList}&default_side=sell_crypto&side_toggle_disabled=true&body_background=transparent&button_background=${guardarianColor}&calc_background=hex_000000&select_background=${guardarianSelectBg}&button_background_disabled=${guardarianColor}&submit_button_color=white&widget_height=390`;
-    }
+  } catch (error) {
+    if (ticket !== signTicket) return;
+    console.error(error);
+    // Without a URL the iframe never renders and the spinner never clears.
+    // MoonPay is the only ramp now, so there is no other provider to fall
+    // back to - show the unsigned widget and say that signing failed.
+    url.value = unsigned;
+    signingError.value = t('wallet.moonpaySigningWarning');
   }
-  step.value++;
 };
 
 watch(() => props.isOpen, (newVal) => {
   if (!newVal) {
     step.value = 1;
     url.value = '';
-    provider.value = undefined;
     method.value = undefined;
     signingError.value = '';
   }
 });
 
+// Back from the widget: drop the iframe so the next choice starts clean.
 watch(step, (newVal) => {
-  if (newVal === 2) {
+  if (newVal === 1) {
     url.value = '';
-    provider.value = undefined;
+    method.value = undefined;
     loading.value = true;
     signingError.value = '';
   }
 });
 </script>
 
-<style>
+<style lang="scss">
 .overflow-visible .v-stepper__wrapper {
   overflow: visible;
   height: 100%;
@@ -287,6 +227,7 @@ iframe html {
 /* Buy / Sell choice cards: clean raised tiles, accent lift on hover.
    Real <button> elements (keyboard-operable money path). */
 .bs-choice {
+  @include g-glass-tier;
   appearance: none;
   -webkit-appearance: none;
   width: 100%;
@@ -298,9 +239,6 @@ iframe html {
   cursor: pointer;
   padding: 16px 18px;
   text-align: center;
-  background: var(--g-raised);
-  border: 1px solid var(--g-hairline-2);
-  border-radius: var(--g-r-card);
   transition: border-color var(--g-dur-fast) ease, transform var(--g-dur-fast) ease,
     box-shadow var(--g-dur-fast) ease;
 }

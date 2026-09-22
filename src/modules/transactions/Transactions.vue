@@ -35,7 +35,7 @@
                 />
                 <v-card
                   v-if="transactionInfo"
-                  :class="[isMidnight ? 'glass-panel' : 'liquid-glass', 'px-3', 'detail-card']"
+                  :class="['glass-panel', 'px-3', 'detail-card']"
                 >
                   <MidnightTransactionDetails v-if="isMidnight" :transactionInfo="transactionInfo" />
                   <TransactionDetails v-else :transactionInfo="transactionInfo" />
@@ -58,7 +58,7 @@
                 />
                 <v-card
                   v-if="selectedUtxo"
-                  :class="[isMidnight ? 'glass-panel' : 'liquid-glass', 'px-3', 'detail-card']"
+                  :class="['glass-panel', 'px-3', 'detail-card']"
                 >
                   <MidnightUtxoDetail v-if="isMidnight" :utxo="selectedUtxo" />
                   <UtxoDetail v-else :utxo="selectedUtxo" />

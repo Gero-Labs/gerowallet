@@ -63,7 +63,7 @@
               </v-badge>
             </v-btn>
           </template>
-          <v-card class="liquid-glass-compact" dark>
+          <v-card class="glass-popover" dark>
             <v-card-text class="pa-3">
               <div class="t-label mb-1">{{ $t('transactions.dateRange') }}</div>
               <div class="d-flex align-center" style="gap: 6px">

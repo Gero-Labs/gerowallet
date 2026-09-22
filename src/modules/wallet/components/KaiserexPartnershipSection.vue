@@ -177,10 +177,10 @@ const trackBlogClick = () => {
 }
 
 .trust-card {
+  @include g-glass-panel(false);
   @include flex-column;
   gap: $spacing-md;
   padding: $spacing-2xl;
-  background: var(--g-raised);
   border-radius: var(--g-r-card);
   border: 1px solid var(--g-hairline-2);
   transition: background-color var(--g-dur-slow) ease, border-color var(--g-dur-slow) ease, transform var(--g-dur-slow) ease;
