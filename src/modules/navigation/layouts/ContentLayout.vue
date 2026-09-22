@@ -670,22 +670,26 @@ onBeforeUnmount(() => {
 /* Cardano Background - Confined to dashboard working area */
 .cardano-background-dashboard {
   position: absolute;
-  top: calc(-50% + 10px);
+  top: 0;
   left: 50%;
-  width: 100vw;
-  height: 100vh;
+  width: 100vw; /* v-container is max-width capped; span the viewport */
+  height: auto;
+  aspect-ratio: 2912 / 1632; /* cardanoBg.png native ratio: show the whole image, never crop */
   z-index: -1; /* Behind dashboard content */
-  background-size: cover;
-  background-position: center;
+  background-size: 100% 100%;
+  background-position: center top;
   background-repeat: no-repeat;
-  transform: translateX(-50%) scaleY(-0.7) scaleX(-1.2); /* Center horizontally, flip vertically and squeeze 20%, flip horizontally and stretch 20% */
   pointer-events: none; /* Allow clicks through */
-  filter: brightness(0.7);
   opacity: 0;
   transition: opacity var(--g-dur-slow) ease-in-out;
+  transform: translate(-50%, -25%); /* centre on the viewport, lift by a quarter of its own height; the mask below still fades at the bottom */
+  filter: brightness(0.6);
+  /* Asset is pre-flipped (both axes); fade into the canvas */
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 1) 50%, rgba(0, 0, 0, 0) 100%);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 1) 50%, rgba(0, 0, 0, 0) 100%);
 
   &[style*='url('] {
-    opacity: 1;
+    opacity: 0.85;
   }
 }
 
@@ -984,7 +988,7 @@ div.v-toolbar__content {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
 }
 .notifications-card {
-  background-color: var(--g-overlay) !important;
+  @include g-glass-overlay(true);
   border: 1px solid var(--g-hairline-3) !important;
   border-radius: var(--g-r-card) !important;
   box-shadow: var(--g-shadow-menu) !important;
@@ -994,7 +998,7 @@ div.v-toolbar__content {
 
 </style>
 
-<style>
+<style lang="scss">
 .kes-notification-item {
   cursor: pointer;
   border-radius: var(--g-r-control);

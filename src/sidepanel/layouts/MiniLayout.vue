@@ -3,7 +3,7 @@
     <!-- Wavy background image (same as dashboard) -->
     <div
       class="mini-bg"
-      :class="{ 'mini-bg--midnight': isMidnight }"
+      :class="{ 'mini-bg--midnight': isMidnight, 'mini-bg--cardano': isCardanoBg }"
       :style="{ backgroundImage: `url(${bgImage})` }"
     ></div>
 
@@ -58,6 +58,10 @@ const bgImage = computed(() => {
       return assets.cardanoBg;
   }
 });
+
+// cardanoBg.png is pre-flipped on disk; keyed on the asset (not the chain) so the
+// transform override always travels with the file that needs it.
+const isCardanoBg = computed(() => bgImage.value === assets.cardanoBg);
 
 // Tab order for directional slide (the center slot is a sheet action, not a route)
 const tabOrder: Record<string, number> = {
@@ -117,6 +121,13 @@ watch(() => route.path, (to) => {
 
 .mini-bg[style*='url('] {
   opacity: 1;
+}
+
+/* cardanoBg.png ships pre-flipped on both axes (the dashboard backdrop uses it
+   as-is), so only the squash remains here — the two sign flips above would
+   undo the baked-in flip and show the waves the wrong way round. */
+.mini-bg--cardano {
+  transform: translateX(-50%) scaleY(0.5);
 }
 
 /* Midnight starfield: render naturally — the flip/squash transform above is
