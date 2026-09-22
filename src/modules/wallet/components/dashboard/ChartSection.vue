@@ -19,7 +19,7 @@
               {{ $t('common.date') }}
             </v-btn>
           </template>
-          <v-card outlined class="liquid-glass">
+          <v-card outlined class="glass-popover chart-date-menu">
             <div class="time-tabs">
               <v-btn
                 class="tab-btn"
@@ -392,7 +392,8 @@ watch(() => cardStore.state.cardBalance?.currentBalance?.amount, () => {
   }
 }
 
-.liquid-glass {
+/* Layout only; the surface comes from the shared `glass-popover` material. */
+.chart-date-menu {
   border-radius: 16px;
   width: 100%;
   padding: 16px;

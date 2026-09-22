@@ -5,20 +5,24 @@
 // always render identically. Change both together.
 // Auto-injected into every SFC <style lang="scss"> via _tokens.scss.
 
-@mixin g-glass-fallbacks($solid) {
+// $important must match the material call: a material emitted with !important
+// would otherwise outrank its own fallbacks, and the reduced-transparency /
+// increased-contrast preferences could not make the surface opaque.
+@mixin g-glass-fallbacks($solid, $important: false) {
+  $i: if($important, '!important', '');
   @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-    background: $solid;
+    background: $solid #{$i};
   }
   @media (prefers-reduced-transparency: reduce) {
-    background: var(--g-overlay);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
+    background: var(--g-overlay) #{$i};
+    backdrop-filter: none #{$i};
+    -webkit-backdrop-filter: none #{$i};
   }
   @media (prefers-contrast: more) {
-    background: var(--g-overlay);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-    border-color: var(--g-hairline-3);
+    background: var(--g-overlay) #{$i};
+    backdrop-filter: none #{$i};
+    -webkit-backdrop-filter: none #{$i};
+    border-color: var(--g-hairline-3) #{$i};
   }
 }
 
@@ -30,7 +34,7 @@
   -webkit-backdrop-filter: blur(20px) saturate(1.8) #{$i};
   border: 1px solid var(--g-hairline-1) #{$i};
   border-radius: var(--g-r-card);
-  @include g-glass-fallbacks(var(--g-surface));
+  @include g-glass-fallbacks(var(--g-surface), $important);
 }
 
 // Material 6: tier — a card nested inside another glass surface.
@@ -41,7 +45,7 @@
   -webkit-backdrop-filter: blur(14px) saturate(1.25) #{$i};
   border: 1px solid var(--g-hairline-1) #{$i};
   border-radius: var(--g-r-card);
-  @include g-glass-fallbacks(var(--g-raised));
+  @include g-glass-fallbacks(var(--g-raised), $important);
 }
 
 // Interactive tier states. Hover lifts the edge (never a solid repaint);
@@ -50,12 +54,26 @@
   $i: if($important, '!important', '');
   background: rgba(18, 21, 28, 0.5) #{$i};
   border-color: var(--g-hairline-3) #{$i};
+  @include g-glass-state-fallback($important);
 }
 
 @mixin g-glass-tier-active($important: false) {
   $i: if($important, '!important', '');
   background: rgba(18, 21, 28, 0.62) #{$i};
   border-color: color-mix(in srgb, var(--g-accent) 45%, transparent) #{$i};
+  @include g-glass-state-fallback($important);
+}
+
+// A :hover / selected rule outranks the base rule's fallback (extra
+// specificity), so the states repeat the opaque override themselves.
+@mixin g-glass-state-fallback($important: false) {
+  $i: if($important, '!important', '');
+  @media (prefers-reduced-transparency: reduce) {
+    background: var(--g-raised) #{$i};
+  }
+  @media (prefers-contrast: more) {
+    background: var(--g-raised) #{$i};
+  }
 }
 
 // Material 2: overlay — sheets and dialog cards that float above the page
@@ -66,7 +84,7 @@
   backdrop-filter: blur(44px) saturate(1.3) #{$i};
   -webkit-backdrop-filter: blur(44px) saturate(1.3) #{$i};
   border: 1px solid var(--g-hairline-2) #{$i};
-  @include g-glass-fallbacks(rgba(18, 21, 28, 0.98));
+  @include g-glass-fallbacks(rgba(18, 21, 28, 0.98), $important);
 }
 
 // Material 1: chrome — the app frame (side-panel header / bottom nav).
@@ -76,5 +94,5 @@
   background: rgba(0, 0, 0, 0) #{$i};
   backdrop-filter: blur(30px) saturate(1.3) #{$i};
   -webkit-backdrop-filter: blur(30px) saturate(1.3) #{$i};
-  @include g-glass-fallbacks(rgba(0, 0, 0, 0.96));
+  @include g-glass-fallbacks(rgba(0, 0, 0, 0.96), $important);
 }

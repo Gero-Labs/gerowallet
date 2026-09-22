@@ -28,6 +28,7 @@
 
       <!-- ═══════ STEP 2: MOONPAY WIDGET ═══════ -->
       <div v-else class="step-content iframe-step">
+        <div v-if="signingError" class="sign-warning t-caption">{{ signingError }}</div>
         <v-progress-circular
           v-if="iframeLoading"
           size="48"
@@ -82,41 +83,50 @@ const step = ref(1);
 const method = ref<'BUY' | 'SELL' | null>(null);
 const iframeUrl = ref('');
 const iframeLoading = ref(true);
+const signingError = ref('');
 
 // MoonPay is the only fiat on/off-ramp (Guardarian was removed 2026-09), so
 // choosing Buy or Sell loads the widget directly — no provider step.
 const title = computed(() => (step.value === 1 ? t('wallet.buySell') : t('wallet.finalize')));
 
+// A slow signing request must not be overwritten by a later pick: each call
+// takes a ticket, and only the newest one is allowed to commit its URL.
+let signTicket = 0;
+
 async function chooseMethod(m: 'BUY' | 'SELL') {
+  const ticket = ++signTicket;
   method.value = m;
   iframeLoading.value = true;
   iframeUrl.value = '';
-  const address = loggedWallet.value?.baseAddress?.value || '';
-
-  if (m === 'BUY') {
-    try {
-      iframeUrl.value = await moonPayApi.moonPaySign(
-        `https://buy.moonpay.com/?apiKey=${moonPayApiKey}&enabledPaymentMethods=credit_debit_card&theme=dark&currencyCode=ada&walletAddress=${address}&colorCode=%232f9cac&baseCurrencyCode=usd`
-      );
-    } catch (e) {
-      console.error('[BuySell] Moonpay sign error:', e);
-    }
-  } else {
-    try {
-      iframeUrl.value = await moonPayApi.moonPaySign(
-        `https://sell.moonpay.com/?apiKey=${moonPayApiKey}&paymentMethod=credit_debit_card&theme=dark&currencyCode=ada&refundWalletAddress=${address}&colorCode=%232f9cac&baseCurrencyCode=eur`
-      );
-    } catch (e) {
-      console.error('[BuySell] Moonpay sign error:', e);
-    }
-  }
-
+  signingError.value = '';
+  // Leave the choice screen at once so a second tap cannot start a rival
+  // request while the first is still signing.
   step.value = 2;
+
+  const address = loggedWallet.value?.baseAddress?.value || '';
+  const unsigned = m === 'BUY'
+    ? `https://buy.moonpay.com/?apiKey=${moonPayApiKey}&enabledPaymentMethods=credit_debit_card&theme=dark&currencyCode=ada&walletAddress=${address}&colorCode=%232f9cac&baseCurrencyCode=usd`
+    : `https://sell.moonpay.com/?apiKey=${moonPayApiKey}&paymentMethod=credit_debit_card&theme=dark&currencyCode=ada&refundWalletAddress=${address}&colorCode=%232f9cac&baseCurrencyCode=eur`;
+
+  try {
+    const signed = await moonPayApi.moonPaySign(unsigned);
+    if (ticket !== signTicket) return;
+    const ok = typeof signed === 'string' && signed.includes('signature=');
+    iframeUrl.value = ok ? signed : unsigned;
+    if (!ok) signingError.value = t('wallet.moonpaySigningWarning');
+  } catch (e) {
+    if (ticket !== signTicket) return;
+    console.error('[BuySell] Moonpay sign error:', e);
+    // Without a URL the iframe never renders and the spinner never clears.
+    iframeUrl.value = unsigned;
+    signingError.value = t('wallet.moonpaySigningWarning');
+  }
 }
 
 function goBack() {
   iframeUrl.value = '';
   iframeLoading.value = true;
+  signingError.value = '';
   method.value = null;
   step.value = 1;
 }
@@ -132,6 +142,7 @@ watch(() => props.value, (open) => {
     method.value = null;
     iframeUrl.value = '';
     iframeLoading.value = true;
+    signingError.value = '';
   }
 });
 </script>
@@ -160,17 +171,18 @@ watch(() => props.value, (open) => {
   margin-top: 24px;
 }
 
+/* Justified solid (readability): the white label + description sit over the
+   side panel's chain backdrop, which is bright on Bitcoin/Apex. A translucent
+   tint here previously washed the text out, so this card stays opaque while
+   the rest of the sheet is glass. */
 .choice-card {
-  @include g-glass-tier(false);
+  background: var(--g-raised);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 24px 16px;
   border-radius: var(--g-r-card);
-  /* Solid raised surface so the white "Buy/Sell ADA" label and description
-     always read at full contrast (was a 5%-white translucent tint that went
-     low-contrast over lighter backdrops). */
   border: 1px solid var(--g-hairline-1);
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
@@ -197,6 +209,15 @@ watch(() => props.value, (open) => {
 }
 
 /* ── Step 2: iframe ── */
+.sign-warning {
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border-radius: var(--g-r-chip);
+  background: var(--g-warning-fill);
+  color: var(--g-warning);
+}
+
 .iframe-step {
   position: relative;
   flex: 1;

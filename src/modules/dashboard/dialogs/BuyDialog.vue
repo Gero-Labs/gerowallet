@@ -148,11 +148,19 @@ const onIframeLoad = () => {
 const chooseBuy = () => loadMoonPay(methods.BUY);
 const chooseSell = () => loadMoonPay(methods.SELL);
 
+// A slow signing request must not be overwritten by a later pick: each call
+// takes a ticket, and only the newest one is allowed to commit its URL.
+let signTicket = 0;
+
 const loadMoonPay = async (chosen: string) => {
+  const ticket = ++signTicket;
   method.value = chosen;
   url.value = '';
   loading.value = true;
   signingError.value = '';
+  // Leave the choice screen at once so a second click cannot start a rival
+  // request while the first is still signing.
+  step.value = 2;
 
   const btc = isBitcoin.value;
   const currencyCode = btc ? 'btc' : 'ada';
@@ -161,41 +169,30 @@ const loadMoonPay = async (chosen: string) => {
     ? loggedWallet.value?.baseAddress
     : loggedWallet.value?.baseAddress?.value ?? loggedWallet.value?.baseAddress;
 
-  if (method.value === methods.BUY) {
-    try {
-      const paymentMethodsParam = btc ? '' : '&enabledPaymentMethods=credit_debit_card';
-      const unsigned = `https://buy.moonpay.com/?apiKey=${moonPayApiKey}${paymentMethodsParam}&theme=dark&currencyCode=${currencyCode}&walletAddress=${walletAddress}&colorCode=${moonpayColor}&baseCurrencyCode=usd`;
-      const signed = await moonPayApi.moonPaySign(unsigned);
-      console.log('🌙 MoonPay signed URL:', signed);
-      if (typeof signed === 'string' && signed.includes('signature=')) {
-        url.value = signed;
-        signingError.value = '';
-      } else {
-        console.warn('🌙 MoonPay signing failed — loading unsigned URL. Response:', signed);
-        url.value = unsigned;
-        signingError.value = t('wallet.moonpaySigningWarning');
-      }
-    } catch (error) {
-      console.error(error);
+  const paymentMethodsParam = btc ? '' : '&enabledPaymentMethods=credit_debit_card';
+  const unsigned = chosen === methods.BUY
+    ? `https://buy.moonpay.com/?apiKey=${moonPayApiKey}${paymentMethodsParam}&theme=dark&currencyCode=${currencyCode}&walletAddress=${walletAddress}&colorCode=${moonpayColor}&baseCurrencyCode=usd`
+    : `https://sell.moonpay.com/?apiKey=${moonPayApiKey}&paymentMethod=credit_debit_card&theme=dark&currencyCode=${currencyCode}&refundWalletAddress=${walletAddress}&colorCode=${moonpayColor}&baseCurrencyCode=eur`;
+
+  try {
+    const signed = await moonPayApi.moonPaySign(unsigned);
+    if (ticket !== signTicket) return;
+    if (typeof signed === 'string' && signed.includes('signature=')) {
+      url.value = signed;
+    } else {
+      console.warn('MoonPay signing failed - loading the unsigned widget.');
+      url.value = unsigned;
+      signingError.value = t('wallet.moonpaySigningWarning');
     }
-  } else if (method.value === methods.SELL) {
-    try {
-      const unsigned = `https://sell.moonpay.com/?apiKey=${moonPayApiKey}&paymentMethod=credit_debit_card&theme=dark&currencyCode=${currencyCode}&refundWalletAddress=${walletAddress}&colorCode=${moonpayColor}&baseCurrencyCode=eur`;
-      const signed = await moonPayApi.moonPaySign(unsigned);
-      console.log('🌙 MoonPay sell signed URL:', signed);
-      if (typeof signed === 'string' && signed.includes('signature=')) {
-        url.value = signed;
-        signingError.value = '';
-      } else {
-        console.warn('🌙 MoonPay sell signing failed — loading unsigned URL. Response:', signed);
-        url.value = unsigned;
-        signingError.value = t('wallet.moonpaySigningWarning');
-      }
-    } catch (error) {
-      console.error(error);
-    }
+  } catch (error) {
+    if (ticket !== signTicket) return;
+    console.error(error);
+    // Without a URL the iframe never renders and the spinner never clears.
+    // MoonPay is the only ramp now, so there is no other provider to fall
+    // back to - show the unsigned widget and say that signing failed.
+    url.value = unsigned;
+    signingError.value = t('wallet.moonpaySigningWarning');
   }
-  step.value = 2;
 };
 
 watch(() => props.isOpen, (newVal) => {
@@ -218,7 +215,7 @@ watch(step, (newVal) => {
 });
 </script>
 
-<style>
+<style lang="scss">
 .overflow-visible .v-stepper__wrapper {
   overflow: visible;
   height: 100%;
