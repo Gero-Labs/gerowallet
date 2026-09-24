@@ -47,7 +47,29 @@
 
         <div class="receive-hero__info">
           <div class="receive-address">
-            <span class="receive-address__label">{{ target.label }}</span>
+            <!-- The DRep format pills share the label's line, so the DRep tab is
+                 no taller than the others. -->
+            <div class="receive-address__top">
+              <span class="receive-address__label">{{ target.label }}</span>
+              <div
+                v-if="activeSegment === 'drep' && drepFormats.length > 1"
+                class="receive-formats"
+                role="group"
+                :aria-label="t('receive.format')"
+              >
+                <button
+                  v-for="format in drepFormats"
+                  :key="format"
+                  type="button"
+                  class="receive-format"
+                  :class="{ 'receive-format--active': format === activeDrepFormat }"
+                  :aria-pressed="format === activeDrepFormat ? 'true' : 'false'"
+                  @click="drepFormat = format"
+                >
+                  {{ DREP_FORMAT_LABELS[format] }}
+                </button>
+              </div>
+            </div>
             <p
               v-if="target.value"
               class="receive-address__value"
@@ -61,21 +83,6 @@
               @click="showFull = !showFull"
             >
               {{ showFull ? t('governance.showLess') : t('receive.showFullAddress') }}
-            </button>
-          </div>
-
-          <div v-if="activeSegment === 'drep' && drepFormats.length > 1" class="receive-formats">
-            <span class="t-caption">{{ t('receive.format') }}</span>
-            <button
-              v-for="format in drepFormats"
-              :key="format"
-              type="button"
-              class="receive-format"
-              :class="{ 'receive-format--active': format === activeDrepFormat }"
-              :aria-pressed="format === activeDrepFormat ? 'true' : 'false'"
-              @click="drepFormat = format"
-            >
-              {{ DREP_FORMAT_LABELS[format] }}
             </button>
           </div>
 
@@ -187,8 +194,9 @@
         </v-expand-transition>
       </section>
 
-      <!-- Cardano: addresses this wallet has already used. -->
-      <section v-if="isCardanoWallet && activeSegment === 'payment'" class="receive-card">
+      <!-- Cardano: addresses this wallet has already used. Shown on every tab so
+           switching tabs never changes the dialog's height. -->
+      <section v-if="isCardanoWallet" class="receive-card">
         <div class="receive-card__head">
           <button
             type="button"
@@ -794,6 +802,17 @@ onBeforeUnmount(() => {
   gap: var(--g-s-1);
 }
 
+/* Fixed to the pills' height whether or not they show, so the label row is
+   the same on every tab. */
+.receive-address__top {
+  min-height: 26px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--g-s-2);
+}
+
 .receive-address__label {
   font-size: 13px;
   font-weight: 500;
@@ -843,7 +862,7 @@ onBeforeUnmount(() => {
 .receive-formats {
   display: flex;
   align-items: center;
-  gap: var(--g-s-2);
+  gap: var(--g-s-1);
 }
 
 .receive-format {
