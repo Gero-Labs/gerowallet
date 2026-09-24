@@ -525,3 +525,95 @@ describe('StorePersister upgrade path', () => {
     }
   });
 });
+
+// Review of 328f28dc: held legacy values must follow their session. Every change,
+// landing before the compact read completes or during the bulk read, with cache
+// writes succeeding or failing, must leave a durable state that restores exactly
+// what the store held at that moment.
+type MatrixState = { loggedWallet: { id: number } | null; isLocked: boolean; transactions: { tx_hash: string }[] };
+const freshMatrix = (): MatrixState => ({ loggedWallet: null, isLocked: false, transactions: [] });
+const matrixScope = (s: Record<string, unknown>) => {
+  const id = (s['loggedWallet'] as { id: number } | null)?.id;
+  return id == null ? null : String(id);
+};
+
+describe('durable state during pending legacy hydration', () => {
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  for (const phase of ['compact-read', 'bulk-read'] as const) {
+    for (const failWrite of [false, true]) {
+      it.each(['lock', 'switch', 'logout', 'history-update'] as const)(`${phase}, cache writes ${failWrite ? 'fail' : 'succeed'}, %s`, async (action) => {
+        vi.useFakeTimers();
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        const legacy: MatrixState = { loggedWallet: { id: 1 }, isLocked: false, transactions: [{ tx_hash: 'wallet-A-old' }] };
+        let record: unknown = structuredClone(legacy);
+        const rows = new Map<string, StoreCacheEntry>();
+        let releaseCompact!: () => void;
+        const compactGate = new Promise<void>((resolve) => { releaseCompact = resolve; });
+        let releaseBulk!: (value: Map<string, StoreCacheEntry>) => void;
+        let signalBulk!: () => void;
+        const bulkStarted = new Promise<void>((resolve) => { signalBulk = resolve; });
+        const compact: CompactStorage = {
+          async get() { const snapshot = structuredClone(record); if (phase === 'compact-read') await compactGate; return snapshot; },
+          async set(_key, value) { record = structuredClone(value); },
+        };
+        const bulk: BulkStorage = {
+          read() { signalBulk(); return new Promise((resolve) => { releaseBulk = resolve; }); },
+          async write(entries) {
+            if (failWrite) throw new Error('IndexedDB unavailable');
+            entries.forEach((entry) => rows.set(entry.key, structuredClone(entry)));
+          },
+        };
+        const state = freshMatrix();
+        const p = new StorePersister(state, { storeName: 'walletStore', bulkFields: ['transactions'], immediateFields: ['loggedWallet', 'isLocked'], scope: matrixScope, compact, bulk });
+        const hydrating = p.hydrate({ migrate: true });
+        if (phase === 'bulk-read') await bulkStarted;
+
+        const expected = structuredClone(legacy);
+        if (action === 'lock') {
+          state.isLocked = true;
+          expected.isLocked = true;
+          p.markDirty(['isLocked']);
+        } else if (action === 'switch') {
+          // clearForWalletSwitch() clears bulk fields without broadcasting/marking them.
+          state.transactions = [];
+          state.loggedWallet = { id: 2 };
+          expected.loggedWallet = { id: 2 };
+          expected.transactions = [];
+          p.markDirty(['loggedWallet']);
+        } else if (action === 'logout') {
+          Object.assign(state, freshMatrix());
+          Object.assign(expected, freshMatrix());
+          p.markDirty(['loggedWallet', 'isLocked', 'transactions']);
+        } else {
+          state.transactions = [{ tx_hash: 'wallet-A-new' }];
+          expected.transactions = structuredClone(state.transactions);
+          p.markDirty(['transactions']);
+        }
+        const flushing = p.flush();
+        releaseCompact();
+        await bulkStarted;
+        await flushing;
+
+        // Simulate interruption now, before the initial bulk read returns.
+        const durable = structuredClone(record);
+        const durableRows = new Map(rows);
+        releaseBulk(new Map());
+        await hydrating;
+        await p.flush();
+
+        const restarted = freshMatrix();
+        await new StorePersister(restarted, {
+          storeName: 'walletStore', bulkFields: ['transactions'], scope: matrixScope,
+          compact: { async get() { return durable; }, async set() {} },
+          bulk: { async read() { return durableRows; }, async write() {} },
+        }).hydrate();
+        expect(restarted).toEqual(expected);
+      });
+    }
+  }
+});

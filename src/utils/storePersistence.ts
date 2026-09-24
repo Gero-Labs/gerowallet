@@ -104,9 +104,16 @@ export class StorePersister {
   /**
    * The old record's own bulk values, held from the moment hydration reads it until
    * the store carries them. Setters keep persisting while the IndexedDB read is
-   * pending, and the store still holds empty defaults then.
+   * pending, and the store still holds empty defaults then. A setter that writes the
+   * field supersedes its held value (see markDirty).
    */
   private readonly legacyHeld = new Map<string, unknown>();
+  /**
+   * Session the legacy data belongs to. Once the store's session differs (a wallet
+   * switch or logout), the legacy data is another session's: it is neither held nor
+   * kept inline any longer (see write).
+   */
+  private legacyScope: string | null = null;
   /** A hydration's chrome.storage read. No write may replace the record before it lands. */
   private compactRead: Promise<State | null> | null = null;
   private retryMs = 0;
@@ -136,8 +143,13 @@ export class StorePersister {
   markDirty(fields: readonly string[]): void {
     let immediate = false;
     for (const field of fields) {
-      if (this.bulkFields.has(field)) this.bulkDirty.add(field);
-      else this.compactDirty = true;
+      if (this.bulkFields.has(field)) {
+        this.bulkDirty.add(field);
+        // The store's value is newer than the old record's from here on.
+        this.legacyHeld.delete(field);
+      } else {
+        this.compactDirty = true;
+      }
       if (this.immediateFields.has(field)) immediate = true;
       this.hydrationWatchers.forEach((touched) => touched.add(field));
     }
@@ -179,6 +191,13 @@ export class StorePersister {
     let failedBulk: string[] = [];
     let compactFailed = false;
     let writeCompact = compactDirty;
+
+    // After a wallet switch or logout the legacy data belongs to another session, so
+    // it must not be written out under this one.
+    if (this.legacyInline.size > 0 && this.scope() !== this.legacyScope) {
+      this.legacyInline.clear();
+      this.legacyHeld.clear();
+    }
 
     // Bulk before compact, so the compact write in the same flush can drop an inline
     // legacy copy (see `legacyInline`) that has just reached IndexedDB.
@@ -284,12 +303,15 @@ export class StorePersister {
         }
       }
       const legacyFields = Object.keys(legacy);
-      if (migrate) {
-        // The old record holds the only persisted copy of these. Keep the values
-        // themselves in every compact write while the IndexedDB read below is pending.
+      const storedScope = stored ? this.options.scope?.(stored) ?? null : null;
+      if (migrate && legacyFields.length > 0 && storedScope === this.scope()) {
+        // The old record holds the only persisted copy of these, and it is still this
+        // session's. Keep them in every compact write while the IndexedDB read below is
+        // pending: the old value itself, unless a setter already wrote a newer one.
+        this.legacyScope = storedScope;
         for (const field of legacyFields) {
           this.legacyInline.add(field);
-          this.legacyHeld.set(field, legacy[field]);
+          if (!touched.has(field)) this.legacyHeld.set(field, legacy[field]);
         }
       }
 
@@ -304,7 +326,7 @@ export class StorePersister {
       // An old-format record's bulk fields belong to the session that wrote it. Use them
       // only while that is still the current session: the port can deliver another
       // wallet's identity while the read above is in flight.
-      const legacyUsable = stored !== null && (this.options.scope?.(stored) ?? null) === scope;
+      const legacyUsable = stored !== null && storedScope === scope;
       const fromLegacy: string[] = [];
       for (const field of this.bulkFields) {
         const entry = entries.get(this.bulkKey(field));
@@ -331,9 +353,14 @@ export class StorePersister {
       if (migrate && legacyFields.length > 0) {
         for (const field of legacyFields) {
           this.legacyHeld.delete(field);
-          if (fromLegacy.includes(field)) this.bulkDirty.add(field);
-          else this.legacyInline.delete(field);
+          if (fromLegacy.includes(field)) {
+            this.legacyInline.add(field);
+            this.bulkDirty.add(field);
+          } else {
+            this.legacyInline.delete(field);
+          }
         }
+        if (fromLegacy.length > 0) this.legacyScope = scope;
         this.compactDirty = true;
         void this.flush();
       }
