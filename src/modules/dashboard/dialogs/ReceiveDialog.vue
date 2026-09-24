@@ -388,6 +388,16 @@ function selectSegment(id: string): void {
   selected.value = id;
 }
 
+// A tab can disappear while the dialog is open (the wallet's DRep keys go away,
+// or the wallet switches). Fall back to the first tab rather than keep a
+// selection nothing on screen represents.
+watch(segments, (list) => {
+  if (isBitcoinWallet.value || !list.length) return;
+  if (!list.some((segment) => segment.id === selected.value)) {
+    selected.value = list[0].id;
+  }
+});
+
 // ---- The selected address ----------------------------------------------------
 
 const bitcoinAddressTypeLabel = computed(() => {
