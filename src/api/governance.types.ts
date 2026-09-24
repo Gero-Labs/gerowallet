@@ -207,6 +207,13 @@ export interface CommitteeMember {
    * empty name: it means the row falls back to its hash.
    */
   displayName?: string | null;
+  /**
+   * Hot credentials this member has authorised. OPTIONAL: newer Nexus sends it
+   * (every mainnet member had one on 2026-09-24), older projections do not. An
+   * EMPTY array is a fact (no hot key, so the ledger counts the seat as
+   * abstaining); absent is not, and changes nothing.
+   */
+  hotHashes?: string[] | null;
 }
 
 export interface Committee {

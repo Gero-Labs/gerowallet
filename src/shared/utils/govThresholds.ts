@@ -13,6 +13,10 @@
  * InfoAction is advisory: it carries no on-chain threshold and can never
  * ratify. Rendering it as pass/fail is a correctness bug, so votingBodies()
  * returns an empty list for it.
+ *
+ * Pass the UNROUNDED yes share as the observed tally (`Composition.yesShare`),
+ * not the two-decimal display figure: 66.996% rounds to 67.00 and must still
+ * read as below a 67% threshold.
  */
 
 export type VotingBody = 'DRep' | 'SPO' | 'CC';
@@ -45,6 +49,12 @@ export interface GovThresholdParams {
   pvtHardFork?: number;
   pvtSecurityGroup?: number;
   committeeMinSize?: number;
+  /**
+   * The committee's quorum as a fraction of its voting seats (mainnet 2/3).
+   * Not an epoch parameter: it comes from the committee itself
+   * (`Committee.thresholdNumerator/Denominator`).
+   */
+  committeeQuorum?: number;
 }
 
 export interface BodyThreshold {
@@ -105,16 +115,17 @@ function parameterChangeBodies(params: GovThresholdParams, scope: ParamChangeSco
 
   const bodies: BodyThreshold[] = [{ body: 'DRep', thresholdPct: drepPct }];
   if (scope?.touchesSecurity) bodies.push({ body: 'SPO', thresholdPct: pct(params.pvtSecurityGroup) });
-  bodies.push({ body: 'CC', thresholdPct: null });
+  bodies.push({ body: 'CC', thresholdPct: pct(params.committeeQuorum) });
   return bodies;
 }
 
 /**
  * Which bodies vote on this action type, and at what threshold.
  *
- * The committee's threshold is a MEMBER-COUNT quorum, not a stake fraction, so
- * its `thresholdPct` is always null — callers render committee progress from
- * `CommitteeDto.thresholdNumerator/Denominator` instead.
+ * The committee's threshold is a MEMBER-COUNT quorum, not a stake fraction: it
+ * is `params.committeeQuorum` (from the committee, not the epoch parameters),
+ * compared against the committee's yes share of its voting seats, and null
+ * when the committee has not been read.
  */
 export function votingBodies(
   type: string,
@@ -137,18 +148,18 @@ export function votingBodies(
     case 'NewConstitution':
       return [
         { body: 'DRep', thresholdPct: pct(params.dvtUpdateConstitution) },
-        { body: 'CC', thresholdPct: null },
+        { body: 'CC', thresholdPct: pct(params.committeeQuorum) },
       ];
     case 'TreasuryWithdrawals':
       return [
         { body: 'DRep', thresholdPct: pct(params.dvtTreasuryWithdrawal) },
-        { body: 'CC', thresholdPct: null },
+        { body: 'CC', thresholdPct: pct(params.committeeQuorum) },
       ];
     case 'HardForkInitiation':
       return [
         { body: 'DRep', thresholdPct: pct(params.dvtHardFork) },
         { body: 'SPO', thresholdPct: pct(params.pvtHardFork) },
-        { body: 'CC', thresholdPct: null },
+        { body: 'CC', thresholdPct: pct(params.committeeQuorum) },
       ];
     case 'ParameterChange':
       return parameterChangeBodies(params, paramScope);

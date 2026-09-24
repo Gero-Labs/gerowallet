@@ -112,6 +112,20 @@ export function toExternalHref(raw: unknown): string | null {
 }
 
 /**
+ * An author-supplied LINK for a new tab: an http(s) URL exactly as written, or
+ * an `ipfs://<cid>[/path]` through the public gateway. Null for everything
+ * else, which keeps the shared guard's refusals (`javascript:`, `data:`,
+ * `mailto:`, junk) and adds one: an ipfs URI whose CID does not parse.
+ *
+ * Unlike {@link toExternalHref}, a working http(s) link is never re-pointed. An
+ * author who linked their own gateway gets their own gateway; only a URI no
+ * browser can open is rewritten.
+ */
+export function toLinkHref(raw: unknown): string | null {
+  return safeExternalHref(raw) ?? toExternalHref(raw);
+}
+
+/**
  * The payout address a DRep published under CIP-119, or null.
  *
  * `DelegatedDRepRecord.metadata` is typed `unknown` — it is upstream JSON-LD

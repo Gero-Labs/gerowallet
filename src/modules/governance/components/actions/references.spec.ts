@@ -63,6 +63,36 @@ describe('toReferenceLinks', () => {
     expect(toReferenceLinks(null)).toEqual([]);
     expect(toReferenceLinks(undefined)).toEqual([]);
   });
+
+  // A real CIDv1 (a mainnet proposal anchor) and a real CIDv0.
+  const CID_V1 = 'bafkreih7qyzwndjjrltybe4ft3a5ryl56gqzof3d4u55jzv2zhatmrqape';
+  const CID_V0 = 'QmcZPndRnPR3giqybj1u24VVFx5q4csN9uYHuFCtT38uqD';
+
+  it('opens an ipfs:// reference with a real CID through the public gateway, keeping its number', () => {
+    const links = toReferenceLinks([
+      { uri: `ipfs://${CID_V1}/paper.pdf`, label: 'Paper' },
+      { uri: `ipfs://${CID_V0}` },
+    ]);
+    expect(links.map(l => [l.href, l.number])).toEqual([
+      [`https://ipfs.io/ipfs/${CID_V1}/paper.pdf`, 1],
+      [`https://ipfs.io/ipfs/${CID_V0}`, 2],
+    ]);
+    expect(links[0].label).toBe('Paper');
+  });
+
+  it('never re-points an http(s) link, even one on another gateway', () => {
+    const own = `https://gateway.pinata.cloud/ipfs/${CID_V1}`;
+    expect(toReferenceLinks([{ uri: own }])[0].href).toBe(own);
+  });
+
+  it('still drops hostile schemes dressed up with an ipfs path', () => {
+    const links = toReferenceLinks([
+      { uri: `javascript:alert('ipfs://${CID_V1}')` },
+      { uri: `data:text/html,ipfs://${CID_V1}` },
+      { uri: 'ipfs://javascript:alert(1)' },
+    ]);
+    expect(links).toEqual([]);
+  });
 });
 
 describe('hasReferenceIndex', () => {

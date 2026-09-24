@@ -113,3 +113,20 @@ describe('evaluateThresholds', () => {
     expect(evaluateThresholds('InfoAction', PARAMS, { drepYesPct: 100, spoYesPct: 100, ccYesPct: 100 })).toEqual([]);
   });
 });
+
+describe('committee quorum', () => {
+  it('draws the CC threshold from the committee quorum, and leaves it unknown without one', () => {
+    const withQuorum = votingBodies('TreasuryWithdrawals', { ...PARAMS, committeeQuorum: 2 / 3 });
+    expect(withQuorum.find(b => b.body === 'CC')!.thresholdPct).toBeCloseTo(66.667, 3);
+    expect(votingBodies('TreasuryWithdrawals', PARAMS).find(b => b.body === 'CC')!.thresholdPct).toBeNull();
+  });
+
+  it('counts an exact 2/3 of the seats as meeting a 2/3 quorum, and 2 of 7 as not', () => {
+    const params = { ...PARAMS, committeeQuorum: 2 / 3 };
+    const observed = { drepYesPct: null, spoYesPct: null };
+    const tie = evaluateThresholds('TreasuryWithdrawals', params, { ...observed, ccYesPct: (4 / 6) * 100 });
+    expect(tie.find(r => r.body === 'CC')!.met).toBe(true);
+    const short = evaluateThresholds('TreasuryWithdrawals', params, { ...observed, ccYesPct: (2 / 7) * 100 });
+    expect(short.find(r => r.body === 'CC')!.met).toBe(false);
+  });
+});

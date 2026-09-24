@@ -75,6 +75,8 @@ vi.mock('@/modules/governance/components/actions/AsOf.vue', () => ({
 
 // @ts-ignore — tsconfig ships no `*.vue` shim; vite resolves this fine.
 import ActionDetail from './ActionDetail.vue';
+// @ts-ignore — same: no `*.vue` shim.
+import CopyButton from '@/shared/components/CopyButton.vue';
 import governanceActionsStore, { resetCommitteeCache } from '@/stores/governanceActionsStore';
 import { walletStore } from '@/stores/walletStore';
 import NetworkStore from '@/stores/networkStore';
@@ -421,5 +423,164 @@ describe('ActionDetail committee names', () => {
     // The action itself is unaffected: names are a courtesy on this surface.
     expect(wrapper.find('.action-detail__title').text()).toBe('A test action');
     expect(wrapper.find('.action-detail__body').exists()).toBe(true);
+  });
+});
+
+// The live bug, 2026-09-24, on mainnet treasury action 418df598…#0: the IPFS
+// gateway answered 429, Nexus reported the unfetched anchor as hashValid=false,
+// and the page showed a "hash mismatch" badge over an empty Overview titled
+// with the raw id. Every shape below is taken from that production response.
+describe('ActionDetail without its metadata document', () => {
+  const CID = 'bafkreih7qyzwndjjrltybe4ft3a5ryl56gqzof3d4u55jzv2zhatmrqape';
+  const REWARD_HEX = 'f1eb06997a94b339ee0b0dd0de7bfec2a184d1af577586654d44e90558';
+  const REWARD_BECH32 = 'stake1784sdxt6jjennmstphgdu7l7c2scf5d02a6cve2dgn5s2kq5u3j9v';
+
+  /** Interpolates, so a case can see WHICH values reached a message. */
+  const $tWithParams = (key: string, params?: Record<string, unknown>): string =>
+    params ? `${key}:${JSON.stringify(params)}` : key;
+
+  function mountWithParams(): Wrapper<Vue> {
+    return mount(ActionDetail, {
+      attachTo: document.body,
+      mocks: { $t: $tWithParams },
+      stubs: { 'v-icon': true, 'v-skeleton-loader': true, 'v-btn': true },
+    });
+  }
+
+  /** The production response: no title, no prose, no document. */
+  function unfetched(over: Record<string, unknown> = {}) {
+    return detail({
+      type: 'TreasuryWithdrawals',
+      anchorUrl: `ipfs://${CID}`,
+      title: null,
+      abstractText: null,
+      references: null,
+      rawMetadata: null,
+      hashValid: false,
+      govAction: { type: 'TREASURY_WITHDRAWALS_ACTION', withdrawals: { [REWARD_HEX]: 11787063000000 } },
+      ...over,
+    });
+  }
+
+  function badgeAttrs(): Record<string, unknown> {
+    return (wrapper as Wrapper<Vue>).findComponent({ name: 'AnchorBadge' }).vm.$attrs;
+  }
+
+  it('reads an old-Nexus "false" with no document in hand as no verdict, not a mismatch', async () => {
+    getProposal.mockResolvedValue(unfetched());
+    wrapper = mountPage();
+    await settle();
+
+    expect(badgeAttrs()['hash-valid']).toBeNull();
+    expect(badgeAttrs()['failure-reason']).toBe('fetchFailed');
+  });
+
+  it('reads the new-Nexus null the same way', async () => {
+    getProposal.mockResolvedValue(unfetched({ hashValid: null }));
+    wrapper = mountPage();
+    await settle();
+
+    expect(badgeAttrs()['hash-valid']).toBeNull();
+    expect(badgeAttrs()['failure-reason']).toBe('fetchFailed');
+  });
+
+  it('still reports a real mismatch, which only exists once the document was read', async () => {
+    getProposal.mockResolvedValue(unfetched({ rawMetadata: { body: {} }, abstractText: 'Tampered.' }));
+    wrapper = mountPage();
+    await settle();
+
+    expect(badgeAttrs()['hash-valid']).toBe(false);
+    expect(badgeAttrs()['failure-reason']).toBeNull();
+  });
+
+  it('says the metadata could not be loaded, and links the ipfs anchor through a gateway once', async () => {
+    getProposal.mockResolvedValue(unfetched());
+    wrapper = mountPage();
+    await settle();
+
+    const notice = wrapper.find('.action-detail__notice');
+    expect(notice.exists()).toBe(true);
+    expect(notice.text()).toContain('governance.metadataUnavailable');
+    const gateway = `https://ipfs.io/ipfs/${CID}`;
+    expect(notice.find('a').attributes('href')).toBe(gateway);
+    // Linked from the notice, so the References list does not repeat it.
+    expect(wrapper.findAll(`a[href="${gateway}"]`)).toHaveLength(1);
+  });
+
+  it('shows no notice when the metadata supplied prose', async () => {
+    wrapper = mountPage();
+    await settle();
+
+    expect(wrapper.find('.action-detail__notice').exists()).toBe(false);
+  });
+
+  it('titles the action by its type and a short id instead of the raw id', async () => {
+    getProposal.mockResolvedValue(unfetched());
+    wrapper = mountWithParams();
+    await settle();
+
+    const heading = wrapper.find('.action-detail__title').text();
+    expect(heading).toContain('governance.untitledActionTitle');
+    expect(heading).toContain('"type":"TreasuryWithdrawals"');
+    expect(heading).toContain('"id":"aaaaaa…aaa#0"');
+  });
+
+  it('shows what the withdrawal pays, and to whom, from the on-chain payload', async () => {
+    getProposal.mockResolvedValue(unfetched());
+    wrapper = mountPage();
+    await settle();
+
+    const rows = wrapper.findAll('.action-detail__withdrawal');
+    expect(rows).toHaveLength(1);
+    expect(rows.at(0).text()).toContain('11.79M ₳');
+    expect(rows.at(0).text()).toContain('stake17...5u3j9v');
+    // The copy button carries the full bech32 address, never the truncation.
+    expect(rows.at(0).findComponent(CopyButton).props('value')).toBe(REWARD_BECH32);
+  });
+
+  describe('committee tally', () => {
+    const SEVEN_SEATS = {
+      thresholdNumerator: 2,
+      thresholdDenominator: 3,
+      members: Array.from({ length: 7 }, (_, i) => ({
+        hash: `${i}`.repeat(56),
+        credType: 'SCRIPTHASH',
+        startEpoch: 581,
+        expiredEpoch: 726,
+      })),
+    };
+    /** The live summary: counts right, pct over 14 seats. */
+    const LIVE = summary({ ccYesVotes: 2, ccNoVotes: 0, ccAbstainVotes: 0, ccYesPct: 14.29, ccNoPct: 85.71 });
+
+    function committeeCard() {
+      return (wrapper as Wrapper<Vue>)
+        .findAllComponents({ name: 'BodyTallyCard' })
+        .wrappers.find(card => (card.props('result') as { body: string }).body === 'CC');
+    }
+
+    it('counts 2 yes votes as 2 of the 7 seats against the 2/3 quorum', async () => {
+      getProposal.mockResolvedValue(unfetched());
+      getVotingSummary.mockResolvedValue(LIVE);
+      getCommittee.mockResolvedValue(SEVEN_SEATS);
+      wrapper = mountPage();
+      await settle();
+
+      const card = committeeCard();
+      expect(card?.props('composition')).toMatchObject({ yesPct: 28.57, noPct: 71.43, available: true });
+      expect((card?.props('result') as { thresholdPct: number }).thresholdPct).toBeCloseTo(66.667, 3);
+      expect((card?.props('result') as { met: boolean }).met).toBe(false);
+      expect(card?.props('counts')).toMatchObject({ yes: 2, no: 0, abstain: 0, notVoted: 5 });
+    });
+
+    it('keeps the server share for a closed action, whose voters may be another committee', async () => {
+      getProposal.mockResolvedValue(unfetched({ status: 'ratified' }));
+      getVotingSummary.mockResolvedValue(LIVE);
+      getCommittee.mockResolvedValue(SEVEN_SEATS);
+      wrapper = mountPage();
+      await settle();
+
+      expect(committeeCard()?.props('composition')).toMatchObject({ yesPct: 14.29 });
+      expect(committeeCard()?.props('counts')).toMatchObject({ notVoted: null });
+    });
   });
 });

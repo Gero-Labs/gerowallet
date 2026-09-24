@@ -1,6 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { composition, drepTallies, spoTallies } from '@/shared/utils/govTally';
-import type { GovVotingSummary } from '@/api/governance.types';
+import {
+  activeCommitteeSize,
+  ccProgress,
+  ccTallies,
+  composition,
+  drepTallies,
+  spoTallies,
+} from '@/shared/utils/govTally';
+import type { Committee, GovVotingSummary } from '@/api/governance.types';
 
 describe('composition', () => {
   it('denominates over yes+no only — abstain is excluded, not counted against', () => {
@@ -69,5 +76,84 @@ describe('spoTallies', () => {
 
   it('is unavailable when the SPO fields are absent', () => {
     expect(spoTallies({} as GovVotingSummary).available).toBe(false);
+  });
+});
+
+describe('composition yesShare', () => {
+  it('keeps the unrounded share for threshold checks while yesPct is rounded for display', () => {
+    // 66.996%: displays as 67.00, and must still read as BELOW a 67% threshold.
+    const c = composition('66996', '33004', null);
+    expect(c.yesPct).toBe(67);
+    expect(c.yesShare).toBeCloseTo(66.996, 6);
+    expect(c.yesShare as number).toBeLessThan(67);
+  });
+});
+
+/** The mainnet committee on 2026-09-24: seven seats, quorum 2/3. */
+function committee(members: Partial<Committee['members'][number]>[] = []): Committee {
+  const seat = { hash: 'h', credType: 'SCRIPTHASH', startEpoch: 581, expiredEpoch: 726 };
+  const seats = members.length ? members : Array.from({ length: 7 }, () => ({}));
+  return {
+    thresholdNumerator: 2,
+    thresholdDenominator: 3,
+    members: seats.map((over, i) => ({ ...seat, hash: `h${i}`, ...over })),
+  };
+}
+
+/** The live summary for 418df598…#0: counts right, pct divided by 14. */
+const LIVE_CC = { ccYesVotes: 2, ccNoVotes: 0, ccAbstainVotes: 0, ccYesPct: 14.29, ccNoPct: 85.71 } as GovVotingSummary;
+
+describe('activeCommitteeSize', () => {
+  it('counts the seats that can vote in the epoch', () => {
+    expect(activeCommitteeSize(committee(), 657)).toBe(7);
+  });
+
+  it('leaves out expired and not-yet-seated members, and a member with no hot key', () => {
+    const c = committee([{}, { expiredEpoch: 650 }, { startEpoch: 700 }, { hotHashes: [] }, { hotHashes: ['x'] }]);
+    expect(activeCommitteeSize(c, 657)).toBe(2);
+  });
+
+  it('is unknown without a committee or an epoch', () => {
+    expect(activeCommitteeSize(null, 657)).toBeNull();
+    expect(activeCommitteeSize(committee(), null)).toBeNull();
+  });
+});
+
+describe('ccTallies', () => {
+  it('derives the share from the counts over the active seats, not the server pct', () => {
+    const c = ccTallies(LIVE_CC, 7);
+    // Two of seven, as api.koios.rest reports it; the five silent seats count against.
+    expect(c.yesPct).toBe(28.57);
+    expect(c.noPct).toBe(71.43);
+    expect(c.available).toBe(true);
+  });
+
+  it('takes abstentions out of the denominator', () => {
+    const c = ccTallies({ ccYesVotes: 4, ccNoVotes: 0, ccAbstainVotes: 1 } as GovVotingSummary, 7);
+    expect(c.yesPct).toBe(66.67);
+    // An exact 4-of-6 tie must compare EQUAL to a 2/3 quorum computed the same way.
+    expect(c.yesShare).toBe((2 / 3) * 100);
+  });
+
+  it('falls back to the server pct when the seat count is unknown or cannot hold the votes', () => {
+    expect(ccTallies(LIVE_CC, null).yesPct).toBe(14.29);
+    expect(ccTallies({ ...LIVE_CC, ccYesVotes: 9 }, 7).yesPct).toBe(14.29);
+  });
+
+  it('is unavailable with nothing to go on', () => {
+    expect(ccTallies(null, 7).available).toBe(false);
+    expect(ccTallies({} as GovVotingSummary, null).available).toBe(false);
+  });
+});
+
+describe('ccProgress', () => {
+  it('reads the quorum from the committee and counts the silent seats', () => {
+    const progress = ccProgress(LIVE_CC, 2, 3, 7);
+    expect(progress).toMatchObject({ yes: 2, no: 0, abstain: 0, notVoted: 5 });
+    expect(progress?.requiredPct).toBeCloseTo(66.667, 3);
+  });
+
+  it('leaves the quorum and the silent seats unknown when not given', () => {
+    expect(ccProgress(LIVE_CC, null, null)).toMatchObject({ requiredPct: null, notVoted: null });
   });
 });
