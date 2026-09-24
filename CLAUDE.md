@@ -44,7 +44,7 @@ src/
 - Stores use `broadcastFromBackground()` to sync across contexts
 - **ALWAYS use in-memory state** as base for Chrome storage updates (prevents race conditions)
 - Browser contexts subscribe via `storeMessaging.subscribe(STORE_NAME, handler)`
-- **Never put multi-MB values in `chrome.storage.local`.** Each changed value is copied old+new, on Chrome's browser UI thread, into every `storage.onChanged` listener: the worker, every dashboard, and the Bring SDK in the content script of every frame of every tab. Whole-store rewrites froze all Chrome windows, other profiles included. `walletStore`/`networkStore` persist through `StorePersister` (`src/utils/storePersistence.ts`): a small record in `chrome.storage.local` plus bulk fields (transactions, UTxOs, tokens, collections, assets, …) in the `gero-store-cache` IndexedDB, written only when that field changed
+- **Never put multi-MB values in `chrome.storage.local`.** Each changed value is copied old+new, on Chrome's browser UI thread, into every `storage.onChanged` listener: the worker, every dashboard, and the Bring SDK in the content script of every frame of every tab. Whole-store rewrites froze all Chrome windows, other profiles included. `walletStore`/`networkStore`/`midnightStore` persist through `StorePersister` (`src/utils/storePersistence.ts`): a small record in `chrome.storage.local` plus bulk fields (transactions, UTxOs, tokens, collections, assets, …) in the `gero-store-cache` IndexedDB, written only when that field changed
 
 ### Database
 - **App-level** (`gero-db.ts`): `GeroWalletDatabase` — wallets list, config, provider

@@ -1,5 +1,5 @@
 /**
- * Persistence for the background-owned stores (walletStore, networkStore).
+ * Persistence for the background-owned stores (walletStore, networkStore, midnightStore).
  *
  * Each store is persisted in two parts:
  *  - a compact record under `chrome.storage.local[storeName]`: the small fields a
@@ -379,6 +379,37 @@ export class StorePersister {
     } finally {
       this.hydrationWatchers.delete(touched);
     }
+  }
+
+  /**
+   * The persisted record, with its bulk fields merged back in, without applying it.
+   * For a store whose fields need custom revival (BigInts, validation) before they
+   * reach its state. A bulk entry is merged only when it belongs to the record's own
+   * session. An inline copy in an old-format record wins over IndexedDB, as in
+   * hydrate(): it is always the later write.
+   */
+  async read(): Promise<State | null> {
+    const { storeName } = this.options;
+    const stored = await this.readCompactRecord();
+    if (!stored) return null;
+    let entries = new Map<string, StoreCacheEntry>();
+    try {
+      entries = await this.bulk.read([...this.bulkFields].map((field) => this.bulkKey(field)));
+    } catch (error) {
+      console.error(`Failed to read cached ${storeName}:`, error);
+    }
+    const scope = this.options.scope?.(stored) ?? null;
+    const record: State = { ...stored };
+    for (const field of this.bulkFields) {
+      const entry = entries.get(this.bulkKey(field));
+      if (field in stored || !entry || entry.scope !== scope) continue;
+      try {
+        record[field] = JSON.parse(entry.json);
+      } catch (error) {
+        console.error(`Discarding unreadable cached ${storeName}.${field}:`, error);
+      }
+    }
+    return record;
   }
 
   private async readCompactRecord(): Promise<State | null> {
