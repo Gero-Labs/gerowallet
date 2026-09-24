@@ -1,6 +1,7 @@
 import Vue from 'vue';
 import { Cardano } from '@cardano-sdk/core';
 import { getContextType } from '@/utils/storageSync';
+import { StorePersister } from '@/utils/storePersistence';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 import { addConnectedDapp, removeDapp, setWalletConfiguration } from '@/db/wallet-db';
@@ -192,48 +193,77 @@ export const walletStore = Vue.observable<WalletStore>({
 const STORE_NAME = 'walletStore';
 const context = getContextType();
 
+/**
+ * Persisted to IndexedDB, not chrome.storage (see storeCache.ts). These are the
+ * multi-MB fields. Everything else stays in the small `walletStore` record that
+ * new contexts read at boot.
+ */
+const BULK_FIELDS: (keyof WalletStore)[] = [
+  'transactions', 'utxos', 'tokens', 'collections', 'programmableTokens', 'rewards', 'keys',
+];
+
+const persister = new StorePersister(walletStore as unknown as Record<string, unknown>, {
+  storeName: STORE_NAME,
+  bulkFields: BULK_FIELDS,
+  replacer: serializeValue,
+  // Who is logged in, and whether the wallet is locked, must survive a worker that
+  // dies right after the change.
+  immediateFields: ['loggedWallet', 'isLocked'],
+  // Bulk data is tagged with its wallet so it can never hydrate into another wallet's session.
+  scope: (state) => {
+    const id = (state['loggedWallet'] as { id?: unknown } | null)?.id;
+    return id == null ? null : String(id);
+  },
+});
+
+let hydration: Promise<void> | null = null;
+
 // Initialize messaging based on context
 if (context === 'browser') {
+  // Fields the port has delivered: fresher than anything hydration reads back.
+  const deliveredFields = new Set<string>();
+
   // Browser context: Subscribe to updates from background
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<WalletStore>) => {
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
       if (key in walletStore) {
+        deliveredFields.add(key);
         (walletStore as unknown as Record<string, unknown>)[key] = updates[key as keyof WalletStore];
       }
     });
   });
 
-  // Initial hydration from chrome.storage (fallback for initial state)
-  chrome.storage.local.get(STORE_NAME, (result) => {
-    if (result[STORE_NAME]) {
-      Object.assign(walletStore, result[STORE_NAME]);
-
-      // Initialize price service if wallet is logged in
-      const hydratedWallet = result[STORE_NAME].loggedWallet;
-      if (hydratedWallet && (hydratedWallet.chain === 'Cardano' || hydratedWallet.chain === 'Bitcoin')) {
-        priceService.initialize(hydratedWallet.chain).catch(error => {
-          console.error('Failed to initialize price service on hydration:', error);
-        });
-      }
+  // Initial hydration from persisted state (fallback for initial state)
+  hydration = persister.hydrate({ skip: deliveredFields }).then((stored) => {
+    // Initialize price service if wallet is logged in
+    const hydratedWallet = stored?.['loggedWallet'] as WalletStore['loggedWallet'];
+    if (hydratedWallet && (hydratedWallet.chain === 'Cardano' || hydratedWallet.chain === 'Bitcoin')) {
+      priceService.initialize(hydratedWallet.chain).catch(error => {
+        console.error('Failed to initialize price service on hydration:', error);
+      });
     }
   });
 }
 
-// Promise-based storage hydration for backward compatibility
+if (context === 'background') {
+  // Start at once, not when background.ts reaches hydrateWalletStore() after
+  // loadWallets(): message handlers (LOCK from the dashboard can wake the worker) run
+  // before then, and until hydration has read the stored record the persister holds
+  // their writes back rather than replace it with the store's defaults. The worker owns
+  // the data, so it also moves a record in the old format out of chrome.storage.
+  hydration = persister.hydrate({ migrate: true }).then(() => undefined);
+}
+
+// Promise-based storage hydration for backward compatibility. One read per context:
+// the options page and the worker await the same hydration the module started above.
 export const hydrateWalletStore = (): Promise<void> => {
-  return new Promise((resolve) => {
-    chrome.storage.local.get(STORE_NAME, (result) => {
-      if (result[STORE_NAME]) {
-        Object.assign(walletStore, result[STORE_NAME]);
-      }
-      resolve();
-    });
-  });
+  if (!hydration) hydration = persister.hydrate().then(() => undefined);
+  return hydration;
 };
 
-// Debounced storage write to reduce I/O operations
-let storageWriteTimeout: ReturnType<typeof setTimeout> | null = null;
+/** Write any pending walletStore persistence now (worker only; resolves once attempted). */
+export const flushWalletStorePersistence = (): Promise<void> => persister.flush();
 
 // Serializer function for complex data types
 function serializeValue(key: string, value: unknown): unknown {
@@ -262,23 +292,9 @@ function broadcastFromBackground(updates: Partial<WalletStore>) {
     // Broadcast to all connected browser contexts (immediate)
     backgroundStoreMessaging.broadcastUpdate(STORE_NAME, serializedUpdates);
 
-    // Debounced storage write to reduce I/O operations during rapid updates
-    // This batches multiple updates together while maintaining data consistency
-    if (storageWriteTimeout) {
-      clearTimeout(storageWriteTimeout);
-    }
-
-    storageWriteTimeout = setTimeout(() => {
-      try {
-        // Use the current local store state as the base to avoid race conditions
-        const finalState = { ...(walletStore) };
-        chrome.storage.local.set({
-          [STORE_NAME]: JSON.parse(JSON.stringify(finalState, serializeValue))
-        });
-      } catch (error) {
-        console.error('Failed to persist wallet store to storage:', Object.keys(updates), error);
-      }
-    }, 300); // 300ms debounce - balances performance with data safety
+    // Persist only what changed. The persister reads the in-memory store when it
+    // writes, so rapid updates still coalesce into one write per debounce window.
+    persister.markDirty(Object.keys(updates));
   }
 }
 

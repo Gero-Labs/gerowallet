@@ -16,10 +16,12 @@ The flow:
 background mutates store
   -> serialize (bigint -> string, Map -> object, Set -> array)
   -> broadcastUpdate over the 'store-sync' chrome.runtime port
-  -> chrome.storage.local.set (300ms debounce, WHOLE store snapshot)
+  -> persist, 300ms debounce. walletStore/networkStore (StorePersister): only the
+     touched fields; small ones to chrome.storage.local, bulk ones to IndexedDB
+     `gero-store-cache`. Most other stores: WHOLE store snapshot to chrome.storage.local
 
 UI page
-  -> one-shot hydrate from chrome.storage.local on cold start
+  -> one-shot hydrate on cold start (chrome.storage.local, plus the IndexedDB cache for StorePersister stores)
   -> storeMessaging.subscribe(STORE_NAME, handler) for live updates
   -> handler applies key-by-key:  if (key in store) store[key] = updates[key]
 ```
@@ -29,6 +31,8 @@ Two rules fall straight out of that:
 **Declare every field in the `Vue.observable({...})` literal with a default.** The subscribe handler drops unknown keys via `if (key in store)`, and Vue 2 only installs reactive getters on properties present at creation. A field added only to the type and the setter works in the background and never appears in the UI, with no error.
 
 **Use the in-memory store as the base for the `chrome.storage` write**, never `chrome.storage.local.get()`. The read-modify-write version races the Dexie liveQuery; the fix is commented in `geroStore.ts:108`. Copy `broadcastFromBackground` from `walletStore.ts`, `geroStore.ts`, `networkStore.ts`, `cip45Store.ts` or `loading.ts`. Do **not** copy it from `tapToolsStore`, `tokenMetadataStore`, `coinGeckoStore`, `charli3Store` or `musicStore` - those still carry the racy pattern. (`stores/modules/card.ts` has no `broadcastFromBackground` at all and never persists, so it is not a store template either.)
+
+**Keep `chrome.storage.local` values small.** Every write that changes a value makes Chrome copy the old and new value, on the browser UI thread, into every `storage.onChanged` listener. The Bring SDK registers one in the content script, which runs in every frame of every tab. A 27 MB `walletStore` rewritten on each `setSyncing` blocked that thread for 1-4 s per write, and froze Chrome windows in other profiles too. Give a store with large or fast-changing fields a `StorePersister` (`src/utils/storePersistence.ts`) and list those fields in `bulkFields`. `midnightStore` still writes its whole snapshot.
 
 **BigInt survives the trip out but not back.** The serializer stringifies `bigint`, and nothing revives it: both `storeMessaging.subscribe` and the cold-start hydrate assign the raw JSON. So in every browser context `walletStore.bitcoinBalance.{available,total,locked}` are **strings**, while in the background they are real BigInts. Arithmetic or a comparison written against the background's view throws `Cannot mix BigInt and other types` - or worse, silently compares strings - in UI contexts only, where no vitest run will see it. Coerce at the read site.
 
