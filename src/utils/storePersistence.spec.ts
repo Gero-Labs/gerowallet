@@ -437,4 +437,91 @@ describe('StorePersister upgrade path', () => {
     expect(f.state.loggedWallet).toEqual({ id: 2 });
     expect(f.state.transactions).toEqual([]);
   });
+
+  // Runtime and auto-lock handlers are live while background startup awaits
+  // hydrateWalletStore(), so writes can land in the middle of the upgrade.
+  it('preserves the only legacy history copy if a lock is persisted while initial IndexedDB hydration is still pending', async () => {
+    vi.useFakeTimers();
+    const history = [{ tx_hash: 'legacy-bitcoin-history' }];
+    const f = walletFixture();
+    f.records.set('walletStore', { loggedWallet: { id: 1 }, isLocked: false, transactions: history });
+    let finishRead!: (value: Map<string, StoreCacheEntry>) => void;
+    let signalReadStarted!: () => void;
+    const readStarted = new Promise<void>((resolve) => { signalReadStarted = resolve; });
+    f.bulk.read = () => { signalReadStarted(); return new Promise((resolve) => { finishRead = resolve; }); };
+    const persister = f.create();
+    const hydration = persister.hydrate({ migrate: true });
+    await readStarted;
+    expect(f.state.loggedWallet).toEqual({ id: 1 });
+
+    f.state.isLocked = true;
+    persister.markDirty(['isLocked']);
+    await persister.flush();
+
+    // Snapshot durable storage at a worker interruption before the read/migration finishes.
+    const durableAtInterruption = structuredClone(f.records.get('walletStore'));
+    const cachedAtInterruption = new Map(f.rows);
+    finishRead(new Map());
+    await hydration;
+    await persister.flush();
+
+    // Restart from exactly the interrupted state.
+    f.records.set('walletStore', durableAtInterruption);
+    const restarted = { loggedWallet: null as { id: number } | null, isLocked: false, transactions: [] as { tx_hash: string }[] };
+    const fromInterruption = new StorePersister(restarted, {
+      storeName: 'walletStore',
+      bulkFields: ['transactions'],
+      scope: (s) => String((s['loggedWallet'] as { id: number } | null)?.id ?? ''),
+      compact: f.compact,
+      bulk: { async read() { return cachedAtInterruption; }, async write() {} },
+    });
+    await fromInterruption.hydrate();
+    expect(restarted.isLocked).toBe(true);
+    expect(restarted.transactions).toEqual(history);
+  });
+
+  it('never replaces the old record before hydration has read it, and every state it passes through restores the session', async () => {
+    const history = [{ tx_hash: 'legacy-bitcoin-history' }];
+    const legacy = { loggedWallet: { id: 1 }, isLocked: false, transactions: history };
+    const f = walletFixture();
+    f.records.set('walletStore', structuredClone(legacy));
+    // Every durable state the upgrade leaves behind, in order.
+    const snapshots: { record: unknown; rows: Map<string, StoreCacheEntry> }[] = [];
+    const set = f.compact.set.bind(f.compact);
+    f.compact.set = async (key, value) => {
+      await set(key, value);
+      snapshots.push({ record: structuredClone(f.records.get(key)), rows: new Map(f.rows) });
+    };
+    let finishCompactRead!: () => void;
+    const get = f.compact.get.bind(f.compact);
+    const gate = new Promise<void>((resolve) => { finishCompactRead = resolve; });
+    f.compact.get = async (key) => { const value = await get(key); await gate; return value; };
+
+    const persister = f.create();
+    const hydration = persister.hydrate({ migrate: true });
+    // A lock lands before the stored record has even been read.
+    f.state.isLocked = true;
+    persister.markDirty(['isLocked']);
+    const flushing = persister.flush();
+    await Promise.resolve();
+    expect(f.records.get('walletStore')).toEqual(legacy);
+
+    finishCompactRead();
+    await flushing;
+    await hydration;
+    await persister.flush();
+
+    expect(snapshots.length).toBeGreaterThan(0);
+    for (const { record, rows } of snapshots) {
+      const restarted = { loggedWallet: null as { id: number } | null, isLocked: false, transactions: [] as { tx_hash: string }[] };
+      await new StorePersister(restarted, {
+        storeName: 'walletStore',
+        bulkFields: ['transactions'],
+        scope: (s) => String((s['loggedWallet'] as { id: number } | null)?.id ?? ''),
+        compact: { async get() { return structuredClone(record); }, async set() {} },
+        bulk: { async read() { return rows; }, async write() {} },
+      }).hydrate();
+      expect(restarted).toEqual({ loggedWallet: { id: 1 }, isLocked: true, transactions: history });
+    }
+  });
 });

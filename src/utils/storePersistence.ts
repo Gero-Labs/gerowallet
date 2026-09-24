@@ -101,6 +101,14 @@ export class StorePersister {
    * even while the move keeps failing.
    */
   private readonly legacyInline = new Set<string>();
+  /**
+   * The old record's own bulk values, held from the moment hydration reads it until
+   * the store carries them. Setters keep persisting while the IndexedDB read is
+   * pending, and the store still holds empty defaults then.
+   */
+  private readonly legacyHeld = new Map<string, unknown>();
+  /** A hydration's chrome.storage read. No write may replace the record before it lands. */
+  private compactRead: Promise<State | null> | null = null;
   private retryMs = 0;
 
   constructor(private readonly state: State, private readonly options: StorePersisterOptions) {
@@ -150,6 +158,9 @@ export class StorePersister {
       clearTimeout(this.timer);
       this.timer = null;
     }
+    // Writing before a hydration has read the stored record would replace it with the
+    // store's defaults: the session, and an old record's only copy of its bulk fields.
+    if (this.compactRead) await this.compactRead;
     // One write at a time, so two flushes can never land the same key out of order.
     while (this.inFlight) await this.inFlight;
     if (!this.compactDirty && this.bulkDirty.size === 0) return;
@@ -235,7 +246,8 @@ export class StorePersister {
   private compactView(): State {
     const view: State = {};
     for (const key of Object.keys(this.state)) {
-      if (!this.bulkFields.has(key) || this.legacyInline.has(key)) view[key] = this.state[key];
+      if (!this.bulkFields.has(key)) view[key] = this.state[key];
+      else if (this.legacyInline.has(key)) view[key] = this.legacyHeld.has(key) ? this.legacyHeld.get(key) : this.state[key];
     }
     return view;
   }
@@ -254,12 +266,14 @@ export class StorePersister {
     this.hydrationWatchers.add(touched);
     const keep = (field: string) => !touched.has(field) && !skip?.has(field);
     try {
-      let stored: State | null = null;
+      // Set before the first await: a flush from here on waits for this read (see flush).
+      const reading = this.readCompactRecord();
+      this.compactRead = reading;
+      let stored: State | null;
       try {
-        const value = await this.compact.get(storeName);
-        if (value && typeof value === 'object') stored = value as State;
-      } catch (error) {
-        console.error(`Failed to read ${storeName}:`, error);
+        stored = await reading;
+      } finally {
+        if (this.compactRead === reading) this.compactRead = null;
       }
 
       const legacy: State = {};
@@ -267,6 +281,15 @@ export class StorePersister {
         for (const [field, value] of Object.entries(stored)) {
           if (this.bulkFields.has(field)) legacy[field] = value;
           else if (keep(field)) this.state[field] = value;
+        }
+      }
+      const legacyFields = Object.keys(legacy);
+      if (migrate) {
+        // The old record holds the only persisted copy of these. Keep the values
+        // themselves in every compact write while the IndexedDB read below is pending.
+        for (const field of legacyFields) {
+          this.legacyInline.add(field);
+          this.legacyHeld.set(field, legacy[field]);
         }
       }
 
@@ -301,19 +324,32 @@ export class StorePersister {
         if (value !== undefined && keep(field)) this.state[field] = value;
       }
 
-      // Move an old-format record's bulk fields into IndexedDB. Each stays inline in the
-      // chrome.storage record until IndexedDB confirms it.
-      if (migrate && Object.keys(legacy).length > 0) {
-        fromLegacy.forEach((field) => {
-          this.legacyInline.add(field);
-          this.bulkDirty.add(field);
-        });
+      // Move an old-format record's bulk fields into IndexedDB. From here the store
+      // carries each value (or a newer one a setter wrote); it stays inline in the
+      // chrome.storage record until IndexedDB confirms it. A field already in
+      // IndexedDB, or belonging to another session, no longer needs the inline copy.
+      if (migrate && legacyFields.length > 0) {
+        for (const field of legacyFields) {
+          this.legacyHeld.delete(field);
+          if (fromLegacy.includes(field)) this.bulkDirty.add(field);
+          else this.legacyInline.delete(field);
+        }
         this.compactDirty = true;
         void this.flush();
       }
       return stored;
     } finally {
       this.hydrationWatchers.delete(touched);
+    }
+  }
+
+  private async readCompactRecord(): Promise<State | null> {
+    try {
+      const value = await this.compact.get(this.options.storeName);
+      return value && typeof value === 'object' ? (value as State) : null;
+    } catch (error) {
+      console.error(`Failed to read ${this.options.storeName}:`, error);
+      return null;
     }
   }
 }
