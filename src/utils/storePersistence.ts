@@ -103,9 +103,10 @@ export class StorePersister {
   private readonly legacyInline = new Set<string>();
   /**
    * The old record's own bulk values, held from the moment hydration reads it until
-   * the store carries them. Setters keep persisting while the IndexedDB read is
-   * pending, and the store still holds empty defaults then. A setter that writes the
-   * field supersedes its held value (see markDirty).
+   * IndexedDB confirms them. Writes use a held value instead of the store's copy:
+   * the store holds empty defaults while the IndexedDB read is pending, and can be
+   * emptied without a setter afterwards. A setter that writes the field supersedes
+   * its held value (see markDirty).
    */
   private readonly legacyHeld = new Map<string, unknown>();
   /**
@@ -206,9 +207,12 @@ export class StorePersister {
       const entries: StoreCacheEntry[] = [];
       const pending = new Map<string, string>();
       for (const field of bulkFields) {
+        // A held legacy value is what the field still is on disk; the store's copy may
+        // have been emptied without a setter (clearForWalletSwitch at login).
+        const value = this.legacyHeld.has(field) ? this.legacyHeld.get(field) : this.state[field];
         let json: string;
         try {
-          json = JSON.stringify(this.state[field] ?? null, replacer);
+          json = JSON.stringify(value ?? null, replacer);
         } catch (error) {
           console.error(`Failed to serialize ${storeName}.${field}:`, error);
           continue;
@@ -216,6 +220,7 @@ export class StorePersister {
         const fp = fingerprint(scope, json);
         if (this.lastBulk.get(field) === fp) {
           // Already in IndexedDB as-is, so an inline legacy copy is now redundant.
+          this.legacyHeld.delete(field);
           if (this.legacyInline.delete(field)) writeCompact = true;
           continue;
         }
@@ -227,6 +232,8 @@ export class StorePersister {
           await this.bulk.write(entries);
           pending.forEach((fp, field) => {
             this.lastBulk.set(field, fp);
+            // IndexedDB now holds the field, so the old record's copy is no longer the only one.
+            this.legacyHeld.delete(field);
             if (this.legacyInline.delete(field)) writeCompact = true;
           });
         } catch (error) {
@@ -331,7 +338,13 @@ export class StorePersister {
       for (const field of this.bulkFields) {
         const entry = entries.get(this.bulkKey(field));
         let value: unknown;
-        if (entry && entry.scope === scope) {
+        if (legacyUsable && field in legacy) {
+          // Only builds older than the split write bulk fields inline (this one does only
+          // while IndexedDB keeps failing), so an inline copy is the later write and wins
+          // over IndexedDB: a user who rolled back and upgraded again keeps the newer data.
+          value = legacy[field];
+          fromLegacy.push(field);
+        } else if (entry && entry.scope === scope) {
           try {
             value = JSON.parse(entry.json);
             this.lastBulk.set(field, fingerprint(entry.scope, entry.json));
@@ -339,24 +352,22 @@ export class StorePersister {
             console.error(`Discarding unreadable cached ${storeName}.${field}:`, error);
           }
         }
-        if (value === undefined && legacyUsable && field in legacy) {
-          value = legacy[field];
-          fromLegacy.push(field);
-        }
         if (value !== undefined && keep(field)) this.state[field] = value;
       }
 
-      // Move an old-format record's bulk fields into IndexedDB. From here the store
-      // carries each value (or a newer one a setter wrote); it stays inline in the
-      // chrome.storage record until IndexedDB confirms it. A field already in
-      // IndexedDB, or belonging to another session, no longer needs the inline copy.
+      // Move an old-format record's bulk fields into IndexedDB. Each stays held, and
+      // inline in the chrome.storage record, until IndexedDB confirms it: the store's own
+      // copy can be emptied without a setter before that write lands (clearForWalletSwitch
+      // at login). A field belonging to another session no longer needs either.
       if (migrate && legacyFields.length > 0) {
         for (const field of legacyFields) {
-          this.legacyHeld.delete(field);
           if (fromLegacy.includes(field)) {
             this.legacyInline.add(field);
+            // A setter's newer value supersedes the old one (see markDirty).
+            if (!touched.has(field)) this.legacyHeld.set(field, legacy[field]);
             this.bulkDirty.add(field);
           } else {
+            this.legacyHeld.delete(field);
             this.legacyInline.delete(field);
           }
         }

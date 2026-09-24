@@ -246,13 +246,19 @@ if (context === 'browser') {
   });
 }
 
+if (context === 'background') {
+  // Start at once, not when background.ts reaches hydrateWalletStore() after
+  // loadWallets(): message handlers (LOCK from the dashboard can wake the worker) run
+  // before then, and until hydration has read the stored record the persister holds
+  // their writes back rather than replace it with the store's defaults. The worker owns
+  // the data, so it also moves a record in the old format out of chrome.storage.
+  hydration = persister.hydrate({ migrate: true }).then(() => undefined);
+}
+
 // Promise-based storage hydration for backward compatibility. One read per context:
-// the options page awaits the same hydration the module started above.
+// the options page and the worker await the same hydration the module started above.
 export const hydrateWalletStore = (): Promise<void> => {
-  if (!hydration) {
-    // The worker owns the data, so it also moves a record in the old format out of chrome.storage.
-    hydration = persister.hydrate({ migrate: context === 'background' }).then(() => undefined);
-  }
+  if (!hydration) hydration = persister.hydrate().then(() => undefined);
   return hydration;
 };
 

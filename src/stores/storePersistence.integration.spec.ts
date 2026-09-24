@@ -203,10 +203,11 @@ describe('store persistence in the worker', () => {
       utxos: [], programmableTokens: {}, programmableLockedLovelace: '0', collateral: null,
     }));
     env.data.set('walletStore', legacy);
+    w = await startWorker(); // the worker starts with the old record already in place
 
-    await w!.wallet.hydrateWalletStore();
-    expect(w!.wallet.walletStore.transactions).toHaveLength(200);
-    await settle(w!.wallet);
+    await w.wallet.hydrateWalletStore();
+    expect(w.wallet.walletStore.transactions).toHaveLength(200);
+    await settle(w.wallet);
 
     const record = lastRecord('walletStore')!;
     BULK.forEach((field) => expect(record).not.toHaveProperty(field));
@@ -215,6 +216,34 @@ describe('store persistence in the worker', () => {
     // Bitcoin history lives only here (no Dexie table), so it must come back after a restart.
     w = await startWorker();
     await w.wallet.hydrateWalletStore();
+    expect(w.wallet.walletStore.transactions).toEqual(legacy.transactions);
+  });
+
+  // background.ts reaches hydrateWalletStore() only after loadWallets(), and the LOCK
+  // message handler (the dashboard's Lock button can wake the worker) is live before
+  // that. Writing the lock then must not replace the stored session with defaults.
+  it('a lock handled before the worker reaches hydrateWalletStore() keeps the session and its data', async () => {
+    const big = bigWallet(100, 7);
+    const legacy = JSON.parse(JSON.stringify({
+      loggedWallet: { id: 7, chain: 'Bitcoin' }, isLocked: false, isSyncing: false, account: null,
+      config: { currency: 'usd' }, contacts: {}, connectedDapps: [], ...big,
+      utxos: [], programmableTokens: {}, programmableLockedLovelace: '0', collateral: null,
+    }));
+    env.data.set('walletStore', legacy);
+    w = await startWorker();
+    w.wallet.default.setLocked(true);
+    await new Promise((r) => setTimeout(r, 5));
+    await w.wallet.hydrateWalletStore();
+    await settle(w.wallet);
+
+    expect(w.wallet.walletStore.loggedWallet).toEqual({ id: 7, chain: 'Bitcoin' });
+    expect(w.wallet.walletStore.isLocked).toBe(true);
+    expect(w.wallet.walletStore.transactions).toEqual(legacy.transactions);
+
+    w = await startWorker();
+    await w.wallet.hydrateWalletStore();
+    expect(w.wallet.walletStore.loggedWallet).toEqual({ id: 7, chain: 'Bitcoin' });
+    expect(w.wallet.walletStore.isLocked).toBe(true);
     expect(w.wallet.walletStore.transactions).toEqual(legacy.transactions);
   });
 

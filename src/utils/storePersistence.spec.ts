@@ -294,14 +294,18 @@ describe('StorePersister', () => {
     expect(JSON.parse(bulk.data.get('testStore.items')!.json)).toHaveLength(30);
   });
 
-  it('prefers IndexedDB over the old record once the move has half-completed', async () => {
-    // Bulk written, then the worker died before the compact rewrite.
+  it('re-migrates from the old record when the move had half-completed', async () => {
+    // Bulk written, then the worker died before the compact rewrite. Only builds older
+    // than the split write bulk fields inline, so the inline copy is never the older one.
     const legacy = { session: { id: 5 }, flag: false, label: 'old', items: bigItems(30), index: {} };
     compact.data.set('testStore', JSON.parse(JSON.stringify(legacy)));
-    await bulk.write([{ key: 'testStore.items', scope: '5', json: JSON.stringify(bigItems(31)), savedAt: 0 }]);
+    await bulk.write([{ key: 'testStore.items', scope: '5', json: JSON.stringify(bigItems(30)), savedAt: 0 }]);
 
     await persister.hydrate({ migrate: true });
-    expect(state.items).toHaveLength(31);
+    await persister.flush();
+    expect(state.items).toEqual(JSON.parse(JSON.stringify(bigItems(30))));
+    expect(compact.data.get('testStore')).not.toHaveProperty('items');
+    expect(JSON.parse(bulk.data.get('testStore.items')!.json)).toHaveLength(30);
   });
 
   it('does not overwrite fields the port delivered while hydration was reading', async () => {
@@ -616,4 +620,70 @@ describe('durable state during pending legacy hydration', () => {
       });
     }
   }
+});
+
+// Independent review of 6b2b3674.
+describe('StorePersister migration hand-off', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // login() runs clearForWalletSwitch(), which empties the bulk fields in memory without
+  // marking them. The migration's own write can still be queued behind another write
+  // at that point, and must not take those empties for the store's data.
+  it('keeps the legacy history when the store is emptied without a setter before the migration write lands', async () => {
+    const history = [{ tx_hash: 'legacy-bitcoin-history' }];
+    const f = walletFixture();
+    f.records.set('walletStore', { loggedWallet: { id: 1 }, isLocked: false, transactions: history });
+    let releaseBulk!: (value: Map<string, StoreCacheEntry>) => void;
+    let signalBulk!: () => void;
+    const bulkStarted = new Promise<void>((resolve) => { signalBulk = resolve; });
+    f.bulk.read = () => { signalBulk(); return new Promise((resolve) => { releaseBulk = resolve; }); };
+    let releaseSet!: () => void;
+    const setGate = new Promise<void>((resolve) => { releaseSet = resolve; });
+    const set = f.compact.set.bind(f.compact);
+    let gated = true;
+    f.compact.set = async (key, value) => {
+      if (gated) { gated = false; await setGate; }
+      return set(key, value);
+    };
+
+    const p = f.create();
+    const hydrating = p.hydrate({ migrate: true });
+    await bulkStarted;
+    // A lock lands during the read, and its write is still in flight when the read resolves.
+    f.state.isLocked = true;
+    p.markDirty(['isLocked']);
+    const locking = p.flush();
+    releaseBulk(new Map());
+    await hydrating;
+    // login(sameWallet): clearForWalletSwitch() empties the bulk fields, then the wallet is set again.
+    f.state.transactions = [];
+    f.state.loggedWallet = { id: 1 };
+    p.markDirty(['loggedWallet']);
+    releaseSet();
+    await locking;
+    await p.flush();
+
+    f.bulk.read = async () => new Map(f.rows);
+    const restarted = { loggedWallet: null as { id: number } | null, isLocked: false, transactions: [] as { tx_hash: string }[] };
+    await f.create(restarted).hydrate();
+    expect(restarted).toEqual({ loggedWallet: { id: 1 }, isLocked: true, transactions: history });
+  });
+
+  // Upgrade, roll back to a build that writes the whole record inline, upgrade again.
+  it('prefers a newer inline copy over an older IndexedDB entry for the same wallet', async () => {
+    const f = walletFixture();
+    f.rows.set('walletStore.transactions', { key: 'walletStore.transactions', scope: '1', json: JSON.stringify([{ tx_hash: 'a' }, { tx_hash: 'b' }]), savedAt: 0 });
+    const newer = [{ tx_hash: 'a' }, { tx_hash: 'b' }, { tx_hash: 'c-added-while-downgraded' }];
+    f.records.set('walletStore', { loggedWallet: { id: 1 }, isLocked: false, transactions: newer });
+
+    const p = f.create();
+    await p.hydrate({ migrate: true });
+    await p.flush();
+
+    expect(f.state.transactions).toEqual(newer);
+    expect(JSON.parse(f.rows.get('walletStore.transactions')!.json)).toEqual(newer);
+    expect(f.records.get('walletStore')).not.toHaveProperty('transactions');
+  });
 });
