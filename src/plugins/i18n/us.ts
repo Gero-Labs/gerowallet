@@ -4030,6 +4030,25 @@ export default {
   'receive.shareTitle': 'Share Bitcoin Address',
   'receive.myBitcoinAddress': 'My Bitcoin Address',
 
+  // Receive dialog
+  'receive.subtitle': 'Share an address from this wallet',
+  'receive.tabStake': 'Stake',
+  'receive.tabDrep': 'DRep ID',
+  'receive.paymentInfo': 'Only send {ticker} and Cardano native tokens to this address.',
+  'receive.stakeInfo': 'Staking rewards are credited here. To receive funds, share your payment address instead.',
+  'receive.drepInfo': 'Share this ID so {ticker} holders can delegate their vote to you.',
+  'receive.drepLegacyInfo': 'Older CIP-105 format, for tools that do not read CIP-129 yet.',
+  'receive.format': 'Format',
+  'receive.copyDrepId': 'Copy DRep ID',
+  'receive.saveQr': 'Save QR',
+  'receive.qrLabel': 'QR code of this address',
+  'receive.showFullAddress': 'Show full address',
+  'receive.derivationDetails': 'Derivation details',
+  'receive.credential': 'Credential',
+  'receive.includeChange': 'Include change addresses',
+  'receive.changeChip': 'Change',
+  'receive.noUsedAddresses': 'No used addresses yet',
+
   // Bitcoin Transaction Types
   'transactions.selfTransfer': 'Self Transfer',
   'transactions.transaction': 'Transaction',

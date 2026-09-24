@@ -1,305 +1,298 @@
 <template>
-  <BaseDialog :width="850"
+  <BaseDialog
+    size="lg"
     :isOpen="isOpen"
     @close="emit('close')"
     :title="t('wallet.receive')"
-    :subtitle="isBitcoinWallet ? t('receive.yourAddress') : t('wallet.myWalletAddresses')"
-    :min-height="300"
-    :height="600"
+    :subtitle="t('receive.subtitle')"
+    :min-height="0"
     :persistent="false"
     :img="assets.qrCodeSvg"
-    imgStyle="filter: brightness(0) saturate(100%) invert(100%) sepia(49%) saturate(2%) hue-rotate(47deg) brightness(118%) contrast(101%);"
+    img-color="var(--g-accent)"
   >
-    <!-- Midnight Wallet UI — three role-specific addresses -->
-    <v-card-title v-if="isMidnightWallet" class="py-0 transparent">
-      <v-tabs
-        v-model="midnightTab"
-        centered
-        background-color="transparent"
+    <v-card-text class="receive-body pa-0 pt-2">
+      <!-- Which address: Cardano payment/stake/DRep, Bitcoin address type, or
+           Midnight public/private/DUST. -->
+      <div
+        role="tablist"
+        class="receive-segments"
+        :aria-label="t('receive.addressType')"
+        :style="{ '--receive-cols': segments.length }"
       >
-        <v-tab>{{ t('midnight.common.public') }}</v-tab>
-        <v-tab>{{ t('midnight.common.private') }}</v-tab>
-        <v-tab>{{ t('midnight.receive.tabDust') }}</v-tab>
-      </v-tabs>
-      <v-tabs-items v-model="midnightTab" class="transparent">
-        <v-tab-item eager v-for="(item, i) in midnightTabs" :key="i">
-          <v-list-item three-line class="px-0">
-            <v-list-item-avatar size="160" rounded>
-              <div
-                class="qr-container"
-                :ref="el => setMidnightQrContainerRef(el, i)"
-              ></div>
-            </v-list-item-avatar>
-            <v-list-item-content class="pl-4">
-              <h4 class="address-label">{{ item.label }}</h4>
-              <div class="address-row">
-                <span
-                  class="address-text"
-                  @click="triggerCopy(item.value)"
-                >
-                  {{ item.value ? filters.truncate(item.value) : '—' }}
-                </span>
-                <CopyButton v-if="item.value" class="ml-1" :ref="el => setCopyButtonRef(el, item.value)" x-small :value="item.value" />
-              </div>
-              <p class="info-text">{{ item.info }}</p>
-              <p v-if="!item.value" class="path-text" style="color: var(--g-warning);">
-                {{ t('midnight.receive.pendingSdk') }}
-              </p>
-            </v-list-item-content>
-          </v-list-item>
-        </v-tab-item>
-      </v-tabs-items>
-    </v-card-title>
+        <button
+          v-for="segment in segments"
+          :key="segment.id"
+          type="button"
+          role="tab"
+          class="receive-segment"
+          :class="{ 'receive-segment--active': segment.id === activeSegment }"
+          :aria-selected="segment.id === activeSegment ? 'true' : 'false'"
+          @click="selectSegment(segment.id)"
+        >
+          <span v-if="segment.id === activeSegment" class="receive-segment__dot" aria-hidden="true"></span>
+          <span>{{ segment.label }}</span>
+        </button>
+      </div>
 
-    <!-- Bitcoin Wallet UI -->
-    <v-card-title v-else-if="isBitcoinWallet" class="py-0 transparent">
-      <v-list-item three-line class="px-0">
-        <v-list-item-avatar size="160" rounded>
-          <div class="qr-container" ref="btcQrContainer"></div>
-        </v-list-item-avatar>
-        <v-list-item-content class="pl-4">
-          <h4 class="address-label">{{ bitcoinAddressTypeLabel }}</h4>
-          <div class="address-row">
-            <span class="address-text" @click="triggerCopy(bitcoinAddress)">
-              {{ filters.truncate(bitcoinAddress) }}
-            </span>
-            <CopyButton class="ml-1" x-small :value="bitcoinAddress" />
-          </div>
-          <p class="path-text">{{ $t('navigation.hdPath') }}: m/{{ bitcoinDerivationPurpose }}'/0'/0'/0/{{ bitcoinAddressIndex }}</p>
-          <p class="info-text">{{ bitcoinAddressTypeDescription }}</p>
-        </v-list-item-content>
-      </v-list-item>
-    </v-card-title>
+      <section class="receive-hero">
+        <div
+          class="receive-qr"
+          :class="{ 'receive-qr--empty': !qrData }"
+          :role="qrData ? 'img' : undefined"
+          :aria-label="qrData ? t('receive.qrLabel') : undefined"
+        >
+          <div v-show="!!qrData" ref="qrEl" class="receive-qr__code"></div>
+          <p v-if="!qrData" class="receive-qr__empty t-caption">{{ t('midnight.receive.pendingSdk') }}</p>
+        </div>
 
-    <!-- Cardano Wallet UI (Original) -->
-    <v-card-title v-else-if="!isMidnightWallet" class="py-0 transparent">
-      <v-tabs
-        v-model="tab"
-        centered
-        background-color="transparent"
-      >
-        <v-tab>{{ $t('wallet.payment') }}</v-tab>
-        <v-tab>{{ $t('wallet.reward') }}</v-tab>
-        <v-tab v-if="networks.resolveGovernanceSupport(loggedWallet?.chain, loggedWallet?.network)">DRep 105</v-tab>
-        <v-tab v-if="networks.resolveGovernanceSupport(loggedWallet?.chain, loggedWallet?.network)">DRep 129</v-tab>
-      </v-tabs>
-      <v-tabs-items v-model="tab" class="transparent">
-        <v-tab-item eager v-for="(item, i) in tabs" :key="i" v-if="item.enabled">
-          <v-list-item three-line class="px-0">
-            <v-list-item-avatar size="160" rounded>
+        <div class="receive-hero__info">
+          <div class="receive-address">
+            <!-- The DRep format pills share the label's line, so the DRep tab is
+                 no taller than the others. -->
+            <div class="receive-address__top">
+              <span class="receive-address__label">{{ target.label }}</span>
               <div
-                class="qr-container"
-                :ref="el => setQrContainerRef(el, i)"
-              ></div>
-            </v-list-item-avatar>
-            <v-list-item-content class="pl-4">
-              <h4 class="address-label">{{ item.label }}</h4>
-              <div class="address-row">
-              <span
-                class="address-text"
-                @click="triggerCopy(item.value)"
+                v-if="activeSegment === 'drep' && drepFormats.length > 1"
+                class="receive-formats"
+                role="group"
+                :aria-label="t('receive.format')"
               >
-                {{ filters.truncate(item.value) }}
-              </span>
-                <CopyButton class="ml-1" :ref="el => setCopyButtonRef(el, item.value)" x-small :value="item.value" />
-              </div>
-              <p class="path-text">{{ $t('navigation.hdPath') }}: {{ item.path }}</p>
-              <p class="path-text">{{ $t('navigation.cred') }}: {{ filters.truncate(item.cred) }}<CopyButton class="ml-1" :value="item.cred" x-small /></p>
-              <p class="info-text">{{ item.info }}</p>
-            </v-list-item-content>
-          </v-list-item>
-        </v-tab-item>
-      </v-tabs-items>
-    </v-card-title>
-    <v-card-text class="px-3 pb-3">
-      <!-- Bitcoin Controls -->
-      <v-expansion-panels v-if="isBitcoinWallet" v-model="bitcoinExpandedPanels" multiple class="accordion-container">
-        <!-- Address Type Selector -->
-        <v-expansion-panel style="background-color: var(--g-raised); border-radius: var(--g-r-control);">
-          <v-expansion-panel-header>
-            <div class="header-container">
-              <div class="icon-container">
-                <v-icon color="#333741">mdi-cog-outline</v-icon>
-              </div>
-              <h3>{{ $t('receive.addressType') }}</h3>
-            </div>
-          </v-expansion-panel-header>
-          <v-expansion-panel-content class="content-container">
-            <v-card flat class="transparent">
-              <v-card-text class="px-0 pt-2">
-                <v-select
-                  v-model="bitcoinAddressType"
-                  :items="bitcoinAddressTypeOptions"
-                  outlined
-                  dense
-                  hide-details
-                  @change="updateBitcoinAddress"
-                ></v-select>
-              </v-card-text>
-            </v-card>
-          </v-expansion-panel-content>
-        </v-expansion-panel>
-
-        <!-- Address Navigation -->
-        <v-expansion-panel style="background-color: var(--g-raised); border-radius: var(--g-r-control);">
-          <v-expansion-panel-header>
-            <div class="header-container">
-              <div class="icon-container">
-                <v-icon color="#333741">mdi-arrow-left-right</v-icon>
-              </div>
-              <h3>{{ $t('receive.addressIndex') }}: {{ bitcoinAddressIndex }}</h3>
-            </div>
-          </v-expansion-panel-header>
-          <v-expansion-panel-content class="content-container">
-            <v-card flat class="transparent">
-              <v-card-text class="px-0 pt-2">
-                <div class="d-flex align-center justify-space-between">
-                  <v-btn
-                    outlined
-                    small
-                    @click="previousBitcoinAddress"
-                    :disabled="bitcoinAddressIndex === 0"
-                  >
-                    <v-icon left>mdi-chevron-left</v-icon>
-                    {{ $t('common.previous') }}
-                  </v-btn>
-                  <v-btn outlined small @click="nextBitcoinAddress">
-                    {{ $t('common.next') }}
-                    <v-icon right>mdi-chevron-right</v-icon>
-                  </v-btn>
-                </div>
-              </v-card-text>
-            </v-card>
-          </v-expansion-panel-content>
-        </v-expansion-panel>
-
-        <!-- Optional Amount/Label -->
-        <v-expansion-panel style="background-color: var(--g-raised); border-radius: var(--g-r-control);">
-          <v-expansion-panel-header>
-            <div class="header-container">
-              <div class="icon-container">
-                <v-icon color="#333741">mdi-tag-outline</v-icon>
-              </div>
-              <h3>{{ $t('receive.specifyAmount') }} ({{ $t('common.optional') }})</h3>
-            </div>
-          </v-expansion-panel-header>
-          <v-expansion-panel-content class="content-container">
-            <v-card flat class="transparent">
-              <v-card-text class="px-0 pt-2">
-                <v-text-field
-                  v-model="bitcoinAmount"
-                  :label="$t('receive.amount') + ' (BTC)'"
-                  type="number"
-                  step="0.00000001"
-                  outlined
-                  dense
-                  hide-details
-                  @input="updateBitcoinQrCode"
+                <button
+                  v-for="format in drepFormats"
+                  :key="format"
+                  type="button"
+                  class="receive-format"
+                  :class="{ 'receive-format--active': format === activeDrepFormat }"
+                  :aria-pressed="format === activeDrepFormat ? 'true' : 'false'"
+                  @click="drepFormat = format"
                 >
-                  <template v-slot:append>
-                    <span class="text-caption">BTC</span>
-                  </template>
-                </v-text-field>
-                <v-text-field
-                  v-model="bitcoinLabel"
-                  :label="$t('receive.label')"
-                  outlined
-                  dense
-                  counter="50"
-                  maxlength="50"
-                  class="mt-2"
-                  @input="updateBitcoinQrCode"
-                ></v-text-field>
-              </v-card-text>
-            </v-card>
-          </v-expansion-panel-content>
-        </v-expansion-panel>
-      </v-expansion-panels>
-
-      <!-- Cardano Used Addresses (Original) -->
-      <v-expansion-panels v-else v-model="expandedPanels" multiple class="accordion-container">
-        <v-expansion-panel style="background-color: var(--g-raised); border-radius: var(--g-r-control);">
-          <v-expansion-panel-header>
-            <div class="header-container">
-              <div class="icon-container">
-                <v-icon color="#333741">mdi-wallet-outline</v-icon>
+                  {{ DREP_FORMAT_LABELS[format] }}
+                </button>
               </div>
-              <h3>{{ $t('wallet.usedAddresses') }} ({{ usedAddresses.length }})</h3>
-              <v-spacer />
-              <v-switch
-                inset
-                class="my-0 mr-2"
-                v-model="showInternal"
-                dense
-                hide-details
-                :label="$t('wallet.showInternal')"
-                @click.stop
-              />
             </div>
-          </v-expansion-panel-header>
-          <v-expansion-panel-content class="content-container">
-            <v-card flat class="transparent">
-              <v-card-text class="px-0 pt-2">
-                <v-simple-table dense style="background-color: transparent">
-                  <thead>
-                    <tr>
-                      <th class="text-left grey--text t-label">{{ $t('wallet.address') }}</th>
-                      <th class="text-left grey--text t-label">{{ $t('wallet.path') }}</th>
-                      <th class="text-center grey--text t-label">{{ $t('wallet.type') }}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="(item, index) in usedAddresses" :key="index">
-                      <td class="text-left">
-                        <div class="d-flex align-center">
-                          <span class="address-cell">{{ filters.shortenStringWithEllipsis(item.address, 40) }}</span>
-                          <CopyButton x-small :value="item.address" class="ml-1" />
-                        </div>
-                        <div class="d-flex align-center mt-1">
-                          <span class="caption grey--text">Cred: {{ filters.truncate(item.cred) }}</span>
-                          <CopyButton x-small :value="item.cred" class="ml-1" />
-                        </div>
-                      </td>
-                      <td class="text-left">
-                        <span class="path-cell">{{ item.path }}</span>
-                      </td>
-                      <td class="text-center">
-                        <v-chip
-                          x-small
-                          outlined
-                          :color="item.internal ? 'orange' : 'primary'"
-                        >
-                          {{ item.internal ? 'Internal' : 'External' }}
-                        </v-chip>
-                      </td>
-                    </tr>
-                  </tbody>
-                </v-simple-table>
-                <div v-if="usedAddresses.length === 0" class="text-center py-4 grey--text">
-                  No used addresses found
-                </div>
-              </v-card-text>
-            </v-card>
-          </v-expansion-panel-content>
-        </v-expansion-panel>
-      </v-expansion-panels>
+            <p
+              v-if="target.value"
+              class="receive-address__value"
+              :class="{ 'receive-address__value--full': showFull }"
+            ><span>{{ addressParts.head }}</span><span class="receive-address__mid">{{ addressParts.mid }}</span><span>{{ addressParts.tail }}</span></p>
+            <button
+              v-if="canExpandAddress"
+              type="button"
+              class="receive-link"
+              :aria-expanded="showFull ? 'true' : 'false'"
+              @click="showFull = !showFull"
+            >
+              {{ showFull ? t('governance.showLess') : t('receive.showFullAddress') }}
+            </button>
+          </div>
+
+          <div class="receive-actions">
+            <GButton tier="primary" :disabled="!target.value" @click="copyTarget()">
+              <v-icon small left>{{ copied ? 'mdi-check' : 'mdi-content-copy' }}</v-icon>
+              {{ copied ? t('common.copied') : copyLabel }}
+            </GButton>
+            <GButton tier="secondary" :disabled="!qrData" @click="saveQr()">
+              <v-icon small left>mdi-tray-arrow-down</v-icon>
+              {{ t('receive.saveQr') }}
+            </GButton>
+          </div>
+
+          <p v-if="target.hint" class="receive-hint">
+            <v-icon small color="var(--g-info)" class="receive-hint__icon">mdi-information-outline</v-icon>
+            <span>{{ target.hint }}</span>
+          </p>
+        </div>
+      </section>
+
+      <!-- Derivation details: HD path, credential, and the Bitcoin address index. -->
+      <section v-if="target.path" class="receive-card">
+        <button
+          type="button"
+          class="receive-card__toggle"
+          aria-controls="receive-details"
+          :aria-expanded="detailsOpen ? 'true' : 'false'"
+          @click="detailsOpen = !detailsOpen"
+        >
+          <v-icon small color="var(--g-text-2)">mdi-file-tree-outline</v-icon>
+          <span class="receive-card__title receive-card__title--quiet">{{ t('receive.derivationDetails') }}</span>
+          <span class="receive-card__meta">{{ target.path }}</span>
+          <v-icon small class="receive-chevron" :class="{ 'receive-chevron--open': detailsOpen }">mdi-chevron-down</v-icon>
+        </button>
+        <v-expand-transition>
+          <div v-show="detailsOpen" id="receive-details" class="receive-details">
+            <div class="receive-details__item">
+              <span class="t-caption">{{ t('navigation.hdPath') }}</span>
+              <span class="receive-mono">{{ target.path }}</span>
+            </div>
+            <div v-if="target.cred" class="receive-details__item">
+              <span class="t-caption">{{ t('receive.credential') }}</span>
+              <span class="receive-mono">
+                {{ filters.truncate(target.cred) }}
+                <CopyButton x-small :value="target.cred" />
+              </span>
+            </div>
+            <div v-if="isBitcoinWallet" class="receive-details__item">
+              <span class="t-caption">{{ t('receive.addressIndex') }}</span>
+              <div class="receive-stepper">
+                <GButton
+                  compact
+                  :aria-label="t('common.previous')"
+                  :disabled="bitcoinAddressIndex === 0"
+                  @click="previousBitcoinAddress()"
+                >
+                  <v-icon small>mdi-chevron-left</v-icon>
+                </GButton>
+                <span class="receive-mono g-num">{{ bitcoinAddressIndex }}</span>
+                <GButton compact :aria-label="t('common.next')" @click="nextBitcoinAddress()">
+                  <v-icon small>mdi-chevron-right</v-icon>
+                </GButton>
+              </div>
+            </div>
+          </div>
+        </v-expand-transition>
+      </section>
+
+      <!-- Bitcoin: optional BIP21 amount and label, encoded into the QR. -->
+      <section v-if="isBitcoinWallet" class="receive-card">
+        <button
+          type="button"
+          class="receive-card__toggle"
+          aria-controls="receive-request"
+          :aria-expanded="requestOpen ? 'true' : 'false'"
+          @click="requestOpen = !requestOpen"
+        >
+          <v-icon small color="var(--g-text-2)">mdi-tag-outline</v-icon>
+          <span class="receive-card__title receive-card__title--quiet">
+            {{ t('receive.specifyAmount') }} ({{ t('common.optional') }})
+          </span>
+          <v-icon small class="receive-chevron" :class="{ 'receive-chevron--open': requestOpen }">mdi-chevron-down</v-icon>
+        </button>
+        <v-expand-transition>
+          <div v-show="requestOpen" id="receive-request" class="receive-request">
+            <v-text-field
+              v-model="bitcoinAmount"
+              :label="t('receive.amount') + ' (BTC)'"
+              type="number"
+              step="0.00000001"
+              outlined
+              dense
+              hide-details
+            >
+              <template v-slot:append>
+                <span class="t-caption">BTC</span>
+              </template>
+            </v-text-field>
+            <v-text-field
+              v-model="bitcoinLabel"
+              :label="t('receive.label')"
+              outlined
+              dense
+              counter="50"
+              maxlength="50"
+            ></v-text-field>
+          </div>
+        </v-expand-transition>
+      </section>
+
+      <!-- Cardano: addresses this wallet has already used. Shown on every tab so
+           switching tabs never changes the dialog's height. -->
+      <section v-if="isCardanoWallet" class="receive-card">
+        <div class="receive-card__head">
+          <button
+            type="button"
+            class="receive-card__toggle"
+            aria-controls="receive-used"
+            :aria-expanded="usedOpen ? 'true' : 'false'"
+            @click="usedOpen = !usedOpen"
+          >
+            <span class="receive-card__icon">
+              <v-icon small color="var(--g-accent)">mdi-wallet-outline</v-icon>
+            </span>
+            <span class="receive-card__title">{{ t('wallet.usedAddresses') }}</span>
+            <span class="receive-count g-num">{{ usedAddresses.length }}</span>
+          </button>
+          <label for="receive-include-change" class="receive-switch-label">{{ t('receive.includeChange') }}</label>
+          <v-switch
+            id="receive-include-change"
+            v-model="includeChange"
+            class="receive-switch mt-0 pt-0"
+            color="var(--g-accent)"
+            inset
+            dense
+            hide-details
+          />
+          <button
+            type="button"
+            class="receive-icon-btn"
+            aria-controls="receive-used"
+            :aria-label="t('wallet.usedAddresses')"
+            :aria-expanded="usedOpen ? 'true' : 'false'"
+            @click="usedOpen = !usedOpen"
+          >
+            <v-icon small class="receive-chevron" :class="{ 'receive-chevron--open': usedOpen }">mdi-chevron-down</v-icon>
+          </button>
+        </div>
+        <v-expand-transition>
+          <div v-show="usedOpen" id="receive-used" class="receive-used">
+            <p v-if="!usedAddresses.length" class="receive-used__empty t-body-sm">{{ t('receive.noUsedAddresses') }}</p>
+            <ul v-else class="receive-used__list">
+              <li v-for="row in visibleUsedAddresses" :key="row.path" class="receive-used__row">
+                <span class="receive-mono receive-used__address" :title="row.address">{{ shortAddress(row.address) }}</span>
+                <span v-if="row.isChange" class="receive-chip">{{ t('receive.changeChip') }}</span>
+                <span class="receive-used__path">{{ row.path }}</span>
+                <CopyButton x-small :value="row.address" />
+              </li>
+            </ul>
+            <button
+              v-if="usedAddresses.length > USED_PREVIEW_COUNT"
+              type="button"
+              class="receive-link receive-used__more"
+              @click="showAllUsed = !showAllUsed"
+            >
+              {{ showAllUsed ? t('governance.showLess') : `${t('common.showAll')} (${usedAddresses.length})` }}
+            </button>
+          </div>
+        </v-expand-transition>
+      </section>
     </v-card-text>
   </BaseDialog>
 </template>
 
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref, watch, nextTick, toRefs, computed } from 'vue';
-import QRCodeStyling from 'qr-code-styling';
+import { ref, watch, nextTick, toRefs, computed, onBeforeUnmount } from 'vue';
+import QRCodeStyling, { type Options as QrOptions } from 'qr-code-styling';
 import CopyButton from '@/shared/components/CopyButton.vue';
+import GButton from '@/shared/components/GButton/GButton.vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import filters from '@/shared/utils/filters';
 import assets from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
 import { midnightStore } from '@/stores/midnightStore';
 import networks from '@/utils/networks';
-import { Blockchain } from '@/models/types';
+import { Blockchain, type Key } from '@/models/types';
+import { useTranslation } from '@/shared/composables/useTranslation';
+import { debugLog } from '@/utils/debug';
 
+interface Segment {
+  id: string;
+  label: string;
+}
+
+interface ReceiveTarget {
+  label: string;
+  value: string;
+  hint: string;
+  path?: string;
+  cred?: string;
+}
+
+interface UsedAddressRow {
+  address: string;
+  path: string;
+  isChange: boolean;
+}
+
+type DrepFormat = 'cip129' | 'cip105';
 
 const { t } = useTranslation();
 
@@ -308,175 +301,104 @@ const emit = defineEmits(['close']);
 
 const { loggedWallet, keys } = toRefs(walletStore);
 
-// Check if Bitcoin wallet
-const isBitcoinWallet = computed(() => {
-  return loggedWallet.value?.chain === Blockchain.BITCOIN;
-});
+const isBitcoinWallet = computed(() => loggedWallet.value?.chain === Blockchain.BITCOIN);
+const isMidnightWallet = computed(() => loggedWallet.value?.chain === Blockchain.MIDNIGHT);
+const isCardanoWallet = computed(() => !isBitcoinWallet.value && !isMidnightWallet.value);
 
-// Check if Midnight wallet
-const isMidnightWallet = computed(() => {
-  return loggedWallet.value?.chain === Blockchain.MIDNIGHT;
-});
+const ticker = computed(() => networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network));
 
-// Midnight state — addresses come from midnightStore (populated by the SDK
-// at login time). Until the SDK is integrated they're empty strings; the UI
-// shows a "Pending SDK integration" hint instead of a QR.
-const midnightTab = ref(0);
-const midnightQrContainers = [
-  ref<HTMLElement | null>(null),
-  ref<HTMLElement | null>(null),
-  ref<HTMLElement | null>(null),
-];
-const midnightQrcodes: (QRCodeStyling | null)[] = [null, null, null];
+// Spec identifiers, the same in every language.
+const DREP_FORMAT_LABELS: Record<DrepFormat, string> = { cip129: 'CIP-129', cip105: 'CIP-105' };
+const USED_PREVIEW_COUNT = 6;
+const QR_SIZE = 192;
+const QR_EXPORT_SIZE = 1024;
+const QR_BACKGROUND = '#ffffff';
+const COPIED_FEEDBACK_MS = 1600;
 
-const setMidnightQrContainerRef = (el: Element | null, index: number) => {
-  if (el && midnightQrContainers[index]) {
-    midnightQrContainers[index].value = el as HTMLElement;
-  }
-};
-
-const midnightTabs = computed(() => {
-  const addrs = midnightStore.addresses;
-  return [
-    {
-      label: t('midnight.receive.publicLabel'),
-      value: addrs.unshielded ?? '',
-      info: t('midnight.receive.publicInfo'),
-    },
-    {
-      label: t('midnight.receive.privateLabel'),
-      value: addrs.shielded ?? '',
-      info: t('midnight.receive.privateInfo'),
-    },
-    {
-      label: t('midnight.receive.dustLabel'),
-      value: addrs.dust ?? '',
-      info: t('midnight.receive.dustInfo'),
-    },
-  ];
-});
-
-// Cardano state
-const showInternal = ref<boolean>(false);
-const expandedPanels = ref<number[]>([]);
-const tab = ref(0);
+const selected = ref('payment');
+const drepFormat = ref<DrepFormat>('cip129');
+const showFull = ref(false);
+const detailsOpen = ref(false);
+const requestOpen = ref(false);
+const usedOpen = ref(false);
+const includeChange = ref(false);
+const showAllUsed = ref(false);
+const copied = ref(false);
+let copiedTimer: ReturnType<typeof setTimeout> | undefined;
 
 // Bitcoin state
-const bitcoinExpandedPanels = ref<number[]>([]);
 const bitcoinAddressType = ref('segwit');
 const bitcoinAddressIndex = ref(0);
 const bitcoinAddress = ref('');
 const bitcoinAmount = ref('');
 const bitcoinLabel = ref('');
-const btcQrContainer = ref<HTMLElement | null>(null);
-let btcQrCode: QRCodeStyling | null = null;
 
-// refs for the QR code container elements (Cardano)
-const qrContainers = [ref<HTMLElement | null>(null), ref<HTMLElement | null>(null), ref<HTMLElement | null>(null), ref<HTMLElement | null>(null)];
-// hold QRCodeStyling instances (Cardano)
-const qrcodes: (QRCodeStyling | null)[] = [null, null, null];
-let copyButtonRefs = {};
+// ---- Segments ----------------------------------------------------------------
 
-const setQrContainerRef = (el: Element | null, index: number) => {
-  if (el && qrContainers[index]) {
-    qrContainers[index].value = el as HTMLElement;
-  }
-}
+// Watch wallets have no DRep keys: walletBg returns `drep105: []` and
+// `drep129: []` for WalletType.Watch, so every access is guarded.
+const drepKeys = computed<Record<DrepFormat, Key | undefined>>(() => ({
+  cip129: keys.value?.drep129?.[0],
+  cip105: keys.value?.drep105?.[0],
+}));
 
-const setCopyButtonRef = (el, address) => {
-  if (!copyButtonRefs) {
-    copyButtonRefs = {};
-  }
-  if (el && address) {
-    copyButtonRefs[address] = el;
-  }
-}
+const drepFormats = computed<DrepFormat[]>(() =>
+  (['cip129', 'cip105'] as DrepFormat[]).filter((format) => !!drepKeys.value[format]?.address),
+);
 
-const triggerCopy = (address) => {
-  const copyButtonRef = copyButtonRefs[address];
-  if (copyButtonRef && typeof copyButtonRef.copy === 'function') {
-    copyButtonRef.copy();
-  }
-}
+const activeDrepFormat = computed<DrepFormat | undefined>(() =>
+  drepFormats.value.includes(drepFormat.value) ? drepFormat.value : drepFormats.value[0],
+);
 
-const tabs = computed(() => {
-  if (!keys.value) {
-    return []
+const segments = computed<Segment[]>(() => {
+  if (isBitcoinWallet.value) {
+    return [
+      { id: 'segwit', label: t('receive.segwit') },
+      { id: 'legacy', label: t('receive.legacy') },
+      { id: 'taproot', label: t('receive.taproot') },
+    ];
   }
-  return [
-    {
-      label: t('wallet.paymentAddress'),
-      value: keys.value.payment[0].address,
-      path: keys.value.payment[0].path,
-      cred: keys.value.payment[0].cred,
-      info: t('wallet.paymentAddressInfo', { ticker: networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network) }),
-      enabled: true,
-    },
-    {
-      label: t('wallet.rewardAddress'),
-      value: keys.value.stake[0].address,
-      path: keys.value.stake[0].path,
-      cred: keys.value.stake[0].cred,
-      info: t('wallet.rewardAddressInfo'),
-      enabled: true,
-    },
-    // Watch wallets have no DRep keys — walletBg returns `drep105: []` and
-    // `drep129: []` for WalletType.Watch, so indexing [0] threw here. Guard
-    // the access and hide the tab when the key is absent.
-    {
-      label: t('wallet.drepId105'),
-      value: keys.value.drep105?.[0]?.address ?? '',
-      path: keys.value.drep105?.[0]?.path ?? '',
-      cred: keys.value.drep105?.[0]?.cred ?? '',
-      info: t('wallet.drepIdInfo'),
-      enabled: !!keys.value.drep105?.[0] && networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network),
-    },
-    {
-      label: t('wallet.drepId129'),
-      value: keys.value.drep129?.[0]?.address ?? '',
-      path: keys.value.drep129?.[0]?.path ?? '',
-      cred: keys.value.drep129?.[0]?.cred ?? '',
-      info: t('wallet.drepIdInfo'),
-      enabled: !!keys.value.drep129?.[0] && networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network),
-    },
-  ]
+  if (isMidnightWallet.value) {
+    return [
+      { id: 'public', label: t('midnight.common.public') },
+      { id: 'private', label: t('midnight.common.private') },
+      { id: 'dust', label: t('midnight.receive.tabDust') },
+    ];
+  }
+  const list: Segment[] = [
+    { id: 'payment', label: t('wallet.payment') },
+    { id: 'stake', label: t('receive.tabStake') },
+  ];
+  const governanceSupported = networks.resolveGovernanceSupport(loggedWallet.value?.chain, loggedWallet.value?.network);
+  if (governanceSupported && drepFormats.value.length) {
+    list.push({ id: 'drep', label: t('receive.tabDrep') });
+  }
+  return list;
 });
 
-const usedAddresses = computed(() => {
-  const results = []
-  if (!keys.value) {
-    return results
+const activeSegment = computed(() => (isBitcoinWallet.value ? bitcoinAddressType.value : selected.value));
+
+function selectSegment(id: string): void {
+  if (isBitcoinWallet.value) {
+    if (bitcoinAddressType.value === id) return;
+    bitcoinAddressType.value = id;
+    updateBitcoinAddress();
+    return;
   }
-  results.push(...keys.value.payment.filter(a => a.used));
-  if (showInternal.value) {
-    results.push(...keys.value.change.filter(a => a.used).map(el => {
-      return {
-        ...el,
-        internal: true,
-      }
-    }));
+  selected.value = id;
+}
+
+// A tab can disappear while the dialog is open (the wallet's DRep keys go away,
+// or the wallet switches). Fall back to the first tab rather than keep a
+// selection nothing on screen represents.
+watch(segments, (list) => {
+  if (isBitcoinWallet.value || !list.length) return;
+  if (!list.some((segment) => segment.id === selected.value)) {
+    selected.value = list[0].id;
   }
-  return results
 });
 
-// QR-center Gero logo, tinted per chain (Apex Prime teal / Vector orange).
-const qrLogo = computed(() => assets.resolveChainLogo(loggedWallet.value?.chain));
-
-// Bitcoin computed properties
-const bitcoinAddressTypeOptions = computed(() => [
-  {
-    text: `${t('receive.segwit')} (bc1q...) - ${t('receive.recommended')}`,
-    value: 'segwit',
-  },
-  {
-    text: `${t('receive.legacy')} (1...)`,
-    value: 'legacy',
-  },
-  {
-    text: `${t('receive.taproot')} (bc1p...)`,
-    value: 'taproot',
-  },
-]);
+// ---- The selected address ----------------------------------------------------
 
 const bitcoinAddressTypeLabel = computed(() => {
   switch (bitcoinAddressType.value) {
@@ -508,8 +430,6 @@ const bitcoinDerivationPurpose = computed(() => {
   switch (bitcoinAddressType.value) {
     case 'legacy':
       return 44;
-    case 'segwit':
-      return 84;
     case 'taproot':
       return 86;
     default:
@@ -517,7 +437,111 @@ const bitcoinDerivationPurpose = computed(() => {
   }
 });
 
-// Bitcoin functions
+function cardanoTarget(): ReceiveTarget {
+  if (selected.value === 'stake') {
+    const key = keys.value?.stake?.[0];
+    return { label: t('wallet.stakeAddress'), value: key?.address ?? '', hint: t('receive.stakeInfo'), path: key?.path, cred: key?.cred };
+  }
+  if (selected.value === 'drep') {
+    const format = activeDrepFormat.value;
+    const key = format ? drepKeys.value[format] : undefined;
+    const legacy = format === 'cip105';
+    return {
+      label: legacy ? t('wallet.drepId105') : t('wallet.drepId129'),
+      value: key?.address ?? '',
+      hint: legacy ? t('receive.drepLegacyInfo') : t('receive.drepInfo', { ticker: ticker.value }),
+      path: key?.path,
+      cred: key?.cred,
+    };
+  }
+  const key = keys.value?.payment?.[0];
+  return {
+    label: t('wallet.paymentAddress'),
+    value: key?.address ?? '',
+    hint: t('receive.paymentInfo', { ticker: ticker.value }),
+    path: key?.path,
+    cred: key?.cred,
+  };
+}
+
+function midnightTarget(): ReceiveTarget {
+  // Populated by the SDK at login; empty until derived, which renders the
+  // "not available yet" state instead of a QR.
+  const addrs = midnightStore.addresses;
+  switch (selected.value) {
+    case 'private':
+      return { label: t('midnight.receive.privateLabel'), value: addrs.shielded ?? '', hint: t('midnight.receive.privateInfo') };
+    case 'dust':
+      return { label: t('midnight.receive.dustLabel'), value: addrs.dust ?? '', hint: t('midnight.receive.dustInfo') };
+    default:
+      return { label: t('midnight.receive.publicLabel'), value: addrs.unshielded ?? '', hint: t('midnight.receive.publicInfo') };
+  }
+}
+
+const target = computed<ReceiveTarget>(() => {
+  if (isBitcoinWallet.value) {
+    return {
+      label: bitcoinAddressTypeLabel.value,
+      value: bitcoinAddress.value,
+      hint: bitcoinAddressTypeDescription.value,
+      path: `m/${bitcoinDerivationPurpose.value}'/0'/0'/0/${bitcoinAddressIndex.value}`,
+    };
+  }
+  return isMidnightWallet.value ? midnightTarget() : cardanoTarget();
+});
+
+const copyLabel = computed(() => (activeSegment.value === 'drep' ? t('receive.copyDrepId') : t('dashboard.copyAddress')));
+
+// Head and tail stay bright: they are what people compare when they check an
+// address, so the middle is muted even when it is shown in full.
+const canExpandAddress = computed(() => target.value.value.length > 24);
+const addressParts = computed(() => {
+  const value = target.value.value;
+  if (!canExpandAddress.value) return { head: value, mid: '', tail: '' };
+  if (showFull.value) return { head: value.slice(0, 8), mid: value.slice(8, -8), tail: value.slice(-8) };
+  return { head: value.slice(0, 12), mid: '…', tail: value.slice(-8) };
+});
+
+function shortAddress(value: string): string {
+  return value.length > 24 ? `${value.slice(0, 12)}…${value.slice(-8)}` : value;
+}
+
+// ---- Used addresses (Cardano) ------------------------------------------------
+
+const usedAddresses = computed<UsedAddressRow[]>(() => {
+  const k = keys.value;
+  if (!k) return [];
+  const toRow = (key: Key, isChange: boolean): UsedAddressRow => ({ address: key.address ?? '', path: key.path, isChange });
+  const rows = (k.payment ?? []).filter((key) => key.used && key.address).map((key) => toRow(key, false));
+  if (includeChange.value) {
+    rows.push(...(k.change ?? []).filter((key) => key.used && key.address).map((key) => toRow(key, true)));
+  }
+  return rows;
+});
+
+const visibleUsedAddresses = computed(() =>
+  showAllUsed.value ? usedAddresses.value : usedAddresses.value.slice(0, USED_PREVIEW_COUNT),
+);
+
+// ---- Copy ---------------------------------------------------------------------
+
+async function copyTarget(): Promise<void> {
+  const value = target.value.value;
+  if (!value) return;
+  try {
+    await navigator.clipboard.writeText(value);
+    copied.value = true;
+    clearTimeout(copiedTimer);
+    copiedTimer = setTimeout(() => {
+      copied.value = false;
+    }, COPIED_FEEDBACK_MS);
+  } catch (error) {
+    debugLog('Receive: clipboard write failed', error);
+  }
+}
+
+// ---- Bitcoin --------------------------------------------------------------------
+
 async function deriveBitcoinAddress(): Promise<void> {
   if (!loggedWallet.value || !loggedWallet.value.publicKey) {
     console.error('No logged wallet or public key');
@@ -526,19 +550,17 @@ async function deriveBitcoinAddress(): Promise<void> {
 
   try {
     const { deriveBitcoinAddress: deriveAddress } = await import('@/chains/bitcoin/bitcoinKeyManager');
-    const address = deriveAddress(
+    bitcoinAddress.value = deriveAddress(
       loggedWallet.value.publicKey, // xpub
       loggedWallet.value.network,
       bitcoinAddressType.value,
       0, // External chain (receive addresses)
-      bitcoinAddressIndex.value
+      bitcoinAddressIndex.value,
     );
-
-    bitcoinAddress.value = address;
-    console.log(`Derived ${bitcoinAddressType.value} address:`, address);
   } catch (error) {
     console.error('Failed to derive Bitcoin address:', error);
-    bitcoinAddress.value = 'Error deriving address';
+    // Empty renders the "not available" state rather than a QR of an error string.
+    bitcoinAddress.value = '';
   }
 }
 
@@ -562,37 +584,8 @@ function generateBitcoinUri(): string {
   return uri;
 }
 
-function updateBitcoinQrCode(): void {
-  if (!btcQrContainer.value) return;
-
-  const uri = generateBitcoinUri();
-
-  if (btcQrCode) {
-    btcQrCode.update({ data: uri });
-  } else {
-    btcQrCode = new QRCodeStyling({
-      width: 160,
-      height: 160,
-      type: 'svg',
-      data: uri,
-      image: assets.geroLogo,
-      margin: 2,
-      qrOptions: { typeNumber: 0, mode: 'Byte', errorCorrectionLevel: 'Q' },
-      imageOptions: { hideBackgroundDots: true, imageSize: 0.5, margin: 10, crossOrigin: 'anonymous' },
-      backgroundOptions: { color: '#ffffff' },
-      cornersSquareOptions: { type: 'extra-rounded' },
-      cornersDotOptions: { type: 'dot' }
-    });
-
-    btcQrContainer.value.innerHTML = '';
-    btcQrCode.append(btcQrContainer.value);
-  }
-}
-
 async function updateBitcoinAddress(): Promise<void> {
   await deriveBitcoinAddress();
-  await nextTick();
-  updateBitcoinQrCode();
 }
 
 function previousBitcoinAddress(): void {
@@ -607,200 +600,532 @@ function nextBitcoinAddress(): void {
   updateBitcoinAddress();
 }
 
-// whenever the dialog opens, initialize or update all QR codes
+// ---- QR -------------------------------------------------------------------------
+
+// QR-center Gero logo, tinted per chain (Apex Prime teal / Vector orange).
+const qrLogo = computed(() => assets.resolveChainLogo(loggedWallet.value?.chain));
+
+// Bitcoin encodes a BIP21 URI so the optional amount and label travel with it.
+const qrData = computed(() => {
+  if (!target.value.value) return '';
+  return isBitcoinWallet.value ? generateBitcoinUri() : target.value.value;
+});
+
+function qrOptions(size: number, data: string): Partial<QrOptions> {
+  return {
+    width: size,
+    height: size,
+    type: 'svg',
+    data,
+    image: qrLogo.value,
+    margin: 2,
+    qrOptions: { typeNumber: 0, mode: 'Byte', errorCorrectionLevel: 'Q' },
+    imageOptions: { hideBackgroundDots: true, imageSize: 0.5, margin: Math.round(size * 0.05), crossOrigin: 'anonymous' },
+    backgroundOptions: { color: QR_BACKGROUND },
+    cornersSquareOptions: { type: 'extra-rounded' },
+    cornersDotOptions: { type: 'dot' },
+  };
+}
+
+const qrEl = ref<HTMLElement | null>(null);
+let qrCode: QRCodeStyling | null = null;
+let qrHost: HTMLElement | null = null;
+
+// One instance, re-pointed at whichever address is selected. update() redraws
+// into the container it was last appended to, so only a new host needs append().
+function renderQr(): void {
+  const host = qrEl.value;
+  const data = qrData.value;
+  if (!host || !data) return;
+  if (!qrCode) {
+    qrCode = new QRCodeStyling(qrOptions(QR_SIZE, data));
+  } else {
+    qrCode.update({ data, image: qrLogo.value });
+  }
+  if (qrHost !== host) {
+    host.innerHTML = '';
+    qrCode.append(host);
+    qrHost = host;
+  }
+}
+
+// Saves a print-size PNG rather than the 192px on-screen render.
+function saveQr(): void {
+  if (!qrData.value) return;
+  const chain = isBitcoinWallet.value ? 'bitcoin' : isMidnightWallet.value ? 'midnight' : 'cardano';
+  new QRCodeStyling(qrOptions(QR_EXPORT_SIZE, qrData.value))
+    .download({ name: `gero-${chain}-${activeSegment.value}-qr`, extension: 'png' })
+    .catch((error) => debugLog('Receive: QR download failed', error));
+}
+
+watch([qrData, qrEl], () => nextTick(renderQr));
+
+// A new address resets the transient states that belonged to the old one.
+watch(() => target.value.value, () => {
+  copied.value = false;
+  showFull.value = false;
+});
+
+watch(includeChange, () => {
+  showAllUsed.value = false;
+});
+
 watch(
   () => props.isOpen,
-  async open => {
+  async (open) => {
     if (!open) return;
-    await nextTick();
+    copied.value = false;
+    showFull.value = false;
 
     if (isBitcoinWallet.value) {
-      // Bitcoin wallet - initialize Bitcoin address and QR code
       bitcoinAddressType.value = loggedWallet.value?.addressType || 'segwit';
       bitcoinAddressIndex.value = 0;
       bitcoinAmount.value = '';
       bitcoinLabel.value = '';
-
       await deriveBitcoinAddress();
-      await nextTick();
-      updateBitcoinQrCode();
-    } else if (isMidnightWallet.value) {
-      // Midnight wallet — render a QR per address tab. Addresses may be empty
-      // strings if the SDK hasn't derived them yet; in that case skip QR setup
-      // and the template renders a "Pending SDK integration" hint.
-      midnightTabs.value.forEach((tabItem, i) => {
-        if (!tabItem.value) return;
-        if (!midnightQrcodes[i]) {
-          midnightQrcodes[i] = new QRCodeStyling({
-            width: 160,
-            height: 160,
-            type: 'svg',
-            data: tabItem.value,
-            image: assets.geroLogo,
-            margin: 2,
-            qrOptions: { typeNumber: 0, mode: 'Byte', errorCorrectionLevel: 'Q' },
-            imageOptions: { hideBackgroundDots: true, imageSize: 0.5, margin: 10, crossOrigin: 'anonymous' },
-            backgroundOptions: { color: '#ffffff' },
-            cornersSquareOptions: { type: 'extra-rounded' },
-            cornersDotOptions: { type: 'dot' },
-          });
-        } else {
-          midnightQrcodes[i]!.update({ data: tabItem.value });
-        }
-        const el = midnightQrContainers[i].value;
-        if (el) {
-          el.innerHTML = '';
-          midnightQrcodes[i]!.append(el);
-        }
-      });
     } else {
-      // Cardano wallet - original logic
-      tabs.value.forEach((tabItem, i) => {
-        // create QR instance if missing
-        if (!qrcodes[i]) {
-          qrcodes[i] = new QRCodeStyling({
-            width: 160,
-            height: 160,
-            type: 'svg',
-            data: tabItem.value,
-            image: qrLogo.value,
-            margin: 2,
-            qrOptions: { typeNumber: 0, mode: 'Byte', errorCorrectionLevel: 'Q' },
-            imageOptions: { hideBackgroundDots: true, imageSize: 0.5, margin: 10, crossOrigin: 'anonymous' },
-            backgroundOptions: { color: '#ffffff' },
-            cornersSquareOptions: { type: 'extra-rounded' },
-            cornersDotOptions: { type: 'dot' }
-          });
-        } else {
-          qrcodes[i]!.update({ data: tabItem.value });
-        }
-
-        // append into the container
-        const el = qrContainers[i].value;
-        if (el) {
-          el.innerHTML = '';
-          qrcodes[i]!.append(el);
-        }
-      });
+      selected.value = segments.value[0]?.id ?? 'payment';
     }
+
+    await nextTick();
+    renderQr();
   },
   { immediate: true },
 );
+
+onBeforeUnmount(() => {
+  clearTimeout(copiedTimer);
+});
 </script>
 
 <style scoped lang="scss">
-.qr-container {
+.receive-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-4);
+  color: var(--g-text-2);
+}
+
+/* ---- Segmented control ---- */
+.receive-segments {
+  display: grid;
+  grid-template-columns: repeat(var(--receive-cols, 3), minmax(0, 1fr));
+  gap: var(--g-s-1);
+  padding: var(--g-s-1);
+  border-radius: var(--g-r-card);
+  border: 1px solid var(--g-hairline-1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.receive-segment {
+  height: var(--g-btn-h-compact);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--g-s-2);
   border-radius: var(--g-r-control);
-}
-
-.address-label {
-  font-weight: bold;
-  font-size: 20px;
-  color: var(--g-text-1);
-}
-
-.address-row {
-  display: flex;
-  align-items: center;
-}
-
-.address-text {
-  word-break: break-all;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--g-text-2);
+  font-family: var(--g-font-ui);
+  font-size: 14px;
+  font-weight: 500;
   cursor: pointer;
+  transition:
+    background-color var(--g-dur-fast) var(--g-ease),
+    border-color var(--g-dur-fast) var(--g-ease),
+    color var(--g-dur-fast) var(--g-ease);
+
+  &:hover {
+    color: var(--g-text-1);
+  }
 }
 
-.path-text {
-  font-size: 14px;
-  color: var(--g-text-2);
-}
-
-.info-text {
-  font-size: 16px;
-  color: var(--g-text-2);
-  margin-top: 0.5rem;
-  word-break: break-word;
-}
-
-.used-title {
-  margin-top: 1rem;
+/* The selected segment is a control, not a surface: a solid chip keeps the
+   choice legible on any backdrop behind the glass. */
+.receive-segment--active {
+  background: var(--g-overlay);
+  border-color: var(--g-hairline-2);
+  color: var(--g-text-1);
   font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 
-.cred-text {
-  font-size: 14px;
-  color: var(--g-text-2);
+.receive-segment__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--g-r-pill);
+  background: var(--g-accent);
 }
 
-/* Collapsible panel styles */
-.accordion-container {
-  background-color: transparent !important;
-  box-shadow: none !important;
-}
-
-.accordion-container .v-expansion-panel {
-  margin-bottom: 8px;
-  border: 1px solid var(--g-hairline-2);
-  transition: border-color var(--g-dur-slow) ease;
-}
-
-.accordion-container .v-expansion-panel:hover {
-  border-color: var(--g-accent);
-}
-
-.accordion-container .v-expansion-panel--active {
-  border-color: var(--g-accent);
-}
-
-.header-container {
+/* ---- Hero: QR + address ---- */
+.receive-hero {
+  @include g-glass-tier(false);
   display: flex;
-  align-items: center;
-  width: 100%;
-  padding: 4px 0;
+  flex-wrap: wrap;
+  gap: var(--g-s-5);
+  padding: var(--g-s-5);
 }
 
-.icon-container {
-  background-color: var(--g-overlay);
-  border-radius: 50%;
-  padding: 8px;
-  margin-right: 12px;
+/* Justified solid: a QR needs a white quiet zone to scan. */
+.receive-qr {
+  flex: 0 0 auto;
+  width: 212px;
+  height: 212px;
+  box-sizing: border-box;
+  padding: 10px;
+  border-radius: var(--g-r-card);
+  background: rgb(255, 255, 255);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.icon-container .v-icon {
-  color: var(--g-accent) !important;
+.receive-qr--empty {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px dashed var(--g-hairline-2);
 }
 
-.content-container {
+.receive-qr__code {
+  width: 192px;
+  height: 192px;
+  line-height: 0;
+}
+
+.receive-qr__empty {
+  margin: 0;
+  padding: 0 var(--g-s-3);
+  text-align: center;
+}
+
+.receive-hero__info {
+  flex: 1 1 240px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-3);
+}
+
+.receive-address {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-1);
+}
+
+/* Fixed to the pills' height whether or not they show, so the label row is
+   the same on every tab. */
+.receive-address__top {
+  min-height: 26px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--g-s-2);
+}
+
+.receive-address__label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--g-text-2);
+}
+
+.receive-address__value {
+  margin: 0;
+  font-family: var(--g-font-mono);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+  color: var(--g-text-1);
+  word-break: break-all;
+}
+
+.receive-address__mid {
+  color: var(--g-text-3);
+}
+
+.receive-address__value--full {
+  font-size: 14px;
+  line-height: 1.6;
+
+  .receive-address__mid {
+    color: var(--g-text-2);
+  }
+}
+
+.receive-link {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--g-accent);
+  font-family: var(--g-font-ui);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.receive-formats {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-1);
+}
+
+.receive-format {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: var(--g-r-pill);
+  border: 1px solid var(--g-hairline-1);
+  background: transparent;
+  color: var(--g-text-3);
+  font-family: var(--g-font-ui);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color var(--g-dur-fast) var(--g-ease),
+    border-color var(--g-dur-fast) var(--g-ease),
+    color var(--g-dur-fast) var(--g-ease);
+}
+
+.receive-format--active {
+  color: var(--g-text-1);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--g-hairline-3);
+}
+
+.receive-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--g-s-2);
+}
+
+.receive-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--g-s-2);
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--g-text-2);
+}
+
+.receive-hint__icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ---- Collapsible cards ---- */
+.receive-card {
   @include g-glass-tier(false);
+  overflow: hidden;
+}
+
+.receive-card__head {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-2);
+  padding-right: var(--g-s-2);
+}
+
+.receive-card__toggle {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  min-height: var(--g-row-h-panel);
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-3);
+  padding: var(--g-s-2) var(--g-s-4);
+  border: 0;
+  background: transparent;
+  color: var(--g-text-2);
+  font-family: var(--g-font-ui);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.receive-card__title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--g-text-1);
+}
+
+.receive-card__title--quiet {
+  flex: 1 1 auto;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--g-text-2);
+}
+
+.receive-card__meta {
+  font-family: var(--g-font-mono);
+  font-size: 12px;
+  color: var(--g-text-3);
+}
+
+.receive-card__icon {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--g-r-control);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.receive-count {
+  min-width: 24px;
+  height: 22px;
+  box-sizing: border-box;
+  padding: 0 var(--g-s-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--g-r-pill);
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--g-text-2);
+}
+
+.receive-chevron {
+  transition: transform var(--g-dur-fast) var(--g-ease);
+}
+
+.receive-chevron--open {
+  transform: rotate(180deg);
+}
+
+.receive-icon-btn {
+  width: var(--g-btn-h);
+  height: var(--g-btn-h);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--g-r-control);
+  background: transparent;
+  cursor: pointer;
+  transition: background-color var(--g-dur-fast) var(--g-ease);
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.04);
+  }
+}
+
+.receive-switch-label {
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--g-text-2);
+  cursor: pointer;
+}
+
+.receive-switch {
+  flex: 0 0 auto;
+}
+
+.receive-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--g-s-3);
+  padding: var(--g-s-1) var(--g-s-4) var(--g-s-4);
+}
+
+.receive-details__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-1);
+}
+
+.receive-mono {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-1);
+  font-family: var(--g-font-mono);
+  font-size: 13px;
+  color: var(--g-text-1);
+}
+
+.receive-stepper {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-3);
+}
+
+.receive-request {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-3);
+  padding: var(--g-s-1) var(--g-s-4) var(--g-s-2);
+}
+
+/* ---- Used addresses ---- */
+.receive-used {
+  display: flex;
+  flex-direction: column;
+  padding: 0 var(--g-s-2) var(--g-s-2);
   border-top: 1px solid var(--g-hairline-1);
 }
 
-.address-cell {
-  font-family: var(--g-font-mono);
-  font-size: 14px;
+.receive-used__empty {
+  margin: 0;
+  padding: var(--g-s-4);
+  text-align: center;
 }
 
-.path-cell {
+.receive-used__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.receive-used__row {
+  min-height: var(--g-row-h-table);
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-3);
+  padding: 0 var(--g-s-2);
+  border-bottom: 1px solid var(--g-hairline-1);
+
+  &:last-child {
+    border-bottom: 0;
+  }
+}
+
+.receive-used__address {
+  min-width: 0;
+}
+
+.receive-used__path {
+  margin-left: auto;
   font-family: var(--g-font-mono);
-  font-size: 14px;
+  font-size: 12px;
+  color: var(--g-text-3);
+  white-space: nowrap;
+}
+
+.receive-chip {
+  height: 20px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--g-r-chip);
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 11px;
+  font-weight: 500;
   color: var(--g-text-2);
 }
 
-/* Override expansion panel chevron color */
-.v-expansion-panel-header__icon .v-icon {
-  color: var(--g-accent) !important;
-}
-
-/* Style the switch inside the header */
-.v-expansion-panel-header .v-input--switch {
-  margin-top: 0 !important;
-  padding-top: 0 !important;
-}
-
-.v-expansion-panel-header .v-input--switch .v-label {
-  font-size: 14px;
-  color: var(--g-text-2);
+.receive-used__more {
+  align-self: center;
+  margin-top: var(--g-s-2);
 }
 </style>

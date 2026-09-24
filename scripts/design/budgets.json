@@ -1,5 +1,5 @@
 {
-  "hexOccurrences": 778,
+  "hexOccurrences": 772,
   "hexDistinct": 287,
   "fontSizeDistinct": 75,
   "radiusDistinct": 60,
@@ -7,11 +7,11 @@
   "backdropFilters": 97,
   "uppercase": 108,
   "infiniteAnimations": 68,
-  "importantCount": 2018,
+  "importantCount": 2012,
   "lowAlphaText": 19,
   "transitionAll": 8,
   "corruptedMdiNames": 0,
   "formatFnForks": 15,
-  "clickableDivs": 105,
+  "clickableDivs": 102,
   "outlineNone": 26
 }
