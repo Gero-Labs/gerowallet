@@ -674,7 +674,7 @@ onBeforeUnmount(() => {
   left: 50%;
   width: 100vw; /* v-container is max-width capped; span the viewport */
   height: auto;
-  aspect-ratio: 2912 / 1632; /* cardanoBg.png native ratio: show the whole image, never crop */
+  aspect-ratio: 5824 / 3264; /* cardanoBg.png native ratio: show the whole image, never crop */
   z-index: -1; /* Behind dashboard content */
   background-size: 100% 100%;
   background-position: center top;
@@ -688,8 +688,9 @@ onBeforeUnmount(() => {
   mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 1) 50%, rgba(0, 0, 0, 0) 100%);
   -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 1) 50%, rgba(0, 0, 0, 0) 100%);
 
+  /* Half the previous 0.85: the backdrop sits behind the portfolio, it shouldn't compete with it. */
   &[style*='url('] {
-    opacity: 0.85;
+    opacity: 0.425;
   }
 }
 
