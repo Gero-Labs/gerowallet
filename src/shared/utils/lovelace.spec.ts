@@ -48,6 +48,25 @@ describe('pctOf', () => {
   it('returns 0 when the denominator is zero', () => {
     expect(pctOf('5', '0')).toBe(0);
   });
+
+  it('rounds the second decimal rather than truncating it', () => {
+    // 2/3 = 66.666…: truncation read 66.66 and put a 2/3 threshold "not met".
+    expect(pctOf('2', '3')).toBe(66.67);
+    expect(pctOf('1', '6')).toBe(16.67);
+    expect(pctOf('5', '6')).toBe(83.33);
+  });
+
+  it('rounds an exact half away from zero', () => {
+    expect(pctOf('1', '800')).toBe(0.13);
+    expect(pctOf('-1', '800')).toBe(-0.13);
+  });
+
+  it('rounds huge values exactly, past MAX_SAFE_INTEGER', () => {
+    // The live DRep yes share on a mainnet treasury action (September 2026):
+    // 2.3162…%. Koios reports 2.32; truncation read 2.31.
+    expect(pctOf('119111932065705', '5142362052546418')).toBe(2.32);
+    expect(pctOf('5023250120480713', '5142362052546418')).toBe(97.68);
+  });
 });
 
 describe('sumLovelace', () => {
