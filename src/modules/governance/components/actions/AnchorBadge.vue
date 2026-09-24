@@ -41,6 +41,10 @@ const { t } = useTranslation();
  * reason only ever refines the null case, so a caller that supplies none gets
  * exactly the behaviour this badge had before: verified / mismatch / none /
  * unverified.
+ *
+ * Only `mismatch` is an error. A document we could not fetch says nothing
+ * about the proposal (the usual cause is a rate-limited IPFS gateway), so
+ * `fetchFailed` is neutral in both wording and colour, like `unverified`.
  */
 const state = computed(() => {
   if (!props.hasAnchor) return 'none';
@@ -55,7 +59,7 @@ const tone = computed(
     ({
       verified: 'ok',
       mismatch: 'bad',
-      fetchFailed: 'warn',
+      fetchFailed: 'unknown',
       unverified: 'unknown',
       none: 'none',
     })[state.value],
@@ -77,7 +81,6 @@ const iconColor = computed(
     ({
       ok: 'var(--g-success)',
       bad: 'var(--g-error)',
-      warn: 'var(--g-warning)',
       unknown: 'var(--g-text-3)',
       none: 'var(--g-text-3)',
     })[tone.value],
@@ -89,7 +92,7 @@ const label = computed(() =>
       {
         verified: 'governance.anchorVerified',
         mismatch: 'governance.anchorMismatch',
-        fetchFailed: 'governance.anchorFetchFailed',
+        fetchFailed: 'governance.anchorCouldNotVerify',
         unverified: 'governance.anchorUnverified',
         none: 'governance.anchorNone',
       }[state.value],
@@ -116,11 +119,6 @@ const label = computed(() =>
   color: var(--g-error);
   border-color: var(--g-error-line);
   background: var(--g-error-fill);
-}
-.anchor--warn {
-  color: var(--g-warning);
-  border-color: var(--g-warning-line);
-  background: var(--g-warning-fill);
 }
 .anchor--unknown,
 .anchor--none {

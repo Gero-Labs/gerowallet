@@ -21,7 +21,12 @@
     <div class="body-card__stats t-caption">
       <template v-if="composition.available">
         <span class="g-num">{{ $t('governance.yesPctLabel', { pct: fmt(composition.yesPct) }) }}</span>
-        <span class="g-num">{{ $t('governance.noPctLabel', { pct: fmt(composition.noPct) }) }}</span>
+        <!-- The other side of the bar is everything counted AGAINST: No votes
+             and, per CIP-1694, whoever has not voted. Labelled plain "No" it
+             told people who never voted that they had. -->
+        <span class="g-num" :title="$t('governance.notVotedCountsAgainst')">
+          {{ $t('governance.noOrNotVotedPctLabel', { pct: fmt(composition.noPct) }) }}
+        </span>
       </template>
       <!-- An unknown threshold gets said out loud — never a marker drawn at 0. -->
       <span v-if="result.thresholdPct !== null" class="g-num">
@@ -31,7 +36,11 @@
     </div>
 
     <div v-if="counts" class="body-card__counts t-caption g-num">
-      {{ $t('governance.votesCount', { yes: counts.yes, no: counts.no, abstain: counts.abstain }) }}
+      {{
+        typeof counts.notVoted === 'number'
+          ? $t('governance.votesCountWithNotVoted', counts)
+          : $t('governance.votesCount', { yes: counts.yes, no: counts.no, abstain: counts.abstain })
+      }}
     </div>
   </div>
 </template>
@@ -50,9 +59,13 @@ import TallyBar from '@/modules/governance/components/actions/TallyBar.vue';
 const props = defineProps({
   result: { type: Object as PropType<BodyResult>, required: true },
   composition: { type: Object as PropType<Composition>, required: true },
-  /** Committee member counts — the CC votes by member count, not stake. */
+  /**
+   * Committee member counts — the CC votes by member count, not stake.
+   * `notVoted` is the seated members with no vote yet, when the committee's
+   * size is known.
+   */
   counts: {
-    type: Object as PropType<{ yes: number; no: number; abstain: number } | null>,
+    type: Object as PropType<{ yes: number; no: number; abstain: number; notVoted?: number | null } | null>,
     default: null,
   },
   /** Label shown when the threshold is unknown (defaults to the epoch-params message). */
