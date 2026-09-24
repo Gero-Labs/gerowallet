@@ -501,7 +501,7 @@ describe('ActionDetail without its metadata document', () => {
     const notice = wrapper.find('.action-detail__notice');
     expect(notice.exists()).toBe(true);
     expect(notice.text()).toContain('governance.metadataUnavailable');
-    const gateway = `https://ipfs.io/ipfs/${CID}`;
+    const gateway = `https://inbrowser.link/ipfs/${CID}`;
     expect(notice.find('a').attributes('href')).toBe(gateway);
     // Linked from the notice, so the References list does not repeat it.
     expect(wrapper.findAll(`a[href="${gateway}"]`)).toHaveLength(1);

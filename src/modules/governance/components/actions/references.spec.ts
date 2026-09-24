@@ -74,8 +74,8 @@ describe('toReferenceLinks', () => {
       { uri: `ipfs://${CID_V0}` },
     ]);
     expect(links.map(l => [l.href, l.number])).toEqual([
-      [`https://ipfs.io/ipfs/${CID_V1}/paper.pdf`, 1],
-      [`https://ipfs.io/ipfs/${CID_V0}`, 2],
+      [`https://inbrowser.link/ipfs/${CID_V1}/paper.pdf`, 1],
+      [`https://inbrowser.link/ipfs/${CID_V0}`, 2],
     ]);
     expect(links[0].label).toBe('Paper');
   });
