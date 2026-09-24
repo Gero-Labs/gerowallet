@@ -363,7 +363,7 @@ function broadcastUpdate(storeName: string, updates: any) {
 }
 ```
 
-Each store persists its own state after the broadcast. `walletStore` and `networkStore` use `StorePersister` (`src/utils/storePersistence.ts`). It writes only the fields that changed: small ones to `chrome.storage.local[storeName]`, and bulk ones (transactions, UTxOs, tokens, collections, assets) to the `gero-store-cache` IndexedDB. Large values must stay out of `chrome.storage`. Chrome copies every changed value (old and new) on its browser UI thread into every `storage.onChanged` listener, including the content script in every tab. Whole-store rewrites froze the entire browser.
+Each store persists its own state after the broadcast. `walletStore`, `networkStore` and `midnightStore` use `StorePersister` (`src/utils/storePersistence.ts`). It writes only the fields that changed: small ones to `chrome.storage.local[storeName]`, and bulk ones (transactions, UTxOs, tokens, collections, assets) to the `gero-store-cache` IndexedDB. Large values must stay out of `chrome.storage`. Chrome copies every changed value (old and new) on its browser UI thread into every `storage.onChanged` listener, including the content script in every tab. Whole-store rewrites froze the entire browser.
 
 #### Browser Context (`src/services/storeMessaging.service.ts`)
 ```typescript

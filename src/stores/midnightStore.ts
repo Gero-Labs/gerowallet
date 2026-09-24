@@ -21,9 +21,10 @@ import type { MidnightSiteActivity, SiteActivityEvent } from '@/chains/midnight/
  *   call it after updating the in-memory state. Never write to `chrome.storage`
  *   from outside this file.
  *
- * Persisted via `chrome.storage.local` under the key `midnightStore`. BigInt
- * values are serialized as strings (Chrome storage doesn't accept BigInt
- * natively) and deserialized on read.
+ * Persisted through `StorePersister` (`src/utils/storePersistence.ts`): a small
+ * record under the `chrome.storage.local` key `midnightStore`, plus
+ * `transactions` and `utxos` in the `gero-store-cache` IndexedDB, written only
+ * when changed. BigInt values are serialized as strings and deserialized on read.
  *
  * Ported 2026-05-04 from the `new-midnight-backup` prototype branch:
  * - Decoupled from the prototype's mock-data import path
@@ -36,6 +37,7 @@ import type { MidnightSiteActivity, SiteActivityEvent } from '@/chains/midnight/
 
 import Vue from 'vue';
 import { getContextType } from '@/utils/storageSync';
+import { StorePersister } from '@/utils/storePersistence';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 import { debugLog } from '@/utils/debug';
@@ -386,6 +388,18 @@ function serializeValue(_key: string, value: unknown): unknown {
   return value;
 }
 
+// `transactions` (each row carries its indexer payload) and `utxos` go to IndexedDB.
+// The rest stays in the small chrome.storage record, which every tip, sync tick and
+// progress sample rewrites. Rewriting the whole store there on each of those pushed
+// the transaction history through Chrome's browser UI thread (see storeCache.ts).
+const persister = new StorePersister(midnightStore as unknown as Record<string, unknown>, {
+  storeName: STORE_NAME,
+  bulkFields: ['transactions', 'utxos'],
+  replacer: serializeValue,
+  // Per-wallet chain state is keyed by the active unshielded address.
+  scope: (state) => (typeof state['activeWalletKey'] === 'string' ? state['activeWalletKey'] : null),
+});
+
 /**
  * A confirmed self-transfer arrives from gero-sync with amount 0: every output
  * of the color came back to us, and the chain cannot say which was the payment
@@ -519,6 +533,9 @@ function toBig(value: unknown): bigint {
 // ---------------------------------------------------------------- browser-context
 
 if (context === 'browser') {
+  // Fields the port has delivered: fresher than anything the cold-start read returns.
+  const deliveredFields = new Set<string>();
+
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<MidnightStore>) => {
     // Mirror walletStore's pattern — direct per-key assignment is what triggers
     // Vue 2's reactivity reliably. Re-hydrate the typed collections (BigInts,
@@ -527,6 +544,7 @@ if (context === 'browser') {
     Object.keys(updates as object).forEach((key) => {
       const k = key as keyof MidnightStore;
       const val = (updates as Record<string, unknown>)[key];
+      deliveredFields.add(key);
       if (k === 'balances') {
         midnightStore.balances = hydrateBalances(val);
       } else if (k === 'utxos') {
@@ -545,18 +563,20 @@ if (context === 'browser') {
     });
   });
 
-  // Hydrate from chrome.storage.local on cold start
-  chrome.storage.local.get(STORE_NAME, (result) => {
+  // Hydrate from the persisted record on cold start: the chrome.storage record plus
+  // the IndexedDB transactions/UTxOs written for the same wallet.
+  void persister.read().then((record) => {
     // Persisted shape mirrors MidnightStore (BigInts/Maps serialized); every
     // field below is read defensively with a fallback, so a typed view is
     // safe and removes the `unknown`-property-access noise this block had.
-    const stored = result[STORE_NAME] as Partial<MidnightStore> | undefined;
+    const stored = record as Partial<MidnightStore> | null;
     if (!stored) return;
+    const next: Partial<MidnightStore> = {};
 
-    midnightStore.isActive = !!stored.isActive;
-    midnightStore.lastSync = stored.lastSync ?? null;
-    midnightStore.networkStatus = stored.networkStatus ?? 'disconnected';
-    midnightStore.tip = stored.tip ?? { ...EMPTY_TIP };
+    next.isActive = !!stored.isActive;
+    next.lastSync = stored.lastSync ?? null;
+    next.networkStatus = stored.networkStatus ?? 'disconnected';
+    next.tip = stored.tip ?? { ...EMPTY_TIP };
     // Defensively strip any zswapViewingKey from a STALE persisted copy: a
     // wallet that was active before this fix landed still has the plaintext
     // key in its chrome.storage `addresses`. Derive the boolean from it, then
@@ -565,38 +585,48 @@ if (context === 'browser') {
     if (stored.addresses && typeof stored.addresses === 'object') {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { zswapViewingKey: _staleVk, ...safeStored } = stored.addresses;
-      midnightStore.addresses = safeStored;
-      midnightStore.shieldedSyncAvailable = typeof stored.shieldedSyncAvailable === 'boolean'
+      next.addresses = safeStored;
+      next.shieldedSyncAvailable = typeof stored.shieldedSyncAvailable === 'boolean'
         ? stored.shieldedSyncAvailable
         : isValidMidnightViewingKey(stored.addresses.zswapViewingKey);
     } else {
-      midnightStore.addresses = { ...EMPTY_ADDRESSES };
-      midnightStore.shieldedSyncAvailable = !!stored.shieldedSyncAvailable;
+      next.addresses = { ...EMPTY_ADDRESSES };
+      next.shieldedSyncAvailable = !!stored.shieldedSyncAvailable;
     }
-    midnightStore.balances = hydrateBalances(stored.balances);
-    midnightStore.utxos = hydrateUtxos(stored.utxos);
-    midnightStore.transactions = hydrateTransactions(stored.transactions);
-    midnightStore.dustState = hydrateDustState(stored.dustState);
-    midnightStore.provingOperations = hydrateProvingOperations(stored.provingOperations);
-    midnightStore.provingHistory = hydrateProvingHistory(stored.provingHistory);
-    midnightStore.chainIdentity = stored.chainIdentity ?? null;
-    midnightStore.lastMidnightTxId = typeof stored.lastMidnightTxId === 'number'
+    next.balances = hydrateBalances(stored.balances);
+    next.utxos = hydrateUtxos(stored.utxos);
+    next.transactions = hydrateTransactions(stored.transactions);
+    next.dustState = hydrateDustState(stored.dustState);
+    next.provingOperations = hydrateProvingOperations(stored.provingOperations);
+    next.provingHistory = hydrateProvingHistory(stored.provingHistory);
+    next.chainIdentity = stored.chainIdentity ?? null;
+    next.lastMidnightTxId = typeof stored.lastMidnightTxId === 'number'
       ? stored.lastMidnightTxId
       : null;
-    midnightStore.shieldedProvingConsent = hydrateShieldedProvingConsent(stored.shieldedProvingConsent);
-    midnightStore.activeWalletKey = typeof stored.activeWalletKey === 'string'
+    next.shieldedProvingConsent = hydrateShieldedProvingConsent(stored.shieldedProvingConsent);
+    next.activeWalletKey = typeof stored.activeWalletKey === 'string'
       ? stored.activeWalletKey
       : null;
-    midnightStore.proofServer = hydrateProofServer(stored.proofServer);
+    next.proofServer = hydrateProofServer(stored.proofServer);
     // The private-note scan can start and finish while no dashboard is open
     // (the side panel's dApp prompt starts it). Without these two the
     // dashboard's "Private tokens" section boots at `idle` and tells the user
     // to unlock a scan the background already completed.
-    midnightStore.privateSyncStatus = hydratePrivateSyncStatus(stored.privateSyncStatus);
-    midnightStore.privateSyncProgress = hydratePrivateSyncProgress(stored.privateSyncProgress);
+    next.privateSyncStatus = hydratePrivateSyncStatus(stored.privateSyncStatus);
+    next.privateSyncProgress = hydratePrivateSyncProgress(stored.privateSyncProgress);
     // A site's transaction may be mid-flight when the panel opens; the card
     // applies its own staleness window, so restoring the record is safe.
-    midnightStore.siteActivity = hydrateSiteActivity(stored.siteActivity);
+    next.siteActivity = hydrateSiteActivity(stored.siteActivity);
+
+    // The history and UTxOs belong to the wallet that wrote this record, and the
+    // port may already have switched to another one.
+    if (deliveredFields.has('activeWalletKey') && midnightStore.activeWalletKey !== next.activeWalletKey) {
+      delete next.transactions;
+      delete next.utxos;
+    }
+    for (const [key, value] of Object.entries(next)) {
+      if (!deliveredFields.has(key)) (midnightStore as unknown as Record<string, unknown>)[key] = value;
+    }
   });
 }
 
@@ -615,7 +645,8 @@ const bgDurableTouched = {
 
 // The background service worker's in-memory store starts at defaults on
 // every SW start (MV3 workers restart constantly), and broadcastFromBackground
-// persists the WHOLE in-memory store — so without a BG-side hydrate, the
+// persists the whole in-memory chrome.storage record (every field except the
+// IndexedDB-held transactions/utxos) — so without a BG-side hydrate, the
 // first write after a restart silently reset every durable preference in
 // chrome.storage (the proof-server mode kept flipping back to Gero Cloud,
 // and the proving consent re-prompted after every reload). Hydrate the
@@ -786,12 +817,10 @@ function applyUpdates(updates: Partial<MidnightStore>) {
 
 // ---------------------------------------------------------------- background-context
 
-let storageWriteTimeout: ReturnType<typeof setTimeout> | null = null;
-
 /**
  * Background-context broadcaster. Updates the in-memory store, broadcasts
- * the partial to every connected browser context, and persists to
- * `chrome.storage.local` (debounced unless `immediate` is set).
+ * the partial to every connected browser context, and persists the touched
+ * fields (debounced unless `immediate` is set).
  *
  * Uses the in-memory state as the persistence base — never reads from
  * `chrome.storage.local` to avoid race conditions where two near-simultaneous
@@ -806,26 +835,11 @@ function broadcastFromBackground(updates: Partial<MidnightStore>, immediate = fa
   const serializedUpdates = JSON.parse(JSON.stringify(updates, serializeValue));
   backgroundStoreMessaging.broadcastUpdate(STORE_NAME, serializedUpdates);
 
-  const writeNow = () => {
-    const serializedState = JSON.parse(JSON.stringify(midnightStore, serializeValue));
-    chrome.storage.local.set({ [STORE_NAME]: serializedState });
-  };
-
+  persister.markDirty(Object.keys(updates));
   if (immediate || 'isActive' in updates) {
-    if (storageWriteTimeout) {
-      clearTimeout(storageWriteTimeout);
-      storageWriteTimeout = null;
-    }
-    writeNow();
+    void persister.flush();
     debugLog('💾 Midnight store persisted (immediate)');
-    return;
   }
-
-  if (storageWriteTimeout) clearTimeout(storageWriteTimeout);
-  storageWriteTimeout = setTimeout(() => {
-    writeNow();
-    debugLog('💾 Midnight store persisted (debounced)');
-  }, 300);
 }
 
 // ---------------------------------------------------------------- actions
