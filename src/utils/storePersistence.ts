@@ -382,6 +382,29 @@ export class StorePersister {
   }
 
   /**
+   * Read the stored compact record and pass it to `apply` before any write can replace
+   * it, as hydrate() does. For a store that restores only some fields, through its own
+   * validators, rather than the whole record.
+   */
+  async hydrateWith(apply: (stored: State | null) => void): Promise<void> {
+    const reading = this.readCompactRecord().then((stored) => {
+      try {
+        apply(stored);
+      } catch (error) {
+        console.error(`Failed to hydrate ${this.options.storeName}:`, error);
+      }
+      return stored;
+    });
+    // Set before the first await: a flush from here on waits for this read (see flush).
+    this.compactRead = reading;
+    try {
+      await reading;
+    } finally {
+      if (this.compactRead === reading) this.compactRead = null;
+    }
+  }
+
+  /**
    * The persisted record, with its bulk fields merged back in, without applying it.
    * For a store whose fields need custom revival (BigInts, validation) before they
    * reach its state. A bulk entry is merged only when it belongs to the record's own
