@@ -89,9 +89,12 @@ describe('composition yesShare', () => {
   });
 });
 
-/** The mainnet committee on 2026-09-24: seven seats, quorum 2/3. */
+/**
+ * The mainnet committee on 2026-09-24: seven seats, quorum 2/3, every member
+ * with an authorised hot key (Nexus sends `hotHashes` for each of them).
+ */
 function committee(members: Partial<Committee['members'][number]>[] = []): Committee {
-  const seat = { hash: 'h', credType: 'SCRIPTHASH', startEpoch: 581, expiredEpoch: 726 };
+  const seat = { hash: 'h', credType: 'SCRIPTHASH', startEpoch: 581, expiredEpoch: 726, hotHashes: ['hot'] };
   const seats = members.length ? members : Array.from({ length: 7 }, () => ({}));
   return {
     thresholdNumerator: 2,
@@ -117,6 +120,14 @@ describe('activeCommitteeSize', () => {
     expect(activeCommitteeSize(null, 657)).toBeNull();
     expect(activeCommitteeSize(committee(), null)).toBeNull();
   });
+
+  it('is unknown when Nexus omits hotHashes for a seated member, rather than counting it eligible', () => {
+    // The Nexus contract: no known authorisation => the field is left out, never [].
+    const sixAuthorised = committee([{}, {}, {}, {}, {}, {}, { hotHashes: undefined }]);
+    expect(activeCommitteeSize(sixAuthorised, 657)).toBeNull();
+    // An expired or not-yet-seated member without the field does not block the count.
+    expect(activeCommitteeSize(committee([{}, {}, { expiredEpoch: 650, hotHashes: undefined }]), 657)).toBe(2);
+  });
 });
 
 describe('ccTallies', () => {
@@ -138,6 +149,16 @@ describe('ccTallies', () => {
   it('falls back to the server pct when the seat count is unknown or cannot hold the votes', () => {
     expect(ccTallies(LIVE_CC, null).yesPct).toBe(14.29);
     expect(ccTallies({ ...LIVE_CC, ccYesVotes: 9 }, 7).yesPct).toBe(14.29);
+  });
+
+  it('uses the server share, not 4 of 7, when one seated member has no known hot key', () => {
+    // Independent-review reproduction: six authorised, one omitted, four yes.
+    // Over the unsupported 7 seats this read 57.14% and missed a 2/3 quorum;
+    // the ledger's own denominator is 6, which the server share reflects.
+    const summary = { ccYesVotes: 4, ccNoVotes: 0, ccAbstainVotes: 0, ccYesPct: 66.67, ccNoPct: 33.33 } as GovVotingSummary;
+    const seats = activeCommitteeSize(committee([{}, {}, {}, {}, {}, {}, { hotHashes: undefined }]), 657);
+    expect(ccTallies(summary, seats)).toMatchObject({ yesPct: 66.67, available: true });
+    expect(ccProgress(summary, 2, 3, seats)).toMatchObject({ notVoted: null });
   });
 
   it('is unavailable with nothing to go on', () => {

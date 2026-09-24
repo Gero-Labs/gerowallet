@@ -210,10 +210,12 @@ export interface CommitteeMember {
    */
   displayName?: string | null;
   /**
-   * Hot credentials this member has authorised. OPTIONAL: newer Nexus sends it
-   * (every mainnet member had one on 2026-09-24), older projections do not. An
-   * EMPTY array is a fact (no hot key, so the ledger counts the seat as
-   * abstaining); absent is not, and changes nothing.
+   * Hot credentials this member has authorised: authorisation HISTORY, not a
+   * current-eligibility flag. OPTIONAL: newer Nexus sends it (every mainnet
+   * member had one on 2026-09-24), older projections do not, and Nexus omits it
+   * for a member with no known authorisation. An EMPTY array is a fact (no hot
+   * key); absent means eligibility is unknown, so `activeCommitteeSize` gives
+   * up and the server's share is used.
    */
   hotHashes?: string[] | null;
 }

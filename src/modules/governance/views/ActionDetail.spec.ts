@@ -542,11 +542,13 @@ describe('ActionDetail without its metadata document', () => {
     const SEVEN_SEATS = {
       thresholdNumerator: 2,
       thresholdDenominator: 3,
+      // Every mainnet member had an authorised hot key on 2026-09-24.
       members: Array.from({ length: 7 }, (_, i) => ({
         hash: `${i}`.repeat(56),
         credType: 'SCRIPTHASH',
         startEpoch: 581,
         expiredEpoch: 726,
+        hotHashes: [`${i}`.repeat(56)],
       })),
     };
     /** The live summary: counts right, pct over 14 seats. */
@@ -576,6 +578,23 @@ describe('ActionDetail without its metadata document', () => {
       getProposal.mockResolvedValue(unfetched({ status: 'ratified' }));
       getVotingSummary.mockResolvedValue(LIVE);
       getCommittee.mockResolvedValue(SEVEN_SEATS);
+      wrapper = mountPage();
+      await settle();
+
+      expect(committeeCard()?.props('composition')).toMatchObject({ yesPct: 14.29 });
+      expect(committeeCard()?.props('counts')).toMatchObject({ notVoted: null });
+    });
+
+    it('keeps the server share when Nexus omits hotHashes for a seated member', async () => {
+      // Nexus leaves the field out for a member with no known authorisation; that
+      // seat's eligibility is unknown, so the page must not count it.
+      const oneUnknown = {
+        ...SEVEN_SEATS,
+        members: SEVEN_SEATS.members.map((member, i) => (i === 6 ? { ...member, hotHashes: undefined } : member)),
+      };
+      getProposal.mockResolvedValue(unfetched());
+      getVotingSummary.mockResolvedValue(LIVE);
+      getCommittee.mockResolvedValue(oneUnknown);
       wrapper = mountPage();
       await settle();
 

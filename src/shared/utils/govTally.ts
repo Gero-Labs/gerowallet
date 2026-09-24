@@ -110,10 +110,20 @@ export function spoTallies(summary: GovVotingSummary | null | undefined): Compos
 }
 
 /**
- * Committee seats that can vote in `epoch`: seated, not yet expired, and —
- * when the projection lists hot keys — holding one. The ledger counts an
- * expired member, or one with no hot key, as ABSTAINING, so neither belongs in
- * the denominator. Null when the committee or the epoch is unknown.
+ * Committee seats that can vote in `epoch`, or null when the projection cannot
+ * establish them. The ledger leaves an expired, not-yet-seated or unregistered
+ * (no hot key) member out of the denominator.
+ *
+ * `hotHashes` is authorisation HISTORY, and Nexus OMITS it for a member it
+ * knows no authorisation for (it never sends an empty list for that case). So
+ * an omitted field is not evidence of eligibility: counting such a seat
+ * understates the share (4 yes of 6 eligible read as 57.14% over 7, missing a
+ * 2/3 quorum it meets). Any seated member without the field therefore makes
+ * the count unknown, and callers fall back to the server's share. An explicit
+ * empty list is still a fact and leaves that one seat out.
+ *
+ * History cannot show a resignation that followed an authorisation, so a
+ * member who resigned is still counted here; the server share has no such gap.
  *
  * Only meaningful for an action that is still open: the committee in hand is
  * the CURRENT one, which may not be the one that voted on a closed action.
@@ -123,11 +133,14 @@ export function activeCommitteeSize(
   epoch: number | null | undefined,
 ): number | null {
   if (!committee || !Array.isArray(committee.members) || typeof epoch !== 'number') return null;
-  return committee.members.filter(member => {
-    if (typeof member.startEpoch === 'number' && member.startEpoch > epoch) return false;
-    if (typeof member.expiredEpoch === 'number' && member.expiredEpoch < epoch) return false;
-    return !(Array.isArray(member.hotHashes) && member.hotHashes.length === 0);
-  }).length;
+  let seats = 0;
+  for (const member of committee.members) {
+    if (typeof member.startEpoch === 'number' && member.startEpoch > epoch) continue;
+    if (typeof member.expiredEpoch === 'number' && member.expiredEpoch < epoch) continue;
+    if (!Array.isArray(member.hotHashes)) return null;
+    if (member.hotHashes.length > 0) seats += 1;
+  }
+  return seats;
 }
 
 /**
