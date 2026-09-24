@@ -653,9 +653,14 @@ const bgDurableTouched = {
 // durable, user-set fields here. Per-wallet chain state (balances / utxos /
 // transactions) is deliberately left out: sync repopulates it and
 // setActive owns its wipe-on-switch lifecycle.
+//
+// The persister holds every write back until this read has landed: an immediate
+// write on the worker's first tick (setActive from walletManager.initializeWallet)
+// would otherwise replace the record with these fields' defaults before they were
+// restored, and a lost chainIdentity costs a full private-note rescan.
 if (context === 'background') {
-  chrome.storage.local.get(STORE_NAME, (result) => {
-    const stored = result[STORE_NAME] as Partial<MidnightStore> | undefined;
+  void persister.hydrateWith((record) => {
+    const stored = record as Partial<MidnightStore> | null;
     if (!stored) return;
     if (!bgDurableTouched.proofServer) {
       midnightStore.proofServer = hydrateProofServer(stored.proofServer);

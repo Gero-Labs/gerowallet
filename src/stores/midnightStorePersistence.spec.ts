@@ -19,7 +19,7 @@ const env = vi.hoisted(() => {
   const data = new Map<string, unknown>();
   const sets: Record<string, unknown>[] = [];
   const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
-  // Both call forms: the persister uses promises, the background boot guard a callback.
+  // Both call forms: the persister uses promises, other callers a callback.
   const local = {
     get: (key: string | string[], cb?: (r: Record<string, unknown>) => void) => {
       const out: Record<string, unknown> = {};
@@ -204,5 +204,27 @@ describe('midnightStore persistence', () => {
     await settle();
     const record = env.data.get('midnightStore') as { proofServer: { mode: string; localUrl: string } };
     expect(record.proofServer).toMatchObject({ mode: 'local', localUrl: 'http://localhost:6399' });
+  });
+
+  it('an immediate write before the restarted worker has read its record keeps the durable preferences', async () => {
+    const chainIdentity = { network: 'midnight-preprod', generation: 2, genesisHash: `0x${'ab'.repeat(32)}` };
+    m!.midnightActions.setProofServer({
+      mode: 'local', localUrl: 'http://localhost:6399', localUrlLedger9: 'http://localhost:6300',
+      zkpaasUrl: '', zkpaasApiKey: '', zkpaasApiSecret: '',
+    });
+    m!.midnightActions.resetChainState(chainIdentity);
+    await settle();
+
+    // walletManager.initializeWallet can activate Midnight on the worker's first tick,
+    // before the boot read of the stored record has landed.
+    const restarted = await load('background');
+    restarted.midnightActions.setActive(addresses('abc'));
+    await settle();
+
+    const record = env.data.get('midnightStore') as { proofServer: { mode: string }; chainIdentity: unknown; isActive: boolean };
+    expect(record.isActive).toBe(true);
+    expect(record.proofServer).toMatchObject({ mode: 'local', localUrl: 'http://localhost:6399' });
+    expect(record.chainIdentity).toEqual(chainIdentity);
+    expect(restarted.midnightStore.chainIdentity).toEqual(chainIdentity);
   });
 });
