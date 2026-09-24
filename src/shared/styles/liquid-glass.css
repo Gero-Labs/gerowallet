@@ -57,24 +57,35 @@
   border-right: 1px solid var(--g-hairline-1) !important;
 }
 
-/* Material 2: overlay (dialogs, sheets) */
+/* Material 2: overlay (dialogs, sheets). Liquid glass, like Material 5, but it
+   floats over the dimmed page rather than sitting on it: a heavier blur so the
+   content behind reads as colour and light rather than shapes, and more tint so
+   dense forms stay legible. The page shows through (it is not a solid sheet),
+   and the sheen and bright top edge separate it from what it covers.
+   Mirror of `g-glass-overlay` in _glass.scss — change both together. */
 .glass-overlay,
 .liquid-glass-dialog,
 .v-card.glass-overlay,
 .v-card.liquid-glass-dialog {
-  background: rgba(18, 21, 28, 0.975) !important;
-  backdrop-filter: blur(44px) saturate(1.3) !important;
-  -webkit-backdrop-filter: blur(44px) saturate(1.3) !important;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.015) 45%, rgba(255, 255, 255, 0.04) 100%),
+    rgba(18, 21, 28, 0.68) !important;
+  backdrop-filter: blur(56px) saturate(1.6) !important;
+  -webkit-backdrop-filter: blur(56px) saturate(1.6) !important;
   border: 1px solid var(--g-hairline-2) !important;
   border-radius: var(--g-r-sheet) !important;
-  box-shadow: var(--g-shadow-sheet) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.04),
+    var(--g-shadow-sheet) !important;
 }
 
 /* Solid variant (opt-in via BaseDialog :solid). Opaque surface, blur disabled.
    Under the glass baseline a caller must state a readability need to use it.
    It was introduced as a workaround for the glass re-compositing lighter on a
-   dialog's second open; at the overlay's current 97.5% opacity that shift is
-   imperceptible, so the two callers were moved back to the glass overlay. */
+   dialog's second open. The two callers were moved back to the glass overlay
+   when it was 97.5% opaque; at its current 68% tint, check a reopened dialog
+   before relying on that again. */
 .liquid-glass-dialog--solid,
 .v-card.liquid-glass-dialog.liquid-glass-dialog--solid {
   background: var(--g-surface) !important;
