@@ -340,3 +340,101 @@ describe('StorePersister', () => {
     expect(state).toEqual(fresh());
   });
 });
+
+// Reproduced in review against the first version of this change: an upgrade whose
+// IndexedDB writes fail must still persist a lock or logout, and a legacy record's
+// bulk data must never land under a different wallet's session.
+function walletFixture() {
+  const records = new Map<string, unknown>();
+  const rows = new Map<string, StoreCacheEntry>();
+  const compact: CompactStorage = {
+    async get(key) { return structuredClone(records.get(key)); },
+    async set(key, value) { records.set(key, structuredClone(value)); },
+  };
+  const bulk: BulkStorage = {
+    async read() { return new Map(rows); },
+    async write(entries) { entries.forEach((entry) => rows.set(entry.key, entry)); },
+  };
+  const state = { loggedWallet: null as { id: number } | null, isLocked: false, transactions: [] as { tx_hash: string }[] };
+  const create = (target = state) => new StorePersister(target, {
+    storeName: 'walletStore',
+    bulkFields: ['transactions'],
+    immediateFields: ['loggedWallet', 'isLocked'],
+    scope: (s) => String((s['loggedWallet'] as { id: number } | null)?.id ?? ''),
+    compact,
+    bulk,
+  });
+  return { records, rows, compact, bulk, state, create };
+}
+
+describe('StorePersister upgrade path', () => {
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it.each(['lock', 'logout'] as const)('persists an explicit %s even when the initial legacy migration cannot write IndexedDB', async (action) => {
+    vi.useFakeTimers();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const f = walletFixture();
+    f.records.set('walletStore', { loggedWallet: { id: 1 }, isLocked: false, transactions: [{ tx_hash: 'wallet-A-tx' }] });
+    f.bulk.write = async () => { throw new Error('IndexedDB unavailable'); };
+    const p = f.create();
+    await p.hydrate({ migrate: true });
+    await p.flush();
+
+    if (action === 'logout') {
+      // WalletStore.logout broadcasts all cleared fields in one update.
+      Object.assign(f.state, { loggedWallet: null, isLocked: false, transactions: [] });
+      p.markDirty(['loggedWallet', 'isLocked', 'transactions']);
+    } else {
+      f.state.isLocked = true;
+      p.markDirty(['isLocked']);
+    }
+    await p.flush();
+
+    const restarted = { loggedWallet: null as { id: number } | null, isLocked: false, transactions: [] as { tx_hash: string }[] };
+    await f.create(restarted).hydrate();
+    if (action === 'logout') expect(restarted.loggedWallet).toBeNull();
+    else expect(restarted.isLocked).toBe(true);
+  });
+
+  it('keeps the legacy history recoverable while IndexedDB keeps failing', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const f = walletFixture();
+    f.records.set('walletStore', { loggedWallet: { id: 1 }, isLocked: false, transactions: [{ tx_hash: 'wallet-A-tx' }] });
+    f.bulk.write = async () => { throw new Error('IndexedDB unavailable'); };
+    const p = f.create();
+    await p.hydrate({ migrate: true });
+    await p.flush();
+    f.state.isLocked = true;
+    p.markDirty(['isLocked']);
+    await p.flush();
+
+    const restarted = { loggedWallet: null as { id: number } | null, isLocked: false, transactions: [] as { tx_hash: string }[] };
+    await f.create(restarted).hydrate();
+    expect(restarted.transactions).toEqual([{ tx_hash: 'wallet-A-tx' }]);
+  });
+
+  it('does not apply legacy wallet A history after a port delivers wallet B during hydration', async () => {
+    const f = walletFixture();
+    f.records.set('walletStore', { loggedWallet: { id: 1 }, isLocked: false, transactions: [{ tx_hash: 'wallet-A-tx' }] });
+    let finishRead!: (rows: Map<string, StoreCacheEntry>) => void;
+    let readStarted!: () => void;
+    const started = new Promise<void>((resolve) => { readStarted = resolve; });
+    f.bulk.read = () => { readStarted(); return new Promise((resolve) => { finishRead = resolve; }); };
+    const deliveredFields = new Set<string>();
+    const hydration = f.create().hydrate({ skip: deliveredFields });
+    await started;
+
+    // Wallet switching broadcasts loggedWallet before the new data loaders finish.
+    f.state.loggedWallet = { id: 2 };
+    deliveredFields.add('loggedWallet');
+    finishRead(new Map());
+    await hydration;
+
+    expect(f.state.loggedWallet).toEqual({ id: 2 });
+    expect(f.state.transactions).toEqual([]);
+  });
+});

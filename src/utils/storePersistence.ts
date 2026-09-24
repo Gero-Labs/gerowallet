@@ -94,8 +94,13 @@ export class StorePersister {
   private readonly lastBulk = new Map<string, string>();
   /** Fields set while a hydration is awaiting storage; it must not overwrite them. */
   private readonly hydrationWatchers = new Set<Set<string>>();
-  /** The chrome.storage record still holds bulk fields not yet safely in IndexedDB. */
-  private legacyPending = false;
+  /**
+   * Bulk fields whose only persisted copy is still inline in an old-format
+   * chrome.storage record. Every compact write keeps them inline until IndexedDB
+   * confirms them, so the compact fields (lock state, logged wallet) stay durable
+   * even while the move keeps failing.
+   */
+  private readonly legacyInline = new Set<string>();
   private retryMs = 0;
 
   constructor(private readonly state: State, private readonly options: StorePersisterOptions) {
@@ -162,10 +167,10 @@ export class StorePersister {
     const { storeName, replacer } = this.options;
     let failedBulk: string[] = [];
     let compactFailed = false;
+    let writeCompact = compactDirty;
 
-    // Bulk before compact. A record in the old format holds the only persisted copy of
-    // its bulk fields until they reach IndexedDB, so the compact rewrite that drops
-    // them waits for that (see `legacyPending`).
+    // Bulk before compact, so the compact write in the same flush can drop an inline
+    // legacy copy (see `legacyInline`) that has just reached IndexedDB.
     if (bulkFields.length > 0) {
       const scope = this.scope();
       const entries: StoreCacheEntry[] = [];
@@ -179,32 +184,38 @@ export class StorePersister {
           continue;
         }
         const fp = fingerprint(scope, json);
-        if (this.lastBulk.get(field) === fp) continue;
+        if (this.lastBulk.get(field) === fp) {
+          // Already in IndexedDB as-is, so an inline legacy copy is now redundant.
+          if (this.legacyInline.delete(field)) writeCompact = true;
+          continue;
+        }
         entries.push({ key: this.bulkKey(field), scope, json, savedAt: Date.now() });
         pending.set(field, fp);
       }
       if (entries.length > 0) {
         try {
           await this.bulk.write(entries);
-          pending.forEach((fp, field) => this.lastBulk.set(field, fp));
+          pending.forEach((fp, field) => {
+            this.lastBulk.set(field, fp);
+            if (this.legacyInline.delete(field)) writeCompact = true;
+          });
         } catch (error) {
           failedBulk = [...pending.keys()];
+          // A field still carried inline takes its latest value there instead.
+          if (failedBulk.some((field) => this.legacyInline.has(field))) writeCompact = true;
           console.error(`Failed to persist ${storeName} (${failedBulk.join(', ')}):`, error);
         }
       }
     }
 
-    if (compactDirty && this.legacyPending && (failedBulk.length > 0 || this.bulkDirty.size > 0)) {
-      // Keep the old record, and with it the only persisted copy, until the move succeeds.
-      compactFailed = true;
-    } else if (compactDirty) {
+    // Never held back by a failed bulk write: a lock or logout must persist regardless.
+    if (writeCompact) {
       try {
         const json = JSON.stringify(this.compactView(), replacer);
-        if (json !== this.lastCompactJson || this.legacyPending) {
+        if (json !== this.lastCompactJson) {
           await this.compact.set(storeName, JSON.parse(json));
           this.lastCompactJson = json;
         }
-        this.legacyPending = false;
       } catch (error) {
         compactFailed = true;
         console.error(`Failed to persist ${storeName}:`, error);
@@ -224,7 +235,7 @@ export class StorePersister {
   private compactView(): State {
     const view: State = {};
     for (const key of Object.keys(this.state)) {
-      if (!this.bulkFields.has(key)) view[key] = this.state[key];
+      if (!this.bulkFields.has(key) || this.legacyInline.has(key)) view[key] = this.state[key];
     }
     return view;
   }
@@ -267,6 +278,11 @@ export class StorePersister {
       }
 
       const scope = this.scope();
+      // An old-format record's bulk fields belong to the session that wrote it. Use them
+      // only while that is still the current session: the port can deliver another
+      // wallet's identity while the read above is in flight.
+      const legacyUsable = stored !== null && (this.options.scope?.(stored) ?? null) === scope;
+      const fromLegacy: string[] = [];
       for (const field of this.bulkFields) {
         const entry = entries.get(this.bulkKey(field));
         let value: unknown;
@@ -278,16 +294,20 @@ export class StorePersister {
             console.error(`Discarding unreadable cached ${storeName}.${field}:`, error);
           }
         }
-        if (value === undefined && field in legacy) value = legacy[field];
+        if (value === undefined && legacyUsable && field in legacy) {
+          value = legacy[field];
+          fromLegacy.push(field);
+        }
         if (value !== undefined && keep(field)) this.state[field] = value;
       }
 
-      const legacyFields = Object.keys(legacy);
-      if (migrate && legacyFields.length > 0) {
-        legacyFields.forEach((field) => {
-          if (!this.lastBulk.has(field)) this.bulkDirty.add(field);
+      // Move an old-format record's bulk fields into IndexedDB. Each stays inline in the
+      // chrome.storage record until IndexedDB confirms it.
+      if (migrate && Object.keys(legacy).length > 0) {
+        fromLegacy.forEach((field) => {
+          this.legacyInline.add(field);
+          this.bulkDirty.add(field);
         });
-        this.legacyPending = true;
         this.compactDirty = true;
         void this.flush();
       }
