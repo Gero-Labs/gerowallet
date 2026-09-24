@@ -360,11 +360,10 @@ function broadcastUpdate(storeName: string, updates: any) {
   ports.forEach(port => {
     port.postMessage({ storeName, updates: serialized });
   });
-
-  // Persist to Chrome storage as fallback
-  chrome.storage.local.set({ [storeName]: serialized });
 }
 ```
+
+Each store persists its own state after the broadcast. `walletStore` and `networkStore` use `StorePersister` (`src/utils/storePersistence.ts`). It writes only the fields that changed: small ones to `chrome.storage.local[storeName]`, and bulk ones (transactions, UTxOs, tokens, collections, assets) to the `gero-store-cache` IndexedDB. Large values must stay out of `chrome.storage`. Chrome copies every changed value (old and new) on its browser UI thread into every `storage.onChanged` listener, including the content script in every tab. Whole-store rewrites froze the entire browser.
 
 #### Browser Context (`src/services/storeMessaging.service.ts`)
 ```typescript
@@ -924,7 +923,7 @@ function updateWalletState(updates: Partial<WalletStore>) {
 
   if (context === 'background') {
     backgroundStoreMessaging.broadcastUpdate('walletStore', updates);
-    chrome.storage.local.set({ walletStore: { ...walletStore } });
+    persister.markDirty(Object.keys(updates)); // only the touched fields; bulk ones to IndexedDB
   }
 }
 ```
