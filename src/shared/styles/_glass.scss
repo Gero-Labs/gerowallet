@@ -80,9 +80,11 @@
 // (side-panel bottom sheets, ad-hoc v-dialog cards). Mirror of .glass-overlay.
 @mixin g-glass-overlay($important: false) {
   $i: if($important, '!important', '');
-  background: rgba(18, 21, 28, 0.975) #{$i};
-  backdrop-filter: blur(44px) saturate(1.3) #{$i};
-  -webkit-backdrop-filter: blur(44px) saturate(1.3) #{$i};
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.015) 45%, rgba(255, 255, 255, 0.04) 100%),
+    rgba(18, 21, 28, 0.68) #{$i};
+  backdrop-filter: blur(56px) saturate(1.6) #{$i};
+  -webkit-backdrop-filter: blur(56px) saturate(1.6) #{$i};
   border: 1px solid var(--g-hairline-2) #{$i};
   @include g-glass-fallbacks(rgba(18, 21, 28, 0.98), $important);
 }

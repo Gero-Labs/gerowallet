@@ -177,9 +177,10 @@ watch(() => geroConfig.value?.locale, async (newLocale, oldLocale) => {
 .v-card {
   background-color: var(--v-cardBackground-base) !important;
 }
+/* Softens the page around an open dialog so the dialog's glass reads as the top layer. */
 .v-dialog__content--active {
-  -webkit-backdrop-filter: blur(4px);
-  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
 }
 .v-carousel__controls {
   background-color: transparent!important;
