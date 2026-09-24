@@ -115,7 +115,7 @@ describe('govAnchor', () => {
 
   it('sends IPFS through the proxy in-app and a public gateway outside', () => {
     expect(toInAppUrl(`ipfs://${CID_V1}`)).toContain(`/api/ipfs?path=${CID_V1}`);
-    expect(toExternalHref(`ipfs://${CID_V1}`)).toBe(`https://ipfs.io/ipfs/${CID_V1}`);
+    expect(toExternalHref(`ipfs://${CID_V1}`)).toBe(`https://inbrowser.link/ipfs/${CID_V1}`);
   });
 
   it('returns null for anything that is not a web link or IPFS content', () => {
