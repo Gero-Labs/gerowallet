@@ -39,6 +39,12 @@ import LoadingState, { loadingState } from '@/stores/loading';
 import webSocketService from './websocket.service';
 
 const BLOCK = { hash: 'b1', height: 100, slot: 1, epoch: 1, epoch_slot: 1, time: 1 };
+/**
+ * gero-sync's answer to a SUBSCRIBE (CatchUpService): it always carries the
+ * subscription's `addresses`. A keep-alive SYNC_CHECK_OK carries only `block`.
+ */
+const ANSWER = { type: 'SYNC_CHECK_OK', block: BLOCK, addresses: ['addr_test1'], utxos: [], account: null };
+const KEEP_ALIVE = { type: 'SYNC_CHECK_OK', block: BLOCK };
 
 /**
  * The release waits for the handler's promise, then one macrotask (the loader
@@ -50,8 +56,8 @@ async function settle() {
   for (let i = 0; i < 6; i++) await Promise.resolve();
 }
 
-function open(onSync: (data: unknown) => unknown = vi.fn()) {
-  webSocketService.connect('CARDANO', 'MAINNET', 'stake1test', 99, { onSync });
+function open(onSync: (data: unknown) => unknown = vi.fn(), chain = 'CARDANO') {
+  webSocketService.connect(chain, 'MAINNET', 'stake1test', 99, { onSync });
   const ws = FakeSocket.instances[FakeSocket.instances.length - 1];
   ws.onopen?.();
   return { ws, onSync };
@@ -92,27 +98,77 @@ describe('syncPending: "the list is last session\'s until gero-sync answers"', (
     expect(armedAt).toBeLessThan(droppedAt);
   });
 
-  it('clears on SYNC_CHECK_OK: a wallet already at the tip is told so', async () => {
+  it('clears on the SUBSCRIBE\'s SYNC_CHECK_OK: a wallet already at the tip is told so', async () => {
     const { ws, onSync } = open();
-    ws.deliver({ type: 'SYNC_CHECK_OK', block: BLOCK });
+    ws.deliver(ANSWER);
     await settle();
     expect(loadingState.syncPending).toBe(false);
     expect(onSync).toHaveBeenCalledTimes(1);
   });
 
-  it('clears on a blockless SYNC_CHECK_OK too, which is not handed to the wallet', async () => {
+  it('stays armed through a reconnect gap\'s SYNC batches and clears with the SYNC_CHECK_OK after them', async () => {
+    // gero-sync pushes the transactions missed while logged out as plain SYNC
+    // batches, then answers with SYNC_CHECK_OK. Releasing on the first batch
+    // dropped the line while the rest of the gap was still on its way.
     const { ws, onSync } = open();
-    ws.deliver({ type: 'SYNC_CHECK_OK' });
+    ws.deliver({ type: 'SYNC', block: BLOCK, transactions: [{ tx_hash: 't1' }] });
+    ws.deliver({ type: 'SYNC', block: { ...BLOCK, hash: 'b2', height: 101 }, transactions: [{ tx_hash: 't2' }] });
     await settle();
-    expect(onSync).not.toHaveBeenCalled();
+    expect(onSync).toHaveBeenCalledTimes(2);
+    expect(loadingState.syncPending).toBe(true);
+
+    ws.deliver(ANSWER);
+    await settle();
     expect(loadingState.syncPending).toBe(false);
   });
 
-  it('clears on a live SYNC', async () => {
+  it('is not released by a realtime block that lands before the answer', async () => {
     const { ws, onSync } = open();
     ws.deliver({ type: 'SYNC', block: BLOCK, transactions: [{ tx_hash: 't1' }] });
     await settle();
     expect(onSync).toHaveBeenCalledTimes(1);
+    expect(loadingState.syncPending).toBe(true);
+  });
+
+  it('is not released by a keep-alive reply, blockless or not', async () => {
+    const { ws, onSync } = open();
+    ws.deliver({ type: 'SYNC_CHECK_OK' });
+    ws.deliver(KEEP_ALIVE);
+    await settle();
+    // The block-stamped keep-alive still reaches the wallet (dashboard tip).
+    expect(onSync).toHaveBeenCalledTimes(1);
+    expect(loadingState.syncPending).toBe(true);
+  });
+
+  it('is not released by the reply to a keep-alive sent before a resubscribe', async () => {
+    const { ws } = open();
+    ws.deliver(ANSWER);
+    await settle();
+    expect(loadingState.syncPending).toBe(false);
+
+    webSocketService.resubscribe(0);
+    ws.deliver(KEEP_ALIVE); // answers the SYNC_CHECK that went out before the SUBSCRIBE
+    await settle();
+    expect(loadingState.syncPending).toBe(true);
+
+    ws.deliver(ANSWER);
+    await settle();
+    expect(loadingState.syncPending).toBe(false);
+  });
+
+  it('clears on a Bitcoin reconnect\'s single SYNC, which carries the addresses and is the answer', async () => {
+    const { ws, onSync } = open(vi.fn(), 'BITCOIN');
+    ws.deliver({ type: 'SYNC', block: BLOCK, transactions: [], addresses: ['bc1qtest'] });
+    await settle();
+    expect(onSync).toHaveBeenCalledTimes(1);
+    expect(loadingState.syncPending).toBe(false);
+  });
+
+  it('is released by the backstop when no answer ever comes', async () => {
+    open();
+    await vi.advanceTimersByTimeAsync(299_999);
+    expect(loadingState.syncPending).toBe(true);
+    await vi.advanceTimersByTimeAsync(1);
     expect(loadingState.syncPending).toBe(false);
   });
 
@@ -123,7 +179,7 @@ describe('syncPending: "the list is last session\'s until gero-sync answers"', (
     const onSync = vi.fn(() => new Promise<void>(resolve => { applied = resolve; }));
     const { ws } = open(onSync);
 
-    ws.deliver({ type: 'SYNC', block: BLOCK, transactions: [{ tx_hash: 't1' }] });
+    ws.deliver(ANSWER);
     await settle();
     expect(onSync).toHaveBeenCalledTimes(1);
     expect(loadingState.syncPending).toBe(true);
@@ -138,7 +194,7 @@ describe('syncPending: "the list is last session\'s until gero-sync answers"', (
     // timer queued at that commit, which holds loadingTxs while it writes the
     // store. The release must not overtake it.
     const { ws } = open();
-    ws.deliver({ type: 'SYNC', block: BLOCK, transactions: [{ tx_hash: 't1' }] });
+    ws.deliver(ANSWER);
     for (let i = 0; i < 6; i++) await Promise.resolve();
     LoadingState.setLoadingTxs(true); // the loader pass starts, before our deferred release
     await settle();
@@ -159,7 +215,7 @@ describe('syncPending: "the list is last session\'s until gero-sync answers"', (
     expect(onSync).not.toHaveBeenCalled();
     expect(loadingState.syncPending).toBe(true);
 
-    ws.deliver({ type: 'CATCH_UP_COMPLETE', block: BLOCK, totalTransactions: 2 });
+    ws.deliver({ type: 'CATCH_UP_COMPLETE', block: BLOCK, totalTransactions: 2, addresses: ['addr_test1'] });
     await settle();
     expect(onSync).toHaveBeenCalledTimes(1);
     expect((onSync as ReturnType<typeof vi.fn>).mock.calls[0][0].transactions).toHaveLength(2);
@@ -168,7 +224,7 @@ describe('syncPending: "the list is last session\'s until gero-sync answers"', (
 
   it('re-arms on resubscribe: a new SUBSCRIBE is a new first answer to wait for', async () => {
     const { ws } = open();
-    ws.deliver({ type: 'SYNC_CHECK_OK', block: BLOCK });
+    ws.deliver(ANSWER);
     await settle();
     expect(loadingState.syncPending).toBe(false);
 
@@ -191,27 +247,36 @@ describe('syncPending: "the list is last session\'s until gero-sync answers"', (
     });
     const { ws } = open(onSync);
 
-    ws.deliver({ type: 'SYNC', block: BLOCK, transactions: [{ tx_hash: 't1' }] });
+    ws.deliver(ANSWER);
     await settle();
     expect(subscribes(ws)).toHaveLength(2);
     expect(loadingState.syncPending).toBe(true);
 
     // The answer to the NEW subscription releases it.
-    ws.deliver({ type: 'SYNC_CHECK_OK', block: BLOCK });
+    ws.deliver(ANSWER);
     await settle();
     expect(loadingState.syncPending).toBe(false);
   });
 
-  it('treats a duplicate block as answered rather than leaving the flag armed', async () => {
-    const { ws } = open();
-    ws.deliver({ type: 'SYNC', block: BLOCK });
+  it('treats a duplicate-block answer as answered rather than leaving the flag armed', async () => {
+    const answerSync = { type: 'SYNC', block: BLOCK, addresses: ['bc1qtest'] };
+    const { ws } = open(vi.fn(), 'BITCOIN');
+    ws.deliver(answerSync);
     await settle();
     webSocketService.resubscribe(99);
     expect(loadingState.syncPending).toBe(true);
 
-    ws.deliver({ type: 'SYNC', block: BLOCK }); // same hash: skipped by the tip cache
+    ws.deliver(answerSync); // same hash: skipped by the tip cache
     await settle();
     expect(loadingState.syncPending).toBe(false);
+  });
+
+  it('does not treat a duplicate plain block as the answer', async () => {
+    const { ws } = open();
+    ws.deliver({ type: 'SYNC', block: BLOCK });
+    ws.deliver({ type: 'SYNC', block: BLOCK }); // same hash: skipped by the tip cache
+    await settle();
+    expect(loadingState.syncPending).toBe(true);
   });
 
   it('clears when the socket drops, and re-arms on the reconnect\'s SUBSCRIBE', () => {

@@ -92,6 +92,8 @@ class WebSocketService {
   private pendingTxBatches: WsSyncMessage[] = [];
   /** The arm the current SUBSCRIBE made (see LoadingState.setSyncPending). */
   private syncPendingToken = 0;
+  /** Backstop release for an arm whose answer never comes (see armSyncPending). */
+  private syncPendingTimer: ReturnType<typeof setTimeout> | null = null;
 
   private readonly RECONNECT_DELAYS = [3000, 5000, 10000, 30000];
   // SYNC_CHECK doubles as the MV3 keep-alive. The service worker is torn down
@@ -102,6 +104,10 @@ class WebSocketService {
   // and out. SYNC_CHECK is idempotent + relay-handled, so this needs no relay
   // change; it also keeps sync fresher. Must stay < 30s.
   private readonly SYNC_CHECK_INTERVAL = 25_000;
+  // Longest a SUBSCRIBE may stay unanswered before syncPending is released
+  // anyway. Matches waitForSync's default: a full catch-up can queue behind
+  // gero-sync's heavy-fetch permit for minutes.
+  private readonly SYNC_PENDING_MAX_MS = 300_000;
   private readonly WS_BASE_URL = import.meta.env['VITE_SYNC_WS_URL'] || 'wss://sync.gerowallet.io';
 
   connect(
@@ -191,7 +197,7 @@ class WebSocketService {
       // which an empty store read as "no transactions". Nothing can arrive before
       // the SUBSCRIBE sent below. Cleared once gero-sync's first answer to that
       // SUBSCRIBE has been applied (see clearSyncPendingWhenApplied).
-      this.syncPendingToken = LoadingState.setSyncPending(true);
+      this.armSyncPending();
       LoadingState.setConnecting(false);
       LoadingState.setText('');
       this.reconnectAttempt = 0;
@@ -290,6 +296,7 @@ class WebSocketService {
       LoadingState.setConnected(false);
       LoadingState.setConnecting(false);
       // Nothing can answer a closed socket; the reconnect's SUBSCRIBE re-arms it.
+      this.clearSyncPendingTimer();
       LoadingState.setSyncPending(false);
       this.stopSyncCheck();
 
@@ -330,10 +337,8 @@ class WebSocketService {
           // by block hash drops every transaction after the first in a block;
           // batching across generations can relabel an old chain's events.
           if (this.chain === 'MIDNIGHT') {
-            this.clearSyncPendingWhenApplied(
-              this.handlers.onSync?.(data)?.catch((error) => debugLog('Midnight sync failed', error)),
-              token,
-            );
+            const applied = this.handlers.onSync?.(data)?.catch((error) => debugLog('Midnight sync failed', error));
+            if (this.answersSubscribe(data)) this.clearSyncPendingWhenApplied(applied, token);
             break;
           }
           const txCount = Array.isArray(data['transactions']) ? data['transactions'].length : 0;
@@ -357,8 +362,9 @@ class WebSocketService {
             // Normal real-time sync — process immediately
             if (data.block?.hash && this.tipCache.get(data.block.hash)) {
               debugLog('⏭️ Duplicate block hash, skipping');
-              // Still an answer: the store already holds this block.
-              LoadingState.setSyncPending(false, token);
+              // A duplicate SUBSCRIBE answer is still an answer: the store
+              // already holds this block.
+              if (this.answersSubscribe(data)) LoadingState.setSyncPending(false, token);
               return;
             }
             if (data.block?.hash) {
@@ -367,7 +373,10 @@ class WebSocketService {
             if (data.block?.height) {
               this.lastSyncedBlock = data.block.height;
             }
-            this.clearSyncPendingWhenApplied(this.handlers.onSync?.(data), token);
+            const applied = this.handlers.onSync?.(data);
+            // A realtime block, or one batch of a reconnect gap, is not the
+            // answer: gero-sync sends the rest of the gap after it.
+            if (this.answersSubscribe(data)) this.clearSyncPendingWhenApplied(applied, token);
           }
           break;
         }
@@ -430,11 +439,11 @@ class WebSocketService {
           // IMPORTANT: type goes AFTER the spread — otherwise data.type ('SYNC_CHECK_OK')
           // overwrites it and setSync's `type === 'SYNC'` guard rejects the message.
           // Midnight must also validate/record a blockless successful check.
-          // "Caught up" is an answer too: the local list IS the chain's.
           if (this.chain === 'MIDNIGHT' || data['utxos'] || data['addresses'] || data['account'] || data['block']) {
-            this.clearSyncPendingWhenApplied(this.handlers.onSync?.({ ...data, type: 'SYNC' } as WsSyncMessage), token);
-          } else {
-            LoadingState.setSyncPending(false, token);
+            const applied = this.handlers.onSync?.({ ...data, type: 'SYNC' } as WsSyncMessage);
+            // "Caught up" answers the SUBSCRIBE: the local list IS the chain's.
+            // A keep-alive reply does not, even one to a SYNC_CHECK sent after it.
+            if (this.answersSubscribe(data)) this.clearSyncPendingWhenApplied(applied, token);
           }
           if (this.syncResolve) { this.syncResolve(); this.syncResolve = null; }
           break;
@@ -460,14 +469,50 @@ class WebSocketService {
   }
 
   /**
+   * Arms `syncPending` for a SUBSCRIBE about to go out, with a backstop release
+   * in case its answer never comes (a server that predates the answer shape
+   * {@link answersSubscribe} relies on, or a catch-up that silently stalls).
+   */
+  private armSyncPending(): void {
+    const token = LoadingState.setSyncPending(true);
+    this.syncPendingToken = token;
+    this.clearSyncPendingTimer();
+    this.syncPendingTimer = setTimeout(() => {
+      this.syncPendingTimer = null;
+      LoadingState.setSyncPending(false, token);
+    }, this.SYNC_PENDING_MAX_MS);
+  }
+
+  private clearSyncPendingTimer(): void {
+    if (this.syncPendingTimer) {
+      clearTimeout(this.syncPendingTimer);
+      this.syncPendingTimer = null;
+    }
+  }
+
+  /**
+   * Whether a frame is gero-sync's answer to a SUBSCRIBE (per CatchUpService on
+   * gero-sync `development`). Every answer carries the subscription's
+   * `addresses`: SYNC_CHECK_OK for a wallet with nothing new (reconnect or
+   * fresh), the single SYNC of a Bitcoin reconnect, and CATCH_UP_COMPLETE.
+   * Nothing else does: a keep-alive SYNC_CHECK_OK carries only `block`, and
+   * realtime blocks, reconnect-gap batches and catch-up batches are plain SYNCs
+   * that come BEFORE the answer. Releasing on those dropped the indicator while
+   * the rest of the gap was still on its way.
+   */
+  private answersSubscribe(data: WsSyncMessage): boolean {
+    return Array.isArray(data['addresses']);
+  }
+
+  /**
    * Releases `syncPending` once an answer from gero-sync has been APPLIED, not
    * merely received. `onSync` resolves when the transactions are written
    * (walletManager → tipMutex → setSync → Dexie commit), but the rows reach the
-   * store only in the TransactionsLoader pass that Dexie schedules on a timer
+   * store only in the TransactionsLoader pass that Dexie starts from a timer
    * queued at that commit. So the release is deferred one macrotask: by then
-   * that pass, if there is one, has started and holds `loadingTxs`, and the
-   * store completes the release when the pass has put the rows in (see
-   * LoadingState.setSyncPending). A release for a superseded arm is ignored
+   * that pass, if there is one, has issued its read, which is when it raises
+   * `loadingTxs` (see TransactionsLoader.load), and the store completes the
+   * release when the pass has put the rows in (see LoadingState.setSyncPending). A release for a superseded arm is ignored
    * there. A handler that returns nothing still releases; a rejection
    * propagates exactly as before.
    */
@@ -555,7 +600,7 @@ class WebSocketService {
     // A new SUBSCRIBE means a new first answer to wait for (see onopen). Only
     // when one will go out: send() is a no-op on a socket that is not open.
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.syncPendingToken = LoadingState.setSyncPending(true);
+      this.armSyncPending();
     }
 
     if (this.chain === 'BITCOIN') {
@@ -635,6 +680,7 @@ class WebSocketService {
   close(): void {
     this.intentionallyClosed = true;
     this.stopSyncCheck();
+    this.clearSyncPendingTimer();
     LoadingState.setSyncPending(false);
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);

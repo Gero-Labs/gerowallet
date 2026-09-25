@@ -193,13 +193,41 @@ export class TransactionsLoader extends BaseLoader {
     super('transactions');
   }
 
+  /**
+   * Generation of the latest read of the transactions table. Only the pass for
+   * the latest read may drop `loadingTxs`: an older pass finishing while a newer
+   * read is in flight would announce rows that are not in the store yet.
+   */
+  private readGeneration = 0;
+
+  unsubscribe(): void {
+    super.unsubscribe();
+    // A read in flight now is abandoned and will never reach its pass.
+    this.readGeneration += 1;
+    Loading.setLoadingTxs(false);
+  }
+
   async load(): Promise<unknown> {
     const walletDB = await this.getDb();
 
-    return this.createSubscription(
-      () => walletDB.table('transactions').toArray(),
-      async (newTransactions: StoredTransaction[]) => {
+    const rows = await this.createSubscription(
+      () => {
+        // `loadingTxs` is raised when the READ starts, not when its result
+        // arrives. Dexie starts this read synchronously from the timer it
+        // queues at a commit, so anything that waits one macrotask after that
+        // commit (websocket.service's syncPending release) already sees the
+        // pass in flight; raised on emission, the flag was still false then.
+        const generation = ++this.readGeneration;
         Loading.setLoadingTxs(true);
+        return walletDB.table('transactions').toArray().then(
+          (transactions) => ({ transactions: transactions as StoredTransaction[], generation }),
+          (error) => {
+            if (generation === this.readGeneration) Loading.setLoadingTxs(false);
+            throw error;
+          },
+        );
+      },
+      async ({ transactions: newTransactions, generation }) => {
         // Count only: the rows hold addresses and transaction bodies.
         debugLog(`TransactionsLoader: ${newTransactions?.length ?? 0} stored transaction(s)`);
         try {
@@ -310,13 +338,14 @@ export class TransactionsLoader extends BaseLoader {
           // Return an empty array on error instead of failing completely
           WalletStore.setTransactions([]);
         } finally {
-          Loading.setLoadingTxs(false);
+          if (generation === this.readGeneration) Loading.setLoadingTxs(false);
         }
       },
       (error: unknown) => {
         console.error('Failed to fetch transactions:', error);
       }
     );
+    return rows.transactions;
   }
 
   /**
