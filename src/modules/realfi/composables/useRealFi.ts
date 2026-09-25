@@ -14,6 +14,7 @@ import featureFlagsStore from '@/stores/featureFlagsStore';
 import networks from '@/utils/networks';
 import { debugLog } from '@/utils/debug';
 import { resolveRealFiReadClient, type RealFiReadClient } from '../services/realfiClient';
+import { usdrAssetIdFor } from '../assets';
 import {
   EMPTY_POINTS,
   REALFI_DECIMALS,
@@ -63,7 +64,9 @@ export function useRealFi() {
    * than the token's metadata, so a registry lag can never misstate it by 1e6.
    */
   const usdrBalance = computed<number>(() => {
-    const assetId = protocol.value?.stablecoinAssetId;
+    // RealFi's own answer first; the known id if the protocol read failed, so one
+    // missing call cannot turn "you're ready to stake" into "go and get USDrf".
+    const assetId = protocol.value?.stablecoinAssetId ?? usdrAssetIdFor(wallet.value?.network);
     if (!assetId) return 0;
     const held = (walletStore.tokens as Record<string, { quantity?: unknown }>)[assetId];
     if (!held) return 0;

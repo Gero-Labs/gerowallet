@@ -37,3 +37,15 @@ const ALL_IDS: ReadonlySet<string> = new Set(
 export function isRealFiAsset(unit: string | null | undefined): boolean {
   return !!unit && ALL_IDS.has(unit);
 }
+
+/**
+ * The canonical USDrf id for a wallet network, or null where RealFi has none.
+ *
+ * A fallback for when the protocol read fails: the page still knows what the user
+ * holds, rather than telling someone with USDrf in their wallet to go and get some.
+ */
+export function usdrAssetIdFor(network: string | null | undefined): string | null {
+  if (network === 'Mainnet') return REALFI_ASSETS.mainnet.usdr;
+  if (network === 'Preprod') return REALFI_ASSETS.preprod.usdr;
+  return null;
+}

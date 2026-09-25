@@ -7,7 +7,7 @@ import {
   toPosition,
   toProtocol,
 } from './realfiClient';
-import { isRealFiAsset, REALFI_ASSETS } from '../assets';
+import { isRealFiAsset, REALFI_ASSETS, usdrAssetIdFor } from '../assets';
 
 /** A fake axios that records every GET and answers from a table keyed by view. */
 function fakeHttp(answers: Record<string, unknown> = {}) {
@@ -129,5 +129,14 @@ describe('isRealFiAsset', () => {
     expect(isRealFiAsset(undefined)).toBe(false);
     // Same policy, different asset name: not ours to verify.
     expect(isRealFiAsset('7d9e4a0ee1a3f5d5ff8159ea91a83310cf2795ee7a87170c7aea05ae414141')).toBe(false);
+  });
+});
+
+describe('usdrAssetIdFor', () => {
+  it('knows USDrf per network, so a failed protocol read cannot hide a holding', () => {
+    expect(usdrAssetIdFor('Mainnet')).toBe(REALFI_ASSETS.mainnet.usdr);
+    expect(usdrAssetIdFor('Preprod')).toBe(REALFI_ASSETS.preprod.usdr);
+    expect(usdrAssetIdFor('Preview')).toBeNull();
+    expect(usdrAssetIdFor(undefined)).toBeNull();
   });
 });
