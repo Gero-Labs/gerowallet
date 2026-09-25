@@ -1,17 +1,15 @@
 /**
  * RealFi Earn — domain types.
  *
- * These mirror the read shapes documented in `@realfi-co/realfi-partner-sdk`
- * (PARTNER_GUIDE.md "Reading account state" / "Protocol transparency", 2.12) but are
- * DELIBERATELY our own declarations rather than re-exports of the SDK's:
+ * The wallet never calls RealFi or its SDK. Nexus brokers every read
+ * (`/api/realfi/*`, reached through gero-backend's Nexus proxy), and these are the
+ * shapes the client maps Nexus's responses onto. Keeping them as our own declarations
+ * means the Earn UI does not change when RealFi's schema does — Nexus absorbs it.
  *
- *  - the SDK is a private package, so the repo must typecheck and build without it;
- *  - these values cross the chrome messaging boundary, where `bigint` cannot travel.
- *
- * Hence the amount convention below.
+ * Amounts stay strings end to end; see `SmallestUnit`.
  */
 
-/** USDr and sUSDr both carry 6 decimals (PARTNER_GUIDE.md "Amounts"). */
+/** USDr and sUSDr both carry 6 decimals (confirmed in the Cardano token registry). */
 export const REALFI_DECIMALS = 6;
 
 /**
@@ -89,7 +87,14 @@ export type RealFiOrderStatus =
   | 'Executed'
   | 'Canceled'
   | 'Invalidated'
-  | 'InvalidMinReceived';
+  | 'InvalidMinReceived'
+  /** Paused for RealFi's compliance screening (SDK 2.18+). No action needed yet. */
+  | 'HeldForScreening'
+  /** Invalidated by that screening. Whether a cancel recovers it is not documented. */
+  | 'InvalidatedBlockedScreening'
+  /** Quarantined after repeated processing failures (SDK 3.1). */
+  | 'Failed'
+  | 'Rejected';
 
 export type RealFiOrderAction =
   | 'Mint'
@@ -97,10 +102,14 @@ export type RealFiOrderAction =
   | 'Stake'
   | 'Unstake'
   | 'Deposit'
-  | 'Withdraw';
+  | 'Withdraw'
+  | 'DirectMint'
+  | 'DirectBurn';
 
 export interface RealFiOrder {
   txHash: string;
+  /** The order's output index. With `txHash`, the order's identity. */
+  outputIndex: number;
   action: RealFiOrderAction;
   status: RealFiOrderStatus;
   /** Present on an Unstake once its released USDr has been claimed from the timelock. */
@@ -127,32 +136,84 @@ export function isSettled(order: RealFiOrder): boolean {
   return order.status === 'Executed' || order.status === 'Canceled';
 }
 
+/** Every status, in one place — the client, the page and the tests all read this. */
+export const ORDER_STATUS_VALUES: readonly RealFiOrderStatus[] = [
+  'Open',
+  'Validating',
+  'Executed',
+  'Canceled',
+  'Invalidated',
+  'InvalidMinReceived',
+  'HeldForScreening',
+  'InvalidatedBlockedScreening',
+  'Failed',
+  'Rejected',
+];
+
+/** Every action, in one place. */
+export const ORDER_ACTION_VALUES: readonly RealFiOrderAction[] = [
+  'Mint',
+  'Redeem',
+  'Stake',
+  'Unstake',
+  'Deposit',
+  'Withdraw',
+  'DirectMint',
+  'DirectBurn',
+];
+
 /**
- * Protocol-wide state. Identical for every wallet, so this is the one read worth
- * caching centrally rather than per-session.
+ * Paused for RealFi's compliance screening (SDK 2.18). Nothing is wrong and nothing
+ * is asked of the user — but an order that sits still with no explanation reads as
+ * stuck, so the page says what is happening.
+ */
+export const ORDER_STATUSES_IN_REVIEW: readonly RealFiOrderStatus[] = ['HeldForScreening'];
+
+export function isInReview(order: RealFiOrder): boolean {
+  return ORDER_STATUSES_IN_REVIEW.includes(order.status);
+}
+
+/**
+ * Statuses that went wrong but carry no documented recovery path.
+ *
+ * Shown as a problem rather than as "still working", and deliberately NOT folded into
+ * `needsAction`: telling someone to cancel an order that may not be cancellable is
+ * worse than stating plainly what happened.
+ */
+export const ORDER_STATUSES_FAILED: readonly RealFiOrderStatus[] = [
+  'InvalidatedBlockedScreening',
+  'Failed',
+  'Rejected',
+];
+
+export function isFailed(order: RealFiOrder): boolean {
+  return ORDER_STATUSES_FAILED.includes(order.status);
+}
+
+/**
+ * Protocol-wide state — `GET /api/realfi/protocol`. Identical for every wallet, which
+ * is why Nexus caches it once for everybody.
  */
 export interface RealFiProtocol {
-  /**
-   * Circulating supply figures read from the treasury / staking-vault datums.
-   *
-   * `null` until the on-chain half of the SDK is wired: these are the only fields
-   * here that need a Blaze instance and a Cardano provider. Everything else on this
-   * interface comes from `RealfiSDK.api`, which needs neither — which is why the
-   * read-only surface can ship before any provider work lands.
-   */
-  circulatingUsdr: SmallestUnit | null;
-  circulatingSusdr: SmallestUnit | null;
-  /** USDr per sUSDr, diffusion-aware where the deployed protocol line supports it. */
-  usdrPerSusdr: number;
-  reserveAssetCount: number;
+  /** Canonical USDr asset id, concatenated form — how `walletStore.tokens` is keyed. */
+  stablecoinAssetId: string | null;
   fees: {
     mintBps: number;
     redeemBps: number;
   };
+  /** USD UX limits from RealFi's partner config — $100 on preprod, $1 on mainnet. */
   limits: {
     mintMinUsd: number;
     redeemMinUsd: number;
   };
+  /**
+   * The latest APY RealFi publishes: the weighted average of the private-credit fund
+   * behind sUSDr. Gross and historical, never a promise — which is why it is useless
+   * without `apyAsOf`. Null when RealFi publishes none (the case at launch).
+   */
+  apyPercent: number | null;
+  /** ISO date (yyyy-MM-dd) `apyPercent` was published. */
+  apyAsOf: string | null;
 }
 
 /**
@@ -163,8 +224,6 @@ export interface RealFiProtocol {
  * and a user who has money staked deserves to know which one they are looking at.
  */
 export type RealFiUnavailableReason =
-  /** The partner SDK is not installed in this build (no npm credential at build time). */
-  | 'sdk-missing'
   /** The wallet's chain/network has no RealFi deployment (see networks.resolveRealFiSupport). */
   | 'unsupported-network'
   /** Reached RealFi, but the request failed. Transient; retry is meaningful. */

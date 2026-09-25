@@ -41,6 +41,33 @@
         </div>
 
         <template v-else>
+          <!-- Nothing staked and no activity. Rendering the hero here would show "$0.00"
+               with no explanation, and at launch that is every user's first look. -->
+          <section v-if="isEmpty" class="realfi-start">
+            <span class="realfi-glyph realfi-glyph--lg" aria-hidden="true"></span>
+            <!-- Holding USDrf but nothing staked is a DIFFERENT state from holding
+                 nothing: telling someone with 9,994 USDrf to "get USDrf" is noise. -->
+            <template v-if="hasUsdr">
+              <h2 class="t-heading realfi-start__title">{{ $t('realfi.start.readyTitle') }}</h2>
+              <p class="t-body realfi-start__body">
+                {{ $t('realfi.start.readyBody', { amount: usdrLabel }) }}
+              </p>
+              <GButton tier="primary" class="mt-4" @click="openRealFiApp()">
+                {{ $t('realfi.start.readyCta') }}
+              </GButton>
+            </template>
+            <template v-else>
+              <h2 class="t-heading realfi-start__title">{{ $t('realfi.start.title') }}</h2>
+              <p class="t-body realfi-start__body">{{ $t('realfi.start.body') }}</p>
+              <GButton tier="primary" class="mt-4" @click="openRealFiApp()">
+                {{ $t('realfi.start.cta') }}
+              </GButton>
+            </template>
+            <p v-if="apyLabel" class="t-caption realfi-start__note">{{ apyLabel }}</p>
+            <p class="t-caption realfi-start__note">{{ $t('realfi.start.note') }}</p>
+          </section>
+
+          <template v-else>
           <!-- Position -->
           <section class="realfi-hero">
             <div class="realfi-hero__top">
@@ -62,14 +89,44 @@
                 <b class="realfi-strong g-num">{{ principalLabel }}</b>
               </span>
             </div>
+            <p v-if="apyLabel" class="t-caption realfi-hero__apy">{{ apyLabel }}</p>
           </section>
 
           <!-- Anything needing the user's attention comes before anything decorative -->
-          <section v-if="actionableOrders.length" class="realfi-attention">
-            <div>
+          <section v-if="actionableOrders.length" class="realfi-notice realfi-notice--warn">
+            <div class="realfi-notice__text">
               <p class="t-body-lg mb-1">{{ $t('realfi.attention.title') }}</p>
-              <p class="t-body-sm realfi-attention__body">
+              <p class="t-body-sm realfi-notice__body">
                 {{ $tc('realfi.attention.body', actionableOrders.length) }}
+              </p>
+            </div>
+            <!-- Cancelling needs a transaction, which Gero cannot build yet — so the
+                 banner hands off to RealFi rather than asking for something the page
+                 cannot do. -->
+            <GButton tier="secondary" compact @click="openRealFiApp()">
+              {{ $t('realfi.attention.cta') }}
+            </GButton>
+          </section>
+
+          <!-- Failed with no documented recovery: RealFi support is the way out. -->
+          <section v-if="failedOrders.length" class="realfi-notice realfi-notice--error">
+            <div class="realfi-notice__text">
+              <p class="t-body-lg mb-1">{{ $t('realfi.failed.title') }}</p>
+              <p class="t-body-sm realfi-notice__body">
+                {{ $tc('realfi.failed.body', failedOrders.length) }}
+              </p>
+            </div>
+            <GButton tier="secondary" compact @click="openRealFiSupport()">
+              {{ $t('realfi.failed.cta') }}
+            </GButton>
+          </section>
+
+          <!-- In compliance review: nothing is wrong, but a still order looks stuck. -->
+          <section v-if="reviewOrders.length" class="realfi-notice">
+            <div class="realfi-notice__text">
+              <p class="t-body-lg mb-1">{{ $t('realfi.review.title') }}</p>
+              <p class="t-body-sm realfi-notice__body">
+                {{ $tc('realfi.review.body', reviewOrders.length) }}
               </p>
             </div>
           </section>
@@ -112,7 +169,20 @@
                   <span class="t-body-sm realfi-strong g-num">{{ referralPointsLabel }}</span>
                 </div>
               </template>
-              <p v-else class="t-body realfi-muted">{{ $t('realfi.referrals.none') }}</p>
+              <template v-else>
+                <p class="t-body realfi-muted">{{ $t('realfi.referrals.none') }}</p>
+                <!-- Reading a code on RealFi CREATES one and joins their referral
+                     programme, so it only ever happens on this tap. -->
+                <GButton
+                  tier="secondary"
+                  compact
+                  class="mt-3"
+                  :loading="isRequestingCode"
+                  @click="requestReferralCode()"
+                >
+                  {{ $t('realfi.referrals.get') }}
+                </GButton>
+              </template>
             </section>
 
             <!-- Activity -->
@@ -121,8 +191,19 @@
                 <span class="t-label">{{ $t('realfi.activity.label') }}</span>
               </div>
               <ul v-if="orders.length" class="realfi-orders">
-                <li v-for="order in orders" :key="order.txHash" class="realfi-order">
-                  <span class="t-body-sm">{{ actionLabel(order.action) }}</span>
+                <li
+                  v-for="order in orders"
+                  :key="`${order.txHash}#${order.outputIndex}`"
+                  class="realfi-order"
+                >
+                  <span class="realfi-order__what">
+                    <span class="t-body-sm">{{ actionLabel(order.action) }}</span>
+                    <!-- The id RealFi support asks for, and what a failed order's
+                         notice tells the user to send them. -->
+                    <span class="t-caption g-mono realfi-order__tx" :title="order.txHash">
+                      {{ shortTx(order.txHash) }}
+                    </span>
+                  </span>
                   <span :class="['realfi-pill', pillClass(order.status)]">
                     {{ statusLabel(order.status) }}
                   </span>
@@ -132,7 +213,9 @@
             </section>
           </div>
 
-          <p class="t-caption realfi-foot">{{ $t('realfi.preview') }}</p>
+          </template>
+
+          <p v-if="isTestnet" class="t-caption realfi-foot">{{ $t('realfi.preview') }}</p>
         </template>
       </v-col>
     </v-row>
@@ -144,8 +227,16 @@ import { computed, onMounted } from 'vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import { formatUsd, formatInt, formatSignedChange } from '@/shared/utils/format';
 import i18n from '@/plugins/i18n';
+import WalletStore from '@/stores/walletStore';
+import { Network } from '@/models/types';
 import { useRealFi } from './composables/useRealFi';
-import { fromSmallestUnit, type RealFiOrderAction, type RealFiOrderStatus } from './types';
+import {
+  fromSmallestUnit,
+  ORDER_STATUSES_FAILED,
+  ORDER_STATUSES_NEEDING_ACTION,
+  type RealFiOrderAction,
+  type RealFiOrderStatus,
+} from './types';
 
 const {
   isLoading,
@@ -155,12 +246,74 @@ const {
   referrals,
   orders,
   actionableOrders,
+  reviewOrders,
+  failedOrders,
   hasPosition,
   hasPointsRecord,
+  usdrBalance,
+  hasUsdr,
+  protocol,
+  isRequestingCode,
   load,
+  requestReferralCode,
 } = useRealFi();
 
-const t = (key: string) => i18n.t(key) as string;
+const t = (key: string, values?: Record<string, unknown>) => i18n.t(key, values) as string;
+
+/* ── Network ──────────────────────────────────────────────────────────────── */
+
+const isTestnet = computed(() => WalletStore.state.loggedWallet?.network !== Network.MAINNET);
+
+/**
+ * RealFi's own app for the wallet's network. Constants, never built from remote data,
+ * so window.open has no injection surface. Transacting happens there until staking
+ * from Gero lands.
+ */
+const realFiAppUrl = computed(() =>
+  isTestnet.value ? 'https://preprod.realfi.co' : 'https://app.realfi.co',
+);
+
+function openRealFiApp(): void {
+  window.open(realFiAppUrl.value, '_blank', 'noopener,noreferrer');
+}
+
+/** RealFi's contact page — the `support` URL in their own runtime config. */
+const REALFI_SUPPORT_URL = 'https://realfi.co/contact';
+
+function openRealFiSupport(): void {
+  window.open(REALFI_SUPPORT_URL, '_blank', 'noopener,noreferrer');
+}
+
+/* ── Start state ──────────────────────────────────────────────────────────── */
+
+/**
+ * Nothing to show yet: no position AND no orders. Orders matter to the check — a
+ * wallet that has unstaked everything still has a cooldown and an activity trail
+ * worth seeing, and a "get started" screen would be wrong for it.
+ */
+const isEmpty = computed(() => !hasPosition.value && orders.value.length === 0);
+
+/**
+ * Full figure, not formatBalance's compact "2.50K": this sits in a sentence telling
+ * someone what they hold, and USDrf tracks the dollar, so cents are the right unit.
+ */
+const usdrLabel = computed(() => `${formatUsd(usdrBalance.value, { symbol: false })} USDrf`);
+
+/**
+ * RealFi's published fund APY, only ever with its date. It is the private-credit
+ * fund's gross weighted average and can be months old, so a bare percentage would
+ * read as a live promise. Nothing is shown when RealFi publishes nothing.
+ */
+const apyLabel = computed(() => {
+  const p = protocol.value;
+  if (!p || p.apyPercent === null || !p.apyAsOf) return '';
+  const date = new Date(`${p.apyAsOf}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return '';
+  return t('realfi.apy', {
+    rate: p.apyPercent.toFixed(1),
+    date: date.toLocaleDateString(i18n.locale, { dateStyle: 'medium', timeZone: 'UTC' }),
+  });
+});
 
 /* ── Position ─────────────────────────────────────────────────────────────── */
 
@@ -202,11 +355,17 @@ const referralPointsLabel = computed(() => formatInt(referrals.value.rewardPoint
 /* ── Orders ───────────────────────────────────────────────────────────────── */
 
 function actionLabel(action: RealFiOrderAction): string {
-  return t(`realfi.actions.${action.toLowerCase()}`);
+  // lowerFirst, not toLowerCase: `DirectMint` must map to `directMint`.
+  return t(`realfi.actions.${lowerFirst(action)}`);
 }
 
 function statusLabel(status: RealFiOrderStatus): string {
   return t(`realfi.statuses.${lowerFirst(status)}`);
+}
+
+/** `d26ab7…0690f6` — enough to match against an explorer or a support reply. */
+function shortTx(txHash: string): string {
+  return txHash.length > 14 ? `${txHash.slice(0, 6)}…${txHash.slice(-6)}` : txHash;
 }
 
 function lowerFirst(value: string): string {
@@ -215,7 +374,9 @@ function lowerFirst(value: string): string {
 
 function pillClass(status: RealFiOrderStatus): string {
   if (status === 'Executed') return 'realfi-pill--ok';
-  if (status === 'Invalidated' || status === 'InvalidMinReceived') return 'realfi-pill--warn';
+  if (ORDER_STATUSES_NEEDING_ACTION.includes(status) || ORDER_STATUSES_FAILED.includes(status)) {
+    return 'realfi-pill--warn';
+  }
   return 'realfi-pill--wait';
 }
 
@@ -232,8 +393,6 @@ function camel(value: string): string {
   return value.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
 }
 
-// `protocol` (fees, limits, rate) is loaded by the composable and will be read here
-// when the transactional phase lands; nothing on this read-only screen needs it yet.
 onMounted(load);
 </script>
 
@@ -299,6 +458,10 @@ onMounted(load);
   margin: var(--g-s-3) 0 var(--g-s-2);
 }
 
+.realfi-hero__apy {
+  margin: var(--g-s-3) 0 0;
+}
+
 .realfi-hero__meta {
   display: flex;
   flex-wrap: wrap;
@@ -315,18 +478,34 @@ onMounted(load);
   color: var(--g-text-3);
 }
 
-.realfi-attention {
+.realfi-notice {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: space-between;
   gap: var(--g-s-3);
   padding: var(--g-s-3) var(--g-s-4);
   margin-bottom: var(--g-s-4);
-  background: var(--g-warning-fill);
-  border: 1px solid var(--g-warning-line);
+  background: var(--g-overlay);
+  border: 1px solid var(--g-hairline-2);
   border-radius: var(--g-r-control);
 }
 
-.realfi-attention__body {
+.realfi-notice--warn {
+  background: var(--g-warning-fill);
+  border-color: var(--g-warning-line);
+}
+
+.realfi-notice--error {
+  background: var(--g-error-fill);
+  border-color: var(--g-error-line);
+}
+
+.realfi-notice__text {
+  flex: 1 1 240px;
+}
+
+.realfi-notice__body {
   margin: 0;
   color: var(--g-text-2);
 }
@@ -401,6 +580,16 @@ onMounted(load);
   }
 }
 
+.realfi-order__what {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.realfi-order__tx {
+  color: var(--g-text-3);
+}
+
 .realfi-pill {
   padding: 3px var(--g-s-2);
   font-size: 11px;
@@ -425,6 +614,42 @@ onMounted(load);
   color: var(--g-text-2);
   background: var(--g-overlay);
   border: 1px solid var(--g-hairline-2);
+}
+
+.realfi-start {
+  @include g-glass-panel(false);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--g-s-6) var(--g-s-5);
+  text-align: center;
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-card);
+}
+
+.realfi-glyph--lg {
+  width: 32px;
+  height: 32px;
+  margin-bottom: var(--g-s-4);
+  border-width: 2px;
+
+  &::after {
+    width: 2px;
+  }
+}
+
+.realfi-start__title {
+  margin: 0 0 var(--g-s-2);
+}
+
+.realfi-start__body {
+  max-width: 46ch;
+  margin: 0;
+}
+
+.realfi-start__note {
+  max-width: 46ch;
+  margin: var(--g-s-4) 0 0;
 }
 
 .realfi-empty {
