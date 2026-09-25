@@ -184,6 +184,12 @@ class WebSocketService {
     this.ws.onopen = () => {
       debugLog('🔌 WebSocket connected');
       LoadingState.setConnected(true);
+      // Armed before `connecting` drops: each setter is its own port message, so
+      // the other order gave the dashboard one frame with neither flag set, in
+      // which an empty store read as "no transactions". Nothing can arrive before
+      // the SUBSCRIBE sent below. Cleared once gero-sync's first answer to that
+      // SUBSCRIBE has been applied (see clearSyncPendingWhenApplied).
+      LoadingState.setSyncPending(true);
       LoadingState.setConnecting(false);
       LoadingState.setText('');
       this.reconnectAttempt = 0;
@@ -248,11 +254,6 @@ class WebSocketService {
       // Socket is OPEN and SUBSCRIBE has been queued on this ordered stream. Let
       // subscribers (e.g. cross-device DEVICE_REGISTER) send now, after SUBSCRIBE.
       this.handlers.onSocketOpen?.();
-
-      // From here until gero-sync's first answer (a SYNC, CATCH_UP_COMPLETE or
-      // SYNC_CHECK_OK) the wallet shows last session's data, not the chain's.
-      // The dashboard reads this to say so; each of those answers clears it.
-      LoadingState.setSyncPending(true);
 
       this.startSyncCheck();
     };
@@ -323,8 +324,9 @@ class WebSocketService {
           // by block hash drops every transaction after the first in a block;
           // batching across generations can relabel an old chain's events.
           if (this.chain === 'MIDNIGHT') {
-            void this.handlers.onSync?.(data)?.catch((error) => debugLog('Midnight sync failed', error));
-            LoadingState.setSyncPending(false);
+            this.clearSyncPendingWhenApplied(
+              this.handlers.onSync?.(data)?.catch((error) => debugLog('Midnight sync failed', error)),
+            );
             break;
           }
           const txCount = Array.isArray(data['transactions']) ? data['transactions'].length : 0;
@@ -356,8 +358,7 @@ class WebSocketService {
             if (data.block?.height) {
               this.lastSyncedBlock = data.block.height;
             }
-            this.handlers.onSync?.(data);
-            LoadingState.setSyncPending(false);
+            this.clearSyncPendingWhenApplied(this.handlers.onSync?.(data));
           }
           break;
         }
@@ -396,12 +397,11 @@ class WebSocketService {
           };
           debugLog(`📤 Processing ${allTransactions.length} transactions + ${(data['utxos'] as unknown[])?.length || 0} UTxOs`);
           this.lastSyncedBlock = block?.height || (data['blockHeight'] as number) || 0;
-          this.handlers.onSync?.(combinedPayload);
+          this.clearSyncPendingWhenApplied(this.handlers.onSync?.(combinedPayload));
           this.pendingTxBatches = [];
 
           this.catchingUp = false;
           LoadingState.setProgress(100);
-          LoadingState.setSyncPending(false);
           if (this.syncResolve) { this.syncResolve(); this.syncResolve = null; }
           break;
         }
@@ -421,11 +421,12 @@ class WebSocketService {
           // IMPORTANT: type goes AFTER the spread — otherwise data.type ('SYNC_CHECK_OK')
           // overwrites it and setSync's `type === 'SYNC'` guard rejects the message.
           // Midnight must also validate/record a blockless successful check.
-          if (this.chain === 'MIDNIGHT' || data['utxos'] || data['addresses'] || data['account'] || data['block']) {
-            this.handlers.onSync?.({ ...data, type: 'SYNC' } as WsSyncMessage);
-          }
           // "Caught up" is an answer too: the local list IS the chain's.
-          LoadingState.setSyncPending(false);
+          if (this.chain === 'MIDNIGHT' || data['utxos'] || data['addresses'] || data['account'] || data['block']) {
+            this.clearSyncPendingWhenApplied(this.handlers.onSync?.({ ...data, type: 'SYNC' } as WsSyncMessage));
+          } else {
+            LoadingState.setSyncPending(false);
+          }
           if (this.syncResolve) { this.syncResolve(); this.syncResolve = null; }
           break;
 
@@ -447,6 +448,18 @@ class WebSocketService {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(data));
     }
+  }
+
+  /**
+   * Clears `syncPending` once an answer from gero-sync has been APPLIED, not
+   * merely received. `onSync` resolves after the transactions are written
+   * (walletManager → tipMutex → setSync → Dexie); the loader's own pass that
+   * follows is covered by `loadingTxs`. Clearing on receipt let the "checking"
+   * line vanish a beat before the row it announced appeared. A handler that
+   * returns nothing still clears; a rejection propagates exactly as before.
+   */
+  private clearSyncPendingWhenApplied(applied: unknown): void {
+    void Promise.resolve(applied).finally(() => LoadingState.setSyncPending(false));
   }
 
   /**
@@ -524,6 +537,8 @@ class WebSocketService {
       if (typeof live === 'number' && live >= 0) liveMidnightCursor = live;
     }
     this.lastSyncedBlock = lastSyncedBlock;
+    // A new SUBSCRIBE means a new first answer to wait for (see onopen).
+    LoadingState.setSyncPending(true);
 
     if (this.chain === 'BITCOIN') {
       // BTC re-subscribe must mirror the BITCOIN branch of the initial SUBSCRIBE
@@ -586,12 +601,13 @@ class WebSocketService {
               block: lastBatch.block,
             };
             debugLog(`📤 Timeout flush: processing ${allTransactions.length} transactions`);
-            this.handlers.onSync?.(combinedPayload);
+            this.clearSyncPendingWhenApplied(this.handlers.onSync?.(combinedPayload));
             this.pendingTxBatches = [];
+          } else {
+            LoadingState.setSyncPending(false);
           }
           this.catchingUp = false;
           this.syncResolve = null;
-          LoadingState.setSyncPending(false);
           resolve();
         }
       }, timeoutMs);

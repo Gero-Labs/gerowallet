@@ -14,12 +14,14 @@ export interface LoadingState {
   connecting: boolean;
   loadingTxs: boolean;
   /**
-   * True from the moment SUBSCRIBE goes out until gero-sync's first answer for
-   * that subscription (a SYNC, CATCH_UP_COMPLETE or SYNC_CHECK_OK) has been
-   * handed to the wallet. Until then the store holds what was synced last
-   * session, not the chain: anything that happened while the wallet was logged
-   * out is still on its way. Read by the dashboard to say "checking for new
-   * transactions" instead of presenting a stale list as current.
+   * True from the moment a SUBSCRIBE goes out (connect, reconnect, resubscribe)
+   * until gero-sync's first answer to it (a SYNC, CATCH_UP_COMPLETE or
+   * SYNC_CHECK_OK) has been APPLIED to the wallet's database. Until then the
+   * store holds what was synced last session, not the chain: a transaction that
+   * arrived while the wallet was logged out is in that first answer, which the
+   * server sends as soon as it has fetched the gap. Read by the dashboard to say
+   * "checking for new transactions" instead of presenting the older list as
+   * current.
    */
   syncPending: boolean;
 }

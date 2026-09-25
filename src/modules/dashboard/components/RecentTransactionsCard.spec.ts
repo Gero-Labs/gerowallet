@@ -6,10 +6,11 @@ vi.mock('@/stores/walletStore', () => ({
   walletStore: Vue.observable({
     transactions: [] as unknown[],
     loggedWallet: { chain: 'Cardano', network: 'Mainnet' },
+    isSyncing: false,
   }),
 }));
 vi.mock('@/stores/loading', () => ({
-  loadingState: Vue.observable({ isSyncing: false, connecting: false, syncPending: false, loadingTxs: false }),
+  loadingState: Vue.observable({ connecting: false, syncPending: false, loadingTxs: false }),
 }));
 vi.mock('@/shared/composables/useTranslation', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('@/modules/dashboard/dialogs/TransactionDetailsDialog.vue', () => ({ default: { template: '<div />' } }));
@@ -44,7 +45,7 @@ function mountCard() {
 describe('Recent Transactions card while the wallet is still loading or syncing', () => {
   beforeEach(() => {
     walletStore.transactions = [];
-    loadingState.isSyncing = false;
+    walletStore.isSyncing = false;
     loadingState.connecting = false;
     loadingState.syncPending = false;
     loadingState.loadingTxs = false;
@@ -58,14 +59,15 @@ describe('Recent Transactions card while the wallet is still loading or syncing'
   });
 
   it.each([
-    ['isSyncing', 'the login is still restoring the wallet'],
-    ['connecting', 'the sync socket is not open yet'],
-    ['syncPending', 'gero-sync has not answered the subscription'],
-    ['loadingTxs', 'a batch is being written'],
-  ] as const)('shows placeholders instead of an empty state while %s (%s)', async (flag) => {
+    // Login sets walletStore.isSyncing (WalletStore.setSyncing), not the loading store's.
+    ['the login is still restoring the wallet', () => { walletStore.isSyncing = true; }],
+    ['the sync socket is not open yet', () => { loadingState.connecting = true; }],
+    ['gero-sync has not answered the subscription', () => { loadingState.syncPending = true; }],
+    ['a batch is being written', () => { loadingState.loadingTxs = true; }],
+  ] as const)('shows placeholders instead of an empty state while %s', async (_reason, arrange) => {
     // The bug: at login the store is empty for a moment and the card claimed
     // "No transactions found" before anything had been asked of the chain.
-    loadingState[flag] = true;
+    arrange();
     const wrapper = mountCard();
     await nextTick();
     expect(wrapper.text()).not.toContain('transactions.noTransactionsFound');
@@ -85,7 +87,7 @@ describe('Recent Transactions card while the wallet is still loading or syncing'
     expect(wrapper.text()).toContain('dashboard.checkingForTransactions');
     expect(wrapper.find('.recent-tx-skeleton').exists()).toBe(false);
 
-    // SYNC_CHECK_OK / CATCH_UP_COMPLETE arrived: the list is now the chain's.
+    // The answer has been applied: the list is now the chain's.
     loadingState.syncPending = false;
     await nextTick();
     expect(wrapper.text()).not.toContain('dashboard.checkingForTransactions');
@@ -93,7 +95,7 @@ describe('Recent Transactions card while the wallet is still loading or syncing'
     wrapper.destroy();
   });
 
-  it('turns placeholders into rows when the catch-up delivers them', async () => {
+  it('turns placeholders into rows when the answer delivers them', async () => {
     loadingState.syncPending = true;
     const wrapper = mountCard();
     await nextTick();

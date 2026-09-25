@@ -118,13 +118,14 @@ const recent = computed<StoredTransaction[]>(() =>
 
 /**
  * The list is not yet known to be current. At login the store is filled from
- * the local database before gero-sync has answered, so a transaction that
- * arrived while the wallet was logged out is still on its way: `syncPending`
- * spans SUBSCRIBE to that first answer, `connecting` the socket before it,
- * `isSyncing` the login itself, and `loadingTxs` a batch being written.
+ * the local database before gero-sync has answered the subscription, so a
+ * transaction that arrived while the wallet was logged out is still on its
+ * way: `walletStore.isSyncing` spans the login itself, `connecting` the socket
+ * before SUBSCRIBE, `syncPending` SUBSCRIBE to the first answer being applied,
+ * and `loadingTxs` the loader's pass that puts that answer in the store.
  */
 const pending = computed(
-  () => !!(loadingState.isSyncing || loadingState.connecting || loadingState.syncPending || loadingState.loadingTxs),
+  () => !!(walletStore.isSyncing || loadingState.connecting || loadingState.syncPending || loadingState.loadingTxs),
 );
 
 const transactionInfo = ref<StoredTransaction | null>(null);
