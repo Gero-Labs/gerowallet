@@ -29,13 +29,19 @@ const received = (id: string, secondsAgo: number) => ({
   assets: [], sentAssets: [], receivedAssets: [], utxo: { inputs: [], outputs: [] },
 });
 
+/** The header spinner's accessible name, or null when it is not shown. */
+function busyLabel(wrapper: ReturnType<typeof mount>): string | null {
+  const spinner = wrapper.find('.recent-tx-header .spinner');
+  return spinner.exists() ? (spinner.attributes('aria-label') ?? '') : null;
+}
+
 function mountCard() {
   return mount(RecentTransactionsCard, {
     mocks: { $t: (key: string) => key },
     stubs: {
       'v-card': { template: '<div><slot /></div>' },
       'v-card-text': { template: '<div><slot /></div>' },
-      'v-progress-circular': { template: '<i class="spinner" />' },
+      'v-progress-circular': { template: '<i class="spinner" :aria-label="$attrs[\'aria-label\']" />' },
       'v-icon': true,
       'router-link': true,
     },
@@ -55,6 +61,7 @@ describe('Recent Transactions card while the wallet is still loading or syncing'
     const wrapper = mountCard();
     expect(wrapper.text()).toContain('transactions.noTransactionsFound');
     expect(wrapper.find('.recent-tx-skeleton').exists()).toBe(false);
+    expect(busyLabel(wrapper)).toBeNull();
     wrapper.destroy();
   });
 
@@ -72,11 +79,11 @@ describe('Recent Transactions card while the wallet is still loading or syncing'
     await nextTick();
     expect(wrapper.text()).not.toContain('transactions.noTransactionsFound');
     expect(wrapper.findAll('.recent-tx-skeleton').length).toBeGreaterThan(0);
-    expect(wrapper.text()).toContain('dashboard.recentTransactionsLoading');
+    expect(busyLabel(wrapper)).toBe('dashboard.recentTransactionsLoading');
     wrapper.destroy();
   });
 
-  it('keeps last session\'s rows on screen and says it is checking, until the first sync answer', async () => {
+  it('keeps last session\'s rows on screen with a header spinner, until the first sync answer', async () => {
     walletStore.transactions = [received('a', 36 * 60), received('b', 43 * 60)];
     loadingState.syncPending = true;
     const wrapper = mountCard();
@@ -84,18 +91,18 @@ describe('Recent Transactions card while the wallet is still loading or syncing'
 
     // Rows first: they are real, just possibly not the latest.
     expect(wrapper.findAll('.recent-tx-row:not(.recent-tx-row--placeholder)')).toHaveLength(2);
-    expect(wrapper.text()).toContain('dashboard.checkingForTransactions');
+    expect(busyLabel(wrapper)).toBe('dashboard.checkingForTransactions');
     expect(wrapper.find('.recent-tx-skeleton').exists()).toBe(false);
 
     // The answer has been applied: the list is now the chain's.
     loadingState.syncPending = false;
     await nextTick();
-    expect(wrapper.text()).not.toContain('dashboard.checkingForTransactions');
+    expect(busyLabel(wrapper)).toBeNull();
     expect(wrapper.findAll('.recent-tx-row')).toHaveLength(2);
     wrapper.destroy();
   });
 
-  it('does not flash the checking line for an ordinary loader pass once rows are shown', async () => {
+  it('does not spin the header indicator for an ordinary loader pass once rows are shown', async () => {
     // loadingTxs is true for EVERY loader pass: each later live block, the
     // periodic cbor heal. Only an unanswered subscription is worth announcing.
     walletStore.transactions = [received('a', 120)];
@@ -103,7 +110,7 @@ describe('Recent Transactions card while the wallet is still loading or syncing'
     const wrapper = mountCard();
     await nextTick();
     expect(wrapper.findAll('.recent-tx-row')).toHaveLength(1);
-    expect(wrapper.text()).not.toContain('dashboard.checkingForTransactions');
+    expect(busyLabel(wrapper)).toBeNull();
     expect(wrapper.find('.recent-tx-skeleton').exists()).toBe(false);
     wrapper.destroy();
   });
@@ -119,7 +126,7 @@ describe('Recent Transactions card while the wallet is still loading or syncing'
     await nextTick();
     expect(wrapper.find('.recent-tx-skeleton').exists()).toBe(false);
     expect(wrapper.findAll('.recent-tx-row')).toHaveLength(1);
-    expect(wrapper.text()).not.toContain('dashboard.checkingForTransactions');
+    expect(busyLabel(wrapper)).toBeNull();
     wrapper.destroy();
   });
 
