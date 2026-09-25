@@ -4,7 +4,22 @@
     class="fill-height d-flex flex-column glass-panel recent-tx-card"
   >
     <div class="recent-tx-header flex-grow-0">
-      <span class="recent-tx-heading">{{ $t('dashboard.recentTransactions') }}</span>
+      <div class="recent-tx-title">
+        <span class="recent-tx-heading">{{ $t('dashboard.recentTransactions') }}</span>
+        <!-- Loading/catching-up indicator. A spinner beside the title rather than
+             a status line under the rows, which the fixed-height card clipped. -->
+        <v-progress-circular
+          v-if="busyLabel"
+          indeterminate
+          :size="12"
+          :width="2"
+          color="var(--g-text-3)"
+          class="flex-shrink-0"
+          role="status"
+          :aria-label="busyLabel"
+          :title="busyLabel"
+        />
+      </div>
       <router-link to="/transactions" class="recent-tx-view-all">
         {{ $t('dashboard.viewAll') }}
       </router-link>
@@ -16,19 +31,14 @@
       <div
         v-if="showSkeleton"
         class="recent-tx-loading flex-grow-1"
-        role="status"
-        :aria-label="t('dashboard.recentTransactionsLoading')"
+        aria-hidden="true"
       >
-        <div v-for="n in 3" :key="n" class="recent-tx-row recent-tx-row--placeholder" aria-hidden="true">
+        <div v-for="n in 3" :key="n" class="recent-tx-row recent-tx-row--placeholder">
           <div class="recent-tx-meta">
             <span class="g-skeleton recent-tx-skeleton recent-tx-skeleton--label"></span>
             <span class="g-skeleton recent-tx-skeleton recent-tx-skeleton--time"></span>
           </div>
           <span class="g-skeleton recent-tx-skeleton recent-tx-skeleton--amount"></span>
-        </div>
-        <div class="recent-tx-status">
-          <v-progress-circular indeterminate :size="12" :width="2" color="var(--g-text-3)" class="flex-shrink-0" />
-          <span>{{ t('dashboard.recentTransactionsLoading') }}</span>
         </div>
       </div>
 
@@ -68,12 +78,6 @@
           <div class="recent-tx-amount" :style="{ color: getTransactionColor(tx) }">
             {{ formatAmount(tx) }}
           </div>
-        </div>
-        <!-- The rows above are last session's until gero-sync answers. Say so
-             rather than let a list that is about to change pass for current. -->
-        <div v-if="pending" class="recent-tx-status" role="status">
-          <v-progress-circular indeterminate :size="12" :width="2" color="var(--g-text-3)" class="flex-shrink-0" />
-          <span>{{ t('dashboard.checkingForTransactions') }}</span>
         </div>
       </div>
     </v-card-text>
@@ -138,6 +142,17 @@ const pending = computed(
  */
 const showSkeleton = computed(() => recent.value.length === 0 && (pending.value || !!loadingState.loadingTxs));
 
+/**
+ * Accessible name of the header spinner, or '' when idle. With rows on screen
+ * they are last session's until gero-sync answers: say so rather than let a
+ * list that is about to change pass for current.
+ */
+const busyLabel = computed(() => {
+  if (showSkeleton.value) return t('dashboard.recentTransactionsLoading');
+  if (pending.value) return t('dashboard.checkingForTransactions');
+  return '';
+});
+
 const transactionInfo = ref<StoredTransaction | null>(null);
 
 function handleRowClick(tx: StoredTransaction) {
@@ -183,6 +198,13 @@ function formatAmount(tx: StoredTransaction): string {
   justify-content: space-between;
   padding: 10px 12px 6px 12px;
   line-height: 1;
+}
+
+.recent-tx-title {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-2);
+  min-width: 0;
 }
 
 .recent-tx-heading {
@@ -305,15 +327,5 @@ function formatAmount(tx: StoredTransaction): string {
 .recent-tx-skeleton--amount {
   width: 44px;
   height: 10px;
-}
-
-.recent-tx-status {
-  display: flex;
-  align-items: center;
-  gap: var(--g-s-2);
-  padding: 6px 8px 2px 8px;
-  font-size: 11px;
-  line-height: 1;
-  color: var(--g-text-3);
 }
 </style>
