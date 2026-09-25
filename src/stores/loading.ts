@@ -13,6 +13,17 @@ export interface LoadingState {
   connected: boolean;
   connecting: boolean;
   loadingTxs: boolean;
+  /**
+   * True from the moment a SUBSCRIBE goes out (connect, reconnect, resubscribe)
+   * until gero-sync's answer to it (the SYNC_CHECK_OK, CATCH_UP_COMPLETE or
+   * Bitcoin reconnect SYNC that carries the subscription's `addresses`) has been
+   * APPLIED and its rows are in the store. Until then the store holds what was
+   * synced last session, not the chain: transactions that arrived while the
+   * wallet was logged out are pushed as SYNC batches ahead of that answer. Read by the dashboard to say
+   * "checking for new transactions" instead of presenting the older list as
+   * current.
+   */
+  syncPending: boolean;
 }
 
 // Create an observable state
@@ -25,6 +36,7 @@ export const loadingState = Vue.observable<LoadingState>({
   connected: false,
   connecting: false,
   loadingTxs: false,
+  syncPending: false,
 });
 
 const STORE_NAME = 'loadingState';
@@ -62,6 +74,9 @@ if (context === 'browser') {
       loadingState.isRestoring = false;
       loadingState.isSyncing = false;
       loadingState.text = '';
+      // Same reason: a "waiting for gero-sync" that outlived its worker would
+      // show a checking indicator nothing will ever clear.
+      loadingState.syncPending = false;
     }
   });
 }
@@ -137,6 +152,19 @@ function createSetter<K extends keyof LoadingState>(
   };
 }
 
+const writeLoadingTxs = createSetter('loadingTxs');
+const writeSyncPending = createSetter('syncPending');
+
+// syncPending bookkeeping (background only). Each arm gets a generation, so a
+// release for an answer to an EARLIER subscription is ignored: when the sync
+// handler itself re-subscribes (credential expansion), the arm it made must
+// outlive the release of the answer that triggered it.
+let syncPendingGeneration = 0;
+// A release that arrived while the TransactionsLoader was writing the rows
+// waits for that pass to finish (see setLoadingTxs), so the flag drops after
+// the rows are in the store, not after the database commit.
+let releaseSyncPendingWhenTxsSettle = false;
+
 export default {
   setLoading: createSetter('loading', (v) => {
     if (context === 'background' && v) {
@@ -166,7 +194,37 @@ export default {
 
   setProgress: createSetter('progress'),
 
-  setLoadingTxs: createSetter('loadingTxs'),
+  setLoadingTxs(value: boolean): void {
+    writeLoadingTxs(value);
+    if (!value && releaseSyncPendingWhenTxsSettle) {
+      releaseSyncPendingWhenTxsSettle = false;
+      writeSyncPending(false);
+    }
+  },
+
+  /**
+   * `true` arms the flag for a new SUBSCRIBE and returns a token for that arm.
+   * `false` clears it: at once when no token is given (socket closed, wallet
+   * gone); with a token, only if that arm is still the current one, and only
+   * once any TransactionsLoader pass in flight has put its rows in the store.
+   * Returns the current generation either way.
+   */
+  setSyncPending(value: boolean, token?: number): number {
+    if (value) {
+      syncPendingGeneration += 1;
+      releaseSyncPendingWhenTxsSettle = false;
+      if (!loadingState.syncPending) writeSyncPending(true);
+      return syncPendingGeneration;
+    }
+    if (token !== undefined && token !== syncPendingGeneration) return syncPendingGeneration;
+    releaseSyncPendingWhenTxsSettle = false;
+    if (token !== undefined && loadingState.loadingTxs) {
+      releaseSyncPendingWhenTxsSettle = true;
+      return syncPendingGeneration;
+    }
+    if (loadingState.syncPending) writeSyncPending(false);
+    return syncPendingGeneration;
+  },
 
   // Expose the observable state
   state: loadingState,
@@ -187,8 +245,10 @@ export default {
       connected: false,
       connecting: false,
       loadingTxs: false,
+      syncPending: false,
     };
 
+    releaseSyncPendingWhenTxsSettle = false;
     Object.assign(loadingState, resetState);
     broadcastFromBackground(resetState);
   }
