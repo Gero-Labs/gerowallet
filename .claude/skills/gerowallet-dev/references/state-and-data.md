@@ -46,7 +46,12 @@ import { walletStore as store } from '@/stores/walletStore';  // the observable
 const { config, loggedWallet } = toRefs(store);
 ```
 
-`src/options/main.ts` awaits hydration of `geroStore` and `walletStore` **before** mounting Vue, because the router's `beforeEach` would otherwise see `loggedWallet === null` and bounce to `/welcome`.
+`src/options/main.ts` waits up to five seconds for `geroStore`, `walletStore`,
+and locale initialization before mounting Vue. The shared startup budget prevents
+a stalled Chrome storage, IndexedDB, or locale load from leaving a blank page.
+Timed-out operations continue in the background. Late wallet readiness revisits
+the requested route through the normal guards; locked wallets, signing popups,
+and an explicit `addWallet=1` flow retain their existing restrictions.
 
 Lightweight UI-owned preferences use a simpler pattern - `Vue.observable` + direct `chrome.storage.local` + an `onChanged` listener + an explicit `hydrated` flag so the UI does not flash the default. See `src/stores/agentDockPrefsStore.ts`.
 
