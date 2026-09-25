@@ -4,6 +4,7 @@ import WalletStore from '@/stores/walletStore';
 import { hasScriptPaymentCredential, toStakeAddress } from '@/chrome/serialization';
 import networks from '@/utils/networks';
 import Loading from '@/stores/loading';
+import { debugLog } from '@/utils/debug';
 import { StoredTransaction, TxAsset } from '@/models/transaction.types';
 
 /** Loose UTxO shape used for input token-amount resolution (see resolveInputAmounts). */
@@ -199,7 +200,8 @@ export class TransactionsLoader extends BaseLoader {
       () => walletDB.table('transactions').toArray(),
       async (newTransactions: StoredTransaction[]) => {
         Loading.setLoadingTxs(true);
-        console.log('new TXs', newTransactions)
+        // Count only: the rows hold addresses and transaction bodies.
+        debugLog(`TransactionsLoader: ${newTransactions?.length ?? 0} stored transaction(s)`);
         try {
           // Check for the old transaction format and trigger migration if needed
           if (await this.detectAndHandleOldTransactionFormat(newTransactions)) {

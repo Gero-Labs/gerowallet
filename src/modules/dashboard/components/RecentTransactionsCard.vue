@@ -11,8 +11,29 @@
     </div>
 
     <v-card-text class="pa-0 flex-grow-1 d-flex flex-column recent-tx-body">
+      <!-- Nothing to show yet, and the wallet is still loading or asking the
+           chain: placeholders, not "no transactions", which would be a claim. -->
       <div
-        v-if="recent.length === 0"
+        v-if="recent.length === 0 && pending"
+        class="recent-tx-loading flex-grow-1"
+        role="status"
+        :aria-label="t('dashboard.recentTransactionsLoading')"
+      >
+        <div v-for="n in 3" :key="n" class="recent-tx-row recent-tx-row--placeholder" aria-hidden="true">
+          <div class="recent-tx-meta">
+            <span class="g-skeleton recent-tx-skeleton recent-tx-skeleton--label"></span>
+            <span class="g-skeleton recent-tx-skeleton recent-tx-skeleton--time"></span>
+          </div>
+          <span class="g-skeleton recent-tx-skeleton recent-tx-skeleton--amount"></span>
+        </div>
+        <div class="recent-tx-status">
+          <v-progress-circular indeterminate :size="12" :width="2" color="var(--g-text-3)" class="flex-shrink-0" />
+          <span>{{ t('dashboard.recentTransactionsLoading') }}</span>
+        </div>
+      </div>
+
+      <div
+        v-else-if="recent.length === 0"
         class="recent-tx-empty d-flex flex-column align-center justify-center flex-grow-1"
       >
         <v-icon small color="grey">mdi-clipboard-text-outline</v-icon>
@@ -29,7 +50,7 @@
           @click="handleRowClick(tx)"
         >
           <div class="recent-tx-meta">
-            <div class="recent-tx-status">
+            <div class="recent-tx-label-row">
               <span class="recent-tx-label">{{ statusLabel(tx) }}</span>
               <v-progress-circular
                 v-if="tx.pending"
@@ -47,6 +68,12 @@
           <div class="recent-tx-amount" :style="{ color: getTransactionColor(tx) }">
             {{ formatAmount(tx) }}
           </div>
+        </div>
+        <!-- The rows above are last session's until gero-sync answers. Say so
+             rather than let a list that is about to change pass for current. -->
+        <div v-if="pending" class="recent-tx-status" role="status">
+          <v-progress-circular indeterminate :size="12" :width="2" color="var(--g-text-3)" class="flex-shrink-0" />
+          <span>{{ t('dashboard.checkingForTransactions') }}</span>
         </div>
       </div>
     </v-card-text>
@@ -67,6 +94,7 @@
 <script setup lang="ts">
 import { computed, ref, toRefs } from 'vue';
 import { walletStore } from '@/stores/walletStore';
+import { loadingState } from '@/stores/loading';
 import { StoredTransaction } from '@/models/transaction.types';
 import { Blockchain } from '@/models/types';
 import TransactionDetailsDialog from '@/modules/dashboard/dialogs/TransactionDetailsDialog.vue';
@@ -86,6 +114,17 @@ const recent = computed<StoredTransaction[]>(() =>
   [...(transactions.value ?? [])]
     .sort((a, b) => b.tx_timestamp - a.tx_timestamp)
     .slice(0, 5),
+);
+
+/**
+ * The list is not yet known to be current. At login the store is filled from
+ * the local database before gero-sync has answered, so a transaction that
+ * arrived while the wallet was logged out is still on its way: `syncPending`
+ * spans SUBSCRIBE to that first answer, `connecting` the socket before it,
+ * `isSyncing` the login itself, and `loadingTxs` a batch being written.
+ */
+const pending = computed(
+  () => !!(loadingState.isSyncing || loadingState.connecting || loadingState.syncPending || loadingState.loadingTxs),
 );
 
 const transactionInfo = ref<StoredTransaction | null>(null);
@@ -161,7 +200,8 @@ function formatAmount(tx: StoredTransaction): string {
   opacity: 0.7;
 }
 
-.recent-tx-list {
+.recent-tx-list,
+.recent-tx-loading {
   display: flex;
   flex-direction: column;
   padding: 2px 6px 6px 6px;
@@ -182,6 +222,15 @@ function formatAmount(tx: StoredTransaction): string {
   background: rgba(255, 255, 255, 0.05);
 }
 
+/* A placeholder row is not a row: no hover, no pointer. */
+.recent-tx-row--placeholder {
+  cursor: default;
+}
+
+.recent-tx-row--placeholder:hover {
+  background: transparent;
+}
+
 .recent-tx-meta {
   flex: 1 1 auto;
   min-width: 0;
@@ -191,7 +240,7 @@ function formatAmount(tx: StoredTransaction): string {
   gap: 1px;
 }
 
-.recent-tx-status {
+.recent-tx-label-row {
   display: flex;
   align-items: center;
   font-size: 11px;
@@ -223,5 +272,37 @@ function formatAmount(tx: StoredTransaction): string {
   max-width: 45%;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Skeleton bars sized like the text they stand in for. */
+.recent-tx-skeleton {
+  display: block;
+  border-radius: var(--g-r-chip);
+}
+
+.recent-tx-skeleton--label {
+  width: 58%;
+  height: 10px;
+  margin-bottom: 3px;
+}
+
+.recent-tx-skeleton--time {
+  width: 36%;
+  height: 8px;
+}
+
+.recent-tx-skeleton--amount {
+  width: 44px;
+  height: 10px;
+}
+
+.recent-tx-status {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-2);
+  padding: 6px 8px 2px 8px;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--g-text-3);
 }
 </style>

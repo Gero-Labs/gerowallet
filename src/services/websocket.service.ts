@@ -249,6 +249,11 @@ class WebSocketService {
       // subscribers (e.g. cross-device DEVICE_REGISTER) send now, after SUBSCRIBE.
       this.handlers.onSocketOpen?.();
 
+      // From here until gero-sync's first answer (a SYNC, CATCH_UP_COMPLETE or
+      // SYNC_CHECK_OK) the wallet shows last session's data, not the chain's.
+      // The dashboard reads this to say so; each of those answers clears it.
+      LoadingState.setSyncPending(true);
+
       this.startSyncCheck();
     };
 
@@ -281,6 +286,8 @@ class WebSocketService {
       debugLog('WebSocket closed:', event.code, event.reason);
       LoadingState.setConnected(false);
       LoadingState.setConnecting(false);
+      // Nothing can answer a closed socket; the reconnect's SUBSCRIBE re-arms it.
+      LoadingState.setSyncPending(false);
       this.stopSyncCheck();
 
       if (!this.intentionallyClosed) {
@@ -317,6 +324,7 @@ class WebSocketService {
           // batching across generations can relabel an old chain's events.
           if (this.chain === 'MIDNIGHT') {
             void this.handlers.onSync?.(data)?.catch((error) => debugLog('Midnight sync failed', error));
+            LoadingState.setSyncPending(false);
             break;
           }
           const txCount = Array.isArray(data['transactions']) ? data['transactions'].length : 0;
@@ -349,6 +357,7 @@ class WebSocketService {
               this.lastSyncedBlock = data.block.height;
             }
             this.handlers.onSync?.(data);
+            LoadingState.setSyncPending(false);
           }
           break;
         }
@@ -360,6 +369,7 @@ class WebSocketService {
             this.pendingTxBatches = [];
             this.catchingUp = false;
             LoadingState.setProgress(100);
+            LoadingState.setSyncPending(false);
             if (this.syncResolve) { this.syncResolve(); this.syncResolve = null; }
             break;
           }
@@ -391,6 +401,7 @@ class WebSocketService {
 
           this.catchingUp = false;
           LoadingState.setProgress(100);
+          LoadingState.setSyncPending(false);
           if (this.syncResolve) { this.syncResolve(); this.syncResolve = null; }
           break;
         }
@@ -413,6 +424,8 @@ class WebSocketService {
           if (this.chain === 'MIDNIGHT' || data['utxos'] || data['addresses'] || data['account'] || data['block']) {
             this.handlers.onSync?.({ ...data, type: 'SYNC' } as WsSyncMessage);
           }
+          // "Caught up" is an answer too: the local list IS the chain's.
+          LoadingState.setSyncPending(false);
           if (this.syncResolve) { this.syncResolve(); this.syncResolve = null; }
           break;
 
@@ -578,6 +591,7 @@ class WebSocketService {
           }
           this.catchingUp = false;
           this.syncResolve = null;
+          LoadingState.setSyncPending(false);
           resolve();
         }
       }, timeoutMs);
@@ -587,6 +601,7 @@ class WebSocketService {
   close(): void {
     this.intentionallyClosed = true;
     this.stopSyncCheck();
+    LoadingState.setSyncPending(false);
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;

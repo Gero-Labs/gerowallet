@@ -13,6 +13,15 @@ export interface LoadingState {
   connected: boolean;
   connecting: boolean;
   loadingTxs: boolean;
+  /**
+   * True from the moment SUBSCRIBE goes out until gero-sync's first answer for
+   * that subscription (a SYNC, CATCH_UP_COMPLETE or SYNC_CHECK_OK) has been
+   * handed to the wallet. Until then the store holds what was synced last
+   * session, not the chain: anything that happened while the wallet was logged
+   * out is still on its way. Read by the dashboard to say "checking for new
+   * transactions" instead of presenting a stale list as current.
+   */
+  syncPending: boolean;
 }
 
 // Create an observable state
@@ -25,6 +34,7 @@ export const loadingState = Vue.observable<LoadingState>({
   connected: false,
   connecting: false,
   loadingTxs: false,
+  syncPending: false,
 });
 
 const STORE_NAME = 'loadingState';
@@ -62,6 +72,9 @@ if (context === 'browser') {
       loadingState.isRestoring = false;
       loadingState.isSyncing = false;
       loadingState.text = '';
+      // Same reason: a "waiting for gero-sync" that outlived its worker would
+      // show a checking indicator nothing will ever clear.
+      loadingState.syncPending = false;
     }
   });
 }
@@ -168,6 +181,8 @@ export default {
 
   setLoadingTxs: createSetter('loadingTxs'),
 
+  setSyncPending: createSetter('syncPending'),
+
   // Expose the observable state
   state: loadingState,
 
@@ -187,6 +202,7 @@ export default {
       connected: false,
       connecting: false,
       loadingTxs: false,
+      syncPending: false,
     };
 
     Object.assign(loadingState, resetState);
