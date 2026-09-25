@@ -26,6 +26,13 @@ function closeGate() {
   gate = new Promise(resolve => { openGate = resolve; });
 }
 
+/**
+ * Each pass ends by awaiting setUtxosAndAddresses. A test that fills
+ * `holdPasses` parks each pass there until it resolves that pass by hand.
+ */
+let holdPasses = false;
+const parkedPasses: Array<() => void> = [];
+
 const tx = (hash: string) => ({ tx_hash: hash, tx_timestamp: 1, utxo: { inputs: [], outputs: [] } });
 
 async function until(condition: () => boolean, what: string) {
@@ -39,6 +46,8 @@ async function until(condition: () => boolean, what: string) {
 describe('TransactionsLoader: loadingTxs covers the whole pass, from the read', () => {
   beforeEach(async () => {
     setTransactions.mockReset();
+    holdPasses = false;
+    parkedPasses.length = 0;
     loadingState.loadingTxs = false;
     loadingState.syncPending = false;
     db = new Dexie(`transactions-loader-spec-${++sequence}`);
@@ -62,7 +71,8 @@ describe('TransactionsLoader: loadingTxs covers the whole pass, from the read', 
       network: 'Mainnet',
       isEnterpriseAddress: () => false,
       networkId: () => 1,
-      setUtxosAndAddresses: async () => {},
+      setUtxosAndAddresses: () =>
+        holdPasses ? new Promise<void>(resolve => { parkedPasses.push(resolve); }) : Promise.resolve(),
     });
     await loader.load();
     await until(() => !loadingState.loadingTxs, 'the initial pass');
@@ -105,6 +115,28 @@ describe('TransactionsLoader: loadingTxs covers the whole pass, from the read', 
       return !loadingState.syncPending;
     }, 'the release');
     expect(rowsWhenReleased).toEqual([expect.objectContaining({ tx_hash: 't1' })]);
+  });
+
+  it('is not dropped by an older pass that finishes while a newer read is in flight', async () => {
+    // Dexie does not wait for an async subscriber: a second commit starts a new
+    // read while the first pass is still running. The first pass finishing must
+    // not announce rows only the second pass will put in the store.
+    holdPasses = true;
+    await db.table('transactions').put(tx('t1'));
+    await until(() => parkedPasses.length === 1, 'the first pass to park');
+    await db.table('transactions').put(tx('t2'));
+    await until(() => parkedPasses.length === 2, 'the second pass to park');
+
+    parkedPasses[0]();
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(loadingState.loadingTxs).toBe(true);
+
+    parkedPasses[1]();
+    await until(() => !loadingState.loadingTxs, 'the second pass to finish');
+    expect(setTransactions).toHaveBeenLastCalledWith([
+      expect.objectContaining({ tx_hash: 't1' }),
+      expect.objectContaining({ tx_hash: 't2' }),
+    ]);
   });
 
   it('is dropped on unsubscribe, so an abandoned read cannot leave it raised', async () => {
