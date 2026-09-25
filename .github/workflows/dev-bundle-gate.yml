@@ -100,6 +100,9 @@ jobs:
       - name: Pending transaction visibility regressions
         run: npx vitest run src/chrome/pendingTransactions.spec.ts src/chrome/injectCip30Extensions.spec.ts src/modules/dashboard/components/TransactionsCard.pending.spec.ts
 
+      - name: Token metadata persistence regressions
+        run: npx vitest run src/stores/tokenMetadataPersistence.spec.ts src/utils/storePersistence.spec.ts
+
       - name: Navigation loading regressions
         run: npx vitest run src/modules/navigation/lazyPage.spec.ts src/modules/navigation/components/governanceNav.spec.ts
 
