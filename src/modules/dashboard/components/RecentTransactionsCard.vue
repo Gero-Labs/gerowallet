@@ -14,7 +14,7 @@
       <!-- Nothing to show yet, and the wallet is still loading or asking the
            chain: placeholders, not "no transactions", which would be a claim. -->
       <div
-        v-if="recent.length === 0 && pending"
+        v-if="showSkeleton"
         class="recent-tx-loading flex-grow-1"
         role="status"
         :aria-label="t('dashboard.recentTransactionsLoading')"
@@ -121,12 +121,22 @@ const recent = computed<StoredTransaction[]>(() =>
  * the local database before gero-sync has answered the subscription, so a
  * transaction that arrived while the wallet was logged out is still on its
  * way: `walletStore.isSyncing` spans the login itself, `connecting` the socket
- * before SUBSCRIBE, `syncPending` SUBSCRIBE to the first answer being applied,
- * and `loadingTxs` the loader's pass that puts that answer in the store.
+ * before SUBSCRIBE, and `syncPending` SUBSCRIBE until the first answer's rows
+ * are in the store. `loadingTxs` is deliberately NOT part of this: it is true
+ * for every loader pass, including each later live block and the periodic
+ * cbor heal, and a "checking" line that flashed on those would announce
+ * nothing.
  */
 const pending = computed(
-  () => !!(walletStore.isSyncing || loadingState.connecting || loadingState.syncPending || loadingState.loadingTxs),
+  () => !!(walletStore.isSyncing || loadingState.connecting || loadingState.syncPending),
 );
+
+/**
+ * Nothing to show yet, and something is still producing it. Here `loadingTxs`
+ * does belong: an empty store while the loader is writing is loading, not
+ * empty.
+ */
+const showSkeleton = computed(() => recent.value.length === 0 && (pending.value || !!loadingState.loadingTxs));
 
 const transactionInfo = ref<StoredTransaction | null>(null);
 

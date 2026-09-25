@@ -152,6 +152,19 @@ function createSetter<K extends keyof LoadingState>(
   };
 }
 
+const writeLoadingTxs = createSetter('loadingTxs');
+const writeSyncPending = createSetter('syncPending');
+
+// syncPending bookkeeping (background only). Each arm gets a generation, so a
+// release for an answer to an EARLIER subscription is ignored: when the sync
+// handler itself re-subscribes (credential expansion), the arm it made must
+// outlive the release of the answer that triggered it.
+let syncPendingGeneration = 0;
+// A release that arrived while the TransactionsLoader was writing the rows
+// waits for that pass to finish (see setLoadingTxs), so the flag drops after
+// the rows are in the store, not after the database commit.
+let releaseSyncPendingWhenTxsSettle = false;
+
 export default {
   setLoading: createSetter('loading', (v) => {
     if (context === 'background' && v) {
@@ -181,9 +194,37 @@ export default {
 
   setProgress: createSetter('progress'),
 
-  setLoadingTxs: createSetter('loadingTxs'),
+  setLoadingTxs(value: boolean): void {
+    writeLoadingTxs(value);
+    if (!value && releaseSyncPendingWhenTxsSettle) {
+      releaseSyncPendingWhenTxsSettle = false;
+      writeSyncPending(false);
+    }
+  },
 
-  setSyncPending: createSetter('syncPending'),
+  /**
+   * `true` arms the flag for a new SUBSCRIBE and returns a token for that arm.
+   * `false` clears it: at once when no token is given (socket closed, wallet
+   * gone); with a token, only if that arm is still the current one, and only
+   * once any TransactionsLoader pass in flight has put its rows in the store.
+   * Returns the current generation either way.
+   */
+  setSyncPending(value: boolean, token?: number): number {
+    if (value) {
+      syncPendingGeneration += 1;
+      releaseSyncPendingWhenTxsSettle = false;
+      if (!loadingState.syncPending) writeSyncPending(true);
+      return syncPendingGeneration;
+    }
+    if (token !== undefined && token !== syncPendingGeneration) return syncPendingGeneration;
+    releaseSyncPendingWhenTxsSettle = false;
+    if (token !== undefined && loadingState.loadingTxs) {
+      releaseSyncPendingWhenTxsSettle = true;
+      return syncPendingGeneration;
+    }
+    if (loadingState.syncPending) writeSyncPending(false);
+    return syncPendingGeneration;
+  },
 
   // Expose the observable state
   state: loadingState,
@@ -207,6 +248,7 @@ export default {
       syncPending: false,
     };
 
+    releaseSyncPendingWhenTxsSettle = false;
     Object.assign(loadingState, resetState);
     broadcastFromBackground(resetState);
   }

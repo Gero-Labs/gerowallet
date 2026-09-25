@@ -95,6 +95,19 @@ describe('Recent Transactions card while the wallet is still loading or syncing'
     wrapper.destroy();
   });
 
+  it('does not flash the checking line for an ordinary loader pass once rows are shown', async () => {
+    // loadingTxs is true for EVERY loader pass: each later live block, the
+    // periodic cbor heal. Only an unanswered subscription is worth announcing.
+    walletStore.transactions = [received('a', 120)];
+    loadingState.loadingTxs = true;
+    const wrapper = mountCard();
+    await nextTick();
+    expect(wrapper.findAll('.recent-tx-row')).toHaveLength(1);
+    expect(wrapper.text()).not.toContain('dashboard.checkingForTransactions');
+    expect(wrapper.find('.recent-tx-skeleton').exists()).toBe(false);
+    wrapper.destroy();
+  });
+
   it('turns placeholders into rows when the answer delivers them', async () => {
     loadingState.syncPending = true;
     const wrapper = mountCard();
