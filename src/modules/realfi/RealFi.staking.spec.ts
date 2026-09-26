@@ -322,4 +322,48 @@ describe('RealFi Earn page, right after an order is sent', () => {
     // The immediate reload plus 24 quiet checks, then nothing more.
     expect(state.load).toHaveBeenCalledTimes(25);
   });
+
+  it("on a first stake, shows only the notice: no 'ready to earn', no empty position", async () => {
+    const page = await placeOrder('tx-first');
+
+    expect(page.text()).toContain('realfi.pending.title');
+    expect(page.text()).not.toContain('realfi.start.readyTitle');
+    expect(page.text()).not.toContain('realfi.position.label');
+  });
+
+  it('offers no claim or cancel either while an order is pending', async () => {
+    withPosition([
+      order({ status: 'Open' }),
+      order({
+        action: 'Unstake',
+        status: 'Executed',
+        unlockSlot: '1500',
+        resultTxHash: TX,
+        resultOutputIndex: 2,
+      }),
+    ]);
+    const page = await placeOrder('tx-new');
+
+    const labels = page.findAll('button').wrappers.map((b) => b.text());
+    expect(labels).not.toContain('realfi.cancel.cta');
+    expect(labels).not.toContain('dashboard.claim');
+  });
+
+  it('a check still in flight for an older order cannot strand a newer one', async () => {
+    // The review's sequence: order A's quiet check is in flight when B is placed.
+    let finishA: () => void = () => {};
+    const page = await placeOrder('tx-A');
+    state.load.mockImplementationOnce(() => new Promise<void>((r) => (finishA = r)));
+    await vi.advanceTimersByTimeAsync(5000); // A's check starts and hangs
+
+    page.findComponent({ name: 'RealFiOrderFlow' }).vm.$emit('placed', 'tx-B', 'claim');
+    finishA(); // A's check lands after B took over
+    await vi.advanceTimersByTimeAsync(0);
+
+    orders.value = [order({ txHash: 'tx-B', status: 'Open' })];
+    await vi.advanceTimersByTimeAsync(5000);
+    await page.vm.$nextTick();
+
+    expect(page.text()).not.toContain('realfi.pending.title');
+  });
 });

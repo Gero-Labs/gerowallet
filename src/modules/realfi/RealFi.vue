@@ -52,7 +52,7 @@
 
           <!-- Nothing staked and no activity. Rendering the hero here would show "$0.00"
                with no explanation, and at launch that is every user's first look. -->
-          <section v-if="isEmpty" class="realfi-start">
+          <section v-if="isEmpty && !pendingTxId" class="realfi-start">
             <span class="realfi-glyph realfi-glyph--lg" aria-hidden="true"></span>
             <!-- Holding USDrf but nothing staked is a DIFFERENT state from holding
                  nothing: telling someone with 9,994 USDrf to "get USDrf" is noise. -->
@@ -88,7 +88,7 @@
             </p>
           </section>
 
-          <template v-else>
+          <template v-else-if="!isEmpty">
           <!-- Position -->
           <section class="realfi-hero">
             <div class="realfi-hero__top">
@@ -125,7 +125,10 @@
           </section>
 
           <!-- Released USDrf waiting in its timelock: the user's money, one tap away. -->
-          <section v-if="canTransact && claimableOrders.length" class="realfi-notice">
+          <section
+            v-if="canTransact && !pendingTxId && claimableOrders.length"
+            class="realfi-notice"
+          >
             <div class="realfi-notice__text">
               <p class="t-body-lg mb-1">{{ $t('realfi.claim.title') }}</p>
               <p class="t-body-sm realfi-notice__body">
@@ -152,14 +155,16 @@
             </div>
             <!-- One transaction cancels every stranded order. Without in-wallet
                  orders the banner hands off to RealFi instead. -->
-            <GButton
-              v-if="canTransact"
-              tier="secondary"
-              compact
-              @click="cancelOrders(actionableOrders)"
-            >
-              {{ $tc('realfi.attention.cancelCta', actionableOrders.length) }}
-            </GButton>
+            <template v-if="canTransact">
+              <GButton
+                v-if="!pendingTxId"
+                tier="secondary"
+                compact
+                @click="cancelOrders(actionableOrders)"
+              >
+                {{ $tc('realfi.attention.cancelCta', actionableOrders.length) }}
+              </GButton>
+            </template>
             <GButton v-else tier="secondary" compact @click="openRealFiApp()">
               {{ $t('realfi.attention.cta') }}
             </GButton>
@@ -266,7 +271,7 @@
                     </span>
                   </span>
                   <span class="realfi-order__side">
-                    <template v-if="canTransact">
+                    <template v-if="canTransact && !pendingTxId">
                       <GButton
                         v-if="isRowClaimable(order)"
                         tier="primary"
@@ -540,7 +545,8 @@ function onAmountConfirm(amount: SmallestUnit): void {
  *
  * RealFi indexes asynchronously, so a reload right after submitting still shows the
  * page as it was: the start card offering to stake the very USDrf just sent. Until
- * the order appears, the page says it was sent and offers no new orders.
+ * the order appears, the page says it was sent and offers no new order of ANY kind,
+ * so one pending order is tracked at a time.
  */
 const pendingTxId = ref<string | null>(null);
 const PENDING_POLL_MS = 5000;
@@ -561,6 +567,9 @@ function hasLanded(txId: string): boolean {
 }
 
 function pollForPlaced(txId: string, remaining: number): void {
+  // A newer order took over: this chain is stale and must not touch the shared
+  // timer, or it would cancel the newer chain's check and strand its notice.
+  if (pendingTxId.value !== txId) return;
   clearPendingTimer();
   if (remaining <= 0 || hasLanded(txId)) {
     if (pendingTxId.value === txId) pendingTxId.value = null;
