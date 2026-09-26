@@ -41,15 +41,6 @@
         </div>
 
         <template v-else>
-          <!-- An order just went on chain but RealFi has not indexed it yet. Without
-               this the page would re-offer the same USDrf, inviting a second order. -->
-          <section v-if="pendingTxId" class="realfi-notice">
-            <div class="realfi-notice__text">
-              <p class="t-body-lg mb-1">{{ $t('realfi.pending.title') }}</p>
-              <p class="t-body-sm realfi-notice__body">{{ $t('realfi.pending.body') }}</p>
-            </div>
-          </section>
-
           <!-- Nothing staked and no activity. Rendering the hero here would show "$0.00"
                with no explanation, and at launch that is every user's first look. -->
           <section v-if="isEmpty && !pendingTxId" class="realfi-start">
@@ -202,6 +193,7 @@
             <section class="realfi-card">
               <div class="realfi-card__head">
                 <span class="t-label">{{ $t('realfi.points.label') }}</span>
+                <p class="t-caption realfi-card__about">{{ $t('realfi.points.about') }}</p>
               </div>
               <template v-if="hasPointsRecord">
                 <p class="realfi-stat g-num">
@@ -251,12 +243,38 @@
               </div>
             </section>
 
-            <!-- Activity — only once there is some; the start card covers "none yet". -->
-            <section v-if="!isEmpty" class="realfi-card">
+            <!-- Activity — once there is some, or an order is on its way; the start card
+                 covers "none yet". -->
+            <section v-if="!isEmpty || pendingTxId" class="realfi-card">
               <div class="realfi-card__head">
                 <span class="t-label">{{ $t('realfi.activity.label') }}</span>
               </div>
-              <ul v-if="orders.length" class="realfi-orders">
+              <ul v-if="orders.length || pendingTxId" class="realfi-orders">
+                <!-- An order on chain that RealFi has not indexed yet, shown the way the
+                     home screen shows an unconfirmed transaction. Without it the page
+                     would re-offer the USDrf just sent, inviting a second order. -->
+                <li v-if="pendingTxId" class="realfi-order realfi-order--pending">
+                  <span class="realfi-order__what">
+                    <span class="realfi-order__label">
+                      <span class="t-body-sm">{{ pendingLabel }}</span>
+                      <v-progress-circular
+                        indeterminate
+                        :size="12"
+                        :width="2"
+                        color="warning"
+                        class="flex-shrink-0"
+                        :aria-label="$t('dashboard.transactionPendingConfirmation')"
+                        :title="$t('dashboard.transactionPendingConfirmation')"
+                      />
+                    </span>
+                    <span class="t-caption g-mono realfi-order__tx" :title="pendingTxId">
+                      {{ shortTx(pendingTxId) }}
+                    </span>
+                  </span>
+                  <span class="realfi-order__side">
+                    <span class="realfi-pill realfi-pill--wait">{{ $t('common.pending') }}</span>
+                  </span>
+                </li>
                 <li
                   v-for="order in orders"
                   :key="`${order.txHash}#${order.outputIndex}`"
@@ -331,7 +349,7 @@ import snackbar from '@/plugins/snackbar';
 import WalletStore from '@/stores/walletStore';
 import { Network } from '@/models/types';
 import { useRealFi } from './composables/useRealFi';
-import type { RealFiBuildRequest } from './services/realfiOrders';
+import type { RealFiBuildRequest, RealFiOrderKind } from './services/realfiOrders';
 import {
   fromSmallestUnit,
   isCancellable,
@@ -545,10 +563,23 @@ function onAmountConfirm(amount: SmallestUnit): void {
  *
  * RealFi indexes asynchronously, so a reload right after submitting still shows the
  * page as it was: the start card offering to stake the very USDrf just sent. Until
- * the order appears, the page says it was sent and offers no new order of ANY kind,
- * so one pending order is tracked at a time.
+ * the order appears, Activity shows it as pending and the page offers no new order
+ * of ANY kind, so one pending order is tracked at a time.
  */
 const pendingTxId = ref<string | null>(null);
+const pendingKind = ref<RealFiOrderKind | null>(null);
+
+/** Worded like the settled row it will become, as the home screen does for a send. */
+const PENDING_LABEL_KEYS: Record<RealFiOrderKind, string> = {
+  stake: 'realfi.actions.stake',
+  unstake: 'realfi.actions.unstake',
+  claim: 'realfi.activity.claimed',
+  cancel: 'realfi.statuses.canceled',
+};
+
+const pendingLabel = computed(() =>
+  pendingKind.value ? t(PENDING_LABEL_KEYS[pendingKind.value]) : '',
+);
 const PENDING_POLL_MS = 5000;
 /** Two minutes. Past that, stop waiting; the next manual refresh will show it. */
 const PENDING_MAX_POLLS = 24;
@@ -568,11 +599,12 @@ function hasLanded(txId: string): boolean {
 
 function pollForPlaced(txId: string, remaining: number): void {
   // A newer order took over: this chain is stale and must not touch the shared
-  // timer, or it would cancel the newer chain's check and strand its notice.
+  // timer, or it would cancel the newer chain's check and strand its pending row.
   if (pendingTxId.value !== txId) return;
   clearPendingTimer();
   if (remaining <= 0 || hasLanded(txId)) {
-    if (pendingTxId.value === txId) pendingTxId.value = null;
+    pendingTxId.value = null;
+    pendingKind.value = null;
     return;
   }
   pendingTimer = setTimeout(async () => {
@@ -581,8 +613,9 @@ function pollForPlaced(txId: string, remaining: number): void {
   }, PENDING_POLL_MS);
 }
 
-function onPlaced(txId: string): void {
+function onPlaced(txId: string, kind: RealFiOrderKind): void {
   pendingTxId.value = txId;
+  pendingKind.value = kind;
   void load();
   pollForPlaced(txId, PENDING_MAX_POLLS);
 }
@@ -782,6 +815,11 @@ onMounted(load);
   margin-bottom: var(--g-s-3);
 }
 
+.realfi-card__about {
+  margin: var(--g-s-1) 0 0;
+  color: var(--g-text-3);
+}
+
 .realfi-stat {
   margin: 0;
   font-size: 24px;
@@ -846,6 +884,12 @@ onMounted(load);
   flex: none;
   align-items: center;
   gap: var(--g-s-2);
+}
+
+.realfi-order__label {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-1);
 }
 
 .realfi-order__tx {

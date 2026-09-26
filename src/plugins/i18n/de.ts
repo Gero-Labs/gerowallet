@@ -4591,7 +4591,8 @@ export default {
   'realfi.failed.cta': 'RealFi kontaktieren',
   'realfi.review.title': 'Order in Prüfung',
   'realfi.review.body': 'RealFi prüft eine Order, bevor sie verarbeitet wird. Sie wird fortgesetzt, sobald die Prüfung abgeschlossen ist. Du musst nichts tun. | RealFi prüft {n} Orders, bevor sie verarbeitet werden. Sie werden fortgesetzt, sobald die Prüfung abgeschlossen ist. Du musst nichts tun.',
-  'realfi.points.label': 'Punkte',
+  'realfi.points.label': 'RealFi-Punkte',
+  'realfi.points.about': 'RealFi vergibt Punkte fürs Staken und für Freunde, die du wirbst. RealFi teilt pro Saison mit, wie die Punkte genau funktionieren.',
   'realfi.points.pending': 'Ausstehend',
   'realfi.points.none': 'Du sammelst Punkte, sobald du stakest.',
   'realfi.referrals.label': 'Empfehlungen',
@@ -4602,6 +4603,7 @@ export default {
   'realfi.referrals.get': 'Meinen Einladungscode anzeigen',
   'realfi.activity.label': 'Aktivität',
   'realfi.activity.none': 'Noch keine RealFi-Aktivität.',
+  'realfi.activity.claimed': 'Beansprucht',
   'realfi.actions.mint': 'Geprägt',
   'realfi.actions.redeem': 'Eingelöst',
   'realfi.actions.stake': 'Gestakt',
@@ -4653,8 +4655,6 @@ export default {
   'realfi.claim.body': 'Ein Unstaking hat seine Wartezeit beendet. Beanspruche es, um die USDrf in deine Wallet zu holen. | {n} Unstakings haben ihre Wartezeit beendet. Beanspruche sie, um die USDrf in deine Wallet zu holen.',
   'realfi.claim.from': 'Beanspruchbar ab {date}',
   'realfi.cancel.cta': 'Abbrechen',
-  'realfi.pending.title': 'Order gesendet',
-  'realfi.pending.body': 'Sie erscheint hier, sobald RealFi sie übernimmt.',
 
   // Midnight DUST-Registrierung
   'midnight.registerForDust': 'Für DUST-Generierung registrieren',
