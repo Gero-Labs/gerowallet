@@ -272,14 +272,6 @@ export class WalletManager {
         TapToolsStore.clear();
         const walletBg = new WalletBg(wallet);
 
-        // Debug: Check WalletBg instance has PRF fields
-        console.log('🔍 [WalletManager] WalletBg PRF fields after construction:', {
-          encryptionMethod: walletBg.encryptionMethod,
-          hasPrfEncryptedPrivateKey: !!walletBg.prfEncryptedPrivateKey,
-          hasPrfEncryptedMnemonic: !!walletBg.prfEncryptedMnemonic,
-          hasWebAuthnCredentialId: !!walletBg.webAuthnCredentialId,
-        });
-
         WalletStore.setLoggedWallet({
           id: walletBg.id,
           name: walletBg.name,
@@ -401,7 +393,6 @@ export class WalletManager {
   private async initializeWallet(walletBg: WalletBg): Promise<void> {
     LoadingState.setText('Setting up wallet address...');
     const promises = [];
-    console.log('walletBg', walletBg)
 
     LoadingState.setText('Loading blockchain data...');
 
