@@ -6,6 +6,7 @@ import {
   buildOrder,
   classifyBuildError,
   MAX_BUILD_UTXOS,
+  MAX_BUILD_UTXOS_HEX,
   RealFiOrderError,
   selectBuildUtxos,
 } from './realfiOrders';
@@ -122,12 +123,16 @@ describe('selectBuildUtxos', () => {
     ] as unknown as Cardano.Utxo;
   }
 
-  it('sends every UTxO when under the cap', () => {
+  /** Each UTxO serialises to `size` hex chars, tagged with its index for the assertions. */
+  const hexOf = (size: number) => (u: Cardano.Utxo) => `${u[0].index}:`.padEnd(size, '0');
+  const indexOf = (hex: string) => Number(hex.split(':')[0]);
+
+  it('sends every UTxO, in order, when within bounds', () => {
     const all = [utxo(0, 1), utxo(1, 2)];
-    expect(selectBuildUtxos(all, [])).toEqual(all);
+    expect(selectBuildUtxos(all, [], hexOf(10)).map(indexOf)).toEqual([0, 1]);
   });
 
-  it('past the cap, keeps UTxOs holding RealFi assets first, then the largest by ADA', () => {
+  it('past the count bound, keeps UTxOs holding RealFi assets first, then the largest by ADA', () => {
     const usdr = REALFI_ASSETS.preprod.usdr;
     const small = Array.from({ length: MAX_BUILD_UTXOS }, (_, i) => utxo(i, 1_000_000));
     const big = utxo(9001, 50_000_000);
@@ -135,9 +140,22 @@ describe('selectBuildUtxos', () => {
     const withUsdrMap = utxo(9002, 1_000_000, new Map([[usdr, 5n]]));
     const withUsdrObj = utxo(9003, 1_000_000, { [usdr]: '7' });
 
-    const picked = selectBuildUtxos([...small, big, withUsdrMap, withUsdrObj], [usdr]);
+    const picked = selectBuildUtxos([...small, big, withUsdrMap, withUsdrObj], [usdr], hexOf(10));
 
     expect(picked).toHaveLength(MAX_BUILD_UTXOS);
-    expect(picked.slice(0, 3).map((u) => u[0].index)).toEqual([9002, 9003, 9001]);
+    expect(picked.slice(0, 3).map(indexOf)).toEqual([9002, 9003, 9001]);
+  });
+
+  it("past the size bound, stays within Nexus's total and still leads with RealFi assets", () => {
+    const usdr = REALFI_ASSETS.preprod.usdr;
+    // 40 UTxOs of 30,000 hex chars = 1.2M, over the 900k budget.
+    const all = Array.from({ length: 40 }, (_, i) => utxo(i, 1_000_000 + i));
+    all.push(utxo(99, 1, { [usdr]: '1' }));
+
+    const picked = selectBuildUtxos(all, [usdr], hexOf(30_000));
+
+    expect(picked.reduce((n, h) => n + h.length, 0)).toBeLessThanOrEqual(MAX_BUILD_UTXOS_HEX);
+    expect(picked).toHaveLength(MAX_BUILD_UTXOS_HEX / 30_000);
+    expect(indexOf(picked[0]!)).toBe(99);
   });
 });

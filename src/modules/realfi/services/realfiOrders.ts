@@ -94,8 +94,9 @@ export function classifyBuildError(err: unknown): RealFiOrderError {
 
 /* ── The wallet's UTxO set ─────────────────────────────────────────────────────── */
 
-/** Nexus's bound on a client UTxO set; see `selectBuildUtxos`. */
+/** Nexus's bounds on a client UTxO set (its `UtxoSetValidator`); see `selectBuildUtxos`. */
 export const MAX_BUILD_UTXOS = 500;
+export const MAX_BUILD_UTXOS_HEX = 900_000;
 
 function lovelaceOf(utxo: Cardano.Utxo): bigint {
   return BigInt(utxo[1]?.value?.coins ?? 0);
@@ -110,28 +111,44 @@ function assetIdsOf(utxo: Cardano.Utxo): string[] {
 }
 
 /**
- * The UTxOs to send with a build.
+ * The UTxOs to send with a build, serialised with `toHex`.
  *
  * All of them, normally: Nexus builds from exactly this set, and it is the only way
  * funds on a multi-address wallet's other addresses are visible to it. Past Nexus's
- * cap, the ones holding RealFi's assets go first — without them there is nothing to
- * stake or unstake — then the largest by ADA, which cover fees and deposits.
+ * count or size bound, the ones holding RealFi's assets go first — without them there
+ * is nothing to stake or unstake — then the largest by ADA, which cover fees and
+ * deposits. A UTxO too big for what is left of the budget is skipped, not truncated.
  */
 export function selectBuildUtxos(
   utxos: readonly Cardano.Utxo[],
   priorityAssetIds: readonly string[],
-): Cardano.Utxo[] {
-  if (utxos.length <= MAX_BUILD_UTXOS) return [...utxos];
+  toHex: (utxo: Cardano.Utxo) => string,
+): string[] {
+  const all = utxos.map((utxo) => ({ utxo, hex: toHex(utxo) }));
+  const total = all.reduce((n, x) => n + x.hex.length, 0);
+  if (all.length <= MAX_BUILD_UTXOS && total <= MAX_BUILD_UTXOS_HEX) return all.map((x) => x.hex);
+
   const priority = new Set(priorityAssetIds);
   const holdsPriority = (u: Cardano.Utxo) => assetIdsOf(u).some((id) => priority.has(id));
-  const byAdaDesc = (a: Cardano.Utxo, b: Cardano.Utxo) => {
-    const x = lovelaceOf(a);
-    const y = lovelaceOf(b);
+  const byAdaDesc = (a: { utxo: Cardano.Utxo }, b: { utxo: Cardano.Utxo }) => {
+    const x = lovelaceOf(a.utxo);
+    const y = lovelaceOf(b.utxo);
     return x === y ? 0 : x > y ? -1 : 1;
   };
-  const first = utxos.filter(holdsPriority).sort(byAdaDesc);
-  const rest = utxos.filter((u) => !holdsPriority(u)).sort(byAdaDesc);
-  return [...first, ...rest].slice(0, MAX_BUILD_UTXOS);
+  const ordered = [
+    ...all.filter((x) => holdsPriority(x.utxo)).sort(byAdaDesc),
+    ...all.filter((x) => !holdsPriority(x.utxo)).sort(byAdaDesc),
+  ];
+
+  const picked: string[] = [];
+  let used = 0;
+  for (const { hex } of ordered) {
+    if (picked.length === MAX_BUILD_UTXOS) break;
+    if (used + hex.length > MAX_BUILD_UTXOS_HEX) continue;
+    picked.push(hex);
+    used += hex.length;
+  }
+  return picked;
 }
 
 /* ── The build call ────────────────────────────────────────────────────────────── */

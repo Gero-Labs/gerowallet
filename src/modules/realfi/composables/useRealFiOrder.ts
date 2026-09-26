@@ -93,7 +93,7 @@ export function useRealFiOrder(signer: RealFiOrderSigner) {
       built = await buildOrder(req, {
         network: wallet.network,
         changeAddress,
-        utxos: selectBuildUtxos(utxos, REALFI_ASSET_IDS).map(utxoToCip30Hex),
+        utxos: selectBuildUtxos(utxos, REALFI_ASSET_IDS, utxoToCip30Hex),
       });
     } catch (err) {
       return fail(err instanceof RealFiOrderError ? err : new RealFiOrderError('build-failed'));
