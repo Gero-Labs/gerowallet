@@ -73,7 +73,7 @@ jobs:
           echo "latest_id=${latest}" >> "$GITHUB_OUTPUT"
 
       - name: Run Claude Code Review
-        uses: anthropics/claude-code-action@56cf60fde42f7b19c3abfd5c9c48b69a1288461f # v1
+        uses: anthropics/claude-code-action@8cf3482550831fb35a4fc3fbf7ca139cf8028b4c # v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           track_progress: true
