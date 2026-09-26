@@ -5107,5 +5107,6 @@ export default {
   'governance.noDelegationNoPosition': 'Sie haben nicht delegiert, daher gehört Ihnen keine der hier gezeigten Positionen.',
   'governance.delegationNotLoaded': 'Ihre Delegation ist noch nicht geladen, daher lässt sich nicht sagen, ob Ihnen eine der Positionen gehört.',
   'governance.positionUnknown': 'Es sind nicht alle Positionen geladen, daher lässt sich nicht sagen, ob diese Stimme abgegeben wurde.',
+  'wallet.ledgerTransport': 'Wie ist Ihr Ledger verbunden?',
 
 }
