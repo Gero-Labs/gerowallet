@@ -4,6 +4,7 @@ import swapApi from '@/api/swap-api';
 import { getContextType } from '@/utils/storageSync';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
+import { StorePersister } from '@/utils/storePersistence';
 
 export interface TokenMetadataStore {
   tokens: {};
@@ -18,6 +19,14 @@ export const tokenMetadataStore = Vue.observable<TokenMetadataStore>({
 
 const STORE_NAME = 'tokenMetadataStore';
 const context = getContextType();
+const persister = new StorePersister(tokenMetadataStore as unknown as Record<string, unknown>, {
+  storeName: STORE_NAME,
+  // Registry data can grow large. Only the blacklist stays in Chrome's compact
+  // record; token writes must not fan out through storage.onChanged in every tab.
+  bulkFields: ['tokens'],
+});
+let hydration: Promise<void> | null = null;
+const deliveredFields = new Set<string>();
 
 // Initialize messaging based on context
 // IMPORTANT: Only browser context subscribes to background updates
@@ -29,71 +38,36 @@ if (context === 'browser') {
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
       if (key in tokenMetadataStore) {
+        deliveredFields.add(key);
         (tokenMetadataStore as unknown as Record<string, unknown>)[key] = updates[key as keyof TokenMetadataStore];
       }
     });
   });
 
-  // Initial hydration from chrome.storage (fallback for initial state)
-  chrome.storage.local.get(STORE_NAME, (result) => {
-    if (result[STORE_NAME]) {
-      Object.assign(tokenMetadataStore, result[STORE_NAME]);
-    }
-  });
+  hydration = persister.hydrate({ skip: deliveredFields }).then(() => undefined);
 }
+
+if (context === 'background') {
+  // Preserve the untouched field on worker restart and migrate old inline token
+  // maps only after IndexedDB has accepted them. Setters win over a late read.
+  hydration = persister.hydrate({ migrate: true }).then(() => undefined);
+}
+
+export const hydrateTokenMetadataStore = (): Promise<void> => hydration ?? Promise.resolve();
+export const flushTokenMetadataPersistence = (): Promise<void> => persister.flush();
 
 /**
  * Broadcast updates from the background context
  */
 function broadcastFromBackground(updates: Partial<TokenMetadataStore>) {
+  // Browser-side registry refreshes are newer than an in-flight disk hydrate,
+  // just like port messages. They still must never persist from this context.
+  if (context === 'browser') Object.keys(updates).forEach((key) => deliveredFields.add(key));
   if (context === 'background') {
     // Broadcast to all connected browser contexts
     backgroundStoreMessaging.broadcastUpdate(STORE_NAME, updates);
 
-    // Also persist to storage as fallback
-    chrome.storage.local.get(STORE_NAME, (result) => {
-      const current = result[STORE_NAME] || { tokens: {}, blacklistPolicies: [] };
-      chrome.storage.local.set({
-        [STORE_NAME]: { ...current, ...updates }
-      });
-    });
-  }
-}
-
-/**
- * Special handler for token patches (partial updates to nested objects)
- */
-async function broadcastTokenPatch(unit: string, patch: { price: number; mcap: number }) {
-  if (context === 'background') {
-    // Get current state
-    const result = await chrome.storage.local.get(STORE_NAME);
-    const saved: TokenMetadataStore = result[STORE_NAME] || { tokens: {}, blacklistPolicies: [] };
-
-    // Create updated tokens object
-    const updatedTokens = {
-      ...saved.tokens,
-      [unit]: {
-        ...saved.tokens[unit],
-        price: patch.price,
-        mcap: patch.mcap,
-      }
-    };
-
-    // Update local state
-    tokenMetadataStore.tokens = updatedTokens;
-
-    // Broadcast the update
-    backgroundStoreMessaging.broadcastUpdate(STORE_NAME, {
-      tokens: updatedTokens
-    });
-
-    // Persist to storage
-    await chrome.storage.local.set({
-      [STORE_NAME]: {
-        ...saved,
-        tokens: updatedTokens,
-      },
-    });
+    persister.markDirty(Object.keys(updates));
   }
 }
 
@@ -132,27 +106,10 @@ export default {
           return map;
         }, {}));
       } else {
-        console.log(res.status)
         console.warn(parseHttpError(res))
       }
     } catch (error) {
       console.error(error);
-    }
-  },
-
-  async updatePrices(tokensUnits: string[]) {
-    for (const unit of tokensUnits) {
-      try {
-        if (unit !== 'lovelace') {
-          const res = await swapApi.mCap(unit);
-          if (res.status === 200) {
-            const { price, mcap } = res.data;
-            await broadcastTokenPatch(unit, { price, mcap });
-          }
-        }
-      } catch (e) {
-        console.warn(`failed to fetch ${unit}`, e);
-      }
     }
   },
 

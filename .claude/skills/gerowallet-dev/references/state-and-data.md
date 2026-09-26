@@ -16,7 +16,7 @@ The flow:
 background mutates store
   -> serialize (bigint -> string, Map -> object, Set -> array)
   -> broadcastUpdate over the 'store-sync' chrome.runtime port
-  -> persist, 300ms debounce. walletStore/networkStore/midnightStore (StorePersister): only the
+  -> persist, 300ms debounce. walletStore/networkStore/midnightStore/tokenMetadataStore (StorePersister): only the
      touched fields; small ones to chrome.storage.local, bulk ones to IndexedDB
      `gero-store-cache`. Most other stores: WHOLE store snapshot to chrome.storage.local
 
@@ -30,7 +30,7 @@ Two rules fall straight out of that:
 
 **Declare every field in the `Vue.observable({...})` literal with a default.** The subscribe handler drops unknown keys via `if (key in store)`, and Vue 2 only installs reactive getters on properties present at creation. A field added only to the type and the setter works in the background and never appears in the UI, with no error.
 
-**Use the in-memory store as the base for the `chrome.storage` write**, never `chrome.storage.local.get()`. The read-modify-write version races the Dexie liveQuery; the fix is commented in `geroStore.ts:108`. Copy `broadcastFromBackground` from `walletStore.ts`, `geroStore.ts`, `networkStore.ts`, `cip45Store.ts` or `loading.ts`. Do **not** copy it from `tapToolsStore`, `tokenMetadataStore`, `coinGeckoStore`, `charli3Store` or `musicStore` - those still carry the racy pattern. (`stores/modules/card.ts` has no `broadcastFromBackground` at all and never persists, so it is not a store template either.)
+**Use the in-memory store as the base for the `chrome.storage` write**, never `chrome.storage.local.get()`. The read-modify-write version races the Dexie liveQuery; the fix is commented in `geroStore.ts:108`. Copy `broadcastFromBackground` from `walletStore.ts`, `geroStore.ts`, `networkStore.ts`, `tokenMetadataStore.ts`, `cip45Store.ts` or `loading.ts`. Do **not** copy it from `tapToolsStore`, `coinGeckoStore`, `charli3Store` or `musicStore` - those still carry the racy pattern. (`stores/modules/card.ts` has no `broadcastFromBackground` at all and never persists, so it is not a store template either.)
 
 **Keep `chrome.storage.local` values small.** Every write that changes a value makes Chrome copy the old and new value, on the browser UI thread, into every `storage.onChanged` listener. The Bring SDK registers one in the content script, which runs in every frame of every tab. A 27 MB `walletStore` rewritten on each `setSyncing` blocked that thread for 1-4 s per write, and froze Chrome windows in other profiles too. Give a store with large or fast-changing fields a `StorePersister` (`src/utils/storePersistence.ts`) and list those fields in `bulkFields`. `walletStore`, `networkStore` and `midnightStore` use one. A store whose fields need revival (BigInts, validation) reads the merged record with `persister.read()` and runs its own hydrators, as `midnightStore` does.
 
@@ -46,7 +46,12 @@ import { walletStore as store } from '@/stores/walletStore';  // the observable
 const { config, loggedWallet } = toRefs(store);
 ```
 
-`src/options/main.ts` awaits hydration of `geroStore` and `walletStore` **before** mounting Vue, because the router's `beforeEach` would otherwise see `loggedWallet === null` and bounce to `/welcome`.
+`src/options/main.ts` waits up to five seconds for `geroStore`, `walletStore`,
+and locale initialization before mounting Vue. The shared startup budget prevents
+a stalled Chrome storage, IndexedDB, or locale load from leaving a blank page.
+Timed-out operations continue in the background. Late wallet readiness revisits
+the requested route through the normal guards; locked wallets, signing popups,
+and an explicit `addWallet=1` flow retain their existing restrictions.
 
 Lightweight UI-owned preferences use a simpler pattern - `Vue.observable` + direct `chrome.storage.local` + an `onChanged` listener + an explicit `hydrated` flag so the UI does not flash the default. See `src/stores/agentDockPrefsStore.ts`.
 
