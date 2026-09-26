@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { extractNexusErrorMessage, isCollateralError, isInsufficientAdaError } from './txErrors';
+import { extractNexusErrorMessage, friendlyTxError, isCollateralError, isInsufficientAdaError } from './txErrors';
+import { TX_SUBMIT_UNCONFIRMED_MESSAGE } from '@/chrome/config';
 
 describe('isCollateralError', () => {
   it('matches a genuine missing-collateral error', () => {
@@ -76,5 +77,32 @@ describe('extractNexusErrorMessage', () => {
   it('still lets the collateral classifier see a wrapped collateral error', () => {
     const wrapped = JSON.stringify({ data: { message: 'Wallet needs a pure-ADA UTxO of at least 5.0 ADA for Plutus collateral.' } });
     expect(isCollateralError(extractNexusErrorMessage(wrapped))).toBe(true);
+  });
+});
+
+describe('friendlyTxError on submit failures', () => {
+  // Regression: the background used to hand the UI the CIP-30 boilerplate
+  // "Inputs do not conform to this spec or are otherwise invalid." for an HTTP 502,
+  // so a backend outage read as a malformed transaction (ticket, 2026-09-21).
+  it('localizes the unconfirmed-submission marker without claiming the tx failed', () => {
+    const localized = friendlyTxError(new Error(`${TX_SUBMIT_UNCONFIRMED_MESSAGE} (HTTP 502). It may still have reached the network.`));
+    expect(localized).not.toContain(TX_SUBMIT_UNCONFIRMED_MESSAGE);
+    expect(localized.toLowerCase()).toContain('could not confirm');
+    expect(localized.toLowerCase()).not.toContain('was not sent');
+  });
+
+  it('drops our prefix from a plain-text node rejection', () => {
+    const raw = 'Wallet could not send the tx. Ogmios rejected tx: The withdrawal amount does not match the reward balance.';
+    expect(friendlyTxError(new Error(raw)))
+      .toBe('The withdrawal amount does not match the reward balance.');
+  });
+
+  it('cuts an Ogmios protocol essay to its first sentence', () => {
+    const essay = 'Ogmios rejected tx: Invalid transaction; It looks like the given transaction wasn\'t well-formed. '
+      + 'Note that I try to decode the transaction in multiple possible eras and it was malformed in ALL eras. '
+      + 'Yet, I can\'t pinpoint the exact issue for I do not know in which era / format you intended the transaction to be. '
+      + 'The \'data\' field, therefore, contains errors for each era.';
+    expect(friendlyTxError(new Error(essay)))
+      .toBe('Invalid transaction; It looks like the given transaction wasn\'t well-formed.');
   });
 });

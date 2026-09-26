@@ -5,6 +5,11 @@ import Loading from '@/stores/loading';
 import { Messaging } from '@/chrome/messaging';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
 import { isStakeKeyRegistered } from '@/shared/utils/stakeRegistration';
+import {
+  dappSubmitError,
+  describeSubmitFailure,
+  describeUnexpectedSubmitResponse,
+} from '@/chrome/submitErrors';
 import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, POPUP, SENDER, TARGET, TxSendError, TxSignError } from '@/chrome/config';
 import { toDappError } from '@/chrome/dappError';
 import { applyDappRequestBadge } from '@/chrome/dappRequestBadge';
@@ -25,7 +30,7 @@ import {
   submitTx,
   urlScan,
 } from '@/chrome/serialization';
-import { Blockchain, coin_type, ERROR, Network, Paginate, purpose } from '@/models/types';
+import { Blockchain, coin_type, Network, Paginate, purpose } from '@/models/types';
 import networks from '@/utils/networks';
 import coinGeckoStore from '@/stores/coinGeckoStore';
 import { getDomain } from 'tldts';
@@ -1467,26 +1472,17 @@ app.add(METHOD.submitTx, async (request, sendResponse) => {
         target: TARGET,
         sender: SENDER.extension,
       });
+      // Without this the handler answered AccountNotSet and then dereferenced the
+      // null wallet on the next line, answering a second time with a TypeError.
+      return;
     }
     const response = await submitTx(request.data.tx, loggedWallet['chain'], loggedWallet['network'])
     if (!response.ok) {
-      let error: unknown;
-      switch (response.status) {
-        case 400:
-          error = { ...TxSendError.Failure, message: response.statusText };
-          break;
-        case 500:
-          error = APIError.InternalError;
-          break;
-        case 429:
-          error = TxSendError.Refused;
-          break;
-        case 425:
-          error = ERROR.fullMempool;
-          break;
-        default:
-          error = APIError.InvalidRequest;
-      }
+      // The node's rejection reason is in the BODY, not in statusText -- reading it is
+      // the difference between "value not conserved" and a bare "Bad Request". Never
+      // let a failed read of it mask the real failure.
+      const body = await response.text().catch(() => '');
+      const error = dappSubmitError(response.status, body);
       console.error("Error in submitTx:", error);
       sendResponse({
         id: request.id,
@@ -1494,6 +1490,9 @@ app.add(METHOD.submitTx, async (request, sendResponse) => {
         target: TARGET,
         sender: SENDER.extension,
       });
+      // Without this the handler fell through to response.text() on a consumed body
+      // and answered a second time on the same request id.
+      return;
     }
     const txCbor = request.data.tx
     const txIdResponse = await response.text();
@@ -1504,10 +1503,14 @@ app.add(METHOD.submitTx, async (request, sendResponse) => {
       console.error(txIdResponse);
       sendResponse({
         id: request.id,
-        error: txIdResponse,
+        error: { ...TxSendError.Failure, info: describeUnexpectedSubmitResponse(txIdResponse) },
         target: TARGET,
         sender: SENDER.extension,
       });
+      // Third missing return in this handler. Without it an unexpected 200 body was
+      // deserialized as if confirmed, written to the wallet DB as a pending tx keyed
+      // by the error text, and answered a second time claiming success.
+      return;
     }
 
     if (txIdResponse) {
@@ -4419,7 +4422,9 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
               const txHash = await response.text();
               await wcService.respondSuccess(topic, id, txHash);
             } else {
-              await wcService.respondError(topic, id, 4100, `Submit failed: ${response.statusText}`);
+              // statusText is "Bad Gateway" at best -- the node's reason is in the body.
+              const body = await response.text().catch(() => '');
+              await wcService.respondError(topic, id, 4100, describeSubmitFailure(response.status, body));
             }
             return;
           }
@@ -4731,7 +4736,10 @@ app.addToOptions(MessageTypes.CIP45_INVOKE, async (request, sendResponse) => {
         if (response.ok) {
           reply({ success: true, result: await response.text() });
         } else {
-          fail(TxSendError.Failure.code, `Submit failed: ${response.statusText}`);
+          // Same as the WalletConnect and CIP-30 paths: report the node's own reason,
+          // or say plainly that submission is down, instead of a bare status phrase.
+          const body = await response.text().catch(() => '');
+          fail(TxSendError.Failure.code, describeSubmitFailure(response.status, body));
         }
         break;
       }
