@@ -130,7 +130,11 @@
               </p>
             </div>
           </section>
+          </template>
 
+          <!-- Points and referrals render with or without a stake: a wallet can hold
+               points or referral results before it stakes, and the invite link is how
+               a new user brings a friend before doing anything else. -->
           <div class="realfi-grid">
             <!-- Points -->
             <section class="realfi-card">
@@ -155,38 +159,38 @@
               <div class="realfi-card__head">
                 <span class="t-label">{{ $t('realfi.referrals.label') }}</span>
               </div>
-              <template v-if="referrals.code">
-                <div class="realfi-row">
-                  <span class="t-caption">{{ $t('realfi.referrals.code') }}</span>
-                  <span class="g-mono realfi-strong">{{ referrals.code }}</span>
-                </div>
-                <div class="realfi-row">
-                  <span class="t-caption">{{ $t('realfi.referrals.invited') }}</span>
-                  <span class="t-body-sm realfi-strong g-num">{{ invitedLabel }}</span>
-                </div>
-                <div class="realfi-row">
-                  <span class="t-caption">{{ $t('realfi.referrals.earned') }}</span>
-                  <span class="t-body-sm realfi-strong g-num">{{ referralPointsLabel }}</span>
-                </div>
-              </template>
-              <template v-else>
-                <p class="t-body realfi-muted">{{ $t('realfi.referrals.none') }}</p>
+              <p v-if="!referrals.code" class="t-body realfi-muted realfi-card__intro">
+                {{ $t('realfi.referrals.none') }}
+              </p>
+              <div class="realfi-row">
+                <span class="t-caption">{{ $t('realfi.referrals.code') }}</span>
+                <span v-if="referrals.code" class="g-mono realfi-strong">{{ referrals.code }}</span>
                 <!-- Reading a code on RealFi CREATES one and joins their referral
                      programme, so it only ever happens on this tap. -->
                 <GButton
+                  v-else
                   tier="secondary"
                   compact
-                  class="mt-3"
                   :loading="isRequestingCode"
                   @click="requestReferralCode()"
                 >
                   {{ $t('realfi.referrals.get') }}
                 </GButton>
-              </template>
+              </div>
+              <!-- The totals are genuine reads, loaded with the page. They never waited
+                   on the code, and a user who has invited people should see it. -->
+              <div class="realfi-row">
+                <span class="t-caption">{{ $t('realfi.referrals.invited') }}</span>
+                <span class="t-body-sm realfi-strong g-num">{{ invitedLabel }}</span>
+              </div>
+              <div class="realfi-row">
+                <span class="t-caption">{{ $t('realfi.referrals.earned') }}</span>
+                <span class="t-body-sm realfi-strong g-num">{{ referralPointsLabel }}</span>
+              </div>
             </section>
 
-            <!-- Activity -->
-            <section class="realfi-card">
+            <!-- Activity — only once there is some; the start card covers "none yet". -->
+            <section v-if="!isEmpty" class="realfi-card">
               <div class="realfi-card__head">
                 <span class="t-label">{{ $t('realfi.activity.label') }}</span>
               </div>
@@ -212,8 +216,6 @@
               <p v-else class="t-body realfi-muted">{{ $t('realfi.activity.none') }}</p>
             </section>
           </div>
-
-          </template>
 
           <p v-if="isTestnet" class="t-caption realfi-foot">{{ $t('realfi.preview') }}</p>
         </template>
@@ -523,6 +525,10 @@ onMounted(load);
   border-radius: var(--g-r-card);
 }
 
+.realfi-card__intro {
+  margin-bottom: var(--g-s-2);
+}
+
 .realfi-card__head {
   margin-bottom: var(--g-s-3);
 }
@@ -618,6 +624,7 @@ onMounted(load);
 
 .realfi-start {
   @include g-glass-panel(false);
+  margin-bottom: var(--g-s-4);
   display: flex;
   flex-direction: column;
   align-items: center;

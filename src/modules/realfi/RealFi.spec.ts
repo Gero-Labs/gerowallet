@@ -122,6 +122,8 @@ describe('RealFi Earn page', () => {
     state.usdrBalance.value = 0;
     state.protocol.value = null;
     state.referrals.value = { code: null, invitedCount: 0, rewardPoints: 0 };
+    state.points.value = { pointsBalance: null, potentialPoints: null, multiplier: null };
+    state.hasPointsRecord.value = false;
     state.requestReferralCode.mockReset();
     openSpy.mockReset();
     vi.stubGlobal('open', openSpy);
@@ -169,7 +171,49 @@ describe('RealFi Earn page', () => {
     });
   });
 
+  describe('before anything is staked', () => {
+    // Review finding: the start card replaced the whole dashboard, so points earned
+    // some other way, referral results, and the invite link were all unreachable
+    // until the user staked.
+    it('still shows points and referrals, but no empty activity card', () => {
+      const page = mountPage();
+      const text = page.text();
+      expect(text).toContain('realfi.start.title');
+      expect(text).toContain('realfi.points.label');
+      expect(text).toContain('realfi.referrals.label');
+      expect(text).not.toContain('realfi.activity.label');
+    });
+
+    it('shows a points balance held without a stake', () => {
+      state.points.value = { pointsBalance: 1240, potentialPoints: null, multiplier: null } as never;
+      state.hasPointsRecord.value = true;
+      expect(mountPage().text()).toContain('1,240');
+    });
+
+    it('lets a new user get an invite code before staking', async () => {
+      await button(mountPage(), 'realfi.referrals.get').trigger('click');
+      expect(state.requestReferralCode).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('referral codes', () => {
+    // Review finding: invited count and points earned were gated on the code, which
+    // is only fetched on tap — so they never showed on a normal page load.
+    it('shows referral totals without waiting for the code', () => {
+      withOrders([]);
+      state.referrals.value = { code: null, invitedCount: 3, rewardPoints: 40 };
+      const card = mountPage()
+        .findAll('.realfi-card')
+        .wrappers.find((c) => c.text().includes('realfi.referrals.label'));
+      expect(card, 'no referrals card').toBeDefined();
+      const text = card!.text();
+      expect(text).toContain('realfi.referrals.invited');
+      expect(text).toContain('3');
+      expect(text).toContain('40');
+      // ...with the code row still offering the tap, not a blank.
+      expect(text).toContain('realfi.referrals.get');
+    });
+
     it('fetches a code only when the user taps for it', async () => {
       withOrders([]);
       const page = mountPage();
