@@ -41,11 +41,18 @@ export class SigningCancelled extends Error {
   }
 }
 
-/** The wallet's shared signer reports its own dismissals by message. */
+/**
+ * Dismissals that reach us as plain errors, matched on the exact text their sources
+ * throw. Keep these in step with those sources; a mismatch turns "the user changed
+ * their mind" into a "signing failed" dialog.
+ */
 const DISMISSED = new Set([
+  // useNativeSwapSigner.cancelKeystone
   'Keystone signing cancelled',
-  'PassKey authentication cancelled',
-  'Spending password entry cancelled',
+  // webauthn-prf.ts evaluatePrfForWallet, on NotAllowedError/AbortError
+  'PassKey authentication was cancelled',
+  // PassKeyAuth.vue popup (side panel), relayed by PassKeyAuthButton
+  'User cancelled',
 ]);
 
 const REALFI_ASSET_IDS = Object.values(REALFI_ASSETS).flatMap((n) => [n.usdr, n.susdr]);

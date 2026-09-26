@@ -32,14 +32,20 @@ export function fromSmallestUnit(value: SmallestUnit | null | undefined): number
 }
 
 /**
- * Parse what a user typed ("12.5", "0.000001", "1,000") into smallest units.
+ * Parse what a user typed ("12.5", "0.000001") into smallest units.
  *
  * String arithmetic, never `Number`: "0.1" through a float is 99999.99… units, and an
  * order for one unit less than the user asked for is a bug they can see on-chain.
+ *
+ * A dot is the only decimal separator, and there are no thousands separators. A comma
+ * is refused rather than interpreted: "1,5" is one and a half to a German reader and
+ * fifteen with the comma dropped, and "1,500" means 1.5 or 1500 depending on who typed
+ * it. Guessing wrong orders the wrong amount, so the user is asked to retype instead.
+ *
  * Returns null for anything that is not a positive amount with at most 6 decimals.
  */
 export function toSmallestUnit(input: string): SmallestUnit | null {
-  const cleaned = input.trim().replace(/,/g, '');
+  const cleaned = input.trim();
   const match = /^(\d*)(?:\.(\d*))?$/.exec(cleaned);
   if (!match || cleaned === '' || cleaned === '.') return null;
   const whole = match[1] ?? '';

@@ -303,6 +303,7 @@ import { computed, defineAsyncComponent, onMounted, ref } from 'vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import { formatUsd, formatInt, formatSignedChange } from '@/shared/utils/format';
 import i18n from '@/plugins/i18n';
+import snackbar from '@/plugins/snackbar';
 import WalletStore from '@/stores/walletStore';
 import { Network } from '@/models/types';
 import { useRealFi } from './composables/useRealFi';
@@ -507,11 +508,17 @@ function onAmountConfirm(amount: SmallestUnit): void {
     void flow.value?.run({ kind: 'stake', amount });
   } else if (mode === 'unstake' && unlockSlot) {
     void flow.value?.run({ kind: 'unstake', amount, unlockSlot });
+  } else {
+    // A reload between opening the dialog and confirming took the cooldown slot away.
+    snackbar.setError(t('realfi.order.errors.buildFailed'));
   }
 }
 
 function claim(order: RealFiOrder | undefined): void {
-  if (!order?.resultTxHash || order.resultOutputIndex === undefined || !order.unlockSlot) return;
+  if (!order?.resultTxHash || order.resultOutputIndex === undefined || !order.unlockSlot) {
+    snackbar.setError(t('realfi.order.errors.buildFailed'));
+    return;
+  }
   void flow.value?.run({
     kind: 'claim',
     resultUtxo: { txHash: order.resultTxHash, index: order.resultOutputIndex },

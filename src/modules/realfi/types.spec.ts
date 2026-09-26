@@ -14,7 +14,6 @@ describe('toSmallestUnit', () => {
     ['0.1', '100000'],
     ['12.5', '12500000'],
     ['0.000001', '1'],
-    ['1,000.25', '1000250000'],
     ['.5', '500000'],
     ['7.', '7000000'],
     // Past 2^53 in smallest units: a Number would round the last digits away.
@@ -23,7 +22,9 @@ describe('toSmallestUnit', () => {
     expect(toSmallestUnit(input)).toBe(units);
   });
 
-  it.each(['', '.', '0', '0.000000', '-1', '1e6', 'abc', '1.0000001', '1.2.3'])(
+  // Commas are refused, never guessed at: '1,5' is 1.5 to a German reader and 15 with
+  // the comma dropped; '1,500' is 1.5 or 1500 depending on who typed it.
+  it.each(['', '.', '0', '0.000000', '-1', '1e6', 'abc', '1.0000001', '1.2.3', '1,5', '1,500', '1,000.25'])(
     'rejects %j',
     (input) => {
       expect(toSmallestUnit(input)).toBeNull();

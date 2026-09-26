@@ -38,6 +38,29 @@
       </v-card-text>
     </BaseDialog>
 
+    <!-- A Ledger that can do Bluetooth may still be plugged in: ask, never assume. -->
+    <BaseDialog
+      v-if="transportPromptVisible"
+      :isOpen="transportPromptVisible"
+      size="sm"
+      :min-height="0"
+      persistent
+      :title="$t('realfi.order.ledgerTransport')"
+      :subtitle="$t('miniGero.connectLedger')"
+      @close="onTransportCancel"
+    >
+      <v-card-text class="pt-4 px-0">
+        <div class="realfi-flow__actions">
+          <GButton tier="secondary" @click="onTransportChosen(true)">
+            {{ $t('governance.bluetooth') }}
+          </GButton>
+          <GButton tier="primary" @click="onTransportChosen(false)">
+            {{ $t('governance.usb') }}
+          </GButton>
+        </div>
+      </v-card-text>
+    </BaseDialog>
+
     <!-- Signing prompts: the same components and wiring the swap embed uses. -->
     <KeystoneSignDialog
       v-if="keystone.keystoneShow.value"
@@ -103,6 +126,7 @@ import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import { useNativeSwapSigner } from '@/modules/swap/composables/useNativeSwapSigner';
 import { walletStore } from '@/stores/walletStore';
+import { WalletType } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
 import i18n from '@/plugins/i18n';
 import { SigningCancelled, useRealFiOrder } from '../composables/useRealFiOrder';
@@ -196,16 +220,64 @@ function onPassKeyCancel(): void {
 
 /* ── The run ────────────────────────────────────────────────────────────────── */
 
-const { signer, keystone } = useNativeSwapSigner({
+/* ── Ledger transport ───────────────────────────────────────────────────────── */
+
+/**
+ * USB unless the user picks Bluetooth for this order. `btSupported` says the device
+ * CAN do Bluetooth, not that it is connected that way, so it only decides whether
+ * to ask — the same choice the Send and governance dialogs offer, defaulting to USB.
+ */
+const isBT = ref(false);
+const transportPromptVisible = ref(false);
+let transportResolve: (() => void) | null = null;
+let transportReject: ((e: Error) => void) | null = null;
+
+function chooseTransport(): Promise<void> {
+  transportPromptVisible.value = true;
+  return new Promise<void>((resolve, reject) => {
+    transportResolve = resolve;
+    transportReject = reject;
+  });
+}
+
+function onTransportChosen(bluetooth: boolean): void {
+  isBT.value = bluetooth;
+  transportPromptVisible.value = false;
+  transportResolve?.();
+  transportResolve = null;
+  transportReject = null;
+}
+
+function onTransportCancel(): void {
+  transportPromptVisible.value = false;
+  transportReject?.(new SigningCancelled());
+  transportResolve = null;
+  transportReject = null;
+}
+
+const { signer: sharedSigner, keystone } = useNativeSwapSigner({
   getPassword,
   getPrfBytes,
-  getIsBT: () => walletStore.loggedWallet?.btSupported ?? false,
+  getIsBT: () => isBT.value,
 });
+
+const signer = {
+  async signTx(unsignedTxCbor: string): Promise<string> {
+    const w = walletStore.loggedWallet;
+    isBT.value = false;
+    if (w?.type === WalletType.Ledger && w.btSupported) await chooseTransport();
+    return sharedSigner.signTx(unsignedTxCbor);
+  },
+};
 
 const { stage, kind, error, run: runOrder, reset } = useRealFiOrder(signer);
 
 const promptVisible = computed(
-  () => pwPromptVisible.value || prfPromptVisible.value || keystone.keystoneShow.value,
+  () =>
+    pwPromptVisible.value ||
+    prfPromptVisible.value ||
+    transportPromptVisible.value ||
+    keystone.keystoneShow.value,
 );
 
 const showProgress = computed(

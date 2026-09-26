@@ -20,11 +20,9 @@ import {
   EMPTY_POINTS,
   EMPTY_REFERRALS,
   fromSmallestUnit,
-  isCancellable,
   isClaimable,
   isFailed,
   isInReview,
-  isUnclaimed,
   needsAction,
   type RealFiOrder,
   type RealFiPoints,
@@ -112,13 +110,6 @@ export function useRealFi() {
     orders.value.filter((o) => isClaimable(o, currentSlot.value)),
   );
 
-  /** Executed unstakes still inside their cooldown. */
-  const coolingOrders = computed<RealFiOrder[]>(() =>
-    orders.value.filter((o) => isUnclaimed(o) && !isClaimable(o, currentSlot.value)),
-  );
-
-  /** Orders the owner can cancel for their funds back. */
-  const cancellableOrders = computed<RealFiOrder[]>(() => orders.value.filter(isCancellable));
 
   /** Orders the user must act on — the operator will not clear these by itself. */
   const actionableOrders = computed<RealFiOrder[]>(() => orders.value.filter(needsAction));
@@ -259,8 +250,6 @@ export function useRealFi() {
     canTransact,
     currentSlot,
     claimableOrders,
-    coolingOrders,
-    cancellableOrders,
     load,
     requestReferralCode,
   };

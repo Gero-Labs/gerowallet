@@ -80,14 +80,20 @@ describe('useRealFiOrder', () => {
     expect(send).not.toHaveBeenCalled();
   });
 
-  it("recognises the shared signer's own dismissals", async () => {
-    signTx.mockRejectedValue(new Error('PassKey authentication cancelled'));
-    const order = useRealFiOrder({ signTx });
+  // The exact texts their sources throw: webauthn-prf.ts, the side-panel PassKey
+  // popup, and the shared signer's Keystone cancel.
+  it.each(['PassKey authentication was cancelled', 'User cancelled', 'Keystone signing cancelled'])(
+    'treats %j as a dismissal',
+    async (message) => {
+      signTx.mockRejectedValue(new Error(message));
+      const order = useRealFiOrder({ signTx });
 
-    await order.run(STAKE);
+      await order.run(STAKE);
 
-    expect(order.stage.value).toBe('idle');
-  });
+      expect(order.stage.value).toBe('idle');
+      expect(order.error.value).toBeNull();
+    },
+  );
 
   it('says so when the password was wrong', async () => {
     signTx.mockRejectedValue(new Error('Invalid spending password'));
