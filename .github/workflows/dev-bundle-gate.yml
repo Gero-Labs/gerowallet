@@ -104,7 +104,7 @@ jobs:
         run: npx vitest run src/stores/tokenMetadataPersistence.spec.ts src/utils/storePersistence.spec.ts
 
       - name: Navigation loading regressions
-        run: npx vitest run src/modules/navigation/lazyPage.spec.ts src/modules/navigation/components/governanceNav.spec.ts
+        run: npx vitest run src/modules/navigation/lazyPage.spec.ts src/modules/navigation/components/governanceNav.spec.ts src/options/startup.spec.ts src/options/main.spec.ts
 
       # The bundle TDZ guard runs against a built artifact (in the workflow
       # named above), so a hole in its own logic passes silently — it already

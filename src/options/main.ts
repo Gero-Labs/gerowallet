@@ -20,11 +20,12 @@ import Notifications from '@voerro/vue-notifications';
 import featureFlagsStore from '@/stores/featureFlagsStore';
 import { walletStore as walletStoreState, hydrateWalletStore } from '@/stores/walletStore';
 import { activityTracker } from '@/services/activityTracker.service';
+import { waitForOptionsStartup } from './startup';
 
 function loadPersistedGero(): Promise<void> {
   return new Promise(resolve => {
     try {
-      chrome.storage.local.get('geroStore', ({ geroStore: saved }) => {
+      chrome.storage.local.get('geroStore', ({ geroStore: saved } = {}) => {
         if (chrome.runtime.lastError) {
           console.warn('Chrome storage error:', chrome.runtime.lastError.message);
           resolve();
@@ -38,6 +39,22 @@ function loadPersistedGero(): Promise<void> {
       resolve();
     }
   });
+}
+
+async function loadSavedLocale(): Promise<void> {
+  const initialLocale = i18n.locale;
+  const locale = await new Promise<string>((resolve, reject) => {
+    chrome.storage.local.get(['walletStore', 'geroStore'], (saved = {}) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error('Locale storage read failed'));
+        return;
+      }
+      resolve(saved.geroStore?.config?.locale || saved.walletStore?.config?.locale || 'us');
+    });
+  });
+  if (locale !== 'us') await loadLanguage(locale);
+  // A late startup read must not reverse a language change made after mount.
+  if (i18n.locale === initialLocale) i18n.locale = locale;
 }
 
 async function initializeFeatureFlags(): Promise<void> {
@@ -54,13 +71,14 @@ async function initializeFeatureFlags(): Promise<void> {
   }
 }
 
-// Hydrate BOTH stores from chrome.storage before mounting Vue. Without this,
-// the router's beforeEach runs with a null loggedWallet and redirects to
-// /welcome; the later async side-effect hydration in walletStore.ts completes
-// *after* the watcher is registered, but `$watch` only fires on changes from
-// that point forward, so the initial /welcome redirect is never corrected
-// when a wallet was actually logged in (e.g., via the side panel).
-Promise.all([loadPersistedGero(), hydrateWalletStore()]).then(() => {
+// Normally hydrate before navigation, but never leave the page blank for a
+// storage read that does not settle. Existing route guards still enforce login,
+// lock, and sync state; the watcher below reconciles a late hydration.
+void waitForOptionsStartup({
+  geroStore: loadPersistedGero,
+  walletStore: hydrateWalletStore,
+  locale: loadSavedLocale,
+}).then(() => {
   // Initialize feature flags in background (non-blocking)
   // This prevents delaying app startup if the flag service is slow/down
   initializeFeatureFlags().catch((error) => {
@@ -74,85 +92,74 @@ Promise.all([loadPersistedGero(), hydrateWalletStore()]).then(() => {
   Vue.directive('click-outside', ClickOutside);
   Vue.component('notifications', Notifications);
 
-  return new Promise<void>((resolve) => {
-    chrome.storage.local.get(['walletStore', 'geroStore'], async ({ walletStore: saved, geroStore }) => {
-      // Priority: geroStore.config.locale (global) -> walletStore.config.locale (wallet-specific) -> 'us'
-      const locale = geroStore?.config?.locale || saved?.config?.locale || 'us';
+  const app = new Vue({
+    vuetify,
+    i18n,
+    router,
+    render: h => h(App)
+  }).$mount('#app');
 
-      if (locale !== 'us') {
-        try {
-          // CRITICAL: Load language file BEFORE setting locale
-          await loadLanguage(locale);
-          i18n.locale = locale;
-        } catch (error) {
-          console.error('Failed to load language file:', locale, error);
-          i18n.locale = 'us'; // Fallback to English
-        }
+  // Initialize activity tracker based on wallet state
+  const checkAndStartActivityTracker = () => {
+    if (walletStoreState.loggedWallet && !walletStoreState.isLocked) {
+      activityTracker.start();
+    } else {
+      activityTracker.stop();
+    }
+  };
+
+  // Start/stop activity tracker based on wallet locked state
+  app.$watch(
+    () => [walletStoreState.loggedWallet, walletStoreState.isLocked],
+    () => {
+      checkAndStartActivityTracker();
+    },
+    { immediate: true }
+  );
+
+  // Redirect to welcome page when wallet is locked — except the two signing
+  // popups. passkey-auth runs the unlock ceremony itself and must stay on its
+  // route while locked. ledger-ble-sign must stay too: navigating it away
+  // leaves no beforeunload, so the side panel that opened it would wait out
+  // its full timeout instead of seeing a cancellation.
+  app.$watch(
+    () => walletStoreState.isLocked,
+    (isLocked) => {
+      if (isLocked
+        && router.currentRoute.path !== '/welcome'
+        && router.currentRoute.name !== 'passkey-auth'
+        && router.currentRoute.name !== 'ledger-ble-sign') {
+        router.push('/welcome');
       }
-      resolve();
-    });
-  }).then(() => {
-    const app = new Vue({
-      vuetify,
-      i18n,
-      router,
-      render: h => h(App)
-    }).$mount('#app');
+    }
+  );
 
-    // Initialize activity tracker based on wallet state
-    const checkAndStartActivityTracker = () => {
-      if (walletStoreState.loggedWallet && !walletStoreState.isLocked) {
-        activityTracker.start();
-      } else {
-        activityTracker.stop();
-      }
-    };
-
-    // Start/stop activity tracker based on wallet locked state
-    app.$watch(
-      () => [walletStoreState.loggedWallet, walletStoreState.isLocked],
-      () => {
-        checkAndStartActivityTracker();
-      },
-      { immediate: true }
-    );
-
-    // Redirect to welcome page when wallet is locked — except the two signing
-    // popups. passkey-auth runs the unlock ceremony itself and must stay on its
-    // route while locked. ledger-ble-sign must stay too: navigating it away
-    // leaves no beforeunload, so the side panel that opened it would wait out
-    // its full timeout instead of seeing a cancellation.
-    app.$watch(
-      () => walletStoreState.isLocked,
-      (isLocked) => {
-        if (isLocked
-          && router.currentRoute.path !== '/welcome'
-          && router.currentRoute.name !== 'passkey-auth'
-          && router.currentRoute.name !== 'ledger-ble-sign') {
-          router.push('/welcome');
-        }
-      }
-    );
-
-    // Redirect to dashboard when the wallet becomes fully "ready" (logged in,
-    // unlocked, and not syncing) from another context (e.g., side-panel
-    // login). Must watch all three flags — not just `loggedWallet` — because:
-    //   1. Login sets `isSyncing = true` *before* broadcasting the wallet.
-    //   2. When the wallet arrives, the router's beforeEach still sees
-    //      `isSyncing === true` and bounces the navigation back to /welcome.
-    //   3. A few seconds later sync completes and `isSyncing` flips to false —
-    //      if we only watch `loggedWallet`, nothing re-attempts the redirect
-    //      and the UI is stranded on /welcome.
-    app.$watch(
-      () => [walletStoreState.loggedWallet, walletStoreState.isLocked, walletStoreState.isSyncing] as const,
-      () => {
-        const ready = walletStoreState.loggedWallet
-          && !walletStoreState.isLocked
-          && !walletStoreState.isSyncing;
-        if (ready && router.currentRoute.path === '/welcome') {
-          router.push('/').catch(() => { /* swallow redundant-nav errors */ });
-        }
-      }
-    );
-  });
+  // Redirect to dashboard when the wallet becomes fully "ready" (logged in,
+  // unlocked, and not syncing) from another context (e.g., side-panel
+  // login). Must watch all three flags — not just `loggedWallet` — because:
+  //   1. Login sets `isSyncing = true` *before* broadcasting the wallet.
+  //   2. When the wallet arrives, the router's beforeEach still sees
+  //      `isSyncing === true` and bounces the navigation back to /welcome.
+  //   3. A few seconds later sync completes and `isSyncing` flips to false —
+  //      if we only watch `loggedWallet`, nothing re-attempts the redirect
+  //      and the UI is stranded on /welcome.
+  const reconcileReadyRoute = () => {
+    const ready = walletStoreState.loggedWallet
+      && !walletStoreState.isLocked
+      && !walletStoreState.isSyncing;
+    if (ready && router.currentRoute.path === '/welcome' && router.currentRoute.query.addWallet !== '1') {
+      const redirect = router.currentRoute.query.redirect;
+      const target = typeof redirect === 'string' && redirect.startsWith('/') && !redirect.startsWith('//')
+        ? redirect : '/';
+      // Go through the existing route guards again, including chain and
+      // feature gates, rather than displaying a protected view directly.
+      router.replace(target).catch(() => { /* swallow navigation failures */ });
+    }
+  };
+  app.$watch(
+    () => [walletStoreState.loggedWallet, walletStoreState.isLocked, walletStoreState.isSyncing] as const,
+    reconcileReadyRoute,
+    { immediate: true }
+  );
+  router.onReady(reconcileReadyRoute);
 });
