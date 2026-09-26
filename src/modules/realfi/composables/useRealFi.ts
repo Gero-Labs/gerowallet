@@ -11,16 +11,20 @@
 import { computed, ref } from 'vue';
 import WalletStore, { walletStore } from '@/stores/walletStore';
 import featureFlagsStore from '@/stores/featureFlagsStore';
+import NetworkStore from '@/stores/networkStore';
 import networks from '@/utils/networks';
 import { debugLog } from '@/utils/debug';
 import { resolveRealFiReadClient, type RealFiReadClient } from '../services/realfiClient';
-import { usdrAssetIdFor } from '../assets';
+import { susdrAssetIdFor, usdrAssetIdFor } from '../assets';
 import {
   EMPTY_POINTS,
-  REALFI_DECIMALS,
   EMPTY_REFERRALS,
+  fromSmallestUnit,
+  isCancellable,
+  isClaimable,
   isFailed,
   isInReview,
+  isUnclaimed,
   needsAction,
   type RealFiOrder,
   type RealFiPoints,
@@ -28,6 +32,7 @@ import {
   type RealFiProtocol,
   type RealFiReferrals,
   type RealFiUnavailableReason,
+  type SmallestUnit,
 } from '../types';
 
 export function useRealFi() {
@@ -56,25 +61,64 @@ export function useRealFi() {
   });
 
   /**
+   * In-wallet orders: the Earn gates plus the staking flag. Off, the page hands
+   * transacting to RealFi's own app exactly as before.
+   */
+  const canTransact = computed<boolean>(
+    () => isAvailable.value && featureFlagsStore.isRealFiStakingEnabled(),
+  );
+
+  /** A held token's quantity in smallest units, as the exact decimal string. */
+  function heldUnits(assetId: string | null): SmallestUnit {
+    if (!assetId) return '0';
+    const held = (walletStore.tokens as Record<string, { quantity?: unknown }>)[assetId];
+    const quantity = held?.quantity;
+    if (typeof quantity === 'bigint') return quantity.toString();
+    if (typeof quantity === 'string' && /^\d+$/.test(quantity)) return quantity;
+    if (typeof quantity === 'number' && Number.isSafeInteger(quantity) && quantity >= 0) {
+      return String(quantity);
+    }
+    return '0';
+  }
+
+  /**
    * USDrf sitting in the wallet, unstaked.
    *
    * Read straight off the wallet's token map rather than from RealFi: it is a plain
    * balance we already hold, and it is the difference between "you have nothing" and
    * "you have money one step away from earning". Decimals are RealFi's fixed 6 rather
    * than the token's metadata, so a registry lag can never misstate it by 1e6.
+   *
+   * RealFi's own asset id first; the known one if the protocol read failed, so one
+   * missing call cannot turn "you're ready to stake" into "go and get USDrf".
    */
-  const usdrBalance = computed<number>(() => {
-    // RealFi's own answer first; the known id if the protocol read failed, so one
-    // missing call cannot turn "you're ready to stake" into "go and get USDrf".
-    const assetId = protocol.value?.stablecoinAssetId ?? usdrAssetIdFor(wallet.value?.network);
-    if (!assetId) return 0;
-    const held = (walletStore.tokens as Record<string, { quantity?: unknown }>)[assetId];
-    if (!held) return 0;
-    const raw = Number(held.quantity ?? 0);
-    return Number.isFinite(raw) ? raw / 10 ** REALFI_DECIMALS : 0;
-  });
-
+  const usdrUnits = computed<SmallestUnit>(() =>
+    heldUnits(protocol.value?.stablecoinAssetId ?? usdrAssetIdFor(wallet.value?.network)),
+  );
+  const usdrBalance = computed<number>(() => fromSmallestUnit(usdrUnits.value));
   const hasUsdr = computed<boolean>(() => usdrBalance.value > 0);
+
+  /** sUSDrf in the wallet — what an unstake spends. */
+  const susdrUnits = computed<SmallestUnit>(() =>
+    heldUnits(susdrAssetIdFor(wallet.value?.network)),
+  );
+  const susdrBalance = computed<number>(() => fromSmallestUnit(susdrUnits.value));
+
+  /** The chain tip's slot, from Gero Sync. Null until the first tip arrives. */
+  const currentSlot = computed<number | null>(() => NetworkStore.getCurrentSlot());
+
+  /** Executed unstakes whose timelock has opened: ready to claim. */
+  const claimableOrders = computed<RealFiOrder[]>(() =>
+    orders.value.filter((o) => isClaimable(o, currentSlot.value)),
+  );
+
+  /** Executed unstakes still inside their cooldown. */
+  const coolingOrders = computed<RealFiOrder[]>(() =>
+    orders.value.filter((o) => isUnclaimed(o) && !isClaimable(o, currentSlot.value)),
+  );
+
+  /** Orders the owner can cancel for their funds back. */
+  const cancellableOrders = computed<RealFiOrder[]>(() => orders.value.filter(isCancellable));
 
   /** Orders the user must act on — the operator will not clear these by itself. */
   const actionableOrders = computed<RealFiOrder[]>(() => orders.value.filter(needsAction));
@@ -208,7 +252,15 @@ export function useRealFi() {
     hasPosition,
     hasPointsRecord,
     usdrBalance,
+    usdrUnits,
     hasUsdr,
+    susdrBalance,
+    susdrUnits,
+    canTransact,
+    currentSlot,
+    claimableOrders,
+    coolingOrders,
+    cancellableOrders,
     load,
     requestReferralCode,
   };

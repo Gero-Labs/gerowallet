@@ -32,6 +32,31 @@ export function fromSmallestUnit(value: SmallestUnit | null | undefined): number
 }
 
 /**
+ * Parse what a user typed ("12.5", "0.000001", "1,000") into smallest units.
+ *
+ * String arithmetic, never `Number`: "0.1" through a float is 99999.99… units, and an
+ * order for one unit less than the user asked for is a bug they can see on-chain.
+ * Returns null for anything that is not a positive amount with at most 6 decimals.
+ */
+export function toSmallestUnit(input: string): SmallestUnit | null {
+  const cleaned = input.trim().replace(/,/g, '');
+  const match = /^(\d*)(?:\.(\d*))?$/.exec(cleaned);
+  if (!match || cleaned === '' || cleaned === '.') return null;
+  const whole = match[1] ?? '';
+  const fraction = match[2] ?? '';
+  if (fraction.length > REALFI_DECIMALS) return null;
+  const units = `${whole}${fraction.padEnd(REALFI_DECIMALS, '0')}`.replace(/^0+/, '');
+  return units === '' ? null : units;
+}
+
+/** Compare two smallest-unit amounts without a lossy Number hop. */
+export function compareUnits(a: SmallestUnit, b: SmallestUnit): number {
+  const x = BigInt(a);
+  const y = BigInt(b);
+  return x === y ? 0 : x < y ? -1 : 1;
+}
+
+/**
  * A wallet's staked position — `api.getYieldBreakdown(address)`.
  *
  * `earned` is the SDK's `yield` field, renamed because `yield` is a reserved word in
@@ -114,6 +139,14 @@ export interface RealFiOrder {
   status: RealFiOrderStatus;
   /** Present on an Unstake once its released USDr has been claimed from the timelock. */
   claimTxHash?: string;
+  /**
+   * Unstake only: the slot its timelock opens at. The claim must be built with THIS
+   * value — a fresh one derives a different timelock address that holds nothing.
+   */
+  unlockSlot?: string;
+  /** The output an Executed order produced. For an Unstake, what the claim spends. */
+  resultTxHash?: string;
+  resultOutputIndex?: number;
 }
 
 /**
@@ -129,6 +162,38 @@ export const ORDER_STATUSES_NEEDING_ACTION: readonly RealFiOrderStatus[] = [
 
 export function needsAction(order: RealFiOrder): boolean {
   return ORDER_STATUSES_NEEDING_ACTION.includes(order.status);
+}
+
+/**
+ * Orders the owner can cancel to get their funds back: still waiting, or stranded.
+ *
+ * `Validating`, `HeldForScreening` and the failure statuses are deliberately absent —
+ * the operator is mid-flight on the first two, and a cancel is not a documented way out
+ * of the others.
+ */
+export function isCancellable(order: RealFiOrder): boolean {
+  return order.status === 'Open' || needsAction(order);
+}
+
+/** An executed unstake whose released USDr still sits in its timelock. */
+export function isUnclaimed(order: RealFiOrder): boolean {
+  return (
+    order.action === 'Unstake' &&
+    order.status === 'Executed' &&
+    !order.claimTxHash &&
+    !!order.resultTxHash &&
+    order.resultOutputIndex !== undefined &&
+    !!order.unlockSlot
+  );
+}
+
+/**
+ * Unclaimed AND its timelock has opened. The claim transaction is only valid from
+ * `unlockSlot` on, so offering it earlier would build something the chain rejects.
+ */
+export function isClaimable(order: RealFiOrder, currentSlot: number | null): boolean {
+  if (!isUnclaimed(order) || currentSlot === null) return false;
+  return BigInt(currentSlot) >= BigInt(order.unlockSlot as string);
 }
 
 /** Terminal statuses — no further settlement will happen. */
@@ -214,6 +279,8 @@ export interface RealFiProtocol {
   apyPercent: number | null;
   /** ISO date (yyyy-MM-dd) `apyPercent` was published. */
   apyAsOf: string | null;
+  /** The cooldown boundary an unstake placed now binds to. Null if RealFi gave none. */
+  nextCooldownSlot: string | null;
 }
 
 /**
