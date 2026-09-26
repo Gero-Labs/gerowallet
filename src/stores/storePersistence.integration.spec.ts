@@ -44,7 +44,7 @@ const env = vi.hoisted(() => {
 
 vi.mock('@/utils/storageSync', () => ({ getContextType: () => env.context }));
 vi.mock('@/chrome/storeMessagingBg', () => ({
-  default: { broadcastUpdate: (store: string, updates: Record<string, unknown>) => env.broadcasts.push({ store, updates }) },
+  default: { registerSnapshot: vi.fn(), broadcastUpdate: (store: string, updates: Record<string, unknown>) => env.broadcasts.push({ store, updates }) },
 }));
 vi.mock('@/services/storeMessaging.service', () => ({
   default: {

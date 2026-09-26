@@ -103,6 +103,9 @@ jobs:
       - name: Token metadata persistence regressions
         run: npx vitest run src/stores/tokenMetadataPersistence.spec.ts src/utils/storePersistence.spec.ts
 
+      - name: Wallet restart and store subscription regressions
+        run: npx vitest run src/chrome/storeMessagingBg.snapshot.spec.ts src/services/walletManager.login.spec.ts src/stores/storePersistence.integration.spec.ts
+
       - name: Navigation loading regressions
         run: npx vitest run src/modules/navigation/lazyPage.spec.ts src/modules/navigation/components/governanceNav.spec.ts src/options/startup.spec.ts src/options/main.spec.ts
 
