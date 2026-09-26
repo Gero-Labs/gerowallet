@@ -298,32 +298,46 @@ describe('RealFi Earn page, right after an order is sent', () => {
     );
   });
 
-  it('checks quietly until the order is listed, then clears the notice', async () => {
+  it('re-checks the order list every 15 s until RealFi lists it, then clears the row', async () => {
     const page = await placeOrder('tx-new');
 
-    await vi.advanceTimersByTimeAsync(5000);
-    expect(state.load).toHaveBeenLastCalledWith({ quiet: true });
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(state.load).toHaveBeenLastCalledWith({ quiet: true, ordersOnly: true });
     expect(pendingRow(page).exists()).toBe(true);
 
-    orders.value = [order({ txHash: 'tx-new', status: 'Open' })];
-    await vi.advanceTimersByTimeAsync(5000);
+    orders.value = [order({ txHash: 'tx-new', status: 'Validating' })];
     await page.vm.$nextTick();
 
     expect(pendingRow(page).exists()).toBe(false);
     const calls = state.load.mock.calls.length;
-    await vi.advanceTimersByTimeAsync(30000);
+    await vi.advanceTimersByTimeAsync(60_000);
     expect(state.load.mock.calls.length).toBe(calls);
   });
 
-  it('stops waiting after two minutes', async () => {
+  it('keeps waiting past two minutes, when RealFi can still be indexing', async () => {
+    // Preprod took longer than two minutes to list an unstake. Giving up then made
+    // the page look as if nothing had been sent.
+    withPosition([]);
+    const page = await placeOrder('tx-slow');
+
+    await vi.advanceTimersByTimeAsync(3 * 60_000);
+    await page.vm.$nextTick();
+
+    expect(pendingRow(page).exists()).toBe(true);
+    // The wallet's balance has caught up by now, so new orders are offered again.
+    expect(page.findAll('button').wrappers.map((b) => b.text())).toContain('receive.tabStake');
+  });
+
+  it('gives up after 30 minutes: something else is wrong by then', async () => {
     const page = await placeOrder('tx-never-indexed');
 
-    await vi.advanceTimersByTimeAsync(24 * 5000);
+    await vi.advanceTimersByTimeAsync(31 * 60_000);
     await page.vm.$nextTick();
 
     expect(pendingRow(page).exists()).toBe(false);
-    // The immediate reload plus 24 quiet checks, then nothing more.
-    expect(state.load).toHaveBeenCalledTimes(25);
+    const calls = state.load.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(state.load.mock.calls.length).toBe(calls);
   });
 
   it("on a first stake, shows the order pending in Activity: no 'ready to earn', no empty position", async () => {
@@ -354,22 +368,45 @@ describe('RealFi Earn page, right after an order is sent', () => {
     expect(labels).not.toContain('dashboard.claim');
   });
 
-  it('a check still in flight for an older order cannot strand a newer one', async () => {
-    // The review's sequence: order A's quiet check is in flight when B is placed.
+  it('keeps a row per order in flight, each until RealFi lists it', async () => {
+    // Includes the earlier review's sequence: A's check is in flight when B is sent.
     let finishA: () => void = () => {};
     const page = await placeOrder('tx-A');
     state.load.mockImplementationOnce(() => new Promise<void>((r) => (finishA = r)));
-    await vi.advanceTimersByTimeAsync(5000); // A's check starts and hangs
+    await vi.advanceTimersByTimeAsync(15_000); // A's check starts and hangs
 
     page.findComponent({ name: 'RealFiOrderFlow' }).vm.$emit('placed', 'tx-B', 'claim');
-    finishA(); // A's check lands after B took over
+    finishA();
     await vi.advanceTimersByTimeAsync(0);
+    expect(page.findAll('.realfi-order--pending')).toHaveLength(2);
 
     orders.value = [order({ txHash: 'tx-B', status: 'Open' })];
-    await vi.advanceTimersByTimeAsync(5000);
     await page.vm.$nextTick();
+    expect(page.findAll('.realfi-order--pending')).toHaveLength(1);
+    expect(pendingRow(page).text()).toContain('tx-A');
 
+    orders.value = [order({ txHash: 'tx-B', status: 'Open' }), order({ txHash: 'tx-A' })];
+    await page.vm.$nextTick();
     expect(pendingRow(page).exists()).toBe(false);
+  });
+
+  it('survives a refresh: an order sent earlier is still shown as pending', async () => {
+    const txId = 'e78bc07cd1d99e2ef6b8607beedf02956c5271b890f7816f6f66e3fc2adb7f86';
+    const address = 'addr_test1qqmzx7n75w7wnj4cgt5wql2qn2k';
+    (wallet as Record<string, unknown>).baseAddress = address;
+    localStorage.setItem(
+      `realfi.pendingOrders:Preprod:${address}`,
+      JSON.stringify([{ txId, kind: 'unstake', at: Date.now() - 90_000 }]),
+    );
+    try {
+      const page = await mountPage();
+
+      expect(pendingRow(page).exists()).toBe(true);
+      expect(pendingRow(page).text()).toContain('realfi.actions.unstake');
+    } finally {
+      delete (wallet as Record<string, unknown>).baseAddress;
+      localStorage.clear();
+    }
   });
 
   it('words a pending claim or cancel like the row it will become', async () => {

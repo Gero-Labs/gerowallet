@@ -149,12 +149,23 @@ export function useRealFi() {
    * @param options.quiet A background refresh (the page polling for an order it just
    *   placed): no loading state, so nothing flickers, and a failed refresh leaves the
    *   page as it was rather than replacing it with an error.
+   * @param options.ordersOnly With `quiet`: re-read the order list alone. The page polls
+   *   it while an order it sent is not listed yet, and the other four reads have no
+   *   reason to repeat every few seconds.
    */
-  async function load(options: { quiet?: boolean } = {}): Promise<void> {
+  async function load(options: { quiet?: boolean; ordersOnly?: boolean } = {}): Promise<void> {
     const quiet = options.quiet === true;
     const w = wallet.value;
     if (!w?.baseAddress) {
       unavailableReason.value = 'unsupported-network';
+      return;
+    }
+    if (quiet && options.ordersOnly && activeClient && activeAddress === w.baseAddress) {
+      try {
+        orders.value = await activeClient.getOrders(activeAddress);
+      } catch (error) {
+        debugLog('[RealFi] order re-check failed; keeping what is shown', error);
+      }
       return;
     }
     if (!isAvailable.value) {

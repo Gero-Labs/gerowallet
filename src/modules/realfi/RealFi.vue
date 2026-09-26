@@ -43,7 +43,7 @@
         <template v-else>
           <!-- Nothing staked and no activity. Rendering the hero here would show "$0.00"
                with no explanation, and at launch that is every user's first look. -->
-          <section v-if="isEmpty && !pendingTxId" class="realfi-start">
+          <section v-if="isEmpty && !pendingOrders.length" class="realfi-start">
             <span class="realfi-glyph realfi-glyph--lg" aria-hidden="true"></span>
             <!-- Holding USDrf but nothing staked is a DIFFERENT state from holding
                  nothing: telling someone with 9,994 USDrf to "get USDrf" is noise. -->
@@ -54,7 +54,7 @@
               </p>
               <template v-if="canTransact">
                 <GButton
-                  v-if="!pendingTxId"
+                  v-if="!ordersLocked"
                   tier="primary"
                   class="mt-4"
                   @click="openAmount('stake')"
@@ -112,7 +112,7 @@
             </p>
             <p v-if="apyLabel" class="t-caption realfi-hero__apy">{{ apyLabel }}</p>
             <div
-              v-if="canTransact && !pendingTxId && (hasUsdr || canUnstake)"
+              v-if="canTransact && !ordersLocked && (hasUsdr || canUnstake)"
               class="realfi-hero__actions"
             >
               <GButton v-if="hasUsdr" tier="primary" compact @click="openAmount('stake')">
@@ -126,7 +126,7 @@
 
           <!-- Released USDrf waiting in its timelock: the user's money, one tap away. -->
           <section
-            v-if="canTransact && !pendingTxId && claimableOrders.length"
+            v-if="canTransact && !ordersLocked && claimableOrders.length"
             class="realfi-notice"
           >
             <div class="realfi-notice__text">
@@ -157,7 +157,7 @@
                  orders the banner hands off to RealFi instead. -->
             <template v-if="canTransact">
               <GButton
-                v-if="!pendingTxId"
+                v-if="!ordersLocked"
                 tier="secondary"
                 compact
                 @click="cancelOrders(actionableOrders)"
@@ -254,18 +254,21 @@
 
             <!-- Activity — once there is some, or an order is on its way; the start card
                  covers "none yet". -->
-            <section v-if="!isEmpty || pendingTxId" class="realfi-card">
+            <section v-if="!isEmpty || pendingOrders.length" class="realfi-card">
               <div class="realfi-card__head">
                 <span class="t-label">{{ $t('realfi.activity.label') }}</span>
               </div>
-              <ul v-if="orders.length || pendingTxId" class="realfi-orders">
-                <!-- An order on chain that RealFi has not indexed yet, shown the way the
-                     home screen shows an unconfirmed transaction. Without it the page
-                     would re-offer the USDrf just sent, inviting a second order. -->
-                <li v-if="pendingTxId" class="realfi-order realfi-order--pending">
+              <ul v-if="orders.length || pendingOrders.length" class="realfi-orders">
+                <!-- Orders sent that RealFi has not listed yet, shown the way the home
+                     screen shows an unconfirmed transaction. They survive a refresh. -->
+                <li
+                  v-for="pending in pendingOrders"
+                  :key="pending.txId"
+                  class="realfi-order realfi-order--pending"
+                >
                   <span class="realfi-order__what">
                     <span class="realfi-order__label">
-                      <span class="t-body-sm">{{ pendingLabel }}</span>
+                      <span class="t-body-sm">{{ pendingLabel(pending.kind) }}</span>
                       <v-progress-circular
                         indeterminate
                         :size="12"
@@ -276,8 +279,8 @@
                         :title="$t('dashboard.transactionPendingConfirmation')"
                       />
                     </span>
-                    <span class="t-caption g-mono realfi-order__tx" :title="pendingTxId">
-                      {{ shortTx(pendingTxId) }}
+                    <span class="t-caption g-mono realfi-order__tx" :title="pending.txId">
+                      {{ shortTx(pending.txId) }}
                     </span>
                   </span>
                   <span class="realfi-order__side">
@@ -303,7 +306,7 @@
                     </span>
                   </span>
                   <span class="realfi-order__side">
-                    <template v-if="canTransact && !pendingTxId">
+                    <template v-if="canTransact && !ordersLocked">
                       <GButton
                         v-if="isRowClaimable(order)"
                         tier="primary"
@@ -355,7 +358,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import { formatUsd, formatInt, formatSignedChange } from '@/shared/utils/format';
 import i18n from '@/plugins/i18n';
@@ -364,6 +367,12 @@ import WalletStore from '@/stores/walletStore';
 import { Network } from '@/models/types';
 import { useRealFi } from './composables/useRealFi';
 import type { RealFiBuildRequest, RealFiOrderKind } from './services/realfiOrders';
+import {
+  PENDING_MAX_AGE_MS,
+  readPendingOrders,
+  savePendingOrders,
+  type PendingOrder,
+} from './pendingOrders';
 import {
   fromSmallestUnit,
   isCancellable,
@@ -570,18 +579,40 @@ function onAmountConfirm(amount: SmallestUnit): void {
   }
 }
 
-/* ── The order just sent ───────────────────────────────────────────────────── */
+/* ── Orders sent, not listed yet ── */
 
 /**
- * The tx id of an order that is on chain but not yet in RealFi's list.
+ * Orders on chain that RealFi has not listed yet, newest first.
  *
- * RealFi indexes asynchronously, so a reload right after submitting still shows the
- * page as it was: the start card offering to stake the very USDrf just sent. Until
- * the order appears, Activity shows it as pending and the page offers no new order
- * of ANY kind, so one pending order is tracked at a time.
+ * RealFi indexes asynchronously, and on preprod that has run past two minutes. Each
+ * one shows in Activity as pending until it is listed, is kept across a refresh (see
+ * `pendingOrders.ts`), and is re-checked on one timer, so several can be in flight.
  */
-const pendingTxId = ref<string | null>(null);
-const pendingKind = ref<RealFiOrderKind | null>(null);
+const pendingOrders = ref<PendingOrder[]>([]);
+/** Advanced on each re-check; drives the order lock below. */
+const now = ref(Date.now());
+
+/**
+ * Nexus caches a wallet's orders for 15 s, so checking any faster would only read the
+ * same answer again.
+ */
+const PENDING_POLL_MS = 15_000;
+/**
+ * New orders wait this long after one is sent: until then the wallet's own balance
+ * may still show the funds just spent, and would offer them again.
+ */
+const ORDER_LOCK_MS = 120_000;
+let pendingTimer: ReturnType<typeof setTimeout> | null = null;
+
+const ordersLocked = computed(() =>
+  pendingOrders.value.some((p) => now.value - p.at < ORDER_LOCK_MS),
+);
+
+/** Where this wallet's pending orders are kept; null when there is no address to key on. */
+function pendingStore(): { network: string; address: string } | null {
+  const w = WalletStore.state.loggedWallet;
+  return w?.network && w.baseAddress ? { network: w.network, address: w.baseAddress } : null;
+}
 
 /** Worded like the settled row it will become, as the home screen does for a send. */
 const PENDING_LABEL_KEYS: Record<RealFiOrderKind, string> = {
@@ -591,13 +622,9 @@ const PENDING_LABEL_KEYS: Record<RealFiOrderKind, string> = {
   cancel: 'realfi.statuses.canceled',
 };
 
-const pendingLabel = computed(() =>
-  pendingKind.value ? t(PENDING_LABEL_KEYS[pendingKind.value]) : '',
-);
-const PENDING_POLL_MS = 5000;
-/** Two minutes. Past that, stop waiting; the next manual refresh will show it. */
-const PENDING_MAX_POLLS = 24;
-let pendingTimer: ReturnType<typeof setTimeout> | null = null;
+function pendingLabel(kind: RealFiOrderKind): string {
+  return t(PENDING_LABEL_KEYS[kind]);
+}
 
 function clearPendingTimer(): void {
   if (pendingTimer) clearTimeout(pendingTimer);
@@ -611,29 +638,54 @@ function hasLanded(txId: string): boolean {
   );
 }
 
-function pollForPlaced(txId: string, remaining: number): void {
-  // A newer order took over: this chain is stale and must not touch the shared
-  // timer, or it would cancel the newer chain's check and strand its pending row.
-  if (pendingTxId.value !== txId) return;
+/** Drop what RealFi now lists or what has aged out, and keep storage in step. */
+function settlePending(): void {
+  now.value = Date.now();
+  const still = pendingOrders.value.filter(
+    (p) => !hasLanded(p.txId) && now.value - p.at < PENDING_MAX_AGE_MS,
+  );
+  if (still.length !== pendingOrders.value.length) pendingOrders.value = still;
+  if (!still.length) clearPendingTimer();
+  const where = pendingStore();
+  if (where) savePendingOrders(where.network, where.address, still);
+}
+
+/** One timer for every pending order: re-read the order list, settle, go again. */
+function schedulePendingCheck(): void {
   clearPendingTimer();
-  if (remaining <= 0 || hasLanded(txId)) {
-    pendingTxId.value = null;
-    pendingKind.value = null;
-    return;
-  }
+  if (!pendingOrders.value.length) return;
   pendingTimer = setTimeout(async () => {
-    await load({ quiet: true });
-    pollForPlaced(txId, remaining - 1);
+    await load({ quiet: true, ordersOnly: true });
+    settlePending();
+    schedulePendingCheck();
   }, PENDING_POLL_MS);
 }
 
 function onPlaced(txId: string, kind: RealFiOrderKind): void {
-  pendingTxId.value = txId;
-  pendingKind.value = kind;
+  now.value = Date.now();
+  pendingOrders.value = [
+    { txId, kind, at: now.value },
+    ...pendingOrders.value.filter((p) => p.txId !== txId),
+  ];
+  settlePending();
   void load();
-  pollForPlaced(txId, PENDING_MAX_POLLS);
+  schedulePendingCheck();
 }
 
+/** Orders sent on an earlier visit that RealFi had not listed when the page closed. */
+function restorePending(): void {
+  const where = pendingStore();
+  if (!where) return;
+  pendingOrders.value = readPendingOrders(where.network, where.address);
+  schedulePendingCheck();
+}
+
+// Any fresh order list (the page's own loads included) may list a pending order.
+watch(orders, () => {
+  if (pendingOrders.value.length) settlePending();
+});
+
+onMounted(restorePending);
 onBeforeUnmount(clearPendingTimer);
 
 function claim(order: RealFiOrder | undefined): void {
