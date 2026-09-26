@@ -52,7 +52,10 @@
               <p class="t-body realfi-start__body">
                 {{ $t('realfi.start.readyBody', { amount: usdrLabel }) }}
               </p>
-              <GButton tier="primary" class="mt-4" @click="openRealFiApp()">
+              <GButton v-if="canTransact" tier="primary" class="mt-4" @click="openAmount('stake')">
+                {{ $t('realfi.start.stakeCta') }}
+              </GButton>
+              <GButton v-else tier="primary" class="mt-4" @click="openRealFiApp()">
                 {{ $t('realfi.start.readyCta') }}
               </GButton>
             </template>
@@ -64,7 +67,9 @@
               </GButton>
             </template>
             <p v-if="apyLabel" class="t-caption realfi-start__note">{{ apyLabel }}</p>
-            <p class="t-caption realfi-start__note">{{ $t('realfi.start.note') }}</p>
+            <p v-if="!canTransact" class="t-caption realfi-start__note">
+              {{ $t('realfi.start.note') }}
+            </p>
           </section>
 
           <template v-else>
@@ -90,6 +95,27 @@
               </span>
             </div>
             <p v-if="apyLabel" class="t-caption realfi-hero__apy">{{ apyLabel }}</p>
+            <div v-if="canTransact && (hasUsdr || canUnstake)" class="realfi-hero__actions">
+              <GButton v-if="hasUsdr" tier="primary" compact @click="openAmount('stake')">
+                {{ $t('receive.tabStake') }}
+              </GButton>
+              <GButton v-if="canUnstake" tier="secondary" compact @click="openAmount('unstake')">
+                {{ $t('staking.unstake') }}
+              </GButton>
+            </div>
+          </section>
+
+          <!-- Released USDrf waiting in its timelock: the user's money, one tap away. -->
+          <section v-if="canTransact && claimableOrders.length" class="realfi-notice">
+            <div class="realfi-notice__text">
+              <p class="t-body-lg mb-1">{{ $t('realfi.claim.title') }}</p>
+              <p class="t-body-sm realfi-notice__body">
+                {{ $tc('realfi.claim.body', claimableOrders.length) }}
+              </p>
+            </div>
+            <GButton tier="primary" compact @click="claim(claimableOrders[0])">
+              {{ $t('dashboard.claim') }}
+            </GButton>
           </section>
 
           <!-- Anything needing the user's attention comes before anything decorative -->
@@ -97,13 +123,25 @@
             <div class="realfi-notice__text">
               <p class="t-body-lg mb-1">{{ $t('realfi.attention.title') }}</p>
               <p class="t-body-sm realfi-notice__body">
-                {{ $tc('realfi.attention.body', actionableOrders.length) }}
+                {{
+                  $tc(
+                    canTransact ? 'realfi.attention.bodyInWallet' : 'realfi.attention.body',
+                    actionableOrders.length,
+                  )
+                }}
               </p>
             </div>
-            <!-- Cancelling needs a transaction, which Gero cannot build yet — so the
-                 banner hands off to RealFi rather than asking for something the page
-                 cannot do. -->
-            <GButton tier="secondary" compact @click="openRealFiApp()">
+            <!-- One transaction cancels every stranded order. Without in-wallet
+                 orders the banner hands off to RealFi instead. -->
+            <GButton
+              v-if="canTransact"
+              tier="secondary"
+              compact
+              @click="cancelOrders(actionableOrders)"
+            >
+              {{ $tc('realfi.attention.cancelCta', actionableOrders.length) }}
+            </GButton>
+            <GButton v-else tier="secondary" compact @click="openRealFiApp()">
               {{ $t('realfi.attention.cta') }}
             </GButton>
           </section>
@@ -208,8 +246,31 @@
                       {{ shortTx(order.txHash) }}
                     </span>
                   </span>
-                  <span :class="['realfi-pill', pillClass(order.status)]">
-                    {{ statusLabel(order.status) }}
+                  <span class="realfi-order__side">
+                    <template v-if="canTransact">
+                      <GButton
+                        v-if="isRowClaimable(order)"
+                        tier="primary"
+                        compact
+                        @click="claim(order)"
+                      >
+                        {{ $t('dashboard.claim') }}
+                      </GButton>
+                      <GButton
+                        v-else-if="isRowCancellable(order)"
+                        tier="tertiary"
+                        compact
+                        @click="cancelOrders([order])"
+                      >
+                        {{ $t('realfi.cancel.cta') }}
+                      </GButton>
+                      <span v-else-if="claimableFrom(order)" class="t-caption">
+                        {{ $t('realfi.claim.from', { date: claimableFrom(order) }) }}
+                      </span>
+                    </template>
+                    <span :class="['realfi-pill', pillClass(order.status)]">
+                      {{ statusLabel(order.status) }}
+                    </span>
                   </span>
                 </li>
               </ul>
@@ -219,26 +280,52 @@
 
           <p v-if="isTestnet" class="t-caption realfi-foot">{{ $t('realfi.preview') }}</p>
         </template>
+
+        <template v-if="canTransact">
+          <RealFiAmountDialog
+            v-if="amountMode"
+            :isOpen="!!amountMode"
+            :mode="amountMode"
+            :balanceUnits="amountMode === 'stake' ? usdrUnits : susdrUnits"
+            :unlockDate="unlockDateLabel"
+            @close="amountMode = null"
+            @confirm="onAmountConfirm"
+          />
+          <RealFiOrderFlow ref="flow" @placed="load()" @support="openRealFiSupport()" />
+        </template>
       </v-col>
     </v-row>
   </v-layout>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
+import { computed, defineAsyncComponent, onMounted, ref } from 'vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import { formatUsd, formatInt, formatSignedChange } from '@/shared/utils/format';
 import i18n from '@/plugins/i18n';
+import snackbar from '@/plugins/snackbar';
 import WalletStore from '@/stores/walletStore';
 import { Network } from '@/models/types';
 import { useRealFi } from './composables/useRealFi';
+import type { RealFiBuildRequest } from './services/realfiOrders';
 import {
   fromSmallestUnit,
+  isCancellable,
+  isClaimable,
+  isUnclaimed,
   ORDER_STATUSES_FAILED,
   ORDER_STATUSES_NEEDING_ACTION,
+  type RealFiOrder,
   type RealFiOrderAction,
   type RealFiOrderStatus,
+  type SmallestUnit,
 } from './types';
+
+// Loaded only when in-wallet orders are on: they pull in every wallet type's signer.
+const RealFiAmountDialog = defineAsyncComponent(
+  () => import('./components/RealFiAmountDialog.vue'),
+);
+const RealFiOrderFlow = defineAsyncComponent(() => import('./components/RealFiOrderFlow.vue'));
 
 const {
   isLoading,
@@ -258,6 +345,12 @@ const {
   isRequestingCode,
   load,
   requestReferralCode,
+  canTransact,
+  usdrUnits,
+  susdrUnits,
+  susdrBalance,
+  currentSlot,
+  claimableOrders,
 } = useRealFi();
 
 const t = (key: string, values?: Record<string, unknown>) => i18n.t(key, values) as string;
@@ -268,8 +361,8 @@ const isTestnet = computed(() => WalletStore.state.loggedWallet?.network !== Net
 
 /**
  * RealFi's own app for the wallet's network. Constants, never built from remote data,
- * so window.open has no injection surface. Transacting happens there until staking
- * from Gero lands.
+ * so window.open has no injection surface. Transacting happens there whenever Gero
+ * does not place the order itself: the staking flag is off, or there is no USDrf yet.
  */
 const realFiAppUrl = computed(() =>
   isTestnet.value ? 'https://preprod.realfi.co' : 'https://app.realfi.co',
@@ -382,6 +475,80 @@ function pillClass(status: RealFiOrderStatus): string {
   return 'realfi-pill--wait';
 }
 
+/* ── In-wallet orders ── */
+
+/** An unstake binds to the protocol's next cooldown boundary; without it, none can be built. */
+const canUnstake = computed(() => susdrBalance.value > 0 && !!protocol.value?.nextCooldownSlot);
+
+const amountMode = ref<'stake' | 'unstake' | null>(null);
+const flow = ref<{ run(req: RealFiBuildRequest): Promise<void> } | null>(null);
+
+function openAmount(mode: 'stake' | 'unstake'): void {
+  amountMode.value = mode;
+}
+
+/**
+ * When a slot arrives, as a local date and time. Post-Shelley a slot is one second
+ * on both mainnet and preprod, so the distance from the tip is the wait.
+ */
+function slotToDate(slot: string | null | undefined): string {
+  const tip = currentSlot.value;
+  if (!slot || tip === null) return '';
+  const at = new Date(Date.now() + (Number(slot) - tip) * 1000);
+  return at.toLocaleString(i18n.locale, { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+const unlockDateLabel = computed(() => slotToDate(protocol.value?.nextCooldownSlot));
+
+function onAmountConfirm(amount: SmallestUnit): void {
+  const mode = amountMode.value;
+  amountMode.value = null;
+  const unlockSlot = protocol.value?.nextCooldownSlot;
+  if (mode === 'stake') {
+    void flow.value?.run({ kind: 'stake', amount });
+  } else if (mode === 'unstake' && unlockSlot) {
+    void flow.value?.run({ kind: 'unstake', amount, unlockSlot });
+  } else {
+    // A reload between opening the dialog and confirming took the cooldown slot away.
+    snackbar.setError(t('realfi.order.errors.buildFailed'));
+  }
+}
+
+function claim(order: RealFiOrder | undefined): void {
+  if (!order?.resultTxHash || order.resultOutputIndex === undefined || !order.unlockSlot) {
+    snackbar.setError(t('realfi.order.errors.buildFailed'));
+    return;
+  }
+  void flow.value?.run({
+    kind: 'claim',
+    resultUtxo: { txHash: order.resultTxHash, index: order.resultOutputIndex },
+    unlockSlot: order.unlockSlot,
+  });
+}
+
+function cancelOrders(list: RealFiOrder[]): void {
+  if (!list.length) return;
+  void flow.value?.run({
+    kind: 'cancel',
+    orderInputs: list.map((o) => ({ txHash: o.txHash, index: o.outputIndex })),
+  });
+}
+
+function isRowClaimable(order: RealFiOrder): boolean {
+  return isClaimable(order, currentSlot.value);
+}
+
+function isRowCancellable(order: RealFiOrder): boolean {
+  return isCancellable(order);
+}
+
+/** For an unstake still in its cooldown: when it can be claimed. Empty otherwise. */
+function claimableFrom(order: RealFiOrder): string {
+  return isUnclaimed(order) && !isClaimable(order, currentSlot.value)
+    ? slotToDate(order.unlockSlot)
+    : '';
+}
+
 /* ── Unavailable copy ─────────────────────────────────────────────────────── */
 
 const unavailableTitle = computed(() =>
@@ -462,6 +629,13 @@ onMounted(load);
 
 .realfi-hero__apy {
   margin: var(--g-s-3) 0 0;
+}
+
+.realfi-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--g-s-2);
+  margin-top: var(--g-s-4);
 }
 
 .realfi-hero__meta {
@@ -590,6 +764,13 @@ onMounted(load);
   display: flex;
   flex-direction: column;
   min-width: 0;
+}
+
+.realfi-order__side {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--g-s-2);
 }
 
 .realfi-order__tx {

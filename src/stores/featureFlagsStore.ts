@@ -37,6 +37,10 @@ export interface FeatureFlags {
   // `networks.resolveRealFiSupport` currently returns true for Cardano preprod only —
   // so both must pass before the route or the nav item appears.
   isRealFiEnabled: boolean;
+  // Staking, unstaking, claiming and cancelling from inside Gero (orders built by
+  // Nexus, signed here). Default OFF: without it the Earn page hands transacting to
+  // RealFi's own app. Only meaningful with `isRealFiEnabled` on.
+  isRealFiStakingEnabled: boolean;
   isNexusWithdrawalEnabled: boolean;
   isNexusUnstakeEnabled: boolean;
   isNexusDelegateEnabled: boolean;
@@ -110,6 +114,7 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
     isGovernanceEnabled: false,
     isGovernanceVotingEnabled: false,
     isRealFiEnabled: false,
+    isRealFiStakingEnabled: false,
     isNexusWithdrawalEnabled: false,
     isNexusUnstakeEnabled: false,
     isNexusDelegateEnabled: false,
@@ -183,6 +188,7 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isGovernanceEnabled = featureFlagService.getFlag('isGovernanceEnabled', false);
     featureFlagsState.flags.isGovernanceVotingEnabled = featureFlagService.getFlag('isGovernanceVotingEnabled', false);
     featureFlagsState.flags.isRealFiEnabled = featureFlagService.getFlag('isRealFiEnabled', false);
+    featureFlagsState.flags.isRealFiStakingEnabled = featureFlagService.getFlag('isRealFiStakingEnabled', false);
     featureFlagsState.flags.isNexusWithdrawalEnabled = featureFlagService.getFlag('isNexusWithdrawalEnabled', false);
     featureFlagsState.flags.isNexusUnstakeEnabled = featureFlagService.getFlag('isNexusUnstakeEnabled', false);
     featureFlagsState.flags.isNexusDelegateEnabled = featureFlagService.getFlag('isNexusDelegateEnabled', false);
@@ -241,6 +247,9 @@ export const featureFlagsStore = {
     });
     featureFlagService.onFlagChange('isRealFiEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isRealFiEnabled', newValue);
+    });
+    featureFlagService.onFlagChange('isRealFiStakingEnabled', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'isRealFiStakingEnabled', newValue);
     });
     featureFlagService.onFlagChange('isNexusWithdrawalEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isNexusWithdrawalEnabled', newValue);
@@ -385,6 +394,11 @@ export const featureFlagsStore = {
    */
   isRealFiEnabled(): boolean {
     return featureFlagsState.flags.isRealFiEnabled;
+  },
+
+  /** In-wallet RealFi orders. Callers AND it with `isRealFiEnabled`. */
+  isRealFiStakingEnabled(): boolean {
+    return featureFlagsState.flags.isRealFiStakingEnabled;
   },
 
   /**
@@ -535,6 +549,7 @@ export const featureFlagsStore = {
       isGovernanceEnabled: false,
       isGovernanceVotingEnabled: false,
       isRealFiEnabled: false,
+      isRealFiStakingEnabled: false,
       isNexusWithdrawalEnabled: false,
       isNexusUnstakeEnabled: false,
       isNexusDelegateEnabled: false,

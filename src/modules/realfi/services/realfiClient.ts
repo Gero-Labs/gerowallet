@@ -7,8 +7,7 @@
  * protocol read for everybody, and means the extension build needs no credential for
  * RealFi's private npm package.
  *
- * Read-only. Order building (stake, unstake, claim, cancel) is not wired yet; until it
- * is, the Earn page hands the user to RealFi's own app to transact.
+ * Reads only. Order building (stake, unstake, claim, cancel) lives in `realfiOrders.ts`.
  */
 
 import axios, { type AxiosInstance } from 'axios';
@@ -93,6 +92,11 @@ function toStringOrNull(value: unknown): string | null {
   return typeof value === 'string' && value.trim() !== '' ? value : null;
 }
 
+function toSlot(value: unknown): string | null {
+  const s = typeof value === 'number' && Number.isSafeInteger(value) ? String(value) : value;
+  return typeof s === 'string' && /^\d+$/.test(s) ? s : null;
+}
+
 /**
  * Narrow an unrecognised status to `Validating` rather than dropping the order.
  *
@@ -164,6 +168,16 @@ export function toOrders(raw: unknown): RealFiOrder[] {
     };
     const claimTxHash = toStringOrNull(get(o, 'claimTxHash'));
     if (claimTxHash) order.claimTxHash = claimTxHash;
+    // Slots are 64-bit and stay strings; anything that is not all digits is dropped
+    // rather than guessed at, because a wrong unlockSlot builds an unclaimable claim.
+    const unlockSlot = toSlot(get(o, 'unlockSlot'));
+    if (unlockSlot) order.unlockSlot = unlockSlot;
+    const resultTxHash = toStringOrNull(get(o, 'resultTxHash'));
+    const resultOutputIndex = toNumberOrNull(get(o, 'resultOutputIndex'));
+    if (resultTxHash && resultOutputIndex !== null) {
+      order.resultTxHash = resultTxHash;
+      order.resultOutputIndex = resultOutputIndex;
+    }
     return [order];
   });
 }
@@ -185,6 +199,7 @@ export function toProtocol(raw: unknown): RealFiProtocol | null {
     apyPercent,
     // A rate without its date is worse than no rate: drop both unless both are there.
     apyAsOf: apyPercent === null ? null : toStringOrNull(get(r, 'apyAsOf')),
+    nextCooldownSlot: toSlot(get(r, 'nextCooldownSlot')),
   };
 }
 
