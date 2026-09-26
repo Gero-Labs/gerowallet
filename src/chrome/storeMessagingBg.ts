@@ -6,6 +6,7 @@
 
 import { getContextType } from '@/utils/storageSync';
 import { debugLog } from '@/utils/debug';
+import { isOwnExtensionPageSender } from '@/chrome/senderTrust';
 
 type StoreUpdateMessage = {
   type: 'STORE_UPDATE';
@@ -43,6 +44,13 @@ class BackgroundStoreMessaging {
   private connectedPorts = new Set<chrome.runtime.Port>();
   private storeSubscriptions = new Map<string, Set<chrome.runtime.Port>>();
   private updateSeq = 0;
+  private snapshots = new Map<string, { read: () => Record<string, unknown>; ready: Promise<unknown> }>();
+
+  /** Register a live snapshot; subscribers must not depend on an earlier broadcast. */
+  public registerSnapshot(storeName: string, read: () => Record<string, unknown>, ready: Promise<unknown>): void {
+    this.snapshots.set(storeName, { read, ready });
+    this.storeSubscriptions.get(storeName)?.forEach(port => this.sendSnapshot(storeName, port));
+  }
 
   constructor() {
     this.initialize();
@@ -63,7 +71,7 @@ class BackgroundStoreMessaging {
 
     // Listen for incoming connections
     chrome.runtime.onConnect.addListener((port) => {
-      if (port.name === 'store-sync') {
+      if (port.name === 'store-sync' && isOwnExtensionPageSender(port.sender, chrome.runtime.id)) {
         this.handleNewConnection(port);
       }
     });
@@ -113,6 +121,21 @@ class BackgroundStoreMessaging {
       this.storeSubscriptions.set(storeName, new Set());
     }
     this.storeSubscriptions.get(storeName)!.add(port);
+    this.sendSnapshot(storeName, port);
+  }
+
+  private sendSnapshot(storeName: string, port: chrome.runtime.Port): void {
+    const snapshot = this.snapshots.get(storeName);
+    if (snapshot) {
+      void snapshot.ready.then(() => {
+        if (!this.connectedPorts.has(port)) return;
+        // Read after readiness, immediately before sending. A state change during
+        // hydration is therefore included, rather than overwritten by an old copy.
+        for (const message of this.buildMessages(storeName, snapshot.read(), Date.now())) {
+          port.postMessage(message);
+        }
+      }).catch(() => console.warn(`Failed to send ${storeName} startup snapshot`));
+    }
   }
 
   /**

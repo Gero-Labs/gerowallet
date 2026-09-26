@@ -253,6 +253,11 @@ if (context === 'background') {
   // their writes back rather than replace it with the store's defaults. The worker owns
   // the data, so it also moves a record in the old format out of chrome.storage.
   hydration = persister.hydrate({ migrate: true }).then(() => undefined);
+  backgroundStoreMessaging.registerSnapshot(
+    STORE_NAME,
+    () => JSON.parse(JSON.stringify(walletStore, serializeValue)),
+    hydration,
+  );
 }
 
 // Promise-based storage hydration for backward compatibility. One read per context:
@@ -544,6 +549,7 @@ export default {
     const clearedState: Partial<WalletStore> = {
       loggedWallet: null,
       isLocked: false,  // Reset locked state on logout
+      isSyncing: false,
       account: null,
       transactions: [],
       contacts: {},
