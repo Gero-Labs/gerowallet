@@ -85,6 +85,9 @@ export class WalletManager {
   private walletBg: WalletBg | null = null;
   private currentWalletId: number | null = null;
   private pendingSyncPromise: Promise<void> | null = null;
+  // A library click can race the worker's automatic login after a restart.
+  // Join that wallet's existing initialization instead of starting it twice.
+  private readonly pendingLogins = new Map<number, Promise<WalletBg | null>>();
   // Cross-device signing bridge handles (null unless the feature flag is on).
   private crossDevice: ReturnType<typeof bootstrapCrossDeviceSigning> = null;
   // Per-wallet remote-signing settings (trust list + policy), loaded on login.
@@ -225,6 +228,22 @@ export class WalletManager {
    * @returns WalletBg instance or null if failed
    */
   async login(wallet): Promise<WalletBg | null> {
+    const pending = this.pendingLogins.get(wallet.id);
+    if (pending) return pending;
+    const operation = this.loginWallet(wallet);
+    this.pendingLogins.set(wallet.id, operation);
+    try {
+      return await operation;
+    } finally {
+      this.pendingLogins.delete(wallet.id);
+    }
+  }
+
+  private async loginWallet(wallet): Promise<WalletBg | null> {
+    // Do not raise transient flags for a wallet that is already initialized.
+    // An in-flight initialization is joined by login() before reaching here.
+    if (this.walletBg && this.currentWalletId === wallet.id) return this.walletBg;
+
     debugLog('WalletManager: Starting login process');
     // Set syncing flag BEFORE setLoggedWallet — prevents router from navigating to dashboard
     WalletStore.setSyncing(true);
@@ -369,6 +388,8 @@ export class WalletManager {
       await this.logout();
       throw error;
     } finally {
+      WalletStore.setSyncing(false);
+      LoadingState.setRestoring(false);
       LoadingState.setLoading(false);
     }
   }
