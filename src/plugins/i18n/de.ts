@@ -4653,6 +4653,8 @@ export default {
   'realfi.claim.body': 'Ein Unstaking hat seine Wartezeit beendet. Beanspruche es, um die USDrf in deine Wallet zu holen. | {n} Unstakings haben ihre Wartezeit beendet. Beanspruche sie, um die USDrf in deine Wallet zu holen.',
   'realfi.claim.from': 'Beanspruchbar ab {date}',
   'realfi.cancel.cta': 'Abbrechen',
+  'realfi.pending.title': 'Order gesendet',
+  'realfi.pending.body': 'Sie erscheint hier, sobald RealFi sie übernimmt.',
 
   // Midnight DUST-Registrierung
   'midnight.registerForDust': 'Für DUST-Generierung registrieren',

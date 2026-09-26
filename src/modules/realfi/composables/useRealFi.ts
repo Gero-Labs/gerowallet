@@ -144,7 +144,13 @@ export function useRealFi() {
     protocol.value = null;
   }
 
-  async function load(): Promise<void> {
+  /**
+   * @param options.quiet A background refresh (the page polling for an order it just
+   *   placed): no loading state, so nothing flickers, and a failed refresh leaves the
+   *   page as it was rather than replacing it with an error.
+   */
+  async function load(options: { quiet?: boolean } = {}): Promise<void> {
+    const quiet = options.quiet === true;
     const w = wallet.value;
     if (!w?.baseAddress) {
       unavailableReason.value = 'unsupported-network';
@@ -156,7 +162,7 @@ export function useRealFi() {
       return;
     }
 
-    isLoading.value = true;
+    if (!quiet) isLoading.value = true;
     try {
       const resolved = await resolveRealFiReadClient(w.network);
       if (resolved.status === 'unavailable') {
@@ -199,12 +205,12 @@ export function useRealFi() {
       // The indexer behind these reads can briefly lag the chain. A failed read means
       // "unknown", never "gone" — so a partial failure leaves whatever we already have
       // on screen rather than replacing it with an error.
-      unavailableReason.value = allFailed ? 'request-failed' : null;
+      if (!quiet || !allFailed) unavailableReason.value = allFailed ? 'request-failed' : null;
     } catch (error) {
       debugLog('[RealFi] failed to load account state', error);
-      unavailableReason.value = 'request-failed';
+      if (!quiet) unavailableReason.value = 'request-failed';
     } finally {
-      isLoading.value = false;
+      if (!quiet) isLoading.value = false;
     }
   }
 
