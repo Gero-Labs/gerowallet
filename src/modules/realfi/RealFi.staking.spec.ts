@@ -277,11 +277,14 @@ describe('RealFi Earn page, right after an order is sent', () => {
     vi.useRealTimers();
   });
 
-  async function placeOrder(txId: string) {
+  /** The Activity row for the order on its way, shown like an unconfirmed home-screen tx. */
+  const pendingRow = (page: Page) => page.find('.realfi-order--pending');
+
+  async function placeOrder(txId: string, kind = 'stake') {
     const page = await mountPage();
     state.load.mockClear(); // count only what follows the order, not the page's own first load
     vi.useFakeTimers();
-    page.findComponent({ name: 'RealFiOrderFlow' }).vm.$emit('placed', txId, 'stake');
+    page.findComponent({ name: 'RealFiOrderFlow' }).vm.$emit('placed', txId, kind);
     await page.vm.$nextTick();
     return page;
   }
@@ -289,7 +292,7 @@ describe('RealFi Earn page, right after an order is sent', () => {
   it('says the order was sent and offers no second one while RealFi catches up', async () => {
     const page = await placeOrder('tx-new');
 
-    expect(page.text()).toContain('realfi.pending.title');
+    expect(pendingRow(page).exists()).toBe(true);
     expect(page.findAll('button').wrappers.map((b) => b.text())).not.toContain(
       'realfi.start.stakeCta',
     );
@@ -300,13 +303,13 @@ describe('RealFi Earn page, right after an order is sent', () => {
 
     await vi.advanceTimersByTimeAsync(5000);
     expect(state.load).toHaveBeenLastCalledWith({ quiet: true });
-    expect(page.text()).toContain('realfi.pending.title');
+    expect(pendingRow(page).exists()).toBe(true);
 
     orders.value = [order({ txHash: 'tx-new', status: 'Open' })];
     await vi.advanceTimersByTimeAsync(5000);
     await page.vm.$nextTick();
 
-    expect(page.text()).not.toContain('realfi.pending.title');
+    expect(pendingRow(page).exists()).toBe(false);
     const calls = state.load.mock.calls.length;
     await vi.advanceTimersByTimeAsync(30000);
     expect(state.load.mock.calls.length).toBe(calls);
@@ -318,15 +321,17 @@ describe('RealFi Earn page, right after an order is sent', () => {
     await vi.advanceTimersByTimeAsync(24 * 5000);
     await page.vm.$nextTick();
 
-    expect(page.text()).not.toContain('realfi.pending.title');
+    expect(pendingRow(page).exists()).toBe(false);
     // The immediate reload plus 24 quiet checks, then nothing more.
     expect(state.load).toHaveBeenCalledTimes(25);
   });
 
-  it("on a first stake, shows only the notice: no 'ready to earn', no empty position", async () => {
+  it("on a first stake, shows the order pending in Activity: no 'ready to earn', no empty position", async () => {
     const page = await placeOrder('tx-first');
 
-    expect(page.text()).toContain('realfi.pending.title');
+    expect(pendingRow(page).exists()).toBe(true);
+    expect(pendingRow(page).text()).toContain('realfi.actions.stake');
+    expect(pendingRow(page).text()).toContain('common.pending');
     expect(page.text()).not.toContain('realfi.start.readyTitle');
     expect(page.text()).not.toContain('realfi.position.label');
   });
@@ -364,6 +369,16 @@ describe('RealFi Earn page, right after an order is sent', () => {
     await vi.advanceTimersByTimeAsync(5000);
     await page.vm.$nextTick();
 
-    expect(page.text()).not.toContain('realfi.pending.title');
+    expect(pendingRow(page).exists()).toBe(false);
+  });
+
+  it('words a pending claim or cancel like the row it will become', async () => {
+    withPosition([]);
+    const claimPage = await placeOrder('tx-claim', 'claim');
+    expect(pendingRow(claimPage).text()).toContain('realfi.activity.claimed');
+    vi.useRealTimers();
+
+    const cancelPage = await placeOrder('tx-cancel', 'cancel');
+    expect(pendingRow(cancelPage).text()).toContain('realfi.statuses.canceled');
   });
 });

@@ -16,6 +16,7 @@ import networks from '@/utils/networks';
 import { debugLog } from '@/utils/debug';
 import { resolveRealFiReadClient, type RealFiReadClient } from '../services/realfiClient';
 import { susdrAssetIdFor, usdrAssetIdFor } from '../assets';
+import { hasReferralOptIn, rememberReferralOptIn } from '../referralOptIn';
 import {
   EMPTY_POINTS,
   EMPTY_REFERRALS,
@@ -183,7 +184,8 @@ export function useRealFi() {
         await Promise.allSettled([
           client.getPosition(address),
           client.getPoints(address),
-          client.getReferrals(address),
+          // Only once the user has asked for a code: reading one mints it.
+          client.getReferrals(address, hasReferralOptIn(w.network, address)),
           client.getOrders(address),
           client.getProtocol(),
         ]);
@@ -226,6 +228,8 @@ export function useRealFi() {
     isRequestingCode.value = true;
     try {
       referrals.value = await activeClient.getReferrals(activeAddress, true);
+      const network = wallet.value?.network;
+      if (referrals.value.code && network) rememberReferralOptIn(network, activeAddress);
     } catch (error) {
       debugLog('[RealFi] failed to fetch referral code', error);
     } finally {
