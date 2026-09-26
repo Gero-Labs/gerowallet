@@ -396,6 +396,11 @@ const items = computed((): NavigationItemUnion[] => {
     { title: t('navigation.transactions'), icon: 'mdi-swap-horizontal', link: '/transactions', enabled: networks.resolveTransactionsSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && (loggedWallet.value?.chain === Blockchain.MIDNIGHT ? midnightTransactions.value.length > 0 : transactions.value.length > 0), notificationDot: hasNewFeaturesInPath(['transactions']) },
     { title: t('navigation.midnightProofServer'), icon: 'mdi-server-security', link: '/proof-server', enabled: isMidnight.value },
     { title: t('navigation.staking'), icon: assts.coinsStacked, link: '/staking', enabled: isStakingEnabled },
+    // RealFi Earn — a yield product, so it sits beside Staking in Financial Hub.
+    // Mirrors the router's `realfi` guard exactly (network support AND the master
+    // flag). Keep the two in step: an item visible here that the guard redirects
+    // away from is worse than no item at all.
+    { title: t('navigation.realfi'), icon: 'mdi-sprout-outline', link: '/realfi', enabled: networks.resolveRealFiSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && featureFlagsStore.isRealFiEnabled(), new: true },
     {
       title: t('navigation.geroCard'),
       icon: assts.cardIcon,
@@ -479,10 +484,6 @@ const items = computed((): NavigationItemUnion[] => {
     { title: t('navigation.mediaPlayer'), icon: assts.mediaPlayer, link: '/media-player', enabled: loggedWallet.value?.chain !== Blockchain.BITCOIN && loggedWallet.value?.chain !== Blockchain.APEX_VECTOR && (musicPlaylist.value?.length ?? 0) > 0 },
     { header: t('navigation.developers'), enabled: true },
     { title: t('navigation.poolOperator'), icon: 'mdi-server-network', link: '/pool-operator', enabled: networks.resolveStakingSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && featureFlagsStore.isPoolOperatorEnabled(), new: true },
-    // RealFi Earn — mirrors the router's `realfi` guard exactly (network support AND
-    // the master flag). Keep the two in step: an item visible here that the guard
-    // redirects away from is worse than no item at all.
-    { title: t('navigation.realfi'), icon: 'mdi-sprout-outline', link: '/realfi', enabled: networks.resolveRealFiSupport(loggedWallet.value?.chain, loggedWallet.value?.network) && featureFlagsStore.isRealFiEnabled(), new: true },
     // Nexus infra product spotlight: colored brand logo + animated gradient border.
     { title: t('navigation.nexus'), icon: assts.nexusLogo, link: '/nexus', enabled: true, special: true },
     // Uncomment to add more items:
