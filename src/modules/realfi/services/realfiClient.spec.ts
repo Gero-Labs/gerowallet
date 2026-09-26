@@ -97,6 +97,17 @@ describe('RealFi read client', () => {
       expect(orders[2]?.action).toBe('DirectMint');
     });
 
+    it('keeps order amounts and the released USDr as exact strings, dropping junk', () => {
+      const [unstake, junk] = toOrders([
+        { txHash: 'aa', outputIndex: 0, action: 'Unstake', status: 'Executed', amount: '5000000000', resultAmount: '5168241487' },
+        { txHash: 'bb', outputIndex: 0, action: 'Stake', status: 'Open', amount: '1e9', resultAmount: -5 },
+      ]);
+
+      expect(unstake).toMatchObject({ amount: '5000000000', resultAmount: '5168241487' });
+      expect(junk!.amount).toBeUndefined();
+      expect(junk!.resultAmount).toBeUndefined();
+    });
+
     it('shows an unknown status as still working rather than dropping the order', () => {
       const [order] = toOrders([{ txHash: 'aa', outputIndex: 0, action: 'Stake', status: 'Brand-new' }]);
       expect(order?.status).toBe('Validating');

@@ -101,6 +101,15 @@
                 <b class="realfi-strong g-num">{{ principalLabel }}</b>
               </span>
             </div>
+            <!-- Unstaked but not yet claimed: the USDrf sits in RealFi's cooldown, not
+                 in the wallet and not in the position. Said here, or it looks gone. -->
+            <p
+              v-for="line in unstakingLines"
+              :key="line.key"
+              class="t-body-sm realfi-hero__unstaking"
+            >
+              {{ line.text }}
+            </p>
             <p v-if="apyLabel" class="t-caption realfi-hero__apy">{{ apyLabel }}</p>
             <div
               v-if="canTransact && !pendingTxId && (hasUsdr || canUnstake)"
@@ -281,7 +290,12 @@
                   class="realfi-order"
                 >
                   <span class="realfi-order__what">
-                    <span class="t-body-sm">{{ actionLabel(order.action) }}</span>
+                    <span class="t-body-sm">
+                      {{ actionLabel(order.action) }}
+                      <span v-if="orderAmountLabel(order)" class="g-num realfi-strong">
+                        {{ orderAmountLabel(order) }}
+                      </span>
+                    </span>
                     <!-- The id RealFi support asks for, and what a failed order's
                          notice tells the user to send them. -->
                     <span class="t-caption g-mono realfi-order__tx" :title="order.txHash">
@@ -650,6 +664,43 @@ function isRowCancellable(order: RealFiOrder): boolean {
   return isCancellable(order);
 }
 
+/** A smallest-unit amount as "5,168.24 USDrf". Tokens track the dollar, so cents. */
+function unitsLabel(units: SmallestUnit, ticker: string): string {
+  return `${formatUsd(fromSmallestUnit(units), { symbol: false })} ${ticker}`;
+}
+
+/** What an order put in, in its own token. Only the two actions Gero places. */
+function orderAmountLabel(order: RealFiOrder): string {
+  if (!order.amount) return '';
+  if (order.action === 'Stake') return unitsLabel(order.amount, 'USDrf');
+  if (order.action === 'Unstake') return unitsLabel(order.amount, 'sUSDrf');
+  return '';
+}
+
+/**
+ * One line per unstake whose USDrf has not been claimed yet: how much, and when it
+ * can be. Nexus reads the exact USDrf from the timelock; until it can, the sUSDrf
+ * sent in is the honest fallback.
+ */
+const unstakingLines = computed(() =>
+  orders.value.filter(isUnclaimed).map((order) => {
+    const amount = order.resultAmount
+      ? unitsLabel(order.resultAmount, 'USDrf')
+      : unitsLabel(order.amount ?? '0', 'sUSDrf');
+    const key = `${order.txHash}#${order.outputIndex}`;
+    if (isClaimable(order, currentSlot.value)) {
+      return { key, text: t('realfi.position.readyToClaim', { amount }) };
+    }
+    const date = slotToDate(order.unlockSlot);
+    return {
+      key,
+      text: date
+        ? t('realfi.position.unstaking', { amount, date })
+        : t('realfi.position.unstakingNoDate', { amount }),
+    };
+  }),
+);
+
 /** For an unstake still in its cooldown: when it can be claimed. Empty otherwise. */
 function claimableFrom(order: RealFiOrder): string {
   return isUnclaimed(order) && !isClaimable(order, currentSlot.value)
@@ -733,6 +784,11 @@ onMounted(load);
 
 .realfi-hero__value {
   margin: var(--g-s-3) 0 var(--g-s-2);
+}
+
+.realfi-hero__unstaking {
+  margin: var(--g-s-2) 0 0;
+  color: var(--g-text-2);
 }
 
 .realfi-hero__apy {

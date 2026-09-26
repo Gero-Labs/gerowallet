@@ -153,6 +153,13 @@ export interface RealFiOrder {
   /** The output an Executed order produced. For an Unstake, what the claim spends. */
   resultTxHash?: string;
   resultOutputIndex?: number;
+  /** What the order put in: USDr for a Stake, sUSDr for an Unstake. */
+  amount?: SmallestUnit;
+  /**
+   * Executed, unclaimed Unstake only: the USDr waiting in its timelock, read from chain
+   * by Nexus. Absent when Nexus could not read it; fall back to `amount` in sUSDr.
+   */
+  resultAmount?: SmallestUnit;
 }
 
 /**

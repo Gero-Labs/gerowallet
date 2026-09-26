@@ -382,3 +382,68 @@ describe('RealFi Earn page, right after an order is sent', () => {
     expect(pendingRow(cancelPage).text()).toContain('realfi.statuses.canceled');
   });
 });
+
+describe('RealFi Earn page, where unstaked money is', () => {
+  const COOLING = {
+    action: 'Unstake' as const,
+    status: 'Executed' as const,
+    amount: '5000000000',
+    unlockSlot: '9000',
+    resultTxHash: TX,
+    resultOutputIndex: 0,
+  };
+
+  beforeEach(() => {
+    currentSlot.value = 2000;
+    state.hasUsdr.value = false;
+    state.actionableOrders.value = [];
+  });
+
+  async function heroCalls(list: RealFiOrder[]) {
+    const i18n = (await import('@/plugins/i18n')).default as unknown as {
+      t: (k: string, v?: unknown) => string;
+    };
+    const spy = vi.spyOn(i18n, 't');
+    withPosition(list);
+    const page = await mountPage();
+    const calls = spy.mock.calls.filter(([k]) => String(k).startsWith('realfi.position.'));
+    spy.mockRestore();
+    return { page, calls };
+  }
+
+  it('says how much USDrf is cooling down and when it can be claimed', async () => {
+    const { calls } = await heroCalls([order({ ...COOLING, resultAmount: '5168241487' })]);
+
+    expect(calls).toContainEqual([
+      'realfi.position.unstaking',
+      { amount: '5,168.24 USDrf', date: expect.any(String) },
+    ]);
+  });
+
+  it('falls back to the sUSDrf sent in when the released USDrf is not known yet', async () => {
+    const { calls } = await heroCalls([order(COOLING)]);
+
+    expect(calls).toContainEqual([
+      'realfi.position.unstaking',
+      { amount: '5,000.00 sUSDrf', date: expect.any(String) },
+    ]);
+  });
+
+  it('says it is ready once the cooldown has passed', async () => {
+    currentSlot.value = 9000;
+    const { calls } = await heroCalls([order({ ...COOLING, resultAmount: '5168241487' })]);
+
+    expect(calls).toContainEqual(['realfi.position.readyToClaim', { amount: '5,168.24 USDrf' }]);
+  });
+
+  it('puts the amount on each Activity row, in the token the order put in', async () => {
+    const { page } = await heroCalls([
+      order({ ...COOLING, resultAmount: '5168241487' }),
+      order({ action: 'Stake', status: 'Executed', amount: '9994980280' }),
+    ]);
+
+    const rows = page.findAll('.realfi-order').wrappers.map((r) => r.text());
+    expect(rows[0]).toContain('5,000.00 sUSDrf');
+    expect(rows[1]).toContain('9,994.98 USDrf');
+  });
+});

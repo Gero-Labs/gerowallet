@@ -92,7 +92,8 @@ function toStringOrNull(value: unknown): string | null {
   return typeof value === 'string' && value.trim() !== '' ? value : null;
 }
 
-function toSlot(value: unknown): string | null {
+/** A non-negative 64-bit number (slot, smallest-unit amount) kept as its digit string. */
+function toDigits(value: unknown): string | null {
   const s = typeof value === 'number' && Number.isSafeInteger(value) ? String(value) : value;
   return typeof s === 'string' && /^\d+$/.test(s) ? s : null;
 }
@@ -170,7 +171,7 @@ export function toOrders(raw: unknown): RealFiOrder[] {
     if (claimTxHash) order.claimTxHash = claimTxHash;
     // Slots are 64-bit and stay strings; anything that is not all digits is dropped
     // rather than guessed at, because a wrong unlockSlot builds an unclaimable claim.
-    const unlockSlot = toSlot(get(o, 'unlockSlot'));
+    const unlockSlot = toDigits(get(o, 'unlockSlot'));
     if (unlockSlot) order.unlockSlot = unlockSlot;
     const resultTxHash = toStringOrNull(get(o, 'resultTxHash'));
     const resultOutputIndex = toNumberOrNull(get(o, 'resultOutputIndex'));
@@ -178,6 +179,10 @@ export function toOrders(raw: unknown): RealFiOrder[] {
       order.resultTxHash = resultTxHash;
       order.resultOutputIndex = resultOutputIndex;
     }
+    const amount = toDigits(get(o, 'amount'));
+    if (amount) order.amount = amount;
+    const resultAmount = toDigits(get(o, 'resultAmount'));
+    if (resultAmount) order.resultAmount = resultAmount;
     return [order];
   });
 }
@@ -199,7 +204,7 @@ export function toProtocol(raw: unknown): RealFiProtocol | null {
     apyPercent,
     // A rate without its date is worse than no rate: drop both unless both are there.
     apyAsOf: apyPercent === null ? null : toStringOrNull(get(r, 'apyAsOf')),
-    nextCooldownSlot: toSlot(get(r, 'nextCooldownSlot')),
+    nextCooldownSlot: toDigits(get(r, 'nextCooldownSlot')),
   };
 }
 
