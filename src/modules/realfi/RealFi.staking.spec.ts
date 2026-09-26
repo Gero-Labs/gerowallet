@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue';
 import { mount } from '@vue/test-utils';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { isClaimable } from './types';
 import type { RealFiOrder } from './types';
 
@@ -261,5 +261,65 @@ describe('RealFi Earn page, in-wallet orders', () => {
     page.findComponent({ name: 'RealFiOrderFlow' }).vm.$emit('placed', 'tx', 'stake');
 
     expect(state.load).toHaveBeenCalled();
+  });
+});
+
+describe('RealFi Earn page, right after an order is sent', () => {
+  beforeEach(() => {
+    state.load.mockReset();
+    state.position.value = null;
+    state.hasPosition.value = false;
+    state.hasUsdr.value = true;
+    state.actionableOrders.value = [];
+    orders.value = [];
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function placeOrder(txId: string) {
+    const page = await mountPage();
+    state.load.mockClear(); // count only what follows the order, not the page's own first load
+    vi.useFakeTimers();
+    page.findComponent({ name: 'RealFiOrderFlow' }).vm.$emit('placed', txId, 'stake');
+    await page.vm.$nextTick();
+    return page;
+  }
+
+  it('says the order was sent and offers no second one while RealFi catches up', async () => {
+    const page = await placeOrder('tx-new');
+
+    expect(page.text()).toContain('realfi.pending.title');
+    expect(page.findAll('button').wrappers.map((b) => b.text())).not.toContain(
+      'realfi.start.stakeCta',
+    );
+  });
+
+  it('checks quietly until the order is listed, then clears the notice', async () => {
+    const page = await placeOrder('tx-new');
+
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(state.load).toHaveBeenLastCalledWith({ quiet: true });
+    expect(page.text()).toContain('realfi.pending.title');
+
+    orders.value = [order({ txHash: 'tx-new', status: 'Open' })];
+    await vi.advanceTimersByTimeAsync(5000);
+    await page.vm.$nextTick();
+
+    expect(page.text()).not.toContain('realfi.pending.title');
+    const calls = state.load.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(state.load.mock.calls.length).toBe(calls);
+  });
+
+  it('stops waiting after two minutes', async () => {
+    const page = await placeOrder('tx-never-indexed');
+
+    await vi.advanceTimersByTimeAsync(24 * 5000);
+    await page.vm.$nextTick();
+
+    expect(page.text()).not.toContain('realfi.pending.title');
+    // The immediate reload plus 24 quiet checks, then nothing more.
+    expect(state.load).toHaveBeenCalledTimes(25);
   });
 });

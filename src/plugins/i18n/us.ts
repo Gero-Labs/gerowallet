@@ -4758,6 +4758,8 @@ export default {
   'realfi.claim.body': 'An unstake has finished its cooldown. Claim it to move the USDrf to your wallet. | {n} unstakes have finished their cooldown. Claim them to move the USDrf to your wallet.',
   'realfi.claim.from': 'Claimable {date}',
   'realfi.cancel.cta': 'Cancel',
+  'realfi.pending.title': 'Order sent',
+  'realfi.pending.body': 'It will show here once RealFi picks it up.',
 
   // Midnight DUST registration. The flow combines a Cardano CIP-30 mapping
   // tx (signed via Gero's Cardano wallet or the official portal) with the

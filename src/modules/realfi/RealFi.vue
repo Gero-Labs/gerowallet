@@ -41,6 +41,15 @@
         </div>
 
         <template v-else>
+          <!-- An order just went on chain but RealFi has not indexed it yet. Without
+               this the page would re-offer the same USDrf, inviting a second order. -->
+          <section v-if="pendingTxId" class="realfi-notice">
+            <div class="realfi-notice__text">
+              <p class="t-body-lg mb-1">{{ $t('realfi.pending.title') }}</p>
+              <p class="t-body-sm realfi-notice__body">{{ $t('realfi.pending.body') }}</p>
+            </div>
+          </section>
+
           <!-- Nothing staked and no activity. Rendering the hero here would show "$0.00"
                with no explanation, and at launch that is every user's first look. -->
           <section v-if="isEmpty" class="realfi-start">
@@ -52,9 +61,16 @@
               <p class="t-body realfi-start__body">
                 {{ $t('realfi.start.readyBody', { amount: usdrLabel }) }}
               </p>
-              <GButton v-if="canTransact" tier="primary" class="mt-4" @click="openAmount('stake')">
-                {{ $t('realfi.start.stakeCta') }}
-              </GButton>
+              <template v-if="canTransact">
+                <GButton
+                  v-if="!pendingTxId"
+                  tier="primary"
+                  class="mt-4"
+                  @click="openAmount('stake')"
+                >
+                  {{ $t('realfi.start.stakeCta') }}
+                </GButton>
+              </template>
               <GButton v-else tier="primary" class="mt-4" @click="openRealFiApp()">
                 {{ $t('realfi.start.readyCta') }}
               </GButton>
@@ -95,7 +111,10 @@
               </span>
             </div>
             <p v-if="apyLabel" class="t-caption realfi-hero__apy">{{ apyLabel }}</p>
-            <div v-if="canTransact && (hasUsdr || canUnstake)" class="realfi-hero__actions">
+            <div
+              v-if="canTransact && !pendingTxId && (hasUsdr || canUnstake)"
+              class="realfi-hero__actions"
+            >
               <GButton v-if="hasUsdr" tier="primary" compact @click="openAmount('stake')">
                 {{ $t('receive.tabStake') }}
               </GButton>
@@ -291,7 +310,7 @@
             @close="amountMode = null"
             @confirm="onAmountConfirm"
           />
-          <RealFiOrderFlow ref="flow" @placed="load()" @support="openRealFiSupport()" />
+          <RealFiOrderFlow ref="flow" @placed="onPlaced" @support="openRealFiSupport()" />
         </template>
       </v-col>
     </v-row>
@@ -299,7 +318,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onMounted, ref } from 'vue';
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import { formatUsd, formatInt, formatSignedChange } from '@/shared/utils/format';
 import i18n from '@/plugins/i18n';
@@ -513,6 +532,53 @@ function onAmountConfirm(amount: SmallestUnit): void {
     snackbar.setError(t('realfi.order.errors.buildFailed'));
   }
 }
+
+/* ── The order just sent ───────────────────────────────────────────────────── */
+
+/**
+ * The tx id of an order that is on chain but not yet in RealFi's list.
+ *
+ * RealFi indexes asynchronously, so a reload right after submitting still shows the
+ * page as it was: the start card offering to stake the very USDrf just sent. Until
+ * the order appears, the page says it was sent and offers no new orders.
+ */
+const pendingTxId = ref<string | null>(null);
+const PENDING_POLL_MS = 5000;
+/** Two minutes. Past that, stop waiting; the next manual refresh will show it. */
+const PENDING_MAX_POLLS = 24;
+let pendingTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearPendingTimer(): void {
+  if (pendingTimer) clearTimeout(pendingTimer);
+  pendingTimer = null;
+}
+
+/** A new order shows as its own tx; a claim or cancel as the order it settled. */
+function hasLanded(txId: string): boolean {
+  return orders.value.some(
+    (o) => o.txHash === txId || o.resultTxHash === txId || o.claimTxHash === txId,
+  );
+}
+
+function pollForPlaced(txId: string, remaining: number): void {
+  clearPendingTimer();
+  if (remaining <= 0 || hasLanded(txId)) {
+    if (pendingTxId.value === txId) pendingTxId.value = null;
+    return;
+  }
+  pendingTimer = setTimeout(async () => {
+    await load({ quiet: true });
+    pollForPlaced(txId, remaining - 1);
+  }, PENDING_POLL_MS);
+}
+
+function onPlaced(txId: string): void {
+  pendingTxId.value = txId;
+  void load();
+  pollForPlaced(txId, PENDING_MAX_POLLS);
+}
+
+onBeforeUnmount(clearPendingTimer);
 
 function claim(order: RealFiOrder | undefined): void {
   if (!order?.resultTxHash || order.resultOutputIndex === undefined || !order.unlockSlot) {
