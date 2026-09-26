@@ -393,7 +393,7 @@ describe('RealFi Earn page, right after an order is sent', () => {
   it('survives a refresh: an order sent earlier is still shown as pending', async () => {
     const txId = 'e78bc07cd1d99e2ef6b8607beedf02956c5271b890f7816f6f66e3fc2adb7f86';
     const address = 'addr_test1qqmzx7n75w7wnj4cgt5wql2qn2k';
-    (wallet as Record<string, unknown>).baseAddress = address;
+    (wallet as Record<string, unknown>)['baseAddress'] = address;
     localStorage.setItem(
       `realfi.pendingOrders:Preprod:${address}`,
       JSON.stringify([{ txId, kind: 'unstake', at: Date.now() - 90_000 }]),
@@ -404,7 +404,7 @@ describe('RealFi Earn page, right after an order is sent', () => {
       expect(pendingRow(page).exists()).toBe(true);
       expect(pendingRow(page).text()).toContain('realfi.actions.unstake');
     } finally {
-      delete (wallet as Record<string, unknown>).baseAddress;
+      delete (wallet as Record<string, unknown>)['baseAddress'];
       localStorage.clear();
     }
   });
