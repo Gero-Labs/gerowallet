@@ -28,6 +28,7 @@ vi.mock('@/stores/tokenMetadataStore', () => ({ tokenMetadataStore: { tokens: {}
 
 import { walletStore } from '@/stores/walletStore';
 import { useHoldingsValuation } from './useHoldingsValuation';
+import { REALFI_ASSETS } from '@/modules/realfi/assets';
 
 const PROGRAMMABLE_UNIT = '8f85b5bbdee80ace3a9f75140818d8fd0f9d9672802c4006e0bee92654657374313233';
 const SPENDABLE_UNIT = 'aaaabbbbccccddddeeeeffff00001111222233334444555566667777';
@@ -157,5 +158,29 @@ describe('useHoldingsValuation — CIP-113 holdings', () => {
       [PROGRAMMABLE_UNIT]: { unit: PROGRAMMABLE_UNIT, name: 'Test123', quantity: '0' },
     };
     expect(useHoldingsValuation().holdings.value.find(r => r.unit === PROGRAMMABLE_UNIT)).toBeUndefined();
+  });
+});
+
+// RealFi's USDrf/sUSDrf are canonical but new at launch, so neither the market API nor
+// DexHunter vouches for them. The portfolio's verified-only filter (the mainnet
+// default) would otherwise hide a user's staked balance from their own holdings.
+describe('useHoldingsValuation — RealFi assets', () => {
+  beforeEach(resetStore);
+
+  it('counts USDrf and sUSDrf as verified before any market source lists them', () => {
+    const { usdr, susdr } = REALFI_ASSETS.mainnet;
+    walletStore.loggedWallet = { chain: 'Cardano', network: 'Mainnet' };
+    walletStore.tokens = {
+      [usdr]: { unit: usdr, name: 'USDrf', quantity: '1000000' },
+      [susdr]: { unit: susdr, name: 'sUSDrf', quantity: '1000000' },
+      [SPENDABLE_UNIT]: { unit: SPENDABLE_UNIT, name: 'Unlisted', quantity: '5' },
+    };
+
+    const rows = useHoldingsValuation().holdings.value;
+
+    expect(rows.find(r => r.unit === usdr)?.verified).toBe(true);
+    expect(rows.find(r => r.unit === susdr)?.verified).toBe(true);
+    // The allowlist is exactly these assets — an unlisted token stays unverified.
+    expect(rows.find(r => r.unit === SPENDABLE_UNIT)?.verified).toBe(false);
   });
 });

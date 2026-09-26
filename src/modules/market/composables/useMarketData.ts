@@ -7,6 +7,7 @@ import { Blockchain } from '@/models/types';
 import networks from '@/utils/networks';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import { applyTokenImageOverride } from '@/shared/utils/resolver';
+import { isRealFiAsset } from '@/modules/realfi/assets';
 
 export interface MarketToken {
   unit: string;
@@ -143,7 +144,9 @@ function enrichWithStores(apiToken: TokenPriceResponse, sparklineMap?: Record<st
     name: apiToken.name || dhToken?.name || apiToken.assetNameAscii || assetId,
     ticker: apiToken.ticker || dhToken?.ticker || apiToken.assetNameAscii || '',
     img: apiToken.logo || '',
-    verified: apiToken.verified ?? dhToken?.verified ?? false,
+    // Same rule as useHoldingsValuation: RealFi's canonical assets count as verified
+    // before any market source has caught up with them.
+    verified: (apiToken.verified ?? dhToken?.verified ?? false) || isRealFiAsset(assetId),
     price: apiToken.priceUsd,
     priceAda: apiToken.priceAda,
     priceEur: apiToken.priceEur ?? 0,
