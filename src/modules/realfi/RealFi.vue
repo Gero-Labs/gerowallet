@@ -284,8 +284,13 @@
 
             <!-- Referrals -->
             <section class="realfi-card">
-              <div class="realfi-card__head">
+              <div :class="['realfi-card__head', { 'realfi-card__head--action': referrals.code }]">
                 <span class="t-label">{{ $t('realfi.referrals.label') }}</span>
+                <!-- The link, not the bare code, is what to share: RealFi reads `ref`
+                     from the address a friend first arrives on. -->
+                <GButton v-if="referrals.code" tier="secondary" compact @click="copyInviteLink()">
+                  {{ inviteCopied ? $t('common.copied') : $t('realfi.referrals.copyLink') }}
+                </GButton>
               </div>
               <p v-if="!referrals.code" class="t-body realfi-muted realfi-card__intro">
                 {{ $t('realfi.referrals.none') }}
@@ -315,6 +320,9 @@
                 <span class="t-caption">{{ $t('realfi.referrals.earned') }}</span>
                 <span class="t-body-sm realfi-strong g-num">{{ referralPointsLabel }}</span>
               </div>
+              <p v-if="referrals.code" class="t-caption realfi-muted realfi-card__foot">
+                {{ $t('realfi.referrals.linkHint') }}
+              </p>
             </section>
 
             <!-- Activity — once there is some, or an order is on its way; the start card
@@ -579,6 +587,32 @@ const multiplierLabel = computed(() =>
   points.value.multiplier ? `${points.value.multiplier}×` : '',
 );
 const invitedLabel = computed(() => formatInt(referrals.value.invitedCount));
+
+/** RealFi's app on this wallet's network, carrying the code as the `ref` it reads. */
+const inviteLink = computed(() =>
+  referrals.value.code
+    ? `${realFiAppUrl.value}/?ref=${encodeURIComponent(referrals.value.code)}`
+    : '',
+);
+
+const inviteCopied = ref(false);
+let inviteCopiedTimer: ReturnType<typeof setTimeout> | null = null;
+
+async function copyInviteLink(): Promise<void> {
+  if (!inviteLink.value) return;
+  try {
+    await navigator.clipboard.writeText(inviteLink.value);
+  } catch {
+    // No clipboard permission: leave the label as it was rather than claim a copy.
+    return;
+  }
+  inviteCopied.value = true;
+  if (inviteCopiedTimer) clearTimeout(inviteCopiedTimer);
+  inviteCopiedTimer = setTimeout(() => {
+    inviteCopied.value = false;
+  }, 2000);
+}
+
 const referralPointsLabel = computed(() => formatInt(referrals.value.rewardPoints));
 
 /* ── Orders ───────────────────────────────────────────────────────────────── */
@@ -780,7 +814,10 @@ watch(orders, () => {
 });
 
 onMounted(restorePending);
-onBeforeUnmount(clearPendingTimer);
+onBeforeUnmount(() => {
+  clearPendingTimer();
+  if (inviteCopiedTimer) clearTimeout(inviteCopiedTimer);
+});
 
 function claim(order: RealFiOrder | undefined): void {
   if (!order?.resultTxHash || order.resultOutputIndex === undefined || !order.unlockSlot) {
@@ -1289,6 +1326,17 @@ onMounted(load);
 
 .realfi-card__head {
   margin-bottom: var(--g-s-3);
+}
+
+.realfi-card__head--action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--g-s-3);
+}
+
+.realfi-card__foot {
+  margin-top: var(--g-s-3);
 }
 
 .realfi-card__about {

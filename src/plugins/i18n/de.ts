@@ -4623,6 +4623,8 @@ export default {
   'realfi.referrals.earned': 'Verdiente Punkte',
   'realfi.referrals.none': 'Lade Freunde zu RealFi ein und sammle Punkte, wenn sie staken.',
   'realfi.referrals.get': 'Meinen Einladungscode anzeigen',
+  'realfi.referrals.copyLink': 'Einladungslink kopieren',
+  'realfi.referrals.linkHint': 'Freunde müssen deinen Link öffnen, bevor sie zum ersten Mal eine Wallet mit RealFi verbinden.',
   'realfi.activity.label': 'Aktivität',
   'realfi.activity.none': 'Noch keine RealFi-Aktivität.',
   'realfi.activity.claimed': 'Beansprucht',

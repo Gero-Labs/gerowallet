@@ -230,6 +230,50 @@ describe('RealFi Earn page', () => {
       expect(text).toContain('H1FBW1jAV1Z');
       expect(text).not.toContain('realfi.referrals.get');
     });
+
+    describe('invite link', () => {
+      const writeText = vi.fn();
+
+      beforeEach(() => {
+        writeText.mockReset().mockResolvedValue(undefined);
+        Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+      });
+
+      afterEach(() => {
+        Reflect.deleteProperty(navigator, 'clipboard');
+      });
+
+      it('copies the RealFi address carrying the code as `ref`', async () => {
+        state.referrals.value = { code: 'H1FBW1jAV1Z', invitedCount: 0, rewardPoints: 0 };
+        const page = mountPage();
+        await button(page, 'realfi.referrals.copyLink').trigger('click');
+        await page.vm.$nextTick();
+        await page.vm.$nextTick();
+        expect(writeText).toHaveBeenCalledWith('https://app.realfi.co/?ref=H1FBW1jAV1Z');
+        expect(page.text()).toContain('common.copied');
+      });
+
+      it("links to RealFi's preprod app from a testnet wallet", async () => {
+        wallet.network = 'Preprod';
+        state.referrals.value = { code: 'H1FBW1jAV1Z', invitedCount: 0, rewardPoints: 0 };
+        await button(mountPage(), 'realfi.referrals.copyLink').trigger('click');
+        expect(writeText).toHaveBeenCalledWith('https://preprod.realfi.co/?ref=H1FBW1jAV1Z');
+      });
+
+      it('offers no link before there is a code', () => {
+        expect(mountPage().text()).not.toContain('realfi.referrals.copyLink');
+      });
+
+      it('does not claim a copy the clipboard refused', async () => {
+        writeText.mockRejectedValue(new Error('denied'));
+        state.referrals.value = { code: 'H1FBW1jAV1Z', invitedCount: 0, rewardPoints: 0 };
+        const page = mountPage();
+        await button(page, 'realfi.referrals.copyLink').trigger('click');
+        await page.vm.$nextTick();
+        await page.vm.$nextTick();
+        expect(page.text()).not.toContain('common.copied');
+      });
+    });
   });
 
   describe('fund APY', () => {
