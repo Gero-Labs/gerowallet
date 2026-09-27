@@ -87,53 +87,77 @@
 
           <template v-else-if="!isEmpty">
           <!-- Position -->
-          <section class="realfi-hero" :class="{ 'realfi-hero--split': showYieldChart }">
-            <div class="realfi-hero__main">
+          <section class="realfi-hero">
+            <!-- Actions sit in the header row: on the card's own line they left the
+                 right half empty whenever there was no chart beside the figure. -->
             <div class="realfi-hero__top">
               <span class="t-label">{{ $t('realfi.position.label') }}</span>
-              <!-- Plain coloured text, never a chip: the design language reserves
-                   chips for status and gives deltas a glyph instead. -->
-              <span :class="['t-body-sm', 'g-num', deltaClass]">{{ yieldLabel }}</span>
+              <div
+                v-if="canTransact && !ordersLocked && (hasUsdr || canUnstake)"
+                class="realfi-hero__actions"
+              >
+                <GButton v-if="hasUsdr" tier="primary" compact @click="openAmount('stake')">
+                  {{ $t('receive.tabStake') }}
+                </GButton>
+                <GButton
+                  v-if="canUnstake"
+                  tier="secondary"
+                  compact
+                  @click="openAmount('unstake')"
+                >
+                  {{ $t('staking.unstake') }}
+                </GButton>
+              </div>
             </div>
 
-            <p class="t-display g-num realfi-hero__value">{{ positionValue }}</p>
-            <!-- What is actually held, and the rate that turns it into the dollar figure
-                 above: the value moves with the rate, the sUSDrf does not. -->
-            <p v-if="holdingLabel" class="t-body-sm g-num realfi-hero__holding">
-              {{ holdingLabel }}
-            </p>
+            <div :class="['realfi-hero__body', { 'realfi-hero__body--split': showYieldChart }]">
+              <div class="realfi-hero__main">
+                <p class="t-display g-num realfi-hero__value">{{ positionValue }}</p>
+                <!-- What is actually held, and the rate that turns it into the dollar
+                     figure above: the value moves with the rate, the sUSDrf does not. -->
+                <p v-if="holdingLabel" class="t-body-sm g-num realfi-hero__holding">
+                  {{ holdingLabel }}
+                </p>
+                <p v-if="apyLabel && !showYieldChart" class="t-caption realfi-hero__apy">
+                  {{ apyLabel }}
+                </p>
+              </div>
+              <RealFiYieldChart
+                v-if="showYieldChart"
+                class="realfi-hero__yield"
+                :history="apyHistory"
+                :avgPercent="apyAvg"
+              />
+            </div>
 
-            <div class="realfi-hero__meta">
-              <span class="t-body-sm">
-                {{ $t('realfi.position.earned') }}
-                <b :class="['realfi-strong', 'g-num', deltaClass]">{{ earnedLabel }}</b>
-              </span>
-              <span class="t-body-sm">
-                {{ $t('realfi.position.principal') }}
-                <b class="realfi-strong g-num">{{ principalLabel }}</b>
-              </span>
-            </div>
-            <p v-if="apyLabel && !showYieldChart" class="t-caption realfi-hero__apy">
-              {{ apyLabel }}
-            </p>
-            <div
-              v-if="canTransact && !ordersLocked && (hasUsdr || canUnstake)"
-              class="realfi-hero__actions"
-            >
-              <GButton v-if="hasUsdr" tier="primary" compact @click="openAmount('stake')">
-                {{ $t('receive.tabStake') }}
-              </GButton>
-              <GButton v-if="canUnstake" tier="secondary" compact @click="openAmount('unstake')">
-                {{ $t('staking.unstake') }}
-              </GButton>
-            </div>
-            </div>
-            <RealFiYieldChart
-              v-if="showYieldChart"
-              class="realfi-hero__yield"
-              :history="apyHistory"
-              :avgPercent="apyAvg"
-            />
+            <!-- The numbers behind the headline, one per column. "Total with RealFi"
+                 is the one a user doing sums wants: the position excludes anything in
+                 cooldown, which is still theirs and still at RealFi. -->
+            <dl class="realfi-stats">
+              <div class="realfi-stats__item">
+                <dt class="t-caption">{{ $t('realfi.position.earned') }}</dt>
+                <dd :class="['t-heading', 'g-num', deltaClass]">{{ earnedLabel }}</dd>
+                <!-- Plain coloured text, never a chip: the design language reserves
+                     chips for status and gives deltas a glyph instead. -->
+                <dd :class="['t-caption', 'g-num', deltaClass]">
+                  {{ $t('realfi.stats.toDate', { change: yieldLabel }) }}
+                </dd>
+              </div>
+              <div class="realfi-stats__item">
+                <dt class="t-caption">{{ $t('realfi.position.principal') }}</dt>
+                <dd class="t-heading g-num">{{ principalLabel }}</dd>
+              </div>
+              <div v-if="cooling" class="realfi-stats__item">
+                <dt class="t-caption">{{ $t('realfi.stats.cooldown') }}</dt>
+                <dd class="t-heading g-num">{{ cooling.amount }}</dd>
+                <dd v-if="cooling.next" class="t-caption g-num">{{ cooling.next }}</dd>
+              </div>
+              <div v-if="totalWithRealFi" class="realfi-stats__item">
+                <dt class="t-caption">{{ $t('realfi.stats.total') }}</dt>
+                <dd class="t-heading g-num">{{ totalWithRealFi }}</dd>
+                <dd class="t-caption">{{ $t('realfi.stats.totalNote') }}</dd>
+              </div>
+            </dl>
           </section>
 
           <!-- Unstaked but not claimed: the USDrf sits in RealFi's cooldown timelock,
@@ -334,11 +358,14 @@
                   class="realfi-order"
                 >
                   <span class="realfi-order__what">
-                    <span class="t-body-sm">
+                    <span class="t-body-sm realfi-order__label">
                       {{ actionLabel(order.action) }}
                       <span v-if="orderAmountLabel(order)" class="g-num realfi-strong">
                         {{ orderAmountLabel(order) }}
                       </span>
+                    </span>
+                    <span v-if="claimableFrom(order)" class="t-caption realfi-order__when">
+                      {{ $t('realfi.claim.from', { date: claimableFrom(order) }) }}
                     </span>
                     <!-- The id RealFi support asks for, and what a failed order's
                          notice tells the user to send them. -->
@@ -364,9 +391,6 @@
                       >
                         {{ $t('realfi.cancel.cta') }}
                       </GButton>
-                      <span v-else-if="claimableFrom(order)" class="t-caption">
-                        {{ $t('realfi.claim.from', { date: claimableFrom(order) }) }}
-                      </span>
                     </template>
                     <span :class="['realfi-pill', pillClass(order.status)]">
                       {{ statusLabel(order.status) }}
@@ -882,6 +906,47 @@ const unstakingTitle = computed(() =>
   t(unstakes.value.some((u) => u.ready) ? 'realfi.claim.title' : 'realfi.unstaking.title'),
 );
 
+/**
+ * USDrf still at RealFi after unstaking: every unclaimed unstake, cooling or ready.
+ * Null when any amount is unknown in USDrf, since a partial sum would understate it.
+ */
+const unclaimedUsdr = computed<{ units: bigint; estimated: boolean } | null>(() => {
+  const list = unstakes.value;
+  if (!list.length || list.some((u) => u.usdrUnits === null)) return null;
+  return {
+    units: list.reduce((sum, u) => sum + (u.usdrUnits as bigint), 0n),
+    estimated: list.some((u) => !u.order.resultAmount),
+  };
+});
+
+/** The stat-strip cell for money in cooldown: how much, and when the next opens. */
+const cooling = computed<{ amount: string; next: string } | null>(() => {
+  const waiting = unstakes.value.filter((u) => !u.ready);
+  if (!waiting.length) return null;
+  let amount: string;
+  if (waiting.every((u) => u.usdrUnits !== null)) {
+    const units = waiting.reduce((sum, u) => sum + (u.usdrUnits as bigint), 0n).toString();
+    const estimated = waiting.some((u) => !u.order.resultAmount);
+    amount = `${estimated ? '≈ ' : ''}${unitsLabel(units, 'USDrf')}`;
+  } else {
+    amount = t('realfi.stats.unstakes', { n: waiting.length });
+  }
+  const next =
+    currentSlot.value === null
+      ? ''
+      : t('realfi.unstaking.next', { wait: formatWait(Math.min(...waiting.map((u) => u.secondsLeft))) });
+  return { amount, next };
+});
+
+/** Position plus everything unclaimed, in dollars: all the user has at RealFi. */
+const totalWithRealFi = computed(() => {
+  const extra = unclaimedUsdr.value;
+  if (!extra) return '';
+  const staked = BigInt(position.value?.totalUSDrValue ?? '0');
+  const total = fromSmallestUnit((staked + extra.units).toString());
+  return `${extra.estimated ? '≈ ' : ''}${formatUsd(total)}`;
+});
+
 /** "5,685.06 USDrf in cooldown · next opens in 14h 20m", as far as it is known. */
 const unstakingSummary = computed(() => {
   const list = unstakes.value;
@@ -987,11 +1052,39 @@ onMounted(load);
   margin: var(--g-s-3) 0 var(--g-s-2);
 }
 
-.realfi-hero--split {
+.realfi-hero__body--split {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 320px);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 340px);
   gap: var(--g-s-5);
   align-items: start;
+}
+
+.realfi-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--g-s-4);
+  padding-top: var(--g-s-4);
+  margin: var(--g-s-4) 0 0;
+  border-top: 1px solid var(--g-hairline-1);
+
+  dd {
+    margin: 0;
+  }
+}
+
+.realfi-stats__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-1);
+  min-width: 0;
+
+  dt {
+    color: var(--g-text-3);
+  }
+
+  .t-heading {
+    color: var(--g-text-1);
+  }
 }
 
 .realfi-hero__holding {
@@ -1005,7 +1098,7 @@ onMounted(load);
 }
 
 @media (max-width: 720px) {
-  .realfi-hero--split {
+  .realfi-hero__body--split {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -1108,13 +1201,6 @@ onMounted(load);
   display: flex;
   flex-wrap: wrap;
   gap: var(--g-s-2);
-  margin-top: var(--g-s-4);
-}
-
-.realfi-hero__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--g-s-4);
 }
 
 .realfi-strong {
@@ -1255,6 +1341,14 @@ onMounted(load);
   display: flex;
   align-items: center;
   gap: var(--g-s-1);
+}
+
+.realfi-order__label {
+  white-space: nowrap;
+}
+
+.realfi-order__when {
+  color: var(--g-text-2);
 }
 
 .realfi-order__tx {

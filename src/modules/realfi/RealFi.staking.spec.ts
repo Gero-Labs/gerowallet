@@ -532,7 +532,27 @@ describe('RealFi Earn page, where unstaked money is', () => {
     };
     ({ page } = await mountSpying([]));
     expect(page.find('.realfi-yield').exists()).toBe(true);
-    expect(page.find('.realfi-hero').classes()).toContain('realfi-hero--split');
+    expect(page.find('.realfi-hero__body').classes()).toContain('realfi-hero__body--split');
+  });
+
+  it('sums what is in cooldown and what the user has at RealFi in total', async () => {
+    const { page, calls } = await mountSpying([order({ ...COOLING, resultAmount: '5168241487' })]);
+
+    const stats = page.find('.realfi-stats').text();
+    expect(stats).toContain('5,168.24 USDrf');
+    // The position's 1.00 plus the 5,168.24 still in cooldown.
+    expect(stats).toContain('$5,169.24');
+    expect(calls).toContainEqual(['realfi.unstaking.next', { wait: 'realfi.duration.hm' }]);
+  });
+
+  it('marks the total as an estimate while an amount is estimated, and omits it when unknown', async () => {
+    state.protocol.value = { nextCooldownSlot: '5000', rateInputs: RATE_INPUTS };
+    let { page } = await mountSpying([order(COOLING)]);
+    expect(page.find('.realfi-stats').text()).toContain('≈ $5,169.24');
+
+    state.protocol.value = { nextCooldownSlot: '5000' };
+    ({ page } = await mountSpying([order(COOLING)]));
+    expect(page.find('.realfi-stats').text()).not.toContain('realfi.stats.total');
   });
 
   it('puts the amount on each Activity row, in the token the order put in', async () => {
