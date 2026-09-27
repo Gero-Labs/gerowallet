@@ -49,3 +49,10 @@ export function usdrAssetIdFor(network: string | null | undefined): string | nul
   if (network === 'Preprod') return REALFI_ASSETS.preprod.usdr;
   return null;
 }
+
+/** The canonical sUSDrf id for a wallet network, or null where RealFi has none. */
+export function susdrAssetIdFor(network: string | null | undefined): string | null {
+  if (network === 'Mainnet') return REALFI_ASSETS.mainnet.susdr;
+  if (network === 'Preprod') return REALFI_ASSETS.preprod.susdr;
+  return null;
+}
