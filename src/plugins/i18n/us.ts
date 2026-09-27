@@ -4728,6 +4728,8 @@ export default {
   'realfi.referrals.earned': 'Points earned',
   'realfi.referrals.none': 'Invite friends to RealFi and earn points when they stake.',
   'realfi.referrals.get': 'Show my invite code',
+  'realfi.referrals.copyLink': 'Copy invite link',
+  'realfi.referrals.linkHint': 'Friends need to open your link before they first connect a wallet to RealFi.',
   'realfi.activity.label': 'Activity',
   'realfi.activity.none': 'No RealFi activity yet.',
   'realfi.activity.claimed': 'Claimed',
