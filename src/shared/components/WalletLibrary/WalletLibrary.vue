@@ -13,11 +13,30 @@
             <v-icon small>mdi-star-outline</v-icon> {{ t('walletLibrary.favorites') }} <span class="library-count">{{ favoriteCount }}</span>
           </button>
         </div>
-        <v-btn icon small :disabled="saving || !ready" :aria-label="t('walletLibrary.newCategory')"
-          :title="t('walletLibrary.newCategory')" @click="editCategory(null)"><v-icon small>mdi-folder-plus-outline</v-icon></v-btn>
+        <div class="library-tools">
+          <v-menu offset-y left>
+            <template #activator="{ on, attrs }">
+              <v-btn icon small v-bind="attrs" v-on="on" :disabled="!ready" class="library-sort"
+                :class="{ 'library-sort--active': sort !== 'custom' }"
+                :aria-label="t('common.sortBy') + ': ' + sortLabel(sort)" :title="t('common.sortBy') + ': ' + sortLabel(sort)">
+                <v-icon small>mdi-sort</v-icon>
+              </v-btn>
+            </template>
+            <v-list dense role="menu" :aria-label="t('common.sortBy')">
+              <v-subheader>{{ t('common.sortBy') }}</v-subheader>
+              <v-list-item v-for="option in WALLET_SORTS" :key="option" role="menuitemradio"
+                :aria-checked="String(sort === option)" :input-value="sort === option" @click="sort = option">
+                <v-list-item-title>{{ sortLabel(option) }}</v-list-item-title>
+                <v-list-item-action class="my-0"><v-icon v-if="sort === option" small>mdi-check</v-icon></v-list-item-action>
+              </v-list-item>
+            </v-list>
+          </v-menu>
+          <v-btn icon small :disabled="saving || !ready" :aria-label="t('walletLibrary.newCategory')"
+            :title="t('walletLibrary.newCategory')" @click="editCategory(null)"><v-icon small>mdi-folder-plus-outline</v-icon></v-btn>
+        </div>
       </div>
       <div class="library-guidance">
-        <p class="library-help" :class="{ 'library-help--saving': pendingCount }">{{ t(filtering ? 'walletLibrary.filteredHint' : 'walletLibrary.reorderHint') }}</p>
+        <p class="library-help" :class="{ 'library-help--saving': pendingCount }">{{ t(filtering ? 'walletLibrary.filteredHint' : reorderable ? 'walletLibrary.reorderHint' : 'walletLibrary.sortedHint') }}</p>
         <p class="library-results library-save-status" role="status">{{ pendingCount ? t('walletLibrary.saving') : '' }}</p>
       </div>
       <p v-if="query" class="library-results" role="status">{{ t('walletLibrary.results', { count: filtered.length, total: wallets.length }) }}<span v-if="indexing"> &middot; {{ t('walletLibrary.indexing') }}</span></p>
@@ -55,13 +74,13 @@
           <Draggable :id="groupDomId(group.key)" tag="ul" class="library-wallets"
             :class="{ 'library-wallets--target': dragging && (!group.expanded || !group.wallets.length) }"
             :value="group.expanded ? group.wallets : []" group="wallet-library" handle=".wallet-drag" draggable=".library-wallet"
-            :disabled="filtering || !ready" :animation="150" :force-fallback="true" :fallback-on-body="true"
+            :disabled="!reorderable || !ready" :animation="150" :force-fallback="true" :fallback-on-body="true"
             :fallback-tolerance="4" :scroll-sensitivity="80" :scroll-speed="16" :empty-insert-threshold="24"
             ghost-class="library-wallet--ghost" fallback-class="library-wallet--fallback"
             @start="dragging = true" @end="dragging = false" @change="reordered($event, group)">
               <li v-for="(wallet, index) in (group.expanded ? group.wallets : [])" :key="wallet.id" class="library-wallet glass-liquid"
                 :data-wallet-id="wallet.id" :class="{ 'library-wallet--locked': wallet.id === lockedWalletId }">
-                <button type="button" class="wallet-drag" :disabled="filtering || !ready"
+                <button type="button" class="wallet-drag" :disabled="!reorderable || !ready"
                   :aria-label="t('walletLibrary.reorderWallet', { name: wallet.name })" :title="t('walletLibrary.keyboardHint')"
                   @keydown.alt.up.prevent="moveStep(wallet, group, index, -1)"
                   @keydown.alt.down.prevent="moveStep(wallet, group, index, 1)">
@@ -94,8 +113,8 @@
                     <v-list-item :disabled="group.id === null" @click="moveCategory(wallet.id, null)"><v-list-item-title>{{ t('walletLibrary.uncategorized') }}</v-list-item-title></v-list-item>
                     <v-list-item v-for="category in preferences.categories" :key="category.id" :disabled="group.id === category.id" @click="moveCategory(wallet.id, category.id)"><v-list-item-title>{{ category.name }}</v-list-item-title></v-list-item>
                     <v-divider />
-                    <v-list-item :disabled="filtering || index === 0" @click="moveStep(wallet, group, index, -1)"><v-list-item-title>{{ t('walletLibrary.moveUp') }}</v-list-item-title></v-list-item>
-                    <v-list-item :disabled="filtering || index === group.wallets.length - 1" @click="moveStep(wallet, group, index, 1)"><v-list-item-title>{{ t('walletLibrary.moveDown') }}</v-list-item-title></v-list-item>
+                    <v-list-item :disabled="!reorderable || index === 0" @click="moveStep(wallet, group, index, -1)"><v-list-item-title>{{ t('walletLibrary.moveUp') }}</v-list-item-title></v-list-item>
+                    <v-list-item :disabled="!reorderable || index === group.wallets.length - 1" @click="moveStep(wallet, group, index, 1)"><v-list-item-title>{{ t('walletLibrary.moveDown') }}</v-list-item-title></v-list-item>
                   </v-list>
                 </v-menu>
               </li>
@@ -138,12 +157,23 @@ import GButton from '@/shared/components/GButton/GButton.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useWalletLibrary } from '@/shared/composables/useWalletLibrary';
 import { walletLibraryRepository as repository } from '@/db/wallet-library';
-import type { LibraryWallet, WalletCategory } from '@/services/walletLibrary/model';
+import { WALLET_SORTS } from '@/services/walletLibrary/model';
+import type { LibraryWallet, WalletCategory, WalletSort } from '@/services/walletLibrary/model';
 
 const props = defineProps<{ availableWallets: Wallet[]; lockedWalletId?: number | null; loadingWalletId?: number | null }>();
 defineEmits<{ (event: 'select', id: number): void; (event: 'focus-wallet', wallet: Wallet): void }>();
 const { t } = useTranslation();
-const { preferences, query, favoritesOnly, ready, saving, error, indexing, wallets, filtered, filtering, groups, favoriteCount, run, pendingCount, toggleFavorite, moveWallet } = useWalletLibrary(toRef(props, 'availableWallets'));
+const { preferences, query, favoritesOnly, sort, ready, saving, error, indexing, wallets, filtered, filtering, reorderable, groups, favoriteCount, run, pendingCount, toggleFavorite, moveWallet } = useWalletLibrary(toRef(props, 'availableWallets'));
+// Existing labels with the same wording are reused; only "Custom order" is the library's own.
+const SORT_LABELS: Record<WalletSort, string> = {
+  custom: 'walletLibrary.sortCustom',
+  name: 'assets.sortNameAZ',
+  chain: 'welcome.blockchain',
+  network: 'common.network',
+  newest: 'governance.sortNewest',
+  oldest: 'governance.sortOldest',
+};
+const sortLabel = (option: WalletSort) => t(SORT_LABELS[option]);
 const dragging = ref(false);
 type WalletGroup = typeof groups.value[number];
 const announcement = ref('');
@@ -188,7 +218,7 @@ async function moveCategory(id: number, categoryId: string | null | undefined, b
   }
 }
 function moveStep(wallet: LibraryWallet, group: WalletGroup, index: number, delta: number) {
-  if (filtering.value || index + delta < 0 || index + delta >= group.wallets.length) return;
+  if (!reorderable.value || index + delta < 0 || index + delta >= group.wallets.length) return;
   void moveCategory(wallet.id, group.id, delta < 0 ? group.wallets[index - 1].id : (group.wallets[index + 2]?.id ?? null), group.favorites);
 }
 function reordered(event: { added?: { element: LibraryWallet; newIndex: number }; moved?: { element: LibraryWallet; newIndex: number } }, group: WalletGroup) {
@@ -205,6 +235,8 @@ function reordered(event: { added?: { element: LibraryWallet; newIndex: number }
 .library-toolbar { flex: none; padding: var(--g-s-2) var(--g-s-1) var(--g-s-3); }
 .library-toolbar-bottom, .library-filters, .filter-button { display: flex; align-items: center; gap: var(--g-s-2); }
 .library-toolbar-bottom { justify-content: space-between; margin-top: var(--g-s-3); }
+.library-tools { display: flex; align-items: center; gap: var(--g-s-1); flex: none; }
+.library-sort--active .v-icon { color: var(--g-accent); }
 .library-filters { gap: var(--g-s-1); flex-wrap: wrap; }
 .filter-button { min-height: var(--g-btn-h-compact); padding: var(--g-s-1) var(--g-s-2); border: 1px solid transparent; border-radius: var(--g-r-control); color: var(--g-text-2); font: inherit; font-size: 12px; }
 .filter-button[aria-pressed="true"] { background: var(--g-raised); border-color: var(--g-hairline-3); color: var(--g-text-1); }

@@ -44,6 +44,8 @@ export default {
   'walletLibrary.invalidName': "Gib einen Kategorienamen mit 1\u201348 Zeichen ein.",
   'walletLibrary.missingWallet': "Diese Wallet wurde in einem anderen Fenster ge\u00e4ndert. Bitte erneut versuchen.",
   'walletLibrary.missingCategory': "Diese Kategorie existiert nicht mehr. W\u00e4hle eine andere Kategorie.",
+  'walletLibrary.sortCustom': "Eigene Reihenfolge",
+  'walletLibrary.sortedHint': "Sortierte Ansicht. W\u00e4hle \u201eEigene Reihenfolge\u201c, um Wallets zu ziehen.",
   'assets.addToken': 'Token hinzufügen',
   'assets.allAssets': 'Alle Vermögenswerte',
   'assets.allocation': 'Allokation',

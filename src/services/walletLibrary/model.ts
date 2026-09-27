@@ -74,6 +74,38 @@ export function sortWallets<T extends WalletOrganization>(wallets: T[]): T[] {
   });
 }
 
+/**
+ * How each section of the library lists its wallets. `custom` is the saved drag
+ * order; the others are views over it and never change what is stored.
+ */
+export const WALLET_SORTS = ['custom', 'name', 'chain', 'network', 'newest', 'oldest'] as const;
+export type WalletSort = typeof WALLET_SORTS[number];
+export const isWalletSort = (value: unknown): value is WalletSort => WALLET_SORTS.includes(value as WalletSort);
+
+const collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
+const byName = (a: Wallet, b: Wallet) => collator.compare(a.name || '', b.name || '');
+// Mainnets lead, then the test networks by name, so Preprod and Preview sit together.
+const byNetwork = (a: Wallet, b: Wallet) =>
+  Number(a.network !== 'Mainnet') - Number(b.network !== 'Mainnet') || collator.compare(a.network || '', b.network || '');
+const byChain = (a: Wallet, b: Wallet) => collator.compare(a.chain || '', b.chain || '');
+
+/**
+ * Wallets in `sort` order. Expects them in the saved order already: the sort is
+ * stable, so wallets that tie (same chain and network, same name) keep it. Wallet
+ * ids auto-increment, so id order is the order wallets were added to Gero.
+ */
+export function sortLibraryWallets<T extends Wallet>(wallets: T[], sort: WalletSort): T[] {
+  const compare: ((a: T, b: T) => number) | null = {
+    custom: null,
+    name: byName,
+    chain: (a: T, b: T) => byChain(a, b) || byNetwork(a, b) || byName(a, b),
+    network: (a: T, b: T) => byNetwork(a, b) || byChain(a, b) || byName(a, b),
+    newest: (a: T, b: T) => b.id - a.id,
+    oldest: (a: T, b: T) => a.id - b.id,
+  }[sort];
+  return compare ? [...wallets].sort(compare) : wallets;
+}
+
 export function categoryFor(wallet: WalletOrganization, preferences: WalletLibraryPreferences): string | null {
   return preferences.categories.some(category => category.id === wallet.categoryId) ? wallet.categoryId! : null;
 }
