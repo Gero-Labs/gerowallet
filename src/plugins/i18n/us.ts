@@ -44,6 +44,8 @@ export default {
   'walletLibrary.invalidName': "Enter a category name of 1\u201348 characters.",
   'walletLibrary.missingWallet': "This wallet changed in another window. Please try again.",
   'walletLibrary.missingCategory': "This category no longer exists. Choose another category.",
+  'walletLibrary.sortCustom': "Custom order",
+  'walletLibrary.sortedHint': "Sorted view. Choose Custom order to drag wallets.",
   'assets.allAssets': 'All Assets',
   'assets.allocation': 'Allocation',
   'assets.apexFusion': 'Apex Fusion',

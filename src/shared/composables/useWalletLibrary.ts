@@ -4,9 +4,22 @@ import type { Subscription } from 'dexie';
 import { liveQuery } from 'dexie';
 import type { Wallet } from '@/models/types';
 import { walletLibraryRepository, WalletLibraryError } from '@/db/wallet-library';
-import { categoryFor, favoriteWallet, moveWalletOrder, matchesWallet, normalizePreferences, sortWallets } from '@/services/walletLibrary/model';
-import type { LibraryWallet, WalletLibrarySnapshot, WalletSearchAddresses } from '@/services/walletLibrary/model';
+import { categoryFor, favoriteWallet, isWalletSort, moveWalletOrder, matchesWallet, normalizePreferences, sortLibraryWallets, sortWallets } from '@/services/walletLibrary/model';
+import type { LibraryWallet, WalletLibrarySnapshot, WalletSearchAddresses, WalletSort } from '@/services/walletLibrary/model';
 import { walletSearchAddresses } from '@/services/walletLibrary/addresses';
+
+// A display choice, like a remembered tab, so it lives in this browser's storage
+// (shared by the options page and the side panel) rather than in the wallet DB.
+export const WALLET_SORT_STORAGE_KEY = 'walletLibrary.sort';
+
+function readSort(): WalletSort {
+  try {
+    const saved = localStorage.getItem(WALLET_SORT_STORAGE_KEY);
+    return isWalletSort(saved) ? saved : 'custom';
+  } catch {
+    return 'custom';
+  }
+}
 
 export function useWalletLibrary(available: Ref<Wallet[]>, repository = walletLibraryRepository) {
   const confirmed = shallowRef<WalletLibrarySnapshot>({ preferences: normalizePreferences(null), wallets: [] });
@@ -21,6 +34,11 @@ export function useWalletLibrary(available: Ref<Wallet[]>, repository = walletLi
   const addresses = ref<Record<number, WalletSearchAddresses>>({});
   const query = ref('');
   const favoritesOnly = ref(false);
+  const sort = ref<WalletSort>(readSort());
+  watch(sort, value => {
+    try { localStorage.setItem(WALLET_SORT_STORAGE_KEY, value); }
+    catch { /* Storage blocked: the choice still applies until the page closes. */ }
+  });
   const ready = ref(false);
   const saving = ref(false);
   const error = ref('');
@@ -69,8 +87,13 @@ export function useWalletLibrary(available: Ref<Wallet[]>, repository = walletLi
       ...(addresses.value[wallet.id] || { addresses: [wallet.baseAddress || wallet.watchAddress || ''].filter(Boolean), stakeAddress: wallet.stakeAddress || '' }) })));
   });
   const favoriteCount = computed(() => wallets.value.filter(wallet => wallet.isFavorite).length);
-  const filtered = computed(() => wallets.value.filter(wallet => (!favoritesOnly.value || wallet.isFavorite) && matchesWallet(wallet, query.value || '')));
+  const filtered = computed(() => sortLibraryWallets(
+    wallets.value.filter(wallet => (!favoritesOnly.value || wallet.isFavorite) && matchesWallet(wallet, query.value || '')),
+    sort.value));
   const filtering = computed(() => !!(query.value || '').trim() || favoritesOnly.value);
+  // Dragging edits the saved order, so it is only offered while that order is what
+  // is on screen: no filter hiding wallets, and no sort rearranging them.
+  const reorderable = computed(() => !filtering.value && sort.value === 'custom');
   const groups = computed(() => {
     const pinned = filtered.value.filter(wallet => wallet.isFavorite);
     const categories = [...preferences.value.categories, { id: null, name: '', collapsed: preferences.value.uncategorizedCollapsed }];
@@ -126,6 +149,6 @@ export function useWalletLibrary(available: Ref<Wallet[]>, repository = walletLi
     try { return await enqueue(snapshot => snapshot, operation); }
     finally { saving.value = false; }
   };
-  return { preferences, query, favoritesOnly, ready, saving, pendingCount, error, indexing, wallets, filtered, filtering,
-    groups, favoriteCount, run, toggleFavorite, moveWallet };
+  return { preferences, query, favoritesOnly, sort, ready, saving, pendingCount, error, indexing, wallets, filtered, filtering,
+    reorderable, groups, favoriteCount, run, toggleFavorite, moveWallet };
 }
