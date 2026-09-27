@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { isClaimable } from './types';
@@ -52,7 +52,9 @@ vi.mock('./components/RealFiAmountDialog.vue', () => ({
   },
 }));
 
-const wallet = { network: 'Preprod' };
+// Reactive, so a test can switch wallets under a page that stays mounted.
+// baseAddress is declared up front: Vue 2 does not track a property added later.
+const wallet = reactive<Record<string, unknown>>({ network: 'Preprod', baseAddress: undefined });
 vi.mock('@/stores/walletStore', () => ({
   default: {
     state: {
@@ -90,6 +92,7 @@ async function mountPage() {
       'v-row': { template: '<div><slot /></div>' },
       'v-col': { template: '<div><slot /></div>' },
       'v-btn': { template: '<button @click="$emit(\'click\')"><slot /></button>' },
+      'v-progress-circular': true,
     },
   });
   await settle(page);
@@ -390,10 +393,37 @@ describe('RealFi Earn page, right after an order is sent', () => {
     expect(pendingRow(page).exists()).toBe(false);
   });
 
+  it("keeps each wallet's pending orders under its own key across a wallet switch", async () => {
+    // Earn stays alive across a wallet switch, so nothing may be keyed on a live read.
+    const txA = 'aa'.repeat(32);
+    const keyA = 'realfi.pendingOrders:Preprod:addr_test1_wallet_a';
+    const keyB = 'realfi.pendingOrders:Preprod:addr_test1_wallet_b';
+    wallet['baseAddress'] = 'addr_test1_wallet_a';
+    try {
+      const page = await placeOrder(txA);
+      expect(JSON.parse(localStorage.getItem(keyA) ?? '[]')).toHaveLength(1);
+
+      wallet['baseAddress'] = 'addr_test1_wallet_b';
+      await page.vm.$nextTick();
+      expect(pendingRow(page).exists()).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(localStorage.getItem(keyB)).toBeNull();
+      expect(JSON.parse(localStorage.getItem(keyA) ?? '[]')).toHaveLength(1);
+
+      wallet['baseAddress'] = 'addr_test1_wallet_a';
+      await page.vm.$nextTick();
+      expect(pendingRow(page).exists()).toBe(true);
+    } finally {
+      wallet['baseAddress'] = undefined;
+      localStorage.clear();
+    }
+  });
+
   it('survives a refresh: an order sent earlier is still shown as pending', async () => {
     const txId = 'e78bc07cd1d99e2ef6b8607beedf02956c5271b890f7816f6f66e3fc2adb7f86';
     const address = 'addr_test1qqmzx7n75w7wnj4cgt5wql2qn2k';
-    (wallet as Record<string, unknown>)['baseAddress'] = address;
+    wallet['baseAddress'] = address;
     localStorage.setItem(
       `realfi.pendingOrders:Preprod:${address}`,
       JSON.stringify([{ txId, kind: 'unstake', at: Date.now() - 90_000 }]),
@@ -404,7 +434,7 @@ describe('RealFi Earn page, right after an order is sent', () => {
       expect(pendingRow(page).exists()).toBe(true);
       expect(pendingRow(page).text()).toContain('realfi.actions.unstake');
     } finally {
-      delete (wallet as Record<string, unknown>)['baseAddress'];
+      wallet['baseAddress'] = undefined;
       localStorage.clear();
     }
   });

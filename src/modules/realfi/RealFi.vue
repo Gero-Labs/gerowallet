@@ -677,11 +677,23 @@ const ordersLocked = computed(() =>
   pendingOrders.value.some((p) => now.value - p.at < ORDER_LOCK_MS),
 );
 
-/** Where this wallet's pending orders are kept; null when there is no address to key on. */
-function pendingStore(): { network: string; address: string } | null {
+interface PendingOwner {
+  network: string;
+  address: string;
+}
+
+/** The logged-in wallet's storage key; null when there is no address to key on. */
+function currentWalletKey(): PendingOwner | null {
   const w = WalletStore.state.loggedWallet;
   return w?.network && w.baseAddress ? { network: w.network, address: w.baseAddress } : null;
 }
+
+/**
+ * The wallet `pendingOrders` belongs to, fixed when the list is loaded, never read
+ * live. The page is kept alive across a wallet switch, so a live read would save
+ * one wallet's pending orders under the next wallet's key.
+ */
+let pendingOwner: PendingOwner | null = null;
 
 /** Worded like the settled row it will become, as the home screen does for a send. */
 const PENDING_LABEL_KEYS: Record<RealFiOrderKind, string> = {
@@ -715,8 +727,7 @@ function settlePending(): void {
   );
   if (still.length !== pendingOrders.value.length) pendingOrders.value = still;
   if (!still.length) clearPendingTimer();
-  const where = pendingStore();
-  if (where) savePendingOrders(where.network, where.address, still);
+  if (pendingOwner) savePendingOrders(pendingOwner.network, pendingOwner.address, still);
 }
 
 /** One timer for every pending order: re-read the order list, settle, go again. */
@@ -741,13 +752,27 @@ function onPlaced(txId: string, kind: RealFiOrderKind): void {
   schedulePendingCheck();
 }
 
-/** Orders sent on an earlier visit that RealFi had not listed when the page closed. */
+/**
+ * Load the logged-in wallet's pending orders: those sent on an earlier visit that
+ * RealFi had not listed yet. Also run on a wallet switch, which swaps the list for
+ * the new wallet's (the old one's stays saved under its own key).
+ */
 function restorePending(): void {
-  const where = pendingStore();
-  if (!where) return;
-  pendingOrders.value = readPendingOrders(where.network, where.address);
+  clearPendingTimer();
+  pendingOwner = currentWalletKey();
+  pendingOrders.value = pendingOwner
+    ? readPendingOrders(pendingOwner.network, pendingOwner.address)
+    : [];
   schedulePendingCheck();
 }
+
+watch(
+  () => {
+    const w = WalletStore.state.loggedWallet;
+    return `${w?.network ?? ''}:${w?.baseAddress ?? ''}`;
+  },
+  restorePending,
+);
 
 // Any fresh order list (the page's own loads included) may list a pending order.
 watch(orders, () => {
@@ -1341,9 +1366,6 @@ onMounted(load);
   display: flex;
   align-items: center;
   gap: var(--g-s-1);
-}
-
-.realfi-order__label {
   white-space: nowrap;
 }
 
