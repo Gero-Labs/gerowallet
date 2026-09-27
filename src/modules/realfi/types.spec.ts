@@ -4,7 +4,11 @@ import {
   isCancellable,
   isClaimable,
   isUnclaimed,
+  RATE_SCALE,
+  susdrForUsdr,
+  susdrRate,
   toSmallestUnit,
+  usdrForSusdr,
   type RealFiOrder,
 } from './types';
 
@@ -97,3 +101,41 @@ describe('cancelling', () => {
     }
   });
 });
+
+describe("sUSDrf rate (RealFi's diffusion formula)", () => {
+  // RealFi's preprod vault on 2026-09-26; their app showed 1 sUSDrf = 1.033648 USDrf.
+  const PREPROD = {
+    vaultUsdr: '59947920817694',
+    circulatingSusdr: '57996439368652',
+    pendingYield: '0',
+    diffusionStart: '0',
+    diffusionEnd: '0',
+  };
+
+  it("matches RealFi's app to the last unit", () => {
+    expect(susdrRate(PREPROD, Date.now())).toBe(1_033_648n);
+  });
+
+  it('holds back yield still being released, linearly, rounding against the holder', () => {
+    const inputs = {
+      vaultUsdr: '1100000000',
+      circulatingSusdr: '1000000000',
+      pendingYield: '100000000',
+      diffusionStart: '1000',
+      diffusionEnd: '2000',
+    };
+    expect(susdrRate(inputs, 500)).toBe(1_000_000n); // before the window: all held back
+    expect(susdrRate(inputs, 1500)).toBe(1_050_000n); // halfway: half released
+    expect(susdrRate(inputs, 2000)).toBe(1_100_000n); // after: all released
+  });
+
+  it('is 1:1 with nothing in circulation', () => {
+    expect(susdrRate({ ...PREPROD, circulatingSusdr: '0' }, 0)).toBe(RATE_SCALE);
+  });
+
+  it('converts both ways, rounding down', () => {
+    expect(susdrForUsdr('10000000000', 1_033_648n)).toBe('9674473321');
+    expect(usdrForSusdr('5000000000', 1_033_648n)).toBe('5168240000');
+  });
+});
+

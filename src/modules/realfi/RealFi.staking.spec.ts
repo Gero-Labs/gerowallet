@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { isClaimable } from './types';
@@ -52,7 +52,9 @@ vi.mock('./components/RealFiAmountDialog.vue', () => ({
   },
 }));
 
-const wallet = { network: 'Preprod' };
+// Reactive, so a test can switch wallets under a page that stays mounted.
+// baseAddress is declared up front: Vue 2 does not track a property added later.
+const wallet = reactive<Record<string, unknown>>({ network: 'Preprod', baseAddress: undefined });
 vi.mock('@/stores/walletStore', () => ({
   default: {
     state: {
@@ -90,6 +92,7 @@ async function mountPage() {
       'v-row': { template: '<div><slot /></div>' },
       'v-col': { template: '<div><slot /></div>' },
       'v-btn': { template: '<button @click="$emit(\'click\')"><slot /></button>' },
+      'v-progress-circular': true,
     },
   });
   await settle(page);
@@ -277,11 +280,14 @@ describe('RealFi Earn page, right after an order is sent', () => {
     vi.useRealTimers();
   });
 
-  async function placeOrder(txId: string) {
+  /** The Activity row for the order on its way, shown like an unconfirmed home-screen tx. */
+  const pendingRow = (page: Page) => page.find('.realfi-order--pending');
+
+  async function placeOrder(txId: string, kind = 'stake') {
     const page = await mountPage();
     state.load.mockClear(); // count only what follows the order, not the page's own first load
     vi.useFakeTimers();
-    page.findComponent({ name: 'RealFiOrderFlow' }).vm.$emit('placed', txId, 'stake');
+    page.findComponent({ name: 'RealFiOrderFlow' }).vm.$emit('placed', txId, kind);
     await page.vm.$nextTick();
     return page;
   }
@@ -289,44 +295,60 @@ describe('RealFi Earn page, right after an order is sent', () => {
   it('says the order was sent and offers no second one while RealFi catches up', async () => {
     const page = await placeOrder('tx-new');
 
-    expect(page.text()).toContain('realfi.pending.title');
+    expect(pendingRow(page).exists()).toBe(true);
     expect(page.findAll('button').wrappers.map((b) => b.text())).not.toContain(
       'realfi.start.stakeCta',
     );
   });
 
-  it('checks quietly until the order is listed, then clears the notice', async () => {
+  it('re-checks the order list every 15 s until RealFi lists it, then clears the row', async () => {
     const page = await placeOrder('tx-new');
 
-    await vi.advanceTimersByTimeAsync(5000);
-    expect(state.load).toHaveBeenLastCalledWith({ quiet: true });
-    expect(page.text()).toContain('realfi.pending.title');
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(state.load).toHaveBeenLastCalledWith({ quiet: true, ordersOnly: true });
+    expect(pendingRow(page).exists()).toBe(true);
 
-    orders.value = [order({ txHash: 'tx-new', status: 'Open' })];
-    await vi.advanceTimersByTimeAsync(5000);
+    orders.value = [order({ txHash: 'tx-new', status: 'Validating' })];
     await page.vm.$nextTick();
 
-    expect(page.text()).not.toContain('realfi.pending.title');
+    expect(pendingRow(page).exists()).toBe(false);
     const calls = state.load.mock.calls.length;
-    await vi.advanceTimersByTimeAsync(30000);
+    await vi.advanceTimersByTimeAsync(60_000);
     expect(state.load.mock.calls.length).toBe(calls);
   });
 
-  it('stops waiting after two minutes', async () => {
-    const page = await placeOrder('tx-never-indexed');
+  it('keeps waiting past two minutes, when RealFi can still be indexing', async () => {
+    // Preprod took longer than two minutes to list an unstake. Giving up then made
+    // the page look as if nothing had been sent.
+    withPosition([]);
+    const page = await placeOrder('tx-slow');
 
-    await vi.advanceTimersByTimeAsync(24 * 5000);
+    await vi.advanceTimersByTimeAsync(3 * 60_000);
     await page.vm.$nextTick();
 
-    expect(page.text()).not.toContain('realfi.pending.title');
-    // The immediate reload plus 24 quiet checks, then nothing more.
-    expect(state.load).toHaveBeenCalledTimes(25);
+    expect(pendingRow(page).exists()).toBe(true);
+    // The wallet's balance has caught up by now, so new orders are offered again.
+    expect(page.findAll('button').wrappers.map((b) => b.text())).toContain('receive.tabStake');
   });
 
-  it("on a first stake, shows only the notice: no 'ready to earn', no empty position", async () => {
+  it('gives up after 30 minutes: something else is wrong by then', async () => {
+    const page = await placeOrder('tx-never-indexed');
+
+    await vi.advanceTimersByTimeAsync(31 * 60_000);
+    await page.vm.$nextTick();
+
+    expect(pendingRow(page).exists()).toBe(false);
+    const calls = state.load.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(state.load.mock.calls.length).toBe(calls);
+  });
+
+  it("on a first stake, shows the order pending in Activity: no 'ready to earn', no empty position", async () => {
     const page = await placeOrder('tx-first');
 
-    expect(page.text()).toContain('realfi.pending.title');
+    expect(pendingRow(page).exists()).toBe(true);
+    expect(pendingRow(page).text()).toContain('realfi.actions.stake');
+    expect(pendingRow(page).text()).toContain('common.pending');
     expect(page.text()).not.toContain('realfi.start.readyTitle');
     expect(page.text()).not.toContain('realfi.position.label');
   });
@@ -349,21 +371,228 @@ describe('RealFi Earn page, right after an order is sent', () => {
     expect(labels).not.toContain('dashboard.claim');
   });
 
-  it('a check still in flight for an older order cannot strand a newer one', async () => {
-    // The review's sequence: order A's quiet check is in flight when B is placed.
+  it('keeps a row per order in flight, each until RealFi lists it', async () => {
+    // Includes the earlier review's sequence: A's check is in flight when B is sent.
     let finishA: () => void = () => {};
     const page = await placeOrder('tx-A');
     state.load.mockImplementationOnce(() => new Promise<void>((r) => (finishA = r)));
-    await vi.advanceTimersByTimeAsync(5000); // A's check starts and hangs
+    await vi.advanceTimersByTimeAsync(15_000); // A's check starts and hangs
 
     page.findComponent({ name: 'RealFiOrderFlow' }).vm.$emit('placed', 'tx-B', 'claim');
-    finishA(); // A's check lands after B took over
+    finishA();
     await vi.advanceTimersByTimeAsync(0);
+    expect(page.findAll('.realfi-order--pending')).toHaveLength(2);
 
     orders.value = [order({ txHash: 'tx-B', status: 'Open' })];
-    await vi.advanceTimersByTimeAsync(5000);
+    await page.vm.$nextTick();
+    expect(page.findAll('.realfi-order--pending')).toHaveLength(1);
+    expect(pendingRow(page).text()).toContain('tx-A');
+
+    orders.value = [order({ txHash: 'tx-B', status: 'Open' }), order({ txHash: 'tx-A' })];
+    await page.vm.$nextTick();
+    expect(pendingRow(page).exists()).toBe(false);
+  });
+
+  it("keeps each wallet's pending orders under its own key across a wallet switch", async () => {
+    // Earn stays alive across a wallet switch, so nothing may be keyed on a live read.
+    const txA = 'aa'.repeat(32);
+    const keyA = 'realfi.pendingOrders:Preprod:addr_test1_wallet_a';
+    const keyB = 'realfi.pendingOrders:Preprod:addr_test1_wallet_b';
+    wallet['baseAddress'] = 'addr_test1_wallet_a';
+    try {
+      const page = await placeOrder(txA);
+      expect(JSON.parse(localStorage.getItem(keyA) ?? '[]')).toHaveLength(1);
+
+      wallet['baseAddress'] = 'addr_test1_wallet_b';
+      await page.vm.$nextTick();
+      expect(pendingRow(page).exists()).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(localStorage.getItem(keyB)).toBeNull();
+      expect(JSON.parse(localStorage.getItem(keyA) ?? '[]')).toHaveLength(1);
+
+      wallet['baseAddress'] = 'addr_test1_wallet_a';
+      await page.vm.$nextTick();
+      expect(pendingRow(page).exists()).toBe(true);
+    } finally {
+      wallet['baseAddress'] = undefined;
+      localStorage.clear();
+    }
+  });
+
+  it('survives a refresh: an order sent earlier is still shown as pending', async () => {
+    const txId = 'e78bc07cd1d99e2ef6b8607beedf02956c5271b890f7816f6f66e3fc2adb7f86';
+    const address = 'addr_test1qqmzx7n75w7wnj4cgt5wql2qn2k';
+    wallet['baseAddress'] = address;
+    localStorage.setItem(
+      `realfi.pendingOrders:Preprod:${address}`,
+      JSON.stringify([{ txId, kind: 'unstake', at: Date.now() - 90_000 }]),
+    );
+    try {
+      const page = await mountPage();
+
+      expect(pendingRow(page).exists()).toBe(true);
+      expect(pendingRow(page).text()).toContain('realfi.actions.unstake');
+    } finally {
+      wallet['baseAddress'] = undefined;
+      localStorage.clear();
+    }
+  });
+
+  it('words a pending claim or cancel like the row it will become', async () => {
+    withPosition([]);
+    const claimPage = await placeOrder('tx-claim', 'claim');
+    expect(pendingRow(claimPage).text()).toContain('realfi.activity.claimed');
+    vi.useRealTimers();
+
+    const cancelPage = await placeOrder('tx-cancel', 'cancel');
+    expect(pendingRow(cancelPage).text()).toContain('realfi.statuses.canceled');
+  });
+});
+
+describe('RealFi Earn page, where unstaked money is', () => {
+  // What RealFi's preprod vault reported: 1 sUSDrf = 1.033648 USDrf.
+  const RATE_INPUTS = {
+    vaultUsdr: '59947920817694',
+    circulatingSusdr: '57996439368652',
+    pendingYield: '0',
+    diffusionStart: '0',
+    diffusionEnd: '0',
+  };
+  const COOLING = {
+    action: 'Unstake' as const,
+    status: 'Executed' as const,
+    amount: '5000000000',
+    slot: '1000',
+    unlockSlot: '9000',
+    resultTxHash: TX,
+    resultOutputIndex: 0,
+  };
+
+  beforeEach(() => {
+    currentSlot.value = 5000;
+    state.hasUsdr.value = false;
+    state.actionableOrders.value = [];
+    state.protocol.value = { nextCooldownSlot: '5000' };
+  });
+
+  /** Mount with i18n.t spied, so the values each line is built from can be checked. */
+  async function mountSpying(list: RealFiOrder[]) {
+    const i18n = (await import('@/plugins/i18n')).default as unknown as {
+      t: (k: string, v?: unknown) => string;
+    };
+    const spy = vi.spyOn(i18n, 't');
+    withPosition(list);
+    const page = await mountPage();
+    const calls = spy.mock.calls.map(([k, v]) => [String(k), v]);
+    spy.mockRestore();
+    return { page, calls };
+  }
+
+  it('lists an unstake with the exact USDrf, what went in, and when it opens', async () => {
+    const { page, calls } = await mountSpying([order({ ...COOLING, resultAmount: '5168241487' })]);
+
+    const card = page.find('.realfi-unstaking');
+    expect(card.text()).toContain('5,168.24 USDrf');
+    expect(calls).toContainEqual(['realfi.unstaking.from', { amount: '5,000.00 sUSDrf' }]);
+    // 4,000 slots (seconds) to go: 1h 06m.
+    expect(calls).toContainEqual(['realfi.duration.hm', { h: 1, m: 6 }]);
+    expect(calls).toContainEqual(['realfi.unstaking.total', { amount: '5,168.24 USDrf' }]);
+  });
+
+  it('shows how far through the cooldown each unstake is', async () => {
+    const { page } = await mountSpying([order(COOLING)]);
+
+    const bar = page.find('.realfi-unstake__track');
+    expect(bar.attributes('aria-valuenow')).toBe('50');
+    expect(page.find('.realfi-unstake__fill').attributes('style')).toContain('scaleX(0.5)');
+  });
+
+  it("estimates the USDrf at today's rate until Nexus reads the exact amount", async () => {
+    state.protocol.value = { nextCooldownSlot: '5000', rateInputs: RATE_INPUTS };
+    const { page, calls } = await mountSpying([order(COOLING)]);
+
+    expect(page.find('.realfi-unstaking').text()).toContain('\u2248 5,168.24 USDrf');
+    expect(calls).toContainEqual(['realfi.unstaking.total', { amount: '\u2248 5,168.24 USDrf' }]);
+  });
+
+  it('falls back to the sUSDrf sent in when there is no rate either', async () => {
+    const { page, calls } = await mountSpying([order(COOLING)]);
+
+    expect(page.find('.realfi-unstaking').text()).toContain('5,000.00 sUSDrf');
+    expect(calls.map(([k]) => k)).not.toContain('realfi.unstaking.total');
+  });
+
+  it('turns into "Ready to claim" with a Claim button once the cooldown has passed', async () => {
+    currentSlot.value = 9000;
+    const { page, calls } = await mountSpying([order({ ...COOLING, resultAmount: '5168241487' })]);
+
+    const card = page.find('.realfi-unstaking');
+    expect(calls).toContainEqual(['realfi.claim.title', undefined]);
+    expect(card.findAll('button').wrappers.map((b) => b.text())).toContain('dashboard.claim');
+    expect(page.find('.realfi-unstake__fill').classes()).toContain('realfi-unstake__fill--ready');
+  });
+
+  it('shows what is held and the rate behind the dollar value', async () => {
+    state.protocol.value = { nextCooldownSlot: '5000', rateInputs: RATE_INPUTS };
+    const { page, calls } = await mountSpying([]);
+    state.position.value = { ...(state.position.value as object), totalSUSDr: '4169640000' };
     await page.vm.$nextTick();
 
-    expect(page.text()).not.toContain('realfi.pending.title');
+    expect(page.find('.realfi-hero__holding').text()).toContain('4,169.64 sUSDrf');
+    expect(calls).toContainEqual(['realfi.rate', { rate: '1.0336' }]);
+  });
+
+  it('charts the fund yield once there are two days to draw, and not before', async () => {
+    state.protocol.value = {
+      nextCooldownSlot: '5000',
+      apyAvg90Percent: 8.3,
+      apyHistory: [{ date: '2026-09-24', apyPercent: 8.2 }],
+    };
+    let { page } = await mountSpying([]);
+    expect(page.find('.realfi-yield').exists()).toBe(false);
+
+    state.protocol.value = {
+      nextCooldownSlot: '5000',
+      apyAvg90Percent: 8.3,
+      apyHistory: [
+        { date: '2026-09-24', apyPercent: 8.2 },
+        { date: '2026-09-25', apyPercent: 8.4 },
+      ],
+    };
+    ({ page } = await mountSpying([]));
+    expect(page.find('.realfi-yield').exists()).toBe(true);
+    expect(page.find('.realfi-hero__body').classes()).toContain('realfi-hero__body--split');
+  });
+
+  it('sums what is in cooldown and what the user has at RealFi in total', async () => {
+    const { page, calls } = await mountSpying([order({ ...COOLING, resultAmount: '5168241487' })]);
+
+    const stats = page.find('.realfi-stats').text();
+    expect(stats).toContain('5,168.24 USDrf');
+    // The position's 1.00 plus the 5,168.24 still in cooldown.
+    expect(stats).toContain('$5,169.24');
+    expect(calls).toContainEqual(['realfi.unstaking.next', { wait: 'realfi.duration.hm' }]);
+  });
+
+  it('marks the total as an estimate while an amount is estimated, and omits it when unknown', async () => {
+    state.protocol.value = { nextCooldownSlot: '5000', rateInputs: RATE_INPUTS };
+    let { page } = await mountSpying([order(COOLING)]);
+    expect(page.find('.realfi-stats').text()).toContain('≈ $5,169.24');
+
+    state.protocol.value = { nextCooldownSlot: '5000' };
+    ({ page } = await mountSpying([order(COOLING)]));
+    expect(page.find('.realfi-stats').text()).not.toContain('realfi.stats.total');
+  });
+
+  it('puts the amount on each Activity row, in the token the order put in', async () => {
+    const { page } = await mountSpying([
+      order({ ...COOLING, resultAmount: '5168241487' }),
+      order({ action: 'Stake', status: 'Executed', amount: '9994980280' }),
+    ]);
+
+    const rows = page.findAll('.realfi-order').wrappers.map((r) => r.text());
+    expect(rows[0]).toContain('5,000.00 sUSDrf');
+    expect(rows[1]).toContain('9,994.98 USDrf');
   });
 });

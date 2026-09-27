@@ -16,11 +16,11 @@ import networks from '@/utils/networks';
 import { debugLog } from '@/utils/debug';
 import { resolveRealFiReadClient, type RealFiReadClient } from '../services/realfiClient';
 import { susdrAssetIdFor, usdrAssetIdFor } from '../assets';
+import { hasReferralOptIn, rememberReferralOptIn } from '../referralOptIn';
 import {
   EMPTY_POINTS,
   EMPTY_REFERRALS,
   fromSmallestUnit,
-  isClaimable,
   isFailed,
   isInReview,
   needsAction,
@@ -105,12 +105,6 @@ export function useRealFi() {
   /** The chain tip's slot, from Gero Sync. Null until the first tip arrives. */
   const currentSlot = computed<number | null>(() => NetworkStore.getCurrentSlot());
 
-  /** Executed unstakes whose timelock has opened: ready to claim. */
-  const claimableOrders = computed<RealFiOrder[]>(() =>
-    orders.value.filter((o) => isClaimable(o, currentSlot.value)),
-  );
-
-
   /** Orders the user must act on — the operator will not clear these by itself. */
   const actionableOrders = computed<RealFiOrder[]>(() => orders.value.filter(needsAction));
 
@@ -148,12 +142,23 @@ export function useRealFi() {
    * @param options.quiet A background refresh (the page polling for an order it just
    *   placed): no loading state, so nothing flickers, and a failed refresh leaves the
    *   page as it was rather than replacing it with an error.
+   * @param options.ordersOnly With `quiet`: re-read the order list alone. The page polls
+   *   it while an order it sent is not listed yet, and the other four reads have no
+   *   reason to repeat every few seconds.
    */
-  async function load(options: { quiet?: boolean } = {}): Promise<void> {
+  async function load(options: { quiet?: boolean; ordersOnly?: boolean } = {}): Promise<void> {
     const quiet = options.quiet === true;
     const w = wallet.value;
     if (!w?.baseAddress) {
       unavailableReason.value = 'unsupported-network';
+      return;
+    }
+    if (quiet && options.ordersOnly && activeClient && activeAddress === w.baseAddress) {
+      try {
+        orders.value = await activeClient.getOrders(activeAddress);
+      } catch (error) {
+        debugLog('[RealFi] order re-check failed; keeping what is shown', error);
+      }
       return;
     }
     if (!isAvailable.value) {
@@ -183,7 +188,8 @@ export function useRealFi() {
         await Promise.allSettled([
           client.getPosition(address),
           client.getPoints(address),
-          client.getReferrals(address),
+          // Only once the user has asked for a code: reading one mints it.
+          client.getReferrals(address, hasReferralOptIn(w.network, address)),
           client.getOrders(address),
           client.getProtocol(),
         ]);
@@ -226,6 +232,8 @@ export function useRealFi() {
     isRequestingCode.value = true;
     try {
       referrals.value = await activeClient.getReferrals(activeAddress, true);
+      const network = wallet.value?.network;
+      if (referrals.value.code && network) rememberReferralOptIn(network, activeAddress);
     } catch (error) {
       debugLog('[RealFi] failed to fetch referral code', error);
     } finally {
@@ -255,7 +263,6 @@ export function useRealFi() {
     susdrUnits,
     canTransact,
     currentSlot,
-    claimableOrders,
     load,
     requestReferralCode,
   };

@@ -30,7 +30,27 @@
         </template>
       </v-text-field>
 
+      <!-- What comes back, before anything is signed: the other side of the trade at
+           today's rate, and for a stake what a year at the average yield would add. -->
+      <dl v-if="preview" class="realfi-amount__preview">
+        <div class="realfi-amount__row">
+          <dt class="t-caption">{{ $t('market.youReceive') }}</dt>
+          <dd class="t-body g-num realfi-amount__strong">{{ preview.receive }}</dd>
+        </div>
+        <div class="realfi-amount__row">
+          <dt class="t-caption">{{ $t('miniGero.rate') }}</dt>
+          <dd class="t-body-sm g-num">{{ preview.rate }}</dd>
+        </div>
+        <div v-if="preview.earnings" class="realfi-amount__row">
+          <dt class="t-caption">{{ $t('realfi.order.earnings') }}</dt>
+          <dd class="t-body-sm g-num">{{ preview.earnings }}</dd>
+        </div>
+      </dl>
+
       <p class="t-body-sm realfi-amount__note">{{ note }}</p>
+      <p v-if="preview && preview.earnings" class="t-caption realfi-amount__fine">
+        {{ $t('realfi.order.earningsNote', { rate: apyLabel }) }}
+      </p>
 
       <div class="realfi-amount__actions">
         <GButton tier="tertiary" @click="$emit('close')">{{ $t('common.cancel') }}</GButton>
@@ -52,7 +72,9 @@ import {
   compareUnits,
   fromSmallestUnit,
   REALFI_DECIMALS,
+  susdrForUsdr,
   toSmallestUnit,
+  usdrForSusdr,
   type SmallestUnit,
 } from '../types';
 
@@ -70,6 +92,10 @@ const props = defineProps<{
   balanceUnits: SmallestUnit;
   /** Unstake only: when the released USDrf becomes claimable, already formatted. */
   unlockDate?: string;
+  /** USDrf per sUSDrf, scaled by 1e6, as a decimal string. Absent: no preview. */
+  rate?: string | null;
+  /** Stake only: the average yield the earnings estimate uses, percent. */
+  apyPercent?: number | null;
 }>();
 
 const emit = defineEmits<{
@@ -120,6 +146,43 @@ const errorMessage = computed(() => {
 });
 
 /** The amount to order, or null while the input is empty or invalid. */
+const apyLabel = computed(() =>
+  props.apyPercent != null ? props.apyPercent.toFixed(1) : '',
+);
+
+/**
+ * The trade's other side at today's rate, for a valid amount. An estimate by nature:
+ * the order fills at the rate when RealFi processes it, which drifts up with yield.
+ */
+const preview = computed(() => {
+  const units = parsed.value;
+  if (!units || errorMessage.value || !props.rate) return null;
+  const rate = BigInt(props.rate);
+  if (rate <= 0n) return null;
+  const rateText = t('realfi.rate', { rate: fromSmallestUnit(props.rate).toFixed(4) });
+  if (props.mode === 'stake') {
+    const yearly =
+      props.apyPercent != null && props.apyPercent > 0
+        ? fromSmallestUnit(units) * (props.apyPercent / 100)
+        : null;
+    return {
+      receive: `≈ ${unitsText(susdrForUsdr(units, rate), 'sUSDrf')}`,
+      rate: rateText,
+      earnings:
+        yearly !== null ? `≈ ${formatUsd(yearly, { symbol: false })} USDrf` : '',
+    };
+  }
+  return {
+    receive: `≈ ${unitsText(usdrForSusdr(units, rate), 'USDrf')}`,
+    rate: rateText,
+    earnings: '',
+  };
+});
+
+function unitsText(units: SmallestUnit, ticker: string): string {
+  return `${formatUsd(fromSmallestUnit(units), { symbol: false })} ${ticker}`;
+}
+
 const amountUnits = computed<SmallestUnit | null>(() =>
   parsed.value && !errorMessage.value ? parsed.value : null,
 );
@@ -147,6 +210,39 @@ function confirm(): void {
 .realfi-amount__note {
   margin: 0 0 var(--g-s-4);
   color: var(--g-text-2);
+}
+
+.realfi-amount__preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-2);
+  padding: var(--g-s-3);
+  margin: 0 0 var(--g-s-3);
+  background: var(--g-overlay);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-control);
+}
+
+.realfi-amount__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--g-s-3);
+
+  dd {
+    margin: 0;
+    text-align: right;
+  }
+}
+
+.realfi-amount__strong {
+  color: var(--g-text-1);
+  font-weight: 600;
+}
+
+.realfi-amount__fine {
+  margin: calc(var(--g-s-2) * -1) 0 var(--g-s-4);
+  color: var(--g-text-3);
 }
 
 .realfi-amount__actions {

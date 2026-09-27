@@ -41,18 +41,9 @@
         </div>
 
         <template v-else>
-          <!-- An order just went on chain but RealFi has not indexed it yet. Without
-               this the page would re-offer the same USDrf, inviting a second order. -->
-          <section v-if="pendingTxId" class="realfi-notice">
-            <div class="realfi-notice__text">
-              <p class="t-body-lg mb-1">{{ $t('realfi.pending.title') }}</p>
-              <p class="t-body-sm realfi-notice__body">{{ $t('realfi.pending.body') }}</p>
-            </div>
-          </section>
-
           <!-- Nothing staked and no activity. Rendering the hero here would show "$0.00"
                with no explanation, and at launch that is every user's first look. -->
-          <section v-if="isEmpty && !pendingTxId" class="realfi-start">
+          <section v-if="isEmpty && !pendingOrders.length" class="realfi-start">
             <span class="realfi-glyph realfi-glyph--lg" aria-hidden="true"></span>
             <!-- Holding USDrf but nothing staked is a DIFFERENT state from holding
                  nothing: telling someone with 9,994 USDrf to "get USDrf" is noise. -->
@@ -63,7 +54,7 @@
               </p>
               <template v-if="canTransact">
                 <GButton
-                  v-if="!pendingTxId"
+                  v-if="!ordersLocked"
                   tier="primary"
                   class="mt-4"
                   @click="openAmount('stake')"
@@ -82,7 +73,13 @@
                 {{ $t('realfi.start.cta') }}
               </GButton>
             </template>
-            <p v-if="apyLabel" class="t-caption realfi-start__note">{{ apyLabel }}</p>
+            <RealFiYieldChart
+              v-if="showYieldChart"
+              class="realfi-start__yield"
+              :history="apyHistory"
+              :avgPercent="apyAvg"
+            />
+            <p v-else-if="apyLabel" class="t-caption realfi-start__note">{{ apyLabel }}</p>
             <p v-if="!canTransact" class="t-caption realfi-start__note">
               {{ $t('realfi.start.note') }}
             </p>
@@ -91,53 +88,121 @@
           <template v-else-if="!isEmpty">
           <!-- Position -->
           <section class="realfi-hero">
+            <!-- Actions sit in the header row: on the card's own line they left the
+                 right half empty whenever there was no chart beside the figure. -->
             <div class="realfi-hero__top">
               <span class="t-label">{{ $t('realfi.position.label') }}</span>
-              <!-- Plain coloured text, never a chip: the design language reserves
-                   chips for status and gives deltas a glyph instead. -->
-              <span :class="['t-body-sm', 'g-num', deltaClass]">{{ yieldLabel }}</span>
+              <div
+                v-if="canTransact && !ordersLocked && (hasUsdr || canUnstake)"
+                class="realfi-hero__actions"
+              >
+                <GButton v-if="hasUsdr" tier="primary" compact @click="openAmount('stake')">
+                  {{ $t('receive.tabStake') }}
+                </GButton>
+                <GButton
+                  v-if="canUnstake"
+                  tier="secondary"
+                  compact
+                  @click="openAmount('unstake')"
+                >
+                  {{ $t('staking.unstake') }}
+                </GButton>
+              </div>
             </div>
 
-            <p class="t-display g-num realfi-hero__value">{{ positionValue }}</p>
+            <div :class="['realfi-hero__body', { 'realfi-hero__body--split': showYieldChart }]">
+              <div class="realfi-hero__main">
+                <p class="t-display g-num realfi-hero__value">{{ positionValue }}</p>
+                <!-- What is actually held, and the rate that turns it into the dollar
+                     figure above: the value moves with the rate, the sUSDrf does not. -->
+                <p v-if="holdingLabel" class="t-body-sm g-num realfi-hero__holding">
+                  {{ holdingLabel }}
+                </p>
+                <p v-if="apyLabel && !showYieldChart" class="t-caption realfi-hero__apy">
+                  {{ apyLabel }}
+                </p>
+              </div>
+              <RealFiYieldChart
+                v-if="showYieldChart"
+                class="realfi-hero__yield"
+                :history="apyHistory"
+                :avgPercent="apyAvg"
+              />
+            </div>
 
-            <div class="realfi-hero__meta">
-              <span class="t-body-sm">
-                {{ $t('realfi.position.earned') }}
-                <b :class="['realfi-strong', 'g-num', deltaClass]">{{ earnedLabel }}</b>
-              </span>
-              <span class="t-body-sm">
-                {{ $t('realfi.position.principal') }}
-                <b class="realfi-strong g-num">{{ principalLabel }}</b>
-              </span>
-            </div>
-            <p v-if="apyLabel" class="t-caption realfi-hero__apy">{{ apyLabel }}</p>
-            <div
-              v-if="canTransact && !pendingTxId && (hasUsdr || canUnstake)"
-              class="realfi-hero__actions"
-            >
-              <GButton v-if="hasUsdr" tier="primary" compact @click="openAmount('stake')">
-                {{ $t('receive.tabStake') }}
-              </GButton>
-              <GButton v-if="canUnstake" tier="secondary" compact @click="openAmount('unstake')">
-                {{ $t('staking.unstake') }}
-              </GButton>
-            </div>
+            <!-- The numbers behind the headline, one per column. "Total with RealFi"
+                 is the one a user doing sums wants: the position excludes anything in
+                 cooldown, which is still theirs and still at RealFi. -->
+            <dl class="realfi-stats">
+              <div class="realfi-stats__item">
+                <dt class="t-caption">{{ $t('realfi.position.earned') }}</dt>
+                <dd :class="['t-heading', 'g-num', deltaClass]">{{ earnedLabel }}</dd>
+                <!-- Plain coloured text, never a chip: the design language reserves
+                     chips for status and gives deltas a glyph instead. -->
+                <dd :class="['t-caption', 'g-num', deltaClass]">
+                  {{ $t('realfi.stats.toDate', { change: yieldLabel }) }}
+                </dd>
+              </div>
+              <div class="realfi-stats__item">
+                <dt class="t-caption">{{ $t('realfi.position.principal') }}</dt>
+                <dd class="t-heading g-num">{{ principalLabel }}</dd>
+              </div>
+              <div v-if="cooling" class="realfi-stats__item">
+                <dt class="t-caption">{{ $t('realfi.stats.cooldown') }}</dt>
+                <dd class="t-heading g-num">{{ cooling.amount }}</dd>
+                <dd v-if="cooling.next" class="t-caption g-num">{{ cooling.next }}</dd>
+              </div>
+              <div v-if="totalWithRealFi" class="realfi-stats__item">
+                <dt class="t-caption">{{ $t('realfi.stats.total') }}</dt>
+                <dd class="t-heading g-num">{{ totalWithRealFi }}</dd>
+                <dd class="t-caption">{{ $t('realfi.stats.totalNote') }}</dd>
+              </div>
+            </dl>
           </section>
 
-          <!-- Released USDrf waiting in its timelock: the user's money, one tap away. -->
-          <section
-            v-if="canTransact && !pendingTxId && claimableOrders.length"
-            class="realfi-notice"
-          >
-            <div class="realfi-notice__text">
-              <p class="t-body-lg mb-1">{{ $t('realfi.claim.title') }}</p>
-              <p class="t-body-sm realfi-notice__body">
-                {{ $tc('realfi.claim.body', claimableOrders.length) }}
-              </p>
+          <!-- Unstaked but not claimed: the USDrf sits in RealFi's cooldown timelock,
+               in neither the wallet nor the position. Each one shows how much, how far
+               through the cooldown it is, and when it opens; then it can be claimed. -->
+          <section v-if="unstakes.length" class="realfi-unstaking" aria-live="polite">
+            <div class="realfi-unstaking__head">
+              <span class="t-label">{{ unstakingTitle }}</span>
+              <span v-if="unstakingSummary" class="t-body-sm g-num realfi-unstaking__summary">
+                {{ unstakingSummary }}
+              </span>
             </div>
-            <GButton tier="primary" compact @click="claim(claimableOrders[0])">
-              {{ $t('dashboard.claim') }}
-            </GButton>
+            <ul class="realfi-unstaking__list">
+              <li v-for="u in unstakes" :key="u.key" class="realfi-unstake">
+                <span class="realfi-unstake__amount">
+                  <span class="t-body g-num realfi-strong">{{ u.amount }}</span>
+                  <span v-if="u.from" class="t-caption g-num">{{ u.from }}</span>
+                </span>
+                <span class="realfi-unstake__time">
+                  <span
+                    v-if="u.progress !== null"
+                    class="realfi-unstake__track"
+                    role="progressbar"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                    :aria-valuenow="Math.round(u.progress * 100)"
+                    :aria-label="$t('realfi.unstaking.progress')"
+                  >
+                    <span
+                      :class="['realfi-unstake__fill', { 'realfi-unstake__fill--ready': u.ready }]"
+                      :style="{ transform: `scaleX(${u.progress})` }"
+                    />
+                  </span>
+                  <span class="t-caption g-num">{{ u.when }}</span>
+                </span>
+                <GButton
+                  v-if="u.ready && canTransact && !ordersLocked"
+                  tier="primary"
+                  compact
+                  @click="claim(u.order)"
+                >
+                  {{ $t('dashboard.claim') }}
+                </GButton>
+              </li>
+            </ul>
           </section>
 
           <!-- Anything needing the user's attention comes before anything decorative -->
@@ -157,7 +222,7 @@
                  orders the banner hands off to RealFi instead. -->
             <template v-if="canTransact">
               <GButton
-                v-if="!pendingTxId"
+                v-if="!ordersLocked"
                 tier="secondary"
                 compact
                 @click="cancelOrders(actionableOrders)"
@@ -202,6 +267,7 @@
             <section class="realfi-card">
               <div class="realfi-card__head">
                 <span class="t-label">{{ $t('realfi.points.label') }}</span>
+                <p class="t-caption realfi-card__about">{{ $t('realfi.points.about') }}</p>
               </div>
               <template v-if="hasPointsRecord">
                 <p class="realfi-stat g-num">
@@ -251,19 +317,56 @@
               </div>
             </section>
 
-            <!-- Activity — only once there is some; the start card covers "none yet". -->
-            <section v-if="!isEmpty" class="realfi-card">
+            <!-- Activity — once there is some, or an order is on its way; the start card
+                 covers "none yet". -->
+            <section v-if="!isEmpty || pendingOrders.length" class="realfi-card">
               <div class="realfi-card__head">
                 <span class="t-label">{{ $t('realfi.activity.label') }}</span>
               </div>
-              <ul v-if="orders.length" class="realfi-orders">
+              <ul v-if="orders.length || pendingOrders.length" class="realfi-orders">
+                <!-- Orders sent that RealFi has not listed yet, shown the way the home
+                     screen shows an unconfirmed transaction. They survive a refresh. -->
+                <li
+                  v-for="pending in pendingOrders"
+                  :key="pending.txId"
+                  class="realfi-order realfi-order--pending"
+                >
+                  <span class="realfi-order__what">
+                    <span class="realfi-order__label">
+                      <span class="t-body-sm">{{ pendingLabel(pending.kind) }}</span>
+                      <v-progress-circular
+                        indeterminate
+                        :size="12"
+                        :width="2"
+                        color="warning"
+                        class="flex-shrink-0"
+                        :aria-label="$t('dashboard.transactionPendingConfirmation')"
+                        :title="$t('dashboard.transactionPendingConfirmation')"
+                      />
+                    </span>
+                    <span class="t-caption g-mono realfi-order__tx" :title="pending.txId">
+                      {{ shortTx(pending.txId) }}
+                    </span>
+                  </span>
+                  <span class="realfi-order__side">
+                    <span class="realfi-pill realfi-pill--wait">{{ $t('common.pending') }}</span>
+                  </span>
+                </li>
                 <li
                   v-for="order in orders"
                   :key="`${order.txHash}#${order.outputIndex}`"
                   class="realfi-order"
                 >
                   <span class="realfi-order__what">
-                    <span class="t-body-sm">{{ actionLabel(order.action) }}</span>
+                    <span class="t-body-sm realfi-order__label">
+                      {{ actionLabel(order.action) }}
+                      <span v-if="orderAmountLabel(order)" class="g-num realfi-strong">
+                        {{ orderAmountLabel(order) }}
+                      </span>
+                    </span>
+                    <span v-if="claimableFrom(order)" class="t-caption realfi-order__when">
+                      {{ $t('realfi.claim.from', { date: claimableFrom(order) }) }}
+                    </span>
                     <!-- The id RealFi support asks for, and what a failed order's
                          notice tells the user to send them. -->
                     <span class="t-caption g-mono realfi-order__tx" :title="order.txHash">
@@ -271,7 +374,7 @@
                     </span>
                   </span>
                   <span class="realfi-order__side">
-                    <template v-if="canTransact && !pendingTxId">
+                    <template v-if="canTransact && !ordersLocked">
                       <GButton
                         v-if="isRowClaimable(order)"
                         tier="primary"
@@ -288,9 +391,6 @@
                       >
                         {{ $t('realfi.cancel.cta') }}
                       </GButton>
-                      <span v-else-if="claimableFrom(order)" class="t-caption">
-                        {{ $t('realfi.claim.from', { date: claimableFrom(order) }) }}
-                      </span>
                     </template>
                     <span :class="['realfi-pill', pillClass(order.status)]">
                       {{ statusLabel(order.status) }}
@@ -312,6 +412,8 @@
             :mode="amountMode"
             :balanceUnits="amountMode === 'stake' ? usdrUnits : susdrUnits"
             :unlockDate="unlockDateLabel"
+            :rate="rate === null ? null : rate.toString()"
+            :apyPercent="protocol && (protocol.apyAvg90Percent != null ? protocol.apyAvg90Percent : protocol.apyPercent)"
             @close="amountMode = null"
             @confirm="onAmountConfirm"
           />
@@ -323,7 +425,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import { formatUsd, formatInt, formatSignedChange } from '@/shared/utils/format';
 import i18n from '@/plugins/i18n';
@@ -331,12 +433,21 @@ import snackbar from '@/plugins/snackbar';
 import WalletStore from '@/stores/walletStore';
 import { Network } from '@/models/types';
 import { useRealFi } from './composables/useRealFi';
-import type { RealFiBuildRequest } from './services/realfiOrders';
+import RealFiYieldChart from './components/RealFiYieldChart.vue';
+import type { RealFiBuildRequest, RealFiOrderKind } from './services/realfiOrders';
+import {
+  PENDING_MAX_AGE_MS,
+  readPendingOrders,
+  savePendingOrders,
+  type PendingOrder,
+} from './pendingOrders';
 import {
   fromSmallestUnit,
   isCancellable,
   isClaimable,
   isUnclaimed,
+  susdrRate,
+  usdrForSusdr,
   ORDER_STATUSES_FAILED,
   ORDER_STATUSES_NEEDING_ACTION,
   type RealFiOrder,
@@ -374,7 +485,6 @@ const {
   susdrUnits,
   susdrBalance,
   currentSlot,
-  claimableOrders,
 } = useRealFi();
 
 const t = (key: string, values?: Record<string, unknown>) => i18n.t(key, values) as string;
@@ -538,21 +648,64 @@ function onAmountConfirm(amount: SmallestUnit): void {
   }
 }
 
-/* ── The order just sent ───────────────────────────────────────────────────── */
+/* ── Orders sent, not listed yet ── */
 
 /**
- * The tx id of an order that is on chain but not yet in RealFi's list.
+ * Orders on chain that RealFi has not listed yet, newest first.
  *
- * RealFi indexes asynchronously, so a reload right after submitting still shows the
- * page as it was: the start card offering to stake the very USDrf just sent. Until
- * the order appears, the page says it was sent and offers no new order of ANY kind,
- * so one pending order is tracked at a time.
+ * RealFi indexes asynchronously, and on preprod that has run past two minutes. Each
+ * one shows in Activity as pending until it is listed, is kept across a refresh (see
+ * `pendingOrders.ts`), and is re-checked on one timer, so several can be in flight.
  */
-const pendingTxId = ref<string | null>(null);
-const PENDING_POLL_MS = 5000;
-/** Two minutes. Past that, stop waiting; the next manual refresh will show it. */
-const PENDING_MAX_POLLS = 24;
+const pendingOrders = ref<PendingOrder[]>([]);
+/** Advanced on each re-check; drives the order lock below. */
+const now = ref(Date.now());
+
+/**
+ * Nexus caches a wallet's orders for 15 s, so checking any faster would only read the
+ * same answer again.
+ */
+const PENDING_POLL_MS = 15_000;
+/**
+ * New orders wait this long after one is sent: until then the wallet's own balance
+ * may still show the funds just spent, and would offer them again.
+ */
+const ORDER_LOCK_MS = 120_000;
 let pendingTimer: ReturnType<typeof setTimeout> | null = null;
+
+const ordersLocked = computed(() =>
+  pendingOrders.value.some((p) => now.value - p.at < ORDER_LOCK_MS),
+);
+
+interface PendingOwner {
+  network: string;
+  address: string;
+}
+
+/** The logged-in wallet's storage key; null when there is no address to key on. */
+function currentWalletKey(): PendingOwner | null {
+  const w = WalletStore.state.loggedWallet;
+  return w?.network && w.baseAddress ? { network: w.network, address: w.baseAddress } : null;
+}
+
+/**
+ * The wallet `pendingOrders` belongs to, fixed when the list is loaded, never read
+ * live. The page is kept alive across a wallet switch, so a live read would save
+ * one wallet's pending orders under the next wallet's key.
+ */
+let pendingOwner: PendingOwner | null = null;
+
+/** Worded like the settled row it will become, as the home screen does for a send. */
+const PENDING_LABEL_KEYS: Record<RealFiOrderKind, string> = {
+  stake: 'realfi.actions.stake',
+  unstake: 'realfi.actions.unstake',
+  claim: 'realfi.activity.claimed',
+  cancel: 'realfi.statuses.canceled',
+};
+
+function pendingLabel(kind: RealFiOrderKind): string {
+  return t(PENDING_LABEL_KEYS[kind]);
+}
 
 function clearPendingTimer(): void {
   if (pendingTimer) clearTimeout(pendingTimer);
@@ -566,27 +719,67 @@ function hasLanded(txId: string): boolean {
   );
 }
 
-function pollForPlaced(txId: string, remaining: number): void {
-  // A newer order took over: this chain is stale and must not touch the shared
-  // timer, or it would cancel the newer chain's check and strand its notice.
-  if (pendingTxId.value !== txId) return;
+/** Drop what RealFi now lists or what has aged out, and keep storage in step. */
+function settlePending(): void {
+  now.value = Date.now();
+  const still = pendingOrders.value.filter(
+    (p) => !hasLanded(p.txId) && now.value - p.at < PENDING_MAX_AGE_MS,
+  );
+  if (still.length !== pendingOrders.value.length) pendingOrders.value = still;
+  if (!still.length) clearPendingTimer();
+  if (pendingOwner) savePendingOrders(pendingOwner.network, pendingOwner.address, still);
+}
+
+/** One timer for every pending order: re-read the order list, settle, go again. */
+function schedulePendingCheck(): void {
   clearPendingTimer();
-  if (remaining <= 0 || hasLanded(txId)) {
-    if (pendingTxId.value === txId) pendingTxId.value = null;
-    return;
-  }
+  if (!pendingOrders.value.length) return;
   pendingTimer = setTimeout(async () => {
-    await load({ quiet: true });
-    pollForPlaced(txId, remaining - 1);
+    await load({ quiet: true, ordersOnly: true });
+    settlePending();
+    schedulePendingCheck();
   }, PENDING_POLL_MS);
 }
 
-function onPlaced(txId: string): void {
-  pendingTxId.value = txId;
+function onPlaced(txId: string, kind: RealFiOrderKind): void {
+  now.value = Date.now();
+  pendingOrders.value = [
+    { txId, kind, at: now.value },
+    ...pendingOrders.value.filter((p) => p.txId !== txId),
+  ];
+  settlePending();
   void load();
-  pollForPlaced(txId, PENDING_MAX_POLLS);
+  schedulePendingCheck();
 }
 
+/**
+ * Load the logged-in wallet's pending orders: those sent on an earlier visit that
+ * RealFi had not listed yet. Also run on a wallet switch, which swaps the list for
+ * the new wallet's (the old one's stays saved under its own key).
+ */
+function restorePending(): void {
+  clearPendingTimer();
+  pendingOwner = currentWalletKey();
+  pendingOrders.value = pendingOwner
+    ? readPendingOrders(pendingOwner.network, pendingOwner.address)
+    : [];
+  schedulePendingCheck();
+}
+
+watch(
+  () => {
+    const w = WalletStore.state.loggedWallet;
+    return `${w?.network ?? ''}:${w?.baseAddress ?? ''}`;
+  },
+  restorePending,
+);
+
+// Any fresh order list (the page's own loads included) may list a pending order.
+watch(orders, () => {
+  if (pendingOrders.value.length) settlePending();
+});
+
+onMounted(restorePending);
 onBeforeUnmount(clearPendingTimer);
 
 function claim(order: RealFiOrder | undefined): void {
@@ -616,6 +809,188 @@ function isRowClaimable(order: RealFiOrder): boolean {
 function isRowCancellable(order: RealFiOrder): boolean {
   return isCancellable(order);
 }
+
+/** A smallest-unit amount as "5,168.24 USDrf". Tokens track the dollar, so cents. */
+function unitsLabel(units: SmallestUnit, ticker: string): string {
+  return `${formatUsd(fromSmallestUnit(units), { symbol: false })} ${ticker}`;
+}
+
+/** What an order put in, in its own token. Only the two actions Gero places. */
+function orderAmountLabel(order: RealFiOrder): string {
+  if (!order.amount) return '';
+  if (order.action === 'Stake') return unitsLabel(order.amount, 'USDrf');
+  if (order.action === 'Unstake') return unitsLabel(order.amount, 'sUSDrf');
+  return '';
+}
+
+/* ── Rate and yield ── */
+
+/** USDrf per sUSDrf now, scaled by 1e6, by RealFi's formula; null without its inputs. */
+const rate = computed<bigint | null>(() => {
+  const inputs = protocol.value?.rateInputs;
+  return inputs ? susdrRate(inputs, Date.now()) : null;
+});
+
+const rateLabel = computed(() =>
+  rate.value === null ? '' : t('realfi.rate', { rate: fromSmallestUnit(rate.value.toString()).toFixed(4) }),
+);
+
+/** "4,169.64 sUSDrf · 1 sUSDrf = 1.0336 USDrf": what is held, and what it is worth. */
+const holdingLabel = computed(() => {
+  const held = position.value?.totalSUSDr;
+  if (!held || held === '0') return '';
+  return [unitsLabel(held, 'sUSDrf'), rateLabel.value].filter(Boolean).join(' · ');
+});
+
+const apyHistory = computed(() => protocol.value?.apyHistory ?? []);
+const apyAvg = computed(() => protocol.value?.apyAvg90Percent ?? 0);
+/** Two days make a line; fewer, and the one-line APY says it better. */
+const showYieldChart = computed(
+  () => apyHistory.value.length >= 2 && protocol.value?.apyAvg90Percent != null,
+);
+
+/* ── Unstaking ── */
+
+/** "2d 3h", "14h 20m", "12m": the wait, at the precision a person plans with. */
+function formatWait(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (d > 0) return t('realfi.duration.dh', { d, h });
+  if (h > 0) return t('realfi.duration.hm', { h, m });
+  return t('realfi.duration.m', { m: Math.max(m, 1) });
+}
+
+interface UnstakeView {
+  key: string;
+  order: RealFiOrder;
+  /** USDrf when known (exact from Nexus, or estimated at today's rate), else sUSDrf. */
+  amount: string;
+  /** Units of USDrf behind `amount`, for the total; null when only sUSDrf is known. */
+  usdrUnits: bigint | null;
+  from: string;
+  /** 0..1 through the cooldown; null when its start is unknown. */
+  progress: number | null;
+  ready: boolean;
+  when: string;
+  secondsLeft: number;
+}
+
+/**
+ * Every unstake whose USDrf has not been claimed. Nexus reads the exact USDrf from
+ * the timelock; until it can, the sUSDrf sent in is converted at today's rate and
+ * marked as an estimate, and without a rate the sUSDrf itself is shown.
+ */
+const unstakes = computed<UnstakeView[]>(() =>
+  orders.value.filter(isUnclaimed).map((order) => {
+    const tip = currentSlot.value;
+    const unlock = Number(order.unlockSlot);
+    const ready = isClaimable(order, tip);
+    let usdrUnits: bigint | null = null;
+    let amount: string;
+    if (order.resultAmount) {
+      usdrUnits = BigInt(order.resultAmount);
+      amount = unitsLabel(order.resultAmount, 'USDrf');
+    } else if (order.amount && rate.value !== null) {
+      const est = usdrForSusdr(order.amount, rate.value);
+      usdrUnits = BigInt(est);
+      amount = `≈ ${unitsLabel(est, 'USDrf')}`;
+    } else {
+      amount = unitsLabel(order.amount ?? '0', 'sUSDrf');
+    }
+    const from = usdrUnits !== null && order.amount
+      ? t('realfi.unstaking.from', { amount: unitsLabel(order.amount, 'sUSDrf') })
+      : '';
+    const start = Number(order.slot);
+    const progress = tip !== null && order.slot && unlock > start
+      ? Math.min(1, Math.max(0, (tip - start) / (unlock - start)))
+      : null;
+    const secondsLeft = tip === null ? 0 : unlock - tip;
+    const date = slotToDate(order.unlockSlot);
+    const when = ready
+      ? t('realfi.claim.title')
+      : tip === null
+        ? date
+        : t('realfi.unstaking.opens', { date, wait: formatWait(secondsLeft) });
+    return {
+      key: `${order.txHash}#${order.outputIndex}`,
+      order,
+      amount,
+      usdrUnits,
+      from,
+      progress: ready ? 1 : progress,
+      ready,
+      when,
+      secondsLeft,
+    };
+  }),
+);
+
+const unstakingTitle = computed(() =>
+  t(unstakes.value.some((u) => u.ready) ? 'realfi.claim.title' : 'realfi.unstaking.title'),
+);
+
+/**
+ * USDrf still at RealFi after unstaking: every unclaimed unstake, cooling or ready.
+ * Null when any amount is unknown in USDrf, since a partial sum would understate it.
+ */
+const unclaimedUsdr = computed<{ units: bigint; estimated: boolean } | null>(() => {
+  const list = unstakes.value;
+  if (!list.length || list.some((u) => u.usdrUnits === null)) return null;
+  return {
+    units: list.reduce((sum, u) => sum + (u.usdrUnits as bigint), 0n),
+    estimated: list.some((u) => !u.order.resultAmount),
+  };
+});
+
+/** The stat-strip cell for money in cooldown: how much, and when the next opens. */
+const cooling = computed<{ amount: string; next: string } | null>(() => {
+  const waiting = unstakes.value.filter((u) => !u.ready);
+  if (!waiting.length) return null;
+  let amount: string;
+  if (waiting.every((u) => u.usdrUnits !== null)) {
+    const units = waiting.reduce((sum, u) => sum + (u.usdrUnits as bigint), 0n).toString();
+    const estimated = waiting.some((u) => !u.order.resultAmount);
+    amount = `${estimated ? '≈ ' : ''}${unitsLabel(units, 'USDrf')}`;
+  } else {
+    amount = t('realfi.stats.unstakes', { n: waiting.length });
+  }
+  const next =
+    currentSlot.value === null
+      ? ''
+      : t('realfi.unstaking.next', { wait: formatWait(Math.min(...waiting.map((u) => u.secondsLeft))) });
+  return { amount, next };
+});
+
+/** Position plus everything unclaimed, in dollars: all the user has at RealFi. */
+const totalWithRealFi = computed(() => {
+  const extra = unclaimedUsdr.value;
+  if (!extra) return '';
+  const staked = BigInt(position.value?.totalUSDrValue ?? '0');
+  const total = fromSmallestUnit((staked + extra.units).toString());
+  return `${extra.estimated ? '≈ ' : ''}${formatUsd(total)}`;
+});
+
+/** "5,685.06 USDrf in cooldown · next opens in 14h 20m", as far as it is known. */
+const unstakingSummary = computed(() => {
+  const list = unstakes.value;
+  const cooling = list.filter((u) => !u.ready);
+  if (!cooling.length) return '';
+  const parts: string[] = [];
+  if (cooling.every((u) => u.usdrUnits !== null)) {
+    const total = cooling.reduce((sum, u) => sum + (u.usdrUnits as bigint), 0n).toString();
+    const estimated = cooling.some((u) => !u.order.resultAmount);
+    parts.push(t('realfi.unstaking.total', {
+      amount: `${estimated ? '≈ ' : ''}${unitsLabel(total, 'USDrf')}`,
+    }));
+  }
+  if (currentSlot.value !== null) {
+    const next = Math.min(...cooling.map((u) => u.secondsLeft));
+    parts.push(t('realfi.unstaking.next', { wait: formatWait(next) }));
+  }
+  return parts.join(' · ');
+});
 
 /** For an unstake still in its cooldown: when it can be claimed. Empty otherwise. */
 function claimableFrom(order: RealFiOrder): string {
@@ -702,6 +1077,147 @@ onMounted(load);
   margin: var(--g-s-3) 0 var(--g-s-2);
 }
 
+.realfi-hero__body--split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 340px);
+  gap: var(--g-s-5);
+  align-items: start;
+}
+
+.realfi-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--g-s-4);
+  padding-top: var(--g-s-4);
+  margin: var(--g-s-4) 0 0;
+  border-top: 1px solid var(--g-hairline-1);
+
+  dd {
+    margin: 0;
+  }
+}
+
+.realfi-stats__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-1);
+  min-width: 0;
+
+  dt {
+    color: var(--g-text-3);
+  }
+
+  .t-heading {
+    color: var(--g-text-1);
+  }
+}
+
+.realfi-hero__holding {
+  margin: 0 0 var(--g-s-2);
+  color: var(--g-text-2);
+}
+
+.realfi-hero__yield {
+  padding-left: var(--g-s-5);
+  border-left: 1px solid var(--g-hairline-1);
+}
+
+@media (max-width: 720px) {
+  .realfi-hero__body--split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .realfi-hero__yield {
+    padding: var(--g-s-4) 0 0;
+    border-left: 0;
+    border-top: 1px solid var(--g-hairline-1);
+  }
+}
+
+.realfi-start__yield {
+  width: 100%;
+  max-width: 360px;
+  margin-top: var(--g-s-5);
+  text-align: left;
+}
+
+.realfi-unstaking {
+  @include g-glass-panel(false);
+  padding: var(--g-s-4) var(--g-s-5);
+  margin-bottom: var(--g-s-4);
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-card);
+}
+
+.realfi-unstaking__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--g-s-2) var(--g-s-4);
+  margin-bottom: var(--g-s-2);
+}
+
+.realfi-unstaking__summary {
+  color: var(--g-text-2);
+}
+
+.realfi-unstaking__list {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.realfi-unstake {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(0, 2fr) auto;
+  gap: var(--g-s-4);
+  align-items: center;
+  padding: var(--g-s-3) 0;
+  border-top: 1px solid var(--g-hairline-1);
+}
+
+.realfi-unstake__amount,
+.realfi-unstake__time {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-1);
+  min-width: 0;
+}
+
+.realfi-unstake__track {
+  display: block;
+  height: 4px;
+  overflow: hidden;
+  background: var(--g-hairline-2);
+  border-radius: var(--g-r-pill);
+}
+
+/* Motion as feedback: the bar only moves when the chain tip does. */
+.realfi-unstake__fill {
+  display: block;
+  height: 100%;
+  background: var(--g-partner-realfi);
+  border-radius: inherit;
+  transform-origin: left center;
+  transition: transform var(--g-dur-base) ease;
+}
+
+.realfi-unstake__fill--ready {
+  background: var(--g-success);
+}
+
+@media (max-width: 560px) {
+  .realfi-unstake {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .realfi-unstake__time {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+
 .realfi-hero__apy {
   margin: var(--g-s-3) 0 0;
 }
@@ -710,13 +1226,6 @@ onMounted(load);
   display: flex;
   flex-wrap: wrap;
   gap: var(--g-s-2);
-  margin-top: var(--g-s-4);
-}
-
-.realfi-hero__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--g-s-4);
 }
 
 .realfi-strong {
@@ -780,6 +1289,11 @@ onMounted(load);
 
 .realfi-card__head {
   margin-bottom: var(--g-s-3);
+}
+
+.realfi-card__about {
+  margin: var(--g-s-1) 0 0;
+  color: var(--g-text-3);
 }
 
 .realfi-stat {
@@ -846,6 +1360,17 @@ onMounted(load);
   flex: none;
   align-items: center;
   gap: var(--g-s-2);
+}
+
+.realfi-order__label {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-1);
+  white-space: nowrap;
+}
+
+.realfi-order__when {
+  color: var(--g-text-2);
 }
 
 .realfi-order__tx {

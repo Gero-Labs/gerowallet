@@ -10,11 +10,15 @@
     overlay-opacity="0.6"
   >
     <v-card class="pa-5 liquid-glass-dialog" :class="{ 'liquid-glass-dialog--solid': solid }" :min-height="minHeight" :max-height="height" :disabled="loading">
-      <div class="rings-container">
-        <div class="rings"></div>
-        <div class="rings"></div>
-        <div class="rings"></div>
-        <div class="rings"></div>
+      <!-- Decoration, clipped to the card: the rings are a fixed 180px, taller than a
+           short dialog, and unclipped they overflowed it and gave it a scrollbar. -->
+      <div class="rings-clip" aria-hidden="true">
+        <div class="rings-container">
+          <div class="rings"></div>
+          <div class="rings"></div>
+          <div class="rings"></div>
+          <div class="rings"></div>
+        </div>
       </div>
       <v-card-title class="pa-0 pb-0">
         <v-list-item class="px-0" :two-line="!!subtitle" style="z-index: 1;">
@@ -191,6 +195,14 @@ const isDialogOpen = computed({
   position: relative;
   z-index: 1;
   height: 100%;
+}
+
+.rings-clip {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
 }
 
 .rings-container {

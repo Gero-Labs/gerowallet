@@ -23,9 +23,14 @@ import DialogSfc from './RealFiAmountDialog.vue';
 
 const Dialog = DialogSfc as unknown as Parameters<typeof mount>[0];
 
-function mountDialog(balanceUnits: string, mode: 'stake' | 'unstake' = 'stake', unlockDate?: string) {
+function mountDialog(
+  balanceUnits: string,
+  mode: 'stake' | 'unstake' = 'stake',
+  unlockDate?: string,
+  extra: Record<string, unknown> = {},
+) {
   return mount(Dialog, {
-    propsData: { isOpen: true, mode, balanceUnits, unlockDate },
+    propsData: { isOpen: true, mode, balanceUnits, unlockDate, ...extra },
     mocks: { $t: (key: string) => key },
     stubs: {
       'v-card-text': { template: '<div><slot /></div>' },
@@ -92,4 +97,41 @@ describe('RealFiAmountDialog', () => {
     expect(w.text()).toContain('realfi.order.unstakeNote{"date":"3 Oct 2026, 14:00"}');
     expect(w.text()).toContain('staking.unstake');
   });
+
+  describe('preview', () => {
+    const RATE = '1033648';
+
+    it('shows the sUSDrf a stake returns and a year at the average yield', async () => {
+      const w = mountDialog('20000000000', 'stake', undefined, { rate: RATE, apyPercent: 8.32 });
+
+      await type(w, '10000');
+
+      const text = w.find('.realfi-amount__preview').text();
+      expect(text).toContain('≈ 9,674.47 sUSDrf');
+      expect(text).toContain('realfi.rate{"rate":"1.0336"}');
+      expect(text).toContain('≈ 832.00 USDrf');
+      expect(w.text()).toContain('realfi.order.earningsNote');
+    });
+
+    it('shows the USDrf an unstake releases, with no earnings line', async () => {
+      const w = mountDialog('5000000000', 'unstake', 'Sep 28', { rate: RATE });
+
+      await type(w, '5000');
+
+      const text = w.find('.realfi-amount__preview').text();
+      expect(text).toContain('≈ 5,168.24 USDrf');
+      expect(text).not.toContain('realfi.order.earnings');
+    });
+
+    it('stays out of the way without a valid amount or a rate', async () => {
+      const noRate = mountDialog('5000000', 'stake');
+      await type(noRate, '1');
+      expect(noRate.find('.realfi-amount__preview').exists()).toBe(false);
+
+      const tooMuch = mountDialog('5000000', 'stake', undefined, { rate: RATE });
+      await type(tooMuch, '6');
+      expect(tooMuch.find('.realfi-amount__preview').exists()).toBe(false);
+    });
+  });
 });
+

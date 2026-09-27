@@ -153,6 +153,15 @@ export interface RealFiOrder {
   /** The output an Executed order produced. For an Unstake, what the claim spends. */
   resultTxHash?: string;
   resultOutputIndex?: number;
+  /** What the order put in: USDr for a Stake, sUSDr for an Unstake. */
+  amount?: SmallestUnit;
+  /** The slot the order was placed at. For an Unstake, when its cooldown began. */
+  slot?: string;
+  /**
+   * Executed, unclaimed Unstake only: the USDr waiting in its timelock, read from chain
+   * by Nexus. Absent when Nexus could not read it; fall back to `amount` in sUSDr.
+   */
+  resultAmount?: SmallestUnit;
 }
 
 /**
@@ -285,8 +294,66 @@ export interface RealFiProtocol {
   apyPercent: number | null;
   /** ISO date (yyyy-MM-dd) `apyPercent` was published. */
   apyAsOf: string | null;
+  /** Mean of `apyHistory`; the figure RealFi's own app headlines. Null with no history. */
+  apyAvg90Percent: number | null;
+  /** Daily portfolio APY, oldest first, at most 90 days. Empty when none is published. */
+  apyHistory: RealFiApyPoint[];
+  /** Inputs to the sUSDrf → USDrf rate; see `susdrRate`. Null when RealFi gave none. */
+  rateInputs: RealFiRateInputs | null;
   /** The cooldown boundary an unstake placed now binds to. Null if RealFi gave none. */
   nextCooldownSlot: string | null;
+}
+
+export interface RealFiApyPoint {
+  /** ISO yyyy-MM-dd. */
+  date: string;
+  /** Percent: 8.38 means 8.38%. */
+  apyPercent: number;
+}
+
+/** RealFi's sUSDr exchange-rate inputs, as Nexus relays them. Amounts in smallest units. */
+export interface RealFiRateInputs {
+  vaultUsdr: SmallestUnit;
+  circulatingSusdr: SmallestUnit;
+  pendingYield: SmallestUnit;
+  /** Epoch millis; 0 when no yield is being released. */
+  diffusionStart: string;
+  diffusionEnd: string;
+}
+
+/** Fixed-point scale for a rate: 1_000_000 means 1 USDr per sUSDr. */
+export const RATE_SCALE = 1_000_000n;
+
+/**
+ * USDr per sUSDr right now, scaled by `RATE_SCALE` — RealFi's own formula.
+ *
+ * Yield deposited into the vault is released into the rate linearly over a window,
+ * so the part not yet released is subtracted (rounded up, never in the holder's
+ * favour) before dividing by the sUSDr in circulation. Mirrors `diffusion.ts` in
+ * RealFi's app, which is what users compare against; bigint throughout.
+ */
+export function susdrRate(inputs: RealFiRateInputs, nowMs: number): bigint {
+  const circulating = BigInt(inputs.circulatingSusdr);
+  if (circulating <= 0n) return RATE_SCALE;
+  const pending = BigInt(inputs.pendingYield);
+  const start = BigInt(inputs.diffusionStart);
+  const end = BigInt(inputs.diffusionEnd);
+  const now = BigInt(Math.floor(nowMs));
+  let unreleased = 0n;
+  if (pending > 0n && now < end) {
+    unreleased = now <= start ? pending : (pending * (end - now) + (end - start) - 1n) / (end - start);
+  }
+  return ((BigInt(inputs.vaultUsdr) - unreleased) * RATE_SCALE) / circulating;
+}
+
+/** sUSDr received for staking `usdr` at `rate`, rounded down. */
+export function susdrForUsdr(usdr: SmallestUnit, rate: bigint): SmallestUnit {
+  return rate > 0n ? ((BigInt(usdr) * RATE_SCALE) / rate).toString() : '0';
+}
+
+/** USDr released for unstaking `susdr` at `rate`, rounded down. */
+export function usdrForSusdr(susdr: SmallestUnit, rate: bigint): SmallestUnit {
+  return ((BigInt(susdr) * rate) / RATE_SCALE).toString();
 }
 
 /**
