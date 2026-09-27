@@ -31,9 +31,10 @@ export interface NativeSwapSignerOptions {
   getPrfBytes: () => Promise<Uint8Array>;
   /**
    * Whether to use the Bluetooth Ledger transport instead of USB. Mirrors the `isBT`
-   * UI toggle every other Ledger-signing flow exposes (SwapSheet.vue:549, SendSheet.vue:635,
-   * etc.) — the swap widget has no such toggle yet, so this defaults to USB (false).
-   * Gap: if/when the embed adds a BT toggle, wire it through here.
+   * UI toggle every other Ledger-signing flow exposes (SendSheet.vue, CastVoteDialog.vue,
+   * etc.) and defaults to USB (false). Return the user's choice, never
+   * `loggedWallet.btSupported`: that says the device CAN use Bluetooth, not that it is
+   * connected that way. GeroSwapEmbed.vue asks before each Ledger signature.
    */
   getIsBT?: () => boolean;
 }

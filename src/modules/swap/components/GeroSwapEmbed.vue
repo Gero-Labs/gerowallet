@@ -54,6 +54,32 @@
         </v-card-text>
       </BaseDialog>
 
+      <!-- Ledger transport host prompt — `btSupported` means the device CAN use
+           Bluetooth, not that it is connected that way, so a plugged-in Ledger must
+           not be forced onto Bluetooth. Ask before signing, like the Send and
+           governance dialogs' USB/Bluetooth toggle. Backs the signer's getIsBT(). -->
+      <BaseDialog
+        v-if="transportPromptVisible"
+        :isOpen="transportPromptVisible"
+        :width="380"
+        :min-height="0"
+        persistent
+        :title="$t('wallet.ledgerTransport')"
+        :subtitle="$t('miniGero.connectLedger')"
+        @close="onTransportCancel"
+      >
+        <v-card-text class="pt-4">
+          <div class="gero-swap-embed__actions">
+            <GButton tier="secondary" @click="onTransportChosen(true)">
+              {{ $t('governance.bluetooth') }}
+            </GButton>
+            <GButton tier="primary" @click="onTransportChosen(false)">
+              {{ $t('governance.usb') }}
+            </GButton>
+          </div>
+        </v-card-text>
+      </BaseDialog>
+
       <!-- Spending-password host prompt — no reusable "enter spending password" dialog
            exists; SwapSheet.vue collects it inline via a v-text-field in its own review
            step (SwapSheet.vue:200-221). We recreate that same input inside BaseDialog
@@ -105,6 +131,8 @@ import { toNexusNetwork } from '@/api/nexus-tx-api';
 import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
 import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
+import GButton from '@/shared/components/GButton/GButton.vue';
+import { WalletType } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
 import i18n from '@/plugins/i18n';
 
@@ -233,13 +261,55 @@ function onPassKeyCancel() {
   prfReject = null;
 }
 
-const { signer, keystone } = useNativeSwapSigner({
+// ── Ledger transport host prompt ──
+// USB unless the user picks Bluetooth for this signature. `btSupported` says the device
+// CAN do Bluetooth, not that it is connected that way, so it only decides whether to
+// ask — the same choice the Send and governance dialogs offer (`isBT`, default false).
+const isBT = ref(false);
+const transportPromptVisible = ref(false);
+let transportResolve: (() => void) | null = null;
+let transportReject: ((e: Error) => void) | null = null;
+
+function chooseTransport(): Promise<void> {
+  transportPromptVisible.value = true;
+  return new Promise<void>((resolve, reject) => {
+    transportResolve = resolve;
+    transportReject = reject;
+  });
+}
+
+function onTransportChosen(bluetooth: boolean) {
+  isBT.value = bluetooth;
+  transportPromptVisible.value = false;
+  transportResolve?.();
+  transportResolve = null;
+  transportReject = null;
+}
+
+function onTransportCancel() {
+  transportPromptVisible.value = false;
+  transportReject?.(new Error('Ledger transport selection cancelled'));
+  transportResolve = null;
+  transportReject = null;
+}
+
+const { signer: sharedSigner, keystone } = useNativeSwapSigner({
   getPassword,
   getPrfBytes,
-  // Wire the wallet's actual Bluetooth-Ledger support so BT users aren't forced onto
-  // USB (see useTransactionSigning.ts's isBTSupported for the same field usage).
-  getIsBT: () => walletStore.loggedWallet?.btSupported ?? false,
+  getIsBT: () => isBT.value,
 });
+
+// The widget signs both swaps and order cancels through signTx, so the question sits
+// in front of every Ledger signature. Everything else passes through unchanged.
+const signer = {
+  ...sharedSigner,
+  async signTx(unsignedTxCbor: string): Promise<string> {
+    const w = walletStore.loggedWallet;
+    isBT.value = false;
+    if (w?.type === WalletType.Ledger && w.btSupported) await chooseTransport();
+    return sharedSigner.signTx(unsignedTxCbor);
+  },
+};
 const { resolveToken } = useSwapTokenResolver();
 
 // PASSIVE market-cache access: `getTokenByUnit` (token logos) and `marketTokensRef`
@@ -538,6 +608,12 @@ watch(network, async (value) => {
 .gero-swap-embed > gero-swap { display: block; }
 .gero-swap-embed--dialog > gero-swap,
 .gero-swap-embed--sidepanel > gero-swap { height: 100%; min-height: 0; }
+
+.gero-swap-embed__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--g-s-2);
+}
 
 .gero-swap-embed__maintenance {
   display: flex;
