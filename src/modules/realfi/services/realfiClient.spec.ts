@@ -151,3 +151,49 @@ describe('usdrAssetIdFor', () => {
     expect(usdrAssetIdFor(undefined)).toBeNull();
   });
 });
+
+describe('toProtocol yield and rate', () => {
+  const BASE = {
+    stablecoinAssetId: 'ab',
+    circulatingSusdr: '57996439368652',
+    vaultUsdr: '59947920817694',
+    pendingYield: '0',
+    diffusionStartUnixMilli: '0',
+    diffusionEndUnixMilli: '0',
+  };
+
+  it('keeps the yield history and average, dropping days that would draw a false point', () => {
+    const p = toProtocol({
+      ...BASE,
+      apyAvg90Percent: 8.32,
+      apyHistory: [
+        { date: '2026-09-24', apyPercent: 8.2 },
+        { date: '2026-09-25', apyPercent: 0 },
+        { date: null, apyPercent: 8.4 },
+        { date: '2026-09-26', apyPercent: '8.5' },
+      ],
+    });
+
+    expect(p!.apyAvg90Percent).toBe(8.32);
+    expect(p!.apyHistory).toEqual([
+      { date: '2026-09-24', apyPercent: 8.2 },
+      { date: '2026-09-26', apyPercent: 8.5 },
+    ]);
+  });
+
+  it('carries the five rate inputs, or none: a partial set gives a wrong rate', () => {
+    expect(toProtocol(BASE)!.rateInputs).toEqual({
+      vaultUsdr: '59947920817694',
+      circulatingSusdr: '57996439368652',
+      pendingYield: '0',
+      diffusionStart: '0',
+      diffusionEnd: '0',
+    });
+    expect(toProtocol({ ...BASE, vaultUsdr: null })!.rateInputs).toBeNull();
+  });
+
+  it('has an empty history when Nexus sends none', () => {
+    expect(toProtocol({ stablecoinAssetId: 'ab' })!.apyHistory).toEqual([]);
+  });
+});
+

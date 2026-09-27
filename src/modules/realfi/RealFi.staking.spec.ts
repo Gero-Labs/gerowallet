@@ -421,60 +421,122 @@ describe('RealFi Earn page, right after an order is sent', () => {
 });
 
 describe('RealFi Earn page, where unstaked money is', () => {
+  // What RealFi's preprod vault reported: 1 sUSDrf = 1.033648 USDrf.
+  const RATE_INPUTS = {
+    vaultUsdr: '59947920817694',
+    circulatingSusdr: '57996439368652',
+    pendingYield: '0',
+    diffusionStart: '0',
+    diffusionEnd: '0',
+  };
   const COOLING = {
     action: 'Unstake' as const,
     status: 'Executed' as const,
     amount: '5000000000',
+    slot: '1000',
     unlockSlot: '9000',
     resultTxHash: TX,
     resultOutputIndex: 0,
   };
 
   beforeEach(() => {
-    currentSlot.value = 2000;
+    currentSlot.value = 5000;
     state.hasUsdr.value = false;
     state.actionableOrders.value = [];
+    state.protocol.value = { nextCooldownSlot: '5000' };
   });
 
-  async function heroCalls(list: RealFiOrder[]) {
+  /** Mount with i18n.t spied, so the values each line is built from can be checked. */
+  async function mountSpying(list: RealFiOrder[]) {
     const i18n = (await import('@/plugins/i18n')).default as unknown as {
       t: (k: string, v?: unknown) => string;
     };
     const spy = vi.spyOn(i18n, 't');
     withPosition(list);
     const page = await mountPage();
-    const calls = spy.mock.calls.filter(([k]) => String(k).startsWith('realfi.position.'));
+    const calls = spy.mock.calls.map(([k, v]) => [String(k), v]);
     spy.mockRestore();
     return { page, calls };
   }
 
-  it('says how much USDrf is cooling down and when it can be claimed', async () => {
-    const { calls } = await heroCalls([order({ ...COOLING, resultAmount: '5168241487' })]);
+  it('lists an unstake with the exact USDrf, what went in, and when it opens', async () => {
+    const { page, calls } = await mountSpying([order({ ...COOLING, resultAmount: '5168241487' })]);
 
-    expect(calls).toContainEqual([
-      'realfi.position.unstaking',
-      { amount: '5,168.24 USDrf', date: expect.any(String) },
-    ]);
+    const card = page.find('.realfi-unstaking');
+    expect(card.text()).toContain('5,168.24 USDrf');
+    expect(calls).toContainEqual(['realfi.unstaking.from', { amount: '5,000.00 sUSDrf' }]);
+    // 4,000 slots (seconds) to go: 1h 06m.
+    expect(calls).toContainEqual(['realfi.duration.hm', { h: 1, m: 6 }]);
+    expect(calls).toContainEqual(['realfi.unstaking.total', { amount: '5,168.24 USDrf' }]);
   });
 
-  it('falls back to the sUSDrf sent in when the released USDrf is not known yet', async () => {
-    const { calls } = await heroCalls([order(COOLING)]);
+  it('shows how far through the cooldown each unstake is', async () => {
+    const { page } = await mountSpying([order(COOLING)]);
 
-    expect(calls).toContainEqual([
-      'realfi.position.unstaking',
-      { amount: '5,000.00 sUSDrf', date: expect.any(String) },
-    ]);
+    const bar = page.find('.realfi-unstake__track');
+    expect(bar.attributes('aria-valuenow')).toBe('50');
+    expect(page.find('.realfi-unstake__fill').attributes('style')).toContain('scaleX(0.5)');
   });
 
-  it('says it is ready once the cooldown has passed', async () => {
+  it("estimates the USDrf at today's rate until Nexus reads the exact amount", async () => {
+    state.protocol.value = { nextCooldownSlot: '5000', rateInputs: RATE_INPUTS };
+    const { page, calls } = await mountSpying([order(COOLING)]);
+
+    expect(page.find('.realfi-unstaking').text()).toContain('\u2248 5,168.24 USDrf');
+    expect(calls).toContainEqual(['realfi.unstaking.total', { amount: '\u2248 5,168.24 USDrf' }]);
+  });
+
+  it('falls back to the sUSDrf sent in when there is no rate either', async () => {
+    const { page, calls } = await mountSpying([order(COOLING)]);
+
+    expect(page.find('.realfi-unstaking').text()).toContain('5,000.00 sUSDrf');
+    expect(calls.map(([k]) => k)).not.toContain('realfi.unstaking.total');
+  });
+
+  it('turns into "Ready to claim" with a Claim button once the cooldown has passed', async () => {
     currentSlot.value = 9000;
-    const { calls } = await heroCalls([order({ ...COOLING, resultAmount: '5168241487' })]);
+    const { page, calls } = await mountSpying([order({ ...COOLING, resultAmount: '5168241487' })]);
 
-    expect(calls).toContainEqual(['realfi.position.readyToClaim', { amount: '5,168.24 USDrf' }]);
+    const card = page.find('.realfi-unstaking');
+    expect(calls).toContainEqual(['realfi.claim.title', undefined]);
+    expect(card.findAll('button').wrappers.map((b) => b.text())).toContain('dashboard.claim');
+    expect(page.find('.realfi-unstake__fill').classes()).toContain('realfi-unstake__fill--ready');
+  });
+
+  it('shows what is held and the rate behind the dollar value', async () => {
+    state.protocol.value = { nextCooldownSlot: '5000', rateInputs: RATE_INPUTS };
+    const { page, calls } = await mountSpying([]);
+    state.position.value = { ...(state.position.value as object), totalSUSDr: '4169640000' };
+    await page.vm.$nextTick();
+
+    expect(page.find('.realfi-hero__holding').text()).toContain('4,169.64 sUSDrf');
+    expect(calls).toContainEqual(['realfi.rate', { rate: '1.0336' }]);
+  });
+
+  it('charts the fund yield once there are two days to draw, and not before', async () => {
+    state.protocol.value = {
+      nextCooldownSlot: '5000',
+      apyAvg90Percent: 8.3,
+      apyHistory: [{ date: '2026-09-24', apyPercent: 8.2 }],
+    };
+    let { page } = await mountSpying([]);
+    expect(page.find('.realfi-yield').exists()).toBe(false);
+
+    state.protocol.value = {
+      nextCooldownSlot: '5000',
+      apyAvg90Percent: 8.3,
+      apyHistory: [
+        { date: '2026-09-24', apyPercent: 8.2 },
+        { date: '2026-09-25', apyPercent: 8.4 },
+      ],
+    };
+    ({ page } = await mountSpying([]));
+    expect(page.find('.realfi-yield').exists()).toBe(true);
+    expect(page.find('.realfi-hero').classes()).toContain('realfi-hero--split');
   });
 
   it('puts the amount on each Activity row, in the token the order put in', async () => {
-    const { page } = await heroCalls([
+    const { page } = await mountSpying([
       order({ ...COOLING, resultAmount: '5168241487' }),
       order({ action: 'Stake', status: 'Executed', amount: '9994980280' }),
     ]);

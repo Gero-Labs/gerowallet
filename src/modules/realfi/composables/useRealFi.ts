@@ -21,7 +21,6 @@ import {
   EMPTY_POINTS,
   EMPTY_REFERRALS,
   fromSmallestUnit,
-  isClaimable,
   isFailed,
   isInReview,
   needsAction,
@@ -105,12 +104,6 @@ export function useRealFi() {
 
   /** The chain tip's slot, from Gero Sync. Null until the first tip arrives. */
   const currentSlot = computed<number | null>(() => NetworkStore.getCurrentSlot());
-
-  /** Executed unstakes whose timelock has opened: ready to claim. */
-  const claimableOrders = computed<RealFiOrder[]>(() =>
-    orders.value.filter((o) => isClaimable(o, currentSlot.value)),
-  );
-
 
   /** Orders the user must act on — the operator will not clear these by itself. */
   const actionableOrders = computed<RealFiOrder[]>(() => orders.value.filter(needsAction));
@@ -270,7 +263,6 @@ export function useRealFi() {
     susdrUnits,
     canTransact,
     currentSlot,
-    claimableOrders,
     load,
     requestReferralCode,
   };

@@ -22,7 +22,9 @@ import {
   type RealFiOrderStatus,
   type RealFiPoints,
   type RealFiPosition,
+  type RealFiApyPoint,
   type RealFiProtocol,
+  type RealFiRateInputs,
   type RealFiReferrals,
   type RealFiUnavailableReason,
   type SmallestUnit,
@@ -179,12 +181,38 @@ export function toOrders(raw: unknown): RealFiOrder[] {
       order.resultTxHash = resultTxHash;
       order.resultOutputIndex = resultOutputIndex;
     }
+    const slot = toDigits(get(o, 'slot'));
+    if (slot) order.slot = slot;
     const amount = toDigits(get(o, 'amount'));
     if (amount) order.amount = amount;
     const resultAmount = toDigits(get(o, 'resultAmount'));
     if (resultAmount) order.resultAmount = resultAmount;
     return [order];
   });
+}
+
+/** Days with a date and a positive rate; anything else would draw a false point. */
+function toApyHistory(raw: unknown): RealFiApyPoint[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((entry) => {
+    const p = asRecord(entry);
+    const date = toStringOrNull(get(p, 'date'));
+    const apyPercent = toNumberOrNull(get(p, 'apyPercent'));
+    return date && apyPercent !== null && apyPercent > 0 ? [{ date, apyPercent }] : [];
+  });
+}
+
+/** All five rate inputs as digit strings, or null: a partial set gives a wrong rate. */
+function toRateInputs(r: UnknownRecord): RealFiRateInputs | null {
+  const vaultUsdr = toDigits(get(r, 'vaultUsdr'));
+  const circulatingSusdr = toDigits(get(r, 'circulatingSusdr'));
+  const pendingYield = toDigits(get(r, 'pendingYield'));
+  const diffusionStart = toDigits(get(r, 'diffusionStartUnixMilli'));
+  const diffusionEnd = toDigits(get(r, 'diffusionEndUnixMilli'));
+  if (!vaultUsdr || !circulatingSusdr || !pendingYield || !diffusionStart || !diffusionEnd) {
+    return null;
+  }
+  return { vaultUsdr, circulatingSusdr, pendingYield, diffusionStart, diffusionEnd };
 }
 
 export function toProtocol(raw: unknown): RealFiProtocol | null {
@@ -205,6 +233,9 @@ export function toProtocol(raw: unknown): RealFiProtocol | null {
     // A rate without its date is worse than no rate: drop both unless both are there.
     apyAsOf: apyPercent === null ? null : toStringOrNull(get(r, 'apyAsOf')),
     nextCooldownSlot: toDigits(get(r, 'nextCooldownSlot')),
+    apyAvg90Percent: toNumberOrNull(get(r, 'apyAvg90Percent')),
+    apyHistory: toApyHistory(get(r, 'apyHistory')),
+    rateInputs: toRateInputs(r),
   };
 }
 
