@@ -82,6 +82,26 @@ export interface NotifyPendingOpen {
   at: number;
 }
 
+/** One entry of the in-app notification centre (the bell): what the worker rendered for a push (B-M3). */
+export interface NotifyInboxItem {
+  /** The event id (`e`): one row per event, a repeat replaces it. */
+  e: string;
+  t: string;
+  c: string;
+  d: string;
+  x?: Record<string, unknown>;
+  walletId: number | null;
+  walletName: string | null;
+  title: string;
+  body: string;
+  /** The push timestamp (`ts`), or the arrival time for a generic entry. */
+  ts: number;
+  readAt: number | null;
+  /** Sticky in the "Needs you" section (security and sign requests). */
+  needsYou: boolean;
+}
+
+export const INBOX_MAX = 50;
 export const SEEN_MAX = 200;
 export const SEEN_TTL_MS = 48 * 3_600_000;
 
@@ -105,6 +125,7 @@ const KEYS = {
   retry: 'notifyRetry',
   seen: 'notifySeen',
   pendingOpen: 'notifyPendingOpen',
+  inbox: 'notifyInbox',
 } as const;
 
 function chromeStorage(): NotifyStorage {
@@ -135,6 +156,12 @@ export interface NotifyStore {
   markSeen(e: string, now: number): Promise<boolean>;
   getPendingOpen(): Promise<NotifyPendingOpen | null>;
   setPendingOpen(open: NotifyPendingOpen | null): Promise<void>;
+  /** Newest first, at most INBOX_MAX; a repeated `e` replaces its row (unread again). */
+  getInbox(): Promise<NotifyInboxItem[]>;
+  addInbox(item: NotifyInboxItem): Promise<void>;
+  /** Mark one row (`e`) or every row (null) read. */
+  markInboxRead(e: string | null, now: number): Promise<void>;
+  clearInbox(): Promise<void>;
 }
 
 export function createNotifyStore(storage: NotifyStorage = chromeStorage(), log: (m: string, e?: unknown) => void = () => undefined): NotifyStore {
@@ -164,6 +191,8 @@ export function createNotifyStore(storage: NotifyStorage = chromeStorage(), log:
   const getDevice = async (): Promise<NotifyDeviceState> => ({ ...DEFAULT_DEVICE_STATE, ...(await read(KEYS.device, {}, isDevice)) });
   const getWallets = () => read(KEYS.wallets, {} as Record<string, NotifyWalletState>, isWallets);
   const getPendingDeletes = () => read(KEYS.pendingDeletes, [] as PendingDelete[], isQueue);
+  const isInbox = (v: unknown): v is NotifyInboxItem[] => Array.isArray(v) && v.every((i) => isObject(i) && typeof i['e'] === 'string' && typeof i['title'] === 'string' && typeof i['ts'] === 'number');
+  const getInbox = () => read(KEYS.inbox, [] as NotifyInboxItem[], isInbox);
 
   return {
     getDevice,
@@ -201,6 +230,17 @@ export function createNotifyStore(storage: NotifyStorage = chromeStorage(), log:
     },
     getPendingOpen: () => read(KEYS.pendingOpen, null as NotifyPendingOpen | null, (v): v is NotifyPendingOpen | null => v === null || (isObject(v) && typeof v['walletId'] === 'number' && typeof v['d'] === 'string')),
     setPendingOpen: (open) => write(KEYS.pendingOpen, open),
+    getInbox,
+    async addInbox(item) {
+      const rest = (await getInbox()).filter((i) => i.e !== item.e);
+      await write(KEYS.inbox, [item, ...rest].slice(0, INBOX_MAX));
+    },
+    async markInboxRead(e, now) {
+      const all = await getInbox();
+      if (!all.some((i) => (e === null || i.e === e) && i.readAt === null)) return;
+      await write(KEYS.inbox, all.map((i) => ((e === null || i.e === e) && i.readAt === null ? { ...i, readAt: now } : i)));
+    },
+    clearInbox: () => write(KEYS.inbox, null),
   };
 }
 

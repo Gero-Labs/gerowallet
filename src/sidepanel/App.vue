@@ -1,6 +1,8 @@
 <template>
   <v-app dark>
     <notifications></notifications>
+    <!-- Pushes that arrive while this page is focused (B8): top right, its own host. -->
+    <NotifySnackbar />
 
     <!-- Pre-switch unlock: authenticate the target MPC wallet before switching to
          it, without logging out the current wallet. -->
@@ -59,7 +61,6 @@
          your device" prompt without each sheet re-declaring it. -->
     <HardwareSignPrompt />
     <!-- In-app toast for a push that arrives while the panel is focused (B8). -->
-    <NotifyToast surface="sidepanel" />
 
   </v-app>
 </template>
@@ -78,15 +79,15 @@ import PendingRequestBanner from './components/PendingRequestBanner.vue';
 import BottomSheet from './components/BottomSheet.vue';
 import { initDappRequestHub } from './services/dappRequestHub';
 import HardwareSignPrompt from '@/shared/components/HardwareSignPrompt.vue';
-import NotifyToast from '@/shared/components/NotifyToast.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import NotifySnackbar from '@/shared/components/NotifySnackbar.vue';
 import { useNotifyPresent } from '@/shared/composables/useNotifyPresent';
 import { Wallet } from '@/models/types';
 import { useChainContext } from './composables/useChainContext';
 
 const { t } = useTranslation();
 // Answer the worker's NOTIFY_PRESENT when the panel is the focused page (B8).
-useNotifyPresent();
+useNotifyPresent('sidepanel');
 
 // Initialize chain context — applies CSS variables for the active wallet's theme.
 // Other components that call useChainContext() reuse the singleton CSS-variable watcher.

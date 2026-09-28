@@ -64,3 +64,38 @@ describe('notifyStore', () => {
     expect(await s.getRetry()).toBeNull();
   });
 });
+
+describe('inbox (the bell, B-M3)', () => {
+  const item = (e: string, ts: number, over: Partial<import('./notifyStore').NotifyInboxItem> = {}): import('./notifyStore').NotifyInboxItem => ({
+    e, t: 'funds', c: 'funds', d: 'activity', walletId: 4, walletName: 'Daily', title: 'ADA Received', body: 'You received funds', ts, readAt: null, needsYou: false, ...over,
+  });
+
+  it('keeps rows newest first, replaces a repeated e, and caps at INBOX_MAX', async () => {
+    const { INBOX_MAX } = await import('./notifyStore');
+    const s = createNotifyStore(memoryNotifyStorage());
+    await s.addInbox(item('a'.repeat(32), 1));
+    await s.addInbox(item('b'.repeat(32), 2));
+    expect((await s.getInbox()).map((i) => i.e[0])).toEqual(['b', 'a']);
+    await s.addInbox(item('a'.repeat(32), 3, { readAt: null }));
+    expect((await s.getInbox()).map((i) => [i.e[0], i.ts])).toEqual([['a', 3], ['b', 2]]);
+    for (let n = 0; n < INBOX_MAX + 5; n++) await s.addInbox(item(n.toString(16).padStart(32, '0'), 10 + n));
+    expect(await s.getInbox()).toHaveLength(INBOX_MAX);
+  });
+
+  it('marks one row or every row read, and clear empties it', async () => {
+    const s = createNotifyStore(memoryNotifyStorage());
+    await s.addInbox(item('a'.repeat(32), 1));
+    await s.addInbox(item('b'.repeat(32), 2));
+    await s.markInboxRead('a'.repeat(32), 100);
+    expect((await s.getInbox()).map((i) => i.readAt)).toEqual([null, 100]);
+    await s.markInboxRead(null, 200);
+    expect((await s.getInbox()).map((i) => i.readAt)).toEqual([200, 100]);
+    await s.clearInbox();
+    expect(await s.getInbox()).toEqual([]);
+  });
+
+  it('ignores a malformed stored value', async () => {
+    const s = createNotifyStore(memoryNotifyStorage({ notifyInbox: [{ nope: 1 }] }));
+    expect(await s.getInbox()).toEqual([]);
+  });
+});

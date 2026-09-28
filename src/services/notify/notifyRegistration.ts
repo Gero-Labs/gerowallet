@@ -76,7 +76,7 @@ export interface NotifyRegistrationDeps {
   log?: (message: string) => void;
 }
 
-export type ReassertTrigger = 'start' | 'alarm' | 'retry' | 'login' | 'pushsubscriptionchange' | 'credentials';
+export type ReassertTrigger = 'start' | 'alarm' | 'retry' | 'login' | 'pushsubscriptionchange' | 'credentials' | 'settings';
 export type ReassertResult = 'opted_out' | 'registered' | 'reasserted' | 'recovered' | 'needs_attention' | 'unavailable' | 'deferred' | 'error' | 'skipped';
 export type BrowserEnableResult = 'ok' | 'unavailable' | 'subscribe_failed' | 'endpoint_not_allowed' | 'needs_attention' | 'deferred' | 'error';
 export type WalletEnableResult = 'ok' | 'browser_off' | 'no_wallet' | 'ineligible' | 'needs_auth' | 'proof_failed' | 'proof_invalid' | 'limit' | 'deferred' | 'error';
@@ -86,6 +86,8 @@ export interface NotifyRegistration {
   enableWallet(auth?: { password?: string; privateKeyBytes?: Uint8Array }): Promise<WalletEnableResult>;
   disableWallet(walletId: number): Promise<void>;
   setPrefs(walletId: number, write: WalletPrefsWrite): Promise<'ok' | 'not_registered' | 'error'>;
+  /** Pull `GET …/prefs` for a registered wallet, so a preference another device wrote (iOS) shows in the tab (§4.8). */
+  refreshPrefs(walletId: number): Promise<'ok' | 'not_registered' | 'error'>;
   /** Wallet deleted: called BEFORE the wallet record and keys are removed. */
   walletRemoved(walletId: number): Promise<void>;
   reassert(trigger: ReassertTrigger): Promise<ReassertResult>;
@@ -508,6 +510,23 @@ export function createNotifyRegistration(deps: NotifyRegistrationDeps): NotifyRe
           return 'not_registered';
         }
         log(`notify PUT prefs failed: ${String(e)}`);
+        return 'error';
+      }
+    },
+
+    async refreshPrefs(walletId) {
+      const w = await store.getWallet(walletId);
+      if (!w || w.registeredAt === null) return 'not_registered';
+      try {
+        const prefs = await client.getPrefs(w.walletTag);
+        await store.setWallet(walletId, { ...w, prefs });
+        return 'ok';
+      } catch (e) {
+        if (e instanceof NotifyError && e.code === 'wallet_not_registered') {
+          await store.setWallet(walletId, { ...w, registeredAt: null });
+          return 'not_registered';
+        }
+        log(`notify GET prefs failed: ${String(e)}`);
         return 'error';
       }
     },

@@ -23,6 +23,7 @@ function fakeServer() {
     links: new Map<string, WalletLinkBody>(),
     config: { ...CONFIG },
     fail: [] as Array<{ m: string; error: Error; times?: number }>,
+    prefs: PREFS as WalletPrefs,
   };
   const failing = (m: string) => {
     const f = server.fail.find((x) => x.m === m && (x.times ?? 1) > 0);
@@ -51,7 +52,7 @@ function fakeServer() {
       return { walletTag, created, prefs: PREFS, servedCategories: { [body.network]: ['funds'] }, credentialCoverage: { link: body.paymentCreds.length, wallet: body.paymentCreds.length, walletTruncated: 0 } };
     },
     async deleteWallet(walletTag) { calls.push({ m: 'DELETE /wallet', path: walletTag }); failing('DELETE /wallet'); server.links.delete(walletTag); },
-    async getPrefs() { return PREFS; },
+    async getPrefs(walletTag) { calls.push({ m: 'GET /prefs', path: walletTag }); failing('GET /prefs'); if (!server.links.has(walletTag)) throw new NotifyError(404, 'wallet_not_registered'); return server.prefs; },
     async putPrefs(walletTag, body) { calls.push({ m: 'PUT /prefs', path: walletTag, body }); return { ...PREFS, device: body.device ?? PREFS.device }; },
     async clockOffsetMs() { return 0; },
   };
@@ -412,5 +413,25 @@ describe('wallet removal (§8.5, §8.6)', () => {
     expect(m.fake.calls.map((c) => c.m)).toEqual(['PUT /prefs', 'DELETE /wallet']);
     expect(m.fake.server.device).not.toBeNull();
     expect(await m.reg.setPrefs(4, { device: { muted: true } })).toBe('not_registered');
+  });
+});
+
+describe('settings refresh (§4.8)', () => {
+  it('refreshPrefs replaces the stored synced prefs with the server\'s (another device wrote them)', async () => {
+    const m = await optedIn();
+    m.fake.server.prefs = { synced: { categoriesOff: ['funds'], showAmounts: true, minReceiveLovelace: 5_000_000, updatedAt: 7 }, device: { muted: false } };
+    expect(await m.reg.refreshPrefs(4)).toBe('ok');
+    expect(m.fake.calls.map((c) => c.m)).toEqual(['GET /prefs']);
+    expect((await m.store.getWallet(4))?.prefs?.synced).toEqual({ categoriesOff: ['funds'], showAmounts: true, minReceiveLovelace: 5_000_000, updatedAt: 7 });
+  });
+
+  it('refreshPrefs on a link the server dropped marks the wallet unregistered; an unregistered wallet is not fetched', async () => {
+    const m = await optedIn();
+    m.fake.server.links.clear();
+    expect(await m.reg.refreshPrefs(4)).toBe('not_registered');
+    expect((await m.store.getWallet(4))?.registeredAt).toBeNull();
+    m.fake.calls.length = 0;
+    expect(await m.reg.refreshPrefs(4)).toBe('not_registered');
+    expect(m.fake.calls).toEqual([]);
   });
 });

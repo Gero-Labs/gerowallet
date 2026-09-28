@@ -10,7 +10,7 @@
 // B8: before showing, the worker asks every open extension page (NOTIFY_PRESENT,
 // 250 ms). A page that is visible AND focused renders the in-app toast and answers
 // `{ shown: true }`; the system notification is then shown silently, and closed
-// when the page reports NOTIFY_TOAST_SHOWN. Otherwise the normal, audible one.
+// and the system notification is skipped. Otherwise the normal, audible one.
 // B0 showed Chrome raises no generic notification on its own, so no case skips it.
 //
 // Dependencies are injected for the unit tests; notifyBackground.ts binds them.
@@ -30,7 +30,6 @@ export interface ToastRequest {
 export interface NotifyPushDeps {
   store: NotifyStore;
   showNotification: (title: string, options: NotificationOptions & { data: NotificationData; tag: string; silent: boolean; renotify: boolean; requireInteraction: boolean; timestamp: number; icon: string }) => Promise<void>;
-  closeNotifications: (tag: string) => Promise<void>;
   /** NOTIFY_PRESENT to the open pages; resolves true when one rendered a toast (within 250 ms). */
   presentToPages: (request: ToastRequest) => Promise<boolean>;
   locale: () => Promise<string>;
@@ -46,8 +45,6 @@ export interface NotifyPushDeps {
 export interface NotifyPushHandlers {
   handlePush(text: string | null): Promise<RenderedPush>;
   handleNotificationClick(notification: { data?: unknown; tag?: string; close(): void }): Promise<RouteIntent>;
-  /** NOTIFY_TOAST_SHOWN: the page's toast closed, so the silent system notification can go. */
-  toastShown(e: string): Promise<void>;
 }
 
 export function createNotifyPushHandlers(deps: NotifyPushDeps): NotifyPushHandlers {
@@ -74,27 +71,38 @@ export function createNotifyPushHandlers(deps: NotifyPushDeps): NotifyPushHandle
         log(`push for unknown wallet tag ${rendered.unknownWalletTag.slice(0, 8)}: generic text, DELETE queued`);
       }
       const repeat = await deps.store.markSeen(rendered.tag, now());
-      let toastShown = false;
-      try {
-        toastShown = await deps.presentToPages({ e: rendered.tag, title: rendered.title, body: rendered.body, route: rendered.route, walletId: rendered.data.walletId });
-      } catch (e) { log(`NOTIFY_PRESENT failed: ${String(e)}`); }
-      await deps.showNotification(rendered.title, {
-        body: rendered.body,
-        icon: deps.iconUrl,
-        tag: rendered.tag,
-        renotify: false,
-        silent: toastShown,
-        requireInteraction: rendered.requireInteraction,
-        timestamp: rendered.timestamp,
-        data: rendered.data,
+      // The in-app notification centre (the bell) keeps what was shown, unread until opened there or clicked.
+      await deps.store.addInbox({
+        e: rendered.tag, t: rendered.data.t, c: rendered.data.c, d: rendered.data.d, ...(rendered.data.x ? { x: rendered.data.x as Record<string, unknown> } : {}),
+        walletId: rendered.data.walletId, walletName: wallet?.name ?? null, title: rendered.title, body: rendered.body,
+        ts: rendered.timestamp, readAt: null, needsYou: rendered.requireInteraction,
       });
-      log(`push shown: t=${rendered.data.t || '?'} degraded=${rendered.data.degraded} toast=${toastShown} repeat=${repeat}`);
+      let presented = false;
+      try {
+        presented = await deps.presentToPages({ e: rendered.tag, title: rendered.title, body: rendered.body, route: rendered.route, walletId: rendered.data.walletId });
+      } catch (e) { log(`NOTIFY_PRESENT failed: ${String(e)}`); }
+      // A focused wallet page showed the snackbar: no system bubble on top of it. Chrome waives
+      // userVisibleOnly when a window client of the origin is visible and focused, which is exactly
+      // the condition the page checked before answering { shown: true }.
+      if (!presented) {
+        await deps.showNotification(rendered.title, {
+          body: rendered.body,
+          icon: deps.iconUrl,
+          tag: rendered.tag,
+          renotify: false,
+          requireInteraction: rendered.requireInteraction,
+          timestamp: rendered.timestamp,
+          data: rendered.data,
+        });
+      }
+      log(`push shown: t=${rendered.data.t || '?'} degraded=${rendered.data.degraded} inPage=${presented} repeat=${repeat}`);
       return rendered;
     },
 
     async handleNotificationClick(notification) {
       notification.close();
       const data = (notification.data && typeof notification.data === 'object' ? notification.data : {}) as Partial<NotificationData>;
+      if (typeof data.e === 'string') await deps.store.markInboxRead(data.e, now());
       const route = routeFor(data.d ?? 'home', data.x, data.degraded === 'none');
       // B4: a notification about a wallet that is not the open one never switches by itself.
       const logged = await deps.loggedWalletId();
@@ -107,8 +115,5 @@ export function createNotifyPushHandlers(deps: NotifyPushDeps): NotifyPushHandle
       return route;
     },
 
-    async toastShown(e) {
-      await deps.closeNotifications(e);
-    },
   };
 }

@@ -152,43 +152,24 @@
                     v-model="notificationsMenu"
                     offset-y
                     nudge-left="75"
-                    :close-on-content-click="true"
+                    :close-on-content-click="false"
                     transition="none"
                   >
                     <template v-slot:activator="{ on, attrs }">
                       <v-btn class="ml-4 toolbar-icon-btn" icon v-bind="attrs" v-on="on">
-                        <v-badge :value="kesWarningVisible" color="error" dot overlap>
+                        <v-badge :value="kesWarningVisible || inboxUnread > 0" :content="inboxUnread > 0 ? String(inboxUnread) : undefined" :dot="inboxUnread === 0" :color="inboxUnread > 0 ? 'var(--g-accent)' : 'error'" overlap>
                           <v-icon size="20">mdi-bell-outline</v-icon>
                         </v-badge>
                       </v-btn>
                     </template>
-                    <v-card outlined class="notifications-card" style="min-width: 280px; max-width: 320px">
-                      <v-card-title class="pa-3 pb-1" style="font-size: 14px">{{ t('navigation.notifications') }}</v-card-title>
-                      <v-card-text class="pa-0 pb-2">
-                        <v-list v-if="kesWarningVisible" class="transparent" dense>
-                          <v-list-item class="kes-notification-item" @click="navigateToPoolOperator">
-                            <v-list-item-avatar size="32" class="mr-2" style="background: var(--g-warning-fill); border-radius: var(--g-r-control); min-width: 32px">
-                              <v-icon size="16" color="warning">mdi-key-chain</v-icon>
-                            </v-list-item-avatar>
-                            <v-list-item-content>
-                              <v-list-item-title style="font-size: 13px; font-weight: 600; color: var(--g-warning); white-space: normal">
-                                {{ t('poolOperator.kesWarningTitle', { remaining: kesRemainingGlobal }) }}
-                              </v-list-item-title>
-                              <v-list-item-subtitle style="font-size: 11px; white-space: normal; color: var(--g-text-3)">
-                                {{ t('poolOperator.kesWarningSubtitle') }}
-                              </v-list-item-subtitle>
-                            </v-list-item-content>
-                            <v-list-item-action class="my-0 ml-1">
-                              <v-icon small color="warning">mdi-chevron-right</v-icon>
-                            </v-list-item-action>
-                          </v-list-item>
-                        </v-list>
-                        <div v-else class="text-center pa-4" style="color: var(--g-text-3); font-size: 13px">
-                          <v-icon small color="var(--g-text-3)" class="mr-1">mdi-bell-check-outline</v-icon>
-                          {{ t('navigation.nothingNew') }}
-                        </div>
-                      </v-card-text>
-                    </v-card>
+                    <NotifyInbox
+                      :open="notificationsMenu"
+                      :kes-visible="kesWarningVisible"
+                      :kes-remaining="kesRemainingGlobal"
+                      @kes="navigateToPoolOperator"
+                      @settings="openNotifySettings"
+                      @close="notificationsMenu = false"
+                    />
                   </v-menu>
 
                   <v-tooltip bottom content-class="custom-tooltip">
@@ -304,6 +285,8 @@ import { walletStore, hasProgrammableLockedLovelace } from '@/stores/walletStore
 import WalletStore from '@/stores/walletStore';
 import { poolOperatorStore } from '@/stores/poolOperatorStore';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
+import NotifyInbox from '@/shared/components/NotifyInbox.vue';
+import { notifyInboxStore } from '@/stores/notifyInboxStore';
 import { networkStore, isBitcoinTip } from '@/stores/networkStore';
 import { midnightStore } from '@/stores/midnightStore';
 import { setConfiguration } from '@/db/gero-db';
@@ -493,6 +476,15 @@ function handleOpenBackupDialog() {
 
 function onSheetScroll() {
   if (notificationsMenu.value) notificationsMenu.value = false;
+}
+
+// Mirror the worker's notifyInbox from the start: the badge counts unread before the menu ever opens.
+notifyInboxStore.init();
+const inboxUnread = computed(() => notifyInboxStore.unread());
+function openNotifySettings() {
+  notificationsMenu.value = false;
+  settingsInitialTab.value = 'notifications';
+  currentDialog.value = dialogs.SETTINGS;
 }
 
 function navigateToPoolOperator() {
@@ -1003,14 +995,3 @@ div.v-toolbar__content {
 
 </style>
 
-<style lang="scss">
-.kes-notification-item {
-  cursor: pointer;
-  border-radius: var(--g-r-control);
-  margin: 0 8px;
-}
-
-.kes-notification-item:hover {
-  background: var(--g-warning-fill) !important;
-}
-</style>
