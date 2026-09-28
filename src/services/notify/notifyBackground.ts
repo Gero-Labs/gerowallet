@@ -18,12 +18,12 @@ import { loadDeviceRegisterProof } from '@/services/crossDevice/deviceProofStore
 import { createNotifyClient, DEFAULT_NOTIFY_API_URL } from './notifyClient';
 import { createNotifyStore, type NotifyDeviceState, type NotifyWalletState } from './notifyStore';
 import {
-  createNotifyRegistration, isEligibleWallet, NOTIFY_REASSERT_ALARM, NOTIFY_RETRY_ALARM,
+  createNotifyRegistration, isEligibleWallet, NOTIFY_REASSERT_ALARM, NOTIFY_RETRY_ALARM, toBcp47,
   type LoggedWallet, type NotifyRegistration, type PushManagerLike, type ReassertTrigger,
 } from './notifyRegistration';
 import { notifyHooks } from './notifyHooks';
 import { createNotifyPushHandlers, type ToastRequest } from './notifyPush';
-import type { RouteIntent } from './notifyRender';
+import { pushLocale, type RouteIntent } from './notifyRender';
 import type { NotifyConfig, WalletPrefsWrite } from './notifyTypes';
 
 interface WorkerRegistration {
@@ -55,7 +55,7 @@ const notifyClient = createNotifyClient({
     const j = sub?.toJSON();
     return {
       protocol: 1, relayPubKey: identity.pubKeyHex, platform: 'extension', appVersion: chrome.runtime.getManifest().version,
-      locale: (await storedLocale()) === 'de' ? 'de' : 'en', osPermission: true,
+      locale: toBcp47(pushLocale(await storedLocale())), osPermission: true,
       transport: j && device.vapidKid ? 'webpush' : 'none',
       ...(j && device.vapidKid ? { webpush: { endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth, vapidKid: device.vapidKid, expirationTime: j.expirationTime ?? null } } : {}),
     };

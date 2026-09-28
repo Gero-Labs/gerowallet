@@ -32,6 +32,8 @@ import { getDomain } from 'tldts';
 import { MessageTypes } from '@/models/MessageTypes';
 import { signInWithGoogle } from '@/chrome/auth';
 import { loadConfig, loadWallets } from '@/plugins/geroLoader';
+import { readyLanguageFor } from '@/plugins/i18n.config';
+import GeroStore from '@/stores/geroStore';
 import WalletStore, { hydrateWalletStore, matchesDappWhitelistEntry, walletStore } from '@/stores/walletStore';
 import { walletManager } from '@/services/walletManager.service';
 import { getNotifyState, installNotifyListeners, notifyActions, onNotifyAlarm, reassert as notifyReassert } from '@/services/notify/notifyBackground';
@@ -227,6 +229,16 @@ if (!isBeta) {
     }
   });
 }
+
+// A fresh install starts in the browser's language when we speak it. Only on
+// 'install': an existing user's 'us' may be a deliberate choice, so updates
+// never touch it. setLocale is the selector's own path (memory, storage, gero-db).
+chrome.runtime.onInstalled.addListener((details) => {
+  if (details.reason !== 'install') return;
+  const detected = readyLanguageFor(chrome.i18n?.getUILanguage?.());
+  if (detected === 'us') return;
+  GeroStore.setLocale(detected).catch((error) => debugLog('🌐', `install locale not applied: ${getErrorMessage(error)}`));
+});
 
 // Shared shapes used throughout the dApp pipeline. Handlers receive `request`
 // objects with a loose shape from `Messaging`/`app.add`, and they routinely

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import us from '@/plugins/i18n/us';
 import de from '@/plugins/i18n/de';
+import es from '@/plugins/i18n/es';
 import { ORDER_ACTION_VALUES, ORDER_STATUS_VALUES } from './types';
 
 /**
@@ -11,7 +12,7 @@ import { ORDER_ACTION_VALUES, ORDER_STATUS_VALUES } from './types';
  * raw `realfi.statuses.heldForScreening` in front of a user. This is the test that
  * would have caught the SDK adding four statuses and two actions behind our back.
  */
-const locales = { us, de } as Record<string, Record<string, string>>;
+const locales = { us, de, es } as Record<string, Record<string, string>>;
 
 function lowerFirst(value: string): string {
   return value.charAt(0).toLowerCase() + value.slice(1);

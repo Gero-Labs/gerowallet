@@ -89,6 +89,12 @@ describe('payload rendering (§6.7), every t of §6.2', () => {
     expect(render(EX.funds_summary.replace('"n":3', '"n":1'), { locale: 'de' }).body).toBe('1 weitere Transaktion');
   });
 
+  it('Spanish strings, and an unsupported locale falls back to English', () => {
+    expect(render(EX.funds, { locale: 'es' }).title).toBe('ADA recibido · Daily Cardano');
+    expect(render(EX.funds_summary.replace('"n":3', '"n":1'), { locale: 'es' }).body).toBe('1 transacción más');
+    expect(render(EX.funds, { locale: 'fr' }).title).toBe(render(EX.funds).title);
+  });
+
   it('unknown t renders the category text; unknown c the generic notification; unknown d goes home', () => {
     const r = render(EX.funds.replace('"t":"funds"', '"t":"funds_v9"'));
     expect(r.title).toBe(us.PUSH_GENERIC_TITLE);

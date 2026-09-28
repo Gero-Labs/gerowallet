@@ -2,10 +2,11 @@ import Vue from 'vue';
 import VueI18n, { type LocaleMessageObject, type LocaleMessages } from 'vue-i18n';
 
 
-// Vuetify locales — only import supported languages (us, de)
+// Vuetify locales — only import supported languages (us, de, es)
 import {
   de as vuetifyDe,
   en as vuetifyEn,
+  es as vuetifyEs,
 } from 'vuetify/src/locale';
 
 // Only load US English by default (other languages lazy-loaded on demand)
@@ -26,6 +27,7 @@ const wrapWithVuetify = (translations: Messages, vuetifyLocale: Messages, rtl = 
 // Vuetify locale mapping — only supported languages
 const vuetifyLocales: Record<string, Messages> = {
   de: vuetifyDe,
+  es: vuetifyEs,
   us: vuetifyEn,
 };
 
@@ -66,6 +68,8 @@ async function loadLanguage(lang: string): Promise<void> {
 function getLocaleCode(lang: string): string {
   const localeCodes: Record<string, string> = {
     de: 'de-DE',
+    // Neutral Latin American Spanish, the same register Lace ships.
+    es: 'es-419',
     us: 'en-US',
   };
   return localeCodes[lang] || 'en-US';
