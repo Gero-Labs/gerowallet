@@ -23,7 +23,10 @@
           <span class="notify-inbox__meta"><span class="notify-inbox__dot notify-inbox__dot--warn" aria-hidden="true"></span></span>
         </button>
         <button v-for="item in needsYou" :key="item.e" type="button" class="notify-inbox__row" :class="{ 'notify-inbox__row--read': item.readAt !== null }" @click="open(item)">
-          <span class="notify-inbox__tile"><v-icon size="15" color="var(--g-text-1)">{{ iconFor(item) }}</v-icon></span>
+          <span class="notify-inbox__tile">
+            <NotifyAssetIcons v-if="item.assets && item.assets.length" :assets="item.assets" :wallet-id="item.walletId" />
+            <v-icon v-else size="15" color="var(--g-text-1)">{{ iconFor(item) }}</v-icon>
+          </span>
           <span class="notify-inbox__text">
             <span class="notify-inbox__row-title">{{ item.title }}</span>
             <span class="notify-inbox__row-body">{{ item.body }}</span>
@@ -39,7 +42,10 @@
       <template v-if="activity.length">
         <div class="t-label notify-inbox__section">{{ $t('notify.inbox.activity') }}</div>
         <button v-for="item in activity" :key="item.e" type="button" class="notify-inbox__row" :class="{ 'notify-inbox__row--read': item.readAt !== null }" @click="open(item)">
-          <span class="notify-inbox__tile"><v-icon size="15" color="var(--g-text-1)">{{ iconFor(item) }}</v-icon></span>
+          <span class="notify-inbox__tile">
+            <NotifyAssetIcons v-if="item.assets && item.assets.length" :assets="item.assets" :wallet-id="item.walletId" />
+            <v-icon v-else size="15" color="var(--g-text-1)">{{ iconFor(item) }}</v-icon>
+          </span>
           <span class="notify-inbox__text">
             <span class="notify-inbox__row-title">{{ item.title }}</span>
             <span class="notify-inbox__row-body">{{ item.body }}</span>
@@ -80,6 +86,7 @@ import { notifyInboxStore, type NotifyInboxItem } from '@/stores/notifyInboxStor
 import { notifySettingsStore } from '@/stores/notifySettingsStore';
 import { walletStore } from '@/stores/walletStore';
 import { routeFor } from '@/services/notify/notifyRender';
+import NotifyAssetIcons from '@/shared/components/NotifyAssetIcons.vue';
 
 const props = defineProps<{ open: boolean; kesVisible?: boolean; kesRemaining?: number | null }>();
 const emit = defineEmits<{ (e: 'kes'): void; (e: 'settings'): void; (e: 'close'): void }>();

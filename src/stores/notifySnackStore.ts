@@ -15,6 +15,10 @@ export interface NotifySnack {
   path: string;
   /** Open the settings dialog on this tab after routing (a security push on the dashboard). */
   settingsTab?: 'security';
+  /** The wallet the push is about (its network picks the ADA icon). */
+  walletId?: number | null;
+  /** The assets of a receipt, for the icon. */
+  assets?: Array<{ unit?: string; label: string }>;
 }
 
 export const SNACK_MS = 8_000;
