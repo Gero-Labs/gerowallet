@@ -61,7 +61,7 @@ Required checks on `development` (these are job `name:` strings, not workflow na
 
 | Context | Workflow | What it runs |
 |---|---|---|
-| `Production bundle (SFC parse)` | `dev-bundle-gate.yml` | 6 named vitest files, `npm run design:check`, then `build:web` against a synthesized placeholder `.env.production` |
+| `Production bundle (SFC parse)` | `dev-bundle-gate.yml` | 18 named vitest files (i18n parity and Copilot no-advice among them), `npm run design:check`, then `build:web` against a synthesized placeholder `.env.production` |
 | `npm ci (lock in sync)` | `lockfile-check.yml` | `npm ci --ignore-scripts` |
 | `ESLint flat config loads` | `eslint-check.yml` | `eslint --print-config` on two files. It lints **no source** - it only proves the flat config resolves |
 | `Ledger tests and extension bundles` | `midnight-ledger-verify.yml` | The Midnight + crossDevice vitest slice, then `scripts/build-isolated-extension.mjs` which builds all five production entry points. Deliberately **not** path-filtered, so it runs on every PR |

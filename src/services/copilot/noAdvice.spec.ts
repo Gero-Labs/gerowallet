@@ -51,18 +51,26 @@ const DE_FORBIDDEN: RegExp[] = [
   /folg/i, /kopier/i, /nachkauf/i,
 ];
 
+// JS `\b` only knows ASCII word characters, so `compró\b` can never match
+// "compró": to it the ó is not part of the word. Spanish patterns get
+// Unicode-aware edges instead: `word()` for a whole word, `stem()` for a prefix.
+const EDGE_BEFORE = '(?<![\\p{L}\\p{N}])';
+const EDGE_AFTER = '(?![\\p{L}\\p{N}])';
+const word = (src: string) => new RegExp(`${EDGE_BEFORE}(?:${src})${EDGE_AFTER}`, 'iu');
+const stem = (src: string) => new RegExp(`${EDGE_BEFORE}(?:${src})`, 'iu');
+
 // Spanish future tense is morphological, so "will" is covered by the prediction
 // verbs and the "va a" periphrasis rather than one token.
 const ES_FORBIDDEN: RegExp[] = [
-  /\bcompr(a|ar|as|an|e|en|es|ó|aste)\b/i, /\bvend(e|er|es|en|a|as|an|ió|iste)\b/i, /\bventa/i,
-  /\bmant[eé]n(er|ga|gas)?\b/i, /deber[ií]as/i, /\bdebes\b/i, /\bvas? a\b/i, /subir[aá]n?\b/i,
-  /bajar[aá]n?\b/i, /\bentrar\b/i, /\bsalir\b/i, /\bluna\b/i, /\bpump\b/i, /\bdump\b/i,
-  /\brug\b/i, /\bcero\b/i, /\b\d+x\b/i, /\bobjetivo\b/i, /adecuad/i, /para ti\b/i,
-  /recomend/i, /ap[uú]rate/i, /\bprisa\b/i, /[uú]ltima oportunidad/i, /no te (lo )?pierdas/i,
-  /ahora!/i,
+  word('compr(a|ar|as|an|e|en|es|ó|aste)'), word('vend(e|er|es|en|a|as|an|ió|iste)'), stem('venta'),
+  word('mant[eé]n(er|ga|gas)?'), /deber[ií]as/iu, word('debes'), word('vas? a'), word('subir[aá]n?'),
+  word('bajar[aá]n?'), word('entrar'), word('salir'), word('luna'), word('pump'), word('dump'),
+  word('rug'), word('cero'), word('\\d+x'), word('objetivo'), /adecuad/iu, word('para ti'),
+  /recomend/iu, /ap[uú]rate/iu, word('prisa'), /[uú]ltima oportunidad/iu, /no te (lo )?pierdas/iu,
+  /ahora!/iu,
   // smart-money / copy-trading slide
-  /\bsigu/i, /\bseguir/i, /\bcopi/i, /dinero inteligente/i, /smart money/i, /ballena/i,
-  /\btop trader/i, /mejor(es)? trader/i, /rentable/i,
+  stem('sigu'), stem('seguir'), stem('copi'), /dinero inteligente/iu, /smart money/iu, /ballena/iu,
+  stem('top trader'), /mejor(es)? trader/iu, /rentable/iu,
 ];
 
 const NEW_COPY_PREFIXES = [
@@ -94,6 +102,16 @@ describe('feed no-advice rule (every narration string, every language)', () => {
       for (const re of DE_FORBIDDEN) {
         expect(re.test(v), `DE ${key} matched forbidden ${re}: "${v}"`).toBe(false);
       }
+    }
+  });
+
+  it('the Spanish list matches accented forms and respects word edges', () => {
+    const matches = (s: string) => ES_FORBIDDEN.some((re) => re.test(s));
+    for (const s of ['alguien compró ADA', 'vendió todo', '{ticker} subirá pronto', 'bajará mañana', 'mantén tus tokens', 'es tu última oportunidad']) {
+      expect(matches(s), s).toBe(true);
+    }
+    for (const s of ['comprobar el saldo', 'un vendedor', 'mantenimiento de la red']) {
+      expect(matches(s), s).toBe(false);
     }
   });
 

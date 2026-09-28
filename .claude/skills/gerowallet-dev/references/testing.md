@@ -42,11 +42,11 @@ npx vitest run src/services/crossDevice/proveService.spec.ts
 
 ## What CI actually runs
 
-About 62 of 245 files. `npm test` is never invoked in CI.
+About 74 files. `npm test` is never invoked in CI.
 
 | Workflow | Runs |
 |---|---|
-| `dev-bundle-gate.yml` | 6 named spec files, then `design:check`, then `build:web` |
+| `dev-bundle-gate.yml` | 18 named spec files (i18n parity among them), then `design:check`, then `build:web` |
 | `midnight-ledger-verify.yml` | Two whole **directories** - `src/chains/midnight` (31 files today) and `src/services/crossDevice` (19) - plus 6 named specs; then `scripts/build-isolated-extension.mjs` |
 
 Because those are directory arguments, the covered set grows on its own whenever someone adds a spec under either path. Count it before quoting a number:

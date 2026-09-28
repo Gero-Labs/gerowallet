@@ -23,7 +23,7 @@ README.md and ARCHITECTURE.md are broadly reliable on structure and intent. CLAU
 | "`api/` - data clients routed through gero-backend/Nexus: ... spo-api" | `spo-api.ts` has a hardcoded per-network Koios URL map and no env var |
 | "Sync throttled to every 2 min when locked" | No locked-state throttle exists. The only `2 * 60_000` is a mutex acquisition timeout |
 | Route gating via `isRouteUnderMaintenance()` | Correct, but incomplete: that check is skipped until flags initialize, so a dark feature also needs the live flag ANDed into `routeNetworkGuards` |
-| "When adding keys to `us.ts`, always add the corresponding German in `de.ts` and Spanish in `es.ts`" | Correct rule. `src/plugins/i18n.parity.spec.ts` checks it for every ready language, but it is not in a required check's path list, so CI does not enforce it |
+| "When adding keys to `us.ts`, always add the corresponding German in `de.ts` and Spanish in `es.ts`" | Correct rule, enforced: `src/plugins/i18n.parity.spec.ts` checks it for every ready language inside the required `Production bundle (SFC parse)` check |
 | "Gates wired into the pre-commit hook" | Correct, but it is **yorkie** via `package.json` `gitHooks`, not husky. There is no `.husky/` directory, and `.git/hooks/pre-commit` is a generated shim |
 
 ## ARCHITECTURE.md

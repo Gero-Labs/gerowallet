@@ -118,6 +118,14 @@ jobs:
       - name: Bundle TDZ guard logic
         run: npx vitest run scripts/check-bundle-tdz.spec.mjs
 
+      # i18n parity. vue-i18n renders English (or the raw key) for a missing
+      # translation and its warnings are silenced, so a key added to us.ts
+      # without de/es ships unseen. These fail on a missing key, placeholder or
+      # plural drift in any READY_LANGUAGES locale, and on advice-worded
+      # Copilot narration in any language.
+      - name: i18n parity and Copilot no-advice copy
+        run: npx vitest run src/plugins/i18n.parity.spec.ts src/services/copilot/noAdvice.spec.ts src/modules/realfi/i18n.spec.ts
+
       # Design ratchet. Unlike tsc/eslint (see the header note) these gates are
       # green today and may only get greener: audit.mjs fails if any style-debt
       # metric in scripts/design/budgets.json grows, and contrast.mjs fails if a
