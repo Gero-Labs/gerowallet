@@ -2749,7 +2749,13 @@ app.addToOptions(MessageTypes.NOTIFY_WALLET_REMOVED, async (request, sendRespons
 });
 
 app.addToOptions(MessageTypes.GET_CROSS_DEVICE_SETTINGS, async (request, sendResponse) => {
-  sendResponse(crossDeviceReply(request.id, { success: true, settings: walletManager.getRemoteSigningSettings() }));
+  sendResponse(crossDeviceReply(request.id, {
+    success: true,
+    settings: walletManager.getRemoteSigningSettings(),
+    // Remote signing is on but no valid wallet-control proof rides this device's
+    // DEVICE_REGISTER: the Security tab asks the user to re-confirm (handover A1).
+    needsProof: walletManager.getNeedsProof(),
+  }));
 });
 
 app.addToOptions(MessageTypes.GET_CROSS_DEVICE_DEVICES, async (request, sendResponse) => {

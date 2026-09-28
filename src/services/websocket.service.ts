@@ -52,6 +52,11 @@ interface WsHandlers {
 // the sync switch's unknown-type default with no breadcrumb.
 const CROSS_DEVICE_MESSAGE_TYPES: readonly string[] = [
   'DEVICE_REGISTER',
+  // Session-bound registration (relay contract §5): the per-SUBSCRIBE challenge the
+  // extension signs into DEVICE_REGISTER, and the answer to a DEVICE_UNREGISTER.
+  // Without these two they fall into the sync switch's unknown-type default.
+  'DEVICE_CHALLENGE',
+  'DEVICE_UNREGISTER_ACK',
   'DEVICES',
   'DEVICE_REGISTER_ACK',
   'SIGN_REQUEST',

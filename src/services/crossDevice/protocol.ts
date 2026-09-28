@@ -13,9 +13,11 @@
 // Pure module: no chrome, no WebSocket, no Date.now.
 
 export type CrossDeviceMessageType =
-  | 'DEVICE_REGISTER' // device -> server: announce this device + its pubkey (TOFU, unsigned)
+  | 'DEVICE_REGISTER' // device -> server: announce this device + its pubkey; session-signed when the relay challenged (§5.3)
+  | 'DEVICE_CHALLENGE' // server -> device: per-SUBSCRIBE session challenge to sign into DEVICE_REGISTER (§5.2)
   | 'DEVICES' // server -> device: the current per-wallet device registry snapshot
   | 'DEVICE_REGISTER_ACK' // server -> device: optional ack of a DEVICE_REGISTER
+  | 'DEVICE_UNREGISTER_ACK' // server -> device: answer to a DEVICE_UNREGISTER (§5.7; not sent by the extension)
   | 'SIGN_REQUEST' // requester -> sibling device(s): please sign this unsigned tx
   | 'SIGN_RESPONSE' // approver -> requester: approved (+witness) or rejected
   | 'PAIR_CONFIRM' // scanner (phone) -> scanned device (desktop): QR-pair handshake, signed
@@ -62,21 +64,63 @@ export interface DeviceInfo {
   proverLedgerVersion?: string;
 }
 
-/** Outbound, unsigned (trust-on-first-use); wallet inferred server-side from SUBSCRIBE. */
+/**
+ * Outbound. The wallet is inferred server-side from the socket's SUBSCRIBE.
+ * `challenge` + `sessionSig` (contract §5.3) bind the frame to the socket session
+ * and to this device's relay key: `sessionSig` is Ed25519 by the relay key over
+ * `gero-xdev/v1|DEVICE_REGISTER_SESSION|<challenge>|<deviceId>|<network>|<stakeAddress>`.
+ * Both are absent only on the legacy fallback (no DEVICE_CHALLENGE arrived, §5.5).
+ * They live HERE and not on DeviceInfo on purpose: the relay never stores or fans
+ * them out, and they must never be treated as device info.
+ */
 export interface DeviceRegister extends DeviceInfo {
   type: 'DEVICE_REGISTER';
+  challenge?: string; // 32 hex: echo of the session's current DEVICE_CHALLENGE
+  sessionSig?: string; // 128 hex: relay-key signature over the session subject
 }
 
-/** Inbound: the server's snapshot of every device registered under this wallet. */
+/**
+ * Inbound (§5.2): the relay's per-session challenge, sent right after EVERY
+ * SUBSCRIBE (including a re-SUBSCRIBE on the same socket), before DEVICES.
+ * `network` / `stakeAddress` are the socket's SUBSCRIBE as the relay recorded
+ * them; a client must only sign a challenge that names its own wallet.
+ */
+export interface DeviceChallenge {
+  type: 'DEVICE_CHALLENGE';
+  challenge: string; // 32 hex (16 CSPRNG bytes)
+  network: string; // wire network id, e.g. 'cardano-mainnet'
+  stakeAddress: string; // bech32 reward address of the SUBSCRIBE
+}
+
+/**
+ * Inbound: the server's snapshot of every device registered under this wallet.
+ * `restricted: true` (§5.6, enforce mode) means THIS session is not registered
+ * yet, not "no other devices": the list is empty and must not replace the registry.
+ */
 export interface DevicesSnapshot {
   type: 'DEVICES';
   devices: DeviceInfo[];
+  restricted?: boolean;
 }
 
-/** Inbound optional ack; advisory only. */
+/**
+ * Inbound optional ack; advisory. A relay that predates contract §5.5 answers
+ * `{type, deviceId}` only: all three status fields missing means "unknown /
+ * legacy", and a client must act only on EXPLICIT values (never `!== 'verified'`).
+ */
 export interface DeviceRegisterAck {
   type: 'DEVICE_REGISTER_ACK';
   deviceId?: string;
+  proofStatus?: 'verified' | 'absent' | 'invalid';
+  sessionStatus?: 'verified' | 'absent' | 'stale_challenge' | 'invalid';
+  registered?: boolean;
+}
+
+/** Inbound answer to a DEVICE_UNREGISTER (§5.7). The extension never sends one; routed so it is not "unknown". */
+export interface DeviceUnregisterAck {
+  type: 'DEVICE_UNREGISTER_ACK';
+  deviceId?: string;
+  removed?: boolean;
 }
 
 export interface SignRequest {
@@ -159,8 +203,10 @@ export interface PairAck {
 
 export type CrossDeviceMessage =
   | DeviceRegister
+  | DeviceChallenge
   | DevicesSnapshot
   | DeviceRegisterAck
+  | DeviceUnregisterAck
   | SignRequest
   | SignResponse
   | PairConfirm
@@ -219,11 +265,37 @@ export function isDeviceRegister(x: unknown): x is DeviceRegister {
 
 export function isDevicesSnapshot(x: unknown): x is DevicesSnapshot {
   if (!isObject(x) || x['type'] !== 'DEVICES') return false;
-  return Array.isArray(x['devices']) && x['devices'].every(isDeviceInfo);
+  return Array.isArray(x['devices']) && x['devices'].every(isDeviceInfo)
+    && (x['restricted'] === undefined || typeof x['restricted'] === 'boolean');
 }
 
+const HEX32 = /^[0-9a-f]{32}$/;
+
+export function isDeviceChallenge(x: unknown): x is DeviceChallenge {
+  if (!isObject(x) || x['type'] !== 'DEVICE_CHALLENGE') return false;
+  return isString(x['challenge']) && HEX32.test(x['challenge'])
+    && isString(x['network']) && isString(x['stakeAddress']);
+}
+
+const PROOF_STATUSES: readonly string[] = ['verified', 'absent', 'invalid'];
+const SESSION_STATUSES: readonly string[] = ['verified', 'absent', 'stale_challenge', 'invalid'];
+
+/**
+ * Accepts the legacy `{type, deviceId}` ack AND the §5.5 ack. An unknown status
+ * VALUE fails the guard (a typo'd relay must not be mistaken for an explicit verdict),
+ * but a MISSING field is fine: that is the legacy relay, and it means "unknown".
+ */
 export function isDeviceRegisterAck(x: unknown): x is DeviceRegisterAck {
-  return isObject(x) && x['type'] === 'DEVICE_REGISTER_ACK' && isOptString(x['deviceId']);
+  if (!isObject(x) || x['type'] !== 'DEVICE_REGISTER_ACK' || !isOptString(x['deviceId'])) return false;
+  const p = x['proofStatus'], s = x['sessionStatus'], r = x['registered'];
+  return (p === undefined || (isString(p) && PROOF_STATUSES.includes(p)))
+    && (s === undefined || (isString(s) && SESSION_STATUSES.includes(s)))
+    && (r === undefined || typeof r === 'boolean');
+}
+
+export function isDeviceUnregisterAck(x: unknown): x is DeviceUnregisterAck {
+  return isObject(x) && x['type'] === 'DEVICE_UNREGISTER_ACK' && isOptString(x['deviceId'])
+    && (x['removed'] === undefined || typeof x['removed'] === 'boolean');
 }
 
 export function isSignRequest(x: unknown): x is SignRequest {
@@ -289,8 +361,10 @@ export function isPairAck(x: unknown): x is PairAck {
  */
 export function parseCrossDeviceMessage(raw: unknown): CrossDeviceMessage | null {
   if (isDeviceRegister(raw)) return raw;
+  if (isDeviceChallenge(raw)) return raw;
   if (isDevicesSnapshot(raw)) return raw;
   if (isDeviceRegisterAck(raw)) return raw;
+  if (isDeviceUnregisterAck(raw)) return raw;
   if (isSignRequest(raw)) return raw;
   if (isSignResponse(raw)) return raw;
   if (isPairConfirm(raw)) return raw;
