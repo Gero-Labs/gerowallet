@@ -20,9 +20,10 @@
               <span class="notify-status__text">{{ statusText }}</span>
             </div>
             <span v-if="statusHint" class="helper my-0 d-block mt-1">{{ statusHint }}</span>
+            <span v-if="browserError" class="helper my-0 d-block mt-1 error--text">{{ browserError }}</span>
           </v-col>
           <v-col cols="3" style="display: flex;">
-            <ToggleSwitch text-left="OFF" text-right="ON" font-size="10px" v-model="browserOn" :disabled="busy || serverDisabled" style="margin: auto" />
+            <ToggleSwitch :key="browserSwitchKey" text-left="OFF" text-right="ON" font-size="10px" v-model="browserOn" :disabled="busy || serverDisabled" style="margin: auto" />
           </v-col>
         </v-row>
 
@@ -218,8 +219,17 @@ const unsupported = computed(() => {
 const serverDisabled = computed(() => !!config.value && (!config.value.enabled || !config.value.vapidPublicKey));
 const browserOn = computed({
   get: () => !!device.value?.browserEnabled,
-  set: (on: boolean) => { void store.setBrowserEnabled(on); },
+  set: (on: boolean) => { void turnBrowser(on); },
 });
+const browserSwitchKey = ref(0);
+const browserError = ref('');
+async function turnBrowser(on: boolean): Promise<void> {
+  browserError.value = '';
+  const r = await store.setBrowserEnabled(on);
+  if (r === 'error') browserError.value = t('notify.saveFailed');
+  // The switch keeps its own toggled look; when the worker did not follow (subscribe failed, error), snap it back.
+  if (on !== !!device.value?.browserEnabled) browserSwitchKey.value++;
+}
 const statusText = computed(() => {
   const d = device.value;
   if (serverDisabled.value) return t('notify.status.notYet');
@@ -364,7 +374,18 @@ onMounted(async () => {
   try { isBrave.value = !!(await nav.brave?.isBrave?.()); } catch { isBrave.value = false; }
 });
 // Every opening of the tab re-reads the worker (and, through it, /config and this wallet's server prefs).
-watch(() => props.active, (active) => { if (active) void store.refresh(true); }, { immediate: true });
+let retries = 0;
+async function refreshWhenActive(): Promise<void> {
+  await store.refresh(true);
+  // Right after an extension reload the worker answers before its wallets are hydrated: ask again.
+  const s = store.state.state;
+  const pageHasWallet = !!walletStore.loggedWallet;
+  if (props.active && (!s || (pageHasWallet && !s.logged) || store.state.error) && retries < 4) {
+    retries++;
+    setTimeout(() => { if (props.active) void refreshWhenActive(); }, 1500 * retries);
+  } else if (s?.logged) retries = 0;
+}
+watch(() => props.active, (active) => { if (active) void refreshWhenActive(); }, { immediate: true });
 </script>
 
 <style scoped lang="scss">

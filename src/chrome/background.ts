@@ -124,6 +124,13 @@ chrome.storage.local.get('openMiniGeroOnClick', (result) => {
     chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(console.error);
   }
 });
+let resolveBooted: () => void = () => {};
+/** Wallets loaded, the store hydrated and the active wallet logged in. NOTIFY_* answers wait
+ *  for this (capped), so a Settings tab opened right after an extension reload does not get an
+ *  empty state from a worker that is still starting. */
+const workerBooted = new Promise<void>((resolve) => { resolveBooted = resolve; });
+const booted = () => Promise.race([workerBooted, new Promise<void>((resolve) => setTimeout(resolve, 15_000))]);
+
 loadWallets().then(async () => {
   // Wait for the wallet store to be hydrated from Chrome storage
   await hydrateWalletStore();
@@ -171,7 +178,7 @@ loadWallets().then(async () => {
   } else {
     Loading.setLoading(false)
   }
-});
+}).finally(() => resolveBooted()).catch((e) => console.warn('⚠️ worker boot failed:', e));
 
 (async () => {
   // Skip cashback init without its env vars — the SDK throws on missing config.
@@ -2691,6 +2698,7 @@ function crossDeviceReply(id: string, data: unknown) {
 // wallet-control proof when none is cached (same path as remote signing).
 app.addToOptions(MessageTypes.NOTIFY_GET_STATE, async (request, sendResponse) => {
   try {
+    await booted();
     sendResponse(crossDeviceReply(request.id, { success: true, state: await getNotifyState({ refreshConfig: request.data?.refreshConfig === true }) }));
   } catch (error) {
     sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
@@ -2699,6 +2707,7 @@ app.addToOptions(MessageTypes.NOTIFY_GET_STATE, async (request, sendResponse) =>
 
 app.addToOptions(MessageTypes.NOTIFY_SET_BROWSER_ENABLED, async (request, sendResponse) => {
   try {
+    await booted();
     const result = await notifyActions.setBrowserEnabled(request.data?.enabled === true);
     sendResponse(crossDeviceReply(request.id, { success: true, result, state: await getNotifyState() }));
   } catch (error) {
@@ -2708,6 +2717,7 @@ app.addToOptions(MessageTypes.NOTIFY_SET_BROWSER_ENABLED, async (request, sendRe
 
 app.addToOptions(MessageTypes.NOTIFY_ENABLE_WALLET, async (request, sendResponse) => {
   try {
+    await booted();
     const password = typeof request.data?.password === 'string' ? request.data.password : undefined;
     const pkBytes = request.data?.privateKeyBytes;
     const privateKeyBytes = Array.isArray(pkBytes) ? Uint8Array.from(pkBytes) : undefined;
@@ -2721,6 +2731,7 @@ app.addToOptions(MessageTypes.NOTIFY_ENABLE_WALLET, async (request, sendResponse
 
 app.addToOptions(MessageTypes.NOTIFY_DISABLE_WALLET, async (request, sendResponse) => {
   try {
+    await booted();
     await notifyActions.disableWallet(Number(request.data?.walletId));
     sendResponse(crossDeviceReply(request.id, { success: true, state: await getNotifyState() }));
   } catch (error) {
@@ -2730,6 +2741,7 @@ app.addToOptions(MessageTypes.NOTIFY_DISABLE_WALLET, async (request, sendRespons
 
 app.addToOptions(MessageTypes.NOTIFY_SET_PREFS, async (request, sendResponse) => {
   try {
+    await booted();
     const result = await notifyActions.setPrefs(Number(request.data?.walletId), request.data?.prefs ?? {});
     sendResponse(crossDeviceReply(request.id, { success: result === 'ok', result, state: await getNotifyState() }));
   } catch (error) {
@@ -2752,6 +2764,7 @@ app.addToOptions(MessageTypes.NOTIFY_TOAST_SHOWN, async (request, sendResponse) 
 // durably while the wallet still exists (§8.5).
 app.addToOptions(MessageTypes.NOTIFY_WALLET_REMOVED, async (request, sendResponse) => {
   try {
+    await booted();
     await notifyActions.walletRemoved(Number(request.data?.walletId));
     sendResponse(crossDeviceReply(request.id, { success: true }));
   } catch (error) {
