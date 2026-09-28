@@ -78,8 +78,8 @@ npm run pack             # Package .zip/.crx/.xpi
 
 ### i18n
 - **Always use `$t()` for user-facing text** — never hardcode strings
-- Translation files: `src/plugins/i18n/us.ts` (English), `de.ts` (German)
-- **When adding keys to `us.ts`, always add corresponding German in `de.ts`**
+- Translation files: `src/plugins/i18n/us.ts` (English), `de.ts` (German), `es.ts` (Spanish: neutral Latin American, tú, Lace terminology)
+- **When adding keys to `us.ts`, always add the corresponding German in `de.ts` and Spanish in `es.ts`**. `src/plugins/i18n.parity.spec.ts` fails on any missing key, placeholder or plural drift
 - **Before creating a new i18n key, search for an existing key with the same text** (e.g., `errors.insufficientBalance` already exists — reuse it instead of creating `perpetuals.insufficientBalance`)
 
 ### Vuetify
@@ -215,7 +215,7 @@ Use these slash commands when working on this project:
 - `/bitcoin` — Bitcoin transactions, wallets, Lightning (multi-chain support)
 - `/blockchain-expert` — DeFi, smart contracts, Web3 patterns
 - `/browser-extension-builder` — Chrome extension architecture, Manifest V3, content scripts, messaging
-- `/i18n` — Sync and translate `us.ts`/`de.ts` language files
+- `/i18n` — Sync and translate `us.ts`/`de.ts`/`es.ts` language files
 - `/content-design` — UI copy: button labels, error messages, tooltips, empty states
 - `/frontend-design` — Production-grade Vue/Vuetify UI components
 - `/senior-security` — Crypto implementation, security architecture, wallet security audits
