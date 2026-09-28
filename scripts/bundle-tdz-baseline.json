@@ -9,7 +9,6 @@
     "bitcoinUtxoManager{calculateBitcoinBalance,filterUtxosByMinValue,findUtxo,formatBtc,getConfirmedUtxos,getTotalUtxoValue,getUnconfirmedUtxos,mergeUtxoSets,parseBitcoinUtxos,parseBtc,removeSpentUtxos,sortUtxosByValue}",
     "chainUtils{BITCOIN_EVENTS,BITCOIN_MAINNET,BITCOIN_METHODS,BITCOIN_TESTNET,CARDANO_EVENTS,CARDANO_MAINNET,CARDANO_METHODS,CARDANO_PREPROD,CARDANO_PREVIEW,buildCAIP10Account,getSupportedChains,getSupportedEvents,getSupportedMethods,isBitcoinChain,isCardanoChain,resolveCAIP2Chain,resolveGeroChain}",
     "converter{CoseLabel,buildAndSignData,buildSignatureAndCoseKey,byteaToHex,createBuilderWithSigStructure,createCoseKey,createCoseKeyHex,createSignDataBuilder,safeFreeCSLObject,stringToHex,toHexArray,toHexBuffer,toHexString}",
-    "de{default}",
     "geroStore{default,geroStore}",
     "index{CustomDustWallet,DustSectionSchema,DustWallet,DustWalletState,mergeDustSections}",
     "index{CustomShieldedWallet,ShieldedSectionSchema,ShieldedWallet,ShieldedWalletState,mergeShieldedSections}",

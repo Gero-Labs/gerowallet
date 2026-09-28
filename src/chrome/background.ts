@@ -1,3 +1,10 @@
+// Keep these first. The background is one iife, so loadLanguage()'s
+// `import(`@/plugins/i18n/${lang}.ts`)` cannot split a chunk here: Rollup inlines
+// each locale and declares its namespace wherever the module lands, which was
+// after the reader in i18n.ts (scripts/check-bundle-tdz.mjs). Importing them
+// before anything else lands them first. 'us' is already static via i18n.ts.
+import '@/plugins/i18n/de';
+import '@/plugins/i18n/es';
 import { validateMidnightConnectorTransfer, syncedMidnightShieldedBalances } from '@/chains/midnight/midnightConnectorTransfer';
 import { captureMidnightSigningSession } from '@/chains/midnight/midnightSigningSession';
 import { Buffer } from 'buffer';
