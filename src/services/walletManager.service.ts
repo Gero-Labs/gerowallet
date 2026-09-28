@@ -39,7 +39,9 @@ import {
 import { loadDeviceRegisterProof, saveDeviceRegisterProof } from '@/services/crossDevice/deviceProofStore';
 import { mintPairingNonce, consumePairingNonce, peekPairingNonce } from '@/services/crossDevice/pairingNonceStore';
 import { buildPairingQrPayload, type PairingQrPayload } from '@/services/crossDevice/pairingQr';
-import type { DeviceRegisterProof, PairConfirm } from '@/services/crossDevice/protocol';
+import { isDeviceChallenge, type DeviceRegisterProof, type PairConfirm } from '@/services/crossDevice/protocol';
+import { createRegistrationSession, type RegistrationSession } from '@/services/crossDevice/registrationSession';
+import { computeNeedsProof, isProofEligibleStakeAddress, wireNetworkOf, type XdevWallet } from '@/services/crossDevice/sessionBinding';
 import {
   defaultRemoteSigningSettings,
   isDeviceTrusted,
@@ -100,6 +102,24 @@ export class WalletManager {
   // Cached wallet-control proof for the CURRENT wallet, produced once at enable
   // time (needs auth) and re-sent on every DEVICE_REGISTER via getProof.
   private crossDeviceProof: DeviceRegisterProof | null = null;
+  // Relay contract §5.5: the relay answered our DEVICE_REGISTER with proofStatus
+  // absent/invalid. Surfaces the A1 re-confirm prompt until a fresh proof is produced.
+  private xdevProofRejected = false;
+  // The logged-in wallet as a DEVICE_CHALLENGE names it (stake address + wire
+  // network). A challenge for any other wallet is never signed (§5.2).
+  private xdevWallet: XdevWallet | null = null;
+  // Per-SOCKET registration state (contract §5.2, G1): the relay's latest challenge,
+  // the dedupe of "one signed frame per challenge" and the 5 s legacy fallback. It
+  // lives here and not in the bridge because the bridge is rebuilt on every
+  // remote-signing toggle and is null while the feature is off, whereas the
+  // challenge arrives on every SUBSCRIBE regardless. Every DEVICE_REGISTER goes
+  // through xdevSession.register().
+  private readonly xdevSession: RegistrationSession = createRegistrationSession({
+    wallet: () => this.xdevWallet,
+    bridge: () => this.crossDevice,
+    isConnected: () => webSocketService.isConnected(),
+    log: (m) => debugLog('🔗', m),
+  });
   // Last device paired via QR scan, for the settings dialog's success poll. Set by
   // handlePairConfirm on a successful pin; cleared on read (getPairingStatus) so a
   // reopen never re-fires a stale success.
@@ -624,6 +644,13 @@ export class WalletManager {
         this.crossDeviceIdentity.deviceId,
         walletBg.stakeAddress,
       );
+      this.xdevProofRejected = false;
+      // How the relay names this wallet in DEVICE_CHALLENGE (contract §5.2). Only
+      // a challenge for exactly this wallet is ever signed.
+      this.xdevWallet = walletBg.stakeAddress
+        ? { stakeAddress: walletBg.stakeAddress, network: wireNetworkOf(walletBg.network) }
+        : null;
+      this.xdevSession.reset();
       const serverFlagOn = await this.isCrossDeviceSigningEnabled();
       this.crossDevice?.dispose();
       this.crossDevice = await this.createCrossDeviceBridge(serverFlagOn);
@@ -636,10 +663,22 @@ export class WalletManager {
         // now (or a no-op when null). A conditional `undefined` here froze the handler
         // to the connect-time state, so enabling post-login left inbound frames
         // falling through to the "unknown type" branch (empty device registry).
-        onCrossDeviceMessage: (raw: unknown) => this.crossDevice?.onCrossDeviceMessage(raw),
-        // Publish DEVICE_REGISTER after the socket opens + SUBSCRIBE, on every
-        // (re)connect. No-op when the feature is off (crossDevice is null).
-        onSocketOpen: () => this.crossDevice?.register(),
+        onCrossDeviceMessage: (raw: unknown) => {
+          // The relay's per-SUBSCRIBE challenge (§5.2) is captured BEFORE the bridge
+          // sees anything, so it is recorded even while the bridge is null (remote
+          // signing off) and survives a bridge rebuild. Turning the feature on later
+          // then registers signed with it instead of falling back to an unsigned frame.
+          if (isDeviceChallenge(raw)) {
+            this.xdevSession.onChallenge(raw);
+            return;
+          }
+          this.crossDevice?.onCrossDeviceMessage(raw);
+        },
+        // A new socket (connect and every reconnect): every earlier challenge is
+        // gone. Sends nothing itself. The relay's DEVICE_CHALLENGE triggers the one
+        // signed registration; only if none arrives within 5 s does the legacy
+        // unsigned frame go out (relay in mode `off`, or older than contract §5).
+        onSocketOpen: () => this.xdevSession.onSocketOpen(),
         onSync: async (data: WsSyncMessage) => {
           await this.tipMutex.runExclusive(async () => {
             await walletBg.syncService.setSync(data);
@@ -855,6 +894,9 @@ export class WalletManager {
         // relay-auth identity is per-install and intentionally NOT reset here.
         this.remoteSigning = defaultRemoteSigningSettings();
         this.crossDeviceProof = null;
+        this.xdevProofRejected = false;
+        this.xdevWallet = null;
+        this.xdevSession.reset();
         this.lastPairedDevice = null;
       } catch (xdError) {
         console.warn('Failed to cleanup cross-device signing during logout:', xdError);
@@ -1517,6 +1559,24 @@ export class WalletManager {
   }
 
   /**
+   * Handover A1: remote signing is on but this device has no wallet-control proof
+   * to send (never produced, storage cleared, identity regenerated), or the relay
+   * rejected the one it got (§5.5). The Security tab shows a re-confirm prompt;
+   * the existing enable-time auth step produces the proof. Once the relay enforces
+   * registrations, a frame without a valid proof is not registered and remote
+   * signing from this browser stops, so this must be visible before then.
+   */
+  getNeedsProof(): boolean {
+    return computeNeedsProof({
+      enabled: this.remoteSigning.enabled,
+      hasProof: !!this.crossDeviceProof,
+      proofRejected: this.xdevProofRejected,
+      isCardano: this.walletBg?.chain === Blockchain.CARDANO,
+      stakeAddress: this.walletBg?.stakeAddress,
+    });
+  }
+
+  /**
    * Devices currently visible in the relay registry, each tagged with whether it
    * is this device and whether it is trusted. Empty when the bridge is off.
    */
@@ -1577,7 +1637,8 @@ export class WalletManager {
    * relay upserts by deviceId, so a repeat register is idempotent.
    */
   private reAdvertiseProver(): void {
-    if (this.crossDevice && webSocketService.isConnected()) this.crossDevice.register();
+    // Through the session so the frame carries the socket's current challenge (§5.3).
+    this.xdevSession.register({ force: true });
   }
 
   /**
@@ -1699,6 +1760,12 @@ export class WalletManager {
       isRequesterTrusted: (id, pk) => isDeviceTrusted(this.remoteSigning, id, pk),
       isResponderTrusted: (id, pk) => isDeviceTrusted(this.remoteSigning, id, pk),
       getProof: () => this.crossDeviceProof ?? undefined,
+      // §5.2: the socket's current challenge, read at each register() like the proof.
+      getChallenge: () => this.xdevSession.getChallenge(),
+      // §5.5 ack outcomes. proofStatus absent/invalid -> the A1 re-confirm prompt;
+      // stale_challenge -> re-register through the per-challenge dedupe.
+      onRegisterRejected: () => { this.xdevProofRejected = true; },
+      onStaleChallenge: () => this.xdevSession.onStaleChallenge(),
       onPairConfirm: (frame) => void this.handlePairConfirm(frame),
       ...createLocalProverServingOptions(profile, {
         isAdvertised: () => this.remoteSigning.serveProofs && hasProofServingDevice(this.remoteSigning),
@@ -1721,9 +1788,12 @@ export class WalletManager {
     }
     this.crossDevice?.dispose();
     this.crossDevice = await this.createCrossDeviceBridge(serverFlagOn);
-    if (this.crossDevice && webSocketService.isConnected()) {
-      this.crossDevice.register();
-    }
+    // The new bridge announces itself, signed with the socket's CURRENT challenge
+    // (enabling after login, turning it back on, a prover-settings change). A
+    // challenge that arrived while the bridge was null was kept by the session, so
+    // this is a signed frame, not the legacy unsigned one. No-op when the feature is
+    // off or the socket is down.
+    this.xdevSession.register({ force: true });
   }
 
   /**
@@ -1733,14 +1803,16 @@ export class WalletManager {
    * from the enable flow where the user has just authenticated (password / PRF
    * privateKeyBytes). Returns true on success; a wrong password / cancelled
    * biometric throws inside signData and yields false (the caller leaves the
-   * wallet not enabled). Only for Cardano software wallets with a stake address.
+   * wallet not enabled). Only for Cardano software wallets with a key-hash reward
+   * address: mainnet `stake1…` or testnet `stake_test1…` (A2: preprod / preview
+   * remote signing must survive relay enforcement too; the verifier is network-agnostic).
    */
   async produceDeviceRegisterProof(auth: { password?: string; privateKeyBytes?: Uint8Array }): Promise<boolean> {
     try {
       const walletBg = this.walletBg;
       if (!walletBg || walletBg.chain !== Blockchain.CARDANO) return false;
       const stakeAddress = walletBg.stakeAddress;
-      if (!stakeAddress || !stakeAddress.startsWith('stake1')) return false; // no reward addr (enterprise/BTC)
+      if (!isProofEligibleStakeAddress(stakeAddress)) return false; // no reward addr (enterprise/BTC)
       if (!this.crossDeviceIdentity) {
         this.crossDeviceIdentity = await loadOrCreateDeviceIdentity();
       }
@@ -1763,10 +1835,10 @@ export class WalletManager {
       const proof: DeviceRegisterProof = { coseSign1: signature, coseKey: String(key), stakeAddress };
       await saveDeviceRegisterProof(this.crossDeviceIdentity.deviceId, stakeAddress, proof);
       this.crossDeviceProof = proof;
-      // Re-send now so the relay + siblings get the proof without a reconnect.
-      if (this.crossDevice && webSocketService.isConnected()) {
-        this.crossDevice.register();
-      }
+      this.xdevProofRejected = false;
+      // Re-send now so the relay + siblings get the proof without a reconnect,
+      // signed with the socket's current challenge (§5.3).
+      this.xdevSession.register({ force: true });
       return true;
     } catch (e) {
       debugLog('produceDeviceRegisterProof failed:', e);

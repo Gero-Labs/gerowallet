@@ -28,6 +28,12 @@ export interface CrossDeviceListEntry {
 interface RemoteSigningState {
   settings: RemoteSigningSettings;
   devices: CrossDeviceListEntry[];
+  /**
+   * Remote signing is on but this device has no valid wallet-control proof to
+   * send (never produced, storage cleared, or rejected by the relay). The Security
+   * tab prompts to re-confirm; the enable-time auth step produces a fresh proof.
+   */
+  needsProof: boolean;
   loaded: boolean;
   loading: boolean;
 }
@@ -35,11 +41,12 @@ interface RemoteSigningState {
 const state = Vue.observable<RemoteSigningState>({
   settings: defaultRemoteSigningSettings(),
   devices: [],
+  needsProof: false,
   loaded: false,
   loading: false,
 });
 
-interface SettingsReply { success: boolean; settings?: RemoteSigningSettings; error?: string }
+interface SettingsReply { success: boolean; settings?: RemoteSigningSettings; needsProof?: boolean; error?: string }
 interface DevicesReply { success: boolean; devices?: CrossDeviceListEntry[]; error?: string }
 interface PairingQrReply { success: boolean; payload?: PairingQrPayload; error?: string }
 interface PairingStatusReply { success: boolean; paired?: PairedResult | null }
@@ -61,6 +68,8 @@ export const remoteSigningStore = {
         send<DevicesReply>(MessageTypes.GET_CROSS_DEVICE_DEVICES),
       ]);
       if (s.success && s.settings) state.settings = s.settings;
+      // Optional in the reply (an older worker omits it): missing means "no prompt".
+      state.needsProof = s.success && s.needsProof === true;
       state.devices = d.success && d.devices ? d.devices : [];
       state.loaded = true;
     } catch (e) {
@@ -78,8 +87,9 @@ export const remoteSigningStore = {
   async setEnabled(enabled: boolean): Promise<void> {
     const r = await send<SettingsReply>(MessageTypes.SET_REMOTE_SIGNING_ENABLED, { enabled });
     if (r.success && r.settings) state.settings = r.settings;
-    // enabling/disabling changes the bridge -> refresh the visible device list.
-    await this.refreshDevices();
+    // enabling/disabling changes the bridge -> refresh the visible device list, and
+    // needsProof (it is only ever true while enabled).
+    await this.refresh();
   },
 
   /**
@@ -155,6 +165,10 @@ export const remoteSigningStore = {
 
   isEnabled(): boolean {
     return state.settings.enabled;
+  },
+  /** Show the re-confirm prompt (a fresh wallet-control proof is needed). */
+  needsProof(): boolean {
+    return state.settings.enabled && state.needsProof;
   },
   policy(): SigningPolicy {
     return state.settings.policy;
