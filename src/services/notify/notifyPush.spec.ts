@@ -11,12 +11,10 @@ const link: NotifyWalletState = { walletTag: TAG, eventKey: '11'.repeat(16), net
 function harness(opts: { toast?: boolean; logged?: number | null } = {}) {
   const store = createNotifyStore(memoryNotifyStorage());
   const shown: Array<{ title: string; options: Record<string, unknown> }> = [];
-  const closed: string[] = [];
   const opened: unknown[] = [];
   const deps: NotifyPushDeps = {
     store,
     showNotification: async (title, options) => { shown.push({ title, options: options as unknown as Record<string, unknown> }); },
-    closeNotifications: async (tag) => { closed.push(tag); },
     presentToPages: vi.fn(async () => opts.toast ?? false),
     locale: async () => 'us',
     walletName: async () => 'Daily Cardano',
@@ -26,7 +24,7 @@ function harness(opts: { toast?: boolean; logged?: number | null } = {}) {
     now: () => 1790553700000,
   };
   const handlers = createNotifyPushHandlers(deps);
-  return { handlers, store, shown, closed, opened, deps };
+  return { handlers, store, shown, opened, deps };
 }
 
 describe('push handler (B3, B5, B8)', () => {
@@ -36,7 +34,7 @@ describe('push handler (B3, B5, B8)', () => {
     await h.handlers.handlePush(FUNDS);
     expect(h.shown).toHaveLength(1);
     expect(h.shown[0].title).toBe('ADA Received · Daily Cardano');
-    expect(h.shown[0].options).toMatchObject({ body: 'You received 12.5 ADA', tag: '431819262709d4f7e2e7b293474c0743', renotify: false, silent: false, requireInteraction: false, timestamp: 1790553660000, icon: 'chrome-extension://x/public/logo128.png' });
+    expect(h.shown[0].options).toMatchObject({ body: 'You received 12.5 ADA', tag: '431819262709d4f7e2e7b293474c0743', renotify: false, requireInteraction: false, timestamp: 1790553660000, icon: 'chrome-extension://x/public/logo128.png' });
     expect(h.shown[0].options['data']).toMatchObject({ t: 'funds', w: TAG, e: '431819262709d4f7e2e7b293474c0743', d: 'activity', walletId: 4, degraded: 'none', x: { tx: 'a690b5e80b646a7d2542e0f440882bebebd6fa4973ee831fac63ad0ebfdf9130' } });
   });
 
@@ -55,14 +53,13 @@ describe('push handler (B3, B5, B8)', () => {
     expect(await h.store.getPendingDeletes()).toMatchObject([{ kind: 'wallet', walletTag: TAG }]);
   });
 
-  it('B8: when a focused page renders the toast, the system notification is silent, and NOTIFY_TOAST_SHOWN closes it by tag', async () => {
+  it('B8: when a focused page shows the snackbar, no system notification is shown at all (the inbox row is still kept)', async () => {
     const h = harness({ toast: true });
     await h.store.setWallet(4, link);
     await h.handlers.handlePush(FUNDS);
     expect(h.deps.presentToPages).toHaveBeenCalledWith(expect.objectContaining({ e: '431819262709d4f7e2e7b293474c0743', title: 'ADA Received · Daily Cardano', route: expect.objectContaining({ dashboard: '/transactions' }) }));
-    expect(h.shown[0].options['silent']).toBe(true);
-    await h.handlers.toastShown('431819262709d4f7e2e7b293474c0743');
-    expect(h.closed).toEqual(['431819262709d4f7e2e7b293474c0743']);
+    expect(h.shown).toHaveLength(0);
+    expect((await h.store.getInbox()).map((i) => i.e)).toEqual(['431819262709d4f7e2e7b293474c0743']);
   });
 
   it('a repeated e is shown again with the same tag (replaces, never stacks) and the LRU remembers it', async () => {

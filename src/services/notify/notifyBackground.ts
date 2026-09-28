@@ -198,7 +198,6 @@ async function openDashboard(route: RouteIntent): Promise<void> {
 export const notifyPushHandlers = createNotifyPushHandlers({
   store: notifyStore,
   showNotification: async (title, options) => { await self.registration?.showNotification?.(title, options); },
-  closeNotifications: async (tag) => { for (const n of (await self.registration?.getNotifications?.({ tag })) ?? []) n.close(); },
   presentToPages,
   locale: storedLocale,
   walletName: storedWalletName,
