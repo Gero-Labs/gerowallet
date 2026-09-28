@@ -7,7 +7,7 @@
 // service with that key, so pushes sent from here arrive as real system notifications.
 //
 //   node spikes/notify-manual/dev-server.mjs            (terminal 1)
-//   VITE_NOTIFY_API_URL=http://127.0.0.1:6300/api/notify/v1 npm run dev   (terminal 2)
+//   VITE_NOTIFY_API_URL=http://localhost:6300/api/notify/v1 npm run dev   (terminal 2)
 //
 // See README.md next to this file for the full walk-through.
 import http from 'node:http';
@@ -91,7 +91,8 @@ commands (the mock's control API, §10.3):
 `;
 
 console.log(`notify mock on ${base}  (VAPID kid ${mock.vapid.kid}, a throwaway pair generated just now)`);
-console.log(`build the extension with  VITE_NOTIFY_API_URL=${base}/api/notify/v1  and load ./extension unpacked.`);
+console.log(`build the extension with  VITE_NOTIFY_API_URL=http://localhost:${PORT}/api/notify/v1  and load ./extension unpacked.`);
+console.log('(localhost, not 127.0.0.1: the development manifest CSP only allows http://localhost:*; production allows both on 6300)');
 console.log(HELP);
 
 async function walletKey() {
@@ -149,7 +150,13 @@ async function run(line) {
   }
 }
 
-const rl = createInterface({ input: process.stdin, output: process.stdout, prompt: 'notify> ' });
-rl.prompt();
-rl.on('line', (line) => { run(line).catch((e) => console.log(`error: ${e.message}`)).finally(() => rl.prompt()); });
-rl.on('close', () => { server.close(); process.exit(0); });
+if (process.stdin.isTTY) {
+  const rl = createInterface({ input: process.stdin, output: process.stdout, prompt: 'notify> ' });
+  rl.prompt();
+  rl.on('line', (line) => { run(line).catch((e) => console.log(`error: ${e.message}`)).finally(() => rl.prompt()); });
+  rl.on('close', () => { server.close(); process.exit(0); });
+} else {
+  // No terminal (a launcher or a background task): keep serving; drive it over the control API,
+  // e.g.  curl -X POST http://127.0.0.1:6300/__mock/push -H 'content-type: application/json' -d '{"t":"funds","c":"funds","d":"activity","eventId":"funds:1"}'
+  console.log('no terminal attached: commands are off, the control API on /__mock/* stays up');
+}

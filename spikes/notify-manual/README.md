@@ -24,7 +24,7 @@ copy: `copy ..\..\..\.env.development .` from the worktree root).
    ```
 
 2. Build the extension against it (terminal 2). `.env.development.local` in this checkout
-   already carries `VITE_NOTIFY_API_URL=http://127.0.0.1:6300/api/notify/v1` (gitignored,
+   already carries `VITE_NOTIFY_API_URL=http://localhost:6300/api/notify/v1` (gitignored,
    `.env.*`); Vite picks it up on top of `.env.development`. The extension's CSP allows that
    loopback port.
 
@@ -35,7 +35,7 @@ copy: `copy ..\..\..\.env.development .` from the worktree root).
    Or a one-off production-mode build, without the dev server:
 
    ```bash
-   cross-env VITE_NOTIFY_API_URL=http://127.0.0.1:6300/api/notify/v1 npm run build
+   cross-env VITE_NOTIFY_API_URL=http://localhost:6300/api/notify/v1 npm run build
    ```
 
 3. `chrome://extensions` → Developer mode → Load unpacked → the `extension/` folder. Branded
