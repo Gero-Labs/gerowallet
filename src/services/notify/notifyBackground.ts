@@ -24,7 +24,7 @@ import {
 import { notifyHooks } from './notifyHooks';
 import { createNotifyPushHandlers, type ToastRequest } from './notifyPush';
 import type { RouteIntent } from './notifyRender';
-import type { WalletPrefsWrite } from './notifyTypes';
+import type { NotifyConfig, WalletPrefsWrite } from './notifyTypes';
 
 interface WorkerRegistration {
   pushManager?: PushManagerLike;
@@ -97,17 +97,37 @@ export const notifyRegistration: NotifyRegistration = createNotifyRegistration({
 export interface NotifyState {
   device: NotifyDeviceState;
   wallets: Record<string, NotifyWalletState>;
-  /** The logged-in wallet's id and whether it can be registered at all. */
-  logged: { walletId: number; eligible: boolean } | null;
+  /** The logged-in wallet's id, whether it can be registered at all, and its wire network. */
+  logged: { walletId: number; eligible: boolean; network: string } | null;
+  /** Every installed wallet, for the "other wallets" list; `eligible` is judged without a stake address. */
+  installed: Array<{ id: number; name: string; chain: string; network: string; type?: string; eligible: boolean }>;
+  /** The last /config (cached up to 1 h), or null before any fetch. */
+  config: NotifyConfig | null;
   pushSupported: boolean;
 }
 
-export async function getNotifyState(): Promise<NotifyState> {
+/** Could this wallet be turned on at all (the stake address is only known once it is open)? */
+function installedEligible(w: { chain: string; network: string; type?: string }): boolean {
+  return w.chain === 'Cardano' && (w.type === undefined || w.type === 'Normal') && ['Mainnet', 'Preprod', 'Preview'].includes(w.network);
+}
+
+export async function getNotifyState(opts: { refreshConfig?: boolean } = {}): Promise<NotifyState> {
   const logged = loggedWallet();
+  let config: NotifyConfig | null = (await notifyStore.getConfigCache())?.config ?? null;
+  if (opts.refreshConfig) {
+    try { config = await notifyClient.getConfig({ force: !config }); } catch (e) { log(`config refresh failed: ${String(e)}`); }
+  }
+  // The tab opening also pulls GET /device, so a preference another device wrote (iOS) shows here (§4.8).
+  if (opts.refreshConfig && (await notifyStore.getDevice()).browserEnabled) {
+    await reassert('settings');
+    if (logged) await notifyRegistration.refreshPrefs(logged.id).catch((e) => log(`prefs refresh failed: ${String(e)}`));
+  }
   return {
     device: await notifyStore.getDevice(),
     wallets: await notifyStore.getWallets(),
-    logged: logged ? { walletId: logged.id, eligible: isEligibleWallet(logged) } : null,
+    logged: logged ? { walletId: logged.id, eligible: isEligibleWallet(logged), network: `cardano-${logged.network.toLowerCase()}` } : null,
+    installed: Object.values(geroStore.wallets ?? {}).map((w) => ({ id: w.id, name: w.name, chain: w.chain, network: w.network, type: w.type, eligible: installedEligible(w) })),
+    config,
     pushSupported: !!self.registration?.pushManager,
   };
 }

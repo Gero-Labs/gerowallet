@@ -165,6 +165,9 @@ const SETTINGS_INDEX: SettingsEntry[] = [
   { keywords: ['passkey', 'biometric', 'webauthn', 'fingerprint', 'face id', 'biometrisch', 'fingerabdruck'], tab: 'security', titleKey: 'security.lockSettings', subtitleKey: 'settings.security', icon: 'mdi-fingerprint' },
   { keywords: ['website protection', 'malicious', 'cardano shield', 'phishing', 'webseiten-schutz', 'bösartig'], tab: 'security', titleKey: 'settings.websiteProtection', subtitleKey: 'settings.security', icon: 'mdi-shield-check' },
   { keywords: ['two factor', '2fa', 'two-factor', 'authenticator', 'zwei-faktor', 'authentifizierung'], tab: 'security', titleKey: 'security.twoFactorAuth', subtitleKey: 'settings.security', icon: 'mdi-two-factor-authentication' },
+  // Notifications
+  { keywords: ['notifications', 'push', 'alerts', 'notify', 'benachrichtigungen', 'mitteilungen'], tab: 'notifications', titleKey: 'notify.browser.title', subtitleKey: 'settings.notifications', icon: 'mdi-bell-outline' },
+  { keywords: ['show amounts', 'minimum amount', 'mute wallet', 'beträge anzeigen', 'mindestbetrag', 'stummschalten'], tab: 'notifications', titleKey: 'notify.wallet.title', subtitleKey: 'settings.notifications', icon: 'mdi-bell-ring-outline' },
   // Advanced
   { keywords: ['shop earn', 'cashback popups', 'bring', 'shop and earn', 'einkaufen', 'cashback'], tab: 'advanced', titleKey: 'settings.shopEarnPopups', subtitleKey: 'settings.advanced', icon: 'mdi-shopping', requires: 'cashback' },
   { keywords: ['auto submit', 'tx auto submit', 'transaction auto', 'automatisch senden'], tab: 'advanced', titleKey: 'settings.txAutoSubmit', subtitleKey: 'settings.advanced', icon: 'mdi-send-check' },

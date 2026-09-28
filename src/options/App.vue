@@ -29,6 +29,8 @@
     <notifications></notifications>
     <!-- In-app toast for a push that arrives while this dashboard is focused (B8). -->
     <NotifyToast surface="dashboard" />
+    <!-- A notification about a wallet other than the open one asks before switching (B4). -->
+    <NotifyPendingOpen v-if="isDashboardShell" />
     <v-snackbar
       content-class="custom-snackbar"
       outlined
@@ -56,6 +58,7 @@ import AgentDock from '@/sidepanel/components/AgentDock.vue';
 import ContentLayout from '@/modules/navigation/layouts/ContentLayout.vue';
 import HardwareSignPrompt from '@/shared/components/HardwareSignPrompt.vue';
 import NotifyToast from '@/shared/components/NotifyToast.vue';
+import NotifyPendingOpen from '@/shared/components/NotifyPendingOpen.vue';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { agentDockPrefsStore } from '@/stores/agentDockPrefsStore';
 import { useChainAccent } from '@/shared/composables/useChainAccent';

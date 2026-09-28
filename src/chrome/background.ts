@@ -2691,7 +2691,7 @@ function crossDeviceReply(id: string, data: unknown) {
 // wallet-control proof when none is cached (same path as remote signing).
 app.addToOptions(MessageTypes.NOTIFY_GET_STATE, async (request, sendResponse) => {
   try {
-    sendResponse(crossDeviceReply(request.id, { success: true, state: await getNotifyState() }));
+    sendResponse(crossDeviceReply(request.id, { success: true, state: await getNotifyState({ refreshConfig: request.data?.refreshConfig === true }) }));
   } catch (error) {
     sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
   }

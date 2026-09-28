@@ -51,6 +51,7 @@
         <ContactsTab />
         <ConnectedDappsTab />
         <SecurityTab />
+        <NotificationsTab :active="isOpen && tab === notificationsTabIndex" />
         <AdvancedSettingsTab @loading="loadingChange" />
       </v-tabs-items>
     </v-card-text>
@@ -67,6 +68,7 @@ import ConnectedDappsTab      from '@/modules/dashboard/components/ConnectedDapp
 import AdvancedSettingsTab    from '@/modules/dashboard/components/AdvancedSettingsTab.vue'
 import walletStoreDefault from '@/stores/walletStore';
 import SecurityTab from '@/modules/dashboard/components/SecurityTab.vue';
+import NotificationsTab from '@/modules/dashboard/components/NotificationsTab.vue';
 import { hasNewFeaturesInPath, markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
 
 const { t } = useTranslation();
@@ -97,7 +99,7 @@ const hasNewAdvancedFeatures = computed(() => hasNewFeaturesInPath(['settings', 
 const hasNewCollateralFeatures = computed(() => hasNewFeaturesInPath(['settings', 'collateral']))
 
 // Local reactive state
-const tab     = ref<string | null>(null)
+const tab     = ref<number | null>(null)
 const loading = ref(false)
 const visitedAdvancedTab = ref(false)
 
@@ -109,8 +111,11 @@ const tabs = computed(() => [
   { label: t('settings.contacts'), value: 'contacts', disabled: false },
   { label: t('settings.dapps'), value: 'connectedDapps', disabled: false },
   { label: t('settings.security'), value: 'security', disabled: false, badge: shouldBackup.value || hasNewSecurityFeatures.value },
+  { label: t('settings.notifications'), value: 'notifications', disabled: false },
   { label: t('settings.advanced'), value: 'advanced', disabled: false, badge: hasNewAdvancedFeatures.value },
 ])
+
+const notificationsTabIndex = computed(() => tabs.value.findIndex(t => t.value === 'notifications'));
 
 // Track when user visits the Advanced tab
 const advancedTabIndex = computed(() => tabs.value.findIndex(t => t.value === 'advanced'));
@@ -127,7 +132,7 @@ watch(
   (open) => {
     if (open && props.initialTab) {
       const idx = tabs.value.findIndex(t => t.value === props.initialTab);
-      if (idx >= 0) tab.value = idx as any;
+      if (idx >= 0) tab.value = idx;
     }
     if (!open && visitedAdvancedTab.value) {
       markFeatureAsSeen('settings.advanced.defaultExtensionMode');
