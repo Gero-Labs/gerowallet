@@ -69,7 +69,7 @@ A third format, `gpw2.` (`src/shared/utils/secretEnvelope.ts`), is **read everyw
 | Field | Reader |
 |---|---|
 | Root key (Cardano, BTC, Midnight) | `decryptPrivateKey(blob, pw)` |
-| Mnemonic, MPC device share, 2FA data, Midnight sponsor mnemonic | `decrypt(blob, pw, SecretPurpose.X)` |
+| Mnemonic (incl. a Midnight sponsor wallet's), MPC device share, 2FA data | `decrypt(blob, pw, SecretPurpose.X)` |
 | SPO cold key, Strike key | `decryptKeyBlob(blob, pw, SecretPurpose.X)` |
 
 The unlock-time root-key rewrite is gated on `isLegacyNestedKey()`, not `!isRawEncryptedKey()`: a `gpw2` blob is not raw hex either, and rewriting it would downgrade it to PBKDF2. Every historical format has a frozen fixture in `src/shared/utils/__fixtures__/secretFormats.ts`; never regenerate those.

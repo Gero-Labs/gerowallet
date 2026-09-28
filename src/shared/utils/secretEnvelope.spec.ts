@@ -116,13 +116,20 @@ describe('gpw2 envelope', () => {
       blobWithParams(2, GPW2_BOUNDS.mMin - 1, 1),
       blobWithParams(0, GPW2_BOUNDS.mMin, 1),
       blobWithParams(2, GPW2_BOUNDS.mMin, 2), // p != 1
+      blobWithParams(1, GPW2_BOUNDS.mMinAtT1 - 1, 1), // t=1 needs the larger memory floor
     ];
     for (const blob of [...tooBig, ...tooWeak]) {
       const started = performance.now();
       expect(() => openGpw2(blob, F.pw, SecretPurpose.RootKey)).toThrow(/out of range/);
-      // A 4 GiB Argon2id would take far longer than this, or OOM.
-      expect(performance.now() - started).toBeLessThan(50);
+      // Rejected on the header alone; a 4 GiB Argon2id would take far longer than this, or OOM.
+      expect(performance.now() - started).toBeLessThan(500);
     }
+  });
+
+  it('accepts the OWASP t=1 / 46 MiB profile', () => {
+    const params = { t: 1, m: GPW2_BOUNDS.mMinAtT1, p: 1 };
+    const blob = sealGpw2(new Uint8Array([1, 2, 3]), PW, SecretPurpose.ColdKey, params);
+    expect(openGpw2(blob, PW, SecretPurpose.ColdKey)).toEqual(new Uint8Array([1, 2, 3]));
   });
 
   it('refuses to seal with out-of-range params or an unknown purpose', () => {

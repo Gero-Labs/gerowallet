@@ -114,7 +114,8 @@ export async function deriveSponsorDustSeed(
     if (!credential.password) throw new SponsorNotEligibleError('missing-credential');
     if (!sponsor.encryptedMnemonic) throw new SponsorNotEligibleError('no-mnemonic');
     const { decrypt, SecretPurpose } = await import('@/shared/utils/crypto');
-    mnemonic = decrypt(sponsor.encryptedMnemonic, credential.password, SecretPurpose.SponsorMnemonic);
+    // The sponsor is an ordinary wallet record, so this is its regular mnemonic field.
+    mnemonic = decrypt(sponsor.encryptedMnemonic, credential.password, SecretPurpose.Mnemonic);
   }
 
   try {

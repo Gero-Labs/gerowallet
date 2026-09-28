@@ -26,8 +26,7 @@ export function encrypt(text: string, password: string): string {
 export type TextSecretPurpose =
   | typeof SecretPurpose.Mnemonic
   | typeof SecretPurpose.MpcShare
-  | typeof SecretPurpose.SecurityData
-  | typeof SecretPurpose.SponsorMnemonic;
+  | typeof SecretPurpose.SecurityData;
 
 /** Purposes whose plaintext is raw key bytes stored as a standalone blob (read through `decryptKeyBlob`). */
 export type KeyBlobPurpose = typeof SecretPurpose.ColdKey | typeof SecretPurpose.StrikeKey;

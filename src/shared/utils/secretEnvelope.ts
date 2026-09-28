@@ -5,7 +5,7 @@ import { toB64url, fromB64url } from './mpc/base64url';
 /**
  * `gpw2` — the versioned, purpose-bound envelope for every secret the wallet
  * stores under the spending password (root key, mnemonic, MPC device share,
- * 2FA data, SPO cold key, Strike key, Midnight sponsor mnemonic).
+ * 2FA data, SPO cold key, Strike key).
  *
  *   gpw2.<base64url( header || ciphertext+tag )>
  *   header = version(1)=2 | purpose(1) | kdf(1)=1 (Argon2id) | t(u32 BE) | m KiB(u32 BE) | p(u32 BE) | salt(16) | nonce(24)
@@ -30,7 +30,6 @@ export const SecretPurpose = {
   SecurityData: 4,
   ColdKey: 5,
   StrikeKey: 6,
-  SponsorMnemonic: 7,
 } as const;
 export type SecretPurpose = typeof SecretPurpose[keyof typeof SecretPurpose];
 
@@ -51,14 +50,15 @@ const HEADER_LEN = 1 + 1 + 1 + 4 + 4 + 4 + SALT_LEN + NONCE_LEN; // 55
 const AAD_LABEL = new TextEncoder().encode('gero-gpw2');
 
 /**
- * Accepted Argon2id cost range on read. The floor is the OWASP minimum
- * (m=19 MiB, t=2 at p=1 ≈ m=46 MiB, t=1), so a downgraded-param blob is refused;
- * the ceiling bounds memory/time a hostile blob can demand.
+ * Accepted Argon2id cost range on read (and write). The floor follows the OWASP
+ * minimums at p=1: m≥19 MiB with t≥2, or m≥46 MiB with t=1. A blob with weaker
+ * params is refused; the ceiling bounds the memory/time a hostile blob can demand.
  */
 export const GPW2_BOUNDS = {
   tMin: 1,
   tMax: 10,
   mMin: 19_456,
+  mMinAtT1: 47_104,
   mMax: 262_144, // 256 MiB
   p: 1,
 } as const;
@@ -81,7 +81,7 @@ function assertParams({ t, m, p }: Argon2Params): void {
   const ok =
     Number.isInteger(t) && Number.isInteger(m) && Number.isInteger(p) &&
     t >= GPW2_BOUNDS.tMin && t <= GPW2_BOUNDS.tMax &&
-    m >= GPW2_BOUNDS.mMin && m <= GPW2_BOUNDS.mMax &&
+    m >= (t === 1 ? GPW2_BOUNDS.mMinAtT1 : GPW2_BOUNDS.mMin) && m <= GPW2_BOUNDS.mMax &&
     p === GPW2_BOUNDS.p;
   if (!ok) throw new Error('Secret envelope KDF parameters out of range');
 }

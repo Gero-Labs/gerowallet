@@ -92,7 +92,7 @@ describe('deriveSponsorDustSeed', () => {
       { sponsor: wallet({ encryptedMnemonic: 'sponsor-blob' }), network: 'Mainnet', credential: { password: 'sponsor-pw' } },
       SENDER_ID,
     );
-    expect(decrypt).toHaveBeenCalledWith('sponsor-blob', 'sponsor-pw', SecretPurpose.SponsorMnemonic);
+    expect(decrypt).toHaveBeenCalledWith('sponsor-blob', 'sponsor-pw', SecretPurpose.Mnemonic);
   });
 
   it('derives against the sponsor network and skips Cardano material', async () => {

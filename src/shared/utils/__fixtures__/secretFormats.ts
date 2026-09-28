@@ -14,7 +14,6 @@
  * Do NOT regenerate: they exist to prove today's readers still open blobs that
  * are already sitting in users' IndexedDB.
  */
-// gitleaks:allow — synthetic test vectors, see header.
 export const SECRET_FORMAT_FIXTURES = 
 {
   "pw": "Gero-fixture-pw-2026!",
