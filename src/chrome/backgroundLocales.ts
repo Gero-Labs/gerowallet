@@ -6,5 +6,6 @@
 // land, which was after the reader in i18n.ts (scripts/check-bundle-tdz.mjs).
 // Eagerly importing the whole locale directory here lands every locale, present
 // and future, before anything that reads it. The options bundle is untouched and
-// keeps its lazy per-locale chunks.
-import.meta.glob('../plugins/i18n/*.ts', { eager: true });
+// keeps its lazy per-locale chunks. Specs are excluded: an eager glob would
+// bundle them into the worker and run their bodies there.
+import.meta.glob(['../plugins/i18n/*.ts', '!../plugins/i18n/*.spec.ts', '!../plugins/i18n/*.test.ts'], { eager: true });

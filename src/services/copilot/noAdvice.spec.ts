@@ -60,17 +60,23 @@ const word = (src: string) => new RegExp(`${EDGE_BEFORE}(?:${src})${EDGE_AFTER}`
 const stem = (src: string) => new RegExp(`${EDGE_BEFORE}(?:${src})`, 'iu');
 
 // Spanish future tense is morphological, so "will" is covered by the prediction
-// verbs and the "va a" periphrasis rather than one token.
+// verbs and the "va a" periphrasis rather than one token. Whole words, not bare
+// stems, wherever a stem is also an everyday word: `venta` starts "ventana"
+// (window) and "ventaja", `sigu` starts "siguiente", and "sigue" alone also means
+// "keeps going" ("el precio sigue bajando"), so "follow" is matched only as
+// "follow someone" (sigue a, síguelos). Bare "debe" is left out: "se debe a"
+// (is due to) is neutral narration.
 const ES_FORBIDDEN: RegExp[] = [
-  word('compr(a|ar|as|an|e|en|es|ó|aste)'), word('vend(e|er|es|en|a|as|an|ió|iste)'), stem('venta'),
-  word('mant[eé]n(er|ga|gas)?'), /deber[ií]as/iu, word('debes'), word('vas? a'), word('subir[aá]n?'),
-  word('bajar[aá]n?'), word('entrar'), word('salir'), word('luna'), word('pump'), word('dump'),
+  word('compr(a|ar|as|an|e|en|es|ó|aste)'), word('vend(e|er|es|en|a|as|an|ió|iste)'), word('ventas?'),
+  word('mant[eé]n(er|ga|gas)?'), word('hold(ea|ear|eando|eo)|hodl(ea|ear)?'),
+  word('deber[ií](a|as|an|amos)'), word('debes'), word('vas? a'), word('subir[aá]n?'),
+  word('bajar[aá]n?'), word('entr(ar|en)|entra ya'), word('sal(ir|gan|te)|sal ya'), word('luna'), word('pump'), word('dump'),
   word('rug'), word('cero'), word('\\d+x'), word('objetivo'), /adecuad/iu, word('para ti'),
   /recomend/iu, /ap[uú]rate/iu, word('prisa'), /[uú]ltima oportunidad/iu, /no te (lo )?pierdas/iu,
   /ahora!/iu,
   // smart-money / copy-trading slide
-  stem('sigu'), stem('seguir'), stem('copi'), /dinero inteligente/iu, /smart money/iu, /ballena/iu,
-  stem('top trader'), /mejor(es)? trader/iu, /rentable/iu,
+  word('(sigue|siguen|seguir|siguiendo) a'), word('s[ií]gue(me|nos|los|las|lo|la)'), stem('copi'),
+  /dinero inteligente/iu, /smart money/iu, /ballena/iu, stem('top trader'), /mejor(es)? trader/iu, /rentable/iu,
 ];
 
 const NEW_COPY_PREFIXES = [
@@ -107,10 +113,18 @@ describe('feed no-advice rule (every narration string, every language)', () => {
 
   it('the Spanish list matches accented forms and respects word edges', () => {
     const matches = (s: string) => ES_FORBIDDEN.some((re) => re.test(s));
-    for (const s of ['alguien compró ADA', 'vendió todo', '{ticker} subirá pronto', 'bajará mañana', 'mantén tus tokens', 'es tu última oportunidad']) {
+    for (const s of [
+      'alguien compró ADA', 'vendió todo', '{ticker} subirá pronto', 'bajará mañana', 'mantén tus tokens',
+      'es tu última oportunidad', 'ADA debería subir', 'entra ya', 'salgan antes', 'holdea tus tokens',
+      'sigue a los mejores', 'síguelos',
+    ]) {
       expect(matches(s), s).toBe(true);
     }
-    for (const s of ['comprobar el saldo', 'un vendedor', 'mantenimiento de la red']) {
+    for (const s of [
+      'comprobar el saldo', 'un vendedor', 'mantenimiento de la red', 'en la ventana de 24h',
+      'una ventaja clara', 'la siguiente época', 'el precio sigue bajando', 'la subida se debe a más volumen',
+      '{ticker} entra en el top 10',
+    ]) {
       expect(matches(s), s).toBe(false);
     }
   });
