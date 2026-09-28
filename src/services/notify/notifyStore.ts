@@ -74,6 +74,17 @@ export interface NotifyConfigCache {
   fetchedAt: number;
 }
 
+/** A click on a notification about a wallet other than the open one (B4): confirmed after unlock. */
+export interface NotifyPendingOpen {
+  walletId: number;
+  d: string;
+  x?: Record<string, unknown>;
+  at: number;
+}
+
+export const SEEN_MAX = 200;
+export const SEEN_TTL_MS = 48 * 3_600_000;
+
 export const DEFAULT_DEVICE_STATE: NotifyDeviceState = {
   browserEnabled: false,
   lastPutAt: null,
@@ -92,6 +103,8 @@ const KEYS = {
   pendingDeletes: 'notifyPendingDeletes',
   configCache: 'notifyConfigCache',
   retry: 'notifyRetry',
+  seen: 'notifySeen',
+  pendingOpen: 'notifyPendingOpen',
 } as const;
 
 function chromeStorage(): NotifyStorage {
@@ -118,6 +131,10 @@ export interface NotifyStore {
   setConfigCache(cache: NotifyConfigCache | null): Promise<void>;
   getRetry(): Promise<NotifyRetryState | null>;
   setRetry(retry: NotifyRetryState | null): Promise<void>;
+  /** §6.7 rule 6: remember `e` (200 entries, 48 h); returns true when it was already seen. */
+  markSeen(e: string, now: number): Promise<boolean>;
+  getPendingOpen(): Promise<NotifyPendingOpen | null>;
+  setPendingOpen(open: NotifyPendingOpen | null): Promise<void>;
 }
 
 export function createNotifyStore(storage: NotifyStorage = chromeStorage(), log: (m: string, e?: unknown) => void = () => undefined): NotifyStore {
@@ -174,6 +191,16 @@ export function createNotifyStore(storage: NotifyStorage = chromeStorage(), log:
     setConfigCache: (cache) => write(KEYS.configCache, cache),
     getRetry: () => read(KEYS.retry, null as NotifyRetryState | null, (v): v is NotifyRetryState | null => v === null || isRetry(v)),
     setRetry: (retry) => write(KEYS.retry, retry),
+    async markSeen(e, now) {
+      const seen = (await read(KEYS.seen, [] as Array<{ e: string; at: number }>, (v): v is Array<{ e: string; at: number }> => Array.isArray(v)))
+        .filter((s) => isObject(s) && typeof s.e === 'string' && typeof s.at === 'number' && now - s.at < SEEN_TTL_MS);
+      const already = seen.some((s) => s.e === e);
+      const next = [...seen.filter((s) => s.e !== e), { e, at: now }].slice(-SEEN_MAX);
+      await write(KEYS.seen, next);
+      return already;
+    },
+    getPendingOpen: () => read(KEYS.pendingOpen, null as NotifyPendingOpen | null, (v): v is NotifyPendingOpen | null => v === null || (isObject(v) && typeof v['walletId'] === 'number' && typeof v['d'] === 'string')),
+    setPendingOpen: (open) => write(KEYS.pendingOpen, open),
   };
 }
 

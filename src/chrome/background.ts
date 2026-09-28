@@ -34,7 +34,7 @@ import { signInWithGoogle } from '@/chrome/auth';
 import { loadConfig, loadWallets } from '@/plugins/geroLoader';
 import WalletStore, { hydrateWalletStore, matchesDappWhitelistEntry, walletStore } from '@/stores/walletStore';
 import { walletManager } from '@/services/walletManager.service';
-import { getNotifyState, installNotifyListeners, notifyActions, onNotifyAlarm, reassert as notifyReassert } from '@/services/notify/notifyBackground';
+import { getNotifyState, installNotifyListeners, notifyActions, notifyPushHandlers, onNotifyAlarm, reassert as notifyReassert } from '@/services/notify/notifyBackground';
 import { shouldAutoLock } from '@/services/autoLock';
 import { nexusCollateralApi } from '@/api/nexus-collateral-api';
 import { toNexusNetwork } from '@/api/nexus-tx-api';
@@ -2732,6 +2732,17 @@ app.addToOptions(MessageTypes.NOTIFY_SET_PREFS, async (request, sendResponse) =>
   try {
     const result = await notifyActions.setPrefs(Number(request.data?.walletId), request.data?.prefs ?? {});
     sendResponse(crossDeviceReply(request.id, { success: result === 'ok', result, state: await getNotifyState() }));
+  } catch (error) {
+    sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
+  }
+});
+
+// B8: the page's in-app toast closed, so the silent system notification with that tag can go.
+app.addToOptions(MessageTypes.NOTIFY_TOAST_SHOWN, async (request, sendResponse) => {
+  try {
+    const e = typeof request.data?.e === 'string' ? request.data.e : '';
+    if (e) await notifyPushHandlers.toastShown(e);
+    sendResponse(crossDeviceReply(request.id, { success: true }));
   } catch (error) {
     sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
   }

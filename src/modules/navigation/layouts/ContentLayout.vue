@@ -586,10 +586,17 @@ const preloadBackgroundImage = () => {
 // We listen for flag changes (handles the case where the dashboard tab is
 // already open and just gets focused) instead of reading on mount, which
 // would leave a stale flag in storage when no fresh ContentLayout mount occurs.
+// The flag is `true` (Mini Gero) or `{ tab }` (a push notification click, B4:
+// `pairedDevices` opens the Security tab).
+const openSettingsFromFlag = (flag: unknown) => {
+  const tab = flag && typeof flag === 'object' && typeof (flag as { tab?: unknown }).tab === 'string' ? (flag as { tab: string }).tab : undefined;
+  if (tab) settingsInitialTab.value = tab;
+  currentDialog.value = dialogs.SETTINGS;
+  chrome.storage.local.remove('openSettingsOnLoad');
+};
 const handleStorageChange = (changes: { [key: string]: chrome.storage.StorageChange }, area: string) => {
   if (area === 'local' && changes.openSettingsOnLoad?.newValue) {
-    currentDialog.value = dialogs.SETTINGS;
-    chrome.storage.local.remove('openSettingsOnLoad');
+    openSettingsFromFlag(changes.openSettingsOnLoad.newValue);
   }
 };
 chrome.storage.onChanged.addListener(handleStorageChange);
@@ -605,10 +612,7 @@ onMounted(async () => {
   // registered, so check the flag once on mount. The already-open-tab path
   // is handled by handleStorageChange, which removes the flag before mount.
   chrome.storage.local.get('openSettingsOnLoad', (result) => {
-    if (result.openSettingsOnLoad) {
-      currentDialog.value = dialogs.SETTINGS;
-      chrome.storage.local.remove('openSettingsOnLoad');
-    }
+    if (result.openSettingsOnLoad) openSettingsFromFlag(result.openSettingsOnLoad);
   });
 
   // Chain colors are applied by useChainAccent (bootstrapped in options/App.vue

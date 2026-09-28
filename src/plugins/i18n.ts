@@ -1,5 +1,5 @@
 import Vue from 'vue';
-import VueI18n from 'vue-i18n';
+import VueI18n, { type LocaleMessageObject, type LocaleMessages } from 'vue-i18n';
 
 
 // Vuetify locales — only import supported languages (us, de)
@@ -10,26 +10,32 @@ import {
 
 // Only load US English by default (other languages lazy-loaded on demand)
 import us from '@/plugins/i18n/us';
+import { pushStrings, type PushLocale } from '@/plugins/i18n/push';
 
 /**
  * Wrap translations with Vuetify locale support
  */
-const wrapWithVuetify = (translations: any, vuetifyLocale: any, rtl = false, locale = 'en-US') => ({
+type Messages = LocaleMessageObject;
+const wrapWithVuetify = (translations: Messages, vuetifyLocale: Messages, rtl = false, locale = 'en-US'): Messages => ({
   rtl, // Fixed: Boolean instead of string
   locale,
   $vuetify: { ...vuetifyLocale },
   ...translations,
-});
+} as unknown as Messages);
 
 // Vuetify locale mapping — only supported languages
-const vuetifyLocales: Record<string, any> = {
+const vuetifyLocales: Record<string, Messages> = {
   de: vuetifyDe,
   us: vuetifyEn,
 };
 
+// Push notification strings live in their own table (the service worker renders
+// from it without vue-i18n); merged here so the settings UI sees the same keys.
+const withPush = (lang: string, translations: Record<string, unknown>) => ({ ...translations, ...(pushStrings[lang as PushLocale] ?? {}) });
+
 // Initial messages with only US English
-const messages: Record<string, any> = {
-  us: wrapWithVuetify(us, vuetifyEn, false, 'en-US'),
+const messages: LocaleMessages = {
+  us: wrapWithVuetify(withPush('us', us), vuetifyEn, false, 'en-US'),
 };
 
 /**
@@ -43,7 +49,7 @@ async function loadLanguage(lang: string): Promise<void> {
     const vuetifyLocale = vuetifyLocales[lang] || vuetifyEn;
     const isRTL = false; // No RTL languages currently supported
 
-    messages[lang] = wrapWithVuetify(translations.default, vuetifyLocale, isRTL, getLocaleCode(lang));
+    messages[lang] = wrapWithVuetify(withPush(lang, translations.default), vuetifyLocale, isRTL, getLocaleCode(lang));
 
     i18n.setLocaleMessage(lang, messages[lang]);
   } catch (error) {
