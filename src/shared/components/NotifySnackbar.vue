@@ -2,6 +2,9 @@
   <div class="notify-snack-host" aria-live="polite">
     <transition-group name="notify-snack" tag="div" class="notify-snack-stack">
       <div v-for="snack in items" :key="snack.id" class="notify-snack" role="status">
+        <span v-if="snack.assets && snack.assets.length" class="notify-snack__tile">
+          <NotifyAssetIcons :assets="snack.assets" :wallet-id="snack.walletId" />
+        </span>
         <div class="notify-snack__text">
           <span class="notify-snack__title">{{ snack.title }}</span>
           <span class="notify-snack__body">{{ snack.body }}</span>
@@ -21,6 +24,7 @@
 // push's route the way a notification click does.
 import { computed, getCurrentInstance } from 'vue';
 import { notifySnackStore, type NotifySnack } from '@/stores/notifySnackStore';
+import NotifyAssetIcons from '@/shared/components/NotifyAssetIcons.vue';
 
 const items = computed(() => notifySnackStore.state.items);
 const router = getCurrentInstance()?.proxy?.$router;
@@ -58,6 +62,17 @@ function open(snack: NotifySnack) {
   color: var(--g-text-1);
   font-size: 14px;
   pointer-events: auto;
+}
+.notify-snack__tile {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--g-r-control);
+  background: var(--g-hairline-1);
+  border: 1px solid var(--g-hairline-2);
 }
 .notify-snack__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .notify-snack__title { font-weight: 600; }

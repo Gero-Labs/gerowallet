@@ -99,6 +99,8 @@ export interface NotifyInboxItem {
   readAt: number | null;
   /** Sticky in the "Needs you" section (security and sign requests). */
   needsYou: boolean;
+  /** The assets of a receipt (`lovelace` or policy id + asset name hex), for the row's icon. */
+  assets?: Array<{ unit?: string; label: string }>;
 }
 
 export const INBOX_MAX = 50;
