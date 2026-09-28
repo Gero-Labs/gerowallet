@@ -22,9 +22,16 @@ import {
   type LoggedWallet, type NotifyRegistration, type PushManagerLike, type ReassertTrigger,
 } from './notifyRegistration';
 import { notifyHooks } from './notifyHooks';
+import { createNotifyPushHandlers, type ToastRequest } from './notifyPush';
+import type { RouteIntent } from './notifyRender';
 import type { WalletPrefsWrite } from './notifyTypes';
 
-declare const self: { registration?: { pushManager?: PushManagerLike } } & typeof globalThis;
+interface WorkerRegistration {
+  pushManager?: PushManagerLike;
+  showNotification?: (title: string, options: NotificationOptions) => Promise<void>;
+  getNotifications?: (filter?: { tag?: string }) => Promise<Array<{ close(): void }>>;
+}
+declare const self: { registration?: WorkerRegistration; addEventListener: (type: string, listener: (event: never) => void) => void } & typeof globalThis;
 
 const log = (m: string) => debugLog('🔔', m);
 
@@ -122,17 +129,84 @@ notifyHooks.credentialsChanged = () => {
   }, 5_000);
 };
 
+// ---- push handling (B3, B4, B5, B8) ------------------------------------------
+
+async function storedWalletName(walletId: number): Promise<string> {
+  try {
+    const saved = (await chrome.storage.local.get('geroStore')) as Record<string, { wallets?: Record<string, { name?: string }> } | undefined>;
+    return saved?.['geroStore']?.wallets?.[String(walletId)]?.name || 'Wallet';
+  } catch { return 'Wallet'; }
+}
+
+async function storedLoggedWalletId(): Promise<number | null> {
+  try {
+    const saved = (await chrome.storage.local.get('walletStore')) as Record<string, { loggedWallet?: { id?: number } | null } | undefined>;
+    const id = saved?.['walletStore']?.loggedWallet?.id;
+    return typeof id === 'number' ? id : null;
+  } catch { return null; }
+}
+
+/** NOTIFY_PRESENT to every open extension page; true when one rendered the toast within 250 ms. */
+function presentToPages(request: ToastRequest): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    const timer = setTimeout(() => resolve(false), 250);
+    try {
+      chrome.runtime.sendMessage({ method: 'NOTIFY_PRESENT', data: request, target: 'gerowallet', sender: 'extension' }, (reply?: { shown?: boolean }) => {
+        clearTimeout(timer);
+        void chrome.runtime.lastError; // no receiver: nothing is open
+        resolve(reply?.shown === true);
+      });
+    } catch { clearTimeout(timer); resolve(false); }
+  });
+}
+
+/** B4: focus the dashboard tab on the route, or open one. The side panel route waits on B0's click test. */
+async function openDashboard(route: RouteIntent): Promise<void> {
+  if (route.settingsTab) await chrome.storage.local.set({ openSettingsOnLoad: { tab: route.settingsTab } });
+  const base = chrome.runtime.getURL('index.html');
+  const url = `${base}#${route.dashboard}`;
+  const tabs = await chrome.tabs.query({ url: `${base}*` });
+  const existing = tabs.find((t) => typeof t.id === 'number');
+  if (existing && typeof existing.id === 'number') {
+    await chrome.tabs.update(existing.id, { active: true, url });
+    if (typeof existing.windowId === 'number') await chrome.windows.update(existing.windowId, { focused: true });
+    return;
+  }
+  await chrome.tabs.create({ url });
+}
+
+export const notifyPushHandlers = createNotifyPushHandlers({
+  store: notifyStore,
+  showNotification: async (title, options) => { await self.registration?.showNotification?.(title, options); },
+  closeNotifications: async (tag) => { for (const n of (await self.registration?.getNotifications?.({ tag })) ?? []) n.close(); },
+  presentToPages,
+  locale: storedLocale,
+  walletName: storedWalletName,
+  loggedWalletId: storedLoggedWalletId,
+  openDashboard,
+  iconUrl: chrome.runtime.getURL('public/logo128.png'),
+  log,
+});
+
 /**
  * Top-level, synchronous: an MV3 worker woken by a push only sees listeners added in
  * the first turn. Feature-detected: the Firefox build has no service-worker registration.
+ * `push` starts its work BEFORE waitUntil (a synthetic PushEvent has no usable one).
  */
 export function installNotifyListeners(): void {
   if (!self.registration?.pushManager) return;
-  (self as unknown as { addEventListener: (t: string, l: (e: { waitUntil?: (p: Promise<unknown>) => void }) => void) => void })
-    .addEventListener('pushsubscriptionchange', (event) => {
-      const p = reassert('pushsubscriptionchange');
-      try { event.waitUntil?.(p); } catch { /* not extendable */ }
-    });
+  self.addEventListener('push', ((event: { data?: { text(): string } | null; waitUntil?: (p: Promise<unknown>) => void }) => {
+    const p = notifyPushHandlers.handlePush(event.data ? event.data.text() : null).then(() => undefined, (e) => log(`push handler failed: ${String(e)}`));
+    try { event.waitUntil?.(p); } catch { /* synthetic event */ }
+  }) as (event: never) => void);
+  self.addEventListener('notificationclick', ((event: { notification: { data?: unknown; tag?: string; close(): void }; waitUntil?: (p: Promise<unknown>) => void }) => {
+    const p = notifyPushHandlers.handleNotificationClick(event.notification).then(() => undefined, (e) => log(`notificationclick failed: ${String(e)}`));
+    try { event.waitUntil?.(p); } catch { /* synthetic event */ }
+  }) as (event: never) => void);
+  self.addEventListener('pushsubscriptionchange', ((event: { waitUntil?: (p: Promise<unknown>) => void }) => {
+    const p = reassert('pushsubscriptionchange');
+    try { event.waitUntil?.(p); } catch { /* not extendable */ }
+  }) as (event: never) => void);
   chrome.alarms.create(NOTIFY_REASSERT_ALARM, { delayInMinutes: 24 * 60, periodInMinutes: 24 * 60 });
 }
 
