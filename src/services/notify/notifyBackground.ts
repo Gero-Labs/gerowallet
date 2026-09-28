@@ -12,6 +12,8 @@
 
 import { debugLog } from '@/utils/debug';
 import { geroStore } from '@/stores/geroStore';
+import { walletStore } from '@/stores/walletStore';
+import { networkStore } from '@/stores/networkStore';
 import { walletManager } from '@/services/walletManager.service';
 import { loadOrCreateDeviceIdentity } from '@/services/crossDevice/deviceIdentityStore';
 import { loadDeviceRegisterProof } from '@/services/crossDevice/deviceProofStore';
@@ -23,7 +25,7 @@ import {
 } from './notifyRegistration';
 import { notifyHooks } from './notifyHooks';
 import { createNotifyPushHandlers, type ToastRequest } from './notifyPush';
-import type { RouteIntent } from './notifyRender';
+import type { RouteIntent, TokenInfo } from './notifyRender';
 import type { NotifyConfig, WalletPrefsWrite } from './notifyTypes';
 
 interface WorkerRegistration {
@@ -195,11 +197,30 @@ async function openDashboard(route: RouteIntent): Promise<void> {
   await chrome.tabs.create({ url });
 }
 
+type TokenMeta = { metadata?: { ticker?: unknown; decimals?: unknown } | null } | undefined;
+
+/**
+ * B3: name and scale a received asset from what the worker already holds: the open wallet's token
+ * (registry or CIP-68 metadata resolved on sync), else the network-wide asset map. Neither may be
+ * hydrated on a cold start, in which case the renderer falls back to the server's symbol.
+ */
+function storedTokenInfo(unit: string): TokenInfo | undefined {
+  const held = (walletStore.tokens as Record<string, TokenMeta>)[unit];
+  const known = (networkStore.assets as Record<string, TokenMeta>)?.[unit];
+  const meta = held?.metadata ?? known?.metadata;
+  if (!meta) return undefined;
+  return {
+    ...(typeof meta.ticker === 'string' ? { ticker: meta.ticker } : {}),
+    decimals: typeof meta.decimals === 'number' ? meta.decimals : 0, // registry semantics: no decimals field means none
+  };
+}
+
 export const notifyPushHandlers = createNotifyPushHandlers({
   store: notifyStore,
   showNotification: async (title, options) => { await self.registration?.showNotification?.(title, options); },
   presentToPages,
   locale: storedLocale,
+  tokenInfo: storedTokenInfo,
   walletName: storedWalletName,
   loggedWalletId: storedLoggedWalletId,
   openDashboard,
