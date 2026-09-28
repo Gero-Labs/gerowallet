@@ -1,6 +1,8 @@
 <template>
   <v-app dark>
     <notifications></notifications>
+    <!-- Pushes that arrive while this page is focused (B8): top right, its own host. -->
+    <NotifySnackbar />
 
     <!-- Pre-switch unlock: authenticate the target MPC wallet before switching to
          it, without logging out the current wallet. -->
@@ -78,6 +80,7 @@ import BottomSheet from './components/BottomSheet.vue';
 import { initDappRequestHub } from './services/dappRequestHub';
 import HardwareSignPrompt from '@/shared/components/HardwareSignPrompt.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import NotifySnackbar from '@/shared/components/NotifySnackbar.vue';
 import { useNotifyPresent } from '@/shared/composables/useNotifyPresent';
 import { Wallet } from '@/models/types';
 import { useChainContext } from './composables/useChainContext';

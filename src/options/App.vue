@@ -27,6 +27,8 @@
          your device" prompt without each dialog re-declaring it. -->
     <HardwareSignPrompt />
     <notifications></notifications>
+    <!-- Pushes that arrive while this page is focused (B8): top right, its own host. -->
+    <NotifySnackbar />
     <!-- A notification about a wallet other than the open one asks before switching (B4). -->
     <NotifyPendingOpen v-if="isDashboardShell" />
     <v-snackbar
@@ -60,6 +62,7 @@ import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { agentDockPrefsStore } from '@/stores/agentDockPrefsStore';
 import { useChainAccent } from '@/shared/composables/useChainAccent';
 import { useGovernanceHydration } from '@/shared/composables/useGovernanceHydration';
+import NotifySnackbar from '@/shared/components/NotifySnackbar.vue';
 import { useNotifyPresent } from '@/shared/composables/useNotifyPresent';
 import { debugLog } from '@/utils/debug';
 
