@@ -6,6 +6,9 @@ import {
   isSignResponse,
   isPairConfirm,
   isPairAck,
+  isDeviceChallenge,
+  isDeviceRegisterAck,
+  isDeviceUnregisterAck,
   parseCrossDeviceMessage,
   type DeviceRegister,
   type DevicesSnapshot,
@@ -186,5 +189,51 @@ describe('parseCrossDeviceMessage', () => {
 
   it('rejects a DEVICE_REGISTER with a bad platform', () => {
     expect(parseCrossDeviceMessage({ ...validRegister, platform: 'windows' })).toBeNull();
+  });
+});
+
+// ---- Relay contract §5 (Track A): session-bound registration frames ----------
+describe('§5 session frames', () => {
+  const challenge = { type: 'DEVICE_CHALLENGE', challenge: 'c0c1c2c3c4c5c6c7c8c9cacbcccdcecf', network: 'cardano-mainnet', stakeAddress: 'stake1uyxk54m7j3q6mrkevcunryrwf4p7e68c93cjk8gzxkhlkpswtcyrc' };
+
+  it('isDeviceChallenge requires a 32-hex challenge, network and stakeAddress', () => {
+    expect(isDeviceChallenge(challenge)).toBe(true);
+    expect(parseCrossDeviceMessage(challenge)).toEqual(challenge);
+    expect(isDeviceChallenge({ ...challenge, challenge: 'C0C1' })).toBe(false);
+    expect(isDeviceChallenge({ ...challenge, challenge: 'zz'.repeat(16) })).toBe(false);
+    for (const field of ['challenge', 'network', 'stakeAddress'] as const) {
+      const { [field]: _omit, ...rest } = challenge;
+      void _omit;
+      expect(isDeviceChallenge(rest)).toBe(false);
+    }
+    expect(isDeviceChallenge(validDevices)).toBe(false);
+  });
+
+  it('isDeviceRegister accepts the session fields (challenge + sessionSig) alongside the device info', () => {
+    const signed = { ...validRegister, challenge: challenge.challenge, sessionSig: 'ab'.repeat(64) };
+    expect(isDeviceRegister(signed)).toBe(true);
+    expect(parseCrossDeviceMessage(signed)).toEqual(signed);
+  });
+
+  it('isDevicesSnapshot accepts the restricted marker (§5.6) and rejects a non-boolean one', () => {
+    expect(isDevicesSnapshot({ type: 'DEVICES', devices: [], restricted: true })).toBe(true);
+    expect(isDevicesSnapshot({ type: 'DEVICES', devices: [], restricted: 'yes' })).toBe(false);
+    expect(isDevicesSnapshot(validDevices)).toBe(true);
+  });
+
+  it('isDeviceRegisterAck accepts the legacy ack, the full §5.5 ack, and rejects unknown status values', () => {
+    expect(isDeviceRegisterAck({ type: 'DEVICE_REGISTER_ACK' })).toBe(true);
+    expect(isDeviceRegisterAck({ type: 'DEVICE_REGISTER_ACK', deviceId: 'dev1' })).toBe(true);
+    expect(isDeviceRegisterAck({ type: 'DEVICE_REGISTER_ACK', deviceId: 'dev1', proofStatus: 'verified', sessionStatus: 'stale_challenge', registered: false })).toBe(true);
+    expect(isDeviceRegisterAck({ type: 'DEVICE_REGISTER_ACK', proofStatus: 'ok' })).toBe(false);
+    expect(isDeviceRegisterAck({ type: 'DEVICE_REGISTER_ACK', sessionStatus: 'expired' })).toBe(false);
+    expect(isDeviceRegisterAck({ type: 'DEVICE_REGISTER_ACK', registered: 'true' })).toBe(false);
+  });
+
+  it('isDeviceUnregisterAck narrows DEVICE_UNREGISTER_ACK', () => {
+    const ack = { type: 'DEVICE_UNREGISTER_ACK', deviceId: 'dev1', removed: true };
+    expect(isDeviceUnregisterAck(ack)).toBe(true);
+    expect(parseCrossDeviceMessage(ack)).toEqual(ack);
+    expect(isDeviceUnregisterAck({ ...ack, removed: 1 })).toBe(false);
   });
 });

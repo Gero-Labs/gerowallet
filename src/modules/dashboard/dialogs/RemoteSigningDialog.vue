@@ -32,6 +32,16 @@
         </div>
 
         <template v-if="enabled">
+          <!-- A1: no valid wallet-control proof for this device; re-sign one under auth -->
+          <v-alert v-if="needsProof" dense text type="warning" class="rs-note mt-3 mb-0">
+            <div class="d-flex align-center">
+              <span class="rs-note-text flex-grow-1">{{ $t('crossDevice.settings.reconfirmBody') }}</span>
+              <v-btn small outlined color="warning" class="ml-3" :loading="busy" @click="startReconfirm">
+                {{ $t('crossDevice.settings.reconfirm') }}
+              </v-btn>
+            </div>
+          </v-alert>
+
           <v-divider class="rs-divider" />
 
           <!-- Signing policy -->
@@ -265,9 +275,13 @@
     <!-- Enable-time auth: sign the one-time wallet-control proof before turning on -->
     <v-dialog :value="enableAuthOpen" max-width="380" persistent @input="(v) => { if (!v) cancelEnableAuth(); }">
       <v-card class="liquid-glass rs-confirm-card" rounded="lg">
-        <v-card-title class="rs-title px-4 pt-4 pb-1">{{ $t('crossDevice.settings.enableAuthTitle') }}</v-card-title>
+        <v-card-title class="rs-title px-4 pt-4 pb-1">
+          {{ $t(reconfirmMode ? 'crossDevice.settings.reconfirmTitle' : 'crossDevice.settings.enableAuthTitle') }}
+        </v-card-title>
         <v-card-text class="px-4 pb-2">
-          <p class="rs-hint mb-3">{{ $t('crossDevice.settings.enableAuthBody') }}</p>
+          <p class="rs-hint mb-3">
+            {{ $t(reconfirmMode ? 'crossDevice.settings.reconfirmBody' : 'crossDevice.settings.enableAuthBody') }}
+          </p>
 
           <PassKeyAuthButton
             v-if="isPrfWallet"
@@ -301,7 +315,7 @@
             :loading="enableBusy"
             :disabled="!enablePassword"
             @click="confirmEnableWithPassword"
-          >{{ $t('crossDevice.settings.enableConfirm') }}</v-btn>
+          >{{ $t(reconfirmMode ? 'crossDevice.settings.reconfirm' : 'crossDevice.settings.enableConfirm') }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -330,6 +344,8 @@ const state = remoteSigningStore.state;
 
 const busy = computed(() => state.loading);
 const enabled = computed(() => state.settings.enabled);
+// A1: on, but no valid wallet-control proof for this device (see remoteSigningStore).
+const needsProof = computed(() => remoteSigningStore.needsProof());
 const policy = computed(() => state.settings.policy);
 // XDP: master serving switch + per-device opt-in.
 const serveProofs = computed(() => state.settings.serveProofs === true);
@@ -406,6 +422,15 @@ const enableAuthOpen = ref(false);
 const enablePassword = ref('');
 const enableBusy = ref(false);
 const enableError = ref('');
+// The same auth step, reused to re-sign the proof while remote signing stays on (A1).
+const reconfirmMode = ref(false);
+
+function startReconfirm() {
+  reconfirmMode.value = true;
+  enableError.value = '';
+  enablePassword.value = '';
+  enableAuthOpen.value = true;
+}
 
 async function onToggleEnabled(value: boolean) {
   if (!value) {
@@ -417,6 +442,7 @@ async function onToggleEnabled(value: boolean) {
     await remoteSigningStore.setEnabled(true);
     return;
   }
+  reconfirmMode.value = false;
   enableError.value = '';
   enablePassword.value = '';
   enableAuthOpen.value = true;
@@ -432,7 +458,10 @@ async function runEnableProof(auth: { password?: string; privateKeyBytes?: numbe
       enableError.value = t('crossDevice.settings.enableProofFailed');
       return;
     }
-    await remoteSigningStore.setEnabled(true);
+    // Re-confirm: already enabled, the background re-registered with the fresh
+    // proof; just pick up needsProof=false. Enable: turn it on now.
+    if (reconfirmMode.value) await remoteSigningStore.refresh();
+    else await remoteSigningStore.setEnabled(true);
     enableAuthOpen.value = false;
     enablePassword.value = '';
   } catch (e) {

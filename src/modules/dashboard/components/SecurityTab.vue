@@ -183,7 +183,7 @@
           <v-list-item-title class="text-left">
             <h3 style="color: white; font-size: 16px;">{{ $t('crossDevice.settings.title') }}</h3>
           </v-list-item-title>
-          <v-list-item-subtitle class="text-left">
+          <v-list-item-subtitle class="text-left" :class="{ 'warning--text': remoteSigningNeedsProof }">
             {{ remoteSigningSubtitle }}
           </v-list-item-subtitle>
         </v-list-item-content>
@@ -546,9 +546,16 @@ const canRemoteSigning = computed(() =>
   loggedWallet.value?.type === WalletType.Normal,
 );
 
+// Remote signing is on but this device has no valid wallet-control proof (never
+// produced, storage cleared, or rejected by the relay). Tapping the row opens the
+// existing auth step, which signs a fresh one; without it the relay will stop
+// registering this browser once it enforces proofs.
+const remoteSigningNeedsProof = computed(() => remoteSigningStore.needsProof());
+
 const remoteSigningSubtitle = computed(() => {
   const s = remoteSigningStore.state.settings;
   if (!s.enabled) return t('crossDevice.settings.subtitleOff');
+  if (remoteSigningNeedsProof.value) return t('crossDevice.settings.reconfirmSubtitle');
   const count = Object.keys(s.trustedDevices).length;
   const policyText = s.policy === 'require_remote'
     ? t('crossDevice.settings.policyRequire')

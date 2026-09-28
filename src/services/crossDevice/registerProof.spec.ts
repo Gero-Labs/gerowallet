@@ -23,10 +23,10 @@ function walletStakeKey(seed: number): Ed25519PrivateKey {
   return Ed25519PrivateKey.fromNormalBytes(new Uint8Array(32).fill(seed));
 }
 
-/** The reward (stake) bech32 address for a wallet stake key, mainnet. */
-function rewardAddressOf(key: Ed25519PrivateKey): string {
+/** The reward (stake) bech32 address for a wallet stake key (mainnet unless told otherwise). */
+function rewardAddressOf(key: Ed25519PrivateKey, networkId: Cardano.NetworkId = Cardano.NetworkId.Mainnet): string {
   const hash = Hash28ByteBase16(key.toPublic().hash().hex());
-  return Cardano.RewardAddress.fromCredentials(Cardano.NetworkId.Mainnet, {
+  return Cardano.RewardAddress.fromCredentials(networkId, {
     type: Cardano.CredentialType.KeyHash,
     hash,
   }).toAddress().toBech32();
@@ -72,6 +72,18 @@ describe('verifyDeviceRegisterProof', () => {
 
     const ok = await verifyDeviceRegisterProof(forged, { deviceId: DEVICE_ID, pubKey: RELAY_PUB }, victimStake);
     expect(ok).toBe(false); // blake2b224(attacker x) != victim stake key-hash
+  });
+
+  it('accepts a testnet (stake_test1) proof: the verifier is network-agnostic (handover A2)', async () => {
+    const wallet = walletStakeKey(7);
+    const stake = rewardAddressOf(wallet, Cardano.NetworkId.Testnet);
+    expect(stake.startsWith('stake_test1')).toBe(true);
+    const subject = buildDeviceRegisterSubject(DEVICE_ID, RELAY_PUB, stake);
+    const proof = makeProof(wallet, stake, subject);
+
+    expect(await verifyDeviceRegisterProof(proof, { deviceId: DEVICE_ID, pubKey: RELAY_PUB }, stake)).toBe(true);
+    // The same key's mainnet address is a different wallet identity on the wire.
+    expect(await verifyDeviceRegisterProof(proof, { deviceId: DEVICE_ID, pubKey: RELAY_PUB }, rewardAddressOf(wallet))).toBe(false);
   });
 
   it('rejects a proof for a different wallet (own-stake mismatch)', async () => {
