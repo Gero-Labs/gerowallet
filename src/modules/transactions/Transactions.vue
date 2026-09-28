@@ -149,7 +149,9 @@ const handleOnUtxoRowClick = (row: any) => {
 // hash+token, with no equivalent auto-select today).
 const selectTransactionFromQuery = () => {
   if (isMidnight.value) return false;
-  const txId = route.query?.tx?.toString();
+  // The live route, not the one captured at setup: a notification opened while this page is
+  // already showing navigates to the same path with a different `tx`.
+  const txId = vmProxy.$route.query?.tx?.toString();
   if (!txId) return false;
 
   const transactions = walletStore.transactions;
@@ -182,6 +184,12 @@ watch(() => walletStore.transactions, (transactions) => {
     });
   }
 }, { immediate: true });
+
+// A new `tx` in the query while the page stays mounted (a push notification, the bell, global
+// search) selects that transaction even though one is already open.
+watch(() => vmProxy.$route.query?.tx, (txId, previous) => {
+  if (txId && txId !== previous) selectTransactionFromQuery();
+});
 
 // Midnight rows are replaced, not mutated (see liveMidnightRow): a pane holding
 // the clicked object kept rendering the dead pending row — "Pending", and a

@@ -29,7 +29,7 @@ function dismiss(id: number) { notifySnackStore.dismiss(id); }
 
 function open(snack: NotifySnack) {
   if (snack.settingsTab) void chrome.storage.local.set({ openSettingsOnLoad: { tab: snack.settingsTab } });
-  if (router && router.currentRoute.path !== snack.path) router.push(snack.path).catch(() => undefined);
+  if (router && router.currentRoute.fullPath !== snack.path) router.push(snack.path).catch(() => undefined);
   dismiss(snack.id);
 }
 </script>

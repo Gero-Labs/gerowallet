@@ -9,9 +9,20 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes } from './notifyAuth';
 import { NOTIFY_PROTOCOL } from './notifyTypes';
 
+/**
+ * One received native asset. `sym` is the server's §6.5 symbol (the on-chain name when it is a plain
+ * ticker). `unit` (policy id + asset name, hex) marks `qty` as raw base units for the renderer to
+ * name and scale from the wallet's registry data; without a unit, `qty` is already display-ready.
+ */
+export interface PushAsset {
+  sym?: string;
+  qty: string;
+  unit?: string;
+}
+
 export interface PushAmounts {
   ada?: string;
-  assets: Array<{ sym: string; qty: string }>;
+  assets: PushAsset[];
   otherAssets?: number;
 }
 
@@ -45,18 +56,28 @@ export type ParsedPush =
 
 const HEX32 = /^[0-9a-f]{32}$/;
 const SYM = /^[A-Z0-9]{1,10}$/; // §6.5, re-checked by the client (rule 7)
+const UNIT = /^[0-9a-f]{56,120}$/; // policy id + asset name, hex
+const QTY = /^[0-9]+(\.[0-9]+)?$/;
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 const isInt = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v);
 const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
+
+/** One well-formed asset (rule 7: a symbol that fails the pattern drops the asset; a unit must be hex). */
+function sanitizeAsset(x: unknown): PushAsset | undefined {
+  if (!isObject(x)) return undefined;
+  const sym = str(x['sym']);
+  const unit = str(x['unit']);
+  const qty = str(x['qty']);
+  if (qty === undefined || !QTY.test(qty)) return undefined;
+  if ((sym === undefined && unit === undefined) || (sym !== undefined && !SYM.test(sym)) || (unit !== undefined && !UNIT.test(unit))) return undefined;
+  return { ...(sym !== undefined ? { sym } : {}), qty, ...(unit !== undefined ? { unit } : {}) };
+}
 
 /** Keep only well-formed amounts; drop any asset whose symbol fails the pattern (rule 7). */
 export function sanitizeAmounts(raw: unknown): PushAmounts | undefined {
   if (!isObject(raw)) return undefined;
   const ada = str(raw['ada']);
-  const assets = Array.isArray(raw['assets'])
-    ? raw['assets'].filter((x): x is { sym: string; qty: string } => isObject(x) && typeof x['sym'] === 'string' && SYM.test(x['sym']) && typeof x['qty'] === 'string' && /^[0-9]+(\.[0-9]+)?$/.test(x['qty']))
-      .map((x) => ({ sym: x.sym, qty: x.qty }))
-    : [];
+  const assets = Array.isArray(raw['assets']) ? raw['assets'].map(sanitizeAsset).filter((x): x is PushAsset => x !== undefined) : [];
   const other = raw['otherAssets'];
   const out: PushAmounts = { assets };
   if (ada !== undefined && /^[0-9]+(\.[0-9]{1,6})?$/.test(ada)) out.ada = ada;

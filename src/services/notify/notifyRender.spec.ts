@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { computeEventTag, parsePushPayload, sanitizeAmounts } from './notifyPayload';
-import { formatAmounts, renderPush, routeFor } from './notifyRender';
+import { formatAmounts, renderPush, routeFor, scaleQuantity, type TokenLookup } from './notifyRender';
 import { pushStrings } from '@/plugins/i18n/push';
 
 // CONTRACT §6.6 examples, verbatim.
@@ -21,8 +21,8 @@ const EX = {
 };
 const NOW = 1790553700000; // before every exp above
 const wallet = { walletId: 4, name: 'Daily Cardano' };
-const render = (text: string, over: Partial<{ wallet: typeof wallet | null; locale: string; now: number }> = {}) =>
-  renderPush({ parsed: parsePushPayload(text), wallet: over.wallet === undefined ? wallet : over.wallet, locale: over.locale ?? 'us', now: over.now ?? NOW });
+const render = (text: string, over: Partial<{ wallet: typeof wallet | null; locale: string; now: number; tokenInfo: TokenLookup }> = {}) =>
+  renderPush({ parsed: parsePushPayload(text), wallet: over.wallet === undefined ? wallet : over.wallet, locale: over.locale ?? 'us', now: over.now ?? NOW, tokenInfo: over.tokenInfo });
 const us = pushStrings.us;
 
 describe('§6.3 event tag vectors', () => {
@@ -45,7 +45,7 @@ describe('payload rendering (§6.7), every t of §6.2', () => {
     expect(r.tag).toBe('431819262709d4f7e2e7b293474c0743');
     expect(r.requireInteraction).toBe(false);
     expect(r.timestamp).toBe(1790553660000);
-    expect(r.route).toEqual({ dashboard: '/transactions', sidepanel: '/activity', highlight: { tx: 'a690b5e80b646a7d2542e0f440882bebebd6fa4973ee831fac63ad0ebfdf9130' } });
+    expect(r.route).toEqual({ dashboard: '/transactions?tx=a690b5e80b646a7d2542e0f440882bebebd6fa4973ee831fac63ad0ebfdf9130', sidepanel: '/activity', highlight: { tx: 'a690b5e80b646a7d2542e0f440882bebebd6fa4973ee831fac63ad0ebfdf9130' } });
     expect(r.data).toMatchObject({ v: 1, t: 'funds', c: 'funds', w: TAG, e: r.tag, d: 'activity', walletId: 4, degraded: 'none' });
     expect(r.unknownWalletTag).toBeNull();
   });
@@ -141,6 +141,39 @@ describe('payload rendering (§6.7), every t of §6.2', () => {
     expect(r.body).toBe('You received 12.5 ADA, 1 other token');
   });
 
+  describe('received assets by unit (the server lists them raw; the wallet names and scales them)', () => {
+    const policy = '10a49b996e2402269af553a8a96fb8eb90d79e9eca79e2b4223057b6';
+    const gero = `${policy}4745524f`;
+    const hosky = `${policy}486f736b79`;
+    const withUnits = (assets: string) => EX.funds.replace('"assets":[{"sym":"NIGHT","qty":"250"}],"otherAssets":1', `"assets":[${assets}]`);
+
+    it('a unit must be hex; sym stays optional next to it', () => {
+      expect(sanitizeAmounts({ ada: '1', assets: [{ sym: 'GERO', qty: '1500000', unit: gero }, { qty: '1', unit: hosky }, { qty: '1', unit: 'nothex' }, { qty: '1' }] }))
+        .toEqual({ ada: '1', assets: [{ sym: 'GERO', qty: '1500000', unit: gero }, { qty: '1', unit: hosky }] });
+    });
+
+    it('the registry ticker and decimals win over the symbol; a raw quantity is shown only once the decimals are known', () => {
+      const registry: TokenLookup = (unit) => (unit === gero ? { ticker: '$GERO', decimals: 6 } : unit === hosky ? { ticker: 'HOSKY', decimals: 0 } : undefined);
+      const r = render(withUnits(`{"sym":"GERO","qty":"1500000","unit":"${gero}"},{"qty":"42","unit":"${hosky}"}`), { tokenInfo: registry });
+      expect(r.body).toBe('You received 12.5 ADA, 1.5 $GERO, 42 HOSKY');
+      // No registry data (cold worker, unknown token): the server symbol without an unscaled number.
+      expect(render(withUnits(`{"sym":"GERO","qty":"1500000","unit":"${gero}"}`)).body).toBe('You received 12.5 ADA, GERO');
+      // Nothing to name it by: folded into the other count.
+      expect(render(withUnits(`{"qty":"1","unit":"${hosky}"}`)).body).toBe('You received 12.5 ADA, 1 other token');
+      expect(render(withUnits(`{"qty":"1","unit":"${hosky}"},{"qty":"2","unit":"${gero}"}`).replace('"assets":[', '"otherAssets":1,"assets":[')).body).toBe('You received 12.5 ADA, 3 other tokens');
+      // A symbol without a unit is display-ready as before (the contract example).
+      expect(render(EX.funds, { tokenInfo: registry }).body).toBe('You received 12.5 ADA, 250 NIGHT, 1 other token');
+    });
+
+    it('scaleQuantity', () => {
+      expect(scaleQuantity('1500000', 6)).toBe('1.5');
+      expect(scaleQuantity('1', 6)).toBe('0.000001');
+      expect(scaleQuantity('123456789', 6)).toBe('123.456789');
+      expect(scaleQuantity('5000000', 6)).toBe('5');
+      expect(scaleQuantity('42', 0)).toBe('42');
+    });
+  });
+
   it('never shows a payload string: only table strings plus a and n', () => {
     const r = render(EX.funds.replace('"d":"activity"', '"d":"activity","title":"<b>hax</b>","body":"pwned"'));
     expect(r.title + r.body).not.toMatch(/hax|pwned/);
@@ -148,7 +181,8 @@ describe('payload rendering (§6.7), every t of §6.2', () => {
 
   it('routing table (§6.4)', () => {
     expect(routeFor('home', undefined, true)).toEqual({ dashboard: '/', sidepanel: '/' });
-    expect(routeFor('activity', { tx: 'a'.repeat(64) }, true)).toEqual({ dashboard: '/transactions', sidepanel: '/activity', highlight: { tx: 'a'.repeat(64) } });
+    expect(routeFor('activity', { tx: 'a'.repeat(64) }, true)).toEqual({ dashboard: `/transactions?tx=${'a'.repeat(64)}`, sidepanel: '/activity', highlight: { tx: 'a'.repeat(64) } });
+    expect(routeFor('activity', undefined, true)).toEqual({ dashboard: '/transactions', sidepanel: '/activity' });
     expect(routeFor('activity', { tx: 'a'.repeat(64) }, false)).toEqual({ dashboard: '/transactions', sidepanel: '/activity' });
     expect(routeFor('staking', undefined, true)).toEqual({ dashboard: '/staking', sidepanel: '/staking' });
     expect(routeFor('swapOrders', undefined, true)).toEqual({ dashboard: '/swap', sidepanel: null });
