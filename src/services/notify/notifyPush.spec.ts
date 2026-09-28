@@ -57,7 +57,7 @@ describe('push handler (B3, B5, B8)', () => {
     const h = harness({ toast: true });
     await h.store.setWallet(4, link);
     await h.handlers.handlePush(FUNDS);
-    expect(h.deps.presentToPages).toHaveBeenCalledWith(expect.objectContaining({ e: '431819262709d4f7e2e7b293474c0743', title: 'ADA Received · Daily Cardano', route: expect.objectContaining({ dashboard: '/transactions' }) }));
+    expect(h.deps.presentToPages).toHaveBeenCalledWith(expect.objectContaining({ e: '431819262709d4f7e2e7b293474c0743', title: 'ADA Received · Daily Cardano', route: expect.objectContaining({ dashboard: '/transactions?tx=a690b5e80b646a7d2542e0f440882bebebd6fa4973ee831fac63ad0ebfdf9130' }) }));
     expect(h.shown).toHaveLength(0);
     expect((await h.store.getInbox()).map((i) => i.e)).toEqual(['431819262709d4f7e2e7b293474c0743']);
   });
@@ -79,7 +79,7 @@ describe('notificationclick routing (B4)', () => {
     const close = vi.fn();
     const route = await h.handlers.handleNotificationClick({ close, tag: 'x', data: { d: 'activity', x: { tx: 'a'.repeat(64) }, walletId: 4, degraded: 'none' } });
     expect(close).toHaveBeenCalled();
-    expect(route).toEqual({ dashboard: '/transactions', sidepanel: '/activity', highlight: { tx: 'a'.repeat(64) } });
+    expect(route).toEqual({ dashboard: `/transactions?tx=${'a'.repeat(64)}`, sidepanel: '/activity', highlight: { tx: 'a'.repeat(64) } });
     expect(h.opened).toEqual([route]);
   });
 

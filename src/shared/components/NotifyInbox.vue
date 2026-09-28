@@ -125,7 +125,7 @@ function open(item: NotifyInboxItem) {
   }
   const route = routeFor(item.d, item.x as Parameters<typeof routeFor>[1], true);
   if (route.settingsTab) void chrome.storage.local.set({ openSettingsOnLoad: { tab: route.settingsTab } });
-  if (router && router.currentRoute.path !== route.dashboard) router.push(route.dashboard).catch(() => undefined);
+  if (router && router.currentRoute.fullPath !== route.dashboard) router.push(route.dashboard).catch(() => undefined);
 }
 
 onMounted(() => notifyInboxStore.init());
