@@ -478,6 +478,8 @@ function onSheetScroll() {
   if (notificationsMenu.value) notificationsMenu.value = false;
 }
 
+// Mirror the worker's notifyInbox from the start: the badge counts unread before the menu ever opens.
+notifyInboxStore.init();
 const inboxUnread = computed(() => notifyInboxStore.unread());
 function openNotifySettings() {
   notificationsMenu.value = false;
