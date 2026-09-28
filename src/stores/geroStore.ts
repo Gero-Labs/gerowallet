@@ -11,7 +11,7 @@ import {
 import { ERROR, Wallet, WalletType } from '@/models/types';
 import { Buffer } from 'buffer';
 import { Bip32PrivateKey } from '@cardano-sdk/crypto';
-import { decrypt, encrypt } from '@/shared/utils/crypto';
+import { SecretPurpose, decrypt, encrypt } from '@/shared/utils/crypto';
 import networks, { NetworkInfo } from '@/utils/networks';
 import { encryptPrivateKey, decryptPrivateKey } from '@/shared/utils/crypto';
 import { getContextType } from '@/utils/storageSync';
@@ -336,7 +336,7 @@ export default {
         // Handle mnemonic if it exists
         let encryptedMnemonic = null;
         if (wallet.encryptedMnemonic) {
-          const decryptedMnemonic = decrypt(wallet.encryptedMnemonic, currentPassword);
+          const decryptedMnemonic = decrypt(wallet.encryptedMnemonic, currentPassword, SecretPurpose.Mnemonic);
           encryptedMnemonic = encrypt(decryptedMnemonic, newPassword);
         }
 

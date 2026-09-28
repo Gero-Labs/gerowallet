@@ -163,8 +163,8 @@ async function rotateKes() {
     const encryptedEntry = await configTable.where({ key: 'spo_encryptedColdKey' }).first();
     if (!encryptedEntry?.value) throw new Error('No cold key configured');
 
-    const { decryptWithPassword } = await import('@/shared/utils/crypto');
-    const coldKeyBytes = new Uint8Array(decryptWithPassword(password.value, encryptedEntry.value));
+    const { decryptKeyBlob, SecretPurpose } = await import('@/shared/utils/crypto');
+    const coldKeyBytes = new Uint8Array(decryptKeyBlob(encryptedEntry.value, password.value, SecretPurpose.ColdKey));
     const coldPubKey = ed25519.getPublicKey(coldKeyBytes);
 
     // Build op cert payload

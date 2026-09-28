@@ -1241,8 +1241,8 @@ export class WalletManager {
       }
       if (chain !== Blockchain.MIDNIGHT || !encryptedMnemonic || !network) return;
 
-      const { decrypt } = await import('@/shared/utils/crypto');
-      const mnemonic = decrypt(encryptedMnemonic, password);
+      const { decrypt, SecretPurpose } = await import('@/shared/utils/crypto');
+      const mnemonic = decrypt(encryptedMnemonic, password, SecretPurpose.Mnemonic);
       // skipCardano: avoid the BG-bundle pbkdf2 polyfill path that
       // deriveCardanoMaterial hits (see walletBg.buildAndSignMidnightShieldedTransfer).
       // Only the viewing key is consumed.

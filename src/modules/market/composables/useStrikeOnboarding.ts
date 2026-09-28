@@ -10,7 +10,7 @@ import {
   requestBuilderSignature,
   verifyBuilderSignature,
 } from '@/api/strike-v2.builder-connect';
-import { encryptWithPassword, decryptWithPassword } from '@/shared/utils/crypto';
+import { SecretPurpose, encryptWithPassword, decryptKeyBlob } from '@/shared/utils/crypto';
 import {
   encryptPrivateKeyWithPrf,
   decryptPrivateKeyWithPrf,
@@ -61,7 +61,7 @@ async function encryptStrikePrivateKey(
 /**
  * Decrypt the stored Strike API-wallet private key.
  *
- * - Password wallets: decryptWithPassword (existing behaviour) → hex.
+ * - Password wallets: decryptKeyBlob (gpw2 or raw PBKDF2 hex) → hex.
  * - PRF wallets: decryptPrivateKeyWithPrf prompts the passkey and returns the
  *   raw key bytes, which we re-encode to hex for setStrikeApiKeys().
  */
@@ -78,7 +78,7 @@ async function decryptStrikePrivateKey(
     );
     return Buffer.from(keyBytes).toString('hex');
   }
-  const decrypted = decryptWithPassword(password, privateKeyEncrypted);
+  const decrypted = decryptKeyBlob(privateKeyEncrypted, password, SecretPurpose.StrikeKey);
   return decrypted.toString('hex');
 }
 

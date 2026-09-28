@@ -502,9 +502,9 @@ export function useCnightDustRegistration() {
     if (!wallet.encryptedMnemonic) {
       throw new Error('Wallet has no encrypted mnemonic. Hardware wallets register via the official portal.');
     }
-    const { decrypt } = await import('@/shared/utils/crypto');
+    const { decrypt, SecretPurpose } = await import('@/shared/utils/crypto');
     try {
-      return decrypt(wallet.encryptedMnemonic, credentials.password ?? '');
+      return decrypt(wallet.encryptedMnemonic, credentials.password ?? '', SecretPurpose.Mnemonic);
     } catch {
       throw new Error('WRONG_PASSWORD');
     }

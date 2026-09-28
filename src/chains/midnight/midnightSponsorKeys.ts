@@ -113,8 +113,8 @@ export async function deriveSponsorDustSeed(
   } else {
     if (!credential.password) throw new SponsorNotEligibleError('missing-credential');
     if (!sponsor.encryptedMnemonic) throw new SponsorNotEligibleError('no-mnemonic');
-    const { decrypt } = await import('@/shared/utils/crypto');
-    mnemonic = decrypt(sponsor.encryptedMnemonic, credential.password);
+    const { decrypt, SecretPurpose } = await import('@/shared/utils/crypto');
+    mnemonic = decrypt(sponsor.encryptedMnemonic, credential.password, SecretPurpose.SponsorMnemonic);
   }
 
   try {

@@ -62,6 +62,18 @@ Do not invent a scheme. Two exist:
 
 The old crypto-ts/CryptoJS outer AES wrap (MD5, one iteration) was **removed** because it negated PBKDF2 under the same password. Legacy nested blobs are still readable and are migrated to the single strong layer on first password unlock, best-effort so a failed rewrite can never break signing. Do not reintroduce an outer wrap.
 
+A third format, `gpw2.` (`src/shared/utils/secretEnvelope.ts`), is **read everywhere but not yet written**. It is Argon2id -> XChaCha20-Poly1305 with the header as AEAD associated data and a purpose byte that binds each blob to its field (`SecretPurpose`). Readers ship one release before any writer so a rollback can never meet a blob it cannot open.
+
+**Always read stored password secrets through the single reader for the field**, never with `decryptWithPassword` or `decryptLegacyAes` directly:
+
+| Field | Reader |
+|---|---|
+| Root key (Cardano, BTC, Midnight) | `decryptPrivateKey(blob, pw)` |
+| Mnemonic, MPC device share, 2FA data, Midnight sponsor mnemonic | `decrypt(blob, pw, SecretPurpose.X)` |
+| SPO cold key, Strike key | `decryptKeyBlob(blob, pw, SecretPurpose.X)` |
+
+The unlock-time root-key rewrite is gated on `isLegacyNestedKey()`, not `!isRawEncryptedKey()`: a `gpw2` blob is not raw hex either, and rewriting it would downgrade it to PBKDF2. Every historical format has a frozen fixture in `src/shared/utils/__fixtures__/secretFormats.ts`; never regenerate those.
+
 Import note: use `blake2b` as a direct dependency - `@noble/hashes/blake2` does not resolve here.
 
 ## Non-negotiables for any change in this area
