@@ -216,7 +216,8 @@ const unsupported = computed(() => {
 });
 
 // ---- This browser ----
-const serverDisabled = computed(() => !!config.value && (!config.value.enabled || !config.value.vapidPublicKey));
+/** No usable /config (not served yet, unreachable, enabled:false or no VAPID key): the feature stays dark here. */
+const serverDisabled = computed(() => store.state.loaded && (!config.value || !config.value.enabled || !config.value.vapidPublicKey));
 const browserOn = computed({
   get: () => !!device.value?.browserEnabled,
   set: (on: boolean) => { void turnBrowser(on); },
