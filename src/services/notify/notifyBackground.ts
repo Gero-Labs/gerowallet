@@ -243,4 +243,6 @@ export const notifyActions = {
   disableWallet: (walletId: number) => notifyRegistration.disableWallet(walletId),
   setPrefs: (walletId: number, write: WalletPrefsWrite) => notifyRegistration.setPrefs(walletId, write),
   walletRemoved: (walletId: number) => notifyRegistration.walletRemoved(walletId),
+  inboxRead: (e: string | null) => notifyStore.markInboxRead(e, Date.now()),
+  inboxClear: () => notifyStore.clearInbox(),
 };

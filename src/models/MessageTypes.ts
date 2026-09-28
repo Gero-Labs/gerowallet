@@ -179,4 +179,6 @@ export enum MessageTypes {
   NOTIFY_WALLET_REMOVED = 'NOTIFY_WALLET_REMOVED', // sent BEFORE GeroStore.removeWallet
   NOTIFY_PRESENT = 'NOTIFY_PRESENT', // worker -> page (B-M2)
   NOTIFY_TOAST_SHOWN = 'NOTIFY_TOAST_SHOWN', // page -> worker (B-M2)
+  NOTIFY_INBOX_READ = 'NOTIFY_INBOX_READ', // page -> worker: one e, or all (B-M3 bell)
+  NOTIFY_INBOX_CLEAR = 'NOTIFY_INBOX_CLEAR',
 }

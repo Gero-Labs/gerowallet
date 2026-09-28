@@ -112,3 +112,25 @@ describe('notificationclick routing (B4)', () => {
     expect(rendered.route).toMatchObject({ settingsTab: 'security', highlight: { deviceId: '4884fdaafea47c29fea7159d0daddd9c' } });
   });
 });
+
+describe('the in-app inbox (B-M3)', () => {
+  it('every shown push lands in the inbox unread; security pushes are "needs you"; a click marks it read', async () => {
+    const h = harness();
+    await h.store.setWallet(4, link);
+    await h.handlers.handlePush(FUNDS);
+    await h.handlers.handlePush(NEW_DEVICE);
+    const inbox = await h.store.getInbox();
+    expect(inbox.map((i) => [i.t, i.needsYou, i.readAt])).toEqual([['new_device', true, null], ['funds', false, null]]);
+    expect(inbox[1]).toMatchObject({ e: '431819262709d4f7e2e7b293474c0743', c: 'funds', d: 'activity', walletId: 4, walletName: 'Daily Cardano', title: 'ADA Received · Daily Cardano', body: 'You received 12.5 ADA', ts: 1790553660000, x: { tx: 'a690b5e80b646a7d2542e0f440882bebebd6fa4973ee831fac63ad0ebfdf9130' } });
+    await h.handlers.handleNotificationClick({ data: h.shown[0].options['data'], tag: inbox[1].e, close: () => undefined }); // the funds one
+    expect((await h.store.getInbox()).map((i) => i.readAt)).toEqual([null, 1790553700000]);
+  });
+
+  it('a generic (unparseable) push is kept too, with no wallet', async () => {
+    const h = harness();
+    await h.handlers.handlePush('{not json');
+    const [row] = await h.store.getInbox();
+    expect(row).toMatchObject({ title: 'Gero', walletId: null, walletName: null, needsYou: false });
+    expect(row.e).toMatch(/^generic-/);
+  });
+});

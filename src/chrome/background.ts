@@ -2762,6 +2762,26 @@ app.addToOptions(MessageTypes.NOTIFY_TOAST_SHOWN, async (request, sendResponse) 
 
 // Sent by the Advanced tab BEFORE GeroStore.removeWallet, so the DELETE is queued
 // durably while the wallet still exists (§8.5).
+app.addToOptions(MessageTypes.NOTIFY_INBOX_READ, async (request, sendResponse) => {
+  try {
+    await booted();
+    await notifyActions.inboxRead(typeof request.data?.e === 'string' ? request.data.e : null);
+    sendResponse(crossDeviceReply(request.id, { success: true }));
+  } catch (error) {
+    sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
+  }
+});
+
+app.addToOptions(MessageTypes.NOTIFY_INBOX_CLEAR, async (request, sendResponse) => {
+  try {
+    await booted();
+    await notifyActions.inboxClear();
+    sendResponse(crossDeviceReply(request.id, { success: true }));
+  } catch (error) {
+    sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
+  }
+});
+
 app.addToOptions(MessageTypes.NOTIFY_WALLET_REMOVED, async (request, sendResponse) => {
   try {
     await booted();

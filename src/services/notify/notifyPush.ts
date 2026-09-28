@@ -74,6 +74,12 @@ export function createNotifyPushHandlers(deps: NotifyPushDeps): NotifyPushHandle
         log(`push for unknown wallet tag ${rendered.unknownWalletTag.slice(0, 8)}: generic text, DELETE queued`);
       }
       const repeat = await deps.store.markSeen(rendered.tag, now());
+      // The in-app notification centre (the bell) keeps what was shown, unread until opened there or clicked.
+      await deps.store.addInbox({
+        e: rendered.tag, t: rendered.data.t, c: rendered.data.c, d: rendered.data.d, ...(rendered.data.x ? { x: rendered.data.x as Record<string, unknown> } : {}),
+        walletId: rendered.data.walletId, walletName: wallet?.name ?? null, title: rendered.title, body: rendered.body,
+        ts: rendered.timestamp, readAt: null, needsYou: rendered.requireInteraction,
+      });
       let toastShown = false;
       try {
         toastShown = await deps.presentToPages({ e: rendered.tag, title: rendered.title, body: rendered.body, route: rendered.route, walletId: rendered.data.walletId });
@@ -95,6 +101,7 @@ export function createNotifyPushHandlers(deps: NotifyPushDeps): NotifyPushHandle
     async handleNotificationClick(notification) {
       notification.close();
       const data = (notification.data && typeof notification.data === 'object' ? notification.data : {}) as Partial<NotificationData>;
+      if (typeof data.e === 'string') await deps.store.markInboxRead(data.e, now());
       const route = routeFor(data.d ?? 'home', data.x, data.degraded === 'none');
       // B4: a notification about a wallet that is not the open one never switches by itself.
       const logged = await deps.loggedWalletId();
