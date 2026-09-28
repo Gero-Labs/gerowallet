@@ -322,8 +322,12 @@ const deleteWalletConfirm = async () => {
   const walletId = loggedWallet.value.id;
   const name = loggedWallet.value.name;
 
+  await handleCardLogout();
+  // Push notifications: queue the server-side unlink durably BEFORE the wallet record
+  // and its keys are deleted (the worker retries it on later starts if it fails now).
+  await Messaging.sendToBackgroundFromOptions({ method: MessageTypes.NOTIFY_WALLET_REMOVED, data: { walletId } });
   // Remove wallet from geroStore (this will also delete from database)
-  await handleCardLogout().then(() => GeroStore.removeWallet(walletId));
+  GeroStore.removeWallet(walletId);
 
   // Then logout
   await submitLogout();
