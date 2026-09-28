@@ -67,7 +67,7 @@ describe('notifyStore', () => {
 
 describe('inbox (the bell, B-M3)', () => {
   const item = (e: string, ts: number, over: Partial<import('./notifyStore').NotifyInboxItem> = {}): import('./notifyStore').NotifyInboxItem => ({
-    e, t: 'funds', c: 'funds', d: 'activity', walletId: 4, walletName: 'Daily', title: 'ADA Received', body: 'You received funds', ts, readAt: null, needsYou: false, ...over,
+    e, t: 'funds', c: 'funds', d: 'activity', walletId: 4, walletName: 'Daily', title: 'Funds Received', body: 'You received funds', ts, readAt: null, needsYou: false, ...over,
   });
 
   it('keeps rows newest first, replaces a repeated e, and caps at INBOX_MAX', async () => {

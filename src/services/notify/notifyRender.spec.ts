@@ -40,7 +40,7 @@ describe('§6.3 event tag vectors', () => {
 describe('payload rendering (§6.7), every t of §6.2', () => {
   it('funds with amounts: title carries the wallet name, body the amounts, click goes to activity with the tx', () => {
     const r = render(EX.funds);
-    expect(r.title).toBe('ADA Received · Daily Cardano');
+    expect(r.title).toBe('Funds Received · Daily Cardano');
     expect(r.body).toBe('You received 12.5 ADA, 250 NIGHT, 1 other token');
     expect(r.tag).toBe('431819262709d4f7e2e7b293474c0743');
     expect(r.requireInteraction).toBe(false);
@@ -52,7 +52,7 @@ describe('payload rendering (§6.7), every t of §6.2', () => {
 
   it('funds without amounts: no wallet name, generic body (the user did not opt into details)', () => {
     const r = render(JSON.stringify({ ...JSON.parse(EX.funds), a: undefined }));
-    expect(r.title).toBe('ADA Received');
+    expect(r.title).toBe('Funds Received');
     expect(r.body).toBe('You received funds');
   });
 
@@ -85,7 +85,7 @@ describe('payload rendering (§6.7), every t of §6.2', () => {
   });
 
   it('German strings', () => {
-    expect(render(EX.funds, { locale: 'de' }).title).toBe('ADA erhalten · Daily Cardano');
+    expect(render(EX.funds, { locale: 'de' }).title).toBe('Guthaben erhalten · Daily Cardano');
     expect(render(EX.funds_summary.replace('"n":3', '"n":1'), { locale: 'de' }).body).toBe('1 weitere Transaktion');
   });
 
@@ -112,7 +112,7 @@ describe('payload rendering (§6.7), every t of §6.2', () => {
 
   it('an expired push renders the category text with no amounts and no deep link', () => {
     const r = render(EX.funds, { now: 1790640060001 });
-    expect(r.title).toBe('ADA Received');
+    expect(r.title).toBe('Funds Received');
     expect(r.body).toBe(us.PUSH_CATEGORY_FUNDS);
     expect(r.body).not.toContain('12.5');
     expect(r.route).toEqual({ dashboard: '/transactions', sidepanel: '/activity' });
