@@ -34,6 +34,7 @@ import { signInWithGoogle } from '@/chrome/auth';
 import { loadConfig, loadWallets } from '@/plugins/geroLoader';
 import WalletStore, { hydrateWalletStore, matchesDappWhitelistEntry, walletStore } from '@/stores/walletStore';
 import { walletManager } from '@/services/walletManager.service';
+import { getNotifyState, installNotifyListeners, notifyActions, onNotifyAlarm, reassert as notifyReassert } from '@/services/notify/notifyBackground';
 import { shouldAutoLock } from '@/services/autoLock';
 import { nexusCollateralApi } from '@/api/nexus-collateral-api';
 import { toNexusNetwork } from '@/api/nexus-tx-api';
@@ -112,6 +113,11 @@ loadConfig().then(() => {
 // call throws and, at top level, would kill the whole service worker.
 const sidePanelSupported = !!chrome.sidePanel;
 
+// Push notifications (handover B2/B3): service-worker listeners must be added in the
+// worker's first turn, synchronously, or a push wake never sees them. Feature-detected
+// inside (no registration on the Firefox background page).
+installNotifyListeners();
+
 // Restore side panel behavior from its own chrome.storage key
 chrome.storage.local.get('openMiniGeroOnClick', (result) => {
   if (result['openMiniGeroOnClick'] && sidePanelSupported) {
@@ -121,6 +127,11 @@ chrome.storage.local.get('openMiniGeroOnClick', (result) => {
 loadWallets().then(async () => {
   // Wait for the wallet store to be hydrated from Chrome storage
   await hydrateWalletStore();
+
+  // Push notifications: re-assert the registration on every worker start (§8.2). Not
+  // awaited, and it needs no logged-in wallet; the opt-out rule inside makes it a no-op
+  // (queue flush only) while the user has not turned notifications on.
+  void notifyReassert('start');
 
   if (walletStore.loggedWallet) {
     // Safety: clear stale isLocked if no unlock method is configured
@@ -597,6 +608,8 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     import('@/services/walletConnect/walletConnect.service').then(({ walletConnectService }) => {
       walletConnectService.pingAll().catch(() => {});
     }).catch(() => {});
+  } else {
+    onNotifyAlarm(alarm.name); // notify-reassert (daily) and notify-retry (after a long Retry-After)
   }
 });
 
@@ -2671,6 +2684,70 @@ function crossDeviceReply(id: string, data: unknown) {
   return { id, data, target: TARGET, sender: SENDER.extension };
 }
 
+// ---- Push notifications (handover B2) -------------------------------------
+// The worker owns the subscription, the relay-key signatures and every call to the
+// notify API; the UI only sends these. The mutators are extension-page-only
+// (senderTrust.ts). NOTIFY_ENABLE_WALLET carries the spending auth that signs the
+// wallet-control proof when none is cached (same path as remote signing).
+app.addToOptions(MessageTypes.NOTIFY_GET_STATE, async (request, sendResponse) => {
+  try {
+    sendResponse(crossDeviceReply(request.id, { success: true, state: await getNotifyState() }));
+  } catch (error) {
+    sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
+  }
+});
+
+app.addToOptions(MessageTypes.NOTIFY_SET_BROWSER_ENABLED, async (request, sendResponse) => {
+  try {
+    const result = await notifyActions.setBrowserEnabled(request.data?.enabled === true);
+    sendResponse(crossDeviceReply(request.id, { success: true, result, state: await getNotifyState() }));
+  } catch (error) {
+    sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
+  }
+});
+
+app.addToOptions(MessageTypes.NOTIFY_ENABLE_WALLET, async (request, sendResponse) => {
+  try {
+    const password = typeof request.data?.password === 'string' ? request.data.password : undefined;
+    const pkBytes = request.data?.privateKeyBytes;
+    const privateKeyBytes = Array.isArray(pkBytes) ? Uint8Array.from(pkBytes) : undefined;
+    const auth = password !== undefined || privateKeyBytes ? { password, privateKeyBytes } : undefined;
+    const result = await notifyActions.enableWallet(auth);
+    sendResponse(crossDeviceReply(request.id, { success: true, result, state: await getNotifyState() }));
+  } catch (error) {
+    sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
+  }
+});
+
+app.addToOptions(MessageTypes.NOTIFY_DISABLE_WALLET, async (request, sendResponse) => {
+  try {
+    await notifyActions.disableWallet(Number(request.data?.walletId));
+    sendResponse(crossDeviceReply(request.id, { success: true, state: await getNotifyState() }));
+  } catch (error) {
+    sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
+  }
+});
+
+app.addToOptions(MessageTypes.NOTIFY_SET_PREFS, async (request, sendResponse) => {
+  try {
+    const result = await notifyActions.setPrefs(Number(request.data?.walletId), request.data?.prefs ?? {});
+    sendResponse(crossDeviceReply(request.id, { success: result === 'ok', result, state: await getNotifyState() }));
+  } catch (error) {
+    sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
+  }
+});
+
+// Sent by the Advanced tab BEFORE GeroStore.removeWallet, so the DELETE is queued
+// durably while the wallet still exists (§8.5).
+app.addToOptions(MessageTypes.NOTIFY_WALLET_REMOVED, async (request, sendResponse) => {
+  try {
+    await notifyActions.walletRemoved(Number(request.data?.walletId));
+    sendResponse(crossDeviceReply(request.id, { success: true }));
+  } catch (error) {
+    sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
+  }
+});
+
 app.addToOptions(MessageTypes.GET_CROSS_DEVICE_SETTINGS, async (request, sendResponse) => {
   sendResponse(crossDeviceReply(request.id, { success: true, settings: walletManager.getRemoteSigningSettings() }));
 });
@@ -3329,6 +3406,8 @@ app.addToOptions(MessageTypes.LOGIN, async (request, sendResponse) => {
     console.log('login', request)
     const walletBg = await walletManager.login(request.data.wallet);
     if (walletBg) {
+      // Push notifications: the opened wallet may need its link re-sent (§8.2 (c)).
+      void notifyReassert('login');
       // Initialize WalletConnect in background (non-blocking), gated by the flag.
       if (await isWalletConnectEnabled()) {
         import('@/services/walletConnect/walletConnect.service').then(({ walletConnectService }) => {

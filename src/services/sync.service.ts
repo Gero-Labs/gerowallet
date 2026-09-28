@@ -9,6 +9,7 @@ import { AxiosResponse } from 'axios';
 import { parseHttpError } from '@/shared/utils/parser';
 import { WalletBg } from '@/chrome/walletBg';
 import { debugLog } from '@/utils/debug';
+import { notifyHooks } from '@/services/notify/notifyHooks';
 import blockchainApi from '@/api/blockchain-api';
 import webSocketService, { type WsSyncMessage } from '@/services/websocket.service';
 import WalletStore, { walletStore } from '@/stores/walletStore';
@@ -343,6 +344,7 @@ export class SyncService {
         if (expanded) {
           debugLog(`🔄 Resubscribing with expanded credentials (${expanded.length})`);
           webSocketService.resubscribe(0, expanded);
+          notifyHooks.credentialsChanged(); // the push registration's credential set grew too (§8.2 step 4)
           return; // resubscribe will trigger a new catch-up with the full credential set
         }
       }

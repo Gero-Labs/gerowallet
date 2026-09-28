@@ -169,4 +169,14 @@ export enum MessageTypes {
   // — WalletStore.setLoggedWallet broadcasts the new blob back to the options
   // store too — so the OLD password stops working immediately, no re-login.
   REFRESH_LOGGED_WALLET_SECRET = 'REFRESH_LOGGED_WALLET_SECRET',
+  // Push notifications (handover B2). The worker owns every subscription and every
+  // signed call; the UI only asks. Mutating ones are extension-page-only (senderTrust).
+  NOTIFY_GET_STATE = 'NOTIFY_GET_STATE',
+  NOTIFY_SET_BROWSER_ENABLED = 'NOTIFY_SET_BROWSER_ENABLED',
+  NOTIFY_ENABLE_WALLET = 'NOTIFY_ENABLE_WALLET', // carries auth (password | privateKeyBytes) for the proof
+  NOTIFY_DISABLE_WALLET = 'NOTIFY_DISABLE_WALLET',
+  NOTIFY_SET_PREFS = 'NOTIFY_SET_PREFS',
+  NOTIFY_WALLET_REMOVED = 'NOTIFY_WALLET_REMOVED', // sent BEFORE GeroStore.removeWallet
+  NOTIFY_PRESENT = 'NOTIFY_PRESENT', // worker -> page (B-M2)
+  NOTIFY_TOAST_SHOWN = 'NOTIFY_TOAST_SHOWN', // page -> worker (B-M2)
 }

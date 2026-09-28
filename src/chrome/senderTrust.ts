@@ -25,6 +25,12 @@ export const EXTENSION_PAGE_ONLY_METHODS = new Set<string>([
   'REQUEST_CROSS_DEVICE_SIGNATURE',
   'PRODUCE_DEVICE_REGISTER_PROOF',
   'SUPPORT_CHAT_AUTH',
+  // Push notifications: subscribe / register / unregister this browser and its wallets.
+  'NOTIFY_SET_BROWSER_ENABLED',
+  'NOTIFY_ENABLE_WALLET',
+  'NOTIFY_DISABLE_WALLET',
+  'NOTIFY_SET_PREFS',
+  'NOTIFY_WALLET_REMOVED',
 ]);
 
 /**
