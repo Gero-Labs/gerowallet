@@ -676,7 +676,7 @@ export async function getCollateral(
  * {@code lovelace}); we synthesize the cardano-sdk core shape here so the call
  * site can return the same kind of value used elsewhere in this file.
  */
-function buildNexusUtxoCbor(lent: { txHash: string; outputIndex: number; address: string; lovelace: string }): string {
+export function buildNexusUtxoCbor(lent: { txHash: string; outputIndex: number; address: string; lovelace: string }): string {
   // Defence-in-depth: the lent UTxO's network is decided server-side by Nexus
   // (COLLATERAL_NETWORK). If it ever disagrees with the wallet's connected
   // network, a mixed-network tx would be built and rejected by the node — and a

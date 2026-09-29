@@ -6,6 +6,7 @@ import { Buffer } from 'buffer';
 import Loading from '@/stores/loading';
 import { Messaging } from '@/chrome/messaging';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
+import { mergeWitnessSets } from '@/shared/utils/witnessSets';
 import { isStakeKeyRegistered } from '@/shared/utils/stakeRegistration';
 import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, POPUP, SENDER, TARGET, TxSendError, TxSignError } from '@/chrome/config';
 import { toDappError } from '@/chrome/dappError';
@@ -2510,33 +2511,6 @@ app.addToOptions(MessageTypes.SIGN_DATA, async (request, sendResponse) => {
     });
   }
 });
-
-/**
- * Merge two TransactionWitnessSet CBOR blobs into one. Used to fold the Nexus
- * collateral co-sign witness into the user's witness before returning to the
- * dApp. Cardano's witness set deduplicates VKeyWitnesses by pubkey, so the
- * Map-based merge preserves both signers without producing duplicates.
- */
-async function mergeWitnessSets(userWitnessCbor: string, extraWitnessCbor: string): Promise<string> {
-  const { Serialization } = await import('@cardano-sdk/core');
-  const { HexBlob } = await import('@cardano-sdk/util');
-
-  const userCore = Serialization.TransactionWitnessSet.fromCbor(HexBlob(userWitnessCbor)).toCore();
-  const extraCore = Serialization.TransactionWitnessSet.fromCbor(HexBlob(extraWitnessCbor)).toCore();
-
-  const merged = {
-    signatures: new Map([
-      ...(userCore.signatures?.entries() || []),
-      ...(extraCore.signatures?.entries() || []),
-    ]),
-    ...(userCore.bootstrap && { bootstrap: userCore.bootstrap }),
-    ...(userCore.scripts && { scripts: userCore.scripts }),
-    ...(userCore.redeemers && { redeemers: userCore.redeemers }),
-    ...(userCore.datums && { datums: userCore.datums }),
-  };
-
-  return Serialization.TransactionWitnessSet.fromCore(merged).toCbor();
-}
 
 /**
  * Register a collateral ref that NEXUS lent server-side (first-party DUST flows, where
