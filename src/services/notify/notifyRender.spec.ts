@@ -90,7 +90,7 @@ describe('payload rendering (§6.7), every t of §6.2', () => {
   });
 
   it('Spanish strings, and an unsupported locale falls back to English', () => {
-    expect(render(EX.funds, { locale: 'es' }).title).toBe('ADA recibido · Daily Cardano');
+    expect(render(EX.funds, { locale: 'es' }).title).toBe('Fondos recibidos · Daily Cardano');
     expect(render(EX.funds_summary.replace('"n":3', '"n":1'), { locale: 'es' }).body).toBe('1 transacción más');
     expect(render(EX.funds, { locale: 'fr' }).title).toBe(render(EX.funds).title);
   });

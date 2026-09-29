@@ -125,7 +125,7 @@ export const pushStrings: Record<PushLocale, Record<PushStringKey, string>> = {
     PUSH_CATEGORY_GOVERNANCE: 'Hay novedades sobre tu delegación de gobernanza',
     PUSH_CATEGORY_REMOTESIGNING: 'Hay un evento de seguridad en esta billetera',
     PUSH_CATEGORY_SYSTEM: 'Una notificación de Gero',
-    PUSH_FUNDS_TITLE: 'ADA recibido',
+    PUSH_FUNDS_TITLE: 'Fondos recibidos',
     PUSH_FUNDS_BODY: 'Recibiste fondos',
     PUSH_FUNDS_BODY_AMOUNT: 'Recibiste {amount}',
     PUSH_FUNDS_SUMMARY_TITLE: 'Fondos recibidos',
