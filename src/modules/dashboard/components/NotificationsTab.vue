@@ -318,8 +318,10 @@ function onPasskeySuccess(bytes: Uint8Array) { void runAuth({ privateKeyBytes: A
 function onPasskeyError(e: Error) { authError.value = e?.message || t('notify.wallet.authFailed'); }
 
 // ---- Preferences (synced sections are written whole, §4.8) ----
-const synced = computed(() => link.value?.prefs?.synced ?? { categoriesOff: [], showAmounts: false, minReceiveLovelace: 1_000_000, updatedAt: null });
+const synced = computed(() => link.value?.prefs?.synced ?? { categoriesOff: [], typesOff: [], showAmounts: false, minReceiveLovelace: 1_000_000, updatedAt: null });
 const categoriesOff = computed(() => synced.value.categoriesOff);
+// A prefs reply from an older server lacks the field.
+const typesOff = computed(() => synced.value.typesOff ?? []);
 const CATEGORY_LABEL: Record<string, string> = { funds: 'notify.category.funds', staking: 'notify.category.staking', swap: 'notify.category.swap', adam: 'notify.category.adam', governance: 'notify.category.governance' };
 /** Open question 6: show a category served on ANY transport for the wallet's network; hide one served nowhere. */
 const categories = computed(() => {
@@ -332,11 +334,12 @@ const categories = computed(() => {
     .filter((id) => !c.securityCategories.includes(id) && servedAnywhere.has(id))
     .map((id) => ({ id, label: CATEGORY_LABEL[id] ? t(CATEGORY_LABEL[id]) : id, servedHere: servedHere.has(id) }));
 });
-async function writeSynced(patch: Partial<{ categoriesOff: string[]; showAmounts: boolean; minReceiveLovelace: number }>) {
+async function writeSynced(patch: Partial<{ categoriesOff: string[]; typesOff: string[]; showAmounts: boolean; minReceiveLovelace: number }>) {
   // One write per change: Vuetify fires keyup/change twice on some paths, and the second call would still see the old state.
   if (!logged.value || busy.value) return;
   const { categoriesOff: off, showAmounts, minReceiveLovelace } = synced.value;
-  const ok = await store.setPrefs(logged.value.walletId, { synced: { categoriesOff: off, showAmounts, minReceiveLovelace, ...patch } });
+  const off2 = typesOff.value;
+  const ok = await store.setPrefs(logged.value.walletId, { synced: { categoriesOff: off, typesOff: off2, showAmounts, minReceiveLovelace, ...patch } });
   walletError.value = ok ? '' : t('notify.saveFailed');
 }
 function setCategory(id: string, on: boolean) {

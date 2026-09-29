@@ -87,6 +87,9 @@ const EVENT_KEYS: Record<string, { title: PushStringKey; body: PushStringKey }> 
   test: { title: 'PUSH_TEST_TITLE', body: 'PUSH_TEST_BODY' },
 };
 
+/** The event types the wallet can render, for the settings catalogue. */
+export const KNOWN_EVENT_TYPES = Object.keys(EVENT_KEYS);
+
 export function pushLocale(locale: string | undefined): PushLocale {
   return locale === 'de' ? 'de' : 'us';
 }

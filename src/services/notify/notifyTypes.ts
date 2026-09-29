@@ -74,6 +74,7 @@ export interface DeviceView {
 
 export interface SyncedPrefs {
   categoriesOff: string[];
+  typesOff: string[];
   showAmounts: boolean;
   minReceiveLovelace: number;
   updatedAt: number | null;
