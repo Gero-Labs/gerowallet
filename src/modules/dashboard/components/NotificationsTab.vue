@@ -67,7 +67,8 @@
               <v-col cols="9" class="text-left">
                 <button type="button" class="notify-row__label" :disabled="busy" @click="setCategory(cat.id, categoriesOff.includes(cat.id))">
                   <span class="notify-row-title">{{ cat.label }}</span>
-                  <span v-if="!cat.servedHere" class="helper my-0 d-block">{{ $t('notify.categories.notHere') }}</span>
+                  <span v-if="!cat.servedAnywhere" class="helper my-0 d-block">{{ $t('notify.categories.comingSoon') }}</span>
+                  <span v-else-if="!cat.servedHere" class="helper my-0 d-block">{{ $t('notify.categories.notHere') }}</span>
                 </button>
               </v-col>
               <v-col cols="3" style="display: flex;">
@@ -367,9 +368,11 @@ const categories = computed(() => {
   if (!c || !net) return [];
   const servedHere = new Set(link.value?.servedCategories ?? c.servedCategories['webpush']?.[net] ?? []);
   const servedAnywhere = new Set(Object.values(c.servedCategories).flatMap((byNet) => byNet[net] ?? []));
+  // Every category the server knows is listed, so a user can set their choices before an alert
+  // ships: one served nowhere yet says "coming soon", one served elsewhere says "not here".
   return c.categories
-    .filter((id) => !c.securityCategories.includes(id) && servedAnywhere.has(id))
-    .map((id) => ({ id, label: CATEGORY_LABEL[id] ? t(CATEGORY_LABEL[id]) : id, servedHere: servedHere.has(id) }));
+    .filter((id) => !c.securityCategories.includes(id))
+    .map((id) => ({ id, label: CATEGORY_LABEL[id] ? t(CATEGORY_LABEL[id]) : id, servedHere: servedHere.has(id), servedAnywhere: servedAnywhere.has(id) }));
 });
 async function writeSynced(patch: Partial<{ categoriesOff: string[]; typesOff: string[]; showAmounts: boolean; minReceiveLovelace: number }>) {
   // One write per change: Vuetify fires keyup/change twice on some paths, and the second call would still see the old state.

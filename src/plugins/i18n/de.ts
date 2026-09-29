@@ -3090,6 +3090,7 @@ export default {
   'notify.categories.title': 'Hinweise',
   'notify.categories.synced': 'Mit deinen anderen Gero-Geräten synchronisiert',
   'notify.categories.notHere': 'Wird an diesen Browser noch nicht zugestellt',
+  'notify.categories.comingSoon': 'Demnächst. Dafür wird noch nichts gesendet; deine Wahl bleibt gespeichert.',
   'notify.category.funds': 'Erhaltenes Guthaben',
   'notify.category.staking': 'Staking-Belohnungen',
   'notify.category.swap': 'Swap-Aufträge',

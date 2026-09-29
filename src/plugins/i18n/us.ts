@@ -2604,6 +2604,7 @@ export default {
   'notify.categories.title': 'Alerts',
   'notify.categories.synced': 'Synced with your other Gero devices',
   'notify.categories.notHere': 'Not delivered to this browser yet',
+  'notify.categories.comingSoon': 'Coming soon. Nothing is sent for this yet; your choice is kept.',
   'notify.category.funds': 'Received funds',
   'notify.category.staking': 'Staking rewards',
   'notify.category.swap': 'Swap orders',
