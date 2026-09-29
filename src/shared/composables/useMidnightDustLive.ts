@@ -12,10 +12,26 @@
  * DUST reaches a wallet two ways: Path A is
  * native NIGHT UTxOs on Midnight — everything this file computed before the
  * Path-B work landed. Path B is cNIGHT held on Cardano, paired to this
- * wallet's dust address through the mapping validator; `useDustPathB` sums
- * that side from Nexus's `dust/status` batch endpoint. Every value this
- * composable exports below is Path A + Path B summed, so consumers don't
- * need to know which path a given unit of DUST came from.
+ * wallet's dust address through the mapping validator; `useDustPathB` reads
+ * that side from Nexus's `dust/destination` endpoint. The values this
+ * composable exports below combine the two, so consumers don't need to know
+ * which path a given unit of DUST came from.
+ *
+ * COMBINING THEM IS NOT ALWAYS A SUM. Path B's figures are the DESTINATION
+ * totals for this wallet's dust address, and the destination total already
+ * contains any native NIGHT registered to that same address: midnight-ledger
+ * v8 emits the same `DustInitialUtxo` event, with the same DustPublicKey
+ * owner, for a native registration, a NIGHT output to a delegated address and
+ * a cNIGHT observation, and the indexer sums `dust_generation_info` by owner
+ * with no source filter (verified in the ledger and indexer source; see
+ * Gero-Labs/nexus PR 1169). Adding Path A on top would count that NIGHT twice.
+ * So once Path B reports a registration AND its figures are destination-wide
+ * (`pathBIsDestinationWide`), Path B alone supplies the battery. In every
+ * other case (Path B not registered, or the fallback whose `dust/status` row
+ * is one generation row and carries no such guarantee) Path A is added, as
+ * before. Known gap: Path A does not check which dust address its native
+ * registration points at, so native NIGHT registered to a DIFFERENT dust
+ * address than this wallet's is dropped while Path B is registered.
  *
  * The polling state is shared module-wide via refcount so multiple
  * components (portfolio chart + registration dialog + …) consuming this
@@ -190,13 +206,16 @@ function pathAPollHasSignal(): boolean {
 }
 
 export interface MidnightDustLive {
-  /** Extrapolated current DUST balance, Path A + Path B, each clamped to its own cap. Updates every 1s. */
+  /**
+   * Extrapolated current DUST balance, each path clamped to its own cap. Updates every 1s.
+   * Path A is dropped while Path B reports a destination-wide registration (see the file header).
+   */
   readonly dustBalance: ComputedRef<bigint>;
-  /** Per-second generation rate, Path A + Path B (atomic units / sec). */
+  /** Per-second generation rate (atomic units / sec), combined the same way. */
   readonly dustGenerating: ComputedRef<bigint>;
-  /** Asymptotic cap, Path A + Path B. */
+  /** Asymptotic cap, combined the same way. */
   readonly dustCap: ComputedRef<bigint>;
-  /** Sum of NIGHT registered for DUST generation, Path A + Path B. */
+  /** NIGHT registered for DUST generation, combined the same way. */
   readonly nightRegistered: ComputedRef<bigint>;
   /** "Registered" / "Unregistered" / ... — 'Registered' when either path is. */
   readonly registrationStatus: ComputedRef<string>;
@@ -230,8 +249,14 @@ export function useMidnightDustLive(): MidnightDustLive {
   // registered at module load, above — see its comment.
 
   const {
-    pathBBalance, pathBCap, pathBRate, pathBNight, pathBRegistered, pathBAsOfMs, pathBBatchAsOfMs,
+    pathBBalance, pathBCap, pathBRate, pathBNight, pathBRegistered, pathBIsDestinationWide,
+    pathBAsOfMs, pathBBatchAsOfMs,
   } = useDustPathB();
+
+  // Path A is dropped, not added, when Path B already contains it (see the file header).
+  // `pathBRegistered` is read first so the flag is only consulted once Path B has reported
+  // a registration.
+  const pathBSupersedesA = computed(() => pathBRegistered.value && pathBIsDestinationWide.value);
 
   const pathABalance = computed<bigint>(() => {
     // No successful poll yet, or the poll was hollow (see pathAPollHasSignal)
@@ -258,26 +283,29 @@ export function useMidnightDustLive(): MidnightDustLive {
     return live;
   });
 
-  const dustBalance = computed<bigint>(() => pathABalance.value + pathBBalanceExtrapolated.value);
+  const dustBalance = computed<bigint>(
+    () => (pathBSupersedesA.value ? 0n : pathABalance.value) + pathBBalanceExtrapolated.value,
+  );
 
   return {
     dustBalance,
     dustGenerating: computed(() => {
       const a = pathAPollHasSignal() ? polledGenerating.value : (midnightStore.balances?.dustGenerating ?? 0n);
-      return a + pathBRate.value;
+      return (pathBSupersedesA.value ? 0n : a) + pathBRate.value;
     }),
     dustCap: computed(() => {
       const a = pathAPollHasSignal() ? polledCap.value : (midnightStore.dustState?.cap ?? 0n);
-      return a + pathBCap.value;
+      return (pathBSupersedesA.value ? 0n : a) + pathBCap.value;
     }),
     nightRegistered: computed(() => {
       const a = pathAPollHasSignal() ? polledNightRegistered.value : (midnightStore.balances?.nightRegistered ?? 0n);
-      return a + pathBNight.value;
+      return (pathBSupersedesA.value ? 0n : a) + pathBNight.value;
     }),
     registrationStatus: computed(() => {
       const a = pathAPollHasSignal()
         ? polledRegistrationStatus.value
         : (midnightStore.dustState?.registrationStatus ?? 'Unregistered');
+      // Either path being registered is enough, even when Path B supersedes Path A's figures.
       return (a === 'Registered' || pathBRegistered.value) ? 'Registered' : a;
     }),
     // Path B has its own independent poll — a pure-Path-B wallet whose

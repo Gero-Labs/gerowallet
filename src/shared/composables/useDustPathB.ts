@@ -4,12 +4,23 @@
  * registration path), as opposed to Path A — native NIGHT UTxOs on
  * Midnight, which `useMidnightDustLive` computes from `dust/account-state`.
  *
- * Nexus's `dust/status` / `dust/status/batch` already return per-Cardano-
- * stake capacity/rate numbers (`current_capacity`, `max_capacity`,
- * `generation_rate`, `night_balance`) — no new Nexus endpoint is needed.
- * This composable enumerates every Cardano stake address the user controls
- * on the anchored Cardano network, batch-queries their status, and keeps
- * only the rows that are live-registered to THIS wallet's dust address.
+ * Asks Nexus ONE question per poll — `GET dust/destination` for THIS wallet's
+ * dust address — and takes the answer as it comes. The indexer's DUST figures
+ * are per DUST ADDRESS, not per stake (it hands the same destination total to
+ * every stake registered to the address), so the old approach of enumerating
+ * stakes and summing their `dust/status` rows multiplied the figures by the
+ * number of stakes. `dust/destination` returns the totals once, plus the stakes
+ * behind them, and finds those stakes from the on-chain registrations rather
+ * than from the stakes this extension happens to hold — so a registration made
+ * from the official portal or another wallet is seen too.
+ *
+ * Because that answer does not depend on enumerable stakes, every successful
+ * response is definitive and stamps `pathBBatchAsOfMs`, zero included.
+ *
+ * FALLBACK: a Nexus that does not have the endpoint yet answers 404/501; then
+ * this reads the old per-stake `dust/status` rows instead, taking the figures from
+ * ONE row rather than summing (see `refreshFromStakes`). That path can only see stakes
+ * the extension holds, so it is not definitive.
  *
  * Module-scoped singleton with refcounted polling, same lifecycle shape as
  * `useMidnightDustLive`. Capacity/rate move slowly (a per-second drip, not
@@ -21,7 +32,12 @@
 import { computed, onBeforeUnmount, ref, watch, type ComputedRef } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import { midnightStore } from '@/stores/midnightStore';
-import { getMidnightApi, MidnightDustRegistrationStatusDto } from '@/api/midnight-api';
+import {
+  DustDestinationUnsupportedError,
+  getMidnightApi,
+  type MidnightDustDestinationDto,
+  type MidnightDustRegistrationStatusDto,
+} from '@/api/midnight-api';
 import { enumerateCardanoStakeIdentities } from '@/shared/composables/useCardanoStakeEnumeration';
 import { debugLog } from '@/utils/debug';
 
@@ -37,17 +53,33 @@ const pathBRegistered = ref<boolean>(false);
 const pathBStakes = ref<string[]>([]);
 const pathBAsOfMs = ref<number>(0);
 /**
- * Stamped ONLY by a successful `dust/status/batch` poll — never by the
- * "no enumerable stakes" exit. That exit stamps `pathBAsOfMs` so extrapolation
- * and `hasData` treat it as a current reading, which is right for display.
- * But it is not a definitive zero: the extension can only enumerate stakes it
- * holds, and a wallet whose DUST is credited by a stake registered from the
- * portal or another wallet has NO enumerable stakes and plenty of DUST.
- * Anything that would REFUSE an action on "Path B is zero" must key off this,
- * where "no stakes" stays unknown — the same call
+ * Stamped by a poll whose answer is DEFINITIVE: any successful `dust/destination`
+ * response (zero included: it does not depend on which stakes the extension can
+ * enumerate), or a successful fallback `dust/status/batch` poll. NOT by the
+ * fallback's "no enumerable stakes" exit. That exit stamps `pathBAsOfMs` so
+ * extrapolation and `hasData` treat it as a current reading, which is right for
+ * display, but it is not a definitive zero: on that path the extension can only
+ * enumerate stakes it holds, and a wallet whose DUST is credited by a stake
+ * registered from the portal or another wallet has NO enumerable stakes and
+ * plenty of DUST. Anything that would REFUSE an action on "Path B is zero" must
+ * key off this, where "no stakes" stays unknown, the same call
  * `midnightSponsorEligibility` already makes.
  */
 const pathBBatchAsOfMs = ref<number>(0);
+/**
+ * True when the current figures came from `dust/destination`: destination-wide
+ * totals, which ALREADY include any native NIGHT registered to this dust address.
+ * Path A must not be added on top of them (see `useMidnightDustLive`).
+ *
+ * Why they include it: midnight-ledger v8 builds every generation record in one
+ * function (`fresh_dust_output`, ledger/src/dust.rs) and emits the same
+ * `DustInitialUtxo` event, with a DustPublicKey owner, for a native registration,
+ * a NIGHT output to a delegated address and a cNIGHT observation; the indexer
+ * stores each in `dust_generation_info` with no source filter and
+ * `dustGenerations` sums that table by owner. False on the fallback path, whose
+ * `dust/status` row is one generation row and carries no such guarantee.
+ */
+const pathBIsDestinationWide = ref<boolean>(false);
 /**
  * Stakes carrying a live registration UTxO on CARDANO that points at this
  * wallet's dust address, but which the Midnight indexer hasn't relayed yet.
@@ -87,6 +119,7 @@ function resetPathBState(): void {
   pathBRegistered.value = false;
   pathBStakes.value = [];
   pathBIncomingStakes.value = [];
+  pathBIsDestinationWide.value = false;
   pathBAsOfMs.value = 0;
   pathBBatchAsOfMs.value = 0;
 }
@@ -117,16 +150,72 @@ async function refreshOnce() {
   }
   if (!network || !dustAddress) return;
 
+  let destination: MidnightDustDestinationDto;
+  try {
+    destination = await getMidnightApi(network).getDustDestination(dustAddress);
+  } catch (e) {
+    if (key !== committedKey) return; // superseded by a later wallet switch
+    if (e instanceof DustDestinationUnsupportedError) {
+      await refreshFromStakes(network, dustAddress, key);
+      return;
+    }
+    // Keep the last successful sums FOR THIS IDENTITY — a transient Nexus
+    // failure must not zero out the cNIGHT-backed portion of the battery.
+    // (A genuine identity change already reset state above, so this only
+    // ever preserves same-wallet data, never a stale different wallet's.)
+    debugLog('🌙 dust/destination poll failed (Path B)', e);
+    return;
+  }
+  if (key !== committedKey) return; // superseded while the request was in flight
+
+  // The destination's totals, taken as they come: they are per dust address, so
+  // adding anything across stakes would multiply them. `registered` already
+  // folds in the duplicate-registration rule (a stake with more than one live
+  // registration is reported `duplicated`, never `active`).
+  pathBBalance.value = toBig(destination.currentCapacity);
+  pathBCap.value = toBig(destination.maxCapacity);
+  pathBRate.value = toBig(destination.generationRate);
+  pathBNight.value = toBig(destination.nightBalance);
+  pathBRegistered.value = destination.registered;
+  pathBStakes.value = destination.stakes
+    .filter((stake) => stake.state === 'active')
+    .map((stake) => stake.cardanoRewardAddress);
+  // Registrations confirmed on Cardano that the indexer has not counted for this
+  // address yet: the "pending" half of the gauge (see `pathBIncomingStakes`).
+  pathBIncomingStakes.value = destination.stakes
+    .filter((stake) => stake.state === 'relaying')
+    .map((stake) => stake.cardanoRewardAddress);
+  pathBIsDestinationWide.value = true;
+  pathBAsOfMs.value = Date.now();
+  pathBBatchAsOfMs.value = pathBAsOfMs.value;
+}
+
+/**
+ * FALLBACK for a Nexus without `dust/destination`. Delete this function, together
+ * with `findIncomingRegistrations`, `STATUS_BATCH_LIMIT` and the enumeration
+ * import, once every Nexus serves the endpoint.
+ *
+ * Enumerates the Cardano stakes this extension holds, batch-queries their
+ * `dust/status`, and keeps the rows live-registered to THIS wallet's dust address.
+ * Those rows all describe the same destination, and each carries the destination
+ * total, so the figures are taken from ONE of them, not summed.
+ *
+ * It can only see stakes the extension holds, so unlike the destination path it is
+ * never definitive about "no stakes", and its figures are not known to include
+ * native NIGHT (`pathBIsDestinationWide` stays false).
+ */
+async function refreshFromStakes(network: string, dustAddress: string, key: string) {
+  pathBIsDestinationWide.value = false;
   const identities = await enumerateCardanoStakeIdentities(network);
   if (key !== committedKey) return; // superseded by a later wallet switch
   const stakes = identities.map((identity) => identity.stakeAddress);
 
   if (stakes.length === 0) {
-    // No controlled stakes for this identity — that IS this identity's real
-    // Path-B state (zero), not "unknown". Stamp the poll rather than bare-
+    // No controlled stakes for this identity. Stamp the poll rather than bare-
     // returning, so extrapolation/hasData treat it as a current reading
     // instead of silently leaving behind whatever the previous identity
-    // (already zeroed above) or a not-yet-run poll left in place.
+    // (already zeroed above) or a not-yet-run poll left in place. NOT a
+    // definitive zero — see `pathBBatchAsOfMs`.
     pathBIncomingStakes.value = [];
     pathBAsOfMs.value = Date.now();
     return;
@@ -141,11 +230,8 @@ async function refreshOnce() {
       if (key !== committedKey) return; // superseded mid-batch
     }
   } catch (e) {
-    // Keep the last successful sums FOR THIS IDENTITY — a transient Nexus
-    // failure must not zero out the cNIGHT-backed portion of the battery.
-    // (A genuine identity change already reset state above, so this only
-    // ever preserves same-wallet data, never a stale different wallet's.)
-    debugLog('🌙 dust/status batch poll failed (Path B)', e);
+    // Keep the last successful sums FOR THIS IDENTITY, as in `refreshOnce`.
+    debugLog('🌙 dust/status batch poll failed (Path B fallback)', e);
     return;
   }
   if (key !== committedKey) return; // superseded while the last chunk resolved
@@ -162,10 +248,12 @@ async function refreshOnce() {
     (r) => r.registered === true && (r.dustAddress ?? '').toLowerCase() === dustLower,
   );
 
-  pathBBalance.value = kept.reduce((sum, r) => sum + toBig(r.currentCapacity), 0n);
-  pathBCap.value = kept.reduce((sum, r) => sum + toBig(r.maxCapacity), 0n);
-  pathBRate.value = kept.reduce((sum, r) => sum + toBig(r.generationRate), 0n);
-  pathBNight.value = kept.reduce((sum, r) => sum + toBig(r.nightBalance), 0n);
+  // One row, not a sum: every kept row is the same destination.
+  const [first] = kept;
+  pathBBalance.value = toBig(first?.currentCapacity);
+  pathBCap.value = toBig(first?.maxCapacity);
+  pathBRate.value = toBig(first?.generationRate);
+  pathBNight.value = toBig(first?.nightBalance);
   pathBRegistered.value = kept.length > 0;
   pathBStakes.value = kept.map((r) => r.cardanoRewardAddress);
   pathBAsOfMs.value = Date.now();
@@ -264,23 +352,32 @@ watch(
 );
 
 export interface DustPathB {
-  /** Σ current capacity across stakes live-registered to this wallet's dust address. */
+  /**
+   * Current capacity of this wallet's dust address, counted ONCE (the destination total,
+   * not a sum over the stakes registered to it).
+   */
   readonly pathBBalance: ComputedRef<bigint>;
-  /** Σ max capacity. */
+  /** Max capacity of the destination, counted once. */
   readonly pathBCap: ComputedRef<bigint>;
-  /** Σ per-second generation rate (atomic units / sec). */
+  /** Per-second generation rate of the destination, counted once (atomic units / sec). */
   readonly pathBRate: ComputedRef<bigint>;
-  /** Σ cNIGHT balance backing generation. */
+  /** NIGHT balance backing generation at the destination, counted once. */
   readonly pathBNight: ComputedRef<bigint>;
   /** True when at least one stake is live-registered to this wallet's dust address. */
   readonly pathBRegistered: ComputedRef<boolean>;
-  /** Stake addresses kept in the sums above (Task C's pending-reconcile needs these). */
+  /**
+   * True when the figures above are destination-wide totals: they already include any native
+   * NIGHT registered to this dust address, so Path A must not be added. False on the fallback
+   * path. See the ref's doc.
+   */
+  readonly pathBIsDestinationWide: ComputedRef<boolean>;
+  /** The stakes whose registration the indexer counts for this address (Task C's pending-reconcile needs these). */
   readonly pathBStakes: ComputedRef<string[]>;
   /** Stakes registered to this wallet on Cardano but not yet relayed to Midnight. */
   readonly pathBIncomingStakes: ComputedRef<string[]>;
   /** Wall-clock ms of the last successful poll (0 = never). */
   readonly pathBAsOfMs: ComputedRef<number>;
-  /** Last SUCCESSFUL batch poll; 0 until one has completed. See the ref's doc. */
+  /** Last DEFINITIVE successful poll; 0 until one has completed. See the ref's doc. */
   readonly pathBBatchAsOfMs: ComputedRef<number>;
 }
 
@@ -303,6 +400,7 @@ export function useDustPathB(): DustPathB {
     pathBRate: computed(() => pathBRate.value),
     pathBNight: computed(() => pathBNight.value),
     pathBRegistered: computed(() => pathBRegistered.value),
+    pathBIsDestinationWide: computed(() => pathBIsDestinationWide.value),
     pathBStakes: computed(() => pathBStakes.value),
     pathBIncomingStakes: computed(() => pathBIncomingStakes.value),
     pathBAsOfMs: computed(() => pathBAsOfMs.value),
