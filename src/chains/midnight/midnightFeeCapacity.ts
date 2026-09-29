@@ -12,28 +12,65 @@
  * mainnet 2026-09-16: a wallet with 3,381 DUST from cNIGHT, refused with
  * "You need NIGHT to send on Midnight".
  *
- * Without this check the send runs a long way before failing: it authorizes,
+ * A ZERO FROM THE INDEXER IS NEVER A VERIFIED ZERO. Everything the wallet knows
+ * about Path B comes from the Midnight indexer, and the indexer reports only the
+ * generation that is running NOW: its `dustGenerations` query sums live generation
+ * rows and excludes any row with a non-null `dtime` (midnight-indexer v4.3.0,
+ * indexer-api/src/infra/storage/dust_generations.rs). It has no notion of spendable
+ * DUST. DUST that was generated earlier is not erased when generation stops: the
+ * ledger keeps decaying each output (`DustOutput::updated_value`), so it stays
+ * spendable for a while. Two ordinary ways to get "all figures zero, but DUST in
+ * hand":
+ *   - the owner moves every backing cNIGHT away while the registration stays active
+ *     (midnight-node's cnight-observation `handle_spend` emits the generation Destroy
+ *     action without removing the mapping), so `dust/destination` answers
+ *     `registered:true` with an active stake and four zeros;
+ *   - a registration is removed, so `dust/destination` answers unregistered/zero.
+ * The wallet has no balance source that counts existing DUST outputs, so it cannot
+ * tell those wallets from one that truly has none. Refusing the send on such a zero
+ * would block a wallet that can pay (review of Gero-Labs/gerowallet#1216, round 1
+ * and round 2).
+ *
+ * So the guard is four-valued and only ever WARNS today. Once the merged balance
+ * has been reported, a positive figure is `ok`; a zero is `unverified`: the send
+ * surfaces tell the user the fee may not be payable and offer a sponsor wallet, but
+ * do not disable Send, so the user can still try with their own DUST. `none` — the
+ * only value that blocks — needs a caller to assert `verifiedZero`, which nothing
+ * does yet; it is the hook for a future balance source that accounts for existing
+ * DUST outputs.
+ *
+ * Without any check the send runs a long way before failing: it authorizes,
  * builds the transaction server-side, syncs the whole DUST ledger, and only
  * then stalls inside `dust.balanceTransactions`, which does not throw. Observed
- * on mainnet 2026-09-07 as a send that span on "Sign transaction" forever.
+ * on mainnet 2026-09-07 as a send that span on "Sign transaction" forever. That
+ * is why the user is warned up front rather than told nothing.
  *
- * Deliberately three-valued. "We haven't computed DUST state yet" is NOT the
- * same as "there is none", and blocking a send on the former would break every
- * send made before the dust state lands.
+ * "We haven't computed DUST state yet" is NOT the same as "there is none", and
+ * warning on the former would flash the notice on every send made before the
+ * dust state lands, so `unknown` never warns and never blocks.
  */
 import type { MidnightDustState } from './midnightTypes';
 
 export type MidnightFeeCapacity =
   /** DUST present — the send may proceed (it still may not be *enough*). */
   | 'ok'
-  /** Known to be zero: the send cannot possibly pay its fee. */
+  /** VERIFIED zero: the send cannot possibly pay its fee. The only value that blocks. */
   | 'none'
-  /** Not yet known. Never block on this. */
+  /**
+   * The merged balance reads zero, but zero is not verified: the indexer reports live
+   * generation, not spendable DUST (see the file header). Warn and offer a sponsor; do not block.
+   */
+  | 'unverified'
+  /** Not yet known. Never block or warn on this. */
   | 'unknown';
 
 /**
  * Path-A-only reading. Kept for callers that genuinely only have the store's
  * `dustState`; the send surfaces must use {@link midnightFeeCapacityLive}.
+ *
+ * Nothing outside this file's spec calls it or {@link blocksMidnightSend}, so it is left as
+ * it was. A new caller must not refuse on its `none` unless the source of `current` accounts
+ * for existing DUST outputs (see the file header).
  */
 export function midnightFeeCapacity(
   dustState: MidnightDustState | null | undefined,
@@ -57,28 +94,54 @@ export function blocksMidnightSend(
   return midnightFeeCapacity(dustState) === 'none';
 }
 
-/** The two live inputs the send guard needs, from `useMidnightDustLive`. */
+/** The live inputs the send guard needs, from `useMidnightDustLive`. */
 export interface MidnightLiveFeeInputs {
   /** Merged Path A + Path B DUST balance in base units — the figure the battery shows. */
   dustBalance: bigint;
   /**
-   * Both paths have reported. Until Path B has answered, the merged balance
+   * Both paths have REPORTED. Until Path B has answered, the merged balance
    * can read 0 for a wallet whose DUST comes entirely from Cardano, and
-   * blocking on that would refuse a valid send for the length of one poll.
+   * warning on that would flash the notice for the length of one poll.
+   *
+   * Reported is not verified: what Path B reports is a generation status, not a
+   * spendable balance (see the file header).
    */
   settled: boolean;
+  /**
+   * The zero balance has been VERIFIED by a source that accounts for existing DUST
+   * outputs. Nothing sets this today, so nothing is ever blocked: the hook for a
+   * future balance source that counts spendable outputs, not just live generation.
+   * Only consulted once `settled` and only while the balance reads zero.
+   */
+  verifiedZero?: boolean;
 }
 
 /**
- * Three-valued like {@link midnightFeeCapacity}, but over the merged live
- * balance. `unknown` until both paths have reported; never block on it.
+ * Four-valued like {@link midnightFeeCapacity}, but over the merged live balance:
+ * `unknown` until both paths have reported, `ok` for any positive balance, `none`
+ * only for a zero the caller asserts is verified, and `unverified` for every other
+ * zero. Only `none` blocks.
  */
 export function midnightFeeCapacityLive(live: MidnightLiveFeeInputs | null | undefined): MidnightFeeCapacity {
   if (!live || !live.settled) return 'unknown';
-  return live.dustBalance > 0n ? 'ok' : 'none';
+  if (live.dustBalance > 0n) return 'ok';
+  return live.verifiedZero === true ? 'none' : 'unverified';
 }
 
-/** Whether the UI should refuse the send outright, judged on the merged live balance. */
+/**
+ * Whether the UI should refuse the send outright, judged on the merged live balance.
+ * True only for a verified zero, so it is false for every reading the wallet can take today.
+ */
 export function blocksMidnightSendLive(live: MidnightLiveFeeInputs | null | undefined): boolean {
   return midnightFeeCapacityLive(live) === 'none';
+}
+
+/**
+ * Whether the UI should warn that this wallet may not be able to pay the fee, and offer a
+ * sponsor: an unverified zero, or a verified one. Never true for `unknown`. Does NOT mean
+ * the send should be blocked; that is {@link blocksMidnightSendLive}.
+ */
+export function mayLackDustLive(live: MidnightLiveFeeInputs | null | undefined): boolean {
+  const capacity = midnightFeeCapacityLive(live);
+  return capacity === 'unverified' || capacity === 'none';
 }

@@ -147,8 +147,13 @@
                   </v-btn>
                 </div>
 
+                <!-- An unverified zero warns and offers a sponsor; it does not disable Review. -->
+                <div v-if="mayLackDust" class="midnight-dust-note mt-3">
+                  <v-icon size="14" color="warning" class="mr-1">mdi-alert-outline</v-icon>
+                  <span>{{ $t('midnight.send.noDustFee') }}</span>
+                </div>
                 <MidnightSponsorPicker
-                  v-if="noFeeCapacity && loggedWallet"
+                  v-if="mayLackDust && loggedWallet"
                   :value="sponsorWalletId"
                   :sender-wallet-id="loggedWallet.id"
                   :network="loggedWallet.network"
@@ -381,7 +386,7 @@ import { Network, WalletType } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { midnightTokenBalances } from '@/chains/midnight/midnightTokenBalances';
 import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
-import { blocksMidnightSendLive } from '@/chains/midnight/midnightFeeCapacity';
+import { blocksMidnightSendLive, mayLackDustLive } from '@/chains/midnight/midnightFeeCapacity';
 import { historyHashForSubmittedTx } from '@/chains/midnight/midnightTxHash';
 import { useMidnightDustLive } from '@/shared/composables/useMidnightDustLive';
 import {
@@ -514,19 +519,27 @@ const recipientError = computed(() => {
 });
 
 /**
-  * No spendable DUST means no fee can be paid. Surfaced on the amount step so
+  * Whether this wallet may be unable to pay the DUST fee. Surfaced on the amount step so
   * the user learns it before authorizing, not after the SDK stalls.
   *
   * Judged on the MERGED live balance (Path A + Path B) — the figure the
   * battery shows — not the store's Path-A `dustState`, which reads zero for a
   * wallet whose DUST comes entirely from a Cardano cNIGHT registration.
-  * `unknown` (either path not yet reported) never blocks.
+  * `unknown` (either path not yet reported) never warns.
+  *
+  * A zero is only ever a WARNING here, not a refusal. The indexer reports live
+  * generation, not spendable DUST, so a zero can hide DUST that was generated earlier and is
+  * still decaying (see `midnightFeeCapacity.ts`). The user gets the notice and the sponsor
+  * picker, and Review stays enabled so they can try with their own DUST.
   */
 const dustLive = useMidnightDustLive();
-const noFeeCapacity = computed(() => blocksMidnightSendLive({
+const dustFeeInputs = computed(() => ({
   dustBalance: dustLive.dustBalance.value,
   settled: dustLive.settled.value,
 }));
+const mayLackDust = computed(() => mayLackDustLive(dustFeeInputs.value));
+/** A VERIFIED zero: the only reading that blocks. Nothing verifies one today, so this is never true. */
+const noFeeCapacity = computed(() => blocksMidnightSendLive(dustFeeInputs.value));
 
 /**
  * Wallet chosen to pay this send's DUST fee, mirroring the options-page dialog.
@@ -551,8 +564,9 @@ const sponsorInitials = computed(() => {
 });
 
 /**
- * Missing DUST only blocks the send while nothing else will pay for it — with
- * a sponsor chosen the fee comes from that wallet.
+ * A verified missing DUST balance only blocks the send while nothing else will pay for
+ * it — with a sponsor chosen the fee comes from that wallet. An unverified zero never
+ * reaches this: it warns but does not block.
  */
 const blockedByFee = computed(() => noFeeCapacity.value && sponsorWalletId.value == null);
 
@@ -855,15 +869,15 @@ async function restoreSponsorPreference() {
   const { linkFor, loadSponsorLinks } = await import('@/chains/midnight/midnightSponsorLinks');
   const link = linkFor(await loadSponsorLinks(), wallet.id, wallet.network);
   // Re-check: the capacity may have flipped while the links were loading.
-  sponsorWalletId.value = noFeeCapacity.value ? (link?.sponsorWalletId ?? null) : null;
+  sponsorWalletId.value = mayLackDust.value ? (link?.sponsorWalletId ?? null) : null;
 }
 // A saved sponsor is restored only while this wallet actually needs one, and
 // dropped the moment it does not. `sponsorWalletId` is otherwise only written
-// by the picker, which is hidden whenever `noFeeCapacity` is false — so
+// by the picker, which is hidden whenever `mayLackDust` is false — so
 // without this, a wallet that saved a sponsor back when the guard wrongly
 // refused it (a Path-B wallet, before the merged-balance fix) would send
 // sponsored with no in-dialog way to opt out.
-watch(noFeeCapacity, (needsSponsor) => {
+watch(mayLackDust, (needsSponsor) => {
   if (needsSponsor) void restoreSponsorPreference();
   else sponsorWalletId.value = null;
 }, { immediate: true });

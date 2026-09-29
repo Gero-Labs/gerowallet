@@ -18,10 +18,16 @@
  *     `dustAddress` is the only thing that says who can spend the DUST, and it
  *     is frequently NOT the wallet whose dashboard displays it.
  *
- * So eligibility is resolved structurally: take the live registration rows,
- * read each row's dust destination, and match it against the dust address a
- * wallet actually stores. A wallet is a sponsor because a registration pays
- * into its dust address — not because a number looked big somewhere.
+ * So eligibility is resolved structurally: ask about the dust address a wallet
+ * actually stores. A wallet is a sponsor because a registration pays into its
+ * dust address — not because a number looked big somewhere.
+ *
+ * 4. The indexer's DUST figures are per DUST ADDRESS, not per stake: every stake
+ *    registered to one address reports that address's total. Adding them counts
+ *    the same DUST once per stake. `sponsorStateFromDestination` reads Nexus's
+ *    `dust/destination`, which already returns the total once. `sponsorStateFor`
+ *    is the fallback over per-stake `dust/status` rows and takes the figure from
+ *    ONE row for the same reason.
  *
  * This module is pure: no Dexie, no API client, no composables. The caller
  * fetches the rows and passes stored wallet records in.
@@ -44,6 +50,21 @@ export interface DustStatusRow {
   readonly currentCapacity?: string;
   readonly maxCapacity?: string;
   readonly registrationUtxoTxHash?: string | null;
+}
+
+/**
+ * Nexus's `dust/destination` answer for one wallet's dust address, narrowed to what
+ * decides eligibility. The capacities are the destination's totals, counted once.
+ */
+export interface DustDestinationRow {
+  /** The address the answer is for. When present it must match the wallet's, or the answer is ignored. */
+  readonly dustAddress?: string;
+  /** True iff at least one stake is `active`. */
+  readonly registered: boolean;
+  readonly currentCapacity?: string;
+  readonly maxCapacity?: string;
+  /** `state` is `active` | `relaying` | `duplicated`; anything else is treated as not feeding the wallet. */
+  readonly stakes: readonly { readonly cardanoRewardAddress: string; readonly state: string }[];
 }
 
 /**
@@ -88,6 +109,15 @@ function toCapacity(value: string | undefined): bigint | null {
   }
 }
 
+/** The first value that parses, or null. Used to take a destination figure ONCE from rows that all carry it. */
+function firstCapacity(values: readonly (string | undefined)[]): bigint | null {
+  for (const value of values) {
+    const parsed = toCapacity(value);
+    if (parsed != null) return parsed;
+  }
+  return null;
+}
+
 /**
  * Resolve one wallet's sponsor state from the registration rows pointing at it.
  *
@@ -117,17 +147,14 @@ export function sponsorStateFor(
   const live = mine.filter((r) => r.registered);
 
   if (live.length > 0) {
-    // Sum across registrations: several Cardano stakes may pay one dust address.
-    // If every row's capacity is unparseable the total stays null rather than
+    // Take the capacity ONCE, not summed. Several Cardano stakes may pay one dust
+    // address, and every row that points at it carries that address's TOTAL (the
+    // indexer attributes the destination total to each stake registered to it), so
+    // adding the rows would multiply the figure by the number of stakes. Use the
+    // first row that parses. If none does, the total stays null rather than
     // collapsing to a confident zero.
-    let total: bigint | null = null;
-    let capTotal: bigint | null = null;
-    for (const row of live) {
-      const c = toCapacity(row.currentCapacity);
-      if (c != null) total = (total ?? 0n) + c;
-      const m = toCapacity(row.maxCapacity);
-      if (m != null) capTotal = (capTotal ?? 0n) + m;
-    }
+    const total = firstCapacity(live.map((row) => row.currentCapacity));
+    const capTotal = firstCapacity(live.map((row) => row.maxCapacity));
     return {
       walletId: wallet.id,
       name: wallet.name,
@@ -157,11 +184,84 @@ export function sponsorStateFor(
 }
 
 /**
- * Sponsor candidates for a send, best first.
+ * Resolve one wallet's sponsor state from Nexus's `dust/destination` answer for
+ * ITS dust address. Same three states and same meaning as `sponsorStateFor`, so
+ * the UI does not change:
  *
- * Excludes the sending wallet (sponsoring yourself is a pointless extra unlock)
- * and anything on another network — DUST is per-network and a mainnet fee
- * cannot pay for a preprod transaction.
+ * - `ready`    a stake is `active` and the destination has capacity now;
+ * - `relaying` a stake is `active` but drained, OR none is active yet and a stake is
+ *              `relaying` (on Cardano, not yet counted for this address);
+ * - `unknown`  nothing feeds the address. Deliberately not "no DUST": native NIGHT
+ *              (Path A) is not looked at here, and a `duplicated` stake may be fixed.
+ *
+ * The capacities are the destination's totals, so they are used as they are.
+ */
+export function sponsorStateFromDestination(
+  wallet: SponsorWalletRef,
+  destination: DustDestinationRow,
+): SponsorCandidate {
+  const base = { walletId: wallet.id, name: wallet.name, dustAddress: wallet.dustAddress };
+  const unknown: SponsorCandidate = { ...base, state: 'unknown', capacity: null, cap: null, fundedBy: [] };
+
+  // An answer for some other address says nothing about this wallet.
+  if (destination.dustAddress != null && norm(destination.dustAddress) !== norm(wallet.dustAddress)) {
+    return unknown;
+  }
+  const feeding = destination.stakes.filter((s) => s.state === 'active' || s.state === 'relaying');
+  const fundedBy = feeding.map((s) => s.cardanoRewardAddress).filter(Boolean);
+
+  if (destination.registered) {
+    const total = toCapacity(destination.currentCapacity);
+    return {
+      ...base,
+      // Capacity known and zero means genuinely drained, not merely unknown —
+      // but a drained registration is still relaying value in, so it is not
+      // "ready" to pay a fee right now.
+      state: total != null && total === 0n ? 'relaying' : 'ready',
+      capacity: total,
+      cap: toCapacity(destination.maxCapacity),
+      fundedBy,
+    };
+  }
+  if (feeding.some((s) => s.state === 'relaying')) {
+    return { ...base, state: 'relaying', capacity: null, cap: null, fundedBy };
+  }
+  return unknown;
+}
+
+/**
+ * The wallets that may be offered as a sponsor: not the sender (sponsoring
+ * yourself is a pointless extra unlock) and nothing on another network — DUST is
+ * per-network and a mainnet fee cannot pay for a preprod transaction.
+ */
+export function eligibleSponsorWallets(
+  wallets: readonly SponsorWalletRef[],
+  senderWalletId: number,
+  network: string,
+): SponsorWalletRef[] {
+  return wallets.filter((w) => w.id !== senderWalletId && w.network === network);
+}
+
+/** Best first: ready, then relaying, then unknown; larger known capacity first; then by name. */
+export function sortSponsorCandidates(candidates: readonly SponsorCandidate[]): SponsorCandidate[] {
+  const order: Record<SponsorState, number> = { ready: 0, relaying: 1, unknown: 2 };
+  return [...candidates].sort((a, b) => {
+    if (order[a.state] !== order[b.state]) return order[a.state] - order[b.state];
+    // Larger known capacity first; unknown capacity sorts after known.
+    const ac = a.capacity ?? -1n;
+    const bc = b.capacity ?? -1n;
+    if (ac !== bc) return bc > ac ? 1 : -1;
+    return a.name.localeCompare(b.name);
+  });
+}
+
+/**
+ * Sponsor candidates for a send, best first, from per-stake `dust/status` rows.
+ * (The current lookup uses `sponsorStateFromDestination`; this serves the fallback
+ * for a Nexus without `dust/destination`.)
+ *
+ * Excludes the sending wallet and anything on another network, see
+ * `eligibleSponsorWallets`.
  *
  * `unknown` candidates are RETAINED, deliberately. The registration may live on
  * a Cardano wallet this profile cannot enumerate, so hiding them would hide the
@@ -174,18 +274,9 @@ export function sponsorCandidates(
   senderWalletId: number,
   network: string,
 ): SponsorCandidate[] {
-  const order: Record<SponsorState, number> = { ready: 0, relaying: 1, unknown: 2 };
-  return wallets
-    .filter((w) => w.id !== senderWalletId && w.network === network)
-    .map((w) => sponsorStateFor(w, rows))
-    .sort((a, b) => {
-      if (order[a.state] !== order[b.state]) return order[a.state] - order[b.state];
-      // Larger known capacity first; unknown capacity sorts after known.
-      const ac = a.capacity ?? -1n;
-      const bc = b.capacity ?? -1n;
-      if (ac !== bc) return bc > ac ? 1 : -1;
-      return a.name.localeCompare(b.name);
-    });
+  return sortSponsorCandidates(
+    eligibleSponsorWallets(wallets, senderWalletId, network).map((w) => sponsorStateFor(w, rows)),
+  );
 }
 
 /** True when at least one candidate can pay a fee right now. */
