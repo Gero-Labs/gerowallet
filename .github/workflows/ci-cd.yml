@@ -79,6 +79,12 @@ jobs:
           } > .env.production
           echo "Wrote .env.production ($(grep -c '^VITE_' .env.production) vars)"
 
+      # A build that cannot open the gpw2 secret envelope locks out every wallet
+      # already migrated to it. Refuse to produce one (e.g. a rollback cut from an
+      # old ref). See docs/security/secret-envelope-runbook.md.
+      - name: Secret envelope readers present
+        run: node scripts/check-secret-envelope-readers.mjs
+
       - name: Build Chrome Extension
         run: npm run build
 
