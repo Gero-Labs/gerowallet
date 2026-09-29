@@ -59,8 +59,8 @@ const EDGE_AFTER = '(?![\\p{L}\\p{N}])';
 const word = (src: string) => new RegExp(`${EDGE_BEFORE}(?:${src})${EDGE_AFTER}`, 'iu');
 const stem = (src: string) => new RegExp(`${EDGE_BEFORE}(?:${src})`, 'iu');
 
-// Spanish future tense is morphological, so "will" is covered by the prediction
-// verbs and the "va a" periphrasis rather than one token. Whole words, not bare
+// Spanish future tense is morphological, so "will" is covered by a future-tense
+// ending pattern and the "va a + infinitive" periphrasis rather than one token. Whole words, not bare
 // stems, wherever a stem is also an everyday word: `venta` starts "ventana"
 // (window) and "ventaja", `sigu` starts "siguiente", and "sigue" alone also means
 // "keeps going" ("el precio sigue bajando"), so "follow" is matched only as
@@ -69,13 +69,17 @@ const stem = (src: string) => new RegExp(`${EDGE_BEFORE}(?:${src})`, 'iu');
 const ES_FORBIDDEN: RegExp[] = [
   word('compr(a|ar|as|an|e|en|es|ó|aste)'), word('vend(e|er|es|en|a|as|an|ió|iste)'), word('ventas?'),
   word('mant[eé]n(er|ga|gas)?'), word('hold(ea|ear|eando|eo)|hodl(ea|ear)?'),
-  word('deber[ií](a|as|an|amos)'), word('debes'), word('vas? a'), word('subir[aá]n?'),
+  word('deber[ií](a|as|an|amos)'), word('debes'), word('va(s|n)? a \\p{L}+(ar|er|ir)'), word('subir[aá]n?'),
+  // Any future-tense verb (the English list bans "will" outright): infinitive +
+  // -á/-án/-ás/-é/-emos, plus the irregular -drá/-brá/-rrá stems (tendrá,
+  // habrá, querrá). Accented endings only, so "extremos" never matches.
+  word('\\p{L}+(ar|er|ir|dr|br|rr)(á|án|ás|é|emos)'),
   word('bajar[aá]n?'), word('entr(ar|en)|entra ya'), word('sal(ir|gan|te)|sal ya'), word('luna'), word('pump'), word('dump'),
   word('rug'), word('cero'), word('\\d+x'), word('objetivo'), /adecuad/iu, word('para ti'),
   /recomend/iu, /ap[uú]rate/iu, word('prisa'), /[uú]ltima oportunidad/iu, /no te (lo )?pierdas/iu,
   /ahora!/iu,
   // smart-money / copy-trading slide
-  word('(sigue|siguen|seguir|siguiendo) a'), word('s[ií]gue(me|nos|los|las|lo|la)'), stem('copi'),
+  word('(sigue|siguen|seguir|siguiendo) a(?! la (baja|alza))'), word('s[ií]gue(me|nos|los|las|lo|la)'), stem('copi'),
   /dinero inteligente/iu, /smart money/iu, /ballena/iu, stem('top trader'), /mejor(es)? trader/iu, /rentable/iu,
 ];
 
@@ -116,14 +120,16 @@ describe('feed no-advice rule (every narration string, every language)', () => {
     for (const s of [
       'alguien compró ADA', 'vendió todo', '{ticker} subirá pronto', 'bajará mañana', 'mantén tus tokens',
       'es tu última oportunidad', 'ADA debería subir', 'entra ya', 'salgan antes', 'holdea tus tokens',
-      'sigue a los mejores', 'síguelos',
+      'sigue a los mejores', 'síguelos', 'ADA caerá pronto', '{ticker} se disparará', 'habrá un rally',
+      'va a subir', 'van a caer',
     ]) {
       expect(matches(s), s).toBe(true);
     }
     for (const s of [
       'comprobar el saldo', 'un vendedor', 'mantenimiento de la red', 'en la ventana de 24h',
       'una ventaja clara', 'la siguiente época', 'el precio sigue bajando', 'la subida se debe a más volumen',
-      '{ticker} entra en el top 10',
+      '{ticker} entra en el top 10', 'la recompensa va a tu billetera', '{ticker} sigue a la baja',
+      'movimientos extremos', 'está en tu billetera',
     ]) {
       expect(matches(s), s).toBe(false);
     }
@@ -133,7 +139,9 @@ describe('feed no-advice rule (every narration string, every language)', () => {
     for (const key of narrationKeys) {
       const v = ES[key];
       expect(typeof v, `missing ES narration key ${key}`).toBe('string');
-      for (const re of ES_FORBIDDEN) {
+      // English slang (moon, ape, whale alert, copy) often stays untranslated in
+      // Spanish copy, so the English list runs over Spanish narration too.
+      for (const re of [...ES_FORBIDDEN, ...EN_FORBIDDEN]) {
         expect(re.test(v), `ES ${key} matched forbidden ${re}: "${v}"`).toBe(false);
       }
     }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { READY_LANGUAGES, readyLanguageFor } from './i18n.config';
-import { PUSH_LOCALES } from './i18n/push';
+import { PUSH_LOCALES, pushStrings } from './i18n/push';
 
 /**
  * Every ready language must carry exactly the English key set, with the same
@@ -46,14 +46,29 @@ describe('i18n parity', () => {
     });
   }
 
-  it('uses no em dash in any ready language', () => {
-    const offenders = READY_LANGUAGES.flatMap((lang) => Object.entries(locale(lang)).filter(([, v]) => v.includes('—')).map(([k]) => `${lang}:${k}`));
+  it('uses no em dash in any ready language or push string', () => {
+    const tables = [
+      ...READY_LANGUAGES.map((lang) => [lang, locale(lang)] as const),
+      ...PUSH_LOCALES.map((lang) => [`push:${lang}`, pushStrings[lang] as Record<string, string>] as const),
+    ];
+    const offenders = tables.flatMap(([name, dict]) => Object.entries(dict).filter(([, v]) => v.includes('\u2014')).map(([k]) => `${name}:${k}`));
     expect(offenders).toEqual([]);
   });
 
   it('has push strings for every ready language', () => {
     expect([...PUSH_LOCALES].sort()).toEqual([...READY_LANGUAGES].sort());
   });
+
+  // The service worker renders pushes from this table alone (no vue-i18n
+  // fallback), so a missing key throws for that language's users.
+  for (const lang of PUSH_LOCALES.filter((l) => l !== 'us')) {
+    it(`push strings: ${lang} has every key with the same placeholders`, () => {
+      const us = pushStrings.us as Record<string, string>;
+      const dict = pushStrings[lang] as Record<string, string>;
+      expect(Object.keys(dict).sort()).toEqual(Object.keys(us).sort());
+      expect(Object.keys(us).filter((k) => placeholders(us[k]!).join() !== placeholders(dict[k] ?? '').join())).toEqual([]);
+    });
+  }
 });
 
 describe('readyLanguageFor', () => {
@@ -62,6 +77,7 @@ describe('readyLanguageFor', () => {
     ['de', 'de'], ['de-AT', 'de'],
     ['en', 'us'], ['en-GB', 'us'], ['EN-us', 'us'],
     ['pt-BR', 'us'], ['ja', 'us'], ['', 'us'], [undefined, 'us'], [null, 'us'],
+    ['constructor', 'us'], ['toString', 'us'], ['__proto__', 'us'],
   ])('%s -> %s', (tag, expected) => {
     expect(readyLanguageFor(tag)).toBe(expected);
   });
