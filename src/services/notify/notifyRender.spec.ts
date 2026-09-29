@@ -40,7 +40,7 @@ describe('§6.3 event tag vectors', () => {
 describe('payload rendering (§6.7), every t of §6.2', () => {
   it('funds with amounts: title carries the wallet name, body the amounts, click goes to activity with the tx', () => {
     const r = render(EX.funds);
-    expect(r.title).toBe('ADA Received · Daily Cardano');
+    expect(r.title).toBe('Funds Received · Daily Cardano');
     expect(r.body).toBe('You received 12.5 ADA, 250 NIGHT, 1 other token');
     expect(r.tag).toBe('431819262709d4f7e2e7b293474c0743');
     expect(r.requireInteraction).toBe(false);
@@ -52,7 +52,7 @@ describe('payload rendering (§6.7), every t of §6.2', () => {
 
   it('funds without amounts: no wallet name, generic body (the user did not opt into details)', () => {
     const r = render(JSON.stringify({ ...JSON.parse(EX.funds), a: undefined }));
-    expect(r.title).toBe('ADA Received');
+    expect(r.title).toBe('Funds Received');
     expect(r.body).toBe('You received funds');
   });
 
@@ -70,7 +70,7 @@ describe('payload rendering (§6.7), every t of §6.2', () => {
   });
 
   it('reward with an amount, swaps, adam, dreps and test render their own strings and routes', () => {
-    expect(render(EX.reward)).toMatchObject({ title: 'Staking Reward Received · Daily Cardano', body: 'Your staking reward of 3.21 ADA has arrived', route: { dashboard: '/staking', sidepanel: '/staking' } });
+    expect(render(EX.reward)).toMatchObject({ title: 'Staking Reward Received · Daily Cardano', body: 'Your staking reward of 3.2 ADA has arrived', route: { dashboard: '/staking', sidepanel: '/staking' } });
     expect(render(EX.swap_filled)).toMatchObject({ title: 'Swap Filled', body: us.PUSH_SWAP_FILLED_BODY, route: { dashboard: '/swap', sidepanel: null } });
     expect(render(EX.swap_cancelled)).toMatchObject({ title: 'Order Cancelled', route: { dashboard: '/swap', sidepanel: null } });
     expect(render(EX.adam_proposal)).toMatchObject({ title: us.PUSH_ADAM_TITLE, route: { dashboard: '/', sidepanel: '/' } });
@@ -85,7 +85,7 @@ describe('payload rendering (§6.7), every t of §6.2', () => {
   });
 
   it('German strings', () => {
-    expect(render(EX.funds, { locale: 'de' }).title).toBe('ADA erhalten · Daily Cardano');
+    expect(render(EX.funds, { locale: 'de' }).title).toBe('Guthaben erhalten · Daily Cardano');
     expect(render(EX.funds_summary.replace('"n":3', '"n":1'), { locale: 'de' }).body).toBe('1 weitere Transaktion');
   });
 
@@ -118,7 +118,7 @@ describe('payload rendering (§6.7), every t of §6.2', () => {
 
   it('an expired push renders the category text with no amounts and no deep link', () => {
     const r = render(EX.funds, { now: 1790640060001 });
-    expect(r.title).toBe('ADA Received');
+    expect(r.title).toBe('Funds Received');
     expect(r.body).toBe(us.PUSH_CATEGORY_FUNDS);
     expect(r.body).not.toContain('12.5');
     expect(r.route).toEqual({ dashboard: '/transactions', sidepanel: '/activity' });
@@ -163,6 +163,15 @@ describe('payload rendering (§6.7), every t of §6.2', () => {
       expect(render(withUnits(`{"qty":"1","unit":"${hosky}"},{"qty":"2","unit":"${gero}"}`).replace('"assets":[', '"otherAssets":1,"assets":[')).body).toBe('You received 12.5 ADA, 3 other tokens');
       // A symbol without a unit is display-ready as before (the contract example).
       expect(render(EX.funds, { tokenInfo: registry }).body).toBe('You received 12.5 ADA, 250 NIGHT, 1 other token');
+    });
+
+    it('quantities are short: one decimal at most, K/M/B when long, and the assets carry their units for icons', () => {
+      const r = render(withUnits(`{"sym":"GERO","qty":"1234567890","unit":"${gero}"},{"qty":"2500","unit":"${hosky}"}`).replace('"ada":"12.5"', '"ada":"1234.567"'), { tokenInfo: (unit) => (unit === gero ? { ticker: 'GERO', decimals: 6 } : { ticker: 'HOSKY', decimals: 0 }) });
+      expect(r.body).toBe('You received 1.2K ADA, 1.2K GERO, 2.5K HOSKY');
+      expect(r.assets).toEqual([{ label: 'ADA', unit: 'lovelace' }, { label: 'GERO', unit: gero }, { label: 'HOSKY', unit: hosky }]);
+      expect(render(EX.funds.replace('"ada":"12.5"', '"ada":"0.000001"')).body).toBe('You received <0.1 ADA, 250 NIGHT, 1 other token');
+      expect(render(EX.funds).assets).toEqual([{ label: 'ADA', unit: 'lovelace' }, { label: 'NIGHT' }]);
+      expect(render(EX.new_device).assets).toBeUndefined();
     });
 
     it('scaleQuantity', () => {
