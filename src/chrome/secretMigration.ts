@@ -257,39 +257,56 @@ async function migrate(walletId: number, password: string, store: SecretMigratio
 
   if (Object.keys(next).length === 0 && planned.length === 0) return { outcome: 'already-current' };
 
-  // 4. Compare-and-swap writes, one transaction per database.
-  try {
-    if (Object.keys(next).length > 0 && !(await store.casWallet(walletId, expected, next))) {
-      return { outcome: 'cas_conflict' };
-    }
-    if (planned.length > 0) {
-      const ok = await store.casConfig(walletId, planned.map(p => ({ key: p.row.key, expected: p.row.value, next: p.next })));
-      if (!ok) return { outcome: 'cas_conflict', ...next };
-    }
-  } catch {
-    return { outcome: 'write_error' };
-  }
-
-  // 5. Read back from storage and open.
-  try {
-    const stored = await store.getWallet(walletId);
-    if (next.encryptedPrivateKey !== undefined) {
-      if (stored?.encryptedPrivateKey !== next.encryptedPrivateKey) return { outcome: 'readback_fail' };
-      if (!decryptPrivateKey(stored.encryptedPrivateKey, password).equals(rootKey)) return { outcome: 'readback_fail' };
-    }
-    if (next.encryptedMnemonic !== undefined) {
-      if (stored?.encryptedMnemonic !== next.encryptedMnemonic) return { outcome: 'readback_fail' };
-      if (decrypt(stored.encryptedMnemonic, password, SecretPurpose.Mnemonic) !== mnemonic) return { outcome: 'readback_fail' };
-    }
-    if (planned.length > 0) {
-      const rows = new Map((await store.getConfig(walletId, CONFIG_KEYS)).map(r => [r.key, r]));
-      for (const p of planned) {
-        const r = rows.get(p.row.key);
-        if (!r || !sameConfigPlain(openConfigSecret(p.field, r.value, password), p.plain)) return { outcome: 'readback_fail' };
+  // 5 (per database). Read back from storage and open, before anything is reported.
+  const walletRowReadsBack = async (): Promise<boolean> => {
+    try {
+      const stored = await store.getWallet(walletId);
+      if (next.encryptedPrivateKey !== undefined) {
+        if (stored?.encryptedPrivateKey !== next.encryptedPrivateKey) return false;
+        if (!decryptPrivateKey(stored.encryptedPrivateKey, password).equals(rootKey)) return false;
       }
+      if (next.encryptedMnemonic !== undefined) {
+        if (stored?.encryptedMnemonic !== next.encryptedMnemonic) return false;
+        if (decrypt(stored.encryptedMnemonic, password, SecretPurpose.Mnemonic) !== mnemonic) return false;
+      }
+      return true;
+    } catch {
+      return false;
     }
-  } catch {
-    return { outcome: 'readback_fail' };
+  };
+  const configReadsBack = async (): Promise<boolean> => {
+    try {
+      const rows = new Map((await store.getConfig(walletId, CONFIG_KEYS)).map(r => [r.key, r]));
+      return planned.every(p => {
+        const r = rows.get(p.row.key);
+        return !!r && sameConfigPlain(openConfigSecret(p.field, r.value, password), p.plain);
+      });
+    } catch {
+      return false;
+    }
+  };
+
+  // 4. Compare-and-swap writes, one transaction per database. The wallets row is
+  // read back before the config write, so every result that hands new blobs to the
+  // caller (for its in-memory copy) has passed the storage read-back.
+  let written: WalletBlobs = {};
+  if (Object.keys(next).length > 0) {
+    try {
+      if (!(await store.casWallet(walletId, expected, next))) return { outcome: 'cas_conflict' };
+    } catch {
+      return { outcome: 'write_error' };
+    }
+    if (!(await walletRowReadsBack())) return { outcome: 'readback_fail' };
+    written = next;
+  }
+  if (planned.length > 0) {
+    try {
+      const ok = await store.casConfig(walletId, planned.map(p => ({ key: p.row.key, expected: p.row.value, next: p.next })));
+      if (!ok) return { outcome: 'cas_conflict', ...written };
+    } catch {
+      return { outcome: 'write_error', ...written };
+    }
+    if (!(await configReadsBack())) return { outcome: 'readback_fail', ...written };
   }
 
   return { outcome: 'migrated', ...next };

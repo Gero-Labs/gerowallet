@@ -195,7 +195,11 @@ describe('migrateWalletSecrets', () => {
   it('an interruption between the two databases leaves a usable wallet, and the next run finishes', async () => {
     const store = legacyCardanoStore();
     store.failCasConfig = true;
-    expect((await migrateWalletSecrets(1, PW, store)).outcome).toBe('write_error');
+    const interrupted = await migrateWalletSecrets(1, PW, store);
+    expect(interrupted.outcome).toBe('write_error');
+    // The wallets row was written and read back, so its new blobs are handed to the caller.
+    expect(interrupted.encryptedPrivateKey).toBe(store.wallets.get(1)!.encryptedPrivateKey);
+    expect(isGpw2(interrupted.encryptedPrivateKey)).toBe(true);
     // Wallets row upgraded, config still legacy: every reader still opens everything.
     expect(decryptPrivateKey(store.wallets.get(1)!.encryptedPrivateKey!, PW).toString('hex')).toBe(F.cardanoRootKeyHex);
     expect(decrypt(configValue(store, 'encryptedTotpSecret') as string, PW, SecretPurpose.SecurityData)).toBe(TOTP);
@@ -210,6 +214,28 @@ describe('migrateWalletSecrets', () => {
     const results = await Promise.all([1, 2, 3].map(() => migrateWalletSecrets(1, PW, store)));
     expect(results.map(r => r.outcome).sort()).toEqual(['already-current', 'already-current', 'migrated']);
     expect(store.casWalletCalls).toBe(1);
+  });
+
+  it('a config conflict after the wallets row is written returns only read-back-verified blobs', async () => {
+    const store = legacyCardanoStore();
+    const original = store.casConfig.bind(store);
+    store.casConfig = async (id, updates) => {
+      store.config.get(1)!.find(r => r.key === 'encryptedTotpSecret')!.value = 'changed-meanwhile';
+      return original(id, updates);
+    };
+    const result = await migrateWalletSecrets(1, PW, store);
+    expect(result.outcome).toBe('cas_conflict');
+    expect(result.encryptedPrivateKey).toBe(store.wallets.get(1)!.encryptedPrivateKey);
+    expect(decryptPrivateKey(result.encryptedPrivateKey!, PW).toString('hex')).toBe(F.cardanoRootKeyHex);
+    expect(configValue(store, 'encryptedTotpSecret')).toBe('changed-meanwhile');
+  });
+
+  it('hands no blobs to the caller when the wallets row fails its read-back', async () => {
+    const store = legacyCardanoStore();
+    store.tamperReadBack = { encryptedPrivateKey: F.rootKey.rawHex };
+    const result = await migrateWalletSecrets(1, PW, store);
+    expect(result.outcome).toBe('readback_fail');
+    expect(result.encryptedPrivateKey).toBeUndefined();
   });
 
   it('reports a read-back mismatch', async () => {
