@@ -286,8 +286,26 @@ watch(() => props.isOpen, (open) => { if (open) void refresh(); }, { immediate: 
 
 .fwd-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--g-s-2);
   margin-top: var(--g-s-3);
+}
+/* A long primary label ("Preseleccionar {name}" in Spanish) moves to its own
+   line and wraps there instead of running past the dialog border. Two classes
+   to beat Vuetify's (0,1,0) button rules; ::v-deep because .v-btn__content is
+   GButton's own markup (same recipe as MyGovernance's change row). */
+.fwd-actions .v-btn.g-btn {
+  height: auto;
+  min-height: 36px;
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+}
+.fwd-actions ::v-deep .v-btn__content {
+  min-width: 0;
+  white-space: normal;
+  line-height: 1.25;
+  text-align: center;
 }
 </style>
