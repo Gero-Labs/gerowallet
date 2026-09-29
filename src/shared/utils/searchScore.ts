@@ -12,9 +12,18 @@
  * word-prefix > substring. `query` is expected already lowercased and trimmed;
  * 0 means "no match" and the row is dropped.
  */
-export function scoreMatch(text: string | null | undefined, query: string): number {
+/**
+ * Lowercase and drop diacritics, so "configuracion" finds "Configuración" and
+ * "contrasena" finds "contraseña". Spanish users often type without accents.
+ */
+export function foldForSearch(text: string): string {
+  return text.normalize('NFD').replace(/\p{M}+/gu, '').toLowerCase();
+}
+
+export function scoreMatch(text: string | null | undefined, rawQuery: string): number {
   if (!text) return 0;
-  const t = text.toLowerCase();
+  const t = foldForSearch(text);
+  const query = foldForSearch(rawQuery);
   if (t === query) return 100;           // exact match
   if (t.startsWith(query)) return 80;    // starts with query
   const words = t.split(/[\s\-_]+/);
