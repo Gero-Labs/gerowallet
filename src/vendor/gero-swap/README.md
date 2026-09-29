@@ -2,7 +2,7 @@
 
 Built IIFE bundle of the Gero DEX aggregator widget. Self-registers `<gero-swap>` on load.
 
-- Source repo: gero-dex-widget (packages/widget) @ 27a4a49: main 1490e11 plus the cancel
+- Source repo: gero-dex-widget (packages/widget) @ 59ea363: main 1490e11 plus the cancel
   signing-deadline note on branch `feat/cancel-sign-deadline` (gero-dex-widget PR 17). Re-pin
   to the merged main commit once that PR lands; the rebuilt bundle should be byte-identical.
 - Rebuild: `pnpm --filter @gero/dex-widget build` then copy `dist/gero-swap.js` + `dist/style.css` (as `gero-swap.css`) here.
