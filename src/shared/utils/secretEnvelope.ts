@@ -77,7 +77,11 @@ export function isGpw2(blob: unknown): blob is string {
   return typeof blob === 'string' && blob.startsWith(`${PREFIX}.`);
 }
 
-function assertParams({ t, m, p }: Argon2Params): void {
+/**
+ * Throw unless Argon2id params are inside `GPW2_BOUNDS`. Also used by the `gpw1`
+ * reader, whose header carries the same params: check BEFORE deriving the key.
+ */
+export function assertArgon2Params({ t, m, p }: Argon2Params): void {
   const ok =
     Number.isInteger(t) && Number.isInteger(m) && Number.isInteger(p) &&
     t >= GPW2_BOUNDS.tMin && t <= GPW2_BOUNDS.tMax &&
@@ -106,7 +110,7 @@ export function sealGpw2(
 ): string {
   if (!password) throw new Error('Password cannot be empty');
   if (!ALL_PURPOSES.has(purpose)) throw new Error('Unknown secret purpose');
-  assertParams(params);
+  assertArgon2Params(params);
 
   const salt = crypto.getRandomValues(new Uint8Array(SALT_LEN));
   const nonce = crypto.getRandomValues(new Uint8Array(NONCE_LEN));
@@ -156,7 +160,7 @@ export function openGpw2(blob: string, password: string, purpose: SecretPurpose)
     m: view.getUint32(7, false),
     p: view.getUint32(11, false),
   };
-  assertParams(params);
+  assertArgon2Params(params);
 
   const header = raw.slice(0, HEADER_LEN);
   const salt = header.subarray(15, 15 + SALT_LEN);
