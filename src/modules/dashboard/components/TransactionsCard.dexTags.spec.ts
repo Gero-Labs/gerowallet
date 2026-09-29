@@ -114,6 +114,23 @@ describe('DEX venue tags', () => {
     expect(text).not.toContain('transactions.steelswap');
   });
 
+  it('keeps a live-synced fill whose pool input is still unresolved a DEX order, not a cancellation', async () => {
+    // The loader resolves an input's address only from a locally synced producing output:
+    // the wallet's own order input resolves, the pool input (someone else's output) does not.
+    for (const unresolved of ['', undefined]) {
+      const fill = tx('fill-unresolved-pool', [], [MINSWAP_V2_POOL, OWN], {
+        ada: 13190000, sentAmount: 0, receivedAmount: 13190000,
+        utxo: {
+          inputs: [io(MINSWAP_V2_ORDER), { address: unresolved, amount: [{ unit: 'lovelace', quantity: '900000000' }] }],
+          outputs: [io(MINSWAP_V2_POOL), io(OWN)],
+        },
+      });
+      const text = await rowText(fill);
+      expect(text).toContain('transactions.dexOrder');
+      expect(text).not.toContain('transactions.orderCancelled');
+    }
+  });
+
   it('tags SteelSwap from its own 674 message only', async () => {
     const text = await rowText(tx('steelswap-order', [OWN], [MINSWAP_V2_ORDER, OWN], metadata('CarDeM', 'SteelSwap: 1.18.0')));
     expect(text).toContain('transactions.steelswap');
