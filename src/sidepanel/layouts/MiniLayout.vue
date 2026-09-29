@@ -10,6 +10,7 @@
     <main class="mini-content">
       <MiniHeader
         @wallet-switch="$emit('wallet-switch')"
+        @notifications="$emit('notifications')"
         @settings="$emit('settings')"
       />
       <transition :name="transitionName" mode="out-in">

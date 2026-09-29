@@ -11,6 +11,7 @@ import {
 import { resolvePrivateKey } from './resolver';
 import { BitcoinAdapter } from '@/chains/bitcoin/bitcoinAdapter';
 import { SECRET_FORMAT_FIXTURES as F } from './__fixtures__/secretFormats';
+import { fromB64url, toB64url } from './mpc/base64url';
 
 /**
  * Every format the wallet has ever written must still open through the single
@@ -94,6 +95,22 @@ describe('text-secret reader (decrypt)', () => {
     for (const format of MNEMONIC_FORMATS) {
       const key = resolvePrivateKey(decrypt(F.mnemonicBlob[format], F.pw, SecretPurpose.Mnemonic));
       expect(Buffer.from(key.bytes()).toString('hex')).toBe(F.cardanoRootKeyHex);
+    }
+  });
+
+  it('refuses a gpw1 blob with out-of-range Argon2id params before running the KDF', () => {
+    const withParams = (t: number, m: number, p: number) => {
+      const raw = fromB64url(F.mnemonicBlob.gpw1.slice('gpw1.'.length));
+      const view = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
+      view.setUint32(1, t, false);
+      view.setUint32(5, m, false);
+      view.setUint32(9, p, false);
+      return `gpw1.${toB64url(raw)}`;
+    };
+    for (const blob of [withParams(2, 0xffffffff, 1), withParams(1000, 19_456, 1), withParams(2, 19_456, 4), withParams(1, 1024, 1)]) {
+      const started = performance.now();
+      expect(() => decrypt(blob, F.pw, SecretPurpose.Mnemonic)).toThrow(/out of range/);
+      expect(performance.now() - started).toBeLessThan(500);
     }
   });
 
