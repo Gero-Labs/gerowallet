@@ -2839,6 +2839,8 @@ export default {
   'transactions.loadingMoreTransactions': 'Cargando más transacciones',
   'transactions.minswap': 'Minswap',
   'transactions.dexOrder': 'Orden de DEX',
+  'transactions.orderCancelled': 'Orden cancelada',
+  'transactions.geroSwap': 'Gero Swap',
   'transactions.moreTransactions': 'Más transacciones',
   'transactions.muesliswap': 'MuesliSwap',
   'transactions.native': 'Nativo',

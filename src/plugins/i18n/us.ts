@@ -2908,6 +2908,8 @@ export default {
   'transactions.loadingMoreTransactions': 'Loading more transactions',
   'transactions.minswap': 'Minswap',
   'transactions.dexOrder': 'DEX Order',
+  'transactions.orderCancelled': 'Order Cancelled',
+  'transactions.geroSwap': 'Gero Swap',
   'transactions.moreTransactions': 'More Transactions',
   'transactions.muesliswap': 'MuesliSwap',
   'transactions.native': 'Native',
