@@ -122,7 +122,7 @@ const title = computed(() =>
 );
 
 const confirmLabel = computed(() =>
-  t(props.mode === 'stake' ? 'receive.tabStake' : 'staking.unstake'),
+  t(props.mode === 'stake' ? 'realfi.stakeAction' : 'staking.unstake'),
 );
 
 const availableLabel = computed(

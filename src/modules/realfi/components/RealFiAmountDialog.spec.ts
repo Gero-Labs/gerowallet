@@ -67,7 +67,7 @@ describe('RealFiAmountDialog', () => {
 
     await button(w, 'common.max').trigger('click');
     expect((w.find('input').element as HTMLInputElement).value).toBe('9007199254.740993');
-    await button(w, 'receive.tabStake').trigger('click');
+    await button(w, 'realfi.stakeAction').trigger('click');
 
     expect(w.emitted('confirm')).toEqual([['9007199254740993']]);
   });
@@ -78,8 +78,8 @@ describe('RealFiAmountDialog', () => {
     await type(w, '5.000001');
 
     expect(w.find('.err').text()).toBe('errors.insufficientBalance');
-    expect(button(w, 'receive.tabStake').attributes('disabled')).toBeDefined();
-    await button(w, 'receive.tabStake').trigger('click');
+    expect(button(w, 'realfi.stakeAction').attributes('disabled')).toBeDefined();
+    await button(w, 'realfi.stakeAction').trigger('click');
     expect(w.emitted('confirm')).toBeUndefined();
   });
 

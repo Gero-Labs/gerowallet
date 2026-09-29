@@ -5338,5 +5338,17 @@ export default {
   'governance.delegationNotLoaded': 'Your delegation has not loaded yet, so we cannot tell whether a position here is yours.',
   'governance.positionUnknown': 'Not every position is loaded, so we cannot tell whether this vote was cast.',
   'wallet.ledgerTransport': 'How is your Ledger connected?',
-
+  'receive.typedAddress': '{type} address',
+  'babylon.stakeDialog.lockDuration': '{blocks} blocks (≈{days} days)',
+  'governance.drepStatusActive': 'Active',
+  'poolOperator.slotProduced': 'Produced',
+  'poolOperator.slotMissed': 'Missed',
+  'security.verifySpendingPassword': 'Verify spending password',
+  'security.verifyPin': 'Verify PIN code',
+  'security.verifyPattern': 'Verify pattern',
+  'security.unlockFeature': 'Unlock',
+  'realfi.stakeAction': 'Stake',
+  'common.offBadge': 'Off',
+  'common.extensionUpdatedTitle': 'Extension updated',
+  'common.extensionUpdatedMessage': 'Gero Dashboard has been updated to version {version}!',
 }

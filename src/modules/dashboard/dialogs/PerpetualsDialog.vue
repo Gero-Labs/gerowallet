@@ -104,7 +104,7 @@
             <span class="price-info-value">{{ formatPrice(currentTicker.lowPrice) }}</span>
           </div>
           <div class="price-info-item">
-            <span class="price-info-label">24h Vol({{ baseCurrency }})</span>
+            <span class="price-info-label">{{ $t('perpetuals.24hVolBase') }} ({{ baseCurrency }})</span>
             <span class="price-info-value">{{ formatFullNumber(currentTicker.volume) }} {{ baseCurrency }}</span>
           </div>
           <div class="price-info-item">

@@ -18,7 +18,7 @@
 
     <template v-else-if="data">
       <div v-if="counterpartyOwner" class="mn-tx-utxos__counterparty">
-        <span class="mn-tx-utxos__counterparty-label">{{ $t('transactions.from') }}</span>
+        <span class="mn-tx-utxos__counterparty-label">{{ $t('wallet.from') }}</span>
         <span class="mn-tx-utxos__counterparty-value">{{ shortAddress(counterpartyOwner) }}</span>
       </div>
 

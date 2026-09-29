@@ -438,7 +438,7 @@ const status = computed(() => {
   if (health.value.inactiveSoon && health.value.epochsLeft !== null) {
     return { tone: 'warning', label: String(t('governance.inactiveInEpochs', { n: health.value.epochsLeft })) };
   }
-  if (record.value.active === true) return { tone: 'success', label: String(t('governance.status.active')) };
+  if (record.value.active === true) return { tone: 'success', label: String(t('governance.drepStatusActive')) };
   return null;
 });
 
