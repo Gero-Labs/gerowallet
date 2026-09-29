@@ -124,7 +124,7 @@ jobs:
             - Missing lazy loading for heavy components
 
             **Code Quality**
-            - i18n: All user-facing text must use $t() with keys in both us.ts and de.ts
+            - i18n: All user-facing text must use $t() with keys in every locale file (us.ts, de.ts, es.ts; src/plugins/i18n.parity.spec.ts enforces parity)
             - Dead code, unused imports, or duplicate logic
             - Consistent patterns with existing codebase (stores, messaging, database access)
 

@@ -17,8 +17,8 @@ The hook (yorkie, from `package.json` `gitHooks`, not husky) runs on every commi
 `node scripts/precommit-lint.mjs && node scripts/design/audit.mjs && node scripts/design/contrast.mjs`.
 Required on `development`: `Production bundle (SFC parse)`, `npm ci (lock in sync)`, `ESLint flat config loads`, `Ledger tests and extension bundles`. Plus 1 approving review, branch up to date, and all review threads resolved.
 
-**3. CI runs roughly a quarter of the repo's 245 spec files, and the covered quarter is not where you are working.**
-`npm test` is never invoked in CI. `dev-bundle-gate.yml` runs 18 named spec files (i18n parity among them); `midnight-ledger-verify.yml` runs two whole directories - `src/chains/midnight` (31 files) and `src/services/crossDevice` (19) - plus 6 named specs. So ~74 run, and everything outside those paths merges green no matter what it breaks. The inverse also holds: **Midnight and crossDevice changes are genuinely gated**, so a red required check there is real. Full suite: 245 files / 2871 tests, ~40s and green on an idle machine. Timing-sensitive specs flake under parallel load, so re-run a failing file alone before calling it a regression.
+**3. CI runs roughly a quarter of the repo's 285 spec files, and the covered quarter is not where you are working.**
+`npm test` is never invoked in CI. `dev-bundle-gate.yml` runs 18 named spec files (i18n parity among them); `midnight-ledger-verify.yml` runs two whole directories - `src/chains/midnight` (31 files) and `src/services/crossDevice` (22) - plus 6 named specs. So ~77 run, and everything outside those paths merges green no matter what it breaks. The inverse also holds: **Midnight and crossDevice changes are genuinely gated**, so a red required check there is real. Full suite: 285 files / 3395 tests, ~40s and green on an idle machine. Timing-sensitive specs flake under parallel load, so re-run a failing file alone before calling it a regression.
 
 ## Before writing code
 
