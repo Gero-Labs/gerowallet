@@ -322,17 +322,13 @@ const { resolveToken } = useSwapTokenResolver();
 // and reacts when that updates. Icons stay empty only if nothing else ever polled.
 const allTokens = marketTokensRef;
 
-// ── MAX button: no host wiring needed ──
-// Investigated src/vendor/gero-swap/gero-swap.js: the widget's internal
-// TokenSelector emits a local `setMax` event that the top-level widget
-// component already handles itself (never dispatched as a CustomEvent on the
-// <gero-swap> host element, so there's nothing for GeroSwapEmbed.vue to
-// listen for). Its handler reads `token.balance` directly off the resolved
-// TokenMeta we now supply, subtracts a fixed 3,000,000-lovelace (3 ADA)
-// reserve when the From side is lovelace, and writes the result straight into
-// the amount field. So supplying `balance` via resolveToken()/buildTokenCatalog()
-// above is the ONLY host-side requirement — MAX is fully functional end-to-end
-// with no further wiring here.
+// ── Balance line + MAX button: no host wiring needed ──
+// The widget handles MAX internally (no CustomEvent reaches the <gero-swap> host).
+// It reads the balance from signer.getUtxos(), the same set the aggregator
+// coin-selects from, and falls back to the `balance` we supply via
+// resolveToken()/buildTokenCatalog() when the signer can't be read. MAX on ADA
+// subtracts the quoted route's fee leg (12 ADA before a quote exists), so the
+// filled amount can always be built.
 
 /**
  * Shape of an entry in `tokenMetadataStore.state.tokens` (see
