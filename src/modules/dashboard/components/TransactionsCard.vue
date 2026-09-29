@@ -356,6 +356,15 @@
                     >{{ $t('transactions.dexhunter') }}</v-chip
                   >
                   <v-chip
+                    v-if="isGeroSwap(item)"
+                    outlined
+                    class="px-1"
+                    x-small
+                    color="var(--g-accent)"
+                    style="margin-left: 1px; margin-bottom: 1px"
+                    >{{ $t('transactions.geroSwap') }}</v-chip
+                  >
+                  <v-chip
                     v-if="isSteelSwap(item)"
                     outlined
                     class="px-1"
@@ -735,6 +744,7 @@ const transactions = computed<StoredTransaction[]>(() => {
         ('jpg.store'.includes(searchLower) && isJpgStore(tx)) ||
         ('cashback'.includes(searchLower) && isCashback(tx)) ||
         ('steelswap'.includes(searchLower) && isSteelSwap(tx)) ||
+        ('gero swap'.includes(searchLower) && isGeroSwap(tx)) ||
         ('internal'.includes(searchLower) && isInternalTransfer(tx)) ||
         ('pending'.includes(searchLower) && tx.pending);
 
@@ -890,6 +900,11 @@ const addFundTransferStatus = (item: StoredTransaction, statuses: string[]): voi
   // A detected DEX interaction (swap / add-remove liquidity) reads wrong as
   // "Sent Funds". Title it "DEX Order" — accurate whichever pool op it is; the
   // venue chip (Minswap, etc.) names the platform.
+  // An order spent without its pool came back unfilled: a refund, not a swap.
+  if (isDexOrderCancellation(item)) {
+    statuses.push(t('transactions.orderCancelled'));
+    return;
+  }
   if (isDexTransaction(item)) {
     statuses.push(t('transactions.dexOrder'));
     return;
@@ -1331,22 +1346,64 @@ const isDustRegistration = (item: StoredTransaction): boolean => {
 // src/modules/swap/components/GeroSwapEmbed.vue.
 // Displayed with the neutral 'transactions.swap' label since DexHunter is no longer
 // the branded swap provider.
-// TODO: add aggregator swap-tx heuristic (order/fee address or metadata) once the
-// Gero aggregator's on-chain order/fee address is confirmed, so newly created
-// aggregator swaps are also tagged here.
 // Any recognised DEX/aggregator interaction — used to title the tx "DEX Order".
 const isDexTransaction = (item: StoredTransaction): boolean =>
-  isMinswap(item) || isSundaeSwap(item) || isSplash(item) || isDexHunter(item) || isSteelSwap(item);
+  isMinswap(item) || isSundaeSwap(item) || isSplash(item) || isDexHunter(item) || isSteelSwap(item) || isGeroSwap(item);
 
+// Script hash of an address's payment part, or null for key/Byron/unparseable
+// addresses. Cached: the same few hundred addresses recur across a history.
+const paymentScriptHashes = new Map<string, string | null>();
+const paymentScriptHash = (address: string | undefined): string | null => {
+  if (!address) return null;
+  const cached = paymentScriptHashes.get(address);
+  if (cached !== undefined) return cached;
+  let hash: string | null = null;
+  try {
+    const payment = Cardano.Address.fromBech32(address).getProps().paymentPart;
+    hash = payment?.type === Cardano.CredentialType.ScriptHash ? payment.hash : null;
+  } catch {
+    hash = null;
+  }
+  if (paymentScriptHashes.size > 5000) paymentScriptHashes.clear();
+  paymentScriptHashes.set(address, hash);
+  return hash;
+};
+
+const addressesOf = (item: StoredTransaction): string[] => [
+  ...(item.utxo?.inputs ?? []).map((input) => input.address),
+  ...(item.utxo?.outputs ?? []).map((output) => output.address),
+  ...(isCardanoTx(item) ? (item.body?.outputs ?? []).map((output) => output.address) : []),
+];
+
+const spendsScript = (item: StoredTransaction, scriptHash: string): boolean =>
+  item.utxo?.inputs?.some((input) => paymentScriptHash(input.address) === scriptHash) ?? false;
+
+// The CIP-20 (label 674) message lines of a transaction
+const metadataMessages = (item: StoredTransaction): string[] => {
+  const msg = isCardanoTx(item) ? item.auxiliaryData?.blob?.[674]?.msg : undefined;
+  if (typeof msg === 'string') return [msg];
+  return Array.isArray(msg) ? msg.filter((line): line is string => typeof line === 'string') : [];
+};
+
+// Minswap scripts, matched on the payment credential: an order address carries its
+// owner's stake key, so no single bech32 string covers every order. Hashes as
+// published by Minswap (minswap-dex-v2 README; @minswap/sdk constants).
+const MINSWAP_V1_ORDER_SCRIPT_HASH = 'a65ca58a4e9c755fa830173d2a5caed458ac0c73f97db7faae2e7e3b';
+const MINSWAP_V2_ORDER_SCRIPT_HASH = 'c3e28c36c3447315ba5a56f33da6a6ddc1770a876a8d9f0cb3a97c4c';
+// Not addr1w9e7ft4…9lvhq7: that is the cNIGHT→DUST mapping validator
+// (DUST_MAPPING_VALIDATOR); matching it once titled every DUST registration "DEX Order".
+const MINSWAP_V2_POOL_SCRIPT_HASH = 'ea07b733d932129c378af627436e7cbc2ef0bf96e0036bb51b3bde6b';
+const MINSWAP_SCRIPT_HASHES = new Set([
+  MINSWAP_V1_ORDER_SCRIPT_HASH,
+  MINSWAP_V2_ORDER_SCRIPT_HASH,
+  MINSWAP_V2_POOL_SCRIPT_HASH,
+]);
+
+// No order address here: aggregators place their orders on the routed DEX's own
+// contract (the address once used was a Minswap V2 order address carrying one
+// wallet's stake key), so the fee address and the 674 message identify DexHunter.
 const isDexHunter = (item: StoredTransaction): boolean => {
   const cardano = isCardanoTx(item) ? item : undefined;
-  // Check for DexHunter order contract address (primary indicator)
-  const DEXHUNTER_ORDER_ADDRESS =
-    'addr1z8p79rpkcdz8x9d6tft0x0dx5mwuzac2sa4gm8cvkw5hcn84xmy84q2crvzy6he2j69798923xvt3jk5n3nd9eecmxks7hfyu8';
-  const hasDexHunterOrderAddress =
-    item.utxo?.inputs?.some((input) => input.address === DEXHUNTER_ORDER_ADDRESS) ||
-    item.utxo?.outputs?.some((output) => output.address === DEXHUNTER_ORDER_ADDRESS) ||
-    cardano?.body?.outputs?.some((output) => output.address === DEXHUNTER_ORDER_ADDRESS);
 
   // Check for DexHunter fee address (indicates completed trade)
   const DEXHUNTER_FEE_ADDRESS =
@@ -1356,69 +1413,40 @@ const isDexHunter = (item: StoredTransaction): boolean => {
     cardano?.body?.outputs?.some((output) => output.address === DEXHUNTER_FEE_ADDRESS);
 
   // Check metadata for DexHunter Trade message (indicates trade execution)
-  const msg = cardano?.auxiliaryData?.blob?.[674]?.msg;
-  const hasDexHunterMetadata =
-    msg && Array.isArray(msg) ? msg.some((m: string) => m.includes('Dexhunter') || m.includes('DexHunter')) : false;
+  const hasDexHunterMetadata = metadataMessages(item).some((m) => m.includes('Dexhunter') || m.includes('DexHunter'));
 
-  // Only tag as DexHunter if there's actual platform interaction
-  return hasDexHunterOrderAddress || hasDexHunterFeeAddress || hasDexHunterMetadata || false;
+  return hasDexHunterFeeAddress || hasDexHunterMetadata || false;
 };
 
-const isSteelSwap = (item: StoredTransaction): boolean => {
-  // SteelSwap order contract address (enterprise-address deployment of the
-  // shared aggregator order script — same payment credential as the DexHunter
-  // order contract but with no staking part, so the bech32 forms don't collide)
-  const STEELSWAP_ORDER_ADDRESS = 'addr1w8p79rpkcdz8x9d6tft0x0dx5mwuzac2sa4gm8cvkw5hcnqst2ctf';
+// A swap placed through Gero's own aggregator (built by Nexus), which writes
+// 674: { msg: ['Gero Swap'] }. The order itself sits on the routed DEX's contract.
+const isGeroSwap = (item: StoredTransaction): boolean =>
+  metadataMessages(item).some((m) => /gero ?swap/i.test(m));
 
-  // Address check runs on the utxo set so records stored before the backend
-  // had the tx CBOR (no body/auxiliaryData) are still tagged
-  const hasSteelSwapOrderAddress =
-    item.utxo?.inputs?.some((input) => input.address === STEELSWAP_ORDER_ADDRESS) ||
-    item.utxo?.outputs?.some((output) => output.address === STEELSWAP_ORDER_ADDRESS) ||
-    (isCardanoTx(item) && item.body?.outputs?.some((output) => output.address === STEELSWAP_ORDER_ADDRESS));
+// SteelSwap is an aggregator: its orders sit on the routed DEX's own contract (a
+// Minswap V2 order is Minswap's script, whoever placed it), so only its 674 message,
+// e.g. { 674: { msg: ['CarDeM', 'SteelSwap: 1.18.0'] } }, identifies it.
+const isSteelSwap = (item: StoredTransaction): boolean =>
+  metadataMessages(item).some((m) => m.includes('SteelSwap'));
 
-  // Check metadata for SteelSwap message, e.g. { 674: { msg: ['CarDeM', 'SteelSwap: 1.18.0'] } }
-  const msg = isCardanoTx(item) ? item.auxiliaryData?.blob?.[674]?.msg : undefined;
-  const hasSteelSwapMetadata =
-    msg && Array.isArray(msg) ? msg.some((m: string) => typeof m === 'string' && m.includes('SteelSwap')) : false;
-
-  return hasSteelSwapOrderAddress || hasSteelSwapMetadata || false;
-};
+// A Minswap V2 order spent without its pool: the order was cancelled by its owner
+// (or refunded on expiry), not filled. A fill always spends the pool UTxO as well.
+const isDexOrderCancellation = (item: StoredTransaction): boolean =>
+  spendsScript(item, MINSWAP_V2_ORDER_SCRIPT_HASH) && !spendsScript(item, MINSWAP_V2_POOL_SCRIPT_HASH);
 
 const isMinswap = (item: StoredTransaction): boolean => {
   const cardano = isCardanoTx(item) ? item : undefined;
-  // Minswap V1 addresses
-  const MINSWAP_V1_MARKET_ORDER_ADDRESS = 'addr1wxn9efv2f6w82hagxqtn62ju4m293tqvw0uhmdl64ch8uwc0h43gt';
-  const MINSWAP_V1_LIMIT_ORDER_ADDRESS =
-    'addr1zxn9efv2f6w82hagxqtn62ju4m293tqvw0uhmdl64ch8uw6j2c79gy9l76sdg0xwhd7r0c0kna0tycz4y5s6mlenh8pq6s3z70';
 
-  // Minswap V2 order contract address
-  const MINSWAP_V2_ORDER_ADDRESS =
-    'addr1zxn9efv2f6w82hagxqtn62ju4m293tqvw0uhmdl64ch8uw6j2c79gy9l76sdg0xwhd7r0c0kna0tycz4y5s6mlenh8pq6s3z70';
-
-  // Minswap V2 pool script address — a pool operation (swap/deposit/withdraw)
-  // spends the pool UTxO, so this address appears as a tx input. Some pool txs
-  // carry no 674 metadata and no locally-stored datums, so the order-address /
-  // metadata / datum checks below miss them; matching the pool address catches
-  // them without false-positiving on plain Minswap-LP-token transfers.
-  const MINSWAP_V2_POOL_ADDRESS = 'addr1w9e7ft4rrdd4rkdseguxr9hudfxyytm5ckh2qy0yhz7lfeg9lvhq7';
-
-  const MINSWAP_CONTRACT_ADDRESSES = [
-    MINSWAP_V1_MARKET_ORDER_ADDRESS,
-    MINSWAP_V1_LIMIT_ORDER_ADDRESS,
-    MINSWAP_V2_ORDER_ADDRESS,
-    MINSWAP_V2_POOL_ADDRESS,
-  ];
-
-  // Check for Minswap contract addresses (indicates DEX interaction)
-  const hasMinswapOrderAddress =
-    item.utxo?.inputs?.some((input) => !!input.address && MINSWAP_CONTRACT_ADDRESSES.includes(input.address)) ||
-    item.utxo?.outputs?.some((output) => !!output.address && MINSWAP_CONTRACT_ADDRESSES.includes(output.address)) ||
-    cardano?.body?.outputs?.some((output) => !!output.address && MINSWAP_CONTRACT_ADDRESSES.includes(output.address));
+  // A Minswap order (V1 or V2) or V2 pool among the inputs/outputs. Pool operations
+  // spend the pool UTxO; orders are placed at, and later spent from, the order script.
+  // This also catches pool txs with no 674 metadata and no locally-stored datums,
+  // without false-positiving on plain Minswap-LP-token transfers.
+  const hasMinswapScriptAddress = addressesOf(item).some(
+    (address) => MINSWAP_SCRIPT_HASHES.has(paymentScriptHash(address) ?? ''),
+  );
 
   // Check for Minswap metadata message (indicates platform interaction)
-  const msg = cardano?.auxiliaryData?.blob?.[674]?.msg;
-  const hasMinswapMetadata = msg && Array.isArray(msg) ? msg.some((m: string) => m.includes('Minswap')) : false;
+  const hasMinswapMetadata = metadataMessages(item).some((m) => m.includes('Minswap'));
 
   // Check for Minswap pool NFT policy in datum CBOR (indicates pool interaction)
   const hasMinswapInOutputDatum = (cardano?.body?.outputs as Array<Cardano.TxOut & { datum?: { cbor?: string } }>)?.some(
@@ -1431,7 +1459,7 @@ const isMinswap = (item: StoredTransaction): boolean => {
   );
 
   // Only tag as Minswap if there's actual DEX interaction, not just LP token transfers
-  return hasMinswapOrderAddress || hasMinswapMetadata || hasMinswapInOutputDatum || hasMinswapInWitnessDatum || false;
+  return hasMinswapScriptAddress || hasMinswapMetadata || hasMinswapInOutputDatum || hasMinswapInWitnessDatum || false;
 };
 
 const isJpgStore = (item: StoredTransaction): boolean => {
