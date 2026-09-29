@@ -143,7 +143,7 @@ describe('useDustPathB — destination path', () => {
     expect(pathB.pathBIncomingStakes.value).toEqual(['stake1relaying']);
   });
 
-  it('a registered answer verifies Path B: it stamps pathBBatchAsOfMs together with pathBAsOfMs', async () => {
+  it('a registered answer stamps pathBBatchAsOfMs together with pathBAsOfMs', async () => {
     mocks.destination.mockResolvedValue(destination());
 
     const pathB = mount();
@@ -154,11 +154,13 @@ describe('useDustPathB — destination path', () => {
     expect(pathB.pathBBatchAsOfMs.value).toBe(pathB.pathBAsOfMs.value);
   });
 
-  it('an unregistered zero answer updates the figures and pathBAsOfMs but is NOT proof of zero spendable DUST', async () => {
-    // A cNIGHT-only wallet whose registration was removed externally gets exactly this from Nexus:
-    // no active stakes, zero figures. DUST generated earlier still decays down and stays spendable
-    // (ledger DustOutput::updated_value) while the indexer no longer reports it, so this is a
-    // generation status, not a verified zero. It must not stamp pathBBatchAsOfMs.
+  it('an unregistered zero answer stamps pathBBatchAsOfMs: Path B has reported, though the zero is no verified balance', async () => {
+    // A wallet with no registration at all (a token-only wallet, or one whose registration was removed
+    // externally) gets exactly this from Nexus: no active stakes, zero figures. The stamp means only
+    // "Path B has answered". It must be set, or such a wallet would never settle and the send notice
+    // and sponsor picker would never appear. It says nothing about spendable DUST: the indexer counts
+    // live generation only, and DUST generated earlier still decays down and stays spendable
+    // (ledger DustOutput::updated_value). The guard therefore warns on it and never blocks.
     mocks.destination.mockResolvedValue(destination({
       registered: false, nightBalance: '0', generationRate: '0', maxCapacity: '0', currentCapacity: '0', stakes: [],
     }));
@@ -167,18 +169,34 @@ describe('useDustPathB — destination path', () => {
     await settle();
 
     expect(pathB.pathBRegistered.value).toBe(false);
-    expect(pathB.pathBAsOfMs.value).toBeGreaterThan(0); // display: a current reading
-    expect(pathB.pathBBatchAsOfMs.value).toBe(0); // refusal: still unknown
+    expect(pathB.pathBAsOfMs.value).toBeGreaterThan(0);
+    expect(pathB.pathBBatchAsOfMs.value).toBe(pathB.pathBAsOfMs.value);
     expect(mocks.enumerate).not.toHaveBeenCalled();
   });
 
-  it('un-settles Path B when a registered answer is followed by an unregistered one', async () => {
-    // Same wallet, same session: the registration is removed between two polls. The earlier
-    // registered answer's stamp must not keep vouching for a zero that is no longer verified.
+  it('an active registration answering all zeros stamps pathBBatchAsOfMs too', async () => {
+    // Every backing cNIGHT moved away while the registration stays active: registered, an active
+    // stake, four zeros. Reported, like any other answer.
+    mocks.destination.mockResolvedValue(destination({
+      nightBalance: '0', generationRate: '0', maxCapacity: '0', currentCapacity: '0',
+    }));
+
+    const pathB = mount();
+    await settle();
+
+    expect(pathB.pathBRegistered.value).toBe(true);
+    expect(pathB.pathBBalance.value).toBe(0n);
+    expect(pathB.pathBBatchAsOfMs.value).toBe(pathB.pathBAsOfMs.value);
+  });
+
+  it('keeps Path B reported when a registered answer is followed by an unregistered one', async () => {
+    // Same wallet, same session: the registration is removed between two polls. Path B answered both
+    // times, so the stamp stays set and advances with the new answer.
     mocks.destination.mockResolvedValueOnce(destination());
     const pathB = mount();
     await settle();
-    expect(pathB.pathBBatchAsOfMs.value).toBeGreaterThan(0);
+    const firstStamp = pathB.pathBBatchAsOfMs.value;
+    expect(firstStamp).toBeGreaterThan(0);
 
     mocks.destination.mockResolvedValueOnce(destination({
       registered: false, nightBalance: '0', generationRate: '0', maxCapacity: '0', currentCapacity: '0', stakes: [],
@@ -189,7 +207,8 @@ describe('useDustPathB — destination path', () => {
     expect(pathB.pathBRegistered.value).toBe(false);
     expect(pathB.pathBNight.value).toBe(0n);
     expect(pathB.pathBAsOfMs.value).toBeGreaterThan(0);
-    expect(pathB.pathBBatchAsOfMs.value).toBe(0);
+    expect(pathB.pathBBatchAsOfMs.value).toBe(pathB.pathBAsOfMs.value);
+    expect(pathB.pathBBatchAsOfMs.value).toBeGreaterThan(firstStamp);
   });
 
   it('keeps the last values for the same wallet across a transient error', async () => {

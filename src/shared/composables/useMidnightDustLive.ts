@@ -222,19 +222,21 @@ export interface MidnightDustLive {
   /** True if at least one poll has succeeded — UI can show a skeleton until then. */
   readonly hasData: ComputedRef<boolean>;
   /**
-   * True once BOTH paths have DEFINITIVELY reported. `hasData` is an OR and
-   * flips as soon as Path A's store has any value — including the zero-filled
-   * one — while Path B is still in flight. Anything that would REFUSE an
-   * action on a zero balance must wait for this instead.
+   * True once BOTH paths have REPORTED. `hasData` is an OR and flips as soon as Path A's
+   * store has any value, including the zero-filled one, while Path B is still in flight.
+   * Anything that acts on a zero balance must wait for this instead, or a Path-B wallet
+   * reads as empty for the length of one poll.
    *
-   * Path B counts only once it has VERIFIED DUST: a `dust/destination` answer that
-   * reports `registered === true`, or a successful fallback batch poll. Two answers
-   * stay unsettled and nothing is refused on them. An unregistered or empty destination
-   * answer is a generation status, not a spendable balance: DUST generated before a
-   * registration was removed keeps decaying and stays spendable while the indexer no
-   * longer reports it. And "no enumerable stakes" on the fallback is not definitive
-   * either: the extension can only see stakes it holds, and a wallet fed by a stake
-   * registered elsewhere has none enumerable and real DUST.
+   * Path B has reported once ANY `dust/destination` answer has landed, registered or not
+   * (or a fallback batch poll has succeeded), so that a token-only wallet with no
+   * registration settles too. Reported is not verified: Path B's figures are a generation
+   * status, not a spendable balance. The indexer counts only generation rows that are live
+   * now, and DUST generated earlier keeps decaying and stays spendable (ledger
+   * `DustOutput::updated_value`) after all backing cNIGHT moved away or a registration was
+   * removed. A zero balance on a settled reading therefore never proves there is nothing
+   * to spend; `midnightFeeCapacityLive` treats it as `unverified` and only warns.
+   *
+   * The fallback's "no enumerable stakes" exit asks nothing, so it does not settle.
    */
   readonly settled: ComputedRef<boolean>;
 }

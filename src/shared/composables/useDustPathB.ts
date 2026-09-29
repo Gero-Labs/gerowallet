@@ -16,16 +16,19 @@
  *
  * GENERATION STATUS IS NOT A SPENDABLE BALANCE. The answer says what is generating
  * NOW: the indexer only counts generation rows that are still live, so a stake whose
- * registration was removed drops out of it at once. DUST generated earlier is not
- * erased at that moment: the ledger's `DustOutput::updated_value` keeps decaying it, so
- * it stays spendable for a while. An unregistered or empty answer therefore updates the
- * displayed figures and `pathBAsOfMs`, but it is NOT proof that nothing is spendable and
- * it does not stamp `pathBBatchAsOfMs`. Only a `registered === true` answer does.
+ * registration was removed, or whose backing cNIGHT was all moved away, drops out of the
+ * figures at once. DUST generated earlier is not erased at that moment: the ledger's
+ * `DustOutput::updated_value` keeps decaying it, so it stays spendable for a while. Every
+ * successful answer, registered or not, stamps `pathBBatchAsOfMs`, and that stamp means
+ * only "Path B has reported". Zero figures, an unregistered answer, and a registered answer
+ * with an active stake and four zeros are all still unverified: nothing in this file may be
+ * read as proof that no DUST is spendable (see `midnightFeeCapacity`, which warns on such a
+ * zero and never blocks on it).
  *
  * FALLBACK: a Nexus that does not have the endpoint yet answers 404/501; then
  * this reads the old per-stake `dust/status` rows instead, taking the figures from
  * ONE row rather than summing (see `refreshFromStakes`). That path can only see stakes
- * the extension holds, so its "no stakes" exit is not definitive either.
+ * the extension holds, so its "no stakes" exit has not reported and does not stamp.
  *
  * Module-scoped singleton with refcounted polling, same lifecycle shape as
  * `useMidnightDustLive`. Capacity/rate move slowly (a per-second drip, not
@@ -58,24 +61,22 @@ const pathBRegistered = ref<boolean>(false);
 const pathBStakes = ref<string[]>([]);
 const pathBAsOfMs = ref<number>(0);
 /**
- * Stamped by a poll that VERIFIED Path B's DUST, so its figures may be refused on: a
- * `dust/destination` answer with `registered === true`, or a successful fallback
- * `dust/status/batch` poll. Anything that would REFUSE an action on "Path B is zero"
- * must key off this.
+ * Stamped by every poll in which Path B REPORTED: any successful `dust/destination`
+ * answer, registered or not, zero or not, or a successful fallback `dust/status/batch`
+ * poll. It means "Path B has answered" and nothing more. `useMidnightDustLive.settled`
+ * keys off it so the send notice and sponsor picker can appear for a wallet with no
+ * registration at all: a token-only wallet would otherwise never settle.
  *
- * NOT stamped, and cleared if it was set, by an unregistered or empty `dust/destination`
- * answer. That answer says nothing is generating now, not that nothing is spendable:
- * DUST generated before a registration was removed keeps decaying and stays spendable
- * (ledger `DustOutput::updated_value`), while the indexer stops reporting the row. For a
- * cNIGHT-only wallet with an externally removed registration the answer is exactly
- * "no active stakes, zero figures", and refusing a send on it would block spendable DUST.
- * Such a poll still stamps `pathBAsOfMs`, which is right for display (extrapolation and
- * `hasData`), just not for refusal.
+ * It is NOT a verified balance and must never be used to refuse an action. The figures
+ * are a generation status: the indexer counts only generation rows that are live now, so
+ * DUST generated earlier, still decaying and still spendable (ledger
+ * `DustOutput::updated_value`), is absent from them, for example after all backing cNIGHT
+ * moved away with the registration still active, or after a registration was removed.
  *
- * Nor by the fallback's "no enumerable stakes" exit: on that path the extension can only
- * enumerate stakes it holds, and a wallet whose DUST is credited by a stake registered
- * from the portal or another wallet has NO enumerable stakes and plenty of DUST. "No
- * stakes" stays unknown, the same call `midnightSponsorEligibility` already makes.
+ * Not stamped by the fallback's "no enumerable stakes" exit: nothing was asked there, so
+ * Path B has not reported. That exit stamps `pathBAsOfMs` so extrapolation and `hasData`
+ * treat it as a current reading, which is right for display. It stays unsettled, as it was
+ * before this Path-B work.
  */
 const pathBBatchAsOfMs = ref<number>(0);
 /**
@@ -199,10 +200,9 @@ async function refreshOnce() {
     .map((stake) => stake.cardanoRewardAddress);
   pathBIsDestinationWide.value = true;
   pathBAsOfMs.value = Date.now();
-  // Only a REGISTERED answer verifies Path B's DUST (see `pathBBatchAsOfMs`). An
-  // unregistered one is a generation status, not a spendable-zero signal, so it clears
-  // any earlier stamp instead of leaving a registered answer's stamp to vouch for it.
-  pathBBatchAsOfMs.value = destination.registered ? pathBAsOfMs.value : 0;
+  // Path B has reported, whatever it said (see `pathBBatchAsOfMs`): registered or not, zero
+  // or not. That is all this stamp means; it does not vouch that no DUST is spendable.
+  pathBBatchAsOfMs.value = pathBAsOfMs.value;
 }
 
 /**
@@ -239,7 +239,8 @@ async function refreshFromStakes(network: string, dustAddress: string, key: stri
     // First reading for this identity: stamp the poll rather than bare-returning, so
     // extrapolation/hasData treat it as a current reading instead of silently leaving
     // behind whatever the previous identity (already zeroed above) or a not-yet-run
-    // poll left in place. NOT a definitive zero — see `pathBBatchAsOfMs`.
+    // poll left in place. Not stamped on `pathBBatchAsOfMs`: nothing was asked, so Path B has
+    // not reported.
     pathBIsDestinationWide.value = false;
     pathBIncomingStakes.value = [];
     pathBAsOfMs.value = Date.now();
@@ -405,8 +406,8 @@ export interface DustPathB {
   /** Wall-clock ms of the last successful poll (0 = never). */
   readonly pathBAsOfMs: ComputedRef<number>;
   /**
-   * Last poll that VERIFIED Path B's DUST (a registered destination answer, or a fallback batch
-   * poll); 0 until one has, and again after an unregistered answer. See the ref's doc.
+   * Wall-clock ms of the last poll in which Path B REPORTED (any successful destination answer, or
+   * a fallback batch poll); 0 until one has. Not a verified balance: see the ref's doc.
    */
   readonly pathBBatchAsOfMs: ComputedRef<number>;
 }
