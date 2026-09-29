@@ -105,22 +105,28 @@
                   </v-btn>
                 </div>
 
-                <!-- Global total -->
-                <div v-if="globalTotal.ada > 0 || globalTotal.usd > 0" class="global-total">
-                  <div v-if="globalTotal.formattedFee" class="global-total__row global-total__fee-row">
+                <!-- Global total: always in the layout so the dialog keeps its height. Empty
+                     (dashes) until there is something to build, a shimmer while the fee is
+                     being computed, the figures once the transaction is built. -->
+                <div class="global-total" :aria-busy="feePending ? 'true' : 'false'">
+                  <div class="global-total__row global-total__fee-row">
                     <span class="global-total__fee-label">{{ $t('signTx.networkFee') }}</span>
-                    <span class="global-total__fee">- {{ globalTotal.formattedFee }}</span>
+                    <span v-if="feePending" class="g-skeleton global-total__skeleton global-total__skeleton--fee" aria-hidden="true"></span>
+                    <span v-else-if="globalTotal.formattedFee && txValid" class="global-total__fee">- {{ globalTotal.formattedFee }}</span>
+                    <span v-else class="global-total__fee-label g-num">—</span>
                   </div>
-                  <div v-if="globalTotal.formattedWithdrawal" class="global-total__row global-total__fee-row">
+                  <div v-if="globalTotal.formattedWithdrawal && !feePending" class="global-total__row global-total__fee-row">
                     <span class="global-total__fee-label">{{ $t('wallet.rewardsWithdrawn') }}</span>
                     <span class="global-total__withdrawal">+ {{ globalTotal.formattedWithdrawal }}</span>
                   </div>
                   <div class="global-total__row global-total__total-row">
                     <span class="global-total__label">{{ $t('common.total') }}</span>
-                    <div>
+                    <span v-if="feePending" class="g-skeleton global-total__skeleton global-total__skeleton--total" aria-hidden="true"></span>
+                    <div v-else-if="globalTotal.ada > 0 || globalTotal.usd > 0">
                       <span class="global-total__ada">{{ globalTotal.formattedTotal }}</span>
                       <span class="global-total__fiat">{{ '≈' }} {{ hideBalances ? '$•••' : globalTotal.formattedUsd }}</span>
                     </div>
+                    <span v-else class="global-total__ada g-num">—</span>
                   </div>
                 </div>
               </div>
@@ -308,6 +314,17 @@ const currentStep = ref<number>(1);
 const expandedRecipientId = ref<string | null>(null);
 const txValid = ref<boolean>(false);
 const isCalculatingMax = ref<boolean>(false);
+/** A build is scheduled or in flight: the summary shows a shimmer instead of stale or missing figures. */
+const isBuilding = ref<boolean>(false);
+const feePending = computed(() => isBuilding.value || isCalculatingMax.value);
+
+/** Something to build at all: an amount on a token, or a collectible, on any recipient. */
+function hasAnyAmount(): boolean {
+  return recipients.value.some((r: SendRecipient) =>
+    r.selectedTokens.some((t: Token) => Number(t.quantity) > 0) ||
+    Object.keys(r.selectedCollectibles).length > 0
+  );
+}
 const maxRecipientIds = ref<Set<string>>(new Set());
 
 function createEmptyRecipient(): SendRecipient {
@@ -1024,15 +1041,21 @@ watch(() => props.isOpen, (val) => {
   }
 })
 
-// Debounced build — avoids firing on every keystroke (e.g. typing "10" = "1" then "10")
+// Debounced build — avoids firing on every keystroke (e.g. typing "10" = "1" then "10").
+// `isBuilding` is raised by the recipients watcher when it schedules this and dropped when
+// the run ends, whichever way, so the summary's shimmer covers the debounce and the call.
 const debouncedBuild = debounce(async () => {
+  try {
+    await runBuild();
+  } finally {
+    isBuilding.value = false;
+  }
+}, 500);
+
+async function runBuild(): Promise<void> {
   if (isCalculatingMax.value) return;
 
-  const hasAnyAmount = recipients.value.some((r: SendRecipient) =>
-    r.selectedTokens.some((t: Token) => Number(t.quantity) > 0) ||
-    Object.keys(r.selectedCollectibles).length > 0
-  );
-  if (!hasAnyAmount) {
+  if (!hasAnyAmount()) {
     txValid.value = false;
     return;
   }
@@ -1195,7 +1218,7 @@ const debouncedBuild = debounce(async () => {
       }
     }
   }
-}, 500);
+}
 
 watch(
   () => recipients.value,
@@ -1244,7 +1267,9 @@ watch(
       }
     }
 
-    // Async: debounced network call to build tx
+    // Async: debounced network call to build tx. The shimmer starts now, not when the
+    // debounce fires, so the summary never flashes stale figures in between.
+    isBuilding.value = hasAnyAmount();
     debouncedBuild();
   },
   { deep: true }
@@ -1326,6 +1351,17 @@ onMounted(() => {
 
 .global-total__fee-row {
   margin-bottom: 4px;
+}
+
+/* Shimmer stand-ins sized like the figures they replace, so the rows keep their height. */
+.global-total__skeleton {
+  display: inline-block;
+  height: 12px;
+  width: 72px;
+}
+.global-total__skeleton--total {
+  height: 16px;
+  width: 128px;
 }
 
 /* Separator + its breathing room only when there ARE rows above Total (fee /
