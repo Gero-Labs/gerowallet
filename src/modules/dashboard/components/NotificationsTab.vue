@@ -83,7 +83,10 @@
                   </button>
                 </v-col>
                 <v-col cols="3" style="display: flex;">
-                  <ToggleSwitch text-left="OFF" text-right="ON" font-size="10px" :value="!typesOff.includes(ty.id)" :disabled="busy || categoriesOff.includes(cat.id)" @input="(on) => setType(ty.id, on)" style="margin: auto" />
+                  <!-- A switched-off category silences its alerts whatever their own setting: say so with a
+                       chip instead of a greyed switch that would still read ON. The alert's own setting is kept. -->
+                  <span v-if="categoriesOff.includes(cat.id)" class="t-label notify-type__chip">{{ $t('notify.types.off') }}</span>
+                  <ToggleSwitch v-else text-left="OFF" text-right="ON" font-size="10px" :value="!typesOff.includes(ty.id)" :disabled="busy" @input="(on) => setType(ty.id, on)" style="margin: auto" />
                 </v-col>
               </v-row>
             </template>
