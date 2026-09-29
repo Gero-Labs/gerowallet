@@ -832,10 +832,12 @@ const dayLabel = (timestamp: number): string => {
   });
 };
 
-// Net per day over the whole filtered list, not just the rows loaded so far
+// Net per day over the whole filtered list, not just the rows loaded so far. A failed
+// attempt (pending past the hour, never on chain) moved no funds, so it doesn't count.
 const dayNets = computed(() => {
   const nets = new Map<string, number>();
   for (const tx of transactions.value) {
+    if (isPendingTooLong(tx)) continue;
     const key = dayKey(tx.tx_timestamp);
     nets.set(key, (nets.get(key) ?? 0) + (tx.ada ?? 0));
   }

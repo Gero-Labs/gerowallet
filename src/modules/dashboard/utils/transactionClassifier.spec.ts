@@ -131,6 +131,20 @@ describe('transaction titles and types', () => {
       expect(tagKeys(item)).not.toContain('steelswap');
     });
 
+    it('keeps a live-synced fill whose pool input is still unresolved a DEX order', () => {
+      for (const unresolved of ['', undefined]) {
+        const item = tx({
+          ada: 13_190_000, receivedAmount: 13_190_000,
+          utxo: {
+            inputs: [io(MINSWAP_V2_ORDER), { address: unresolved, amount: [{ unit: 'lovelace', quantity: '900000000' }] }],
+            outputs: [io(MINSWAP_V2_POOL), io(OWN_PAYMENT)],
+          },
+        });
+        expect(isDexOrderCancellation(item)).toBe(false);
+        expect(buildTxTitle(item, ctx, t)).toBe('transactions.dexOrder');
+      }
+    });
+
     it('keeps a fill, which spends the pool too, a DEX order', () => {
       const item = tx({
         ada: 13_190_000, receivedAmount: 13_190_000,

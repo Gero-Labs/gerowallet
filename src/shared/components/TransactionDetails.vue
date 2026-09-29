@@ -47,37 +47,37 @@
           <dt class="t-label">{{ $t('transactions.transactionId') }}</dt>
           <dd>
             <a v-if="transactionUrl" class="g-mono tx-fact__link" :href="transactionUrl" target="_blank" rel="noopener noreferrer">
-              {{ filters.truncate(transactionInfo.id) }}
+              {{ filters.truncate(liveTx.id) }}
             </a>
-            <span v-else class="g-mono">{{ filters.truncate(transactionInfo.id) }}</span>
-            <CopyButton x-small :value="transactionInfo.id" />
+            <span v-else class="g-mono">{{ filters.truncate(liveTx.id) }}</span>
+            <CopyButton x-small :value="liveTx.id" />
           </dd>
         </div>
-        <div v-if="transactionInfo.block_height" class="tx-fact">
+        <div v-if="liveTx.block_height" class="tx-fact">
           <dt class="t-label">{{ $t('transactions.blockHeight') }}</dt>
-          <dd class="g-num">{{ transactionInfo.block_height.toLocaleString('en-US') }}</dd>
+          <dd class="g-num">{{ liveTx.block_height.toLocaleString('en-US') }}</dd>
         </div>
-        <div v-if="transactionInfo.block_hash" class="tx-fact tx-fact--wide">
+        <div v-if="liveTx.block_hash" class="tx-fact tx-fact--wide">
           <dt class="t-label">{{ $t('miniGero.block') }}</dt>
           <dd>
             <a v-if="blockUrl" class="g-mono tx-fact__link" :href="blockUrl" target="_blank" rel="noopener noreferrer">
-              {{ filters.truncate(transactionInfo.block_hash) }}
+              {{ filters.truncate(liveTx.block_hash) }}
             </a>
-            <span v-else class="g-mono">{{ filters.truncate(transactionInfo.block_hash) }}</span>
-            <CopyButton x-small :value="transactionInfo.block_hash" />
+            <span v-else class="g-mono">{{ filters.truncate(liveTx.block_hash) }}</span>
+            <CopyButton x-small :value="liveTx.block_hash" />
           </dd>
         </div>
-        <div v-if="transactionInfo.epoch_no" class="tx-fact">
+        <div v-if="liveTx.epoch_no" class="tx-fact">
           <dt class="t-label">{{ $t('transactions.epoch') }}</dt>
-          <dd class="g-num">{{ transactionInfo.epoch_no }}</dd>
+          <dd class="g-num">{{ liveTx.epoch_no }}</dd>
         </div>
         <div v-if="networkFee" class="tx-fact">
           <dt class="t-label">{{ $t('signTx.networkFee') }}</dt>
           <dd class="g-num">{{ networkFee }}</dd>
         </div>
-        <div v-if="transactionInfo.tx_size" class="tx-fact">
+        <div v-if="liveTx.tx_size" class="tx-fact">
           <dt class="t-label">{{ $t('mempool.size') }}</dt>
-          <dd class="g-num">{{ filters.humanFileSize(transactionInfo.tx_size) }}</dd>
+          <dd class="g-num">{{ filters.humanFileSize(liveTx.tx_size) }}</dd>
         </div>
         <div v-if="ioSummary" class="tx-fact">
           <dt class="t-label">{{ $t('bitcoin.inputs') }} → {{ $t('bitcoin.outputs') }}</dt>
@@ -385,21 +385,21 @@
               <span class="g-mono">{{ filters.truncate(`${collateral.txId}#${collateral.index}`) }}</span>
               <CopyButton x-small :value="`${collateral.txId}#${collateral.index}`" />
             </div>
-            <div v-if="transactionInfo.body?.collateralReturn" class="tx-block">
+            <div v-if="liveTx.body?.collateralReturn" class="tx-block">
               <div class="tx-block__title">{{ $t('transactions.collateralReturn') }}</div>
               <dl class="tx-kv">
                 <dt>{{ $t('common.address') }}</dt>
                 <dd>
-                  <span class="g-mono">{{ filters.truncate(transactionInfo.body.collateralReturn.address) }}</span>
+                  <span class="g-mono">{{ filters.truncate(liveTx.body.collateralReturn.address) }}</span>
                   <CopyButton
-                    v-if="transactionInfo.body.collateralReturn.address"
+                    v-if="liveTx.body.collateralReturn.address"
                     x-small
-                    :value="transactionInfo.body.collateralReturn.address"
+                    :value="liveTx.body.collateralReturn.address"
                   />
                 </dd>
                 <dt>{{ $t('common.amount') }}</dt>
                 <dd class="g-num">
-                  {{ filters.toCurrency(transactionInfo.body.collateralReturn.value.coins, false, 0, currencySymbol) }}
+                  {{ filters.toCurrency(liveTx.body.collateralReturn.value.coins, false, 0, currencySymbol) }}
                 </dd>
               </dl>
             </div>
@@ -416,7 +416,7 @@
       </section>
     </div>
 
-    <ReportDialog :isOpen="isReportDialogOpen" @close="isReportDialogOpen = false" :reportTx="transactionInfo.id" />
+    <ReportDialog :isOpen="isReportDialogOpen" @close="isReportDialogOpen = false" :reportTx="liveTx.id" />
   </div>
 </template>
 <script setup lang="ts">
@@ -505,6 +505,15 @@ const { t } = useTranslation();
 const { loggedWallet } = toRefs(walletStore);
 const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 
+// The store's current record for this transaction. The pane and the dialog hold the
+// object that was clicked, and the store replaces (never mutates) a record when it
+// changes, so a pending transaction would otherwise stay "Pending" after it confirmed.
+const liveTx = computed(() => {
+  const id = props.transactionInfo?.id;
+  const live = id ? (walletStore.transactions ?? []).find((stored) => stored.id === id) : undefined;
+  return live ?? props.transactionInfo;
+});
+
 /** Long lists collapse: UTxOs after this many, token pills per UTxO after TOKEN_LIMIT. */
 const UTXO_LIMIT = 10;
 const TOKEN_LIMIT = 6;
@@ -539,10 +548,10 @@ const currencyTicker = computed(() =>
 // Hero: title, type, status, amount
 // ---------------------------------------------------------------------------
 const classifyCtx = computed(() => buildClassifyContext(loggedWallet.value, walletStore.keys, walletStore.contacts));
-const kind = computed(() => classifyTxKind(props.transactionInfo, classifyCtx.value));
+const kind = computed(() => classifyTxKind(liveTx.value, classifyCtx.value));
 const kindIcon = computed(() => TX_KIND_ICON[kind.value]);
 const kindTone = computed(() => TX_KIND_TONE[kind.value]);
-const tags = computed(() => buildTxTags(props.transactionInfo, classifyCtx.value, t, kind.value));
+const tags = computed(() => buildTxTags(liveTx.value, classifyCtx.value, t, kind.value));
 
 const DELEGATION_CERTIFICATES = new Set<string>([
   Cardano.CertificateType.StakeDelegation,
@@ -551,7 +560,7 @@ const DELEGATION_CERTIFICATES = new Set<string>([
 
 // Same title the history row shows, including "Delegating to TICKER" once the pool resolves
 const title = computed(() => {
-  const tx = props.transactionInfo;
+  const tx = liveTx.value;
   if (isPendingTooLong(tx)) return t('transactions.failedTransaction');
   const certificates: Cardano.Certificate[] = tx.body?.certificates ?? [];
   if (txPoolTicker.value && certificates.length) {
@@ -566,8 +575,8 @@ const title = computed(() => {
 });
 
 const status = computed<'confirmed' | 'pending' | 'failed'>(() => {
-  if (isPendingTooLong(props.transactionInfo)) return 'failed';
-  return props.transactionInfo.pending ? 'pending' : 'confirmed';
+  if (isPendingTooLong(liveTx.value)) return 'failed';
+  return liveTx.value.pending ? 'pending' : 'confirmed';
 });
 
 const STATUS_ICON = {
@@ -578,11 +587,11 @@ const STATUS_ICON = {
 const statusIcon = computed(() => STATUS_ICON[status.value]);
 const statusLabel = computed(() => t(`transactions.${status.value}`));
 
-const txDate = computed(() => new Date(props.transactionInfo.tx_timestamp * 1000));
+const txDate = computed(() => new Date(liveTx.value.tx_timestamp * 1000));
 const absoluteTime = computed(() => txDate.value.toLocaleString());
 const relativeTime = computed(() => time.format(txDate.value));
 
-const adaDelta = computed(() => Number(props.transactionInfo.ada ?? 0));
+const adaDelta = computed(() => Number(liveTx.value.ada ?? 0));
 
 const verb = computed(() => {
   // A self transfer moves nothing out of the wallet but the fee
@@ -611,24 +620,24 @@ const fiatLine = computed(() => {
 });
 
 const networkFee = computed(() => {
-  const fee = props.transactionInfo.body?.fee;
+  const fee = liveTx.value.body?.fee;
   return fee ? filters.toCurrency(fee, false, 0, currencySymbol.value) : '';
 });
 
-const inputCount = computed(() => props.transactionInfo.utxo?.inputs?.length ?? 0);
-const outputCount = computed(() => props.transactionInfo.utxo?.outputs?.length ?? 0);
+const inputCount = computed(() => liveTx.value.utxo?.inputs?.length ?? 0);
+const outputCount = computed(() => liveTx.value.utxo?.outputs?.length ?? 0);
 const ioSummary = computed(() =>
-  props.transactionInfo.utxo?.inputs ? `${inputCount.value} → ${outputCount.value}` : ''
+  liveTx.value.utxo?.inputs ? `${inputCount.value} → ${outputCount.value}` : ''
 );
 
 // ---------------------------------------------------------------------------
 // Assets
 // ---------------------------------------------------------------------------
 const txAssets = computed(() => {
-  if (props.transactionInfo) {
+  if (liveTx.value) {
     // Guard against missing asset arrays (pending transactions may not have these fields yet)
-    const received = props.transactionInfo['receivedAssets'] || [];
-    const sent = props.transactionInfo['sentAssets'] || [];
+    const received = liveTx.value['receivedAssets'] || [];
+    const sent = liveTx.value['sentAssets'] || [];
 
     return [...received, ...sent]
       .filter((asset: TxAsset) => asset.policy_id !== '')
@@ -669,7 +678,7 @@ interface LedgerRow {
 }
 
 const ledger = computed<LedgerRow[]>(() => {
-  const assets: TxAsset[] = Array.isArray(props.transactionInfo.assets) ? props.transactionInfo.assets : [];
+  const assets: TxAsset[] = Array.isArray(liveTx.value.assets) ? liveTx.value.assets : [];
   const tokens = assets.filter((asset) => asset.policy_id !== '' && asset.unit !== 'lovelace' && Number(asset.quantity) !== 0);
   if (tokens.length === 0) return [];
 
@@ -753,17 +762,17 @@ const utxoView = (io: TxIO, key: string, ref: string): UtxoView => {
 };
 
 const inputViews = computed<UtxoView[]>(() => {
-  const inputs: TxIO[] = props.transactionInfo.utxo?.inputs ?? [];
+  const inputs: TxIO[] = liveTx.value.utxo?.inputs ?? [];
   const visible = showAllInputs.value ? inputs : inputs.slice(0, UTXO_LIMIT);
   return visible.map((input, index) =>
     utxoView(input, `in-${index}`, input.tx_hash != null ? `${input.tx_hash}#${input.output_index}` : ''));
 });
 
 const outputViews = computed<UtxoView[]>(() => {
-  const outputs: TxIO[] = props.transactionInfo.utxo?.outputs ?? [];
+  const outputs: TxIO[] = liveTx.value.utxo?.outputs ?? [];
   const visible = showAllOutputs.value ? outputs : outputs.slice(0, UTXO_LIMIT);
   return visible.map((output, index) =>
-    utxoView(output, `out-${index}`, output.output_index != null ? `${props.transactionInfo.id}#${output.output_index}` : ''));
+    utxoView(output, `out-${index}`, output.output_index != null ? `${liveTx.value.id}#${output.output_index}` : ''));
 });
 
 function toggleTokens(key: string) {
@@ -773,10 +782,10 @@ function toggleTokens(key: string) {
 // ---------------------------------------------------------------------------
 // Sections
 // ---------------------------------------------------------------------------
-const certificates = computed<Cardano.Certificate[]>(() => props.transactionInfo.body?.certificates ?? []);
-const withdrawals = computed(() => props.transactionInfo.body?.withdrawals ?? []);
-const collaterals = computed<Cardano.TxIn[]>(() => props.transactionInfo.body?.collaterals ?? []);
-const referenceInputs = computed<Cardano.TxIn[]>(() => props.transactionInfo.body?.referenceInputs ?? []);
+const certificates = computed<Cardano.Certificate[]>(() => liveTx.value.body?.certificates ?? []);
+const withdrawals = computed(() => liveTx.value.body?.withdrawals ?? []);
+const collaterals = computed<Cardano.TxIn[]>(() => liveTx.value.body?.collaterals ?? []);
+const referenceInputs = computed<Cardano.TxIn[]>(() => liveTx.value.body?.referenceInputs ?? []);
 
 // Pre-compute DRep IDs per certificate to avoid repeated serialization in template.
 // Indices align with the certificates v-for in the template.
@@ -818,7 +827,7 @@ const getRedeemerDataJson = (redeemerData: Cardano.PlutusData): string => {
 
 // One serialization per redeemer, not one per template binding
 const redeemerViews = computed(() => {
-  const redeemers: Cardano.Redeemer[] = props.transactionInfo.witness?.redeemers ?? [];
+  const redeemers: Cardano.Redeemer[] = liveTx.value.witness?.redeemers ?? [];
   return redeemers.map((redeemer) => {
     const serialized = getRedeemer(redeemer);
     return {
@@ -834,7 +843,7 @@ const redeemerViews = computed(() => {
 });
 
 const witnessScripts = computed<Serialization.Script[]>(() =>
-  (props.transactionInfo.witness?.scripts ?? []).map((script: Cardano.Script) => Serialization.Script.fromCore(script))
+  (liveTx.value.witness?.scripts ?? []).map((script: Cardano.Script) => Serialization.Script.fromCore(script))
 );
 
 const getScriptDataBytes = (script: Cardano.Script) => {
@@ -916,7 +925,7 @@ const getDRepCip129 = (drep: Cardano.DelegateRepresentative): string => {
 };
 
 const mintRows = computed(() => {
-  const mint: Cardano.TokenMap | undefined = props.transactionInfo.body?.mint;
+  const mint: Cardano.TokenMap | undefined = liveTx.value.body?.mint;
   if (!mint) return [];
   // Handle both Map (from CBOR deserialization) and plain object (from chrome.storage.local)
   const entries: [string, bigint][] = mint instanceof Map
@@ -940,7 +949,7 @@ const mintRows = computed(() => {
 
 // Parsed once per transaction; the template reads it several times
 const metadataJson = computed((): string | null => {
-  const cbor: string | undefined = props.transactionInfo?.cbor;
+  const cbor: string | undefined = liveTx.value?.cbor;
   if (!cbor) {
     return null;
   }
@@ -982,7 +991,7 @@ interface SectionView {
 }
 
 const sections = computed<SectionView[]>(() => {
-  const tx = props.transactionInfo;
+  const tx = liveTx.value;
   const list: SectionView[] = [];
   if (tx.utxo?.inputs) {
     list.push({ key: 'utxos', title: t('transactions.utxos'), icon: 'mdi-cube-outline', count: ioSummary.value });
@@ -1027,7 +1036,7 @@ function toggleSection(key: SectionKey) {
 const transactionUrl = computed(() =>
   getExplorerUrl(
     loggedWallet.value?.chain ?? '',
-    props.transactionInfo['id'],
+    liveTx.value['id'],
     'tx',
     loggedWallet.value?.network,
   ) || null,
@@ -1036,7 +1045,7 @@ const transactionUrl = computed(() =>
 const blockUrl = computed(() =>
   getExplorerUrl(
     loggedWallet.value?.chain ?? '',
-    props.transactionInfo['block_hash'],
+    liveTx.value['block_hash'],
     'block',
     loggedWallet.value?.network,
   ) || null,
@@ -1120,7 +1129,7 @@ const resolvePoolMeta = async (poolId: string | undefined) => {
 
 // A different transaction starts from the default disclosure state
 watch(
-  () => props.transactionInfo?.id,
+  () => liveTx.value?.id,
   () => {
     openSections.value = Object.fromEntries(props.initiallyOpen.map((key) => [key, true]));
     showAllInputs.value = false;
@@ -1131,10 +1140,12 @@ watch(
   { immediate: true }
 );
 
+// Keyed on the id: a pending record's replacement by its confirmed one carries the
+// same certificates, so there is nothing to re-resolve (and no ticker flicker).
 watch(
-  () => props.transactionInfo,
+  () => liveTx.value?.id,
   async () => {
-    const value = props.transactionInfo;
+    const value = liveTx.value;
     if (!value) return;
     txDRep.value = null;
     currentPoolMeta.value = null;
@@ -1148,7 +1159,7 @@ watch(
       poolCert ? stakingStoreActions.loadPoolById(loggedWallet.value, poolCert.poolId) : Promise.resolve(null),
     ]);
     // The user may have moved on to another transaction while these resolved
-    if (props.transactionInfo !== value) return;
+    if (liveTx.value?.id !== value.id) return;
     currentPoolMeta.value = poolMeta;
     txDRep.value = resolvedDRep;
     txPoolTicker.value = pool?.ticker ?? null;

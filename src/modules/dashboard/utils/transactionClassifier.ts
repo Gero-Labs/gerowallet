@@ -261,12 +261,21 @@ export const isMinswap = (item: StoredTransaction): boolean => {
   return hasMinswapScriptAddress || hasMinswapMetadata || hasMinswapInOutputDatum || hasMinswapInWitnessDatum || false;
 };
 
+// Whether every input's address is known. The wallet loader fills an input's address
+// from its producing output only when that output is synced locally, so a live-synced
+// fill can carry the wallet's own order input resolved and the pool input still blank.
+const inputsResolved = (item: StoredTransaction): boolean =>
+  (item.utxo?.inputs?.length ?? 0) > 0 && item.utxo!.inputs.every((input) => !!input.address);
+
 /**
  * A Minswap V2 order spent without its pool: the order was cancelled by its owner
- * (or refunded on expiry), not filled. A fill always spends the pool UTxO as well.
+ * (or refunded on expiry), not filled. A fill always spends the pool UTxO as well, so
+ * with any input unresolved "no pool" is unproven and it stays a DEX order.
  */
 export const isDexOrderCancellation = (item: StoredTransaction): boolean =>
-  spendsScript(item, MINSWAP_V2_ORDER_SCRIPT_HASH) && !spendsScript(item, MINSWAP_V2_POOL_SCRIPT_HASH);
+  inputsResolved(item) &&
+  spendsScript(item, MINSWAP_V2_ORDER_SCRIPT_HASH) &&
+  !spendsScript(item, MINSWAP_V2_POOL_SCRIPT_HASH);
 
 export const isJpgStore = (item: StoredTransaction): boolean => {
   const cardano = isCardanoTx(item) ? item : undefined;
