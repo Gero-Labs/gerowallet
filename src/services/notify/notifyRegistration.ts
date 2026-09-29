@@ -62,7 +62,7 @@ export interface NotifyRegistrationDeps {
   /** Read at call time: the e2e fixture patches `self.registration.pushManager`. Null on Firefox. */
   pushManager: () => PushManagerLike | null;
   appVersion: () => string;
-  /** The stored locale (`us` | `de`). */
+  /** The stored UI locale, one of PUSH_LOCALES (`us` | `de` | `es`). */
   locale: () => Promise<string>;
   /** Every installed wallet, for reconciliation. */
   wallets: () => Promise<LocalWallet[]>;
@@ -101,7 +101,8 @@ export function wireNetworkOf(network: string): string {
   return `cardano-${network.toLowerCase()}`;
 }
 
-/** The extension stores `us` / `de`; the API wants BCP-47. */
+/** Our locale keys are not all BCP-47 (`us` is English); the API wants BCP-47. Keys that
+ *  already are a language subtag (`de`, `es`) pass through. */
 export function toBcp47(locale: string): string {
   const l = (locale || 'us').toLowerCase();
   return (l === 'us' ? 'en' : l).slice(0, 16);

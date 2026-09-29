@@ -34,7 +34,8 @@ import { getDomain } from 'tldts';
 import { MessageTypes } from '@/models/MessageTypes';
 import { signInWithGoogle } from '@/chrome/auth';
 import { loadConfig, loadWallets } from '@/plugins/geroLoader';
-import { readyLanguageFor } from '@/plugins/i18n.config';
+import i18n, { loadLanguage } from '@/plugins/i18n';
+import { installLocaleFor } from '@/chrome/installLocale';
 import GeroStore from '@/stores/geroStore';
 import WalletStore, { hydrateWalletStore, matchesDappWhitelistEntry, walletStore } from '@/stores/walletStore';
 import { walletManager } from '@/services/walletManager.service';
@@ -209,17 +210,27 @@ loadWallets().then(async () => {
 const isBeta: boolean = import.meta.env.VITE_IS_BETA === 'true';
 const currentVersion: string = chrome.runtime.getManifest().version;
 
+// The worker's i18n is still on its 'us' default when onInstalled fires (gero-db
+// config has not loaded yet), so the saved language is read directly.
+async function showUpdateNotification(): Promise<void> {
+  let locale = 'us';
+  try {
+    const saved = (await chrome.storage.local.get('geroStore')) as { geroStore?: { config?: { locale?: string } } };
+    locale = saved.geroStore?.config?.locale || 'us';
+    await loadLanguage(locale);
+  } catch { /* fall back to English */ }
+  chrome.notifications.create('updateNotification', {
+    type: 'image',
+    title: String(i18n.t('common.extensionUpdatedTitle', locale)),
+    message: String(i18n.t('common.extensionUpdatedMessage', locale, { version: currentVersion })),
+    iconUrl: chrome.runtime.getURL('public/logo128.png'),
+    imageUrl: chrome.runtime.getURL('public/v2.6.3.png'),
+  });
+}
+
 if (!isBeta) {
   chrome.runtime.onInstalled.addListener((details) => {
-    if (details.reason === 'update') {
-      chrome.notifications.create('updateNotification', {
-        type: 'image',
-        title: 'Extension Updated',
-        message: `Gero Dashboard has been updated to version ${currentVersion}!`,
-        iconUrl: chrome.runtime.getURL('public/logo128.png'),
-        imageUrl: chrome.runtime.getURL('public/v2.6.3.png'),
-      });
-    }
+    if (details.reason === 'update') void showUpdateNotification();
   });
   chrome.notifications.onClicked.addListener(function(notificationId) {
     if (notificationId === 'updateNotification') {
@@ -232,14 +243,13 @@ if (!isBeta) {
   });
 }
 
-// A fresh install starts in the browser's language when we speak it. Only on
-// 'install': an existing user's 'us' may be a deliberate choice, so updates
-// never touch it. setLocale is the selector's own path (memory, storage, gero-db).
+// A fresh install starts in the browser's language when we speak it; updates
+// never touch an existing user's choice (see installLocale.ts). setLocale is the
+// selector's own path (memory, storage, gero-db).
 chrome.runtime.onInstalled.addListener((details) => {
-  if (details.reason !== 'install') return;
-  const detected = readyLanguageFor(chrome.i18n?.getUILanguage?.());
-  if (detected === 'us') return;
-  GeroStore.setLocale(detected).catch((error) => debugLog('🌐', `install locale not applied: ${getErrorMessage(error)}`));
+  const locale = installLocaleFor(details.reason, chrome.i18n?.getUILanguage?.());
+  if (!locale) return;
+  GeroStore.setLocale(locale).catch((error) => debugLog('🌐', `install locale not applied: ${getErrorMessage(error)}`));
 });
 
 // Shared shapes used throughout the dApp pipeline. Handlers receive `request`

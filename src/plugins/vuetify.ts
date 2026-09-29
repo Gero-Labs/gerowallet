@@ -1,7 +1,7 @@
-import Vue from 'vue';
+import Vue, { watch } from 'vue';
 import Vuetify from 'vuetify/lib';
 import { ClickOutside } from 'vuetify/lib/directives';
-import i18n from '@/plugins/i18n';
+import i18n, { getLocaleCode } from '@/plugins/i18n';
 import { chainAccents, chainKeyFor } from '@/config/themes';
 
 Vue.use(Vuetify);
@@ -51,5 +51,15 @@ export const updateVuetifyTheme = (chain: string) => {
   vuetify.framework.theme.themes.dark.secondary = a.gradient2;
   vuetify.framework.theme.themes.dark.accent = a.gradient1;
 };
+
+// Our lang.t hands strings to vue-i18n, but Vuetify still formats its own dates
+// (v-date-picker month and weekday names) from lang.current, which nothing set,
+// and the page's <html lang> stayed "en" for screen readers. Both follow the UI
+// locale now.
+watch(() => i18n.locale, (locale: string) => {
+  const tag = getLocaleCode(locale);
+  vuetify.framework.lang.current = tag;
+  if (typeof document !== 'undefined') document.documentElement.lang = tag;
+}, { immediate: true });
 
 export default vuetify;

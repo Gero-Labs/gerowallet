@@ -29,7 +29,7 @@ const BROWSER_LANGUAGE_ALIASES: Record<string, ReadyLanguage> = { en: 'us' };
  */
 export function readyLanguageFor(tag: string | null | undefined): ReadyLanguage {
   const primary = (tag || '').toLowerCase().split(/[-_]/)[0];
-  const alias = BROWSER_LANGUAGE_ALIASES[primary];
-  if (alias) return alias;
+  // Own keys only: a tag like 'constructor' must not resolve to Object.prototype.
+  if (Object.prototype.hasOwnProperty.call(BROWSER_LANGUAGE_ALIASES, primary)) return BROWSER_LANGUAGE_ALIASES[primary]!;
   return (READY_LANGUAGES as readonly string[]).includes(primary) ? primary as ReadyLanguage : 'us';
 }
