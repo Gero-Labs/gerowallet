@@ -1,12 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Blockchain } from '@/models/types';
 import type { Wallet } from '@/models/types';
+import { SecretPurpose } from '@/shared/utils/secretEnvelope';
 
 const decrypt = vi.fn();
 const decryptMnemonicWithPrfOutput = vi.fn();
 const deriveMidnightKeys = vi.fn();
 
-vi.mock('@/shared/utils/crypto', () => ({ decrypt: (...a: unknown[]) => decrypt(...a) }));
+vi.mock('@/shared/utils/crypto', async () => ({
+  decrypt: (...a: unknown[]) => decrypt(...a),
+  SecretPurpose: (await import('@/shared/utils/secretEnvelope')).SecretPurpose,
+}));
 vi.mock('@/shared/utils/webauthn-prf', () => ({
   decryptMnemonicWithPrfOutput: (...a: unknown[]) => decryptMnemonicWithPrfOutput(...a),
 }));
@@ -88,7 +92,7 @@ describe('deriveSponsorDustSeed', () => {
       { sponsor: wallet({ encryptedMnemonic: 'sponsor-blob' }), network: 'Mainnet', credential: { password: 'sponsor-pw' } },
       SENDER_ID,
     );
-    expect(decrypt).toHaveBeenCalledWith('sponsor-blob', 'sponsor-pw');
+    expect(decrypt).toHaveBeenCalledWith('sponsor-blob', 'sponsor-pw', SecretPurpose.Mnemonic);
   });
 
   it('derives against the sponsor network and skips Cardano material', async () => {

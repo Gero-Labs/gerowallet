@@ -54,6 +54,7 @@ function fakeServer() {
     async deleteWallet(walletTag) { calls.push({ m: 'DELETE /wallet', path: walletTag }); failing('DELETE /wallet'); server.links.delete(walletTag); },
     async getPrefs(walletTag) { calls.push({ m: 'GET /prefs', path: walletTag }); failing('GET /prefs'); if (!server.links.has(walletTag)) throw new NotifyError(404, 'wallet_not_registered'); return server.prefs; },
     async putPrefs(walletTag, body) { calls.push({ m: 'PUT /prefs', path: walletTag, body }); return { ...PREFS, device: body.device ?? PREFS.device }; },
+    async watchOrders(walletTag, body) { calls.push({ m: 'POST /orders', path: walletTag, body }); failing('POST /orders'); return { watching: body.txHashes.length }; },
     async clockOffsetMs() { return 0; },
   };
   return { server, calls, client };
@@ -434,5 +435,39 @@ describe('settings refresh (§4.8)', () => {
     m.fake.calls.length = 0;
     expect(await m.reg.refreshPrefs(4)).toBe('not_registered');
     expect(m.fake.calls).toEqual([]);
+  });
+});
+
+describe('swap order watches (§4.9)', () => {
+  const PKH = 'ab'.repeat(28);
+  const TX = 'cd'.repeat(32);
+
+  it('a registered wallet POSTs the owner pkh and the hashes under its wallet tag', async () => {
+    const m = await optedIn();
+    m.fake.calls.length = 0;
+    const tag = (await m.store.getWallet(4))!.walletTag;
+    expect(await m.reg.watchOrders({ walletId: 4, ownerPkh: PKH, txHashes: [TX] })).toEqual({ result: 'ok', watching: 1 });
+    expect(m.fake.calls).toEqual([{ m: 'POST /orders', path: tag, body: { ownerPkh: PKH, txHashes: [TX] } }]);
+  });
+
+  it('a wallet that is not registered makes no call', async () => {
+    const m = machine();
+    expect(await m.reg.watchOrders({ walletId: 4, ownerPkh: PKH, txHashes: [TX] })).toEqual({ result: 'not_registered' });
+    expect(m.fake.calls).toEqual([]);
+  });
+
+  it('a client error is logged and reported as failed, without a retry', async () => {
+    const m = await optedIn();
+    m.fake.calls.length = 0;
+    m.fake.server.fail.push({ m: 'POST /orders', error: new NotifyError(500, 'http_500') });
+    expect(await m.reg.watchOrders({ walletId: 4, ownerPkh: PKH, txHashes: [TX] })).toEqual({ result: 'failed' });
+    expect(m.fake.calls.filter((c) => c.m === 'POST /orders')).toHaveLength(1);
+  });
+
+  it('a link the server dropped marks the wallet unregistered', async () => {
+    const m = await optedIn();
+    m.fake.server.fail.push({ m: 'POST /orders', error: new NotifyError(404, 'wallet_not_registered') });
+    expect(await m.reg.watchOrders({ walletId: 4, ownerPkh: PKH, txHashes: [TX] })).toEqual({ result: 'not_registered' });
+    expect((await m.store.getWallet(4))?.registeredAt).toBeNull();
   });
 });

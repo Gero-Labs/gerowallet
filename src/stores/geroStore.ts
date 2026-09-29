@@ -9,11 +9,8 @@ import {
   updatePrivateKeyAndMnemonic as dbUpdatePrivateKeyAndMnemonic
 } from '@/db/gero-db';
 import { ERROR, Wallet, WalletType } from '@/models/types';
-import { Buffer } from 'buffer';
-import { Bip32PrivateKey } from '@cardano-sdk/crypto';
-import { decrypt, encrypt } from '@/shared/utils/crypto';
 import networks, { NetworkInfo } from '@/utils/networks';
-import { encryptPrivateKey, decryptPrivateKey } from '@/shared/utils/crypto';
+import { prepareSpendingPasswordRotation } from '@/shared/utils/passwordRotation';
 import { getContextType } from '@/utils/storageSync';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
@@ -341,22 +338,14 @@ export default {
 
     if (wallet.type === WalletType.Normal) {
       try {
-        // Decrypt current private key (reads legacy nested + current raw formats)
-        const buffer: Buffer = decryptPrivateKey(wallet.encryptedPrivateKey, currentPassword);
-        const rootKey = Bip32PrivateKey.fromBytes(buffer);
-
-        // Re-encrypt with new password
-        const encryptedPrivateKey = encryptPrivateKey(rootKey, newPassword);
-
-        // Handle mnemonic if it exists
-        let encryptedMnemonic = null;
-        if (wallet.encryptedMnemonic) {
-          const decryptedMnemonic = decrypt(wallet.encryptedMnemonic, currentPassword);
-          encryptedMnemonic = encrypt(decryptedMnemonic, newPassword);
-        }
+        // Decrypts with the current password (throws on a wrong one) and seals
+        // every password secret under the new one; see passwordRotation.ts.
+        const rotation = await prepareSpendingPasswordRotation(wallet, currentPassword, newPassword);
 
         // Update database
-        await dbUpdatePrivateKeyAndMnemonic(walletId, encryptedPrivateKey, encryptedMnemonic);
+        await dbUpdatePrivateKeyAndMnemonic(walletId, rotation.encryptedPrivateKey, rotation.encryptedMnemonic);
+        // 2FA data, SPO cold key and Strike key follow the new password too.
+        await rotation.commitSecondary();
 
         // Reload local state
         const updatedWallets = await getAllWallets();

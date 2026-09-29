@@ -5,6 +5,7 @@ import { Api } from '@/api/api';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import { APIError, CIP113_SIGN_REFUSAL_MESSAGE, TxSendError } from '@/chrome/config';
+import { classifySubmitFailure } from '@/chrome/submitFailure';
 import networks from '@/utils/networks';
 import { blockChainDBSchema, blockChainDBVersion } from '@/db/schema';
 import {
@@ -45,7 +46,9 @@ import {
 } from '@/chrome/serialization';
 import { isCip113Enabled } from '@/chrome/cip113Flag';
 import { readCachedUtxoRows, serializeUtxoRows, type CachedUtxoRow } from '@/chrome/utxoCache';
-import { decryptPrivateKey, encryptWithPassword, isRawEncryptedKey } from '@/shared/utils/crypto';
+import { SecretPurpose, decryptPrivateKey, encryptWithPassword, isLegacyNestedKey } from '@/shared/utils/crypto';
+import { refreshEnvelopeV2Flag } from '@/shared/utils/envelopeV2Flag';
+import { migrateWalletSecrets } from '@/chrome/secretMigration';
 import type { IUnifiedUtxo } from '@/chains/common/interfaces';
 import type { BitcoinUtxo } from '@/api/bitcoin-api';
 import type { Psbt } from 'bitcoinjs-lib';
@@ -1392,15 +1395,42 @@ export class WalletBg {
 
       try {
         const buffer: Buffer = decryptPrivateKey(this.encryptedPrivateKey, password);
-        // One-time silent upgrade of legacy weak-outer-KDF blobs. Non-blocking:
-        // a failed rewrite must never break signing; it retries on next unlock.
-        if (!isRawEncryptedKey(this.encryptedPrivateKey)) {
-          void this.migrateEncryptedPrivateKeyFormat(buffer, password);
-        }
+        // Silent upgrade of stored secrets. Non-blocking: a failed rewrite must
+        // never break signing; it retries on the next password decrypt.
+        void this.upgradeStoredSecrets(buffer, password);
         return Bip32PrivateKey.fromBytes(buffer);
       } catch (e) {
         throw ERROR.wrongPassword;
       }
+    }
+  }
+
+  /** Set once this session's stored secrets are known to be fully `gpw2`, so later signs skip the check. */
+  private storedSecretsCurrent = false;
+
+  /**
+   * Upgrade stored secrets after a successful password decrypt. With
+   * `isKeyEnvelopeV2Enabled` on, every password secret of the wallet moves to
+   * `gpw2` (see `secretMigration.ts`). With it off, only the legacy nested
+   * root-key blob is rewritten to raw PBKDF2 hex, as before.
+   */
+  private async upgradeStoredSecrets(rootKeyBuffer: Buffer, password: string): Promise<void> {
+    if (this.storedSecretsCurrent) return;
+    try {
+      if (!(await refreshEnvelopeV2Flag())) {
+        if (isLegacyNestedKey(this.encryptedPrivateKey)) {
+          await this.migrateEncryptedPrivateKeyFormat(rootKeyBuffer, password);
+        }
+        return;
+      }
+      const result = await migrateWalletSecrets(this.id, password);
+      if (result.encryptedPrivateKey) this.encryptedPrivateKey = result.encryptedPrivateKey;
+      if (result.encryptedMnemonic) this.encryptedMnemonic = result.encryptedMnemonic;
+      if (result.outcome === 'migrated' || result.outcome === 'already-current' || result.outcome === 'not-applicable') {
+        this.storedSecretsCurrent = true;
+      }
+    } catch (e) {
+      debugLog('🔐 Stored-secret upgrade deferred (will retry on next unlock):', e);
     }
   }
 
@@ -1788,7 +1818,7 @@ export class WalletBg {
         }
 
         // Decrypt mnemonic with password
-        const decryptedMnemonic = decrypt(this.encryptedMnemonic, password);
+        const decryptedMnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
 
         // Sign and finalize PSBT
         const signedTx = await signAndFinalizePsbt(
@@ -1874,7 +1904,7 @@ export class WalletBg {
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
       if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
-      mnemonic = decrypt(this.encryptedMnemonic, password);
+      mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
     }
 
     const bitcoin = await import('bitcoinjs-lib');
@@ -1927,7 +1957,7 @@ export class WalletBg {
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
       if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
-      mnemonic = decrypt(this.encryptedMnemonic, password);
+      mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
     }
 
     // Derive signing key (first receiving address: m/purpose'/coinType'/0'/0/0)
@@ -2188,13 +2218,14 @@ export class WalletBg {
       console.error('Transaction submission error:', error);
 
       // Handle different error types
-      if (error['response']?.status === 400) {
+      const failure = classifySubmitFailure(error['response']?.status);
+      if (failure === 'failure') {
         throw new Error(TxSendError.Failure.info.concat('', ' ', JSON.stringify(error['response'].data)));
-      } else if (error['response']?.status === 500) {
+      } else if (failure === 'internal') {
         throw new Error(APIError.InternalError.info);
-      } else if (error['response']?.status === 429) {
+      } else if (failure === 'refused') {
         throw new Error(TxSendError.Refused.info);
-      } else if (error['response']?.status === 425) {
+      } else if (failure === 'mempoolFull') {
         throw new Error(ERROR.fullMempool);
       } else {
         throw new Error(APIError.InvalidRequest.info.concat('', ' ', JSON.stringify(error)));
@@ -2280,7 +2311,7 @@ export class WalletBg {
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
       if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
-      mnemonic = decrypt(this.encryptedMnemonic, password);
+      mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
     }
 
     try {
@@ -2339,7 +2370,7 @@ export class WalletBg {
       } else {
         if (!password || !this.encryptedMnemonic) throw new Error('Spending password is required');
         const { decrypt } = await import('@/shared/utils/crypto');
-        mnemonic = decrypt(this.encryptedMnemonic, password);
+        mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
       }
       const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
       const derived = await deriveMidnightKeys(mnemonic, network, 0, { skipCardano: true });
@@ -2380,7 +2411,7 @@ export class WalletBg {
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
       if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
-      mnemonic = decrypt(this.encryptedMnemonic, password);
+      mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
     }
 
     try {
@@ -2505,7 +2536,7 @@ export class WalletBg {
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
       if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
-      mnemonic = decrypt(this.encryptedMnemonic, password);
+      mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
     }
 
     try {
@@ -2620,7 +2651,7 @@ export class WalletBg {
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
       if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
-      mnemonic = decrypt(this.encryptedMnemonic, password);
+      mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
     }
 
     try {
@@ -2820,7 +2851,7 @@ export class WalletBg {
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
       if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
-      mnemonic = decrypt(this.encryptedMnemonic, password);
+      mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
     }
 
     try {
@@ -3053,7 +3084,7 @@ export class WalletBg {
     } else {
       if (!password) throw new Error('Password required to sign DUST registration tx');
       if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
-      mnemonic = decrypt(this.encryptedMnemonic, password);
+      mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
     }
 
     try {

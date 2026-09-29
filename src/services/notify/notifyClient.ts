@@ -19,7 +19,7 @@
 import { encodeBody, signHeaders, type NotifyMethod, type SigningIdentity } from './notifyAuth';
 import type { NotifyStore } from './notifyStore';
 import type {
-  DeviceBody, DeviceView, NotifyConfig, NotifyErrorBody, WalletLinkBody, WalletLinkView, WalletPrefs, WalletPrefsWrite,
+  DeviceBody, DeviceView, NotifyConfig, NotifyErrorBody, WalletLinkBody, WalletLinkView, WalletPrefs, WalletPrefsWrite, WatchOrdersBody,
 } from './notifyTypes';
 import { NOTIFY_PROTOCOL } from './notifyTypes';
 
@@ -76,6 +76,8 @@ export interface NotifyClient {
   deleteWallet(walletTag: string): Promise<void>;
   getPrefs(walletTag: string): Promise<WalletPrefs>;
   putPrefs(walletTag: string, body: WalletPrefsWrite): Promise<WalletPrefs>;
+  /** Register submitted swap transactions so the server can watch their orders (CONTRACT §4.9). */
+  watchOrders(walletTag: string, body: WatchOrdersBody): Promise<{ watching: number }>;
   /** Current clock correction (serverTime − localNow), for tests and diagnostics. */
   clockOffsetMs(): Promise<number>;
 }
@@ -201,6 +203,7 @@ export function createNotifyClient(deps: NotifyClientDeps): NotifyClient {
     deleteWallet: async (walletTag) => { await request<null>('DELETE', `/device/wallets/${walletTag}`); },
     getPrefs: (walletTag) => request<WalletPrefs>('GET', `/device/wallets/${walletTag}/prefs`),
     putPrefs: (walletTag, body) => request<WalletPrefs>('PUT', `/device/wallets/${walletTag}/prefs`, body),
+    watchOrders: (walletTag, body) => request<{ watching: number }>('POST', `/device/wallets/${walletTag}/orders`, body),
     clockOffsetMs: async () => (await deps.store.getDevice()).clockOffsetMs,
   };
 }

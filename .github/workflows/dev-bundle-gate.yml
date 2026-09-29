@@ -97,6 +97,9 @@ jobs:
       - name: Wallet database and onboarding regressions
         run: npx vitest run src/db/wallet-db.spec.ts src/modules/welcome/components/WalletOnboarding/steps/StepSecurity.spec.ts
 
+      - name: Stored-secret formats, writers and migration (every historical format must still open)
+        run: npx vitest run src/shared/utils/secretEnvelope.spec.ts src/shared/utils/secretReaders.spec.ts src/shared/utils/secretWriters.spec.ts src/chrome/secretMigration.spec.ts src/shared/utils/legacyCryptoJs.spec.ts src/shared/utils/mpc/deviceShareCipher.spec.ts
+
       - name: Pending transaction visibility regressions
         run: npx vitest run src/chrome/pendingTransactions.spec.ts src/chrome/injectCip30Extensions.spec.ts src/modules/dashboard/components/TransactionsCard.pending.spec.ts
 

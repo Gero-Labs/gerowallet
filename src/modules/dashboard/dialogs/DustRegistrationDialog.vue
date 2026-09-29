@@ -427,9 +427,9 @@ async function runUpgrade() {
       if (!wallet.encryptedMnemonic) {
         throw new Error('Wallet has no encrypted mnemonic. Re-restore from your seed phrase.');
       }
-      const { decrypt } = await import('@/shared/utils/crypto');
+      const { decrypt, SecretPurpose } = await import('@/shared/utils/crypto');
       try {
-        mnemonic = decrypt(wallet.encryptedMnemonic, upgradePassword.value);
+        mnemonic = decrypt(wallet.encryptedMnemonic, upgradePassword.value, SecretPurpose.Mnemonic);
       } catch {
         throw new Error('Wrong spending password');
       }

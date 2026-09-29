@@ -134,6 +134,8 @@ import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import { WalletType } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
+import { Messaging } from '@/chrome/messaging';
+import { MessageTypes } from '@/models/MessageTypes';
 import i18n from '@/plugins/i18n';
 
 interface Props {
@@ -320,17 +322,13 @@ const { resolveToken } = useSwapTokenResolver();
 // and reacts when that updates. Icons stay empty only if nothing else ever polled.
 const allTokens = marketTokensRef;
 
-// ── MAX button: no host wiring needed ──
-// Investigated src/vendor/gero-swap/gero-swap.js: the widget's internal
-// TokenSelector emits a local `setMax` event that the top-level widget
-// component already handles itself (never dispatched as a CustomEvent on the
-// <gero-swap> host element, so there's nothing for GeroSwapEmbed.vue to
-// listen for). Its handler reads `token.balance` directly off the resolved
-// TokenMeta we now supply, subtracts a fixed 3,000,000-lovelace (3 ADA)
-// reserve when the From side is lovelace, and writes the result straight into
-// the amount field. So supplying `balance` via resolveToken()/buildTokenCatalog()
-// above is the ONLY host-side requirement — MAX is fully functional end-to-end
-// with no further wiring here.
+// ── Balance line + MAX button: no host wiring needed ──
+// The widget handles MAX internally (no CustomEvent reaches the <gero-swap> host).
+// It reads the balance from signer.getUtxos(), the same set the aggregator
+// coin-selects from, and falls back to the `balance` we supply via
+// resolveToken()/buildTokenCatalog() when the signer can't be read. MAX on ADA
+// subtracts the quoted route's fee leg (12 ADA before a quote exists), so the
+// filled amount can always be built.
 
 /**
  * Shape of an entry in `tokenMetadataStore.state.tokens` (see
@@ -462,8 +460,28 @@ function wireProps() {
   node.ownerPkh = resolveOwnerPkh(); // for in-widget swap history (indexed orders lookup)
 }
 
+// Ask the worker to watch this swap for a fill or cancel push. Fire-and-forget: a wallet that has not
+// opted in to notifications answers not_registered, and nothing here may block or break the emit.
+function registerSwapForAlerts(detail: unknown) {
+  const txHash = (detail as { txHash?: unknown } | undefined)?.txHash;
+  if (typeof txHash !== 'string' || !/^[0-9a-f]{64}$/.test(txHash)) return;
+  const ownerPkh = resolveOwnerPkh();
+  const walletId = walletStore.loggedWallet?.id;
+  if (!ownerPkh || walletId === undefined) return;
+  try {
+    Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.NOTIFY_WATCH_ORDERS,
+      data: { walletId, ownerPkh, txHashes: [txHash] },
+    }).catch(() => undefined);
+  } catch {
+    // alerts are best-effort
+  }
+}
+
 function onSwapSubmitted(e: Event) {
-  emit('swap-submitted', (e as CustomEvent).detail);
+  const detail = (e as CustomEvent).detail;
+  emit('swap-submitted', detail);
+  registerSwapForAlerts(detail);
 }
 
 // Widget error codes observed in src/vendor/gero-swap/gero-swap.js — mapped to existing
@@ -543,6 +561,9 @@ const CATALOG_REBUILD_DEBOUNCE_MS = 200;
 // the entire catalog (churning every TokenSelector/SelectTokenDialog row) for nothing.
 // Sorted-units string is cheap to compute and cheap to compare.
 let lastCatalogUnitsKey = '';
+// Set when the wallet's UTxO set changes; forces the next rebuild even if the token set
+// did not change (see the walletStore.utxos watch below).
+let holdingsChanged = false;
 function computeCatalogUnitsKey(): string {
   const stored = Object.values(TokenMetadataStore.state.tokens || {}) as StoredCatalogToken[];
   const units = stored.filter(token => !isAdaLike(token)).map(token => token.unit);
@@ -560,8 +581,10 @@ function scheduleCatalogRebuild() {
     tryResolveDefaultGeroTokenOut();
 
     const key = computeCatalogUnitsKey();
-    if (key === lastCatalogUnitsKey) return; // token SET unchanged — skip the rebuild
+    // Token SET unchanged and holdings unchanged: skip the rebuild.
+    if (key === lastCatalogUnitsKey && !holdingsChanged) return;
     lastCatalogUnitsKey = key;
+    holdingsChanged = false;
     wireProps();
   }, CATALOG_REBUILD_DEBOUNCE_MS);
 }
@@ -577,6 +600,17 @@ watch(() => TokenMetadataStore.state.tokens, scheduleCatalogRebuild);
 // in place), so a shallow watch is sufficient and far cheaper than a deep watch over
 // what can be a large array of MarketToken objects (each carrying a sparkline array).
 watch(allTokens, scheduleCatalogRebuild);
+
+// Holdings changed: sync hydrated after login, funds arrived, a swap settled. The signer
+// keeps its identity, so the widget only re-reads the wallet's UTxOs when `tokens` is
+// reassigned (or the pair changes). Re-send the catalog, which also refreshes its balances,
+// or a balance read before the change stays on screen and can block Swap.
+// `setUtxos()` and the browser-context broadcast both reassign the array, so a shallow
+// watch fires on every real change.
+watch(() => walletStore.utxos, () => {
+  holdingsChanged = true;
+  scheduleCatalogRebuild();
+});
 
 // isSwapEnabled can flip the maintenance overlay in/out while mounted, which
 // destroys/recreates the <gero-swap> element (v-if/v-else) — re-attach on re-entry.

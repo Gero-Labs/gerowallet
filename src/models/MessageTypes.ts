@@ -180,4 +180,5 @@ export enum MessageTypes {
   NOTIFY_PRESENT = 'NOTIFY_PRESENT', // worker -> page (B-M2)
   NOTIFY_INBOX_READ = 'NOTIFY_INBOX_READ', // page -> worker: one e, or all (B-M3 bell)
   NOTIFY_INBOX_CLEAR = 'NOTIFY_INBOX_CLEAR',
+  NOTIFY_WATCH_ORDERS = 'NOTIFY_WATCH_ORDERS', // swap widget -> worker: register a submitted swap for fill/cancel alerts
 }

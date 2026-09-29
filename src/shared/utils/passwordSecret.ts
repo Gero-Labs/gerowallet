@@ -2,6 +2,7 @@ import { argon2id } from '@noble/hashes/argon2.js';
 import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
 import { decryptLegacyAes } from './legacyCryptoJs';
 import { toB64url, fromB64url } from './mpc/base64url';
+import { assertArgon2Params } from './secretEnvelope';
 
 /**
  * Password-based encryption for small UTF-8 secrets (mnemonic, MPC password
@@ -75,6 +76,8 @@ export function decryptSecret(blob: string, password: string): string {
     const t = view.getUint32(1, false);
     const m = view.getUint32(5, false);
     const p = view.getUint32(9, false);
+    // Refuse hostile or downgraded params before running Argon2id (memory/time bomb).
+    assertArgon2Params({ t, m, p });
     const salt = raw.subarray(13, 13 + SALT_LEN);
     const nonce = raw.subarray(13 + SALT_LEN, HEADER_LEN);
     const ciphertext = raw.subarray(HEADER_LEN);

@@ -74,6 +74,7 @@ export interface DeviceView {
 
 export interface SyncedPrefs {
   categoriesOff: string[];
+  typesOff: string[];
   showAmounts: boolean;
   minReceiveLovelace: number;
   updatedAt: number | null;
@@ -92,6 +93,12 @@ export interface WalletPrefs {
 export interface WalletPrefsWrite {
   synced?: Omit<SyncedPrefs, 'updatedAt'>;
   device?: DevicePrefs;
+}
+
+/** `POST …/orders` body (CONTRACT rc4 §4.9): 1-20 unique 64-hex transaction hashes placed with `ownerPkh`. */
+export interface WatchOrdersBody {
+  ownerPkh: string;
+  txHashes: string[];
 }
 
 /** The stored DeviceRegisterProof; the server ignores the extra `stakeAddress` (§3.7). */

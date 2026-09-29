@@ -195,6 +195,8 @@ describe('payload rendering (§6.7), every t of §6.2', () => {
     expect(routeFor('activity', { tx: 'a'.repeat(64) }, false)).toEqual({ dashboard: '/transactions', sidepanel: '/activity' });
     expect(routeFor('staking', undefined, true)).toEqual({ dashboard: '/staking', sidepanel: '/staking' });
     expect(routeFor('swapOrders', undefined, true)).toEqual({ dashboard: '/swap', sidepanel: null });
+    expect(routeFor('swapOrders', { orderRef: `${'a'.repeat(64)}#0` }, true)).toEqual({ dashboard: '/swap', sidepanel: null, highlight: { orderRef: `${'a'.repeat(64)}#0` } });
+    expect(routeFor('swapOrders', { orderRef: `${'a'.repeat(64)}#0` }, false)).toEqual({ dashboard: '/swap', sidepanel: null });
     expect(routeFor('governance', undefined, true)).toEqual({ dashboard: '/governance/me', sidepanel: null });
     expect(routeFor('pairedDevices', { deviceId: 'b'.repeat(32) }, true)).toEqual({ dashboard: '/', sidepanel: null, settingsTab: 'security', highlight: { deviceId: 'b'.repeat(32) } });
     expect(routeFor('signRequest', undefined, true)).toEqual({ dashboard: '/', sidepanel: '/' });

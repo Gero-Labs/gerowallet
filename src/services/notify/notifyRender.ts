@@ -37,7 +37,7 @@ export interface RouteIntent {
   /** Open the settings dialog on this tab after navigating (pairedDevices). */
   settingsTab?: 'security';
   /** Deep-link data kept for later screens (a tx hash for transaction detail). */
-  highlight?: { tx?: string; deviceId?: string; drepId?: string };
+  highlight?: { tx?: string; deviceId?: string; drepId?: string; orderRef?: string };
 }
 
 /** What `notificationclick` needs, stored in `Notification.data`. */
@@ -86,6 +86,9 @@ const EVENT_KEYS: Record<string, { title: PushStringKey; body: PushStringKey }> 
   drep_expiring: { title: 'PUSH_DREP_EXPIRING_TITLE', body: 'PUSH_DREP_EXPIRING_BODY' },
   test: { title: 'PUSH_TEST_TITLE', body: 'PUSH_TEST_BODY' },
 };
+
+/** The event types the wallet can render, for the settings catalogue. */
+export const KNOWN_EVENT_TYPES = Object.keys(EVENT_KEYS);
 
 export function pushLocale(locale: string | undefined): PushLocale {
   return (PUSH_LOCALES as readonly string[]).includes(locale ?? '') ? locale as PushLocale : 'us';
@@ -160,7 +163,7 @@ export function formatAmounts(locale: PushLocale, a: PushAmounts, tokenInfo?: To
 
 /** §6.4: destination to routes. Unknown `d` means home; `signRequest` and `adam` are home in v1. */
 export function routeFor(d: string, x: PushPayload['x'] | undefined, deepLinks: boolean): RouteIntent {
-  const highlight = deepLinks && x ? { ...(x.tx ? { tx: x.tx } : {}), ...(x.deviceId ? { deviceId: x.deviceId } : {}), ...(x.drepId ? { drepId: x.drepId } : {}) } : undefined;
+  const highlight = deepLinks && x ? { ...(x.tx ? { tx: x.tx } : {}), ...(x.deviceId ? { deviceId: x.deviceId } : {}), ...(x.drepId ? { drepId: x.drepId } : {}), ...(x.orderRef ? { orderRef: x.orderRef } : {}) } : undefined;
   const withHighlight = (r: RouteIntent): RouteIntent => (highlight && Object.keys(highlight).length ? { ...r, highlight } : r);
   switch (d) {
     case 'activity': return withHighlight({ dashboard: highlight?.tx ? `/transactions?tx=${highlight.tx}` : '/transactions', sidepanel: '/activity' });

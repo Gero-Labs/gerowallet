@@ -14,7 +14,6 @@ import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from 'tiny-secp256k1';
 import { HDKey } from '@scure/bip32';
 import * as bip39 from 'bip39';
-import { decryptWithPassword } from '@/shared/utils/crypto';
 import { getBitcoinNetwork } from './bitcoinPsbtBuilder';
 import type { ISignedTx } from '@/chains/common/interfaces';
 
@@ -211,46 +210,6 @@ export function signAndFinalizePsbt(
     id: txId,
     hex: txHex,
   };
-}
-
-/**
- * Sign PSBT with encrypted private key (password-based)
- *
- * @param psbt PSBT to sign
- * @param encryptedMnemonic Encrypted mnemonic phrase
- * @param password Wallet password
- * @param network Bitcoin network
- * @param addressType Address type
- * @param accountIndex Account index
- * @returns Signed PSBT
- */
-export function signPsbtWithPassword(
-  psbt: string | bitcoin.Psbt,
-  encryptedMnemonic: string,
-  password: string,
-  network: string,
-  addressType: string = 'segwit',
-  accountIndex: number = 0
-): bitcoin.Psbt {
-  try {
-    // Decrypt mnemonic with password
-    const decryptedBuffer = decryptWithPassword(password, encryptedMnemonic);
-    const mnemonic = Buffer.from(decryptedBuffer).toString('utf8');
-
-    // Validate mnemonic
-    if (!bip39.validateMnemonic(mnemonic)) {
-      throw new Error('Invalid mnemonic phrase after decryption');
-    }
-
-    // Sign PSBT with decrypted mnemonic
-    return signPsbtWithMnemonic(psbt, mnemonic, network, addressType, accountIndex);
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    if (errorMessage.includes('Invalid mnemonic')) {
-      throw error;
-    }
-    throw new Error('Failed to decrypt mnemonic. Incorrect password?');
-  }
 }
 
 /**

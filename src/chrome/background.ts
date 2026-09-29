@@ -28,6 +28,7 @@ import {
   urlScan,
 } from '@/chrome/serialization';
 import { Blockchain, coin_type, ERROR, Network, Paginate, purpose } from '@/models/types';
+import { classifySubmitFailure } from '@/chrome/submitFailure';
 import networks from '@/utils/networks';
 import coinGeckoStore from '@/stores/coinGeckoStore';
 import { getDomain } from 'tldts';
@@ -1511,21 +1512,22 @@ app.add(METHOD.submitTx, async (request, sendResponse) => {
         target: TARGET,
         sender: SENDER.extension,
       });
+      return;
     }
     const response = await submitTx(request.data.tx, loggedWallet['chain'], loggedWallet['network'])
     if (!response.ok) {
       let error: unknown;
-      switch (response.status) {
-        case 400:
+      switch (classifySubmitFailure(response.status)) {
+        case 'failure':
           error = { ...TxSendError.Failure, message: response.statusText };
           break;
-        case 500:
+        case 'internal':
           error = APIError.InternalError;
           break;
-        case 429:
+        case 'refused':
           error = TxSendError.Refused;
           break;
-        case 425:
+        case 'mempoolFull':
           error = ERROR.fullMempool;
           break;
         default:
@@ -1538,6 +1540,7 @@ app.add(METHOD.submitTx, async (request, sendResponse) => {
         target: TARGET,
         sender: SENDER.extension,
       });
+      return;
     }
     const txCbor = request.data.tx
     const txIdResponse = await response.text();
@@ -1552,6 +1555,8 @@ app.add(METHOD.submitTx, async (request, sendResponse) => {
         target: TARGET,
         sender: SENDER.extension,
       });
+      // Without this, the invalid body was stored as a pending tx in the wallet's history.
+      return;
     }
 
     if (txIdResponse) {
@@ -2796,6 +2801,21 @@ app.addToOptions(MessageTypes.NOTIFY_INBOX_CLEAR, async (request, sendResponse) 
   }
 });
 
+app.addToOptions(MessageTypes.NOTIFY_WATCH_ORDERS, async (request, sendResponse) => {
+  try {
+    await booted();
+    const txHashes = Array.isArray(request.data?.txHashes) ? request.data.txHashes.map(String) : [];
+    const result = await notifyActions.watchOrders({
+      walletId: Number(request.data?.walletId),
+      ownerPkh: String(request.data?.ownerPkh ?? ''),
+      txHashes,
+    });
+    sendResponse(crossDeviceReply(request.id, { success: result.result !== 'failed', result }));
+  } catch (error) {
+    sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
+  }
+});
+
 app.addToOptions(MessageTypes.NOTIFY_WALLET_REMOVED, async (request, sendResponse) => {
   try {
     await booted();
@@ -3003,8 +3023,8 @@ app.addToOptions(MessageTypes.SIGN_TX_WITH_POOL_KEYS, async (request, sendRespon
       );
     } else {
       // Normal wallet: decrypt with spending password
-      const { decryptWithPassword } = await import('@/shared/utils/crypto');
-      coldKeyBytes = decryptWithPassword(password, encryptedColdKeyEntry.value);
+      const { decryptKeyBlob, SecretPurpose } = await import('@/shared/utils/crypto');
+      coldKeyBytes = decryptKeyBlob(encryptedColdKeyEntry.value, password, SecretPurpose.ColdKey);
     }
 
     // Step 3: Sign the transaction hash with the cold key

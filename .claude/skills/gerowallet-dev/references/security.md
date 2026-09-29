@@ -62,6 +62,20 @@ Do not invent a scheme. Two exist:
 
 The old crypto-ts/CryptoJS outer AES wrap (MD5, one iteration) was **removed** because it negated PBKDF2 under the same password. Legacy nested blobs are still readable and are migrated to the single strong layer on first password unlock, best-effort so a failed rewrite can never break signing. Do not reintroduce an outer wrap.
 
+A third format, `gpw2.` (`src/shared/utils/secretEnvelope.ts`), is Argon2id -> XChaCha20-Poly1305 with the header as AEAD associated data and a purpose byte that binds each blob to its field (`SecretPurpose`). It is written only while the `isKeyEnvelopeV2Enabled` kill switch is on (ships dark); readers shipped one release earlier, so a rollback can never meet a blob it cannot open.
+
+**Always write stored password secrets through `sealTextSecret` / `sealKeySecret`** (`src/shared/utils/secretWriters.ts`), never `encrypt` / `encryptWithPassword` directly: they pick `gpw2` or the current format from the flag. With the flag on, `src/chrome/secretMigration.ts` upgrades a wallet's existing secrets after a successful password decrypt (key-equivalence check, in-memory read-back, compare-and-swap per IndexedDB, storage read-back). A new secret stored under the spending password must be added to `CONFIG_SECRET_FIELDS` (`walletSecretFields.ts`) or it keeps the old password after a password change.
+
+**Always read stored password secrets through the single reader for the field**, never with `decryptWithPassword` or `decryptLegacyAes` directly:
+
+| Field | Reader |
+|---|---|
+| Root key (Cardano, BTC, Midnight) | `decryptPrivateKey(blob, pw)` |
+| Mnemonic (incl. a Midnight sponsor wallet's), MPC device share, 2FA data | `decrypt(blob, pw, SecretPurpose.X)` |
+| SPO cold key, Strike key | `decryptKeyBlob(blob, pw, SecretPurpose.X)` |
+
+The unlock-time root-key rewrite is gated on `isLegacyNestedKey()`, not `!isRawEncryptedKey()`: a `gpw2` blob is not raw hex either, and rewriting it would downgrade it to PBKDF2. Every historical format has a frozen fixture in `src/shared/utils/__fixtures__/secretFormats.ts`; never regenerate those.
+
 Import note: use `blake2b` as a direct dependency - `@noble/hashes/blake2` does not resolve here.
 
 ## Non-negotiables for any change in this area
