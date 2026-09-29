@@ -1,5 +1,5 @@
 <template>
-  <v-card outlined class="notifications-card notify-inbox" role="dialog" :aria-label="$t('navigation.notifications')">
+  <v-card :outlined="!inSheet" :flat="inSheet" :color="inSheet ? 'transparent' : undefined" class="notifications-card notify-inbox" :class="{ 'notify-inbox--sheet': inSheet }" role="dialog" :aria-label="$t('navigation.notifications')">
     <!-- Header: title, "N new" pill, mark-all -->
     <div class="notify-inbox__head">
       <div class="notify-inbox__title">
@@ -87,11 +87,16 @@ import { notifySettingsStore } from '@/stores/notifySettingsStore';
 import { walletStore } from '@/stores/walletStore';
 import { routeFor } from '@/services/notify/notifyRender';
 import NotifyAssetIcons from '@/shared/components/NotifyAssetIcons.vue';
+import { openFullDashboard } from '@/shared/utils/openFullDashboard';
 
-const props = defineProps<{ open: boolean; kesVisible?: boolean; kesRemaining?: number | null }>();
+// `surface`: the dashboard hosts this in the bell menu and routes on its own router; Mini Gero
+// hosts it in a bottom sheet, routes on the side panel's router where a route exists, and
+// opens the full dashboard for everything that has no side-panel equivalent.
+const props = withDefaults(defineProps<{ open: boolean; kesVisible?: boolean; kesRemaining?: number | null; surface?: 'dashboard' | 'sidepanel' }>(), { surface: 'dashboard' });
 const emit = defineEmits<{ (e: 'kes'): void; (e: 'settings'): void; (e: 'close'): void }>();
 const { t } = useTranslation();
 const router = getCurrentInstance()?.proxy?.$router;
+const inSheet = computed(() => props.surface === 'sidepanel');
 
 const items = computed(() => notifyInboxStore.state.items);
 const unread = computed(() => notifyInboxStore.unread());
@@ -128,10 +133,17 @@ function open(item: NotifyInboxItem) {
   const loggedId = (walletStore.loggedWallet as { id?: number } | null)?.id ?? null;
   if (item.walletId !== null && loggedId !== null && item.walletId !== loggedId) {
     void chrome.storage.local.set({ notifyPendingOpen: { walletId: item.walletId, d: item.d, ...(item.x ? { x: item.x } : {}), at: Date.now() } });
+    // The switch prompt lives on the dashboard; the panel hands over to it.
+    if (inSheet.value) void openFullDashboard();
     return;
   }
   const route = routeFor(item.d, item.x as Parameters<typeof routeFor>[1], true);
   if (route.settingsTab) void chrome.storage.local.set({ openSettingsOnLoad: { tab: route.settingsTab } });
+  if (inSheet.value) {
+    if (route.settingsTab || route.sidepanel === null) { void openFullDashboard(`#${route.dashboard}`); return; }
+    if (router && router.currentRoute.fullPath !== route.sidepanel) router.push(route.sidepanel).catch(() => undefined);
+    return;
+  }
   if (router && router.currentRoute.fullPath !== route.dashboard) router.push(route.dashboard).catch(() => undefined);
 }
 
@@ -156,6 +168,8 @@ watch(() => props.open, (isOpen) => { if (isOpen) void notifySettingsStore.refre
   padding: 12px 14px;
 }
 .notify-inbox__head { border-bottom: 1px solid var(--g-hairline-1); }
+/* In Mini Gero's bottom sheet the sheet is the surface: fill it, no card chrome of its own. */
+.notify-inbox--sheet { display: flex; flex-direction: column; height: 100%; }
 .notify-inbox__foot { border-top: 1px solid var(--g-hairline-1); padding-top: 10px; padding-bottom: 10px; }
 .notify-inbox__title { display: flex; align-items: center; gap: var(--g-s-2); }
 .notify-inbox__heading { font-size: 14px; font-weight: 600; color: var(--g-text-1); }
