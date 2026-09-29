@@ -143,8 +143,22 @@ describe('useDustPathB — destination path', () => {
     expect(pathB.pathBIncomingStakes.value).toEqual(['stake1relaying']);
   });
 
-  it('a successful answer with no stakes at all is DEFINITIVE: it stamps pathBBatchAsOfMs', async () => {
-    // Unlike the per-stake path, the answer does not depend on which stakes this profile holds.
+  it('a registered answer verifies Path B: it stamps pathBBatchAsOfMs together with pathBAsOfMs', async () => {
+    mocks.destination.mockResolvedValue(destination());
+
+    const pathB = mount();
+    await settle();
+
+    expect(pathB.pathBRegistered.value).toBe(true);
+    expect(pathB.pathBAsOfMs.value).toBeGreaterThan(0);
+    expect(pathB.pathBBatchAsOfMs.value).toBe(pathB.pathBAsOfMs.value);
+  });
+
+  it('an unregistered zero answer updates the figures and pathBAsOfMs but is NOT proof of zero spendable DUST', async () => {
+    // A cNIGHT-only wallet whose registration was removed externally gets exactly this from Nexus:
+    // no active stakes, zero figures. DUST generated earlier still decays down and stays spendable
+    // (ledger DustOutput::updated_value) while the indexer no longer reports it, so this is a
+    // generation status, not a verified zero. It must not stamp pathBBatchAsOfMs.
     mocks.destination.mockResolvedValue(destination({
       registered: false, nightBalance: '0', generationRate: '0', maxCapacity: '0', currentCapacity: '0', stakes: [],
     }));
@@ -153,9 +167,29 @@ describe('useDustPathB — destination path', () => {
     await settle();
 
     expect(pathB.pathBRegistered.value).toBe(false);
-    expect(pathB.pathBAsOfMs.value).toBeGreaterThan(0);
-    expect(pathB.pathBBatchAsOfMs.value).toBe(pathB.pathBAsOfMs.value);
+    expect(pathB.pathBAsOfMs.value).toBeGreaterThan(0); // display: a current reading
+    expect(pathB.pathBBatchAsOfMs.value).toBe(0); // refusal: still unknown
     expect(mocks.enumerate).not.toHaveBeenCalled();
+  });
+
+  it('un-settles Path B when a registered answer is followed by an unregistered one', async () => {
+    // Same wallet, same session: the registration is removed between two polls. The earlier
+    // registered answer's stamp must not keep vouching for a zero that is no longer verified.
+    mocks.destination.mockResolvedValueOnce(destination());
+    const pathB = mount();
+    await settle();
+    expect(pathB.pathBBatchAsOfMs.value).toBeGreaterThan(0);
+
+    mocks.destination.mockResolvedValueOnce(destination({
+      registered: false, nightBalance: '0', generationRate: '0', maxCapacity: '0', currentCapacity: '0', stakes: [],
+    }));
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(mocks.destination).toHaveBeenCalledTimes(2);
+    expect(pathB.pathBRegistered.value).toBe(false);
+    expect(pathB.pathBNight.value).toBe(0n);
+    expect(pathB.pathBAsOfMs.value).toBeGreaterThan(0);
+    expect(pathB.pathBBatchAsOfMs.value).toBe(0);
   });
 
   it('keeps the last values for the same wallet across a transient error', async () => {
@@ -319,5 +353,76 @@ describe('useDustPathB — fallback for a Nexus without dust/destination', () =>
 
     expect(pathB.pathBIsDestinationWide.value).toBe(true);
     expect(pathB.pathBNight.value).toBe(935_253_826n);
+  });
+
+  describe('the source flag moves with the figures, never before them', () => {
+    // A destination-wide total already includes native NIGHT, so useMidnightDustLive must keep
+    // dropping Path A for as long as those figures are what is shown. Flipping the flag to false
+    // while the destination figures are retained makes it add Path A on top: a double count.
+    /** A registered destination reading, taken by the first poll. */
+    async function firstPollIsDestination() {
+      mocks.destination.mockResolvedValueOnce(destination({ currentCapacity: '500' }));
+      const pathB = mount();
+      await settle();
+      expect(pathB.pathBBalance.value).toBe(500n);
+      expect(pathB.pathBIsDestinationWide.value).toBe(true);
+      return pathB;
+    }
+
+    it('destination success, then unsupported, then a failed fallback batch: figures, flag and timestamps are kept', async () => {
+      const pathB = await firstPollIsDestination();
+      const asOf = pathB.pathBAsOfMs.value;
+      const batchAsOf = pathB.pathBBatchAsOfMs.value;
+      const stakes = pathB.pathBStakes.value;
+
+      mocks.destination.mockRejectedValueOnce(new DustDestinationUnsupportedError(501));
+      mocks.enumerate.mockResolvedValue([{ stakeAddress: 'stake1a' }]);
+      mocks.batch.mockRejectedValueOnce(JSON.stringify({ status: 503 }));
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      expect(mocks.batch).toHaveBeenCalledTimes(1); // the fallback really ran, and failed
+      expect(pathB.pathBBalance.value).toBe(500n);
+      expect(pathB.pathBNight.value).toBe(935_253_826n);
+      expect(pathB.pathBRegistered.value).toBe(true);
+      expect(pathB.pathBStakes.value).toEqual(stakes);
+      expect(pathB.pathBIsDestinationWide.value).toBe(true);
+      expect(pathB.pathBAsOfMs.value).toBe(asOf);
+      expect(pathB.pathBBatchAsOfMs.value).toBe(batchAsOf);
+    });
+
+    it('destination success, then unsupported, then an empty enumeration: figures, flag and timestamps are kept', async () => {
+      const pathB = await firstPollIsDestination();
+      const asOf = pathB.pathBAsOfMs.value;
+      const batchAsOf = pathB.pathBBatchAsOfMs.value;
+
+      mocks.destination.mockRejectedValueOnce(new DustDestinationUnsupportedError(404));
+      mocks.enumerate.mockResolvedValue([]);
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      expect(mocks.enumerate).toHaveBeenCalledTimes(1); // the fallback really ran, and found nothing
+      expect(mocks.batch).not.toHaveBeenCalled();
+      expect(pathB.pathBBalance.value).toBe(500n);
+      expect(pathB.pathBRegistered.value).toBe(true);
+      expect(pathB.pathBIsDestinationWide.value).toBe(true);
+      expect(pathB.pathBAsOfMs.value).toBe(asOf); // not advanced: nothing refreshed these figures
+      expect(pathB.pathBBatchAsOfMs.value).toBe(batchAsOf);
+    });
+
+    it('a fallback that succeeds replaces the figures and clears the flag in the same step', async () => {
+      const pathB = await firstPollIsDestination();
+      const asOf = pathB.pathBAsOfMs.value;
+
+      mocks.destination.mockRejectedValueOnce(new DustDestinationUnsupportedError(404));
+      mocks.enumerate.mockResolvedValue([{ stakeAddress: 'stake1a' }]);
+      mocks.batch.mockResolvedValueOnce([row('stake1a')]);
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      expect(pathB.pathBBalance.value).toBe(100n); // the fallback row, not the destination's 500
+      expect(pathB.pathBNight.value).toBe(50n);
+      expect(pathB.pathBIsDestinationWide.value).toBe(false);
+      expect(pathB.pathBAsOfMs.value).toBeGreaterThan(asOf);
+      expect(pathB.pathBBatchAsOfMs.value).toBe(pathB.pathBAsOfMs.value);
+    });
+
   });
 });

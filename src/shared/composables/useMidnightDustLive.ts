@@ -227,10 +227,14 @@ export interface MidnightDustLive {
    * one — while Path B is still in flight. Anything that would REFUSE an
    * action on a zero balance must wait for this instead.
    *
-   * Path B counts only after a successful batch poll. "No enumerable stakes"
-   * is NOT definitive — the extension can only see stakes it holds, and a
-   * wallet fed by a stake registered elsewhere has none enumerable and real
-   * DUST — so that case stays unsettled and nothing is refused on it.
+   * Path B counts only once it has VERIFIED DUST: a `dust/destination` answer that
+   * reports `registered === true`, or a successful fallback batch poll. Two answers
+   * stay unsettled and nothing is refused on them. An unregistered or empty destination
+   * answer is a generation status, not a spendable balance: DUST generated before a
+   * registration was removed keeps decaying and stays spendable while the indexer no
+   * longer reports it. And "no enumerable stakes" on the fallback is not definitive
+   * either: the extension can only see stakes it holds, and a wallet fed by a stake
+   * registered elsewhere has none enumerable and real DUST.
    */
   readonly settled: ComputedRef<boolean>;
 }

@@ -14,13 +14,18 @@
  * than from the stakes this extension happens to hold — so a registration made
  * from the official portal or another wallet is seen too.
  *
- * Because that answer does not depend on enumerable stakes, every successful
- * response is definitive and stamps `pathBBatchAsOfMs`, zero included.
+ * GENERATION STATUS IS NOT A SPENDABLE BALANCE. The answer says what is generating
+ * NOW: the indexer only counts generation rows that are still live, so a stake whose
+ * registration was removed drops out of it at once. DUST generated earlier is not
+ * erased at that moment: the ledger's `DustOutput::updated_value` keeps decaying it, so
+ * it stays spendable for a while. An unregistered or empty answer therefore updates the
+ * displayed figures and `pathBAsOfMs`, but it is NOT proof that nothing is spendable and
+ * it does not stamp `pathBBatchAsOfMs`. Only a `registered === true` answer does.
  *
  * FALLBACK: a Nexus that does not have the endpoint yet answers 404/501; then
  * this reads the old per-stake `dust/status` rows instead, taking the figures from
  * ONE row rather than summing (see `refreshFromStakes`). That path can only see stakes
- * the extension holds, so it is not definitive.
+ * the extension holds, so its "no stakes" exit is not definitive either.
  *
  * Module-scoped singleton with refcounted polling, same lifecycle shape as
  * `useMidnightDustLive`. Capacity/rate move slowly (a per-second drip, not
@@ -53,17 +58,24 @@ const pathBRegistered = ref<boolean>(false);
 const pathBStakes = ref<string[]>([]);
 const pathBAsOfMs = ref<number>(0);
 /**
- * Stamped by a poll whose answer is DEFINITIVE: any successful `dust/destination`
- * response (zero included: it does not depend on which stakes the extension can
- * enumerate), or a successful fallback `dust/status/batch` poll. NOT by the
- * fallback's "no enumerable stakes" exit. That exit stamps `pathBAsOfMs` so
- * extrapolation and `hasData` treat it as a current reading, which is right for
- * display, but it is not a definitive zero: on that path the extension can only
- * enumerate stakes it holds, and a wallet whose DUST is credited by a stake
- * registered from the portal or another wallet has NO enumerable stakes and
- * plenty of DUST. Anything that would REFUSE an action on "Path B is zero" must
- * key off this, where "no stakes" stays unknown, the same call
- * `midnightSponsorEligibility` already makes.
+ * Stamped by a poll that VERIFIED Path B's DUST, so its figures may be refused on: a
+ * `dust/destination` answer with `registered === true`, or a successful fallback
+ * `dust/status/batch` poll. Anything that would REFUSE an action on "Path B is zero"
+ * must key off this.
+ *
+ * NOT stamped, and cleared if it was set, by an unregistered or empty `dust/destination`
+ * answer. That answer says nothing is generating now, not that nothing is spendable:
+ * DUST generated before a registration was removed keeps decaying and stays spendable
+ * (ledger `DustOutput::updated_value`), while the indexer stops reporting the row. For a
+ * cNIGHT-only wallet with an externally removed registration the answer is exactly
+ * "no active stakes, zero figures", and refusing a send on it would block spendable DUST.
+ * Such a poll still stamps `pathBAsOfMs`, which is right for display (extrapolation and
+ * `hasData`), just not for refusal.
+ *
+ * Nor by the fallback's "no enumerable stakes" exit: on that path the extension can only
+ * enumerate stakes it holds, and a wallet whose DUST is credited by a stake registered
+ * from the portal or another wallet has NO enumerable stakes and plenty of DUST. "No
+ * stakes" stays unknown, the same call `midnightSponsorEligibility` already makes.
  */
 const pathBBatchAsOfMs = ref<number>(0);
 /**
@@ -187,7 +199,10 @@ async function refreshOnce() {
     .map((stake) => stake.cardanoRewardAddress);
   pathBIsDestinationWide.value = true;
   pathBAsOfMs.value = Date.now();
-  pathBBatchAsOfMs.value = pathBAsOfMs.value;
+  // Only a REGISTERED answer verifies Path B's DUST (see `pathBBatchAsOfMs`). An
+  // unregistered one is a generation status, not a spendable-zero signal, so it clears
+  // any earlier stamp instead of leaving a registered answer's stamp to vouch for it.
+  pathBBatchAsOfMs.value = destination.registered ? pathBAsOfMs.value : 0;
 }
 
 /**
@@ -200,22 +215,32 @@ async function refreshOnce() {
  * Those rows all describe the same destination, and each carries the destination
  * total, so the figures are taken from ONE of them, not summed.
  *
- * It can only see stakes the extension holds, so unlike the destination path it is
- * never definitive about "no stakes", and its figures are not known to include
- * native NIGHT (`pathBIsDestinationWide` stays false).
+ * It can only see stakes the extension holds, so it is never definitive about
+ * "no stakes", and its figures are not known to include native NIGHT
+ * (`pathBIsDestinationWide` is false for them).
+ *
+ * The figures and the source flag are committed in ONE step, and only when this poll
+ * actually replaces the figures. Every path that keeps the previous reading (the batch
+ * fails, or there is nothing to enumerate while a reading exists) leaves the figures, the
+ * flag and both timestamps as they were: a retained destination-wide total must keep
+ * `pathBIsDestinationWide === true`, or `useMidnightDustLive` would add native Path A to a
+ * total that already contains it.
  */
 async function refreshFromStakes(network: string, dustAddress: string, key: string) {
-  pathBIsDestinationWide.value = false;
   const identities = await enumerateCardanoStakeIdentities(network);
   if (key !== committedKey) return; // superseded by a later wallet switch
   const stakes = identities.map((identity) => identity.stakeAddress);
 
   if (stakes.length === 0) {
-    // No controlled stakes for this identity. Stamp the poll rather than bare-
-    // returning, so extrapolation/hasData treat it as a current reading
-    // instead of silently leaving behind whatever the previous identity
-    // (already zeroed above) or a not-yet-run poll left in place. NOT a
-    // definitive zero — see `pathBBatchAsOfMs`.
+    // Nothing to ask about. A same-identity reading already exists when `pathBAsOfMs` is
+    // set (the identity reset zeroes it): keep it exactly as it is, timestamp included,
+    // rather than advancing the age of figures this poll did not refresh.
+    if (pathBAsOfMs.value !== 0) return;
+    // First reading for this identity: stamp the poll rather than bare-returning, so
+    // extrapolation/hasData treat it as a current reading instead of silently leaving
+    // behind whatever the previous identity (already zeroed above) or a not-yet-run
+    // poll left in place. NOT a definitive zero — see `pathBBatchAsOfMs`.
+    pathBIsDestinationWide.value = false;
     pathBIncomingStakes.value = [];
     pathBAsOfMs.value = Date.now();
     return;
@@ -248,8 +273,10 @@ async function refreshFromStakes(network: string, dustAddress: string, key: stri
     (r) => r.registered === true && (r.dustAddress ?? '').toLowerCase() === dustLower,
   );
 
-  // One row, not a sum: every kept row is the same destination.
+  // One row, not a sum: every kept row is the same destination. The source flag moves with
+  // the figures it describes, in this same synchronous block (never earlier).
   const [first] = kept;
+  pathBIsDestinationWide.value = false;
   pathBBalance.value = toBig(first?.currentCapacity);
   pathBCap.value = toBig(first?.maxCapacity);
   pathBRate.value = toBig(first?.generationRate);
@@ -377,7 +404,10 @@ export interface DustPathB {
   readonly pathBIncomingStakes: ComputedRef<string[]>;
   /** Wall-clock ms of the last successful poll (0 = never). */
   readonly pathBAsOfMs: ComputedRef<number>;
-  /** Last DEFINITIVE successful poll; 0 until one has completed. See the ref's doc. */
+  /**
+   * Last poll that VERIFIED Path B's DUST (a registered destination answer, or a fallback batch
+   * poll); 0 until one has, and again after an unregistered answer. See the ref's doc.
+   */
   readonly pathBBatchAsOfMs: ComputedRef<number>;
 }
 

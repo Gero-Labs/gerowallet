@@ -86,7 +86,7 @@ describe('Path A + Path B', () => {
   });
 
   it('adds Path A when Path B is not registered', async () => {
-    // A definitive-zero destination answer: destination-wide but nothing registered.
+    // A destination-wide answer with nothing registered: Path B adds nothing, so Path A shows.
     setB({ pathBIsDestinationWide: true, pathBBatchAsOfMs: Date.now(), pathBAsOfMs: Date.now() });
     const live = mount();
     await settle();
