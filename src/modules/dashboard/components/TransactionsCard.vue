@@ -1,480 +1,312 @@
 <template>
-  <v-card
-    :class="['fill-height d-flex flex-column', isBitcoin ? 'tx-glass-card' : 'glass-panel']"
-    :outlined="!isBitcoin"
-    :loading="loadingTxs"
-  >
-    <!-- Bitcoin header -->
-    <v-card-title v-if="isBitcoin" class="px-3 pt-3 pb-2 flex-grow-0 tx-card-title">
-      <div class="tx-icon-box">
-        <svg viewBox="0 0 20 20" fill="none" width="13" height="13">
-          <path d="M3 5h14M3 9h14M3 13h8M3 17h5" stroke="var(--g-accent)" stroke-width="1.5" stroke-linecap="round"/>
-        </svg>
-      </div>
-      <div class="tx-heading-group ml-2">
-        <router-link v-if="!isFullList" to="/transactions" class="tx-heading-link">
+  <v-card class="tx-list glass-panel fill-height d-flex flex-column" outlined :loading="loadingTxs">
+    <div class="tx-list__head">
+      <div class="tx-list__title-row">
+        <router-link v-if="!isFullList" to="/transactions" class="tx-list__title t-heading">
           {{ $t('transactions.title') }}
         </router-link>
-        <span v-else class="tx-heading">{{ $t('transactions.title') }}</span>
-        <span class="tx-count">{{ transactions.length }} TXS</span>
+        <h2 v-else class="tx-list__title t-heading">{{ $t('transactions.title') }}</h2>
+        <span class="tx-list__count g-num">{{ transactions.length }}</span>
+        <v-spacer />
+
+        <v-tooltip bottom content-class="custom-tooltip">
+          <template v-slot:activator="{ on, attrs }">
+            <button
+              type="button"
+              class="tx-icon-btn"
+              v-bind="attrs"
+              :aria-label="sortLabel"
+              v-on="on"
+              @click="sortDesc = !sortDesc"
+            >
+              <v-icon small>{{ sortDesc ? 'mdi-sort-clock-descending-outline' : 'mdi-sort-clock-ascending-outline' }}</v-icon>
+            </button>
+          </template>
+          <span>{{ sortLabel }}</span>
+        </v-tooltip>
+
+        <!-- Filter menu -->
+        <v-menu
+          v-if="isFullList && !isBitcoin"
+          v-model="filterMenuOpen"
+          :close-on-content-click="false"
+          offset-y
+          nudge-left="150"
+          nudge-bottom="4"
+          min-width="240"
+          max-width="300"
+          content-class="filter-menu"
+          transition="none"
+        >
+          <template v-slot:activator="{ on, attrs }">
+            <button type="button" class="tx-icon-btn" v-bind="attrs" :aria-label="$t('common.filter')" v-on="on">
+              <v-icon small>mdi-tune-variant</v-icon>
+              <span v-if="activeFilterCount > 0" class="tx-icon-btn__badge g-num">{{ activeFilterCount }}</span>
+            </button>
+          </template>
+          <v-card class="glass-popover" dark>
+            <v-card-text class="pa-3">
+              <!-- Date range -->
+              <div class="filter-section-label t-label">{{ $t('transactions.dateRange') }}</div>
+              <div class="d-flex align-center" style="gap: 6px">
+                <v-menu
+                  v-model="dateFromMenu"
+                  :close-on-content-click="false"
+                  offset-y
+                  min-width="auto"
+                  content-class="date-picker-menu"
+                >
+                  <template v-slot:activator="{ on, attrs }">
+                    <v-text-field
+                      :value="filterDateFrom || ''"
+                      :placeholder="$t('transactions.from')"
+                      dense
+                      outlined
+                      hide-details
+                      readonly
+                      v-bind="attrs"
+                      v-on="on"
+                      class="filter-date-field"
+                      clearable
+                      @click:clear="filterDateFrom = null"
+                    >
+                      <template v-slot:prepend-inner>
+                        <v-icon small class="mt-1 filter-date-icon">mdi-calendar</v-icon>
+                      </template>
+                    </v-text-field>
+                  </template>
+                  <v-date-picker
+                    :value="filterDateFrom"
+                    @input="filterDateFrom = $event; dateFromMenu = false"
+                    :min="earliestTxDate"
+                    :max="filterDateTo || latestTxDate"
+                    :events="transactionDates"
+                    event-color="var(--g-accent)"
+                    no-title
+                    dark
+                    color="var(--g-accent)"
+                    class="filter-date-picker"
+                  />
+                </v-menu>
+                <v-menu
+                  v-model="dateToMenu"
+                  :close-on-content-click="false"
+                  offset-y
+                  min-width="auto"
+                  content-class="date-picker-menu"
+                >
+                  <template v-slot:activator="{ on, attrs }">
+                    <v-text-field
+                      :value="filterDateTo || ''"
+                      :placeholder="$t('transactions.to')"
+                      dense
+                      outlined
+                      hide-details
+                      readonly
+                      v-bind="attrs"
+                      v-on="on"
+                      class="filter-date-field"
+                      clearable
+                      @click:clear="filterDateTo = null"
+                    >
+                      <template v-slot:prepend-inner>
+                        <v-icon small class="mt-1 filter-date-icon">mdi-calendar</v-icon>
+                      </template>
+                    </v-text-field>
+                  </template>
+                  <v-date-picker
+                    :value="filterDateTo"
+                    @input="filterDateTo = $event; dateToMenu = false"
+                    :min="filterDateFrom || earliestTxDate"
+                    :max="latestTxDate"
+                    :events="transactionDates"
+                    event-color="var(--g-accent)"
+                    no-title
+                    dark
+                    color="var(--g-accent)"
+                    class="filter-date-picker"
+                  />
+                </v-menu>
+              </div>
+
+              <v-divider class="my-2 filter-divider" />
+
+              <!-- Transaction type -->
+              <div class="filter-section-label t-label">{{ $t('transactions.type') }}</div>
+              <v-chip-group v-model="filterTypes" multiple column>
+                <v-chip
+                  v-for="ft in typeFilterOptions"
+                  :key="ft.value"
+                  :value="ft.value"
+                  small
+                  outlined
+                  filter
+                  class="filter-type-chip"
+                >{{ ft.text }}</v-chip>
+              </v-chip-group>
+
+              <v-divider class="my-2 filter-divider" />
+
+              <!-- Token filter -->
+              <div class="filter-section-label t-label">{{ $t('transactions.tokens') }}</div>
+              <v-chip-group v-model="filterTokenMode" column>
+                <v-chip value="all" small outlined filter class="filter-type-chip">{{ $t('common.all') }}</v-chip>
+                <v-chip value="ada_only" small outlined filter class="filter-type-chip">ADA {{ $t('common.only') }}</v-chip>
+                <v-chip value="with_tokens" small outlined filter class="filter-type-chip">{{ $t('transactions.withTokens') }}</v-chip>
+              </v-chip-group>
+
+              <v-divider class="my-2 filter-divider" />
+
+              <!-- Export CSV -->
+              <v-btn text block small class="justify-start" @click="exportToCsv()">
+                <v-icon small class="mr-2">mdi-download</v-icon>
+                {{ $t('transactions.exportCsv') }}
+              </v-btn>
+
+              <!-- Clear all -->
+              <v-btn
+                :disabled="activeFilterCount === 0"
+                text
+                block
+                small
+                class="justify-start mt-1"
+                color="error"
+                @click="clearAllFilters()"
+              >
+                <v-icon small class="mr-2">mdi-close-circle-outline</v-icon>
+                {{ $t('common.clearFilters') }}
+              </v-btn>
+            </v-card-text>
+          </v-card>
+        </v-menu>
       </div>
-      <v-spacer />
-      <v-text-field
-        v-model="search"
-        dense
-        flat
-        solo
-        hide-details
-        :placeholder="$t('common.search')"
-        prepend-inner-icon="mdi-magnify"
-        clearable
-        class="top-level-search tx-search-field"
-      />
-    </v-card-title>
 
-    <!-- Cardano/Apex header (original) -->
-    <v-card-title v-else class="pb-0 flex-grow-0">
-      <router-link v-if="!isFullList" to="/transactions" style="text-decoration: auto; color: var(--g-text-1)">
-        {{ $t('transactions.title') }}
-      </router-link>
-      <span v-else>{{ $t('transactions.title') }}</span>
-      <v-spacer />
-
-      <!-- Expandable search (grows to the left) -->
-      <div class="expanding-search-wrap">
+      <label class="tx-search">
+        <v-icon small class="tx-search__icon">mdi-magnify</v-icon>
         <input
           ref="searchField"
           v-model="search"
-          type="text"
-          class="expanding-search-input"
-          :placeholder="t('common.search')"
-          @keydown.esc="searchField?.blur()"
+          type="search"
+          class="tx-search__input"
+          :placeholder="$t('transactions.searchPlaceholder')"
+          :aria-label="$t('common.search')"
+          @keydown.esc="search = ''"
         />
-        <v-icon small class="expanding-search-icon" color="var(--g-text-1)">mdi-magnify</v-icon>
+      </label>
+    </div>
+
+    <div ref="listScroller" class="tx-list__scroll">
+      <!-- Nothing to show yet and the loader is still writing: placeholders, not
+           "no transactions", which would be a claim. -->
+      <div v-if="showSkeleton" aria-hidden="true">
+        <div v-for="n in 6" :key="n" class="tx-skeleton">
+          <span class="g-skeleton tx-skeleton__glyph"></span>
+          <span class="tx-skeleton__text">
+            <span class="g-skeleton tx-skeleton__line tx-skeleton__line--title"></span>
+            <span class="g-skeleton tx-skeleton__line tx-skeleton__line--meta"></span>
+          </span>
+          <span class="g-skeleton tx-skeleton__line tx-skeleton__line--amount"></span>
+        </div>
       </div>
 
-      <!-- Filter menu -->
-      <v-menu
-        v-if="props.isFullList"
-        v-model="filterMenuOpen"
-        :close-on-content-click="false"
-        offset-y
-        nudge-left="150"
-        nudge-bottom="4"
-        min-width="240"
-        max-width="300"
-        content-class="filter-menu"
-        transition="none"
-      >
-        <template v-slot:activator="{ on, attrs }">
-          <v-btn icon small v-bind="attrs" v-on="on" class="ml-1">
-            <v-badge color="transparent" avatar :value="activeFilterCount > 0" :content="activeFilterCount" overlap>
-              <template v-slot:badge>
-                <v-avatar size="14" height="14" style="height: 14px!important;" color="primary">
-                  <span style="font-size: 11px; color: var(--g-on-grad)">{{ activeFilterCount }}</span>
-                </v-avatar>
-              </template>
-              <v-icon small>mdi-tune-variant</v-icon>
-            </v-badge>
-          </v-btn>
-        </template>
-        <v-card class="glass-popover" dark>
-          <v-card-text class="pa-3">
-            <!-- Date range -->
-            <div class="filter-section-label t-label">{{ $t('transactions.dateRange') }}</div>
-            <div class="d-flex align-center" style="gap: 6px">
-              <v-menu
-                v-model="dateFromMenu"
-                :close-on-content-click="false"
-                offset-y
-                min-width="auto"
-                content-class="date-picker-menu"
-              >
-                <template v-slot:activator="{ on, attrs }">
-                  <v-text-field
-                    :value="filterDateFrom || ''"
-                    :placeholder="$t('transactions.from')"
-                    dense
-                    outlined
-                    hide-details
-                    readonly
-                    v-bind="attrs"
-                    v-on="on"
-                    class="filter-date-field"
-                    clearable
-                    @click:clear="filterDateFrom = null"
-                  >
-                    <template v-slot:prepend-inner>
-                      <v-icon small class="mt-1" style="opacity: 0.5">mdi-calendar</v-icon>
-                    </template>
-                  </v-text-field>
-                </template>
-                <v-date-picker
-                  :value="filterDateFrom"
-                  @input="filterDateFrom = $event; dateFromMenu = false"
-                  :min="earliestTxDate"
-                  :max="filterDateTo || latestTxDate"
-                  :events="transactionDates"
-                  event-color="var(--g-accent)"
-                  no-title
-                  dark
-                  color="var(--g-accent)"
-                  class="filter-date-picker"
-                  @click:clear="filterDateTo = null"
-                />
-              </v-menu>
-              <v-menu
-                v-model="dateToMenu"
-                :close-on-content-click="false"
-                offset-y
-                min-width="auto"
-                content-class="date-picker-menu"
-              >
-                <template v-slot:activator="{ on, attrs }">
-                  <v-text-field
-                    :value="filterDateTo || ''"
-                    :placeholder="$t('transactions.to')"
-                    dense
-                    outlined
-                    hide-details
-                    readonly
-                    v-bind="attrs"
-                    v-on="on"
-                    class="filter-date-field"
-                    clearable
-                  >
-                    <template v-slot:prepend-inner>
-                      <v-icon small class="mt-1" style="opacity: 0.5">mdi-calendar</v-icon>
-                    </template>
-                  </v-text-field>
-                </template>
-                <v-date-picker
-                  :value="filterDateTo"
-                  @input="filterDateTo = $event; dateToMenu = false"
-                  :min="filterDateFrom || earliestTxDate"
-                  :max="latestTxDate"
-                  :events="transactionDates"
-                  event-color="var(--g-accent)"
-                  no-title
-                  dark
-                  color="var(--g-accent)"
-                  class="filter-date-picker"
-                />
-              </v-menu>
-            </div>
+      <div v-else-if="displayedTransactions.length === 0" class="tx-list__empty">
+        <TxGlyph :icon="hasActiveQuery ? 'mdi-text-search' : 'mdi-clipboard-text-outline'" large />
+        <span class="tx-list__empty-title">
+          {{ hasActiveQuery ? $t('transactions.noMatches') : $t('transactions.noTransactionsFound') }}
+        </span>
+        <GButton v-if="hasActiveQuery" tier="secondary" compact @click="clearQuery()">
+          {{ $t('common.clearFilters') }}
+        </GButton>
+      </div>
 
-            <v-divider class="my-2" style="opacity: 0.1" />
-
-            <!-- Transaction type -->
-            <div class="filter-section-label t-label">{{ $t('transactions.type') }}</div>
-            <v-chip-group v-model="filterTypes" multiple column>
-              <v-chip
-                v-for="ft in typeFilterOptions"
-                :key="ft.value"
-                :value="ft.value"
-                small
-                outlined
-                filter
-                class="filter-type-chip"
-              >{{ ft.text }}</v-chip>
-            </v-chip-group>
-
-            <v-divider class="my-2" style="opacity: 0.1" />
-
-            <!-- Token filter -->
-            <div class="filter-section-label t-label">{{ $t('transactions.tokens') }}</div>
-            <v-chip-group v-model="filterTokenMode" column>
-              <v-chip value="all" small outlined filter class="filter-type-chip">{{ $t('common.all') }}</v-chip>
-              <v-chip value="ada_only" small outlined filter class="filter-type-chip">ADA {{ $t('common.only') }}</v-chip>
-              <v-chip value="with_tokens" small outlined filter class="filter-type-chip">{{ $t('transactions.withTokens') }}</v-chip>
-            </v-chip-group>
-
-            <v-divider class="my-2" style="opacity: 0.1" />
-
-            <!-- Export CSV -->
-            <v-btn text block small class="justify-start" @click="exportToCsv()">
-              <v-icon small class="mr-2">mdi-download</v-icon>
-              {{ $t('transactions.exportCsv') }}
-            </v-btn>
-
-            <!-- Clear all -->
-            <v-btn
-              :disabled="activeFilterCount === 0"
-              text
-              block
-              small
-              class="justify-start mt-1"
-              color="error"
-              @click="clearAllFilters()"
+      <template v-else>
+        <section v-for="group in groupedTransactions" :key="group.key" class="tx-day">
+          <h3 class="tx-day__head">
+            <span>{{ group.label }}</span>
+            <span v-if="group.net" class="tx-day__net g-num">{{ group.net }}</span>
+          </h3>
+          <div
+            v-for="item in group.items"
+            :key="item.id"
+            :data-id="item.id"
+            :class="['tx-row', { 'selected-transaction': isSelected(item) }]"
+          >
+            <button
+              type="button"
+              class="tx-row__main"
+              :aria-current="isSelected(item) ? 'true' : undefined"
+              @click="handleOnTransactionsRowClick(item)"
             >
-              <v-icon small class="mr-2">mdi-close-circle-outline</v-icon>
-              {{ $t('common.clearFilters') }}
-            </v-btn>
-          </v-card-text>
-        </v-card>
-      </v-menu>
-    </v-card-title>
-    <v-card-text class="pa-0 text-center flex-grow-1 d-flex flex-column">
-      <div :class="{ 'table-container': props.isFullList }" class="flex-grow-1">
-        <v-data-table
-          :header-props="{ 'sort-icon': 'mdi-menu-up' }"
-          :items="displayedTransactions"
-          :headers="activityHeaders"
-          class="transparent transactions-table"
-          :sort-by.sync="sortBy"
-          :sort-desc.sync="sortDesc"
-          :items-per-page="-1"
-          hide-default-footer
-          dense
-          @click:row="handleOnTransactionsRowClick"
-          :item-class="getRowClass"
-        >
-          <template v-slot:[`item.tx_timestamp`]="{ item }">
-            <v-list-item two-line class="px-0 py-1" style="height: 55px">
-              <v-list-item-content class="px-0 py-1">
-                <v-list-item-title class="activity-title">
-                  <span class="activity-text" :class="{ 'failed-transaction-text': isPendingTooLong(item) }">{{ getTransactionStatus(item) }}</span>
-                  <v-tooltip v-if="item.pending" content-class="custom-tooltip" top>
-                    <template v-slot:activator="{ on, attrs }">
-                      <span
-                        v-bind="attrs"
-                        v-on="on"
-                        :class="isPendingTooLong(item) ? 'pending-indicator-remove' : 'pending-indicator'"
-                        @click.stop="isPendingTooLong(item) && handleRemovePendingTransaction(item)"
-                      >
-                        <v-icon v-if="isPendingTooLong(item)" x-small color="error">mdi-close-circle</v-icon>
-                      </span>
-                    </template>
-                    <span>{{ isPendingTooLong(item) ? $t('transactions.removePendingTransaction') : $t('dashboard.transactionPendingConfirmation') }}</span>
-                  </v-tooltip>
-                </v-list-item-title>
-                <v-list-item-subtitle class="activity-date">
-                  <v-tooltip content-class="custom-tooltip" top>
-                    <template v-slot:activator="{ on, attrs }">
-                      <span v-bind="attrs" v-on="on">
-                        {{ time.format(new Date(item.tx_timestamp * 1000)) }}
-                      </span>
-                    </template>
-                    <span>
-                      {{ new Date(item.tx_timestamp * 1000).toLocaleString() }}
-                      <br v-if="item.epoch_no" />
-                      {{ item.epoch_no ? `${$t('transactions.epoch')}: ${item.epoch_no}` : '' }}
-                    </span>
-                  </v-tooltip>
-                </v-list-item-subtitle>
-                <v-list-item-subtitle class="chips-row">
-                  <v-chip
-                    v-if="isStakeRegistration(item)"
-                    x-small
-                    outlined
-                    class="px-1"
-                    color="error"
-                    style="margin-right: 4px !important"
-                    >{{ $t('transactions.stakeRegistration') }}</v-chip
-                  >
-                  <v-chip
-                    v-if="isStakeDeRegistration(item)"
-                    x-small
-                    outlined
-                    class="px-1"
-                    color="error"
-                    style="margin-right: 4px !important"
-                    >{{ $t('transactions.stakeDeregistration') }}</v-chip
-                  >
-                  <v-chip
-                    v-if="isWithdrawal(item)"
-                    x-small
-                    outlined
-                    class="px-1"
-                    color="info"
-                    style="margin-right: 4px !important"
-                    >{{ $t('transactions.withdrawal') }}</v-chip
-                  >
-                  <v-chip
-                    v-if="isCashback(item)"
-                    outlined
-                    class="px-1"
-                    x-small
-                    color="#E77DFF"
-                    style="margin-left: 1px; margin-bottom: 1px"
-                    >{{ $t('cashback.cashback') }}</v-chip
-                  >
-                  <v-chip
-                    v-if="isInternalTransfer(item)"
-                    outlined
-                    class="px-1"
-                    x-small
-                    color="#9C27B0"
-                    style="margin-left: 1px; margin-bottom: 1px"
-                    >{{ $t('common.internal') }}</v-chip
-                  >
-                  <template v-for="(contact, index) in (getContactName(item) || [])">
-                    <v-chip
-                      v-if="contact.isHandle"
-                      outlined
-                      class="px-1"
-                      x-small
-                      color="var(--g-text-1)"
-                      style="margin-left: 1px; margin-bottom: 1px"
-                      :key="'h-' + index"
-                    ><span style="color: var(--g-success); font-weight: 600">$</span>{{ contact.label.replace(/^\$/, '') }}</v-chip>
-                    <v-chip
-                      v-else
-                      outlined
-                      class="px-1"
-                      x-small
-                      color="#FF9800"
-                      style="margin-left: 1px; margin-bottom: 1px"
-                      :key="'c-' + index"
-                    ><v-icon x-small class="mr-1">mdi-account</v-icon>{{ contact.label }}</v-chip>
-                  </template>
-                  <v-chip
-                    v-if="isStrike(item)"
-                    outlined
-                    class="px-1"
-                    x-small
-                    color="#26FAB0"
-                    style="margin-left: 1px; margin-bottom: 1px"
-                    >{{ $t('transactions.strike') }}</v-chip
-                  >
-                  <v-chip
-                    v-if="isDustRegistration(item)"
-                    outlined
-                    class="px-1"
-                    x-small
-                    color="rgb(232, 199, 137)"
-                    style="margin-left: 1px; margin-bottom: 1px"
-                    >{{ $t('transactions.dustRegistration') }}</v-chip
-                  >
-                  <v-chip
-                    v-if="isDexHunter(item)"
-                    outlined
-                    class="px-1"
-                    x-small
-                    color="#007DFF"
-                    style="margin-left: 1px; margin-bottom: 1px"
-                    >{{ $t('transactions.dexhunter') }}</v-chip
-                  >
-                  <v-chip
-                    v-if="isSteelSwap(item)"
-                    outlined
-                    class="px-1"
-                    x-small
-                    color="var(--g-text-1)"
-                    style="margin-left: 1px; margin-bottom: 1px"
-                    >{{ $t('transactions.steelswap') }}</v-chip
-                  >
-                  <v-chip
-                    v-if="isMinswap(item)"
-                    outlined
-                    class="px-1"
-                    x-small
-                    color="#89AAFF"
-                    style="margin-left: 1px; margin-bottom: 1px"
-                    >{{ $t('transactions.minswap') }}</v-chip
-                  >
-                  <v-chip
-                    v-if="isJpgStore(item)"
-                    outlined
-                    class="px-1"
-                    x-small
-                    color="#ffdb24"
-                    style="margin-left: 1px; margin-bottom: 1px"
-                    >jpg.store</v-chip
-                  >
-                  <v-chip
-                    v-if="isWingRiders(item)"
-                    outlined
-                    class="px-1"
-                    x-small
-                    color="#e5e7eb"
-                    style="margin-left: 1px; margin-bottom: 1px"
-                    >{{ $t('transactions.wingRiders') }}</v-chip
-                  >
-                  <v-chip
-                    v-if="isMuesliSwap(item)"
-                    outlined
-                    class="px-1"
-                    x-small
-                    color="#5B4EFF"
-                    style="margin-left: 1px; margin-bottom: 1px"
-                    >{{ $t('transactions.muesliswap') }}</v-chip
-                  >
-                  <span v-if="isVyFi(item)" class="vyfi-chip"></span>
-                  <span v-if="isSundaeSwap(item)" class="sundaeswap-chip" :data-label="$t('transactions.sundaeswap')"></span>
-                  <span v-if="isSplash(item)" class="splash-chip" :data-label="$t('transactions.splash')"></span>
-                </v-list-item-subtitle>
-              </v-list-item-content>
-            </v-list-item>
-          </template>
-          <template v-slot:[`item.assets`]="{ item }">
-            <StackedTokens
-              :tokens="item.assets"
-              :style="item.status === 'Pending' ? { opacity: '0.5' } : {}"
-              :token-size="30"
-            ></StackedTokens>
-          </template>
-          <template v-slot:[`item.amount`]="{ item }">
-            <div v-if="loggedWallet" style="display: flex; flex-direction: column; align-items: center">
-              <div
-                :style="{
-                  color: getColor(item),
-                  fontSize: '14px',
-                  paddingBottom: '4px',
-                  textWrap: 'nowrap',
-                }"
-              >
-                <template v-if="hideBalances">••••••</template>
-                <template v-else>
-                  {{
-                    filters.toCurrency(
-                      item.ada ?? 0,
-                      true,
-                      0,
-                      networks.resolveCurrencySymbol(loggedWallet.chain, loggedWallet.network),
-                      '',
-                      false
-                    )
-                  }}
-                </template>
-              </div>
-              <div style="font-size: 12px; color: var(--g-text-2); white-space: nowrap">
-                <template v-if="hideBalances">$•••</template>
-                <template v-else>
-                  {{ filters.toCurrency(convertFiat((item.ada ?? 0) * adaPrice), true, 0, getCurrencySymbol(), '', false, 6) }}
-                </template>
-              </div>
-            </div>
-          </template>
-          <template v-slot:body.append>
-            <!-- Loading indicator for infinite scroll -->
-            <tr v-if="props.isFullList && isLoadingMore" class="no-hover">
-              <td :colspan="activityHeaders.length" class="text-center pa-4">
-                <v-progress-circular indeterminate color="primary" size="24"></v-progress-circular>
-                <span class="ml-2">{{ $t('transactions.loadingMoreTransactions') }}</span>
-              </td>
-            </tr>
-            <!-- End of list indicator for infinite scroll -->
-            <tr v-else-if="props.isFullList && hasReachedEnd && !debouncedSearch" class="no-hover">
-              <td :colspan="activityHeaders.length" class="text-center pa-4">
-                <span class="text-caption text--secondary">
-                  {{ displayedTransactions.length > 0 ? $t('transactions.noMoreTransactions') : $t('transactions.noTransactionsFound') }}
+              <TxGlyph :icon="view(item).icon" :tone="view(item).tone" />
+              <span class="tx-row__text">
+                <span class="tx-row__title">
+                  <span :class="['tx-row__title-text', { 'tx-row__title-text--failed': isPendingTooLong(item) }]">
+                    {{ getTransactionStatus(item) }}
+                  </span>
+                  <span
+                    v-if="item.pending && !isPendingTooLong(item)"
+                    class="pending-indicator"
+                    role="status"
+                    :aria-label="$t('dashboard.transactionPendingConfirmation')"
+                    :title="$t('dashboard.transactionPendingConfirmation')"
+                  ></span>
                 </span>
-              </td>
-            </tr>
-            <!-- Intersection observer target for infinite scroll -->
-            <tr v-if="props.isFullList && !hasReachedEnd && !isLoadingMore" class="no-hover">
-              <td :colspan="activityHeaders.length" class="pa-0 ma-0">
-                <div ref="intersectionTarget" style="height: 1px"></div>
-              </td>
-            </tr>
-          </template>
-        </v-data-table>
-      </div>
-    </v-card-text>
+                <span class="tx-row__meta">
+                  <span :title="absoluteTime(item)">{{ relativeTime(item) }}</span>
+                  <TxTag v-for="tag in view(item).tags" :key="tag.key" :tag="tag" />
+                </span>
+              </span>
+              <span
+                v-if="view(item).tokens.length"
+                :class="['tx-row__tokens', { 'tx-row__tokens--pending': item.pending }]"
+              >
+                <span v-for="token in view(item).tokens" :key="token.key" class="tx-row__token">
+                  <img :src="token.img" :alt="token.name" />
+                </span>
+                <span v-if="view(item).moreTokens" class="tx-row__token tx-row__token--more g-num">
+                  +{{ view(item).moreTokens }}
+                </span>
+              </span>
+              <span v-if="loggedWallet" class="tx-row__value">
+                <span :class="['tx-row__amount', 'g-num', amountClass(item)]">
+                  <template v-if="hideBalances">••••••</template>
+                  <template v-else>{{ formatRowAmount(item) }}</template>
+                </span>
+                <span v-if="adaPrice > 0" class="tx-row__fiat g-num">
+                  <template v-if="hideBalances">{{ getCurrencySymbol() }}•••</template>
+                  <template v-else>{{ formatRowFiat(item) }}</template>
+                </span>
+              </span>
+            </button>
+            <button
+              v-if="isPendingTooLong(item)"
+              type="button"
+              class="tx-icon-btn tx-row__dismiss"
+              :aria-label="$t('transactions.removePendingTransaction')"
+              :title="$t('transactions.removePendingTransaction')"
+              @click="handleRemovePendingTransaction(item)"
+            >
+              <v-icon small>mdi-delete-outline</v-icon>
+            </button>
+          </div>
+        </section>
+
+        <div v-if="isFullList && isLoadingMore" class="tx-list__footer">
+          <v-progress-circular indeterminate :size="14" :width="2" color="var(--g-text-3)" />
+          {{ $t('transactions.loadingMoreTransactions') }}
+        </div>
+        <div v-else-if="isFullList && hasReachedEnd && !debouncedSearch" class="tx-list__footer">
+          {{ $t('transactions.noMoreTransactions') }}
+        </div>
+      </template>
+
+      <!-- Intersection observer target for infinite scroll -->
+      <div v-if="isFullList && !hasReachedEnd" ref="intersectionTarget" class="tx-list__sentinel"></div>
+    </div>
+
     <v-card-actions
-      v-if="!props.isFullList && transactions.length > itemsPerPage"
-      :class="['pa-0 no-hover text-center justify-center', isBitcoin ? 'tx-pagination-bar' : '']"
+      v-if="!isFullList && transactions.length > itemsPerPage"
+      class="pa-0 text-center justify-center"
     >
       <v-pagination
         v-model="currentPage"
@@ -495,30 +327,63 @@
       :transactionInfo="transactionInfo"
       @close="handleTransactionModalClose"
     ></TransactionDetailsDialog>
-
   </v-card>
 </template>
 <script setup lang="ts">
 import '@/shared/styles/compact-pagination.css';
 import { computed, getCurrentInstance, nextTick, onMounted, onUnmounted, ref, toRefs, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import StackedTokens from '@/modules/dashboard/components/StackedTokens.vue';
 import filters from '@/shared/utils/filters';
 import TransactionDetailsDialog from '@/modules/dashboard/dialogs/TransactionDetailsDialog.vue';
 import BitcoinTransactionDetailsDialog from '@/modules/dashboard/dialogs/BitcoinTransactionDetailsDialog.vue';
+import GButton from '@/shared/components/GButton/GButton.vue';
+import TxGlyph from '@/modules/transactions/components/TxGlyph.vue';
+import TxTag from '@/modules/transactions/components/TxTag.vue';
 import networks from '@/utils/networks';
 import time from '@/plugins/time';
+import assts from '@/utils/assets';
 import { walletStore } from '@/stores/walletStore';
 import { loadingState } from '@/stores/loading';
-import { Cardano, Serialization } from '@cardano-sdk/core';
+import { Cardano } from '@cardano-sdk/core';
 import { Blockchain } from '@/models/types';
 import { networkStore } from '@/stores/networkStore';
 import { priceStore } from '@/stores/priceStore';
 import stakingStoreActions from '@/stores/stakingStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import debounce from 'lodash/debounce';
-import { isCardanoTx, StoredTransaction } from '@/models/transaction.types';
-import { DUST_MAPPING_VALIDATOR } from '@/shared/composables/useCnightDustRegistration';
+import { isCardanoTx, StoredTransaction, TxAsset } from '@/models/transaction.types';
+import { resolveAsset } from '@/shared/utils/resolver';
+import { getCertificateBaseStatus } from '@/modules/dashboard/utils/transactionStatus';
+import {
+  addFundTransferStatus,
+  buildClassifyContext,
+  buildTxTags,
+  buildTxTitle,
+  classifyTxKind,
+  getTxContacts,
+  isCashback,
+  isDexHunter,
+  isDustRegistration,
+  isGeroSwap,
+  isInternalTransfer,
+  isJpgStore,
+  isMinswap,
+  isMuesliSwap,
+  isPendingTooLong,
+  isSplash,
+  isStakeRegistration,
+  isSteelSwap,
+  isStrike,
+  isSundaeSwap,
+  isVyFi,
+  isWingRiders,
+  isWithdrawal,
+  TX_KIND_ICON,
+  TX_KIND_TONE,
+  TxTag as TxTagData,
+  TxTone,
+  withMinusSign,
+} from '@/modules/dashboard/utils/transactionClassifier';
 
 const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
 
@@ -548,15 +413,12 @@ const hideBalances = computed(() => walletStore.config?.hideBalances || false);
 // Live Kraken ticker price for ADA
 const adaPrice = computed(() => priceStore.adaUsd?.lastPrice || 0);
 
-const activityHeaders = computed(() => [
-  { text: t('transactions.activity'), align: 'start overflow-x', sortable: true, value: 'tx_timestamp' },
-  { text: '', align: 'center no-padding', sortable: false, value: 'assets', width: '78px' },
-  { text: t('transactions.amount'), align: 'end text-nowrap', sortable: false, value: 'amount', width: '90px' },
-]);
+// Wallet addresses, stake address and contacts the classifiers compare against
+const classifyCtx = computed(() => buildClassifyContext(loggedWallet.value, keys.value, contacts.value));
 
 const transactionInfo = ref<StoredTransaction | null>(null);
-const sortBy = ref<string>('tx_timestamp');
 const sortDesc = ref<boolean>(true);
+const sortLabel = computed(() => (sortDesc.value ? t('governance.sortNewest') : t('governance.sortOldest')));
 
 const searchField = ref<HTMLInputElement | null>(null);
 
@@ -574,11 +436,7 @@ watch(searchInput, (newValue) => {
   debouncedUpdateSearch(newValue);
 });
 
-// Cancel pending debounce on unmount to prevent state mutation after teardown
-onUnmounted(() => debouncedUpdateSearch.cancel());
-
-// Computed search property for v-model binding
-// Note: Vuetify clearable sets value to null, so we coerce to empty string
+// Computed search property for v-model binding (a cleared search input reports '')
 const search = computed({
   get: () => searchInput.value,
   set: (value: string) => {
@@ -637,11 +495,18 @@ const activeFilterCount = computed(() => {
   return count;
 });
 
+const hasActiveQuery = computed(() => activeFilterCount.value > 0 || !!debouncedSearch.value);
+
 function clearAllFilters() {
   filterDateFrom.value = null;
   filterDateTo.value = null;
   filterTypes.value = [];
   filterTokenMode.value = 'all';
+}
+
+function clearQuery() {
+  clearAllFilters();
+  search.value = '';
 }
 
 function exportToCsv() {
@@ -650,7 +515,7 @@ function exportToCsv() {
   const csvHeaders = ['Date', 'Type', 'Amount (ADA)', 'Transaction ID'];
   const csvRows = rows.map(tx => {
     const date = new Date(tx.tx_timestamp * 1000).toISOString();
-    const status = transactionStatuses.value[tx.id] || buildBasicStatus(tx);
+    const status = transactionStatuses.value[tx.id] || buildTxTitle(tx, classifyCtx.value, t);
     const ada = (tx.ada / 1_000_000).toFixed(6);
     return [date, `"${status}"`, ada, tx.id].join(',');
   });
@@ -674,7 +539,7 @@ const isLoadingMore = ref<boolean>(false);
 const hasReachedEnd = ref<boolean>(false);
 const intersectionTarget = ref<HTMLElement | null>(null);
 const intersectionObserver = ref<IntersectionObserver | null>(null);
-const scrollContainer = ref<HTMLElement | null>(null);
+const listScroller = ref<HTMLElement | null>(null);
 
 // Pagination variables (for non-full list mode)
 const currentPage = ref<number>(1);
@@ -694,7 +559,7 @@ const vmProxy = getCurrentInstance()!.proxy as { $route: { path: string } };
 const state = computed(() => vmProxy.$route.path);
 
 const transactions = computed<StoredTransaction[]>(() => {
-  // Apply date range filter
+  const ctx = classifyCtx.value;
   let result = (txs.value as StoredTransaction[]).filter((tx) => {
     if (debouncedSearch.value) {
       const searchLower = debouncedSearch.value.toLowerCase();
@@ -711,13 +576,13 @@ const transactions = computed<StoredTransaction[]>(() => {
         );
       });
 
-      // Check tags/chips and certificates (fields only present on full CardanoTx records)
+      // Check tags and certificates (fields only present on full CardanoTx records)
       let matchesChip = false;
       if (isCardanoTx(tx)) {
         matchesChip =
           ('vyfi'.includes(searchLower) && isVyFi(tx)) ||
           ('splash'.includes(searchLower) && isSplash(tx)) ||
-          ('withdrawal'.includes(searchLower) && isWithdrawal(tx)) ||
+          ('withdrawal'.includes(searchLower) && isWithdrawal(tx, ctx)) ||
           ('stake'.includes(searchLower) && isStakeRegistration(tx)) ||
           (tx.body?.certificates?.some((cert) => cert.__typename.toLowerCase().includes(searchLower)) ?? false);
       }
@@ -731,15 +596,16 @@ const transactions = computed<StoredTransaction[]>(() => {
         ('sundaeswap'.includes(searchLower) && isSundaeSwap(tx)) ||
         ('dexhunter'.includes(searchLower) && isDexHunter(tx)) ||
         ('strike'.includes(searchLower) && isStrike(tx)) ||
-        ('dust'.includes(searchLower) && isDustRegistration(tx)) ||
+        ('dust'.includes(searchLower) && isDustRegistration(tx, ctx)) ||
         ('jpg.store'.includes(searchLower) && isJpgStore(tx)) ||
         ('cashback'.includes(searchLower) && isCashback(tx)) ||
         ('steelswap'.includes(searchLower) && isSteelSwap(tx)) ||
-        ('internal'.includes(searchLower) && isInternalTransfer(tx)) ||
+        ('gero swap'.includes(searchLower) && isGeroSwap(tx)) ||
+        ('internal'.includes(searchLower) && isInternalTransfer(tx, ctx)) ||
         ('pending'.includes(searchLower) && tx.pending);
 
       // Check contact name
-      const contactName = getContactName(tx);
+      const contactName = getTxContacts(tx, ctx);
       const matchesContact = contactName && contactName.find(c => c.label.toLowerCase() === searchLower);
 
       return matchesId || matchesAsset || matchesChip || matchesContact;
@@ -767,8 +633,8 @@ const transactions = computed<StoredTransaction[]>(() => {
             c => c.__typename === Cardano.CertificateType.StakeDelegation ||
                  c.__typename === Cardano.CertificateType.StakeRegistrationDelegation
           );
-          case 'withdrawal': return isWithdrawal(tx);
-          case 'internal': return isInternalTransfer(tx);
+          case 'withdrawal': return isWithdrawal(tx, ctx);
+          case 'internal': return isInternalTransfer(tx, ctx);
           default: return false;
         }
       });
@@ -782,8 +648,8 @@ const transactions = computed<StoredTransaction[]>(() => {
     result = result.filter(tx => tx.assets?.some(a => a.unit !== 'lovelace' && a.quantity !== 0));
   }
 
-  // Sort by timestamp descending (most recent first)
-  return result.sort((a, b) => b.tx_timestamp - a.tx_timestamp);
+  // `result` is a fresh array (filter), so sorting it in place is safe
+  return result.sort((a, b) => (sortDesc.value ? b.tx_timestamp - a.tx_timestamp : a.tx_timestamp - b.tx_timestamp));
 });
 
 // Store for transaction statuses with loaded pool data
@@ -810,7 +676,7 @@ const preloadTransactionStatuses = async (transactions: StoredTransaction[]): Pr
       }
     }
 
-    addFundTransferStatus(item, statuses);
+    addFundTransferStatus(item, statuses, t, classifyCtx.value);
 
     if (version === loadVersion.value) {
       transactionStatuses.value = { ...transactionStatuses.value, [txId]: statuses.join(', ') };
@@ -822,44 +688,18 @@ const preloadTransactionStatuses = async (transactions: StoredTransaction[]): Pr
 
 // Get transaction status (reactive)
 const getTransactionStatus = (item: StoredTransaction): string => {
-  // Check if transaction is pending for too long (> 1 hour) - show as "Failed Transaction"
+  // Pending for more than an hour: it never reached the chain
   if (isPendingTooLong(item)) {
     return t('transactions.failedTransaction');
   }
 
-  const txId = item.id;
-
-  // Return cached status or basic status as fallback
-  return transactionStatuses.value[txId] || buildBasicStatus(item);
-};
-
-// Certificate type to status mapping
-const getCertificateBaseStatus = (certificateType: string): string => {
-  switch (certificateType) {
-    case Cardano.CertificateType.StakeRegistrationDelegation:
-    case Cardano.CertificateType.StakeDelegation:
-      return t('transactions.delegatingToPool');
-    case Cardano.CertificateType.Unregistration:
-    case Cardano.CertificateType.StakeDeregistration:
-      return t('transactions.stakeDeregistration');
-    case Cardano.CertificateType.RegisterDelegateRepresentative:
-      return t('dashboard.dRepRegistration');
-    case Cardano.CertificateType.VoteDelegation:
-      return t('transactions.voteDelegation');
-    case Cardano.CertificateType.VoteRegistrationDelegation:
-      return t('transactions.voteRegistrationDelegation');
-    case Cardano.CertificateType.StakeVoteRegistrationDelegation:
-      return t('transactions.stakeVoteRegistration');
-    case Cardano.CertificateType.UnregisterDelegateRepresentative:
-      return t('dashboard.dRepDeregistration');
-    default:
-      return '';
-  }
+  // Cached status (with pool ticker) or the basic status as fallback
+  return transactionStatuses.value[item.id] || buildTxTitle(item, classifyCtx.value, t);
 };
 
 // Process single certificate and return status
 const processCertificate = async (certificate: Cardano.Certificate, loadPoolData = false): Promise<string> => {
-  const baseStatus = getCertificateBaseStatus(certificate.__typename);
+  const baseStatus = getCertificateBaseStatus(certificate.__typename, t);
 
   // For delegation certificates, try to get enhanced status with pool ticker
   if (
@@ -881,93 +721,6 @@ const processCertificate = async (certificate: Cardano.Certificate, loadPoolData
   return baseStatus;
 };
 
-// Add fund transfer status if applicable
-const addFundTransferStatus = (item: StoredTransaction, statuses: string[]): void => {
-  // Skip if transaction has certificates (delegation, registration, etc.)
-  if (isCardanoTx(item) && item.body?.certificates && item.body.certificates.length > 0) {
-    return;
-  }
-  // A detected DEX interaction (swap / add-remove liquidity) reads wrong as
-  // "Sent Funds". Title it "DEX Order" — accurate whichever pool op it is; the
-  // venue chip (Minswap, etc.) names the platform.
-  if (isDexTransaction(item)) {
-    statuses.push(t('transactions.dexOrder'));
-    return;
-  }
-  const hasReceivedFunds = item.receivedAmount - item.sentAmount > 0;
-  const hasSentFunds = item.receivedAmount - item.sentAmount < 0;
-  const receivedTokenCount = item.assets?.filter((asset) => asset.unit !== 'lovelace' && asset.quantity > 0).length ?? 0;
-  const sentTokenCount = item.assets?.filter((asset) => asset.unit !== 'lovelace' && asset.quantity < 0).length ?? 0;
-  const hasReceivedTokens = receivedTokenCount > 0;
-  const hasSentTokens = sentTokenCount > 0;
-
-  // When tokens are present, a small ADA amount is just the min UTxO locked with the tokens.
-  // In that case, label as token-only (e.g. "Received Tokens" instead of "Received Funds & Tokens").
-  // TODO: min UTxO threshold (currently 2 ADA) should be derived from protocol params
-  // (coinsPerUtxoByte) rather than hardcoded, as it can change with protocol updates.
-  const netAdaAbs = Math.abs(item.receivedAmount - item.sentAmount) / 1_000_000;
-  const isMinUtxoOnly = netAdaAbs <= 2;
-
-  const receivedTokenLabel = receivedTokenCount === 1 ? t('transactions.receivedToken') : t('transactions.receivedTokens');
-  const sentTokenLabel = sentTokenCount === 1 ? t('transactions.sentToken') : t('transactions.sentTokens');
-  const receivedFundsAndTokensLabel = receivedTokenCount === 1 ? t('transactions.receivedFundsAndToken') : t('transactions.receivedFundsAndTokens');
-  const sentFundsAndTokensLabel = sentTokenCount === 1 ? t('transactions.sentFundsAndToken') : t('transactions.sentFundsAndTokens');
-
-  // Build smart status message
-  if (hasReceivedFunds && hasReceivedTokens && isMinUtxoOnly) {
-    statuses.push(receivedTokenLabel);
-  } else if (hasSentFunds && hasSentTokens && isMinUtxoOnly) {
-    statuses.push(sentTokenLabel);
-  } else if (hasReceivedFunds && hasReceivedTokens) {
-    statuses.push(receivedFundsAndTokensLabel);
-  } else if (hasSentFunds && hasSentTokens) {
-    statuses.push(sentFundsAndTokensLabel);
-  } else if (hasReceivedFunds && hasSentTokens) {
-    statuses.push(t('transactions.receivedFundsAndSentTokens'));
-  } else if (hasSentFunds && hasReceivedTokens) {
-    statuses.push(t('transactions.sentFundsAndReceivedTokens'));
-  } else if (hasReceivedFunds) {
-    statuses.push(t('transactions.receivedFunds'));
-  } else if (hasSentFunds) {
-    statuses.push(t('transactions.sentFunds'));
-  } else if (hasReceivedTokens) {
-    statuses.push(receivedTokenLabel);
-  } else if (hasSentTokens) {
-    statuses.push(sentTokenLabel);
-  }
-};
-
-// Build basic transaction status without pool API data
-const buildBasicStatus = (item: StoredTransaction): string => {
-  const statuses: string[] = [];
-
-  // Bitcoin transaction status (simpler than Cardano)
-  if (item.type) {
-    // Bitcoin transaction with type field
-    switch (item.type) {
-      case 'receive':
-        return t('transactions.receivedFunds');
-      case 'send':
-        return t('transactions.sentFunds');
-      case 'self':
-        return t('transactions.selfTransfer');
-      default:
-        return t('transactions.transaction');
-    }
-  }
-
-  // Cardano transaction status (complex with certificates)
-  if (isCardanoTx(item) && item.body?.certificates?.length > 0) {
-    item.body.certificates.forEach((certificate: Cardano.Certificate) => {
-      const status = getCertificateBaseStatus(certificate.__typename);
-      if (status) statuses.push(status);
-    });
-  }
-
-  addFundTransferStatus(item, statuses);
-  return statuses.join(', ');
-};
-
 const getPoolByIdFromApi = async (poolId: string) => {
   if (!poolId) return null;
 
@@ -978,6 +731,145 @@ const getPoolByIdFromApi = async (poolId: string) => {
     return null;
   }
 };
+
+// ---------------------------------------------------------------------------
+// Row presentation: glyph, tags and token stack, derived once per displayed row
+// ---------------------------------------------------------------------------
+interface RowToken {
+  key: string;
+  img: string;
+  name: string;
+}
+
+interface RowView {
+  icon: string;
+  tone: TxTone;
+  tags: TxTagData[];
+  tokens: RowToken[];
+  moreTokens: number;
+}
+
+const ROW_TOKEN_LIMIT = 3;
+
+const rowToken = (asset: TxAsset): RowToken => {
+  // A malformed unit must not take the whole list down
+  try {
+    const resolved = resolveAsset(asset);
+    return { key: asset.unit, img: resolved?.img || assts.questionMarkDark, name: resolved?.name || '' };
+  } catch {
+    return { key: asset.unit, img: assts.questionMarkDark, name: '' };
+  }
+};
+
+const rowViews = computed(() => {
+  const ctx = classifyCtx.value;
+  const views = new Map<string, RowView>();
+  for (const item of displayedTransactions.value) {
+    const kind = classifyTxKind(item, ctx);
+    // ADA is implied by the amount; the stack only shows tokens that moved
+    const movedTokens = (item.assets ?? []).filter(
+      (asset) => asset.unit !== 'lovelace' && asset.policy_id !== '' && Number(asset.quantity) !== 0,
+    );
+    views.set(item.id, {
+      icon: TX_KIND_ICON[kind],
+      tone: TX_KIND_TONE[kind],
+      tags: buildTxTags(item, ctx, t, kind),
+      tokens: movedTokens.slice(0, ROW_TOKEN_LIMIT).map(rowToken),
+      moreTokens: Math.max(0, movedTokens.length - ROW_TOKEN_LIMIT),
+    });
+  }
+  return views;
+});
+
+const EMPTY_VIEW: RowView = { icon: TX_KIND_ICON.neutral, tone: 'neutral', tags: [], tokens: [], moreTokens: 0 };
+const view = (item: StoredTransaction): RowView => rowViews.value.get(item.id) ?? EMPTY_VIEW;
+
+const currencySymbol = computed(() =>
+  loggedWallet.value ? networks.resolveCurrencySymbol(loggedWallet.value.chain, loggedWallet.value.network) : '',
+);
+
+const formatRowAmount = (item: StoredTransaction): string =>
+  withMinusSign(filters.toCurrency(item.ada ?? 0, true, 0, currencySymbol.value, '', false));
+
+const formatRowFiat = (item: StoredTransaction): string =>
+  withMinusSign(filters.toCurrency(convertFiat((item.ada ?? 0) * adaPrice.value), true, 0, getCurrencySymbol(), '', false, 6));
+
+const amountClass = (item: StoredTransaction): string => {
+  if (isPendingTooLong(item)) return 'tx-row__amount--failed';
+  if (item.pending) return 'tx-row__amount--pending';
+  return item.ada > 0 ? 'tx-row__amount--in' : '';
+};
+
+const relativeTime = (item: StoredTransaction): string => time.format(new Date(item.tx_timestamp * 1000));
+
+const absoluteTime = (item: StoredTransaction): string => {
+  const when = new Date(item.tx_timestamp * 1000).toLocaleString();
+  return item.epoch_no ? `${when} · ${t('transactions.epoch')} ${item.epoch_no}` : when;
+};
+
+const isSelected = (item: StoredTransaction): boolean => props.selectedTransaction?.id === item.id;
+
+// ---------------------------------------------------------------------------
+// Day groups: sticky "Today" / "Yesterday" / date headers with the day's net
+// ---------------------------------------------------------------------------
+const dayKey = (timestamp: number): string => {
+  const date = new Date(timestamp * 1000);
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+};
+
+const dayLabel = (timestamp: number): string => {
+  const now = Date.now() / 1000;
+  const key = dayKey(timestamp);
+  if (key === dayKey(now)) return t('miniGero.today');
+  if (key === dayKey(now - 86400)) return t('miniGero.yesterday');
+  const date = new Date(timestamp * 1000);
+  const sameYear = date.getFullYear() === new Date().getFullYear();
+  return date.toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    ...(sameYear ? {} : { year: 'numeric' }),
+  });
+};
+
+// Net per day over the whole filtered list, not just the rows loaded so far. A failed
+// attempt (pending past the hour, never on chain) moved no funds, so it doesn't count.
+const dayNets = computed(() => {
+  const nets = new Map<string, number>();
+  for (const tx of transactions.value) {
+    if (isPendingTooLong(tx)) continue;
+    const key = dayKey(tx.tx_timestamp);
+    nets.set(key, (nets.get(key) ?? 0) + (tx.ada ?? 0));
+  }
+  return nets;
+});
+
+const groupedTransactions = computed(() => {
+  const groups: { key: string; label: string; net: string; items: StoredTransaction[] }[] = [];
+  for (const item of displayedTransactions.value) {
+    const key = dayKey(item.tx_timestamp);
+    let group = groups[groups.length - 1];
+    if (!group || group.key !== key) {
+      const net = dayNets.value.get(key) ?? 0;
+      group = {
+        key,
+        label: dayLabel(item.tx_timestamp),
+        net: hideBalances.value || !loggedWallet.value
+          ? ''
+          : withMinusSign(filters.toCurrency(net, true, 0, currencySymbol.value, '', false)),
+        items: [],
+      };
+      groups.push(group);
+    }
+    group.items.push(item);
+  }
+  return groups;
+});
+
+// Nothing to show yet, and the loader is still writing: loading, not empty
+const showSkeleton = computed(
+  () => !!loadingTxs.value && displayedTransactions.value.length === 0 && !hasActiveQuery.value,
+);
 
 // Load more transactions
 const loadMoreTransactions = async () => {
@@ -1056,9 +948,9 @@ watch(
   }
 );
 
-// Watch for filter changes to reset infinite scroll
+// Watch for filter and sort changes to reset infinite scroll
 watch(
-  [filterDateFrom, filterDateTo, filterTypes, filterTokenMode],
+  [filterDateFrom, filterDateTo, filterTypes, filterTokenMode, sortDesc],
   async () => {
     if (props.isFullList) {
       await resetInfiniteScroll();
@@ -1091,7 +983,7 @@ watch(
 );
 
 // Watch for changes in transaction data (e.g., pending status updates)
-// This updates displayed transactions without clearing the table
+// This updates displayed transactions without clearing the list
 watch(
   () => transactions.value,
   (newTransactions, oldTransactions) => {
@@ -1125,9 +1017,6 @@ const setupIntersectionObserver = () => {
     intersectionObserver.value.disconnect();
   }
 
-  // Find the scrollable container
-  const scrollContainer = intersectionTarget.value.closest('.table-container');
-
   intersectionObserver.value = new IntersectionObserver(
     entries => {
       entries.forEach(entry => {
@@ -1137,7 +1026,7 @@ const setupIntersectionObserver = () => {
       });
     },
     {
-      root: scrollContainer, // Use the scrollable container as root
+      root: listScroller.value, // The list's own scroll container
       rootMargin: '100px', // Start loading when 100px away from the target
       threshold: [0, 0.1, 1.0], // Multiple thresholds for better detection
     }
@@ -1148,9 +1037,9 @@ const setupIntersectionObserver = () => {
 
 // Fallback scroll handler
 const handleScroll = () => {
-  if (!scrollContainer.value || !props.isFullList || isLoadingMore.value || hasReachedEnd.value) return;
+  if (!listScroller.value || !props.isFullList || isLoadingMore.value || hasReachedEnd.value) return;
 
-  const { scrollTop, scrollHeight, clientHeight } = scrollContainer.value;
+  const { scrollTop, scrollHeight, clientHeight } = listScroller.value;
   const scrolledToBottom = scrollTop + clientHeight >= scrollHeight - 100; // 100px threshold
 
   if (scrolledToBottom) {
@@ -1160,13 +1049,8 @@ const handleScroll = () => {
 
 // Setup scroll fallback
 const setupScrollFallback = () => {
-  if (!props.isFullList) return;
-
-  const container = document.querySelector('.table-container') as HTMLElement;
-  if (container) {
-    scrollContainer.value = container;
-    container.addEventListener('scroll', handleScroll, { passive: true });
-  }
+  if (!props.isFullList || !listScroller.value) return;
+  listScroller.value.addEventListener('scroll', handleScroll, { passive: true });
 };
 
 const handleOnTransactionsRowClick = (row: StoredTransaction) => {
@@ -1178,515 +1062,11 @@ const handleTransactionModalClose = () => {
   transactionInfo.value = null;
 };
 
-const isWithdrawal = (item: StoredTransaction): boolean => {
-  if (!isCardanoTx(item)) return false;
-  return (
-    item.body?.withdrawals?.length > 0 &&
-    loggedWallet.value?.stakeAddress &&
-    item.body?.withdrawals.some((withdrawal) => withdrawal.stakeAddress === loggedWallet.value.stakeAddress)
-  ) ?? false;
-};
-
-const getContactName = (item: StoredTransaction): { label: string; isHandle: boolean }[] | null => {
-  const contactsResult = new Map<string, { label: string; isHandle: boolean }>();
-  // Check if contacts are available (contacts is an object, not an array)
-  if (!contacts.value || !item.utxo) {
-    return null;
-  }
-
-  // Create a map of contact addresses to display info
-  const contactMap = new Map<string, { label: string; isHandle: boolean }>();
-  Object.values(contacts.value).forEach((contact) => {
-    if (contact.address && contact.name) {
-      contactMap.set(contact.address, {
-        label: contact.handle || contact.name,
-        isHandle: !!contact.handle,
-      });
-    }
-  });
-
-  // Check if there are any contacts to compare
-  if (contactMap.size === 0) {
-    return null;
-  }
-
-  // Check inputs for contact addresses
-  for (const input of item.utxo.inputs || []) {
-    if (contactMap.has(input.address)) {
-      const info = contactMap.get(input.address)!;
-      contactsResult.set(info.label, info);
-    }
-  }
-
-  // Check outputs for contact addresses (CardanoTx only)
-  if (isCardanoTx(item)) {
-    for (const output of item.body?.outputs || []) {
-      if (contactMap.has(output.address)) {
-        const info = contactMap.get(output.address)!;
-        contactsResult.set(info.label, info);
-      }
-    }
-  }
-
-  return Array.from(contactsResult.values());
-};
-
-const isInternalTransfer = (item: StoredTransaction): boolean => {
-  // Check if keys are available
-  if (!keys.value || !item.utxo) {
-    return false;
-  }
-
-  // Collect all wallet addresses from keys
-  const walletAddresses = new Set<string>();
-
-  // Add payment addresses
-  if (keys.value.payment) {
-    keys.value.payment.forEach(key => {
-      if (key.address) {
-        walletAddresses.add(key.address);
-      }
-    });
-  }
-
-  // Add change addresses
-  if (keys.value.change) {
-    keys.value.change.forEach(key => {
-      if (key.address) {
-        walletAddresses.add(key.address);
-      }
-    });
-  }
-
-  // Check if there are any addresses to compare
-  if (walletAddresses.size === 0) {
-    return false;
-  }
-
-  // Check all input addresses
-  const allInputsInternal = item.utxo.inputs?.every((input) => walletAddresses.has(input.address));
-
-  // Check all output addresses. Prefer the utxo output set — it is the full
-  // on-chain output list and is present even for records stored before the
-  // backend had the tx CBOR (no `body`, so isCardanoTx() is false for them);
-  // `body.outputs` is the fallback for just-submitted pending txs (utxo is
-  // null until confirmation). Match by full (base) address — the wallet only
-  // monitors its base addresses, so an output to an enterprise address derived
-  // from the same payment key (e.g. a self-send to the collateral pool) is NOT
-  // tracked balance and reads as an ordinary Sent, matching how other Cardano
-  // wallets classify it.
-  const outputAddresses = item.utxo.outputs?.length
-    ? item.utxo.outputs.map((output) => output.address)
-    : (isCardanoTx(item) ? item.body?.outputs?.map((output) => output.address) : undefined);
-
-  // Without a verifiable output list, never claim the tx is internal
-  if (!outputAddresses?.length) {
-    return false;
-  }
-
-  // Transaction is internal if ALL inputs AND ALL outputs belong to this wallet
-  return !!allInputsInternal && outputAddresses.every((address) => walletAddresses.has(address));
-};
-
-const isStrike = (item: StoredTransaction): boolean => {
-  // body/witness are only present on full Cardano records; address checks below
-  // also run on the utxo set so thin records (no CBOR stored) are still tagged
-  const cardano = isCardanoTx(item) ? item : undefined;
-  // Strike Finance perpetual trading transactions
-  const STRIKE_SCRIPT_HASH = 'be7544ca7d42c903268caecae465f3f8b5a7e7607d09165e471ac8b5';
-  const STRIKE_CONTRACT_ADDRESS = 'addr1wytzw530pgjxm4wxsxj5ufp23cxacrvzmytpjnlcgq6t7vsgz25ef';
-
-  // Check for Strike contract address (primary indicator of platform interaction)
-  const hasStrikeAddress =
-    item.utxo?.inputs?.some((input) => input.address === STRIKE_CONTRACT_ADDRESS) ||
-    item.utxo?.outputs?.some((output) => output.address === STRIKE_CONTRACT_ADDRESS) ||
-    cardano?.body?.outputs?.some((output) => output.address === STRIKE_CONTRACT_ADDRESS);
-
-  // Check for Strike script hash in witness (indicates contract execution)
-  const hasStrikeScript = cardano?.witness?.scripts?.some(
-    (script) => Serialization.Script.fromCore(script).hash() === STRIKE_SCRIPT_HASH
-  );
-
-  // Only tag as Strike if there's actual platform interaction, not just position NFT transfers
-  return hasStrikeAddress || hasStrikeScript || false;
-};
-
-// Detects a cNIGHT→DUST registration: it locks its mapping NFT at the DUST
-// mapping validator, so a registration has an OUTPUT to the validator address.
-// (Deregistration spends that UTxO as an input, so keying on the output keeps
-// this registration-specific.)
-const isDustRegistration = (item: StoredTransaction): boolean => {
-  const cardano = isCardanoTx(item) ? item : undefined;
-  const validator = DUST_MAPPING_VALIDATOR[loggedWallet.value?.network ?? ''];
-  if (!validator) return false;
-  return cardano?.body?.outputs?.some((output) => output.address === validator.address)
-    || item.utxo?.outputs?.some((output) => output.address === validator.address)
-    || false;
-};
-
-// Detects historical DexHunter swap transactions (pre-aggregator-embed migration).
-// This is read-only on-chain detection of transactions users made before the
-// migration: the wallet reads addresses and metadata already on chain and calls
-// no DexHunter service. Swap routing is Gero's own, via Nexus. See
-// src/modules/swap/components/GeroSwapEmbed.vue.
-// Displayed with the neutral 'transactions.swap' label since DexHunter is no longer
-// the branded swap provider.
-// TODO: add aggregator swap-tx heuristic (order/fee address or metadata) once the
-// Gero aggregator's on-chain order/fee address is confirmed, so newly created
-// aggregator swaps are also tagged here.
-// Any recognised DEX/aggregator interaction — used to title the tx "DEX Order".
-const isDexTransaction = (item: StoredTransaction): boolean =>
-  isMinswap(item) || isSundaeSwap(item) || isSplash(item) || isDexHunter(item) || isSteelSwap(item);
-
-const isDexHunter = (item: StoredTransaction): boolean => {
-  const cardano = isCardanoTx(item) ? item : undefined;
-  // Check for DexHunter order contract address (primary indicator)
-  const DEXHUNTER_ORDER_ADDRESS =
-    'addr1z8p79rpkcdz8x9d6tft0x0dx5mwuzac2sa4gm8cvkw5hcn84xmy84q2crvzy6he2j69798923xvt3jk5n3nd9eecmxks7hfyu8';
-  const hasDexHunterOrderAddress =
-    item.utxo?.inputs?.some((input) => input.address === DEXHUNTER_ORDER_ADDRESS) ||
-    item.utxo?.outputs?.some((output) => output.address === DEXHUNTER_ORDER_ADDRESS) ||
-    cardano?.body?.outputs?.some((output) => output.address === DEXHUNTER_ORDER_ADDRESS);
-
-  // Check for DexHunter fee address (indicates completed trade)
-  const DEXHUNTER_FEE_ADDRESS =
-    'addr1q8l7hny7x96fadvq8cukyqkcfca5xmkrvfrrkt7hp76v3qvssm7fz9ajmtd58ksljgkyvqu6gl23hlcfgv7um5v0rn8qtnzlfk';
-  const hasDexHunterFeeAddress =
-    item.utxo?.outputs?.some((output) => output.address === DEXHUNTER_FEE_ADDRESS) ||
-    cardano?.body?.outputs?.some((output) => output.address === DEXHUNTER_FEE_ADDRESS);
-
-  // Check metadata for DexHunter Trade message (indicates trade execution)
-  const msg = cardano?.auxiliaryData?.blob?.[674]?.msg;
-  const hasDexHunterMetadata =
-    msg && Array.isArray(msg) ? msg.some((m: string) => m.includes('Dexhunter') || m.includes('DexHunter')) : false;
-
-  // Only tag as DexHunter if there's actual platform interaction
-  return hasDexHunterOrderAddress || hasDexHunterFeeAddress || hasDexHunterMetadata || false;
-};
-
-const isSteelSwap = (item: StoredTransaction): boolean => {
-  // SteelSwap order contract address (enterprise-address deployment of the
-  // shared aggregator order script — same payment credential as the DexHunter
-  // order contract but with no staking part, so the bech32 forms don't collide)
-  const STEELSWAP_ORDER_ADDRESS = 'addr1w8p79rpkcdz8x9d6tft0x0dx5mwuzac2sa4gm8cvkw5hcnqst2ctf';
-
-  // Address check runs on the utxo set so records stored before the backend
-  // had the tx CBOR (no body/auxiliaryData) are still tagged
-  const hasSteelSwapOrderAddress =
-    item.utxo?.inputs?.some((input) => input.address === STEELSWAP_ORDER_ADDRESS) ||
-    item.utxo?.outputs?.some((output) => output.address === STEELSWAP_ORDER_ADDRESS) ||
-    (isCardanoTx(item) && item.body?.outputs?.some((output) => output.address === STEELSWAP_ORDER_ADDRESS));
-
-  // Check metadata for SteelSwap message, e.g. { 674: { msg: ['CarDeM', 'SteelSwap: 1.18.0'] } }
-  const msg = isCardanoTx(item) ? item.auxiliaryData?.blob?.[674]?.msg : undefined;
-  const hasSteelSwapMetadata =
-    msg && Array.isArray(msg) ? msg.some((m: string) => typeof m === 'string' && m.includes('SteelSwap')) : false;
-
-  return hasSteelSwapOrderAddress || hasSteelSwapMetadata || false;
-};
-
-const isMinswap = (item: StoredTransaction): boolean => {
-  const cardano = isCardanoTx(item) ? item : undefined;
-  // Minswap V1 addresses
-  const MINSWAP_V1_MARKET_ORDER_ADDRESS = 'addr1wxn9efv2f6w82hagxqtn62ju4m293tqvw0uhmdl64ch8uwc0h43gt';
-  const MINSWAP_V1_LIMIT_ORDER_ADDRESS =
-    'addr1zxn9efv2f6w82hagxqtn62ju4m293tqvw0uhmdl64ch8uw6j2c79gy9l76sdg0xwhd7r0c0kna0tycz4y5s6mlenh8pq6s3z70';
-
-  // Minswap V2 order contract address
-  const MINSWAP_V2_ORDER_ADDRESS =
-    'addr1zxn9efv2f6w82hagxqtn62ju4m293tqvw0uhmdl64ch8uw6j2c79gy9l76sdg0xwhd7r0c0kna0tycz4y5s6mlenh8pq6s3z70';
-
-  // Minswap V2 pool script address — a pool operation (swap/deposit/withdraw)
-  // spends the pool UTxO, so this address appears as a tx input. Some pool txs
-  // carry no 674 metadata and no locally-stored datums, so the order-address /
-  // metadata / datum checks below miss them; matching the pool address catches
-  // them without false-positiving on plain Minswap-LP-token transfers.
-  const MINSWAP_V2_POOL_ADDRESS = 'addr1w9e7ft4rrdd4rkdseguxr9hudfxyytm5ckh2qy0yhz7lfeg9lvhq7';
-
-  const MINSWAP_CONTRACT_ADDRESSES = [
-    MINSWAP_V1_MARKET_ORDER_ADDRESS,
-    MINSWAP_V1_LIMIT_ORDER_ADDRESS,
-    MINSWAP_V2_ORDER_ADDRESS,
-    MINSWAP_V2_POOL_ADDRESS,
-  ];
-
-  // Check for Minswap contract addresses (indicates DEX interaction)
-  const hasMinswapOrderAddress =
-    item.utxo?.inputs?.some((input) => !!input.address && MINSWAP_CONTRACT_ADDRESSES.includes(input.address)) ||
-    item.utxo?.outputs?.some((output) => !!output.address && MINSWAP_CONTRACT_ADDRESSES.includes(output.address)) ||
-    cardano?.body?.outputs?.some((output) => !!output.address && MINSWAP_CONTRACT_ADDRESSES.includes(output.address));
-
-  // Check for Minswap metadata message (indicates platform interaction)
-  const msg = cardano?.auxiliaryData?.blob?.[674]?.msg;
-  const hasMinswapMetadata = msg && Array.isArray(msg) ? msg.some((m: string) => m.includes('Minswap')) : false;
-
-  // Check for Minswap pool NFT policy in datum CBOR (indicates pool interaction)
-  const hasMinswapInOutputDatum = (cardano?.body?.outputs as Array<Cardano.TxOut & { datum?: { cbor?: string } }>)?.some(
-    (output) => output.datum?.cbor?.includes('f5808c2c990d86da54bfc97d89cee6efa20cd8461616359478d96b4c')
-  );
-
-  // Check for Minswap pool NFT policy in witness datums (indicates pool interaction)
-  const hasMinswapInWitnessDatum = (cardano?.witness?.datums as Array<{ cbor?: string }> | undefined)?.some(
-    (datum) => datum.cbor?.includes('f5808c2c990d86da54bfc97d89cee6efa20cd8461616359478d96b4c')
-  );
-
-  // Only tag as Minswap if there's actual DEX interaction, not just LP token transfers
-  return hasMinswapOrderAddress || hasMinswapMetadata || hasMinswapInOutputDatum || hasMinswapInWitnessDatum || false;
-};
-
-const isJpgStore = (item: StoredTransaction): boolean => {
-  const cardano = isCardanoTx(item) ? item : undefined;
-  // Check for jpg.store marketplace script address
-  const JPGSTORE_SCRIPT_ADDRESS =
-    'addr1zxgx3far7qygq0k6epa0zcvcvrevmn0ypsnfsue94nsn3tvpw288a4x0xf8pxgcntelxmyclq83s0ykeehchz2wtspks905plm';
-
-  // Check for jpg.store Ask V1 Contract address (inputs only)
-  const JPGSTORE_ASK_V1_ADDRESS =
-    'addr1x8rjw3pawl0kelu4mj3c8x20fsczf5pl744s9mxz9v8n7efvjel5h55fgjcxgchp830r7h2l5msrlpt8262r3nvr8ekstg4qrx';
-
-  const hasJpgStoreAddress =
-    item.utxo?.inputs?.some(
-      (input) => input.address === JPGSTORE_SCRIPT_ADDRESS || input.address === JPGSTORE_ASK_V1_ADDRESS
-    ) ||
-    item.utxo?.outputs?.some((output) => output.address === JPGSTORE_SCRIPT_ADDRESS) ||
-    cardano?.body?.outputs?.some((output) => output.address === JPGSTORE_SCRIPT_ADDRESS);
-
-  // Check for jpg.store auxiliary data structure (fields 0-10, 30)
-  const hasJpgStoreMetadata =
-    cardano?.auxiliaryData?.blob &&
-    (cardano.auxiliaryData.blob[0] ||
-      cardano.auxiliaryData.blob[1] ||
-      cardano.auxiliaryData.blob[2] ||
-      cardano.auxiliaryData.blob[3] ||
-      cardano.auxiliaryData.blob[4] ||
-      cardano.auxiliaryData.blob[5] ||
-      cardano.auxiliaryData.blob[6] ||
-      cardano.auxiliaryData.blob[7] ||
-      cardano.auxiliaryData.blob[8] ||
-      cardano.auxiliaryData.blob[9] ||
-      cardano.auxiliaryData.blob[10] ||
-      cardano.auxiliaryData.blob[30]);
-
-  // Check for datum hash (indicating a marketplace listing)
-  const hasDatumHash = cardano?.body?.outputs?.some((output) => output.datumHash);
-
-  return hasJpgStoreAddress || (hasJpgStoreMetadata && hasDatumHash) || false;
-};
-
-const isWingRiders = (item: StoredTransaction): boolean => {
-  const cardano = isCardanoTx(item) ? item : undefined;
-  // WingRiders V1 order address
-  const WINGRIDERS_V1_ORDER_ADDRESS = 'addr1wxr2a8htmzuhj39y2gq7ftkpxv98y2g67tg8zezthgq4jkg0a4ul4';
-
-  // WingRiders V2 order address
-  const WINGRIDERS_V2_ORDER_ADDRESS = 'addr1w8qnfkpe5e99m7umz4vxnmelxs5qw5dxytmfjk964rla98q605wte';
-
-  // Check for WingRiders order contract addresses (indicates DEX interaction)
-  const hasWingRidersOrderAddress =
-    item.utxo?.inputs?.some(
-      (input) => input.address === WINGRIDERS_V1_ORDER_ADDRESS || input.address === WINGRIDERS_V2_ORDER_ADDRESS
-    ) ||
-    item.utxo?.outputs?.some(
-      (output) => output.address === WINGRIDERS_V1_ORDER_ADDRESS || output.address === WINGRIDERS_V2_ORDER_ADDRESS
-    ) ||
-    cardano?.body?.outputs?.some(
-      (output) => output.address === WINGRIDERS_V1_ORDER_ADDRESS || output.address === WINGRIDERS_V2_ORDER_ADDRESS
-    );
-
-  // Check for WingRiders V1 pool validity asset policy in datum CBOR (indicates pool interaction)
-  const enrichedOutputs = cardano?.body?.outputs as Array<Cardano.TxOut & { datum?: { cbor?: string } }>;
-  const enrichedDatums = cardano?.witness?.datums as Array<{ cbor?: string }> | undefined;
-
-  const hasWingRidersV1InDatum =
-    enrichedDatums?.some((datum) =>
-      datum.cbor?.includes('026a18d04a0c642759bb3d83b12e3344894e5c1c7b2aeb1a2113a5704c')
-    ) ||
-    enrichedOutputs?.some((output) =>
-      output.datum?.cbor?.includes('026a18d04a0c642759bb3d83b12e3344894e5c1c7b2aeb1a2113a5704c')
-    );
-
-  // Check for WingRiders V2 pool validity asset policy in datum CBOR (indicates pool interaction)
-  const hasWingRidersV2InDatum =
-    enrichedDatums?.some((datum) =>
-      datum.cbor?.includes('6fdc63a1d71dc2c65502b79baae7fb543185702b12c3c5fb639ed7374c')
-    ) ||
-    enrichedOutputs?.some((output) =>
-      output.datum?.cbor?.includes('6fdc63a1d71dc2c65502b79baae7fb543185702b12c3c5fb639ed7374c')
-    );
-
-  return hasWingRidersOrderAddress || hasWingRidersV1InDatum || hasWingRidersV2InDatum || false;
-};
-
-const isVyFi = (item: StoredTransaction): boolean => {
-  if (!isCardanoTx(item)) return false;
-  // Check for VyFi metadata message (indicates platform interaction)
-  const msg = item.auxiliaryData?.blob?.[674]?.msg;
-  return typeof msg === 'string' && msg.includes('VyFi');
-};
-
-const isSundaeSwap = (item: StoredTransaction): boolean => {
-  const cardano = isCardanoTx(item) ? item : undefined;
-  // SundaeSwap V1 addresses
-  const SUNDAESWAP_V1_ORDER_ADDRESS = 'addr1wxaptpmxcxawvr3pzlhgnpmzz3ql43n2tc8mn3av5kx0yzs09tqh8';
-  const SUNDAESWAP_V1_POOL_ADDRESS = 'addr1w9qzpelu9hn45pefc0xr4ac4kdxeswq7pndul2vuj59u8tqaxdznu';
-
-  // SundaeSwap V3 pool address (primary indicator)
-  const SUNDAESWAP_V3_POOL_ADDRESS =
-    'addr1x8srqftqemf0mjlukfszd97ljuxdp44r372txfcr75wrz26rnxqnmtv3hdu2t6chcfhl2zzjh36a87nmd6dwsu3jenqsslnz7e';
-
-  // Check for SundaeSwap contract addresses (indicates DEX interaction)
-  return (
-    item.utxo?.inputs?.some(
-      (input) =>
-        input.address === SUNDAESWAP_V1_ORDER_ADDRESS ||
-        input.address === SUNDAESWAP_V1_POOL_ADDRESS ||
-        input.address === SUNDAESWAP_V3_POOL_ADDRESS
-    ) ||
-    item.utxo?.outputs?.some(
-      (output) =>
-        output.address === SUNDAESWAP_V1_ORDER_ADDRESS ||
-        output.address === SUNDAESWAP_V1_POOL_ADDRESS ||
-        output.address === SUNDAESWAP_V3_POOL_ADDRESS
-    ) ||
-    cardano?.body?.outputs?.some(
-      (output) =>
-        output.address === SUNDAESWAP_V1_ORDER_ADDRESS ||
-        output.address === SUNDAESWAP_V1_POOL_ADDRESS ||
-        output.address === SUNDAESWAP_V3_POOL_ADDRESS
-    )
-  ) ?? false;
-};
-
-const isSplash = (item: StoredTransaction): boolean => {
-  if (!isCardanoTx(item)) return false;
-  // Splash DEX batcher key (primary indicator)
-  const SPLASH_BATCHER_KEY = '5cb2c968e5d1c7197a6ce7615967310a375545d9bc65063a964335b2';
-
-  // Splash order script hash
-  const SPLASH_ORDER_SCRIPT_HASH = '464eeee89f05aff787d40045af2a40a83fd96c513197d32fbc54ff02';
-
-  // Check for Splash batcher key in required signatures (indicates DEX interaction)
-  const hasSplashBatcherKey = item.body?.requiredExtraSignatures?.some((sig) => sig === SPLASH_BATCHER_KEY);
-
-  // Check for Splash order script in witness scripts
-  const hasSplashScript = item.witness?.scripts?.some(
-    (script) => Serialization.Script.fromCore(script).hash() === SPLASH_ORDER_SCRIPT_HASH
-  );
-
-  return hasSplashBatcherKey || hasSplashScript || false;
-};
-
-const isMuesliSwap = (item: StoredTransaction): boolean => {
-  const cardano = isCardanoTx(item) ? item : undefined;
-  // MuesliSwap order address
-  const MUESLISWAP_ORDER_ADDRESS =
-    'addr1zyq0kyrml023kwjk8zr86d5gaxrt5w8lxnah8r6m6s4jp4g3r6dxnzml343sx8jweqn4vn3fz2kj8kgu9czghx0jrsyqqktyhv';
-
-  // Check for MuesliSwap order contract address (indicates DEX interaction)
-  const hasMuesliSwapOrderAddress =
-    item.utxo?.inputs?.some((input) => input.address === MUESLISWAP_ORDER_ADDRESS) ||
-    item.utxo?.outputs?.some((output) => output.address === MUESLISWAP_ORDER_ADDRESS) ||
-    cardano?.body?.outputs?.some((output) => output.address === MUESLISWAP_ORDER_ADDRESS);
-
-  const enrichedOutputs = cardano?.body?.outputs as Array<Cardano.TxOut & { datum?: { cbor?: string } }>;
-  const enrichedDatums = cardano?.witness?.datums as Array<{ cbor?: string }> | undefined;
-
-  // Check for MuesliSwap V1 pool NFT policy in datum CBOR (indicates pool interaction)
-  const hasMuesliSwapV1InDatum =
-    enrichedDatums?.some((datum) =>
-      datum.cbor?.includes('909133088303c49f3a30f1cc8ed553a73857a29779f6c6561cd8093f')
-    ) ||
-    enrichedOutputs?.some((output) =>
-      output.datum?.cbor?.includes('909133088303c49f3a30f1cc8ed553a73857a29779f6c6561cd8093f')
-    );
-
-  // Check for MuesliSwap V2 pool NFT policy in datum CBOR (indicates pool interaction)
-  const hasMuesliSwapV2InDatum =
-    enrichedDatums?.some((datum) =>
-      datum.cbor?.includes('7a8041a0693e6605d010d5185b034d55c79eaf7ef878aae3bdcdbf67')
-    ) ||
-    enrichedOutputs?.some((output) =>
-      output.datum?.cbor?.includes('7a8041a0693e6605d010d5185b034d55c79eaf7ef878aae3bdcdbf67')
-    );
-
-  // Check for MuesliSwap factory token in assets (indicates pool interaction)
-  const hasMuesliSwapFactoryToken = item.assets?.some((asset) =>
-    asset.unit?.includes('de9b756719341e79785aa13c164e7fe68c189ed04d61c9876b2fe53f4d7565736c69537761705f414d4d')
-  );
-
-  return hasMuesliSwapOrderAddress || hasMuesliSwapV1InDatum || hasMuesliSwapV2InDatum || hasMuesliSwapFactoryToken || false;
-};
-
-const isCashback = (item: StoredTransaction): boolean => {
-  return !!item.utxo?.inputs?.some((input) =>
-    [
-      'DdzFFzCqrhtBatWqyFge4w6M6VLgNUwRHiXTAg3xfQCUdTcjJxSrPHVZJBsQprUEc5pRhgMWQaGciTssoZVwrSKmG1fneZ1AeCtLgs5Y',
-      'addr1qxj7hjwxkxlf2tyahw5fchm2w5tjm5xcedqywyd9gjh8hhpq3lssfl2enmaypvwdyfmpcvzkpdtlpa8ur332rnc0ksyq7eq6sd',
-    ].includes(input.address)
-  );
-};
-
-const isStakeRegistration = (item: StoredTransaction): boolean => {
-  if (!isCardanoTx(item)) return false;
-  const certs = item.body?.certificates;
-  return (
-    (certs?.length ?? 0) > 0 &&
-    certs!.some(
-      (certificate) =>
-        certificate.__typename === Cardano.CertificateType.StakeRegistration ||
-        certificate.__typename === Cardano.CertificateType.StakeRegistrationDelegation ||
-        certificate.__typename === Cardano.CertificateType.Registration
-    )
-  );
-};
-
-const isStakeDeRegistration = (item: StoredTransaction): boolean => {
-  if (!isCardanoTx(item)) return false;
-  const certs = item.body?.certificates;
-  return (
-    (certs?.length ?? 0) > 0 &&
-    certs!.some(
-      (certificate) =>
-        certificate.__typename === Cardano.CertificateType.Unregistration ||
-        certificate.__typename === Cardano.CertificateType.StakeDeregistration
-    )
-  );
-};
-
-const getColor = (item: StoredTransaction): string => {
-  if (item.pending) {
-    return 'var(--g-warning)';
-  } else if (item.ada > 0) {
-    return 'var(--g-success)';
-  } else if (item.ada < 0) {
-    return 'var(--g-error)';
-  }
-  return '';
-};
-
-const getRowClass = (item: StoredTransaction): string => {
-  if (props.selectedTransaction && props.selectedTransaction['id'] === item.id) {
-    return 'selected-transaction';
-  }
-  return '';
-};
-
 // Handle page change for pagination
 const handlePageChange = async (page: number) => {
   currentPage.value = page;
   hasReachedEnd.value = false;
   await loadMoreTransactions();
-};
-
-// Check if transaction has been pending for more than 1 hour
-const isPendingTooLong = (item: StoredTransaction): boolean => {
-  if (!item.pending) return false;
-
-  const currentTime = Date.now() / 1000; // Current time in seconds
-  const pendingDuration = currentTime - item.tx_timestamp; // Duration in seconds
-  const oneHourInSeconds = 60 * 60; // 1 hour = 3600 seconds
-
-  return pendingDuration > oneHourInSeconds;
 };
 
 // Remove pending transaction
@@ -1700,9 +1080,7 @@ const handleRemovePendingTransaction = async (item: StoredTransaction) => {
       data: { txId: item.id }
     }) as { data: { success: boolean; error?: string } };
 
-    if (response.data?.success) {
-      console.log('Pending transaction removed successfully');
-    } else {
+    if (!response.data?.success) {
       console.error('Failed to remove pending transaction:', response.data?.error);
     }
   } catch (error) {
@@ -1728,664 +1106,335 @@ onUnmounted(() => {
   if (intersectionObserver.value) {
     intersectionObserver.value.disconnect();
   }
-  if (scrollContainer.value) {
-    scrollContainer.value.removeEventListener('scroll', handleScroll);
-  }
-  // Cancel any pending debounced search updates (VueUse provides cancel method)
-  if ('cancel' in debouncedUpdateSearch && typeof debouncedUpdateSearch.cancel === 'function') {
-    debouncedUpdateSearch.cancel();
-  }
+  listScroller.value?.removeEventListener('scroll', handleScroll);
+  // Cancel pending debounce to prevent state mutation after teardown
+  debouncedUpdateSearch.cancel();
 });
 </script>
-<style scoped>
-/* ─── TX Liquid Glass Card ──────────────────────────────────── */
-.tx-glass-card {
-  position: relative;
-  background: rgba(255, 255, 255, 0.07) !important;
-  backdrop-filter: blur(24px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
-  border-radius: 22px !important;
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
-  box-shadow:
-    0 2px 8px rgba(0, 0, 0, 0.18),
-    0 16px 48px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.06) !important;
-  transition: box-shadow 0.3s ease !important;
+<style scoped lang="scss">
+/* Surface comes from the shared .glass-panel material. */
+.tx-list {
   overflow: hidden;
 }
 
-.tx-glass-card:hover {
-  box-shadow:
-    0 4px 16px rgba(0, 0, 0, 0.22),
-    0 24px 60px rgba(0, 0, 0, 0.36),
-    0 0 0 1px rgba(255, 255, 255, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.22),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.08) !important;
-}
-
-/* ─── Card Title Header ─────────────────────────────────────── */
-.tx-card-title {
-  border-bottom: 1px solid var(--g-hairline-1) !important;
-}
-
-.tx-icon-box {
-  width: 30px;
-  height: 30px;
-  background: color-mix(in srgb, var(--g-accent) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--g-accent) 20%, transparent);
-  border-radius: var(--g-r-control);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.tx-heading-group {
+/* ─── Header ─────────────────────────────────────────────────── */
+.tx-list__head {
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--g-s-3);
+  padding: var(--g-s-4) var(--g-s-4) var(--g-s-3);
 }
 
-.tx-heading,
-.tx-heading-link {
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif !important;
-  font-size: 14px !important;
-  font-weight: 600 !important;
-  letter-spacing: -0.01em !important;
-  color: var(--g-text-1) !important;
-  text-decoration: none !important;
-  line-height: 1 !important;
-}
-
-.tx-heading-link:hover {
-  color: var(--g-accent) !important;
-}
-
-.tx-count {
-  font-size: 11px;
-  font-weight: 400;
-  color: var(--g-text-3);
-  line-height: 1;
-}
-
-.tx-search-field {
-  max-height: 28px;
-  max-width: 170px !important;
-}
-
-.filter-section-label {
-  margin-bottom: 4px;
-}
-
-.filter-date-field {
-  font-size: 12px !important;
-}
-
-.filter-date-field >>> .v-input__slot {
-  min-height: 30px !important;
-  padding: 0 8px !important;
-  align-items: center !important;
-}
-
-.filter-date-field >>> .v-input__prepend-inner {
-  margin-top: 4px !important;
-  margin-right: 4px !important;
-  padding-right: 0 !important;
-  display: flex !important;
-  align-items: center !important;
-  height: 100% !important;
-}
-
-.filter-date-field >>> .v-input__append-inner {
-  margin-top: 4px !important;
-  display: flex !important;
-  align-items: center !important;
-}
-
-.filter-date-field >>> .v-input__append-inner .v-icon {
-  font-size: 14px !important;
-}
-
-/* Date picker menu styling */
-.date-picker-menu {
-  border-radius: var(--g-r-card) !important;
-  overflow: hidden;
-  box-shadow: var(--g-shadow-menu) !important;
-}
-
-.filter-date-picker {
-  background: var(--g-overlay) !important;
-  border-radius: var(--g-r-card) !important;
-  border: 1px solid var(--g-hairline-1) !important;
-}
-
-.filter-date-picker >>> .v-date-picker-header {
-  padding: 8px 16px !important;
-  background: transparent !important;
-}
-
-.filter-date-picker >>> .v-date-picker-header .v-btn {
-  color: var(--g-text-2) !important;
-}
-
-.filter-date-picker >>> .v-date-picker-table {
-  padding: 0 8px 8px !important;
-}
-
-.filter-date-picker >>> .v-date-picker-table .v-btn {
-  border-radius: var(--g-r-control) !important;
-  color: var(--g-text-2) !important;
-}
-
-.filter-date-picker >>> .v-date-picker-table .v-btn:hover {
-  background: color-mix(in srgb, var(--g-accent) 8%, transparent) !important;
-}
-
-.filter-date-picker >>> .v-btn--active {
-  background-color: var(--g-accent) !important;
-  color: var(--g-on-grad) !important;
-}
-
-.filter-date-picker >>> .v-date-picker-table--date .v-btn--disabled {
-  opacity: 0.25 !important;
-}
-
-/* Expanding search — grows to the left */
-.expanding-search-wrap {
-  position: relative;
+.tx-list__title-row {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  gap: var(--g-s-2);
 }
 
-.expanding-search-icon {
-  position: absolute;
-  right: 6px;
-  pointer-events: none;
-  color: var(--g-text-1) !important;
-  z-index: 1;
-  transition: right 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-              opacity 0.2s ease;
-}
-
-.expanding-search-input {
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: var(--g-r-pill);
-  padding: 6px;
-  background-color: transparent;
-  outline: none;
-  font-size: 13px;
-  color: transparent;
-  cursor: pointer;
-  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-              padding 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-              background-color 0.3s ease,
-              color 0.2s ease;
-  overflow: hidden;
-}
-
-.expanding-search-input::placeholder {
-  color: transparent;
-  transition: color 0.2s ease;
-}
-
-.expanding-search-input:focus {
-  width: 180px;
-  padding: 6px 12px 6px 30px;
-  background-color: var(--g-hairline-1);
+.tx-list__title {
+  margin: 0;
   color: var(--g-text-1);
-  cursor: text;
+  text-decoration: none;
 }
 
-.expanding-search-input:focus::placeholder {
+a.tx-list__title:hover {
+  color: var(--g-accent);
+}
+
+.tx-list__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--g-r-pill);
+  background: var(--g-hairline-2);
+  color: var(--g-text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tx-icon-btn {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--g-r-control);
+  color: var(--g-text-2);
+  cursor: pointer;
+  transition: background-color var(--g-dur-fast) var(--g-ease), color var(--g-dur-fast) var(--g-ease);
+}
+
+.tx-icon-btn:hover {
+  background: var(--g-hairline-1);
+  color: var(--g-text-1);
+}
+
+.tx-icon-btn .v-icon {
+  color: inherit;
+}
+
+.tx-icon-btn__badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: var(--g-r-pill);
+  background: var(--g-accent);
+  color: var(--g-on-grad);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+}
+
+/* ─── Search ─────────────────────────────────────────────────── */
+.tx-search {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-2);
+  height: 36px;
+  padding: 0 var(--g-s-3);
+  border: 1px solid var(--g-hairline-1);
+  border-radius: var(--g-r-pill);
+  background: var(--g-hairline-1);
+  cursor: text;
+  transition: border-color var(--g-dur-fast) var(--g-ease);
+}
+
+/* The field's focus ring lives on the pill, so the input inside needs none of its own. */
+.tx-search:focus-within {
+  border-color: var(--g-accent);
+}
+
+.tx-search .tx-search__icon {
   color: var(--g-text-3);
 }
 
-.expanding-search-wrap:focus-within .expanding-search-icon {
-  right: calc(100% - 22px);
-  opacity: 0.4;
+.tx-search__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--g-text-1);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
 }
 
-/* Filter type chips */
-.filter-type-chip {
-  border-color: var(--g-hairline-3) !important;
-  color: var(--g-text-2) !important;
+.tx-search__input::placeholder {
+  color: var(--g-text-3);
 }
 
-.filter-type-chip.v-chip--active {
-  background: color-mix(in srgb, var(--g-accent) 12%, transparent) !important;
-  border-color: color-mix(in srgb, var(--g-accent) 40%, transparent) !important;
-  color: var(--g-accent) !important;
-}
-
-.filter-menu .v-chip--active {
-  background: color-mix(in srgb, var(--g-accent) 12%, transparent) !important;
-  border-color: color-mix(in srgb, var(--g-accent) 40%, transparent) !important;
-  color: var(--g-accent) !important;
-}
-
-/* ─── Data Table Glass Overrides ────────────────────────────── */
-.tx-glass-card >>> .v-data-table__wrapper thead th {
-  background: var(--g-hairline-1) !important;
-  border-bottom: 1px solid var(--g-hairline-1) !important;
-  font-size: 11px !important;
-  font-weight: 500 !important;
-  letter-spacing: 0.02em !important;
-  color: var(--g-text-2) !important;
-  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif !important;
-}
-
-.tx-glass-card >>> .v-data-table__wrapper tbody td {
-  border-bottom-color: var(--g-hairline-1) !important;
-}
-
-/* ─── Pagination Bar ────────────────────────────────────────── */
-.tx-pagination-bar {
-  border-top: 1px solid var(--g-hairline-1) !important;
-  background: var(--g-hairline-1) !important;
-  padding: 4px 0 !important;
-}
-
-/* ─── Existing Styles ───────────────────────────────────────── */
-.text-nowrap {
-  text-wrap: nowrap;
-}
-
-.transactions-table >>> .no-padding {
-  padding: 0 !important;
-}
-.chips-row {
-  overflow: hidden !important;
-  white-space: nowrap !important;
-  text-overflow: ellipsis !important;
-}
-
-.transactions-table >>> table {
-  table-layout: fixed !important;
-  width: 100% !important;
-}
-
-
-.transactions-table >>> tr.selected-transaction {
-  background: var(--g-hairline-2) !important;
-}
-
-.transactions-table >>> tr {
+.tx-search__input::-webkit-search-cancel-button {
   cursor: pointer;
 }
 
-.transactions-table >>> tr:hover {
-  background: var(--g-hairline-1) !important;
-}
-
-.transactions-table tbody tr {
-  height: 50px !important;
-  max-height: 50px !important;
-  min-height: 50px !important;
-}
-
-.transactions-table tbody tr td {
-  height: 50px !important;
-  padding-top: 0 !important;
-  padding-bottom: 0 !important;
-  vertical-align: middle !important;
-  text-align: center !important;
-}
-
-.transactions-table tbody tr td .v-list-item {
-  min-height: auto !important;
-  padding: 0 !important;
-}
-
-.transactions-table tbody tr td .v-list-item__content {
-  text-align: center !important;
-}
-
-/* Left-align the Activity column content */
-.transactions-table tbody tr td:first-child .v-list-item__content {
-  text-align: left !important;
-}
-
-.transactions-table .v-avatar {
-  height: 26px !important;
-  width: 26px !important;
-  min-width: 26px !important;
-}
-
-.transactions-table .v-avatar img {
-  height: 26px !important;
-  width: 26px !important;
-}
-
-.activity-title {
-  font-size: 12px !important;
-  line-height: 1.2 !important;
-  min-height: 14px !important;
-  overflow: hidden !important;
-  display: flex !important;
-  align-items: center !important;
-  white-space: nowrap !important;
-}
-
-.activity-text {
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  white-space: nowrap !important;
-  display: inline-block !important;
-}
-
-.activity-date {
-  font-size: 11px !important;
-  line-height: 1.1 !important;
-  min-height: 11px !important;
-  max-height: 11px !important;
-  overflow: hidden !important;
-  white-space: nowrap !important;
-  text-overflow: ellipsis !important;
-}
-
-/* Infinite scroll styling */
-.transactions-table .no-hover:hover {
-  background-color: transparent !important;
-}
-
-.transactions-table .no-hover td {
-  padding: 0 !important;
-  margin: 0 !important;
-  vertical-align: middle !important;
-}
-
-/* Loading indicator styling */
-.transactions-table .v-progress-circular {
-  margin-right: 8px;
-}
-
-.transactions-table .text--secondary {
-  color: var(--g-text-2) !important;
-}
-
-/* Table container styling */
-.table-container {
-  max-height: calc(100vh - 227px);
-  overflow-y: auto;
+/* ─── List ───────────────────────────────────────────────────── */
+.tx-list__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-x: hidden;
+  overflow-y: auto;
+  padding: 0 var(--g-s-2) var(--g-s-2);
   scrollbar-width: thin;
   scrollbar-color: var(--g-hairline-3) transparent;
 }
 
-/* Custom scrollbar styling for webkit browsers */
-.table-container::-webkit-scrollbar {
-  width: 6px;
+.tx-day__head {
+  @include g-glass-chrome;
+  position: sticky;
+  top: 0;
+  z-index: var(--g-z-sticky);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 0;
+  padding: var(--g-s-3) var(--g-s-3) var(--g-s-2);
+  /* Tinted so the label stays legible over the rows scrolling beneath it */
+  background: rgba(6, 8, 10, 0.72);
+  color: var(--g-text-2);
+  font-size: 12px;
+  font-weight: 600;
 }
 
-.table-container::-webkit-scrollbar-track {
+.tx-day__net {
+  color: var(--g-text-3);
+  font-weight: 500;
+}
+
+.tx-row {
+  display: flex;
+  align-items: center;
+  border-radius: var(--g-r-control);
+  transition: background-color var(--g-dur-fast) var(--g-ease), box-shadow var(--g-dur-fast) var(--g-ease);
+}
+
+.tx-row:hover {
+  background: var(--g-hairline-1);
+}
+
+.tx-row.selected-transaction {
+  background: color-mix(in srgb, var(--g-accent) 8%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--g-accent) 30%, transparent);
+}
+
+.tx-row__main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-3);
+  min-height: 60px;
+  padding: 10px var(--g-s-3);
+  border: 0;
+  border-radius: inherit;
   background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
-.table-container::-webkit-scrollbar-thumb {
-  background-color: var(--g-hairline-3);
-  border-radius: 3px;
+.tx-row__text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-1);
 }
 
-.table-container::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(255, 255, 255, 0.28);
+.tx-row__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--g-text-1);
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 1.3;
 }
 
-/* Ensure table takes full width within container */
-.table-container .v-data-table {
+.tx-row__title-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tx-row__title-text--failed {
+  color: var(--g-error);
+}
+
+.tx-row__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--g-text-3);
+  font-size: 12px;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.tx-row__tokens {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+}
+
+.tx-row__tokens--pending {
+  opacity: 0.5;
+}
+
+.tx-row__token {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  overflow: hidden;
+  border-radius: var(--g-r-pill);
+  background: var(--g-raised);
+  box-shadow: 0 0 0 2px var(--g-surface);
+}
+
+.tx-row__token + .tx-row__token {
+  margin-left: -6px;
+}
+
+.tx-row__token img {
   width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
-/* Intersection observer target styling */
-.transactions-table .intersection-target {
-  height: 1px;
-  width: 100%;
+.tx-row__token--more {
+  color: var(--g-text-2);
+  font-size: 10px;
+  font-weight: 600;
 }
 
-/* .compact-pagination is the shared recipe in
-   src/shared/styles/compact-pagination.css (imported in the script block). */
-
-.top-level-search.v-text-field {
-  background: transparent !important;
+.tx-row__value {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--g-s-1);
 }
 
-.top-level-search >>> .v-input__slot {
-  background: transparent !important;
-  box-shadow: none !important;
-}
-
-.top-level-search >>> .v-input__control {
-  background: transparent !important;
-}
-
-.top-level-search >>> .v-text-field__slot {
-  background: transparent !important;
-}
-
-.top-level-search >>> .v-input__slot:before {
-  border: none !important;
-}
-
-.top-level-search >>> .v-input__slot:after {
-  border: none !important;
-}
-
-.top-level-search.v-text-field--solo > .v-input__control > .v-input__slot {
-  background: transparent !important;
-}
-
-/* VyFi gradient text and border - matches v-chip x-small */
-.vyfi-chip {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  margin-left: 1px;
-  margin-bottom: 1px;
-  font-size: 11px;
-  font-weight: 400;
-  border-radius: var(--g-r-card);
-  background: transparent;
-  cursor: default;
-  vertical-align: middle;
-  height: 16px;
-  line-height: 20px;
+/* Outgoing reads in the default text tone; the minus sign carries direction. */
+.tx-row__amount {
+  color: var(--g-text-1);
+  font-size: 13px;
+  font-weight: 600;
   white-space: nowrap;
-  text-decoration: none;
-  transition-duration: 0.28s;
-  transition-property: box-shadow, opacity;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.vyfi-chip::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  border-radius: var(--g-r-card);
-  padding: 1px;
-  background: linear-gradient(135deg, #935aaf 5%, #6fc7ff 95%);
-  mask-image: linear-gradient(to bottom, #fff 0%, #fff 100%), linear-gradient(to bottom, #fff 0%, #fff 100%);
-  mask-clip: content-box, padding-box;
-  mask-composite: exclude;
+.tx-row__amount--in {
+  color: var(--g-success);
 }
 
-.vyfi-chip::after {
-  content: 'VyFi';
-  position: relative;
-  z-index: 1;
-  padding: 0 4px;
-  display: inline-block;
-  background: linear-gradient(135deg, #935aaf 5%, #6fc7ff 95%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  height: 14px;
-  line-height: 14px;
+.tx-row__amount--pending {
+  color: var(--g-warning);
 }
 
-.vyfi-chip:hover {
-  background-color: var(--g-hairline-1);
+.tx-row__amount--failed {
+  color: var(--g-text-3);
+  text-decoration: line-through;
 }
 
-/* SundaeSwap gradient text and border - matches v-chip x-small */
-.sundaeswap-chip {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  margin-left: 1px;
-  margin-bottom: 1px;
-  font-size: 11px;
-  font-weight: 400;
-  border-radius: var(--g-r-card);
-  background: transparent;
-  cursor: default;
-  vertical-align: middle;
-  height: 16px;
-  line-height: 20px;
+.tx-row__fiat {
+  color: var(--g-text-3);
+  font-size: 12px;
   white-space: nowrap;
-  text-decoration: none;
-  transition-duration: 0.28s;
-  transition-property: box-shadow, opacity;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.sundaeswap-chip::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  border-radius: var(--g-r-card);
-  padding: 1px;
-  background: linear-gradient(90deg, #e85ce8, #6fb3ff);
-  mask-image: linear-gradient(to bottom, #fff 0%, #fff 100%), linear-gradient(to bottom, #fff 0%, #fff 100%);
-  mask-clip: content-box, padding-box;
-  mask-composite: exclude;
+.tx-row__dismiss {
+  margin-right: var(--g-s-2);
 }
 
-.sundaeswap-chip::after {
-  content: 'SundaeSwap';
-  position: relative;
-  z-index: 1;
-  padding: 0 4px;
-  display: inline-block;
-  background: linear-gradient(90deg, #e85ce8, #6fb3ff);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  height: 14px;
-  line-height: 14px;
+.tx-row__dismiss .v-icon {
+  color: var(--g-error);
 }
 
-.sundaeswap-chip:hover {
-  background-color: var(--g-hairline-1);
-}
-
-/* Splash gradient text and border - matches v-chip x-small */
-.splash-chip {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  margin-left: 1px;
-  margin-bottom: 1px;
-  font-size: 11px;
-  font-weight: 400;
-  border-radius: var(--g-r-card);
-  background: transparent;
-  cursor: default;
-  vertical-align: middle;
-  height: 16px;
-  line-height: 20px;
-  white-space: nowrap;
-  text-decoration: none;
-  transition-duration: 0.28s;
-  transition-property: box-shadow, opacity;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.splash-chip::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  border-radius: var(--g-r-card);
-  padding: 1px;
-  background: linear-gradient(90deg, #0059ff, #00fff6);
-  mask-image: linear-gradient(to bottom, #fff 0%, #fff 100%), linear-gradient(to bottom, #fff 0%, #fff 100%);
-  mask-clip: content-box, padding-box;
-  mask-composite: exclude;
-}
-
-.splash-chip::after {
-  content: attr(data-label);
-  position: relative;
-  z-index: 1;
-  padding: 0 4px;
-  display: inline-block;
-  background: linear-gradient(90deg, #0059ff, #00fff6);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  height: 14px;
-  line-height: 14px;
-}
-
-.splash-chip:hover {
-  background-color: var(--g-hairline-1);
-}
-
-@media (max-width: 600px) {
-  .top-level-search {
-    order: 2 !important;
-    margin-left: 0 !important;
-    flex: 1 1 auto !important;
-  }
-
-  .table-container {
-    max-height: calc(100vh - 150px);
-  }
-}
-
-/* Pending indicator - pulsing yellow circle */
+/* Pending: the sanctioned status pulse */
 .pending-indicator {
   display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--g-r-pill);
   background-color: var(--g-warning);
-  margin-left: 6px;
   animation: pulse-pending 2s ease-in-out infinite;
-  flex-shrink: 0;
-}
-
-/* Pending indicator for transactions pending > 1 hour - red X icon, clickable */
-.pending-indicator-remove {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-left: 6px;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: transform 0.2s ease;
-}
-
-.pending-indicator-remove:hover {
-  transform: scale(1.2);
 }
 
 @keyframes pulse-pending {
@@ -2399,8 +1448,165 @@ onUnmounted(() => {
   }
 }
 
-/* Failed transaction text - red/error color */
-.failed-transaction-text {
-  color: var(--g-error) !important;
+/* ─── States ─────────────────────────────────────────────────── */
+.tx-skeleton {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-3);
+  min-height: 60px;
+  padding: 10px var(--g-s-3);
+}
+
+.tx-skeleton__glyph {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--g-r-pill);
+}
+
+.tx-skeleton__text {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-2);
+}
+
+.tx-skeleton__line {
+  display: block;
+  height: 10px;
+  border-radius: var(--g-r-chip);
+}
+
+.tx-skeleton__line--title {
+  width: 55%;
+}
+
+.tx-skeleton__line--meta {
+  width: 32%;
+}
+
+.tx-skeleton__line--amount {
+  flex: 0 0 auto;
+  width: 56px;
+}
+
+.tx-list__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--g-s-3);
+  padding: var(--g-s-6) var(--g-s-4);
+  text-align: center;
+}
+
+.tx-list__empty-title {
+  color: var(--g-text-1);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.tx-list__footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--g-s-2);
+  padding: var(--g-s-4) 0 var(--g-s-2);
+  color: var(--g-text-3);
+  font-size: 12px;
+}
+
+.tx-list__sentinel {
+  height: 1px;
+}
+
+/* ─── Filter popover ─────────────────────────────────────────── */
+.filter-section-label {
+  margin-bottom: 4px;
+}
+
+.filter-divider {
+  opacity: 0.1;
+}
+
+.filter-date-icon {
+  opacity: 0.5;
+}
+
+.filter-date-field {
+  font-size: 12px !important;
+}
+
+.filter-date-field ::v-deep .v-input__slot {
+  min-height: 30px !important;
+  padding: 0 8px !important;
+  align-items: center !important;
+}
+
+.filter-date-field ::v-deep .v-input__prepend-inner {
+  margin-top: 4px !important;
+  margin-right: 4px !important;
+  padding-right: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  height: 100% !important;
+}
+
+.filter-date-field ::v-deep .v-input__append-inner {
+  margin-top: 4px !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+.filter-date-field ::v-deep .v-input__append-inner .v-icon {
+  font-size: 14px !important;
+}
+
+.filter-date-picker {
+  background: var(--g-overlay) !important;
+  border-radius: var(--g-r-card) !important;
+  border: 1px solid var(--g-hairline-1) !important;
+}
+
+.filter-date-picker ::v-deep .v-date-picker-header {
+  padding: 8px 16px !important;
+  background: transparent !important;
+}
+
+.filter-date-picker ::v-deep .v-date-picker-header .v-btn {
+  color: var(--g-text-2) !important;
+}
+
+.filter-date-picker ::v-deep .v-date-picker-table {
+  padding: 0 8px 8px !important;
+}
+
+.filter-date-picker ::v-deep .v-date-picker-table .v-btn {
+  border-radius: var(--g-r-control) !important;
+  color: var(--g-text-2) !important;
+}
+
+.filter-date-picker ::v-deep .v-date-picker-table .v-btn:hover {
+  background: color-mix(in srgb, var(--g-accent) 8%, transparent) !important;
+}
+
+.filter-date-picker ::v-deep .v-btn--active {
+  background-color: var(--g-accent) !important;
+  color: var(--g-on-grad) !important;
+}
+
+.filter-date-picker ::v-deep .v-date-picker-table--date .v-btn--disabled {
+  opacity: 0.25 !important;
+}
+
+.filter-type-chip {
+  border-color: var(--g-hairline-3) !important;
+  color: var(--g-text-2) !important;
+}
+
+.filter-type-chip.v-chip--active {
+  background: color-mix(in srgb, var(--g-accent) 12%, transparent) !important;
+  border-color: color-mix(in srgb, var(--g-accent) 40%, transparent) !important;
+  color: var(--g-accent) !important;
 }
 </style>
