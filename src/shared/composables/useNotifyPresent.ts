@@ -20,6 +20,7 @@ export interface NotifyPresentRequest {
   body: string;
   route: NotifyPresentRoute;
   walletId: number | null;
+  assets?: Array<{ unit?: string; label: string }>;
 }
 
 type Listener = (message: unknown, sender: chrome.runtime.MessageSender, sendResponse: (response: unknown) => void) => boolean | void;
@@ -31,9 +32,10 @@ export function useNotifyPresent(surface: 'dashboard' | 'sidepanel'): void {
     if (!m || m.method !== MessageTypes.NOTIFY_PRESENT || !m.data) return false;
     const focused = typeof document !== 'undefined' && document.visibilityState === 'visible' && document.hasFocus();
     if (!focused) { sendResponse({ shown: false }); return false; }
-    const { e, title, body, route } = m.data;
+    const { e, title, body, route, assets, walletId } = m.data;
     notifySnackStore.show({
-      e, title, body,
+      e, title, body, walletId,
+      ...(assets?.length ? { assets } : {}),
       path: surface === 'sidepanel' ? (route.sidepanel ?? '/') : route.dashboard,
       ...(route.settingsTab && surface === 'dashboard' ? { settingsTab: route.settingsTab } : {}),
     });

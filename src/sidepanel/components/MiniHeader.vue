@@ -54,6 +54,12 @@
         </template>
         <span>{{ $t('miniGero.openFullDashboard') }}</span>
       </v-tooltip>
+      <!-- The bell: the same inbox as the dashboard's, in a bottom sheet (B-M3). -->
+      <v-btn icon x-small @click="$emit('notifications')" class="toolbar-btn" :aria-label="$t('navigation.notifications')">
+        <v-badge :value="inboxUnread > 0" :content="String(inboxUnread)" color="var(--g-accent)" overlap>
+          <v-icon size="18" color="var(--g-text-3)">mdi-bell-outline</v-icon>
+        </v-badge>
+      </v-btn>
       <v-btn icon x-small @click="$emit('settings')" class="toolbar-btn">
         <v-icon size="18" color="var(--g-text-3)">mdi-cog-outline</v-icon>
       </v-btn>
@@ -69,6 +75,10 @@ import { WalletType } from '@/models/types';
 import assets from '@/utils/assets';
 import networks from '@/utils/networks';
 import { openFullDashboard as openFullDashboardTab } from '@/shared/utils/openFullDashboard';
+import { notifyInboxStore } from '@/stores/notifyInboxStore';
+
+// Unread pushes for the bell's badge; the store mirrors the worker's inbox once subscribed.
+const inboxUnread = computed(() => notifyInboxStore.unread());
 
 // Connected-site visibility: no session management existed anywhere in the
 // panel before this — once whitelisted, enable() auto-approved silently
@@ -94,6 +104,7 @@ function onVisibilityChange() {
 onMounted(() => {
   resolveActiveTabOrigin();
   document.addEventListener('visibilitychange', onVisibilityChange);
+  notifyInboxStore.init();
 });
 onBeforeUnmount(() => {
   document.removeEventListener('visibilitychange', onVisibilityChange);

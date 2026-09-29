@@ -33,7 +33,7 @@ describe('push handler (B3, B5, B8)', () => {
     await h.store.setWallet(4, link);
     await h.handlers.handlePush(FUNDS);
     expect(h.shown).toHaveLength(1);
-    expect(h.shown[0].title).toBe('ADA Received · Daily Cardano');
+    expect(h.shown[0].title).toBe('Funds Received · Daily Cardano');
     expect(h.shown[0].options).toMatchObject({ body: 'You received 12.5 ADA', tag: '431819262709d4f7e2e7b293474c0743', renotify: false, requireInteraction: false, timestamp: 1790553660000, icon: 'chrome-extension://x/public/logo128.png' });
     expect(h.shown[0].options['data']).toMatchObject({ t: 'funds', w: TAG, e: '431819262709d4f7e2e7b293474c0743', d: 'activity', walletId: 4, degraded: 'none', x: { tx: 'a690b5e80b646a7d2542e0f440882bebebd6fa4973ee831fac63ad0ebfdf9130' } });
   });
@@ -57,7 +57,7 @@ describe('push handler (B3, B5, B8)', () => {
     const h = harness({ toast: true });
     await h.store.setWallet(4, link);
     await h.handlers.handlePush(FUNDS);
-    expect(h.deps.presentToPages).toHaveBeenCalledWith(expect.objectContaining({ e: '431819262709d4f7e2e7b293474c0743', title: 'ADA Received · Daily Cardano', route: expect.objectContaining({ dashboard: '/transactions' }) }));
+    expect(h.deps.presentToPages).toHaveBeenCalledWith(expect.objectContaining({ e: '431819262709d4f7e2e7b293474c0743', title: 'Funds Received · Daily Cardano', route: expect.objectContaining({ dashboard: '/transactions?tx=a690b5e80b646a7d2542e0f440882bebebd6fa4973ee831fac63ad0ebfdf9130' }) }));
     expect(h.shown).toHaveLength(0);
     expect((await h.store.getInbox()).map((i) => i.e)).toEqual(['431819262709d4f7e2e7b293474c0743']);
   });
@@ -79,7 +79,7 @@ describe('notificationclick routing (B4)', () => {
     const close = vi.fn();
     const route = await h.handlers.handleNotificationClick({ close, tag: 'x', data: { d: 'activity', x: { tx: 'a'.repeat(64) }, walletId: 4, degraded: 'none' } });
     expect(close).toHaveBeenCalled();
-    expect(route).toEqual({ dashboard: '/transactions', sidepanel: '/activity', highlight: { tx: 'a'.repeat(64) } });
+    expect(route).toEqual({ dashboard: `/transactions?tx=${'a'.repeat(64)}`, sidepanel: '/activity', highlight: { tx: 'a'.repeat(64) } });
     expect(h.opened).toEqual([route]);
   });
 
@@ -118,7 +118,7 @@ describe('the in-app inbox (B-M3)', () => {
     await h.handlers.handlePush(NEW_DEVICE);
     const inbox = await h.store.getInbox();
     expect(inbox.map((i) => [i.t, i.needsYou, i.readAt])).toEqual([['new_device', true, null], ['funds', false, null]]);
-    expect(inbox[1]).toMatchObject({ e: '431819262709d4f7e2e7b293474c0743', c: 'funds', d: 'activity', walletId: 4, walletName: 'Daily Cardano', title: 'ADA Received · Daily Cardano', body: 'You received 12.5 ADA', ts: 1790553660000, x: { tx: 'a690b5e80b646a7d2542e0f440882bebebd6fa4973ee831fac63ad0ebfdf9130' } });
+    expect(inbox[1]).toMatchObject({ e: '431819262709d4f7e2e7b293474c0743', c: 'funds', d: 'activity', walletId: 4, walletName: 'Daily Cardano', title: 'Funds Received · Daily Cardano', body: 'You received 12.5 ADA', ts: 1790553660000, x: { tx: 'a690b5e80b646a7d2542e0f440882bebebd6fa4973ee831fac63ad0ebfdf9130' } });
     await h.handlers.handleNotificationClick({ data: h.shown[0].options['data'], tag: inbox[1].e, close: () => undefined }); // the funds one
     expect((await h.store.getInbox()).map((i) => i.readAt)).toEqual([null, 1790553700000]);
   });

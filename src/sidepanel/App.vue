@@ -40,7 +40,8 @@
     <template v-else>
       <MiniLayout
         @wallet-switch="showWalletSwitcher = true"
-        @settings="openDashboardSettings"
+        @notifications="showNotifications = true"
+        @settings="openDashboardSettings()"
       />
     </template>
 
@@ -55,6 +56,12 @@
         :error-message="loginError"
         @select="onWalletSwitch"
       />
+    </BottomSheet>
+
+    <!-- The bell's inbox (B-M3): the dashboard's notification centre in a sheet. Rows route on
+         the panel's router where a page exists and hand over to the full dashboard otherwise. -->
+    <BottomSheet v-model="showNotifications" height="85%">
+      <NotifyInbox surface="sidepanel" :open="showNotifications" @close="showNotifications = false" @settings="openDashboardSettings('notifications')" />
     </BottomSheet>
 
     <!-- Global, so every hardware-wallet signing path gets the "continue on
@@ -81,6 +88,7 @@ import { initDappRequestHub } from './services/dappRequestHub';
 import HardwareSignPrompt from '@/shared/components/HardwareSignPrompt.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import NotifySnackbar from '@/shared/components/NotifySnackbar.vue';
+import NotifyInbox from '@/shared/components/NotifyInbox.vue';
 import { useNotifyPresent } from '@/shared/composables/useNotifyPresent';
 import { Wallet } from '@/models/types';
 import { useChainContext } from './composables/useChainContext';
@@ -98,6 +106,7 @@ useChainContext();
 initDappRequestHub();
 
 const showWalletSwitcher = ref(false);
+const showNotifications = ref(false);
 // When set, a full-screen pre-switch unlock overlay is shown for this target MPC
 // wallet — we authenticate it (Google + passkey/password) BEFORE switching, so the
 // current wallet stays active until the switch actually completes.
@@ -199,8 +208,9 @@ async function onSwitchUnlocked(wallet: Wallet) {
   await doLogin(wallet);
 }
 
-function openDashboardSettings() {
-  chrome.storage.local.set({ openSettingsOnLoad: true });
+/** Open the full dashboard's settings dialog, on a given tab when asked (the bell's Settings link). */
+function openDashboardSettings(tab?: string) {
+  chrome.storage.local.set({ openSettingsOnLoad: tab ? { tab } : true });
   const dashboardUrl = chrome.runtime.getURL('index.html');
   try {
     chrome.tabs.query({ url: `${dashboardUrl}*` }, (tabs) => {

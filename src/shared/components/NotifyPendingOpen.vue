@@ -81,7 +81,7 @@ async function switchWallet(): Promise<void> {
     if (!res?.data?.success) return;
     const route = routeFor(p.d, p.x as Parameters<typeof routeFor>[1], true);
     if (route.settingsTab) await chrome.storage.local.set({ openSettingsOnLoad: { tab: route.settingsTab } });
-    if (router.currentRoute.path !== route.dashboard) await router.push(route.dashboard).catch(() => undefined);
+    if (router.currentRoute.fullPath !== route.dashboard) await router.push(route.dashboard).catch(() => undefined);
     await clear();
   } finally { switching.value = false; }
 }

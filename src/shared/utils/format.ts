@@ -15,6 +15,22 @@ export function formatCompact(value: number): string {
   return value.toFixed(value < 1 ? 4 : 0);
 }
 
+/**
+ * A quantity for a notification line: at most one decimal, and K/M/B once it gets long
+ * (12.5 → "12.5", 1234.56 → "1.2K", 2500000 → "2.5M", 0.04 → "<0.1"). Trailing ".0" is dropped.
+ */
+export function formatAmountShort(value: number): string {
+  if (!Number.isFinite(value)) return '';
+  const one = (v: number) => v.toFixed(1).replace(/\.0$/, '');
+  const abs = Math.abs(value);
+  const sign = value < 0 ? '-' : '';
+  if (abs >= 1e9) return `${sign}${one(abs / 1e9)}B`;
+  if (abs >= 1e6) return `${sign}${one(abs / 1e6)}M`;
+  if (abs >= 1e3) return `${sign}${one(abs / 1e3)}K`;
+  if (abs > 0 && abs < 0.05) return `${sign}<0.1`;
+  return `${sign}${one(abs)}`;
+}
+
 /** Format an integer count with thousands separators (e.g. transaction / maker counts) */
 export function formatInt(value: number | null | undefined): string {
   if (value == null) return '—';

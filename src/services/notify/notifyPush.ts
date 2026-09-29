@@ -16,7 +16,7 @@
 // Dependencies are injected for the unit tests; notifyBackground.ts binds them.
 
 import { parsePushPayload } from './notifyPayload';
-import { renderPush, routeFor, type NotificationData, type RenderedPush, type RouteIntent } from './notifyRender';
+import { renderPush, routeFor, type NotificationData, type NotifyAsset, type RenderedPush, type RouteIntent, type TokenLookup } from './notifyRender';
 import type { NotifyStore } from './notifyStore';
 
 export interface ToastRequest {
@@ -25,6 +25,7 @@ export interface ToastRequest {
   body: string;
   route: RouteIntent;
   walletId: number | null;
+  assets?: NotifyAsset[];
 }
 
 export interface NotifyPushDeps {
@@ -33,6 +34,8 @@ export interface NotifyPushDeps {
   /** NOTIFY_PRESENT to the open pages; resolves true when one rendered a toast (within 250 ms). */
   presentToPages: (request: ToastRequest) => Promise<boolean>;
   locale: () => Promise<string>;
+  /** The wallet's registry data for a unit, to name and scale received assets (B3). */
+  tokenInfo?: TokenLookup;
   walletName: (walletId: number) => Promise<string>;
   loggedWalletId: () => Promise<number | null>;
   /** Focus or open the dashboard on this route (B4). */
@@ -64,7 +67,7 @@ export function createNotifyPushHandlers(deps: NotifyPushDeps): NotifyPushHandle
     async handlePush(text) {
       const parsed = parsePushPayload(text ?? '');
       const wallet = parsed.ok ? await walletFor(parsed.payload.w) : null;
-      const rendered = renderPush({ parsed, wallet, locale: await deps.locale(), now: now() });
+      const rendered = renderPush({ parsed, wallet, locale: await deps.locale(), now: now(), tokenInfo: deps.tokenInfo });
       if (rendered.unknownWalletTag) {
         // Rule 5: heal the server; the DELETE itself runs on the next re-assertion (no network here).
         await deps.store.enqueueDelete({ kind: 'wallet', walletTag: rendered.unknownWalletTag, enqueuedAt: now() });
@@ -75,11 +78,11 @@ export function createNotifyPushHandlers(deps: NotifyPushDeps): NotifyPushHandle
       await deps.store.addInbox({
         e: rendered.tag, t: rendered.data.t, c: rendered.data.c, d: rendered.data.d, ...(rendered.data.x ? { x: rendered.data.x as Record<string, unknown> } : {}),
         walletId: rendered.data.walletId, walletName: wallet?.name ?? null, title: rendered.title, body: rendered.body,
-        ts: rendered.timestamp, readAt: null, needsYou: rendered.requireInteraction,
+        ts: rendered.timestamp, readAt: null, needsYou: rendered.requireInteraction, ...(rendered.assets ? { assets: rendered.assets } : {}),
       });
       let presented = false;
       try {
-        presented = await deps.presentToPages({ e: rendered.tag, title: rendered.title, body: rendered.body, route: rendered.route, walletId: rendered.data.walletId });
+        presented = await deps.presentToPages({ e: rendered.tag, title: rendered.title, body: rendered.body, route: rendered.route, walletId: rendered.data.walletId, ...(rendered.assets ? { assets: rendered.assets } : {}) });
       } catch (e) { log(`NOTIFY_PRESENT failed: ${String(e)}`); }
       // A focused wallet page showed the snackbar: no system bubble on top of it. Chrome waives
       // userVisibleOnly when a window client of the origin is visible and focused, which is exactly
