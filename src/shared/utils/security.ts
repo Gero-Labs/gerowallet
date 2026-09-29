@@ -1,5 +1,5 @@
 import * as OTPAuth from 'otpauth';
-import { decrypt, encrypt } from '@/shared/utils/crypto';
+import { SecretPurpose, decrypt, encrypt } from '@/shared/utils/crypto';
 import cryptoRandomString from 'crypto-random-string';
 import { Buffer } from 'buffer';
 import { debugLog } from '@/utils/debug';
@@ -245,9 +245,9 @@ export function encryptSecurityData(data: string | string[], password: string): 
  */
 export function decryptSecurityData(encryptedData: string | string[], password: string): string | string[] {
   if (Array.isArray(encryptedData)) {
-    return encryptedData.map(item => decrypt(item, password));
+    return encryptedData.map(item => decrypt(item, password, SecretPurpose.SecurityData));
   }
-  return decrypt(encryptedData, password);
+  return decrypt(encryptedData, password, SecretPurpose.SecurityData);
 }
 
 /**

@@ -45,7 +45,7 @@ import {
 } from '@/chrome/serialization';
 import { isCip113Enabled } from '@/chrome/cip113Flag';
 import { readCachedUtxoRows, serializeUtxoRows, type CachedUtxoRow } from '@/chrome/utxoCache';
-import { decryptPrivateKey, encryptWithPassword, isRawEncryptedKey } from '@/shared/utils/crypto';
+import { SecretPurpose, decryptPrivateKey, encryptWithPassword, isLegacyNestedKey } from '@/shared/utils/crypto';
 import type { IUnifiedUtxo } from '@/chains/common/interfaces';
 import type { BitcoinUtxo } from '@/api/bitcoin-api';
 import type { Psbt } from 'bitcoinjs-lib';
@@ -1394,7 +1394,7 @@ export class WalletBg {
         const buffer: Buffer = decryptPrivateKey(this.encryptedPrivateKey, password);
         // One-time silent upgrade of legacy weak-outer-KDF blobs. Non-blocking:
         // a failed rewrite must never break signing; it retries on next unlock.
-        if (!isRawEncryptedKey(this.encryptedPrivateKey)) {
+        if (isLegacyNestedKey(this.encryptedPrivateKey)) {
           void this.migrateEncryptedPrivateKeyFormat(buffer, password);
         }
         return Bip32PrivateKey.fromBytes(buffer);
@@ -1788,7 +1788,7 @@ export class WalletBg {
         }
 
         // Decrypt mnemonic with password
-        const decryptedMnemonic = decrypt(this.encryptedMnemonic, password);
+        const decryptedMnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
 
         // Sign and finalize PSBT
         const signedTx = await signAndFinalizePsbt(
@@ -1874,7 +1874,7 @@ export class WalletBg {
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
       if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
-      mnemonic = decrypt(this.encryptedMnemonic, password);
+      mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
     }
 
     const bitcoin = await import('bitcoinjs-lib');
@@ -1927,7 +1927,7 @@ export class WalletBg {
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
       if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
-      mnemonic = decrypt(this.encryptedMnemonic, password);
+      mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
     }
 
     // Derive signing key (first receiving address: m/purpose'/coinType'/0'/0/0)
@@ -2280,7 +2280,7 @@ export class WalletBg {
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
       if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
-      mnemonic = decrypt(this.encryptedMnemonic, password);
+      mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
     }
 
     try {
@@ -2339,7 +2339,7 @@ export class WalletBg {
       } else {
         if (!password || !this.encryptedMnemonic) throw new Error('Spending password is required');
         const { decrypt } = await import('@/shared/utils/crypto');
-        mnemonic = decrypt(this.encryptedMnemonic, password);
+        mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
       }
       const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
       const derived = await deriveMidnightKeys(mnemonic, network, 0, { skipCardano: true });
@@ -2380,7 +2380,7 @@ export class WalletBg {
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
       if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
-      mnemonic = decrypt(this.encryptedMnemonic, password);
+      mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
     }
 
     try {
@@ -2505,7 +2505,7 @@ export class WalletBg {
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
       if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
-      mnemonic = decrypt(this.encryptedMnemonic, password);
+      mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
     }
 
     try {
@@ -2620,7 +2620,7 @@ export class WalletBg {
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
       if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
-      mnemonic = decrypt(this.encryptedMnemonic, password);
+      mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
     }
 
     try {
@@ -2820,7 +2820,7 @@ export class WalletBg {
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
       if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
-      mnemonic = decrypt(this.encryptedMnemonic, password);
+      mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
     }
 
     try {
@@ -3053,7 +3053,7 @@ export class WalletBg {
     } else {
       if (!password) throw new Error('Password required to sign DUST registration tx');
       if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
-      mnemonic = decrypt(this.encryptedMnemonic, password);
+      mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
     }
 
     try {

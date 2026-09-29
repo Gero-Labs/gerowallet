@@ -2979,8 +2979,8 @@ app.addToOptions(MessageTypes.SIGN_TX_WITH_POOL_KEYS, async (request, sendRespon
       );
     } else {
       // Normal wallet: decrypt with spending password
-      const { decryptWithPassword } = await import('@/shared/utils/crypto');
-      coldKeyBytes = decryptWithPassword(password, encryptedColdKeyEntry.value);
+      const { decryptKeyBlob, SecretPurpose } = await import('@/shared/utils/crypto');
+      coldKeyBytes = decryptKeyBlob(encryptedColdKeyEntry.value, password, SecretPurpose.ColdKey);
     }
 
     // Step 3: Sign the transaction hash with the cold key
