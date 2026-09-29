@@ -54,22 +54,59 @@
           <div class="text-left pt-2">
             <h3 style="color: white">{{ $t('notify.categories.title') }}</h3>
             <span class="helper my-0">{{ $t('notify.categories.synced') }}</span>
-          </div>
-          <v-row v-for="cat in categories" :key="cat.id" no-gutters class="py-1">
-            <v-col cols="9" class="text-left">
-              <button type="button" class="notify-row__label" :disabled="busy" @click="setCategory(cat.id, categoriesOff.includes(cat.id))">
-                <span class="notify-row-title">{{ cat.label }}</span>
-                <span v-if="!cat.servedHere" class="helper my-0 d-block">{{ $t('notify.categories.notHere') }}</span>
+            <div>
+              <button type="button" class="notify-types__toggle" :aria-expanded="showTypes ? 'true' : 'false'" @click="showTypes = !showTypes">
+                <v-icon size="16" color="var(--g-accent)">{{ showTypes ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
+                {{ showTypes ? $t('notify.types.hide') : $t('notify.types.show') }}
               </button>
-            </v-col>
-            <v-col cols="3" style="display: flex;">
-              <ToggleSwitch text-left="OFF" text-right="ON" font-size="10px" :value="!categoriesOff.includes(cat.id)" :disabled="busy" @input="(on) => setCategory(cat.id, on)" style="margin: auto" />
-            </v-col>
-          </v-row>
+            </div>
+            <span v-if="showTypes" class="helper my-0 d-block">{{ $t('notify.types.hint') }}</span>
+          </div>
+          <template v-for="cat in categories">
+            <v-row :key="cat.id" no-gutters class="py-1">
+              <v-col cols="9" class="text-left">
+                <button type="button" class="notify-row__label" :disabled="busy" @click="setCategory(cat.id, categoriesOff.includes(cat.id))">
+                  <span class="notify-row-title">{{ cat.label }}</span>
+                  <span v-if="!cat.servedAnywhere" class="helper my-0 d-block">{{ $t('notify.categories.comingSoon') }}</span>
+                  <span v-else-if="!cat.servedHere" class="helper my-0 d-block">{{ $t('notify.categories.notHere') }}</span>
+                </button>
+              </v-col>
+              <v-col cols="3" style="display: flex;">
+                <ToggleSwitch text-left="OFF" text-right="ON" font-size="10px" :value="!categoriesOff.includes(cat.id)" :disabled="busy" @input="(on) => setCategory(cat.id, on)" style="margin: auto" />
+              </v-col>
+            </v-row>
+            <template v-if="showTypes">
+              <v-row v-for="ty in alertTypesFor(cat.id)" :key="cat.id + ':' + ty.id" no-gutters class="py-1 notify-type" :class="{ 'notify-type--off': categoriesOff.includes(cat.id) }">
+                <v-col cols="9" class="text-left">
+                  <button type="button" class="notify-row__label" :disabled="busy || categoriesOff.includes(cat.id)" @click="setType(ty.id, typesOff.includes(ty.id))">
+                    <span class="notify-type__title">{{ $t(`notify.type.${ty.id}.title`) }}</span>
+                    <span class="helper my-0 d-block">{{ categoriesOff.includes(cat.id) ? $t('notify.types.categoryOff') : $t(`notify.type.${ty.id}.desc`) }}</span>
+                  </button>
+                </v-col>
+                <v-col cols="3" style="display: flex;">
+                  <!-- A switched-off category silences its alerts whatever their own setting: say so with a
+                       chip instead of a greyed switch that would still read ON. The alert's own setting is kept. -->
+                  <span v-if="categoriesOff.includes(cat.id)" class="t-label notify-type__chip">{{ $t('notify.types.off') }}</span>
+                  <ToggleSwitch v-else text-left="OFF" text-right="ON" font-size="10px" :value="!typesOff.includes(ty.id)" :disabled="busy" @input="(on) => setType(ty.id, on)" style="margin: auto" />
+                </v-col>
+              </v-row>
+            </template>
+          </template>
           <div class="text-left py-2">
             <span class="notify-row-title">{{ $t('notify.security.title') }}</span>
             <span class="helper my-0 d-block">{{ $t('notify.security.hint') }}</span>
           </div>
+          <template v-if="showTypes">
+            <v-row v-for="ty in alertTypesFor('remoteSigning')" :key="'security:' + ty.id" no-gutters class="py-1 notify-type">
+              <v-col cols="9" class="text-left">
+                <span class="notify-type__title">{{ $t(`notify.type.${ty.id}.title`) }}</span>
+                <span class="helper my-0 d-block">{{ $t(`notify.type.${ty.id}.desc`) }}</span>
+              </v-col>
+              <v-col cols="3" style="display: flex;">
+                <span class="t-label notify-type__chip">{{ $t('notify.types.alwaysOn') }}</span>
+              </v-col>
+            </v-row>
+          </template>
 
           <div class="notify-divider" role="separator"></div>
 
@@ -190,6 +227,7 @@ import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
+import { alertTypesFor } from '@/services/notify/notifyCatalogue';
 import { notifySettingsStore } from '@/stores/notifySettingsStore';
 import { walletStore } from '@/stores/walletStore';
 import { isFirefox } from '@/env';
@@ -318,8 +356,10 @@ function onPasskeySuccess(bytes: Uint8Array) { void runAuth({ privateKeyBytes: A
 function onPasskeyError(e: Error) { authError.value = e?.message || t('notify.wallet.authFailed'); }
 
 // ---- Preferences (synced sections are written whole, §4.8) ----
-const synced = computed(() => link.value?.prefs?.synced ?? { categoriesOff: [], showAmounts: false, minReceiveLovelace: 1_000_000, updatedAt: null });
+const synced = computed(() => link.value?.prefs?.synced ?? { categoriesOff: [], typesOff: [], showAmounts: false, minReceiveLovelace: 1_000_000, updatedAt: null });
 const categoriesOff = computed(() => synced.value.categoriesOff);
+// A prefs reply from an older server lacks the field.
+const typesOff = computed(() => synced.value.typesOff ?? []);
 const CATEGORY_LABEL: Record<string, string> = { funds: 'notify.category.funds', staking: 'notify.category.staking', swap: 'notify.category.swap', adam: 'notify.category.adam', governance: 'notify.category.governance' };
 /** Open question 6: show a category served on ANY transport for the wallet's network; hide one served nowhere. */
 const categories = computed(() => {
@@ -328,20 +368,28 @@ const categories = computed(() => {
   if (!c || !net) return [];
   const servedHere = new Set(link.value?.servedCategories ?? c.servedCategories['webpush']?.[net] ?? []);
   const servedAnywhere = new Set(Object.values(c.servedCategories).flatMap((byNet) => byNet[net] ?? []));
+  // Every category the server knows is listed, so a user can set their choices before an alert
+  // ships: one served nowhere yet says "coming soon", one served elsewhere says "not here".
   return c.categories
-    .filter((id) => !c.securityCategories.includes(id) && servedAnywhere.has(id))
-    .map((id) => ({ id, label: CATEGORY_LABEL[id] ? t(CATEGORY_LABEL[id]) : id, servedHere: servedHere.has(id) }));
+    .filter((id) => !c.securityCategories.includes(id))
+    .map((id) => ({ id, label: CATEGORY_LABEL[id] ? t(CATEGORY_LABEL[id]) : id, servedHere: servedHere.has(id), servedAnywhere: servedAnywhere.has(id) }));
 });
-async function writeSynced(patch: Partial<{ categoriesOff: string[]; showAmounts: boolean; minReceiveLovelace: number }>) {
+async function writeSynced(patch: Partial<{ categoriesOff: string[]; typesOff: string[]; showAmounts: boolean; minReceiveLovelace: number }>) {
   // One write per change: Vuetify fires keyup/change twice on some paths, and the second call would still see the old state.
   if (!logged.value || busy.value) return;
   const { categoriesOff: off, showAmounts, minReceiveLovelace } = synced.value;
-  const ok = await store.setPrefs(logged.value.walletId, { synced: { categoriesOff: off, showAmounts, minReceiveLovelace, ...patch } });
+  const off2 = typesOff.value;
+  const ok = await store.setPrefs(logged.value.walletId, { synced: { categoriesOff: off, typesOff: off2, showAmounts, minReceiveLovelace, ...patch } });
   walletError.value = ok ? '' : t('notify.saveFailed');
 }
 function setCategory(id: string, on: boolean) {
   const off = categoriesOff.value.filter((c) => c !== id);
   void writeSynced({ categoriesOff: on ? off : [...off, id] });
+}
+const showTypes = ref(false);
+function setType(id: string, on: boolean) {
+  const off = typesOff.value.filter((t) => t !== id);
+  void writeSynced({ typesOff: on ? off : [...off, id] });
 }
 function setShowAmounts(on: boolean) { void writeSynced({ showAmounts: on }); }
 const minAda = ref('1');
@@ -430,5 +478,10 @@ watch(() => props.active, (active) => { if (active) void refreshWhenActive(); },
   border: 0;
   cursor: pointer;
 }
+.notify-types__toggle { display: inline-flex; align-items: center; gap: 4px; padding: 4px 0; border: 0; background: none; color: var(--g-accent); font: inherit; font-size: 12px; cursor: pointer; }
+.notify-type { padding-left: 14px; border-left: 2px solid var(--g-hairline-2); margin-left: 2px; }
+.notify-type--off { opacity: 0.6; }
+.notify-type__title { font-size: 13px; color: var(--g-text-1); }
+.notify-type__chip { margin: auto; color: var(--g-text-2); }
 .notify-min-amount { margin: auto; max-width: 120px; }
 </style>
