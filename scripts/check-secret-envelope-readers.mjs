@@ -5,7 +5,7 @@
  * Once any user's wallet has been migrated to `gpw2` (flag `isKeyEnvelopeV2Enabled`),
  * a build without the gpw2 readers reports "wrong password" for that wallet: a
  * lockout. That is exactly what a rollback or hotfix cut from an older tag would
- * ship. See docs/security/secret-envelope-runbook.md.
+ * ship. See .github/runbooks/secret-envelope.md.
  *
  *   node scripts/check-secret-envelope-readers.mjs            # working tree
  *   node scripts/check-secret-envelope-readers.mjs v2.7.3     # any git ref, before cutting a hotfix from it
@@ -84,7 +84,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
       ...problems.map(p => `  - ${p}`),
       '',
       'This build cannot open wallets already migrated to gpw2 and would lock those users out.',
-      'Cut rollbacks and hotfixes only from a ref that passes. See docs/security/secret-envelope-runbook.md.',
+      'Cut rollbacks and hotfixes only from a ref that passes. See .github/runbooks/secret-envelope.md.',
       '',
     ].join('\n'));
     process.exit(1);

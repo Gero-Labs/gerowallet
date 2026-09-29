@@ -81,7 +81,7 @@ jobs:
 
       # A build that cannot open the gpw2 secret envelope locks out every wallet
       # already migrated to it. Refuse to produce one (e.g. a rollback cut from an
-      # old ref). See docs/security/secret-envelope-runbook.md.
+      # old ref). See .github/runbooks/secret-envelope.md.
       - name: Secret envelope readers present
         run: node scripts/check-secret-envelope-readers.mjs
 
