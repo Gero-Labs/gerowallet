@@ -1,5 +1,6 @@
 import * as OTPAuth from 'otpauth';
-import { SecretPurpose, decrypt, encrypt } from '@/shared/utils/crypto';
+import { SecretPurpose, decrypt } from '@/shared/utils/crypto';
+import { sealTextSecret } from '@/shared/utils/secretWriters';
 import cryptoRandomString from 'crypto-random-string';
 import { Buffer } from 'buffer';
 import { debugLog } from '@/utils/debug';
@@ -230,11 +231,11 @@ export function generateBackupCodes(count: number = BACKUP_CODES_COUNT): string[
  * @param password - Spending password
  * @returns Encrypted data
  */
-export function encryptSecurityData(data: string | string[], password: string): string | string[] {
+export async function encryptSecurityData(data: string | string[], password: string): Promise<string | string[]> {
   if (Array.isArray(data)) {
-    return data.map(item => encrypt(item, password));
+    return Promise.all(data.map(item => sealTextSecret(item, password, SecretPurpose.SecurityData)));
   }
-  return encrypt(data, password);
+  return sealTextSecret(data, password, SecretPurpose.SecurityData);
 }
 
 /**
