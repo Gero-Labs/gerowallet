@@ -17,6 +17,7 @@ import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { geroStore } from '@/stores/geroStore';
 import networks from '@/utils/networks';
+import { applyTokenImageOverride } from '@/shared/utils/resolver';
 
 interface NotifyAsset { unit?: string; label: string }
 const props = defineProps<{ assets: NotifyAsset[]; walletId?: number | null }>();
@@ -40,7 +41,9 @@ function imageFor(asset: NotifyAsset): string {
   if (asset.unit === 'lovelace') return adaImage();
   const held = (walletStore.tokens as Record<string, WithImage>)[asset.unit]?.img;
   const known = (networkStore.assets as Record<string, WithImage>)?.[asset.unit]?.img;
-  return held || known || '';
+  // The same per-ticker overrides the holdings use (NIGHT's registry mark is black on
+  // transparent, invisible on this tile; the wallet ships the white Midnight mark).
+  return applyTokenImageOverride(asset.label, held || known || '');
 }
 </script>
 
