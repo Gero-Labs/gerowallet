@@ -5,6 +5,7 @@ import { Api } from '@/api/api';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import { APIError, CIP113_SIGN_REFUSAL_MESSAGE, TxSendError } from '@/chrome/config';
+import { classifySubmitFailure } from '@/chrome/submitFailure';
 import networks from '@/utils/networks';
 import { blockChainDBSchema, blockChainDBVersion } from '@/db/schema';
 import {
@@ -2217,13 +2218,14 @@ export class WalletBg {
       console.error('Transaction submission error:', error);
 
       // Handle different error types
-      if (error['response']?.status === 400) {
+      const failure = classifySubmitFailure(error['response']?.status);
+      if (failure === 'failure') {
         throw new Error(TxSendError.Failure.info.concat('', ' ', JSON.stringify(error['response'].data)));
-      } else if (error['response']?.status === 500) {
+      } else if (failure === 'internal') {
         throw new Error(APIError.InternalError.info);
-      } else if (error['response']?.status === 429) {
+      } else if (failure === 'refused') {
         throw new Error(TxSendError.Refused.info);
-      } else if (error['response']?.status === 425) {
+      } else if (failure === 'mempoolFull') {
         throw new Error(ERROR.fullMempool);
       } else {
         throw new Error(APIError.InvalidRequest.info.concat('', ' ', JSON.stringify(error)));
