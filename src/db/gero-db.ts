@@ -1,10 +1,11 @@
 import Dexie from 'dexie';
 import { geroDBSchema, geroDBVersion, walletDBSchema, walletDBVersion } from '@/db/schema';
 import * as bip39 from 'bip39';
-import { encrypt, encryptPrivateKey } from '@/shared/utils/crypto';
 import { Blockchain, CoinTypes, Currency, HARDENED, Wallet, WalletType, WalletTypePurpose } from '@/models/types';
 import { bech32, bech32m } from 'bech32';
 import { clearDbCache } from '@/db/wallet-db';
+import { sealKeySecret, sealTextSecret } from '@/shared/utils/secretWriters';
+import { SecretPurpose } from '@/shared/utils/secretEnvelope';
 import { resolvePrivateKey } from '@/shared/utils/resolver';
 import { debugLog } from '@/utils/debug';
 import { Bip32Ed25519, Bip32PrivateKey, Bip32PublicKeyHex, SodiumBip32Ed25519 } from '@cardano-sdk/crypto';
@@ -557,24 +558,15 @@ export async function createNewWallet(
     // ============================================================================
     console.log('🔑 Password Encryption Branch Entered (usePrf was false)');
 
-    const encryptedMnemonic: string = encrypt(mnemonic, password);
+    const encryptedMnemonic: string = await sealTextSecret(mnemonic, password, SecretPurpose.Mnemonic);
 
-    // Encrypt private key based on chain
-    let encryptedPrivateKey: string;
-    if (chain === Blockchain.BITCOIN || chain === Blockchain.MIDNIGHT) {
-      // Bitcoin/Midnight: encrypt raw key bytes (Uint8Array) with the strong
-      // single-layer routine — same format as Cardano's encryptPrivateKey, just
-      // without the Bip32PrivateKey wrapper. The weak crypto-ts outer wrap that
-      // used to double-encrypt this blob is removed (it negated the PBKDF2 cost —
-      // see decryptPrivateKey / PR #888). decryptPrivateKey reads both formats, so
-      // wallets created before this fix still unlock and migrate on next unlock.
-      const { encryptWithPassword } = await import('@/shared/utils/crypto');
-      const keyBytes = rootKey.privateKey;  // Uint8Array
-      encryptedPrivateKey = encryptWithPassword(password, keyBytes);
-    } else {
-      // Cardano: Use existing encryptPrivateKey function
-      encryptedPrivateKey = encryptPrivateKey(rootKey, password);
-    }
+    // Root key bytes per chain: Bitcoin/Midnight store the raw key bytes, Cardano
+    // the 96-byte Bip32 key. One strong layer either way (the old crypto-ts outer
+    // wrap is gone, see decryptPrivateKey), and gpw2 once the envelope flag is on.
+    const keyBytes: Uint8Array = chain === Blockchain.BITCOIN || chain === Blockchain.MIDNIGHT
+      ? rootKey.privateKey
+      : rootKey.bytes();
+    const encryptedPrivateKey: string = await sealKeySecret(keyBytes, password, SecretPurpose.RootKey);
 
     const walletData = {
       name,

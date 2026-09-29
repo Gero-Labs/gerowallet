@@ -228,7 +228,7 @@ const emit = defineEmits<{
 }>();
 
 // Access Vue instance for $t
-const vmProxy = getCurrentInstance()!.proxy as any;
+const vmProxy = getCurrentInstance()!.proxy as unknown as { $t: (key: string) => string };
 
 // Reactive state
 type Step = 'disable' | 'scan' | 'verify' | 'backup' | 'password';
@@ -431,8 +431,8 @@ async function handleSave() {
     }
 
     // Encrypt the TOTP secret and backup codes with spending password
-    const encryptedTotpSecret = encryptSecurityData(totpSecret.value, password.value) as string;
-    const encryptedBackupCodes = encryptSecurityData(backupCodes.value, password.value) as string[];
+    const encryptedTotpSecret = await encryptSecurityData(totpSecret.value, password.value) as string;
+    const encryptedBackupCodes = await encryptSecurityData(backupCodes.value, password.value) as string[];
 
     // Save to database
     const { getDb } = await import('@/db/wallet-db');
@@ -455,9 +455,9 @@ async function handleSave() {
       emit('input', false);
       emit('updated');
     }, 1500);
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error saving 2FA settings:', error);
-    errorMessage.value = error.message || vmProxy.$t('security.2FASetupFailed');
+    errorMessage.value = (error instanceof Error && error.message) || vmProxy.$t('security.2FASetupFailed');
   } finally {
     loading.value = false;
   }
@@ -489,9 +489,9 @@ async function handleDisable2FA() {
       emit('input', false);
       emit('updated');
     }, 1500);
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error disabling 2FA:', error);
-    errorMessage.value = error.message || vmProxy.$t('security.2FADisableFailed');
+    errorMessage.value = (error instanceof Error && error.message) || vmProxy.$t('security.2FADisableFailed');
   } finally {
     loading.value = false;
   }

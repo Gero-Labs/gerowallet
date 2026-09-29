@@ -10,7 +10,8 @@ import {
   requestBuilderSignature,
   verifyBuilderSignature,
 } from '@/api/strike-v2.builder-connect';
-import { SecretPurpose, encryptWithPassword, decryptKeyBlob } from '@/shared/utils/crypto';
+import { SecretPurpose, decryptKeyBlob } from '@/shared/utils/crypto';
+import { sealKeySecret } from '@/shared/utils/secretWriters';
 import {
   encryptPrivateKeyWithPrf,
   decryptPrivateKeyWithPrf,
@@ -55,7 +56,7 @@ async function encryptStrikePrivateKey(
       w.id.toString(),
     );
   }
-  return encryptWithPassword(password, privateKeyHex);
+  return sealKeySecret(Uint8Array.from(Buffer.from(privateKeyHex, 'hex')), password, SecretPurpose.StrikeKey);
 }
 
 /**
