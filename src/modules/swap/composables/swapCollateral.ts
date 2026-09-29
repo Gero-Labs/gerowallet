@@ -12,10 +12,16 @@ import { nexusCollateralApi, lendRef } from '@/api/nexus-collateral-api';
 import { toNexusNetwork } from '@/api/nexus-tx-api';
 import { mergeWitnessSets } from '@/shared/utils/witnessSets';
 
-const LENT_TTL_MS = 10 * 60 * 1000;
+// How long a borrowed ref stays recognised. The signer checks it only after the wallet has
+// signed, and a hardware wallet can sit on its confirmation screen for minutes, so a short
+// window silently dropped the pool's co-signature. Three hours outlasts the cancel
+// transaction the collateral is for (the engine builds it valid for 7200 slots, two hours).
+// Nexus keeps no lease: it co-signs any transaction that uses a pool UTxO purely as
+// collateral, so recognising a ref for longer never asks it for something it would refuse.
+const LENT_TTL_MS = 3 * 60 * 60 * 1000;
 const lentRefs = new Map<string, number>();
 
-/** True when this page borrowed `utxoRef` from the pool within the last ten minutes. */
+/** True when this page borrowed `utxoRef` from the pool within the last three hours. */
 export function isLentHere(utxoRef: string): boolean {
   const at = lentRefs.get(utxoRef);
   if (at === undefined) return false;

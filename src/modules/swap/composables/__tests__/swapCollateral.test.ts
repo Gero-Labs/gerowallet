@@ -63,4 +63,36 @@ describe('swapCollateral: the Nexus pool as the widget\'s collateral', () => {
     cosign.mockRejectedValueOnce(new Error('cosign 503'));
     await expect(cosignLentCollateral('00', witnessWith(VKEY_A), 'Mainnet', [`${'9'.repeat(64)}#2`])).rejects.toThrow('cosign 503');
   });
+
+  it('still co-signs a borrowed ref after a slow hardware confirmation', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-09-29T20:00:00Z'));
+      lend.mockResolvedValueOnce({ txHash: '7'.repeat(64), outputIndex: 0, address: 'addr1pool', lovelace: '5000000' });
+      await lendPoolCollateral('Mainnet');
+      // signTx calls back in only once the device prompt is confirmed, eleven minutes later.
+      vi.setSystemTime(new Date('2026-09-29T20:11:00Z'));
+      cosign.mockResolvedValueOnce({ witness: witnessWith(VKEY_B) });
+      const merged = await cosignLentCollateral('00', witnessWith(VKEY_A), 'Mainnet', [`${'7'.repeat(64)}#0`]);
+      expect(cosign).toHaveBeenCalledWith('00', `${'7'.repeat(64)}#0`, 'cardano-mainnet');
+      expect(vkeysOf(merged).sort()).toEqual([VKEY_A, VKEY_B]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('recognises a borrowed ref for as long as the cancel transaction it collateralises can be valid', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-09-29T20:00:00Z'));
+      lend.mockResolvedValueOnce({ txHash: '6'.repeat(64), outputIndex: 1, address: 'addr1pool', lovelace: '5000000' });
+      await lendPoolCollateral('Mainnet');
+      vi.setSystemTime(new Date('2026-09-29T22:00:00Z')); // the cancel transaction's two-hour validity
+      expect(isLentHere(`${'6'.repeat(64)}#1`)).toBe(true);
+      vi.setSystemTime(new Date('2026-09-29T23:01:00Z'));
+      expect(isLentHere(`${'6'.repeat(64)}#1`)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
