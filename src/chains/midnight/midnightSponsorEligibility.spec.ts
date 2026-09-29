@@ -4,6 +4,8 @@ import {
   hasReadySponsor,
   sponsorCandidates,
   sponsorStateFor,
+  sponsorStateFromDestination,
+  type DustDestinationRow,
   type DustStatusRow,
   type SponsorWalletRef,
 } from './midnightSponsorEligibility';
@@ -68,13 +70,25 @@ describe('sponsorStateFor', () => {
     expect(sponsorStateFor(wallet({ dustAddress: '' }), [row()]).state).toBe('unknown');
   });
 
-  it('sums capacity across several registrations paying one dust address', () => {
+  it('counts capacity ONCE across several registrations paying one dust address', () => {
+    // The indexer attaches the destination TOTAL to every stake registered to a dust
+    // address (mainnet: 7 stakes, each reporting the same 935253826), so adding the rows
+    // multiplied the figure by the number of stakes. Two stakes, one destination: the
+    // capacity is the destination's, not twice it.
     const c = sponsorStateFor(wallet(), [
-      row({ currentCapacity: '100' }),
+      row({ currentCapacity: '250' }),
       row({ cardanoRewardAddress: 'stake1other', currentCapacity: '250' }),
     ]);
-    expect(c.capacity).toBe(350n);
+    expect(c.capacity).toBe(250n);
     expect(c.fundedBy).toHaveLength(2);
+  });
+
+  it('takes the first row that parses when another row for the same address does not', () => {
+    const c = sponsorStateFor(wallet(), [
+      row({ currentCapacity: 'not-a-number' }),
+      row({ cardanoRewardAddress: 'stake1other', currentCapacity: '250' }),
+    ]);
+    expect(c.capacity).toBe(250n);
   });
 
   it('keeps capacity null when every row is unparseable rather than claiming zero', () => {
@@ -194,12 +208,103 @@ describe('chargePercent', () => {
     expect(chargePercent(c)).toBe(100);
   });
 
-  it('sums caps across several registrations', () => {
+  it('counts the cap once across several registrations to one address', () => {
+    // Same destination-total rule as capacity: two stakes must not read as a cap twice as large.
     const c = sponsorStateFor(w, [
       row({ currentCapacity: '50', maxCapacity: '100' }),
       row({ cardanoRewardAddress: 'stake1other', currentCapacity: '50', maxCapacity: '100' }),
     ]);
-    expect(c.cap).toBe(200n);
+    expect(c.cap).toBe(100n);
     expect(chargePercent(c)).toBe(50);
+  });
+});
+
+describe('sponsorStateFromDestination', () => {
+  const stake = (state: string, address = ADAM_STAKE) => ({ cardanoRewardAddress: address, state });
+  const destination = (over: Partial<DustDestinationRow> = {}): DustDestinationRow => ({
+    dustAddress: CYBER_NEXUS_DUST,
+    registered: true,
+    currentCapacity: '4880300000',
+    maxCapacity: '9000000000',
+    stakes: [stake('active')],
+    ...over,
+  });
+
+  it('is ready when a stake is active and the destination has capacity', () => {
+    const c = sponsorStateFromDestination(wallet(), destination());
+    expect(c.state).toBe('ready');
+    expect(c.capacity).toBe(4_880_300_000n);
+    expect(c.cap).toBe(9_000_000_000n);
+    expect(c.fundedBy).toEqual([ADAM_STAKE]);
+  });
+
+  it('counts the capacity once when two stakes feed one destination', () => {
+    // The destination answer carries the total once; two active stakes must not double it.
+    const c = sponsorStateFromDestination(wallet(), destination({
+      stakes: [stake('active'), stake('active', 'stake1other')],
+    }));
+    expect(c.capacity).toBe(4_880_300_000n);
+    expect(c.cap).toBe(9_000_000_000n);
+    expect(c.fundedBy).toEqual([ADAM_STAKE, 'stake1other']);
+    expect(chargePercent(c)).toBe(54);
+  });
+
+  it('matches the answer to the wallet case-insensitively', () => {
+    const c = sponsorStateFromDestination(wallet(), destination({ dustAddress: CYBER_NEXUS_DUST.toUpperCase() }));
+    expect(c.state).toBe('ready');
+  });
+
+  it('treats a registered but drained destination as relaying, not ready', () => {
+    const c = sponsorStateFromDestination(wallet(), destination({ currentCapacity: '0' }));
+    expect(c.state).toBe('relaying');
+    expect(c.capacity).toBe(0n);
+  });
+
+  it('keeps capacity null when it is unparseable rather than claiming zero', () => {
+    const c = sponsorStateFromDestination(wallet(), destination({ currentCapacity: 'nope', maxCapacity: undefined }));
+    expect(c.state).toBe('ready');
+    expect(c.capacity).toBeNull();
+    expect(c.cap).toBeNull();
+  });
+
+  it('is relaying, with no capacity, when a stake is on Cardano but not counted yet', () => {
+    const c = sponsorStateFromDestination(wallet(), destination({
+      registered: false, currentCapacity: '0', maxCapacity: '0', stakes: [stake('relaying')],
+    }));
+    expect(c.state).toBe('relaying');
+    expect(c.capacity).toBeNull();
+    expect(c.cap).toBeNull();
+    expect(c.fundedBy).toEqual([ADAM_STAKE]);
+  });
+
+  it('is unknown, not empty, when nothing feeds the address', () => {
+    const c = sponsorStateFromDestination(wallet(), destination({
+      registered: false, currentCapacity: '0', maxCapacity: '0', stakes: [],
+    }));
+    expect(c.state).toBe('unknown');
+    expect(c.capacity).toBeNull();
+    expect(c.fundedBy).toEqual([]);
+  });
+
+  it('is unknown for a destination whose only stake is duplicated', () => {
+    // Generates nothing until the extras are deregistered, but that can be fixed: not "no DUST".
+    const c = sponsorStateFromDestination(wallet(), destination({
+      registered: false, stakes: [stake('duplicated')],
+    }));
+    expect(c.state).toBe('unknown');
+    expect(c.fundedBy).toEqual([]);
+  });
+
+  it('does NOT credit a wallet with the answer for another wallet\'s address', () => {
+    const c = sponsorStateFromDestination(wallet({ id: 36, name: 'Primal Spectre', dustAddress: PRIMAL_DUST }), destination());
+    expect(c.state).toBe('unknown');
+    expect(c.capacity).toBeNull();
+  });
+
+  it('ignores stakes in a state it does not know', () => {
+    const c = sponsorStateFromDestination(wallet(), destination({
+      registered: false, stakes: [stake('something-new')],
+    }));
+    expect(c.state).toBe('unknown');
   });
 });
