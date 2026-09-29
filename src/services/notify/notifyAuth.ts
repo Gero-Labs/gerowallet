@@ -28,7 +28,7 @@ export const EMPTY_BODY_SHA256 = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b93
 /** |serverTime − X-Gero-Ts| must stay within this (§3.4 step 3). */
 export const NOTIFY_SKEW_MS = 300_000;
 
-export type NotifyMethod = 'GET' | 'PUT' | 'DELETE';
+export type NotifyMethod = 'GET' | 'PUT' | 'POST' | 'DELETE';
 
 export interface NotifyHeaders {
   'X-Gero-Device': string;

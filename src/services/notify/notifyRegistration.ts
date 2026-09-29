@@ -22,7 +22,7 @@ import { bytesToHex } from './notifyAuth';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { NotifyDeferred, NotifyError, type NotifyClient } from './notifyClient';
 import type { NotifyStore, NotifyWalletState } from './notifyStore';
-import { NOTIFY_PROTOCOL, type DeviceBody, type DeviceView, type NotifyConfig, type WalletLinkBody, type WalletPrefsWrite, type WalletProof, type WebPushTarget } from './notifyTypes';
+import { NOTIFY_PROTOCOL, type DeviceBody, type DeviceView, type NotifyConfig, type WalletLinkBody, type WalletPrefsWrite, type WalletProof, type WatchOrdersBody, type WebPushTarget } from './notifyTypes';
 
 export const NOTIFY_REASSERT_ALARM = 'notify-reassert';
 export const NOTIFY_RETRY_ALARM = 'notify-retry';
@@ -81,6 +81,14 @@ export type ReassertResult = 'opted_out' | 'registered' | 'reasserted' | 'recove
 export type BrowserEnableResult = 'ok' | 'unavailable' | 'subscribe_failed' | 'endpoint_not_allowed' | 'needs_attention' | 'deferred' | 'error';
 export type WalletEnableResult = 'ok' | 'browser_off' | 'no_wallet' | 'ineligible' | 'needs_auth' | 'proof_failed' | 'proof_invalid' | 'limit' | 'deferred' | 'error';
 
+/** A submitted swap to register: the wallet, the payment key hash it was placed with, and the transaction hash(es). */
+export interface WatchOrdersInput {
+  walletId: number;
+  ownerPkh: string;
+  txHashes: string[];
+}
+export type WatchOrdersResult = { result: 'ok'; watching: number } | { result: 'not_registered' } | { result: 'failed' };
+
 export interface NotifyRegistration {
   setBrowserEnabled(enabled: boolean): Promise<BrowserEnableResult | 'off'>;
   enableWallet(auth?: { password?: string; privateKeyBytes?: Uint8Array }): Promise<WalletEnableResult>;
@@ -90,6 +98,8 @@ export interface NotifyRegistration {
   refreshPrefs(walletId: number): Promise<'ok' | 'not_registered' | 'error'>;
   /** Wallet deleted: called BEFORE the wallet record and keys are removed. */
   walletRemoved(walletId: number): Promise<void>;
+  /** Tell the server to watch a submitted swap for a fill or cancel (§4.9). Fire-and-forget: no retry queue. */
+  watchOrders(input: WatchOrdersInput): Promise<WatchOrdersResult>;
   reassert(trigger: ReassertTrigger): Promise<ReassertResult>;
   /** Re-send the logged wallet's link after its credential range grew. */
   credentialsChanged(): Promise<void>;
@@ -528,6 +538,23 @@ export function createNotifyRegistration(deps: NotifyRegistrationDeps): NotifyRe
         }
         log(`notify GET prefs failed: ${String(e)}`);
         return 'error';
+      }
+    },
+
+    async watchOrders({ walletId, ownerPkh, txHashes }) {
+      const w = await store.getWallet(walletId);
+      if (!w || w.registeredAt === null) return { result: 'not_registered' };
+      const body: WatchOrdersBody = { ownerPkh, txHashes };
+      try {
+        const { watching } = await client.watchOrders(w.walletTag, body);
+        return { result: 'ok', watching };
+      } catch (e) {
+        if (e instanceof NotifyError && e.code === 'wallet_not_registered') {
+          await store.setWallet(walletId, { ...w, registeredAt: null });
+          return { result: 'not_registered' };
+        }
+        log(`notify POST orders failed: ${String(e)}`);
+        return { result: 'failed' };
       }
     },
 

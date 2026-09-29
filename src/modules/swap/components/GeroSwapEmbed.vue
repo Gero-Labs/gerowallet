@@ -134,6 +134,8 @@ import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import { WalletType } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
+import { Messaging } from '@/chrome/messaging';
+import { MessageTypes } from '@/models/MessageTypes';
 import i18n from '@/plugins/i18n';
 
 interface Props {
@@ -462,8 +464,28 @@ function wireProps() {
   node.ownerPkh = resolveOwnerPkh(); // for in-widget swap history (indexed orders lookup)
 }
 
+// Ask the worker to watch this swap for a fill or cancel push. Fire-and-forget: a wallet that has not
+// opted in to notifications answers not_registered, and nothing here may block or break the emit.
+function registerSwapForAlerts(detail: unknown) {
+  const txHash = (detail as { txHash?: unknown } | undefined)?.txHash;
+  if (typeof txHash !== 'string' || !/^[0-9a-f]{64}$/.test(txHash)) return;
+  const ownerPkh = resolveOwnerPkh();
+  const walletId = walletStore.loggedWallet?.id;
+  if (!ownerPkh || walletId === undefined) return;
+  try {
+    Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.NOTIFY_WATCH_ORDERS,
+      data: { walletId, ownerPkh, txHashes: [txHash] },
+    }).catch(() => undefined);
+  } catch {
+    // alerts are best-effort
+  }
+}
+
 function onSwapSubmitted(e: Event) {
-  emit('swap-submitted', (e as CustomEvent).detail);
+  const detail = (e as CustomEvent).detail;
+  emit('swap-submitted', detail);
+  registerSwapForAlerts(detail);
 }
 
 // Widget error codes observed in src/vendor/gero-swap/gero-swap.js — mapped to existing

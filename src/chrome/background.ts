@@ -2772,6 +2772,21 @@ app.addToOptions(MessageTypes.NOTIFY_INBOX_CLEAR, async (request, sendResponse) 
   }
 });
 
+app.addToOptions(MessageTypes.NOTIFY_WATCH_ORDERS, async (request, sendResponse) => {
+  try {
+    await booted();
+    const txHashes = Array.isArray(request.data?.txHashes) ? request.data.txHashes.map(String) : [];
+    const result = await notifyActions.watchOrders({
+      walletId: Number(request.data?.walletId),
+      ownerPkh: String(request.data?.ownerPkh ?? ''),
+      txHashes,
+    });
+    sendResponse(crossDeviceReply(request.id, { success: result.result !== 'failed', result }));
+  } catch (error) {
+    sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
+  }
+});
+
 app.addToOptions(MessageTypes.NOTIFY_WALLET_REMOVED, async (request, sendResponse) => {
   try {
     await booted();
