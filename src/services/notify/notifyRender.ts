@@ -8,7 +8,7 @@
 // `a` and `n` interpolated. The wallet's name appears only when `a` is present,
 // which means the user opted into details (open question 10).
 
-import { pushStrings, type PushLocale, type PushStringKey } from '@/plugins/i18n/push';
+import { PUSH_LOCALES, pushStrings, type PushLocale, type PushStringKey } from '@/plugins/i18n/push';
 import type { ParsedPush, PushAmounts, PushPayload } from './notifyPayload';
 import { formatAmountShort } from '@/shared/utils/format';
 
@@ -91,7 +91,7 @@ const EVENT_KEYS: Record<string, { title: PushStringKey; body: PushStringKey }> 
 export const KNOWN_EVENT_TYPES = Object.keys(EVENT_KEYS);
 
 export function pushLocale(locale: string | undefined): PushLocale {
-  return locale === 'de' ? 'de' : 'us';
+  return (PUSH_LOCALES as readonly string[]).includes(locale ?? '') ? locale as PushLocale : 'us';
 }
 
 function t(locale: PushLocale, key: PushStringKey, vars: Record<string, string | number> = {}): string {

@@ -8,7 +8,7 @@ One runner: Vitest 3.2.7, `vitest.config.mts`, happy-dom, `globals: true`, `test
 - 11 `*.test.ts` under `src/`, mostly in `__tests__/` dirs
 - 7 `*.test.ts` under `test/`
 
-245 files, 2871 tests, ~95s for a full run.
+285 files, 3395 tests, ~95s for a full run.
 
 Colocate new tests under `src/`, next to the code. Not for typechecking - nothing in this repo ever runs a meaningful `tsc` (see SKILL.md) - but because both CI workflows address tests by path, and the colocated convention is what everything else follows. (`tsconfig.json` includes `src/**` only, so anything under `test/` is outside it, which matters only if the typecheck debt is ever cleaned up.)
 
@@ -26,7 +26,7 @@ npm run test:watch
 
 ## A red full-suite run is probably not you
 
-On an idle machine the suite is green: 245 files, 2871 tests, ~37s, exit 0. Under load it is a different story - several specs are timing-sensitive and fail intermittently:
+On an idle machine the suite is green: 285 files, 3395 tests, ~37s, exit 0. Under load it is a different story - several specs are timing-sensitive and fail intermittently:
 
 - `src/services/crossDevice/*.spec.ts` (real timers)
 - `src/chains/midnight/midnightKeyManager.ledger.spec.ts` (a `beforeAll` deriving Midnight HD keys for 3 networks, ~9.4s against a **10s** hook timeout)
@@ -42,12 +42,12 @@ npx vitest run src/services/crossDevice/proveService.spec.ts
 
 ## What CI actually runs
 
-About 62 of 245 files. `npm test` is never invoked in CI.
+About 77 files. `npm test` is never invoked in CI.
 
 | Workflow | Runs |
 |---|---|
-| `dev-bundle-gate.yml` | 6 named spec files, then `design:check`, then `build:web` |
-| `midnight-ledger-verify.yml` | Two whole **directories** - `src/chains/midnight` (31 files today) and `src/services/crossDevice` (19) - plus 6 named specs; then `scripts/build-isolated-extension.mjs` |
+| `dev-bundle-gate.yml` | 18 named spec files (i18n parity among them), then `design:check`, then `build:web` |
+| `midnight-ledger-verify.yml` | Two whole **directories** - `src/chains/midnight` (31 files today) and `src/services/crossDevice` (22) - plus 6 named specs; then `scripts/build-isolated-extension.mjs` |
 
 Because those are directory arguments, the covered set grows on its own whenever someone adds a spec under either path. Count it before quoting a number:
 

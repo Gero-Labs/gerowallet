@@ -92,41 +92,59 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 
 const { t } = useTranslation();
 
+// The fields this card reads from the node monitor's leader schedule.
+interface ScheduleSlot {
+  slot: number;
+  timestamp: number;
+  produced?: boolean | null;
+  status?: string;
+  blockNo?: number;
+}
+interface EpochSchedule {
+  epoch: number;
+  slots: ScheduleSlot[];
+  totalSlots: number;
+  producedCount?: number;
+  missedCount?: number;
+}
+
 defineProps<{
   connected: boolean;
   loading: boolean;
-  current?: any;
-  next?: any;
+  current?: EpochSchedule;
+  next?: EpochSchedule;
   nextCountdown?: string;
 }>();
 
-function slotStatus(slot: any): string {
+function slotStatus(slot: ScheduleSlot): string {
   if (slot.produced === true) return 'produced';
   if (slot.produced === false) return 'missed';
   return 'pending';
 }
 
-function slotClass(slot: any): string {
+function slotClass(slot: ScheduleSlot): string {
   if (slot.produced === true) return 'ls-slot--produced';
   if (slot.produced === false) return 'ls-slot--missed';
   return 'ls-slot--pending';
 }
 
-function slotColor(slot: any): string {
+function slotColor(slot: ScheduleSlot): string {
   if (slot.produced === true) return 'var(--g-success)';
   if (slot.produced === false) return 'var(--g-error)';
   return 'var(--g-warning)';
 }
 
-function slotIcon(slot: any): string {
+function slotIcon(slot: ScheduleSlot): string {
   if (slot.produced === true) return 'mdi-check-circle';
   if (slot.produced === false) return 'mdi-close-circle';
   return 'mdi-clock-outline';
 }
 
-function slotStatusLabel(slot: any): string {
-  if (slot.produced === true) return slot.status || t('poolOperator.produced');
-  if (slot.produced === false) return slot.status || t('poolOperator.missed');
+function slotStatusLabel(slot: ScheduleSlot): string {
+  // Per-slot (singular) labels; poolOperator.produced/missed are the plural
+  // summary counters.
+  if (slot.produced === true) return slot.status || t('poolOperator.slotProduced');
+  if (slot.produced === false) return slot.status || t('poolOperator.slotMissed');
   return t('poolOperator.pending');
 }
 

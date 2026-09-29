@@ -97,7 +97,7 @@
                 class="realfi-hero__actions"
               >
                 <GButton v-if="hasUsdr" tier="primary" compact @click="openAmount('stake')">
-                  {{ $t('receive.tabStake') }}
+                  {{ $t('realfi.stakeAction') }}
                 </GButton>
                 <GButton
                   v-if="canUnstake"

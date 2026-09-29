@@ -19,7 +19,10 @@
           :key="item.requestId"
           class="queue-strip-row"
         >
-          <span class="grey--text text-caption queue-strip-label">{{ queuedItemLabel(item) }}</span>
+          <span class="grey--text text-caption queue-strip-label">
+            <span class="queue-strip-method">{{ queuedItemMethod(item) }}</span>
+            <span class="queue-strip-domain">· {{ queuedItemDomain(item) }}</span>
+          </span>
           <v-btn icon x-small :aria-label="$t('miniGero.reject')" @click="rejectQueued(item.requestId)">
             <v-icon size="14" color="var(--g-text-3)">mdi-close</v-icon>
           </v-btn>
@@ -1140,11 +1143,15 @@ const { t } = useTranslation();
 // Domain + method label for a queued (not-yet-shown) request, for the queue
 // strip below. Reuses the same URL-hostname extraction as enableDomain/
 // signDataDomain (identical parsing, different source object).
-function queuedItemLabel(item: DAppRequest): string {
+// Method first, domain second: Spanish method labels all open with "Solicitud
+// de …", so with the domain first the ellipsis cut exactly the word that says
+// what the request is. Only the domain shrinks now.
+function queuedItemDomain(item: DAppRequest): string {
   const payload = item.payload as { website?: string } | undefined;
   const website = payload?.website || '';
-  let domain = website;
-  try { domain = new URL(website).hostname; } catch { /* leave as-is */ }
+  try { return new URL(website).hostname; } catch { return website; }
+}
+function queuedItemMethod(item: DAppRequest): string {
   const methodKeys: Record<string, string> = {
     enable: 'miniGero.connectRequest',
     signTx: 'miniGero.signTxRequest',
@@ -1155,8 +1162,7 @@ function queuedItemLabel(item: DAppRequest): string {
     midnight_balanceUnsealedTransaction: 'miniGero.balanceRequest',
     wcSessionProposal: 'miniGero.connectRequest',
   };
-  const methodLabel = methodKeys[item.method] ? t(methodKeys[item.method]) : item.method;
-  return `${domain} - ${methodLabel}`;
+  return methodKeys[item.method] ? t(methodKeys[item.method]) : item.method;
 }
 const { themeColors } = useChainContext();
 const primaryColor = computed(() => themeColors.value.primary);
@@ -3506,10 +3512,27 @@ function approveWcSession() {
 }
 
 .queue-strip-label {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.queue-strip-method,
+.queue-strip-domain {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+/* The domain gives way first; the method keeps its width unless the row is
+   narrower than the method alone. */
+.queue-strip-method {
+  flex: 0 1 auto;
+}
+
+.queue-strip-domain {
+  flex: 1 1 0;
 }
 
 /* ── Enable / Connect ── */
@@ -3915,5 +3938,20 @@ function approveWcSession() {
 .action-buttons .v-btn {
   width: 100%;
   min-width: 0;
+}
+/* Longer labels (Spanish "Desbloquear y compartir") wrap inside the button
+   instead of running into the one next to it. Doubled class to beat Vuetify's
+   (0,3,0) size rule; ::v-deep because .v-btn__content is Vuetify's own markup
+   (same recipe as MyGovernance's change row). */
+.action-buttons .v-btn.v-btn {
+  height: auto;
+  min-height: 36px;
+  white-space: normal;
+}
+.action-buttons ::v-deep .v-btn__content {
+  min-width: 0;
+  white-space: normal;
+  line-height: 1.25;
+  text-align: center;
 }
 </style>

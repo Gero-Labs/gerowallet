@@ -238,11 +238,11 @@ const recoveryStrengthColor = computed(() => (
 ));
 const creating = ref(false);
 const errorMessage = ref('');
-// Confirmation-gated "reset this Google account" flow — surfaced only when
+// Confirmation-gated "delete recovery and create a new wallet" flow — surfaced only when
 // CREATE_MPC_GOOGLE_WALLET fails with the backend's already-enrolled 409
 // (`response.data.code === 'already_enrolled'`, set in background.ts's
 // isMpcConflictError check). Never auto-triggered: the user must click
-// "Reset this Google account" explicitly.
+// "Delete recovery and create a new wallet" explicitly.
 const alreadyEnrolled = ref(false);
 const resetting = ref(false);
 const resetError = ref('');
@@ -343,7 +343,7 @@ const createWallet = async (): Promise<void> => {
  * Google account's backend login + recovery shares (DEREGISTER_MPC_ACCOUNT), then
  * automatically retries createWallet() with the same idToken/device-secret the
  * user already supplied — no re-prompting mid-flow. Only ever invoked from the
- * explicit "Reset this Google account" button click; never called automatically.
+ * explicit "Delete recovery and create a new wallet" button click; never called automatically.
  */
 const resetGoogleAccount = async (): Promise<void> => {
   if (resetting.value) return; // guard: destructive op, ignore concurrent double-clicks

@@ -103,7 +103,7 @@
               </v-avatar>
               <span v-if="!compact" class="button-text">{{ $t('swap.swap') }}</span>
               <div v-if="!loadingSwap && !isSwapEnabledByFeatureFlag" class="ribbon top-right" aria-hidden="true">
-                <span>{{ $t('common.off') }}</span>
+                <span>{{ $t('common.offBadge') }}</span>
               </div>
             </v-btn>
           </template>

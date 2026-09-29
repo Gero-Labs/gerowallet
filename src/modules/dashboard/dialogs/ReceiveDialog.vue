@@ -402,12 +402,14 @@ watch(segments, (list) => {
 
 const bitcoinAddressTypeLabel = computed(() => {
   switch (bitcoinAddressType.value) {
+    // One key with a placeholder, not "type + Address": Spanish puts the noun
+    // first ("Dirección SegWit").
     case 'segwit':
-      return `${t('receive.segwit')} ${t('wallet.address')}`;
+      return t('receive.typedAddress', { type: t('receive.segwit') });
     case 'legacy':
-      return `${t('receive.legacy')} ${t('wallet.address')}`;
+      return t('receive.typedAddress', { type: t('receive.legacy') });
     case 'taproot':
-      return `${t('receive.taproot')} ${t('wallet.address')}`;
+      return t('receive.typedAddress', { type: t('receive.taproot') });
     default:
       return t('wallet.address');
   }

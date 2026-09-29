@@ -11,7 +11,7 @@ import governanceApi from '@/api/governance-api';
 import governanceActionsStore from '@/stores/governanceActionsStore';
 import networks from '@/utils/networks';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
-import { scoreMatch } from '@/shared/utils/searchScore';
+import { foldForSearch, scoreMatch } from '@/shared/utils/searchScore';
 import { drepResults, governanceActionResults, governancePageResults } from '@/shared/utils/governanceSearch';
 import type { GovProposal } from '@/api/governance.types';
 
@@ -138,41 +138,42 @@ async function loadRetailerCache() {
 // Settings navigation — ContentLayout watches this to open SettingsDialog
 export const settingsNavRequest = ref<{ tab: string; highlight?: string } | null>(null);
 
-// Searchable settings index with optional feature requirement
+// Searchable settings index with optional feature requirement. Keywords carry
+// EN, DE and ES terms; matching folds accents on both sides (foldForSearch).
 // `requires`: if set, the setting only appears when the chain supports that feature
 // `titleKey`/`subtitleKey`: i18n keys resolved at search time for locale-aware display
 type SettingsEntry = { keywords: string[]; tab: string; titleKey: string; subtitleKey: string; icon: string; requires?: 'cashback' | 'governance' };
 
 const SETTINGS_INDEX: SettingsEntry[] = [
   // Profile
-  { keywords: ['wallet name', 'rename wallet', 'edit name', 'wallet-name', 'umbenennen'], tab: 'profile', titleKey: 'settings.walletName', subtitleKey: 'settings.profile', icon: 'mdi-pencil' },
-  { keywords: ['profile picture', 'avatar', 'wallet picture', 'photo', 'profilbild'], tab: 'profile', titleKey: 'settings.walletProfilePicture', subtitleKey: 'settings.profile', icon: 'mdi-account-circle' },
-  { keywords: ['currency', 'usd', 'eur', 'dollar', 'euro', 'currency preference', 'währung'], tab: 'profile', titleKey: 'settings.currencyPreference', subtitleKey: 'settings.profile', icon: 'mdi-currency-usd' },
-  { keywords: ['language', 'german', 'english', 'deutsch', 'display language', 'sprache', 'anzeigesprache'], tab: 'profile', titleKey: 'settings.displayLanguage', subtitleKey: 'settings.profile', icon: 'mdi-translate' },
-  { keywords: ['region'], tab: 'profile', titleKey: 'settings.region', subtitleKey: 'settings.profile', icon: 'mdi-map-marker' },
-  { keywords: ['welcome guide', 'onboarding', 'tutorial', 'anleitung'], tab: 'profile', titleKey: 'settings.welcomeGuide', subtitleKey: 'settings.profile', icon: 'mdi-book-open-variant' },
+  { keywords: ['wallet name', 'rename wallet', 'edit name', 'wallet-name', 'umbenennen', 'nombre de la billetera', 'renombrar', 'cambiar nombre'], tab: 'profile', titleKey: 'settings.walletName', subtitleKey: 'settings.profile', icon: 'mdi-pencil' },
+  { keywords: ['profile picture', 'avatar', 'wallet picture', 'photo', 'profilbild', 'foto de perfil', 'imagen de la billetera'], tab: 'profile', titleKey: 'settings.walletProfilePicture', subtitleKey: 'settings.profile', icon: 'mdi-account-circle' },
+  { keywords: ['currency', 'usd', 'eur', 'dollar', 'euro', 'currency preference', 'währung', 'moneda', 'divisa'], tab: 'profile', titleKey: 'settings.currencyPreference', subtitleKey: 'settings.profile', icon: 'mdi-currency-usd' },
+  { keywords: ['language', 'german', 'english', 'deutsch', 'display language', 'sprache', 'anzeigesprache', 'spanish', 'spanisch', 'español', 'idioma', 'inglés', 'alemán'], tab: 'profile', titleKey: 'settings.displayLanguage', subtitleKey: 'settings.profile', icon: 'mdi-translate' },
+  { keywords: ['region', 'región'], tab: 'profile', titleKey: 'settings.region', subtitleKey: 'settings.profile', icon: 'mdi-map-marker' },
+  { keywords: ['welcome guide', 'onboarding', 'tutorial', 'anleitung', 'guía de bienvenida'], tab: 'profile', titleKey: 'settings.welcomeGuide', subtitleKey: 'settings.profile', icon: 'mdi-book-open-variant' },
   // Collateral
-  { keywords: ['collateral', 'set collateral', '5 ada', 'kollateral', 'sicherheit'], tab: 'collateral', titleKey: 'settings.collateral', subtitleKey: 'settings.collateral', icon: 'mdi-shield-lock' },
+  { keywords: ['collateral', 'set collateral', '5 ada', 'kollateral', 'sicherheit', 'colateral', 'garantía'], tab: 'collateral', titleKey: 'settings.collateral', subtitleKey: 'settings.collateral', icon: 'mdi-shield-lock' },
   // Contacts
-  { keywords: ['contacts', 'address book', 'add contact', 'saved addresses', 'kontakte', 'adressbuch'], tab: 'contacts', titleKey: 'settings.contacts', subtitleKey: 'settings.contacts', icon: 'mdi-contacts' },
+  { keywords: ['contacts', 'address book', 'add contact', 'saved addresses', 'kontakte', 'adressbuch', 'contactos', 'libreta de direcciones', 'agregar contacto'], tab: 'contacts', titleKey: 'settings.contacts', subtitleKey: 'settings.contacts', icon: 'mdi-contacts' },
   // Connected DApps
-  { keywords: ['dapps', 'connected dapps', 'connected sites', 'remove dapp', 'disconnect dapp', 'verbundene dapps'], tab: 'connectedDapps', titleKey: 'settings.connectedDApps', subtitleKey: 'settings.connectedDApps', icon: 'mdi-application-brackets' },
+  { keywords: ['dapps', 'connected dapps', 'connected sites', 'remove dapp', 'disconnect dapp', 'verbundene dapps', 'dapps conectadas', 'sitios conectados', 'desconectar dapp'], tab: 'connectedDapps', titleKey: 'settings.connectedDApps', subtitleKey: 'settings.connectedDApps', icon: 'mdi-application-brackets' },
   // Security
-  { keywords: ['public key', 'extended public key', 'ed25519', 'xpub', 'öffentlicher schlüssel'], tab: 'security', titleKey: 'settings.extendedPublicKey', subtitleKey: 'settings.security', icon: 'mdi-key' },
-  { keywords: ['recovery phrase', 'seed phrase', 'mnemonic', 'backup', 'back up', 'wiederherstellungsphrase', 'sicherung'], tab: 'security', titleKey: 'settings.recoveryPhrase', subtitleKey: 'settings.security', icon: 'mdi-shield-key' },
-  { keywords: ['spending password', 'change password', 'spending security', 'ausgabenpasswort', 'passwort ändern'], tab: 'security', titleKey: 'settings.spendingSecuritySettings', subtitleKey: 'settings.security', icon: 'mdi-lock' },
-  { keywords: ['lock settings', 'auto lock', 'auto-lock', 'unlock method', 'pin', 'pattern', 'sperreinstellungen', 'entsperrmethode'], tab: 'security', titleKey: 'security.lockSettings', subtitleKey: 'settings.security', icon: 'mdi-lock-clock' },
-  { keywords: ['passkey', 'biometric', 'webauthn', 'fingerprint', 'face id', 'biometrisch', 'fingerabdruck'], tab: 'security', titleKey: 'security.lockSettings', subtitleKey: 'settings.security', icon: 'mdi-fingerprint' },
-  { keywords: ['website protection', 'malicious', 'cardano shield', 'phishing', 'webseiten-schutz', 'bösartig'], tab: 'security', titleKey: 'settings.websiteProtection', subtitleKey: 'settings.security', icon: 'mdi-shield-check' },
-  { keywords: ['two factor', '2fa', 'two-factor', 'authenticator', 'zwei-faktor', 'authentifizierung'], tab: 'security', titleKey: 'security.twoFactorAuth', subtitleKey: 'settings.security', icon: 'mdi-two-factor-authentication' },
+  { keywords: ['public key', 'extended public key', 'ed25519', 'xpub', 'öffentlicher schlüssel', 'clave pública', 'clave pública extendida'], tab: 'security', titleKey: 'settings.extendedPublicKey', subtitleKey: 'settings.security', icon: 'mdi-key' },
+  { keywords: ['recovery phrase', 'seed phrase', 'mnemonic', 'backup', 'back up', 'wiederherstellungsphrase', 'sicherung', 'frase de recuperación', 'frase semilla', 'semilla', 'respaldo', 'respaldar'], tab: 'security', titleKey: 'settings.recoveryPhrase', subtitleKey: 'settings.security', icon: 'mdi-shield-key' },
+  { keywords: ['spending password', 'change password', 'spending security', 'ausgabenpasswort', 'passwort ändern', 'contraseña', 'contraseña de gasto', 'cambiar contraseña', 'seguridad de las transacciones', 'autorizar transacciones'], tab: 'security', titleKey: 'settings.spendingSecuritySettings', subtitleKey: 'settings.security', icon: 'mdi-lock' },
+  { keywords: ['lock settings', 'auto lock', 'auto-lock', 'unlock method', 'pin', 'pattern', 'sperreinstellungen', 'entsperrmethode', 'bloqueo', 'bloqueo automático', 'método de desbloqueo', 'patrón'], tab: 'security', titleKey: 'security.lockSettings', subtitleKey: 'settings.security', icon: 'mdi-lock-clock' },
+  { keywords: ['passkey', 'biometric', 'webauthn', 'fingerprint', 'face id', 'biometrisch', 'fingerabdruck', 'biometría', 'huella digital'], tab: 'security', titleKey: 'security.lockSettings', subtitleKey: 'settings.security', icon: 'mdi-fingerprint' },
+  { keywords: ['website protection', 'malicious', 'cardano shield', 'phishing', 'webseiten-schutz', 'bösartig', 'protección de sitios web', 'protección contra sitios maliciosos', 'sitio malicioso'], tab: 'security', titleKey: 'settings.websiteProtection', subtitleKey: 'settings.security', icon: 'mdi-shield-check' },
+  { keywords: ['two factor', '2fa', 'two-factor', 'authenticator', 'zwei-faktor', 'authentifizierung', 'dos factores', 'verificación en dos pasos', 'autenticación'], tab: 'security', titleKey: 'security.twoFactorAuth', subtitleKey: 'settings.security', icon: 'mdi-two-factor-authentication' },
   // Notifications
-  { keywords: ['notifications', 'push', 'alerts', 'notify', 'benachrichtigungen', 'mitteilungen'], tab: 'notifications', titleKey: 'notify.browser.title', subtitleKey: 'settings.notifications', icon: 'mdi-bell-outline' },
-  { keywords: ['show amounts', 'minimum amount', 'mute wallet', 'beträge anzeigen', 'mindestbetrag', 'stummschalten'], tab: 'notifications', titleKey: 'notify.wallet.title', subtitleKey: 'settings.notifications', icon: 'mdi-bell-ring-outline' },
+  { keywords: ['notifications', 'push', 'alerts', 'notify', 'benachrichtigungen', 'mitteilungen', 'notificaciones', 'alertas'], tab: 'notifications', titleKey: 'notify.browser.title', subtitleKey: 'settings.notifications', icon: 'mdi-bell-outline' },
+  { keywords: ['show amounts', 'minimum amount', 'mute wallet', 'beträge anzeigen', 'mindestbetrag', 'stummschalten', 'mostrar montos', 'monto mínimo', 'silenciar billetera'], tab: 'notifications', titleKey: 'notify.wallet.title', subtitleKey: 'settings.notifications', icon: 'mdi-bell-ring-outline' },
   // Advanced
-  { keywords: ['shop earn', 'cashback popups', 'bring', 'shop and earn', 'einkaufen', 'cashback'], tab: 'advanced', titleKey: 'settings.shopEarnPopups', subtitleKey: 'settings.advanced', icon: 'mdi-shopping', requires: 'cashback' },
-  { keywords: ['auto submit', 'tx auto submit', 'transaction auto', 'automatisch senden'], tab: 'advanced', titleKey: 'settings.txAutoSubmit', subtitleKey: 'settings.advanced', icon: 'mdi-send-check' },
-  { keywords: ['resync', 're-sync', 'sync wallet', 'refresh', 'synchronisieren', 'aktualisieren'], tab: 'advanced', titleKey: 'settings.reSyncWallet', subtitleKey: 'settings.advanced', icon: 'mdi-sync' },
-  { keywords: ['delete wallet', 'remove wallet', 'danger', 'wallet löschen', 'entfernen'], tab: 'advanced', titleKey: 'settings.deleteWallet', subtitleKey: 'settings.advanced', icon: 'mdi-delete' },
+  { keywords: ['shop earn', 'cashback popups', 'bring', 'shop and earn', 'einkaufen', 'cashback', 'compras'], tab: 'advanced', titleKey: 'settings.shopEarnPopups', subtitleKey: 'settings.advanced', icon: 'mdi-shopping', requires: 'cashback' },
+  { keywords: ['auto submit', 'tx auto submit', 'transaction auto', 'automatisch senden', 'envío automático'], tab: 'advanced', titleKey: 'settings.txAutoSubmit', subtitleKey: 'settings.advanced', icon: 'mdi-send-check' },
+  { keywords: ['resync', 're-sync', 'sync wallet', 'refresh', 'synchronisieren', 'aktualisieren', 'resincronizar', 'sincronizar billetera', 'actualizar'], tab: 'advanced', titleKey: 'settings.reSyncWallet', subtitleKey: 'settings.advanced', icon: 'mdi-sync' },
+  { keywords: ['delete wallet', 'remove wallet', 'danger', 'wallet löschen', 'entfernen', 'eliminar billetera', 'borrar billetera'], tab: 'advanced', titleKey: 'settings.deleteWallet', subtitleKey: 'settings.advanced', icon: 'mdi-delete' },
 ];
 
 export function useGlobalSearch() {
@@ -359,10 +360,12 @@ export function useGlobalSearch() {
         const subtitle = String(t(s.subtitleKey));
         // Score: exact keyword match = 100, keyword starts with = 90, keyword contains = 50, title match = 40
         let best = 0;
-        for (const kw of s.keywords) {
-          if (kw === lower) { best = Math.max(best, 100); break; }
-          if (kw.startsWith(lower)) best = Math.max(best, 90);
-          else if (kw.includes(lower)) best = Math.max(best, 50);
+        const folded = foldForSearch(lower);
+        for (const keyword of s.keywords) {
+          const kw = foldForSearch(keyword);
+          if (kw === folded) { best = Math.max(best, 100); break; }
+          if (kw.startsWith(folded)) best = Math.max(best, 90);
+          else if (kw.includes(folded)) best = Math.max(best, 50);
         }
         // Also match against the resolved (possibly translated) title
         best = Math.max(best, scoreMatch(title, lower));

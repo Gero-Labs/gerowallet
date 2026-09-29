@@ -2,7 +2,7 @@ import { parseGovActionId, type GovActionId } from '@/shared/utils/govActionId';
 import { drepDisplayName } from '@/shared/utils/drepView';
 import { formatCompact } from '@/shared/utils/format';
 import { toLovelace } from '@/shared/utils/lovelace';
-import { scoreMatch } from '@/shared/utils/searchScore';
+import { foldForSearch, scoreMatch } from '@/shared/utils/searchScore';
 import type { GovProposal } from '@/api/governance.types';
 // TYPE-ONLY on purpose. A value import here would pull the whole search
 // composable (and its store/API graph) into every consumer of these mappers,
@@ -45,7 +45,7 @@ export interface DRepSearchRow {
 }
 
 interface GovernancePage {
-  /** Extra terms beyond the translated title, EN and DE both, as SETTINGS_INDEX does. */
+  /** Extra terms beyond the translated title, EN, DE and ES, as SETTINGS_INDEX does. */
   keywords: string[];
   titleKey: string;
   route: string;
@@ -65,25 +65,25 @@ interface GovernancePage {
  */
 const GOVERNANCE_PAGES: GovernancePage[] = [
   {
-    keywords: ['my governance', 'my vote', 'my votes', 'delegation', 'meine governance', 'delegierung'],
+    keywords: ['my governance', 'my vote', 'my votes', 'delegation', 'meine governance', 'delegierung', 'mi gobernanza', 'mi voto', 'mis votos', 'delegación'],
     titleKey: 'navigation.governanceMe',
     route: '/governance/me',
     icon: 'mdi-account-check',
   },
   {
-    keywords: ['dreps', 'drep', 'delegate', 'representative', 'directory', 'delegieren', 'vertreter', 'verzeichnis'],
+    keywords: ['dreps', 'drep', 'delegate', 'representative', 'directory', 'delegieren', 'vertreter', 'verzeichnis', 'delegar', 'representante', 'representantes', 'directorio'],
     titleKey: 'governance.dReps',
     route: '/governance/dreps',
     icon: 'mdi-account-group',
   },
   {
-    keywords: ['governance actions', 'gov actions', 'proposals', 'vote', 'governance-aktionen', 'vorschlage', 'vorschläge', 'abstimmen'],
+    keywords: ['governance actions', 'gov actions', 'proposals', 'vote', 'governance-aktionen', 'vorschlage', 'vorschläge', 'abstimmen', 'acciones de gobernanza', 'propuestas', 'votar'],
     titleKey: 'governance.actionsTitle',
     route: '/governance/actions',
     icon: 'mdi-gavel',
   },
   {
-    keywords: ['become a drep', 'register as a drep', 'drep registration', 'drep werden', 'drep registrierung'],
+    keywords: ['become a drep', 'register as a drep', 'drep registration', 'drep werden', 'drep registrierung', 'ser drep', 'registrarse como drep', 'registro de drep'],
     titleKey: 'navigation.becomeDRep',
     route: '/governance/register',
     icon: 'mdi-account-plus',
@@ -141,10 +141,12 @@ export function governancePageResults(
     .map(page => {
       const title = String(t(page.titleKey));
       let best = 0;
+      const folded = foldForSearch(lower);
       for (const keyword of page.keywords) {
-        if (keyword === lower) { best = 100; break; }
-        if (keyword.startsWith(lower)) best = Math.max(best, 90);
-        else if (keyword.includes(lower)) best = Math.max(best, 50);
+        const kw = foldForSearch(keyword);
+        if (kw === folded) { best = 100; break; }
+        if (kw.startsWith(folded)) best = Math.max(best, 90);
+        else if (kw.includes(folded)) best = Math.max(best, 50);
       }
       best = Math.max(best, scoreMatch(title, lower));
       return { page, title, score: best };

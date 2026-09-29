@@ -37,6 +37,12 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     version: '2.6.3',
     path: ['settings', 'profile', 'germanLanguage']
   },
+  // Settings > Profile > Spanish Language (ships in the release after 2.7.1)
+  {
+    id: 'settings.profile.spanishLanguage',
+    version: '2.7.2',
+    path: ['settings', 'profile', 'spanishLanguage']
+  },
   // Navigation > Governance (the governance hub and its submenu)
   {
     id: 'navigation.governance',

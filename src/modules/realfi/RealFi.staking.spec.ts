@@ -328,7 +328,7 @@ describe('RealFi Earn page, right after an order is sent', () => {
 
     expect(pendingRow(page).exists()).toBe(true);
     // The wallet's balance has caught up by now, so new orders are offered again.
-    expect(page.findAll('button').wrappers.map((b) => b.text())).toContain('receive.tabStake');
+    expect(page.findAll('button').wrappers.map((b) => b.text())).toContain('realfi.stakeAction');
   });
 
   it('gives up after 30 minutes: something else is wrong by then', async () => {

@@ -119,6 +119,7 @@ describe('pure helpers', () => {
     expect(wireNetworkOf('Preprod')).toBe('cardano-preprod');
     expect(toBcp47('us')).toBe('en');
     expect(toBcp47('de')).toBe('de');
+    expect(toBcp47('es')).toBe('es');
     expect(isEligibleWallet({ chain: 'Cardano', network: 'Mainnet', type: 'Normal', stakeAddress: 'stake1abc' })).toBe(true);
     expect(isEligibleWallet({ chain: 'Cardano', network: 'Preview', type: 'Normal', stakeAddress: 'stake_test1abc' })).toBe(true);
     expect(isEligibleWallet({ chain: 'Cardano', network: 'Mainnet', type: 'Ledger', stakeAddress: 'stake1abc' })).toBe(false);

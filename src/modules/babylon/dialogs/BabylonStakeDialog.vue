@@ -177,7 +177,7 @@
               <span class="confirm-amount-val">{{ amountBtc }}</span>
             </div>
             <div class="confirm-label mt-1">{{ $t('babylon.stakeDialog.willBeLockedFor') }}</div>
-            <div class="confirm-timelock">{{ timelockBlocks.toLocaleString() }} blocks (≈{{ timelockDays }} days)</div>
+            <div class="confirm-timelock">{{ $t('babylon.stakeDialog.lockDuration', { blocks: timelockBlocks.toLocaleString(), days: timelockDays }) }}</div>
 
             <div class="confirm-flow-icon">
               <v-icon size="16" color="var(--g-text-3)">mdi-arrow-down-thin</v-icon>

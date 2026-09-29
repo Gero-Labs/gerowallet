@@ -503,7 +503,7 @@ function statusFor(record: DRepRecord): StatusPill | null {
   if (health.inactiveSoon && health.epochsLeft !== null) {
     return { tone: 'warning', label: String(t('governance.inactiveInEpochs', { n: health.epochsLeft })) };
   }
-  if (record.active === true) return { tone: 'success', label: String(t('governance.status.active')) };
+  if (record.active === true) return { tone: 'success', label: String(t('governance.drepStatusActive')) };
   return null;
 }
 

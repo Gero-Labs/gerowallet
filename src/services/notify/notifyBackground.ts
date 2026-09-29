@@ -20,12 +20,12 @@ import { loadDeviceRegisterProof } from '@/services/crossDevice/deviceProofStore
 import { createNotifyClient, DEFAULT_NOTIFY_API_URL } from './notifyClient';
 import { createNotifyStore, type NotifyDeviceState, type NotifyWalletState } from './notifyStore';
 import {
-  createNotifyRegistration, isEligibleWallet, NOTIFY_REASSERT_ALARM, NOTIFY_RETRY_ALARM,
+  createNotifyRegistration, isEligibleWallet, NOTIFY_REASSERT_ALARM, NOTIFY_RETRY_ALARM, toBcp47,
   type LoggedWallet, type NotifyRegistration, type PushManagerLike, type ReassertTrigger, type WatchOrdersInput,
 } from './notifyRegistration';
 import { notifyHooks } from './notifyHooks';
 import { createNotifyPushHandlers, type ToastRequest } from './notifyPush';
-import type { RouteIntent, TokenInfo } from './notifyRender';
+import { pushLocale, type RouteIntent, type TokenInfo } from './notifyRender';
 import type { NotifyConfig, WalletPrefsWrite } from './notifyTypes';
 
 interface WorkerRegistration {
@@ -57,7 +57,7 @@ const notifyClient = createNotifyClient({
     const j = sub?.toJSON();
     return {
       protocol: 1, relayPubKey: identity.pubKeyHex, platform: 'extension', appVersion: chrome.runtime.getManifest().version,
-      locale: (await storedLocale()) === 'de' ? 'de' : 'en', osPermission: true,
+      locale: toBcp47(await storedLocale()), osPermission: true,
       transport: j && device.vapidKid ? 'webpush' : 'none',
       ...(j && device.vapidKid ? { webpush: { endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth, vapidKid: device.vapidKid, expirationTime: j.expirationTime ?? null } } : {}),
     };
@@ -68,7 +68,9 @@ const notifyClient = createNotifyClient({
 async function storedLocale(): Promise<string> {
   try {
     const saved = (await chrome.storage.local.get('geroStore')) as Record<string, { config?: { locale?: string } } | undefined>;
-    return saved?.['geroStore']?.config?.locale || 'us';
+    // Normalized once here, so rendering, registration and device recovery all
+    // see the same ready locale ('us' | 'de' | 'es', anything else is 'us').
+    return pushLocale(saved?.['geroStore']?.config?.locale);
   } catch { return 'us'; }
 }
 

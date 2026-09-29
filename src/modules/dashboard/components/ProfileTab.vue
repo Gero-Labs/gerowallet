@@ -167,8 +167,8 @@ const { t } = useTranslation();
 
 import { READY_LANGUAGES } from '@/plugins/i18n.config';
 
-// Feature notifications for new German language
-const hasNewLanguage = computed(() => isFeatureNew('settings.profile.germanLanguage'));
+// Feature notification for the newest language (Spanish)
+const hasNewLanguage = computed(() => isFeatureNew('settings.profile.spanishLanguage'));
 
 // Feature notification for new profile picture picker
 const hasNewProfilePicture = computed(() => isFeatureNew('settings.profile.profilePicture'));
@@ -260,9 +260,9 @@ const openProfilePicDialog = () => {
 };
 
 const handleLanguageSelectorFocus = () => {
-  // Mark German language feature as seen when user opens the language selector
+  // Mark the new-language feature as seen when user opens the language selector
   if (hasNewLanguage.value) {
-    markFeatureAsSeen('settings.profile.germanLanguage');
+    markFeatureAsSeen('settings.profile.spanishLanguage');
   }
 };
 

@@ -10,7 +10,7 @@
     <span class="av" :class="{ gone: removed }">{{ incoming ? initials(incoming.sponsorName) : '·' }}</span>
     <span class="l">
       <template v-if="incoming">
-        {{ t('midnight.sponsor.feesPrefix') }}
+        <span class="pfx">{{ t('midnight.sponsor.feesPrefix') }}</span>
         <b :class="{ gone: removed }">{{ incoming.sponsorName }}</b>
       </template>
       <template v-else>{{ t('midnight.sponsor.feesSelfOnly') }}</template>
@@ -536,7 +536,17 @@ function onToggle(): void {
     overflow: hidden;
     text-overflow: ellipsis;
 
+    // text-overflow on the inline-flex .l never reaches its children, so the
+    // name was hard-clipped once a longer prefix ("Comisiones ·") took the room.
+    // The prefix keeps its width; the name shrinks with an ellipsis.
+    .pfx {
+      flex: none;
+    }
+
     b {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
       font-weight: 600;
       color: var(--g-text-1);
 

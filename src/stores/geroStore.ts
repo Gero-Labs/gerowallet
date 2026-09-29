@@ -74,6 +74,14 @@ function serializeValue(_key: string, value: unknown): unknown {
 // Debounced storage write to reduce I/O operations during rapid updates
 let storageWriteTimeout: ReturnType<typeof setTimeout> | null = null;
 
+// The worker's store starts from the defaults above and is filled from gero-db by
+// geroLoader's liveQueries: config first, wallets a few ms later. Persisting
+// `{ ...geroStore }` before the wallets land writes `wallets: {}` over the saved
+// list, and a page that hydrates from chrome.storage in that window shows no
+// wallets. So the worker holds its storage writes until setWallets() has run
+// once; broadcasts to open pages still go out immediately.
+let walletsHydrated = false;
+
 /**
  * Broadcast updates from background context
  *
@@ -92,6 +100,9 @@ function broadcastFromBackground(updates: Partial<GeroStore>, immediate = false)
 
     // Broadcast to all connected browser contexts (immediate)
     backgroundStoreMessaging.broadcastUpdate(STORE_NAME, serializedUpdates);
+
+    // Not hydrated yet: setWallets() persists everything on its first run.
+    if (!walletsHydrated) return;
 
     // For critical state changes (e.g., locale), write immediately to storage
     // so browser context gets correct state on hydration
@@ -136,7 +147,11 @@ function broadcastFromBackground(updates: Partial<GeroStore>, immediate = false)
 export default {
   setWallets(wallets: Record<number, Wallet>) {
     geroStore.wallets = wallets;
-    broadcastFromBackground({ wallets });
+    // The first call is the worker's hydration from gero-db: persist right away,
+    // including any config (locale) that arrived before it.
+    const firstHydration = !walletsHydrated;
+    walletsHydrated = true;
+    broadcastFromBackground({ wallets }, firstHydration);
   },
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- config is the dynamic settings bag (see GeroStore.config)
   setConfig(config: any) {

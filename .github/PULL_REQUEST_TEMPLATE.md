@@ -22,7 +22,7 @@ Closes #
 - [ ] Follows the existing code style; `npm run lint` and `npm run typecheck` pass.
 - [ ] Self-reviewed the diff; no leftover debug logs.
 - [ ] **No secrets** (keys, mnemonics, passwords, tokens) added to code, tests, or fixtures.
-- [ ] User-facing strings use i18n (`$t()`), with matching `us.ts` / `de.ts` entries.
+- [ ] User-facing strings use i18n (`$t()`), with entries in every locale (`us.ts` / `de.ts` / `es.ts`, enforced by `src/plugins/i18n.parity.spec.ts`).
 - [ ] Updated docs / README where behavior changed.
 - [ ] Tested on the Preprod or Preview testnet where applicable.
 
