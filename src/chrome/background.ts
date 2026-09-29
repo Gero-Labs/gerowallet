@@ -26,6 +26,7 @@ import {
   urlScan,
 } from '@/chrome/serialization';
 import { Blockchain, coin_type, ERROR, Network, Paginate, purpose } from '@/models/types';
+import { classifySubmitFailure } from '@/chrome/submitFailure';
 import networks from '@/utils/networks';
 import coinGeckoStore from '@/stores/coinGeckoStore';
 import { getDomain } from 'tldts';
@@ -1487,21 +1488,22 @@ app.add(METHOD.submitTx, async (request, sendResponse) => {
         target: TARGET,
         sender: SENDER.extension,
       });
+      return;
     }
     const response = await submitTx(request.data.tx, loggedWallet['chain'], loggedWallet['network'])
     if (!response.ok) {
       let error: unknown;
-      switch (response.status) {
-        case 400:
+      switch (classifySubmitFailure(response.status)) {
+        case 'failure':
           error = { ...TxSendError.Failure, message: response.statusText };
           break;
-        case 500:
+        case 'internal':
           error = APIError.InternalError;
           break;
-        case 429:
+        case 'refused':
           error = TxSendError.Refused;
           break;
-        case 425:
+        case 'mempoolFull':
           error = ERROR.fullMempool;
           break;
         default:
@@ -1514,6 +1516,7 @@ app.add(METHOD.submitTx, async (request, sendResponse) => {
         target: TARGET,
         sender: SENDER.extension,
       });
+      return;
     }
     const txCbor = request.data.tx
     const txIdResponse = await response.text();
