@@ -94,6 +94,12 @@ export interface WalletPrefsWrite {
   device?: DevicePrefs;
 }
 
+/** `POST …/orders` body (CONTRACT rc4 §4.9): 1-20 unique 64-hex transaction hashes placed with `ownerPkh`. */
+export interface WatchOrdersBody {
+  ownerPkh: string;
+  txHashes: string[];
+}
+
 /** The stored DeviceRegisterProof; the server ignores the extra `stakeAddress` (§3.7). */
 export interface WalletProof {
   coseSign1: string;

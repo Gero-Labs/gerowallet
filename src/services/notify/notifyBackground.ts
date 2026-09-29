@@ -21,7 +21,7 @@ import { createNotifyClient, DEFAULT_NOTIFY_API_URL } from './notifyClient';
 import { createNotifyStore, type NotifyDeviceState, type NotifyWalletState } from './notifyStore';
 import {
   createNotifyRegistration, isEligibleWallet, NOTIFY_REASSERT_ALARM, NOTIFY_RETRY_ALARM,
-  type LoggedWallet, type NotifyRegistration, type PushManagerLike, type ReassertTrigger,
+  type LoggedWallet, type NotifyRegistration, type PushManagerLike, type ReassertTrigger, type WatchOrdersInput,
 } from './notifyRegistration';
 import { notifyHooks } from './notifyHooks';
 import { createNotifyPushHandlers, type ToastRequest } from './notifyPush';
@@ -265,4 +265,5 @@ export const notifyActions = {
   walletRemoved: (walletId: number) => notifyRegistration.walletRemoved(walletId),
   inboxRead: (e: string | null) => notifyStore.markInboxRead(e, Date.now()),
   inboxClear: () => notifyStore.clearInbox(),
+  watchOrders: (input: WatchOrdersInput) => notifyRegistration.watchOrders(input),
 };

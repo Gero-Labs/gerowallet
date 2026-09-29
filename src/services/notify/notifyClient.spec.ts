@@ -58,6 +58,16 @@ describe('notifyClient', () => {
     expect(h.seen[0].headers['X-Gero-Ts']).toBe(String(1_790_553_600_000 + 1234));
   });
 
+  it('watchOrders POSTs the signed body to the orders path of the wallet', async () => {
+    const h = harness([{ status: 202, json: { watching: 1 } }]);
+    const body = { ownerPkh: 'ab'.repeat(28), txHashes: ['cd'.repeat(32)] };
+    expect(await h.client.watchOrders('a'.repeat(32), body)).toEqual({ watching: 1 });
+    expect(h.seen[0].method).toBe('POST');
+    expect(h.seen[0].url).toBe(`https://sync.gerowallet.io/api/notify/v1/device/wallets/${'a'.repeat(32)}/orders`);
+    expect(h.seen[0].body).toBe(JSON.stringify(body));
+    expect(h.seen[0].headers['X-Gero-Sig']).toMatch(/^[0-9a-f]{128}$/);
+  });
+
   it('auth_clock_skew: stores serverTime − now and retries exactly once', async () => {
     const h = harness([err(401, 'auth_clock_skew', { serverTime: 1_790_553_900_000 }), { status: 200, json: deviceView }]);
     await h.client.getDevice();
