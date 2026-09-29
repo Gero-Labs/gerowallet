@@ -1531,6 +1531,8 @@ app.add(METHOD.submitTx, async (request, sendResponse) => {
         target: TARGET,
         sender: SENDER.extension,
       });
+      // Without this, the invalid body was stored as a pending tx in the wallet's history.
+      return;
     }
 
     if (txIdResponse) {
