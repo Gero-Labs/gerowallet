@@ -31,6 +31,10 @@ export const WALLET_ADDRESS = 'addr1qyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3
 const WALLET_ADDRESS_BYTES = `01${'11'.repeat(28)}${'22'.repeat(28)}`;
 /** blake2b-224 of the wallet's DRep key, m/1852'/1815'/0'/3/0. */
 const WALLET_DREP_KEY_HASH = '47c6d376abd6b65454fd7eb6610982f721388cf46f816f61e66ad63d';
+/** The same wallet's address on a testnet. */
+export const TESTNET_WALLET_ADDRESS =
+  'addr_test1qqg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyfzyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3qwzdgzn';
+const TESTNET_WALLET_ADDRESS_BYTES = `00${'11'.repeat(28)}${'22'.repeat(28)}`;
 
 /** A Babbage output (map) with an inline datum and a reference script. */
 const babbageOutput = (address: string, coin: string, datum: string, script: string): string =>
@@ -101,3 +105,15 @@ export const OWN_TX = transaction(
   `04 81 8410 8200581c${WALLET_DREP_KEY_HASH} 1a1dcd6500 f6`, // certificates: DRep registration, 500 ADA
 );
 export const OWN_TX_ID = '64bd20d6ecb91a8a31e73813083fba0b32bf22a066f38b0102c358c9edadb0b4';
+
+/**
+ * A testnet transaction whose body carries its network id, 0: the wallet's input, change back to
+ * the wallet's testnet address.
+ */
+export const TESTNET_TX = transaction(
+  `00 81825820${'aa'.repeat(32)}00`, // inputs
+  `01 81 825839${TESTNET_WALLET_ADDRESS_BYTES}1a001e8480`, // outputs: change
+  '02 1a00030d40', // fee
+  '0f 00', // network id
+);
+export const TESTNET_TX_ID = 'e1d7924ed6f8c0f2dc6455187ef7189f7650f6f0c61ffc288280cdf61430722b';

@@ -12,6 +12,9 @@ import {
   OUTPUT_SCRIPT,
   SCRIPT_REF_TX,
   SCRIPT_REF_TX_ID,
+  TESTNET_TX,
+  TESTNET_TX_ID,
+  TESTNET_WALLET_ADDRESS,
   WALLET_ADDRESS,
 } from '@/shared/utils/__fixtures__/handAssembledTxs';
 
@@ -60,6 +63,12 @@ const UTXOS: Cardano.Utxo[] = [
   ],
 ];
 const MAINNET = networks.resolveNetwork(Blockchain.CARDANO, Network.MAINNET);
+const PREPROD = networks.resolveNetwork(Blockchain.CARDANO, Network.PREPROD);
+/** The same wallet on a testnet: TESTNET_TX's change goes back to it. */
+const TESTNET_KEYS: Keys = {
+  ...KEYS,
+  payment: [{ address: TESTNET_WALLET_ADDRESS, cred: '11'.repeat(28), path: "m/1852'/1815'/0'/0/0" }],
+};
 
 // The input resolver logs each input the wallet does not own: all of them here.
 beforeAll(() => {
@@ -69,15 +78,28 @@ afterAll(() => {
   vi.restoreAllMocks();
 });
 
-describe.each(SIGNERS)('%s: outputs reach the device as the transaction holds them', (_, connect, signTransaction) => {
+describe.each(SIGNERS)('%s: the device gets the body the transaction holds', (_, connect, signTransaction) => {
   /** Signs a transaction as a dApp hands it over, and returns what the device was asked to sign. */
-  async function deviceRequest(txCbor: string, txId: string): Promise<Trezor.CardanoSignTransaction> {
+  async function deviceRequest(
+    txCbor: string,
+    txId: string,
+    network = MAINNET,
+    keys = KEYS,
+  ): Promise<Trezor.CardanoSignTransaction> {
     // The device's answer when it serializes the body it was sent back to the same bytes.
     connect.cardanoSignTransaction.mockResolvedValueOnce({ success: true, payload: { hash: txId, witnesses: [] } });
     const tx = Serialization.Transaction.fromCbor(Serialization.TxCBOR(txCbor)).toCore();
-    await signTransaction(tx, KEYS, UTXOS, false, MAINNET, 'unused-xpub', txCbor);
+    await signTransaction(tx, keys, UTXOS, false, network, 'unused-xpub', txCbor);
     return connect.cardanoSignTransaction.mock.lastCall![0];
   }
+
+  it('a testnet body’s network id, 0, and none for a body without one', async () => {
+    const testnet = await deviceRequest(TESTNET_TX, TESTNET_TX_ID, PREPROD, TESTNET_KEYS);
+    const withoutNetworkId = await deviceRequest(SCRIPT_REF_TX, SCRIPT_REF_TX_ID);
+
+    expect(testnet).toMatchObject({ includeNetworkId: true, networkId: 0, protocolMagic: 1 });
+    expect(withoutNetworkId).toMatchObject({ includeNetworkId: false });
+  });
 
   it.each(INLINE_DATUM_UTXOS)('inline datums of $nexusRow.txHash', async ({ nexusRow, datumCbor, txCbor }) => {
     const { outputs } = await deviceRequest(txCbor, nexusRow.txHash);

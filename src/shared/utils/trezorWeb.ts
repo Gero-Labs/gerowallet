@@ -690,7 +690,8 @@ const txToTrezor = async (
     collateralReturn: collateralReturn ? toTxOut({ index: 0, txOut: collateralReturn, isCollateral: true }, context) : undefined,
     totalCollateral: body.totalCollateral?.toString(),
     referenceInputs: body.referenceInputs ? mapTxIns(body.referenceInputs, context) : undefined,
-    includeNetworkId: !!body.networkId,
+    // Not `!!body.networkId`: a testnet's network id is 0, and leaving it out changes the body.
+    includeNetworkId: body.networkId !== undefined,
     tagCborSets: context.tagCborSets,
   };
 };

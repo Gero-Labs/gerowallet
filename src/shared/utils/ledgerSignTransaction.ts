@@ -55,26 +55,35 @@ const withOriginalBytes = (ledgerOutput: TxOutput, output: Serialization.Transac
 };
 
 /**
- * `LedgerKeyAgent.signTransaction`, except that every output's inline datum and reference script
- * reach the device as the bytes they have in the transaction.
+ * `LedgerKeyAgent.signTransaction`, except that the device gets the body the transaction holds:
+ * every output's inline datum and reference script as the bytes they have in it, and a testnet
+ * body's network id.
  *
  * The agent maps outputs from `txBody.toCore()` and re-encodes both from the Core value
  * (`PlutusData.fromCore(datum).toCbor()`, `TransactionOutput.fromCore(txOut).scriptRef()`). That
- * changes any not in the SDK's own encoding, a definite-length list datum for one, so the device
- * hashes a different body and the agent throws "Ledger computed a different transaction id".
- * Still so in @cardano-sdk/hardware-ledger 0.17.0: input-output-hk/cardano-js-sdk#1758.
+ * changes any not in the SDK's own encoding, a definite-length list datum for one. It also maps
+ * `includeNetworkId: !!networkId`, which leaves out a testnet's network id, 0. Either way the device
+ * hashes a different body and the agent throws "Ledger computed a different transaction id". That
+ * is so in @cardano-sdk/hardware-ledger 0.17.0 (input-output-hk/cardano-js-sdk#1758), and nothing
+ * here waits for upstream: this path is the wallet's own. ledgerSignTransaction.spec.ts compares
+ * its device request with the agent's, so an upgrade that changes the agent fails there.
  *
- * Only such a transaction takes the path below, a copy of the agent's own with the output bytes
- * put back: every other transaction is the agent's to sign, unchanged.
+ * Only such a transaction takes the path below, a copy of the agent's own with those put back:
+ * every other transaction is the agent's to sign, unchanged.
  */
 export async function signLedgerTransaction(
   agent: LedgerKeyAgent,
   txBody: Serialization.TransactionBody,
   { knownAddresses, txInKeyPathMap }: SignTransactionContext,
 ): Promise<Cardano.Signatures> {
+  const body = txBody.toCore();
   const outputs = txBody.outputs();
   const collateralReturn = txBody.collateralReturn();
-  if (!outputs.some(agentReencodes) && !(collateralReturn && agentReencodes(collateralReturn))) {
+  if (
+    !outputs.some(agentReencodes) &&
+    !(collateralReturn && agentReencodes(collateralReturn)) &&
+    body.networkId !== Cardano.NetworkId.Testnet
+  ) {
     return agent.signTransaction(txBody, { knownAddresses, txInKeyPathMap });
   }
 
@@ -82,7 +91,7 @@ export async function signLedgerTransaction(
     const hash = txBody.hash();
     const dRepPublicKey = await agent.derivePublicKey(util.DREP_KEY_DERIVATION_PATH);
     const dRepKeyHashHex = (await Crypto.Ed25519PublicKey.fromHex(dRepPublicKey).hash()).hex();
-    const tx = await toLedgerTx(txBody.toCore(), {
+    const tx = await toLedgerTx(body, {
       accountIndex: agent.accountIndex,
       chainId: agent.chainId,
       collateralReturnFormat: outputFormat(collateralReturn),
@@ -93,6 +102,7 @@ export async function signLedgerTransaction(
     });
     tx.outputs = tx.outputs.map((ledgerOutput, index) => withOriginalBytes(ledgerOutput, outputs[index]));
     if (tx.collateralOutput && collateralReturn) tx.collateralOutput = withOriginalBytes(tx.collateralOutput, collateralReturn);
+    tx.includeNetworkId = body.networkId !== undefined;
 
     const { communicationType } = agent.serializableData as SerializableLedgerKeyAgentData;
     const deviceConnection = await LedgerKeyAgent.checkDeviceConnection(communicationType, agent.deviceConnection);
