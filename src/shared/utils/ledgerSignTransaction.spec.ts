@@ -35,6 +35,9 @@ import {
   SCRIPT_REF_TX_ID,
   SDK_ENCODED_TX,
   SDK_ENCODED_TX_ID,
+  TESTNET_TX,
+  TESTNET_TX_ID,
+  TESTNET_WALLET_ADDRESS,
   WALLET_ACCOUNT_XPUB,
   WALLET_ADDRESS,
 } from '@/shared/utils/__fixtures__/handAssembledTxs';
@@ -60,18 +63,37 @@ const OWN_CONTEXT: SignTransactionContext = {
   },
 };
 
-let agent: LedgerKeyAgent;
-beforeAll(async () => {
-  agent = new LedgerKeyAgent(
+/** Signing TESTNET_TX: the wallet's input (aa…#0) and its testnet change address. */
+const TESTNET_CONTEXT: SignTransactionContext = {
+  knownAddresses: [
+    {
+      ...OWN_CONTEXT.knownAddresses[0],
+      address: Cardano.PaymentAddress(TESTNET_WALLET_ADDRESS),
+      networkId: Cardano.NetworkId.Testnet,
+      rewardAccount: Cardano.RewardAccount('stake_test1uq3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygsw4fsh7'),
+    },
+  ],
+  txInKeyPathMap: OWN_CONTEXT.txInKeyPathMap,
+};
+
+let bip32Ed25519: Crypto.Bip32Ed25519;
+/** The wallet's account on the Ledger, for a network. */
+const ledgerAgent = (chainId: Cardano.ChainId) =>
+  new LedgerKeyAgent(
     {
       accountIndex: 0,
-      chainId: Cardano.ChainIds.Mainnet,
+      chainId,
       communicationType: CommunicationType.Web,
       extendedAccountPublicKey: Crypto.Bip32PublicKeyHex(WALLET_ACCOUNT_XPUB),
       purpose: KeyPurpose.STANDARD,
     },
-    { bip32Ed25519: await Crypto.SodiumBip32Ed25519.create(), logger: console },
+    { bip32Ed25519, logger: console },
   );
+
+let agent: LedgerKeyAgent;
+beforeAll(async () => {
+  bip32Ed25519 = await Crypto.SodiumBip32Ed25519.create();
+  agent = ledgerAgent(Cardano.ChainIds.Mainnet);
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -135,6 +157,32 @@ describe('signLedgerTransaction: outputs reach the device as the transaction hol
       datum: { type: DatumType.INLINE, datumHex: COLLATERAL_DATUM },
       referenceScriptHex: COLLATERAL_SCRIPT,
     });
+  });
+});
+
+describe('signLedgerTransaction: a testnet body’s network id, 0', () => {
+  it('reaches the device', async () => {
+    const signTransaction = signingDevice(TESTNET_TX_ID);
+    await signLedgerTransaction(ledgerAgent(Cardano.ChainIds.Preprod), body(TESTNET_TX), TESTNET_CONTEXT);
+
+    expect(signTransaction.mock.lastCall![0].tx).toMatchObject({
+      includeNetworkId: true,
+      network: { networkId: 0, protocolMagic: 1 },
+    });
+  });
+
+  it('is all that differs from what the agent asks for', async () => {
+    const signTransaction = signingDevice(TESTNET_TX_ID);
+    const preprodAgent = ledgerAgent(Cardano.ChainIds.Preprod);
+
+    await preprodAgent.signTransaction(body(TESTNET_TX), TESTNET_CONTEXT);
+    await signLedgerTransaction(preprodAgent, body(TESTNET_TX), TESTNET_CONTEXT);
+
+    const [agentRequest, request] = signTransaction.mock.calls.map(([{ tx, ...sent }]) => ({
+      ...sent,
+      tx: { ...tx, includeNetworkId: 'compared above' },
+    }));
+    expect(request).toEqual(agentRequest);
   });
 });
 
