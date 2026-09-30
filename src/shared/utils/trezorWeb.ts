@@ -220,8 +220,7 @@ const mapTokenMap = (tokenMap?: Cardano.TokenMap, isMint?: boolean): Trezor.Card
 };
 
 /**
- * Get script reference from transaction output in CBOR format
- * Matches official SDK implementation from txOut.ts
+ * The output's reference script, as the bytes it has in the transaction.
  */
 const getScriptHex = (output: Serialization.TransactionOutput): string | undefined => {
   const scriptRef = output.scriptRef();
@@ -230,19 +229,24 @@ const getScriptHex = (output: Serialization.TransactionOutput): string | undefin
 };
 
 /**
- * Convert inline datum to CBOR format for Trezor
- * Matches official SDK implementation from txOut.ts
+ * The output's inline datum, as the bytes it has in the transaction.
  */
-const getInlineDatum = (datum: Cardano.PlutusData): string => {
-  return Serialization.PlutusData.fromCore(datum).toCbor();
-};
+const getInlineDatum = (output: Serialization.TransactionOutput): string | undefined =>
+  output.datum()?.asInlineData()?.toCbor();
 
 /**
- * Convert TxOut to Trezor format with Babbage-era support
+ * Convert a transaction output to Trezor format with Babbage-era support
  * Includes inline datum and reference script handling
+ *
+ * Takes the output as the transaction holds it. The device serializes each output back from
+ * these params and hashes the body, so the inline datum and reference script must go over as
+ * their original bytes. Re-encoding them from the Core value, as @cardano-sdk/hardware-trezor
+ * does, changes any not in the SDK's own encoding (a definite-length list datum comes back
+ * indefinite-length), and cardanoSignTransaction then fails with "Trezor computed a different
+ * transaction id".
  */
-const toTxOut = (output: { index: number; txOut: Cardano.TxOut; isCollateral?: boolean }, context: TrezorTxTransformerContext): Trezor.CardanoOutput => {
-  const { txOut } = output;
+const toTxOut = (output: { index: number; txOut: Serialization.TransactionOutput; isCollateral?: boolean }, context: TrezorTxTransformerContext): Trezor.CardanoOutput => {
+  const txOut = output.txOut.toCore();
   const { knownAddresses, outputsFormat, collateralReturnFormat } = context;
 
   // Find if this is one of our addresses
@@ -251,10 +255,6 @@ const toTxOut = (output: { index: number; txOut: Cardano.TxOut; isCollateral?: b
   const format = output.isCollateral ? collateralReturnFormat : outputsFormat?.[output.index];
   const isBabbage = format === Trezor.PROTO.CardanoTxOutputSerializationFormat.MAP_BABBAGE;
 
-  // Serialize the output to access script reference
-  const serializedOutput = Serialization.TransactionOutput.fromCore(txOut);
-  const scriptHex = getScriptHex(serializedOutput);
-
   const baseOutput: Record<string, unknown> = {
     amount: txOut.value.coins.toString(),
     tokenBundle: mapTokenMap(txOut.value.assets),
@@ -262,9 +262,9 @@ const toTxOut = (output: { index: number; txOut: Cardano.TxOut; isCollateral?: b
     // Datum hash (always included if present)
     datumHash: txOut.datumHash?.toString(),
     // Inline datum (Babbage format only)
-    inlineDatum: isBabbage && txOut.datum ? getInlineDatum(txOut.datum) : undefined,
+    inlineDatum: isBabbage ? getInlineDatum(output.txOut) : undefined,
     // Reference script (Babbage format only)
-    referenceScript: isBabbage ? scriptHex : undefined,
+    referenceScript: isBabbage ? getScriptHex(output.txOut) : undefined,
   };
 
   // Check if this is a script address (script addresses should always use address string, not addressParameters)
@@ -301,7 +301,7 @@ const toTxOut = (output: { index: number; txOut: Cardano.TxOut; isCollateral?: b
   return baseOutput as unknown as Trezor.CardanoOutput;
 };
 
-const mapTxOuts = (outputs: Cardano.TxOut[], context: TrezorTxTransformerContext): Trezor.CardanoOutput[] =>
+const mapTxOuts = (outputs: Serialization.TransactionOutput[], context: TrezorTxTransformerContext): Trezor.CardanoOutput[] =>
   outputs.map((txOut, index) => toTxOut({ index, txOut }, context));
 
 const mapDRep = (dRep: Cardano.DelegateRepresentative | undefined): Trezor.CardanoDRep | undefined => {
@@ -664,14 +664,17 @@ const mapAdditionalWitnessRequests = (body: Cardano.TxBody, context: TrezorTxTra
 
 /**
  * Transform Cardano SDK transaction body to Trezor format
+ * Outputs map from the serialized body, the rest from its Core value (see toTxOut).
  */
 const txToTrezor = async (
-  body: Cardano.TxBody,
+  txBody: Serialization.TransactionBody,
   context: TrezorTxTransformerContext
 ): Promise<Omit<Trezor.CardanoSignTransaction, 'signingMode' | 'derivationType'>> => {
+  const body = txBody.toCore();
+  const collateralReturn = txBody.collateralReturn();
   return {
     inputs: mapTxIns(body.inputs, context),
-    outputs: mapTxOuts(body.outputs, context),
+    outputs: mapTxOuts(txBody.outputs(), context),
     fee: body.fee.toString(),
     ttl: body.validityInterval?.invalidHereafter?.toString(),
     protocolMagic: context.chainId.networkMagic,
@@ -684,7 +687,7 @@ const txToTrezor = async (
     scriptDataHash: body.scriptIntegrityHash?.toString(),
     collateralInputs: body.collaterals ? mapTxIns(body.collaterals, context) : undefined,
     requiredSigners: mapRequiredSigners(body.requiredExtraSignatures, context),
-    collateralReturn: body.collateralReturn ? toTxOut({ index: 0, txOut: body.collateralReturn, isCollateral: true }, context) : undefined,
+    collateralReturn: collateralReturn ? toTxOut({ index: 0, txOut: collateralReturn, isCollateral: true }, context) : undefined,
     totalCollateral: body.totalCollateral?.toString(),
     referenceInputs: body.referenceInputs ? mapTxIns(body.referenceInputs, context) : undefined,
     includeNetworkId: !!body.networkId,
@@ -913,7 +916,7 @@ export default {
         ? Trezor.PROTO.CardanoTxOutputSerializationFormat.MAP_BABBAGE
         : Trezor.PROTO.CardanoTxOutputSerializationFormat.ARRAY_LEGACY;
 
-      const trezorTxData: Omit<Trezor.CardanoSignTransaction, 'signingMode'> = await txToTrezor(body, {
+      const trezorTxData: Omit<Trezor.CardanoSignTransaction, 'signingMode'> = await txToTrezor(txBody, {
         accountIndex: 0,
         chainId: {
           networkId: network.networkId,
