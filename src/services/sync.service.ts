@@ -12,6 +12,7 @@ import { debugLog } from '@/utils/debug';
 import { notifyHooks } from '@/services/notify/notifyHooks';
 import blockchainApi from '@/api/blockchain-api';
 import webSocketService, { type WsSyncMessage } from '@/services/websocket.service';
+import { convertNexusUtxos } from '@/services/nexusUtxo';
 import WalletStore, { walletStore } from '@/stores/walletStore';
 import type { BitcoinTip } from '@/stores/networkStore';
 import {
@@ -350,7 +351,7 @@ export class SyncService {
       }
       // Apply server-provided UTxOs — set on store, resolve assets, persist to DB
       if (syncObject.utxos && Array.isArray(syncObject.utxos)) {
-        const converted = this.convertNexusUtxos(syncObject.utxos);
+        const converted = convertNexusUtxos(syncObject.utxos);
         debugLog(`Applying ${converted.length} server UTxOs`);
         promises.push(this.walletBg.applyUtxos(converted, true));
       }
@@ -935,56 +936,6 @@ export class SyncService {
       debugLog('Error getting latest transaction block height:', e);
       return 0;
     }
-  }
-
-  /**
-   * Convert Nexus UTxO format to Cardano.Utxo[] (TxIn/TxOut tuples).
-   * Nexus: {txHash, txIndex, address, value, assetList, datumHash, inlineDatum, referenceScript}
-   * Wallet: [[{txId, index, address}, {address, value: {coins, assets}, datumHash, datum, scriptReference}]]
-   */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Nexus payload shape documented above; fields normalized defensively below
-  private convertNexusUtxos(nexusUtxos: any[]): Cardano.Utxo[] {
-    const result: Cardano.Utxo[] = [];
-    for (const u of nexusUtxos) {
-      try {
-        const txHash = u.txHash || u.tx_hash;
-        const txIndex = u.txIndex ?? u.tx_index ?? u.output_index ?? 0;
-        const address = u.address || u.owner_addr;
-        const lovelace = BigInt(u.value || u.lovelace_amount || '0');
-
-        // Build assets map from assetList
-        const assets = new Map<Cardano.AssetId, bigint>();
-        const assetList = u.assetList || u.assets || u.amounts || [];
-        for (const a of assetList) {
-          const unit = a.unit || (a.policyId && a.assetName ? a.policyId + a.assetName : null);
-          if (unit && unit !== 'lovelace') {
-            assets.set(Cardano.AssetId(unit), BigInt(a.quantity || '0'));
-          }
-        }
-
-        const txIn: Cardano.HydratedTxIn = {
-          txId: Cardano.TransactionId(txHash),
-          index: txIndex,
-          address: address as Cardano.PaymentAddress,
-        };
-
-        const txOut: Cardano.TxOut = {
-          address: address as Cardano.PaymentAddress,
-          value: {
-            coins: lovelace,
-            assets: assets.size > 0 ? assets : undefined,
-          },
-          datumHash: u.datumHash || undefined,
-          datum: u.inlineDatum || undefined,
-          scriptReference: u.referenceScript || undefined,
-        };
-
-        result.push([txIn, txOut]);
-      } catch (e) {
-        debugLog('Failed to convert Nexus UTxO:', e, u);
-      }
-    }
-    return result;
   }
 }
 
