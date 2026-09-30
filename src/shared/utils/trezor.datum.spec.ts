@@ -27,6 +27,10 @@ const { connectWebextension, connectWeb } = vi.hoisted(() => {
 });
 vi.mock('@trezor/connect-webextension', () => ({ default: connectWebextension }));
 vi.mock('@trezor/connect-web', () => ({ default: connectWeb }));
+// @trezor/connect's entry loads its device-authenticity API, which require()s an ESM-only
+// @noble/curves: Node before 22.12 (CI pins 22.11.0) cannot load it. At runtime both modules
+// only read PROTO from it, so they get the real one, from the constants module that defines it.
+vi.mock('@trezor/connect', async () => ({ PROTO: (await import('@trezor/connect/lib/constants')).PROTO }));
 
 import trezor from './trezor';
 import trezorWeb from './trezorWeb';
