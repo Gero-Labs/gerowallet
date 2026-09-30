@@ -36,14 +36,22 @@ vi.mock('@/stores/walletStore', () => ({
   },
 }));
 
+vi.mock('@/chrome/messaging', () => ({
+  Messaging: { sendToBackgroundFromOptions: vi.fn() },
+}));
+
 import trezorWeb from '@/shared/utils/trezorWeb';
 import networks from '@/utils/networks';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
+import { CIP113_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
+import { Messaging } from '@/chrome/messaging';
+import { MessageTypes } from '@/models/MessageTypes';
 import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
 
 const mockedTrezorWeb = vi.mocked(trezorWeb);
 const mockedNetworks = vi.mocked(networks);
 const mockedDeserialize = vi.mocked(deserializeCardanoJsSdkTx);
+const mockedSendToBackground = vi.mocked(Messaging.sendToBackgroundFromOptions);
 
 describe('dispatchTrezor', () => {
   beforeEach(() => {
@@ -101,17 +109,46 @@ describe('dispatchTrezor', () => {
       witness: {},
     } as never);
     mockedNetworks.resolveNetwork.mockReturnValue({ networkId: 1 } as never);
+    mockedSendToBackground.mockResolvedValue({ data: { success: true, refused: false } });
     const signatures = new Map([['pubkey1', 'sig1']]);
     mockedTrezorWeb.cardanoSignTransaction.mockResolvedValue(signatures as never);
 
     const resp = await dispatchTrezor({ method: 'signTx', txCbor: 'deadbeef' });
 
+    // The worker's CIP-113 refusal is asked first, about this transaction.
+    expect(mockedSendToBackground).toHaveBeenCalledWith({
+      method: MessageTypes.CIP113_SIGN_PREFLIGHT,
+      data: { txCbor: 'deadbeef' },
+    });
     expect(mockedTrezorWeb.cardanoSignTransaction).toHaveBeenCalled();
     expect(resp).toEqual({
       data: { success: true, signatures: [['pubkey1', 'sig1']] },
       target: 'gerowallet',
       sender: 'extension',
     });
+  });
+
+  test('signTx: refuses a transaction that spends CIP-113 programmable-token UTxOs, as the background handler does', async () => {
+    mockedSendToBackground.mockResolvedValue({ data: { success: true, refused: true } });
+
+    const resp = await dispatchTrezor({ method: 'signTx', txCbor: 'deadbeef' });
+
+    expect(mockedTrezorWeb.cardanoSignTransaction).not.toHaveBeenCalled();
+    expect(resp).toEqual({
+      data: { success: false, error: CIP113_SIGN_REFUSAL_MESSAGE },
+      target: 'gerowallet',
+      sender: 'extension',
+    });
+  });
+
+  test('signTx: does not sign when the worker cannot answer the CIP-113 check', async () => {
+    // Messaging resolves (never rejects) with { error } when the worker is unreachable.
+    mockedSendToBackground.mockResolvedValue({ error: 'Could not establish connection. Receiving end does not exist.' });
+
+    const resp = await dispatchTrezor({ method: 'signTx', txCbor: 'deadbeef' });
+
+    expect(mockedTrezorWeb.cardanoSignTransaction).not.toHaveBeenCalled();
+    expect(resp.data.success).toBe(false);
   });
 
   test('signData: calls trezorWeb.cardanoSignMessage (renamed from signData)', async () => {

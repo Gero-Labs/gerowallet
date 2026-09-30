@@ -41,4 +41,8 @@ describe('isOwnExtensionPageSender', () => {
   it('gates the support-chat handshake (it takes spending auth and signs with the stake key)', () => {
     expect(EXTENSION_PAGE_ONLY_METHODS.has('SUPPORT_CHAT_AUTH')).toBe(true);
   });
+
+  it('gates the CIP-113 signing preflight (only the wallet’s own pages sign)', () => {
+    expect(EXTENSION_PAGE_ONLY_METHODS.has('CIP113_SIGN_PREFLIGHT')).toBe(true);
+  });
 });

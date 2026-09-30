@@ -2,7 +2,10 @@ import { Cardano } from '@cardano-sdk/core';
 import { Blockchain, coin_type, purpose } from '@/models/types';
 import networks from '@/utils/networks';
 import { deserializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
-import { SENDER, TARGET } from '@/chrome/config';
+import { CIP113_SIGN_REFUSAL_MESSAGE, SENDER, TARGET } from '@/chrome/config';
+import { Messaging } from '@/chrome/messaging';
+import { MessageTypes } from '@/models/MessageTypes';
+import i18n from '@/plugins/i18n';
 import WalletStore from '@/stores/walletStore';
 import { debugLog } from '@/utils/debug';
 
@@ -84,6 +87,16 @@ export async function dispatchTrezor(data: any): Promise<any> {
       };
     } else if (data.method === 'signTx') {
       const { txCbor } = data;
+
+      // The background handler refuses a transaction that spends CIP-113 programmable-token
+      // UTxOs before it signs (refusalForProgrammableInputs). The refusal index lives in the
+      // worker, so ask it; without an answer, do not sign.
+      const preflight = (await Messaging.sendToBackgroundFromOptions({
+        method: MessageTypes.CIP113_SIGN_PREFLIGHT,
+        data: { txCbor },
+      })) as { data?: { success?: boolean; refused?: boolean } };
+      if (preflight?.data?.refused) throw new Error(CIP113_SIGN_REFUSAL_MESSAGE);
+      if (preflight?.data?.success !== true) throw new Error(i18n.t('wallet.trezorSigningFailed') as string);
 
       const tx = deserializeCardanoJsSdkTx(txCbor);
 
