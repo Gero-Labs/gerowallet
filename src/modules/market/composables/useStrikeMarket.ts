@@ -1,5 +1,6 @@
-import { ref, computed } from 'vue';
+import { ref, computed, getCurrentScope, onScopeDispose } from 'vue';
 import { strikeMarketApi } from '@/api/strike-v2.market';
+import { debugLog } from '@/utils/debug';
 import type {
   ExchangeInfo,
   SymbolInfo,
@@ -16,8 +17,10 @@ const tickers = ref<Record<string, Ticker24hrResponse>>({});
 const fundingRates = ref<Record<string, PremiumIndexResponse>>({});
 const loading = ref(false);
 
-let initialized = false;
-let _refreshInterval: ReturnType<typeof setInterval> | null = null;
+const REFRESH_INTERVAL_MS = 30_000;
+
+let consumers = 0;
+let refreshInterval: ReturnType<typeof setInterval> | null = null;
 
 // ---------------------------------------------------------------------------
 // Fetch helpers
@@ -48,24 +51,51 @@ async function fetchFundingRates(): Promise<void> {
   fundingRates.value = map;
 }
 
+/**
+ * Run fetches without letting a failure escape: Strike is a third-party API and
+ * a timeout must not surface as an unhandled rejection every refresh. A failed
+ * fetch leaves the last good data in place.
+ */
+async function settle(fetches: Promise<void>[]): Promise<void> {
+  const results = await Promise.allSettled(fetches);
+  for (const result of results) {
+    if (result.status === 'rejected') debugLog('Strike market data fetch failed:', result.reason);
+  }
+}
+
+function refresh(): Promise<void> {
+  // Exchange info is fetched once, but retried until it lands: without it the
+  // symbol list stays empty for as long as the page is open.
+  const fetches = [fetchTickers(), fetchFundingRates()];
+  if (!exchangeInfo.value) fetches.push(fetchExchangeInfo());
+  return settle(fetches);
+}
+
+function startPolling(): void {
+  loading.value = true;
+  void settle([fetchExchangeInfo(), fetchTickers(), fetchFundingRates()]).finally(() => {
+    loading.value = false;
+  });
+  refreshInterval = setInterval(() => void refresh(), REFRESH_INTERVAL_MS);
+}
+
+function release(): void {
+  consumers -= 1;
+  if (consumers > 0 || !refreshInterval) return;
+  clearInterval(refreshInterval);
+  refreshInterval = null;
+}
+
 // ---------------------------------------------------------------------------
 // Composable
 // ---------------------------------------------------------------------------
 
 export function useStrikeMarket() {
-  if (!initialized) {
-    initialized = true;
-    loading.value = true;
-
-    Promise.all([fetchExchangeInfo(), fetchTickers(), fetchFundingRates()])
-      .finally(() => {
-        loading.value = false;
-      });
-
-    _refreshInterval = setInterval(async () => {
-      await Promise.all([fetchTickers(), fetchFundingRates()]);
-    }, 30_000);
-  }
+  consumers += 1;
+  if (consumers === 1) startPolling();
+  // Callers outside a component/effect scope are never disposed, so they keep
+  // polling alive for the life of the page, as before.
+  if (getCurrentScope()) onScopeDispose(release);
 
   const symbols = computed<SymbolInfo[]>(() =>
     (exchangeInfo.value?.symbols ?? []).filter((s) => s.status === 'TRADING'),
