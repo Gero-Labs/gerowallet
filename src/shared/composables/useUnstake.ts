@@ -8,8 +8,8 @@ import { buildCardanoTransaction } from '@/shared/utils/builder';
 import { nexusTxApi, cardanoUtxoToNexusInput, type BuildStakeRegistrationTxRequest } from '@/api/nexus-tx-api';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import snackbar from '@/plugins/snackbar';
-import { isStakeKeyRegistered } from '@/shared/utils/stakeRegistration';
-import { refreshStakeAccount } from '@/shared/composables/refreshStakeAccount';
+import { isStakeKeyRegistered, StakeAccountError } from '@/shared/utils/stakeRegistration';
+import { refreshStakeAccount, assertStakeWalletUnchanged } from '@/shared/composables/refreshStakeAccount';
 import { Blockchain } from '@/models/types';
 
 /**
@@ -36,7 +36,9 @@ export function useUnstake() {
         throw new Error(t('common.epochParametersNotAvailable'));
       }
 
-      const stakingAccount = await refreshStakeAccount(loggedWallet.value);
+      if (!loggedWallet.value) throw new Error(t(StakeAccountError.WalletChanged));
+      const wallet = { ...loggedWallet.value };
+      const stakingAccount = await refreshStakeAccount(wallet, t);
       if (!isStakeKeyRegistered(stakingAccount)) {
         throw new Error(t('common.cannotUnstake'));
       }
@@ -104,12 +106,13 @@ export function useUnstake() {
           deregister: true,
         };
         const { tx_cbor } = await nexusTxApi.buildStakeRegistrationTx(request, loggedWallet.value.network);
-        if (!tx_cbor) throw new Error('Nexus returned an empty transaction CBOR');
+        assertStakeWalletUnchanged(wallet, t);
+        if (!tx_cbor) throw new Error(t(StakeAccountError.EmptyTransaction));
         txData.value = Serialization.Transaction.fromCbor(HexBlob(tx_cbor)).toCore();
       } else {
         // Build the unstaking transaction with wallet context for accurate fee estimation
         // For unstaking, deposit is returned (negative implicit coin)
-        txData.value = await buildCardanoTransaction({
+        const built = await buildCardanoTransaction({
           certificates,
           withdrawals,
           utxos: utxos.value as Cardano.Utxo[],
@@ -123,6 +126,8 @@ export function useUnstake() {
             accountIndex: 0,
           }
         });
+        assertStakeWalletUnchanged(wallet, t);
+        txData.value = built;
       }
 
       unstakeDialog.value = true;

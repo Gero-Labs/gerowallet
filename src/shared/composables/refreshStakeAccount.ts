@@ -1,29 +1,41 @@
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { walletStore, type Account } from '@/stores/walletStore';
-import { getStakeRegistrationState } from '@/shared/utils/stakeRegistration';
+import { getStakeRegistrationState, StakeAccountError } from '@/shared/utils/stakeRegistration';
 
-interface StakeWallet {
+export interface StakeWallet {
   id: number;
   stakeAddress?: string;
   network: string;
 }
 
+type Translate = (key: string) => string;
+
+/** Check again after building, not just after fetching the account. */
+export function assertStakeWalletUnchanged(wallet: StakeWallet, t: Translate): void {
+  const current = walletStore.loggedWallet;
+  if (!current || current.id !== wallet.id || current.network !== wallet.network ||
+      current.stakeAddress !== wallet.stakeAddress) {
+    throw new Error(t(StakeAccountError.WalletChanged));
+  }
+}
+
 /** Never build registration certificates from a cached or balance-only sync record. */
-export async function refreshStakeAccount(wallet: StakeWallet): Promise<Account> {
+export async function refreshStakeAccount(wallet: StakeWallet | null, t: Translate): Promise<Account> {
+  if (!wallet?.stakeAddress) throw new Error(t(StakeAccountError.NoStakeAddress));
   const identity = { walletId: wallet.id, stakeAddress: wallet.stakeAddress, network: wallet.network };
   const response = await Messaging.sendToBackgroundFromOptions({
     method: MessageTypes.REFRESH_STAKE_ACCOUNT,
     data: identity,
   }) as { data?: Account; error?: string } | undefined;
-  const current = walletStore.loggedWallet;
-  if (!current || current.id !== identity.walletId || current.network !== identity.network ||
-      current.stakeAddress !== identity.stakeAddress) {
-    throw new Error('The active wallet changed. Please try again.');
+  assertStakeWalletUnchanged({ id: identity.walletId, network: identity.network, stakeAddress: identity.stakeAddress }, t);
+  if (response?.error) {
+    const key = Object.values(StakeAccountError).some(value => value === response.error)
+      ? response.error : StakeAccountError.LookupFailed;
+    throw new Error(t(key));
   }
-  if (response?.error) throw new Error(response.error);
   if (!response?.data || getStakeRegistrationState(response.data) === undefined) {
-    throw new Error('Could not verify stake registration. Refresh the wallet and try again.');
+    throw new Error(t(StakeAccountError.RegistrationUnavailable));
   }
   return response.data;
 }

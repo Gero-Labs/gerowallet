@@ -38,6 +38,15 @@ export interface StakeRegistrationSignals {
   drep_id?: string | null;
 }
 
+/** Stable error keys cross the background boundary; the UI translates them. */
+export const StakeAccountError = {
+  WalletChanged: 'staking.walletChanged',
+  RegistrationUnavailable: 'staking.registrationUnavailable',
+  NoStakeAddress: 'staking.noStakeAddress',
+  LookupFailed: 'staking.registrationLookupFailed',
+  EmptyTransaction: 'staking.emptyTransaction',
+} as const;
+
 /**
  * Structurally typed so this stays importable from the background bundle
  * without dragging in the Vue-observable wallet store.

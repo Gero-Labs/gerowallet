@@ -12,8 +12,8 @@ import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import snackbar from '@/plugins/snackbar';
 import networks from '@/utils/networks';
 import { WalletType } from '@/models/types';
-import { isStakeKeyRegistered } from '@/shared/utils/stakeRegistration';
-import { refreshStakeAccount } from '@/shared/composables/refreshStakeAccount';
+import { isStakeKeyRegistered, StakeAccountError } from '@/shared/utils/stakeRegistration';
+import { refreshStakeAccount, assertStakeWalletUnchanged } from '@/shared/composables/refreshStakeAccount';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
 
 interface DelegationPool {
@@ -94,7 +94,9 @@ export function useDelegation() {
         throw new Error(t('errors.networkError'));
       }
 
-      const stakingAccount = await refreshStakeAccount(loggedWallet.value);
+      if (!loggedWallet.value) throw new Error(t(StakeAccountError.WalletChanged));
+      const wallet = { ...loggedWallet.value };
+      const stakingAccount = await refreshStakeAccount(wallet, t);
       const isRegistered = isStakeKeyRegistered(stakingAccount);
 
       // Trezor can't sign the combined Conway certs (StakeVoteDelegCert /
@@ -124,7 +126,8 @@ export function useDelegation() {
               { ...nexusReq, poolId, drepId: 'drep_always_abstain', includeStakeRegistration: !isRegistered },
               loggedWallet.value.network
             );
-        if (!tx_cbor) throw new Error('Nexus returned an empty transaction CBOR');
+        assertStakeWalletUnchanged(wallet, t);
+        if (!tx_cbor) throw new Error(t(StakeAccountError.EmptyTransaction));
         txData.value = Serialization.Transaction.fromCbor(HexBlob(tx_cbor)).toCore();
         isDelegateDialogOpen.value = true;
         return;
@@ -221,7 +224,7 @@ export function useDelegation() {
       }
 
       // Build the delegation transaction with wallet context for accurate fee estimation
-      txData.value = await buildCardanoTransaction({
+      const built = await buildCardanoTransaction({
         certificates,
         utxos: utxos.value as Cardano.Utxo[],
         epochParams: epochParams.value,
@@ -234,7 +237,8 @@ export function useDelegation() {
           accountIndex: 0,
         }
       });
-
+      assertStakeWalletUnchanged(wallet, t);
+      txData.value = built;
       isDelegateDialogOpen.value = true;
     } catch (error: unknown) {
       console.error('Error building delegation transaction:', error);

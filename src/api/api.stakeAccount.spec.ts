@@ -11,6 +11,13 @@ function setup(status: number) {
 }
 
 describe('stake account lookup', () => {
+  it.each([true, false])('preserves a successful account record with active:%s', async active => {
+    const api = setup(404);
+    const account = { active, pool_id: null, drep_id: null, withdrawable_amount: '0' };
+    vi.mocked(api.axiosInstance.get).mockResolvedValue({ status: 200, data: account });
+    await expect(api.getAccountInfo('stake_test1test', true)).resolves.toBe(account);
+  });
+
   it('treats a missing stake account as unregistered only when preflight opts in', async () => {
     const api = setup(404);
     await expect(api.getAccountInfo('stake_test1test', true)).resolves.toMatchObject({ active: false, pool_id: null, drep_id: null });

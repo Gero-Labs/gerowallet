@@ -176,7 +176,7 @@ describe('stake account recovery and preflight', () => {
   it('rejects an incomplete lookup instead of using the cached balance as registration truth', async () => {
     const { service, api, wallet } = setup();
     api.getAccountInfo.mockResolvedValue({ controlled_amount: '20000000' });
-    await expect(service.refreshStakeAccountInfo()).rejects.toThrow('Could not verify stake registration');
+    await expect(service.refreshStakeAccountInfo()).rejects.toThrow('staking.registrationUnavailable');
     expect(wallet.setAccountInfo).not.toHaveBeenCalled();
   });
 
@@ -204,5 +204,58 @@ describe('stake account recovery and preflight', () => {
     expect(api.getAccountInfo).toHaveBeenCalledTimes(1);
     resolve({ active: true });
     await Promise.resolve();
+  });
+
+  it.each([true, false])('does not repair known active:%s without delegations every minute', async active => {
+    vi.useFakeTimers();
+    try {
+      const { push, api } = setup();
+      api.getAccountInfo.mockResolvedValue({ active, pool_id: null, drep_id: null });
+      await push();
+      await flushRefresh();
+      vi.advanceTimersByTime(60_000);
+      await push();
+      await flushRefresh();
+      expect(api.getAccountInfo).toHaveBeenCalledTimes(1);
+      vi.advanceTimersByTime(3_540_000);
+      await push();
+      await flushRefresh();
+      expect(api.getAccountInfo).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('retries a failed background repair after a minute', async () => {
+    vi.useFakeTimers();
+    try {
+      const { push, api } = setup();
+      api.getAccountInfo.mockRejectedValueOnce(new Error('offline'));
+      await push();
+      await flushRefresh();
+      await push();
+      expect(api.getAccountInfo).toHaveBeenCalledTimes(1);
+      vi.advanceTimersByTime(60_000);
+      await push();
+      await flushRefresh();
+      expect(api.getAccountInfo).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('always refreshes for explicit transaction preflight, even after a successful background repair', async () => {
+    vi.useFakeTimers();
+    try {
+      const { service, push, api } = setup();
+      await push();
+      await flushRefresh();
+      expect(api.getAccountInfo).toHaveBeenCalledTimes(1);
+      await service.refreshStakeAccountInfo();
+      await service.refreshStakeAccountInfo();
+      expect(api.getAccountInfo).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

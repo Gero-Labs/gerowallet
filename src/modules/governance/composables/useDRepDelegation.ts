@@ -4,8 +4,8 @@ import { HexBlob } from '@cardano-sdk/util';
 import { buildCardanoTransaction } from '@/shared/utils/builder';
 import { nexusTxApi, walletUtxosToNexusInputs } from '@/api/nexus-tx-api';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
-import { isStakeKeyRegistered } from '@/shared/utils/stakeRegistration';
-import { refreshStakeAccount } from '@/shared/composables/refreshStakeAccount';
+import { isStakeKeyRegistered, StakeAccountError } from '@/shared/utils/stakeRegistration';
+import { refreshStakeAccount, assertStakeWalletUnchanged } from '@/shared/composables/refreshStakeAccount';
 import { WalletType } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
@@ -80,7 +80,7 @@ export function useDRepDelegation(): UseDRepDelegation {
     dRep: Cardano.DelegateRepresentative,
     nexusDrepId: string,
   ): Promise<void> {
-    const wallet = walletStore.loggedWallet;
+    const wallet = walletStore.loggedWallet ? { ...walletStore.loggedWallet } : null;
     const keys = walletStore.keys;
     const epochParams = networkStore.epochParams;
 
@@ -101,7 +101,7 @@ export function useDRepDelegation(): UseDRepDelegation {
         type: Cardano.CredentialType.KeyHash,
         hash: keys.stake[0].cred,
       };
-      const registered = isStakeKeyRegistered(await refreshStakeAccount(wallet));
+      const registered = isStakeKeyRegistered(await refreshStakeAccount(wallet, t));
       const stakeKeyDeposit = BigInt(epochParams.stakeKeyDeposit);
 
       const certificate: Cardano.Certificate = registered
@@ -128,10 +128,11 @@ export function useDRepDelegation(): UseDRepDelegation {
           },
           wallet.network,
         );
-        if (!tx_cbor) throw new Error('Nexus returned an empty transaction CBOR');
+        assertStakeWalletUnchanged(wallet, t);
+        if (!tx_cbor) throw new Error(t(StakeAccountError.EmptyTransaction));
         tx.value = Serialization.Transaction.fromCbor(HexBlob(tx_cbor)).toCore();
       } else {
-        tx.value = await buildCardanoTransaction({
+        const built = await buildCardanoTransaction({
           certificates: [certificate],
           utxos: walletStore.utxos as Cardano.Utxo[],
           epochParams,
@@ -144,6 +145,8 @@ export function useDRepDelegation(): UseDRepDelegation {
             accountIndex: 0,
           },
         });
+        assertStakeWalletUnchanged(wallet, t);
+        tx.value = built;
       }
 
       debugLog('useDRepDelegation: vote delegation transaction built');

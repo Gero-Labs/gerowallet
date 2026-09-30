@@ -151,6 +151,54 @@ describe('stake transaction registration preflight', () => {
     await useDelegation().delegate({ pool_id_bech32: poolId });
     expect(nexusTxApi.buildDelegationTx).not.toHaveBeenCalled();
     expect(nexusTxApi.buildVoteDelegationTx).not.toHaveBeenCalled();
-    expect(snackbar.setError).toHaveBeenCalledWith(expect.stringContaining('active wallet changed'));
+    expect(snackbar.setError).toHaveBeenCalledWith(expect.stringContaining('staking.walletChanged'));
+  });
+
+  it.each([true, false])('discards pool delegation after a wallet switch during the %s Nexus build', async nexus => {
+    vi.mocked(featureFlagsStore.isNexusDelegateEnabled).mockReturnValue(nexus);
+    const switchWallet = async () => {
+      walletStore.loggedWallet = { ...walletStore.loggedWallet, id: 2 };
+      return transaction([]);
+    };
+    vi.mocked(nexusTxApi.buildDelegationTx).mockImplementation(async () => ({
+      tx_cbor: Serialization.Transaction.fromCore(await switchWallet()).toCbor(), tx_hash: '0'.repeat(64),
+    }));
+    vi.mocked(buildCardanoTransaction).mockImplementation(switchWallet);
+    const delegation = useDelegation();
+    await delegation.delegate({ pool_id_bech32: poolId });
+    expect(delegation.txData.value).toBeNull();
+    expect(delegation.isDelegateDialogOpen.value).toBe(false);
+  });
+
+  it.each([true, false])('discards DRep delegation after a wallet switch during the %s Nexus build', async nexus => {
+    vi.mocked(featureFlagsStore.isNexusVoteDelegationEnabled).mockReturnValue(nexus);
+    const switchWallet = async () => {
+      walletStore.loggedWallet = { ...walletStore.loggedWallet, id: 2 };
+      return transaction([]);
+    };
+    vi.mocked(nexusTxApi.buildVoteDelegationTx).mockImplementation(async () => ({
+      tx_cbor: Serialization.Transaction.fromCore(await switchWallet()).toCbor(), tx_hash: '0'.repeat(64),
+    }));
+    vi.mocked(buildCardanoTransaction).mockImplementation(switchWallet);
+    const delegation = useDRepDelegation();
+    await delegation.delegateToPredefined('abstain');
+    expect(delegation.tx.value).toBeUndefined();
+    expect(delegation.isDialogOpen.value).toBe(false);
+  });
+
+  it.each([true, false])('discards unstaking after a wallet switch during the %s Nexus build', async nexus => {
+    vi.mocked(featureFlagsStore.isNexusUnstakeEnabled).mockReturnValue(nexus);
+    const switchWallet = async () => {
+      walletStore.loggedWallet = { ...walletStore.loggedWallet, id: 2 };
+      return transaction([]);
+    };
+    vi.mocked(nexusTxApi.buildStakeRegistrationTx).mockImplementation(async () => ({
+      tx_cbor: Serialization.Transaction.fromCore(await switchWallet()).toCbor(), tx_hash: '0'.repeat(64),
+    }));
+    vi.mocked(buildCardanoTransaction).mockImplementation(switchWallet);
+    const unstake = useUnstake();
+    await unstake.unstake();
+    expect(unstake.txData.value).toBeNull();
+    expect(unstake.unstakeDialog.value).toBe(false);
   });
 });

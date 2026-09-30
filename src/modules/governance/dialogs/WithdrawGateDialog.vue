@@ -151,6 +151,7 @@ import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { buildCardanoTransaction } from '@/shared/utils/builder';
 import { isStakeKeyRegistered } from '@/shared/utils/stakeRegistration';
+import { refreshStakeAccount, assertStakeWalletUnchanged } from '@/shared/composables/refreshStakeAccount';
 import { clearWithdrawableAmount } from '@/shared/utils/autoWithdraw';
 import { buildAbstainWithdrawalTx } from './withdrawGateBundle';
 import filters from '@/shared/utils/filters';
@@ -177,6 +178,7 @@ const GOV_TOOLS_DOCS_URL = 'https://docs.gov.tools/';
 // `Ref<Cardano.Tx | undefined>` and watches it for the CBOR it signs.
 const tx = ref<Cardano.Tx | undefined>(undefined);
 const buildError = ref('');
+let buildSeq = 0;
 
 const currencySymbol = computed(() =>
   networks.resolveCurrencySymbol(loggedWallet.value?.chain, loggedWallet.value?.network),
@@ -235,6 +237,7 @@ function goToDReps(): void {
  * so a build failure surfaces here rather than at signing time.
  */
 async function withdrawWithAbstain(): Promise<void> {
+  const seq = ++buildSeq;
   buildError.value = '';
   if (!loggedWallet.value || !keys.value?.stake?.length || !keys.value?.payment?.length) {
     buildError.value = String(t('errors.networkError'));
@@ -247,34 +250,43 @@ async function withdrawWithAbstain(): Promise<void> {
 
   loading.value = true;
   try {
-    tx.value = await buildAbstainWithdrawalTx(
+    const wallet = { ...loggedWallet.value };
+    const walletKeys = keys.value;
+    const params = epochParams.value;
+    const stakingAccount = await refreshStakeAccount(wallet, t);
+    if (seq !== buildSeq) return;
+    const built = await buildAbstainWithdrawalTx(
       {
-        stakeKeyHash: keys.value.stake[0].cred,
-        stakeAddress: loggedWallet.value.stakeAddress,
-        withdrawableAmount: account.value?.withdrawable_amount,
-        registered: isStakeKeyRegistered(account.value),
-        stakeKeyDeposit: epochParams.value.stakeKeyDeposit,
+        stakeKeyHash: walletKeys.stake[0].cred,
+        stakeAddress: wallet.stakeAddress,
+        withdrawableAmount: stakingAccount.withdrawable_amount,
+        registered: isStakeKeyRegistered(stakingAccount),
+        stakeKeyDeposit: params.stakeKeyDeposit,
       },
       {
         utxos: utxos.value as Cardano.Utxo[],
-        epochParams: epochParams.value,
-        changeAddress: keys.value.payment[0].address,
+        epochParams: params,
+        changeAddress: walletKeys.payment[0].address,
         tip: tip.value,
         walletContext: {
-          keys: keys.value,
-          stakeAddress: loggedWallet.value.stakeAddress,
+          keys: walletKeys,
+          stakeAddress: wallet.stakeAddress,
           accountIndex: 0,
         },
       },
       buildCardanoTransaction,
     );
+    if (seq !== buildSeq) return;
+    assertStakeWalletUnchanged(wallet, t);
+    tx.value = built;
   } catch (error: unknown) {
+    if (seq !== buildSeq) return;
     console.error('Error building the abstain + withdrawal bundle:', error);
     const message = error instanceof Error ? error.message : String(t('errors.unknownError'));
     buildError.value = `${t('errors.buildTransactionFailed')}: ${message}`;
     tx.value = undefined;
   } finally {
-    loading.value = false;
+    if (seq === buildSeq) loading.value = false;
   }
 }
 
@@ -285,11 +297,11 @@ async function signAndSubmit(): Promise<void> {
 watch(
   () => props.isOpen,
   open => {
-    if (!open) return;
+    ++buildSeq;
     resetState();
     tx.value = undefined;
     buildError.value = '';
-    if (form.value) form.value.resetValidation();
+    if (open && form.value) form.value.resetValidation();
   },
 );
 </script>

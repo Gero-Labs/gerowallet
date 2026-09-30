@@ -24,7 +24,7 @@ import {
   type BtcAccount,
 } from '@/chains/bitcoin/bitcoinWireSync';
 import type { UnifiedTransaction } from '@/chains/bitcoin/bitcoinTransactionParser';
-import { getStakeRegistrationState } from '@/shared/utils/stakeRegistration';
+import { getStakeRegistrationState, StakeAccountError } from '@/shared/utils/stakeRegistration';
 
 /**
  * SyncService handles all wallet synchronization operations
@@ -46,6 +46,7 @@ export class SyncService {
   private lastRewardsSum: string | undefined;
   private stakeAccountRefreshInFlight: Promise<unknown> | null = null;
   private lastStakeAccountRepairAt: number | null = null;
+  private lastStakeAccountRefreshAt: number | null = null;
 
   constructor(walletBg: WalletBg) {
     this.walletBg = walletBg;
@@ -630,15 +631,17 @@ export class SyncService {
   /** Authoritative preflight shared by pool delegation, voting and unstaking. */
   async refreshStakeAccountInfo(): Promise<unknown> {
     if (!this.walletBg?.stakeAddress || this.walletBg.isEnterpriseAddress()) {
-      throw new Error('This wallet has no stake address.');
+      throw new Error(StakeAccountError.NoStakeAddress);
     }
     if (this.stakeAccountRefreshInFlight) return this.stakeAccountRefreshInFlight;
     const refresh = async () => {
       const account = await this.api.getAccountInfo(this.walletBg.stakeAddress, true);
       if (getStakeRegistrationState(account) === undefined) {
-        throw new Error('Could not verify stake registration. Refresh the wallet and try again.');
+        throw new Error(StakeAccountError.RegistrationUnavailable);
       }
-      return this.walletBg.setAccountInfo(account);
+      const saved = await this.walletBg.setAccountInfo(account);
+      this.lastStakeAccountRefreshAt = Date.now();
+      return saved;
     };
     this.stakeAccountRefreshInFlight = refresh();
     try {
@@ -651,6 +654,10 @@ export class SyncService {
   private repairStakeAccountInfo(): void {
     if (this.walletBg?.chain !== Blockchain.CARDANO || this.walletBg.isEnterpriseAddress()) return;
     const now = Date.now();
+    // Thin pushes omit registration even after a successful REST repair. Recheck
+    // hourly, while failed attempts can retry after a minute. Explicit transaction
+    // preflight always fetches, regardless of this background-only throttle.
+    if (this.lastStakeAccountRefreshAt !== null && now - this.lastStakeAccountRefreshAt < 3_600_000) return;
     if (this.lastStakeAccountRepairAt !== null && now - this.lastStakeAccountRepairAt < 60_000) return;
     this.lastStakeAccountRepairAt = now;
     void this.refreshStakeAccountInfo().catch(error => {
