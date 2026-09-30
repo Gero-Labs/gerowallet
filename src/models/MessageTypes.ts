@@ -51,6 +51,7 @@ export enum MessageTypes {
   VERIFY_PRE_LOGIN_UNLOCK = 'VERIFY_PRE_LOGIN_UNLOCK',
   RESYNC = 'RESYNC',
   SYNC_VIA_REST = 'SYNC_VIA_REST',
+  REFRESH_STAKE_ACCOUNT = 'REFRESH_STAKE_ACCOUNT',
   TREZOR = 'TREZOR',
   REMOVE_PENDING_TRANSACTION = 'REMOVE_PENDING_TRANSACTION',
   CHECK_AUTO_LOCK = 'CHECK_AUTO_LOCK',
@@ -181,4 +182,8 @@ export enum MessageTypes {
   NOTIFY_INBOX_READ = 'NOTIFY_INBOX_READ', // page -> worker: one e, or all (B-M3 bell)
   NOTIFY_INBOX_CLEAR = 'NOTIFY_INBOX_CLEAR',
   NOTIFY_WATCH_ORDERS = 'NOTIFY_WATCH_ORDERS', // swap widget -> worker: register a submitted swap for fill/cancel alerts
+  // The CIP-113 signing refusal for a signer outside the worker (Trezor over WebUSB,
+  // trezorDispatch.ts): the refusal index lives in the worker, so it asks before signing.
+  // Answers { success, refused }. Extension-page-only (senderTrust).
+  CIP113_SIGN_PREFLIGHT = 'CIP113_SIGN_PREFLIGHT',
 }

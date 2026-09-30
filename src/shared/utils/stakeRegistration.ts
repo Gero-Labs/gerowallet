@@ -38,6 +38,15 @@ export interface StakeRegistrationSignals {
   drep_id?: string | null;
 }
 
+/** Stable error keys cross the background boundary; the UI translates them. */
+export const StakeAccountError = {
+  WalletChanged: 'staking.walletChanged',
+  RegistrationUnavailable: 'staking.registrationUnavailable',
+  NoStakeAddress: 'staking.noStakeAddress',
+  LookupFailed: 'staking.registrationLookupFailed',
+  EmptyTransaction: 'staking.emptyTransaction',
+} as const;
+
 /**
  * Structurally typed so this stays importable from the background bundle
  * without dragging in the Vue-observable wallet store.
@@ -47,4 +56,10 @@ export function isStakeKeyRegistered(account?: StakeRegistrationSignals | null):
   // A delegation certificate cannot exist without a registered stake key, so
   // either id being present outranks a false/absent `active`.
   return account.active === true || !!account.pool_id || !!account.drep_id;
+}
+
+/** Missing sync fields are unknown, not evidence that a deposit is required. */
+export function getStakeRegistrationState(account?: StakeRegistrationSignals | null): boolean | undefined {
+  if (isStakeKeyRegistered(account)) return true;
+  return account?.active === false ? false : undefined;
 }

@@ -45,6 +45,14 @@ export default defineConfig({
       '**/.claude/**',
       '**/.worktrees/**',
     ],
+    server: {
+      deps: {
+        // @cardano-sdk/hardware-ledger's ESM build imports
+        // '@cardano-foundation/ledgerjs-hw-app-cardano/dist/utils/address' with no extension,
+        // which Node's ESM loader rejects. Inlined, Vite resolves it, as the app build does.
+        inline: ['@cardano-sdk/hardware-ledger'],
+      },
+    },
   },
   resolve: {
     alias: {

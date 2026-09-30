@@ -7,7 +7,7 @@ import Loading from '@/stores/loading';
 import { Messaging } from '@/chrome/messaging';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
 import { mergeWitnessSets } from '@/shared/utils/witnessSets';
-import { isStakeKeyRegistered } from '@/shared/utils/stakeRegistration';
+import { isStakeKeyRegistered, StakeAccountError } from '@/shared/utils/stakeRegistration';
 import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, POPUP, SENDER, TARGET, TxSendError, TxSignError } from '@/chrome/config';
 import { toDappError } from '@/chrome/dappError';
 import { applyDappRequestBadge } from '@/chrome/dappRequestBadge';
@@ -1362,8 +1362,10 @@ app.add(METHOD.signData, (request, sendResponse) => {
  *
  * Runs at REQUEST ENTRY, before the approval UI, so it covers every downstream signer
  * for anything already known to be programmable. It is NOT a signature-time check: a
- * UTxO first learned while the prompt is open is re-checked by WalletBg.signTx on the
- * software path, but not by the hardware paths, which sign in document context.
+ * UTxO first learned while the prompt is open is re-checked right before signing by
+ * WalletBg.signTx on the software path and by both Trezor paths (the TREZOR handler, and
+ * CIP113_SIGN_PREFLIGHT for WebUSB), but not by Ledger or Keystone, which sign in
+ * document context.
  *
  * Returns a reason string when the transaction must be refused, else null.
  */
@@ -1385,6 +1387,17 @@ function refusalForProgrammableInputs(txCbor: unknown): string | null {
     return null;
   }
 }
+
+// The same refusal for a signer outside the worker: Trezor over WebUSB signs in a document
+// (trezorDispatch.ts), which cannot read the refusal index, so it asks here first.
+app.addToOptions(MessageTypes.CIP113_SIGN_PREFLIGHT, async (request, sendResponse) => {
+  // A worker this message woke may not have restored the wallet yet, and without it the
+  // check would pass everything.
+  await booted();
+  const refusal = refusalForProgrammableInputs(request.data?.txCbor);
+  if (refusal) debugLog(refusal);
+  sendResponse({ id: request.id, data: { success: true, refused: refusal !== null }, target: TARGET, sender: SENDER.extension });
+});
 
 app.add(METHOD.signTx, async (request, sendResponse) => {
   const signTxReply = (opts: ReplyOpts) => {
@@ -3616,6 +3629,30 @@ app.addToOptions(MessageTypes.CHECK_AUTO_LOCK, async (request, sendResponse) => 
   }
 });
 
+app.addToOptions(MessageTypes.REFRESH_STAKE_ACCOUNT, async (request, sendResponse) => {
+  try {
+    const wallet = walletManager.getWallet();
+    if (!wallet || wallet.id !== request.data?.walletId ||
+        wallet.stakeAddress !== request.data?.stakeAddress || wallet.network !== request.data?.network) {
+      throw new Error(StakeAccountError.WalletChanged);
+    }
+    const account = await wallet.syncService.refreshStakeAccountInfo();
+    if (walletManager.getWallet() !== wallet) {
+      throw new Error(StakeAccountError.WalletChanged);
+    }
+    sendResponse({ id: request.id, data: account, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    sendResponse({
+      id: request.id,
+      error: Object.values(StakeAccountError).some(key => key === message) ? message : StakeAccountError.LookupFailed,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+  return true;
+});
+
 app.addToOptions(MessageTypes.SYNC_VIA_REST, async (request, sendResponse) => {
   try {
     const currentWallet = walletManager.getWallet();
@@ -3796,7 +3833,6 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
       // Get current wallet and network info
       const currentWallet = walletManager.getWallet();
       const network = networks.resolveNetwork(currentWallet.chain, currentWallet.network);
-      console.log('[TREZOR Background] Signing transaction...', { tx: txWithoutWitnesses, network });
 
       // Sign transaction with Trezor SDK (includes witness filtering)
       // Pass original CBOR to preserve exact transaction hash computation
@@ -3812,7 +3848,6 @@ app.addToOptions(MessageTypes.TREZOR, async (request, sendResponse) => {
 
       // Convert Map to array for Chrome messaging (Maps don't serialize properly)
       const signaturesArray = Array.from(signatures.entries());
-      console.log('[TREZOR Background] Signatures array:', signaturesArray);
 
       assertCip45SigningRequest(request.data);
       sendResponse({

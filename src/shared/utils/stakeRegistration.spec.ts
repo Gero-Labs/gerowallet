@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isStakeKeyRegistered } from './stakeRegistration';
+import { getStakeRegistrationState, isStakeKeyRegistered } from './stakeRegistration';
 
 describe('isStakeKeyRegistered', () => {
   it('trusts an explicit active: true', () => {
@@ -56,5 +56,20 @@ describe('isStakeKeyRegistered', () => {
     };
     expect('active' in captured).toBe(false);
     expect(isStakeKeyRegistered(captured)).toBe(true);
+  });
+});
+
+describe('registration state for transaction construction', () => {
+  it.each([undefined, null, {}, { pool_id: null, drep_id: null }])('keeps missing signals unknown: %j', account => {
+    expect(getStakeRegistrationState(account)).toBeUndefined();
+  });
+
+  it('requires an explicit false before adding a registration deposit', () => {
+    expect(getStakeRegistrationState({ active: false })).toBe(false);
+    expect(getStakeRegistrationState({ active: true })).toBe(true);
+  });
+
+  it('accepts delegation evidence when the legacy active flag is false', () => {
+    expect(getStakeRegistrationState({ active: false, pool_id: 'pool1abc' })).toBe(true);
   });
 });
