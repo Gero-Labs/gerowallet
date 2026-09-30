@@ -19,11 +19,9 @@ export interface VotingCapability {
  * NOT uniform and cannot be made uniform, so the UI must surface a reason per
  * wallet type instead of letting the signing layer throw:
  *
- * - Ledger builds its transformer context with a hardcoded
- *   `chainId: Cardano.ChainIds.Mainnet` (ledger.ts:201), so a vote signed on
- *   any other network would target the wrong chain — blocked off-mainnet.
- *   On mainnet, single votes only until the multi-vote path is verified on
- *   the installed Cardano app version.
+ * - Ledger: blocked off-mainnet, where hardware wallets do not pair
+ *   (`supportedHardware` in networks.ts). On mainnet, single votes only until
+ *   the multi-vote path is verified on the installed Cardano app version.
  * - Trezor's certificate mapper ends in a terminal throw for governance
  *   certs (trezor.ts:470) and GovTool lists Trezor as delegation-only.
  * - Keystone's extra-signer scan only keys on certificates/withdrawals and

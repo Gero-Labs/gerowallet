@@ -26,6 +26,17 @@ import { bech32 } from 'bech32';
 import { HexBlob } from '@cardano-sdk/util';
 import { debugLog } from '@/utils/debug';
 import { DeviceModel } from '@ledgerhq/devices';
+import { signLedgerTransaction } from '@/shared/utils/ledgerSignTransaction';
+
+/**
+ * The wallet's network as the Ledger agent's chain. The device builds the body's network id,
+ * every change address and a signed message's address from it, so a hard-coded chain signs
+ * something the wallet did not hand it on any other network.
+ */
+const ledgerChainId = (network: NetworkInfo): Cardano.ChainId => ({
+  networkId: network.networkId as Cardano.NetworkId,
+  networkMagic: network.networkParams.networkMagic,
+});
 
 const timeout = (ms: number, message: string) => {
   return new Promise((_, reject) => {
@@ -198,7 +209,7 @@ export default {
     const txInKeyPathMap = await util.createTxInKeyPathMap(txBody, knownAddresses, inputResolver);
 
     const ledgerTxTransformerContext: LedgerTxTransformerContext = {
-      chainId: Cardano.ChainIds.Mainnet,
+      chainId: ledgerChainId(network),
       accountIndex: 0,
       outputsFormat: tx.body.outputs.map(_out => TxOutputFormat.MAP_BABBAGE),
       collateralReturnFormat: TxOutputFormat.MAP_BABBAGE,
@@ -232,7 +243,7 @@ export default {
     });
 
     hardwareLoading.setText(i18n.t('wallet.ledgerPleaseConfirmDevice') as string);
-    const res: Cardano.Signatures = await ledgerKeyAgent.signTransaction(deserializedTx.body(), {
+    const res: Cardano.Signatures = await signLedgerTransaction(ledgerKeyAgent, deserializedTx.body(), {
       knownAddresses,
       txInKeyPathMap,
     })
@@ -271,7 +282,7 @@ export default {
     hardwareLoading.setText(i18n.t('wallet.ledgerInitializingSigning') as string);
     const ledgerKeyAgent: LedgerKeyAgent = await LedgerKeyAgent.createWithDevice(
       {
-        chainId: Cardano.ChainIds.Mainnet,
+        chainId: ledgerChainId(network),
         accountIndex: 0,
         communicationType: CommunicationType.Web,
         deviceConnection: await LedgerKeyAgent.createDeviceConnection(transport),
@@ -280,7 +291,7 @@ export default {
     );
 
     hardwareLoading.setText(i18n.t('wallet.ledgerPleaseConfirmDevice') as string);
-    const res: Cardano.Signatures = await ledgerKeyAgent.signTransaction(deserializedTx.body(), {
+    const res: Cardano.Signatures = await signLedgerTransaction(ledgerKeyAgent, deserializedTx.body(), {
       knownAddresses,
       txInKeyPathMap,
     });
@@ -297,9 +308,8 @@ export default {
     await this.ensureLedgerVersion(ledger);
 
     // Create LedgerKeyAgent instance for proper CIP-8/CIP-30 signing
-    const chainId = network.networkId === 1 ? Cardano.ChainIds.Mainnet : Cardano.ChainIds.Preprod;
     const ledgerKeyAgent: LedgerKeyAgent = await LedgerKeyAgent.createWithDevice({
-      chainId: chainId,
+      chainId: ledgerChainId(network),
       accountIndex: accountIndex,
       communicationType: CommunicationType.Web,
       deviceConnection: await LedgerKeyAgent.createDeviceConnection(transport),
