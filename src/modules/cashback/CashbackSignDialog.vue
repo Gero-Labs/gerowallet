@@ -105,12 +105,24 @@ import { signPayloadHex } from './portalBridge';
  * base address the claim was initiated for. It moves no funds.
  */
 export interface CashbackSignature {
+  /** The `requestId` the prompt was showing when the user approved. */
+  requestId: number;
   signature: string;
   key: string;
 }
 
+/** What the user approved, captured before any await so a request that
+ *  replaces it mid-flight is neither signed nor answered with this approval. */
+interface ApprovedRequest {
+  requestId: number;
+  address: string;
+  payloadHex: string;
+}
+
 interface Props {
   isOpen: boolean;
+  /** Identifies the request; echoed back in `signed` so the caller can drop a stale answer. */
+  requestId: number;
   /** The challenge, verbatim from `claim-initiate`. */
   message: string;
   /** The bech32 base address the claim was initiated for. */
@@ -147,12 +159,12 @@ const usesPassword = computed(() => walletType.value === WalletType.Normal && !i
 const canSign = computed(() =>
   usesPassword.value || walletType.value === WalletType.Ledger || walletType.value === WalletType.Trezor,
 );
-const payloadHex = computed(() => signPayloadHex(props.message));
 
-watch(() => props.isOpen, open => {
+// A new request, whether by opening or by replacing the one shown, starts from
+// a clean prompt: nothing typed for the old challenge carries over.
+watch(() => [props.isOpen, props.requestId] as const, ([open]) => {
   spendingPassword.value = '';
   valid.value = false;
-  loading.value = false;
   openedForWalletId = open ? (loggedWallet.value?.id ?? null) : null;
   form.value?.resetValidation();
 });
@@ -162,16 +174,18 @@ function cancel() {
   emit('close');
 }
 
-function finish(result: CashbackSignature) {
+type Signed = Omit<CashbackSignature, 'requestId'>;
+
+function finish(approved: ApprovedRequest, result: Signed) {
   if (loggedWallet.value?.id !== openedForWalletId) {
     snackbar.setError(t('cashback.signWalletChanged'));
     emit('close');
     return;
   }
-  emit('signed', result);
+  emit('signed', { requestId: approved.requestId, ...result });
 }
 
-function unwrapSignData(res: unknown): CashbackSignature {
+function unwrapSignData(res: unknown): Signed {
   const response = res as { data?: { signature?: string; key?: string; error?: string }; error?: string } | undefined;
   if (response?.error) throw new Error(response.error);
   if (response?.data?.error) throw new Error(response.data.error);
@@ -179,7 +193,7 @@ function unwrapSignData(res: unknown): CashbackSignature {
   return { signature: response.data.signature, key: response.data.key };
 }
 
-async function signWithPassword(): Promise<CashbackSignature> {
+async function signWithPassword(approved: ApprovedRequest): Promise<Signed> {
   const verification = await Messaging.sendToBackgroundFromOptions({
     method: MessageTypes.VERIFY_SPENDING_PASSWORD,
     data: { password: spendingPassword.value },
@@ -190,24 +204,24 @@ async function signWithPassword(): Promise<CashbackSignature> {
   }
   return unwrapSignData(await Messaging.sendToBackgroundFromOptions({
     method: MessageTypes.SIGN_DATA,
-    data: { address: props.address, payload: payloadHex.value, password: spendingPassword.value, accountIndex: 0, isUsb: false },
+    data: { address: approved.address, payload: approved.payloadHex, password: spendingPassword.value, accountIndex: 0, isUsb: false },
   }));
 }
 
-async function signWithLedger(): Promise<CashbackSignature> {
+async function signWithLedger(approved: ApprovedRequest): Promise<Signed> {
   const network = networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network);
   hardwareLoading.begin('Ledger', t('wallet.ledgerPleaseConfirmDevice') as string);
   try {
     const known = ledger.createKnownAddressesFromKeys(keys.value, network);
-    const signed = await ledger.signData(props.address, payloadHex.value, network, 0, !isBluetooth.value, known);
+    const signed = await ledger.signData(approved.address, approved.payloadHex, network, 0, !isBluetooth.value, known);
     return { signature: signed.signatureHex, key: signed.signingPublicKeyHex };
   } finally {
     hardwareLoading.end();
   }
 }
 
-async function signWithTrezor(): Promise<CashbackSignature> {
-  const data = { method: 'signData', address: props.address, payload: payloadHex.value, accountIndex: 0 };
+async function signWithTrezor(approved: ApprovedRequest): Promise<Signed> {
+  const data = { method: 'signData', address: approved.address, payload: approved.payloadHex, accountIndex: 0 };
   hardwareLoading.begin('Trezor', t('wallet.confirmOnTrezor') as string);
   try {
     const response = (featureFlagsStore.state.flags.isTrezorWebUsbEnabled
@@ -220,11 +234,17 @@ async function signWithTrezor(): Promise<CashbackSignature> {
   }
 }
 
-async function run(signer: () => Promise<CashbackSignature>) {
+async function run(signer: (approved: ApprovedRequest) => Promise<Signed>) {
   if (loading.value) return;
+  // Snapshot what is on screen now: this is what the user approved.
+  const approved: ApprovedRequest = {
+    requestId: props.requestId,
+    address: props.address,
+    payloadHex: signPayloadHex(props.message),
+  };
   loading.value = true;
   try {
-    finish(await signer());
+    finish(approved, await signer(approved));
   } catch (error: unknown) {
     console.error('Cashback claim signing failed:', error);
     snackbar.setError(getErrorMessage(error, t('cashback.signFailed')));
@@ -245,11 +265,11 @@ async function sign() {
 }
 
 async function signWithPassKey(privateKeyBytes: Uint8Array) {
-  await run(async () => {
+  await run(async approved => {
     try {
       return unwrapSignData(await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.SIGN_DATA,
-        data: { address: props.address, payload: payloadHex.value, password: '', privateKeyBytes: Array.from(privateKeyBytes), accountIndex: 0, isUsb: false },
+        data: { address: approved.address, payload: approved.payloadHex, password: '', privateKeyBytes: Array.from(privateKeyBytes), accountIndex: 0, isUsb: false },
       }));
     } finally {
       privateKeyBytes.fill(0);

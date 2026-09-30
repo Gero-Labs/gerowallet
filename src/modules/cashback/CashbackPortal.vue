@@ -18,6 +18,7 @@
     />
     <CashbackSignDialog
       :is-open="!!pendingSign"
+      :request-id="pendingSign?.seq ?? 0"
       :message="pendingSign?.message ?? ''"
       :address="pendingSign?.address ?? ''"
       :origin="portalOrigin()"
@@ -152,8 +153,10 @@ function finishSign(seq: number, result: CashbackSignature | null, error?: strin
   post(abortSignMessage());
 }
 
+/** Answered by the id the prompt echoes back, so a signature approved for an
+ *  earlier request never reaches the portal as the newer one. */
 function onSigned(result: CashbackSignature) {
-  if (pendingSign.value) finishSign(pendingSign.value.seq, result);
+  finishSign(result.requestId, result);
 }
 
 function onDeclined() {
@@ -166,6 +169,9 @@ function onDeclined() {
 // SESSION_UPDATE token so it re-verifies within a full lifetime.
 let didRefreshOnLoad = false;
 async function onFrameLoad() {
+  // Whatever document just loaded is not the one that asked; a pending
+  // approval must not be able to deliver a signature into it.
+  clearPendingSign();
   if (didRefreshOnLoad || !portalUrl.value) return;
   didRefreshOnLoad = true;
   await bootstrap('resync');

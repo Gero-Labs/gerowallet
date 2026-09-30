@@ -68,7 +68,7 @@ const send = vi.mocked(Messaging.sendToBackgroundFromOptions);
 
 function mountDialog() {
   wrapper = mount(CashbackSignDialog, {
-    propsData: { isOpen: false, message: MESSAGE, address: ADDRESS, origin: 'https://portal.bringweb3.io' },
+    propsData: { isOpen: false, requestId: 1, message: MESSAGE, address: ADDRESS, origin: 'https://portal.bringweb3.io' },
     mocks: { $t },
     stubs: {
       // Reports itself valid whenever it renders, the way the real form does once
@@ -130,7 +130,27 @@ describe('cashback claim approval', () => {
       method: MessageTypes.SIGN_DATA,
       data: { address: ADDRESS, payload: MESSAGE_HEX, password: 'hunter22', accountIndex: 0, isUsb: false },
     });
-    expect(wrapper.emitted('signed')).toEqual([[{ signature: 'sig', key: 'key' }]]);
+    expect(wrapper.emitted('signed')).toEqual([[{ requestId: 1, signature: 'sig', key: 'key' }]]);
+  });
+
+  it('signs the challenge that was approved, not one that replaced it while the password was being verified', async () => {
+    send
+      .mockImplementationOnce(async () => {
+        // A second claim arrives from the portal before verification returns.
+        await wrapper.setProps({ requestId: 2, message: 'Claim 99 ADA nonce 43' });
+        return { data: { success: true } };
+      })
+      .mockResolvedValueOnce({ data: { signature: 'sig', key: 'key' } });
+    mountDialog();
+    await open();
+    await wrapper.find('[data-testid="password"]').setValue('hunter22');
+    await wrapper.find('[data-testid="cashback-sign-confirm"]').trigger('click');
+    await flush();
+    expect(send).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      method: MessageTypes.SIGN_DATA,
+      data: expect.objectContaining({ payload: MESSAGE_HEX }),
+    }));
+    expect(wrapper.emitted('signed')).toEqual([[{ requestId: 1, signature: 'sig', key: 'key' }]]);
   });
 
   it('does not sign with a wrong password', async () => {
@@ -172,7 +192,7 @@ describe('cashback claim approval', () => {
       data: { address: ADDRESS, payload: MESSAGE_HEX, password: '', privateKeyBytes: [1, 2, 3], accountIndex: 0, isUsb: false },
     });
     expect(Array.from(bytes)).toEqual([0, 0, 0]);
-    expect(wrapper.emitted('signed')).toEqual([[{ signature: 'sig', key: 'key' }]]);
+    expect(wrapper.emitted('signed')).toEqual([[{ requestId: 1, signature: 'sig', key: 'key' }]]);
   });
 
   it('withholds a signature produced after the wallet changed', async () => {

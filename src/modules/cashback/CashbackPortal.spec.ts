@@ -14,13 +14,14 @@ import { Blockchain, Network } from '@/models/types';
  *  is not registered by name, so it is mocked as a module rather than stubbed. */
 const SignDialogStub = vi.hoisted(() => ({
   name: 'CashbackSignDialogStub',
-  props: ['isOpen', 'message', 'address', 'origin'],
+  props: ['isOpen', 'requestId', 'message', 'address', 'origin'],
   // A render function, not a template: the test build of Vue has no template compiler.
   render(h: (tag: string, data: object) => unknown) {
     return h('div', {
       attrs: {
         'data-testid': 'dialog',
         'data-open': String(this.isOpen),
+        'data-request-id': String(this.requestId),
         'data-message': this.message,
         'data-address': this.address,
         'data-origin': this.origin,
@@ -86,8 +87,15 @@ function dialog() {
   return wrapper.find('[data-testid="dialog"]');
 }
 
-function answer(event: 'signed' | 'close', payload?: unknown) {
-  wrapper.findComponent({ name: 'CashbackSignDialogStub' }).vm.$emit(event, payload);
+/** The id of the request the prompt is showing right now. */
+function shownRequestId(): number {
+  return Number(dialog().attributes('data-request-id'));
+}
+
+/** Answer as the prompt would: a signature echoes the id it was approved for (the shown one unless given). */
+function answer(event: 'signed' | 'close', payload?: { signature: string; key: string; requestId?: number }) {
+  const body = event === 'signed' && payload ? { requestId: shownRequestId(), ...payload } : payload;
+  wrapper.findComponent({ name: 'CashbackSignDialogStub' }).vm.$emit(event, body);
   return flush();
 }
 
@@ -171,6 +179,31 @@ describe('cashback claim signing bridge', () => {
     expect(dialog().attributes('data-message')).toBe('second');
     await answer('signed', { signature: 'sig', key: 'key' });
     expect(replies()).toEqual([expect.objectContaining({ action: 'SIGNATURE', message: 'second' })]);
+  });
+
+  it('drops a signature approved for a request the portal has since replaced', async () => {
+    await mountPortal();
+    await signRequest('first');
+    const first = shownRequestId();
+    await signRequest('second');
+    // The approval for "first" completes late, after "second" took its place.
+    await answer('signed', { requestId: first, signature: 'sig-a', key: 'key-a' });
+    expect(replies()).toEqual([]);
+    expect(dialog().attributes('data-open')).toBe('true');
+    expect(dialog().attributes('data-message')).toBe('second');
+    await answer('signed', { signature: 'sig-b', key: 'key-b' });
+    expect(replies()).toEqual([expect.objectContaining({ action: 'SIGNATURE', signature: 'sig-b', message: 'second' })]);
+  });
+
+  it('cancels a pending request when the portal document reloads', async () => {
+    await mountPortal();
+    await signRequest();
+    const stale = shownRequestId();
+    await wrapper.find('iframe').trigger('load');
+    expect(dialog().attributes('data-open')).toBe('false');
+    // The prompt that was open for the old document cannot answer into the new one.
+    await answer('signed', { requestId: stale, signature: 'sig', key: 'key' });
+    expect(replies()).toEqual([]);
   });
 
   it.each([
