@@ -230,11 +230,27 @@ export async function syncDustWalletAndBalanceFees(
     let lastPersistMs = Date.now();
     let lastPersistedApplied = -1n;
     let persistInFlight = false;
+    // Per-attempt bookkeeping for the poisoned-restore check below: how many
+    // state updates this attempt received and the cursor it started from.
+    let attemptUpdates = 0;
+    let attemptFirstApplied: bigint | null = null;
+    /** Whether this attempt resumed from any restored blob (local checkpoint or Nexus snapshot). */
+    let restoredThisAttempt = false;
+    /**
+     * Set once a restored state proved unusable (see the stall branch): every
+     * later attempt of this send skips the checkpoint and the snapshot and
+     * replays from genesis, which is the only state guaranteed to apply.
+     */
+    let forceCold = false;
 
     const persistCheckpoint = async (reason: string): Promise<void> => {
       const wallet = dustWallet;
       const applied = lastProgress.applied;
       if (!wallet || persistInFlight || applied == null || applied <= lastPersistedApplied) return;
+      // A periodic save that would only re-persist the blob this attempt was
+      // restored from banks nothing and, if that blob is poisoned, cements
+      // it as the local checkpoint. Wait until the attempt has advanced.
+      if ((reason === 'interval' || reason === 'failure') && attemptFirstApplied != null && applied <= attemptFirstApplied) return;
       persistInFlight = true;
       try {
         const serialized = await wallet.serializeState();
@@ -327,21 +343,25 @@ export async function syncDustWalletAndBalanceFees(
         // is required per attempt because a stopped wallet can't restart.
         // On a checkpoint hit the wallet resumes from its saved appliedIndex
         // cursor; on a miss/corrupt blob dustBuilderStart cold-inits.
-        let persistedDustState = await loadWalletState(
-          args.sdkNetworkId, 'dust', args.dustSecretSeed,
-        );
+        let persistedDustState = forceCold
+          ? null
+          : await loadWalletState(args.sdkNetworkId, 'dust', args.dustSecretSeed);
         restoredFromLocalCheckpoint = !!persistedDustState;
         // Local miss → snapshot bootstrap: ask Nexus for a global dust state
         // captured before this wallet's registration and start the tail
         // replay from there instead of genesis. Once the tail syncs, the
         // regular checkpointing below persists LOCAL state, so this fetch
         // happens at most once per wallet+device lifetime.
-        if (!persistedDustState && !bootstrapTried && args.dustRegisteredAt) {
+        if (!persistedDustState && !bootstrapTried && !forceCold && args.dustRegisteredAt) {
           bootstrapTried = true;
           persistedDustState = await fetchDustBootstrapSnapshot(
             args.endpoints, args.sdkNetworkId, args.dustRegisteredAt,
           );
         }
+        restoredThisAttempt = !!persistedDustState;
+        attemptUpdates = 0;
+        attemptFirstApplied = null;
+        if (forceCold) debugLog('🌙 dust sync: cold init from genesis (restored state could not apply live events)');
         const dustBuilder = DustWallet({
           networkId: args.sdkNetworkId as Parameters<typeof DustWallet>[0]['networkId'],
           indexerClientConnection: {
@@ -374,7 +394,9 @@ export async function syncDustWalletAndBalanceFees(
         dustSubscription = dustWallet.state.subscribe((state: unknown) => {
           stateUpdateCount += 1;
           totalStateUpdates += 1;
+          attemptUpdates += 1;
           const p = readProgress(state);
+          if (attemptFirstApplied == null && p.applied != null) attemptFirstApplied = p.applied;
           if (p.applied != null && (lastProgress.applied == null || p.applied > lastProgress.applied)) {
             lastAdvanceMs = Date.now();
           }
@@ -410,6 +432,16 @@ export async function syncDustWalletAndBalanceFees(
               ));
             } else if (now - lastAdvanceMs > STALL_MS) {
               resolve('stalled');
+            } else if (
+              // Early exit for a poisoned restore (see the stall branch): the
+              // stream is live and delivering, yet nothing applies. No point
+              // waiting out the full stall window before switching to cold.
+              restoredThisAttempt && !forceCold && attemptUpdates >= 10
+              && lastProgress.isConnected === true
+              && attemptFirstApplied != null && lastProgress.applied != null
+              && lastProgress.applied <= attemptFirstApplied
+            ) {
+              resolve('stalled');
             }
           }, 5_000);
         });
@@ -430,10 +462,36 @@ export async function syncDustWalletAndBalanceFees(
           break;
         }
 
-        // Stalled: bank progress, tear down, rebuild from the checkpoint.
-        await persistCheckpoint('stall-restart');
-        const advanced = lastPersistedApplied > appliedAtAttemptStart;
-        barrenAttempts = advanced ? 0 : barrenAttempts + 1;
+        // A restored blob that cannot apply the live stream looks nothing like
+        // the dead-subscription stall above: the subscription is CONNECTED and
+        // updates keep arriving, but the applied cursor never leaves the value
+        // it was restored at (the SDK swallows the per-event WASM error,
+        // observed on mainnet 2026-09-30 as "values inserted non-linearly into
+        // dust commitment tree" on every event after a Nexus snapshot whose
+        // commitment tree lagged its own cursor). Restarting from that blob,
+        // or checkpointing it, reproduces the failure forever. Discard it and
+        // replay from genesis instead: slower once, but it always applies.
+        const poisonedRestore = restoredThisAttempt
+          && !forceCold
+          && attemptUpdates >= 2
+          && lastProgress.isConnected === true
+          && lastProgress.applied != null
+          && attemptFirstApplied != null
+          && lastProgress.applied <= attemptFirstApplied;
+        if (poisonedRestore) {
+          debugLog(`🌙 dust sync: restored state cannot apply live events (connected, ${attemptUpdates} updates, still at ${percentLabel()}) — discarding it and cold-syncing from genesis`);
+          try {
+            await clearWalletState(args.sdkNetworkId, 'dust', args.dustSecretSeed);
+          } catch { /* best effort: a failed clear only costs another attempt */ }
+          forceCold = true;
+          lastPersistedApplied = -1n;
+          barrenAttempts = 0;
+        } else {
+          // Stalled: bank progress, tear down, rebuild from the checkpoint.
+          await persistCheckpoint('stall-restart');
+          const advanced = lastPersistedApplied > appliedAtAttemptStart;
+          barrenAttempts = advanced ? 0 : barrenAttempts + 1;
+        }
         restarts += 1;
         try { dustSubscription?.unsubscribe(); } catch { /* already torn down */ }
         dustSubscription = undefined;
