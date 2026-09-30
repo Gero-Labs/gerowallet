@@ -271,7 +271,7 @@ export const hydrateWalletStore = (): Promise<void> => {
 export const flushWalletStorePersistence = (): Promise<void> => persister.flush();
 
 // Serializer function for complex data types
-function serializeValue(key: string, value: unknown): unknown {
+export function serializeValue(key: string, value: unknown): unknown {
   if (typeof value === 'bigint') {
     return value.toString();
   } else if (value instanceof Map) {

@@ -16,6 +16,7 @@ import { Buffer } from 'buffer';
 import { nexusCollateralApi } from '@/api/nexus-collateral-api';
 import { toNexusNetwork } from '@/api/nexus-tx-api';
 import { debugLog } from '@/utils/debug';
+import { toTransactionUnspentOutput } from '@/shared/utils/utxoCbor';
 import WalletStore from '@/stores/walletStore';
 
 const baseUrl = import.meta.env['VITE_BACKEND_URL'];
@@ -318,38 +319,7 @@ export function getUtxos(
   utxos = filterOutCollateralFromUTxOs(utxos, collateral);
 
   // Convert raw UTXOs to the appropriate format
-  const converted: Serialization.TransactionUnspentOutput[] = utxos.map((utxo: Cardano.Utxo) => {
-    // Reconstruct the value with proper Map for assets (needed after JSON deserialization)
-    let value = utxo[1].value;
-    if (value?.assets && !(value.assets instanceof Map)) {
-      const assetsMap = new Map<Cardano.AssetId, bigint>();
-      // Convert plain object back to Map
-      Object.entries(value.assets).forEach(([assetId, quantity]) => {
-        assetsMap.set(assetId as Cardano.AssetId, BigInt(quantity as string | number | bigint));
-      });
-      value = {
-        coins: BigInt(value.coins),
-        assets: assetsMap
-      };
-    } else if (value) {
-      // Ensure coins is BigInt even if no assets
-      value = {
-        coins: BigInt(value.coins),
-        assets: value.assets || undefined
-      };
-    }
-
-    return Serialization.TransactionUnspentOutput.fromCore([{
-      txId: utxo[0].txId,
-      index: utxo[0].index
-    }, {
-      address: utxo[1].address,
-      value: value,
-      datumHash: utxo[1].datumHash,
-      datum: utxo[1].datum,
-      scriptReference: utxo[1].scriptReference
-    }]);
-  });
+  const converted: Serialization.TransactionUnspentOutput[] = utxos.map(toTransactionUnspentOutput);
 
   // If no amount is specified, return all UTXOs (with optional pagination)
   if (!amount) {
@@ -615,7 +585,7 @@ export async function getCollateral(
       return av < bv ? -1 : av > bv ? 1 : 0;
     });
   if (singleSufficient.length > 0) {
-    return [Serialization.TransactionUnspentOutput.fromCore(singleSufficient[0]).toCbor()];
+    return [toTransactionUnspentOutput(singleSufficient[0]).toCbor()];
   }
 
   // No single UTxO covers it — combine the largest pure-ADA UTxOs so we reach the
@@ -637,7 +607,7 @@ export async function getCollateral(
   }
 
   if (totalCoins >= filterAmount) {
-    return selected.map((utxo) => Serialization.TransactionUnspentOutput.fromCore(utxo).toCbor());
+    return selected.map((utxo) => toTransactionUnspentOutput(utxo).toCbor());
   }
 
   // Pass 2 — Nexus shared-pool fallback, TRUSTED dApps only. The wallet has no
