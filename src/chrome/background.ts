@@ -3616,6 +3616,29 @@ app.addToOptions(MessageTypes.CHECK_AUTO_LOCK, async (request, sendResponse) => 
   }
 });
 
+app.addToOptions(MessageTypes.REFRESH_STAKE_ACCOUNT, async (request, sendResponse) => {
+  try {
+    const wallet = walletManager.getWallet();
+    if (!wallet || wallet.id !== request.data?.walletId ||
+        wallet.stakeAddress !== request.data?.stakeAddress || wallet.network !== request.data?.network) {
+      throw new Error('The active wallet changed. Please try again.');
+    }
+    const account = await wallet.syncService.refreshStakeAccountInfo();
+    if (walletManager.getWallet() !== wallet) {
+      throw new Error('The active wallet changed. Please try again.');
+    }
+    sendResponse({ id: request.id, data: account, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({
+      id: request.id,
+      error: error instanceof Error ? error.message : String(error),
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+  return true;
+});
+
 app.addToOptions(MessageTypes.SYNC_VIA_REST, async (request, sendResponse) => {
   try {
     const currentWallet = walletManager.getWallet();

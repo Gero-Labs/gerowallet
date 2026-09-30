@@ -48,3 +48,9 @@ export function isStakeKeyRegistered(account?: StakeRegistrationSignals | null):
   // either id being present outranks a false/absent `active`.
   return account.active === true || !!account.pool_id || !!account.drep_id;
 }
+
+/** Missing sync fields are unknown, not evidence that a deposit is required. */
+export function getStakeRegistrationState(account?: StakeRegistrationSignals | null): boolean | undefined {
+  if (isStakeKeyRegistered(account)) return true;
+  return account?.active === false ? false : undefined;
+}

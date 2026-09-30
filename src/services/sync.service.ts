@@ -24,6 +24,7 @@ import {
   type BtcAccount,
 } from '@/chains/bitcoin/bitcoinWireSync';
 import type { UnifiedTransaction } from '@/chains/bitcoin/bitcoinTransactionParser';
+import { getStakeRegistrationState } from '@/shared/utils/stakeRegistration';
 
 /**
  * SyncService handles all wallet synchronization operations
@@ -43,6 +44,8 @@ export class SyncService {
   private lastRewardsRefreshAt: number | null = null;
   private lastRewardsEpoch: number | undefined;
   private lastRewardsSum: string | undefined;
+  private stakeAccountRefreshInFlight: Promise<unknown> | null = null;
+  private lastStakeAccountRepairAt: number | null = null;
 
   constructor(walletBg: WalletBg) {
     this.walletBg = walletBg;
@@ -369,6 +372,11 @@ export class SyncService {
       if (accountIsEmpty && this.walletBg?.chain === Blockchain.CARDANO) {
         await this.reconcileControlledAmountFromUtxos();
       }
+      // A UTxO-derived balance does not tell us whether the stake key is registered.
+      // Repair thin push records through REST without delaying block processing.
+      if (accountIsEmpty || getStakeRegistrationState(syncObject.account) === undefined) {
+        this.repairStakeAccountInfo();
+      }
       debugLog('setSync', syncObject);
       // Heal any "thin" tx records (stored without CBOR) in the background —
       // deliberately not awaited so it never delays tip/sync processing.
@@ -617,6 +625,37 @@ export class SyncService {
     } catch (e) {
       // console.log(e);
     }
+  }
+
+  /** Authoritative preflight shared by pool delegation, voting and unstaking. */
+  async refreshStakeAccountInfo(): Promise<unknown> {
+    if (!this.walletBg?.stakeAddress || this.walletBg.isEnterpriseAddress()) {
+      throw new Error('This wallet has no stake address.');
+    }
+    if (this.stakeAccountRefreshInFlight) return this.stakeAccountRefreshInFlight;
+    const refresh = async () => {
+      const account = await this.api.getAccountInfo(this.walletBg.stakeAddress, true);
+      if (getStakeRegistrationState(account) === undefined) {
+        throw new Error('Could not verify stake registration. Refresh the wallet and try again.');
+      }
+      return this.walletBg.setAccountInfo(account);
+    };
+    this.stakeAccountRefreshInFlight = refresh();
+    try {
+      return await this.stakeAccountRefreshInFlight;
+    } finally {
+      this.stakeAccountRefreshInFlight = null;
+    }
+  }
+
+  private repairStakeAccountInfo(): void {
+    if (this.walletBg?.chain !== Blockchain.CARDANO || this.walletBg.isEnterpriseAddress()) return;
+    const now = Date.now();
+    if (this.lastStakeAccountRepairAt !== null && now - this.lastStakeAccountRepairAt < 60_000) return;
+    this.lastStakeAccountRepairAt = now;
+    void this.refreshStakeAccountInfo().catch(error => {
+      debugLog('Could not repair stake account info:', error);
+    });
   }
 
   /**

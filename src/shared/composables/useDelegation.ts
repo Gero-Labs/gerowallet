@@ -13,6 +13,12 @@ import snackbar from '@/plugins/snackbar';
 import networks from '@/utils/networks';
 import { WalletType } from '@/models/types';
 import { isStakeKeyRegistered } from '@/shared/utils/stakeRegistration';
+import { refreshStakeAccount } from '@/shared/composables/refreshStakeAccount';
+import { getErrorMessage } from '@/shared/utils/errorHandler';
+
+interface DelegationPool {
+  pool_id_bech32: string;
+}
 
 /**
  * Composable for handling Cardano staking delegation transactions and the
@@ -21,10 +27,10 @@ import { isStakeKeyRegistered } from '@/shared/utils/stakeRegistration';
 export function useDelegation() {
   const { t } = useTranslation();
 
-  const { loggedWallet, account, utxos, keys } = toRefs(walletStore);
+  const { loggedWallet, utxos, keys } = toRefs(walletStore);
   const { epochParams, tip } = toRefs(networkStore);
 
-  const selectedPool = ref<any>(null);
+  const selectedPool = ref<DelegationPool | null>(null);
   const txData = ref<Cardano.Tx | null>(null);
   const isDelegateDialogOpen = ref(false);
 
@@ -69,7 +75,7 @@ export function useDelegation() {
 
       // Delegate to the loaded Gero pool
       await delegate(stakingStore.state.currentPool);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error delegating to Gero pool:', error);
       snackbar.setError(t('errors.unknownError'));
     }
@@ -79,7 +85,7 @@ export function useDelegation() {
    * Build and prepare delegation transaction for any pool
    * @param pool - The stake pool to delegate to
    */
-  const delegate = async (pool: any) => {
+  const delegate = async (pool: DelegationPool) => {
     selectedPool.value = pool;
 
     try {
@@ -88,6 +94,9 @@ export function useDelegation() {
         throw new Error(t('errors.networkError'));
       }
 
+      const stakingAccount = await refreshStakeAccount(loggedWallet.value);
+      const isRegistered = isStakeKeyRegistered(stakingAccount);
+
       // Trezor can't sign the combined Conway certs (StakeVoteDelegCert /
       // StakeVoteRegDelegCert) that nexus emits, so it always uses the client-side
       // @cardano-sdk builder below (separate certs). Software + Ledger use nexus.
@@ -95,8 +104,7 @@ export function useDelegation() {
 
       // Nexus migration: build the delegation server-side for software + Ledger.
       if (featureFlagsStore.isNexusDelegateEnabled() && !isTrezorWallet) {
-        const isRegistered = isStakeKeyRegistered(account.value);
-        const hasDrep = !!account.value?.drep_id;
+        const hasDrep = !!stakingAccount.drep_id;
         const poolId = Cardano.PoolId(selectedPool.value.pool_id_bech32);
         const nexusReq = {
           stakeAddress: loggedWallet.value.stakeAddress,
@@ -137,7 +145,7 @@ export function useDelegation() {
 
       let implicitCoin = BigInt(0);
 
-      if (!isStakeKeyRegistered(account.value)) {
+      if (!isRegistered) {
         // Need to register a stake key first, then delegate
         if (isTrezorWallet) {
           // Trezor: Use separate certificates
@@ -174,7 +182,7 @@ export function useDelegation() {
           });
         }
         implicitCoin = stakeKeyDepositLovelace; // Deposit required
-      } else if (!account.value?.drep_id) {
+      } else if (!stakingAccount.drep_id) {
         // Delegate to pool and abstain by default
         if (isTrezorWallet) {
           // Trezor: Use separate certificates
@@ -228,12 +236,13 @@ export function useDelegation() {
       });
 
       isDelegateDialogOpen.value = true;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error building delegation transaction:', error);
-      if (error.message?.includes('UTxO Balance Insufficient')) {
+      const message = getErrorMessage(error, t('errors.unknownError'));
+      if (message.includes('UTxO Balance Insufficient')) {
         snackbar.setError(t('errors.insufficientBalance'));
       } else {
-        snackbar.setError(t('errors.buildTransactionFailed') + ': ' + (error.message || t('errors.unknownError')));
+        snackbar.setError(t('errors.buildTransactionFailed') + ': ' + message);
       }
     }
   };

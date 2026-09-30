@@ -89,6 +89,7 @@ import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { buildCardanoTransaction } from '@/shared/utils/builder';
 import { isStakeKeyRegistered } from '@/shared/utils/stakeRegistration';
+import { refreshStakeAccount } from '@/shared/composables/refreshStakeAccount';
 import { Blockchain } from '@/models/types';
 import type { Keys } from '@/models/types';
 
@@ -177,7 +178,7 @@ export default defineComponent({
         hash: keys.stake[0].cred,
       };
       const poolIdBech32 = Cardano.PoolId(poolId);
-      const account = walletStore.account;
+      const account = await refreshStakeAccount(walletStore.loggedWallet);
       const certificates: Cardano.Certificate[] = [];
       const stakeKeyDepositLovelace = BigInt(epochParams.stakeKeyDeposit ?? 2_000000);
       let implicitCoin = 0n;

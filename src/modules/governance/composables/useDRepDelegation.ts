@@ -5,6 +5,7 @@ import { buildCardanoTransaction } from '@/shared/utils/builder';
 import { nexusTxApi, walletUtxosToNexusInputs } from '@/api/nexus-tx-api';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { isStakeKeyRegistered } from '@/shared/utils/stakeRegistration';
+import { refreshStakeAccount } from '@/shared/composables/refreshStakeAccount';
 import { WalletType } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
@@ -100,7 +101,7 @@ export function useDRepDelegation(): UseDRepDelegation {
         type: Cardano.CredentialType.KeyHash,
         hash: keys.stake[0].cred,
       };
-      const registered = isStakeKeyRegistered(walletStore.account);
+      const registered = isStakeKeyRegistered(await refreshStakeAccount(wallet));
       const stakeKeyDeposit = BigInt(epochParams.stakeKeyDeposit);
 
       const certificate: Cardano.Certificate = registered

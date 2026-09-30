@@ -9,6 +9,7 @@ import { nexusTxApi, cardanoUtxoToNexusInput, type BuildStakeRegistrationTxReque
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import snackbar from '@/plugins/snackbar';
 import { isStakeKeyRegistered } from '@/shared/utils/stakeRegistration';
+import { refreshStakeAccount } from '@/shared/composables/refreshStakeAccount';
 import { Blockchain } from '@/models/types';
 
 /**
@@ -18,7 +19,7 @@ import { Blockchain } from '@/models/types';
 export function useUnstake() {
   const { t } = useTranslation();
 
-  const { loggedWallet, account, utxos, keys } = toRefs(walletStore);
+  const { loggedWallet, utxos, keys } = toRefs(walletStore);
   const { epochParams, tip } = toRefs(networkStore);
 
   const txData = ref<Cardano.Tx | null>(null);
@@ -35,10 +36,8 @@ export function useUnstake() {
         throw new Error(t('common.epochParametersNotAvailable'));
       }
 
-      // Check if stake key is registered. Uses the shared predicate rather than
-      // `account.active` directly — the synced payload omits that field, so a
-      // direct read threw `cannotUnstake` for every wallet.
-      if (!isStakeKeyRegistered(account.value)) {
+      const stakingAccount = await refreshStakeAccount(loggedWallet.value);
+      if (!isStakeKeyRegistered(stakingAccount)) {
         throw new Error(t('common.cannotUnstake'));
       }
 
@@ -54,8 +53,8 @@ export function useUnstake() {
       // without it, the deregistration). Open the dialog in its blocked
       // state (warning + Go to Governance) instead of building a doomed tx.
       const isCardano = loggedWallet.value?.chain === Blockchain.CARDANO;
-      const hasPendingRewards = Number(account.value?.withdrawable_amount || 0) > 0;
-      if (isCardano && hasPendingRewards && !account.value?.drep_id) {
+      const hasPendingRewards = Number(stakingAccount.withdrawable_amount || 0) > 0;
+      if (isCardano && hasPendingRewards && !stakingAccount.drep_id) {
         txData.value = null;
         unstakeDialog.value = true;
         return;
@@ -82,10 +81,10 @@ export function useUnstake() {
 
       // Prepare withdrawals if there are any rewards
       const withdrawals: Cardano.Withdrawal[] = [];
-      if (account.value?.withdrawable_amount && Number(account.value.withdrawable_amount) > 0) {
+      if (stakingAccount.withdrawable_amount && Number(stakingAccount.withdrawable_amount) > 0) {
         withdrawals.push({
           stakeAddress: loggedWallet.value.stakeAddress,
-          quantity: BigInt(account.value.withdrawable_amount),
+          quantity: BigInt(stakingAccount.withdrawable_amount),
         });
       }
 
