@@ -7,7 +7,7 @@ import Loading from '@/stores/loading';
 import { Messaging } from '@/chrome/messaging';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
 import { mergeWitnessSets } from '@/shared/utils/witnessSets';
-import { isStakeKeyRegistered } from '@/shared/utils/stakeRegistration';
+import { isStakeKeyRegistered, StakeAccountError } from '@/shared/utils/stakeRegistration';
 import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, POPUP, SENDER, TARGET, TxSendError, TxSignError } from '@/chrome/config';
 import { toDappError } from '@/chrome/dappError';
 import { applyDappRequestBadge } from '@/chrome/dappRequestBadge';
@@ -3627,6 +3627,30 @@ app.addToOptions(MessageTypes.CHECK_AUTO_LOCK, async (request, sendResponse) => 
       error: err,
     });
   }
+});
+
+app.addToOptions(MessageTypes.REFRESH_STAKE_ACCOUNT, async (request, sendResponse) => {
+  try {
+    const wallet = walletManager.getWallet();
+    if (!wallet || wallet.id !== request.data?.walletId ||
+        wallet.stakeAddress !== request.data?.stakeAddress || wallet.network !== request.data?.network) {
+      throw new Error(StakeAccountError.WalletChanged);
+    }
+    const account = await wallet.syncService.refreshStakeAccountInfo();
+    if (walletManager.getWallet() !== wallet) {
+      throw new Error(StakeAccountError.WalletChanged);
+    }
+    sendResponse({ id: request.id, data: account, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    sendResponse({
+      id: request.id,
+      error: Object.values(StakeAccountError).some(key => key === message) ? message : StakeAccountError.LookupFailed,
+      target: TARGET,
+      sender: SENDER.extension,
+    });
+  }
+  return true;
 });
 
 app.addToOptions(MessageTypes.SYNC_VIA_REST, async (request, sendResponse) => {

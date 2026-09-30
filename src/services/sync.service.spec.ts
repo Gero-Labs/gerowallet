@@ -15,18 +15,25 @@ vi.mock('@/utils/debug', () => ({ debugLog: vi.fn() }));
 
 function setup(chain = Blockchain.CARDANO, enterprise = false) {
   const rows = new Map([[600, { epoch: 600, amount: '1000000' }]]);
-  const api = { getAccountRewards: vi.fn().mockResolvedValue([{ epoch: 630, amount: '2000000' }]) };
+  let accountRow: Record<string, unknown> = { controlled_amount: '0' };
+  const api = {
+    getAccountRewards: vi.fn().mockResolvedValue([{ epoch: 630, amount: '2000000' }]),
+    getAccountInfo: vi.fn().mockResolvedValue({ active: true, pool_id: 'pool1existing', drep_id: 'drep_always_abstain' }),
+  };
   const wallet = {
     chain,
     stakeAddress: 'stake1test',
     api,
     isEnterpriseAddress: () => enterprise,
-    setAccountInfo: vi.fn().mockResolvedValue(undefined),
+    setAccountInfo: vi.fn(async (account: Record<string, unknown>) => {
+      accountRow = { ...accountRow, ...account };
+      return accountRow;
+    }),
     setLastSyncInfo: vi.fn().mockResolvedValue(undefined),
     setAccountRewards: vi.fn(async (rewards: Array<{ epoch: number; amount: string }>) => {
       rewards.forEach(reward => rows.set(reward.epoch, reward));
     }),
-    getAccountInfo: vi.fn().mockResolvedValue({ controlled_amount: '0' }),
+    getAccountInfo: vi.fn(async () => accountRow),
   };
   const service = new SyncService(wallet as unknown as WalletBg);
   vi.spyOn(service, 'healMissingTxCbor').mockResolvedValue();
@@ -143,5 +150,112 @@ describe('reward history during WebSocket sync', () => {
     const { push, api } = setup(Blockchain.CARDANO, true);
     await push();
     expect(api.getAccountRewards).not.toHaveBeenCalled();
+  });
+});
+
+describe('stake account recovery and preflight', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('repairs a balance-only push with authoritative registration, pool and DRep state', async () => {
+    const { push, api, wallet } = setup();
+    await push();
+    await Promise.resolve();
+    expect(api.getAccountInfo).toHaveBeenCalledWith('stake1test', true);
+    expect(await wallet.getAccountInfo()).toMatchObject({
+      controlled_amount: '10000000', active: true, pool_id: 'pool1existing', drep_id: 'drep_always_abstain',
+    });
+  });
+
+  it('preserves the UTxO balance when the stake lookup reports an unregistered key', async () => {
+    const { service, api, wallet } = setup();
+    await wallet.setAccountInfo({ controlled_amount: '20000000' });
+    api.getAccountInfo.mockResolvedValue({ active: false, pool_id: null, drep_id: null });
+    expect(await service.refreshStakeAccountInfo()).toMatchObject({ controlled_amount: '20000000', active: false });
+  });
+
+  it('rejects an incomplete lookup instead of using the cached balance as registration truth', async () => {
+    const { service, api, wallet } = setup();
+    api.getAccountInfo.mockResolvedValue({ controlled_amount: '20000000' });
+    await expect(service.refreshStakeAccountInfo()).rejects.toThrow('staking.registrationUnavailable');
+    expect(wallet.setAccountInfo).not.toHaveBeenCalled();
+  });
+
+  it('coalesces overlapping lookups, but retries after an outage', async () => {
+    const { service, api } = setup();
+    let reject!: (reason: Error) => void;
+    api.getAccountInfo.mockReturnValueOnce(new Promise((_, fail) => { reject = fail; }));
+    const first = service.refreshStakeAccountInfo();
+    const second = service.refreshStakeAccountInfo();
+    const checks = [expect(first).rejects.toThrow('offline'), expect(second).rejects.toThrow('offline')];
+    expect(api.getAccountInfo).toHaveBeenCalledTimes(1);
+    reject(new Error('offline'));
+    await Promise.all(checks);
+    await service.refreshStakeAccountInfo();
+    expect(api.getAccountInfo).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not block tip processing while the repair request is pending', async () => {
+    const { push, api, wallet } = setup();
+    let resolve!: (value: unknown) => void;
+    api.getAccountInfo.mockReturnValueOnce(new Promise(done => { resolve = done; }));
+    await push();
+    await push();
+    expect(wallet.setLastSyncInfo).toHaveBeenCalledTimes(2);
+    expect(api.getAccountInfo).toHaveBeenCalledTimes(1);
+    resolve({ active: true });
+    await Promise.resolve();
+  });
+
+  it.each([true, false])('does not repair known active:%s without delegations every minute', async active => {
+    vi.useFakeTimers();
+    try {
+      const { push, api } = setup();
+      api.getAccountInfo.mockResolvedValue({ active, pool_id: null, drep_id: null });
+      await push();
+      await flushRefresh();
+      vi.advanceTimersByTime(60_000);
+      await push();
+      await flushRefresh();
+      expect(api.getAccountInfo).toHaveBeenCalledTimes(1);
+      vi.advanceTimersByTime(3_540_000);
+      await push();
+      await flushRefresh();
+      expect(api.getAccountInfo).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('retries a failed background repair after a minute', async () => {
+    vi.useFakeTimers();
+    try {
+      const { push, api } = setup();
+      api.getAccountInfo.mockRejectedValueOnce(new Error('offline'));
+      await push();
+      await flushRefresh();
+      await push();
+      expect(api.getAccountInfo).toHaveBeenCalledTimes(1);
+      vi.advanceTimersByTime(60_000);
+      await push();
+      await flushRefresh();
+      expect(api.getAccountInfo).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('always refreshes for explicit transaction preflight, even after a successful background repair', async () => {
+    vi.useFakeTimers();
+    try {
+      const { service, push, api } = setup();
+      await push();
+      await flushRefresh();
+      expect(api.getAccountInfo).toHaveBeenCalledTimes(1);
+      await service.refreshStakeAccountInfo();
+      await service.refreshStakeAccountInfo();
+      expect(api.getAccountInfo).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

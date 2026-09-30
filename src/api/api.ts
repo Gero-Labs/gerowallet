@@ -22,7 +22,7 @@ export class Api {
     });
   }
 
-  async getAccountInfo(rewardAddress: string) {
+  async getAccountInfo(rewardAddress: string, allowUnregistered = false) {
     try {
       const { data, status } = await this.axiosInstance.get(
         `/api/account/info?chain=${this.chain}&network=${this.network}&provider=${this.provider}&stakeAddress=${rewardAddress}`
@@ -30,6 +30,12 @@ export class Api {
       if (status === 200) return data;
       throw parseHttpError(data);
     } catch (error) {
+      // Unknown reward addresses can return 404; inactive account records return
+      // 200 with active:false. The live Koios-backed endpoint uses both shapes.
+      // Only staking preflight opts into this; outages and other errors still throw.
+      if (allowUnregistered && axios.isAxiosError(error) && error.response?.status === 404) {
+        return { active: false, pool_id: null, drep_id: null, rewards_sum: '0', withdrawable_amount: '0' };
+      }
       throw parseHttpError(error);
     }
   }
