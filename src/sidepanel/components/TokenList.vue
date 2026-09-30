@@ -248,7 +248,10 @@ const midnightTokenRows = computed<MidnightTokenRow[]>(() => {
     if (!meta) {
       return {
         color,
-        ticker: `${color.slice(0, 8)}…`,
+        // Head+tail, as the dashboard's MidnightHoldingsTable: a prefix-only
+        // label lets an issuer grind a colliding prefix and pass one unlisted
+        // token off as another.
+        ticker: `${color.slice(0, 8)}…${color.slice(-6)}`,
         balanceFormatted: amount.toString(),
         valueFormatted: '',
         change24h: null,
