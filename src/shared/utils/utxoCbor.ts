@@ -1,5 +1,6 @@
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
+import { toScriptReference } from './scriptReference';
 
 /**
  * The inline datum as the wallet keeps it in `TxOut.datum`: its original CBOR, nothing else.
@@ -67,12 +68,16 @@ function coreValue(value: Cardano.Value): Cardano.Value {
  * and then `datumHash`: an inline datum stored beside its hash (as Nexus sends it, and as
  * earlier versions kept it) would come out as a datum-HASH output. On chain an output
  * holds one or the other, so an inline datum wins.
+ *
+ * The reference script goes through `toScriptReference` here as well as at ingestion,
+ * because UTxOs stored by earlier versions still hold Nexus's raw script object, or
+ * gero-sync's hex string, until the next push replaces them.
  */
 export function toTransactionUnspentOutput([txIn, txOut]: Cardano.Utxo): Serialization.TransactionUnspentOutput {
   const output = Serialization.TransactionOutput.fromCore({
     address: txOut.address,
     value: coreValue(txOut.value),
-    scriptReference: txOut.scriptReference,
+    scriptReference: toScriptReference(txOut.scriptReference),
   });
   if (txOut.datum != null) {
     output.setDatum(Serialization.Datum.newInlineData(inlineDatumPlutusData(txOut.datum)));

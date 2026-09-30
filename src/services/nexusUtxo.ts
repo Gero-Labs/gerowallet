@@ -1,6 +1,7 @@
 import { Cardano } from '@cardano-sdk/core';
 import { debugLog } from '@/utils/debug';
 import { inlineDatumCbor, inlineDatumFromCbor } from '@/shared/utils/utxoCbor';
+import { toScriptReference } from '@/shared/utils/scriptReference';
 
 /**
  * Convert Nexus UTxO format to Cardano.Utxo[] (TxIn/TxOut tuples).
@@ -50,7 +51,7 @@ export function convertNexusUtxos(nexusUtxos: any[]): Cardano.Utxo[] {
         // the output as a datum-HASH output.
         datumHash: inlineDatum ? undefined : u.datumHash || undefined,
         datum: inlineDatum ? inlineDatumFromCbor(inlineDatum) : undefined,
-        scriptReference: u.referenceScript || undefined,
+        scriptReference: toScriptReference(u.referenceScript),
       };
 
       result.push([txIn, txOut]);
