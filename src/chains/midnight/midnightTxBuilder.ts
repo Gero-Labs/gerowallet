@@ -237,26 +237,31 @@ export async function syncDustWalletAndBalanceFees(
     /** Whether this attempt resumed from any restored blob (local checkpoint or Nexus snapshot). */
     let restoredThisAttempt = false;
     /**
-     * Set once a restored state proved unusable (see the stall branch): every
-     * later attempt of this send skips the checkpoint and the snapshot and
-     * replays from genesis, which is the only state guaranteed to apply.
+     * Set once a restored state proved unusable (see the stall branch). From
+     * then on this send never uses the Nexus snapshot, and ignores the local
+     * checkpoint until the cold replay has saved one of its own
+     * ({@link savedSinceColdFallback}); those are trusted, so a backpressure
+     * stall mid-replay resumes instead of restarting from genesis.
      */
-    let forceCold = false;
+    let coldFallback = false;
+    let savedSinceColdFallback = false;
 
     const persistCheckpoint = async (reason: string): Promise<void> => {
       const wallet = dustWallet;
       const applied = lastProgress.applied;
       if (!wallet || persistInFlight || applied == null || applied <= lastPersistedApplied) return;
-      // A periodic save that would only re-persist the blob this attempt was
-      // restored from banks nothing and, if that blob is poisoned, cements
-      // it as the local checkpoint. Wait until the attempt has advanced.
-      if ((reason === 'interval' || reason === 'failure') && attemptFirstApplied != null && applied <= attemptFirstApplied) return;
+      // A save that would only re-persist the blob this attempt was restored
+      // from banks nothing and, if that blob is poisoned, cements it as the
+      // local checkpoint. Wait until the attempt has advanced. A synced
+      // restore is the one exception: it is at the tip, so it is usable.
+      if (reason !== 'synced' && (attemptFirstApplied == null || applied <= attemptFirstApplied)) return;
       persistInFlight = true;
       try {
         const serialized = await wallet.serializeState();
         await saveWalletState(args.sdkNetworkId, 'dust', args.dustSecretSeed, serialized);
         lastPersistedApplied = applied;
         lastPersistMs = Date.now();
+        if (coldFallback) savedSinceColdFallback = true;
         debugLog(`🌙 dust sync: checkpoint saved (${reason}) applied=${applied}`);
       } catch (e) {
         debugLog(`🌙 dust sync: checkpoint save failed (${reason}, non-fatal)`, e);
@@ -343,7 +348,7 @@ export async function syncDustWalletAndBalanceFees(
         // is required per attempt because a stopped wallet can't restart.
         // On a checkpoint hit the wallet resumes from its saved appliedIndex
         // cursor; on a miss/corrupt blob dustBuilderStart cold-inits.
-        let persistedDustState = forceCold
+        let persistedDustState = coldFallback && !savedSinceColdFallback
           ? null
           : await loadWalletState(args.sdkNetworkId, 'dust', args.dustSecretSeed);
         restoredFromLocalCheckpoint = !!persistedDustState;
@@ -352,16 +357,19 @@ export async function syncDustWalletAndBalanceFees(
         // replay from there instead of genesis. Once the tail syncs, the
         // regular checkpointing below persists LOCAL state, so this fetch
         // happens at most once per wallet+device lifetime.
-        if (!persistedDustState && !bootstrapTried && !forceCold && args.dustRegisteredAt) {
+        if (!persistedDustState && !bootstrapTried && !coldFallback && args.dustRegisteredAt) {
           bootstrapTried = true;
           persistedDustState = await fetchDustBootstrapSnapshot(
             args.endpoints, args.sdkNetworkId, args.dustRegisteredAt,
           );
         }
         restoredThisAttempt = !!persistedDustState;
+        // Only a restore made before the cold fallback can be the poisoned
+        // one; checkpoints the cold replay saved itself are trusted.
+        const suspectRestore = restoredThisAttempt && !coldFallback;
         attemptUpdates = 0;
         attemptFirstApplied = null;
-        if (forceCold) debugLog('🌙 dust sync: cold init from genesis (restored state could not apply live events)');
+        if (coldFallback && !persistedDustState) debugLog('🌙 dust sync: cold init from genesis (restored state could not apply live events)');
         const dustBuilder = DustWallet({
           networkId: args.sdkNetworkId as Parameters<typeof DustWallet>[0]['networkId'],
           indexerClientConnection: {
@@ -436,7 +444,7 @@ export async function syncDustWalletAndBalanceFees(
               // Early exit for a poisoned restore (see the stall branch): the
               // stream is live and delivering, yet nothing applies. No point
               // waiting out the full stall window before switching to cold.
-              restoredThisAttempt && !forceCold && attemptUpdates >= 10
+              suspectRestore && attemptUpdates >= 10
               && lastProgress.isConnected === true
               && attemptFirstApplied != null && lastProgress.applied != null
               && lastProgress.applied <= attemptFirstApplied
@@ -462,30 +470,37 @@ export async function syncDustWalletAndBalanceFees(
           break;
         }
 
-        // A restored blob that cannot apply the live stream looks nothing like
-        // the dead-subscription stall above: the subscription is CONNECTED and
-        // updates keep arriving, but the applied cursor never leaves the value
-        // it was restored at (the SDK swallows the per-event WASM error,
-        // observed on mainnet 2026-09-30 as "values inserted non-linearly into
-        // dust commitment tree" on every event after a Nexus snapshot whose
-        // commitment tree lagged its own cursor). Restarting from that blob,
-        // or checkpointing it, reproduces the failure forever. Discard it and
-        // replay from genesis instead: slower once, but it always applies.
-        const poisonedRestore = restoredThisAttempt
-          && !forceCold
-          && attemptUpdates >= 2
-          && lastProgress.isConnected === true
-          && lastProgress.applied != null
+        // A restored blob can be unable to apply the live stream (observed on
+        // mainnet 2026-09-30: every event after a Nexus snapshot whose
+        // commitment tree lagged its own cursor failed in ledger WASM with
+        // "values inserted non-linearly into dust commitment tree"). The SDK
+        // (dust-wallet 4.2.0, RunningV1Variant.startSync) only publishes state
+        // after a SUCCESSFUL applyUpdate: a failing apply emits nothing, logs
+        // "Error while applying sync update" and retries the same batch with
+        // backoff. So this cannot be detected from emissions alone. Instead:
+        // any suspect restore that ends an attempt without advancing past the
+        // cursor it resumed at is treated as unusable, whether or not updates
+        // arrived. Restarting from that blob, or checkpointing it, would
+        // reproduce the failure forever, so replay from genesis instead.
+        //
+        // The blob is not cleared: an unreachable indexer also produces a
+        // barren attempt, and a healthy checkpoint must survive that. The cold
+        // replay's first checkpoint overwrites it; if the replay is barren
+        // too, the barren counter below ends the send with it intact.
+        const advancedThisAttempt = attemptUpdates > 0
           && attemptFirstApplied != null
-          && lastProgress.applied <= attemptFirstApplied;
-        if (poisonedRestore) {
-          debugLog(`🌙 dust sync: restored state cannot apply live events (connected, ${attemptUpdates} updates, still at ${percentLabel()}) — discarding it and cold-syncing from genesis`);
-          try {
-            await clearWalletState(args.sdkNetworkId, 'dust', args.dustSecretSeed);
-          } catch { /* best effort: a failed clear only costs another attempt */ }
-          forceCold = true;
+          && lastProgress.applied != null
+          && lastProgress.applied > attemptFirstApplied;
+        if (suspectRestore && !advancedThisAttempt) {
+          debugLog(`🌙 dust sync: restored state cannot apply live events (${attemptUpdates} updates, connected=${lastProgress.isConnected ?? '?'}, still at ${percentLabel()}), cold-syncing from genesis`);
+          coldFallback = true;
+          savedSinceColdFallback = false;
+          // Cold replay starts below the restored cursor: reset every
+          // high-water mark so its progress counts as progress and saves.
+          lastProgress = { applied: null, highest: null, isConnected: null };
           lastPersistedApplied = -1n;
-          barrenAttempts = 0;
+          lastLoggedApplied = -1n;
+          barrenAttempts += 1;
         } else {
           // Stalled: bank progress, tear down, rebuild from the checkpoint.
           await persistCheckpoint('stall-restart');
