@@ -16,22 +16,34 @@
       title="Bring Cashback"
       @load="onFrameLoad"
     />
+    <CashbackSignDialog
+      :is-open="!!pendingSign"
+      :message="pendingSign?.message ?? ''"
+      :address="pendingSign?.address ?? ''"
+      :origin="portalOrigin()"
+      @signed="onSigned"
+      @close="onDeclined"
+    />
   </div>
 </template>
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
-import { Cardano } from '@cardano-sdk/core';
 import cashbackApi from '@/api/cashback-api';
 import { walletStore } from '@/stores/walletStore';
-import { Messaging } from '@/chrome/messaging';
-import { METHOD } from '@/chrome/config';
-import { stringToHex } from '@/shared/utils/converter';
+import { Blockchain } from '@/models/types';
+import networks from '@/utils/networks';
+import snackbar from '@/plugins/snackbar';
+import { useTranslation } from '@/shared/composables/useTranslation';
+import CashbackSignDialog, { type CashbackSignature } from './CashbackSignDialog.vue';
 import {
   isTrustedPortalMessage,
+  signRequestMessage,
   sessionUpdateMessage,
   signatureMessage,
   abortSignMessage,
 } from './portalBridge';
+
+const { t } = useTranslation();
 
 const frame = ref<HTMLIFrameElement | null>(null);
 const portalUrl = ref('');
@@ -40,8 +52,29 @@ const errorState = ref(false);
 
 const theme = 'dark';
 
+/** How long a claim challenge may wait for approval before the portal is told to reset. */
+const SIGN_TIMEOUT_MS = 5 * 60_000;
+
+interface PendingSign {
+  seq: number;
+  message: string;
+  walletId: number;
+  address: string;
+}
+const pendingSign = ref<PendingSign | null>(null);
+let signSeq = 0;
+let signTimer: ReturnType<typeof setTimeout> | null = null;
+
 function baseAddress(): string | null {
   return walletStore.loggedWallet?.baseAddress ?? null;
+}
+
+/** The wallet a claim may be signed for: Cardano, on a network Bring supports. */
+function claimWallet(): { id: number; address: string } | null {
+  const wallet = walletStore.loggedWallet;
+  if (!wallet || wallet.chain !== Blockchain.CARDANO || !wallet.baseAddress) return null;
+  if (!networks.resolveCashbackSupport(wallet.chain, wallet.network)) return null;
+  return { id: wallet.id, address: wallet.baseAddress };
 }
 
 function portalOrigin(): string {
@@ -60,7 +93,11 @@ async function bootstrap(reason: 'initial' | 'resync' = 'initial') {
   errorState.value = false;
   // A fresh initial load (mount or Retry) re-mounts/reloads the iframe, so re-arm
   // the on-load refresh; otherwise a post-error Retry would silently skip it.
-  if (reason === 'initial') didRefreshOnLoad = false;
+  // A reload also discards any claim the previous document was waiting on.
+  if (reason === 'initial') {
+    didRefreshOnLoad = false;
+    clearPendingSign();
+  }
   try {
     const res = await cashbackApi.portal(baseAddress(), theme);
     if (reason === 'initial' || !portalUrl.value) {
@@ -75,21 +112,52 @@ async function bootstrap(reason: 'initial' | 'resync' = 'initial') {
   }
 }
 
-async function signForPortal(messageToSign: string) {
-  const addr = baseAddress();
-  if (!addr) { post(abortSignMessage()); return; }
-  try {
-    const res = await Messaging.sendToBackground({
-      method: METHOD.signData,
-      data: { address: Cardano.Address.fromBech32(addr).toBytes(), payload: stringToHex(messageToSign) },
-    }) as { data?: { signature?: string; key?: string } };
-    const signature = res.data?.signature;
-    const key = res.data?.key;
-    if (signature && key) post(signatureMessage(signature, key, messageToSign));
-    else post(abortSignMessage());
-  } catch {
+function clearPendingSign() {
+  if (signTimer) clearTimeout(signTimer);
+  signTimer = null;
+  pendingSign.value = null;
+}
+
+/**
+ * A claim challenge from the portal. One is live at a time: a newer request
+ * replaces an older one outright, and the older one's answer, whenever it
+ * arrives, is dropped by its sequence number. The signature is only ever
+ * returned for the wallet the request was bound to.
+ */
+function requestSignature(message: string) {
+  const wallet = claimWallet();
+  if (!wallet) {
+    snackbar.setError(t('cashback.signUnsupportedNetwork'));
     post(abortSignMessage());
+    return;
   }
+  clearPendingSign();
+  const seq = ++signSeq;
+  pendingSign.value = { seq, message, walletId: wallet.id, address: wallet.address };
+  signTimer = setTimeout(() => finishSign(seq, null, t('cashback.signTimedOut')), SIGN_TIMEOUT_MS);
+}
+
+function finishSign(seq: number, result: CashbackSignature | null, error?: string) {
+  const request = pendingSign.value;
+  if (!request || request.seq !== seq) return;
+  clearPendingSign();
+  const wallet = claimWallet();
+  const sameWallet = !!wallet && wallet.id === request.walletId && wallet.address === request.address;
+  if (result && sameWallet) {
+    post(signatureMessage(result.signature, result.key, request.message));
+    return;
+  }
+  const reason = result ? t('cashback.signWalletChanged') : error;
+  if (reason) snackbar.setError(reason);
+  post(abortSignMessage());
+}
+
+function onSigned(result: CashbackSignature) {
+  if (pendingSign.value) finishSign(pendingSign.value.seq, result);
+}
+
+function onDeclined() {
+  if (pendingSign.value) finishSign(pendingSign.value.seq, null);
 }
 
 // The portal's initial token (embedded in portalUrl) has a very short TTL and can
@@ -112,20 +180,28 @@ async function onMessage(event: MessageEvent) {
   if (action === 'LOGIN') {
     await bootstrap('resync');
   } else if (action === 'SIGN_MESSAGE') {
-    await signForPortal((event.data as { messageToSign: string }).messageToSign);
+    const message = signRequestMessage(event.data);
+    if (message === null) post(abortSignMessage());
+    else requestSignature(message);
   }
   // POPUP_CLOSED: informational, ignore.
 }
 
 watch(() => walletStore.loggedWallet?.baseAddress, (addr, prev) => {
-  if (addr !== prev && portalUrl.value) bootstrap('resync');
+  if (addr === prev) return;
+  // The claim was initiated for the previous wallet; never sign it with this one.
+  if (pendingSign.value) finishSign(pendingSign.value.seq, null, t('cashback.signWalletChanged'));
+  if (portalUrl.value) bootstrap('resync');
 });
 
 onMounted(() => {
   window.addEventListener('message', onMessage);
   bootstrap('initial');
 });
-onBeforeUnmount(() => window.removeEventListener('message', onMessage));
+onBeforeUnmount(() => {
+  window.removeEventListener('message', onMessage);
+  clearPendingSign();
+});
 </script>
 <style scoped>
 .cashback-portal { width: 100%; height: 100%; min-height: 0; display: flex; flex-direction: column; }
