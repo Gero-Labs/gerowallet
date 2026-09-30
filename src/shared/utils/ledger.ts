@@ -29,8 +29,9 @@ import { DeviceModel } from '@ledgerhq/devices';
 import { signLedgerTransaction } from '@/shared/utils/ledgerSignTransaction';
 
 /**
- * The wallet's network as the Ledger agent's chain. The device builds the body's network id and
- * every change address from it, so a hard-coded mainnet signs a testnet body it did not get.
+ * The wallet's network as the Ledger agent's chain. The device builds the body's network id,
+ * every change address and a signed message's address from it, so a hard-coded chain signs
+ * something the wallet did not hand it on any other network.
  */
 const ledgerChainId = (network: NetworkInfo): Cardano.ChainId => ({
   networkId: network.networkId as Cardano.NetworkId,
@@ -307,9 +308,8 @@ export default {
     await this.ensureLedgerVersion(ledger);
 
     // Create LedgerKeyAgent instance for proper CIP-8/CIP-30 signing
-    const chainId = network.networkId === 1 ? Cardano.ChainIds.Mainnet : Cardano.ChainIds.Preprod;
     const ledgerKeyAgent: LedgerKeyAgent = await LedgerKeyAgent.createWithDevice({
-      chainId: chainId,
+      chainId: ledgerChainId(network),
       accountIndex: accountIndex,
       communicationType: CommunicationType.Web,
       deviceConnection: await LedgerKeyAgent.createDeviceConnection(transport),
