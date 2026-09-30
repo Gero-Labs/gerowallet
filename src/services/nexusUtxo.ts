@@ -26,7 +26,10 @@ export function convertNexusUtxos(nexusUtxos: any[]): Cardano.Utxo[] {
       const assets = new Map<Cardano.AssetId, bigint>();
       const assetList = u.assetList || u.assets || u.amounts || [];
       for (const a of assetList) {
-        const unit = a.unit || (a.policyId && a.assetName ? a.policyId + a.assetName : null);
+        // Account endpoint rows (/api/account/{stake}/utxos) carry no `unit`, only policyId and
+        // hex assetName. That name is '' for a token minted without one: still a real asset,
+        // whose unit is the bare policy id.
+        const unit = a.unit || (a.policyId && typeof a.assetName === 'string' ? a.policyId + a.assetName : null);
         if (unit && unit !== 'lovelace') {
           assets.set(Cardano.AssetId(unit), BigInt(a.quantity || '0'));
         }
