@@ -26,6 +26,7 @@ import { bech32 } from 'bech32';
 import { HexBlob } from '@cardano-sdk/util';
 import { debugLog } from '@/utils/debug';
 import { DeviceModel } from '@ledgerhq/devices';
+import { signLedgerTransaction } from '@/shared/utils/ledgerSignTransaction';
 
 const timeout = (ms: number, message: string) => {
   return new Promise((_, reject) => {
@@ -232,7 +233,7 @@ export default {
     });
 
     hardwareLoading.setText(i18n.t('wallet.ledgerPleaseConfirmDevice') as string);
-    const res: Cardano.Signatures = await ledgerKeyAgent.signTransaction(deserializedTx.body(), {
+    const res: Cardano.Signatures = await signLedgerTransaction(ledgerKeyAgent, deserializedTx.body(), {
       knownAddresses,
       txInKeyPathMap,
     })
@@ -280,7 +281,7 @@ export default {
     );
 
     hardwareLoading.setText(i18n.t('wallet.ledgerPleaseConfirmDevice') as string);
-    const res: Cardano.Signatures = await ledgerKeyAgent.signTransaction(deserializedTx.body(), {
+    const res: Cardano.Signatures = await signLedgerTransaction(ledgerKeyAgent, deserializedTx.body(), {
       knownAddresses,
       txInKeyPathMap,
     });
