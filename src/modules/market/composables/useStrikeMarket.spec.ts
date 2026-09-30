@@ -112,6 +112,8 @@ describe('useStrikeMarket', () => {
     third.run(() => useStrikeMarket());
     await settle();
     expect(api.get24hrTicker).toHaveBeenCalledTimes(3);
+    // Already loaded on the first mount, so a restart does not refetch it.
+    expect(api.getExchangeInfo).toHaveBeenCalledTimes(1);
     third.stop();
   });
 });

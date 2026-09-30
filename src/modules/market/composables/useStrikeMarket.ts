@@ -73,7 +73,7 @@ function refresh(): Promise<void> {
 
 function startPolling(): void {
   loading.value = true;
-  void settle([fetchExchangeInfo(), fetchTickers(), fetchFundingRates()]).finally(() => {
+  void refresh().finally(() => {
     loading.value = false;
   });
   refreshInterval = setInterval(() => void refresh(), REFRESH_INTERVAL_MS);
