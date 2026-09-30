@@ -30,10 +30,13 @@
           @enter="sign()"
           @passkey-autofill-success="sign()"
         />
+        <!-- The button runs WebAuthn itself and reports back afterwards, so the
+             request is captured on the click that starts it, not on the callback. -->
         <PassKeyAuthButton
           v-else-if="isPrfWallet"
           :disabled="loading"
           block
+          @click.native="armPassKey"
           @success="signWithPassKey"
           @error="onPassKeyError"
         />
@@ -147,6 +150,8 @@ const loading = ref(false);
 const isBluetooth = ref(false);
 /** The wallet the prompt opened for; a signature for any other wallet is never returned. */
 let openedForWalletId: number | null = null;
+/** The request shown when PassKey authentication started; null once it is stale. */
+let passKeyArmedFor: ApprovedRequest | null = null;
 
 const walletType = computed<string | undefined>(() => loggedWallet.value?.type);
 const isPrfWallet = computed(() =>
@@ -166,6 +171,8 @@ watch(() => [props.isOpen, props.requestId] as const, ([open]) => {
   spendingPassword.value = '';
   valid.value = false;
   openedForWalletId = open ? (loggedWallet.value?.id ?? null) : null;
+  // An authentication still in flight was started for a request that is gone.
+  passKeyArmedFor = null;
   form.value?.resetValidation();
 });
 
@@ -234,14 +241,13 @@ async function signWithTrezor(approved: ApprovedRequest): Promise<Signed> {
   }
 }
 
-async function run(signer: (approved: ApprovedRequest) => Promise<Signed>) {
+/** What is on screen now: this is what the user is approving. */
+function shownRequest(): ApprovedRequest {
+  return { requestId: props.requestId, address: props.address, payloadHex: signPayloadHex(props.message) };
+}
+
+async function run(signer: (approved: ApprovedRequest) => Promise<Signed>, approved: ApprovedRequest = shownRequest()) {
   if (loading.value) return;
-  // Snapshot what is on screen now: this is what the user approved.
-  const approved: ApprovedRequest = {
-    requestId: props.requestId,
-    address: props.address,
-    payloadHex: signPayloadHex(props.message),
-  };
   loading.value = true;
   try {
     finish(approved, await signer(approved));
@@ -264,8 +270,21 @@ async function sign() {
   }
 }
 
+function armPassKey() {
+  if (loading.value) return;
+  passKeyArmedFor = shownRequest();
+}
+
 async function signWithPassKey(privateKeyBytes: Uint8Array) {
-  await run(async approved => {
+  const approved = passKeyArmedFor;
+  passKeyArmedFor = null;
+  // Authentication that finished for a request no longer shown (replaced, or
+  // the prompt closed) was never approved for what is shown now: drop it.
+  if (!approved || !props.isOpen || approved.requestId !== props.requestId) {
+    privateKeyBytes.fill(0);
+    return;
+  }
+  await run(async () => {
     try {
       return unwrapSignData(await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.SIGN_DATA,
@@ -274,7 +293,7 @@ async function signWithPassKey(privateKeyBytes: Uint8Array) {
     } finally {
       privateKeyBytes.fill(0);
     }
-  });
+  }, approved);
 }
 
 function onPassKeyError(error: Error) {

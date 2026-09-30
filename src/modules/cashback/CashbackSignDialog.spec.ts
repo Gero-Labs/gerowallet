@@ -185,6 +185,7 @@ describe('cashback claim approval', () => {
     mountDialog();
     await open();
     const bytes = Uint8Array.from([1, 2, 3]);
+    await wrapper.find('[data-testid="passkey"]').trigger('click');
     wrapper.findComponent({ name: 'PassKeyButtonStub' }).vm.$emit('success', bytes);
     await flush();
     expect(send).toHaveBeenCalledWith({
@@ -193,6 +194,36 @@ describe('cashback claim approval', () => {
     });
     expect(Array.from(bytes)).toEqual([0, 0, 0]);
     expect(wrapper.emitted('signed')).toEqual([[{ requestId: 1, signature: 'sig', key: 'key' }]]);
+  });
+
+  it('drops PassKey authentication that finishes for a request replaced while it was pending', async () => {
+    walletStore.loggedWallet = { id: 1, type: WalletType.Normal, encryptionMethod: 'prf', chain: 'cardano', network: 'mainnet' };
+    mountDialog();
+    await open();
+    // The user starts authenticating for request 1...
+    await wrapper.find('[data-testid="passkey"]').trigger('click');
+    // ...and the portal replaces it while WebAuthn is still up.
+    await wrapper.setProps({ requestId: 2, message: 'Claim 99 ADA nonce 43' });
+    const bytes = Uint8Array.from([1, 2, 3]);
+    wrapper.findComponent({ name: 'PassKeyButtonStub' }).vm.$emit('success', bytes);
+    await flush();
+    expect(send).not.toHaveBeenCalled();
+    expect(wrapper.emitted('signed')).toBeUndefined();
+    expect(Array.from(bytes)).toEqual([0, 0, 0]);
+  });
+
+  it('drops PassKey authentication that finishes after the prompt closed', async () => {
+    walletStore.loggedWallet = { id: 1, type: WalletType.Normal, encryptionMethod: 'prf', chain: 'cardano', network: 'mainnet' };
+    mountDialog();
+    await open();
+    await wrapper.find('[data-testid="passkey"]').trigger('click');
+    await wrapper.setProps({ isOpen: false });
+    const bytes = Uint8Array.from([1, 2, 3]);
+    wrapper.findComponent({ name: 'PassKeyButtonStub' }).vm.$emit('success', bytes);
+    await flush();
+    expect(send).not.toHaveBeenCalled();
+    expect(wrapper.emitted('signed')).toBeUndefined();
+    expect(Array.from(bytes)).toEqual([0, 0, 0]);
   });
 
   it('withholds a signature produced after the wallet changed', async () => {
