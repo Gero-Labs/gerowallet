@@ -2,6 +2,7 @@
   <v-form ref="form" v-model="valid" class="fill-height">
     <PopupHeader :title="t('navigation.transactionSummary')" ref="popupHeader" :show-website="!(route.query['website'] === 'undefined' || Object.keys(route.query).length === 0)">
       <v-card-text class="d-flex flex-column justify-space-between pa-0" style="flex: 1 1 auto; overflow-y: auto; max-height: 100%; height: 0;">
+        <EmbeddedSiteWarning class="mb-2" :embedded-in="request?.embeddedIn" />
         <DappAddress class="mb-2" :address="recipient" :risk="risks?.addressRisk" />
         <TransactionCard v-if="swapDetails" :transaction="swapDetails.give" :risk="true">
           {{ $t('navigation.youreGiving') }}
@@ -206,6 +207,7 @@ import { getErrorMessage } from '@/shared/utils/errorHandler';
 import { validateCip45Signing } from '@/services/cip45/signingAuthorization';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
+import EmbeddedSiteWarning from '@/shared/components/EmbeddedSiteWarning.vue';
 import {
   BackgroundResponse,
   Messaging,
@@ -254,6 +256,8 @@ const risks = ref<TxScanResponse | { addressRisk: 'unknown'; score: 'unknown' }>
 const spendingPassword = ref('');
 const privateKeyBytes = ref<Uint8Array | null>(null);
 interface SignTxRequest {
+  /** Browser-derived embedding site, set by the background (see EmbeddedSiteWarning). */
+  embeddedIn?: string | null;
   data?: {
     tx: string;
     partialSign?: boolean;

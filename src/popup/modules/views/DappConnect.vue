@@ -4,6 +4,7 @@
       <v-card-title class="justify-center text-center pt-0" style="color: white; font-size: 14px; word-break: break-word">
         {{ $t('navigation.confirmUrlBeforeGranting') }}
       </v-card-title>
+      <EmbeddedSiteWarning class="mb-2" :embedded-in="embeddedIn" />
           <section style="font-weight: bold; color: white; font-size: 16px">
             {{ $t('navigation.allowTheSiteTo') }}
           </section>
@@ -45,6 +46,7 @@
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { onMounted, ref, toRefs, getCurrentInstance } from 'vue';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
+import EmbeddedSiteWarning from '@/shared/components/EmbeddedSiteWarning.vue';
 import { Messaging } from '@/chrome/messaging';
 import { APIError } from '@/chrome/config';
 import WalletStore, { walletStore } from '@/stores/walletStore';
@@ -64,6 +66,8 @@ const { loggedWallet } = toRefs(walletStore);
 const consent = ref<boolean>(false);
 const controller = ref<ReturnType<typeof Messaging.createInternalController> | null>(null);
 const popupHeader = ref<unknown>(null);
+// Browser-derived embedding site, set by the background on the request.
+const embeddedIn = ref<unknown>(null);
 
 // Methods
 const decline = async () => {
@@ -108,6 +112,9 @@ onMounted(() => {
   // this fallback view was reached (same bug fixed in 371b9ce for the other
   // five popup dApp views).
   controller.value = Messaging.createInternalController();
+  controller.value.requestData()
+    .then((req) => { embeddedIn.value = (req as { embeddedIn?: unknown } | undefined)?.embeddedIn ?? null; })
+    .catch(() => { /* no request: nothing to warn about */ });
 
   // Set document title with domain
   const route = vmProxy.$route;

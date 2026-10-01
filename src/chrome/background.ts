@@ -808,7 +808,8 @@ app.add(METHOD.enable, (request, sendResponse) => {
         (favIconUrl ? `&favIconUrl=${encodeURIComponent(favIconUrl)}` : '')
     );
     return focusOrCreatePopup(popupURL, 470, 600)
-      .then(newTab => Messaging.sendToPopupInternal(newTab.id, request))
+      // The popup shows the same embedding-site warning as the side panel.
+      .then(newTab => Messaging.sendToPopupInternal(newTab.id, { ...request, embeddedIn: enablePayload.embeddedIn }))
       .then((response: BackgroundResponse) => {
         if (response.data) reply({ data: response.data });
         else if (response.error) reply({ error: response.error });
@@ -1335,7 +1336,8 @@ app.add(METHOD.signData, (request, sendResponse) => {
         // Fallback: popup window
         const popupURL = chrome.runtime.getURL(`index.html#/${POPUP.dappSignData}?website=${encodeURIComponent(request.origin)}`);
         focusOrCreatePopup(popupURL, 470, 600)
-          .then((tab) => Messaging.sendToPopupInternal(tab.id, request))
+          // embeddedIn: same embedding-site warning as the side panel.
+          .then((tab) => Messaging.sendToPopupInternal(tab.id, { ...request, embeddedIn: signDataPayload.embeddedIn }))
           .then((response: BackgroundResponse) => {
             if (response.data) signDataReply({ data: response.data });
             else if (response.error) signDataReply({ error: response.error });
@@ -1440,7 +1442,8 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
   // response back to the dApp. Used both as the primary path when the user has
   // disabled the side panel and as a fallback when opening the side panel fails.
   const openPopupForSignTx = async () => {
-    const requestCopy = JSON.parse(JSON.stringify(request));
+    // embeddedIn: the browser-derived embedding site, so the popup warns like the side panel.
+    const requestCopy = { ...JSON.parse(JSON.stringify(request)), embeddedIn: signTxPayload.embeddedIn };
     // Force close any existing SignTx popups before opening a new one
     const windows = await chrome.windows.getAll({ populate: true });
     for (const window of windows) {

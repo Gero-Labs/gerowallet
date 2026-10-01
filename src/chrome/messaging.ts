@@ -17,6 +17,13 @@ interface Message {
   origin?: string;
   event?: string;
   isUserGesture?: boolean;
+  /**
+   * Set by the background on requests it hands to a popup approval: the
+   * browser-derived top-level site when the request came from a cross-origin
+   * frame (see originBinding.embeddingSite), else null. Always overwritten by
+   * the background, never taken from the page.
+   */
+  embeddedIn?: string | null;
 }
 
 /**
