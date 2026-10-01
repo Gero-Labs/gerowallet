@@ -91,6 +91,7 @@
             v-model="loc"
             :items="availableLanguages"
             item-text="name"
+            item-value="iso"
             outlined
             dense
             hide-details
@@ -144,7 +145,7 @@
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref, computed, watch, onMounted, toRefs, getCurrentInstance } from 'vue';
+import { ref, computed, onMounted, toRefs } from 'vue';
 import languages from '@/plugins/languages';
 import assets from '@/utils/assets';
 import EditableTextField from '@/modules/dashboard/components/EditableTextField.vue';
@@ -182,13 +183,6 @@ const availableLanguages = computed(() => {
 const { loggedWallet } = toRefs(walletStore);
 const { wallets } = toRefs(geroStore);
 
-// Access Vue instance for i18n. Narrowed to the two members used below rather
-// than `any`: $i18n is added by the plugin and is not on the public instance type.
-const vmProxy = getCurrentInstance()!.proxy as unknown as {
-  $i18n: { locale: string };
-  $nextTick: () => Promise<void>;
-};
-
 // Reactive data
 const currencies = ref([
   { text: 'USD ($)', value: 'usd' },
@@ -215,7 +209,19 @@ const selectedCurrency = computed({
 });
 
 const walletName = ref('');
-const loc = ref<string | undefined>(undefined);
+// Use locale codes as select values and the persisted global preference as the
+// source of truth, just like the welcome-screen language selector.
+const loc = computed({
+  get: () => geroStore.config?.locale || 'us',
+  set: async (locale: string) => {
+    if (!READY_LANGUAGES.some(ready => ready === locale) || locale === geroStore.config?.locale) return;
+    try {
+      await WalletStore.setLocale(locale);
+    } catch (error) {
+      console.error(`Failed to set language ${locale}:`, error);
+    }
+  },
+});
 const profilePicDialog = ref<InstanceType<typeof ProfilePictureDialog>>();
 
 // Computed properties
@@ -266,35 +272,9 @@ const handleLanguageSelectorFocus = () => {
   }
 };
 
-// Watchers
-// Watch for user changing the dropdown
-watch(loc, async (val) => {
-  if (val) {
-    const iso = Object.values(languages).find(value => value.name === val)?.iso;
-    if (iso) {
-      // CRITICAL: Don't call setLocale if we're already at this locale
-      if (iso === geroStore.config?.locale) {
-        return;
-      }
-
-      // Load language file and update locale
-      const { loadLanguage } = await import('@/plugins/i18n');
-      try {
-        await loadLanguage(iso);
-        await WalletStore.setLocale(iso);
-        vmProxy.$i18n.locale = iso;
-        await vmProxy.$nextTick();
-      } catch (error) {
-        console.error(`Failed to load language ${iso}:`, error);
-      }
-    }
-  }
-}, { immediate: false });
-
 // Lifecycle - Set initial value from store
 onMounted(() => {
   walletName.value = loggedWallet.value.name;
-  loc.value = languages[geroStore.config?.locale || 'us'].name;
 });
 </script>
 
