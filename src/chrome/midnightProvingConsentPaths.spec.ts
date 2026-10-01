@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const read = (rel: string) => readFileSync(join(__dirname, '..', rel), 'utf8');
+const read = (rel: string) => readFileSync(join(__dirname, '..', rel), 'utf8').replace(/\r\n/g, '\n');
 
 describe('dapp proving consent gates', () => {
   it('submitTransaction relays an unsealed tx to Gero Cloud only in remote mode with cloud consent', () => {
@@ -30,5 +30,17 @@ describe('dapp proving consent gates', () => {
       expect(body).toContain('if (transferNeedsProvingConsent()) return;');
     }
     expect(overlay).toContain("$t('midnight.connector.transferProvedBy', { prover: transferProverLabel })");
+  });
+
+  it('the makeTransfer approval pins the prover at the click and the build re-checks it after authentication', () => {
+    const overlay = read('sidepanel/components/DAppOverlay.vue');
+    for (const fn of ['async function signMidnightTransferNormal() {', 'async function signMidnightTransferPrf() {']) {
+      const start = overlay.indexOf(fn);
+      const body = overlay.slice(start, overlay.indexOf('\n}\n', start));
+      expect(body).toContain('const approvedProver = transferProver.value;');
+      expect(body).toContain('}, approvedProver);');
+      expect(body).toContain('await buildMidnightTransferTx(');
+    }
+    expect(read('services/midnight-tx.service.ts')).toContain('assertWalletProving(target, expectedProver);');
   });
 });

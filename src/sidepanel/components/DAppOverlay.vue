@@ -3139,6 +3139,7 @@ function rejectMidnightMakeTransfer() {
 
 async function buildMidnightTransferTx(
   credentials: { password?: string; prfSecret?: Uint8Array },
+  approvedProver: 'local' | 'cloud' | 'zkpaas',
 ): Promise<{ tx: string }> {
   const wallet = loggedWallet.value;
   if (!wallet) throw new Error('No wallet logged in');
@@ -3150,10 +3151,14 @@ async function buildMidnightTransferTx(
     token: outputToken(o),
   }));
   const { buildAndSignUnshieldedTransfer } = await import('@/services/midnight-tx.service');
+  // The service re-checks that this is still the prover in use, and that it
+  // has consent, after authentication: the setting can change while a
+  // PassKey prompt is open (PRIV-01 review).
   return buildAndSignUnshieldedTransfer(
     wallet.network,
     { fromAddress: wallet.baseAddress, outputs, ttlMs: Date.now() + 5 * 60_000 },
     credentials,
+    approvedProver,
   );
 }
 
@@ -3182,6 +3187,8 @@ function transferNeedsProvingConsent(): boolean {
 async function signMidnightTransferNormal() {
   if (!currentRequest.value || !spendingPassword.value) return;
   if (transferNeedsProvingConsent()) return;
+  // The prover the user is approving this transfer for, fixed at the click.
+  const approvedProver = transferProver.value;
   // Capture the request identity BEFORE the multi-second build round-trip. If
   // the request is settled meanwhile (Reject clicked, wallet switched → queue
   // advances), currentRequest becomes a DIFFERENT request — never deliver this
@@ -3191,12 +3198,14 @@ async function signMidnightTransferNormal() {
   signError.value = '';
 
   try {
-    const { tx } = await buildMidnightTransferTx({ password: spendingPassword.value });
+    const { tx } = await buildMidnightTransferTx({ password: spendingPassword.value }, approvedProver);
     if (currentRequest.value?.requestId !== reqId) return; // request superseded — drop
     approve({ tx });
     spendingPassword.value = '';
   } catch (e) {
     console.error('[DApp] Midnight makeTransfer error:', e);
+    // A remote prover without consent (setting changed during authentication): ask for it.
+    if ((e as Error)?.name === 'ProvingConsentRequiredError') transferConsentOpen.value = true;
     signError.value = (e as Error)?.message || 'Transfer failed';
   } finally {
     signing.value = false;
@@ -3206,6 +3215,8 @@ async function signMidnightTransferNormal() {
 async function signMidnightTransferPrf() {
   if (!currentRequest.value) return;
   if (transferNeedsProvingConsent()) return;
+  // The prover the user is approving this transfer for, fixed at the click.
+  const approvedProver = transferProver.value;
   // Capture identity before the PRF popup wait + build (up to ~60s) — see
   // signMidnightTransferNormal; don't deliver this tx to a superseded request.
   const reqId = currentRequest.value.requestId;
@@ -3236,11 +3247,13 @@ async function signMidnightTransferPrf() {
       }, 60000);
     });
 
-    const { tx } = await buildMidnightTransferTx({ prfSecret: prfBytes });
+    const { tx } = await buildMidnightTransferTx({ prfSecret: prfBytes }, approvedProver);
     if (currentRequest.value?.requestId !== reqId) return; // request superseded — drop
     approve({ tx });
   } catch (e) {
     console.error('[DApp] Midnight PRF makeTransfer error:', e);
+    // A remote prover without consent (setting changed during authentication): ask for it.
+    if ((e as Error)?.name === 'ProvingConsentRequiredError') transferConsentOpen.value = true;
     signError.value = (e as Error)?.message || 'PassKey signing failed';
   } finally {
     signing.value = false;
