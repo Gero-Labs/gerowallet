@@ -46,7 +46,8 @@ Deploy Nexus with `POST /api/midnight/{network}/dust/light-sync` before releasin
 this wallet. Mainnet and Preprod use ledger 8; Stagenet uses ledger 9. The endpoint
 accepts three operations: `snapshot` with a public DUST address, `spends` with a
 pinned block hash and nullifier prefixes, and `commitments` with a pinned block
-hash and inclusive tree ranges. No spending key or seed leaves the wallet.
+hash and inclusive tree ranges. These synchronization requests contain only
+public data; key derivation and fee construction run in the wallet.
 
 Nexus retrieves owned generation records, historical decay updates, and compact
 hashes for foreign tree ranges. The wallet derives nullifiers locally, follows
@@ -60,6 +61,9 @@ replaying the network's DUST event history. An unavailable or inconsistent
 projection fails with a retryable error; there is no silent full-replay fallback.
 This change covers DUST fee preparation. Private-note discovery remains in the
 shielded synchronization modules, and proving follows the selected proving path.
+Remote proving retains its existing witness-sharing boundary: an unproven DUST
+spend includes secret witness material, including the DUST secret scalar, for the
+selected prover. Public-only synchronization does not make remote proving local.
 
 The server limits each request to 60 seconds, shares the caller's existing
 Midnight connection budget, and caps concurrent projections per sidecar. Tests
