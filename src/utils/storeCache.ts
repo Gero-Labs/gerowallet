@@ -56,6 +56,11 @@ export async function writeStoreCache(entries: StoreCacheEntry[]): Promise<void>
   await cacheDb().entries.bulkPut(entries);
 }
 
+/** Drop every cached field that belongs to one session (a deleted wallet's id). */
+export async function deleteStoreCacheScope(scope: string): Promise<void> {
+  await cacheDb().entries.filter((entry) => entry.scope === scope).delete();
+}
+
 /** Test seam: drop the cached connection so a fresh fake IndexedDB can be installed. */
 export function resetStoreCacheForTest(): void {
   db?.close();

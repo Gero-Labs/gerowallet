@@ -4,6 +4,7 @@ import * as bip39 from 'bip39';
 import { Blockchain, CoinTypes, Currency, HARDENED, Wallet, WalletType, WalletTypePurpose } from '@/models/types';
 import { bech32, bech32m } from 'bech32';
 import { clearDbCache } from '@/db/wallet-db';
+import { deleteStoreCacheScope } from '@/utils/storeCache';
 import { sealKeySecret, sealTextSecret } from '@/shared/utils/secretWriters';
 import { SecretPurpose } from '@/shared/utils/secretEnvelope';
 import { resolvePrivateKey } from '@/shared/utils/resolver';
@@ -715,6 +716,23 @@ export async function deleteWallet(walletId: number|string) {
   await Dexie.delete(walletName).catch(err => {
     console.error(`Failed to delete database '${walletName}': ${err.stack || err}`);
   });
+  await deleteWalletLeftovers(numericWalletId);
+}
+
+/**
+ * Wallet data kept outside the `wallets` row and the `wallet-{id}` database,
+ * removed with the wallet so deleting it leaves nothing of it on this device:
+ * the encrypted Strike API key (`strike_keys_{id}` in chrome.storage.local) and
+ * the wallet's cached display state (transactions, UTxOs, tokens) in the
+ * `gero-store-cache` IndexedDB. Best effort: a failure here never blocks the
+ * deletion that has already happened.
+ */
+async function deleteWalletLeftovers(walletId: number): Promise<void> {
+  if (!Number.isFinite(walletId)) return;
+  if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+    await chrome.storage.local.remove(`strike_keys_${walletId}`).catch(() => undefined);
+  }
+  await deleteStoreCacheScope(String(walletId)).catch(() => undefined);
 }
 
 /**
