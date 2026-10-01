@@ -2273,6 +2273,11 @@ export default {
   'perps.connect.gateDeposit': 'Connect to Strike to deposit funds.',
   'perps.connect.gateWithdraw': 'Connect to Strike to withdraw funds.',
   'perps.connect.submitCta': 'Connect to Strike',
+  'perps.connect.signCta': 'Sign and connect',
+  'perps.connect.messageHint': 'Strike asks your wallet to sign this message with your payment key. Read it before you sign.',
+  'perps.connect.boundNote': 'This message includes the new API key created for this connection.',
+  'perps.connect.unboundWarning': 'This message does not include the new API key created for this connection. Sign it only if it clearly comes from Strike and names this wallet.',
+  'perps.connect.messageRefused': 'Strike sent a message that Gero will not sign. Try again later.',
   'perps.passkeySignHint': 'Authenticate with your PassKey to sign this transaction.',
 
   // Strike v2 deposit/withdraw

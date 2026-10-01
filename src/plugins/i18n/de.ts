@@ -2522,6 +2522,11 @@ export default {
   'perps.connect.gateDeposit': 'Mit Strike verbinden, um Guthaben einzuzahlen.',
   'perps.connect.gateWithdraw': 'Mit Strike verbinden, um Guthaben auszuzahlen.',
   'perps.connect.submitCta': 'Mit Strike Verbinden',
+  'perps.connect.signCta': 'Signieren und verbinden',
+  'perps.connect.messageHint': 'Strike bittet Ihre Wallet, diese Nachricht mit Ihrem Zahlungsschlüssel zu signieren. Lesen Sie sie, bevor Sie signieren.',
+  'perps.connect.boundNote': 'Diese Nachricht enthält den neuen API-Schlüssel, der für diese Verbindung erstellt wurde.',
+  'perps.connect.unboundWarning': 'Diese Nachricht enthält nicht den neuen API-Schlüssel, der für diese Verbindung erstellt wurde. Signieren Sie sie nur, wenn sie eindeutig von Strike stammt und diese Wallet nennt.',
+  'perps.connect.messageRefused': 'Strike hat eine Nachricht gesendet, die Gero nicht signiert. Versuchen Sie es später erneut.',
   'perps.passkeySignHint': 'Mit Ihrem PassKey authentifizieren, um diese Transaktion zu signieren.',
 
   // Strike v2 Einzahlung/Auszahlung
