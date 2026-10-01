@@ -12,6 +12,9 @@ import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, M
 import { toDappError } from '@/chrome/dappError';
 import { applyDappRequestBadge } from '@/chrome/dappRequestBadge';
 import { isOwnExtensionPageSender, panelMaySettleRequest } from '@/chrome/senderTrust';
+import { isConnectApproval } from '@/chrome/connectApproval';
+import { decideSignTxPopup } from '@/chrome/signTxPopupPolicy';
+import { approvalStillValid } from '@/chrome/approvalRelease';
 import { bringInitBackground } from '@bringweb3/chrome-extension-kit';
 import {
   focusOrCreatePopup,
@@ -795,13 +798,16 @@ app.add(METHOD.enable, (request, sendResponse) => {
     const deliverTabId = typeof tabId === 'number' && miniGeroPorts.has(tabId) ? tabId : undefined;
     return sendToMiniGero('enable', enablePayload, deliverTabId)
       .then(async (response) => {
-        if (response.data === true) {
+        if (isConnectApproval(response)) {
           // Read the wallet fresh: a cold-start request may have logged a
           // wallet in between the initial check and this resolution.
           const walletNow = walletManager.getWallet();
           if (walletNow) await WalletStore.addConnectedDapp(walletNow.id, origin);
+          reply({ data: true });
+        } else {
+          // CIP-30: a declined enable() rejects with APIError Refused.
+          reply({ error: APIError.Refused });
         }
-        reply({ data: response.data });
       });
   };
 
@@ -814,9 +820,9 @@ app.add(METHOD.enable, (request, sendResponse) => {
     return focusOrCreatePopup(popupURL, 470, 600)
       .then(newTab => Messaging.sendToPopupInternal(newTab.id, request))
       .then((response: BackgroundResponse) => {
-        if (response.data) reply({ data: response.data });
-        else if (response.error) reply({ error: response.error });
-        else reply({ error: APIError.InternalError });
+        // Only an explicit approval connects; Decline (or anything else) refuses.
+        if (isConnectApproval(response)) reply({ data: true });
+        else reply({ error: APIError.Refused });
       })
       .catch(err => reply({ error: toDappError(err) }));
   };
@@ -1307,10 +1313,34 @@ app.add(METHOD.popupLogin, async (request, sendResponse) => {
   }
 });
 
-app.add(METHOD.signData, (request, sendResponse) => {
-  const signDataReply = (opts: ReplyOpts) => {
-    sendResponse({ id: request.id, ...opts, target: TARGET, sender: SENDER.extension });
+/** Active wallet id, as the side-panel wallet-switch guard reads it. */
+function activeWalletId(): string | undefined {
+  return (WalletStore.state.loggedWallet as { id?: string } | null)?.id;
+}
+
+/**
+ * Build a reply that only releases a signing result while the consent behind it
+ * still holds (origin connected, same wallet as at request time); otherwise the
+ * dApp gets Refused. Covers the side panel and the popup path alike.
+ */
+function guardedSignReply(
+  request: { id?: unknown; origin?: string },
+  sendResponse: (r: unknown) => void,
+): (opts: ReplyOpts) => void {
+  const ctx = { origin: request.origin, walletIdAtRequest: activeWalletId() };
+  return (opts: ReplyOpts) => {
+    const releasing = opts.data !== undefined && opts.error == null;
+    const safe = releasing && !approvalStillValid(ctx, (o) => WalletStore.isWhitelisted(o), activeWalletId())
+      ? { error: APIError.Refused }
+      : opts;
+    sendResponse({ id: request.id, ...safe, target: TARGET, sender: SENDER.extension });
   };
+}
+
+app.add(METHOD.signData, (request, sendResponse) => {
+  // Releases the signature only while the origin is still connected and the
+  // wallet is unchanged since the request (revoke / switch during the prompt).
+  const signDataReply = guardedSignReply(request, sendResponse);
   // The content relay now fast-paths sign requests straight to background
   // (see messaging.ts) so the user gesture survives to sidePanel.open();
   // enforce the whitelist here instead of in that pre-check round-trip.
@@ -1318,7 +1348,16 @@ app.add(METHOD.signData, (request, sendResponse) => {
     return signDataReply({ error: APIError.Refused });
   }
 
-  const signDataPayload = { ...request.data, website: request.origin, favIconUrl: request.send?.tab?.favIconUrl };
+  // Explicit fields only: never spread page-supplied data into the approval
+  // payload, or extra fields (e.g. a decoy `message`) reach the prompt and can
+  // change what the user is shown without changing what gets signed.
+  const signDataRequest = (request.data ?? {}) as { address?: unknown; payload?: unknown };
+  const signDataPayload = {
+    address: typeof signDataRequest.address === 'string' ? signDataRequest.address : '',
+    payload: typeof signDataRequest.payload === 'string' ? signDataRequest.payload : '',
+    website: request.origin,
+    favIconUrl: request.send?.tab?.favIconUrl,
+  };
   const tabId = request.send?.tab?.id;
 
   const handleMiniGeroSignData = () => {
@@ -1406,9 +1445,8 @@ app.addToOptions(MessageTypes.CIP113_SIGN_PREFLIGHT, async (request, sendRespons
 });
 
 app.add(METHOD.signTx, async (request, sendResponse) => {
-  const signTxReply = (opts: ReplyOpts) => {
-    sendResponse({ id: request.id, ...opts, target: TARGET, sender: SENDER.extension });
-  };
+  // Same consent re-check as signData before the witness set is released.
+  const signTxReply = guardedSignReply(request, sendResponse);
   // Same fast-path/whitelist split as signData above. Use ONLY the relay-set
   // `request.origin` (stamped to the true window.origin in messaging.ts) — never
   // the page-supplied `request.data.origin`, which a malicious site can set to a
@@ -1427,7 +1465,15 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
     return signTxReply({ error: { code: APIError.Refused.code, info: CIP113_SIGN_REFUSAL_MESSAGE } });
   }
 
-  const signTxPayload = { ...request.data, website: request.origin, favIconUrl: request.send?.tab?.favIconUrl };
+  // Explicit fields only (see signData): the prompt must be built from the tx
+  // the page asked to sign, not from extra page-supplied fields.
+  const signTxRequest = (request.data ?? {}) as { tx?: unknown; partialSign?: unknown };
+  const signTxPayload = {
+    tx: typeof signTxRequest.tx === 'string' ? signTxRequest.tx : '',
+    partialSign: signTxRequest.partialSign === true,
+    website: request.origin,
+    favIconUrl: request.send?.tab?.favIconUrl,
+  };
   const tabId = request.send?.tab?.id;
 
   const handleMiniGeroSignTx = () => {
@@ -1445,16 +1491,20 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
   // disabled the side panel and as a fallback when opening the side panel fails.
   const openPopupForSignTx = async () => {
     const requestCopy = JSON.parse(JSON.stringify(request));
-    // Force close any existing SignTx popups before opening a new one
+    // A pending signTx prompt belongs to its origin: another origin's request
+    // is refused rather than allowed to close it and take its place. The same
+    // origin may supersede its own pending prompt.
     const windows = await chrome.windows.getAll({ populate: true });
-    for (const window of windows) {
-      if (window.type === 'popup') {
-        for (const tab of window.tabs) {
-          if (tab.url?.includes(`index.html#/${POPUP.signTx}`)) {
-            await chrome.windows.remove(window.id);
-            break;
-          }
-        }
+    const popupTabs = windows
+      .filter((w) => w.type === 'popup')
+      .flatMap((w) => (w.tabs ?? []).map((tab) => ({ windowId: w.id, url: tab.url })));
+    const decision = decideSignTxPopup(popupTabs.map((t) => t.url), request.origin, POPUP.signTx);
+    if (decision.action === 'busy') {
+      return signTxReply({ error: APIError.Refused });
+    }
+    for (const t of popupTabs) {
+      if (t.url && decision.closeTabUrls.includes(t.url) && typeof t.windowId === 'number') {
+        await chrome.windows.remove(t.windowId);
       }
     }
     const popupURL = chrome.runtime.getURL(
@@ -3975,7 +4025,9 @@ app.add(BITCOIN_METHOD.enable, (request, sendResponse) => {
   }
 
   const handleResponse = (response: BackgroundResponse) => {
-    if (response.data) {
+    // Only an explicit approval connects: the popup's Decline must never be
+    // read as consent (it used to send a truthy `{}`).
+    if (isConnectApproval(response)) {
       // Immediately update the background's in-memory whitelist so that subsequent
       // calls (getPublicKey, getNetwork, etc.) pass the whitelist check without
       // waiting for the Dexie live-query subscription to fire asynchronously.
@@ -3987,17 +4039,15 @@ app.add(BITCOIN_METHOD.enable, (request, sendResponse) => {
         } catch {}
       }
       reply({ data: [currentWallet.baseAddress] });
-    } else if (response.error) {
-      reply({ error: response.error });
     } else {
-      reply({ error: APIError.InternalError });
+      reply({ error: response?.error || APIError.Refused });
     }
   };
 
   const handleMiniGeroBtcEnable = () => {
     sendToMiniGero('enable', { ...request.data, website: origin }, tabId)
       .then(async (response) => {
-        if (response.data === true) {
+        if (isConnectApproval(response)) {
           await WalletStore.addConnectedDapp(currentWallet.id, origin);
         }
         handleResponse(response);

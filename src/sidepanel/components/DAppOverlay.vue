@@ -1341,9 +1341,13 @@ const nightCurrency = computed(() =>
 // on !signDataDecodeError means malformed input never reaches the signer, so
 // by the time signing happens the lenient decode has no invalid input left to
 // diverge from this preview on.
-const signDataRawPayload = computed(() =>
-  currentRequest.value?.payload?.message || currentRequest.value?.payload?.payload || ''
-);
+// Preview ONLY the bytes that get signed (payload.payload). Never prefer a
+// separate display field: anything else could show one text while the
+// signer signs different bytes.
+const signDataRawPayload = computed(() => {
+  const signed = currentRequest.value?.payload?.payload;
+  return typeof signed === 'string' ? signed : '';
+});
 // payload.address is signed against (see signDataNormal/signDataPrf/signDataHw
 // below) but was never shown — the user could not see which key attests.
 const signDataAddress = computed(() => currentRequest.value?.payload?.address || '');
