@@ -1073,11 +1073,11 @@ export class WalletManager {
     // - PassKey: WebAuthn requires user activation (popup), not available in service worker
     // - Lock password: @noble/hashes PBKDF2 produces different results in service worker vs browser
     //   context due to crypto polyfill mismatches (Buffer handling in separate Vite bundles)
-    // Trust boundary: these signals arrive via chrome.runtime messaging (sendToBackgroundFromOptions),
-    // which is same-origin extension-only. The background handler (addToOptions) only accepts messages
-    // from the extension's options/popup pages, not from content scripts or injected page scripts.
-    // DApp connection relay in background.ts uses a separate message handler (addToPopup) that does
-    // not route to this unlock flow.
+    // Trust boundary: these signals arrive on the options channel (sendToBackgroundFromOptions).
+    // The router (messaging.ts + senderTrust.ts isOptionsSenderAllowed) dispatches that channel only
+    // when the real MessageSender is one of our own chrome-extension:// pages; a content script (which
+    // shares our sender.id) or an injected page script can't reach this flow. UNLOCK must never be added
+    // to CONTENT_SCRIPT_OPTIONS_METHODS.
     // Defense-in-depth: lockpassword-verified requires encryptionMethod === 'prf' to prevent
     // a normal wallet from bypassing spending password verification if this signal is sent by mistake.
     // If encryptionMethod lookup fails (DB error → undefined), browserVerified is false and the code

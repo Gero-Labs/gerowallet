@@ -1,16 +1,19 @@
 // Background message-router trust boundary (pure, unit-tested).
 //
 // The router dispatches options-context messages on a `sender` STRING in the
-// message body. For sensitive handlers we additionally require the REAL
-// chrome.runtime.MessageSender to be one of this extension's own pages, so a
-// content script that forged `sender:'options'` cannot reach them.
+// message body. That string is not a trust signal: the content script runs in
+// every frame of every page, inside the page's renderer process, so code with
+// content-script privileges (e.g. a compromised renderer) can send any body it
+// likes with the extension's own sender.id. The options channel is therefore
+// DEFAULT-DENY: a message is dispatched only when the REAL
+// chrome.runtime.MessageSender is one of this extension's own pages, or the
+// method is explicitly allowlisted for the content script below.
 
 /**
- * Sensitive options-context methods that must originate from an own extension
- * page (the wallet UI), never a content script. Scoped to the cross-device
- * settings/signing mutators — plus the support-chat handshake, which likewise
- * takes spending auth and produces a stake-key signature — to keep the
- * router-level check's blast radius small.
+ * Options-context methods that are especially sensitive. Since the channel is
+ * default-deny these are already page-only; the list is kept as a tripwire so
+ * none of them can ever be added to CONTENT_SCRIPT_OPTIONS_METHODS (asserted in
+ * senderTrust.spec.ts and services/cip45/authorization.spec.ts).
  */
 export const EXTENSION_PAGE_ONLY_METHODS = new Set<string>([
   'CIP45_BEGIN_SESSION',
@@ -57,5 +60,39 @@ export function isOwnExtensionPageSender(
   const origin = typeof (sender as { origin?: string }).origin === 'string'
     ? (sender as { origin?: string }).origin as string
     : '';
-  return url.startsWith('chrome-extension://') || origin.startsWith('chrome-extension://');
+  // Prefix includes our own id and the trailing slash, so another extension's
+  // page (or a look-alike id prefix) never matches.
+  const ownPrefix = `chrome-extension://${ownId}/`;
+  return url.startsWith(ownPrefix) || `${origin}/` === ownPrefix;
+}
+
+/**
+ * The only options-context methods the content script (or anything else that is
+ * not an extension page) may call. Each entry must be safe to call from a
+ * hostile renderer:
+ * - WC_PAIR: the user clicked a `wc:` link (content.ts); the handler only opens
+ *   the pairing approval UI, it approves nothing.
+ */
+export const CONTENT_SCRIPT_OPTIONS_METHODS: ReadonlySet<string> = new Set<string>([
+  'WC_PAIR',
+]);
+
+/** Router gate for the options channel: own extension page, or an allowlisted content-script method. */
+export function isOptionsSenderAllowed(
+  method: string,
+  sender: chrome.runtime.MessageSender | undefined,
+  ownId: string | undefined,
+): boolean {
+  if (isOwnExtensionPageSender(sender, ownId)) return true;
+  return CONTENT_SCRIPT_OPTIONS_METHODS.has(method) && !EXTENSION_PAGE_ONLY_METHODS.has(method);
+}
+
+/**
+ * Whether an approval panel bound to `panelTabId` may settle a pending dApp
+ * request issued from `requestTabId`. A tab's prompt can only be answered by
+ * that tab's panel; tabless requests (NaN, e.g. WalletConnect relay events)
+ * are delivered to, and may be settled by, any of our panels.
+ */
+export function panelMaySettleRequest(requestTabId: number, panelTabId: number): boolean {
+  return Number.isNaN(requestTabId) || requestTabId === panelTabId;
 }

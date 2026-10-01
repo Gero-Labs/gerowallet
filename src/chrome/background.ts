@@ -11,6 +11,7 @@ import { isStakeKeyRegistered, StakeAccountError } from '@/shared/utils/stakeReg
 import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, POPUP, SENDER, TARGET, TxSendError, TxSignError } from '@/chrome/config';
 import { toDappError } from '@/chrome/dappError';
 import { applyDappRequestBadge } from '@/chrome/dappRequestBadge';
+import { isOwnExtensionPageSender, panelMaySettleRequest } from '@/chrome/senderTrust';
 import { bringInitBackground } from '@bringweb3/chrome-extension-kit';
 import {
   focusOrCreatePopup,
@@ -377,8 +378,10 @@ function redeliverParkedRequests(tabId: number, port: chrome.runtime.Port) {
 
 chrome.runtime.onConnect.addListener((port) => {
   if (!port.name.startsWith('mini-gero-dapp-channel')) return;
-  // Only our own extension pages may register an approval surface.
-  if (port.sender?.id !== chrome.runtime.id) {
+  // Only our own extension pages may register an approval surface. A content
+  // script has the same sender.id, so the page URL must be ours too: otherwise a
+  // forged port could replace the real panel, read pending payloads and approve.
+  if (!isOwnExtensionPageSender(port.sender, chrome.runtime.id)) {
     console.warn('[DApp] rejected foreign mini-gero port from', port.sender?.id);
     try { port.disconnect(); } catch { /* noop */ }
     return;
@@ -404,6 +407,9 @@ chrome.runtime.onConnect.addListener((port) => {
     if (!message?.requestId) return;
     const entry = pendingDAppRequests.get(message.requestId);
     if (!entry) return;
+    // A panel may only settle requests delivered to it: its own tab's, or
+    // tabless ones (which go to any panel). Never another tab's prompt.
+    if (!panelMaySettleRequest(entry.tabId, tabId)) return;
     if (message.type === 'dapp-response') {
       // Wallet-switch guard: if the active wallet changed since the request
       // was issued, an approval must not be honored silently.
@@ -1517,6 +1523,12 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
 });
 
 app.add(METHOD.submitTx, async (request, sendResponse) => {
+  // Server-side whitelist gate (defense-in-depth): the content relay pre-checks
+  // too, but nothing reaching the background may skip it.
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+    return;
+  }
   try {
     const loggedWallet = WalletStore.state.loggedWallet;
     if (!loggedWallet || !loggedWallet.publicKey) {
@@ -1612,6 +1624,12 @@ app.add(METHOD.submitTx, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getPubDRepKey, async (request, sendResponse) => {
+  // Server-side whitelist gate (defense-in-depth): the content relay pre-checks
+  // too, but nothing reaching the background may skip it.
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+    return;
+  }
   const loggedWallet = WalletStore.state.loggedWallet;
   if (!loggedWallet || !loggedWallet.publicKey) {
     sendResponse({
@@ -1642,6 +1660,12 @@ app.add(METHOD.getPubDRepKey, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getRegisteredPubStakeKeys, async (request, sendResponse) => {
+  // Server-side whitelist gate (defense-in-depth): the content relay pre-checks
+  // too, but nothing reaching the background may skip it.
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+    return;
+  }
   try {
     const account = WalletStore.state.account;
     if (!account) {
@@ -1702,6 +1726,12 @@ app.add(METHOD.getRegisteredPubStakeKeys, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getUnregisteredPubStakeKeys, async (request, sendResponse) => {
+  // Server-side whitelist gate (defense-in-depth): the content relay pre-checks
+  // too, but nothing reaching the background may skip it.
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+    return;
+  }
   try {
     const account = WalletStore.state.account;
     if (!account) {
@@ -1762,6 +1792,12 @@ app.add(METHOD.getUnregisteredPubStakeKeys, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getAccountPub, async (request, sendResponse) => {
+  // Server-side whitelist gate (defense-in-depth): the content relay pre-checks
+  // too, but nothing reaching the background may skip it.
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+    return;
+  }
   const loggedWallet = WalletStore.state.loggedWallet;
   if (!loggedWallet || !loggedWallet.publicKey) {
     sendResponse({
@@ -1770,6 +1806,7 @@ app.add(METHOD.getAccountPub, async (request, sendResponse) => {
       target: TARGET,
       sender: SENDER.extension,
     });
+    return;
   }
   try {
     const key = getPublicKey(loggedWallet.publicKey).toRawKey().hex();
@@ -1791,6 +1828,12 @@ app.add(METHOD.getAccountPub, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getNetworkMagic, async (request, sendResponse) => {
+  // Server-side whitelist gate (defense-in-depth): the content relay pre-checks
+  // too, but nothing reaching the background may skip it.
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+    return;
+  }
   const loggedWallet = WalletStore.state.loggedWallet;
   try {
     sendResponse({
@@ -6305,6 +6348,11 @@ app.add(MIDNIGHT_METHOD.getConnectionStatus, async (request, sendResponse) => {
  * midnight-tx.service's submitSignedTx — no build/balance/sign happens.
  */
 app.add(MIDNIGHT_METHOD.submitTransaction, async (request, sendResponse) => {
+  // Server-side whitelist gate (defense-in-depth), like the other Midnight handlers.
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'Not connected'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
   const wallet = requireMidnightWallet();
   if (!wallet) {
     sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected'), target: TARGET, sender: SENDER.extension });

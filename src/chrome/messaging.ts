@@ -1,6 +1,6 @@
 import { APIError, BITCOIN_METHOD, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, SENDER, TARGET } from './config';
 import { Cardano } from '@cardano-sdk/core';
-import { EXTENSION_PAGE_ONLY_METHODS, isOwnExtensionPageSender } from './senderTrust';
+import { isOptionsSenderAllowed, isOwnExtensionPageSender } from './senderTrust';
 
 interface Message {
   method?: string;
@@ -283,9 +283,10 @@ class BackgroundController {
             this.methodList[request.method](request, sendResponse);
             return true;
           } else if (request.sender === SENDER.options && request.method && this.optionsMethodList[request.method]) {
-            // Trust boundary: sensitive cross-device handlers must come from an
-            // own extension page, not a content script forging sender:'options'.
-            if (EXTENSION_PAGE_ONLY_METHODS.has(request.method) && !isOwnExtensionPageSender(sender, chrome.runtime?.id)) {
+            // Trust boundary: the options channel is default-deny. Only our own
+            // extension pages may use it (plus the content-script allowlist in
+            // senderTrust.ts); a content script forging sender:'options' is refused.
+            if (!isOptionsSenderAllowed(request.method, sender, chrome.runtime?.id)) {
               console.warn('Rejected sensitive options-context message from untrusted sender:', request.method);
               // Match the envelope callers unwrap (res.data.success) so a rejection
               // is a clean failure, not a TypeError on undefined data.
@@ -387,6 +388,9 @@ export const Messaging = {
       chrome.runtime.onConnect.addListener(function connectionHandler(port) {
         // Only handle connections from popup (not side panel)
         if (port.name !== 'internal-background-popup-communication') return;
+        // Only our own extension pages may answer an approval: a content script
+        // shares our sender.id, so the port name alone is not proof.
+        if (!isOwnExtensionPageSender(port.sender, chrome.runtime?.id)) return;
 
         let resolved = false;
         function cleanup() {
@@ -446,6 +450,9 @@ export const Messaging = {
       }
 
       function connectionHandler(port: chrome.runtime.Port) {
+        // Approval answers must come from our own side panel page, never from a
+        // content-script port (same sender.id, http(s) url).
+        if (!isOwnExtensionPageSender(port.sender, chrome.runtime?.id)) return;
         function messageHandler(response: PortMessage) {
           if (response.tabId !== tabIdd) return;
           if (response.method === METHOD.requestData) {
