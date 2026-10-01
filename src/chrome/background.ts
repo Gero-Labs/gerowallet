@@ -3957,8 +3957,12 @@ app.add(BITCOIN_METHOD.enable, (request, sendResponse) => {
     }
   };
 
+  // Browser-derived top-level site when a cross-origin frame asks; both the
+  // side panel and the popup warn with it, as on the Cardano paths.
+  const embeddedIn = embeddingSite(origin, send);
+
   const handleMiniGeroBtcEnable = () => {
-    sendToMiniGero('enable', { ...request.data, website: origin }, tabId)
+    sendToMiniGero('enable', { ...request.data, website: origin, embeddedIn }, tabId)
       .then(async (response) => {
         if (response.data === true) {
           await WalletStore.addConnectedDapp(currentWallet.id, origin);
@@ -3982,7 +3986,7 @@ app.add(BITCOIN_METHOD.enable, (request, sendResponse) => {
           `index.html#/${POPUP.dappConnect}?website=${encodeURIComponent(origin)}`
         );
         focusOrCreatePopup(popupURL, 470, 600)
-          .then(tab => Messaging.sendToPopupInternal(tab.id, request))
+          .then(tab => Messaging.sendToPopupInternal(tab.id, { ...request, embeddedIn }))
           .then(handleResponse)
           .catch(err => reply({ error: toDappError(err) }));
       });
@@ -4091,7 +4095,7 @@ app.add(BITCOIN_METHOD.signPsbt, (request, sendResponse) => {
   const signPsbtReply = (opts: ReplyOpts) => {
     sendResponse({ id: request.id, ...opts, target: TARGET, sender: SENDER.extension });
   };
-  const btcSignPsbtPayload = { ...request.data, website: request.origin, favIconUrl: request.send?.tab?.favIconUrl };
+  const btcSignPsbtPayload = { ...request.data, website: request.origin, favIconUrl: request.send?.tab?.favIconUrl, embeddedIn: embeddingSite(request.origin, request.send) };
   const tabId = request.send?.tab?.id;
 
   const handleMiniGeroSignPsbt = () => {
@@ -4104,7 +4108,7 @@ app.add(BITCOIN_METHOD.signPsbt, (request, sendResponse) => {
       `index.html#/${POPUP.bitcoinSignPsbt}?website=${encodeURIComponent(request.origin)}`
     );
     return focusOrCreatePopup(popupURL, 470, 600)
-      .then(tab => Messaging.sendToPopupInternal(tab.id, request))
+      .then(tab => Messaging.sendToPopupInternal(tab.id, { ...request, embeddedIn: btcSignPsbtPayload.embeddedIn }))
       .then((response: BackgroundResponse) => {
         if (response.data !== undefined) signPsbtReply({ data: response.data });
         else signPsbtReply({ error: response.error ?? APIError.InternalError });
@@ -4145,6 +4149,7 @@ app.add(BITCOIN_METHOD.signPsbts, async (request, sendResponse) => {
   const { psbtHexs, options } = request.data;
   const tabId = request.send?.tab?.id;
   const favIconUrl = request.send?.tab?.favIconUrl;
+  const embeddedIn = embeddingSite(request.origin, request.send);
 
   // Signs one PSBT in the batch via the mini-gero port (primary), an
   // auto-opened side panel (secondary), or a standalone popup (fallback, when
@@ -4153,7 +4158,7 @@ app.add(BITCOIN_METHOD.signPsbts, async (request, sendResponse) => {
   // per PSBT in a sequential loop (matching the popup-only version's original
   // one-popup-per-PSBT behavior).
   const signOne = async (psbtHex: string): Promise<string> => {
-    const singleRequest = { ...request, data: { psbtHex, options } };
+    const singleRequest = { ...request, data: { psbtHex, options }, embeddedIn };
 
     const viaPopup = async (): Promise<string> => {
       const popupURL = chrome.runtime.getURL(
@@ -4167,7 +4172,7 @@ app.add(BITCOIN_METHOD.signPsbts, async (request, sendResponse) => {
 
     const viaMiniGero = async (): Promise<string> => {
       try {
-        const response = await sendToMiniGero('btcSignPsbt', { psbtHex, options, website: request.origin, favIconUrl }, tabId);
+        const response = await sendToMiniGero('btcSignPsbt', { psbtHex, options, website: request.origin, favIconUrl, embeddedIn }, tabId);
         return response.data as string;
       } catch (err) {
         throw errorMessage(err) || APIError.InternalError;
@@ -4212,7 +4217,7 @@ app.add(BITCOIN_METHOD.signMessage, (request, sendResponse) => {
   const signMessageReply = (opts: ReplyOpts) => {
     sendResponse({ id: request.id, ...opts, target: TARGET, sender: SENDER.extension });
   };
-  const btcSignMessagePayload = { ...request.data, website: request.origin, favIconUrl: request.send?.tab?.favIconUrl };
+  const btcSignMessagePayload = { ...request.data, website: request.origin, favIconUrl: request.send?.tab?.favIconUrl, embeddedIn: embeddingSite(request.origin, request.send) };
   const tabId = request.send?.tab?.id;
 
   const handleMiniGeroSignMessage = () => {
@@ -4225,7 +4230,7 @@ app.add(BITCOIN_METHOD.signMessage, (request, sendResponse) => {
       `index.html#/${POPUP.bitcoinSignMessage}?website=${encodeURIComponent(request.origin)}`
     );
     return focusOrCreatePopup(popupURL, 470, 600)
-      .then(tab => Messaging.sendToPopupInternal(tab.id, request))
+      .then(tab => Messaging.sendToPopupInternal(tab.id, { ...request, embeddedIn: btcSignMessagePayload.embeddedIn }))
       .then((response: BackgroundResponse) => {
         if (response.data !== undefined) signMessageReply({ data: response.data });
         else signMessageReply({ error: response.error ?? APIError.InternalError });
