@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { matchesDappWhitelistEntry } from '@/stores/walletStore';
-import { sessionApprovedAddresses, sessionAuthorizesWallet } from '@/services/walletConnect/sessionBinding';
+import { authorizationStillHolds, sessionApprovedAddresses, sessionAuthorizesWallet } from '@/services/walletConnect/sessionBinding';
 import { claimedOriginMatchesSender, embeddingSite } from './originBinding';
 
 describe('matchesDappWhitelistEntry', () => {
@@ -44,6 +44,30 @@ describe('WalletConnect session binding', () => {
     expect(sessionAuthorizesWallet(session, { baseAddress: 'addr1other' })).toBe(false);
     expect(sessionAuthorizesWallet(null, { baseAddress: ADDR })).toBe(false);
     expect(sessionAuthorizesWallet(session, null)).toBe(false);
+  });
+
+  it('releases a signature only if the authorization still holds after approval', () => {
+    const wallet = { id: 1, baseAddress: ADDR };
+    expect(authorizationStillHolds(session, wallet, { ...wallet }, false)).toBe(true);
+    // Locked while the prompt was open.
+    expect(authorizationStillHolds(session, wallet, wallet, true)).toBe(false);
+    // Peer disconnected the session meanwhile.
+    expect(authorizationStillHolds(null, wallet, wallet, false)).toBe(false);
+    // Switched to another wallet, or logged out.
+    expect(authorizationStillHolds(session, wallet, { id: 2, baseAddress: 'addr1other' }, false)).toBe(false);
+    expect(authorizationStillHolds(session, wallet, { id: 2, baseAddress: ADDR }, false)).toBe(false);
+    expect(authorizationStillHolds(session, wallet, null, false)).toBe(false);
+  });
+
+  it('the WalletConnect signing relay never answers success without that re-check', () => {
+    const bg = readFileSync(join(__dirname, 'background.ts'), 'utf8');
+    const start = bg.indexOf('async function routeWcSigningRequest(');
+    const fn = bg.slice(start, bg.indexOf('\n  }\n', start));
+    const releaseAt = fn.indexOf('const release = async');
+    expect(releaseAt).toBeGreaterThan(-1);
+    expect(fn.slice(releaseAt)).toContain('authorizationStillHolds(wcService.getSessionForTopic(topic), walletAtRequest, WalletStore.state.loggedWallet, walletStore.isLocked)');
+    // Exactly one success path, inside release().
+    expect(fn.match(/respondSuccess\(/g)).toHaveLength(1);
   });
 });
 

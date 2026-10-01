@@ -10,6 +10,7 @@ interface SessionLike {
 }
 
 interface WalletLike {
+  id?: number | string;
   baseAddress?: string;
   bitcoinAddress?: string;
 }
@@ -31,4 +32,22 @@ export function sessionAuthorizesWallet(session: SessionLike | null | undefined,
   if (!session || !wallet) return false;
   const approved = sessionApprovedAddresses(session);
   return [wallet.baseAddress, wallet.bitcoinAddress].some((a) => !!a && approved.has(a));
+}
+
+/**
+ * Re-check, at the moment a signature is about to be released, what was
+ * checked when the request arrived. Approval can take minutes; in that time
+ * the peer may have disconnected the session, the user may have switched
+ * wallets or locked. Only the same, still unlocked wallet that the live
+ * session authorizes may have its signature returned.
+ */
+export function authorizationStillHolds(
+  session: SessionLike | null | undefined,
+  walletAtRequest: WalletLike | null | undefined,
+  currentWallet: WalletLike | null | undefined,
+  isLocked: boolean,
+): boolean {
+  if (isLocked || !walletAtRequest || !currentWallet) return false;
+  if (walletAtRequest.id !== currentWallet.id || walletAtRequest.baseAddress !== currentWallet.baseAddress) return false;
+  return sessionAuthorizesWallet(session, currentWallet);
 }
