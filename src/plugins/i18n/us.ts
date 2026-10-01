@@ -5125,6 +5125,7 @@ export default {
   'midnight.connector.walletTypeUnsupported': 'This wallet type cannot sign Midnight transactions here.',
   'midnight.connector.transferTitle': 'Approve transfer',
   'midnight.connector.transferFeesNote': 'Network fees are paid by your wallet in DUST.',
+  'midnight.connector.transferProvedBy': 'Proved by: {prover}',
   'midnight.connector.balanceTitle': 'Fund and pay fees',
   'midnight.connector.balanceBody': 'This site asks your wallet to add the funds below to a transaction it built, and to pay its network fee.',
   'midnight.connector.balanceNothing': 'No funds are needed; your wallet only pays the network fee.',
@@ -5291,6 +5292,8 @@ export default {
   'midnight.proofServer.notDetectedSend': 'Local ledger-8 proof server not detected. Start it, or use Gero Cloud for this transaction.',
   'midnight.proofServer.notDetectedSendLedger9': 'Local ledger-9 proof server not detected. Start it, or use Gero Cloud for this transaction.',
   'midnight.proofServer.localUrlMissingSend': 'No local proof server URL is set for this network. Add one in the proof server settings, or use Gero Cloud for this transaction.',
+  'midnight.proofServer.urlNotLoopback': 'The local proof server must run on this computer (localhost or 127.0.0.1).',
+  'midnight.proofServer.localUrlNotLoopbackSend': 'Your local proof server URL is not on this computer, so Gero will not send proving data to it. Change it in Settings, or use Gero Cloud for this transaction.',
   'midnight.proofServer.useCloudOnce': 'Use Gero Cloud for this transaction',
   'midnight.proofServer.openSettings': 'Open settings',
   // Arkhia zkPaaS (hosted Midnight prover behind the Arkhia gateway)

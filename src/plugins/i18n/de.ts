@@ -5019,6 +5019,7 @@ export default {
   'midnight.connector.walletTypeUnsupported': 'Dieser Wallet-Typ kann hier keine Midnight-Transaktionen signieren.',
   'midnight.connector.transferTitle': 'Überweisung genehmigen',
   'midnight.connector.transferFeesNote': 'Netzwerkgebühren werden von deiner Wallet in DUST bezahlt.',
+  'midnight.connector.transferProvedBy': 'Beweis erstellt durch: {prover}',
   'midnight.connector.balanceTitle': 'Finanzieren und Gebühren zahlen',
   'midnight.connector.balanceBody': 'Diese Seite bittet deine Wallet, die unten aufgeführten Beträge zu einer von ihr erstellten Transaktion beizusteuern und die Netzwerkgebühr zu zahlen.',
   'midnight.connector.balanceNothing': 'Es werden keine Beträge benötigt; deine Wallet zahlt nur die Netzwerkgebühr.',
@@ -5184,6 +5185,8 @@ export default {
   'midnight.proofServer.notDetectedSend': 'Lokaler Ledger-8-Proof-Server nicht erkannt. Starte ihn oder nutze Gero Cloud für diese Transaktion.',
   'midnight.proofServer.notDetectedSendLedger9': 'Lokaler Ledger-9-Proof-Server nicht erkannt. Starte ihn oder nutze Gero Cloud für diese Transaktion.',
   'midnight.proofServer.localUrlMissingSend': 'Für dieses Netzwerk ist keine lokale Proof-Server-URL gesetzt. Füge eine in den Proof-Server-Einstellungen hinzu oder nutze Gero Cloud für diese Transaktion.',
+  'midnight.proofServer.urlNotLoopback': 'Der lokale Proof-Server muss auf diesem Computer laufen (localhost oder 127.0.0.1).',
+  'midnight.proofServer.localUrlNotLoopbackSend': 'Die URL Ihres lokalen Proof-Servers liegt nicht auf diesem Computer, daher sendet Gero keine Beweisdaten dorthin. Ändern Sie sie in den Einstellungen oder nutzen Sie Gero Cloud für diese Transaktion.',
   'midnight.proofServer.useCloudOnce': 'Gero Cloud für diese Transaktion nutzen',
   'midnight.proofServer.openSettings': 'Einstellungen öffnen',
   // Arkhia zkPaaS (gehosteter Midnight-Prover hinter dem Arkhia-Gateway)

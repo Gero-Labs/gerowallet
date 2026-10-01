@@ -247,24 +247,36 @@ export async function sendUnshieldedNight(
 }
 
 /**
- * Phase-2 DApp-connector `makeTransfer`: run steps 1-3 of the unshielded NIGHT
- * transfer (getWalletKeys → Nexus build → BG DUST-balance + sign) and STOP —
- * do NOT submit. Returns the signed-but-unproven hex.
- *
- * The dapp is expected to submit the returned tx via the connector's own
- * `submitTransaction`, which relays to Nexus `/tx/submit` → sidecar
- * `/tx/finalize` (prove + bind + submit). This is literally
- * `sendUnshieldedNight` minus step 4, so it reuses the exact build+sign path
- * the dashboard send uses — no separate tx-building logic.
+ * DApp-connector `makeTransfer`: build, DUST-balance and sign the unshielded
+ * transfer, and do NOT submit. Proving follows the user's own preference,
+ * exactly like a dashboard send:
+ *   - local / zkPaaS: the wallet proves and seals it here, so the dapp gets a
+ *     sealed tx and its `submitTransaction` goes to `/tx/submit-proven`. No
+ *     proving data reaches Gero.
+ *   - remote (Gero Cloud): returned signed-but-unproven; `submitTransaction`
+ *     relays it to Nexus `/tx/submit`, which proves, binds and submits. The
+ *     approval UI requires the user's Gero Cloud consent first.
+ * An unusable local/zkPaaS preference throws ProofServerUnreachableError
+ * rather than silently falling back to Gero Cloud.
  */
 export async function buildAndSignUnshieldedTransfer(
   network: string,
   baseRequest: Omit<BuildMidnightTxRequest, 'publicKeyHex' | 'addressHex'>,
   credentials: MidnightSendCredentials,
 ): Promise<{ tx: string }> {
+  const target = resolveWalletProvingTarget(network);
+  if (target) {
+    const { checkProofServerHealth } = await import('@/chains/midnight/midnightLocalProver');
+    if (!await checkProofServerHealth(target.url, { headers: target.headers, acceptNotFound: target.lenientHealth })) {
+      throw new ProofServerUnreachableError(target.url);
+    }
+  }
   const { publicKeyHex, addressHex } = await getWalletKeys(credentials);
   const built = await buildUnshielded(network, { ...baseRequest, publicKeyHex, addressHex });
-  const { signedTxHex } = await balanceAndSignInBg(built.unprovenTxHex, baseRequest.ttlMs, credentials);
+  const { signedTxHex } = await balanceAndSignInBg(
+    built.unprovenTxHex, baseRequest.ttlMs, credentials, undefined,
+    target ? { url: target.url, headers: target.headers } : undefined,
+  );
   return { tx: signedTxHex };
 }
 

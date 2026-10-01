@@ -5517,6 +5517,10 @@ app.addToOptions(
         throw new Error('localUrl is required and must be a non-empty string');
       }
       validateProofServerUrlField('localUrl', localUrl);
+      // "Local" means on this machine: proof inputs sent anywhere else would
+      // skip the remote-prover consent (PRIV-01).
+      const { isLoopbackProverUrl } = await import('@/chains/midnight/midnightProvingTarget');
+      if (!isLoopbackProverUrl(localUrl)) throw new Error('localUrl must point at this computer (localhost)');
       const { midnightStore, midnightActions } = await import('@/stores/midnightStore');
       // The zkPaaS fields are OPTIONAL per request: absent means "keep the
       // stored value" (older call sites like the consent dialog's
@@ -5532,6 +5536,7 @@ app.addToOptions(
         throw new Error('localUrlLedger9 must be a non-empty string');
       }
       validateProofServerUrlField('localUrlLedger9', localUrlLedger9Value);
+      if (!isLoopbackProverUrl(localUrlLedger9Value)) throw new Error('localUrlLedger9 must point at this computer (localhost)');
       const zkpaasUrlValue = zkpaasUrl === undefined || zkpaasUrl === null
         ? current.zkpaasUrl : zkpaasUrl;
       if (typeof zkpaasUrlValue !== 'string') throw new Error('zkpaasUrl must be a string');
@@ -6346,7 +6351,19 @@ app.add(MIDNIGHT_METHOD.submitTransaction, async (request, sendResponse) => {
     // A sealed tx (balanceUnsealedTransaction's output, or anything the dapp
     // proved and bound itself) is already final: the sidecar's finalize relay
     // would try to prove it again and throw. Route it to submit-proven.
-    const submitted = await isSealedMidnightTransaction(tx, midnightSdkNetworkId(wallet.network))
+    const sealed = await isSealedMidnightTransaction(tx, midnightSdkNetworkId(wallet.network));
+    // An unsealed tx is proved by Gero Cloud on the way through (`/tx/submit`
+    // → sidecar finalize), which hands Gero its proof inputs. Allowed only when
+    // the user chose Gero Cloud and accepted its notice (PRIV-01); in local or
+    // zkPaaS mode the wallet seals its own transfers, so this never applies.
+    if (!sealed) {
+      const { midnightStore } = await import('@/stores/midnightStore');
+      const { hasMidnightProvingConsent } = await import('@/chains/midnight/midnightProvingConsent');
+      if (midnightStore.proofServer.mode !== 'remote' || !hasMidnightProvingConsent(midnightStore.shieldedProvingConsent, 'cloud')) {
+        throw new Error('This transaction is not proven, and GeroWallet is not set to prove it with Gero Cloud. Prove and seal it before submitting.');
+      }
+    }
+    const submitted = sealed
       ? await api.submitProvenMidnightTx({ signedTxHex: tx, waitFor: 'Submitted' })
       : await api.submitMidnightTx({ signedTxHex: tx, waitFor: 'Submitted' });
     // Shown to the user as the tx id. The ledger hash when the relay reports
@@ -6580,6 +6597,7 @@ app.add(MIDNIGHT_METHOD.getProvingProvider, async (request, sendResponse) => {
       network: wallet.network,
       sdkNetworkId: midnightSdkNetworkId(wallet.network),
       proofServer: midnightStore.proofServer,
+      provingConsent: midnightStore.shieldedProvingConsent,
     });
     debugLog('🌙 connector getProvingProvider', { origin, source });
     sendResponse({ id: request.id, data: undefined, target: TARGET, sender: SENDER.extension });
@@ -6653,6 +6671,7 @@ async function handleMidnightDappProving(
           network: wallet.network,
           sdkNetworkId: midnightSdkNetworkId(wallet.network),
           proofServer: midnightStore.proofServer,
+          provingConsent: midnightStore.shieldedProvingConsent,
           tabId: request.send?.tab?.id,
         },
         request.data,

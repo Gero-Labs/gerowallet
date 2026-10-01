@@ -850,6 +850,7 @@ const consentProvider = ref<'cloud' | 'zkpaas'>('cloud');
 const proverFallbackText = computed(() => {
   if (midnightStore.proofServer.mode === 'zkpaas') return t('midnight.proofServer.zkpaasNotReachableSend');
   if (proverFallbackReason.value === 'local-url-missing') return t('midnight.proofServer.localUrlMissingSend');
+  if (proverFallbackReason.value === 'local-url-not-loopback') return t('midnight.proofServer.localUrlNotLoopbackSend');
   return isLedger9Network(loggedWallet.value?.network)
     ? t('midnight.proofServer.notDetectedSendLedger9')
     : t('midnight.proofServer.notDetectedSend');

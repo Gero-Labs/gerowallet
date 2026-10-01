@@ -1621,6 +1621,10 @@ export class WalletManager {
    */
   private async checkLocalProverHealth(localUrl: string): Promise<boolean> {
     try {
+      // Only a prover on this machine counts: a LAN host or tunnel would ship
+      // the peer's witness data off-machine. Reported as "no prover" (PRIV-01).
+      const { isLoopbackProverUrl } = await import('@/chains/midnight/midnightProvingTarget');
+      if (!isLoopbackProverUrl(localUrl)) return false;
       const { checkProofServerHealth } = await import('@/chains/midnight/midnightLocalProver');
       return await checkProofServerHealth(localUrl);
     } catch (e) {
@@ -1643,6 +1647,8 @@ export class WalletManager {
     // resolution for @trezor/device-authenticity's CJS entry and breaks
     // trezorWeb.spec. This is also the idiom the surrounding Midnight code
     // already uses (midnightUnshieldedProver, midnightShieldedBuilder).
+    const { isLoopbackProverUrl } = await import('@/chains/midnight/midnightProvingTarget');
+    if (!isLoopbackProverUrl(localUrl)) throw new Error('Cross-device proving needs a proof server on this computer');
     const signedTxHex = Buffer.from(payload).toString('hex');
     const { provenTxHex } = await proveUnshieldedTransfer({
       signedTxHex,

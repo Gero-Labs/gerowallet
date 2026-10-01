@@ -17,7 +17,7 @@ vi.mock('@/chains/midnight/midnightZkpaas', () => ({
 }));
 
 import { MessageTypes } from '@/models/MessageTypes';
-import { checkWalletProvingPreflight, registerNightForDust, sendShieldedNight, sendUnshieldedNight, shieldNight } from './midnight-tx.service';
+import { buildAndSignUnshieldedTransfer, checkWalletProvingPreflight, registerNightForDust, sendShieldedNight, sendUnshieldedNight, shieldNight } from './midnight-tx.service';
 
 describe('Midnight ledger-specific orchestration', () => {
   beforeEach(() => {
@@ -79,6 +79,42 @@ describe('Midnight ledger-specific orchestration', () => {
     expect(mocks.send.mock.calls[1][0].data.proving.url).toBe(mode === 'local' ? 'http://localhost:6301' : 'https://prover.example');
     expect(submitProven).toHaveBeenCalledOnce();
     expect(cloud).not.toHaveBeenCalled();
+  });
+
+  it.each(['local', 'zkpaas'])('dapp makeTransfer proves with the %s prover and never hands Gero the proof inputs (PRIV-01)', async mode => {
+    mocks.proofServer.mode = mode;
+    const cloud = vi.fn();
+    mocks.api.mockReturnValue({ buildUnshieldedTx: async () => ({ unprovenTxHex: 'aa', txHash: 'built' }), submitMidnightTx: cloud });
+    mocks.send.mockResolvedValueOnce({ data: { success: true, publicKeyHex: '11', addressHex: '22' } })
+      .mockResolvedValueOnce({ data: { success: true, signedTxHex: 'sealed', proven: true } });
+    const { tx } = await buildAndSignUnshieldedTransfer('Preprod', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {});
+    expect(tx).toBe('sealed');
+    expect(mocks.send.mock.calls[1][0].data.proving.url).toBe(mode === 'local' ? 'http://localhost:6300' : 'https://prover.example');
+    expect(cloud).not.toHaveBeenCalled();
+  });
+
+  it('dapp makeTransfer in remote mode returns the tx unproven, for Gero Cloud to prove on submit', async () => {
+    mocks.api.mockReturnValue({ buildUnshieldedTx: async () => ({ unprovenTxHex: 'aa', txHash: 'built' }) });
+    mocks.send.mockResolvedValueOnce({ data: { success: true, publicKeyHex: '11', addressHex: '22' } })
+      .mockResolvedValueOnce({ data: { success: true, signedTxHex: 'unproven', proven: false } });
+    const { tx } = await buildAndSignUnshieldedTransfer('Preprod', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {});
+    expect(tx).toBe('unproven');
+    expect(mocks.send.mock.calls[1][0].data.proving).toBeUndefined();
+  });
+
+  it('dapp makeTransfer refuses an unreachable or non-loopback local prover instead of falling back to Gero Cloud', async () => {
+    mocks.proofServer.mode = 'local';
+    mocks.health.mockResolvedValue(false);
+    await expect(buildAndSignUnshieldedTransfer('Preprod', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {}))
+      .rejects.toThrow('Proof server not reachable');
+    mocks.health.mockResolvedValue(true);
+    const saved = mocks.proofServer.localUrl;
+    mocks.proofServer.localUrl = 'https://abc.trycloudflare.com';
+    try {
+      await expect(buildAndSignUnshieldedTransfer('Preprod', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {}))
+        .rejects.toThrow('Proof server not reachable');
+    } finally { mocks.proofServer.localUrl = saved; }
+    expect(mocks.send).not.toHaveBeenCalled();
   });
 
   it('fails before authorization when the preferred prover is unreachable, without implicit cloud fallback', async () => {

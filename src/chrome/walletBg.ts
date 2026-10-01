@@ -2307,7 +2307,7 @@ export class WalletBg {
         assertSession();
         const endpoints = getMidnightEndpoints(network);
         if (!endpoints) throw new Error(`No Midnight endpoints configured for network ${network}`);
-        const target = resolveDappProvingTarget(network, midnightStore.proofServer);
+        const target = resolveDappProvingTarget(network, midnightStore.proofServer, midnightStore.shieldedProvingConsent);
         // Registration lower bound for the dust snapshot bootstrap (see
         // balanceAndSignMidnightUnshieldedTransfer): creation time, else a
         // conservative 90-day lookback.
