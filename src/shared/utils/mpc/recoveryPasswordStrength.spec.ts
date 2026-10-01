@@ -3,6 +3,7 @@ import {
   scoreRecoveryPassword,
   isAcceptableRecoveryPassword,
   MIN_RECOVERY_PASSWORD_LENGTH,
+  isCommonRecoveryPattern,
 } from './recoveryPasswordStrength';
 
 describe('recoveryPasswordStrength', () => {
@@ -28,14 +29,14 @@ describe('recoveryPasswordStrength', () => {
   });
 
   it('accepts a 12+ char password with mixed character classes', () => {
-    const good = 'Recover-Me-42';
+    const good = 'Kestrel.Moss.Lantern.9';
     expect(good.length).toBeGreaterThanOrEqual(MIN_RECOVERY_PASSWORD_LENGTH);
     expect(isAcceptableRecoveryPassword(good)).toBe(true);
     expect(scoreRecoveryPassword(good).score).toBeGreaterThanOrEqual(2);
   });
 
   it('accepts exactly 12 chars with two character classes', () => {
-    const exact = 'abcdefghij12'; // 12 chars, lower + digit
+    const exact = 'tqmzvbrkwp47'; // 12 chars, lower + digit, no pattern
     expect(exact.length).toBe(MIN_RECOVERY_PASSWORD_LENGTH);
     expect(isAcceptableRecoveryPassword(exact)).toBe(true);
   });
@@ -62,5 +63,26 @@ describe('recoveryPasswordStrength', () => {
     for (const pw of ['', 'a', 'Recover-Me-42', 'Sup3r-Secret-Recovery-Phrase!']) {
       expect(scoreRecoveryPassword(pw).labelKey).toMatch(/^welcome\.recoveryStrength/);
     }
+  });
+});
+
+describe('common recovery-password patterns (offline-crack resistance)', () => {
+  // Every one of these clears the length + two-class floor on its own.
+  const guessable = [
+    'Password1234', 'P@ssw0rd2024!', 'MyPassword2024', 'Cardano12345', 'Qwerty123456!',
+    'Gero-Wallet-2024', 'Wallet-Backup-2025', 'Welcome2Gero!', 'Recover-Me-42',
+    'Abcdefgh1234', 'abcdefghij12', '12345678901!', 'Aaaa1111aaaa', 'Ab1!Ab1!Ab1!Ab1!',
+  ];
+  it.each(guessable)('refuses %s and caps it at the weakest tier', (pw) => {
+    expect(pw.length).toBeGreaterThanOrEqual(MIN_RECOVERY_PASSWORD_LENGTH);
+    expect(isCommonRecoveryPattern(pw)).toBe(true);
+    expect(isAcceptableRecoveryPassword(pw)).toBe(false);
+    expect(scoreRecoveryPassword(pw).score).toBeLessThanOrEqual(1);
+  });
+
+  const fine = ['tqmzvbrkwp47', 'Kestrel.Moss.Lantern.9', 'correct-horse-battery-staple', '8#4!9$2&7*1@', 'Sup3r-Secret-Recovery-Phrase!'];
+  it.each(fine)('accepts %s', (pw) => {
+    expect(isCommonRecoveryPattern(pw)).toBe(false);
+    expect(isAcceptableRecoveryPassword(pw)).toBe(true);
   });
 });

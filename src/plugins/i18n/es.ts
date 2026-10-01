@@ -3381,7 +3381,7 @@ export default {
   'welcome.savingRecovery': 'Guardando los datos de recuperación…',
   'welcome.recoverySaved': 'Datos de recuperación guardados',
   'welcome.recoverySaveFailed': 'No se pudieron guardar los datos de recuperación. Inténtalo de nuevo.',
-  'welcome.recoveryPasswordTooWeak': 'Elige una contraseña de recuperación más segura (al menos 12 caracteres).',
+  'welcome.recoveryPasswordTooWeak': 'Elige una contraseña de recuperación más segura: al menos 12 caracteres, letras combinadas con números o símbolos, y sin palabras ni secuencias comunes.',
   'welcome.restoreRecoveryPasswordHint': 'La contraseña de recuperación que elegiste al crear esta billetera.',
   'welcome.recoveryStrengthWeak': 'Débil',
   'welcome.recoveryStrengthFair': 'Aceptable',

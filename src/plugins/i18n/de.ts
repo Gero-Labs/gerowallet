@@ -3980,7 +3980,7 @@ export default {
   'welcome.savingRecovery': 'Wiederherstellung wird gespeichert…',
   'welcome.recoverySaved': 'Wiederherstellung gespeichert',
   'welcome.recoverySaveFailed': 'Wiederherstellung konnte nicht gespeichert werden. Bitte erneut versuchen.',
-  'welcome.recoveryPasswordTooWeak': 'Wählen Sie ein stärkeres Wiederherstellungspasswort (mindestens 12 Zeichen).',
+  'welcome.recoveryPasswordTooWeak': 'Wählen Sie ein stärkeres Wiederherstellungspasswort: mindestens 12 Zeichen, Buchstaben gemischt mit Zahlen oder Symbolen, ohne gängige Wörter oder Zeichenfolgen.',
   'welcome.restoreRecoveryPasswordHint': 'Das Wiederherstellungspasswort, das Sie beim Erstellen dieser Wallet gewählt haben.',
   'welcome.recoveryStrengthWeak': 'Schwach',
   'welcome.recoveryStrengthFair': 'Ausreichend',

@@ -20,6 +20,85 @@ const STRENGTH_LABEL_KEYS = [
   'welcome.recoveryStrengthStrong', // 4
 ];
 
+/**
+ * Base words that make up most guessed passwords, plus wallet- and brand-
+ * specific ones an attacker targeting this wallet would try first. Matched
+ * after lower-casing and undoing common letter swaps (0→o, 1→i, 3→e, @→a…).
+ */
+const COMMON_BASE_WORDS: readonly string[] = [
+  'password', 'passwort', 'contrasena', 'passphrase', 'pass', 'secret', 'letmein', 'welcome',
+  'admin', 'login', 'master', 'iloveyou', 'loveyou', 'trustno', 'monkey', 'dragon', 'shadow',
+  'sunshine', 'princess', 'football', 'baseball', 'soccer', 'superman', 'batman', 'starwars',
+  'freedom', 'whatever', 'qwerty', 'qwertz', 'azerty', 'asdfgh', 'zxcvbn', 'qazwsx', 'abcdef',
+  'recovery', 'recover', 'backup', 'wallet', 'gerowallet', 'gero', 'cardano', 'bitcoin',
+  'crypto', 'google', 'gmail', 'changeme', 'default', 'test',
+];
+
+const BASE_WORDS_LONGEST_FIRST = [...COMMON_BASE_WORDS].sort((a, b) => b.length - a.length);
+
+/** Letter swaps undone before the base-word check ('P@ssw0rd' reads as 'password'). */
+const LEET: Record<string, string> = { '0': 'o', '1': 'i', '!': 'i', '3': 'e', '4': 'a', '@': 'a', '5': 's', '$': 's', '7': 't', '+': 't', '8': 'b', '9': 'g' };
+
+/** Fewer distinct characters than this is a repeat pattern ('Aaaa1111aaaa'). */
+const MIN_DISTINCT_CHARS = 6;
+/** A run of sequential or repeated characters this long dominates the password. */
+const MAX_RUN_FRACTION = 0.5;
+
+/** Longest run of characters stepping by +1, -1 or 0 (case-insensitive): 'abcd', '4321', 'zzzz'. */
+function longestRun(password: string): number {
+  const codes = Array.from(password.toLowerCase(), (c) => c.codePointAt(0) ?? 0);
+  let best = codes.length > 0 ? 1 : 0;
+  let run = 1;
+  let step: number | null = null;
+  for (let i = 1; i < codes.length; i++) {
+    const d = codes[i] - codes[i - 1];
+    if (Math.abs(d) <= 1 && (step === null || d === step)) {
+      run += 1;
+      step = d;
+    } else if (Math.abs(d) <= 1) {
+      run = 2;
+      step = d;
+    } else {
+      run = 1;
+      step = null;
+    }
+    best = Math.max(best, run);
+  }
+  return best;
+}
+
+/**
+ * True when the password is built from a guessable pattern that the length and
+ * class rules alone let through, such as 'Password1234', 'P@ssw0rd2024!',
+ * 'Cardano12345' or 'Abcdefgh1234'. The recovery blob can be fetched and
+ * attacked offline, so these are refused rather than just scored low.
+ */
+export function isCommonRecoveryPattern(pw: string): boolean {
+  const password = pw ?? '';
+  if (new Set(Array.from(password.toLowerCase())).size < MIN_DISTINCT_CHARS) return true;
+  if (longestRun(password) >= Math.ceil(password.length * MAX_RUN_FRACTION)) return true;
+
+  // Keep letters only (once as typed, once with letter swaps undone, so both
+  // 'Cardano12345' and 'P@ssw0rd!' are read), then strip every common base
+  // word: if under 4 letters are left, it is a base word plus padding.
+  const lower = password.toLowerCase();
+  const asTyped = lower.replace(/[^a-z]/g, '');
+  const unswapped = Array.from(lower, (c) => LEET[c] ?? c).join('').replace(/[^a-z]/g, '');
+  return [asTyped, unswapped].some(isBaseWordPlusPadding);
+}
+
+function isBaseWordPlusPadding(letters: string): boolean {
+  let rest = letters;
+  let hit = false;
+  for (const word of BASE_WORDS_LONGEST_FIRST) {
+    if (rest.includes(word)) {
+      hit = true;
+      rest = rest.split(word).join('');
+    }
+  }
+  return hit && rest.length < 4;
+}
+
 /** Heuristic 0–4 score from length + character-class variety. No external deps. */
 export function scoreRecoveryPassword(pw: string): RecoveryPasswordScore {
   const password = pw ?? '';
@@ -46,13 +125,18 @@ export function scoreRecoveryPassword(pw: string): RecoveryPasswordScore {
   if (variety >= 3) raw += 1;
   if (variety >= 4) raw += 1;
 
-  const score = Math.min(4, raw) as 0 | 1 | 2 | 3 | 4;
+  // A common pattern is capped at the weakest tier and never acceptable.
+  const common = isCommonRecoveryPattern(password);
+  const score = (common ? Math.min(1, raw) : Math.min(4, raw)) as 0 | 1 | 2 | 3 | 4;
   const acceptable =
-    password.length >= MIN_RECOVERY_PASSWORD_LENGTH && variety >= 2 && score >= 2;
+    password.length >= MIN_RECOVERY_PASSWORD_LENGTH && variety >= 2 && score >= 2 && !common;
   return { score, labelKey: STRENGTH_LABEL_KEYS[score], acceptable };
 }
 
-/** Single gate used by every set/change site. */
+/**
+ * Single gate used by every set/change site: the onboarding and Settings forms,
+ * and again in the background before a recovery blob is ever encrypted.
+ */
 export function isAcceptableRecoveryPassword(pw: string): boolean {
   return scoreRecoveryPassword(pw).acceptable;
 }

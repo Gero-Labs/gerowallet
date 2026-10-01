@@ -3458,7 +3458,7 @@ export default {
   'welcome.savingRecovery': 'Saving recovery…',
   'welcome.recoverySaved': 'Recovery saved',
   'welcome.recoverySaveFailed': 'Could not save your recovery. Please try again.',
-  'welcome.recoveryPasswordTooWeak': 'Choose a stronger recovery password (at least 12 characters).',
+  'welcome.recoveryPasswordTooWeak': 'Choose a stronger recovery password: at least 12 characters, letters mixed with numbers or symbols, and no common words or sequences.',
   'welcome.restoreRecoveryPasswordHint': 'The recovery password you chose when you created this wallet.',
   'welcome.recoveryStrengthWeak': 'Weak',
   'welcome.recoveryStrengthFair': 'Fair',
