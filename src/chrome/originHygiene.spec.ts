@@ -60,7 +60,8 @@ describe('WalletConnect session binding', () => {
   });
 
   it('the WalletConnect signing relay never answers success without that re-check', () => {
-    const bg = readFileSync(join(__dirname, 'background.ts'), 'utf8');
+    // Normalize CRLF (Windows checkouts) before slicing on newline delimiters.
+    const bg = readFileSync(join(__dirname, 'background.ts'), 'utf8').replace(/\r\n/g, '\n');
     const start = bg.indexOf('async function routeWcSigningRequest(');
     const fn = bg.slice(start, bg.indexOf('\n  }\n', start));
     const releaseAt = fn.indexOf('const release = async');
@@ -145,5 +146,22 @@ describe('origin hygiene wiring tripwires', () => {
 
   it('every WalletConnect request checks the session belongs to the active wallet', () => {
     expect(read('chrome/background.ts')).toContain('sessionAuthorizesWallet(wcService.getSessionForTopic(topic), loggedWallet)');
+  });
+});
+
+describe('embedding-site warning on popup approvals (PR #2 review)', () => {
+  const read = (rel: string) => readFileSync(join(__dirname, '..', rel), 'utf8').replace(/\r\n/g, '\n');
+
+  it('the background hands the popup the browser-derived embedding site, overriding anything in the request', () => {
+    const bg = read('chrome/background.ts');
+    expect(bg).toContain('Messaging.sendToPopupInternal(newTab.id, { ...request, embeddedIn: enablePayload.embeddedIn })');
+    expect(bg).toContain('{ ...JSON.parse(JSON.stringify(request)), embeddedIn: signTxPayload.embeddedIn }');
+    expect(bg).toContain('Messaging.sendToPopupInternal(tab.id, { ...request, embeddedIn: signDataPayload.embeddedIn })');
+  });
+
+  it('connect, signTx and signData popups render the warning', () => {
+    for (const view of ['DappConnect', 'SignTx', 'DappSignData']) {
+      expect(read(`popup/modules/views/${view}.vue`)).toMatch(/<EmbeddedSiteWarning [^>]*:embedded-in="/);
+    }
   });
 });
