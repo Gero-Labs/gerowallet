@@ -33,6 +33,12 @@ import { debugLog } from '@/utils/debug';
 
 /** Bumped if the persisted shape or the SDK serialization contract changes. */
 const SCHEMA_VERSION = 1;
+
+// Indexer event IDs are provider-specific. Mainnet checkpoints made before
+// the Blockfrost migration must not resume against the new provider.
+function schemaVersion(network: string): number {
+  return network === 'mainnet' || network === 'midnight-mainnet' ? 2 : SCHEMA_VERSION;
+}
 const KEY_PREFIX = 'midnight_wallet_state';
 
 export type MidnightWalletKind = 'dust' | 'shielded' | 'unshielded';
@@ -90,7 +96,7 @@ export async function loadWalletState(
         const blob = result?.[key] as PersistedWalletState | undefined;
         if (
           !blob
-          || blob.schemaVersion !== SCHEMA_VERSION
+          || blob.schemaVersion !== schemaVersion(network)
           || blob.network !== network
           || blob.kind !== kind
           || typeof blob.serializedState !== 'string'
@@ -125,7 +131,7 @@ export async function saveWalletState(
   if (typeof serializedState !== 'string' || serializedState.length === 0) return;
   const key = storageKey(network, kind, identitySeed);
   const blob: PersistedWalletState = {
-    schemaVersion: SCHEMA_VERSION,
+    schemaVersion: schemaVersion(network),
     network,
     kind,
     serializedState,

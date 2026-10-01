@@ -81,6 +81,11 @@ function buildCSP(dev: boolean): string {
     // (https://rpc.preview.midnight.network, etc).
     'https://*.midnight.network',
     'wss://*.midnight.network',
+    // Midnight mainnet is hosted by Blockfrost from 2026-09-30.
+    'https://midnight-mainnet.blockfrost.io',
+    'wss://midnight-mainnet.blockfrost.io',
+    'https://rpc.midnight-mainnet.blockfrost.io',
+    'wss://rpc.midnight-mainnet.blockfrost.io',
     // Stagenet moved off midnight.network; keep the direct SDK endpoints usable.
     'https://rpc.stagenet.shielded.tools',
     'wss://rpc.stagenet.shielded.tools',
