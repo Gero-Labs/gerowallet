@@ -11,7 +11,7 @@ import { isStakeKeyRegistered, StakeAccountError } from '@/shared/utils/stakeReg
 import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, POPUP, SENDER, TARGET, TxSendError, TxSignError } from '@/chrome/config';
 import { toDappError } from '@/chrome/dappError';
 import { applyDappRequestBadge } from '@/chrome/dappRequestBadge';
-import { sessionAuthorizesWallet } from '@/services/walletConnect/sessionBinding';
+import { authorizationStillHolds, sessionAuthorizesWallet } from '@/services/walletConnect/sessionBinding';
 import { embeddingSite } from '@/chrome/originBinding';
 import { bringInitBackground } from '@bringweb3/chrome-extension-kit';
 import {
@@ -4485,11 +4485,23 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
     const session = wcService.getSessionForTopic(topic) as { peer?: { metadata?: { url?: string; icons?: string[] } } } | null;
     const peerMeta = session?.peer?.metadata;
     const payload = { ...data, website: peerMeta?.url || 'WalletConnect', favIconUrl: peerMeta?.icons?.[0] };
+    // The wallet this request was authorized for (onSessionRequest checked it).
+    const walletAtRequest = WalletStore.state.loggedWallet ? { ...WalletStore.state.loggedWallet } : null;
+    // Release a signature only if that authorization still holds now: the
+    // session is live and approves the same, unlocked wallet. Otherwise the
+    // peer gets an error and never sees the signature.
+    const release = async (result: unknown) => {
+      if (!authorizationStillHolds(wcService.getSessionForTopic(topic), walletAtRequest, WalletStore.state.loggedWallet, walletStore.isLocked)) {
+        await wcService.respondError(topic, id, 4100, 'Unauthorized: the session or active wallet changed during approval');
+        return;
+      }
+      await wcService.respondSuccess(topic, id, result);
+    };
 
     if (miniGeroPorts.size > 0) {
       try {
         const response = await sendToMiniGero(portMethod, payload, undefined);
-        await wcService.respondSuccess(topic, id, response.data);
+        await release(response.data);
       } catch (err) {
         await wcService.respondError(topic, id, 4001, errorMessage(err) || 'User rejected');
       }
@@ -4501,7 +4513,7 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
     const tab = await focusOrCreatePopup(popupURL, popupSize[0], popupSize[1]);
     const response = await Messaging.sendToPopupInternal(tab.id, fakeRequest) as BackgroundResponse;
     if (response.data !== undefined) {
-      await wcService.respondSuccess(topic, id, response.data);
+      await release(response.data);
     } else {
       const errInfo = (response.error as { info?: string } | undefined)?.info;
       await wcService.respondError(topic, id, 4001, errInfo || 'User rejected');
