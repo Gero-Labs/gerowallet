@@ -315,10 +315,10 @@ class BackgroundController {
  */
 export function toPageReply(response: unknown, requestId: unknown): Record<string, unknown> {
   const r = (response && typeof response === 'object') ? response as Record<string, unknown> : {};
-  if (r.id === requestId && r.target === TARGET && r.sender === SENDER.extension) return r;
+  if (r['id'] === requestId && r['target'] === TARGET && r['sender'] === SENDER.extension) return r;
   return {
     ...r,
-    error: r.error ?? (r.data === undefined ? APIError.InternalError : undefined),
+    error: r['error'] ?? (r['data'] === undefined ? APIError.InternalError : undefined),
     id: requestId,
     target: TARGET,
     sender: SENDER.extension,
