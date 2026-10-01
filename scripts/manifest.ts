@@ -251,14 +251,12 @@ async function getManifest() {
       'notifications',
       'identity',
       'sidePanel',
-      'scripting',
       'declarativeNetRequest',
     ],
-    declarative_net_request: {
-      rule_resources: [
-        { id: 'moonpay_iframe', enabled: true, path: 'public/dnr_rules.json' },
-      ],
-    },
+    // The MoonPay frame-header rule is a SESSION rule scoped to frames this
+    // extension initiates (src/chrome/moonpayFrameRule.ts), not a static ruleset:
+    // a static rule can't name the runtime extension id, and without that
+    // condition it stripped MoonPay's anti-framing headers for every site.
     host_permissions: ['*://*/*'],
     web_accessible_resources: [
       {

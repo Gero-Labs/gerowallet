@@ -11,6 +11,13 @@ import { isStakeKeyRegistered, StakeAccountError } from '@/shared/utils/stakeReg
 import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, POPUP, SENDER, TARGET, TxSendError, TxSignError } from '@/chrome/config';
 import { toDappError } from '@/chrome/dappError';
 import { applyDappRequestBadge } from '@/chrome/dappRequestBadge';
+import { isOwnExtensionPageSender, panelMaySettleRequest } from '@/chrome/senderTrust';
+import { isConnectApproval } from '@/chrome/connectApproval';
+import { decideSignTxPopup } from '@/chrome/signTxPopupPolicy';
+import { approvalStillValid } from '@/chrome/approvalRelease';
+import { authorizationStillHolds, sessionAuthorizesWallet } from '@/services/walletConnect/sessionBinding';
+import { embeddingSite } from '@/chrome/originBinding';
+import { installMoonpayFrameRule } from '@/chrome/moonpayFrameRule';
 import { bringInitBackground } from '@bringweb3/chrome-extension-kit';
 import {
   focusOrCreatePopup,
@@ -163,8 +170,11 @@ loadWallets().then(async () => {
           console.log('🔓 Cleared stale lock — no unlock method configured');
         }
       } catch (e) {
+        // Fail CLOSED: if the unlock method can't be read, stay locked. A
+        // database error must never be what unlocks a wallet; once the database
+        // is readable again the normal unlock (or the no-method clear above,
+        // on the next start) applies.
         console.warn('Failed to check unlock method for stale lock:', e);
-        WalletStore.setLocked(false);
       }
     }
 
@@ -186,6 +196,10 @@ loadWallets().then(async () => {
     Loading.setLoading(false)
   }
 }).finally(() => resolveBooted()).catch((e) => console.warn('⚠️ worker boot failed:', e));
+
+// MoonPay frame headers: stripped only for frames this extension opens. Session
+// rules don't survive a browser restart, so (re)install on every worker start.
+installMoonpayFrameRule().catch((e) => debugLog('MoonPay frame rule not installed:', e));
 
 (async () => {
   // Skip cashback init without its env vars — the SDK throws on missing config.
@@ -377,8 +391,10 @@ function redeliverParkedRequests(tabId: number, port: chrome.runtime.Port) {
 
 chrome.runtime.onConnect.addListener((port) => {
   if (!port.name.startsWith('mini-gero-dapp-channel')) return;
-  // Only our own extension pages may register an approval surface.
-  if (port.sender?.id !== chrome.runtime.id) {
+  // Only our own extension pages may register an approval surface. A content
+  // script has the same sender.id, so the page URL must be ours too: otherwise a
+  // forged port could replace the real panel, read pending payloads and approve.
+  if (!isOwnExtensionPageSender(port.sender, chrome.runtime.id)) {
     console.warn('[DApp] rejected foreign mini-gero port from', port.sender?.id);
     try { port.disconnect(); } catch { /* noop */ }
     return;
@@ -404,6 +420,9 @@ chrome.runtime.onConnect.addListener((port) => {
     if (!message?.requestId) return;
     const entry = pendingDAppRequests.get(message.requestId);
     if (!entry) return;
+    // A panel may only settle requests delivered to it: its own tab's, or
+    // tabless ones (which go to any panel). Never another tab's prompt.
+    if (!panelMaySettleRequest(entry.tabId, tabId)) return;
     if (message.type === 'dapp-response') {
       // Wallet-switch guard: if the active wallet changed since the request
       // was issued, an approval must not be honored silently.
@@ -739,7 +758,19 @@ chrome.webNavigation?.onCommitted.addListener(async (details) => {
   }
 });
 
+/**
+ * Wallet-data reads stay closed while the wallet is locked: a connected dApp
+ * must not keep reading UTxOs, addresses or account keys behind the lock
+ * screen. Midnight's handlers already behave this way (requireMidnightWallet).
+ */
+function refuseWhileLocked(request: { id?: unknown }, sendResponse: (r: unknown) => void): boolean {
+  if (!walletStore.isLocked) return false;
+  sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+  return true;
+}
+
 app.add(METHOD.getBalance, async (request, sendResponse) => {
+  if (refuseWhileLocked(request, sendResponse)) return;
   // Server-side whitelist enforcement (defense-in-depth): the content relay
   // pre-checks the whitelist client-side, but the background must not depend on
   // that. CIP-30 read methods are only reachable after enable(), so a legit
@@ -781,7 +812,7 @@ app.add(METHOD.enable, (request, sendResponse) => {
   };
 
   const favIconUrl = send.tab?.favIconUrl;
-  const enablePayload = { ...request.data, website: origin, favIconUrl };
+  const enablePayload = { ...request.data, website: origin, favIconUrl, embeddedIn: embeddingSite(origin, request.send) };
 
   const handleMiniGeroEnable = () => {
     // Prefer this tab's panel port, else any open panel (same rationale as
@@ -789,13 +820,16 @@ app.add(METHOD.enable, (request, sendResponse) => {
     const deliverTabId = typeof tabId === 'number' && miniGeroPorts.has(tabId) ? tabId : undefined;
     return sendToMiniGero('enable', enablePayload, deliverTabId)
       .then(async (response) => {
-        if (response.data === true) {
+        if (isConnectApproval(response)) {
           // Read the wallet fresh: a cold-start request may have logged a
           // wallet in between the initial check and this resolution.
           const walletNow = walletManager.getWallet();
           if (walletNow) await WalletStore.addConnectedDapp(walletNow.id, origin);
+          reply({ data: true });
+        } else {
+          // CIP-30: a declined enable() rejects with APIError Refused.
+          reply({ error: APIError.Refused });
         }
-        reply({ data: response.data });
       });
   };
 
@@ -806,11 +840,12 @@ app.add(METHOD.enable, (request, sendResponse) => {
         (favIconUrl ? `&favIconUrl=${encodeURIComponent(favIconUrl)}` : '')
     );
     return focusOrCreatePopup(popupURL, 470, 600)
-      .then(newTab => Messaging.sendToPopupInternal(newTab.id, request))
+      // The popup shows the same embedding-site warning as the side panel.
+      .then(newTab => Messaging.sendToPopupInternal(newTab.id, { ...request, embeddedIn: enablePayload.embeddedIn }))
       .then((response: BackgroundResponse) => {
-        if (response.data) reply({ data: response.data });
-        else if (response.error) reply({ error: response.error });
-        else reply({ error: APIError.InternalError });
+        // Only an explicit approval connects; Decline (or anything else) refuses.
+        if (isConnectApproval(response)) reply({ data: true });
+        else reply({ error: APIError.Refused });
       })
       .catch(err => reply({ error: toDappError(err) }));
   };
@@ -921,6 +956,7 @@ app.add(METHOD.isEnabled, (request, sendResponse) => {
 });
 
 app.add(METHOD.getAddress, async (request, sendResponse) => {
+  if (refuseWhileLocked(request, sendResponse)) return;
   if (!WalletStore.isWhitelisted(request.origin)) {
     sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
     return;
@@ -1043,6 +1079,7 @@ app.add(METHOD.getNetworkId, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getRewardAddresses, async (request, sendResponse) => {
+  if (refuseWhileLocked(request, sendResponse)) return;
   if (!WalletStore.isWhitelisted(request.origin)) {
     sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
     return;
@@ -1067,6 +1104,7 @@ app.add(METHOD.getRewardAddresses, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getUtxos, async (request, sendResponse) => {
+  if (refuseWhileLocked(request, sendResponse)) return;
   if (!WalletStore.isWhitelisted(request.origin)) {
     sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
     return;
@@ -1148,11 +1186,13 @@ async function isTrustedCollateralDapp(origin?: string): Promise<boolean> {
 }
 
 app.add(METHOD.getCollateral, async (request, sendResponse) => {
+  // This handler ends `return true`, so its early exits must return a value too.
+  if (refuseWhileLocked(request, sendResponse)) return true;
   // Server-side whitelist gate (defense-in-depth), mirroring getBalance:
   // only a connected dApp may read collateral UTxOs.
   if (!WalletStore.isWhitelisted(request.origin)) {
     sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
-    return;
+    return true;
   }
   const storedUtxos = WalletStore.state.utxos;
   try {
@@ -1177,6 +1217,7 @@ app.add(METHOD.getCollateral, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getUsedAddresses, async (request, sendResponse) => {
+  if (refuseWhileLocked(request, sendResponse)) return;
   if (!WalletStore.isWhitelisted(request.origin)) {
     sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
     return;
@@ -1209,6 +1250,7 @@ app.add(METHOD.getUsedAddresses, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getUnusedAddresses, async (request, sendResponse) => {
+  if (refuseWhileLocked(request, sendResponse)) return;
   if (!WalletStore.isWhitelisted(request.origin)) {
     sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
     return;
@@ -1301,10 +1343,34 @@ app.add(METHOD.popupLogin, async (request, sendResponse) => {
   }
 });
 
-app.add(METHOD.signData, (request, sendResponse) => {
-  const signDataReply = (opts: ReplyOpts) => {
-    sendResponse({ id: request.id, ...opts, target: TARGET, sender: SENDER.extension });
+/** Active wallet id, as the side-panel wallet-switch guard reads it. */
+function activeWalletId(): string | undefined {
+  return (WalletStore.state.loggedWallet as { id?: string } | null)?.id;
+}
+
+/**
+ * Build a reply that only releases a signing result while the consent behind it
+ * still holds (origin connected, same wallet as at request time); otherwise the
+ * dApp gets Refused. Covers the side panel and the popup path alike.
+ */
+function guardedSignReply(
+  request: { id?: unknown; origin?: string },
+  sendResponse: (r: unknown) => void,
+): (opts: ReplyOpts) => void {
+  const ctx = { origin: request.origin, walletIdAtRequest: activeWalletId() };
+  return (opts: ReplyOpts) => {
+    const releasing = opts.data !== undefined && opts.error == null;
+    const safe = releasing && !approvalStillValid(ctx, (o) => WalletStore.isWhitelisted(o), activeWalletId())
+      ? { error: APIError.Refused }
+      : opts;
+    sendResponse({ id: request.id, ...safe, target: TARGET, sender: SENDER.extension });
   };
+}
+
+app.add(METHOD.signData, (request, sendResponse) => {
+  // Releases the signature only while the origin is still connected and the
+  // wallet is unchanged since the request (revoke / switch during the prompt).
+  const signDataReply = guardedSignReply(request, sendResponse);
   // The content relay now fast-paths sign requests straight to background
   // (see messaging.ts) so the user gesture survives to sidePanel.open();
   // enforce the whitelist here instead of in that pre-check round-trip.
@@ -1312,7 +1378,17 @@ app.add(METHOD.signData, (request, sendResponse) => {
     return signDataReply({ error: APIError.Refused });
   }
 
-  const signDataPayload = { ...request.data, website: request.origin, favIconUrl: request.send?.tab?.favIconUrl };
+  // Explicit fields only: never spread page-supplied data into the approval
+  // payload, or extra fields (e.g. a decoy `message`) reach the prompt and can
+  // change what the user is shown without changing what gets signed.
+  const signDataRequest = (request.data ?? {}) as { address?: unknown; payload?: unknown };
+  const signDataPayload = {
+    address: typeof signDataRequest.address === 'string' ? signDataRequest.address : '',
+    payload: typeof signDataRequest.payload === 'string' ? signDataRequest.payload : '',
+    website: request.origin,
+    favIconUrl: request.send?.tab?.favIconUrl,
+    embeddedIn: embeddingSite(request.origin, request.send),
+  };
   const tabId = request.send?.tab?.id;
 
   const handleMiniGeroSignData = () => {
@@ -1333,7 +1409,8 @@ app.add(METHOD.signData, (request, sendResponse) => {
         // Fallback: popup window
         const popupURL = chrome.runtime.getURL(`index.html#/${POPUP.dappSignData}?website=${encodeURIComponent(request.origin)}`);
         focusOrCreatePopup(popupURL, 470, 600)
-          .then((tab) => Messaging.sendToPopupInternal(tab.id, request))
+          // embeddedIn: same embedding-site warning as the side panel.
+          .then((tab) => Messaging.sendToPopupInternal(tab.id, { ...request, embeddedIn: signDataPayload.embeddedIn }))
           .then((response: BackgroundResponse) => {
             if (response.data) signDataReply({ data: response.data });
             else if (response.error) signDataReply({ error: response.error });
@@ -1400,9 +1477,8 @@ app.addToOptions(MessageTypes.CIP113_SIGN_PREFLIGHT, async (request, sendRespons
 });
 
 app.add(METHOD.signTx, async (request, sendResponse) => {
-  const signTxReply = (opts: ReplyOpts) => {
-    sendResponse({ id: request.id, ...opts, target: TARGET, sender: SENDER.extension });
-  };
+  // Same consent re-check as signData before the witness set is released.
+  const signTxReply = guardedSignReply(request, sendResponse);
   // Same fast-path/whitelist split as signData above. Use ONLY the relay-set
   // `request.origin` (stamped to the true window.origin in messaging.ts) — never
   // the page-supplied `request.data.origin`, which a malicious site can set to a
@@ -1421,7 +1497,16 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
     return signTxReply({ error: { code: APIError.Refused.code, info: CIP113_SIGN_REFUSAL_MESSAGE } });
   }
 
-  const signTxPayload = { ...request.data, website: request.origin, favIconUrl: request.send?.tab?.favIconUrl };
+  // Explicit fields only (see signData): the prompt must be built from the tx
+  // the page asked to sign, not from extra page-supplied fields.
+  const signTxRequest = (request.data ?? {}) as { tx?: unknown; partialSign?: unknown };
+  const signTxPayload = {
+    tx: typeof signTxRequest.tx === 'string' ? signTxRequest.tx : '',
+    partialSign: signTxRequest.partialSign === true,
+    website: request.origin,
+    favIconUrl: request.send?.tab?.favIconUrl,
+    embeddedIn: embeddingSite(request.origin, request.send),
+  };
   const tabId = request.send?.tab?.id;
 
   const handleMiniGeroSignTx = () => {
@@ -1438,17 +1523,22 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
   // response back to the dApp. Used both as the primary path when the user has
   // disabled the side panel and as a fallback when opening the side panel fails.
   const openPopupForSignTx = async () => {
-    const requestCopy = JSON.parse(JSON.stringify(request));
-    // Force close any existing SignTx popups before opening a new one
+    // embeddedIn: the browser-derived embedding site, so the popup warns like the side panel.
+    const requestCopy = { ...JSON.parse(JSON.stringify(request)), embeddedIn: signTxPayload.embeddedIn };
+    // A pending signTx prompt belongs to its origin: another origin's request
+    // is refused rather than allowed to close it and take its place. The same
+    // origin may supersede its own pending prompt.
     const windows = await chrome.windows.getAll({ populate: true });
-    for (const window of windows) {
-      if (window.type === 'popup') {
-        for (const tab of window.tabs) {
-          if (tab.url?.includes(`index.html#/${POPUP.signTx}`)) {
-            await chrome.windows.remove(window.id);
-            break;
-          }
-        }
+    const popupTabs = windows
+      .filter((w) => w.type === 'popup')
+      .flatMap((w) => (w.tabs ?? []).map((tab) => ({ windowId: w.id, url: tab.url })));
+    const decision = decideSignTxPopup(popupTabs.map((t) => t.url), request.origin, POPUP.signTx, chrome.runtime.getURL('index.html'));
+    if (decision.action === 'busy') {
+      return signTxReply({ error: APIError.Refused });
+    }
+    for (const t of popupTabs) {
+      if (t.url && decision.closeTabUrls.includes(t.url) && typeof t.windowId === 'number') {
+        await chrome.windows.remove(t.windowId);
       }
     }
     const popupURL = chrome.runtime.getURL(
@@ -1517,6 +1607,12 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
 });
 
 app.add(METHOD.submitTx, async (request, sendResponse) => {
+  // Server-side whitelist gate (defense-in-depth): the content relay pre-checks
+  // too, but nothing reaching the background may skip it.
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+    return;
+  }
   try {
     const loggedWallet = WalletStore.state.loggedWallet;
     if (!loggedWallet || !loggedWallet.publicKey) {
@@ -1612,6 +1708,13 @@ app.add(METHOD.submitTx, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getPubDRepKey, async (request, sendResponse) => {
+  // Server-side whitelist gate (defense-in-depth): the content relay pre-checks
+  // too, but nothing reaching the background may skip it.
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+    return;
+  }
+  if (refuseWhileLocked(request, sendResponse)) return;
   const loggedWallet = WalletStore.state.loggedWallet;
   if (!loggedWallet || !loggedWallet.publicKey) {
     sendResponse({
@@ -1642,6 +1745,13 @@ app.add(METHOD.getPubDRepKey, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getRegisteredPubStakeKeys, async (request, sendResponse) => {
+  // Server-side whitelist gate (defense-in-depth): the content relay pre-checks
+  // too, but nothing reaching the background may skip it.
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+    return;
+  }
+  if (refuseWhileLocked(request, sendResponse)) return;
   try {
     const account = WalletStore.state.account;
     if (!account) {
@@ -1702,6 +1812,13 @@ app.add(METHOD.getRegisteredPubStakeKeys, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getUnregisteredPubStakeKeys, async (request, sendResponse) => {
+  // Server-side whitelist gate (defense-in-depth): the content relay pre-checks
+  // too, but nothing reaching the background may skip it.
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+    return;
+  }
+  if (refuseWhileLocked(request, sendResponse)) return;
   try {
     const account = WalletStore.state.account;
     if (!account) {
@@ -1762,6 +1879,13 @@ app.add(METHOD.getUnregisteredPubStakeKeys, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getAccountPub, async (request, sendResponse) => {
+  // Server-side whitelist gate (defense-in-depth): the content relay pre-checks
+  // too, but nothing reaching the background may skip it.
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+    return;
+  }
+  if (refuseWhileLocked(request, sendResponse)) return;
   const loggedWallet = WalletStore.state.loggedWallet;
   if (!loggedWallet || !loggedWallet.publicKey) {
     sendResponse({
@@ -1770,6 +1894,7 @@ app.add(METHOD.getAccountPub, async (request, sendResponse) => {
       target: TARGET,
       sender: SENDER.extension,
     });
+    return;
   }
   try {
     const key = getPublicKey(loggedWallet.publicKey).toRawKey().hex();
@@ -1791,6 +1916,12 @@ app.add(METHOD.getAccountPub, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getNetworkMagic, async (request, sendResponse) => {
+  // Server-side whitelist gate (defense-in-depth): the content relay pre-checks
+  // too, but nothing reaching the background may skip it.
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+    return;
+  }
   const loggedWallet = WalletStore.state.loggedWallet;
   try {
     sendResponse({
@@ -2551,7 +2682,6 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
       let transaction;
       if (request.data.txCbor) {
         // New format: deserialize CBOR to Cardano.Tx object
-        console.log('Deserializing CBOR transaction:', request.data.txCbor);
         transaction = deserializeCardanoJsSdkTx(request.data.txCbor);
       } else if (request.data.tx) {
         // Legacy format: use transaction object directly
@@ -3361,14 +3491,11 @@ app.addToOptions(MessageTypes.BABYLON_STAKE, async (request, sendResponse) => {
 
 app.addToOptions(MessageTypes.SUBMIT_TX, async (request, sendResponse) => {
   try {
-    console.log('submit tx', request);
     const walletBg = walletManager.getWallet();
     if (walletBg) {
       // Handle different transaction input formats
       let txCbor: string;
       if (request.data.txCbor && request.data.witnessHex) {
-        console.log('original Cbor', request.data.txCbor)
-        console.log('witnessHex', request.data.witnessHex)
         const serializableTx: Serialization.Transaction = Serialization.Transaction.fromCbor(HexBlob(request.data.txCbor));
         // Integrity guard: capture the tx body hash BEFORE merging the external
         // witness set. Merging a VKey witness set must never alter body bytes;
@@ -3400,7 +3527,6 @@ app.addToOptions(MessageTypes.SUBMIT_TX, async (request, sendResponse) => {
           throw new Error('Transaction body changed while applying witness set; refusing to submit');
         }
         txCbor = serializableTx.toCbor();
-        console.log('Submitting transaction with witnesses:', txCbor);
       } else if (request.data.txCbor) {
         // CBOR hex string format (already signed)
         txCbor = request.data.txCbor;
@@ -3443,7 +3569,6 @@ app.addToOptions(MessageTypes.SUBMIT_TX, async (request, sendResponse) => {
 
 app.addToOptions(MessageTypes.RESTORE, async (request, sendResponse) => {
   try {
-    console.log('restore', request)
     const currentWallet = await walletManager.restore(request.data.wallet);
     if (currentWallet) {
       sendResponse({
@@ -3474,7 +3599,6 @@ app.addToOptions(MessageTypes.RESTORE, async (request, sendResponse) => {
 
 app.addToOptions(MessageTypes.LOGIN, async (request, sendResponse) => {
   try {
-    console.log('login', request)
     const walletBg = await walletManager.login(request.data.wallet);
     if (walletBg) {
       // Push notifications: the opened wallet may need its link re-sent (§8.2 (c)).
@@ -3932,29 +4056,34 @@ app.add(BITCOIN_METHOD.enable, (request, sendResponse) => {
   }
 
   const handleResponse = (response: BackgroundResponse) => {
-    if (response.data) {
+    // Only an explicit approval connects: the popup's Decline must never be
+    // read as consent (it used to send a truthy `{}`).
+    if (isConnectApproval(response)) {
       // Immediately update the background's in-memory whitelist so that subsequent
       // calls (getPublicKey, getNetwork, etc.) pass the whitelist check without
       // waiting for the Dexie live-query subscription to fire asynchronously.
       if (!WalletStore.isWhitelisted(origin)) {
         try {
-          const hostname = new URL(origin).hostname;
+          // Full origin, never the bare hostname (see matchesDappWhitelistEntry).
+          const fullOrigin = new URL(origin).origin;
           const currentDapps = WalletStore.state.connectedDapps || [];
-          WalletStore.setConnectedDapps([...currentDapps, { domain: hostname }]);
+          WalletStore.setConnectedDapps([...currentDapps, { domain: fullOrigin }]);
         } catch {}
       }
       reply({ data: [currentWallet.baseAddress] });
-    } else if (response.error) {
-      reply({ error: response.error });
     } else {
-      reply({ error: APIError.InternalError });
+      reply({ error: response?.error || APIError.Refused });
     }
   };
 
+  // Browser-derived top-level site when a cross-origin frame asks; both the
+  // side panel and the popup warn with it, as on the Cardano paths.
+  const embeddedIn = embeddingSite(origin, send);
+
   const handleMiniGeroBtcEnable = () => {
-    sendToMiniGero('enable', { ...request.data, website: origin }, tabId)
+    sendToMiniGero('enable', { ...request.data, website: origin, embeddedIn }, tabId)
       .then(async (response) => {
-        if (response.data === true) {
+        if (isConnectApproval(response)) {
           await WalletStore.addConnectedDapp(currentWallet.id, origin);
         }
         handleResponse(response);
@@ -3976,7 +4105,7 @@ app.add(BITCOIN_METHOD.enable, (request, sendResponse) => {
           `index.html#/${POPUP.dappConnect}?website=${encodeURIComponent(origin)}`
         );
         focusOrCreatePopup(popupURL, 470, 600)
-          .then(tab => Messaging.sendToPopupInternal(tab.id, request))
+          .then(tab => Messaging.sendToPopupInternal(tab.id, { ...request, embeddedIn }))
           .then(handleResponse)
           .catch(err => reply({ error: toDappError(err) }));
       });
@@ -4002,6 +4131,7 @@ app.add(BITCOIN_METHOD.isEnabled, (request, sendResponse) => {
 });
 
 app.add(BITCOIN_METHOD.getAccounts, async (request, sendResponse) => {
+  if (refuseWhileLocked(request, sendResponse)) return;
   const walletBg = walletManager.getWallet();
   if (!walletBg || walletBg.chain !== Blockchain.BITCOIN) {
     return sendResponse({ id: request.id, error: APIError.AccountNotSet, target: TARGET, sender: SENDER.extension });
@@ -4013,6 +4143,7 @@ app.add(BITCOIN_METHOD.getAccounts, async (request, sendResponse) => {
 });
 
 app.add(BITCOIN_METHOD.getPublicKey, async (request, sendResponse) => {
+  if (refuseWhileLocked(request, sendResponse)) return;
   const walletBg = walletManager.getWallet();
   if (!walletBg || walletBg.chain !== Blockchain.BITCOIN) {
     return sendResponse({ id: request.id, error: APIError.AccountNotSet, target: TARGET, sender: SENDER.extension });
@@ -4042,6 +4173,7 @@ app.add(BITCOIN_METHOD.getNetwork, (request, sendResponse) => {
 });
 
 app.add(BITCOIN_METHOD.getBalance, (request, sendResponse) => {
+  if (refuseWhileLocked(request, sendResponse)) return;
   const walletBg = walletManager.getWallet();
   if (!walletBg || walletBg.chain !== Blockchain.BITCOIN) {
     return sendResponse({ id: request.id, error: APIError.AccountNotSet, target: TARGET, sender: SENDER.extension });
@@ -4061,6 +4193,7 @@ app.add(BITCOIN_METHOD.getBalance, (request, sendResponse) => {
 });
 
 app.add(BITCOIN_METHOD.getUtxos, (request, sendResponse) => {
+  if (refuseWhileLocked(request, sendResponse)) return;
   const walletBg = walletManager.getWallet();
   if (!walletBg || walletBg.chain !== Blockchain.BITCOIN) {
     return sendResponse({ id: request.id, error: APIError.AccountNotSet, target: TARGET, sender: SENDER.extension });
@@ -4085,7 +4218,7 @@ app.add(BITCOIN_METHOD.signPsbt, (request, sendResponse) => {
   const signPsbtReply = (opts: ReplyOpts) => {
     sendResponse({ id: request.id, ...opts, target: TARGET, sender: SENDER.extension });
   };
-  const btcSignPsbtPayload = { ...request.data, website: request.origin, favIconUrl: request.send?.tab?.favIconUrl };
+  const btcSignPsbtPayload = { ...request.data, website: request.origin, favIconUrl: request.send?.tab?.favIconUrl, embeddedIn: embeddingSite(request.origin, request.send) };
   const tabId = request.send?.tab?.id;
 
   const handleMiniGeroSignPsbt = () => {
@@ -4098,7 +4231,7 @@ app.add(BITCOIN_METHOD.signPsbt, (request, sendResponse) => {
       `index.html#/${POPUP.bitcoinSignPsbt}?website=${encodeURIComponent(request.origin)}`
     );
     return focusOrCreatePopup(popupURL, 470, 600)
-      .then(tab => Messaging.sendToPopupInternal(tab.id, request))
+      .then(tab => Messaging.sendToPopupInternal(tab.id, { ...request, embeddedIn: btcSignPsbtPayload.embeddedIn }))
       .then((response: BackgroundResponse) => {
         if (response.data !== undefined) signPsbtReply({ data: response.data });
         else signPsbtReply({ error: response.error ?? APIError.InternalError });
@@ -4139,6 +4272,7 @@ app.add(BITCOIN_METHOD.signPsbts, async (request, sendResponse) => {
   const { psbtHexs, options } = request.data;
   const tabId = request.send?.tab?.id;
   const favIconUrl = request.send?.tab?.favIconUrl;
+  const embeddedIn = embeddingSite(request.origin, request.send);
 
   // Signs one PSBT in the batch via the mini-gero port (primary), an
   // auto-opened side panel (secondary), or a standalone popup (fallback, when
@@ -4147,7 +4281,7 @@ app.add(BITCOIN_METHOD.signPsbts, async (request, sendResponse) => {
   // per PSBT in a sequential loop (matching the popup-only version's original
   // one-popup-per-PSBT behavior).
   const signOne = async (psbtHex: string): Promise<string> => {
-    const singleRequest = { ...request, data: { psbtHex, options } };
+    const singleRequest = { ...request, data: { psbtHex, options }, embeddedIn };
 
     const viaPopup = async (): Promise<string> => {
       const popupURL = chrome.runtime.getURL(
@@ -4161,7 +4295,7 @@ app.add(BITCOIN_METHOD.signPsbts, async (request, sendResponse) => {
 
     const viaMiniGero = async (): Promise<string> => {
       try {
-        const response = await sendToMiniGero('btcSignPsbt', { psbtHex, options, website: request.origin, favIconUrl }, tabId);
+        const response = await sendToMiniGero('btcSignPsbt', { psbtHex, options, website: request.origin, favIconUrl, embeddedIn }, tabId);
         return response.data as string;
       } catch (err) {
         throw errorMessage(err) || APIError.InternalError;
@@ -4206,7 +4340,7 @@ app.add(BITCOIN_METHOD.signMessage, (request, sendResponse) => {
   const signMessageReply = (opts: ReplyOpts) => {
     sendResponse({ id: request.id, ...opts, target: TARGET, sender: SENDER.extension });
   };
-  const btcSignMessagePayload = { ...request.data, website: request.origin, favIconUrl: request.send?.tab?.favIconUrl };
+  const btcSignMessagePayload = { ...request.data, website: request.origin, favIconUrl: request.send?.tab?.favIconUrl, embeddedIn: embeddingSite(request.origin, request.send) };
   const tabId = request.send?.tab?.id;
 
   const handleMiniGeroSignMessage = () => {
@@ -4219,7 +4353,7 @@ app.add(BITCOIN_METHOD.signMessage, (request, sendResponse) => {
       `index.html#/${POPUP.bitcoinSignMessage}?website=${encodeURIComponent(request.origin)}`
     );
     return focusOrCreatePopup(popupURL, 470, 600)
-      .then(tab => Messaging.sendToPopupInternal(tab.id, request))
+      .then(tab => Messaging.sendToPopupInternal(tab.id, { ...request, embeddedIn: btcSignMessagePayload.embeddedIn }))
       .then((response: BackgroundResponse) => {
         if (response.data !== undefined) signMessageReply({ data: response.data });
         else signMessageReply({ error: response.error ?? APIError.InternalError });
@@ -4482,11 +4616,23 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
     const session = wcService.getSessionForTopic(topic) as { peer?: { metadata?: { url?: string; icons?: string[] } } } | null;
     const peerMeta = session?.peer?.metadata;
     const payload = { ...data, website: peerMeta?.url || 'WalletConnect', favIconUrl: peerMeta?.icons?.[0] };
+    // The wallet this request was authorized for (onSessionRequest checked it).
+    const walletAtRequest = WalletStore.state.loggedWallet ? { ...WalletStore.state.loggedWallet } : null;
+    // Release a signature only if that authorization still holds now: the
+    // session is live and approves the same, unlocked wallet. Otherwise the
+    // peer gets an error and never sees the signature.
+    const release = async (result: unknown) => {
+      if (!authorizationStillHolds(wcService.getSessionForTopic(topic), walletAtRequest, WalletStore.state.loggedWallet, walletStore.isLocked)) {
+        await wcService.respondError(topic, id, 4100, 'Unauthorized: the session or active wallet changed during approval');
+        return;
+      }
+      await wcService.respondSuccess(topic, id, result);
+    };
 
     if (miniGeroPorts.size > 0) {
       try {
         const response = await sendToMiniGero(portMethod, payload, undefined);
-        await wcService.respondSuccess(topic, id, response.data);
+        await release(response.data);
       } catch (err) {
         await wcService.respondError(topic, id, 4001, errorMessage(err) || 'User rejected');
       }
@@ -4498,7 +4644,7 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
     const tab = await focusOrCreatePopup(popupURL, popupSize[0], popupSize[1]);
     const response = await Messaging.sendToPopupInternal(tab.id, fakeRequest) as BackgroundResponse;
     if (response.data !== undefined) {
-      await wcService.respondSuccess(topic, id, response.data);
+      await release(response.data);
     } else {
       const errInfo = (response.error as { info?: string } | undefined)?.info;
       await wcService.respondError(topic, id, 4001, errInfo || 'User rejected');
@@ -4515,6 +4661,13 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
       const loggedWallet = WalletStore.state.loggedWallet;
       if (!loggedWallet) {
         await wcService.respondError(topic, id, 4100, 'No wallet logged in');
+        return;
+      }
+
+      // The session was approved for one wallet's accounts. After a wallet
+      // switch, refuse rather than answer with a wallet the peer never got.
+      if (!sessionAuthorizesWallet(wcService.getSessionForTopic(topic), loggedWallet)) {
+        await wcService.respondError(topic, id, 4100, 'Unauthorized: the active wallet is not the one connected to this session');
         return;
       }
 
@@ -6305,6 +6458,11 @@ app.add(MIDNIGHT_METHOD.getConnectionStatus, async (request, sendResponse) => {
  * midnight-tx.service's submitSignedTx — no build/balance/sign happens.
  */
 app.add(MIDNIGHT_METHOD.submitTransaction, async (request, sendResponse) => {
+  // Server-side whitelist gate (defense-in-depth), like the other Midnight handlers.
+  if (!WalletStore.isWhitelisted(request.origin)) {
+    sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'Not connected'), target: TARGET, sender: SENDER.extension });
+    return;
+  }
   const wallet = requireMidnightWallet();
   if (!wallet) {
     sendResponse({ id: request.id, error: midnightApiError(MidnightErrorCode.Disconnected, 'No Midnight wallet connected'), target: TARGET, sender: SENDER.extension });
