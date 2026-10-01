@@ -309,9 +309,9 @@ const walletCreationStep = async (): Promise<void> => {
       cardanoPaymentKeyHashHex?: string;
     } | undefined;
     if (props.network.blockchain === 'Midnight') {
-      const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
-      const derived = await deriveMidnightKeys(seedToStr.value, props.network.network);
-      midnightAddresses = derived.addresses;
+      const { deriveMidnightAddresses } = await import('@/chains/midnight/midnightKeyManager');
+      // Addresses only; the derived secret keys are wiped inside (PRIV-01).
+      midnightAddresses = await deriveMidnightAddresses(seedToStr.value, props.network.network);
     }
 
     // Refuse to restore a seed that already has a wallet on this chain+network.

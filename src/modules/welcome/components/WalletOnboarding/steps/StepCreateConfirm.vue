@@ -262,10 +262,10 @@ const walletCreationStep = async (): Promise<void> => {
     } | undefined;
     if (props.network.blockchain === 'Midnight') {
       const bip39 = await import('bip39');
-      const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
+      const { deriveMidnightAddresses } = await import('@/chains/midnight/midnightKeyManager');
       preGeneratedMnemonic = bip39.generateMnemonic(256);
-      const derived = await deriveMidnightKeys(preGeneratedMnemonic, props.network.network);
-      midnightAddresses = derived.addresses;
+      // Addresses only; the derived secret keys are wiped inside (PRIV-01).
+      midnightAddresses = await deriveMidnightAddresses(preGeneratedMnemonic, props.network.network);
     }
 
     if (props.securityMethod === 'prf') {

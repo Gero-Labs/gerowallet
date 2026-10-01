@@ -857,6 +857,18 @@ function broadcastFromBackground(updates: Partial<MidnightStore>, immediate = fa
  * `walletManager.initializeWallet` (to decide the sync subscription) so the
  * two can never disagree on what "shielded available" means.
  */
+/**
+ * A prover / WASM error message as it may be persisted in `provingHistory`:
+ * long hex or base64 runs (transaction, preimage or key bytes a library may
+ * echo) are replaced, and the text is capped (PRIV-01).
+ */
+export function sanitizeProvingError(message: string): string {
+  return String(message)
+    .replace(/(?:0x)?[0-9a-fA-F]{32,}/g, '[hex]')
+    .replace(/[A-Za-z0-9+/_-]{48,}={0,2}/g, '[data]')
+    .slice(0, 200);
+}
+
 export function isValidMidnightViewingKey(vk: string | undefined | null): boolean {
   return typeof vk === 'string' && vk.startsWith('mn_shield-esk_');
 }
@@ -1039,6 +1051,36 @@ export const midnightActions = {
    * balances. Only in-flight proving operations are dropped — they don't
    * survive a session.
    */
+  /**
+   * Wallet deletion (PRIV-01): drop everything this store persisted for the
+   * wallet whose unshielded address is `address` (balances, shielded history,
+   * UTxOs, DUST state, cursor, site activity). Unlike {@link clear}, nothing is
+   * kept for a fast re-login, because the wallet is gone. No-op when another
+   * wallet is the active one; its own state stays.
+   */
+  forgetWallet(address: string) {
+    if (!address || midnightStore.activeWalletKey !== address) return;
+    const wiped = {
+      isActive: false,
+      networkStatus: 'disconnected' as const,
+      lastSync: null,
+      balances: { ...EMPTY_BALANCES },
+      transactions: [],
+      utxos: [],
+      dustState: null,
+      lastMidnightTxId: null,
+      chainIdentity: null,
+      privateSyncStatus: 'idle' as const,
+      privateSyncProgress: null,
+      siteActivity: null,
+      addresses: { ...EMPTY_ADDRESSES },
+      activeWalletKey: null,
+      shieldedSyncAvailable: false,
+    };
+    Object.assign(midnightStore, wiped);
+    broadcastFromBackground(wiped, true);
+  },
+
   clear() {
     Object.assign(midnightStore, {
       isActive: false,
@@ -1106,7 +1148,7 @@ export const midnightActions = {
   recordLocalProvingAttempt(entry: { durationMs: number; success: boolean; error?: string }) {
     bgDurableTouched.provingHistory = true;
     const next = [
-      { timestamp: Date.now(), ...entry },
+      { timestamp: Date.now(), ...entry, ...(entry.error !== undefined ? { error: sanitizeProvingError(entry.error) } : {}) },
       ...midnightStore.provingHistory,
     ].slice(0, PROVING_HISTORY_LIMIT);
     midnightStore.provingHistory = next;

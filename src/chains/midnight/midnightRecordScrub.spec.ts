@@ -68,3 +68,27 @@ describe('write paths never persist the viewing key', () => {
     expect(boot).toContain('stripViewingKeyFromPublicKey(walletStore.loggedWallet.publicKey)');
   });
 });
+
+describe('Midnight data on wallet deletion', () => {
+  const read = (rel: string) => readFileSync(join(__dirname, '..', '..', rel), 'utf8');
+
+  it('the Advanced tab asks the background to forget Midnight data before the record is removed', () => {
+    const tab = read('modules/dashboard/components/AdvancedSettingsTab.vue');
+    const forget = tab.indexOf('MessageTypes.FORGET_MIDNIGHT_WALLET_DATA');
+    const remove = tab.indexOf('GeroStore.removeWallet(walletId)');
+    expect(forget).toBeGreaterThan(-1);
+    expect(forget).toBeLessThan(remove);
+  });
+
+  it('the background clears store state, the address-scoped cache and the SDK state blobs', () => {
+    const bg = read('chrome/background.ts');
+    const start = bg.indexOf('app.addToOptions(MessageTypes.FORGET_MIDNIGHT_WALLET_DATA');
+    const handler = bg.slice(start, bg.indexOf('\napp.add', start + 10));
+    expect(handler).toContain('midnightActions.forgetWallet(unshielded)');
+    expect(handler).toContain('deleteStoreCacheScope(unshielded)');
+    expect(handler).toContain('clearAllWalletState()');
+    // The address comes from the wallet's own record, not from the page.
+    expect(handler).toContain('getAllWallets()');
+    expect(handler).not.toMatch(/request\.data\?\.(unshielded|address)/);
+  });
+});

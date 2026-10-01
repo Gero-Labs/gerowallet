@@ -2832,6 +2832,35 @@ app.addToOptions(MessageTypes.NOTIFY_WALLET_REMOVED, async (request, sendRespons
   }
 });
 
+// PRIV-01: a deleted Midnight wallet must leave none of its coin state, history
+// or balances on the device. Sent by the Advanced tab BEFORE GeroStore.removeWallet,
+// so the address is read from the wallet's own record here, never from the page.
+app.addToOptions(MessageTypes.FORGET_MIDNIGHT_WALLET_DATA, async (request, sendResponse) => {
+  try {
+    const walletId = Number(request.data?.walletId);
+    const { getAllWallets } = await import('@/db/gero-db');
+    const record = (await getAllWallets())[walletId] as { chain?: string; publicKey?: string } | undefined;
+    if (record?.chain === Blockchain.MIDNIGHT && typeof record.publicKey === 'string') {
+      let unshielded = '';
+      try { unshielded = String(JSON.parse(record.publicKey)?.unshielded ?? ''); } catch { /* malformed record */ }
+      const { midnightActions } = await import('@/stores/midnightStore');
+      const { clearAllWalletState } = await import('@/chains/midnight/midnightWalletStatePersistence');
+      const { deleteStoreCacheScope } = await import('@/utils/storeCache');
+      if (unshielded) {
+        midnightActions.forgetWallet(unshielded);
+        await deleteStoreCacheScope(unshielded);
+      }
+      // The SDK state blobs are keyed by a hash of the seed, so this wallet's
+      // cannot be told apart without it: drop them all. Other Midnight wallets
+      // only pay a cold resync for it.
+      await clearAllWalletState();
+    }
+    sendResponse({ id: request.id, data: { success: true }, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, data: { success: false, error: getErrorMessage(error) }, target: TARGET, sender: SENDER.extension });
+  }
+});
+
 app.addToOptions(MessageTypes.GET_CROSS_DEVICE_SETTINGS, async (request, sendResponse) => {
   sendResponse(crossDeviceReply(request.id, {
     success: true,

@@ -312,3 +312,38 @@ describe('history: a self-transfer keeps the amount the wallet typed', () => {
     expect(midnightStore.transactions[0]).toMatchObject({ type: 'self', status: 'confirmed', amount: 2_000_000n });
   });
 });
+
+describe('forgetWallet (PRIV-01 wallet deletion)', () => {
+  it("wipes the deleted wallet's balances, history and identity when it is the active one", () => {
+    midnightActions.setActive(MAINNET_A);
+    midnightStore.balances = { ...midnightStore.balances, nightUnshielded: 5n };
+    midnightStore.transactions = [{ txHash: 'h' } as unknown as MidnightTransaction];
+    midnightActions.forgetWallet(MAINNET_A.unshielded);
+    expect(midnightStore.activeWalletKey).toBeNull();
+    expect(midnightStore.addresses.unshielded).toBe('');
+    expect(midnightStore.transactions).toEqual([]);
+    expect(midnightStore.balances.nightUnshielded).toBe(0n);
+    expect(midnightStore.isActive).toBe(false);
+  });
+
+  it('leaves another wallet\'s state alone', () => {
+    midnightActions.setActive(MAINNET_B);
+    midnightStore.transactions = [{ txHash: 'keep' } as unknown as MidnightTransaction];
+    midnightActions.forgetWallet(MAINNET_A.unshielded);
+    expect(midnightStore.activeWalletKey).toBe(MAINNET_B.unshielded);
+    expect(midnightStore.transactions).toHaveLength(1);
+  });
+});
+
+describe('provingHistory error hygiene (PRIV-01)', () => {
+  it('never persists byte runs a prover error may echo, and caps the text', async () => {
+    const { sanitizeProvingError } = await import('./midnightStore');
+    const hex = 'ab'.repeat(40);
+    expect(sanitizeProvingError(`prove failed: ${hex}`)).toBe('prove failed: [hex]');
+    expect(sanitizeProvingError(`bad preimage ${'Zq'.repeat(30)}==`)).toBe('bad preimage [data]');
+    expect(sanitizeProvingError('HTTP 503 Service Unavailable')).toBe('HTTP 503 Service Unavailable');
+    expect(sanitizeProvingError('proof failed. '.repeat(40))).toHaveLength(200);
+    midnightActions.recordLocalProvingAttempt({ durationMs: 1, success: false, error: `boom ${hex}` });
+    expect(midnightStore.provingHistory[0].error).toBe('boom [hex]');
+  });
+});

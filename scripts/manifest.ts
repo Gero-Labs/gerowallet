@@ -117,7 +117,10 @@ function buildCSP(dev: boolean): string {
           'ws://*.gerowallet.io',
           'https://fastly.jsdelivr.net/npm/@sec-ant/zxing-wasm@2.1.5/dist/reader/zxing_reader.wasm',
         ]
-      : ['ws://127.0.0.1:*', 'http://localhost:6300', 'http://127.0.0.1:6300']),
+      // Local Midnight proof servers: ledger 8 (mainnet, preprod) on 6300 and
+      // ledger 9 (stagenet) on 6301. Loopback only; the wallet refuses a
+      // "local" prover anywhere else (PRIV-01).
+      : ['ws://127.0.0.1:*', 'http://localhost:6300', 'http://127.0.0.1:6300', 'http://localhost:6301', 'http://127.0.0.1:6301']),
     // SPO Node Monitor (Cloudflare Tunnel)
     'https://*.trycloudflare.com',
   ];

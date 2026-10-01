@@ -359,6 +359,12 @@ export async function deriveMidnightAddresses(
   account = 0,
 ): Promise<MidnightAddresses> {
   const derived = await deriveMidnightKeys(mnemonic, network, account);
+  // Callers only want the public addresses, often in a page context: zero the
+  // seed and role secret keys now rather than leave them to the GC (PRIV-01).
+  derived.seed.fill(0);
+  derived.unshieldedSecretKey.fill(0);
+  derived.dustSecretKey.fill(0);
+  derived.zswapSecretKey.fill(0);
   return derived.addresses;
 }
 
