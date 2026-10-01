@@ -4,6 +4,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const swapEnabled = ref(false);
 const openSpy = vi.fn();
+const tokenCatalogStore = vi.hoisted(() => {
+  const store: {
+    tokens: Record<string, unknown>;
+    state: { tokens: Record<string, unknown> };
+    loadTokens: ReturnType<typeof vi.fn>;
+  } = { tokens: {}, state: { tokens: {} }, loadTokens: vi.fn() };
+  store.state = store;
+  return store;
+});
+const mountedPages: Array<{ destroy: () => void }> = [];
 const wallet = reactive<Record<string, unknown>>({
   id: 1,
   network: 'Mainnet',
@@ -56,6 +66,7 @@ vi.mock('@/stores/walletStore', () => ({
     },
   },
 }));
+vi.mock('@/stores/tokenMetadataStore', () => ({ default: tokenCatalogStore }));
 vi.mock('@/plugins/i18n', () => ({
   default: { locale: 'en-US', t: (key: string) => key },
 }));
@@ -97,6 +108,7 @@ async function mountPage() {
     },
   });
   await settle(page);
+  mountedPages.push(page);
   return page;
 }
 
@@ -115,6 +127,24 @@ describe('RealFi acquisition', () => {
     wallet.chain = 'Cardano';
     wallet.baseAddress = 'addr_main_a';
     swapEnabled.value = false;
+    tokenCatalogStore.tokens = {};
+    tokenCatalogStore.state.tokens = tokenCatalogStore.tokens;
+    tokenCatalogStore.loadTokens.mockReset().mockImplementation(async (shouldApply?: () => boolean) => {
+      const next = {
+        '7d9e4a0ee1a3f5d5ff8159ea91a83310cf2795ee7a87170c7aea05ae55534472': {
+          unit: '7d9e4a0ee1a3f5d5ff8159ea91a83310cf2795ee7a87170c7aea05ae55534472',
+          decimals: 6,
+        },
+        '1f3aec8bfe7ea4fe14c5f121e2a92e301afe414147860d557cac7e345553444378': {
+          unit: '1f3aec8bfe7ea4fe14c5f121e2a92e301afe414147860d557cac7e345553444378',
+          decimals: 6,
+        },
+      };
+      if (shouldApply && !shouldApply()) return false;
+      tokenCatalogStore.tokens = next;
+      tokenCatalogStore.state.tokens = next;
+      return true;
+    });
     state.isLoading.value = false;
     state.unavailableReason.value = null;
     state.position.value = null;
@@ -131,6 +161,7 @@ describe('RealFi acquisition', () => {
   });
 
   afterEach(() => {
+    mountedPages.splice(0).forEach((page) => page.destroy());
     vi.clearAllMocks();
     vi.unstubAllGlobals();
   });
@@ -153,6 +184,8 @@ describe('RealFi acquisition', () => {
     expect(openSpy).toHaveBeenCalledWith('https://app.realfi.co', '_blank', 'noopener,noreferrer');
     expect(page.text()).not.toContain('realfi.gettingStarted.eligibilityComplete');
     expect(page.text()).toContain('realfi.gettingStarted.getUsdrf');
+    expect(tokenCatalogStore.loadTokens).toHaveBeenCalled();
+    expect(tokenCatalogStore.tokens[USDRF]).toEqual({ unit: USDRF, decimals: 6 });
   });
 
   it('preselects USDCx to USDrf in the mainnet acquisition dialog', async () => {
@@ -188,14 +221,68 @@ describe('RealFi acquisition', () => {
     expect(page.text()).not.toContain('realfi.gettingStarted.getUsdcx');
     expect(page.findComponent({ name: 'SwapDialog' }).exists()).toBe(false);
     expect(page.text()).toContain('realfi.gettingStarted.preprodAcquireBody');
+    expect(tokenCatalogStore.loadTokens).not.toHaveBeenCalled();
   });
 
   it('keeps the mainnet onboarding guide when the swap flag is off', async () => {
     const page = await mountPage();
     expect(page.text()).toContain('realfi.gettingStarted.eligibilityTitle');
-    expect(page.text()).toContain('realfi.gettingStarted.swapUnavailable');
+    expect(page.text()).toContain('realfi.gettingStarted.swapStatus.disabled');
     expect(page.text()).not.toContain('realfi.gettingStarted.getUsdrf');
     expect(page.text()).not.toContain('realfi.gettingStarted.getUsdcx');
+    expect(tokenCatalogStore.loadTokens).not.toHaveBeenCalled();
+  });
+
+  it('fails closed while availability is loading and when USDrf is absent from the catalogue', async () => {
+    swapEnabled.value = true;
+    let resolveLoad!: (loaded: boolean) => void;
+    tokenCatalogStore.loadTokens.mockImplementation(() => new Promise((resolve) => {
+      resolveLoad = resolve;
+    }));
+    const page = await mountPage();
+    expect(page.text()).toContain('realfi.gettingStarted.swapStatus.loading');
+    expect(page.text()).not.toContain('realfi.gettingStarted.getUsdrf');
+    resolveLoad(true);
+    await settle(page);
+    expect(page.text()).toContain('realfi.gettingStarted.swapStatus.unavailable');
+    expect(page.text()).not.toContain('realfi.gettingStarted.getUsdrf');
+    expect(page.text()).not.toContain('realfi.gettingStarted.getUsdcx');
+  });
+
+  it('fails closed when the fixed USDCx-to-USDrf pair is missing USDCx from the catalogue', async () => {
+    swapEnabled.value = true;
+    tokenCatalogStore.loadTokens.mockImplementation(async (shouldApply?: () => boolean) => {
+      if (shouldApply && !shouldApply()) return false;
+      tokenCatalogStore.tokens = { [USDRF]: { unit: USDRF, decimals: 6 } };
+      tokenCatalogStore.state.tokens = tokenCatalogStore.tokens;
+      return true;
+    });
+    const page = await mountPage();
+    expect(page.text()).toContain('realfi.gettingStarted.swapStatus.unavailable');
+    expect(page.text()).not.toContain('realfi.gettingStarted.getUsdrf');
+    expect(page.text()).not.toContain('realfi.gettingStarted.getUsdcx');
+  });
+
+  it('does not apply a catalog response after the wallet account changes', async () => {
+    swapEnabled.value = true;
+    let isCurrent: (() => boolean) | undefined;
+    tokenCatalogStore.loadTokens.mockImplementationOnce(async (shouldApply?: () => boolean) => {
+      isCurrent = shouldApply;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      if (shouldApply && !shouldApply()) return false;
+      tokenCatalogStore.tokens = {
+        [USDRF]: { unit: USDRF, decimals: 6 },
+      };
+      tokenCatalogStore.state.tokens = tokenCatalogStore.tokens;
+      return true;
+    });
+    const page = mountPage();
+    wallet.baseAddress = 'addr_main_changed_during_fetch';
+    await page.then((mounted) => mounted.vm.$nextTick());
+    await settle(await page);
+    expect(isCurrent?.()).toBe(false);
+    expect(tokenCatalogStore.tokens[USDRF]).toEqual({ unit: USDRF, decimals: 6 });
+    expect((await page).text()).toContain('realfi.gettingStarted.getUsdrf');
   });
 
   it('closes the swap dialog when the live swap flag is disabled', async () => {

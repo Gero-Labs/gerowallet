@@ -61,9 +61,13 @@
               :canStake="canTransact && !ordersLocked"
               :canStakeExternally="!canTransact && !ordersLocked"
               :canAcquire="canAcquireUsdrf"
+              :canAcquireUsdcx="canAcquireUsdrf && hasUsdcxSwapAvailability"
+              :swapStatus="swapStatusForGuide"
+              :canRetryAvailability="canRetryUsdrfAvailability"
               @check-eligibility="openRealFiApp()"
               @get-usdrf="onGetUsdrf"
               @get-usdcx="openUsdcxSwap()"
+              @retry-availability="refreshUsdrfAvailability()"
               @stake="onStake"
             />
             <RealFiYieldChart
@@ -166,9 +170,13 @@
               :canStake="canTransact && !ordersLocked"
               :canStakeExternally="!canTransact && !ordersLocked"
               :canAcquire="canAcquireUsdrf"
+              :canAcquireUsdcx="canAcquireUsdrf && hasUsdcxSwapAvailability"
+              :swapStatus="swapStatusForGuide"
+              :canRetryAvailability="canRetryUsdrfAvailability"
               @check-eligibility="openRealFiApp()"
               @get-usdrf="onGetUsdrf"
               @get-usdcx="openUsdcxSwap()"
+              @retry-availability="refreshUsdrfAvailability()"
               @stake="onStake"
             />
           </details>
@@ -465,6 +473,7 @@ import { useRealFi } from './composables/useRealFi';
 import RealFiYieldChart from './components/RealFiYieldChart.vue';
 import RealFiGettingStarted from './components/RealFiGettingStarted.vue';
 import { usdrAssetIdFor } from './assets';
+import { useRealFiSwapAvailability } from './composables/useRealFiSwapAvailability';
 import type { RealFiBuildRequest, RealFiOrderKind } from './services/realfiOrders';
 import {
   PENDING_MAX_AGE_MS,
@@ -530,8 +539,22 @@ const isMainnet = computed(() => {
   const w = WalletStore.state.loggedWallet;
   return w?.chain === Blockchain.CARDANO && w.network === Network.MAINNET;
 });
+const swapEnabled = computed(() => featureFlagsStore.isSwapEnabled());
+const {
+  status: usdrfSwapStatus,
+  isAvailable: hasUsdrfSwapAvailability,
+  isUsdcxAvailable: hasUsdcxSwapAvailability,
+  canCheck: canCheckUsdrfAvailability,
+  refresh: refreshUsdrfAvailability,
+} = useRealFiSwapAvailability();
+const swapStatusForGuide = computed(() =>
+  swapEnabled.value ? usdrfSwapStatus.value : 'disabled',
+);
+const canRetryUsdrfAvailability = computed(
+  () => canCheckUsdrfAvailability.value && ['unknown', 'unavailable'].includes(usdrfSwapStatus.value),
+);
 const canAcquireUsdrf = computed(
-  () => isMainnet.value && !unavailableReason.value && featureFlagsStore.isSwapEnabled(),
+  () => isMainnet.value && !unavailableReason.value && hasUsdrfSwapAvailability.value,
 );
 const mainnetUsdrfUnit = usdrAssetIdFor(Network.MAINNET) ?? '';
 const swapDialogOpen = ref(false);

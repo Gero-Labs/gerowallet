@@ -36,18 +36,26 @@
             <GButton tier="secondary" compact @click="$emit('get-usdrf')">
               {{ $t('realfi.gettingStarted.getUsdrf') }}
             </GButton>
-            <GButton tier="tertiary" compact @click="$emit('get-usdcx')">
+            <GButton v-if="canAcquireUsdcx" tier="tertiary" compact @click="$emit('get-usdcx')">
               {{ $t('realfi.gettingStarted.getUsdcx') }}
             </GButton>
           </div>
           <p v-else-if="mainnet" class="t-caption">
-            {{ $t('realfi.gettingStarted.swapUnavailable') }}
+            {{ $t(`realfi.gettingStarted.swapStatus.${swapStatus}`) }}
           </p>
-          <GButton v-else tier="secondary" compact @click="$emit('get-usdrf')">
+          <GButton
+            v-if="mainnet && canRetryAvailability"
+            tier="tertiary"
+            compact
+            @click="$emit('retry-availability')"
+          >
+            {{ $t('realfi.gettingStarted.retryAvailability') }}
+          </GButton>
+          <GButton v-else-if="!mainnet" tier="secondary" compact @click="$emit('get-usdrf')">
             {{ $t('realfi.gettingStarted.preprodCta') }}
           </GButton>
           <p v-if="mainnet" class="t-caption">{{ $t('realfi.gettingStarted.routeNote') }}</p>
-          <p v-if="mainnet && canAcquire" class="t-caption">
+          <p v-if="mainnet && canAcquireUsdcx" class="t-caption">
             {{ $t('realfi.gettingStarted.getUsdcxNote') }}
           </p>
         </div>
@@ -82,6 +90,9 @@ withDefaults(
     canStake: boolean;
     canStakeExternally: boolean;
     canAcquire: boolean;
+    canAcquireUsdcx: boolean;
+    swapStatus: 'disabled' | 'unknown' | 'loading' | 'available' | 'unavailable';
+    canRetryAvailability: boolean;
     compact?: boolean;
   }>(),
   { compact: false },
@@ -91,6 +102,7 @@ defineEmits<{
   (event: 'check-eligibility'): void;
   (event: 'get-usdrf'): void;
   (event: 'get-usdcx'): void;
+  (event: 'retry-availability'): void;
   (event: 'stake'): void;
 }>();
 </script>

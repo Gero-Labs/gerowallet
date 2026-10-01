@@ -60,6 +60,17 @@ describe('GeroSwapEmbed', () => {
     expect(typeof el.resolveToken).toBe('function');
   });
 
+  it('forwards arbitrary token units, including native lovelace, as token-in', async () => {
+    const tokenIn = '1f3aec8bfe7ea4fe14c5f121e2a92e301afe414147860d557cac7e345553444378';
+    const wrapper = mount(GeroSwapEmbed, { propsData: { tokenIn, tokenOut: 'lovelace' } });
+    const el = wrapper.find('gero-swap').element;
+    expect(el.getAttribute('token-in')).toBe(tokenIn);
+    expect(el.getAttribute('token-out')).toBe('lovelace');
+    await wrapper.setProps({ tokenIn: 'lovelace', tokenOut: 'another-policy.token' });
+    expect(el.getAttribute('token-in')).toBe('lovelace');
+    expect(el.getAttribute('token-out')).toBe('another-policy.token');
+  });
+
   it('re-emits swap-submitted from the element', async () => {
     const wrapper = mount(GeroSwapEmbed, {});
     const el = wrapper.find('gero-swap').element;
