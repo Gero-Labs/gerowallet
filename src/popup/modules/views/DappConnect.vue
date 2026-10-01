@@ -52,20 +52,24 @@ import filters from '@/shared/utils/filters';
 
 const { t } = useTranslation();
 
-const vmProxy = getCurrentInstance()!.proxy as any
+const vmProxy = getCurrentInstance()!.proxy as unknown as {
+  $refs: { popupHeader: { domain: string } };
+  $route: { query?: Record<string, string | undefined> };
+};
 
 // Get store values
 const { loggedWallet } = toRefs(walletStore);
 
 // Reactive data
 const consent = ref<boolean>(false);
-const controller = ref<any>(null);
-const popupHeader = ref<any>(null);
+const controller = ref<ReturnType<typeof Messaging.createInternalController> | null>(null);
+const popupHeader = ref<unknown>(null);
 
 // Methods
 const decline = async () => {
   try {
-    await controller.value.returnData({ data: {}, error: APIError.Refused });
+    // `data: false`, never a truthy placeholder: Decline must not read as consent.
+    await controller.value?.returnData({ data: false, error: APIError.Refused });
   } catch (e) {
     console.warn('[DappConnect] returnData failed on decline:', e);
   }
@@ -75,7 +79,7 @@ const decline = async () => {
 const confirm = async () => {
   await WalletStore.addConnectedDapp(loggedWallet.value.id, vmProxy.$refs.popupHeader.domain);
   try {
-    await controller.value.returnData({ data: true, error: {} });
+    await controller.value?.returnData({ data: true, error: {} });
   } catch (e) {
     console.warn('[DappConnect] returnData failed:', e);
   }
