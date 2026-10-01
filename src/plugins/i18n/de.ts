@@ -1001,6 +1001,7 @@ export default {
   'support.auth.body': 'Bestätige einmalig, damit der Support dich anonym wiedererkennt. Deine Wallet signiert eine einmalige Nachricht. Es wird keine Transaktion erstellt und es werden keine Mittel bewegt.',
   'support.error.unavailable': 'Live-Chat ist vorübergehend nicht verfügbar. Bitte versuche es später erneut.',
   'support.error.sendFailed': 'Deine Nachricht konnte nicht gesendet werden. Bitte versuche es erneut.',
+  'support.error.sessionExpired': 'Dein bisheriger Support-Chat ist nicht mehr verfügbar. Sende eine Nachricht, um einen neuen Chat zu starten.',
   'support.error.fileTooLarge': 'Dateien müssen kleiner als 20 MB sein.',
   'support.error.tooManyFiles': 'Du kannst bis zu 5 Dateien pro Nachricht anhängen.',
   'support.hide.action': 'Support-Schaltfläche ausblenden',

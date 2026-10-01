@@ -5,6 +5,7 @@ import { nextTick } from 'vue';
 import { createSupportChat, type SupportChatDeps, type SupportWalletSnapshot } from './useSupportChat';
 import {
   ChatAuthError,
+  ChatRequestError,
   SUPPORT_MAX_FILE_BYTES,
   SUPPORT_MAX_FILES_PER_MESSAGE,
   type SupportApiMessage,
@@ -425,6 +426,150 @@ describe('useSupportChat', () => {
       expect(h.chat.errorKey.value).toBe('support.error.sendFailed');
       expect(h.chat.messages.value).toEqual([]);
       expect(h.chat.busy.value).toBe(false);
+    });
+  });
+
+  describe('missing Chatwoot session recovery', () => {
+    it('stops connecting after a history 404 and recreates the chat only on the next send', async () => {
+      const h = makeHarness();
+      h.store[1] = cached();
+      h.api.listMessages.mockRejectedValueOnce(new ChatRequestError('missing conversation', 404));
+
+      await h.chat.enter();
+
+      expect(h.chat.connectionState.value).toBe('idle');
+      expect(h.chat.errorKey.value).toBe('support.error.sessionExpired');
+      expect(h.store[1]).toEqual(VERIFIED);
+      expect(h.cable.connect).not.toHaveBeenCalled();
+      expect(h.api.ensureContact).not.toHaveBeenCalled();
+      expect(h.api.createConversation).not.toHaveBeenCalled();
+
+      h.api.ensureContact.mockResolvedValue({ sourceId: 'fresh-source', pubsubToken: 'fresh-token' });
+      h.api.createConversation.mockResolvedValue(43);
+      expect(await h.chat.send('please help')).toBe(true);
+      expect(h.api.sendMessage).toHaveBeenCalledWith('fresh-source', 43, 'please help');
+      expect(h.cableOptions()?.pubsubToken).toBe('fresh-token');
+      expect(h.promptAuth).not.toHaveBeenCalled();
+      expect(h.requestIdentity).not.toHaveBeenCalled();
+      expect(h.chat.errorKey.value).toBeNull();
+    });
+
+    it('retries a missing conversation once and reconciles the message into the new thread', async () => {
+      const h = makeHarness();
+      h.store[1] = cached();
+      h.api.sendMessage.mockRejectedValueOnce(new ChatRequestError('missing conversation', 404));
+      h.api.sendMessage.mockResolvedValueOnce({ id: 90, role: 'user', text: 'hello', createdAt: 90 });
+      h.api.ensureContact.mockResolvedValue({ sourceId: 'fresh-source', pubsubToken: 'fresh-token' });
+      h.api.createConversation.mockResolvedValue(43);
+
+      expect(await h.chat.send('hello')).toBe(true);
+      expect(h.api.sendMessage).toHaveBeenNthCalledWith(1, 'src-1', 42, 'hello');
+      expect(h.api.sendMessage).toHaveBeenNthCalledWith(2, 'fresh-source', 43, 'hello');
+      expect(h.chat.messages.value).toHaveLength(1);
+      expect(h.chat.messages.value[0].id).toBe(90);
+      expect(h.store[1]).toMatchObject({ ...VERIFIED, sourceId: 'fresh-source', conversationId: 43 });
+      expect(h.promptAuth).not.toHaveBeenCalled();
+    });
+
+    it('recovers a deleted contact when conversation creation returns 404', async () => {
+      const h = makeHarness();
+      h.store[1] = cached({ conversationId: undefined });
+      h.api.createConversation.mockRejectedValueOnce(new ChatRequestError('missing contact', 404));
+      h.api.ensureContact.mockResolvedValue({ sourceId: 'fresh-source', pubsubToken: 'fresh-token' });
+      expect(await h.chat.send('hello')).toBe(true);
+      expect(h.api.ensureContact).toHaveBeenCalledTimes(1);
+      expect(h.api.createConversation).toHaveBeenNthCalledWith(2, 'fresh-source');
+      expect(h.api.sendMessage).toHaveBeenCalledTimes(1);
+      expect(h.promptAuth).not.toHaveBeenCalled();
+    });
+
+    it('stops after one failed retry and leaves the draft unsent', async () => {
+      const h = makeHarness();
+      h.store[1] = cached();
+      h.api.sendMessage.mockRejectedValue(new ChatRequestError('still missing', 404));
+      expect(await h.chat.send('hello')).toBe(false);
+      expect(h.api.sendMessage).toHaveBeenCalledTimes(2);
+      expect(h.store[1]).toEqual(VERIFIED);
+      expect(h.chat.messages.value).toEqual([]);
+      expect(h.chat.connectionState.value).toBe('unavailable');
+      expect(h.chat.errorKey.value).toBe('support.error.unavailable');
+      expect(h.chat.busy.value).toBe(false);
+    });
+
+    it('keeps cached handles on transient history errors and exposes an unavailable state', async () => {
+      const h = makeHarness();
+      h.store[1] = cached();
+      h.api.listMessages.mockRejectedValueOnce(new ChatRequestError('server unavailable', 503));
+      await h.chat.enter();
+      expect(h.store[1]).toEqual(cached());
+      expect(h.chat.connectionState.value).toBe('unavailable');
+      expect(h.chat.errorKey.value).toBe('support.error.unavailable');
+      expect(h.cable.connect).not.toHaveBeenCalled();
+      await h.chat.enter();
+      expect(h.chat.errorKey.value).toBeNull();
+      expect(h.cable.connect).toHaveBeenCalledTimes(1);
+    });
+
+    it('never retries an ambiguous failed send that could have reached the server', async () => {
+      const h = makeHarness();
+      h.store[1] = cached();
+      h.api.sendMessage.mockRejectedValue(new ChatRequestError('gateway timeout', 504));
+      expect(await h.chat.send('hello')).toBe(false);
+      expect(h.api.sendMessage).toHaveBeenCalledTimes(1);
+      expect(h.api.ensureContact).not.toHaveBeenCalled();
+      expect(h.store[1]).toEqual(cached());
+    });
+
+    it('ignores a late history 404 after a send has already recovered the conversation', async () => {
+      const h = makeHarness();
+      h.store[1] = cached();
+      const history = deferred<SupportApiMessage[]>();
+      h.api.listMessages.mockReturnValueOnce(history.promise);
+      const entering = h.chat.enter();
+      await flushPromises(2);
+      h.api.sendMessage.mockRejectedValueOnce(new ChatRequestError('missing', 404));
+      h.api.createConversation.mockResolvedValue(43);
+      expect(await h.chat.send('hello')).toBe(true);
+      history.reject(new ChatRequestError('old conversation missing', 404));
+      await entering;
+      expect(h.store[1]?.conversationId).toBe(43);
+      expect(h.chat.errorKey.value).toBeNull();
+      expect(h.chat.messages.value.map((m) => m.text)).toEqual(['hello']);
+    });
+
+    it('disconnects on a reconnect history 404 and ignores callbacks from the retired cable', async () => {
+      const h = makeHarness();
+      h.store[1] = cached();
+      await h.chat.enter();
+      const oldCable = h.cableOptions()!;
+      h.api.listMessages.mockRejectedValueOnce(new ChatRequestError('missing', 404));
+      oldCable.onReconnected?.();
+      await flushPromises(2);
+      oldCable.onState('connected');
+      oldCable.onMessage({ id: 80, role: 'agent', text: 'old thread', createdAt: 80 });
+      oldCable.onReconnected?.();
+      expect(h.cable.close).toHaveBeenCalledTimes(1);
+      expect(h.chat.connectionState.value).toBe('idle');
+      expect(h.chat.messages.value).toEqual([]);
+      expect(h.api.listMessages).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not clear another wallet when a history 404 arrives after switching', async () => {
+      const active = Vue.observable({ wallet: CARDANO_WALLET as SupportWalletSnapshot });
+      const h = makeHarness({ wallet: () => active.wallet });
+      h.store[1] = cached();
+      h.store[2] = cached({ identifier: 'v1:bb', sourceId: 'src-2', conversationId: 77 });
+      const history = deferred<SupportApiMessage[]>();
+      h.api.listMessages.mockReturnValueOnce(history.promise);
+      const entering = h.chat.enter();
+      await flushPromises(2);
+      active.wallet = { ...CARDANO_WALLET, id: 2 };
+      await flushPromises(2);
+      history.reject(new ChatRequestError('missing', 404));
+      await entering;
+      expect(h.store[2]?.conversationId).toBe(77);
+      expect(h.chat.errorKey.value).toBeNull();
+      expect(h.cache.save).not.toHaveBeenCalled();
     });
   });
 
