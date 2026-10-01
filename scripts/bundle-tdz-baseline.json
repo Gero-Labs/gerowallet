@@ -25,7 +25,7 @@
     "midnightSignDataCodec{decodeSignDataPayload,decodedPayloadHexPreview}",
     "midnightTxBuilder{balanceAndSignUnshieldedTransfer,hexToBytes,signUnshieldedSegments,startUnshieldedWalletForKey,syncDustWalletAndBalanceFees}",
     "midnightUnshieldedProver{proveUnshieldedTransfer}",
-    "midnightViewingKeySession{clearSessionViewingKey,getSessionViewingKey,setSessionViewingKey}",
+    "midnightViewingKeySession{clearSessionViewingKey}",
     "security{APP_NAME,BACKUP_CODES_COUNT,BACKUP_CODE_LENGTH,KEY_SIZE,NONCE_SIZE,PBKDF2_ITERATIONS,SALT_SIZE,TAG_SIZE,TOTP_DEFAULT_ISSUER,TOTP_DIGITS,TOTP_PERIOD,TOTP_SECRET_SIZE,WEBAUTHN_RELYING_PARTY_NAME,arrayBufferToBase64,authenticateWebAuthn,base64ToArrayBuffer,createTotp,decryptSecurityData,encryptSecurityData,generateBackupCodes,generateTotpCode,generateTotpSecret,generateTotpUrl,hashPattern,hashPin,isValidPattern,isValidPin,isValidTotpCode,isWebAuthnSupported,registerWebAuthnCredential,removeLegacyPassKeyMasterKey,verifyPattern,verifyPin,verifyTotpCode}",
     "walletConnectStore{default,walletConnectState}",
     "walletConnect_service{default,walletConnectService}",
