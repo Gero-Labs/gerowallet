@@ -63,7 +63,7 @@ const localPref: ProofServerPreference = {
   zkpaasApiSecret: '',
 };
 
-const ZKPAAS_CONSENT = { version: 2, provider: 'zkpaas', acceptedAt: 1 };
+const ZKPAAS_CONSENT = { version: 3, provider: 'zkpaas', acceptedAt: 1 };
 const ctx = { origin: ORIGIN, network: Network.PREPROD, sdkNetworkId: 'preprod', proofServer: localPref, provingConsent: null as unknown };
 
 /** A fake prover that records how it was built and what it was asked. */
@@ -277,7 +277,7 @@ describe('runDappProvingProve', () => {
 
   it('refuses to send proving data to Arkhia without the user\'s zkPaaS consent (PRIV-01)', async () => {
     const { deps, built } = fakeDeps();
-    for (const provingConsent of [null, { version: 2, provider: 'cloud', acceptedAt: 1 }]) {
+    for (const provingConsent of [null, { version: 3, provider: 'cloud', acceptedAt: 1 }]) {
       const store = new ProvingUploadStore();
       uploadPart(store, ORIGIN, 'u', 'preimage', bytes('pre'));
       const zkpaasCtx = { ...ctx, proofServer: { ...localPref, mode: 'zkpaas' as const, zkpaasApiKey: 'KEY' }, provingConsent };
