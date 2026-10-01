@@ -1185,12 +1185,13 @@ async function isTrustedCollateralDapp(origin?: string): Promise<boolean> {
 }
 
 app.add(METHOD.getCollateral, async (request, sendResponse) => {
-  if (refuseWhileLocked(request, sendResponse)) return;
+  // This handler ends `return true`, so its early exits must return a value too.
+  if (refuseWhileLocked(request, sendResponse)) return true;
   // Server-side whitelist gate (defense-in-depth), mirroring getBalance:
   // only a connected dApp may read collateral UTxOs.
   if (!WalletStore.isWhitelisted(request.origin)) {
     sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
-    return;
+    return true;
   }
   const storedUtxos = WalletStore.state.utxos;
   try {
