@@ -314,6 +314,25 @@ class BackgroundController {
   };
 }
 
+/**
+ * The page only accepts a reply carrying its request id, our target and the
+ * extension sender. A background reply already has them; a transport failure
+ * (service worker gone, `chrome.runtime.lastError`) resolves to a bare
+ * `{ error }`, which the page used to ignore, leaving the dApp's call hanging
+ * forever. Give every reply the envelope the page matches on.
+ */
+export function toPageReply(response: unknown, requestId: unknown): Record<string, unknown> {
+  const r = (response && typeof response === 'object') ? response as Record<string, unknown> : {};
+  if (r.id === requestId && r.target === TARGET && r.sender === SENDER.extension) return r;
+  return {
+    ...r,
+    error: r.error ?? (r.data === undefined ? APIError.InternalError : undefined),
+    id: requestId,
+    target: TARGET,
+    sender: SENDER.extension,
+  };
+}
+
 export const Messaging = {
   sendToBackgroundFromOptions: async function (request: Message) {
     return new Promise((resolve) => {
@@ -588,7 +607,7 @@ export const Messaging = {
       ) {
         Messaging.sendToBackground({
           ...request,
-        }).then((response) => window.postMessage(response));
+        }).then((response) => window.postMessage(toPageReply(response, request.id)));
         return;
       }
 
@@ -603,7 +622,7 @@ export const Messaging = {
         return;
       }
       await Messaging.sendToBackground(request).then((response) => {
-        window.postMessage(response);
+        window.postMessage(toPageReply(response, request.id));
       });
     });
   },

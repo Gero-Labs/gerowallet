@@ -17,6 +17,7 @@ import { decideSignTxPopup } from '@/chrome/signTxPopupPolicy';
 import { approvalStillValid } from '@/chrome/approvalRelease';
 import { sessionAuthorizesWallet } from '@/services/walletConnect/sessionBinding';
 import { embeddingSite } from '@/chrome/originBinding';
+import { installMoonpayFrameRule } from '@/chrome/moonpayFrameRule';
 import { bringInitBackground } from '@bringweb3/chrome-extension-kit';
 import {
   focusOrCreatePopup,
@@ -169,8 +170,11 @@ loadWallets().then(async () => {
           console.log('🔓 Cleared stale lock — no unlock method configured');
         }
       } catch (e) {
+        // Fail CLOSED: if the unlock method can't be read, stay locked. A
+        // database error must never be what unlocks a wallet; once the database
+        // is readable again the normal unlock (or the no-method clear above,
+        // on the next start) applies.
         console.warn('Failed to check unlock method for stale lock:', e);
-        WalletStore.setLocked(false);
       }
     }
 
@@ -192,6 +196,10 @@ loadWallets().then(async () => {
     Loading.setLoading(false)
   }
 }).finally(() => resolveBooted()).catch((e) => console.warn('⚠️ worker boot failed:', e));
+
+// MoonPay frame headers: stripped only for frames this extension opens. Session
+// rules don't survive a browser restart, so (re)install on every worker start.
+installMoonpayFrameRule().catch((e) => debugLog('MoonPay frame rule not installed:', e));
 
 (async () => {
   // Skip cashback init without its env vars — the SDK throws on missing config.
@@ -750,7 +758,19 @@ chrome.webNavigation?.onCommitted.addListener(async (details) => {
   }
 });
 
+/**
+ * Wallet-data reads stay closed while the wallet is locked: a connected dApp
+ * must not keep reading UTxOs, addresses or account keys behind the lock
+ * screen. Midnight's handlers already behave this way (requireMidnightWallet).
+ */
+function refuseWhileLocked(request: { id?: unknown }, sendResponse: (r: unknown) => void): boolean {
+  if (!walletStore.isLocked) return false;
+  sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+  return true;
+}
+
 app.add(METHOD.getBalance, async (request, sendResponse) => {
+  if (refuseWhileLocked(request, sendResponse)) return;
   // Server-side whitelist enforcement (defense-in-depth): the content relay
   // pre-checks the whitelist client-side, but the background must not depend on
   // that. CIP-30 read methods are only reachable after enable(), so a legit
@@ -935,6 +955,7 @@ app.add(METHOD.isEnabled, (request, sendResponse) => {
 });
 
 app.add(METHOD.getAddress, async (request, sendResponse) => {
+  if (refuseWhileLocked(request, sendResponse)) return;
   if (!WalletStore.isWhitelisted(request.origin)) {
     sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
     return;
@@ -1057,6 +1078,7 @@ app.add(METHOD.getNetworkId, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getRewardAddresses, async (request, sendResponse) => {
+  if (refuseWhileLocked(request, sendResponse)) return;
   if (!WalletStore.isWhitelisted(request.origin)) {
     sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
     return;
@@ -1081,6 +1103,7 @@ app.add(METHOD.getRewardAddresses, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getUtxos, async (request, sendResponse) => {
+  if (refuseWhileLocked(request, sendResponse)) return;
   if (!WalletStore.isWhitelisted(request.origin)) {
     sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
     return;
@@ -1162,6 +1185,7 @@ async function isTrustedCollateralDapp(origin?: string): Promise<boolean> {
 }
 
 app.add(METHOD.getCollateral, async (request, sendResponse) => {
+  if (refuseWhileLocked(request, sendResponse)) return;
   // Server-side whitelist gate (defense-in-depth), mirroring getBalance:
   // only a connected dApp may read collateral UTxOs.
   if (!WalletStore.isWhitelisted(request.origin)) {
@@ -1191,6 +1215,7 @@ app.add(METHOD.getCollateral, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getUsedAddresses, async (request, sendResponse) => {
+  if (refuseWhileLocked(request, sendResponse)) return;
   if (!WalletStore.isWhitelisted(request.origin)) {
     sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
     return;
@@ -1223,6 +1248,7 @@ app.add(METHOD.getUsedAddresses, async (request, sendResponse) => {
 });
 
 app.add(METHOD.getUnusedAddresses, async (request, sendResponse) => {
+  if (refuseWhileLocked(request, sendResponse)) return;
   if (!WalletStore.isWhitelisted(request.origin)) {
     sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
     return;
@@ -1684,6 +1710,7 @@ app.add(METHOD.getPubDRepKey, async (request, sendResponse) => {
     sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
     return;
   }
+  if (refuseWhileLocked(request, sendResponse)) return;
   const loggedWallet = WalletStore.state.loggedWallet;
   if (!loggedWallet || !loggedWallet.publicKey) {
     sendResponse({
@@ -1720,6 +1747,7 @@ app.add(METHOD.getRegisteredPubStakeKeys, async (request, sendResponse) => {
     sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
     return;
   }
+  if (refuseWhileLocked(request, sendResponse)) return;
   try {
     const account = WalletStore.state.account;
     if (!account) {
@@ -1786,6 +1814,7 @@ app.add(METHOD.getUnregisteredPubStakeKeys, async (request, sendResponse) => {
     sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
     return;
   }
+  if (refuseWhileLocked(request, sendResponse)) return;
   try {
     const account = WalletStore.state.account;
     if (!account) {
@@ -1852,6 +1881,7 @@ app.add(METHOD.getAccountPub, async (request, sendResponse) => {
     sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
     return;
   }
+  if (refuseWhileLocked(request, sendResponse)) return;
   const loggedWallet = WalletStore.state.loggedWallet;
   if (!loggedWallet || !loggedWallet.publicKey) {
     sendResponse({
@@ -2648,7 +2678,6 @@ app.addToOptions(MessageTypes.SIGN_TX, async (request, sendResponse) => {
       let transaction;
       if (request.data.txCbor) {
         // New format: deserialize CBOR to Cardano.Tx object
-        console.log('Deserializing CBOR transaction:', request.data.txCbor);
         transaction = deserializeCardanoJsSdkTx(request.data.txCbor);
       } else if (request.data.tx) {
         // Legacy format: use transaction object directly
@@ -3458,14 +3487,11 @@ app.addToOptions(MessageTypes.BABYLON_STAKE, async (request, sendResponse) => {
 
 app.addToOptions(MessageTypes.SUBMIT_TX, async (request, sendResponse) => {
   try {
-    console.log('submit tx', request);
     const walletBg = walletManager.getWallet();
     if (walletBg) {
       // Handle different transaction input formats
       let txCbor: string;
       if (request.data.txCbor && request.data.witnessHex) {
-        console.log('original Cbor', request.data.txCbor)
-        console.log('witnessHex', request.data.witnessHex)
         const serializableTx: Serialization.Transaction = Serialization.Transaction.fromCbor(HexBlob(request.data.txCbor));
         // Integrity guard: capture the tx body hash BEFORE merging the external
         // witness set. Merging a VKey witness set must never alter body bytes;
@@ -3497,7 +3523,6 @@ app.addToOptions(MessageTypes.SUBMIT_TX, async (request, sendResponse) => {
           throw new Error('Transaction body changed while applying witness set; refusing to submit');
         }
         txCbor = serializableTx.toCbor();
-        console.log('Submitting transaction with witnesses:', txCbor);
       } else if (request.data.txCbor) {
         // CBOR hex string format (already signed)
         txCbor = request.data.txCbor;
@@ -3540,7 +3565,6 @@ app.addToOptions(MessageTypes.SUBMIT_TX, async (request, sendResponse) => {
 
 app.addToOptions(MessageTypes.RESTORE, async (request, sendResponse) => {
   try {
-    console.log('restore', request)
     const currentWallet = await walletManager.restore(request.data.wallet);
     if (currentWallet) {
       sendResponse({
@@ -3571,7 +3595,6 @@ app.addToOptions(MessageTypes.RESTORE, async (request, sendResponse) => {
 
 app.addToOptions(MessageTypes.LOGIN, async (request, sendResponse) => {
   try {
-    console.log('login', request)
     const walletBg = await walletManager.login(request.data.wallet);
     if (walletBg) {
       // Push notifications: the opened wallet may need its link re-sent (§8.2 (c)).
@@ -4100,6 +4123,7 @@ app.add(BITCOIN_METHOD.isEnabled, (request, sendResponse) => {
 });
 
 app.add(BITCOIN_METHOD.getAccounts, async (request, sendResponse) => {
+  if (refuseWhileLocked(request, sendResponse)) return;
   const walletBg = walletManager.getWallet();
   if (!walletBg || walletBg.chain !== Blockchain.BITCOIN) {
     return sendResponse({ id: request.id, error: APIError.AccountNotSet, target: TARGET, sender: SENDER.extension });
@@ -4111,6 +4135,7 @@ app.add(BITCOIN_METHOD.getAccounts, async (request, sendResponse) => {
 });
 
 app.add(BITCOIN_METHOD.getPublicKey, async (request, sendResponse) => {
+  if (refuseWhileLocked(request, sendResponse)) return;
   const walletBg = walletManager.getWallet();
   if (!walletBg || walletBg.chain !== Blockchain.BITCOIN) {
     return sendResponse({ id: request.id, error: APIError.AccountNotSet, target: TARGET, sender: SENDER.extension });
@@ -4140,6 +4165,7 @@ app.add(BITCOIN_METHOD.getNetwork, (request, sendResponse) => {
 });
 
 app.add(BITCOIN_METHOD.getBalance, (request, sendResponse) => {
+  if (refuseWhileLocked(request, sendResponse)) return;
   const walletBg = walletManager.getWallet();
   if (!walletBg || walletBg.chain !== Blockchain.BITCOIN) {
     return sendResponse({ id: request.id, error: APIError.AccountNotSet, target: TARGET, sender: SENDER.extension });
@@ -4159,6 +4185,7 @@ app.add(BITCOIN_METHOD.getBalance, (request, sendResponse) => {
 });
 
 app.add(BITCOIN_METHOD.getUtxos, (request, sendResponse) => {
+  if (refuseWhileLocked(request, sendResponse)) return;
   const walletBg = walletManager.getWallet();
   if (!walletBg || walletBg.chain !== Blockchain.BITCOIN) {
     return sendResponse({ id: request.id, error: APIError.AccountNotSet, target: TARGET, sender: SENDER.extension });
