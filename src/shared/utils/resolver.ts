@@ -640,6 +640,20 @@ export function analyzeTransactionForSignatures(
 ): Array<{ derivationPath: number[], type: string }> {
   const requiredSigners: Array<{ derivationPath: number[], type: string }> = [];
 
+  // Only sign for credentials this wallet owns. A stake/DRep/CC witness for a
+  // credential that isn't ours authorises nothing, and adding it hides what the
+  // tx really does. If the key set carries no creds of a kind (not expected
+  // for a normal wallet), fall back to the old behaviour rather than drop a
+  // witness the wallet's own action needs.
+  const credsOf = (...lists: Array<Array<{ cred?: string }> | undefined>) =>
+    new Set(lists.flatMap((l) => (Array.isArray(l) ? l : []).map((k) => String(k?.cred ?? '').toLowerCase()).filter(Boolean)));
+  const keySet = (addresses ?? {}) as Partial<Keys>;
+  const ownStakeCreds = credsOf(keySet.stake);
+  const ownDrepCreds = credsOf(keySet.drep105, keySet.drep129);
+  const ownCcHotCreds = credsOf(keySet.ccHot);
+  const ownedOrUnknown = (owned: Set<string>, hash: unknown) =>
+    owned.size === 0 || (typeof hash === 'string' && owned.has(hash.toLowerCase()));
+
   // Check transaction inputs
   for (const input of transaction.body.inputs) {
     const utxo = utxos.find(u =>
@@ -693,11 +707,15 @@ export function analyzeTransactionForSignatures(
           certificate.__typename === Cardano.CertificateType.VoteDelegation ||
           certificate.__typename === Cardano.CertificateType.VoteRegistrationDelegation ||
           certificate.__typename === Cardano.CertificateType.StakeVoteRegistrationDelegation) {
-        // Need stake key signature for both staking and governance operations (including Conway-era certificates)
-        requiredSigners.push({
-          derivationPath: [ChainDerivations.CHIMERIC_ACCOUNT, 0],
-          type: 'stake'
-        });
+        // Need stake key signature for both staking and governance operations
+        // (including Conway-era certificates), but only for OUR stake credential.
+        const certStakeHash = (certificate as { stakeCredential?: { hash?: unknown } }).stakeCredential?.hash;
+        if (certStakeHash === undefined || ownedOrUnknown(ownStakeCreds, certStakeHash)) {
+          requiredSigners.push({
+            derivationPath: [ChainDerivations.CHIMERIC_ACCOUNT, 0],
+            type: 'stake'
+          });
+        }
       }
 
       // Pool operator certificates
@@ -739,10 +757,13 @@ export function analyzeTransactionForSignatures(
     for (const group of transaction.body.votingProcedures) {
       switch (group.voter?.__typename) {
         case Cardano.VoterType.dRepKeyHash:
-          requiredSigners.push({
-            derivationPath: [ChainDerivations.DREP, 0],
-            type: 'drep'
-          });
+          // Only when the voter is this wallet's own DRep key.
+          if (ownedOrUnknown(ownDrepCreds, group.voter.credential?.hash)) {
+            requiredSigners.push({
+              derivationPath: [ChainDerivations.DREP, 0],
+              type: 'drep'
+            });
+          }
           break;
         case Cardano.VoterType.stakePoolKeyHash:
           // The pool cold key lives outside the HD tree — it is imported or
@@ -751,10 +772,12 @@ export function analyzeTransactionForSignatures(
           (requiredSigners as unknown as { requiresColdKeySignature?: boolean }).requiresColdKeySignature = true;
           break;
         case Cardano.VoterType.ccHotKeyHash:
-          requiredSigners.push({
-            derivationPath: [ChainDerivations.CONSTITUTIONAL_COMMITTEE_HOT, 0],
-            type: 'ccHot'
-          });
+          if (ownedOrUnknown(ownCcHotCreds, group.voter.credential?.hash)) {
+            requiredSigners.push({
+              derivationPath: [ChainDerivations.CONSTITUTIONAL_COMMITTEE_HOT, 0],
+              type: 'ccHot'
+            });
+          }
           break;
         // Script-credential voters (dRepScriptHash, ccHotScriptHash) are
         // witnessed by the script itself, not by a key from this wallet.
