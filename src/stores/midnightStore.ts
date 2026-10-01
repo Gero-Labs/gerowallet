@@ -588,7 +588,7 @@ if (context === 'browser') {
       next.addresses = safeStored;
       next.shieldedSyncAvailable = typeof stored.shieldedSyncAvailable === 'boolean'
         ? stored.shieldedSyncAvailable
-        : isValidMidnightViewingKey(stored.addresses.zswapViewingKey);
+        : hasMidnightShieldedAddress(safeStored.shielded) || isValidMidnightViewingKey(stored.addresses.zswapViewingKey);
     } else {
       next.addresses = { ...EMPTY_ADDRESSES };
       next.shieldedSyncAvailable = !!stored.shieldedSyncAvailable;
@@ -862,6 +862,16 @@ export function isValidMidnightViewingKey(vk: string | undefined | null): boolea
 }
 
 /**
+ * True when the wallet has a shielded receive address, which is all the
+ * on-device private sync needs (it derives its keys from the seed at unlock).
+ * Public material, so it can gate the shielded-balance UI without the
+ * viewing key ever being stored.
+ */
+export function hasMidnightShieldedAddress(address: string | undefined | null): boolean {
+  return typeof address === 'string' && address.startsWith('mn_shield-addr');
+}
+
+/**
  * Background-context actions. Browser code should never call these directly —
  * trigger them via Chrome messaging if needed.
  */
@@ -931,10 +941,11 @@ export const midnightActions = {
     // at-rest copy of the key. Strip it here, at the single chokepoint every
     // caller (walletManager.initializeWallet, midnight-sync.service.start,
     // DustRegistrationDialog) passes through, and publish only the boolean
-    // `shieldedSyncAvailable`. The raw key never travels via the store: the
-    // background reads it straight from the wallet record and hands it to the
-    // sync service (walletManager.initializeWallet → midnightSyncService.start).
-    const shieldedSyncAvailable = isValidMidnightViewingKey(addresses.zswapViewingKey);
+    // `shieldedSyncAvailable`, derived from the PUBLIC shielded address. The
+    // key itself is no longer persisted or sent anywhere (PRIV-01); this strip
+    // only guards against a legacy record that still carries one.
+    const shieldedSyncAvailable = hasMidnightShieldedAddress(addresses.shielded)
+      || isValidMidnightViewingKey(addresses.zswapViewingKey);
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { zswapViewingKey: _zswapViewingKey, ...safeAddresses } = addresses;
 

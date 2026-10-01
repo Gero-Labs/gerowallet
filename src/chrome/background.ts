@@ -139,8 +139,27 @@ const workerBooted = new Promise<void>((resolve) => { resolveBooted = resolve; }
 const booted = () => Promise.race([workerBooted, new Promise<void>((resolve) => setTimeout(resolve, 15_000))]);
 
 loadWallets().then(async () => {
+  // PRIV-01: older releases stored the Midnight viewing key in plaintext on the
+  // wallet record. Scrub it before anything reads the records; the live query
+  // behind loadWallets then rewrites geroStore's copy as well.
+  try {
+    const { getDb } = await import('@/db/gero-db');
+    const { scrubStoredMidnightViewingKeys } = await import('@/chains/midnight/midnightRecordScrub');
+    await scrubStoredMidnightViewingKeys((await getDb())['wallets']);
+  } catch { /* non-fatal: retried on the next worker start */ }
+
   // Wait for the wallet store to be hydrated from Chrome storage
   await hydrateWalletStore();
+
+  // ...and the logged-in wallet's copy in walletStore, which is hydrated from
+  // chrome.storage.local rather than the record.
+  if (typeof walletStore.loggedWallet?.publicKey === 'string') {
+    const { stripViewingKeyFromPublicKey } = await import('@/chains/midnight/midnightRecordScrub');
+    const scrubbed = stripViewingKeyFromPublicKey(walletStore.loggedWallet.publicKey);
+    if (scrubbed !== walletStore.loggedWallet.publicKey) {
+      WalletStore.setLoggedWallet({ ...walletStore.loggedWallet, publicKey: scrubbed });
+    }
+  }
 
   // Push notifications: re-assert the registration on every worker start (§8.2). Not
   // awaited, and it needs no logged-in wallet; the opt-out rule inside makes it a no-op
@@ -4958,10 +4977,13 @@ app.addToOptions(MessageTypes.CIP45_INVOKE, async (request, sendResponse) => {
  */
 app.addToOptions(MessageTypes.UPDATE_MIDNIGHT_PUBLIC_KEY, async (request, sendResponse) => {
   try {
-    const { walletId, publicKey } = request.data || {};
-    if (typeof walletId !== 'number' || typeof publicKey !== 'string' || !publicKey) {
+    const { walletId, publicKey: suppliedPublicKey } = request.data || {};
+    if (typeof walletId !== 'number' || typeof suppliedPublicKey !== 'string' || !suppliedPublicKey) {
       throw new Error('walletId and publicKey are required');
     }
+    // Whatever the page sends, the zswap viewing key is never stored (PRIV-01).
+    const { stripViewingKeyFromPublicKey } = await import('@/chains/midnight/midnightRecordScrub');
+    const publicKey = stripViewingKeyFromPublicKey(suppliedPublicKey);
     const { getDb } = await import('@/db/gero-db');
     const db = await getDb();
     await db['wallets'].update(walletId, { publicKey });
