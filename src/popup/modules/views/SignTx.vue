@@ -3,6 +3,14 @@
     <PopupHeader :title="t('navigation.transactionSummary')" ref="popupHeader" :show-website="!(route.query['website'] === 'undefined' || Object.keys(route.query).length === 0)">
       <v-card-text class="d-flex flex-column justify-space-between pa-0" style="flex: 1 1 auto; overflow-y: auto; max-height: 100%; height: 0;">
         <DappAddress class="mb-2" :address="recipient" :risk="risks?.addressRisk" />
+        <!-- Every output, not just the first recipient (same card as the side panel). -->
+        <TransactionDetailsCard
+          v-if="approvalCard"
+          :outputs="approvalCard.outputs"
+          :withdrawal="approvalCard.withdrawal"
+          :totals="approvalCard.totals"
+          class="mb-2"
+        />
         <TransactionCard v-if="swapDetails" :transaction="swapDetails.give" :risk="true">
           {{ $t('navigation.youreGiving') }}
           <v-tooltip bottom>
@@ -37,6 +45,15 @@
             <CopyButton x-small :value="request?.data ? request?.data.tx : ''" :title="'CBOR'"></CopyButton>
           </div>
         </v-row>
+        <!-- Same effects list and network guard as the side panel: certificates,
+             withdrawals, votes, proposals, mint/burn, collateral, reference
+             inputs, required signers, validity, and a blocking network banner. -->
+        <TxApprovalIntents
+          v-if="approvalSummary"
+          class="mt-2"
+          :summary="approvalSummary"
+          :network-ack.sync="networkMismatchAck"
+        />
       </v-card-text>
       <v-card-actions class="justify-center pa-0 pt-2">
         <v-layout>
@@ -63,7 +80,7 @@
               <!-- Before signing: PassKey button -->
               <PassKeyAuthButton
                 v-if="!witnesses"
-                :disabled="txSignLoading"
+                :disabled="txSignLoading || signBlocked"
                 @success="handlePassKeyAuthSuccess"
                 @error="handlePassKeyAuthError"
                 block
@@ -76,7 +93,7 @@
                 class="geroButton"
                 style="color: black!important;"
                 @click="sign"
-                :disabled="txSignLoading"
+                :disabled="txSignLoading || signBlocked"
                 :loading="txSignLoading"
               >
                 {{ $t('common.confirm') }}
@@ -115,7 +132,7 @@
             </v-col>
             <!-- Hide action button for PRF wallets (handled above) -->
             <v-col cols="6" v-if="!isPrfWallet">
-              <v-btn block class="geroButton" style="color: black!important;" @click="sign" :disabled="!valid || txSignLoading" :loading="txSignLoading">
+              <v-btn block class="geroButton" style="color: black!important;" @click="sign" :disabled="!valid || txSignLoading || signBlocked" :loading="txSignLoading">
                 {{txAutoSubmit ? $t('wallet.signAndConfirm') : !witnesses ? $t('wallet.sign') : $t('common.confirm')}}
               </v-btn>
             </v-col>
@@ -228,6 +245,10 @@ import { Blockchain, coin_type, purpose, WalletType, Network } from '@/models/ty
 import snackbar from '@/plugins/snackbar';
 import cardanoShieldApi from '@/api/cardano-shield-api';
 import CopyButton from '@/shared/components/CopyButton.vue';
+import TxApprovalIntents from '@/shared/components/TxApprovalIntents.vue';
+import TransactionDetailsCard from '@/shared/components/TransactionDetailsCard.vue';
+import { approvalContextFromKeys, buildTxApprovalSummary, toTransactionDetailsCardProps, type TxApprovalSummary } from '@/shared/utils/txApprovalSummary';
+import filters from '@/shared/utils/filters';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import { walletStore } from '@/stores/walletStore';
 import { Cardano, Serialization } from '@cardano-sdk/core';
@@ -281,6 +302,34 @@ const keystoneUseHash = ref(false);
 const addresses = computed(() => {
   return new Set([...keys.value.payment, ...keys.value.change].map(el => el.address));
 })
+
+// Every effect of the tx, from the same CBOR the signer hashes (shared with the
+// side panel). Asset names aren't resolved here, so units show truncated.
+const approvalSummary = computed<TxApprovalSummary | null>(() => {
+  if (!tx.value?.body) return null;
+  try {
+    const wallet = loggedWallet.value;
+    const walletNetworkId = wallet
+      ? (wallet.network === Network.MAINNET ? Cardano.NetworkId.Mainnet : Cardano.NetworkId.Testnet)
+      : null;
+    return buildTxApprovalSummary(
+      tx.value,
+      approvalContextFromKeys(keys.value, walletNetworkId, (unit) => ({ name: filters.truncate(unit), decimals: 0 })),
+    );
+  } catch {
+    return null;
+  }
+});
+const approvalCard = computed(() =>
+  approvalSummary.value ? toTransactionDetailsCardProps(approvalSummary.value, filters.truncate) : null,
+);
+const networkMismatchAck = ref(false);
+// Sign is blocked until a network mismatch is explicitly acknowledged.
+const signBlocked = computed(() =>
+  !!approvalSummary.value
+  && (approvalSummary.value.bodyNetworkMismatch || approvalSummary.value.outputNetworkMismatch)
+  && !networkMismatchAck.value,
+);
 
 const txAutoSubmit = computed(() => {
   return config.value?.txAutoSubmit;
@@ -463,6 +512,8 @@ const decline = async () => {
 };
 
 const sign = async () => {
+  // Enter in the password field calls sign() directly; honour the same gate.
+  if (signBlocked.value) return;
   if (!txAutoSubmit.value && witnesses.value) {
     await confirm();
   }
