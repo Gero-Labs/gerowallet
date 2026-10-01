@@ -3823,6 +3823,7 @@ export default {
   'signTx.rejected': 'Firma de transacción cancelada',
   'miniGero.futureTransactionsNote': 'Por tu seguridad, cualquier transacción futura de este sitio web requerirá una verificación adicional antes de firmarse.',
   'miniGero.requestQueueIndicator': 'Solicitud {current} de {total}',
+  'miniGero.embeddedIn': 'Esta solicitud viene de una página incrustada en {site}. Continúa solo si confías en ambos sitios.',
   'miniGero.rejectAll': 'Rechazar todas',
   'miniGero.pendingRequestBanner': 'Desbloquea para revisar la solicitud de {domain}',
   'miniGero.pendingRequestBannerNoDomain': 'Desbloquea para revisar una solicitud pendiente de una dApp',

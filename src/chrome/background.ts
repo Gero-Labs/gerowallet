@@ -11,6 +11,8 @@ import { isStakeKeyRegistered, StakeAccountError } from '@/shared/utils/stakeReg
 import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, POPUP, SENDER, TARGET, TxSendError, TxSignError } from '@/chrome/config';
 import { toDappError } from '@/chrome/dappError';
 import { applyDappRequestBadge } from '@/chrome/dappRequestBadge';
+import { sessionAuthorizesWallet } from '@/services/walletConnect/sessionBinding';
+import { embeddingSite } from '@/chrome/originBinding';
 import { bringInitBackground } from '@bringweb3/chrome-extension-kit';
 import {
   focusOrCreatePopup,
@@ -781,7 +783,7 @@ app.add(METHOD.enable, (request, sendResponse) => {
   };
 
   const favIconUrl = send.tab?.favIconUrl;
-  const enablePayload = { ...request.data, website: origin, favIconUrl };
+  const enablePayload = { ...request.data, website: origin, favIconUrl, embeddedIn: embeddingSite(origin, request.send) };
 
   const handleMiniGeroEnable = () => {
     // Prefer this tab's panel port, else any open panel (same rationale as
@@ -1312,7 +1314,7 @@ app.add(METHOD.signData, (request, sendResponse) => {
     return signDataReply({ error: APIError.Refused });
   }
 
-  const signDataPayload = { ...request.data, website: request.origin, favIconUrl: request.send?.tab?.favIconUrl };
+  const signDataPayload = { ...request.data, website: request.origin, favIconUrl: request.send?.tab?.favIconUrl, embeddedIn: embeddingSite(request.origin, request.send) };
   const tabId = request.send?.tab?.id;
 
   const handleMiniGeroSignData = () => {
@@ -1421,7 +1423,7 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
     return signTxReply({ error: { code: APIError.Refused.code, info: CIP113_SIGN_REFUSAL_MESSAGE } });
   }
 
-  const signTxPayload = { ...request.data, website: request.origin, favIconUrl: request.send?.tab?.favIconUrl };
+  const signTxPayload = { ...request.data, website: request.origin, favIconUrl: request.send?.tab?.favIconUrl, embeddedIn: embeddingSite(request.origin, request.send) };
   const tabId = request.send?.tab?.id;
 
   const handleMiniGeroSignTx = () => {
@@ -3938,9 +3940,10 @@ app.add(BITCOIN_METHOD.enable, (request, sendResponse) => {
       // waiting for the Dexie live-query subscription to fire asynchronously.
       if (!WalletStore.isWhitelisted(origin)) {
         try {
-          const hostname = new URL(origin).hostname;
+          // Full origin, never the bare hostname (see matchesDappWhitelistEntry).
+          const fullOrigin = new URL(origin).origin;
           const currentDapps = WalletStore.state.connectedDapps || [];
-          WalletStore.setConnectedDapps([...currentDapps, { domain: hostname }]);
+          WalletStore.setConnectedDapps([...currentDapps, { domain: fullOrigin }]);
         } catch {}
       }
       reply({ data: [currentWallet.baseAddress] });
@@ -4515,6 +4518,13 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
       const loggedWallet = WalletStore.state.loggedWallet;
       if (!loggedWallet) {
         await wcService.respondError(topic, id, 4100, 'No wallet logged in');
+        return;
+      }
+
+      // The session was approved for one wallet's accounts. After a wallet
+      // switch, refuse rather than answer with a wallet the peer never got.
+      if (!sessionAuthorizesWallet(wcService.getSessionForTopic(topic), loggedWallet)) {
+        await wcService.respondError(topic, id, 4100, 'Unauthorized: the active wallet is not the one connected to this session');
         return;
       }
 

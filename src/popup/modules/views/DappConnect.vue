@@ -52,20 +52,23 @@ import filters from '@/shared/utils/filters';
 
 const { t } = useTranslation();
 
-const vmProxy = getCurrentInstance()!.proxy as any
+const vmProxy = getCurrentInstance()!.proxy as unknown as {
+  $refs: { popupHeader: { domain: string } };
+  $route: { query?: Record<string, string | undefined> };
+};
 
 // Get store values
 const { loggedWallet } = toRefs(walletStore);
 
 // Reactive data
 const consent = ref<boolean>(false);
-const controller = ref<any>(null);
-const popupHeader = ref<any>(null);
+const controller = ref<ReturnType<typeof Messaging.createInternalController> | null>(null);
+const popupHeader = ref<unknown>(null);
 
 // Methods
 const decline = async () => {
   try {
-    await controller.value.returnData({ data: {}, error: APIError.Refused });
+    await controller.value?.returnData({ data: {}, error: APIError.Refused });
   } catch (e) {
     console.warn('[DappConnect] returnData failed on decline:', e);
   }
@@ -73,9 +76,21 @@ const decline = async () => {
 };
 
 const confirm = async () => {
-  await WalletStore.addConnectedDapp(loggedWallet.value.id, vmProxy.$refs.popupHeader.domain);
+  // Store the full origin (scheme + host + port), never the bare hostname: a
+  // hostname entry would also authorise http:// and other ports of that name.
+  let origin = '';
   try {
-    await controller.value.returnData({ data: true, error: {} });
+    origin = new URL(String(vmProxy.$route.query?.website ?? '')).origin;
+  } catch {
+    origin = '';
+  }
+  if (!origin || origin === 'null') {
+    await decline();
+    return;
+  }
+  await WalletStore.addConnectedDapp(loggedWallet.value.id, origin);
+  try {
+    await controller.value?.returnData({ data: true, error: {} });
   } catch (e) {
     console.warn('[DappConnect] returnData failed:', e);
   }
