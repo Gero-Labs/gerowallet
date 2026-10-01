@@ -199,6 +199,7 @@
 </template>
 
 <script setup lang="ts">
+import { copySensitiveText } from '@/shared/utils/sensitiveClipboard';
 import { ref, computed, watch, nextTick, getCurrentInstance } from 'vue';
 import { walletStore } from '@/stores/walletStore';
 import {
@@ -497,9 +498,10 @@ async function handleDisable2FA() {
   }
 }
 
-function copyBackupCodes() {
+async function copyBackupCodes() {
   const codesText = backupCodes.value.join(' ');
-  navigator.clipboard.writeText(codesText);
+  // Backup codes bypass 2FA: never leave them on the clipboard indefinitely.
+  await copySensitiveText(codesText);
 
   // Show success tooltip
   showCopiedTooltip.value = true;

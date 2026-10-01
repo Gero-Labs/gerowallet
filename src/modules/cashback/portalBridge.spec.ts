@@ -6,6 +6,8 @@ import {
   abortSignMessage,
   signRequestMessage,
   signPayloadHex,
+  pinnedPortalUrl,
+  BRING_PORTAL_ORIGINS,
   MAX_SIGN_MESSAGE_LENGTH,
 } from './portalBridge';
 
@@ -68,5 +70,39 @@ describe('signPayloadHex', () => {
   it('hex-encodes the UTF-8 bytes, not UTF-16 code units', () => {
     expect(signPayloadHex('Claim 1 ADA')).toBe('436c61696d203120414441');
     expect(signPayloadHex('€')).toBe('e282ac');
+  });
+});
+
+describe('pinnedPortalUrl', () => {
+  it('pins the production portal origin', () => {
+    expect(BRING_PORTAL_ORIGINS).toEqual([ORIGIN]);
+  });
+  it('accepts a portal URL on the pinned origin', () => {
+    expect(pinnedPortalUrl(`${ORIGIN}/gero?token=abc`)).toBe(`${ORIGIN}/gero?token=abc`);
+  });
+  it('rejects any other origin the backend might name', () => {
+    for (const url of [
+      'https://evil.example/portal',
+      'https://other.bringweb3.io/portal',
+      'http://portal.bringweb3.io/portal',
+      'https://portal.bringweb3.io:8443/portal',
+      'https://portal.bringweb3.io.evil.example/portal',
+      'https://user:pw@portal.bringweb3.io/portal',
+      'javascript:alert(1)',
+      'not a url',
+      '',
+      undefined,
+      42,
+    ]) {
+      expect(pinnedPortalUrl(url)).toBeNull();
+    }
+  });
+});
+
+describe('signRequestMessage bidi', () => {
+  it('rejects bidi overrides and isolates that reorder the shown text', () => {
+    expect(signRequestMessage({ messageToSign: 'claim \u202Ereward' })).toBeNull();
+    expect(signRequestMessage({ messageToSign: 'claim \u2067reward' })).toBeNull();
+    expect(signRequestMessage({ messageToSign: 'claim reward 42' })).toBe('claim reward 42');
   });
 });

@@ -94,9 +94,11 @@ const valid = ref<boolean>(false);
 const currentPassword = ref<string>('');
 const newPassword = ref<string>('');
 const confirmNewPassword = ref<string>('');
-const passwordField = ref<any>(null);
+const passwordField = ref<{ showError: (message: string) => void } | null>(null);
 
-const vmProxy = getCurrentInstance()!.proxy as any
+const vmProxy = getCurrentInstance()!.proxy as unknown as {
+  $refs: { form: { validate: () => boolean; resetValidation: () => void } };
+};
 
 watch(() => props.isOpen, (newValue, _oldValue) => {
   if (!newValue) {
@@ -152,8 +154,19 @@ const updateSpendingPassword = async (): Promise<void> => {
             key: 'passKeyEncryptedSpendingPassword',
             value: encryptedPassword
           });
+        } else {
+          // Autofill is off: no PassKey copy of the (old) password may remain.
+          await configTable.where({ key: 'passKeyEncryptedSpendingPassword' }).delete();
         }
       } catch (passKeyError) {
+        // A copy that could not be re-encrypted still holds the OLD password: drop it,
+        // so autofill asks for the password again instead of offering a stale one.
+        try {
+          const db = await getDb(loggedWallet.value.id);
+          await db.table('config').where({ key: 'passKeyEncryptedSpendingPassword' }).delete();
+        } catch {
+          // The snackbar below already tells the user PassKey autofill needs attention.
+        }
         // Log but don't fail the password change if PassKey update fails
         console.error('⚠️ Failed to update PassKey encrypted password:', passKeyError);
         snackbar.setError(t('security.passKeyPasswordUpdateFailed'));

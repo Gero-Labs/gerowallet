@@ -14,6 +14,7 @@
 import { MpcValidationError, RecoveryBackupStoreError, NoRecoveryBackupError } from '@/shared/utils/mpc';
 import type { MpcShareSet, DeviceShareSecret } from '@/shared/utils/mpc';
 import { mpcSessionCache } from '@/chrome/mpcSessionCache';
+import { isAcceptableRecoveryPassword } from '@/shared/utils/mpc/recoveryPasswordStrength';
 
 /** Minimal wallet shape the sign-path helpers need. */
 export interface SignableWallet {
@@ -459,12 +460,24 @@ export interface StoreRecoveryShareDeps {
  * (background handler) reports it non-fatally and offers a retry — no local state is
  * touched, so the wallet cannot be corrupted by an upload error.
  */
+/**
+ * The recovery blob can be downloaded by any holder of the Google token (and
+ * is held by the backend operator), then attacked offline, so the strength
+ * floor is enforced here too, not only in the forms that collect it.
+ */
+function assertAcceptableRecoveryPassword(password: string): void {
+  if (!isAcceptableRecoveryPassword(password)) {
+    throw new Error('Recovery password does not meet the strength requirements');
+  }
+}
+
 export async function storeRecoveryShareFlow(
   input: StoreRecoveryShareInput,
   deps: StoreRecoveryShareDeps,
 ): Promise<{ stored: boolean }> {
   const { idToken, chain, network, recoveryShare, recoveryPassword, publicKey } = input;
   const { encryptRecoveryShare, storeRecovery } = deps;
+  assertAcceptableRecoveryPassword(recoveryPassword);
 
   const encryptedRecovery = await encryptRecoveryShare(recoveryShare, recoveryPassword);
   return storeRecovery(idToken, chain, network, encryptedRecovery, publicKey);
@@ -619,6 +632,9 @@ export async function setRecoveryPasswordFlow(
     storeRecovery,
     clearLoginShareCache,
   } = deps;
+  // Before anything is read, staged or rotated: a refused password must leave
+  // every share exactly as it was.
+  assertAcceptableRecoveryPassword(newRecoveryPassword);
 
   const wallet = await getWallet(walletId);
   if (!wallet) {

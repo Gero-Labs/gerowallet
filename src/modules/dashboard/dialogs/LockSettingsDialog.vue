@@ -665,13 +665,17 @@ async function saveUnlockMethod(method: UnlockMethod) {
     const configTable = db.table('config');
 
     if (method === null) {
-      // Remove unlock method data (but keep PassKey registration and encrypted password)
+      // Remove unlock method data (but keep the PassKey registration)
       await configTable.put({ key: 'unlockMethod', value: null });
       await configTable.where({ key: 'pinHash' }).delete();
       await configTable.where({ key: 'encryptedPinHash' }).delete();
       await configTable.where({ key: 'encryptedPatternHash' }).delete();
-      // Note: webAuthnCredentialId and passKeyEncryptedSpendingPassword are NOT deleted
-      // PassKey registration persists - user can re-enable PassKey features after setting a new unlock method
+      // webAuthnCredentialId is kept so PassKey features can be re-enabled after
+      // setting a new unlock method. The PassKey-encrypted copy of the spending
+      // password is NOT kept: autofill is switched off below, and a dormant copy
+      // of the password must not outlive the feature that needs it. Re-enabling
+      // autofill asks for the password and encrypts it again.
+      await configTable.where({ key: 'passKeyEncryptedSpendingPassword' }).delete();
 
       // Disable PassKey features when the unlock method is set to None
       await configTable.put({ key: 'passKeyForUnlock', value: false });
@@ -872,11 +876,14 @@ async function handlePassKeyAutofillChange(enabled: boolean) {
         }
       }
     } else {
-      // When disabling, keep the encrypted password for potential re-enabling
-      // Only disable auto-trigger
+      // When disabling, drop the PassKey-encrypted copy of the spending
+      // password too: anyone with this device and the passkey could otherwise
+      // still recover the password with autofill off. Re-enabling asks for the
+      // password and encrypts it again.
+      await configTable.where({ key: 'passKeyEncryptedSpendingPassword' }).delete();
       await configTable.put({ key: 'passKeyAutoTrigger', value: false });
       passKeyAutoTrigger.value = false;
-      debugLog('🔒 PassKey autofill disabled (encrypted password retained)');
+      debugLog('🔒 PassKey autofill disabled (encrypted password removed)');
     }
 
     // Save PassKey autofill setting
