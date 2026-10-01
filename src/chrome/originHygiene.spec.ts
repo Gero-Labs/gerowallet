@@ -159,8 +159,30 @@ describe('embedding-site warning on popup approvals (PR #2 review)', () => {
     expect(bg).toContain('Messaging.sendToPopupInternal(tab.id, { ...request, embeddedIn: signDataPayload.embeddedIn })');
   });
 
+  it('the Bitcoin connect and sign paths carry it to the side panel and the popup too', () => {
+    const bg = read('chrome/background.ts');
+    const handler = (name: string) => {
+      const start = bg.indexOf(`app.add(BITCOIN_METHOD.${name}, `);
+      expect(start, name).toBeGreaterThan(-1);
+      return bg.slice(start, bg.indexOf('\napp.add(', start + 10));
+    };
+    const enable = handler('enable');
+    expect(enable).toContain('const embeddedIn = embeddingSite(origin, send);');
+    expect(enable).toContain("sendToMiniGero('enable', { ...request.data, website: origin, embeddedIn }, tabId)");
+    expect(enable).toContain('Messaging.sendToPopupInternal(tab.id, { ...request, embeddedIn })');
+    for (const [name, payload] of [['signPsbt', 'btcSignPsbtPayload'], ['signMessage', 'btcSignMessagePayload']]) {
+      const h = handler(name);
+      expect(h).toContain('embeddedIn: embeddingSite(request.origin, request.send)');
+      expect(h).toContain(`Messaging.sendToPopupInternal(tab.id, { ...request, embeddedIn: ${payload}.embeddedIn })`);
+    }
+    const batch = handler('signPsbts');
+    expect(batch).toContain('const embeddedIn = embeddingSite(request.origin, request.send);');
+    expect(batch).toContain('data: { psbtHex, options }, embeddedIn }');
+    expect(batch).toContain('website: request.origin, favIconUrl, embeddedIn }');
+  });
+
   it('connect, signTx and signData popups render the warning', () => {
-    for (const view of ['DappConnect', 'SignTx', 'DappSignData']) {
+    for (const view of ['DappConnect', 'SignTx', 'DappSignData', 'BitcoinSignPsbt', 'BitcoinSignMessage']) {
       expect(read(`popup/modules/views/${view}.vue`)).toMatch(/<EmbeddedSiteWarning [^>]*:embedded-in="/);
     }
   });
