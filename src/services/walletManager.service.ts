@@ -453,7 +453,7 @@ export class WalletManager {
 
       // Hydrate midnightStore with the persisted addresses so the dashboard
       // (MidnightHoldingsTable, ReceiveDialog) can render immediately.
-      const { midnightActions, isValidMidnightViewingKey } = await import('@/stores/midnightStore');
+      const { midnightActions } = await import('@/stores/midnightStore');
       let addresses: {
         unshielded: string;
         shielded: string;
@@ -491,36 +491,11 @@ export class WalletManager {
       // service translates SYNC / CATCH_UP_COMPLETE / ROLLBACK / FORCE_RESYNC
       // into midnightStore actions. Skip if the address derivation failed.
       if (addresses.unshielded) {
-        // Opt into shielded sync only if the wallet record carries a viewing
-        // key in the form the indexer's connect(viewingKey) mutation accepts:
-        // bech32m with HRP `mn_shield-esk_` (see the a3f76f1f fix). Wallets
-        // created before that fix stored the raw-hex or `mn_shield-epk_` form,
-        // which the indexer rejects with "cannot bech32m-decode viewing key" —
-        // enabling shielded sync for those just spams the indexer with failing
-        // connect() calls every reconcile. Gate on the correct prefix so legacy
-        // wallets fall back to unshielded-only cleanly. They regain shielded
-        // sync once their viewing key is re-derived (recreate the wallet, or
-        // the future in-place viewing-key heal).
-        // Privacy: log only the boolean/validity, never the key itself.
-        // Source the raw key from RAM-only chrome.storage.session first (it is
-        // re-derived at each credentialed unlock/send, see
-        // midnightViewingKeySession), falling back to the wallet record's
-        // persisted copy for wallets not yet re-derived this browser session.
-        // It never travels via midnightStore (setActive strips it).
-        const { getSessionViewingKey } = await import('@/chains/midnight/midnightViewingKeySession');
-        const sessionVk = await getSessionViewingKey(walletBg.id, walletBg.network);
-        const vk = sessionVk ?? addresses.zswapViewingKey;
-        const vkIsValid = isValidMidnightViewingKey(vk);
-        // Stagenet private notes are synchronized locally with ephemeral keys.
-        const shielded = vkIsValid && walletBg.network !== Network.STAGENET
-          ? { viewingKey: vk, lastIndex: null }
-          : undefined;
-        if (shielded) {
-          debugLog('🌙 Midnight sync: starting with shielded subscription enabled');
-        } else if (vk) {
-          debugLog('🌙 Midnight sync: viewing key is legacy form (not mn_shield-esk_) — shielded sync disabled until re-derivation; unshielded-only for now');
-        }
-        midnightSyncService.start(walletBg.network, addresses, 0, shielded);
+        // Unshielded data only. The shielded viewing key never goes to
+        // gero-sync: it would let the server read every incoming shielded
+        // note of this wallet, and private balances already come from the
+        // on-device private sync (midnightPrivateSyncSession).
+        midnightSyncService.start(walletBg.network, addresses, 0);
       } else {
         debugLog('🌙 Skipping gero-sync subscribe: no unshielded address on wallet record');
       }
@@ -1199,28 +1174,27 @@ export class WalletManager {
       }
     }
 
-    // Credentialed moment: re-derive the Midnight viewing key into RAM-only
-    // session storage so shielded sync can resume without persisting the key on
-    // disk. Only Normal password wallets qualify — their `unlockCredential` IS
-    // the mnemonic-encrypting spending password. PRF wallets arrive
-    // browser-verified (no usable secret here) and PIN/pattern don't decrypt the
-    // mnemonic, so those repopulate at the next Midnight send instead.
+    // Credentialed moment: re-derive the Midnight zswap keys and start the
+    // on-device private sync. Only Normal password wallets qualify: their
+    // `unlockCredential` IS the mnemonic-encrypting spending password. PRF
+    // wallets arrive browser-verified (no usable secret here) and PIN/pattern
+    // don't decrypt the mnemonic, so those start it at the next Midnight send.
     // Fire-and-forget: must never block or fail unlock.
     if (!browserVerified && unlockMethod === 'password' && encryptionMethod !== 'prf') {
-      void this.cacheMidnightViewingKeyToSession(walletId, unlockCredential as string);
+      void this.startMidnightPrivateSessionAtUnlock(walletId, unlockCredential as string);
     }
 
     return true;
   }
 
   /**
-   * Re-derive the Midnight zswap viewing key from the wallet's mnemonic and
-   * stash it in RAM-only chrome.storage.session for this browser session, so
-   * shielded sync survives service-worker cold starts without the key ever
-   * touching disk. Self-gates on Midnight + Normal-password wallets and fully
-   * swallows errors so it can never break the unlock path that calls it.
+   * Re-derive the Midnight zswap seed from the wallet's mnemonic and start the
+   * on-device private sync, which finds this wallet's shielded notes by local
+   * trial decryption. Nothing is persisted and no key leaves the background.
+   * Self-gates on Midnight + Normal-password wallets and fully swallows errors
+   * so it can never break the unlock path that calls it.
    */
-  private async cacheMidnightViewingKeyToSession(walletId: number, password: string): Promise<void> {
+  private async startMidnightPrivateSessionAtUnlock(walletId: number, password: string): Promise<void> {
     const privateEpoch = midnightPrivateSessionEpoch();
     try {
       // Resolve encrypted mnemonic + network: prefer the live walletBg
@@ -1245,17 +1219,15 @@ export class WalletManager {
       const mnemonic = decrypt(encryptedMnemonic, password, SecretPurpose.Mnemonic);
       // skipCardano: avoid the BG-bundle pbkdf2 polyfill path that
       // deriveCardanoMaterial hits (see walletBg.buildAndSignMidnightShieldedTransfer).
-      // Only the viewing key is consumed.
+      // Only the zswap seed is consumed.
       const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
       const derived = await deriveMidnightKeys(mnemonic, network, 0, { skipCardano: true });
       try {
-      const { setSessionViewingKey } = await import('@/chains/midnight/midnightViewingKeySession');
-      await setSessionViewingKey(walletId, network, derived.zswapViewingKey);
       prepareMidnightPrivateSession(walletId, network, derived.zswapSecretKey, privateEpoch);
       if (this.walletBg?.id === walletId && this.walletBg.network === network && !walletStore.isLocked) {
         await activateMidnightPrivateSession(walletId, network);
       }
-      debugLog('🌙 Midnight viewing key cached to session at unlock');
+      debugLog('🌙 Midnight private session prepared at unlock');
       } finally {
         derived.unshieldedSecretKey.fill(0);
         derived.dustSecretKey.fill(0);
@@ -1263,7 +1235,7 @@ export class WalletManager {
         derived.seed.fill(0);
       }
     } catch (e) {
-      debugLog('🌙 cacheMidnightViewingKeyToSession failed (non-fatal):', (e as Error)?.message);
+      debugLog('🌙 startMidnightPrivateSessionAtUnlock failed (non-fatal):', (e as Error)?.message);
     }
   }
 
@@ -1649,6 +1621,10 @@ export class WalletManager {
    */
   private async checkLocalProverHealth(localUrl: string): Promise<boolean> {
     try {
+      // Only a prover on this machine counts: a LAN host or tunnel would ship
+      // the peer's witness data off-machine. Reported as "no prover" (PRIV-01).
+      const { isLoopbackProverUrl } = await import('@/chains/midnight/midnightProvingTarget');
+      if (!isLoopbackProverUrl(localUrl)) return false;
       const { checkProofServerHealth } = await import('@/chains/midnight/midnightLocalProver');
       return await checkProofServerHealth(localUrl);
     } catch (e) {
@@ -1671,6 +1647,8 @@ export class WalletManager {
     // resolution for @trezor/device-authenticity's CJS entry and breaks
     // trezorWeb.spec. This is also the idiom the surrounding Midnight code
     // already uses (midnightUnshieldedProver, midnightShieldedBuilder).
+    const { isLoopbackProverUrl } = await import('@/chains/midnight/midnightProvingTarget');
+    if (!isLoopbackProverUrl(localUrl)) throw new Error('Cross-device proving needs a proof server on this computer');
     const signedTxHex = Buffer.from(payload).toString('hex');
     const { provenTxHex } = await proveUnshieldedTransfer({
       signedTxHex,

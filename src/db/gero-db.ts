@@ -5,6 +5,7 @@ import { Blockchain, CoinTypes, Currency, HARDENED, Wallet, WalletType, WalletTy
 import { bech32, bech32m } from 'bech32';
 import { clearDbCache } from '@/db/wallet-db';
 import { deleteStoreCacheScope } from '@/utils/storeCache';
+import { withoutViewingKey } from '@/chains/midnight/midnightRecordScrub';
 import { sealKeySecret, sealTextSecret } from '@/shared/utils/secretWriters';
 import { SecretPurpose } from '@/shared/utils/secretEnvelope';
 import { resolvePrivateKey } from '@/shared/utils/resolver';
@@ -317,7 +318,9 @@ export async function deriveWalletPublicKey(
   }
 
   if (chain === Blockchain.MIDNIGHT) {
-    return JSON.stringify(midnightAddresses ?? { unshielded: '', shielded: '', dust: '' });
+    // Never persist the zswap viewing key (PRIV-01): it decrypts every incoming
+    // shielded note, and nothing reads it back.
+    return JSON.stringify(midnightAddresses ? withoutViewingKey(midnightAddresses) : { unshielded: '', shielded: '', dust: '' });
   }
 
   // Cardano and the Apex Fusion chains share the CIP-1852 derivation.

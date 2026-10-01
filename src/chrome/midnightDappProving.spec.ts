@@ -63,7 +63,8 @@ const localPref: ProofServerPreference = {
   zkpaasApiSecret: '',
 };
 
-const ctx = { origin: ORIGIN, network: Network.PREPROD, sdkNetworkId: 'preprod', proofServer: localPref };
+const ZKPAAS_CONSENT = { version: 3, provider: 'zkpaas', acceptedAt: 1 };
+const ctx = { origin: ORIGIN, network: Network.PREPROD, sdkNetworkId: 'preprod', proofServer: localPref, provingConsent: null as unknown };
 
 /** A fake prover that records how it was built and what it was asked. */
 function fakeDeps(impl: {
@@ -266,12 +267,34 @@ describe('runDappProvingProve', () => {
     const store = new ProvingUploadStore();
     uploadPart(store, ORIGIN, 'u', 'preimage', bytes('pre'));
     const { deps, built } = fakeDeps();
-    const zkpaasCtx = { ...ctx, proofServer: { ...localPref, mode: 'zkpaas' as const, zkpaasApiKey: 'KEY' } };
+    const zkpaasCtx = { ...ctx, proofServer: { ...localPref, mode: 'zkpaas' as const, zkpaasApiKey: 'KEY' }, provingConsent: ZKPAAS_CONSENT };
 
     const reply = await runDappProvingProve(store, deps, zkpaasCtx, { uploadId: 'u', keyLocation: 'midnight/zswap/sign' });
 
     expect(built[0].options?.headers).toEqual({ 'x-api-key': 'KEY' });
     expect(JSON.stringify(reply)).not.toContain('KEY');
+  });
+
+  it('refuses to send proving data to Arkhia without the user\'s zkPaaS consent (PRIV-01)', async () => {
+    const { deps, built } = fakeDeps();
+    for (const provingConsent of [null, { version: 3, provider: 'cloud', acceptedAt: 1 }]) {
+      const store = new ProvingUploadStore();
+      uploadPart(store, ORIGIN, 'u', 'preimage', bytes('pre'));
+      const zkpaasCtx = { ...ctx, proofServer: { ...localPref, mode: 'zkpaas' as const, zkpaasApiKey: 'KEY' }, provingConsent };
+      await expect(runDappProvingProve(store, deps, zkpaasCtx, { uploadId: 'u', keyLocation: 'midnight/zswap/sign' }))
+        .rejects.toThrow(/not been allowed to send proving data to Arkhia/);
+    }
+    expect(built).toHaveLength(0);
+  });
+
+  it('refuses a "local" prover that is not on this machine (PRIV-01)', async () => {
+    const store = new ProvingUploadStore();
+    uploadPart(store, ORIGIN, 'u', 'preimage', bytes('pre'));
+    const { deps, built } = fakeDeps();
+    const tunnelCtx = { ...ctx, proofServer: { ...localPref, localUrl: 'https://abc.trycloudflare.com' } };
+    await expect(runDappProvingProve(store, deps, tunnelCtx, { uploadId: 'u', keyLocation: 'midnight/zswap/sign' }))
+      .rejects.toThrow(/must run on this computer/);
+    expect(built).toHaveLength(0);
   });
 
   it('validates the request shape before touching the upload', async () => {

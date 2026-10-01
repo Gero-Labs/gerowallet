@@ -146,8 +146,27 @@ const workerBooted = new Promise<void>((resolve) => { resolveBooted = resolve; }
 const booted = () => Promise.race([workerBooted, new Promise<void>((resolve) => setTimeout(resolve, 15_000))]);
 
 loadWallets().then(async () => {
+  // PRIV-01: older releases stored the Midnight viewing key in plaintext on the
+  // wallet record. Scrub it before anything reads the records; the live query
+  // behind loadWallets then rewrites geroStore's copy as well.
+  try {
+    const { getDb } = await import('@/db/gero-db');
+    const { scrubStoredMidnightViewingKeys } = await import('@/chains/midnight/midnightRecordScrub');
+    await scrubStoredMidnightViewingKeys((await getDb())['wallets']);
+  } catch { /* non-fatal: retried on the next worker start */ }
+
   // Wait for the wallet store to be hydrated from Chrome storage
   await hydrateWalletStore();
+
+  // ...and the logged-in wallet's copy in walletStore, which is hydrated from
+  // chrome.storage.local rather than the record.
+  if (typeof walletStore.loggedWallet?.publicKey === 'string') {
+    const { stripViewingKeyFromPublicKey } = await import('@/chains/midnight/midnightRecordScrub');
+    const scrubbed = stripViewingKeyFromPublicKey(walletStore.loggedWallet.publicKey);
+    if (scrubbed !== walletStore.loggedWallet.publicKey) {
+      WalletStore.setLoggedWallet({ ...walletStore.loggedWallet, publicKey: scrubbed });
+    }
+  }
 
   // Push notifications: re-assert the registration on every worker start (§8.2). Not
   // awaited, and it needs no logged-in wallet; the opt-out rule inside makes it a no-op
@@ -2943,6 +2962,35 @@ app.addToOptions(MessageTypes.NOTIFY_WALLET_REMOVED, async (request, sendRespons
   }
 });
 
+// PRIV-01: a deleted Midnight wallet must leave none of its coin state, history
+// or balances on the device. Sent by the Advanced tab BEFORE GeroStore.removeWallet,
+// so the address is read from the wallet's own record here, never from the page.
+app.addToOptions(MessageTypes.FORGET_MIDNIGHT_WALLET_DATA, async (request, sendResponse) => {
+  try {
+    const walletId = Number(request.data?.walletId);
+    const { getAllWallets } = await import('@/db/gero-db');
+    const record = (await getAllWallets())[walletId] as { chain?: string; publicKey?: string } | undefined;
+    if (record?.chain === Blockchain.MIDNIGHT && typeof record.publicKey === 'string') {
+      let unshielded = '';
+      try { unshielded = String(JSON.parse(record.publicKey)?.unshielded ?? ''); } catch { /* malformed record */ }
+      const { midnightActions } = await import('@/stores/midnightStore');
+      const { clearAllWalletState } = await import('@/chains/midnight/midnightWalletStatePersistence');
+      const { deleteStoreCacheScope } = await import('@/utils/storeCache');
+      if (unshielded) {
+        midnightActions.forgetWallet(unshielded);
+        await deleteStoreCacheScope(unshielded);
+      }
+      // The SDK state blobs are keyed by a hash of the seed, so this wallet's
+      // cannot be told apart without it: drop them all. Other Midnight wallets
+      // only pay a cold resync for it.
+      await clearAllWalletState();
+    }
+    sendResponse({ id: request.id, data: { success: true }, target: TARGET, sender: SENDER.extension });
+  } catch (error) {
+    sendResponse({ id: request.id, data: { success: false, error: getErrorMessage(error) }, target: TARGET, sender: SENDER.extension });
+  }
+});
+
 app.addToOptions(MessageTypes.GET_CROSS_DEVICE_SETTINGS, async (request, sendResponse) => {
   sendResponse(crossDeviceReply(request.id, {
     success: true,
@@ -5111,10 +5159,13 @@ app.addToOptions(MessageTypes.CIP45_INVOKE, async (request, sendResponse) => {
  */
 app.addToOptions(MessageTypes.UPDATE_MIDNIGHT_PUBLIC_KEY, async (request, sendResponse) => {
   try {
-    const { walletId, publicKey } = request.data || {};
-    if (typeof walletId !== 'number' || typeof publicKey !== 'string' || !publicKey) {
+    const { walletId, publicKey: suppliedPublicKey } = request.data || {};
+    if (typeof walletId !== 'number' || typeof suppliedPublicKey !== 'string' || !suppliedPublicKey) {
       throw new Error('walletId and publicKey are required');
     }
+    // Whatever the page sends, the zswap viewing key is never stored (PRIV-01).
+    const { stripViewingKeyFromPublicKey } = await import('@/chains/midnight/midnightRecordScrub');
+    const publicKey = stripViewingKeyFromPublicKey(suppliedPublicKey);
     const { getDb } = await import('@/db/gero-db');
     const db = await getDb();
     await db['wallets'].update(walletId, { publicKey });
@@ -5648,6 +5699,10 @@ app.addToOptions(
         throw new Error('localUrl is required and must be a non-empty string');
       }
       validateProofServerUrlField('localUrl', localUrl);
+      // "Local" means on this machine: proof inputs sent anywhere else would
+      // skip the remote-prover consent (PRIV-01).
+      const { isLoopbackProverUrl } = await import('@/chains/midnight/midnightProvingTarget');
+      if (!isLoopbackProverUrl(localUrl)) throw new Error('localUrl must point at this computer (localhost)');
       const { midnightStore, midnightActions } = await import('@/stores/midnightStore');
       // The zkPaaS fields are OPTIONAL per request: absent means "keep the
       // stored value" (older call sites like the consent dialog's
@@ -5663,6 +5718,7 @@ app.addToOptions(
         throw new Error('localUrlLedger9 must be a non-empty string');
       }
       validateProofServerUrlField('localUrlLedger9', localUrlLedger9Value);
+      if (!isLoopbackProverUrl(localUrlLedger9Value)) throw new Error('localUrlLedger9 must point at this computer (localhost)');
       const zkpaasUrlValue = zkpaasUrl === undefined || zkpaasUrl === null
         ? current.zkpaasUrl : zkpaasUrl;
       if (typeof zkpaasUrlValue !== 'string') throw new Error('zkpaasUrl must be a string');
@@ -6482,7 +6538,19 @@ app.add(MIDNIGHT_METHOD.submitTransaction, async (request, sendResponse) => {
     // A sealed tx (balanceUnsealedTransaction's output, or anything the dapp
     // proved and bound itself) is already final: the sidecar's finalize relay
     // would try to prove it again and throw. Route it to submit-proven.
-    const submitted = await isSealedMidnightTransaction(tx, midnightSdkNetworkId(wallet.network))
+    const sealed = await isSealedMidnightTransaction(tx, midnightSdkNetworkId(wallet.network));
+    // An unsealed tx is proved by Gero Cloud on the way through (`/tx/submit`
+    // → sidecar finalize), which hands Gero its proof inputs. Allowed only when
+    // the user chose Gero Cloud and accepted its notice (PRIV-01); in local or
+    // zkPaaS mode the wallet seals its own transfers, so this never applies.
+    if (!sealed) {
+      const { midnightStore } = await import('@/stores/midnightStore');
+      const { hasMidnightProvingConsent } = await import('@/chains/midnight/midnightProvingConsent');
+      if (midnightStore.proofServer.mode !== 'remote' || !hasMidnightProvingConsent(midnightStore.shieldedProvingConsent, 'cloud')) {
+        throw new Error('This transaction is not proven, and GeroWallet is not set to prove it with Gero Cloud. Prove and seal it before submitting.');
+      }
+    }
+    const submitted = sealed
       ? await api.submitProvenMidnightTx({ signedTxHex: tx, waitFor: 'Submitted' })
       : await api.submitMidnightTx({ signedTxHex: tx, waitFor: 'Submitted' });
     // Shown to the user as the tx id. The ledger hash when the relay reports
@@ -6716,6 +6784,7 @@ app.add(MIDNIGHT_METHOD.getProvingProvider, async (request, sendResponse) => {
       network: wallet.network,
       sdkNetworkId: midnightSdkNetworkId(wallet.network),
       proofServer: midnightStore.proofServer,
+      provingConsent: midnightStore.shieldedProvingConsent,
     });
     debugLog('🌙 connector getProvingProvider', { origin, source });
     sendResponse({ id: request.id, data: undefined, target: TARGET, sender: SENDER.extension });
@@ -6789,6 +6858,7 @@ async function handleMidnightDappProving(
           network: wallet.network,
           sdkNetworkId: midnightSdkNetworkId(wallet.network),
           proofServer: midnightStore.proofServer,
+          provingConsent: midnightStore.shieldedProvingConsent,
           tabId: request.send?.tab?.id,
         },
         request.data,

@@ -2255,23 +2255,6 @@ export class WalletBg {
    * @param prfSecret Raw PRF output bytes (PRF/PassKey wallets)
    * @returns         Array of `{ index, signatureHex }` matching input order
    */
-  /**
-   * Stash a freshly re-derived Midnight viewing key in RAM-only session storage
-   * so shielded sync can resume across service-worker cold starts without the
-   * key ever being persisted on disk. Covers PRF wallets, whose only
-   * credentialed background moment is a send/ceremony (they can't silently
-   * re-derive at unlock). Fire-and-forget: never throws into the signing path.
-   */
-  private cacheMidnightViewingKeyToSession(viewingKey: string | undefined): void {
-    if (!viewingKey) return;
-    void (async () => {
-      try {
-        const { setSessionViewingKey } = await import('@/chains/midnight/midnightViewingKeySession');
-        await setSessionViewingKey(this.id, this.network, viewingKey);
-      } catch { /* non-fatal: session cache is best-effort */ }
-    })();
-  }
-
   /** Unlock a private balance session without persisting a spending key or submitting a transaction. */
   /**
    * DApp Connector `balanceUnsealedTransaction`: fund + fee-pay a dapp's
@@ -2324,7 +2307,7 @@ export class WalletBg {
         assertSession();
         const endpoints = getMidnightEndpoints(network);
         if (!endpoints) throw new Error(`No Midnight endpoints configured for network ${network}`);
-        const target = resolveDappProvingTarget(network, midnightStore.proofServer);
+        const target = resolveDappProvingTarget(network, midnightStore.proofServer, midnightStore.shieldedProvingConsent);
         // Registration lower bound for the dust snapshot bootstrap (see
         // balanceAndSignMidnightUnshieldedTransfer): creation time, else a
         // conservative 90-day lookback.
@@ -2673,7 +2656,6 @@ export class WalletBg {
       let sponsorDustSeed: Uint8Array | undefined;
       try {
         assertSession();
-        this.cacheMidnightViewingKeyToSession(derived.zswapViewingKey);
         let sdkNetworkId: string;
         switch (network) {
           case Network.MAINNET: sdkNetworkId = 'mainnet'; break;
@@ -2868,7 +2850,6 @@ export class WalletBg {
       let sponsorDustSeed: Uint8Array | undefined;
       try {
       assertSession();
-      this.cacheMidnightViewingKeyToSession(derived.zswapViewingKey);
       let sdkNetworkId: string;
       switch (network) {
         case Network.MAINNET: sdkNetworkId = 'mainnet'; break;
@@ -2882,27 +2863,24 @@ export class WalletBg {
         throw new Error(`No Midnight endpoints configured for network ${this.network}`);
       }
 
-      // Sanity check the stored viewing key matches what we just re-derived.
-      // If they diverge, sync was running against a different key than this
-      // tx — the indexer's session was scanning the wrong viewing key, the
-      // wallet sees stale notes, and the tx may try to spend phantom inputs.
-      // Fail loud rather than build a tx the chain will reject.
+      // Sanity check the wallet record's shielded address matches the keys we
+      // just re-derived. If they diverge, the local note set belongs to a
+      // different key than this tx and the tx may try to spend phantom inputs.
+      // Fail loud rather than build a tx the chain will reject. (Compared on the
+      // PUBLIC shielded address: the viewing key is no longer stored.)
       try {
         const parsed = this.publicKey ? JSON.parse(this.publicKey) : null;
-        const storedViewingKey = parsed?.zswapViewingKey;
-        if (storedViewingKey && storedViewingKey !== derived.zswapViewingKey) {
+        const storedShielded = parsed?.shielded;
+        if (storedShielded && storedShielded !== derived.addresses.shielded) {
           throw new Error(
-            `Midnight viewing-key mismatch: BG-derived viewing key ` +
-            `(${derived.zswapViewingKey.slice(0, 16)}…) doesn't match the ` +
-            `wallet record's stored viewing key (${storedViewingKey.slice(0, 16)}…). ` +
-            `Sync was running against the wrong key; the local note set is unsound.`,
+            'Midnight shielded-address mismatch: the keys derived for this send do not ' +
+            "match the wallet record's shielded address, so the local note set is unsound.",
           );
         }
       } catch (e) {
-        if (e instanceof Error && e.message.startsWith('Midnight viewing-key mismatch')) throw e;
-        // Parse failures fall through — the publicKey JSON may not have the
-        // field yet on legacy wallets. The build will still produce a valid
-        // tx; sync correctness is the user's responsibility on legacy wallets.
+        if (e instanceof Error && e.message.startsWith('Midnight shielded-address mismatch')) throw e;
+        // Parse failures fall through: a malformed publicKey JSON cannot be
+        // compared, and the build will still produce a valid tx.
       }
 
       {
