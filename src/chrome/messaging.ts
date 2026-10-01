@@ -1,6 +1,7 @@
 import { APIError, BITCOIN_METHOD, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, SENDER, TARGET } from './config';
 import { Cardano } from '@cardano-sdk/core';
 import { isOptionsSenderAllowed, isOwnExtensionPageSender } from './senderTrust';
+import { claimedOriginMatchesSender } from './originBinding';
 
 interface Message {
   method?: string;
@@ -280,6 +281,12 @@ class BackgroundController {
         request.send = sender;
         try {
           if (request.sender === SENDER.webpage && request.method && this.methodList[request.method]) {
+            // The origin in the body is written inside the page's renderer; it
+            // must match the browser-reported origin of the sending frame.
+            if (!claimedOriginMatchesSender(request.origin, sender)) {
+              sendResponse({ id: request.id, error: APIError.Refused, target: TARGET, sender: SENDER.extension });
+              return true;
+            }
             this.methodList[request.method](request, sendResponse);
             return true;
           } else if (request.sender === SENDER.options && request.method && this.optionsMethodList[request.method]) {

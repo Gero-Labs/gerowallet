@@ -15,6 +15,8 @@ import { isOwnExtensionPageSender, panelMaySettleRequest } from '@/chrome/sender
 import { isConnectApproval } from '@/chrome/connectApproval';
 import { decideSignTxPopup } from '@/chrome/signTxPopupPolicy';
 import { approvalStillValid } from '@/chrome/approvalRelease';
+import { sessionAuthorizesWallet } from '@/services/walletConnect/sessionBinding';
+import { embeddingSite } from '@/chrome/originBinding';
 import { bringInitBackground } from '@bringweb3/chrome-extension-kit';
 import {
   focusOrCreatePopup,
@@ -790,7 +792,7 @@ app.add(METHOD.enable, (request, sendResponse) => {
   };
 
   const favIconUrl = send.tab?.favIconUrl;
-  const enablePayload = { ...request.data, website: origin, favIconUrl };
+  const enablePayload = { ...request.data, website: origin, favIconUrl, embeddedIn: embeddingSite(origin, request.send) };
 
   const handleMiniGeroEnable = () => {
     // Prefer this tab's panel port, else any open panel (same rationale as
@@ -1357,6 +1359,7 @@ app.add(METHOD.signData, (request, sendResponse) => {
     payload: typeof signDataRequest.payload === 'string' ? signDataRequest.payload : '',
     website: request.origin,
     favIconUrl: request.send?.tab?.favIconUrl,
+    embeddedIn: embeddingSite(request.origin, request.send),
   };
   const tabId = request.send?.tab?.id;
 
@@ -1473,6 +1476,7 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
     partialSign: signTxRequest.partialSign === true,
     website: request.origin,
     favIconUrl: request.send?.tab?.favIconUrl,
+    embeddedIn: embeddingSite(request.origin, request.send),
   };
   const tabId = request.send?.tab?.id;
 
@@ -4033,9 +4037,10 @@ app.add(BITCOIN_METHOD.enable, (request, sendResponse) => {
       // waiting for the Dexie live-query subscription to fire asynchronously.
       if (!WalletStore.isWhitelisted(origin)) {
         try {
-          const hostname = new URL(origin).hostname;
+          // Full origin, never the bare hostname (see matchesDappWhitelistEntry).
+          const fullOrigin = new URL(origin).origin;
           const currentDapps = WalletStore.state.connectedDapps || [];
-          WalletStore.setConnectedDapps([...currentDapps, { domain: hostname }]);
+          WalletStore.setConnectedDapps([...currentDapps, { domain: fullOrigin }]);
         } catch {}
       }
       reply({ data: [currentWallet.baseAddress] });
@@ -4608,6 +4613,13 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
       const loggedWallet = WalletStore.state.loggedWallet;
       if (!loggedWallet) {
         await wcService.respondError(topic, id, 4100, 'No wallet logged in');
+        return;
+      }
+
+      // The session was approved for one wallet's accounts. After a wallet
+      // switch, refuse rather than answer with a wallet the peer never got.
+      if (!sessionAuthorizesWallet(wcService.getSessionForTopic(topic), loggedWallet)) {
+        await wcService.respondError(topic, id, 4100, 'Unauthorized: the active wallet is not the one connected to this session');
         return;
       }
 

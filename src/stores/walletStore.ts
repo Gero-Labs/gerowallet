@@ -15,13 +15,21 @@ interface WhitelistedEntry {
   id: number;
 }
 
+const LOCAL_DEV_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
 /**
- * Exact origin/host match for the connected-dApp whitelist. Entries store the
- * dApp's full origin (scheme+host+port) captured at connect time. Compare by
- * canonicalized-origin equality — NEVER substring, which would let
+ * Exact origin match for the connected-dApp whitelist. Entries store the dApp's
+ * full origin (scheme+host+port) captured at connect time. Compare by
+ * canonicalized-origin equality, NEVER substring, which would let
  * `https://app.trusted.com.evil.com` match an entry for `https://app.trusted.com`
- * and bypass the connect/sign consent gate. Falls back to exact host equality for
- * any legacy entry stored as a bare hostname.
+ * and bypass the connect/sign consent gate.
+ *
+ * Legacy entries stored as a bare hostname (older popup connects) carry no
+ * scheme or port. They used to match any scheme and port, so approving
+ * https://dapp.example also authorised http://dapp.example, which anyone on
+ * the network path can inject into. They now match only https on the default
+ * port (or the explicit `host:port` they were stored with), plus http/https
+ * on any port for local development hosts.
  */
 export function matchesDappWhitelistEntry(origin: string, entryDomain: string): boolean {
   if (!origin || !entryDomain) return false;
@@ -31,13 +39,24 @@ export function matchesDappWhitelistEntry(origin: string, entryDomain: string): 
   } catch {
     return false;
   }
+  if (reqUrl.origin === 'null') return false; // opaque origins never match
+  let entryOrigin: string | null = null;
   try {
-    return new URL(entryDomain).origin === reqUrl.origin;
+    entryOrigin = new URL(entryDomain).origin;
   } catch {
-    // Legacy entry stored as a bare hostname → exact host match (case-insensitive).
-    const host = entryDomain.toLowerCase();
-    return host === reqUrl.host.toLowerCase() || host === reqUrl.hostname.toLowerCase();
+    entryOrigin = null;
   }
+  // A full http(s) origin entry: exact equality. Anything else (a bare host,
+  // or `host:port`, which URL parses as an opaque `host:` scheme) is legacy.
+  if (entryOrigin && entryOrigin !== 'null') return entryOrigin === reqUrl.origin;
+
+  const entry = entryDomain.toLowerCase();
+  const hostname = reqUrl.hostname.toLowerCase();
+  if (LOCAL_DEV_HOSTS.has(hostname) && (entry === hostname || entry === reqUrl.host.toLowerCase())) {
+    return reqUrl.protocol === 'http:' || reqUrl.protocol === 'https:';
+  }
+  if (reqUrl.protocol !== 'https:') return false;
+  return entry === reqUrl.host.toLowerCase();
 }
 
 /**

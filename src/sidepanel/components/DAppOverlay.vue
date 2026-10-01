@@ -38,6 +38,14 @@
         <span v-if="loggedWallet.network !== Network.MAINNET" class="network-badge ml-2">{{ loggedWallet.network }}</span>
       </div>
 
+      <!-- The request came from a frame embedded in a different top-level
+           site. The domain shown below is the embedded frame's; say which site
+           it sits inside so a trusted dApp framed by a hostile page stands out. -->
+      <div v-if="embeddedInSite" class="embedded-site-strip mb-2">
+        <v-icon size="13" color="warning" class="mr-1">mdi-picture-in-picture-top-right-outline</v-icon>
+        <span class="warning--text text-caption">{{ $t('miniGero.embeddedIn', { site: embeddedInSite }) }}</span>
+      </div>
+
       <!-- DApp Connect -->
       <div v-if="currentRequest.method === 'enable'" class="dapp-connect">
         <!-- Favicon + domain -->
@@ -1787,6 +1795,13 @@ function resolveAssetInfo(unit: string): KnownAssetInfo {
  * a private inline function there, not exported.
  */
 
+// Top-level site embedding the requesting frame, when that differs from the
+// requesting origin (set by the background from the real MessageSender).
+const embeddedInSite = computed(() => {
+  const v = (currentRequest.value?.payload as { embeddedIn?: unknown } | undefined)?.embeddedIn;
+  return typeof v === 'string' && v ? v : '';
+});
+
 // Raw CBOR hex of the current sign request — used by the parser below.
 const txCborForSummary = computed<string | null>(() => {
   if (currentRequest.value?.method !== 'signTx') return null;
@@ -3211,6 +3226,12 @@ function approveWcSession() {
 .wallet-identity-strip {
   display: flex;
   align-items: center;
+}
+
+.embedded-site-strip {
+  display: flex;
+  align-items: flex-start;
+  overflow-wrap: anywhere;
 }
 
 .network-badge {

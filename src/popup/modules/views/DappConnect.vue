@@ -77,7 +77,19 @@ const decline = async () => {
 };
 
 const confirm = async () => {
-  await WalletStore.addConnectedDapp(loggedWallet.value.id, vmProxy.$refs.popupHeader.domain);
+  // Store the full origin (scheme + host + port), never the bare hostname: a
+  // hostname entry would also authorise http:// and other ports of that name.
+  let origin = '';
+  try {
+    origin = new URL(String(vmProxy.$route.query?.website ?? '')).origin;
+  } catch {
+    origin = '';
+  }
+  if (!origin || origin === 'null') {
+    await decline();
+    return;
+  }
+  await WalletStore.addConnectedDapp(loggedWallet.value.id, origin);
   try {
     await controller.value?.returnData({ data: true, error: {} });
   } catch (e) {
