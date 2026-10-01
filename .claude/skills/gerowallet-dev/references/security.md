@@ -66,6 +66,8 @@ A third format, `gpw2.` (`src/shared/utils/secretEnvelope.ts`), is Argon2id -> X
 
 **Always write stored password secrets through `sealTextSecret` / `sealKeySecret`** (`src/shared/utils/secretWriters.ts`), never `encrypt` / `encryptWithPassword` directly: they pick `gpw2` or the current format from the flag. With the flag on, `src/chrome/secretMigration.ts` upgrades a wallet's existing secrets after a successful password decrypt (key-equivalence check, in-memory read-back, compare-and-swap per IndexedDB, storage read-back). A new secret stored under the spending password must be added to `CONFIG_SECRET_FIELDS` (`walletSecretFields.ts`) or it keeps the old password after a password change.
 
+Release, rollout, rollback and device-test procedure: `.github/runbooks/secret-envelope.md`. **Never publish a build that fails `node scripts/check-secret-envelope-readers.mjs`** (run it against the tag before cutting a hotfix): it cannot open migrated wallets.
+
 **Always read stored password secrets through the single reader for the field**, never with `decryptWithPassword` or `decryptLegacyAes` directly:
 
 | Field | Reader |
