@@ -3925,6 +3925,7 @@ export default {
   'signTx.asYourDrep': 'Cast as your DRep',
   'signTx.asOtherVoter': 'Cast by a voter that is not you',
   'signTx.submitsProposal': 'Submits a {type} proposal with a {amount} ADA deposit, refunded to {account}',
+  'signTx.donatesToTreasury': 'Donates {amount} ADA to the Cardano treasury (not refundable)',
   'signTx.totalCollateral': 'Up to {amount} ADA is at risk if the script fails',
   'signTx.collateralReturnTo': 'Returns {amount} ADA of collateral to {address} if the script fails',
   'signTx.referenceInputs': 'Reads {count} reference input | Reads {count} reference inputs',
