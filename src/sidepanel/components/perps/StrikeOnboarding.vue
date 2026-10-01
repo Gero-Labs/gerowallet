@@ -106,7 +106,7 @@
         <PassKeyAuthButton
           v-if="isPrfWallet"
           :disabled="isLoading"
-          :text="needsUnlock ? $t('perpetuals.unlockStrike') : $t('perps.connect.signCta')"
+          :text="needsUnlock ? t('perpetuals.unlockStrike') : t('perps.connect.signCta')"
           @success="onPassKeySuccess"
           @error="onPassKeyError"
         />
