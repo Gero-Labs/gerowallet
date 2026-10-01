@@ -3810,6 +3810,7 @@ export default {
   'signTx.asYourDrep': 'Emitido como tu DRep',
   'signTx.asOtherVoter': 'Emitido por un votante que no eres tú',
   'signTx.submitsProposal': 'Envía una propuesta ({type}) con un depósito de {amount} ADA, reembolsado a {account}',
+  'signTx.donatesToTreasury': 'Dona {amount} ADA a la tesorería de Cardano (no reembolsable)',
   'signTx.totalCollateral': 'Hasta {amount} ADA están en riesgo si el script falla',
   'signTx.collateralReturnTo': 'Devuelve {amount} ADA de garantía a {address} si el script falla',
   'signTx.referenceInputs': 'Lee {count} entrada de referencia | Lee {count} entradas de referencia',

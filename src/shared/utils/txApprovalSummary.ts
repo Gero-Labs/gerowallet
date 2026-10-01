@@ -118,6 +118,11 @@ export interface TxApprovalSummary {
   outputNetworkMismatch: boolean;
   /** A certificate acts on a stake credential the wallet doesn't own. */
   hasForeignStakeCertificate: boolean;
+  /**
+   * Conway `donation` (body field 22): ADA moved to the treasury, paid by the
+   * wallet and never returned. Null when the body carries none.
+   */
+  treasuryDonationAda: string | null;
   totals: {
     totalSendingAda: string;
     feeAda: string;
@@ -300,11 +305,15 @@ export function buildTxApprovalSummary(tx: Cardano.Tx, ctx: ApprovalContext): Tx
 
   const totalSendingLovelace = outputs.reduce((sum, o) => (o.isOwn ? sum : sum + o.lovelace), 0n);
   const ownWithdrawalLovelace = withdrawals.reduce((sum, w) => (w.isOwn ? sum + w.lovelace : sum), 0n);
-  const youPayLovelace = feeLovelace + totalSendingLovelace - ownWithdrawalLovelace;
+  // A treasury donation leaves the wallet like a payment, so it is part of
+  // what the user pays and a donating transaction is never "internal".
+  const donationLovelace = body.donation != null ? BigInt(body.donation) : 0n;
+  const youPayLovelace = feeLovelace + totalSendingLovelace + donationLovelace - ownWithdrawalLovelace;
 
   const isInternal = outputs.length > 0 && outputs.every((o) => o.isOwn)
     && certificates.length === 0 && mints.length === 0 && collateralCount === 0
-    && votes.length === 0 && proposals.length === 0 && withdrawals.every((w) => w.isOwn);
+    && votes.length === 0 && proposals.length === 0 && withdrawals.every((w) => w.isOwn)
+    && donationLovelace === 0n;
 
   const feeAda = formatLovelace(feeLovelace);
   return {
@@ -326,6 +335,7 @@ export function buildTxApprovalSummary(tx: Cardano.Tx, ctx: ApprovalContext): Tx
     bodyNetworkMismatch,
     outputNetworkMismatch,
     hasForeignStakeCertificate,
+    treasuryDonationAda: donationLovelace > 0n ? formatLovelace(donationLovelace) : null,
     totals: {
       totalSendingAda: formatLovelace(totalSendingLovelace),
       feeAda,

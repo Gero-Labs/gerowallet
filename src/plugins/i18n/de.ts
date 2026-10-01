@@ -4235,6 +4235,7 @@ export default {
   'signTx.asYourDrep': 'Abgegeben als Ihr DRep',
   'signTx.asOtherVoter': 'Abgegeben von einem anderen Wähler',
   'signTx.submitsProposal': 'Reicht einen Antrag ({type}) mit {amount} ADA Kaution ein, Rückzahlung an {account}',
+  'signTx.donatesToTreasury': 'Spendet {amount} ADA an die Cardano-Treasury (nicht erstattbar)',
   'signTx.totalCollateral': 'Bis zu {amount} ADA sind gefährdet, falls das Skript fehlschlägt',
   'signTx.collateralReturnTo': 'Gibt {amount} ADA Sicherheit an {address} zurück, falls das Skript fehlschlägt',
   'signTx.referenceInputs': 'Liest {count} Referenz-Input | Liest {count} Referenz-Inputs',

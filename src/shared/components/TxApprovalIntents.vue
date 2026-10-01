@@ -44,6 +44,11 @@
         </div>
       </div>
 
+      <div v-if="summary.treasuryDonationAda" class="tx-intent-row" data-testid="tx-intent-donation">
+        <v-icon size="14" color="warning" class="mr-1">mdi-bank-transfer-out</v-icon>
+        <span class="white--text text-caption">{{ $t('signTx.donatesToTreasury', { amount: summary.treasuryDonationAda }) }}</span>
+      </div>
+
       <div v-for="(mint, i) in summary.mints" :key="'mint-' + i" class="tx-intent-row">
         <v-icon size="14" :color="mint.isBurn ? 'error' : 'success'" class="mr-1">{{ mint.isBurn ? 'mdi-fire' : 'mdi-file-plus-outline' }}</v-icon>
         <span class="white--text text-caption">
@@ -130,6 +135,7 @@ const foreignSignerCount = computed(() => props.summary.requiredSigners.filter(s
 const hasIntents = computed(() => {
   const s = props.summary;
   return s.certificates.length > 0 || s.withdrawals.length > 0 || s.votes.length > 0 || s.proposals.length > 0
+    || !!s.treasuryDonationAda
     || s.mints.length > 0 || s.collateralCount > 0 || s.referenceInputCount > 0 || s.requiredSigners.length > 0
     || s.validityStartSlot !== null || s.hasMetadata;
 });

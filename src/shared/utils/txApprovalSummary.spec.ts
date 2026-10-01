@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Cardano } from '@cardano-sdk/core';
+import { Cardano, Serialization } from '@cardano-sdk/core';
 import { buildTxApprovalSummary, formatLovelace, type ApprovalContext } from './txApprovalSummary';
 
 const OWN_ADDR = 'addr_test1qpdmx56dml9qtej5vxhejju492w9pfv7j9270wjh0pfe9hdzqxa4r35qhuqx29n693k4gqukhk3lfw37xkp4egvh6raq4d4rzj';
@@ -123,6 +123,20 @@ describe('buildTxApprovalSummary', () => {
     expect(buildTxApprovalSummary(tx({ outputs: [out(MAINNET_ADDR, 1n)] }), ctx()).outputNetworkMismatch).toBe(true);
     expect(buildTxApprovalSummary(tx({ collateralReturn: out(MAINNET_ADDR, 1n) }), ctx()).outputNetworkMismatch).toBe(true);
     expect(buildTxApprovalSummary(tx({ outputs: [out(EXT_ADDR, 1n)] }), ctx()).outputNetworkMismatch).toBe(false);
+  });
+
+  it('shows a treasury donation, counts it in what the user pays and never calls the tx internal', () => {
+    const s = buildTxApprovalSummary(tx({ outputs: [out(CHANGE_ADDR, 2_000_000n)], donation: 50_000_000n }), ctx());
+    expect(s.treasuryDonationAda).toBe('50.00');
+    expect(s.totals.youPayAda).toBe('50.17');
+    expect(s.isInternal).toBe(false);
+    expect(buildTxApprovalSummary(tx({ outputs: [out(CHANGE_ADDR, 2_000_000n)] }), ctx()).treasuryDonationAda).toBeNull();
+  });
+
+  it('reads the donation from real CBOR (body field 22), not only from a core object', () => {
+    const core = tx({ inputs: [{ txId: TX_ID, index: 0 }], outputs: [out(CHANGE_ADDR, 2_000_000n)], donation: 7_000_000n });
+    const fromCbor = Serialization.Transaction.fromCbor(Serialization.Transaction.fromCore(core).toCbor()).toCore();
+    expect(buildTxApprovalSummary(fromCbor, ctx()).treasuryDonationAda).toBe('7.00');
   });
 
   it('treats an all-own transfer with nothing else as internal', () => {
