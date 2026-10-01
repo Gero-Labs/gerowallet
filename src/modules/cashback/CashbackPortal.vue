@@ -38,6 +38,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import CashbackSignDialog, { type CashbackSignature } from './CashbackSignDialog.vue';
 import {
   isTrustedPortalMessage,
+  pinnedPortalUrl,
   signRequestMessage,
   sessionUpdateMessage,
   signatureMessage,
@@ -102,7 +103,11 @@ async function bootstrap(reason: 'initial' | 'resync' = 'initial') {
   try {
     const res = await cashbackApi.portal(baseAddress(), theme);
     if (reason === 'initial' || !portalUrl.value) {
-      portalUrl.value = res.portalUrl;
+      // Only a pinned portal origin is ever loaded (and so ever trusted to
+      // request signatures), whatever URL the bootstrap names.
+      const url = pinnedPortalUrl(res.portalUrl);
+      if (!url) throw new Error('Untrusted cashback portal origin');
+      portalUrl.value = url;
     } else {
       post(sessionUpdateMessage(res.token));
     }
