@@ -21,28 +21,40 @@ describe('isConnectApproval', () => {
 
 describe('signTx popup policy', () => {
   const ROUTE = 'sign-tx';
-  const url = (origin: string) => `chrome-extension://abc/index.html#/${ROUTE}?website=${encodeURIComponent(origin)}`;
+  const PAGE = 'chrome-extension://abc/index.html';
+  const url = (origin: string) => `${PAGE}#/${ROUTE}?website=${encodeURIComponent(origin)}`;
 
   it('reads the website of a signTx popup and ignores other routes', () => {
-    expect(popupWebsite(url('https://a.example'), ROUTE)).toBe('https://a.example');
-    expect(popupWebsite('chrome-extension://abc/index.html#/dapp-connect?website=x', ROUTE)).toBeNull();
-    expect(popupWebsite('chrome-extension://abc/index.html', ROUTE)).toBeNull();
-    expect(popupWebsite(undefined, ROUTE)).toBeNull();
+    expect(popupWebsite(url('https://a.example'), ROUTE, PAGE)).toBe('https://a.example');
+    expect(popupWebsite('chrome-extension://abc/index.html#/dapp-connect?website=x', ROUTE, PAGE)).toBeNull();
+    expect(popupWebsite('chrome-extension://abc/index.html', ROUTE, PAGE)).toBeNull();
+    expect(popupWebsite(undefined, ROUTE, PAGE)).toBeNull();
   });
 
   it('opens when no signTx prompt is pending', () => {
-    expect(decideSignTxPopup([undefined, 'chrome-extension://abc/index.html#/dapp-connect?website=x'], 'https://a.example', ROUTE))
+    expect(decideSignTxPopup([undefined, 'chrome-extension://abc/index.html#/dapp-connect?website=x'], 'https://a.example', ROUTE, PAGE))
       .toEqual({ action: 'open', closeTabUrls: [] });
   });
 
   it('lets an origin supersede its own pending prompt', () => {
-    expect(decideSignTxPopup([url('https://a.example')], 'https://a.example', ROUTE))
+    expect(decideSignTxPopup([url('https://a.example')], 'https://a.example', ROUTE, PAGE))
       .toEqual({ action: 'open', closeTabUrls: [url('https://a.example')] });
   });
 
+  it('ignores look-alike popups that are not this extension\'s page (PR #2 review)', () => {
+    const forged = (base: string) => `${base}#/${ROUTE}?website=${encodeURIComponent('https://victim.example')}`;
+    for (const base of ['https://evil.example/', 'https://evil.example/index.html', 'chrome-extension://other/index.html',
+      'chrome-extension://abc/other.html', 'chrome-extension://abc/index.html?x=1']) {
+      expect(popupWebsite(forged(base), ROUTE, PAGE)).toBeNull();
+    }
+    // A forged popup can neither make the wallet busy nor be closed by it.
+    expect(decideSignTxPopup([forged('https://evil.example/')], 'https://a.example', ROUTE, PAGE))
+      .toEqual({ action: 'open', closeTabUrls: [] });
+  });
+
   it('never lets another origin close and replace a pending prompt', () => {
-    expect(decideSignTxPopup([url('https://victim.example')], 'https://attacker.example', ROUTE)).toEqual({ action: 'busy' });
-    expect(decideSignTxPopup([url('https://a.example'), url('https://b.example')], 'https://a.example', ROUTE)).toEqual({ action: 'busy' });
+    expect(decideSignTxPopup([url('https://victim.example')], 'https://attacker.example', ROUTE, PAGE)).toEqual({ action: 'busy' });
+    expect(decideSignTxPopup([url('https://a.example'), url('https://b.example')], 'https://a.example', ROUTE, PAGE)).toEqual({ action: 'busy' });
   });
 });
 

@@ -1528,7 +1528,7 @@ app.add(METHOD.signTx, async (request, sendResponse) => {
     const popupTabs = windows
       .filter((w) => w.type === 'popup')
       .flatMap((w) => (w.tabs ?? []).map((tab) => ({ windowId: w.id, url: tab.url })));
-    const decision = decideSignTxPopup(popupTabs.map((t) => t.url), request.origin, POPUP.signTx);
+    const decision = decideSignTxPopup(popupTabs.map((t) => t.url), request.origin, POPUP.signTx, chrome.runtime.getURL('index.html'));
     if (decision.action === 'busy') {
       return signTxReply({ error: APIError.Refused });
     }
