@@ -1,5 +1,6 @@
 import type { MidnightNetworkEndpoints } from './midnightConfig';
 import { getNexusAccessToken, reauthenticateNexus } from '@/services/nexusDevice.service';
+import { withMidnightAbort } from './midnightAbort';
 
 export interface MidnightChainIdentity {
   network: string;
@@ -7,15 +8,15 @@ export interface MidnightChainIdentity {
   genesis_hash: string;
 }
 
-async function authenticatedGet(url: string): Promise<Response> {
+async function authenticatedGet(url: string, signal?: AbortSignal): Promise<Response> {
   const attempt = async (token: string) => fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
-    signal: AbortSignal.timeout(30_000),
+    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
   });
-  let response = await attempt(await getNexusAccessToken());
+  let response = await attempt(await withMidnightAbort(getNexusAccessToken(), signal));
   if (response.status === 401 || response.status === 403) {
     await response.body?.cancel();
-    response = await attempt(await reauthenticateNexus());
+    response = await attempt(await withMidnightAbort(reauthenticateNexus(), signal));
   }
   return response;
 }
@@ -23,9 +24,10 @@ async function authenticatedGet(url: string): Promise<Response> {
 /** A saved identity alone cannot detect an indexer reset while purge is disabled. */
 export async function readVerifiedMidnightChainIdentity(
   endpoints: MidnightNetworkEndpoints,
+  signal?: AbortSignal,
 ): Promise<MidnightChainIdentity> {
   const network = `midnight-${endpoints.sdkNetworkId}`;
-  const response = await authenticatedGet(`${endpoints.nexusBaseUrl}/api/midnight/${network}/chain-identity`);
+  const response = await authenticatedGet(`${endpoints.nexusBaseUrl}/api/midnight/${network}/chain-identity`, signal);
   if (!response.ok) throw new Error('Midnight chain identity is unavailable; synchronization or reset recovery is required');
   const identity: MidnightChainIdentity = await response.json();
   if (identity.network !== network || !Number.isSafeInteger(identity.chain_generation)
@@ -36,7 +38,7 @@ export async function readVerifiedMidnightChainIdentity(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query: '{ block(offset: { height: 0 }) { hash } }' }),
-    signal: AbortSignal.timeout(30_000),
+    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
   });
   if (!indexer.ok) throw new Error('Cannot verify Midnight indexer genesis');
   const body = await indexer.json();
@@ -57,8 +59,9 @@ export function midnightCheckpointNamespace(identity: MidnightChainIdentity): st
 export async function assertMidnightChainIdentityUnchanged(
   endpoints: MidnightNetworkEndpoints,
   expected: MidnightChainIdentity,
+  signal?: AbortSignal,
 ): Promise<void> {
-  const current = await readVerifiedMidnightChainIdentity(endpoints);
+  const current = await readVerifiedMidnightChainIdentity(endpoints, signal);
   if (current.network !== expected.network || current.chain_generation !== expected.chain_generation
     || current.genesis_hash !== expected.genesis_hash) {
     throw new Error('Midnight chain changed during transaction preparation; retry after synchronization');
