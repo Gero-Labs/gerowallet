@@ -42,6 +42,7 @@ import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 import { debugLog } from '@/utils/debug';
 import { DEFAULT_LOCAL_PROOF_SERVER_URL, DEFAULT_LOCAL_PROOF_SERVER_URL_LEDGER9 } from '@/chains/midnight/midnightConfig';
+import { isLoopbackProverUrl } from '@/chains/midnight/midnightProvingTarget';
 import { isNativeNight } from '@/chains/midnight/midnightTokenBalances';
 import { midnightTxRowKey, normalizeMidnightTxHash } from '@/chains/midnight/midnightTxHash';
 import type {
@@ -700,6 +701,17 @@ function hydrateShieldedProvingConsent(
 }
 
 /**
+ * A local proof-server slot must also point at this machine (PRIV-01). Older
+ * releases accepted any host, but a non-loopback "local" URL is refused at use
+ * and rejected on save, so a stored one would leave Settings unable to save
+ * anything (each save re-sends both slots). It is replaced by that ledger's
+ * localhost default instead.
+ */
+function isValidLocalProofServerUrl(value: unknown): value is string {
+  return isValidProofServerUrl(value) && isLoopbackProverUrl(value);
+}
+
+/**
  * `localUrl` must be a well-formed http(s) URL - guards against a corrupted
  * or tampered stored value silently routing proving to an unexpected origin.
  */
@@ -759,15 +771,15 @@ export function hydrateProofServer(stored: unknown): MidnightStore['proofServer'
   // as a profile mismatch. The default profile ('legacy') needs no move.
   const legacyProfileWasStagenet = storedLedger9 === undefined
     && (stored as { localProfile?: unknown }).localProfile === 'stagenet'
-    && isValidProofServerUrl(localUrl);
+    && isValidLocalProofServerUrl(localUrl);
   return {
     mode: mode === 'remote' || mode === 'local' || mode === 'zkpaas' ? mode : DEFAULT_PROOF_SERVER.mode,
     localUrl: legacyProfileWasStagenet
       ? DEFAULT_PROOF_SERVER.localUrl
-      : (isValidProofServerUrl(localUrl) ? localUrl : DEFAULT_PROOF_SERVER.localUrl),
+      : (isValidLocalProofServerUrl(localUrl) ? localUrl : DEFAULT_PROOF_SERVER.localUrl),
     localUrlLedger9: legacyProfileWasStagenet
       ? localUrl as string
-      : (isValidProofServerUrl(storedLedger9) ? storedLedger9 : DEFAULT_PROOF_SERVER.localUrlLedger9),
+      : (isValidLocalProofServerUrl(storedLedger9) ? storedLedger9 : DEFAULT_PROOF_SERVER.localUrlLedger9),
     // '' is the valid "derive per network" state, distinct from a corrupted
     // value — only non-empty overrides must parse as http(s) URLs.
     zkpaasUrl: zkpaasUrl === '' || isValidProofServerUrl(zkpaasUrl) ? zkpaasUrl as string : '',

@@ -347,3 +347,24 @@ describe('provingHistory error hygiene (PRIV-01)', () => {
     expect(midnightStore.provingHistory[0].error).toBe('boom [hex]');
   });
 });
+
+describe('legacy non-loopback proof-server URLs (PRIV-01 review P2)', () => {
+  it('replaces LAN "local" URLs in both slots with the localhost defaults, so Settings can save again', async () => {
+    const { isLoopbackProverUrl } = await import('@/chains/midnight/midnightProvingTarget');
+    const ps = hydrateProofServer({
+      mode: 'local', localUrl: 'http://192.168.1.20:6300', localUrlLedger9: 'https://abc.trycloudflare.com',
+      zkpaasUrl: '', zkpaasApiKey: 'k', zkpaasApiSecret: '',
+    });
+    expect(ps.localUrl).toBe('http://localhost:6300');
+    expect(ps.localUrlLedger9).toBe('http://localhost:6301');
+    expect(ps.mode).toBe('local');
+    expect(ps.zkpaasApiKey).toBe('k');
+    // Every save re-sends both slots; the background requires both to be loopback.
+    expect(isLoopbackProverUrl(ps.localUrl) && isLoopbackProverUrl(ps.localUrlLedger9)).toBe(true);
+  });
+
+  it('keeps loopback URLs the user chose, including a custom port', () => {
+    const ps = hydrateProofServer({ mode: 'local', localUrl: 'http://127.0.0.1:7300', localUrlLedger9: 'http://localhost:7301' });
+    expect([ps.localUrl, ps.localUrlLedger9]).toEqual(['http://127.0.0.1:7300', 'http://localhost:7301']);
+  });
+});
