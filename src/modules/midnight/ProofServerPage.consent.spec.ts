@@ -3,7 +3,7 @@
 // proof-server settings. This pins that the settings page can record it.
 import { describe, expect, it, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
-import Vue, { ref } from 'vue';
+import Vue, { defineComponent, ref } from 'vue';
 
 const state = vi.hoisted(() => ({ mode: 'zkpaas' as 'remote' | 'local' | 'zkpaas' }));
 const store = vi.hoisted(() => ({ shieldedProvingConsent: null as unknown }));
@@ -30,23 +30,30 @@ vi.mock('@/stores/midnightStore', () => ({ midnightStore: Vue.observable(store) 
 vi.mock('@/shared/composables/useTranslation', () => ({
   useTranslation: () => ({ t: (key: string, args?: Record<string, string>) => (args?.['provider'] ? `${key}:${args['provider']}` : key) }),
 }));
-const DialogStub = vi.hoisted(() => ({
-  name: 'ShieldedProvingConsentDialogStub',
-  props: ['isOpen', 'provider'],
-  render(h: (tag: string, data: object) => unknown) {
-    return h('div', { attrs: { 'data-testid': 'consent-dialog', 'data-open': String(this.isOpen), 'data-provider': this.provider } });
-  },
-}));
-vi.mock('@/modules/dashboard/dialogs/ShieldedProvingConsentDialog.vue', () => ({ default: DialogStub }));
+vi.mock('@/modules/dashboard/dialogs/ShieldedProvingConsentDialog.vue', async () => {
+  const { defineComponent: define } = await import('vue');
+  return {
+    default: define({
+      name: 'ShieldedProvingConsentDialogStub',
+      props: { isOpen: Boolean, provider: String },
+      render(h) {
+        const props = this.$props as { isOpen?: boolean; provider?: string };
+        return h('div', { attrs: { 'data-testid': 'consent-dialog', 'data-open': String(props.isOpen), 'data-provider': props.provider } });
+      },
+    }),
+  };
+});
 
 // @ts-ignore: tsconfig ships no `*.vue` shim; vite resolves this fine.
 import ProofServerPage from './ProofServerPage.vue';
 
 // GButton is a <script setup> import (not stubbable by name); it renders a
 // v-btn and forwards its listeners, so the v-btn stub must be clickable.
-const VBtnStub = { render(h: (tag: string, data: object, children: unknown) => unknown) {
-  return h('button', { attrs: this.$attrs, on: this.$listeners }, this.$slots.default);
-} };
+const VBtnStub = defineComponent({
+  render(h) {
+    return h('button', { attrs: this.$attrs, on: this.$listeners }, this.$slots['default']);
+  },
+});
 
 function mountPage(mode: typeof state.mode, consent: unknown) {
   state.mode = mode;
