@@ -186,15 +186,7 @@ const cardStoreInstance = {
     try {
       const wasLoggedIn = cardStore.accessToken !== null;
 
-      cardStore.accessToken = null;
-      cardStore.refreshToken = null;
-      cardStore.tokenExpiry = null;
-      cardStore.userInfo = null;
-      cardStore.cardanoAddress = null;
-      cardStore.cards = [];
-      cardStore.selectedCardId = null;
-      cardStore.exchangeRate = null;
-      cardStore.walletStatus.isKaiserexAuthenticated = false;
+      resetCardAccountState();
 
       if (wasLoggedIn) {
         await endProviderSession(getCardApi().axiosInstance);
@@ -271,12 +263,27 @@ async function clearStoredTokens(): Promise<void> {
   }
 }
 
-/** Drops the card session after the provider rejected its token. */
-async function expireCardSession(): Promise<void> {
+/**
+ * Forgets the signed-in provider account: its tokens and everything loaded for
+ * it. fetchCardData() only upserts, so cards, the selection and cached details
+ * would otherwise carry over to the next account that signs in.
+ */
+function resetCardAccountState(): void {
   cardStore.accessToken = null;
   cardStore.refreshToken = null;
   cardStore.tokenExpiry = null;
+  cardStore.userInfo = null;
+  cardStore.cardanoAddress = null;
+  cardStore.cards = [];
+  cardStore.selectedCardId = null;
+  cardStore.currentCardIndex = 0;
+  cardStore.exchangeRate = null;
   cardStore.walletStatus.isKaiserexAuthenticated = false;
+}
+
+/** Drops the card session after the provider rejected its token. */
+async function expireCardSession(): Promise<void> {
+  resetCardAccountState();
   await clearStoredTokens();
 }
 
