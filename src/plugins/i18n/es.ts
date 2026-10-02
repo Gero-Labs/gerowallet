@@ -129,7 +129,7 @@ export default {
   'card.beforeOrderingKYC': 'Antes de solicitar tu Gero Card, completa un breve proceso KYC con nuestro socio del programa de tarjetas, Zione.',
   'card.blockCard': 'Bloquear tarjeta',
   'card.blockCardTab': 'Bloquear tarjeta',
-  'card.blockingCardWarning': 'Bloquear tu tarjeta detendrá de inmediato todas las transacciones. Esta acción no se puede revertir al instante: tendrás que contactar a nuestro equipo de soporte para desbloquearla.',
+  'card.blockingCardWarning': 'Al bloquearla, se detienen de inmediato todas las transacciones nuevas. Puedes desbloquear la tarjeta aquí en cualquier momento.',
   'card.capturedPhoto': 'Foto capturada',
   'card.cardAlreadyBlocked': 'Tarjeta bloqueada',
   'card.cardIssuance': 'Emisión de tarjeta',
@@ -189,7 +189,7 @@ export default {
   'card.to': 'Hasta',
   'card.apply': 'Aplicar',
   'card.close': 'Cerrar',
-  'card.dateRangeExceeds3Months': 'El rango de fechas no puede superar los 3 meses.',
+  'card.dateRangeExceeds3Months': 'Elige un período de 89 días o menos.',
   'card.startDateAfterEndDate': 'La fecha de inicio no puede ser posterior a la fecha de fin',
   'card.documentsReceivedReview': 'Recibimos tus documentos y tu solicitud está en revisión.',
   'card.ecommerce': 'Comercio electrónico',
@@ -263,7 +263,7 @@ export default {
   'card.mastercard': 'Mastercard',
   'card.monthlyFee': 'Comisión mensual',
   'card.nameWithAsterisk': 'Nombre *',
-  'card.needHelpContactSupport': '¿Necesitas ayuda? Contacta a nuestro equipo de soporte para desbloquear o reemplazar tu tarjeta.',
+  'card.needHelpContactSupport': '¿Necesitas ayuda? Para reemplazar tu tarjeta, contacta al soporte de Zione:',
   'card.newToKaiserex': '¿Nuevo en',
   'card.next': 'Siguiente',
   'card.noMonthlyFee': 'Sin comisión mensual',
@@ -467,6 +467,188 @@ export default {
   'card.orderPlacedSuccessfully': 'Tu pedido de tarjeta física se realizó con éxito',
   'card.estimatedDelivery': 'Entrega estimada: 7-14 días hábiles',
   'card.confirmationEmailSent': 'Se envió un correo electrónico de confirmación',
+
+  'card.activateAutoCheck': 'Verificamos la activación automáticamente. Tu tarjeta aparecerá como activa en cuanto Zione la confirme.',
+
+  'card.activateCard': 'Activar tarjeta',
+
+  'card.activateDesc': 'Ingresa el número impreso en el frente de la tarjeta que recibiste. Tu tarjeta virtual sigue funcionando mientras la activamos.',
+
+  'card.activateHint': 'Solo se usa para confirmar que la tarjeta llegó a tus manos.',
+
+  'card.activateInvalidPan': 'Revisa el número de tarjeta: debe tener entre 16 y 19 dígitos, tal como aparece impreso.',
+
+  'card.activateTitle': 'Activa tu tarjeta física',
+
+  'card.activationEmailNote': 'Recibirás un correo de Zione para activar tu cuenta.',
+
+  'card.activationFailed': 'No pudimos activar la tarjeta. Revisa el número e inténtalo de nuevo.',
+
+  'card.activationStarted': 'La activación comenzó. Suele tardar unos minutos.',
+
+  'card.addressValidFor': 'Dirección de un solo uso, válida por {time}',
+
+  'card.alreadyRegisteredSignIn': '¿Ya te registraste? Inicia sesión',
+
+  'card.applicationNotApproved': 'Tu solicitud no fue aprobada',
+
+  'card.applicationNotApprovedDesc': 'Zione no pudo aprobar tu solicitud de tarjeta. Contacta al soporte de Zione para saber el motivo y qué puedes hacer a continuación.',
+
+  'card.blocked': 'Bloqueada',
+
+  'card.buildingTransaction': 'Creando la transacción',
+
+  'card.cardActivated': 'Tu tarjeta está activa.',
+
+  'card.cardBlockedNotice': 'Tarjeta bloqueada.',
+
+  'card.cardControls': 'Controles de la tarjeta',
+
+  'card.cardProgramPartner': 'Socio del programa de tarjetas',
+
+  'card.cardUnblocked': 'Tarjeta desbloqueada.',
+
+  'card.changePin': 'Cambiar PIN',
+
+  'card.changePinSubtitle': 'Define un nuevo PIN de 4 dígitos para pagos con tarjeta y cajeros automáticos',
+
+  'card.confirmNewPin': 'Confirma el nuevo PIN',
+
+  'card.declined': 'Rechazada',
+
+  'card.depositAddressVerified': 'Dirección verificada',
+
+  'card.feeEstimateNote': 'Estimado con el tipo de cambio de hoy. El monto exacto se fija al enviar tu solicitud.',
+
+  'card.fieldTooLong': 'Usa como máximo {max} caracteres.',
+
+  'card.followOrderOnDashboard': 'Sigue tu solicitud desde el panel de tu tarjeta.',
+
+  'card.heroArtLabel': 'ADA fluyendo hacia la Gero Card, emitida con Zione',
+
+  'card.hideCardDetails': 'Ocultar datos de la tarjeta',
+
+  'card.hidePin': 'Ocultar PIN',
+
+  'card.journeyActivate': 'Activar',
+
+  'card.journeyLabel': 'Tu camino a la tarjeta',
+
+  'card.journeyOrder': 'Solicitar tarjeta',
+
+  'card.journeySpend': 'Pagar',
+
+  'card.journeyVerify': 'Verificar identidad',
+
+  'card.kycLinkFailed': 'No pudimos abrir la verificación de identidad. Inténtalo de nuevo.',
+
+  'card.kycOpensNewTab': 'La verificación de identidad de Zione se abre en una nueva pestaña.',
+
+  'card.last30DaysLabel': 'Últimos 30 días',
+
+  'card.legalEntity': 'Entidad legal',
+
+  'card.minimumTopUp': 'Monto mínimo de recarga: {amount} ADA',
+
+  'card.newPin': 'Nuevo PIN',
+
+  'card.noTransactionsInPeriod': 'No hay transacciones en este período.',
+
+  'card.orderAnotherCard': 'Solicitar otra tarjeta',
+
+  'card.payLaterNote': 'Tu solicitud quedó guardada. También puedes pagar el costo de envío más tarde desde el panel de tu tarjeta.',
+
+  'card.payTo': 'Pagar a',
+
+  'card.physicalCardOrder': 'Solicitud de tarjeta física',
+
+  'card.pinChangeFailed': 'No pudimos cambiar el PIN. Inténtalo de nuevo.',
+
+  'card.pinChanged': 'PIN cambiado.',
+
+  'card.pinHidden': 'PIN oculto',
+
+  'card.pinMismatch': 'Los dos PIN no coinciden.',
+
+  'card.pinWeak': 'Evita dígitos repetidos o secuencias como 1234.',
+
+  'card.rateLine': '1 ADA = {rate}',
+
+  'card.registrationDetails': 'Registro',
+
+  'card.restartVerification': 'Reiniciar verificación',
+
+  'card.savePin': 'Guardar PIN',
+
+  'card.secureFormBy': 'Formulario seguro de Zione',
+
+  'card.secureSignInWindow': 'El inicio de sesión de Zione se abre en una ventana segura',
+
+  'card.showCardDetails': 'Mostrar datos de la tarjeta',
+
+  'card.showPin': 'Mostrar PIN',
+
+  'card.signInFailed': 'No se pudo iniciar sesión. Inténtalo de nuevo.',
+
+  'card.signOut': 'Cerrar sesión',
+
+  'card.signedInAs': 'Sesión iniciada como',
+
+  'card.signingAndSubmitting': 'Firmando y enviando',
+
+  'card.switchCurrency': 'Cambiar entre ADA y EUR',
+
+  'card.topUpCredited': 'El saldo de tu tarjeta está actualizado.',
+
+  'card.topUpSubmitted': 'Recarga enviada',
+
+  'card.topUpSubmittedDesc': 'Tu saldo se actualizará cuando la red confirme la transacción, normalmente en pocos minutos.',
+
+  'card.trackerActivated': 'Activada',
+
+  'card.trackerActivating': 'Activando tu tarjeta',
+
+  'card.trackerAutoRefresh': 'Esta página busca actualizaciones automáticamente. Tu tarjeta aparecerá aquí en cuanto Zione la emita.',
+
+  'card.trackerAwaitingPayment': 'Esperando el pago del costo de envío',
+
+  'card.trackerDispatched': 'Enviada',
+
+  'card.trackerIssuing': 'Emitiendo tu tarjeta virtual',
+
+  'card.trackerOnItsWay': 'Va en camino. Actívala cuando llegue.',
+
+  'card.trackerPaid': 'Costo de envío pagado',
+
+  'card.trackerPaymentDetected': 'Pago detectado, esperando confirmaciones',
+
+  'card.trackerPlaced': 'Solicitud enviada',
+
+  'card.trackerPreparing': 'Preparando tu tarjeta para el envío',
+
+  'card.trackerReady': 'Lista para usar',
+
+  'card.trackerTitlePhysical': 'Estamos preparando tu tarjeta',
+
+  'card.trackerTitleVirtual': 'Estamos emitiendo tu tarjeta virtual',
+
+  'card.typePhysical': 'Física',
+
+  'card.typeVirtual': 'Virtual',
+
+  'card.unblockCard': 'Desbloquear tarjeta',
+
+  'card.verificationFailed': 'La verificación falló',
+
+  'card.verificationFailedDesc': 'Zione no pudo confirmar tu identidad esta vez. Puedes iniciar la verificación de nuevo; ten a mano un documento de identidad válido y tu cámara.',
+
+  'card.verificationFailedTitle': 'Tu verificación de identidad no se completó',
+
+  'card.viewFees': 'Ver comisiones',
+
+  'card.virtualCardOrder': 'Solicitud de tarjeta virtual',
+
+  'card.waitingForBalance': 'Esperando que se actualice el saldo de tu tarjeta…',
   'cashback.adaCashback': 'Cashback en ADA',
   'cashback.allCategories': 'Todas las categorías',
   'cashback.availableIn': 'Disponible en',

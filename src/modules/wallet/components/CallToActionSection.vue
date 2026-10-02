@@ -1,69 +1,102 @@
 <template>
   <section class="call-to-action-section">
-    <v-row>
-      <!-- Left Column - 3D Card -->
-      <v-col cols="12" md="6" class="card-column">
-        <div class="card-container">
-          <div
-            class="credit-card"
-            @mousemove="handleCardMouseMove"
-            @mouseleave="handleCardMouseLeave"
-            :style="cardTiltStyle"
-          >
-            <!-- Shine effect -->
-            <div class="card-shine" :style="cardShineStyle"></div>
-          </div>
+    <!-- Left: the 3D card. Its tilt, shine and glow are unchanged. -->
+    <div class="card-column">
+      <div class="card-container">
+        <div
+          class="credit-card"
+          @mousemove="handleCardMouseMove"
+          @mouseleave="handleCardMouseLeave"
+          :style="cardTiltStyle"
+        >
+          <!-- Shine effect -->
+          <div class="card-shine" :style="cardShineStyle"></div>
         </div>
-      </v-col>
+      </div>
+    </div>
 
-      <!-- Right Column - KYC Info -->
-      <v-col cols="12" md="6" class="kyc-column">
-        <div class="kyc-content">
-          <h2 class="cta-heading">{{ t('card.spendAdaAnywhere') }}</h2>
-          <p class="cta-description">{{ t('card.beforeOrderingKYC') }}</p>
-          <GradientButton v-if="kycStatus !== 'verified'" :text="t('card.startKYCProcess')" @click="startKYC" class="kyc-button" />
-          <div class="kyc-status-text">
-            {{ t('card.yourKYCStatus') }}
-            <v-tooltip bottom :open-delay="300" content-class="custom-tooltip kyc-tooltip">
-              <template v-slot:activator="{ on, attrs }">
-                <b v-bind="attrs" v-on="on" class="kyc-status-hover">{{ filters.capitalize(kycStatus) }}</b>
-              </template>
-              <div class="tooltip-content">
-                <div class="tooltip-item"><strong>{{ t('card.kycRegistered') }}:</strong> {{ t('card.kycRegisteredDesc') }}</div>
-                <div class="tooltip-item"><strong>{{ t('card.kycVerificationStarted') }}:</strong> {{ t('card.kycVerificationStartedDesc') }}</div>
-              </div>
-            </v-tooltip>
-          </div>
-          <v-alert type="info" color="primary" prominent outlined v-if="!cardanoAddress && kycStatus === 'verified'" class="kyc-alert">
-            {{ t('card.documentsReceivedReview') }}
-          </v-alert>
+    <!-- Right: identity verification with Zione -->
+    <div class="kyc-column">
+      <span class="t-label kyc-eyebrow">{{ t('card.journeyVerify') }}</span>
+      <h1 class="t-display">{{ t('card.spendAdaAnywhere') }}</h1>
+      <p class="kyc-lead">{{ t('card.beforeOrderingKYC') }}</p>
+
+      <div v-if="verificationFailed" class="kyc-failed" role="status">
+        <IsoScene name="attention" class="kyc-failed__art" />
+        <div class="kyc-failed__copy">
+          <CardChip tone="warning">{{ t('card.verificationFailed') }}</CardChip>
+          <h2 class="t-body-lg">{{ t('card.verificationFailedTitle') }}</h2>
+          <p class="t-body-sm">{{ t('card.verificationFailedDesc') }}</p>
         </div>
-      </v-col>
-    </v-row>
-    <OrderCardModal :open="showModal" @close="showModal = false" />
+      </div>
+
+      <div v-if="kycStatus !== 'verified'" class="kyc-action">
+        <GButton tier="primary" :loading="openingKyc" @click="startKYC">
+          {{ verificationFailed ? t('card.restartVerification') : t('card.startKYCProcess') }}
+          <v-icon small right>mdi-open-in-new</v-icon>
+        </GButton>
+        <span class="t-caption">{{ t('card.kycOpensNewTab') }}</span>
+      </div>
+
+      <div class="kyc-status glass-tier">
+        <span class="t-body-sm">{{ t('card.yourKYCStatus') }}</span>
+        <v-tooltip bottom max-width="350" :open-delay="300">
+          <template #activator="{ on, attrs }">
+            <span class="kyc-status__chip" tabindex="0" v-bind="attrs" v-on="on">
+              <CardChip :tone="verificationFailed ? 'warning' : 'neutral'">{{ statusLabel }}</CardChip>
+            </span>
+          </template>
+          <div class="kyc-status__help">
+            <p class="t-caption"><strong>{{ t('card.kycRegistered') }}:</strong> {{ t('card.kycRegisteredDesc') }}</p>
+            <p class="t-caption"><strong>{{ t('card.kycVerificationStarted') }}:</strong> {{ t('card.kycVerificationStartedDesc') }}</p>
+          </div>
+        </v-tooltip>
+      </div>
+    </div>
   </section>
 </template>
 
 <script setup lang="ts">
+import { computed, ref } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import GradientButton from './GradientButton.vue';
-import OrderCardModal from './OrderCardModal.vue';
-import { ref, computed } from 'vue';
 import cardStore from '@/stores/modules/card';
-import filters from '@/shared/utils/filters';
+import snackbar from '@/plugins/snackbar';
+import GButton from '@/shared/components/GButton/GButton.vue';
+import IsoScene from '@/shared/components/iso/IsoScene.vue';
+import CardChip from './ui/CardChip.vue';
 
 const { t } = useTranslation();
 
-const showModal = ref(false);
-const cardTiltStyle = ref<any>({});
-const cardShineStyle = ref<any>({});
+const cardTiltStyle = ref<Record<string, string>>({});
+const cardShineStyle = ref<Record<string, string | number>>({});
+const openingKyc = ref(false);
 
 const kycStatus = computed(() => cardStore.state.walletStatus.kycStatus);
-const cardanoAddress = computed(() => cardStore.state.cardanoAddress);
+const verificationFailed = computed(() => kycStatus.value === 'verification_failed');
 
-const startKYC = () => {
-  cardStore.fetchKYCLink();
-};
+const statusLabel = computed(() => {
+  switch (kycStatus.value) {
+    case 'verification_started':
+      return t('card.kycVerificationStarted');
+    case 'verification_failed':
+      return t('card.verificationFailed');
+    case 'verified':
+      return t('card.kycUnderReview');
+    default:
+      return t('card.kycRegistered');
+  }
+});
+
+async function startKYC(): Promise<void> {
+  openingKyc.value = true;
+  try {
+    await cardStore.fetchKYCLink();
+  } catch {
+    snackbar.setError(t('card.kycLinkFailed'));
+  } finally {
+    openingKyc.value = false;
+  }
+}
 
 // 3D Card tilt effect with shine and dynamic glow
 const handleCardMouseMove = (event: MouseEvent) => {
@@ -124,12 +157,12 @@ const handleCardMouseLeave = () => {
 </script>
 
 <style lang="scss" scoped>
-@import '../styles/variables';
-@import '../styles/mixins';
-
 .call-to-action-section {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr));
+  gap: var(--g-s-5);
+  align-items: center;
   width: 100%;
-  padding: 32px 0;
 }
 
 .card-column {
@@ -147,19 +180,81 @@ const handleCardMouseLeave = () => {
 
 .kyc-column {
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
+  gap: var(--g-s-4);
+  max-width: 520px;
+
+  h1 {
+    margin: 0;
+  }
 }
 
-.kyc-content {
-  width: 100%;
-  max-width: 500px;
+.kyc-eyebrow {
+  color: var(--g-accent);
+}
+
+.kyc-lead {
+  margin: 0;
+  font-size: 16px;
+  color: var(--g-text-2);
+}
+
+.kyc-failed {
+  display: flex;
+  gap: var(--g-s-4);
+  align-items: center;
+  padding: var(--g-s-4);
+  border-radius: var(--g-r-card);
+  background: var(--g-warning-fill);
+  border: 1px solid var(--g-warning-line);
+}
+
+.kyc-failed__art {
+  width: 112px;
+  flex: none;
+}
+
+.kyc-failed__copy {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  align-items: flex-start;
+  gap: var(--g-s-2);
+
+  h2,
+  p {
+    margin: 0;
+  }
 }
 
-// Credit Card Styling
+.kyc-action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--g-s-2);
+}
+
+.kyc-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--g-s-3);
+  padding: var(--g-s-3) var(--g-s-4);
+}
+
+.kyc-status__chip {
+  cursor: help;
+  border-radius: var(--g-r-pill);
+}
+
+.kyc-status__help p {
+  margin: 0 0 var(--g-s-2);
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+// Credit Card Styling (the 3D card: unchanged)
 .credit-card {
   width: 35rem;
   aspect-ratio: 345 / 222;
@@ -194,90 +289,5 @@ const handleCardMouseLeave = () => {
   opacity: 0;
   transition: opacity var(--g-dur-fast) ease-out;
   z-index: 1;
-}
-
-.cta-heading {
-  @include heading-style($font-size-3xl);
-  margin: 0 0 $spacing-md 0;
-  text-align: left;
-}
-
-.cta-description {
-  @include body-text($font-size-xl);
-  margin: 0 0 $spacing-2xl 0;
-  text-align: left;
-}
-
-.kyc-button {
-  margin-bottom: $spacing-sm;
-}
-
-.kyc-status-text {
-  margin-top: $spacing-md;
-  font-size: $font-size-base;
-  color: $text-secondary;
-}
-
-.kyc-alert {
-  border-radius: 16px !important;
-  margin-top: $spacing-lg;
-
-  :deep(.v-alert__icon) {
-    align-self: center;
-    min-width: 32px !important;
-    width: 32px !important;
-    height: 32px !important;
-    padding: 0 !important;
-  }
-
-  :deep(.v-icon) {
-    font-size: 18px !important;
-    width: 32px !important;
-    height: 32px !important;
-    border-radius: 50% !important;
-  }
-
-  :deep(.v-alert__wrapper) {
-    align-items: center;
-  }
-}
-
-.kyc-status-hover {
-  cursor: help;
-  border-bottom: 1px dotted $primary-cyan;
-  transition: color var(--g-dur-base) ease, border-color var(--g-dur-base) ease;
-
-  &:hover {
-    color: lighten($primary-cyan, 10%);
-    border-bottom-color: lighten($primary-cyan, 10%);
-  }
-}
-
-:deep(.kyc-tooltip) {
-  opacity: 1 !important;
-
-  .v-tooltip__content {
-    max-width: 350px !important;
-    padding: 12px 16px !important;
-    background-color: rgba(0, 0, 0, 0.9) !important;
-  }
-}
-
-.tooltip-content {
-  font-size: $font-size-sm;
-  line-height: 1.5;
-
-  .tooltip-item {
-    margin-bottom: 8px;
-
-    &:last-child {
-      margin-bottom: 0;
-    }
-
-    strong {
-      color: $primary-cyan !important;
-      font-weight: $font-weight-semibold;
-    }
-  }
 }
 </style>

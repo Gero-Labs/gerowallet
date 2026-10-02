@@ -239,7 +239,7 @@ export default {
   'card.beforeOrderingKYC': 'Bevor Sie Ihre Gero Card bestellen, führen Sie bitte einen kurzen KYC-Prozess mit unserem Kartenprogramm-Partner Zione durch.',
   'card.blockCard': 'Karte sperren',
   'card.blockCardTab': 'Karte sperren',
-  'card.blockingCardWarning': 'Das Sperren Ihrer Karte stoppt sofort alle Transaktionen. Diese Aktion kann nicht sofort rückgängig gemacht werden - Sie müssen unser Support-Team kontaktieren, um sie wieder freizuschalten.',
+  'card.blockingCardWarning': 'Durch das Sperren werden alle neuen Transaktionen sofort gestoppt. Sie können die Karte hier jederzeit wieder entsperren.',
   'card.capturedPhoto': 'Aufgenommenes Foto',
   'card.cardAlreadyBlocked': 'Karte bereits gesperrt',
   'card.cardIssuance': 'Kartenausgabe',
@@ -274,6 +274,188 @@ export default {
   'card.confirmPayment': 'Zahlung bestätigen',
   'card.confirmPreferredPayment': 'Bestätigen Sie Ihre bevorzugte Zahlungsart',
   'card.confirmationEmailSent': 'Eine Bestätigungs-E-Mail wurde gesendet',
+
+  'card.activateAutoCheck': 'Wir prüfen die Aktivierung automatisch. Ihre Karte wird als aktiv angezeigt, sobald Zione sie bestätigt.',
+
+  'card.activateCard': 'Karte aktivieren',
+
+  'card.activateDesc': 'Geben Sie die Nummer ein, die auf der Vorderseite der erhaltenen Karte aufgedruckt ist. Ihre virtuelle Karte funktioniert während der Aktivierung weiter.',
+
+  'card.activateHint': 'Wird nur verwendet, um zu bestätigen, dass diese Karte bei Ihnen angekommen ist.',
+
+  'card.activateInvalidPan': 'Prüfen Sie die Kartennummer: Sie sollte 16 bis 19 Ziffern haben, genau wie aufgedruckt.',
+
+  'card.activateTitle': 'Physische Karte aktivieren',
+
+  'card.activationEmailNote': 'Sie erhalten eine E-Mail von Zione, um Ihr Konto zu aktivieren.',
+
+  'card.activationFailed': 'Die Karte konnte nicht aktiviert werden. Prüfen Sie die Nummer und versuchen Sie es erneut.',
+
+  'card.activationStarted': 'Die Aktivierung wurde gestartet. Sie dauert in der Regel einige Minuten.',
+
+  'card.addressValidFor': 'Einmalige Adresse, gültig für {time}',
+
+  'card.alreadyRegisteredSignIn': 'Bereits registriert? Anmelden',
+
+  'card.applicationNotApproved': 'Ihr Antrag wurde nicht genehmigt',
+
+  'card.applicationNotApprovedDesc': 'Zione konnte Ihren Kartenantrag nicht genehmigen. Wenden Sie sich an den Zione-Support, um den Grund und die nächsten Schritte zu erfahren.',
+
+  'card.blocked': 'Gesperrt',
+
+  'card.buildingTransaction': 'Transaktion wird erstellt',
+
+  'card.cardActivated': 'Ihre Karte ist aktiv.',
+
+  'card.cardBlockedNotice': 'Karte gesperrt.',
+
+  'card.cardControls': 'Karteneinstellungen',
+
+  'card.cardProgramPartner': 'Kartenprogrammpartner',
+
+  'card.cardUnblocked': 'Karte entsperrt.',
+
+  'card.changePin': 'PIN ändern',
+
+  'card.changePinSubtitle': 'Legen Sie eine neue 4-stellige PIN für Kartenzahlungen und Geldautomaten fest',
+
+  'card.confirmNewPin': 'Neue PIN bestätigen',
+
+  'card.declined': 'Abgelehnt',
+
+  'card.depositAddressVerified': 'Verifizierte Adresse',
+
+  'card.feeEstimateNote': 'Geschätzt zum heutigen Kurs. Der genaue Betrag wird bei der Bestellung festgelegt.',
+
+  'card.fieldTooLong': 'Verwenden Sie höchstens {max} Zeichen.',
+
+  'card.followOrderOnDashboard': 'Verfolgen Sie die Bestellung in Ihrer Kartenübersicht.',
+
+  'card.heroArtLabel': 'ADA fließt in die Gero Card, ausgegeben mit Zione',
+
+  'card.hideCardDetails': 'Kartendaten ausblenden',
+
+  'card.hidePin': 'PIN ausblenden',
+
+  'card.journeyActivate': 'Aktivieren',
+
+  'card.journeyLabel': 'Ihr Weg zur Karte',
+
+  'card.journeyOrder': 'Karte bestellen',
+
+  'card.journeySpend': 'Bezahlen',
+
+  'card.journeyVerify': 'Identität bestätigen',
+
+  'card.kycLinkFailed': 'Die Identitätsprüfung konnte nicht geöffnet werden. Bitte versuchen Sie es erneut.',
+
+  'card.kycOpensNewTab': 'Die Identitätsprüfung von Zione öffnet sich in einem neuen Tab.',
+
+  'card.last30DaysLabel': 'Letzte 30 Tage',
+
+  'card.legalEntity': 'Rechtsträger',
+
+  'card.minimumTopUp': 'Mindestbetrag für die Aufladung: {amount} ADA',
+
+  'card.newPin': 'Neue PIN',
+
+  'card.noTransactionsInPeriod': 'Keine Transaktionen in diesem Zeitraum.',
+
+  'card.orderAnotherCard': 'Weitere Karte bestellen',
+
+  'card.payLaterNote': 'Ihre Bestellung ist gespeichert. Sie können die Gebühr auch später in Ihrer Kartenübersicht bezahlen.',
+
+  'card.payTo': 'Zahlung an',
+
+  'card.physicalCardOrder': 'Bestellung der physischen Karte',
+
+  'card.pinChangeFailed': 'Die PIN konnte nicht geändert werden. Bitte versuchen Sie es erneut.',
+
+  'card.pinChanged': 'PIN geändert.',
+
+  'card.pinHidden': 'PIN verborgen',
+
+  'card.pinMismatch': 'Die beiden PINs stimmen nicht überein.',
+
+  'card.pinWeak': 'Vermeiden Sie wiederholte Ziffern oder Folgen wie 1234.',
+
+  'card.rateLine': '1 ADA = {rate}',
+
+  'card.registrationDetails': 'Registrierung',
+
+  'card.restartVerification': 'Verifizierung neu starten',
+
+  'card.savePin': 'PIN speichern',
+
+  'card.secureFormBy': 'Sicheres Formular von Zione',
+
+  'card.secureSignInWindow': 'Die Anmeldung bei Zione öffnet sich in einem sicheren Fenster',
+
+  'card.showCardDetails': 'Kartendaten anzeigen',
+
+  'card.showPin': 'PIN anzeigen',
+
+  'card.signInFailed': 'Die Anmeldung ist fehlgeschlagen. Bitte versuchen Sie es erneut.',
+
+  'card.signOut': 'Abmelden',
+
+  'card.signedInAs': 'Angemeldet als',
+
+  'card.signingAndSubmitting': 'Signieren und senden',
+
+  'card.switchCurrency': 'Zwischen ADA und EUR wechseln',
+
+  'card.topUpCredited': 'Ihr Kartenguthaben ist aktualisiert.',
+
+  'card.topUpSubmitted': 'Aufladung gesendet',
+
+  'card.topUpSubmittedDesc': 'Ihr Guthaben wird aktualisiert, sobald das Netzwerk die Transaktion bestätigt, in der Regel innerhalb weniger Minuten.',
+
+  'card.trackerActivated': 'Aktiviert',
+
+  'card.trackerActivating': 'Ihre Karte wird aktiviert',
+
+  'card.trackerAutoRefresh': 'Diese Seite sucht automatisch nach Neuigkeiten. Ihre Karte erscheint hier, sobald Zione sie ausgibt.',
+
+  'card.trackerAwaitingPayment': 'Warten auf die Versandgebühr',
+
+  'card.trackerDispatched': 'Versandt',
+
+  'card.trackerIssuing': 'Ihre virtuelle Karte wird ausgegeben',
+
+  'card.trackerOnItsWay': 'Unterwegs. Aktivieren Sie die Karte, sobald sie ankommt.',
+
+  'card.trackerPaid': 'Versandgebühr bezahlt',
+
+  'card.trackerPaymentDetected': 'Zahlung erkannt, Bestätigungen stehen noch aus',
+
+  'card.trackerPlaced': 'Bestellung aufgegeben',
+
+  'card.trackerPreparing': 'Ihre Karte wird für den Versand vorbereitet',
+
+  'card.trackerReady': 'Einsatzbereit',
+
+  'card.trackerTitlePhysical': 'Ihre Karte wird vorbereitet',
+
+  'card.trackerTitleVirtual': 'Ihre virtuelle Karte wird ausgegeben',
+
+  'card.typePhysical': 'Physisch',
+
+  'card.typeVirtual': 'Virtuell',
+
+  'card.unblockCard': 'Karte entsperren',
+
+  'card.verificationFailed': 'Verifizierung fehlgeschlagen',
+
+  'card.verificationFailedDesc': 'Zione konnte Ihre Identität diesmal nicht bestätigen. Sie können die Prüfung erneut starten; halten Sie ein gültiges Ausweisdokument und Ihre Kamera bereit.',
+
+  'card.verificationFailedTitle': 'Ihre Identitätsprüfung war nicht erfolgreich',
+
+  'card.viewFees': 'Gebühren ansehen',
+
+  'card.virtualCardOrder': 'Bestellung der virtuellen Karte',
+
+  'card.waitingForBalance': 'Warten auf die Aktualisierung Ihres Kartenguthabens…',
   'card.confirmingAdaTransaction': 'ADA-Transaktion wird auf der Blockchain bestätigt...',
   'card.confirmingPayment': 'Ihre Zahlung wird bestätigt...',
   'card.contactSupport': 'Support kontaktieren',
@@ -287,7 +469,7 @@ export default {
   'card.createKaiserexAccount': 'Erstellen Sie Ihr Zione-Konto und schließen Sie den Verifizierungsprozess ab, um Ihre Karte zu bestellen.',
   'card.customDateRange': 'Benutzerdefinierter Datumsbereich',
   'card.cvv': 'CVV',
-  'card.dateRangeExceeds3Months': 'Der Datumsbereich darf 3 Monate nicht überschreiten.',
+  'card.dateRangeExceeds3Months': 'Wählen Sie einen Zeitraum von höchstens 89 Tagen.',
   'card.dateTime': 'Datum & Uhrzeit',
   'card.documentsReceivedReview': 'Ihre Dokumente wurden empfangen und Ihr Antrag wird derzeit geprüft.',
   'card.ecommerce': 'E-Commerce',
@@ -393,7 +575,7 @@ export default {
   'card.missingPaymentAddress': 'Zahlungsadresse nicht verfügbar. Bitte versuchen Sie es erneut.',
   'card.monthlyFee': 'Monatliche Gebühr',
   'card.nameWithAsterisk': 'Name *',
-  'card.needHelpContactSupport': 'Brauchen Sie Hilfe? Kontaktieren Sie unser Support-Team, um Ihre Karte zu entsperren oder zu ersetzen.',
+  'card.needHelpContactSupport': 'Brauchen Sie Hilfe? Für eine Ersatzkarte wenden Sie sich an den Zione-Support:',
   'card.newToKaiserex': 'Neu bei',
   'card.next': 'Weiter',
   'card.noMonthlyFee': 'Keine monatliche Gebühr',

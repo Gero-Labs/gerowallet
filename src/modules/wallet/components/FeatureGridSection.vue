@@ -1,62 +1,34 @@
 <template>
-  <section class="feature-grid-section">
-    <div class="feature-grid">
-      <FeatureCard
-        v-for="feature in features"
-        :key="feature.title"
-        :icon="feature.icon"
-        :title="feature.title"
-        :description="feature.description"
-      />
-    </div>
+  <section class="feature-grid" :aria-label="t('card.geroCard')">
+    <FeatureCard
+      v-for="feature in features"
+      :key="feature.icon"
+      :icon="feature.icon"
+      :title="feature.title"
+      :description="feature.description"
+    />
   </section>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import FeatureCard from './FeatureCard.vue';
 import type { FeatureCardProps } from '@/models/types';
-
+import FeatureCard from './FeatureCard.vue';
 
 const { t } = useTranslation();
 
-const features: FeatureCardProps[] = [
-  {
-    icon: 'conversion',
-    title: t('card.realTimeConversion'),
-    description: t('card.realTimeConversionDesc'),
-  },
-  {
-    icon: 'global',
-    title: t('card.globalAcceptance'),
-    description: t('card.globalAcceptanceDesc'),
-  },
-  {
-    icon: 'track',
-    title: t('card.trackManageEasily'),
-    description: t('card.trackManageEasilyDesc'),
-  },
-];
+const features = computed<FeatureCardProps[]>(() => [
+  { icon: 'conversion', title: t('card.realTimeConversion'), description: t('card.realTimeConversionDesc') },
+  { icon: 'global', title: t('card.globalAcceptance'), description: t('card.globalAcceptanceDesc') },
+  { icon: 'track', title: t('card.trackManageEasily'), description: t('card.trackManageEasilyDesc') },
+]);
 </script>
 
 <style lang="scss" scoped>
-@import '../styles/variables';
-@import '../styles/mixins';
 .feature-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: $spacing-2xl;
-  padding: $spacing-3xl;
-
-  @include mobile {
-    grid-template-columns: 1fr;
-    gap: $spacing-xl;
-  }
-}
-
-.bottom-cta {
-  display: flex;
-  justify-content: center;
-  padding: $spacing-3xl;
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+  gap: var(--g-s-4);
 }
 </style>

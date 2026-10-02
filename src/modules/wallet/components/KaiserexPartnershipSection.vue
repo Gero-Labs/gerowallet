@@ -1,50 +1,57 @@
 <template>
-  <section class="partnership-section mb-2">
-    <div class="partnership-header">
-      <div class="kaiserex-logo">
-        <img src="@/assets/svg/Icon-Kaiserex.svg" :alt="$t('card.kaiserex')" class="logo-icon" />
-      </div>
-      <h3 class="partnership-heading">{{ t('card.poweredByKaiserex') }}</h3>
-      <p class="partnership-subheading">
-        {{ t('card.cardPoweredByKaiser') }}
-      </p>
-    </div>
-
-    <div class="trust-grid">
-      <!-- Regulation (facts from zione.com Terms §1) -->
-      <div class="trust-card">
-        <h4 class="trust-title">{{ t('card.providerRegulated') }}</h4>
-        <p class="trust-description">
-          {{ t('card.providerRegulatedDesc') }}
-        </p>
-      </div>
-
-      <!-- AML/KYC controls (zione.com home page, AML/CFT policy §9) -->
-      <div class="trust-card">
-        <h4 class="trust-title">{{ t('card.providerAmlKyc') }}</h4>
-        <p class="trust-description">
-          {{ t('card.providerAmlKycDesc') }}
-        </p>
+  <section class="card-partner glass-panel" aria-labelledby="card-partner-heading">
+    <div class="card-partner__intro">
+      <IsoScene name="bridge" class="card-partner__art" />
+      <div class="card-partner__copy">
+        <span class="t-label">{{ t('card.cardProgramPartner') }}</span>
+        <h2 id="card-partner-heading" class="t-heading">{{ t('card.poweredByKaiserex') }}</h2>
+        <p class="t-body">{{ t('card.cardPoweredByKaiser') }}</p>
       </div>
     </div>
 
-    <div class="partnership-footer">
-      <div class="company-info">
-        <p class="company-name">{{ t('card.kaiserExchangeInternational') }}</p>
-        <p class="company-details">{{ t('card.companyDetails') }}</p>
-        <p class="company-details">{{ t('card.providerRegisteredOffice') }}: {{ CARD_PROVIDER.registeredOffice }}</p>
+    <div class="card-partner__facts">
+      <!-- Facts from zione.com: Terms of Service section 1 and the AML/CFT policy section 9 -->
+      <div class="card-partner__trust">
+        <article class="card-partner__tile glass-tier">
+          <h3 class="card-partner__tile-title t-body-lg">
+            <v-icon small>mdi-shield-check-outline</v-icon>
+            {{ t('card.providerRegulated') }}
+          </h3>
+          <p class="t-body-sm">{{ t('card.providerRegulatedDesc') }}</p>
+        </article>
+        <article class="card-partner__tile glass-tier">
+          <h3 class="card-partner__tile-title t-body-lg">
+            <v-icon small>mdi-account-check-outline</v-icon>
+            {{ t('card.providerAmlKyc') }}
+          </h3>
+          <p class="t-body-sm">{{ t('card.providerAmlKycDesc') }}</p>
+        </article>
       </div>
-      <div class="footer-divider"></div>
-      <div class="footer-links">
-        <a :href="CARD_PROVIDER.websiteUrl" target="_blank" rel="noopener noreferrer" class="kaiserex-link">
+
+      <dl class="card-partner__legal">
+        <dt>{{ t('card.legalEntity') }}</dt>
+        <dd>{{ t('card.kaiserExchangeInternational') }}</dd>
+        <dt>{{ t('card.registrationDetails') }}</dt>
+        <dd class="g-num">{{ t('card.companyDetails') }}</dd>
+        <dt>{{ t('card.providerRegisteredOffice') }}</dt>
+        <dd>{{ CARD_PROVIDER.registeredOffice }}</dd>
+        <dt>{{ t('support.toggle.support') }}</dt>
+        <dd>
+          <a :href="`mailto:${CARD_PROVIDER.supportEmail}`">{{ CARD_PROVIDER.supportEmail }}</a>
+        </dd>
+      </dl>
+
+      <div class="card-partner__links">
+        <GButton tier="tertiary" compact :href="CARD_PROVIDER.websiteUrl" target="_blank" rel="noopener noreferrer">
           {{ t('card.learnMoreKaiserex') }}
-        </a>
-        <a :href="CARD_PROVIDER.termsUrl" target="_blank" rel="noopener noreferrer" class="blog-link">
+          <v-icon small right>mdi-open-in-new</v-icon>
+        </GButton>
+        <GButton tier="tertiary" compact :href="CARD_PROVIDER.termsUrl" target="_blank" rel="noopener noreferrer">
           {{ t('navigation.termsOfService') }}
-        </a>
-        <a :href="CARD_PROVIDER.privacyUrl" target="_blank" rel="noopener noreferrer" class="blog-link">
+        </GButton>
+        <GButton tier="tertiary" compact :href="CARD_PROVIDER.privacyUrl" target="_blank" rel="noopener noreferrer">
           {{ t('navigation.privacyPolicy') }}
-        </a>
+        </GButton>
       </div>
     </div>
   </section>
@@ -53,220 +60,94 @@
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { CARD_PROVIDER } from '@/modules/wallet/cardProvider';
+import GButton from '@/shared/components/GButton/GButton.vue';
+import IsoScene from '@/shared/components/iso/IsoScene.vue';
 
 const { t } = useTranslation();
 </script>
 
 <style lang="scss" scoped>
-@import '../styles/variables';
-@import '../styles/mixins';
-
-.partnership-section {
-  @include flex-column;
-  gap: $spacing-4xl;
-  padding: $spacing-4xl $spacing-3xl;
-
-  // Liquid glass effect matching auth cards
-  -webkit-backdrop-filter: blur(12px) brightness(0.2) !important;
-  backdrop-filter: blur(12px) !important;
-  background: #000000ab !important;
-  border: solid 2px var(--g-hairline-3) !important;
-  border-radius: var(--g-r-sheet);
-  position: relative;
-  overflow: hidden;
-  transition: background-color var(--g-dur-slow) ease, border-color var(--g-dur-slow) ease;
-
-  // Top gradient line effect
-  &::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
-    background: linear-gradient(90deg, var(--g-grad-1) 0%, var(--g-grad-2) 100%);
-    opacity: 0;
-    transition: opacity var(--g-dur-slow) ease;
-  }
-
-  &:hover {
-    background: #000000bb !important;
-    border-color: var(--g-accent) !important;
-    -webkit-backdrop-filter: blur(15px) brightness(0.3) !important;
-    backdrop-filter: blur(15px) !important;
-  }
-
-  &:hover::before {
-    opacity: 1;
-  }
-
-  @include mobile {
-    padding: $spacing-3xl $spacing-2xl;
-    gap: $spacing-3xl;
-  }
-}
-
-// Header Section
-.partnership-header {
-  @include flex-column;
-  @include flex-center;
-  gap: $spacing-lg;
-  text-align: center;
-}
-
-.kaiserex-logo {
-  display: flex;
-  justify-content: center;
-  margin-bottom: -25px;
-  margin-top: -25px;
-
-  .logo-icon {
-    width: 80px;
-    height: 80px;
-    // Make the logo white using CSS filters
-    filter: brightness(0) invert(1);
-    opacity: 0.9;
-    transition: opacity var(--g-dur-slow) ease;
-  }
-
-  &:hover .logo-icon {
-    opacity: 1;
-  }
-}
-
-.partnership-heading {
-  @include heading-style($font-size-2xl);
-  margin: 0;
-  color: var(--g-accent);
-}
-
-.partnership-subheading {
-  @include body-text($font-size-base);
-  max-width: 600px;
-  margin: 0;
-  opacity: 0.9;
-}
-
-// Trust Grid
-.trust-grid {
+.card-partner {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: $spacing-2xl;
-
-  @include mobile {
-    grid-template-columns: 1fr;
-    gap: $spacing-xl;
-  }
-}
-
-.trust-card {
-  @include g-glass-panel(false);
-  @include flex-column;
-  gap: $spacing-md;
-  padding: $spacing-2xl;
-  border-radius: var(--g-r-card);
-  border: 1px solid var(--g-hairline-2);
-  transition: background-color var(--g-dur-slow) ease, border-color var(--g-dur-slow) ease, transform var(--g-dur-slow) ease;
-
-  &:hover {
-    background: var(--g-overlay);
-    border-color: var(--g-accent);
-    transform: translateY(-2px);
-  }
-}
-
-.trust-title {
-  @include text-style($font-size-lg, $font-weight-semibold, $line-height-normal);
-  color: $text-primary;
-  margin: 0;
-}
-
-.trust-description {
-  @include body-text($font-size-sm);
-  margin: 0;
-  opacity: 0.8;
-  line-height: 1.6;
-}
-
-// Footer Section
-.partnership-footer {
-  display: flex;
+  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+  gap: var(--g-s-5);
+  padding: var(--g-s-5);
   align-items: center;
-  justify-content: center;
-  gap: $spacing-2xl;
-  padding-top: $spacing-2xl;
-  border-top: 1px solid var(--g-hairline-1);
-
-  @include mobile {
-    flex-direction: column;
-    gap: $spacing-lg;
-  }
 }
 
-.company-info {
-  @include flex-column;
-  gap: $spacing-xs;
-  text-align: center;
-
-  .company-name {
-    @include text-style($font-size-base, $font-weight-medium, $line-height-normal);
-    color: $text-primary;
-    margin: 0;
-  }
-
-  .company-details {
-    @include text-style($font-size-sm, $font-weight-normal, $line-height-normal);
-    color: $text-secondary;
-    margin: 0;
-  }
-}
-
-.footer-divider {
-  width: 1px;
-  height: 40px;
-  background: var(--g-hairline-2);
-
-  @include mobile {
-    display: none;
-  }
-}
-
-.footer-links {
+.card-partner__intro,
+.card-partner__copy,
+.card-partner__facts {
   display: flex;
   flex-direction: column;
-  gap: $spacing-xs;
-  align-items: flex-start;
+  gap: var(--g-s-4);
+}
 
-  @include mobile {
-    align-items: center;
+.card-partner__copy {
+  gap: var(--g-s-2);
+}
+
+.card-partner__copy p {
+  margin: 0;
+}
+
+.card-partner__art {
+  max-width: 320px;
+}
+
+.card-partner__trust {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: var(--g-s-3);
+}
+
+.card-partner__tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-2);
+  padding: var(--g-s-4);
+
+  p {
+    margin: 0;
   }
 }
 
-.kaiserex-link,
-.blog-link {
-  display: inline-flex;
+.card-partner__tile-title {
+  display: flex;
   align-items: center;
-  gap: $spacing-sm;
-  @include text-style($font-size-sm, $font-weight-medium, $line-height-normal);
-  color: var(--g-accent);
-  text-decoration: none;
-  padding: $spacing-xs $spacing-md;
-  border-radius: $border-radius-md;
-  transition: background-color var(--g-dur-base) ease, gap var(--g-dur-base) ease;
+  gap: var(--g-s-2);
+  margin: 0;
 
-  &:hover {
-    background: rgba(0, 199, 243, 0.1);
-    gap: $spacing-sm + 2px;
+  .v-icon {
+    color: var(--g-accent);
+  }
+}
+
+.card-partner__legal {
+  display: grid;
+  grid-template-columns: minmax(120px, auto) 1fr;
+  gap: var(--g-s-2) var(--g-s-4);
+  margin: 0;
+  font-size: 13px;
+
+  dt {
+    color: var(--g-text-3);
   }
 
-  .link-arrow {
-    width: 14px;
-    height: 14px;
-    transition: transform var(--g-dur-base) ease;
+  dd {
+    margin: 0;
+    color: var(--g-text-1);
   }
 
-  &:hover .link-arrow {
-    transform: translateX(4px);
+  a {
+    color: var(--g-accent);
   }
+}
+
+.card-partner__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--g-s-1);
+  margin-left: calc(-1 * var(--g-s-3));
 }
 </style>

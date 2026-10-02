@@ -1,148 +1,46 @@
 <template>
-  <div class="partnership-badge-compact">
-    <div class="badge-content">
-      <div class="badge-left">
-        <img src="@/assets/svg/Icon-Kaiserex.svg" :alt="$t('card.kaiserex')" class="badge-icon" />
-        <div class="badge-text">
-          <span class="badge-title">{{ $t('card.poweredByKaiserex') }}</span>
-          <span class="badge-subtitle">{{ $t('card.licensedRegulated') }}</span>
-        </div>
-      </div>
-      <div class="badge-links">
-        <a :href="CARD_PROVIDER.websiteUrl" target="_blank" rel="noopener noreferrer" class="badge-link">
-          {{ $t('common.learnMore') }}
-          <img src="@/modules/wallet/icons/arrow-right.svg" alt="" class="link-arrow" />
-        </a>
-      </div>
+  <aside class="card-partner-badge glass-panel" :aria-label="t('card.poweredByKaiserex')">
+    <IsoScene name="bridge" class="card-partner-badge__art" />
+    <div class="card-partner-badge__text">
+      <span class="t-body-lg">{{ t('card.poweredByKaiserex') }}</span>
+      <span class="t-caption">{{ t('card.licensedRegulated') }} · FSP {{ CARD_PROVIDER.fspNumber }}</span>
     </div>
-  </div>
+    <GButton tier="tertiary" compact :href="CARD_PROVIDER.websiteUrl" target="_blank" rel="noopener noreferrer">
+      {{ t('card.learnMoreKaiserex') }}
+      <v-icon small right>mdi-open-in-new</v-icon>
+    </GButton>
+  </aside>
 </template>
 
 <script setup lang="ts">
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { CARD_PROVIDER } from '@/modules/wallet/cardProvider';
+import GButton from '@/shared/components/GButton/GButton.vue';
+import IsoScene from '@/shared/components/iso/IsoScene.vue';
+
+const { t } = useTranslation();
 </script>
 
 <style lang="scss" scoped>
-@import '../styles/variables';
-@import '../styles/mixins';
-
-.partnership-badge-compact {
-  padding: $spacing-lg;
-  background: linear-gradient(135deg, rgba(11, 74, 111, 0.1) 0%, rgba(0, 199, 243, 0.1) 100%);
-  border-radius: $border-radius-lg;
-  border: 1px solid rgba(0, 199, 243, 0.2);
-  position: relative;
-  overflow: hidden;
+.card-partner-badge {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--g-s-4);
+  padding: var(--g-s-3) var(--g-s-4);
   width: 100%;
-
-  &::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 1px;
-    background: linear-gradient(
-      90deg,
-      transparent 0%,
-      rgba(0, 199, 243, 0.4) 50%,
-      transparent 100%
-    );
-  }
 }
 
-.badge-content {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: $spacing-lg;
-
-  @include mobile {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: $spacing-md;
-  }
+.card-partner-badge__art {
+  width: 120px;
+  flex: none;
 }
 
-.badge-left {
-  display: flex;
-  align-items: center;
-  gap: $spacing-md;
-}
-
-.badge-icon {
-  width: 40px;
-  height: 40px;
-  flex-shrink: 0;
-  // Make the Kaiserex logo white
-  filter: brightness(0) invert(1);
-  opacity: 0.9;
-}
-
-.badge-text {
+.card-partner-badge__text {
   display: flex;
   flex-direction: column;
-  gap: $spacing-xs;
-}
-
-.badge-title {
-  @include text-style($font-size-base, $font-weight-semibold, $line-height-normal);
-  color: $text-primary;
-}
-
-.badge-subtitle {
-  @include text-style($font-size-sm, $font-weight-normal, $line-height-normal);
-  color: $text-secondary;
-}
-
-.badge-links {
-  display: flex;
-  flex-direction: column;
-  gap: $spacing-xs;
-  align-items: flex-end;
-
-  @include mobile {
-    align-items: flex-start;
-  }
-}
-
-.badge-link {
-  display: inline-flex;
-  align-items: center;
-  gap: $spacing-xs;
-  @include text-style($font-size-sm, $font-weight-medium, $line-height-normal);
-  color: #6ecbdf;
-  text-decoration: none;
-  padding: $spacing-xs $spacing-md;
-  border-radius: $border-radius-md;
-  transition: color var(--g-dur-base) ease, background-color var(--g-dur-base) ease, gap var(--g-dur-base) ease;
-  white-space: nowrap;
-
-  &:hover {
-    background: rgba(0, 199, 243, 0.1);
-    gap: $spacing-sm;
-  }
-
-  .link-arrow {
-    width: 14px;
-    height: 14px;
-    transition: transform var(--g-dur-base) ease;
-    // Make arrows off-white
-    filter: brightness(0) invert(1);
-    opacity: 0.7;
-  }
-
-  &:hover .link-arrow {
-    transform: translateX(4px);
-    opacity: 1;
-  }
-
-  &.blog-link {
-    color: $text-secondary;
-
-    &:hover {
-      color: $primary-cyan;;
-    }
-  }
+  gap: 2px;
+  flex: 1;
+  min-width: 200px;
 }
 </style>

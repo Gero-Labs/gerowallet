@@ -129,7 +129,7 @@ export default {
   'card.beforeOrderingKYC': 'Before ordering your Gero Card, please complete a quick KYC process with our card program partner, Zione.',
   'card.blockCard': 'Block Card',
   'card.blockCardTab': 'Block Card',
-  'card.blockingCardWarning': 'Blocking your card will immediately stop all transactions. This action can\'t be reversed instantly - you\'ll need to contact our support team to unblock it.',
+  'card.blockingCardWarning': 'Blocking stops all new transactions straight away. You can unblock the card here at any time.',
   'card.capturedPhoto': 'Captured Photo',
   'card.cardAlreadyBlocked': 'Card Blocked',
   'card.cardIssuance': 'Card Issuance',
@@ -189,7 +189,7 @@ export default {
   'card.to': 'To',
   'card.apply': 'Apply',
   'card.close': 'Close',
-  'card.dateRangeExceeds3Months': 'Date range cannot exceed 3 months.',
+  'card.dateRangeExceeds3Months': 'Choose a range of 89 days or less.',
   'card.startDateAfterEndDate': 'Start date cannot be after end date',
   'card.documentsReceivedReview': 'Your documents has been received and your application is currently under review.',
   'card.ecommerce': 'Ecommerce',
@@ -263,7 +263,7 @@ export default {
   'card.mastercard': 'Mastercard',
   'card.monthlyFee': 'Monthly Fee',
   'card.nameWithAsterisk': 'Name *',
-  'card.needHelpContactSupport': 'Need help? Contact our support team to unblock or replace your card.',
+  'card.needHelpContactSupport': 'Need help? To replace your card, contact Zione support:',
   'card.newToKaiserex': 'New to',
   'card.next': 'Next',
   'card.noMonthlyFee': 'No Monthly Fee',
@@ -470,6 +470,188 @@ export default {
   'card.orderPlacedSuccessfully': 'Your physical card order has been placed successfully',
   'card.estimatedDelivery': 'Estimated delivery: 7-14 business days',
   'card.confirmationEmailSent': 'A confirmation email has been sent',
+
+  'card.activateAutoCheck': 'We check the activation automatically. Your card shows as Active as soon as Zione confirms it.',
+
+  'card.activateCard': 'Activate card',
+
+  'card.activateDesc': 'Enter the number printed on the front of the card you received. Your virtual card keeps working while we activate it.',
+
+  'card.activateHint': 'Only used to confirm this card reached you.',
+
+  'card.activateInvalidPan': 'Check the card number: it should be 16 to 19 digits, exactly as printed.',
+
+  'card.activateTitle': 'Activate your physical card',
+
+  'card.activationEmailNote': 'You\'ll get an email from Zione to activate your account.',
+
+  'card.activationFailed': 'We couldn\'t activate the card. Check the number and try again.',
+
+  'card.activationStarted': 'Activation started. It usually takes a few minutes.',
+
+  'card.addressValidFor': 'One-time address, valid for {time}',
+
+  'card.alreadyRegisteredSignIn': 'Already registered? Sign in',
+
+  'card.applicationNotApproved': 'Your application wasn\'t approved',
+
+  'card.applicationNotApprovedDesc': 'Zione couldn\'t approve your card application. Contact Zione support to find out why and what you can do next.',
+
+  'card.blocked': 'Blocked',
+
+  'card.buildingTransaction': 'Building transaction',
+
+  'card.cardActivated': 'Your card is active.',
+
+  'card.cardBlockedNotice': 'Card blocked.',
+
+  'card.cardControls': 'Card controls',
+
+  'card.cardProgramPartner': 'Card program partner',
+
+  'card.cardUnblocked': 'Card unblocked.',
+
+  'card.changePin': 'Change PIN',
+
+  'card.changePinSubtitle': 'Set a new 4-digit PIN for card payments and ATMs',
+
+  'card.confirmNewPin': 'Confirm new PIN',
+
+  'card.declined': 'Declined',
+
+  'card.depositAddressVerified': 'Verified address',
+
+  'card.feeEstimateNote': 'Estimated at today\'s rate. The exact amount is set when your order is placed.',
+
+  'card.fieldTooLong': 'Use at most {max} characters.',
+
+  'card.followOrderOnDashboard': 'Follow the order from your card dashboard.',
+
+  'card.heroArtLabel': 'ADA flowing into the Gero Card, issued with Zione',
+
+  'card.hideCardDetails': 'Hide card details',
+
+  'card.hidePin': 'Hide PIN',
+
+  'card.journeyActivate': 'Activate',
+
+  'card.journeyLabel': 'Card journey',
+
+  'card.journeyOrder': 'Order card',
+
+  'card.journeySpend': 'Spend',
+
+  'card.journeyVerify': 'Verify identity',
+
+  'card.kycLinkFailed': 'We couldn\'t open the identity check. Please try again.',
+
+  'card.kycOpensNewTab': 'Zione\'s identity check opens in a new tab.',
+
+  'card.last30DaysLabel': 'Last 30 days',
+
+  'card.legalEntity': 'Legal entity',
+
+  'card.minimumTopUp': 'Minimum top-up amount: {amount} ADA',
+
+  'card.newPin': 'New PIN',
+
+  'card.noTransactionsInPeriod': 'No transactions in this period.',
+
+  'card.orderAnotherCard': 'Order another card',
+
+  'card.payLaterNote': 'Your order is saved. You can also pay the fee later from your card dashboard.',
+
+  'card.payTo': 'Pay to',
+
+  'card.physicalCardOrder': 'Physical card order',
+
+  'card.pinChangeFailed': 'We couldn\'t change the PIN. Please try again.',
+
+  'card.pinChanged': 'PIN changed.',
+
+  'card.pinHidden': 'PIN hidden',
+
+  'card.pinMismatch': 'The two PINs don\'t match.',
+
+  'card.pinWeak': 'Avoid repeated digits or sequences like 1234.',
+
+  'card.rateLine': '1 ADA = {rate}',
+
+  'card.registrationDetails': 'Registration',
+
+  'card.restartVerification': 'Restart verification',
+
+  'card.savePin': 'Save PIN',
+
+  'card.secureFormBy': 'Secure form by Zione',
+
+  'card.secureSignInWindow': 'Zione\'s sign-in opens in a secure window',
+
+  'card.showCardDetails': 'Show card details',
+
+  'card.showPin': 'Show PIN',
+
+  'card.signInFailed': 'Sign-in failed. Please try again.',
+
+  'card.signOut': 'Sign out',
+
+  'card.signedInAs': 'Signed in as',
+
+  'card.signingAndSubmitting': 'Signing and submitting',
+
+  'card.switchCurrency': 'Switch between ADA and EUR',
+
+  'card.topUpCredited': 'Your card balance is updated.',
+
+  'card.topUpSubmitted': 'Top-up submitted',
+
+  'card.topUpSubmittedDesc': 'Your balance updates once the network confirms the transaction, usually within a few minutes.',
+
+  'card.trackerActivated': 'Activated',
+
+  'card.trackerActivating': 'Activating your card',
+
+  'card.trackerAutoRefresh': 'This page checks for updates automatically. Your card appears here as soon as Zione issues it.',
+
+  'card.trackerAwaitingPayment': 'Waiting for the delivery fee',
+
+  'card.trackerDispatched': 'Dispatched',
+
+  'card.trackerIssuing': 'Issuing your virtual card',
+
+  'card.trackerOnItsWay': 'On its way. Activate it when it arrives.',
+
+  'card.trackerPaid': 'Delivery fee paid',
+
+  'card.trackerPaymentDetected': 'Payment detected, waiting for confirmations',
+
+  'card.trackerPlaced': 'Order placed',
+
+  'card.trackerPreparing': 'Preparing your card for dispatch',
+
+  'card.trackerReady': 'Ready to use',
+
+  'card.trackerTitlePhysical': 'Your card is being prepared',
+
+  'card.trackerTitleVirtual': 'Your virtual card is being issued',
+
+  'card.typePhysical': 'Physical',
+
+  'card.typeVirtual': 'Virtual',
+
+  'card.unblockCard': 'Unblock card',
+
+  'card.verificationFailed': 'Verification failed',
+
+  'card.verificationFailedDesc': 'Zione couldn\'t confirm your identity this time. You can start the check again; have a valid ID document and your camera ready.',
+
+  'card.verificationFailedTitle': 'Your identity check didn\'t go through',
+
+  'card.viewFees': 'View fees',
+
+  'card.virtualCardOrder': 'Virtual card order',
+
+  'card.waitingForBalance': 'Waiting for your card balance to update…',
   'cashback.adaCashback': 'ADA Cashback',
   'cashback.allCategories': 'All Categories',
   'cashback.availableIn': 'Available In',
