@@ -10,4 +10,6 @@
 export const CARD_PROVIDER = {
   /** Lead form shown in KaiserexRegistrationModal. It submits to Zoho inside the frame. */
   registrationUrl: 'https://zione.com/gerocard/',
+  /** OAuth/API host used when the VITE_KAISEREX_OAUTH_URL build variable is unset. */
+  defaultOAuthUrl: 'https://oauth.zione.com',
 } as const;
