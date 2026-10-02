@@ -8,6 +8,7 @@ import { Api } from '@/api/api';
 import { Provider } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
 import { handleCardApiError } from './cardApiErrors';
+import { endProviderSession } from './cardSession';
 import { depositAddressFromResponse } from '@/modules/wallet/utils/cardApiCompat';
 import { kycStatusToCardState } from '@/modules/wallet/utils/cardKycState';
 
@@ -196,11 +197,7 @@ const cardStoreInstance = {
       cardStore.walletStatus.isKaiserexAuthenticated = false;
 
       if (wasLoggedIn) {
-        try {
-          const api = getCardApi();
-          await api.axiosInstance.get('/api/kaiserex/logout');
-        } catch (backendError) {
-        }
+        await endProviderSession(getCardApi().axiosInstance);
       }
 
       await clearStoredTokens();
