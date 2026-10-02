@@ -87,7 +87,7 @@
               {{ t('card.newToKaiserex') }}
               <v-tooltip top :open-delay="300" content-class="custom-tooltip">
                 <template v-slot:activator="{ on, attrs }">
-                  <span v-bind="attrs" v-on="on" class="kaiserex-hover">Kaiserex</span>
+                  <span v-bind="attrs" v-on="on" class="kaiserex-hover">{{ t('card.kaiserex') }}</span>
                 </template>
                 <div class="tooltip-content">
                   {{ t('card.kaiserexTooltip') }}
@@ -106,7 +106,7 @@
         <!-- Login Option -->
         <div class="auth-option login-option liquid-glass-card">
           <!-- Default Login Card View -->
-          <div v-if="!showLoginForm && !show2FAForm" class="default-card-view">
+          <div class="default-card-view">
             <div class="option-icon">
               <div class="icon-circle existing-user">
                 <v-icon>mdi-account-check</v-icon>
@@ -144,93 +144,6 @@
               />
             </div>
           </div>
-
-          <!-- Login Form View -->
-          <div v-if="showLoginForm && !show2FAForm" class="login-form-container">
-            <div class="form-header">
-              <button @click="showLoginForm = false" class="back-button">
-                <v-icon small>mdi-arrow-left</v-icon>
-                {{ t('common.back') }}
-              </button>
-              <h3 class="form-title">{{ t('card.signInToKaiserex') }}</h3>
-              <p class="form-description">{{ t('card.enterCredentialsToContinue') }}</p>
-            </div>
-
-            <div class="form-content">
-              <div class="form-group">
-                <label class="form-label">{{ t('card.usernameOrEmail') }}</label>
-                <input v-model="username" type="text" class="form-input" :placeholder="t('card.enterUsernameOrEmail')" />
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">{{ t('card.password') }}</label>
-                <input v-model="password" type="password" class="form-input" :placeholder="t('card.enterPassword')" />
-              </div>
-
-              <div class="form-actions">
-                <GradientButton :text="t('card.signIn')" @click="handleLoginSubmit" class="full-width" />
-              </div>
-
-              <div class="forgot-password">
-                <button class="forgot-link">{{ t('card.forgotPassword') }}</button>
-              </div>
-            </div>
-          </div>
-
-          <!-- 2FA Verification View -->
-          <div v-if="show2FAForm" class="twofa-form-container">
-            <div class="form-header">
-              <button
-                @click="
-                  show2FAForm = false;
-                  showLoginForm = true;
-                "
-                class="back-button"
-              >
-                <v-icon small>mdi-arrow-left</v-icon>
-                {{ t('common.back') }}
-              </button>
-              <h3 class="form-title">{{ t('card.twoFactorAuthentication') }}</h3>
-              <p class="form-description">{{ t('card.enter6DigitCode') }}</p>
-            </div>
-
-            <div class="form-content">
-              <div class="form-group">
-                <label class="form-label">{{ t('card.verificationCode') }}</label>
-                <div class="code-input-container">
-                  <input
-                    v-for="(_, index) in twoFACode"
-                    :key="index"
-                    :ref="`codeInput${index}`"
-                    v-model="twoFACode[index]"
-                    @input="handleCodeInput(index)"
-                    @keydown="handleCodeKeydown($event, index)"
-                    type="text"
-                    maxlength="1"
-                    class="code-input"
-                    :placeholder="'•'"
-                  />
-                </div>
-                <div v-if="twoFAError" class="error-message">
-                  <v-icon small class="error-icon">mdi-alert-circle</v-icon>
-                  {{ twoFAError }}
-                </div>
-              </div>
-
-              <div class="form-actions">
-                <GradientButton
-                  :text="kaiserExLoading ? 'Verifying...' : 'Verify'"
-                  @click="handleTwoFASubmit"
-                  :disabled="!isCodeComplete || kaiserExLoading"
-                  class="full-width"
-                />
-              </div>
-
-              <div class="resend-code">
-                <button class="resend-link" @click="handleResendCode">Didn't receive a code? Resend</button>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -250,7 +163,7 @@
 
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref, computed } from 'vue';
+import { ref } from 'vue';
 import GradientButton from './GradientButton.vue';
 import SecondaryButton from './SecondaryButton.vue';
 import KaiserexRegistrationModal from './KaiserexRegistrationModal.vue';
@@ -258,6 +171,7 @@ import PromotionModal from './PromotionModal.vue';
 import KaiserexPartnershipSection from './KaiserexPartnershipSection.vue';
 import { receiveKaiserExToken } from '@/services/kaiserEx.service';
 import cardStore from '@/stores/modules/card';
+import { debugLog } from '@/utils/debug';
 
 const { t } = useTranslation();
 const emit = defineEmits<{
@@ -266,17 +180,7 @@ const emit = defineEmits<{
 
 const showRegistrationModal = ref(false);
 const showPromotionModal = ref(false);
-const showLoginForm = ref(false);
-const show2FAForm = ref(false);
-const username = ref('');
-const password = ref('');
-const twoFACode = ref(['', '', '', '', '', '']);
-const twoFAError = ref('');
 const kaiserExLoading = ref(false);
-
-const isCodeComplete = computed(() => {
-  return twoFACode.value.every(digit => digit.length === 1 && /\d/.test(digit));
-});
 
 const handleRegister = () => {
   showRegistrationModal.value = true;
@@ -286,152 +190,28 @@ const handleLogin = async () => {
   try {
     kaiserExLoading.value = true;
 
-    // Call receiveKaiserExToken with callback
     await receiveKaiserExToken(async tokenData => {
       try {
-        console.log('Token received:', tokenData);
-        // Use the proper method to set tokens
         await cardStore.setKaiserExTokens(tokenData);
-        // Set authentication status in localStorage
         kaiserExLoading.value = false;
-        // Emit auth completion
         emit('auth-complete');
       } catch (error) {
-        console.error('❌ Failed to process KaiserEx token:', error);
+        console.error('❌ Failed to store card session:', error instanceof Error ? error.message : error);
         kaiserExLoading.value = false;
       }
     });
   } catch (error: unknown) {
-    // Handle window closed gracefully (don't log as error)
     const errorMessage = error instanceof Error ? error.message : String(error);
     if (errorMessage === 'Authentication window was closed by user') {
-      console.log('ℹ️ Authentication cancelled by user');
+      debugLog('Card sign-in cancelled by user');
     } else {
-      console.error('❌ Failed to receive KaiserEx token:', error);
+      console.error('❌ Card sign-in failed:', errorMessage);
     }
     kaiserExLoading.value = false;
   }
 };
 
-const handleLoginSubmit = () => {
-  // After successful login credentials, show 2FA form
-  showLoginForm.value = false;
-  show2FAForm.value = true;
-  twoFAError.value = '';
-
-  // Focus on first input when 2FA form shows
-  setTimeout(() => {
-    const firstInput = document.querySelector('.code-input') as HTMLInputElement;
-    if (firstInput) firstInput.focus();
-  }, 100);
-};
-
-const handleCodeInput = (index: number) => {
-  const value = twoFACode.value[index];
-
-  // Only allow digits
-  if (value && !/^\d$/.test(value)) {
-    twoFACode.value[index] = '';
-    return;
-  }
-
-  // Move to next input if value entered
-  if (value && index < 5) {
-    const nextInput = document.querySelectorAll('.code-input')[index + 1] as HTMLInputElement;
-    if (nextInput) nextInput.focus();
-  }
-};
-
-const handleCodeKeydown = (event: KeyboardEvent, index: number) => {
-  // Handle backspace
-  if (event.key === 'Backspace' && !twoFACode.value[index] && index > 0) {
-    const prevInput = document.querySelectorAll('.code-input')[index - 1] as HTMLInputElement;
-    if (prevInput) {
-      prevInput.focus();
-      twoFACode.value[index - 1] = '';
-    }
-  }
-
-  // Handle paste
-  if (event.key === 'v' && (event.ctrlKey || event.metaKey)) {
-    event.preventDefault();
-    navigator.clipboard.readText().then(text => {
-      const digits = text.replace(/\D/g, '').slice(0, 6);
-      if (digits.length === 6) {
-        twoFACode.value = digits.split('');
-        const lastInput = document.querySelectorAll('.code-input')[5] as HTMLInputElement;
-        if (lastInput) lastInput.focus();
-      }
-    });
-  }
-};
-
-const handleTwoFASubmit = async () => {
-  if (!isCodeComplete.value) {
-    twoFAError.value = t('wallet.pleaseEnterAll6Digits');
-    return;
-  }
-
-  // Verify the code (in production, this would call an API)
-  const enteredCode = twoFACode.value.join('');
-
-  // For demo purposes, accept any 6-digit code or specific test code
-  if (enteredCode.length === 6) {
-    try {
-      // Simulate getting token after 2FA verification
-      await new Promise((resolve, reject) => {
-        receiveKaiserExToken(tokenData => {
-          try {
-            console.log('2FA verification successful, token received:', tokenData);
-            // Use the proper method to set tokens
-            cardStore.setKaiserExTokens(tokenData);
-            // Set authentication status
-
-            // Reset forms
-            show2FAForm.value = false;
-            showLoginForm.value = false;
-            twoFACode.value = ['', '', '', '', '', ''];
-            twoFAError.value = '';
-
-            // Emit auth completion
-            emit('auth-complete');
-            resolve(tokenData);
-          } catch (error) {
-            reject(error);
-          }
-        });
-      });
-    } catch (error) {
-      console.error('❌ Failed to receive KaiserEx token after 2FA:', error);
-      twoFAError.value = 'Authentication failed. Please try again.';
-    }
-  } else {
-    twoFAError.value = 'Invalid verification code. Please try again.';
-    twoFACode.value = ['', '', '', '', '', ''];
-
-    // Focus back on first input
-    setTimeout(() => {
-      const firstInput = document.querySelector('.code-input') as HTMLInputElement;
-      if (firstInput) firstInput.focus();
-    }, 100);
-  }
-};
-
-const handleResendCode = () => {
-  // In production, this would trigger a new code to be sent
-  twoFAError.value = '';
-  console.log('Resending 2FA code...');
-
-  // Show success message temporarily
-  twoFAError.value = t('card.newCodeSent');
-  setTimeout(() => {
-    twoFAError.value = '';
-  }, 3000);
-};
-
 const handleRegistrationComplete = () => {
-  // Set authentication status
-
   showRegistrationModal.value = false;
   emit('auth-complete');
 };
@@ -834,192 +614,5 @@ const handleRegistrationComplete = () => {
   flex-direction: column;
   height: 100%;
   justify-content: space-between; // Distribute content evenly
-}
-
-// Login form styles
-.login-form-container {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  justify-content: space-between; // Distribute content evenly
-}
-
-.form-header {
-  margin-bottom: $spacing-xl;
-
-  .back-button {
-    display: flex;
-    align-items: center;
-    gap: $spacing-xs;
-    background: none;
-    border: none;
-    color: $text-muted;
-    cursor: pointer;
-    font-size: $font-size-sm;
-    margin-bottom: $spacing-lg;
-    padding: $spacing-xs;
-    border-radius: $border-radius-sm;
-    transition: color var(--g-dur-base) ease, background-color var(--g-dur-base) ease;
-
-    &:hover {
-      color: $primary-cyan;
-      background: color-mix(in srgb, var(--g-accent) 10%, transparent);
-    }
-  }
-
-  .form-title {
-    @include heading-style($font-size-xl);
-    color: $text-primary;
-    margin: 0 0 $spacing-sm 0;
-    text-align: center;
-  }
-
-  .form-description {
-    @include body-text($font-size-sm);
-    color: $text-secondary;
-    margin: 0;
-    text-align: center;
-  }
-}
-
-.form-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: $spacing-lg;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: $spacing-sm;
-}
-
-.form-label {
-  @include text-style($font-size-sm, $font-weight-medium);
-  color: $text-primary;
-}
-
-.form-input {
-  padding: $spacing-md;
-  border: 1px solid $border-secondary;
-  border-radius: $border-radius-md;
-  background: $background-secondary;
-  color: $text-primary;
-  font-size: $font-size-base;
-  transition: border-color var(--g-dur-base) ease;
-
-  &:focus {
-    outline: none;
-    border-color: $primary-cyan;
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--g-accent) 10%, transparent);
-  }
-
-  &::placeholder {
-    color: $text-muted;
-  }
-}
-
-.form-actions {
-  margin-top: auto;
-  padding-top: $spacing-lg;
-}
-
-.forgot-password {
-  text-align: center;
-  margin-top: $spacing-md;
-
-  .forgot-link {
-    background: none;
-    border: none;
-    color: $primary-cyan;
-    font-size: $font-size-sm;
-    cursor: pointer;
-    text-decoration: underline;
-
-    &:hover {
-      opacity: 0.8;
-    }
-  }
-}
-
-// 2FA Form Styles
-.twofa-form-container {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  justify-content: space-between;
-}
-
-.code-input-container {
-  display: flex;
-  gap: $spacing-sm;
-  justify-content: center;
-  margin: $spacing-lg 0;
-}
-
-.code-input {
-  width: 45px;
-  height: 50px;
-  text-align: center;
-  font-size: $font-size-xl;
-  font-weight: $font-weight-semibold;
-  border: 2px solid $border-secondary;
-  border-radius: $border-radius-md;
-  background: $background-secondary;
-  color: $text-primary;
-  transition: border-color var(--g-dur-base) ease, box-shadow var(--g-dur-base) ease, background-color var(--g-dur-base) ease;
-
-  &:focus {
-    outline: none;
-    border-color: $primary-cyan;
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--g-accent) 20%, transparent);
-    background: color-mix(in srgb, var(--g-accent) 5%, transparent);
-  }
-
-  &::placeholder {
-    color: $text-muted;
-    font-size: $font-size-2xl;
-    line-height: 1;
-  }
-}
-
-.error-message {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: $spacing-xs;
-  color: var(--g-error);
-  font-size: $font-size-sm;
-  margin-top: $spacing-sm;
-  text-align: center;
-
-  .error-icon {
-    color: var(--g-error);
-  }
-}
-
-.resend-code {
-  text-align: center;
-  margin-top: $spacing-md;
-
-  .resend-link {
-    background: none;
-    border: none;
-    color: $primary-cyan;
-    font-size: $font-size-sm;
-    cursor: pointer;
-    text-decoration: underline;
-    transition: opacity var(--g-dur-base) ease;
-
-    &:hover {
-      opacity: 0.8;
-    }
-
-    &:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-  }
 }
 </style>

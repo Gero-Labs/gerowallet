@@ -34,3 +34,19 @@ describe('Gero Card provider wiring', () => {
     expect(modal).not.toContain('kaiserex.com');
   });
 });
+
+describe('KaiserexAuthPage hygiene', () => {
+  const page = read('src/modules/wallet/components/KaiserexAuthPage.vue');
+
+  it('has no client-side fake login or 2FA', () => {
+    expect(page).not.toMatch(/handleTwoFASubmit|twoFACode|showLoginForm|show2FAForm/);
+  });
+
+  it('never logs token data', () => {
+    expect(page).not.toMatch(/console\.\w+\([^)]*token/i);
+  });
+
+  it('shows the provider name through i18n', () => {
+    expect(page).toContain("{{ t('card.kaiserex') }}");
+  });
+});
