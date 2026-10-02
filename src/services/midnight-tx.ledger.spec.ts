@@ -5,10 +5,20 @@ const mocks = vi.hoisted(() => ({
   api: vi.fn(),
   health: vi.fn(),
   proofServer: { mode: 'remote', localUrl: 'http://localhost:6300', localUrlLedger9: 'http://localhost:6301' },
+  /** When true, the user has accepted the notice of the remote prover the current mode uses. */
+  consented: true,
 }));
 vi.mock('@/chrome/messaging', () => ({ Messaging: { sendToBackgroundFromOptions: mocks.send } }));
 vi.mock('@/api/midnight-api', () => ({ getMidnightApi: mocks.api }));
-vi.mock('@/stores/midnightStore', () => ({ midnightStore: { proofServer: mocks.proofServer } }));
+vi.mock('@/stores/midnightStore', () => ({
+  midnightStore: {
+    proofServer: mocks.proofServer,
+    get shieldedProvingConsent() {
+      if (!mocks.consented) return null;
+      return { version: 3, acceptedAt: 1, provider: mocks.proofServer.mode === 'zkpaas' ? 'zkpaas' : 'cloud' };
+    },
+  },
+}));
 vi.mock('@/chains/midnight/midnightLocalProver', () => ({ checkProofServerHealth: mocks.health }));
 vi.mock('@/chains/midnight/midnightZkpaas', () => ({
   resolveZkpaasUrl: () => 'https://prover.example',
@@ -17,11 +27,12 @@ vi.mock('@/chains/midnight/midnightZkpaas', () => ({
 }));
 
 import { MessageTypes } from '@/models/MessageTypes';
-import { checkWalletProvingPreflight, registerNightForDust, sendShieldedNight, sendUnshieldedNight, shieldNight } from './midnight-tx.service';
+import { buildAndSignUnshieldedTransfer, checkWalletProvingPreflight, registerNightForDust, sendShieldedNight, sendUnshieldedNight, shieldNight } from './midnight-tx.service';
 
 describe('Midnight ledger-specific orchestration', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    mocks.consented = true;
     mocks.proofServer.mode = 'remote';
     mocks.proofServer.localUrlLedger9 = 'http://localhost:6301';
     mocks.health.mockResolvedValue(true);
@@ -79,6 +90,66 @@ describe('Midnight ledger-specific orchestration', () => {
     expect(mocks.send.mock.calls[1][0].data.proving.url).toBe(mode === 'local' ? 'http://localhost:6301' : 'https://prover.example');
     expect(submitProven).toHaveBeenCalledOnce();
     expect(cloud).not.toHaveBeenCalled();
+  });
+
+  it.each(['local', 'zkpaas'])('dapp makeTransfer proves with the %s prover and never hands Gero the proof inputs (PRIV-01)', async mode => {
+    mocks.proofServer.mode = mode;
+    const cloud = vi.fn();
+    mocks.api.mockReturnValue({ buildUnshieldedTx: async () => ({ unprovenTxHex: 'aa', txHash: 'built' }), submitMidnightTx: cloud });
+    mocks.send.mockResolvedValueOnce({ data: { success: true, publicKeyHex: '11', addressHex: '22' } })
+      .mockResolvedValueOnce({ data: { success: true, signedTxHex: 'sealed', proven: true } });
+    const { tx } = await buildAndSignUnshieldedTransfer('Preprod', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {});
+    expect(tx).toBe('sealed');
+    expect(mocks.send.mock.calls[1][0].data.proving.url).toBe(mode === 'local' ? 'http://localhost:6300' : 'https://prover.example');
+    expect(cloud).not.toHaveBeenCalled();
+  });
+
+  it('dapp makeTransfer refuses when the prover changed after approval (Local approved, zkPaaS at build)', async () => {
+    // PRIV-01 review P1: approve in Local mode, switch to zkPaaS while the PassKey prompt is open.
+    mocks.proofServer.mode = 'zkpaas';
+    await expect(buildAndSignUnshieldedTransfer('Preprod', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {}, 'local'))
+      .rejects.toThrow('The proof-server setting changed during approval');
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(mocks.api).not.toHaveBeenCalled();
+    expect(mocks.health).not.toHaveBeenCalled();
+  });
+
+  it.each(['remote', 'zkpaas'])('refuses to build for a %s prover without its recorded consent, before any credential is used', async mode => {
+    mocks.proofServer.mode = mode;
+    mocks.consented = false;
+    const client = { buildUnshieldedTx: vi.fn(), submitMidnightTx: vi.fn(), submitProvenMidnightTx: vi.fn(), proveAndSubmitMidnightTx: vi.fn() };
+    mocks.api.mockReturnValue(client);
+    const req = { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 };
+    await expect(buildAndSignUnshieldedTransfer('Preprod', req, {}, mode === 'zkpaas' ? 'zkpaas' : 'cloud')).rejects.toThrow('needs your consent');
+    await expect(sendUnshieldedNight('Preprod', req, {})).rejects.toThrow('needs your consent');
+    await expect(sendShieldedNight('Preprod', [{ receiverAddress: 'r', amount: 1n, tokenType: '12'.repeat(32) }], {})).rejects.toThrow('needs your consent');
+    expect(mocks.send).not.toHaveBeenCalled();
+    // No request reaches Nexus (getting the client object sends nothing).
+    for (const method of Object.values(client)) expect(method).not.toHaveBeenCalled();
+  });
+
+  it('dapp makeTransfer in remote mode returns the tx unproven, for Gero Cloud to prove on submit', async () => {
+    mocks.api.mockReturnValue({ buildUnshieldedTx: async () => ({ unprovenTxHex: 'aa', txHash: 'built' }) });
+    mocks.send.mockResolvedValueOnce({ data: { success: true, publicKeyHex: '11', addressHex: '22' } })
+      .mockResolvedValueOnce({ data: { success: true, signedTxHex: 'unproven', proven: false } });
+    const { tx } = await buildAndSignUnshieldedTransfer('Preprod', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {});
+    expect(tx).toBe('unproven');
+    expect(mocks.send.mock.calls[1][0].data.proving).toBeUndefined();
+  });
+
+  it('dapp makeTransfer refuses an unreachable or non-loopback local prover instead of falling back to Gero Cloud', async () => {
+    mocks.proofServer.mode = 'local';
+    mocks.health.mockResolvedValue(false);
+    await expect(buildAndSignUnshieldedTransfer('Preprod', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {}))
+      .rejects.toThrow('Proof server not reachable');
+    mocks.health.mockResolvedValue(true);
+    const saved = mocks.proofServer.localUrl;
+    mocks.proofServer.localUrl = 'https://abc.trycloudflare.com';
+    try {
+      await expect(buildAndSignUnshieldedTransfer('Preprod', { fromAddress: 'sender', outputs: [], ttlMs: Date.now() + 60000 }, {}))
+        .rejects.toThrow('Proof server not reachable');
+    } finally { mocks.proofServer.localUrl = saved; }
+    expect(mocks.send).not.toHaveBeenCalled();
   });
 
   it('fails before authorization when the preferred prover is unreachable, without implicit cloud fallback', async () => {

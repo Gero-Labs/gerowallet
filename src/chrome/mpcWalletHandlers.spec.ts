@@ -347,6 +347,14 @@ describe('storeRecoveryShareFlow', () => {
     publicKey: 'xpub-anchor',
   };
 
+  it('refuses a weak recovery password before encrypting or uploading anything', async () => {
+    const deps = makeDeps();
+    await expect(storeRecoveryShareFlow({ ...baseInput, recoveryPassword: 'Password1234' }, deps)).rejects.toThrow(/strength/);
+    await expect(storeRecoveryShareFlow({ ...baseInput, recoveryPassword: 'short' }, deps)).rejects.toThrow(/strength/);
+    expect(deps.encryptRecoveryShare).not.toHaveBeenCalled();
+    expect(deps.storeRecovery).not.toHaveBeenCalled();
+  });
+
   it('encrypts the recovery share under the recovery password before uploading', async () => {
     const deps = makeDeps();
     await storeRecoveryShareFlow(baseInput, deps);
@@ -601,6 +609,17 @@ describe('setRecoveryPasswordFlow', () => {
     newRecoveryPassword: 'a-brand-new-strong-password',
     secret,
   };
+
+  it('refuses a weak new recovery password before any share is read, staged or rotated', async () => {
+    const order: string[] = [];
+    const deps = makeDeps(order);
+    await expect(setRecoveryPasswordFlow({ ...baseInput, newRecoveryPassword: 'Cardano12345' }, deps)).rejects.toThrow(/strength/);
+    expect(deps.getLoginShare).not.toHaveBeenCalled();
+    expect(deps.setMpcDeviceShareNext).not.toHaveBeenCalled();
+    expect(deps.rotate).not.toHaveBeenCalled();
+    expect(deps.storeRecovery).not.toHaveBeenCalled();
+    expect(order).toEqual([]);
+  });
 
   it('reconstructs from the CURRENT device+login and NEVER asks the old recovery password', async () => {
     const order: string[] = [];

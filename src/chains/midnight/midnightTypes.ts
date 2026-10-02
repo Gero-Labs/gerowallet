@@ -80,12 +80,11 @@ export interface MidnightAddresses {
    *
    * BLAST RADIUS: anyone with this string can decrypt every incoming
    * shielded note for this wallet, forever. Cannot spend, but can fully
-   * de-anonymize. Followup work: move to encrypted-at-rest storage
-   * alongside the mnemonic instead of plain-form on the publicKey JSON.
+   * de-anonymize.
    *
-   * Optional for backward compat: wallets created before this field was added
-   * keep doing unshielded-only sync. Re-derived + persisted on first wallet
-   * upgrade or on a forced re-derivation path.
+   * LEGACY, read-only: older releases persisted it on the wallet record's
+   * publicKey JSON. It is no longer written, sent, or used; it is declared
+   * only so `stripPersistedViewingKey` can remove it from old records.
    */
   zswapViewingKey?: string;
   /**

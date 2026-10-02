@@ -21,7 +21,7 @@ import {
  */
 export { PROOF_SERVER_DOCKER_TAG, PROOF_SERVER_DOCKER_COMMAND } from '@/chains/midnight/midnightConfig';
 import { isLedger9Network, midnightProofServerCommand } from '@/chains/midnight/midnightConfig';
-import { localUrlForNetwork } from '@/chains/midnight/midnightProvingTarget';
+import { isLoopbackProverUrl, localUrlForNetwork } from '@/chains/midnight/midnightProvingTarget';
 
 
 export type ProofServerMode = 'remote' | 'local' | 'zkpaas';
@@ -143,9 +143,14 @@ export function useMidnightProofServer() {
     return '';
   }
 
+  /** A local proof server must be on this machine: anything else is a remote prover without its consent. */
+  function validateLocalProofServerUrl(value: string): string {
+    return validateProofServerUrl(value) || (isLoopbackProverUrl(value) ? '' : t('midnight.proofServer.urlNotLoopback'));
+  }
+
   async function onLocalUrlBlur() {
     const value = localUrlDraft.value.trim();
-    const error = validateProofServerUrl(value);
+    const error = validateLocalProofServerUrl(value);
     localUrlError.value = error;
     if (error) return;
     if (value === proofServer.value.localUrl) return;
@@ -155,7 +160,7 @@ export function useMidnightProofServer() {
 
   async function onLocalUrlLedger9Blur() {
     const value = localUrlLedger9Draft.value.trim();
-    const error = validateProofServerUrl(value);
+    const error = validateLocalProofServerUrl(value);
     localUrlLedger9Error.value = error;
     if (error) return;
     if (value === proofServer.value.localUrlLedger9) return;

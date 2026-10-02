@@ -326,6 +326,9 @@ const deleteWalletConfirm = async () => {
   // Push notifications: queue the server-side unlink durably BEFORE the wallet record
   // and its keys are deleted (the worker retries it on later starts if it fails now).
   await Messaging.sendToBackgroundFromOptions({ method: MessageTypes.NOTIFY_WALLET_REMOVED, data: { walletId } });
+  // Midnight: drop this wallet's coin state, history and balances (PRIV-01).
+  // Also BEFORE removeWallet: the background reads the address from the record.
+  await Messaging.sendToBackgroundFromOptions({ method: MessageTypes.FORGET_MIDNIGHT_WALLET_DATA, data: { walletId } });
   // Remove wallet from geroStore (this will also delete from database)
   GeroStore.removeWallet(walletId);
 

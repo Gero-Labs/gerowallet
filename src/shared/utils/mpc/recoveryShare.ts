@@ -15,9 +15,12 @@ const V1_HEADER_LEN = 1 + 4 + SALT_LEN + NONCE_LEN; // 45
 
 // v2 (current): version | t(BE32) | m(BE32) | p(BE32) | salt(16) | nonce(24)
 const V2 = 2;
-// OWASP-recommended Argon2id baseline, extension-friendly. Pinned in the header
-// so future tuning stays decryptable.
-const V2_ARGON = { t: 2, m: 19_456 /* KiB = 19 MiB */, p: 1 };
+// Cost for NEW blobs. Pinned in each blob's header, so older blobs (t=2,
+// m=19 MiB, the OWASP floor) still decrypt with the cost they were made with.
+// Raised above that floor because the blob is reachable by any Google-token
+// holder and by the backend operator, and is attacked offline: each guess now
+// costs 64 MiB and three passes (about 0.5 s here).
+const V2_ARGON = { t: 3, m: 65_536 /* KiB = 64 MiB */, p: 1 };
 const V2_HEADER_LEN = 1 + 4 + 4 + 4 + SALT_LEN + NONCE_LEN; // 53
 
 function v1Key(password: string, salt: Uint8Array, iterations: number): Uint8Array {
@@ -75,7 +78,8 @@ export async function decryptRecoveryShare(blob: string, password: string): Prom
     // tightly enough to stop a crafted backup from requesting gigabytes of Argon2 memory, which
     // would hang or OOM-crash the extension before a passphrase is even checked. We only ever
     // WRITE `V2_ARGON` above, so these bounds are generous but tight enough to always accept
-    // legitimate files while rejecting anything attacker-tunable to be dangerous.
+    // legitimate files (both the t=2/19 MiB and t=3/64 MiB generations) while rejecting
+    // anything attacker-tunable to be dangerous.
     if (t < 1 || t > 10 || m < 8 || m > 262_144 /* 256 MiB in KiB */ || p < 1 || p > 4) {
       throw new RecoveryDecryptError('unsupported recovery backup parameters');
     }

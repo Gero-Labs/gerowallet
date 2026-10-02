@@ -228,22 +228,6 @@ class MidnightSyncService {
     network: string,
     addresses: MidnightAddresses,
     lastSyncedBlock = 0,
-    /**
-     * Optional shielded-sync opt-in. When provided, gero-sync opens a
-     * shielded-tx indexer subscription alongside the unshielded one and
-     * forwards events to this WS session. Until the wallet's shielded-SDK
-     * derivation lands at login, callers leave this undefined and the
-     * sync stays unshielded-only.
-     *
-     * Held in the WS service for the session lifetime; not persisted. Re-
-     * derive from the wallet at next login rather than caching the value.
-     */
-    shielded?: {
-      /** Hex-encoded Zswap viewing key from the user's mnemonic. */
-      viewingKey: string;
-      /** Persisted resume cursor (highest applied shielded indexer endIndex). */
-      lastIndex?: number | null;
-    },
   ): void {
     if (!addresses.unshielded) {
       debugLog('Midnight sync: refusing to start without unshielded address');
@@ -280,8 +264,7 @@ class MidnightSyncService {
     if (!hasPreservedUtxos && midnightStore.lastMidnightTxId != null) {
       debugLog('🌙 Midnight sync: cursor present but no preserved UTxOs — forcing full replay to rebuild balance');
     }
-    // Privacy: log only whether shielded is enabled, never the viewing key.
-    debugLog(`🌙 Midnight sync start: resume cursor=${midnightLastTxId} shielded=${shielded != null}`);
+    debugLog(`🌙 Midnight sync start: resume cursor=${midnightLastTxId}`);
 
     webSocketService.connect(
       'MIDNIGHT',
@@ -298,14 +281,13 @@ class MidnightSyncService {
       // is where role-specific public keys would flow.
       [],
       // `addresses` is BTC-only (CONTRACT-btc-wire.md); Midnight sends none.
-      // MUST be passed explicitly: omitting it shifts every argument below it
-      // one slot left, which put the shielded viewing key into
-      // `midnightLastTxId` (gero-sync then closed the WS with 1011 on every
-      // SUBSCRIBE) and silently disabled shielded sync.
+      // MUST be passed explicitly so `midnightLastTxId` lands in its own slot.
       undefined,
       midnightLastTxId,
-      shielded?.viewingKey ?? null,
-      shielded?.lastIndex ?? null,
+      // No shielded viewing key, ever: the server cannot read this wallet's
+      // incoming shielded notes. Private balances come from the on-device
+      // private sync (midnightPrivateSync), which trial-decrypts the public
+      // zswap event stream locally.
     );
 
     this.active = true;

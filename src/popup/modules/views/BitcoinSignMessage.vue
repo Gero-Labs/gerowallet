@@ -2,6 +2,7 @@
   <v-form ref="form" v-model="valid" class="fill-height">
     <PopupHeader :title="$t('bitcoin.signMessage')" :show-website="hasWebsite" :disabled="loading">
       <v-card-text class="d-flex flex-column pa-0 fill-height">
+        <EmbeddedSiteWarning class="mb-2" :embedded-in="request?.embeddedIn" />
         <v-card-title class="pa-0 mb-2" style="color: white; font-size: 14px">
           {{ $t('bitcoin.signMessageRequest') }}
         </v-card-title>
@@ -81,6 +82,15 @@ import { computed, getCurrentInstance, onMounted, ref } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import rules from '@/utils/rules';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
+import EmbeddedSiteWarning from '@/shared/components/EmbeddedSiteWarning.vue';
+import { getErrorMessage } from '@/shared/utils/errorHandler';
+
+/** What the background hands this popup (see BITCOIN_METHOD.signMessage). */
+interface BtcSignMessageRequest {
+  /** Browser-derived embedding site, set by the background. */
+  embeddedIn?: string | null;
+  data?: { message?: string; type?: 'ecdsa' | 'bip322-simple' };
+}
 import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
 import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
 import { Messaging } from '@/chrome/messaging';
@@ -101,7 +111,7 @@ const spendingPassword = ref('');
 const passwordField = ref(null);
 const privateKeyBytes = ref<Uint8Array | null>(null);
 const controller = ref(null);
-const request = ref<any>(null);
+const request = ref<BtcSignMessageRequest | null>(null);
 const messageText = ref('');
 const signingType = ref<'ecdsa' | 'bip322-simple'>('ecdsa');
 const signed = ref(false);
@@ -140,7 +150,7 @@ const sign = async () => {
 
   loading.value = true;
   try {
-    const signingData: any = {
+    const signingData: { message?: string; type: 'ecdsa' | 'bip322-simple'; privateKeyBytes?: number[]; password?: string } = {
       message: request.value.data.message,
       type: signingType.value,
     };
@@ -152,17 +162,17 @@ const sign = async () => {
       signingData.password = spendingPassword.value;
     }
 
-    const response: any = await Messaging.sendToBackgroundFromOptions({
+    const response = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.BITCOIN_DAPP_SIGN_MESSAGE,
       data: signingData,
-    });
+    }) as { data: { success: boolean; error?: string; signature?: string } };
 
     if (!response.data.success) throw new Error(response.data.error || 'Signing failed');
 
     await controller.value.returnData({ data: response.data.signature });
     window.close();
-  } catch (e: any) {
-    snackbar.setError(e.message || 'Failed to sign message');
+  } catch (e: unknown) {
+    snackbar.setError(getErrorMessage(e, 'Failed to sign message') || 'Failed to sign message');
     loading.value = false;
   }
 };

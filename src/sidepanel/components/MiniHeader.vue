@@ -70,7 +70,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue';
 import { walletStore } from '@/stores/walletStore';
-import WalletStore from '@/stores/walletStore';
+import WalletStore, { matchesDappWhitelistEntry } from '@/stores/walletStore';
 import { WalletType } from '@/models/types';
 import assets from '@/utils/assets';
 import networks from '@/utils/networks';
@@ -115,7 +115,8 @@ const connectedSiteEntry = computed<ConnectedDappEntry | null>(() => {
   const origin = activeTabOrigin.value;
   if (!origin || !WalletStore.isWhitelisted(origin)) return null;
   const dapps = (walletStore.connectedDapps || []) as ConnectedDappEntry[];
-  return dapps.find((d) => d.domain && origin.indexOf(String(d.domain)) !== -1) || null;
+  // Exact origin match, never a substring (evil.com/?dapp.example would match).
+  return dapps.find((d) => d.domain && matchesDappWhitelistEntry(origin, String(d.domain))) || null;
 });
 
 function disconnectActiveSite() {
