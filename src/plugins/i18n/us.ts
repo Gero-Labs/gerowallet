@@ -6,6 +6,7 @@ export default {
   'walletLibrary.search': "Search wallets",
   'walletLibrary.searchPlaceholder': "Name, wallet or stake address",
   'walletLibrary.filter': "Filter wallets",
+  'walletLibrary.sortedBy': 'Sort by {sort}',
   'walletLibrary.allWallets': "All wallets",
   'walletLibrary.favorites': "Favorites",
   'walletLibrary.newCategory': "New category",

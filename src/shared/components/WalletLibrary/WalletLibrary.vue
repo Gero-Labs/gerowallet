@@ -18,7 +18,7 @@
             <template #activator="{ on, attrs }">
               <v-btn icon small v-bind="attrs" v-on="on" :disabled="!ready" class="library-sort"
                 :class="{ 'library-sort--active': sort !== 'custom' }"
-                :aria-label="t('common.sortBy') + ': ' + sortLabel(sort)" :title="t('common.sortBy') + ': ' + sortLabel(sort)">
+                :aria-label="t('walletLibrary.sortedBy', { sort: sortLabel(sort) })" :title="t('walletLibrary.sortedBy', { sort: sortLabel(sort) })">
                 <v-icon small>mdi-sort</v-icon>
               </v-btn>
             </template>
