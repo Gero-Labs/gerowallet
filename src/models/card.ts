@@ -244,7 +244,7 @@ export interface CardState {
   walletStatus: {
     currentState: 'loading' | 'auth' | 'new' | 'pending' | 'approved' | 'error';
     isKaiserexAuthenticated: boolean;
-    kycStatus: 'approved' | 'rejected' | 'verified' | 'registered' | 'verification_started';
+    kycStatus: 'approved' | 'rejected' | 'verified' | 'registered' | 'verification_started' | 'verification_failed';
     kycData: unknown;
     loadingMessage: string;
     error: string | null;

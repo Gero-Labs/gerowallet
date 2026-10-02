@@ -9,6 +9,7 @@ import { Provider } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
 import { handleCardApiError } from './cardApiErrors';
 import { depositAddressFromResponse } from '@/modules/wallet/utils/cardApiCompat';
+import { kycStatusToCardState } from '@/modules/wallet/utils/cardKycState';
 
 export interface OrderPhysicalCardPayload {
   address: string;
@@ -33,7 +34,7 @@ export const cardStore = Vue.observable<CardState>({
   walletStatus: {
     currentState: 'loading' as 'loading' | 'auth' | 'new' | 'pending' | 'approved' | 'error',
     isKaiserexAuthenticated: false,
-    kycStatus: 'not_started' as 'approved' | 'rejected' | 'verified' | 'registered' | 'verification_started',
+    kycStatus: 'not_started' as 'approved' | 'rejected' | 'verified' | 'registered' | 'verification_started' | 'verification_failed',
     kycData: null,
     loadingMessage: '',
     error: null as string | null,
@@ -374,20 +375,7 @@ export default {
     if (!this.isAuthenticated) {
       return 'auth';
     }
-    switch (walletStatus.kycStatus) {
-      case 'registered':
-        return 'new';
-      case 'verification_started':
-        return 'pending';
-      case 'approved':
-        return 'approved';
-      case 'verified':
-        return 'pending';
-      case 'rejected':
-        return 'auth';
-      default:
-        return 'new';
-    }
+    return kycStatusToCardState(walletStatus.kycStatus);
   },
 
   // Auth methods
