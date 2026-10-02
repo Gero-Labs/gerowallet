@@ -185,6 +185,33 @@ export interface ExchangeRate {
   buy: string;
   sell: string;
 }
+
+// Provider responses, proxied unchanged by gero-backend's /api/kaiserex/*.
+// Amounts are numbers in the provider spec but may arrive as decimal strings.
+export interface KycLinkResponse {
+  success?: boolean;
+  url?: string;
+  id?: string;
+}
+
+export interface CardOrderResponse {
+  message?: string;
+  orderUuid?: string;
+  paymentId?: number | null;
+  depositAddress?: string | null;
+  depositAmountEur?: number | string | null;
+  depositAmountAda?: number | string | null;
+  exchangeRate?: number | string | null;
+  depositExpiresAt?: string | null;
+  depositQrCode?: string | null;
+}
+
+export interface CardOrderStatus {
+  status?: string;
+  paymentStatus?: string | null;
+  cardUuid?: string;
+  card_uuid?: string;
+}
 // Individual card data with all related information
 export interface CardInfo {
   cardData: CardData;
@@ -218,7 +245,7 @@ export interface CardState {
     currentState: 'loading' | 'auth' | 'new' | 'pending' | 'approved' | 'error';
     isKaiserexAuthenticated: boolean;
     kycStatus: 'approved' | 'rejected' | 'verified' | 'registered' | 'verification_started';
-    kycData: any;
+    kycData: unknown;
     loadingMessage: string;
     error: string | null;
   };
