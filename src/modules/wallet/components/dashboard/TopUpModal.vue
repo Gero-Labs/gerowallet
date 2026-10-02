@@ -160,6 +160,7 @@ import { walletStore } from '@/stores/walletStore';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import { nexusTxApi, walletUtxosToNexusInputs, txOutToNexusOutput, type BuildTxRequest } from '@/api/nexus-tx-api';
+import { isCardDepositAddress, networkIdOfAddress } from '@/modules/wallet/utils/cardDepositAddress';
 import snackbar from '@/plugins/snackbar';
 import { WalletType } from '@/models/types';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
@@ -185,7 +186,7 @@ const amounts = ref({
 });
 const feeOption = ref('ADA');
 const transactionId = ref('1');
-const passwordField = ref<any>(null);
+const passwordField = ref<{ showError: (message: string) => void } | null>(null);
 const tx = ref<Cardano.Tx | undefined>(undefined);
 
 // Use the transaction signing composable
@@ -311,10 +312,16 @@ const handlePassKeyAuthError = (error: Error) => {
 // Build transaction
 const buildTx = async () => {
   try {
-    const cardanoAddress = cardStore.state.cardanoAddress?.wallet_address;
-    console.log('💰 Cardano address:', cardanoAddress);
-
-    if (!cardanoAddress) {
+    // Re-read the deposit address right before sending; the copy cached at
+    // sign-in is persisted and can be stale after a provider change.
+    let depositAddress: string | null = null;
+    try {
+      depositAddress = await cardStore.fetchFreshDepositAddress();
+    } catch {
+      depositAddress = null;
+    }
+    const walletNetworkId = networkIdOfAddress(walletStore.loggedWallet.baseAddress);
+    if (!isCardDepositAddress(depositAddress, walletNetworkId)) {
       throw new Error(t('errors.invalidAddress'));
     }
 
@@ -325,12 +332,11 @@ const buildTx = async () => {
     }
 
     const lovelaceAmount = BigInt(Math.floor(adaAmount * 1_000_000)) as Cardano.Lovelace;
-    console.log(`💰 Building transaction: ${adaAmount} ADA (${lovelaceAmount} Lovelace) to ${cardanoAddress}`);
 
     // Create output
     const outputs: Cardano.TxOut[] = [
       {
-        address: cardanoAddress as Cardano.PaymentAddress,
+        address: depositAddress,
         value: {
           coins: lovelaceAmount,
           assets: new Map(),

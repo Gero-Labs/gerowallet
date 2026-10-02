@@ -8,6 +8,7 @@ import { Api } from '@/api/api';
 import { Provider } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
 import { handleCardApiError } from './cardApiErrors';
+import { depositAddressFromResponse } from '@/modules/wallet/utils/cardApiCompat';
 
 export interface OrderPhysicalCardPayload {
   address: string;
@@ -443,6 +444,16 @@ export default {
     } finally {
       cardStore.loading.cardanoAddress = false;
     }
+  },
+
+  /**
+   * The card's ADA deposit address, fetched now. Top-up calls this right before
+   * building the transaction instead of trusting the copy cached at sign-in
+   * (which is also persisted in chrome.storage.local).
+   */
+  async fetchFreshDepositAddress(): Promise<string | null> {
+    await this.fetchCardanoAddress();
+    return depositAddressFromResponse(cardStore.cardanoAddress);
   },
 
   // Card methods

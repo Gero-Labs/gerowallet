@@ -466,6 +466,7 @@ export default {
   'card.prfAuthenticationRequired': 'PassKey authentication will be required to confirm payment',
   'card.missingPaymentAddress': 'Payment address not available. Please try again.',
   'card.failedToGetPaymentDetails': 'Failed to get payment details. Please try again.',
+  'card.paymentDetailsRefreshed': 'Your payment details were updated. Review the new amount and address, then confirm again.',
   'card.processingOrder': 'Processing Order',
   'card.pleaseWait': 'Please wait while we process your order...',
   'card.confirmingPayment': 'Confirming your payment...',

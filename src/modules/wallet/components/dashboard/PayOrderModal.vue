@@ -55,6 +55,8 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { Cardano } from '@cardano-sdk/core';
 import { walletStore } from '@/stores/walletStore';
 import { nexusTxApi, walletUtxosToNexusInputs, txOutToNexusOutput, type BuildTxRequest } from '@/api/nexus-tx-api';
+import { isCardDepositAddress, networkIdOfAddress } from '@/modules/wallet/utils/cardDepositAddress';
+import { checkDeliveryPayment } from '@/modules/wallet/utils/cardDeliveryPayment';
 
 const { t } = useTranslation();
 const router = useRouter();
@@ -133,8 +135,8 @@ const loadOrderDetails = async () => {
       ada: parseFloat(String(paymentDetails.amount_ada)) || 0,
       eur: parseFloat(String(paymentDetails.amount_eur)) || 0,
     };
-  } catch (error: any) {
-    snackbar.setError(error?.message || t('card.failedToLoadOrderDetails'));
+  } catch (error: unknown) {
+    snackbar.setError((error instanceof Error && error.message) || t('card.failedToLoadOrderDetails'));
     handleClose();
   } finally {
     isProcessing.value = false;
@@ -167,10 +169,22 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
       throw new Error(t('errors.invalidOrder'));
     }
 
-    const cardanoAddress = orderResponse.value.depositAddress;
-    const adaAmount = parseFloat(String(orderResponse.value.depositAmountAda));
-
-    if (!cardanoAddress || isNaN(adaAmount) || adaAmount <= 0) {
+    // The delivery-fee address expires after 60 minutes and the provider then
+    // issues a new one, so re-read the payment right before sending ADA.
+    const fresh = await cardStore.getDeliveryPayment(props.orderUuid);
+    const verdict = checkDeliveryPayment(fresh, orderResponse.value, Date.now());
+    if (verdict === 'expired') {
+      throw new Error(t('card.paymentExpired'));
+    }
+    if (verdict === 'changed') {
+      // Show the user what they would actually pay before anything is signed.
+      await loadOrderDetails();
+      throw new Error(t('card.paymentDetailsRefreshed'));
+    }
+    const cardanoAddress = fresh?.deposit_address;
+    const adaAmount = parseFloat(String(fresh?.amount_ada));
+    const walletNetworkId = networkIdOfAddress(walletStore.loggedWallet.baseAddress);
+    if (verdict !== 'ok' || !isCardDepositAddress(cardanoAddress, walletNetworkId) || isNaN(adaAmount) || adaAmount <= 0) {
       throw new Error(t('errors.invalidPaymentDetails'));
     }
 
@@ -178,7 +192,7 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
 
     const outputs: Cardano.TxOut[] = [
       {
-        address: cardanoAddress as Cardano.PaymentAddress,
+        address: cardanoAddress,
         value: {
           coins: lovelaceAmount,
           assets: new Map(),
@@ -206,7 +220,7 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
         addresses: walletStore.keys,
         mergeWitnesses: false,
       },
-    })) as { data: { witnesses?: any; error?: string } };
+    })) as { data: { witnesses?: unknown; error?: string } };
 
     if (witnessResult.data.error) {
       throw new Error(witnessResult.data.error);
@@ -234,8 +248,8 @@ const handlePaymentConfirm = async (spendingPassword: string) => {
 
     orderSuccess.value = true;
     emit('success');
-  } catch (error: any) {
-    snackbar.setError(error?.message || t('card.failedToOrderCard') + ' ' + t('card.pleaseTryAgain'));
+  } catch (error: unknown) {
+    snackbar.setError((error instanceof Error && error.message) || t('card.failedToOrderCard') + ' ' + t('card.pleaseTryAgain'));
   } finally {
     isProcessing.value = false;
   }
