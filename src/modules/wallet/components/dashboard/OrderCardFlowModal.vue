@@ -155,6 +155,7 @@ import assets from '@/utils/assets';
 import { Cardano } from '@cardano-sdk/core';
 import { walletStore } from '@/stores/walletStore';
 import { nexusTxApi, walletUtxosToNexusInputs, txOutToNexusOutput, type BuildTxRequest } from '@/api/nexus-tx-api';
+import { isCardDepositAddress, networkIdOfAddress } from '@/modules/wallet/utils/cardDepositAddress';
 
 const { t } = useTranslation();
 
@@ -389,22 +390,19 @@ const orderVirtualCard = async () => {
     await cardStore.orderCard();
     snackbar.fireSuccess(t('card.cardOrderedSuccess'));
     handleClose();
-  } catch (error: any) {
-    let errorReason: string;
-    if (typeof error?.response?.data === 'string' && error.response.data) {
-      errorReason = '<b>' + t('card.failedToOrderCard') + '</b><br>' + error.response.data;
-    } else {
-      errorReason =
-        t('card.failedToOrderCard') +
-        ' ' +
-        (error?.response?.data?.error?.message ||
-          error?.response?.data?.error ||
-          error?.response?.data?.reason ||
-          error?.response?.data?.message ||
-          error?.message ||
-          t('card.pleaseTryAgain'));
+  } catch (error: unknown) {
+    // The snackbar renders plain text, so the provider's reason is appended as text
+    // (it used to be wrapped in <b>/<br> markup that showed up literally).
+    const failure = error as { message?: string; response?: { data?: unknown } } | null;
+    const data = failure?.response?.data;
+    let reason: string | undefined;
+    if (typeof data === 'string' && data) {
+      reason = data;
+    } else if (data && typeof data === 'object') {
+      const body = data as { error?: { message?: string } | string; reason?: string; message?: string };
+      reason = (typeof body.error === 'string' ? body.error : body.error?.message) || body.reason || body.message;
     }
-    snackbar.setError(errorReason);
+    snackbar.setError(`${t('card.failedToOrderCard')}: ${reason || failure?.message || t('card.pleaseTryAgain')}`);
   } finally {
     orderingVirtualCard.value = false;
   }
@@ -464,41 +462,45 @@ const handlePaymentConfirm = async (spendingPassword: string, privateKeyBytes?: 
     // Get payment address (depositAddress)
     paymentAddress.value = orderResponse.depositAddress || '';
 
-    // Get payment amount (depositAmountAda, depositAmountEur)
-    const amountAda = parseFloat(orderResponse.depositAmountAda || '0');
+    // Get payment amount. The provider spec types these as numbers while live
+    // responses carry decimal strings ("47.99946773"), so read either.
+    const adaString = String(orderResponse.depositAmountAda ?? '0');
+    const amountAda = parseFloat(adaString);
     if (isNaN(amountAda) || amountAda <= 0) {
       throw new Error(t('errors.invalidAmount'));
     }
-    const amountEur = parseFloat(orderResponse.depositAmountEur || '0');
+    const amountEur = parseFloat(String(orderResponse.depositAmountEur ?? '0'));
 
     paymentAmount.value = {
       eur: amountEur,
     };
 
     // Store additional payment info
-    exchangeRate.value = orderResponse.exchangeRate || '';
+    exchangeRate.value = String(orderResponse.exchangeRate ?? '');
     depositExpiresAt.value = orderResponse.depositExpiresAt || '';
     depositQrCode.value = orderResponse.depositQrCode || '';
-
-    if (!paymentAddress.value || amountAda <= 0) {
-      throw new Error(t('card.failedToGetPaymentDetails'));
-    }
 
     if (!paymentAddress.value) {
       throw new Error(t('card.missingPaymentAddress'));
     }
 
+    // The order is already placed; only pay a bech32 payment address on this wallet's
+    // own network. Otherwise the user can retry the payment from the dashboard.
+    const depositAddress = paymentAddress.value;
+    if (!isCardDepositAddress(depositAddress, networkIdOfAddress(walletStore.loggedWallet.baseAddress))) {
+      throw new Error(t('errors.invalidAddress'));
+    }
+
     // Convert ADA to lovelace (6 decimal precision)
     // depositAmountAda comes as string like "47.99946773" with 8 decimals
     // ADA only supports 6 decimals, so we truncate to 6 and convert to integer lovelace
-    const adaString = orderResponse.depositAmountAda || '0';
     const [integerPart = '0', decimalPart = ''] = adaString.split('.');
     // Take only first 6 decimal digits (ADA precision)
     const truncatedDecimal = decimalPart.substring(0, 6).padEnd(6, '0');
     const lovelaceAmount = BigInt(integerPart + truncatedDecimal) as Cardano.Lovelace;
     const outputs: Cardano.TxOut[] = [
       {
-        address: paymentAddress.value as Cardano.PaymentAddress,
+        address: depositAddress,
         value: {
           coins: lovelaceAmount,
           assets: new Map(),
@@ -527,7 +529,7 @@ const handlePaymentConfirm = async (spendingPassword: string, privateKeyBytes?: 
         mergeWitnesses: false,
         privateKeyBytes: privateKeyBytes ? Array.from(privateKeyBytes) : undefined,
       },
-    })) as { data: { witnesses?: any; error?: string } };
+    })) as { data: { witnesses?: unknown; error?: string } };
 
     if (witnessResult.data.error) {
       throw new Error(witnessResult.data.error);
@@ -552,8 +554,8 @@ const handlePaymentConfirm = async (spendingPassword: string, privateKeyBytes?: 
     await cardStore.fetchCardData();
 
     orderSuccess.value = true;
-  } catch (error: any) {
-    snackbar.setError(error?.message || t('card.failedToOrderCard') + ' ' + t('card.pleaseTryAgain'));
+  } catch (error: unknown) {
+    snackbar.setError((error instanceof Error && error.message) || t('card.failedToOrderCard') + ' ' + t('card.pleaseTryAgain'));
     currentStep.value = 4;
   } finally {
     isProcessing.value = false;

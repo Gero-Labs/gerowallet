@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { Cardano } from '@cardano-sdk/core';
 import { Hash28ByteBase16 } from '@cardano-sdk/crypto';
 import { describe, expect, it } from 'vitest';
@@ -37,5 +39,21 @@ describe('networkIdOfAddress', () => {
   it('reads the network from a bech32 address', () => {
     expect(networkIdOfAddress(mainnetBase)).toBe(Mainnet);
     expect(networkIdOfAddress(testnetEnterprise)).toBe(Testnet);
+  });
+});
+
+describe('every card payment path validates its destination', () => {
+  // Top-up, delivery-fee payment and the physical-card order flow each send ADA to an
+  // address the provider hands out. None may cast it straight to a PaymentAddress.
+  const paths = [
+    'src/modules/wallet/components/dashboard/TopUpModal.vue',
+    'src/modules/wallet/components/dashboard/PayOrderModal.vue',
+    'src/modules/wallet/components/dashboard/OrderCardFlowModal.vue',
+  ];
+
+  it.each(paths)('%s checks the address before building the transaction', path => {
+    const source = readFileSync(join(__dirname, '..', '..', '..', '..', path), 'utf8');
+    expect(source).toContain('isCardDepositAddress(');
+    expect(source).not.toContain('as Cardano.PaymentAddress');
   });
 });
