@@ -11,19 +11,19 @@
     </div>
 
     <div class="trust-grid">
-      <!-- Industry Experience -->
+      <!-- Regulation (facts from zione.com Terms §1) -->
       <div class="trust-card">
-        <h4 class="trust-title">{{ t('card.yearsExperience') }}</h4>
+        <h4 class="trust-title">{{ t('card.providerRegulated') }}</h4>
         <p class="trust-description">
-          {{ t('card.yearsExperienceDesc') }}
+          {{ t('card.providerRegulatedDesc') }}
         </p>
       </div>
 
-      <!-- Security -->
+      <!-- AML/KYC controls (zione.com home page, AML/CFT policy §9) -->
       <div class="trust-card">
-        <h4 class="trust-title">{{ t('card.enterpriseSecurity') }}</h4>
+        <h4 class="trust-title">{{ t('card.providerAmlKyc') }}</h4>
         <p class="trust-description">
-          {{ t('card.enterpriseSecurityDesc') }}
+          {{ t('card.providerAmlKycDesc') }}
         </p>
       </div>
     </div>
@@ -32,26 +32,18 @@
       <div class="company-info">
         <p class="company-name">{{ t('card.kaiserExchangeInternational') }}</p>
         <p class="company-details">{{ t('card.companyDetails') }}</p>
+        <p class="company-details">{{ t('card.providerRegisteredOffice') }}: {{ CARD_PROVIDER.registeredOffice }}</p>
       </div>
       <div class="footer-divider"></div>
       <div class="footer-links">
-        <a
-          href="https://www.kaiserex.com/"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="kaiserex-link"
-          @click="trackKaiserexClick"
-        >
+        <a :href="CARD_PROVIDER.websiteUrl" target="_blank" rel="noopener noreferrer" class="kaiserex-link">
           {{ t('card.learnMoreKaiserex') }}
         </a>
-        <a
-          href="https://www.gerowallet.io/post/gero-card-satchel-eu-integration-cardano-crypto-card"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="blog-link"
-          @click="trackBlogClick"
-        >
-          {{ t('card.readOurAnnouncement') }}
+        <a :href="CARD_PROVIDER.termsUrl" target="_blank" rel="noopener noreferrer" class="blog-link">
+          {{ t('navigation.termsOfService') }}
+        </a>
+        <a :href="CARD_PROVIDER.privacyUrl" target="_blank" rel="noopener noreferrer" class="blog-link">
+          {{ t('navigation.privacyPolicy') }}
         </a>
       </div>
     </div>
@@ -60,18 +52,9 @@
 
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
+import { CARD_PROVIDER } from '@/modules/wallet/cardProvider';
 
 const { t } = useTranslation();
-
-const trackKaiserexClick = () => {
-  // Track external link click for analytics
-  console.log('Kaiserex link clicked');
-};
-
-const trackBlogClick = () => {
-  // Track blog link click for analytics
-  console.log('Gero blog link clicked');
-};
 </script>
 
 <style lang="scss" scoped>

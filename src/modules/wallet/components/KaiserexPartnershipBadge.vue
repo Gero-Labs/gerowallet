@@ -9,25 +9,9 @@
         </div>
       </div>
       <div class="badge-links">
-        <a
-          href="https://www.kaiserex.com/"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="badge-link"
-          @click="trackKaiserexClick"
-        >
+        <a :href="CARD_PROVIDER.websiteUrl" target="_blank" rel="noopener noreferrer" class="badge-link">
           {{ $t('common.learnMore') }}
-          <img src="@/modules/wallet/icons/arrow-right.svg" alt="arrow" class="link-arrow" />
-        </a>
-        <a
-          href="https://www.gerowallet.io/post/gero-card-satchel-eu-integration-cardano-crypto-card"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="badge-link blog-link"
-          @click="trackBlogClick"
-        >
-          Read announcement
-          <img src="@/modules/wallet/icons/arrow-right.svg" alt="arrow" class="link-arrow" />
+          <img src="@/modules/wallet/icons/arrow-right.svg" alt="" class="link-arrow" />
         </a>
       </div>
     </div>
@@ -35,13 +19,7 @@
 </template>
 
 <script setup lang="ts">
-const trackKaiserexClick = () => {
-  console.log('Kaiserex link clicked from badge');
-};
-
-const trackBlogClick = () => {
-  console.log('Gero blog link clicked from badge');
-};
+import { CARD_PROVIDER } from '@/modules/wallet/cardProvider';
 </script>
 
 <style lang="scss" scoped>

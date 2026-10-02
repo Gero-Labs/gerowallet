@@ -68,7 +68,7 @@
         <div class="support-section">
           <p class="support-text">
             {{ $t('card.pleaseContact') }}
-            <a href="mailto:support@kaiserex.com" class="support-link">support@kaiserex.com</a>
+            <a :href="`mailto:${CARD_PROVIDER.supportEmail}`" class="support-link">{{ CARD_PROVIDER.supportEmail }}</a>
           </p>
         </div>
       </div>
@@ -77,6 +77,7 @@
 </template>
 <script setup lang="ts">
 import assets from '@/utils/assets';
+import { CARD_PROVIDER } from '@/modules/wallet/cardProvider';
 
 interface Props {
   kycStatus?: string;
