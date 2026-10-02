@@ -7,7 +7,6 @@
   "description": "A Multi-chain Light Wallet Merging Web2 and Web3",
   "scripts": {
     "dev": "npm run clear && cross-env NODE_ENV=development NODE_OPTIONS='--max-old-space-size=6144 --max-semi-space-size=256' run-p dev:*",
-    "dev-firefox": "npm run clear && cross-env NODE_ENV=development EXTENSION=firefox run-p dev:*",
     "dev:prepare": "esno scripts/prepare.ts",
     "dev:background": "npm run build:background -- --mode development",
     "dev:content": "npm run build:content -- --mode development",
@@ -25,9 +24,7 @@
     "pack:zip": "rimraf extension/*.zip && jszip-cli add extension/* -o ./extension/Gero-v${npm_package_version}.zip",
     "pack:zip:beta": "rimraf extension/*.zip && jszip-cli add extension/* -o ./extension/Gero-v${npm_package_version}-Beta.zip",
     "pack:crx": "crx pack extension -o ./extension.crx",
-    "pack:xpi": "cross-env WEB_EXT_ARTIFACTS_DIR=./ web-ext build --source-dir ./extension --filename extension.xpi --overwrite-dest",
     "start:chromium": "web-ext run --source-dir ./extension --target=chromium",
-    "start:firefox": "web-ext run --source-dir ./extension --target=firefox-desktop",
     "clear": "rimraf --glob extension/assets extension/background extension/js extension/content extension/index.html extension/sidepanel.html extension/sidepanel extension/manifest.json",
     "lint": "eslint --cache .",
     "test": "vitest run",

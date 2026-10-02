@@ -11,8 +11,6 @@ import {
 const OWN = 'abcdefghijklmnopabcdefghijklmnop';
 /** Chromium: pages under chrome-extension://<id>/ (what runtime.getURL('') returns). */
 const CHROME: OwnExtension = { id: OWN, root: `chrome-extension://${OWN}/` };
-/** Firefox: the page host is a per-install UUID, not the add-on id. */
-const FIREFOX: OwnExtension = { id: 'wallet@gerowallet.io', root: 'moz-extension://3f1c9a52-7d1e-4b8e-9a4f-2c6d0e5b7a10/' };
 
 type S = chrome.runtime.MessageSender;
 
@@ -65,21 +63,12 @@ describe('isOwnExtensionPageSender', () => {
   });
 });
 
-describe('isOwnExtensionPageSender on Firefox (PR #1241 review)', () => {
-  it('accepts our moz-extension page, by url or origin', () => {
-    expect(isOwnExtensionPageSender({ id: FIREFOX.id, url: `${FIREFOX.root}index.html` } as unknown as S, FIREFOX)).toBe(true);
-    expect(isOwnExtensionPageSender({ id: FIREFOX.id, origin: FIREFOX.root!.slice(0, -1) } as unknown as S, FIREFOX)).toBe(true);
-  });
-
-  it('rejects a Firefox content script, another UUID, and a URL built from the add-on id', () => {
-    expect(isOwnExtensionPageSender({ id: FIREFOX.id, url: 'https://evil.example/' } as unknown as S, FIREFOX)).toBe(false);
-    expect(isOwnExtensionPageSender({ id: FIREFOX.id, url: 'moz-extension://00000000-0000-4000-8000-000000000000/i.html' } as unknown as S, FIREFOX)).toBe(false);
-    expect(isOwnExtensionPageSender({ id: FIREFOX.id, url: `moz-extension://${FIREFOX.id}/i.html` } as unknown as S, FIREFOX)).toBe(false);
-    expect(isOwnExtensionPageSender({ id: 'other@addon', url: `${FIREFOX.root}index.html` } as unknown as S, FIREFOX)).toBe(false);
-  });
-
-  it('fails closed on a root that is not an extension page root', () => {
-    for (const root of ['https://evil.example/', 'moz-extension://uuid/sub/', 'not a url', '']) {
+describe('isOwnExtensionPageSender: the root comes from runtime.getURL', () => {
+  it('trusts only a chrome-extension:// root, and only pages under it', () => {
+    expect(isOwnExtensionPageSender({ id: OWN, url: `${CHROME.root}index.html` } as unknown as S, CHROME)).toBe(true);
+    // A root the runtime would never report for this extension fails closed.
+    for (const root of ['moz-extension://3f1c9a52-7d1e-4b8e-9a4f-2c6d0e5b7a10/', 'https://evil.example/',
+      `chrome-extension://${OWN}/sub/`, 'not a url', '']) {
       expect(isOwnExtensionPageSender({ id: OWN, url: `${root}x.html` } as unknown as S, { id: OWN, root })).toBe(false);
     }
   });

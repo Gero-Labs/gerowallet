@@ -232,7 +232,7 @@ export const notifyPushHandlers = createNotifyPushHandlers({
 
 /**
  * Top-level, synchronous: an MV3 worker woken by a push only sees listeners added in
- * the first turn. Feature-detected: the Firefox build has no service-worker registration.
+ * the first turn. Feature-detected: a no-op where the worker has no push registration.
  * `push` starts its work BEFORE waitUntil (a synthetic PushEvent has no usable one).
  */
 export function installNotifyListeners(): void {

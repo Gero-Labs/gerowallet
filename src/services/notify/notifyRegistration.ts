@@ -59,7 +59,7 @@ export interface NotifyRegistrationDeps {
   client: NotifyClient;
   store: NotifyStore;
   identity: () => Promise<{ deviceId: string; pubKeyHex: string }>;
-  /** Read at call time: the e2e fixture patches `self.registration.pushManager`. Null on Firefox. */
+  /** Read at call time: the e2e fixture patches `self.registration.pushManager`. Null where push is unsupported. */
   pushManager: () => PushManagerLike | null;
   appVersion: () => string;
   /** The stored UI locale, one of PUSH_LOCALES (`us` | `de` | `es`). */

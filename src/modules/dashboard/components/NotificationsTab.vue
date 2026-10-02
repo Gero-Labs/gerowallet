@@ -230,7 +230,6 @@ import GButton from '@/shared/components/GButton/GButton.vue';
 import { alertTypesFor } from '@/services/notify/notifyCatalogue';
 import { notifySettingsStore } from '@/stores/notifySettingsStore';
 import { walletStore } from '@/stores/walletStore';
-import { isFirefox } from '@/env';
 
 const { t } = useTranslation();
 /** True while the dialog is open on this tab: the pane stays mounted across closes, so this is the refresh trigger. */
@@ -247,9 +246,8 @@ const link = computed(() => store.loggedLink());
 const isBeta = import.meta.env['VITE_IS_BETA'] === 'true';
 const isBrave = ref(false);
 const unsupported = computed(() => {
-  if (isFirefox) return t('notify.unsupported.firefox');
   if (isBeta) return t('notify.unsupported.beta');
-  if (state.value && !state.value.pushSupported) return t('notify.unsupported.firefox');
+  if (state.value && !state.value.pushSupported) return t('notify.unsupported.browser');
   return '';
 });
 

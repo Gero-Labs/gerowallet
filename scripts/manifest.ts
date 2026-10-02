@@ -1,5 +1,5 @@
 import fs from 'fs-extra'
-import { isDev, isFirefox, log, r } from './utils';
+import { isDev, log, r } from './utils';
 import type PkgType from '../package.json';
 import type { Manifest } from 'webextension-polyfill';
 import dotenv from 'dotenv';
@@ -226,16 +226,11 @@ async function getManifest() {
         }
       }
       : {}),
-    background: isFirefox
-      ? {
-        scripts: ['background/_virtual_index.js'],
-        persistent: true,
-      }
-      : {
-        service_worker: './background/index.js',
-        // Note: We build with format: 'iife', not ES modules, so don't use type: 'module'
-        // This was causing "Failed to resolve module specifier" errors
-      },
+    background: {
+      service_worker: './background/index.js',
+      // Note: We build with format: 'iife', not ES modules, so don't use type: 'module'
+      // This was causing "Failed to resolve module specifier" errors
+    },
     permissions: [
       'tabs',
       'activeTab',

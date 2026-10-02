@@ -43,10 +43,9 @@ export const EXTENSION_PAGE_ONLY_METHODS = new Set<string>([
 
 /**
  * This extension's identity as the runtime reports it: its id, and the root of
- * its own page URLs. The root comes from `runtime.getURL('')` because it is not
- * derivable from the id on every browser: Chromium serves pages from
- * `chrome-extension://<id>/`, but Firefox from `moz-extension://<internal-uuid>/`,
- * where the UUID is per-install and differs from the add-on id.
+ * its own page URLs (`chrome-extension://<id>/`). The root is read from
+ * `runtime.getURL('')` rather than assembled from the id, so the check follows
+ * whatever the browser actually serves the pages from.
  */
 export interface OwnExtension {
   id: string | undefined;
@@ -61,7 +60,7 @@ export function ownExtension(): OwnExtension {
   return { id: runtime?.id, root };
 }
 
-const EXTENSION_PAGE_SCHEMES = new Set(['chrome-extension:', 'moz-extension:']);
+const EXTENSION_PAGE_SCHEMES = new Set(['chrome-extension:']);
 
 /** `<scheme>://<host>/` for a well-formed extension root, else null. */
 function normalizedRoot(root: string | undefined): string | null {
