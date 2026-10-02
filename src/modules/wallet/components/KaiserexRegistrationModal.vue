@@ -13,7 +13,7 @@
             <iframe
               ref="registrationIframe"
               :src="iframeUrl"
-              title="Kaiserex Registration"
+              :title="t('card.kaiserexRegistration')"
               class="registration-iframe"
               @load="onIframeLoad"
               sandbox="allow-forms allow-scripts allow-same-origin allow-popups"
@@ -46,6 +46,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, watch, nextTick } from 'vue';
 import GradientButton from './GradientButton.vue';
 import { debugLog } from '@/utils/debug';
+import { CARD_PROVIDER } from '@/modules/wallet/cardProvider';
 
 
 const { t } = useTranslation();
@@ -64,8 +65,8 @@ const isLoading = ref(true);
 const iframeLoaded = ref(false);
 const registrationComplete = ref(false);
 
-// Registration URL
-const iframeUrl = 'https://www.kaiserex.com/gerocard';
+// Registration lead form (Zione). Its origin must be in the manifest's frame-src.
+const iframeUrl = CARD_PROVIDER.registrationUrl;
 
 // Reset state when modal opens
 watch(
