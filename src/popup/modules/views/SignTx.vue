@@ -806,7 +806,6 @@ const onKeystoneScan = async (ur: UR) => {
       signatures = Serialization.TransactionWitnessSet.fromCbor(witnessSetHex).toCore().signatures;
     } catch (error) {
       console.error('[Keystone] Failed to parse witness set CBOR:', error);
-      console.error('[Keystone] WitnessSet hex dump:', witnessSetHex);
       throw new Error(`Failed to parse Keystone signature: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 

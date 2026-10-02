@@ -369,9 +369,7 @@ export async function registerWebAuthnCredential(
       hasExtensions: !!extensionResults,
       hasPrf: !!prfResults,
       prfEnabled: prfResults?.enabled,
-      hasProbeResult: !!prfResults?.results?.first,
-      fullPrfResults: prfResults,
-      allExtensions: extensionResults
+      hasProbeResult: !!prfResults?.results?.first
     });
 
     debugLog('[WebAuthn] Credential registered with PRF:', prfEnabled ? '✅ Enabled' : '❌ Not supported');

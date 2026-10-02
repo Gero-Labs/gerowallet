@@ -4,7 +4,7 @@
 
 512 log statements in this codebase go through `debugLog()` in `src/utils/debug.ts`, which is bound to a no-op unless `VITE_DEBUG_STORES === 'true'` **at build time**. The entire gero-sync WebSocket trace (connect, SUBSCRIBE, SYNC, CATCH_UP_COMPLETE, rollback, reconnect) and the whole store-sync port lifecycle are `debugLog`-only. With the flag off, a sync failure produces **zero console output**, which reads as "sync is fine".
 
-It is read in exactly one source file and appears in no documentation - but `ci-cd.yml` also passes it through from a repo variable, so a release build can be produced with it on (see the logging rule in `security.md`). Do this before debugging anything:
+It is read in exactly one source file. `ci-cd.yml` pins it to `false` for release builds, but a hand-built `.env.production` can still turn it on (see the logging rule in `security.md`). Do this before debugging anything:
 
 ```bash
 printf 'VITE_DEBUG_STORES=true\n' >> .env.development
