@@ -264,4 +264,22 @@ describe('support ActionCable', () => {
     vi.advanceTimersByTime(1_000);
     expect(h.sockets).toHaveLength(2);
   });
+
+  it('times out an unconfirmed subscription even while the server keeps pinging', () => {
+    const h = harness({ pingTimeoutMs: 12_000 });
+    h.cable.connect();
+    const socket = h.sockets[0];
+    socket.open();
+    socket.emit({ type: 'welcome' });
+    for (let i = 0; i < 3; i++) {
+      vi.advanceTimersByTime(3_000);
+      socket.emit({ type: 'ping', message: i });
+    }
+    vi.advanceTimersByTime(3_000);
+    expect(socket.closed).toBe(true);
+    expect(h.cable.isConnected()).toBe(false);
+    expect(h.states[h.states.length - 1]).toBe('reconnecting');
+    vi.advanceTimersByTime(1_000);
+    expect(h.sockets).toHaveLength(2);
+  });
 });

@@ -29,6 +29,7 @@ import { walletStore } from '@/stores/walletStore';
 import { debugLog } from '@/utils/debug';
 import {
   ChatAuthError,
+  ChatRequestError,
   chatwootSupportApi,
   SUPPORT_MAX_FILE_BYTES,
   SUPPORT_MAX_FILES_PER_MESSAGE,
@@ -257,6 +258,7 @@ export function createSupportChat(deps: SupportChatDeps = {}): SupportChat {
 
   let identity: SupportChatIdentity | null = null;
   let cable: SupportCable | null = null;
+  let cableGeneration = 0;
   let entered = false;
   let walletId: number | null = null;
   let nextLocalId = 1;
@@ -287,10 +289,15 @@ export function createSupportChat(deps: SupportChatDeps = {}): SupportChat {
     errorKey.value = key;
   }
 
-  function resetThread(): void {
-    generation += 1;
+  function disconnectCable(): void {
+    cableGeneration += 1;
     cable?.close();
     cable = null;
+  }
+
+  function resetThread(): void {
+    generation += 1;
+    disconnectCable();
     identity = null;
     entered = false;
     messages.value = [];
@@ -327,20 +334,32 @@ export function createSupportChat(deps: SupportChatDeps = {}): SupportChat {
    * messages are not "new") and true for a reconnect gap-fill, where anything that
    * arrived while the socket was down genuinely is unseen.
    */
-  async function loadHistory(session: ThreadSession, countUnread: boolean): Promise<void> {
+  async function loadHistory(session: ThreadSession, countUnread: boolean): Promise<boolean> {
     const sourceId = identity?.sourceId;
     const conversationId = identity?.conversationId;
-    if (!sourceId || !conversationId) return;
+    if (!sourceId || !conversationId) return true;
+    // A send can replace a deleted conversation while this request is pending.
+    const isCurrent = () =>
+      !isStale(session) && identity?.sourceId === sourceId && identity?.conversationId === conversationId;
     let history: SupportMessage[];
     try {
       history = await api.listMessages(sourceId, conversationId);
     } catch (error) {
+      if (!isCurrent()) return false;
       debugLog('supportChat: history fetch failed', error);
-      return;
+      if (isMissingChatSession(error)) {
+        await discardChatSession(session);
+        if (!isStale(session) && !identity?.conversationId) setError('support.error.sessionExpired');
+      } else {
+        connectionState.value = 'unavailable';
+        setError('support.error.unavailable');
+      }
+      return false;
     }
-    if (isStale(session)) return;
+    if (!isCurrent()) return false;
     for (const message of history) ingest(message, countUnread);
     messages.value.sort((a, b) => a.createdAt - b.createdAt);
+    return true;
   }
 
   function connectCable(session: ThreadSession): void {
@@ -353,22 +372,25 @@ export function createSupportChat(deps: SupportChatDeps = {}): SupportChat {
       cable.connect();
       return;
     }
+    const cableSession = cableGeneration;
+    const isCurrentCable = () => !isStale(session) && cableSession === cableGeneration;
     cable = makeCable({
       pubsubToken: identity.pubsubToken,
       // Read at dispatch time: the conversation is created lazily and may not
       // exist yet when the cable comes up.
       activeConversationId: () => identity?.conversationId,
       onMessage: (message) => {
-        if (isStale(session)) return;
+        if (!isCurrentCable()) return;
         ingest(message);
       },
       onState: (state: SupportCableState) => {
-        if (isStale(session)) return;
+        if (!isCurrentCable()) return;
         connectionState.value = state;
       },
       // Broadcasts during a drop are not replayed, so refill from REST — and count
       // what we missed as unread.
       onReconnected: () => {
+        if (!isCurrentCable()) return;
         void loadHistory(session, true);
       },
     });
@@ -402,6 +424,24 @@ export function createSupportChat(deps: SupportChatDeps = {}): SupportChat {
   async function persist(session: ThreadSession): Promise<void> {
     if (isStale(session) || !identity) return;
     await cache.save(session.owner, identity);
+  }
+
+  function isMissingChatSession(error: unknown): boolean {
+    return error instanceof ChatRequestError && error.status === 404;
+  }
+
+  /** Keep the signed identity, but forget handles that Chatwoot no longer has. */
+  async function discardChatSession(session: ThreadSession): Promise<void> {
+    assertOwn(session);
+    if (!identity) return;
+    const { identifier, identifierHash, displayName } = identity;
+    disconnectCable();
+    identity = { identifier, identifierHash, displayName };
+    // Keep any in-flight draft echo so a recovered send can reconcile it once.
+    messages.value = messages.value.filter((message) => message.id < 0);
+    unread.value = 0;
+    connectionState.value = 'idle';
+    await persist(session);
   }
 
   /**
@@ -491,8 +531,7 @@ export function createSupportChat(deps: SupportChatDeps = {}): SupportChat {
     assertOwn(session);
     const displayName = identity?.displayName;
     identity = null;
-    cable?.close();
-    cable = null;
+    disconnectCable();
     const outcome = await handshake(session);
     if (outcome.status !== 'ok') return false;
     // Keep the pseudonym the agent already knows this person by if the fresh
@@ -524,7 +563,7 @@ export function createSupportChat(deps: SupportChatDeps = {}): SupportChat {
 
     connectionState.value = 'connecting';
     // Opening the thread is not "receiving" — history must not inflate the badge.
-    await loadHistory(session, false);
+    if (!(await loadHistory(session, false))) return;
     if (isStale(session)) return;
     connectCable(session);
   }
@@ -594,19 +633,28 @@ export function createSupportChat(deps: SupportChatDeps = {}): SupportChat {
         await deliver(trimmed, session, fileList);
         delivered = true;
       } catch (error) {
-        if (!(error instanceof ChatAuthError)) throw error;
-        // Stale/rotated HMAC: rebuild the identity once, then retry once.
-        debugLog('supportChat: identity rejected, re-running handshake');
-        if (!(await recoverIdentity(session))) {
-          setError('support.error.unavailable');
-          return false;
+        if (isMissingChatSession(error)) {
+          // A 404 guarantees this attempt did not deliver. Rebuild the contact
+          // and conversation once, using the already-verified wallet identity.
+          await discardChatSession(session);
+        } else if (error instanceof ChatAuthError) {
+          debugLog('supportChat: identity rejected, re-running handshake');
+          if (!(await recoverIdentity(session))) {
+            setError('support.error.unavailable');
+            return false;
+          }
+        } else {
+          throw error;
         }
         try {
           await deliver(trimmed, session, fileList);
           delivered = true;
         } catch (retryError) {
           if (retryError instanceof StaleSessionError) throw retryError;
-          debugLog('supportChat: retry after re-handshake failed', retryError);
+          if (isMissingChatSession(retryError)) await discardChatSession(session);
+          assertOwn(session);
+          debugLog('supportChat: retry after recovery failed', retryError);
+          connectionState.value = 'unavailable';
           setError('support.error.unavailable');
           return false;
         }
