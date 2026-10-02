@@ -289,7 +289,6 @@ const handleLogin = async () => {
     // Call receiveKaiserExToken with callback
     await receiveKaiserExToken(async tokenData => {
       try {
-        console.log('Token received:', tokenData);
         // Use the proper method to set tokens
         await cardStore.setKaiserExTokens(tokenData);
         // Set authentication status in localStorage
@@ -382,7 +381,6 @@ const handleTwoFASubmit = async () => {
       await new Promise((resolve, reject) => {
         receiveKaiserExToken(tokenData => {
           try {
-            console.log('2FA verification successful, token received:', tokenData);
             // Use the proper method to set tokens
             cardStore.setKaiserExTokens(tokenData);
             // Set authentication status

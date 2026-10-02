@@ -82,7 +82,7 @@ Import note: use `blake2b` as a direct dependency - `@noble/hashes/blake2` does 
 
 ## Non-negotiables for any change in this area
 
-- **Never log key material, mnemonics, addresses, or transaction contents.** Use `debugLog()`, which compiles out unless `VITE_DEBUG_STORES=true`. Strip ad-hoc `console.log` before committing. This is an open-source wallet; a stray log ships to production consoles. Note `debugLog` is **not** an unconditional safety net: `ci-cd.yml` passes `VITE_DEBUG_STORES` through from a repo variable, so a release build can be produced with debug logging on. Write every log as if it will ship.
+- **Never log key material, mnemonics, addresses, or transaction contents.** Use `debugLog()`, which compiles out unless `VITE_DEBUG_STORES=true`. Strip ad-hoc `console.log` before committing. This is an open-source wallet; a stray log ships to production consoles. `ci-cd.yml` pins `VITE_DEBUG_STORES=false` for release builds, but a build made by hand from a local `.env.production` can still turn it on. Write every log as if it will ship.
 - **Never widen a refusal.** If you add a signing path, add its preflight.
 - **Validate at the boundary.** Escape data you serialize. The existing CSV export quotes naively and escapes nothing, and the rows carry attacker-influenced strings (asset names, ADA Handles, metadata) - do not copy that into a new exporter without fixing the formula-injection surface.
 - **URL safety has one SSOT**: `parseSafeUrl()` in `src/shared/utils/externalLink.ts`. It parses with `new URL()`, allows only http/https, and matches brands on the parsed `hostname` exactly or as a subdomain. **Never** `url.includes('github.com')` - `https://evil.example/?github.com` satisfies it.
