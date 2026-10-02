@@ -15,3 +15,19 @@ export async function handleCardApiError(error: unknown, expireSession: () => Pr
   }
   throw error;
 }
+
+/**
+ * The provider's own explanation from a failed card API call, when it sent one: a plain-text
+ * body, or `error` (string or { message }), `reason` or `message` in a JSON body.
+ */
+export function providerReason(error: unknown): string | undefined {
+  const data = (error as { response?: { data?: unknown } } | null)?.response?.data;
+  if (typeof data === 'string') return data.trim() || undefined;
+  if (!data || typeof data !== 'object') return undefined;
+  const body = data as { error?: { message?: unknown } | unknown; reason?: unknown; message?: unknown };
+  const nested = typeof body.error === 'object' && body.error ? (body.error as { message?: unknown }).message : body.error;
+  for (const candidate of [nested, body.reason, body.message]) {
+    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
+  }
+  return undefined;
+}

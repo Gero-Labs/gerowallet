@@ -9,7 +9,7 @@ import { Provider } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
 import { handleCardApiError } from './cardApiErrors';
 import { endProviderSession } from './cardSession';
-import { depositAddressFromResponse } from '@/modules/wallet/utils/cardApiCompat';
+import { cardUuidFromOrderStatus, depositAddressFromResponse } from '@/modules/wallet/utils/cardApiCompat';
 import { kycStatusToCardState } from '@/modules/wallet/utils/cardKycState';
 
 export interface OrderPhysicalCardPayload {
@@ -450,14 +450,12 @@ export default {
 
   // Card methods
   async fetchCardData(): Promise<void> {
-    console.log('Fetching card data');
     cardStore.loading.cardData = true;
     cardStore.errors.cardData = null;
 
     try {
       const response = await getCardApi().axiosInstance.get<CardData[]>('/api/kaiserex/cards');
       const cardsData = response.data || [];
-      console.log('Fetched card data', cardsData);
 
       for (const cardData of cardsData) {
         const existingCard = cardStore.cards.find(c => {
@@ -834,6 +832,46 @@ export default {
     } catch (error) {
       throw error;
     }
+  },
+
+  /**
+   * GET /cards/card-uuid/{orderUuid}: the UUID of the card issued for an order, or null
+   * while there is none yet. The provider asks clients to poll this after ordering.
+   */
+  async fetchCardUuidForOrder(orderUuid: string): Promise<string | null> {
+    try {
+      const response = await getCardApi().axiosInstance.get(`/api/kaiserex/cards/card-uuid/${orderUuid}`);
+      return cardUuidFromOrderStatus(response.data);
+    } catch (error: unknown) {
+      if ((error as { response?: { status?: number } } | null)?.response?.status === 404) return null;
+      throw error;
+    }
+  },
+
+  /** GET /cards/state/{cardUuid}: NEW, SET, ACTIVATION_IN_PROGRESS, ACTIVE, INACTIVE or BLOCKED. */
+  async fetchCardState(cardUuid: string): Promise<string | null> {
+    const response = await getCardApi().axiosInstance.get(`/api/kaiserex/cards/state/${cardUuid}`);
+    const state = (response.data as { state?: unknown } | null)?.state;
+    return typeof state === 'string' ? state : null;
+  },
+
+  /**
+   * PATCH /cards/activate: activates a delivered physical card with the number printed on
+   * it. Returns the card UUID when the provider already sends one (202 { cardUuid }).
+   */
+  async activatePhysicalCard(orderUuid: string, pan: string): Promise<string | null> {
+    const response = await getCardApi().axiosInstance.patch('/api/kaiserex/cards/activate', {
+      pan,
+      order_uuid: orderUuid,
+    });
+    return cardUuidFromOrderStatus(response.data);
+  },
+
+  /** PUT /cards/pin/{cardUuid}. Drops the cached PIN so the next reveal fetches the new one. */
+  async changeCardPin(cardUuid: string, pin: string): Promise<void> {
+    await getCardApi().axiosInstance.put(`/api/kaiserex/cards/pin/${cardUuid}`, { pin });
+    const card = this.getCard(cardUuid);
+    if (card) card.cardPin = null;
   },
 
   // State getter for compatibility

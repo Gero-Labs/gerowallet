@@ -18,4 +18,6 @@ export const CARD_PROVIDER = {
   privacyUrl: 'https://zione.com/privacy-policy/',
   /** Registered office, as published in Zione's Terms of Service (2026-07-20 revision). */
   registeredOffice: '1 Hood Avenue, Rosebank, Johannesburg, Gauteng, 2196, South Africa',
+  /** FSCA licence number (FAIS financial services provider), from the same Terms of Service. */
+  fspNumber: '53786',
 } as const;
