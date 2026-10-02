@@ -75,6 +75,7 @@ import CardCarousel from './dashboard/CardCarousel.vue';
 import CardStatusSection from './dashboard/CardStatusSection.vue';
 import cardStoreModule from '@/stores/modules/card';
 import { CardInfo } from '@/models/card';
+import { cardUuidFromOrderStatus } from '@/modules/wallet/utils/cardApiCompat';
 
 const currentCardIndex = computed({
   get: () => cardStoreModule.state.currentCardIndex,
@@ -493,7 +494,7 @@ const _checkCurrentCardStatus = async () => {
       };
     }
 
-    if (orderDetails?.card_uuid && !currentCard.cardData.card_uuid) {
+    if (cardUuidFromOrderStatus(orderDetails) && !currentCard.cardData.card_uuid) {
       await cardStoreModule.fetchCardData();
       return;
     }
@@ -698,7 +699,7 @@ const checkPendingOrders = async () => {
         orderStatuses.value[card.cardData.order_uuid] = orderDetails.status;
       }
 
-      if (orderDetails?.card_uuid && !card.cardData.card_uuid) {
+      if (cardUuidFromOrderStatus(orderDetails) && !card.cardData.card_uuid) {
         await cardStoreModule.fetchCardData();
         continue;
       }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { depositAddressFromResponse } from './cardApiCompat';
+import { cardUuidFromOrderStatus, depositAddressFromResponse } from './cardApiCompat';
 
 describe('depositAddressFromResponse', () => {
   it('reads wallet_address first, then the spec name address', () => {
@@ -13,5 +13,18 @@ describe('depositAddressFromResponse', () => {
     expect(depositAddressFromResponse({})).toBeNull();
     expect(depositAddressFromResponse('addr1d')).toBeNull();
     expect(depositAddressFromResponse({ address: 42 })).toBeNull();
+  });
+});
+
+describe('cardUuidFromOrderStatus', () => {
+  it('reads the spec name cardUuid, then card_uuid', () => {
+    expect(cardUuidFromOrderStatus({ status: 'done', cardUuid: 'u1' })).toBe('u1');
+    expect(cardUuidFromOrderStatus({ status: 'done', card_uuid: 'u2' })).toBe('u2');
+  });
+
+  it('returns null while the card is not issued', () => {
+    expect(cardUuidFromOrderStatus({ status: 'new' })).toBeNull();
+    expect(cardUuidFromOrderStatus({ status: 'new', cardUuid: '' })).toBeNull();
+    expect(cardUuidFromOrderStatus(undefined)).toBeNull();
   });
 });
