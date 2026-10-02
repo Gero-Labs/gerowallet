@@ -650,10 +650,8 @@ const sign = async () => {
 const onKeystoneScan = async (ur: UR) => {
   try {
     await validateCip45Signing(request.value?.data);
-    console.log('[Keystone] Received UR object:', ur);
     console.log('[Keystone] UR type:', ur?.type);
     console.log('[Keystone] UR cbor type:', typeof ur?.cbor);
-    console.log('[Keystone] UR cbor:', ur?.cbor);
 
     // Parse the signature using stored builder and addressBytes
     if (!keystoneBuilder.value || !keystoneAddressBytes.value) {

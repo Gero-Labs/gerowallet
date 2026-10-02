@@ -202,8 +202,7 @@ export async function isCredentialPrfEnabled(credentialId: string): Promise<bool
       hasPrf: !!prfResults,
       prfEnabled: prfResults?.enabled,
       hasResults: !!prfResults?.results,
-      hasFirst: !!prfResults?.results?.first,
-      fullPrfResults: prfResults
+      hasFirst: !!prfResults?.results?.first
     });
 
     // During authentication, the 'enabled' field may be undefined
