@@ -1,0 +1,82 @@
+/* ============================================================
+   Isometric illustration materials (IsoScene.vue).
+   The markup in src/shared/components/iso/isoScenes.ts carries classes only;
+   every colour resolves to a --g-iso-* token (tokens.css) or a house token.
+   Illustrations are still: motion is feedback, and none is needed here.
+   ============================================================ */
+.g-iso {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+/* Faces: s1/s2 = top-face gradient, l = left face, r = right face */
+.g-iso .iso-cyan-s1 { stop-color: var(--g-iso-cyan-s1); }
+.g-iso .iso-cyan-s2 { stop-color: var(--g-iso-cyan-s2); }
+.g-iso .iso-cyan-l { fill: var(--g-iso-cyan-l); }
+.g-iso .iso-cyan-r { fill: var(--g-iso-cyan-r); }
+.g-iso .iso-navy-s1 { stop-color: var(--g-iso-navy-s1); }
+.g-iso .iso-navy-s2 { stop-color: var(--g-iso-navy-s2); }
+.g-iso .iso-navy-l { fill: var(--g-iso-navy-l); }
+.g-iso .iso-navy-r { fill: var(--g-iso-navy-r); }
+.g-iso .iso-green-s1 { stop-color: var(--g-iso-green-s1); }
+.g-iso .iso-green-s2 { stop-color: var(--g-iso-green-s2); }
+.g-iso .iso-green-l { fill: var(--g-iso-green-l); }
+.g-iso .iso-green-r { fill: var(--g-iso-green-r); }
+.g-iso .iso-amber-s1 { stop-color: var(--g-iso-amber-s1); }
+.g-iso .iso-amber-s2 { stop-color: var(--g-iso-amber-s2); }
+.g-iso .iso-amber-l { fill: var(--g-iso-amber-l); }
+.g-iso .iso-amber-r { fill: var(--g-iso-amber-r); }
+.g-iso .iso-graphite-s1 { stop-color: var(--g-iso-graphite-s1); }
+.g-iso .iso-graphite-s2 { stop-color: var(--g-iso-graphite-s2); }
+.g-iso .iso-graphite-l { fill: var(--g-iso-graphite-l); }
+.g-iso .iso-graphite-r { fill: var(--g-iso-graphite-r); }
+.g-iso .iso-slate-s1 { stop-color: var(--g-iso-slate-s1); }
+.g-iso .iso-slate-s2 { stop-color: var(--g-iso-slate-s2); }
+.g-iso .iso-slate-l { fill: var(--g-iso-slate-l); }
+.g-iso .iso-slate-r { fill: var(--g-iso-slate-r); }
+
+/* Details */
+.g-iso .iso-edge { fill: none; stroke: var(--g-iso-edge); stroke-width: 0.8; stroke-linejoin: round; }
+.g-iso .iso-chip { fill: var(--g-iso-chip); }
+.g-iso .iso-stripe { fill: var(--g-accent); fill-opacity: 0.85; }
+.g-iso .iso-tape { fill: var(--g-iso-tape); }
+.g-iso .iso-coin-ring { fill: none; stroke: var(--g-on-grad); stroke-opacity: 0.35; stroke-width: 1; }
+.g-iso .iso-slot { fill: none; stroke: var(--g-text-3); stroke-dasharray: 3 3; stroke-width: 1.2; }
+
+/* Floor glow instead of a contact shadow (shadows vanish on the black canvas) */
+.g-iso .iso-floor-s1 { stop-color: var(--g-accent); stop-opacity: 0.24; }
+.g-iso .iso-floor-s2 { stop-color: var(--g-accent); stop-opacity: 0; }
+
+/* Rails: dashed on a faint base line; the partner rail is the success tone */
+.g-iso .iso-rail-base { fill: none; stroke: var(--g-iso-rail-base); stroke-width: 1; }
+.g-iso .iso-rail {
+  fill: none;
+  stroke: var(--g-accent);
+  stroke-width: 1.6;
+  stroke-dasharray: 2 5;
+  stroke-linecap: round;
+  stroke-opacity: 0.9;
+}
+.g-iso .iso-rail--partner { stroke: var(--g-success); }
+
+/* Markers: glyph, tether and floor spot share one colour per marker */
+.g-iso .iso-mark { color: var(--g-accent); }
+.g-iso .iso-mark--warm { color: var(--g-warning); }
+.g-iso .iso-mark--ok { color: var(--g-success); }
+.g-iso .iso-mark-spot { fill: currentColor; fill-opacity: 0.16; stroke: currentColor; stroke-opacity: 0.7; stroke-width: 1; }
+.g-iso .iso-mark-beam {
+  stroke: currentColor;
+  stroke-opacity: 0.55;
+  stroke-width: 1.2;
+  stroke-dasharray: 1.5 3;
+  stroke-linecap: round;
+}
+.g-iso .iso-mark-glyph {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
