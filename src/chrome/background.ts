@@ -11,7 +11,7 @@ import { isStakeKeyRegistered, StakeAccountError } from '@/shared/utils/stakeReg
 import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, POPUP, SENDER, TARGET, TxSendError, TxSignError } from '@/chrome/config';
 import { toDappError } from '@/chrome/dappError';
 import { applyDappRequestBadge } from '@/chrome/dappRequestBadge';
-import { isOwnExtensionPageSender, panelMaySettleRequest } from '@/chrome/senderTrust';
+import { isOwnExtensionPageSender, ownExtension, panelMaySettleRequest } from '@/chrome/senderTrust';
 import { isConnectApproval } from '@/chrome/connectApproval';
 import { decideSignTxPopup } from '@/chrome/signTxPopupPolicy';
 import { approvalStillValid } from '@/chrome/approvalRelease';
@@ -413,7 +413,7 @@ chrome.runtime.onConnect.addListener((port) => {
   // Only our own extension pages may register an approval surface. A content
   // script has the same sender.id, so the page URL must be ours too: otherwise a
   // forged port could replace the real panel, read pending payloads and approve.
-  if (!isOwnExtensionPageSender(port.sender, chrome.runtime.id)) {
+  if (!isOwnExtensionPageSender(port.sender, ownExtension())) {
     console.warn('[DApp] rejected foreign mini-gero port from', port.sender?.id);
     try { port.disconnect(); } catch { /* noop */ }
     return;
@@ -4660,6 +4660,8 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
     id: number,
     popupRoute: string,
     popupSize: [number, number],
+    /** The request's CAIP-2 chain: the release re-check requires it to stay the wallet's own. */
+    chainId: string,
   ): Promise<void> {
     const session = wcService.getSessionForTopic(topic) as { peer?: { metadata?: { url?: string; icons?: string[] } } } | null;
     const peerMeta = session?.peer?.metadata;
@@ -4670,7 +4672,7 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
     // session is live and approves the same, unlocked wallet. Otherwise the
     // peer gets an error and never sees the signature.
     const release = async (result: unknown) => {
-      if (!authorizationStillHolds(wcService.getSessionForTopic(topic), walletAtRequest, WalletStore.state.loggedWallet, walletStore.isLocked)) {
+      if (!authorizationStillHolds(wcService.getSessionForTopic(topic), walletAtRequest, WalletStore.state.loggedWallet, walletStore.isLocked, chainId)) {
         await wcService.respondError(topic, id, 4100, 'Unauthorized: the session or active wallet changed during approval');
         return;
       }
@@ -4714,7 +4716,9 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
 
       // The session was approved for one wallet's accounts. After a wallet
       // switch, refuse rather than answer with a wallet the peer never got.
-      if (!sessionAuthorizesWallet(wcService.getSessionForTopic(topic), loggedWallet)) {
+      // Full CAIP-10 identity (chain + network + address) and the request's chainId:
+      // the same address on another network is not the account the peer approved.
+      if (!sessionAuthorizesWallet(wcService.getSessionForTopic(topic), loggedWallet, chainId)) {
         await wcService.respondError(topic, id, 4100, 'Unauthorized: the active wallet is not the one connected to this session');
         return;
       }
@@ -4808,7 +4812,7 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
             await routeWcSigningRequest(
               'signTx',
               { tx: wcTx, partialSign: wcParams.partialSign, origin: 'WalletConnect' },
-              topic, id, POPUP.signTx, [470, 852],
+              topic, id, POPUP.signTx, [470, 852], chainId,
             );
             return;
           }
@@ -4817,7 +4821,7 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
             await routeWcSigningRequest(
               'signData',
               { address: wcParams.addr || wcParams.address, payload: wcParams.payload, origin: 'WalletConnect' },
-              topic, id, POPUP.dappSignData, [470, 600],
+              topic, id, POPUP.dappSignData, [470, 600], chainId,
             );
             return;
           }
@@ -4837,7 +4841,7 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
             await routeWcSigningRequest(
               'btcSignPsbt',
               { psbtHex: wcParams.psbt || wcParams.psbtHex, options: wcParams.signInputs },
-              topic, id, POPUP.bitcoinSignPsbt, [470, 600],
+              topic, id, POPUP.bitcoinSignPsbt, [470, 600], chainId,
             );
             return;
           }
@@ -4846,7 +4850,7 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
             await routeWcSigningRequest(
               'btcSignMessage',
               { message: wcParams.message, type: wcParams.type || 'ecdsa' },
-              topic, id, POPUP.bitcoinSignMessage, [470, 600],
+              topic, id, POPUP.bitcoinSignMessage, [470, 600], chainId,
             );
             return;
           }

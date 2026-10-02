@@ -6,7 +6,7 @@
 
 import { getContextType } from '@/utils/storageSync';
 import { debugLog } from '@/utils/debug';
-import { isOwnExtensionPageSender } from '@/chrome/senderTrust';
+import { isOwnExtensionPageSender, ownExtension } from '@/chrome/senderTrust';
 
 type StoreUpdateMessage = {
   type: 'STORE_UPDATE';
@@ -71,7 +71,7 @@ class BackgroundStoreMessaging {
 
     // Listen for incoming connections
     chrome.runtime.onConnect.addListener((port) => {
-      if (port.name === 'store-sync' && isOwnExtensionPageSender(port.sender, chrome.runtime.id)) {
+      if (port.name === 'store-sync' && isOwnExtensionPageSender(port.sender, ownExtension())) {
         this.handleNewConnection(port);
       }
     });

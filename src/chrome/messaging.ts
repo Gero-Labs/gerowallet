@@ -1,6 +1,6 @@
 import { APIError, BITCOIN_METHOD, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, SENDER, TARGET } from './config';
 import { Cardano } from '@cardano-sdk/core';
-import { isOptionsSenderAllowed, isOwnExtensionPageSender } from './senderTrust';
+import { isOptionsSenderAllowed, isOwnExtensionPageSender, ownExtension } from './senderTrust';
 import { claimedOriginMatchesSender } from './originBinding';
 
 interface Message {
@@ -300,7 +300,7 @@ class BackgroundController {
             // Trust boundary: the options channel is default-deny. Only our own
             // extension pages may use it (plus the content-script allowlist in
             // senderTrust.ts); a content script forging sender:'options' is refused.
-            if (!isOptionsSenderAllowed(request.method, sender, chrome.runtime?.id)) {
+            if (!isOptionsSenderAllowed(request.method, sender, ownExtension())) {
               console.warn('Rejected sensitive options-context message from untrusted sender:', request.method);
               // Match the envelope callers unwrap (res.data.success) so a rejection
               // is a clean failure, not a TypeError on undefined data.
@@ -423,7 +423,7 @@ export const Messaging = {
         if (port.name !== 'internal-background-popup-communication') return;
         // Only our own extension pages may answer an approval: a content script
         // shares our sender.id, so the port name alone is not proof.
-        if (!isOwnExtensionPageSender(port.sender, chrome.runtime?.id)) return;
+        if (!isOwnExtensionPageSender(port.sender, ownExtension())) return;
 
         let resolved = false;
         function cleanup() {
@@ -485,7 +485,7 @@ export const Messaging = {
       function connectionHandler(port: chrome.runtime.Port) {
         // Approval answers must come from our own side panel page, never from a
         // content-script port (same sender.id, http(s) url).
-        if (!isOwnExtensionPageSender(port.sender, chrome.runtime?.id)) return;
+        if (!isOwnExtensionPageSender(port.sender, ownExtension())) return;
         function messageHandler(response: PortMessage) {
           if (response.tabId !== tabIdd) return;
           if (response.method === METHOD.requestData) {

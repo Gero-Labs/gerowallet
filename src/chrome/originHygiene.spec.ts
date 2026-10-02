@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { matchesDappWhitelistEntry } from '@/stores/walletStore';
-import { authorizationStillHolds, sessionApprovedAddresses, sessionAuthorizesWallet } from '@/services/walletConnect/sessionBinding';
+import { authorizationStillHolds, sessionApprovedAccounts, sessionAuthorizesWallet, walletCaip10Account } from '@/services/walletConnect/sessionBinding';
 import { claimedOriginMatchesSender, embeddingSite } from './originBinding';
 
 describe('matchesDappWhitelistEntry', () => {
@@ -33,30 +33,53 @@ describe('matchesDappWhitelistEntry', () => {
 
 describe('WalletConnect session binding', () => {
   const ADDR = 'addr1qxck3xjmnvlpn3lyfvrxhx0k7d2mcsz5fzhpn8v7ss4vwhk2akaxldknpvrqfrepnthdlspf98jefvcmyyhjaqx9vjqsknpe6h';
-  const session = { namespaces: { cip34: { accounts: [`cip34:1-764824073:${ADDR}`] } } };
+  const MAINNET = 'cip34:1-764824073';
+  const session = { namespaces: { cip34: { accounts: [`${MAINNET}:${ADDR}`] } } };
+  const mainnetWallet = { id: 1, chain: 'Cardano', network: 'Mainnet', baseAddress: ADDR };
 
-  it('reads the approved addresses from CAIP-10 accounts', () => {
-    expect([...sessionApprovedAddresses(session)]).toEqual([ADDR]);
+  it('keeps the full CAIP-10 accounts, chain and network included', () => {
+    expect([...sessionApprovedAccounts(session)]).toEqual([`${MAINNET}:${ADDR}`]);
+    expect(walletCaip10Account(mainnetWallet)).toBe(`${MAINNET}:${ADDR}`);
+    expect(walletCaip10Account({ chain: 'Bitcoin', network: 'Mainnet', baseAddress: 'x', bitcoinAddress: 'bc1q' }))
+      .toBe('bip122:000000000019d6689c085ae165831e93:bc1q');
+    expect(walletCaip10Account({ chain: 'Apex Prime', network: 'Mainnet', baseAddress: ADDR })).toBeNull();
   });
 
   it('authorises only the wallet that approved the session', () => {
-    expect(sessionAuthorizesWallet(session, { baseAddress: ADDR })).toBe(true);
-    expect(sessionAuthorizesWallet(session, { baseAddress: 'addr1other' })).toBe(false);
-    expect(sessionAuthorizesWallet(null, { baseAddress: ADDR })).toBe(false);
+    expect(sessionAuthorizesWallet(session, mainnetWallet)).toBe(true);
+    expect(sessionAuthorizesWallet(session, { ...mainnetWallet, baseAddress: 'addr1other' })).toBe(false);
+    expect(sessionAuthorizesWallet(null, mainnetWallet)).toBe(false);
     expect(sessionAuthorizesWallet(session, null)).toBe(false);
   });
 
+  it('never authorises the same address on a network the session did not approve (PR #1241 review)', () => {
+    // One seed restored on Preprod and Preview: same addr_test… address, different chains.
+    const TEST_ADDR = 'addr_test1qz2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x';
+    const preprodSession = { namespaces: { cip34: { accounts: [`cip34:0-1:${TEST_ADDR}`] } } };
+    const preprod = { id: 5, chain: 'Cardano', network: 'Preprod', baseAddress: TEST_ADDR };
+    const preview = { id: 6, chain: 'Cardano', network: 'Preview', baseAddress: TEST_ADDR };
+    expect(sessionAuthorizesWallet(preprodSession, preprod, 'cip34:0-1')).toBe(true);
+    expect(sessionAuthorizesWallet(preprodSession, preview)).toBe(false);
+    expect(sessionAuthorizesWallet(preprodSession, preview, 'cip34:0-1')).toBe(false);
+    // A request for another chain is not answered with this wallet, even on an approved account.
+    expect(sessionAuthorizesWallet(preprodSession, preprod, 'cip34:0-2')).toBe(false);
+  });
+
   it('releases a signature only if the authorization still holds after approval', () => {
-    const wallet = { id: 1, baseAddress: ADDR };
-    expect(authorizationStillHolds(session, wallet, { ...wallet }, false)).toBe(true);
+    const wallet = mainnetWallet;
+    expect(authorizationStillHolds(session, wallet, { ...wallet }, false, MAINNET)).toBe(true);
     // Locked while the prompt was open.
-    expect(authorizationStillHolds(session, wallet, wallet, true)).toBe(false);
+    expect(authorizationStillHolds(session, wallet, wallet, true, MAINNET)).toBe(false);
     // Peer disconnected the session meanwhile.
-    expect(authorizationStillHolds(null, wallet, wallet, false)).toBe(false);
+    expect(authorizationStillHolds(null, wallet, wallet, false, MAINNET)).toBe(false);
     // Switched to another wallet, or logged out.
-    expect(authorizationStillHolds(session, wallet, { id: 2, baseAddress: 'addr1other' }, false)).toBe(false);
-    expect(authorizationStillHolds(session, wallet, { id: 2, baseAddress: ADDR }, false)).toBe(false);
-    expect(authorizationStillHolds(session, wallet, null, false)).toBe(false);
+    expect(authorizationStillHolds(session, wallet, { ...wallet, id: 2, baseAddress: 'addr1other' }, false, MAINNET)).toBe(false);
+    expect(authorizationStillHolds(session, wallet, { ...wallet, id: 2 }, false, MAINNET)).toBe(false);
+    expect(authorizationStillHolds(session, wallet, null, false, MAINNET)).toBe(false);
+    // Same wallet id and address but the network changed under the prompt.
+    expect(authorizationStillHolds(session, wallet, { ...wallet, network: 'Preview' }, false, MAINNET)).toBe(false);
+    // The request was for another chain.
+    expect(authorizationStillHolds(session, wallet, wallet, false, 'cip34:0-1')).toBe(false);
   });
 
   it('the WalletConnect signing relay never answers success without that re-check', () => {
@@ -66,9 +89,12 @@ describe('WalletConnect session binding', () => {
     const fn = bg.slice(start, bg.indexOf('\n  }\n', start));
     const releaseAt = fn.indexOf('const release = async');
     expect(releaseAt).toBeGreaterThan(-1);
-    expect(fn.slice(releaseAt)).toContain('authorizationStillHolds(wcService.getSessionForTopic(topic), walletAtRequest, WalletStore.state.loggedWallet, walletStore.isLocked)');
+    expect(fn.slice(releaseAt)).toContain('authorizationStillHolds(wcService.getSessionForTopic(topic), walletAtRequest, WalletStore.state.loggedWallet, walletStore.isLocked, chainId)');
     // Exactly one success path, inside release().
     expect(fn.match(/respondSuccess\(/g)).toHaveLength(1);
+    // The request entry check binds the chain too, and every signing route passes it on.
+    expect(bg).toContain('sessionAuthorizesWallet(wcService.getSessionForTopic(topic), loggedWallet, chainId)');
+    expect(bg.match(/topic, id, POPUP\.\w+, \[\d+, \d+\], chainId,/g)).toHaveLength(4);
   });
 });
 
@@ -145,7 +171,7 @@ describe('origin hygiene wiring tripwires', () => {
   });
 
   it('every WalletConnect request checks the session belongs to the active wallet', () => {
-    expect(read('chrome/background.ts')).toContain('sessionAuthorizesWallet(wcService.getSessionForTopic(topic), loggedWallet)');
+    expect(read('chrome/background.ts')).toContain('sessionAuthorizesWallet(wcService.getSessionForTopic(topic), loggedWallet, chainId)');
   });
 });
 
