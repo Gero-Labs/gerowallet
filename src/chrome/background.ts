@@ -129,7 +129,7 @@ const sidePanelSupported = !!chrome.sidePanel;
 
 // Push notifications (handover B2/B3): service-worker listeners must be added in the
 // worker's first turn, synchronously, or a push wake never sees them. Feature-detected
-// inside (no registration on the Firefox background page).
+// inside (no-op where the worker has no push registration).
 installNotifyListeners();
 
 // Restore side panel behavior from its own chrome.storage key

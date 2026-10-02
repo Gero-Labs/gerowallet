@@ -103,7 +103,7 @@ Before you believe such a failure, check your install. The guard's keys are comp
 
 ```bash
 npm run build          # full production build - ~24GB peak, do not use as a check
-npm run pack           # .zip / .crx / .xpi from extension/
+npm run pack           # .zip / .crx from extension/
 ```
 
 For a memory-constrained machine, run the four builds serially instead of `run-p`:

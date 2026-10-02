@@ -68,7 +68,7 @@ npm run dev              # Dev (all contexts)
 npm run build            # Production build
 npm run typecheck        # TypeScript check
 npm run lint             # ESLint
-npm run pack             # Package .zip/.crx/.xpi
+npm run pack             # Package .zip/.crx
 ```
 
 ## Key Rules

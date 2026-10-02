@@ -33,20 +33,14 @@ function fakePort(name: string, sender: chrome.runtime.MessageSender) {
   return { port, posted, emit: (m: unknown) => onMessage.slice().forEach(fn => fn(m)) };
 }
 
-/** Which browser the stubbed runtime behaves like: its page root comes from getURL(''). */
-let browserRoot: string;
-// Firefox: the add-on id is not the host of its page URLs (a per-install UUID is).
-const FIREFOX_ID = 'wallet@gerowallet.io';
-const FIREFOX_ROOT = 'moz-extension://3f1c9a52-7d1e-4b8e-9a4f-2c6d0e5b7a10/';
-
 beforeEach(() => {
   messageListeners = [];
   connectListeners = [];
-  browserRoot = `chrome-extension://${OWN}/`;
   vi.stubGlobal('chrome', {
     runtime: {
-      get id() { return browserRoot === FIREFOX_ROOT ? FIREFOX_ID : OWN; },
-      getURL: (path: string) => `${browserRoot}${path}`,
+      id: OWN,
+      // The router derives our own page root from getURL(''), as the real runtime reports it.
+      getURL: (path: string) => `chrome-extension://${OWN}/${path}`,
       onMessage: { addListener: (fn: OnMessage) => messageListeners.push(fn) },
       onConnect: {
         addListener: (fn: OnConnect) => connectListeners.push(fn),
@@ -107,44 +101,6 @@ describe('background router: options channel is default-deny', () => {
     const { send, handled, SENDER } = await router();
     send('getUtxos', CONTENT, SENDER.webpage);
     expect(handled).toEqual(['getUtxos']);
-  });
-});
-
-describe('Firefox: own pages live under moz-extension://<internal-uuid>/ (PR #1241 review)', () => {
-  const FIREFOX_PAGE: chrome.runtime.MessageSender = { id: FIREFOX_ID, url: `${FIREFOX_ROOT}index.html#/login` };
-  const FIREFOX_CONTENT: chrome.runtime.MessageSender = { id: FIREFOX_ID, url: 'https://evil.example/', tab: { id: 9 } as chrome.tabs.Tab, frameId: 0 };
-
-  it("dispatches the Firefox build's own page (LOGIN, UNLOCK, SIGN_TX reach their handlers)", async () => {
-    browserRoot = FIREFOX_ROOT;
-    const { send, handled } = await router();
-    for (const m of ['LOGIN', 'UNLOCK', 'SIGN_TX']) send(m, FIREFOX_PAGE);
-    expect(handled).toEqual(['LOGIN', 'UNLOCK', 'SIGN_TX']);
-  });
-
-  it('still refuses a Firefox content script, another install\'s UUID, and a moz URL built from the add-on id', async () => {
-    browserRoot = FIREFOX_ROOT;
-    const { send, handled } = await router();
-    for (const sender of [
-      FIREFOX_CONTENT,
-      { id: FIREFOX_ID, url: 'moz-extension://00000000-0000-4000-8000-000000000000/index.html' },
-      { id: FIREFOX_ID, url: `moz-extension://${FIREFOX_ID}/index.html` },
-    ] as chrome.runtime.MessageSender[]) {
-      expect(send('LOGIN', sender)?.data).toEqual({ success: false, error: 'Unauthorized sender' });
-    }
-    expect(handled).toEqual([]);
-  });
-
-  it('a Firefox approval port from our own page settles the prompt', async () => {
-    browserRoot = FIREFOX_ROOT;
-    const { Messaging } = await import('./messaging');
-    const { METHOD } = await import('./config');
-    let settled: unknown;
-    void Messaging.sendToPopupInternal(42, { method: 'signTx', data: { tx: 'ab' } } as never).then(r => { settled = r; });
-    const real = fakePort('internal-background-popup-communication', FIREFOX_PAGE);
-    connectListeners.forEach(l => l(real.port));
-    real.emit({ tabId: 42, method: METHOD.returnData, data: 'signed' });
-    await Promise.resolve();
-    expect(settled).toMatchObject({ data: 'signed' });
   });
 });
 
