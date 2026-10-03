@@ -275,6 +275,12 @@ export default {
   'card.confirmPreferredPayment': 'Bestätigen Sie Ihre bevorzugte Zahlungsart',
   'card.confirmationEmailSent': 'Eine Bestätigungs-E-Mail wurde gesendet',
 
+  'card.howItWorks': 'So erhalten Sie Ihre Karte',
+
+  'card.hubLead': 'Laden Sie Ihre Karte mit ADA aus dieser Wallet auf und bezahlen Sie in Euro – online, im Geschäft und am Geldautomaten.',
+
+  'card.pricingTitle': 'Was es kostet',
+
   'card.activateAutoCheck': 'Wir prüfen die Aktivierung automatisch. Ihre Karte wird als aktiv angezeigt, sobald Zione sie bestätigt.',
 
   'card.activateCard': 'Karte aktivieren',

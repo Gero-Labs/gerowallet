@@ -471,6 +471,12 @@ export default {
   'card.estimatedDelivery': 'Estimated delivery: 7-14 business days',
   'card.confirmationEmailSent': 'A confirmation email has been sent',
 
+  'card.howItWorks': 'How to get your card',
+
+  'card.hubLead': 'Top up with ADA from this wallet and pay in euros online, in stores and at ATMs.',
+
+  'card.pricingTitle': 'What it costs',
+
   'card.activateAutoCheck': 'We check the activation automatically. Your card shows as Active as soon as Zione confirms it.',
 
   'card.activateCard': 'Activate card',

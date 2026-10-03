@@ -468,6 +468,12 @@ export default {
   'card.estimatedDelivery': 'Entrega estimada: 7-14 días hábiles',
   'card.confirmationEmailSent': 'Se envió un correo electrónico de confirmación',
 
+  'card.howItWorks': 'Cómo obtener tu tarjeta',
+
+  'card.hubLead': 'Recarga con ADA desde esta billetera y paga en euros en línea, en tiendas y en cajeros automáticos.',
+
+  'card.pricingTitle': 'Cuánto cuesta',
+
   'card.activateAutoCheck': 'Verificamos la activación automáticamente. Tu tarjeta aparecerá como activa en cuanto Zione la confirme.',
 
   'card.activateCard': 'Activar tarjeta',

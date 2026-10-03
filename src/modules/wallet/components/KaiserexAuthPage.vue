@@ -16,45 +16,20 @@
       </div>
     </section>
 
+    <!-- One path: the value and the primary action above the fold, then benefits, how it
+         works, pricing and the partner's legal facts, in that order of importance. -->
     <template v-else>
-      <header class="card-hub__hero">
+      <header class="card-hub__hero" aria-labelledby="card-hub-title">
         <div class="card-hub__intro">
-          <span class="t-label card-hub__eyebrow">{{ t('card.geroCard') }}</span>
-          <h1 class="t-display">{{ t('card.getYourGeroCryptoCard') }}</h1>
-          <p class="card-hub__lead t-body">{{ t('card.chooseOptionBelow') }}</p>
-          <div class="card-hub__row">
-            <CardChip tone="accent" icon="mdi-tag-outline" clickable @click="showPromotionModal = true">
-              {{ t('card.enjoyZeroFeesUntil') }}
-            </CardChip>
-            <GButton tier="tertiary" compact @click="showPromotionModal = true">{{ t('card.viewFees') }}</GButton>
+          <CardChip tone="accent" icon="mdi-tag-outline" clickable @click="showPromotionModal = true">
+            {{ t('card.enjoyZeroFeesUntil') }}
+          </CardChip>
+          <div class="card-hub__headline">
+            <h1 id="card-hub-title" class="t-display">{{ t('card.getYourGeroCryptoCard') }}</h1>
+            <p class="card-hub__lead">{{ t('card.hubLead') }}</p>
           </div>
-        </div>
-        <IsoScene name="hero" class="card-hub__art" :label="t('card.heroArtLabel')" />
-      </header>
-
-      <CardJourney :current="0" />
-
-      <div class="card-hub__options">
-        <article class="card-hub__steps glass-tier">
-          <h2 class="t-body-lg">{{ t('card.getCardInSteps') }}</h2>
-          <ol class="card-hub__numbered">
-            <li v-for="(step, i) in steps" :key="step">
-              <span class="card-hub__num g-num" aria-hidden="true">{{ i + 1 }}</span>
-              {{ step }}
-            </li>
-          </ol>
-          <hr class="card-hub__rule" />
-          <ul class="card-hub__checks">
-            <li><v-icon small>mdi-check</v-icon>{{ t('card.zeroMonthlyFees') }}</li>
-            <li><v-icon small>mdi-check</v-icon>{{ t('card.zeroAdaEurFees') }}</li>
-          </ul>
-        </article>
-
-        <article class="card-hub__option card-hub__option--lead glass-panel">
-          <IsoScene name="register" class="card-hub__option-art" />
-          <div class="card-hub__option-copy">
-            <h2 class="t-heading">{{ t('card.registerToOrderCard') }}</h2>
-            <p class="t-body">{{ t('card.createKaiserexAccount') }}</p>
+          <div class="card-hub__primary">
+            <GButton tier="primary" @click="showRegistrationModal = true">{{ t('card.orderYourGeroCard') }}</GButton>
             <p class="t-body-sm">
               {{ t('card.newToKaiserex') }}
               <v-tooltip top :open-delay="300" max-width="320">
@@ -65,29 +40,47 @@
               </v-tooltip>?
             </p>
           </div>
-          <GButton tier="primary" block @click="showRegistrationModal = true">{{ t('card.orderYourGeroCard') }}</GButton>
-        </article>
+          <div class="card-hub__row">
+            <span class="t-body-sm">{{ t('card.alreadyHaveAccount') }}</span>
+            <GButton tier="secondary" compact :loading="signingIn" @click="handleLogin">{{ t('card.signIn') }}</GButton>
+          </div>
+          <ul class="card-hub__trust">
+            <li><v-icon x-small>mdi-lock-outline</v-icon>{{ t('card.secureSignInWindow') }}</li>
+            <li><v-icon x-small>mdi-shield-check-outline</v-icon>{{ t('card.licensedRegulated') }} · FSP {{ CARD_PROVIDER.fspNumber }}</li>
+          </ul>
+        </div>
+        <IsoScene name="hero" class="card-hub__art" :label="t('card.heroArtLabel')" />
+      </header>
 
-        <article class="card-hub__option glass-panel">
-          <IsoScene name="activate" class="card-hub__option-art" />
-          <div class="card-hub__option-copy">
-            <h2 class="t-heading">{{ t('card.alreadyHaveAccount') }}</h2>
-            <p class="t-body">{{ t('card.signInTopUpCheck') }}</p>
-            <ul class="card-hub__checks">
-              <li><v-icon small>mdi-check</v-icon>{{ t('card.checkOrderStatus') }}</li>
-              <li><v-icon small>mdi-check</v-icon>{{ t('card.topUpCardWithAda') }}</li>
-              <li><v-icon small>mdi-check</v-icon>{{ t('card.orderAdditionalCards') }}</li>
-            </ul>
-          </div>
-          <div class="card-hub__signin">
-            <GButton tier="secondary" block :loading="signingIn" @click="handleLogin">{{ t('card.signIn') }}</GButton>
-            <span class="t-caption card-hub__secure">
-              <v-icon x-small>mdi-lock-outline</v-icon>
-              {{ t('card.secureSignInWindow') }}
-            </span>
-          </div>
-        </article>
-      </div>
+      <FeatureGridSection />
+
+      <section class="card-hub__how" aria-labelledby="card-hub-how">
+        <h2 id="card-hub-how" class="t-heading">{{ t('card.howItWorks') }}</h2>
+        <ol class="card-hub__steps">
+          <li v-for="(step, i) in steps" :key="step" class="glass-tier">
+            <span class="card-hub__num g-num" aria-hidden="true">{{ i + 1 }}</span>
+            <span class="card-hub__step">{{ step }}</span>
+          </li>
+        </ol>
+      </section>
+
+      <section class="card-hub__pricing glass-panel" aria-labelledby="card-hub-pricing">
+        <div class="card-hub__pricing-col">
+          <h2 id="card-hub-pricing" class="t-heading">{{ t('card.pricingTitle') }}</h2>
+          <p class="t-body-sm">{{ t('card.enjoyZeroFeesUntil') }}</p>
+          <ul class="card-hub__checks">
+            <li><v-icon small>mdi-check</v-icon>{{ t('card.zeroMonthlyFees') }}</li>
+            <li><v-icon small>mdi-check</v-icon>{{ t('card.zeroAdaEurFees') }}</li>
+          </ul>
+        </div>
+        <div class="card-hub__pricing-col">
+          <p class="t-body-sm">
+            {{ t('card.startingMayFirst') }} <strong>{{ t('card.geroHolders') }}</strong>
+            {{ t('card.willEnjoyTokenIncentives') }}
+          </p>
+          <GButton tier="secondary" @click="showPromotionModal = true">{{ t('card.viewFees') }}</GButton>
+        </div>
+      </section>
 
       <KaiserexPartnershipSection />
     </template>
@@ -111,7 +104,7 @@ import { CARD_PROVIDER } from '@/modules/wallet/cardProvider';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import IsoScene from '@/shared/components/iso/IsoScene.vue';
 import CardChip from './ui/CardChip.vue';
-import CardJourney from './ui/CardJourney.vue';
+import FeatureGridSection from './FeatureGridSection.vue';
 import KaiserexRegistrationModal from './KaiserexRegistrationModal.vue';
 import PromotionModal from './PromotionModal.vue';
 import KaiserexPartnershipSection from './KaiserexPartnershipSection.vue';
@@ -177,136 +170,82 @@ function signInFromRegistration(): void {
   padding: var(--g-s-6) clamp(16px, 3vw, 32px);
 }
 
+/* Hero: the value, one primary action, the secondary path, then trust. */
 .card-hub__hero {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr));
-  gap: var(--g-s-5);
+  gap: var(--g-s-6);
   align-items: center;
 }
 
 .card-hub__intro {
   display: flex;
   flex-direction: column;
-  gap: var(--g-s-4);
+  align-items: flex-start;
+  gap: var(--g-s-5);
+}
+
+.card-hub__headline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-3);
 
   h1 {
     margin: 0;
   }
 }
 
-.card-hub__eyebrow {
-  color: var(--g-accent);
-}
-
 .card-hub__lead {
   margin: 0;
-  max-width: 520px;
+  max-width: 460px;
   font-size: 16px;
+  color: var(--g-text-2);
 }
 
-.card-hub__art {
-  max-width: 560px;
-  justify-self: end;
-}
-
-.card-hub__row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--g-s-2);
-}
-
-.card-hub__options {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
-  gap: var(--g-s-4);
-}
-
-.card-hub__steps,
-.card-hub__option {
+.card-hub__primary {
   display: flex;
   flex-direction: column;
-  gap: var(--g-s-4);
-  padding: var(--g-s-5);
-
-  h2 {
-    margin: 0;
-  }
-}
-
-.card-hub__option--lead {
-  border-color: color-mix(in srgb, var(--g-accent) 30%, transparent);
-}
-
-.card-hub__option-art {
-  width: 160px;
-}
-
-.card-hub__option-copy {
-  display: flex;
-  flex-direction: column;
+  align-items: flex-start;
   gap: var(--g-s-2);
-  flex: 1;
 
   p {
     margin: 0;
   }
 }
 
-.card-hub__numbered,
-.card-hub__checks {
+.card-hub__row {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--g-s-2) var(--g-s-3);
+}
+
+.card-hub__trust {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--g-s-2) var(--g-s-5);
+  align-self: stretch;
   margin: 0;
-  padding: 0;
+  padding: var(--g-s-4) 0 0;
+  border-top: 1px solid var(--g-hairline-1);
   list-style: none;
-  font-size: 14px;
-  color: var(--g-text-2);
-}
-
-.card-hub__numbered {
-  gap: var(--g-s-3);
 
   li {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: var(--g-s-3);
-  }
-}
-
-.card-hub__num {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  flex: none;
-  border-radius: var(--g-r-pill);
-  background: var(--g-hairline-1);
-  color: var(--g-text-1);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.card-hub__checks {
-  gap: var(--g-s-2);
-  font-size: 13px;
-
-  li {
-    display: flex;
-    align-items: center;
-    gap: var(--g-s-2);
+    gap: var(--g-s-1);
+    font-size: 12px;
+    color: var(--g-text-3);
   }
 
   .v-icon {
-    color: var(--g-accent);
+    color: var(--g-text-3);
   }
 }
 
-.card-hub__rule {
-  border: 0;
-  height: 1px;
-  margin: 0;
-  background: var(--g-hairline-1);
+.card-hub__art {
+  max-width: 560px;
+  justify-self: end;
 }
 
 .card-hub__term {
@@ -320,17 +259,95 @@ function signInFromRegistration(): void {
   cursor: help;
 }
 
-.card-hub__signin {
+/* How it works: the process once, as four numbered steps. */
+.card-hub__how {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-4);
+
+  h2 {
+    margin: 0;
+  }
+}
+
+.card-hub__steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: var(--g-s-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: var(--g-s-3);
+    padding: var(--g-s-4);
+  }
+}
+
+.card-hub__num {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: var(--g-r-pill);
+  border: 1px solid color-mix(in srgb, var(--g-accent) 40%, transparent);
+  color: var(--g-accent);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.card-hub__step {
+  font-size: 14px;
+  color: var(--g-text-1);
+}
+
+/* Pricing: what applies now and what changes after the promotion. */
+.card-hub__pricing {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+  gap: var(--g-s-5);
+  align-items: center;
+  padding: var(--g-s-5);
+}
+
+.card-hub__pricing-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--g-s-3);
+
+  h2,
+  p {
+    margin: 0;
+  }
+
+  strong {
+    color: var(--g-text-1);
+  }
+}
+
+.card-hub__checks {
   display: flex;
   flex-direction: column;
   gap: var(--g-s-2);
-}
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  color: var(--g-text-2);
 
-.card-hub__secure {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--g-s-1);
+  li {
+    display: flex;
+    align-items: center;
+    gap: var(--g-s-2);
+  }
+
+  .v-icon {
+    color: var(--g-accent);
+  }
 }
 
 .card-hub__rejected {
