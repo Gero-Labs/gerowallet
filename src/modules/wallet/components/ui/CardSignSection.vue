@@ -1,6 +1,8 @@
 <template>
   <!-- One signing path for every card payment (top-up, delivery fee): password, PassKey,
-       Ledger/Trezor and Keystone all go through useTransactionSigning. -->
+       Ledger/Trezor and Keystone all go through useTransactionSigning. Every attempt (button,
+       Enter, PassKey password autofill) goes through confirm(), which prepares the transaction
+       again first; the composable's own autofill handler would sign without preparing. -->
   <div class="card-sign">
     <TransactionAuthSection
       :wallet-type="loggedWallet?.type"
@@ -21,7 +23,7 @@
       @update:isBT="isBT = $event"
       @passkey-success="onPassKeySuccess"
       @passkey-error="handlePassKeyAuthError"
-      @autofill-success="handlePassKeySuccess"
+      @autofill-success="confirm()"
       @autofill-error="handlePassKeyError"
       @submit="confirm()"
       @password-field-ref="setPasswordFieldRef"
@@ -92,7 +94,6 @@ const {
   keystoneCbor,
   handleSign,
   resetState,
-  handlePassKeySuccess,
   handlePassKeyError,
   handlePassKeyAuthError,
   setPasswordFieldRef,
