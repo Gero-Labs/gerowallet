@@ -35,6 +35,10 @@
           <v-list-item-icon class="ml-5 mr-3 my-4" v-if="icon">
             <v-icon style="font-size: 56px">{{icon}}</v-icon>
           </v-list-item-icon>
+          <!-- Header illustration (e.g. an IsoScene) in place of img/icon. -->
+          <div v-if="$slots.art" class="base-dialog-art ml-5 mr-3 my-3" aria-hidden="true">
+            <slot name="art"></slot>
+          </div>
           <v-list-item-content>
             <v-list-item-title class="t-heading" style="max-width: 90%; display: -webkit-box; -webkit-line-clamp: 1;-webkit-box-orient: vertical;overflow: hidden;text-overflow: ellipsis;white-space: normal;">
               {{ title }}
@@ -181,6 +185,11 @@ const isDialogOpen = computed({
   top: 26px;
   right: 20px;
   z-index: 1;
+}
+
+.base-dialog-art {
+  flex: none;
+  width: 96px;
 }
 
 .base-dialog-img-mask {

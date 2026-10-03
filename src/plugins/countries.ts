@@ -1,6 +1,7 @@
-// Complete list of world countries (ISO 3166-1 alpha-2)
-// Excludes countries forbidden by KaiserEx: https://www.kaiserex.com/forbidden-countries
-// Last updated: 2026-01-26
+// Complete list of world countries (ISO 3166-1 alpha-2) the Gero Card can be delivered to.
+// Built by excluding KaiserEx's forbidden list (kaiserex.com/forbidden-countries, offline
+// since the 2026 move to Zione; last synced 2026-01-26). ZA added 2026-10 for the Zione
+// (South Africa) programme. Replace with Zione's delivery list when they publish one.
 
 export default [
   { code: 'AD', label: 'Andorra' },
@@ -193,6 +194,7 @@ export default [
   { code: 'WF', label: 'Wallis and Futuna' },
   { code: 'WS', label: 'Samoa' },
   { code: 'XK', label: 'Kosovo' },
+  { code: 'ZA', label: 'South Africa' },
 ];
 
 // EXCLUDED COUNTRIES (KaiserEx Forbidden):

@@ -1,258 +1,161 @@
 <template>
-  <v-dialog v-model="open" max-width="1150" persistent content-class="kaiserex-registration-modal">
-    <v-card class="modal-card">
-      <div class="modal-content">
-        <div class="content-wrapper" v-if="!registrationComplete">
-          <!-- Close button positioned absolutely -->
-          <v-btn icon small @click="emit('close')" class="modal-close-btn">
-            <v-icon>mdi-close</v-icon>
-          </v-btn>
+  <BaseDialog
+    :isOpen="open"
+    :title="t('card.kaiserexRegistration')"
+    :subtitle="t('card.createKaiserexAccount')"
+    :width="1040"
+    :min-height="0"
+    persistent
+    @close="emit('close')"
+  >
+    <template #art>
+      <IsoScene name="register" />
+    </template>
 
-          <!-- Registration iframe -->
-          <div class="iframe-container">
-            <iframe
-              ref="registrationIframe"
-              :src="iframeUrl"
-              title="Kaiserex Registration"
-              class="registration-iframe"
-              @load="onIframeLoad"
-              sandbox="allow-forms allow-scripts allow-same-origin allow-popups"
-              scrolling="yes"
-            />
-            <div v-if="isLoading" class="loading-overlay">
-              <v-progress-circular indeterminate color="primary" size="48" />
-              <p class="loading-text">{{ t('card.loadingSecureForm') }}</p>
-            </div>
-          </div>
-        </div>
+    <div class="card-register">
+      <div class="card-register__note">
+        <span class="card-register__chip">
+          <v-icon x-small>mdi-lock-outline</v-icon>
+          {{ t('card.secureFormBy') }} · {{ host }}
+        </span>
+        <span class="t-caption">{{ t('card.activationEmailNote') }}</span>
+      </div>
 
-        <div v-else class="completion-message">
-          <div class="success-icon">
-            <img src="@/modules/wallet/icons/check-blue.svg" :alt="$t('common.success')" />
-          </div>
-          <h3 class="success-title">{{ t('card.registrationComplete') }}</h3>
-          <p class="success-text">
-            {{ t('card.kaiserexAccountCreated') }}
-          </p>
-          <GradientButton :text="t('card.continueToKYC')" @click="proceedToKYC" />
+      <!-- Zione's own form. Its origin must be in the manifest's frame-src (cardProvider.spec.ts). -->
+      <div class="card-register__frame">
+        <iframe
+          ref="registrationIframe"
+          :src="iframeUrl"
+          :title="t('card.kaiserexRegistration')"
+          class="card-register__iframe"
+          sandbox="allow-forms allow-scripts allow-same-origin allow-popups"
+          @load="onIframeLoad"
+        />
+        <div v-if="isLoading" class="card-register__loading">
+          <v-progress-circular indeterminate color="primary" size="40" width="3" />
+          <p class="t-body-sm">{{ t('card.loadingSecureForm') }}</p>
         </div>
       </div>
-    </v-card>
-  </v-dialog>
+
+      <div class="card-register__actions">
+        <GButton tier="tertiary" @click="emit('sign-in')">{{ t('card.alreadyRegisteredSignIn') }}</GButton>
+        <GButton tier="secondary" @click="emit('close')">{{ t('common.close') }}</GButton>
+      </div>
+    </div>
+  </BaseDialog>
 </template>
 
 <script setup lang="ts">
+import { nextTick, ref, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref, watch, nextTick } from 'vue';
-import GradientButton from './GradientButton.vue';
 import { debugLog } from '@/utils/debug';
+import { CARD_PROVIDER } from '@/modules/wallet/cardProvider';
+import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
+import GButton from '@/shared/components/GButton/GButton.vue';
+import IsoScene from '@/shared/components/iso/IsoScene.vue';
 
+const props = defineProps<{ open: boolean }>();
+const emit = defineEmits<{
+  (e: 'close'): void;
+  (e: 'sign-in'): void;
+}>();
 
 const { t } = useTranslation();
 
-const props = defineProps<{
-  open: boolean;
-}>();
-
-const emit = defineEmits<{
-  (e: 'close'): void;
-  (e: 'complete'): void;
-}>();
-
 const registrationIframe = ref<HTMLIFrameElement>();
 const isLoading = ref(true);
-const iframeLoaded = ref(false);
-const registrationComplete = ref(false);
 
-// Registration URL
-const iframeUrl = 'https://www.kaiserex.com/gerocard';
+// Registration lead form (Zione). Its origin must be in the manifest's frame-src.
+const iframeUrl = CARD_PROVIDER.registrationUrl;
+const host = new URL(iframeUrl).host;
 
-// Reset state when modal opens
+let loadTimeout: ReturnType<typeof setTimeout> | null = null;
+
 watch(
   () => props.open,
-  newVal => {
-    if (newVal) {
-      isLoading.value = true;
-      iframeLoaded.value = false;
-      registrationComplete.value = false;
-      debugLog('Kaiserex registration modal opened');
-
-      // Force iframe reload by changing the src slightly to prevent caching issues
-      nextTick(() => {
-        if (registrationIframe.value) {
-          const timestamp = Date.now();
-          registrationIframe.value.src = `${iframeUrl}?_t=${timestamp}`;
-        }
-      });
-
-      // Fallback timeout in case iframe load event doesn't fire
-      setTimeout(() => {
-        if (isLoading.value && newVal) {
-          // Only if still loading and modal is still open
-          console.warn('Iframe load timeout, hiding loading state');
-          isLoading.value = false;
-          iframeLoaded.value = true;
-        }
-      }, 5000); // 5 second timeout
-    }
-  }
+  open => {
+    if (loadTimeout) clearTimeout(loadTimeout);
+    if (!open) return;
+    isLoading.value = true;
+    // A fresh query string so a cached, half-filled form never comes back.
+    nextTick(() => {
+      if (registrationIframe.value) registrationIframe.value.src = `${iframeUrl}?_t=${Date.now()}`;
+    });
+    // Some pages never fire load inside a sandboxed frame; stop covering it after 5 s.
+    loadTimeout = setTimeout(() => {
+      if (isLoading.value) {
+        debugLog('Card registration frame: load event timed out');
+        isLoading.value = false;
+      }
+    }, 5000);
+  },
 );
 
-const onIframeLoad = () => {
+function onIframeLoad(): void {
   isLoading.value = false;
-  iframeLoaded.value = true;
-  debugLog('Kaiserex registration iframe loaded');
-
-  // Don't inject any CSS - let the iframe scroll naturally on smaller screens
-};
-
-const proceedToKYC = () => {
-  emit('complete');
-};
+}
 </script>
 
 <style lang="scss" scoped>
-@import '../styles/variables';
-@import '../styles/mixins';
-
-.kaiserex-registration-modal {
-  border-radius: $border-radius-lg;
-}
-
-.modal-card {
-  background: $background-dark;
-  border-radius: $border-radius-lg;
-  box-shadow: $shadow-lg;
-  position: relative;
-  max-height: 90vh;
+.card-register {
   display: flex;
   flex-direction: column;
+  gap: var(--g-s-3);
+  padding: var(--g-s-2) var(--g-s-2) 0;
 }
 
-.modal-close-btn {
-  position: absolute !important;
-  top: $spacing-md; // Position at top of modal
-  right: $spacing-md;
-  z-index: 10;
-  color: $text-secondary;
-  background: rgba(0, 0, 0, 0.5);
-  border-radius: 50%;
-
-  &:hover {
-    color: $text-primary;
-    background: rgba(0, 0, 0, 0.7);
-  }
+.card-register__note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--g-s-2) var(--g-s-3);
 }
 
-.modal-content {
-  flex: 1;
+/* Justified solid: a chip is a control-scale label. */
+.card-register__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--g-s-1);
+  padding: 2px var(--g-s-2);
+  border-radius: var(--g-r-pill);
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-2);
+  color: var(--g-text-2);
+  font-size: 12px;
+}
+
+/* Justified solid: the provider's page is light; a dark frame edge keeps it legible. */
+.card-register__frame {
+  position: relative;
+  height: min(70vh, 720px);
+  border-radius: var(--g-r-card);
+  border: 1px solid var(--g-hairline-2);
+  background: var(--g-raised);
   overflow: hidden;
-  position: relative;
-  padding: 0;
 }
 
-.content-wrapper {
-  display: flex;
-  flex-direction: column;
-  position: relative; // For close button positioning
-}
-
-.iframe-container {
-  position: relative;
+.card-register__iframe {
   width: 100%;
-  max-width: 1150px; // 1800 * 0.73
-  height: 876px; // 1200 * 0.73 (scaled height of iframe)
-  margin: 0 auto;
-  background: transparent;
-  border-radius: 0;
-  overflow: hidden;
-  border: none;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-}
-
-.registration-iframe {
-  width: 1800px; // Original content width
-  height: 1200px; // Original content height
-  border: none;
-  background: white;
+  height: 100%;
+  border: 0;
   display: block;
-  transform: scale(0.73) translateY(0px);
-  transform-origin: center top;
-  flex-shrink: 0;
 }
 
-.loading-overlay {
+.card-register__loading {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(12, 17, 29, 0.95);
+  inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: $spacing-xl;
-  z-index: 10;
+  gap: var(--g-s-3);
+  background: var(--g-surface);
 }
 
-.loading-text {
-  @include body-text($font-size-base);
-  color: $text-secondary;
-}
-
-.completion-message {
-  padding: $spacing-4xl $spacing-2xl;
-  text-align: center;
+.card-register__actions {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: $spacing-xl;
-}
-
-.success-icon {
-  width: 64px;
-  height: 64px;
-  background: rgba(0, 199, 243, 0.1);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  img {
-    width: 32px;
-    height: 32px;
-  }
-}
-
-.success-title {
-  @include heading-style($font-size-xl);
-  color: $text-primary;
-  margin: 0;
-}
-
-.success-text {
-  @include body-text($font-size-base);
-  color: $text-secondary;
-  max-width: 400px;
-  line-height: 1.5;
-  margin: 0;
-}
-
-.trust-header {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  margin-bottom: $spacing-lg;
-}
-
-// Removed old tooltip CSS since we're using v-tooltip now
-
-@media (max-width: $breakpoint-md) {
-  .kaiserex-registration-modal {
-    max-height: 100vh;
-  }
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--g-s-2);
 }
 </style>

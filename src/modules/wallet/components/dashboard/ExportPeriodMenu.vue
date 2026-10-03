@@ -147,6 +147,8 @@
 import { ref, computed } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import cardStore from '@/stores/modules/card';
+import snackbar from '@/plugins/snackbar';
+import { uiLocale } from '@/modules/wallet/utils/cardFormat';
 
 interface Props {
   disabled?: boolean;
@@ -191,21 +193,13 @@ const minDate = computed(() => {
 const formattedStartDate = computed(() => {
   if (!startDate.value) return '';
   const date = new Date(startDate.value);
-  return date.toLocaleDateString('en-US', {
-    month: '2-digit',
-    day: '2-digit',
-    year: 'numeric',
-  });
+  return date.toLocaleDateString(uiLocale(), { dateStyle: 'medium' });
 });
 
 const formattedEndDate = computed(() => {
   if (!endDate.value) return '';
   const date = new Date(endDate.value);
-  return date.toLocaleDateString('en-US', {
-    month: '2-digit',
-    day: '2-digit',
-    year: 'numeric',
-  });
+  return date.toLocaleDateString(uiLocale(), { dateStyle: 'medium' });
 });
 
 // Format date for API (dd.mm.yyyy)
@@ -258,7 +252,7 @@ const validateDateRange = () => {
 
   const diffTime = Math.abs(end.getTime() - start.getTime());
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  const maxDays = 90; // 3 months
+  const maxDays = 88; // the provider returns at most 89 days of history
 
   if (diffDays > maxDays) {
     dateRangeError.value = t('card.dateRangeExceeds3Months');
@@ -349,6 +343,14 @@ const getCategoryFromMCC = (mccCode: string): string => {
   return mccCategories[mccCode] || t('card.other');
 };
 
+// A quoted CSV cell. Merchant text comes from card networks, so a leading = + - @ is
+// neutralised: spreadsheet apps would otherwise run it as a formula.
+const csvCell = (value: unknown): string => {
+  const text = String(value ?? '');
+  const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+  return `"${safe.replace(/"/g, '""')}"`;
+};
+
 // Export to CSV
 const exportToCSV = async (startDate: Date, endDate: Date) => {
   try {
@@ -362,7 +364,7 @@ const exportToCSV = async (startDate: Date, endDate: Date) => {
     const exportTransactions = await cardStore.fetchCardHistoryForExport(params);
 
     if (exportTransactions.length === 0) {
-      console.warn('No transactions to export');
+      snackbar.setError(t('card.noTransactionsInPeriod'));
       return;
     }
 
@@ -375,24 +377,17 @@ const exportToCSV = async (startDate: Date, endDate: Date) => {
     ];
 
     const rows = exportTransactions.map(tx => {
-      const merchantName = tx.narrative || 'Unknown';
+      const merchantName = tx.narrative || t('card.other');
       const category = getCategoryFromMCC(tx.mcc.code);
       const amount = tx.amount.amount;
       const currency = resolveCurrencySymbol(tx.amount.currencyCode);
       const date = parseEuropeanDate(tx.createTime);
-      const dateTime = date.toLocaleString('en-US', {
-        month: '2-digit',
-        day: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-      });
+      const dateTime = date.toLocaleString(uiLocale(), { dateStyle: 'short', timeStyle: 'short' });
 
       return [dateTime, category, merchantName, tx.reference, `${amount} ${currency}`];
     });
 
-    const csvContent = [headers.join(','), ...rows.map(row => row.map(cell => `"${cell}"`).join(','))].join('\n');
+    const csvContent = [headers, ...rows].map(row => row.map(csvCell).join(',')).join('\n');
 
     const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');

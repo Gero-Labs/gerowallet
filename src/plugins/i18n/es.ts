@@ -116,7 +116,7 @@ export default {
   'card.allEuIntPosFeesWaived': 'Exención de todas las comisiones POS UE + INT',
   'card.allFeesWaived': 'Exención de TODAS LAS COMISIONES',
   'card.allInOnePlatform': 'Una plataforma todo en uno que te ayuda a gestionar todo lo relacionado con tu Gero Card',
-  'card.alreadyHaveAccount': '¿Ya tienes una cuenta de Kaiserex?',
+  'card.alreadyHaveAccount': '¿Ya tienes una cuenta de Zione?',
   'card.amount': 'Monto',
   'card.atmWithdrawalEu': 'Retiro en cajero (UE)',
   'card.atmWithdrawalIntl': 'Retiro en cajero (Intl)',
@@ -126,10 +126,10 @@ export default {
   'card.balanceOverTime': 'Saldo a lo largo del tiempo',
   'card.balanceUpdatedReady': 'Tu saldo se actualizó y está listo para usar',
   'card.basicPlus': 'Básico +',
-  'card.beforeOrderingKYC': 'Antes de solicitar tu Gero Card, completa un breve proceso KYC con nuestro socio institucional, Kaiserex.',
+  'card.beforeOrderingKYC': 'Antes de solicitar tu Gero Card, completa un breve proceso KYC con nuestro socio del programa de tarjetas, Zione.',
   'card.blockCard': 'Bloquear tarjeta',
   'card.blockCardTab': 'Bloquear tarjeta',
-  'card.blockingCardWarning': 'Bloquear tu tarjeta detendrá de inmediato todas las transacciones. Esta acción no se puede revertir al instante: tendrás que contactar a nuestro equipo de soporte para desbloquearla.',
+  'card.blockingCardWarning': 'Al bloquearla, se detienen de inmediato todas las transacciones nuevas. Puedes desbloquear la tarjeta aquí en cualquier momento.',
   'card.capturedPhoto': 'Foto capturada',
   'card.cardAlreadyBlocked': 'Tarjeta bloqueada',
   'card.cardIssuance': 'Emisión de tarjeta',
@@ -149,14 +149,19 @@ export default {
   'card.paymentInProgress': 'El pago se está procesando.',
   'card.pleaseWaitForConfirmation': 'Espera la confirmación de la transacción.',
   'card.alreadyOrdered': 'Ya solicitada',
-  'card.cardPoweredByKaiser': 'Tu Gero Card funciona con Kaiser Exchange International, un proveedor de servicios financieros de criptomonedas regulado y con licencia completa',
+  'card.cardPoweredByKaiser': 'Tu Gero Card la ofrece Digi Ex Pro (Pty) Ltd, que opera como Zione, un proveedor de servicios financieros autorizado y regulado por la FSCA en Sudáfrica (FSP 53786).',
   'card.cardWillReceiveExactly': 'La tarjeta recibirá exactamente',
   'card.cardholderName': 'NOMBRE DEL TITULAR',
   'card.category': 'Categoría',
   'card.checkOrderStatus': 'Consultar estado del pedido',
   'card.chooseOptionBelow': 'Elige una opción a continuación para comenzar con el pedido de tu tarjeta cripto',
   'card.cityWithAsterisk': 'Ciudad *',
-  'card.companyDetails': 'Empresa #21766401 · República Checa',
+  'card.companyDetails': 'Reg. 2023/150340/07 · FSCA FSP 53786 · Sudáfrica',
+  'card.providerRegisteredOffice': 'Domicilio social',
+  'card.providerRegulated': 'Regulado en Sudáfrica',
+  'card.providerRegulatedDesc': 'Proveedor de servicios financieros autorizado (FSCA, FSP 53786) e institución obligada conforme a la Financial Intelligence Centre Act.',
+  'card.providerAmlKyc': 'AML/KYC en cada cuenta',
+  'card.providerAmlKycDesc': 'La verificación de identidad, el control de sanciones y el monitoreo de transacciones se aplican a cada cuenta y a cada transacción.',
   'card.completeKYC': 'Completar KYC',
   'card.confirm': 'Confirmar',
   'card.confirmAction': 'Confirmar acción',
@@ -168,7 +173,7 @@ export default {
   'card.convertingAdaToEur': 'Convirtiendo ADA a EUR al tipo de cambio actual...',
   'card.countryWithAsterisk': 'País *',
   'card.createAccount': 'Crear cuenta',
-  'card.createKaiserexAccount': 'Crea tu cuenta de Kaiserex y completa el proceso de verificación para solicitar tu tarjeta.',
+  'card.createKaiserexAccount': 'Crea tu cuenta de Zione y completa el proceso de verificación para solicitar tu tarjeta.',
   'card.cvv': 'CVV',
   'card.dateTime': 'Fecha y hora',
   'card.customDateRange': 'Rango de fechas personalizado',
@@ -184,21 +189,15 @@ export default {
   'card.to': 'Hasta',
   'card.apply': 'Aplicar',
   'card.close': 'Cerrar',
-  'card.dateRangeExceeds3Months': 'El rango de fechas no puede superar los 3 meses debido a una limitación de Satchel',
+  'card.dateRangeExceeds3Months': 'Elige un período de 89 días o menos.',
   'card.startDateAfterEndDate': 'La fecha de inicio no puede ser posterior a la fecha de fin',
   'card.documentsReceivedReview': 'Recibimos tus documentos y tu solicitud está en revisión.',
   'card.ecommerce': 'Comercio electrónico',
   'card.enjoyMonthsZeroFees': 'Disfruta 6 meses SIN COMISIONES',
-  'card.enjoyZeroFeesUntil': 'Disfruta SIN COMISIONES hasta el 1 de agosto',
-  'card.enter6DigitCode': 'Ingresa el código de 6 dígitos de tu app de autenticación para continuar.',
-  'card.enterCredentialsToContinue': 'Ingresa tus credenciales para continuar con el pedido de tu tarjeta.',
-  'card.enterPassword': 'Ingresa tu contraseña',
+  'card.enjoyZeroFeesUntil': 'Disfruta SIN COMISIONES hasta el 1 de mayo de 2027',
   'card.enterPasswordToConfirm': 'Ingresa la contraseña para confirmar la acción*',
-  'card.enterUsernameOrEmail': 'Ingresa tu usuario o correo electrónico',
   'card.enterYourName': 'Ingresa tu nombre',
   'card.enterTwoAda': 'Ingresa un monto mayor o igual a 2 ADA para continuar',
-  'card.enterpriseSecurity': 'Seguridad empresarial',
-  'card.enterpriseSecurityDesc': 'Protocolos de seguridad descentralizados con auditorías frecuentes de la plataforma y cumplimiento de las regulaciones globales',
   'card.entertainment': 'Entretenimiento',
   'card.exp': 'VENC.',
   'card.expiry': 'Vencimiento',
@@ -213,9 +212,8 @@ export default {
   'card.feeOrderSummary': 'Comisión y resumen del pedido',
   'card.feePayment': 'Pago de comisión',
   'card.feeType': 'Tipo de comisión',
-  'card.firstCreateKaiserex': 'Primero, crearás una cuenta con Kaiserex, nuestro socio bancario de confianza. Luego completa la verificación para solicitar tu tarjeta.',
+  'card.firstCreateKaiserex': 'Primero, crearás una cuenta con Zione, nuestro socio del programa de tarjetas. Luego completa la verificación para solicitar tu tarjeta.',
   'card.foodAndDining': 'Comida y restaurantes',
-  'card.forgotPassword': '¿Olvidaste tu contraseña?',
   'card.freeAtmWithdrawals': 'Retiros gratis en cajeros',
   'card.fxConversionMarkup': 'Margen de conversión de divisas',
   'card.geroCard': 'Gero Card',
@@ -236,19 +234,19 @@ export default {
   'card.groceries': 'Supermercado',
   'card.inGero': 'en $GERO',
   'card.inactive': 'Inactiva',
-  'card.kaiserExchangeInternational': 'SmartAtlas Ltd. s.r.o.',
-  'card.kaiserex': 'Kaiserex',
-  'card.kaiserexAccountCreated': 'Se creó tu cuenta de Kaiserex. Ya puedes continuar con la verificación KYC para solicitar tu Gero Crypto Card.',
-  'card.kaiserexRegistration': 'Registro en Kaiserex',
-  'card.kaiserexTooltip': 'Kaiserex es el socio financiero de confianza de Gero que gestiona la emisión de tarjetas, la verificación KYC y el procesamiento de pagos de la Gero Crypto Card.',
+  'card.kaiserExchangeInternational': 'Digi Ex Pro (Pty) Ltd, que opera como Zione',
+  'card.kaiserex': 'Zione',
+  'card.kaiserexAccountCreated': 'Se creó tu cuenta de Zione. Ya puedes continuar con la verificación KYC para solicitar tu Gero Crypto Card.',
+  'card.kaiserexRegistration': 'Registro en Zione',
+  'card.kaiserexTooltip': 'Zione es el socio del programa de tarjetas de Gero y gestiona la verificación KYC y el procesamiento de pagos de la Gero Crypto Card.',
   'card.kycRegistered': 'Registrado',
   'card.kycRegisteredDesc': 'Proceso KYC aún no iniciado',
   'card.kycVerificationStarted': 'Verificando',
   'card.kycVerificationStartedDesc': 'KYC en curso, pendiente de aprobación',
   'card.kycApprovalInProgress': 'Aprobación de KYC en curso',
   'card.kycApprovalInProgressDesc': 'Tu verificación KYC se envió y está en revisión. Te avisaremos cuando se apruebe.',
-  'card.learnMoreKaiserex': 'Más información sobre Kaiserex',
-  'card.licensedRegulated': 'Servicios financieros con licencia y regulados',
+  'card.learnMoreKaiserex': 'Más información sobre Zione',
+  'card.licensedRegulated': 'Proveedor de servicios financieros autorizado por la FSCA',
   'card.loadingCardDetails': 'Cargando datos de la tarjeta...',
   'card.loadingCardStatus': 'Cargando estado de la tarjeta...',
   'card.loadingSecureForm': 'Cargando formulario de registro seguro...',
@@ -265,8 +263,7 @@ export default {
   'card.mastercard': 'Mastercard',
   'card.monthlyFee': 'Comisión mensual',
   'card.nameWithAsterisk': 'Nombre *',
-  'card.needHelpContactSupport': '¿Necesitas ayuda? Contacta a nuestro equipo de soporte para desbloquear o reemplazar tu tarjeta.',
-  'card.newCodeSent': 'Nuevo código enviado a tu app de autenticación',
+  'card.needHelpContactSupport': '¿Necesitas ayuda? Para reemplazar tu tarjeta, contacta al soporte de Zione:',
   'card.newToKaiserex': '¿Nuevo en',
   'card.next': 'Siguiente',
   'card.noMonthlyFee': 'Sin comisión mensual',
@@ -281,7 +278,6 @@ export default {
   'card.orderYourCard': 'Solicita tu tarjeta',
   'card.orderYourGeroCard': 'Solicita tu Gero Card',
   'card.other': 'Otros',
-  'card.password': 'Contraseña',
   'card.pending': 'Pendiente',
   'card.pendingApproval': 'Pendiente de aprobación',
   'card.rejected': 'Rechazada',
@@ -306,15 +302,14 @@ export default {
   'card.posPurchasesEu': 'Compras POS (UE)',
   'card.posPurchasesIntl': 'Compras POS (Intl)',
   'card.postalCodeWithAsterisk': 'Código postal *',
-  'card.poweredByKaiserex': 'Con tecnología de Kaiserex',
+  'card.poweredByKaiserex': 'Con tecnología de Zione',
   'card.preparingAdaTransaction': 'Preparando la transacción de ADA...',
   'card.processingYourApplication': 'Procesando tu solicitud...',
-  'card.readOurAnnouncement': 'Lee nuestro anuncio',
   'card.realTimeConversion': 'Conversión en tiempo real',
   'card.realTimeConversionDesc': 'Tus criptomonedas se convierten al instante a dinero fiat en el momento de la recarga.',
   'card.recentActivities': 'Actividad reciente',
   'card.reference': 'Referencia',
-  'card.registerOnKaiserex': 'Regístrate en Kaiserex',
+  'card.registerOnKaiserex': 'Regístrate en Zione',
   'card.registerToOrderCard': 'Regístrate para solicitar tu tarjeta',
   'card.registrationComplete': '¡Registro completado!',
   'card.replacementCard': 'Tarjeta de reemplazo (física)',
@@ -331,16 +326,15 @@ export default {
   'card.signIn': 'Iniciar sesión',
   'card.signInCompleteKYC': 'Inicia sesión y completa el KYC',
   'card.signInToExisting': 'Inicia sesión en tu cuenta existente para continuar con el pedido de tu tarjeta o consultar tu estado.',
-  'card.signInToKaiserex': 'Inicia sesión en Kaiserex',
   'card.signInTopUpCheck': 'Inicia sesión en tu cuenta existente para recargar tu tarjeta, solicitar tarjetas adicionales o consultar tu saldo.',
   'card.signingIn': 'Iniciando sesión...',
   'card.spendAdaAnywhere': '¡Gasta ADA en cualquier lugar!',
   'card.spendCryptoAnywhere': 'Gasta tus criptomonedas en cualquier lugar con tu Gero Card.',
   'card.standardFees': 'Comisiones estándar (tras el período promocional)',
   'card.startKYCProcess': 'Iniciar proceso KYC',
-  'card.startingMayFirst': 'A partir del 1 de agosto de 2026',
+  'card.startingMayFirst': 'A partir del 1 de mayo de 2027',
   'card.stateProvinceWithAsterisk': 'Estado / Provincia *',
-  'card.step1CreateKaiserex': 'Paso 1: Crea tu cuenta de Kaiserex (nuestro socio bancario)',
+  'card.step1CreateKaiserex': 'Paso 1: Crea tu cuenta de Zione (nuestro socio del programa de tarjetas)',
   'card.step2CompleteKYC': 'Paso 2: Completa la verificación KYC con tu documento de identidad y un escaneo facial',
   'card.step3ReceiveCard': 'Paso 3: Recibe tu Gero Crypto Card',
   'card.streetAddress': 'Calle y número',
@@ -373,18 +367,13 @@ export default {
   'card.transferringEurToCard': 'Transfiriendo EUR a tu Gero Card...',
   'card.transportation': 'Transporte',
   'card.travel': 'Viajes',
-  'card.twoFactorAuthentication': 'Autenticación de dos factores',
   'card.updatingCardBalance': 'Actualizando el saldo de la tarjeta...',
   'card.uploadedId': 'Documento subido',
-  'card.usernameOrEmail': 'Usuario o correo electrónico',
-  'card.verificationCode': 'Código de verificación',
   'card.viewCardDetails': 'Ver datos de la tarjeta',
   'card.viewCardDetailsSubtitle': 'Consulta los datos de tu tarjeta. Esta acción no se puede deshacer.',
   'card.viewCardDetailsTab': 'Ver datos de la tarjeta',
   'card.willEnjoyTokenIncentives': 'disfrutarán de incentivos en tokens en forma de exención de comisiones',
   'card.writeDeliveryDetails': 'Escribe tus datos de entrega, enviaremos la tarjeta en 10-20 días.',
-  'card.yearsExperience': 'Más de 10 años de experiencia',
-  'card.yearsExperienceDesc': 'Más de una década de experiencia en el sector, al servicio de más de 200 clientes de alto valor en múltiples industrias y países',
   'card.yourAdaBalance': 'Tu saldo de ADA:',
   'card.yourDetails': 'Tus datos',
   'card.yourGeroBalance': 'Tu saldo de $GERO:',
@@ -428,7 +417,7 @@ export default {
   'card.shippingAddress': 'Dirección',
   'card.whereToShipCard': '¿A dónde enviamos tu tarjeta?',
   'card.useExistingAddress': 'Usar dirección existente',
-  'card.useAddressRegisteredWithKaiserex': 'Usa la dirección registrada en tu cuenta de KaiserEx',
+  'card.useAddressRegisteredWithKaiserex': 'Usa la dirección registrada en tu cuenta de Zione',
   'card.enterNewAddress': 'Ingresar nueva dirección',
   'card.provideNewShippingAddress': 'Indica otra dirección de envío',
   'card.enterStreetAddress': 'Ingresa la calle y el número',
@@ -463,6 +452,7 @@ export default {
   'card.prfAuthenticationRequired': 'Se requerirá autenticación con PassKey para confirmar el pago',
   'card.missingPaymentAddress': 'Dirección de pago no disponible. Inténtalo de nuevo.',
   'card.failedToGetPaymentDetails': 'No se pudieron obtener los datos del pago. Inténtalo de nuevo.',
+  'card.paymentDetailsRefreshed': 'Se actualizaron tus datos de pago. Revisa el nuevo monto y la dirección, y vuelve a confirmar.',
   'card.processingOrder': 'Procesando pedido',
   'card.pleaseWait': 'Espera mientras procesamos tu pedido...',
   'card.confirmingPayment': 'Confirmando tu pago...',
@@ -477,6 +467,194 @@ export default {
   'card.orderPlacedSuccessfully': 'Tu pedido de tarjeta física se realizó con éxito',
   'card.estimatedDelivery': 'Entrega estimada: 7-14 días hábiles',
   'card.confirmationEmailSent': 'Se envió un correo electrónico de confirmación',
+
+  'card.howItWorks': 'Cómo obtener tu tarjeta',
+
+  'card.hubLead': 'Recarga con ADA desde esta billetera y paga en euros en línea, en tiendas y en cajeros automáticos.',
+
+  'card.pricingTitle': 'Cuánto cuesta',
+
+  'card.activateAutoCheck': 'Verificamos la activación automáticamente. Tu tarjeta aparecerá como activa en cuanto Zione la confirme.',
+
+  'card.activateCard': 'Activar tarjeta',
+
+  'card.activateDesc': 'Ingresa el número impreso en el frente de la tarjeta que recibiste. Tu tarjeta virtual sigue funcionando mientras la activamos.',
+
+  'card.activateHint': 'Solo se usa para confirmar que la tarjeta llegó a tus manos.',
+
+  'card.activateInvalidPan': 'Revisa el número de tarjeta: debe tener entre 16 y 19 dígitos, tal como aparece impreso.',
+
+  'card.activateTitle': 'Activa tu tarjeta física',
+
+  'card.activationEmailNote': 'Recibirás un correo de Zione para activar tu cuenta.',
+
+  'card.activationFailed': 'No pudimos activar la tarjeta. Revisa el número e inténtalo de nuevo.',
+
+  'card.activationStarted': 'La activación comenzó. Suele tardar unos minutos.',
+
+  'card.addressValidFor': 'Dirección de un solo uso, válida por {time}',
+
+  'card.alreadyRegisteredSignIn': '¿Ya te registraste? Inicia sesión',
+
+  'card.applicationNotApproved': 'Tu solicitud no fue aprobada',
+
+  'card.applicationNotApprovedDesc': 'Zione no pudo aprobar tu solicitud de tarjeta. Contacta al soporte de Zione para saber el motivo y qué puedes hacer a continuación.',
+
+  'card.blocked': 'Bloqueada',
+
+  'card.buildingTransaction': 'Creando la transacción',
+
+  'card.cardActivated': 'Tu tarjeta está activa.',
+
+  'card.cardBlockedNotice': 'Tarjeta bloqueada.',
+
+  'card.cardControls': 'Controles de la tarjeta',
+
+  'card.cardProgramPartner': 'Socio del programa de tarjetas',
+
+  'card.cardUnblocked': 'Tarjeta desbloqueada.',
+
+  'card.changePin': 'Cambiar PIN',
+
+  'card.changePinSubtitle': 'Define un nuevo PIN de 4 dígitos para pagos con tarjeta y cajeros automáticos',
+
+  'card.confirmNewPin': 'Confirma el nuevo PIN',
+
+  'card.declined': 'Rechazada',
+
+  'card.depositAddressVerified': 'Dirección verificada',
+
+  'card.feeEstimateNote': 'Estimado con el tipo de cambio de hoy. El monto exacto se fija al enviar tu solicitud.',
+
+  'card.fieldTooLong': 'Usa como máximo {max} caracteres.',
+
+  'card.followOrderOnDashboard': 'Sigue tu solicitud desde el panel de tu tarjeta.',
+
+  'card.heroArtLabel': 'ADA fluyendo hacia la Gero Card, emitida con Zione',
+
+  'card.hideCardDetails': 'Ocultar datos de la tarjeta',
+
+  'card.hidePin': 'Ocultar PIN',
+
+  'card.journeyActivate': 'Activar',
+
+  'card.journeyLabel': 'Tu camino a la tarjeta',
+
+  'card.journeyOrder': 'Solicitar tarjeta',
+
+  'card.journeySpend': 'Pagar',
+
+  'card.journeyVerify': 'Verificar identidad',
+
+  'card.kycLinkFailed': 'No pudimos abrir la verificación de identidad. Inténtalo de nuevo.',
+
+  'card.kycOpensNewTab': 'La verificación de identidad de Zione se abre en una nueva pestaña.',
+
+  'card.last30DaysLabel': 'Últimos 30 días',
+
+  'card.legalEntity': 'Entidad legal',
+
+  'card.minimumTopUp': 'Monto mínimo de recarga: {amount} ADA',
+
+  'card.newPin': 'Nuevo PIN',
+
+  'card.noTransactionsInPeriod': 'No hay transacciones en este período.',
+
+  'card.orderAnotherCard': 'Solicitar otra tarjeta',
+
+  'card.payLaterNote': 'Tu solicitud quedó guardada. También puedes pagar el costo de envío más tarde desde el panel de tu tarjeta.',
+
+  'card.payTo': 'Pagar a',
+
+  'card.physicalCardOrder': 'Solicitud de tarjeta física',
+
+  'card.pinChangeFailed': 'No pudimos cambiar el PIN. Inténtalo de nuevo.',
+
+  'card.pinChanged': 'PIN cambiado.',
+
+  'card.pinHidden': 'PIN oculto',
+
+  'card.pinMismatch': 'Los dos PIN no coinciden.',
+
+  'card.pinWeak': 'Evita dígitos repetidos o secuencias como 1234.',
+
+  'card.rateLine': '1 ADA = {rate}',
+
+  'card.registrationDetails': 'Registro',
+
+  'card.restartVerification': 'Reiniciar verificación',
+
+  'card.savePin': 'Guardar PIN',
+
+  'card.secureFormBy': 'Formulario seguro de Zione',
+
+  'card.secureSignInWindow': 'El inicio de sesión de Zione se abre en una ventana segura',
+
+  'card.showCardDetails': 'Mostrar datos de la tarjeta',
+
+  'card.showPin': 'Mostrar PIN',
+
+  'card.signInFailed': 'No se pudo iniciar sesión. Inténtalo de nuevo.',
+
+  'card.signOut': 'Cerrar sesión',
+
+  'card.signedInAs': 'Sesión iniciada como',
+
+  'card.signingAndSubmitting': 'Firmando y enviando',
+
+  'card.switchCurrency': 'Cambiar entre ADA y EUR',
+
+  'card.topUpCredited': 'El saldo de tu tarjeta está actualizado.',
+
+  'card.topUpSubmitted': 'Recarga enviada',
+
+  'card.topUpSubmittedDesc': 'Tu saldo se actualizará cuando la red confirme la transacción, normalmente en pocos minutos.',
+
+  'card.trackerActivated': 'Activada',
+
+  'card.trackerActivating': 'Activando tu tarjeta',
+
+  'card.trackerAutoRefresh': 'Esta página busca actualizaciones automáticamente. Tu tarjeta aparecerá aquí en cuanto Zione la emita.',
+
+  'card.trackerAwaitingPayment': 'Esperando el pago del costo de envío',
+
+  'card.trackerDispatched': 'Enviada',
+
+  'card.trackerIssuing': 'Emitiendo tu tarjeta virtual',
+
+  'card.trackerOnItsWay': 'Va en camino. Actívala cuando llegue.',
+
+  'card.trackerPaid': 'Costo de envío pagado',
+
+  'card.trackerPaymentDetected': 'Pago detectado, esperando confirmaciones',
+
+  'card.trackerPlaced': 'Solicitud enviada',
+
+  'card.trackerPreparing': 'Preparando tu tarjeta para el envío',
+
+  'card.trackerReady': 'Lista para usar',
+
+  'card.trackerTitlePhysical': 'Estamos preparando tu tarjeta',
+
+  'card.trackerTitleVirtual': 'Estamos emitiendo tu tarjeta virtual',
+
+  'card.typePhysical': 'Física',
+
+  'card.typeVirtual': 'Virtual',
+
+  'card.unblockCard': 'Desbloquear tarjeta',
+
+  'card.verificationFailed': 'La verificación falló',
+
+  'card.verificationFailedDesc': 'Zione no pudo confirmar tu identidad esta vez. Puedes iniciar la verificación de nuevo; ten a mano un documento de identidad válido y tu cámara.',
+
+  'card.verificationFailedTitle': 'Tu verificación de identidad no se completó',
+
+  'card.viewFees': 'Ver comisiones',
+
+  'card.virtualCardOrder': 'Solicitud de tarjeta virtual',
+
+  'card.waitingForBalance': 'Esperando que se actualice el saldo de tu tarjeta…',
   'cashback.adaCashback': 'Cashback en ADA',
   'cashback.allCategories': 'Todas las categorías',
   'cashback.availableIn': 'Disponible en',
@@ -3095,7 +3273,6 @@ export default {
   'wallet.paymentAddress': 'Dirección de pago',
   'wallet.paymentAddressInfo': 'Comparte tu dirección de pago para recibir {ticker} de forma segura',
   'wallet.pleaseAllowCameraAccess': 'Permite el acceso a la cámara en la configuración de tu navegador.',
-  'wallet.pleaseEnterAll6Digits': 'Ingresa los 6 dígitos',
   'wallet.pointCameraAtQR': 'Apunta la cámara a un código QR que contenga una dirección',
   'wallet.pleaseEnterPasswordToContinue': 'Ingresa tu contraseña para continuar.',
   'wallet.pleaseReviewCarefully': 'Revisa detenidamente los detalles de la transacción antes de continuar. Confirma la transacción firmando con tu dispositivo {walletType}.',
