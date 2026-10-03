@@ -46,6 +46,23 @@ const EASE = 'calcMode="spline" keyTimes="0;0.5;1" keySplines="0.45 0 0.55 1;0.4
 const both = (still, live) => isLive => (isLive ? live : still);
 const draw = (part, isLive) => (typeof part === 'function' ? part(isLive) : part);
 
+/**
+ * A card's box: 54 units wide at s = 1, with the artwork's own proportions so the image is
+ * never stretched. `over` centres it on that box's footprint instead of a hand-set x/y.
+ */
+function cardBox({ x, y, z, s = 1, over }) {
+  const w = 54 * s;
+  const d = w * CARD_ART.h / CARD_ART.w;
+  return {
+    x: over ? over.x + (over.w - w) / 2 : x,
+    y: over ? over.y + (over.d - d) / 2 : y,
+    z,
+    w,
+    d,
+    h: 2 * s,
+  };
+}
+
 function railPath(points, r) {
   let d = `M${xy(P(...points[0]))}`;
   for (let i = 1; i < points.length - 1; i++) {
@@ -119,21 +136,30 @@ function makeWorld() {
       + `<ellipse class="iso-coin-ring" cx="${R(c[0])}" cy="${R(c[1])}" rx="${R(rx * 0.58)}" ry="${R(ry * 0.58)}"/></g>`;
   }
 
-  // A payment card slab with the real card artwork on its top face. The artwork's width runs
-  // along x and its height along y, so the affine map is exactly this projection.
-  function cardSvg({ x, y, z, s = 1, tone = 'graphite', hover = false }) {
-    const w = 54 * s;
-    const d = 34 * s;
-    const top = z + 2 * s;
-    const { faces, edge } = boxFaces({ x, y, z, w, d, h: 2 * s, tone });
-    const sx = w / CARD_ART.w;
-    const sy = d / CARD_ART.h;
-    const [e, f] = P(x, y, top);
-    const matrix = [sx, sx / 2, -sy, sy / 2, e, f].map(R).join(' ');
-    const art = `<image class="iso-card-art" href="__CARD_IMG__" width="${CARD_ART.w}" height="${CARD_ART.h}" preserveAspectRatio="none" transform="matrix(${matrix})"/>`;
+  // A payment card slab with the real card artwork on its top face. The image is laid out in
+  // world units (its width along x, its height along y) and placed by the projection's own
+  // matrix, so its corners are the face's corners exactly. Scaling the 1080 px artwork in the
+  // matrix instead would need more precision than R() keeps: rounded to 0.05 / 0.03, the
+  // terms skew the image off the slab.
+  // A floating card (`hover`, centred `over` a box) casts its shadow straight down onto it.
+  function cardSvg({ tone = 'graphite', hover = false, ...placement }) {
+    const b = cardBox(placement);
+    const { faces, edge } = boxFaces({ ...b, tone });
+    const [e, f] = P(b.x, b.y, b.z + b.h);
+    const art = `<image class="iso-card-art" href="__CARD_IMG__" width="${R(b.w)}" height="${R(b.d)}" preserveAspectRatio="none" transform="matrix(1 0.5 -1 0.5 ${R(e)} ${R(f)})"/>`;
     const slab = faces + art + edge;
     if (!hover) return slab;
-    return both(slab, `<g>${slab}<animateTransform attributeName="transform" type="translate" values="0 0;0 -2.5;0 0" ${EASE} dur="4s" repeatCount="indefinite"/></g>`);
+    const shadow = placement.over ? shadowSvg(b, placement.over) : '';
+    return both(shadow + slab, `${shadow}<g>${slab}<animateTransform attributeName="transform" type="translate" values="0 0;0 -2.5;0 0" ${EASE} dur="4s" repeatCount="indefinite"/></g>`);
+  }
+
+  // The part of a footprint that falls on the top face of the box beneath it.
+  function shadowSvg(b, under) {
+    const x0 = Math.max(b.x, under.x);
+    const y0 = Math.max(b.y, under.y);
+    const x1 = Math.min(b.x + b.w, under.x + under.w);
+    const y1 = Math.min(b.y + b.d, under.y + under.d);
+    return quadSvg({ x: x0, y: y0, z: under.z + under.h, w: x1 - x0, d: y1 - y0, cls: 'iso-shadow' });
   }
 
   function upperY(sh, sx) {
@@ -285,11 +311,12 @@ scene('hero', [320, 200], s => {
   [0, 0.47, 0.33].forEach((phase, i) => s.flow(bus[i], { dur: 3.6, phase }));
   s.packet([-40, 12], { still: true });
   s.packet([-17, 30], { still: true });
+  const pad = { x: 10, y: 8, z: 14, w: 68, d: 44, h: 5 };
   s.floor({ x: 0, y: 0, w: 88, d: 60, k: 0.95 });
   s.stack({ x: 0, y: 0, w: 88, d: 60 }, p => {
     p.box({ x: 0, y: 0, z: 0, w: 88, d: 60, h: 14, tone: 'navy' });
-    p.box({ x: 10, y: 8, z: 14, w: 68, d: 44, h: 5, tone: 'cyan' });
-    p.card({ x: 16, y: 13, z: 32, s: 1.08, hover: true });
+    p.box({ ...pad, tone: 'cyan' });
+    p.card({ over: pad, z: 32, s: 1.08, hover: true });
   });
   s.rail([[88, 30], [114, 30]], { partner: true });
   s.flow([[88, 30], [114, 30]], { tone: 'green' });
@@ -364,11 +391,13 @@ scene('virtual', [200, 140], s => {
   s.rail([[-38, 23], [0, 23]]);
   s.flow([[-38, 23], [0, 23]], { count: 2 });
   s.packet([-19, 23], { still: true });
+  // The emitter is larger than the card, so a lit rim shows around the card's shadow.
+  const emitter = { x: 6, y: 6, z: 8, w: 50, d: 34, h: 3 };
   s.floor({ x: 0, y: 0, w: 62, d: 46 });
   s.stack({ x: 0, y: 0, w: 62, d: 46 }, p => {
     p.box({ x: 0, y: 0, z: 0, w: 62, d: 46, h: 8, tone: 'navy' });
-    p.box({ x: 8, y: 6, z: 8, w: 46, d: 34, h: 3, tone: 'cyan' });
-    p.card({ x: 4, y: 6, z: 26, s: 1, hover: true });
+    p.box({ ...emitter, tone: 'cyan' });
+    p.card({ over: emitter, z: 26, s: 0.84, hover: true });
   });
 });
 
@@ -408,23 +437,25 @@ scene('payment', [220, 140], s => {
   s.flow([[-40, 22], [0, 22]], { kind: 'coin', count: 2 });
   s.coinAt([-28, 22], { still: true });
   s.coinAt([-13, 22], { still: true });
+  const wallet = { x: 0, y: 0, z: 0, w: 60, d: 44, h: 8 };
   s.floor({ x: 0, y: 0, w: 60, d: 44 });
   s.stack({ x: 0, y: 0, w: 60, d: 44 }, p => {
-    p.box({ x: 0, y: 0, z: 0, w: 60, d: 44, h: 8, tone: 'navy' });
-    p.card({ x: 4, y: 6, z: 8, s: 0.96 });
+    p.box({ ...wallet, tone: 'navy' });
+    p.card({ over: wallet, z: 8, s: 0.96 });
   });
 });
 
 // Activate: the card on its dock, the key over the card.
 scene('activate', [200, 140], s => {
-  const card = { x: 5, y: 6, z: 12, s: 0.98 };
+  const dock = { x: 4, y: 4, z: 10, w: 56, d: 38, h: 2 };
+  const card = { over: dock, z: 12, s: 0.98 };
   s.floor({ x: 0, y: 0, w: 64, d: 46 });
   s.stack({ x: 0, y: 0, w: 64, d: 46 }, p => {
     p.box({ x: 0, y: 0, z: 0, w: 64, d: 46, h: 10, tone: 'navy' });
-    p.box({ x: 4, y: 4, z: 10, w: 56, d: 38, h: 2, tone: 'cyan' });
+    p.box({ ...dock, tone: 'cyan' });
     p.card(card);
   });
-  s.mark({ on: { x: card.x, y: card.y, z: card.z, w: 54 * card.s, d: 34 * card.s, h: 2 * card.s }, glyph: 'key' });
+  s.mark({ on: cardBox(card), glyph: 'key' });
 });
 
 // PIN: a keypad of nine keys; live, the lit key presses.

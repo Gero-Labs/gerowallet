@@ -2,7 +2,7 @@
    Isometric illustration materials (IsoScene.vue).
    The markup in src/shared/components/iso/isoScenes.ts carries classes only;
    every colour resolves to a --g-iso-* token (tokens.css) or a house token.
-   Illustrations are still: motion is feedback, and none is needed here.
+   Motion is opt-in per scene (IsoScene `animated`) and off under reduced motion.
    ============================================================ */
 .g-iso {
   display: block;
@@ -44,6 +44,9 @@
 .g-iso .iso-tape { fill: var(--g-iso-tape); }
 .g-iso .iso-coin-ring { fill: none; stroke: var(--g-on-grad); stroke-opacity: 0.35; stroke-width: 1; }
 .g-iso .iso-slot { fill: none; stroke: var(--g-text-3); stroke-dasharray: 3 3; stroke-width: 1.2; }
+
+/* A floating card's shadow on the lit pad beneath it, which places the card in depth */
+.g-iso .iso-shadow { fill: var(--g-iso-navy-r); fill-opacity: 0.4; }
 
 /* Floor glow instead of a contact shadow (shadows vanish on the black canvas) */
 .g-iso .iso-floor-s1 { stop-color: var(--g-accent); stop-opacity: 0.24; }
