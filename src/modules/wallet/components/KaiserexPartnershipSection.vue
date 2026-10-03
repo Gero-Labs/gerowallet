@@ -1,7 +1,7 @@
 <template>
   <section class="card-partner glass-panel" aria-labelledby="card-partner-heading">
     <div class="card-partner__intro">
-      <IsoScene name="bridge" class="card-partner__art" />
+      <IsoScene name="bridge" :animated="animated" class="card-partner__art" />
       <div class="card-partner__copy">
         <span class="t-label">{{ t('card.cardProgramPartner') }}</span>
         <h2 id="card-partner-heading" class="t-heading">{{ t('card.poweredByKaiserex') }}</h2>
@@ -62,6 +62,8 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { CARD_PROVIDER } from '@/modules/wallet/cardProvider';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import IsoScene from '@/shared/components/iso/IsoScene.vue';
+
+withDefaults(defineProps<{ animated?: boolean }>(), { animated: false });
 
 const { t } = useTranslation();
 </script>

@@ -21,9 +21,6 @@
     <template v-else>
       <header class="card-hub__hero" aria-labelledby="card-hub-title">
         <div class="card-hub__intro">
-          <CardChip tone="accent" icon="mdi-tag-outline" clickable @click="showPromotionModal = true">
-            {{ t('card.enjoyZeroFeesUntil') }}
-          </CardChip>
           <div class="card-hub__headline">
             <h1 id="card-hub-title" class="t-display">{{ t('card.getYourGeroCryptoCard') }}</h1>
             <p class="card-hub__lead">{{ t('card.hubLead') }}</p>
@@ -49,12 +46,12 @@
             <li><v-icon x-small>mdi-shield-check-outline</v-icon>{{ t('card.licensedRegulated') }} · FSP {{ CARD_PROVIDER.fspNumber }}</li>
           </ul>
         </div>
-        <IsoScene name="hero" class="card-hub__art" :label="t('card.heroArtLabel')" />
+        <IsoScene name="hero" animated class="card-hub__art" :label="t('card.heroArtLabel')" />
       </header>
 
-      <FeatureGridSection />
+      <FeatureGridSection animated />
 
-      <section class="card-hub__how" aria-labelledby="card-hub-how">
+      <section class="card-hub__how glass-panel" aria-labelledby="card-hub-how">
         <h2 id="card-hub-how" class="t-heading">{{ t('card.howItWorks') }}</h2>
         <ol class="card-hub__steps">
           <li v-for="(step, i) in steps" :key="step" class="glass-tier">
@@ -82,7 +79,7 @@
         </div>
       </section>
 
-      <KaiserexPartnershipSection />
+      <KaiserexPartnershipSection animated />
     </template>
 
     <KaiserexRegistrationModal
@@ -264,6 +261,7 @@ function signInFromRegistration(): void {
   display: flex;
   flex-direction: column;
   gap: var(--g-s-4);
+  padding: var(--g-s-5);
 
   h2 {
     margin: 0;

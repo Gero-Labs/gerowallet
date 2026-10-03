@@ -38,7 +38,7 @@
         <span class="t-caption">{{ t('card.kycOpensNewTab') }}</span>
       </div>
 
-      <div class="kyc-status glass-tier">
+      <div class="kyc-status glass-panel">
         <span class="t-body-sm">{{ t('card.yourKYCStatus') }}</span>
         <v-tooltip bottom max-width="350" :open-delay="300">
           <template #activator="{ on, attrs }">

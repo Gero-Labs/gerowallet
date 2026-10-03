@@ -6,6 +6,7 @@
       :icon="feature.icon"
       :title="feature.title"
       :description="feature.description"
+      :animated="animated"
     />
   </section>
 </template>
@@ -15,6 +16,8 @@ import { computed } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import type { FeatureCardProps } from '@/models/types';
 import FeatureCard from './FeatureCard.vue';
+
+withDefaults(defineProps<{ animated?: boolean }>(), { animated: false });
 
 const { t } = useTranslation();
 
