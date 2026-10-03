@@ -1,472 +1,225 @@
 <template>
-  <div class="amount-input-step">
-    <!-- Title and Subtitle -->
-    <div class="header-text">
-      <h2 class="modal-title">{{ t('card.topUpCardBalance') }}</h2>
-      <p class="modal-subtitle">{{ t('card.swapAdaToEuro') }}</p>
+  <div class="topup-amount">
+    <div class="topup-amount__rate glass-tier">
+      <span class="t-body-sm">{{ t('card.todaysRate') }}</span>
+      <span class="t-body-lg g-num">{{ rateText }}</span>
     </div>
 
-    <!-- Exchange Rate Table -->
-    <div class="exchange-rate-table">
-      <div class="rate-row">
-        <span class="rate-label">{{ t('card.todaysRate') }}</span>
-      </div>
-      <div class="rate-row">
-        <span class="rate-value">₳1 ADA</span>
-        <span class="rate-equals">=</span>
-        <span class="rate-value">€{{ EXCHANGE_RATE?.toFixed(2) }} EUR</span>
-      </div>
-    </div>
-
-    <!-- Wallet Balance -->
-    <div class="wallet-balance">
-      <span class="balance-label">{{ t('card.yourAdaBalance') }}</span>
-      <span class="balance-value">₳{{ adaBalance }}</span>
-    </div>
-
-    <!-- Minimum Requirement Notice -->
-    <div class="minimum-notice">
-      <v-icon color="primary" size="16" class="notice-icon">mdi-information</v-icon>
-      <span class="notice-text">Minimum top-up amount: 2 ADA</span>
-    </div>
-
-    <!-- Amount Input Section -->
-    <div class="amount-section">
-      <!-- First Input (ADA or EUR based on switch state) -->
-      <div class="amount-input-container">
-        <div class="input-header">
-          <span class="input-label">{{ t('card.amount') }}</span>
-        </div>
-        <div class="input-content">
-          <span class="currency-badge">{{ isSwitched ? '€' : '₳' }}</span>
+    <div class="topup-amount__fields">
+      <label class="topup-amount__field is-primary">
+        <span class="t-label">{{ t('card.amount') }}</span>
+        <span class="topup-amount__input-row">
           <input
-            v-model="firstInputValue"
-            type="number"
+            :value="primaryValue"
+            class="topup-amount__input g-num"
+            inputmode="decimal"
+            autocomplete="off"
             placeholder="0"
-            class="custom-input"
-            @input="handleFirstInput"
-            @focus="handleInputFocus"
+            :aria-label="`${t('card.amount')} (${primaryCurrency})`"
+            @input="onPrimaryEvent"
           />
-          <span class="currency-badge">{{ isSwitched ? 'EUR' : 'ADA' }}</span>
-        </div>
-      </div>
+          <CardChip>{{ primaryCurrency }}</CardChip>
+        </span>
+      </label>
 
-      <!-- Switch Button -->
-      <div class="switch-button">
-        <v-avatar size="32" style="border: 1px solid var(--g-accent)">
-          <v-icon color="primary" size="20">mdi-arrow-down</v-icon>
-        </v-avatar>
-      </div>
+      <v-btn
+        icon
+        outlined
+        class="topup-amount__swap"
+        :aria-label="t('card.switchCurrency')"
+        @click="inEur = !inEur"
+      >
+        <v-icon small>mdi-swap-vertical</v-icon>
+      </v-btn>
 
-      <!-- Second Input (EUR or ADA based on switch state) -->
-      <div class="amount-input-container">
-        <div class="input-header">
-          <span class="input-label">{{ t('card.amount') }}</span>
-        </div>
-        <div class="input-content">
-          <span class="currency-badge">{{ isSwitched ? '₳' : '€' }}</span>
-          <input
-            v-model="secondInputValue"
-            type="number"
-            placeholder="0"
-            class="custom-input"
-            @input="handleSecondInput"
-            @focus="handleInputFocus"
-          />
-          <span class="currency-badge">{{ isSwitched ? 'ADA' : 'EUR' }}</span>
-        </div>
+      <div class="topup-amount__field">
+        <span class="t-label">{{ t('card.cardWillReceiveExactly') }}</span>
+        <span class="topup-amount__input-row">
+          <span class="topup-amount__secondary g-num">{{ secondaryValue || '0' }}</span>
+          <CardChip>{{ secondaryCurrency }}</CardChip>
+        </span>
       </div>
+    </div>
+
+    <div class="topup-amount__meta">
+      <span class="t-body-sm">{{ t('card.yourAdaBalance') }} <span class="g-num topup-amount__balance">₳{{ adaBalance }}</span></span>
+      <span class="t-caption topup-amount__min" :class="{ 'is-error': belowMinimum }">
+        <v-icon x-small>mdi-information-outline</v-icon>
+        {{ t('card.minimumTopUp', { amount: minAda }) }}
+      </span>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed, ref, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref, watch, computed } from 'vue';
 import walletStore from '@/stores/walletStore';
-import cardStore from '@/stores/modules/card';
+import { adaFigure, cardMoney } from '@/modules/wallet/utils/cardFormat';
+import CardChip from '../../ui/CardChip.vue';
 
-const { t } = useTranslation();
+const props = defineProps<{
+  modelValue: { adaAmount: string; eurAmount: string };
+  /** EUR per ADA (the provider's buy rate), 0 while unknown. */
+  rate: number;
+  minAda: number;
+}>();
 
-// Props
-interface Props {
-  modelValue: {
-    adaAmount: string;
-    eurAmount: string;
-  };
-}
-
-const props = defineProps<Props>();
-// Emits
 const emit = defineEmits<{
   (e: 'update:modelValue', value: { adaAmount: string; eurAmount: string }): void;
 }>();
 
-// Reactive data
-const adaAmount = ref(props.modelValue.adaAmount);
-const eurAmount = ref(props.modelValue.eurAmount);
-const isSwitched = ref(false);
-const isUpdatingFromFirst = ref(false);
-const isUpdatingFromSecond = ref(false);
-const activeInput = ref<'first' | 'second' | null>(null);
+const { t } = useTranslation();
 
-// Exchange rate
-const EXCHANGE_RATE = computed(() => {
-  return Number(cardStore.state.exchangeRate?.buy);
-});
+/** Typing in euros instead of ADA. */
+const inEur = ref(false);
 
-// Computed property for ADA balance
+const primaryCurrency = computed(() => (inEur.value ? 'EUR' : 'ADA'));
+const secondaryCurrency = computed(() => (inEur.value ? 'ADA' : 'EUR'));
+const primaryValue = computed(() => (inEur.value ? props.modelValue.eurAmount : props.modelValue.adaAmount));
+const secondaryValue = computed(() => (inEur.value ? props.modelValue.adaAmount : props.modelValue.eurAmount));
+
+const rateText = computed(() => (props.rate > 0 ? `₳1 ADA = ${cardMoney(props.rate)} EUR` : '—'));
+
 const adaBalance = computed(() => {
-  if (walletStore.state.account?.controlled_amount) {
-    // Convert lovelaces to ADA (1 ADA = 1,000,000 lovelaces)
-    const ada = Number(walletStore.state.account.controlled_amount) / 1_000_000;
-    return ada.toFixed(2);
-  }
-  return '0.00';
+  const lovelace = Number(walletStore.state.account?.controlled_amount ?? 0);
+  return adaFigure(Number.isFinite(lovelace) ? lovelace / 1_000_000 : 0);
 });
 
-// Computed values for inputs based on switch state
-const firstInputValue = computed({
-  get: () => (isSwitched.value ? eurAmount.value : adaAmount.value),
-  set: (value: string) => {
-    if (isSwitched.value) {
-      eurAmount.value = value;
-    } else {
-      adaAmount.value = value;
-    }
-  },
+const belowMinimum = computed(() => {
+  const ada = parseFloat(props.modelValue.adaAmount);
+  return props.modelValue.adaAmount !== '' && (!Number.isFinite(ada) || ada < props.minAda);
 });
 
-const secondInputValue = computed({
-  get: () => (isSwitched.value ? adaAmount.value : eurAmount.value),
-  set: (value: string) => {
-    if (isSwitched.value) {
-      adaAmount.value = value;
-    } else {
-      eurAmount.value = value;
-    }
-  },
-});
+/** Digits with one decimal point, ADA to 6 places and EUR to 2. */
+function sanitize(raw: string, decimals: number): string {
+  const cleaned = raw.replace(',', '.').replace(/[^\d.]/g, '');
+  const [whole = '', ...rest] = cleaned.split('.');
+  return rest.length ? `${whole}.${rest.join('').slice(0, decimals)}` : whole;
+}
 
-const handleInputFocus = (event: Event) => {
-  const target = event.target as HTMLInputElement;
-  if (target.value === firstInputValue.value) {
-    activeInput.value = 'first';
+function onPrimaryInput(raw: string): void {
+  const rate = props.rate;
+  if (inEur.value) {
+    const eurAmount = sanitize(raw, 2);
+    const eur = parseFloat(eurAmount);
+    const adaAmount = Number.isFinite(eur) && rate > 0 ? (eur / rate).toFixed(2) : '';
+    emit('update:modelValue', { adaAmount, eurAmount });
   } else {
-    activeInput.value = 'second';
+    const adaAmount = sanitize(raw, 6);
+    const ada = parseFloat(adaAmount);
+    const eurAmount = Number.isFinite(ada) && rate > 0 ? (ada * rate).toFixed(2) : '';
+    emit('update:modelValue', { adaAmount, eurAmount });
   }
-};
+}
 
-const handleFirstInput = () => {
-  if (isUpdatingFromSecond.value) return;
+function onPrimaryEvent(event: Event): void {
+  onPrimaryInput((event.target as HTMLInputElement).value);
+}
 
-  isUpdatingFromFirst.value = true;
-  const firstValue = parseFloat(firstInputValue.value) || 0;
-
-  if (isSwitched.value) {
-    // First input is EUR, second should be ADA
-    adaAmount.value = (firstValue / EXCHANGE_RATE.value).toFixed(2);
-  } else {
-    // First input is ADA, second should be EUR
-    eurAmount.value = (firstValue * EXCHANGE_RATE.value).toFixed(2);
-  }
-
-  isUpdatingFromFirst.value = false;
-
-  const emitData = {
-    adaAmount: adaAmount.value,
-    eurAmount: eurAmount.value,
-  };
-  console.log('🔢 AmountInputStep emitting update:modelValue:', emitData);
-  emit('update:modelValue', emitData);
-};
-
-const handleSecondInput = () => {
-  if (isUpdatingFromFirst.value) return;
-
-  isUpdatingFromSecond.value = true;
-  const secondValue = parseFloat(secondInputValue.value) || 0;
-
-  if (isSwitched.value) {
-    // Second input is ADA, first should be EUR
-    eurAmount.value = (secondValue * EXCHANGE_RATE.value).toFixed(2);
-  } else {
-    // Second input is EUR, first should be ADA
-    adaAmount.value = (secondValue / EXCHANGE_RATE.value).toFixed(2);
-  }
-
-  isUpdatingFromSecond.value = false;
-
-  const emitData = {
-    adaAmount: adaAmount.value,
-    eurAmount: eurAmount.value,
-  };
-  console.log('🔢 AmountInputStep emitting update:modelValue:', emitData);
-  emit('update:modelValue', emitData);
-};
-
-// Watch for external changes
+// A rate that arrives (or moves) after typing re-derives the other side.
 watch(
-  () => props.modelValue,
-  newValue => {
-    adaAmount.value = newValue.adaAmount;
-    eurAmount.value = newValue.eurAmount;
+  () => props.rate,
+  () => {
+    if (primaryValue.value) onPrimaryInput(primaryValue.value);
   },
-  { deep: true }
 );
 </script>
 
 <style lang="scss" scoped>
-@import '../../../styles/variables';
-@import '../../../styles/mixins';
-
-.amount-input-step {
+.topup-amount {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 24px;
-  padding: $spacing-2xl $spacing-2xl $spacing-md;
+  gap: var(--g-s-4);
 }
 
-.currency-icon {
-  width: 48px;
-  height: 48px;
-  background: $background-secondary;
-  border-radius: 50%;
+.topup-amount__rate {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
+  gap: var(--g-s-3);
+  padding: var(--g-s-3) var(--g-s-4);
 }
 
-.header-text {
+.topup-amount__fields {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: $spacing-sm;
-  width: 100%;
+  align-items: stretch;
+  gap: var(--g-s-2);
 }
 
-.modal-title {
-  @include heading-style($font-size-2xl);
-  color: $text-primary;
-  margin: 0;
-  line-height: 1.17;
-  text-align: center;
-  font-weight: 600;
-  font-size: 24px;
-}
-
-.modal-subtitle {
-  @include body-text($font-size-base);
-  color: $text-secondary;
-  margin: 0;
-  line-height: 1.5;
-  text-align: center;
-  font-size: 16px;
-}
-
-.exchange-rate-table {
+/* Justified solid: an amount field is a control. */
+.topup-amount__field {
   display: flex;
-  gap: 16px;
-  padding: $spacing-sm $spacing-md;
-  align-items: center;
-  justify-content: center;
-  background: var(--g-surface);
+  flex-direction: column;
+  gap: var(--g-s-2);
+  padding: var(--g-s-3) var(--g-s-4);
+  border-radius: var(--g-r-control);
+  background: var(--g-raised);
   border: 1px solid var(--g-hairline-2);
-  border-radius: $border-radius-md;
-  width: fit-content;
 }
 
-.rate-row {
+.topup-amount__field.is-primary:focus-within {
+  border-color: var(--g-accent);
+}
+
+.topup-amount__input-row {
   display: flex;
   align-items: center;
-  gap: $spacing-sm;
-  justify-content: center;
+  justify-content: space-between;
+  gap: var(--g-s-3);
 }
 
-.rate-label {
-  font-family: var(--g-font-ui);
-  font-weight: 600;
-  font-size: 14px;
-  line-height: 1.43;
-  color: var(--g-text-2);
-}
-
-.rate-value {
-  font-family: var(--g-font-ui);
-  font-weight: 600;
-  font-size: 14px;
-  line-height: 1.43;
-  color: $text-primary;
-}
-
-.rate-equals {
-  font-family: var(--g-font-ui);
-  font-weight: 600;
-  font-size: 14px;
-  line-height: 1.43;
-  color: $text-primary;
-}
-
-.wallet-balance {
-  display: flex;
-  align-items: center;
-  gap: $spacing-sm;
-  justify-content: center;
-  padding: $spacing-sm $spacing-md;
-  background: var(--g-surface);
-  border: 1px solid var(--g-hairline-2);
-  border-radius: $border-radius-md;
-  width: fit-content;
-}
-
-.balance-label {
-  font-family: var(--g-font-ui);
-  font-weight: 500;
-  font-size: 14px;
-  line-height: 1.43;
-  color: var(--g-text-2);
-}
-
-.balance-value {
-  font-family: var(--g-font-ui);
-  font-weight: 600;
-  font-size: 14px;
-  line-height: 1.43;
-  color: var(--g-success);
-}
-
-.minimum-notice {
-  display: flex;
-  align-items: center;
-  gap: $spacing-sm;
-  justify-content: center;
-  padding: $spacing-sm $spacing-md;
-  background: color-mix(in srgb, var(--g-accent) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--g-accent) 30%, transparent);
-  border-radius: $border-radius-md;
-  width: fit-content;
-}
-
-.notice-icon {
-  flex-shrink: 0;
-}
-
-.notice-text {
-  font-family: var(--g-font-ui);
-  font-weight: 500;
-  font-size: 14px;
-  line-height: 1.43;
-  color: var(--g-accent);
-}
-
-.amount-section {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: $spacing-md;
-  width: 100%;
-}
-
-.amount-input-container {
-  display: flex;
-  flex-direction: column;
-  gap: $spacing-lg;
-  padding: $spacing-sm $spacing-md;
-  background: $background-secondary;
-  border: 1px solid var(--g-hairline-2);
-  border-radius: $border-radius-md;
-  width: 100%;
-}
-
-.input-header {
-  display: flex;
-  align-items: center;
-  gap: $spacing-sm;
-}
-
-.input-label {
-  font-family: var(--g-font-ui);
-  font-weight: 600;
-  font-size: 14px;
-  line-height: 1.43;
-  color: var(--g-text-2);
-}
-
-.input-content {
-  display: flex;
-  align-items: center;
-  gap: $spacing-md;
-  width: 100%;
-  position: relative;
-}
-
-.custom-input {
-  flex: 1;
-  font-family: var(--g-font-ui);
-  font-weight: 600;
-  font-size: 24px;
-  line-height: 1.58;
-  color: $text-primary;
-  padding: 0;
-  text-align: left;
-  background: transparent;
-  border: none;
-  outline: none;
-  box-shadow: none;
-  margin-left: -10px;
+.topup-amount__input {
   width: 100%;
   min-width: 0;
-
-  &::placeholder {
-    color: $text-secondary;
-    opacity: 0.7;
-  }
-
-  &:focus {
-    outline: none;
-    border: none;
-    box-shadow: none;
-  }
-
-  &::-webkit-outer-spin-button,
-  &::-webkit-inner-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-  }
-
-  &[type='number'] {
-    -moz-appearance: textfield;
-  }
+  border: 0;
+  background: transparent;
+  color: var(--g-text-1);
+  font-family: inherit;
+  font-size: 32px;
+  font-weight: 620;
+  letter-spacing: -0.02em;
 }
 
-.currency-badge {
-  font-family: var(--g-font-ui);
-  font-weight: 600;
+.topup-amount__input:focus-visible {
+  outline-offset: 4px;
+}
+
+.topup-amount__secondary {
+  color: var(--g-text-1);
   font-size: 24px;
-  line-height: 1.58;
-  color: $text-primary;
-  white-space: nowrap;
+  font-weight: 620;
 }
 
-.switch-button {
-  display: flex;
-  justify-content: center;
-  align-items: center;
+.topup-amount__swap {
+  align-self: center;
+  border-color: color-mix(in srgb, var(--g-accent) 40%, transparent);
+
+  .v-icon {
+    color: var(--g-accent);
+  }
 }
 
-.switch-icon {
-  width: 48px;
-  height: 48px;
-  background: var(--g-accent);
-  border-radius: 50%;
+.topup-amount__meta {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
-  box-shadow: none;
+  justify-content: space-between;
+  gap: var(--g-s-2);
+}
 
-  &:hover {
-    background: var(--g-accent);
+.topup-amount__balance {
+  color: var(--g-text-1);
+}
+
+.topup-amount__min {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--g-s-1);
+
+  &.is-error {
+    color: var(--g-error);
   }
 }
 </style>

@@ -98,4 +98,35 @@
   /* Shadows: ONLY for true overlays */
   --g-shadow-sheet: 0 24px 64px rgba(0, 0, 0, 0.55);
   --g-shadow-menu: 0 8px 24px rgba(0, 0, 0, 0.45);
+
+  /* Isometric illustration palette (iso.css / IsoScene.vue). Illustration only:
+     never a UI colour. s1/s2 = top-face gradient, l = left face, r = right face. */
+  --g-iso-cyan-s1: rgb(134, 233, 245);
+  --g-iso-cyan-s2: rgb(55, 198, 221);
+  --g-iso-cyan-l: rgb(18, 166, 196);
+  --g-iso-cyan-r: rgb(13, 132, 160);
+  --g-iso-navy-s1: rgb(70, 89, 122);
+  --g-iso-navy-s2: rgb(46, 65, 95);
+  --g-iso-navy-l: rgb(34, 51, 77);
+  --g-iso-navy-r: rgb(23, 37, 56);
+  --g-iso-green-s1: rgb(140, 238, 187);
+  --g-iso-green-s2: rgb(52, 205, 119);
+  --g-iso-green-l: rgb(30, 181, 103);
+  --g-iso-green-r: rgb(21, 143, 80);
+  --g-iso-amber-s1: rgb(251, 212, 138);
+  --g-iso-amber-s2: rgb(234, 166, 63);
+  --g-iso-amber-l: rgb(227, 138, 20);
+  --g-iso-amber-r: rgb(185, 109, 12);
+  --g-iso-graphite-s1: rgb(59, 66, 82);
+  --g-iso-graphite-s2: rgb(31, 36, 46);
+  --g-iso-graphite-l: rgb(42, 48, 60);
+  --g-iso-graphite-r: rgb(22, 26, 34);
+  --g-iso-slate-s1: rgb(93, 107, 130);
+  --g-iso-slate-s2: rgb(60, 70, 89);
+  --g-iso-slate-l: rgb(52, 61, 78);
+  --g-iso-slate-r: rgb(37, 44, 57);
+  --g-iso-chip: rgb(217, 180, 106);
+  --g-iso-edge: rgba(255, 255, 255, 0.32);
+  --g-iso-tape: rgba(255, 255, 255, 0.22);
+  --g-iso-rail-base: rgba(255, 255, 255, 0.09);
 }

@@ -50,3 +50,41 @@ describe('KaiserexAuthPage hygiene', () => {
     expect(page).toContain("{{ t('card.kaiserex') }}");
   });
 });
+
+describe('provider copy, legal facts and promotion date', () => {
+  const locales = ['us', 'de', 'es'].map(l => read(`src/plugins/i18n/${l}.ts`));
+  const walletSources = [
+    'src/modules/wallet/components/KaiserexPartnershipSection.vue',
+    'src/modules/wallet/components/KaiserexPartnershipBadge.vue',
+    'src/modules/wallet/components/ApplicationStatusSection.vue',
+  ].map(read);
+
+  it('names the current legal entity and drops the old EU one', () => {
+    for (const text of locales) {
+      expect(text).toContain('Digi Ex Pro (Pty) Ltd');
+      expect(text).toContain('2023/150340/07');
+      expect(text).toContain('FSP 53786');
+      expect(text).not.toMatch(/SmartAtlas|21766401|Satchel/);
+    }
+  });
+
+  it('makes no partner claims Zione does not publish about itself', () => {
+    expect(locales[0]).not.toMatch(/banking partner|10\+ Years|global regulations/i);
+  });
+
+  it('runs the zero-fees promotion until May 1st, 2027 in every locale', () => {
+    const promo = /'card\.(enjoyZeroFeesUntil|startingMayFirst)': '([^']*)'/g;
+    for (const text of locales) {
+      const values = [...text.matchAll(promo)].map(m => m[2]);
+      expect(values).toHaveLength(2);
+      for (const value of values) expect(value).toMatch(/2027/);
+    }
+  });
+
+  it('links to Zione, not kaiserex.com, and drops the outdated EU announcement', () => {
+    for (const source of walletSources) {
+      expect(source).not.toMatch(/kaiserex\.com|gero-card-satchel-eu-integration/);
+    }
+    expect(walletSources[2]).toContain('CARD_PROVIDER.supportEmail');
+  });
+});

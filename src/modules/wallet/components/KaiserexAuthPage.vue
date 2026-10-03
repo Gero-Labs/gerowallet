@@ -1,177 +1,110 @@
 <template>
-  <div class="kaiserex-auth-page">
-    <div class="auth-container">
-      <!-- Header -->
-      <div class="auth-header">
-        <h1 class="page-title">{{ t('card.getYourGeroCryptoCard') }}</h1>
-        <p class="page-description">{{ t('card.chooseOptionBelow') }}</p>
-      </div>
-
-      <!-- Auth Options Grid (3 columns) -->
-      <div class="auth-options">
-        <!-- Card Management Option (moved to first position) -->
-        <div class="auth-option management-option liquid-glass-card">
-          <div class="default-card-view">
-            <div class="option-icon">
-              <img src="@/assets/front_card_no_mcx2.png" alt="card" class="card-image" />
-            </div>
-
-            <div class="option-content">
-              <h3 class="option-title">{{ t('card.getCardInSteps') }}</h3>
-
-              <div class="option-features steps-list">
-                <div class="feature-item">
-                  <span class="step-number-inline">1.</span>
-                  <span class="feature-text">{{ t('card.registerOnKaiserex') }}</span>
-                </div>
-                <div class="feature-item">
-                  <span class="step-number-inline">2.</span>
-                  <span class="feature-text">{{ t('card.activateViaEmail') }}</span>
-                </div>
-                <div class="feature-item">
-                  <span class="step-number-inline">3.</span>
-                  <span class="feature-text">{{ t('card.signInCompleteKYC') }}</span>
-                </div>
-                <div class="feature-item">
-                  <span class="step-number-inline">4.</span>
-                  <span class="feature-text">{{ t('card.onceApprovedOrder') }}</span>
-                </div>
-              </div>
-
-              <div class="promo-section">
-                <p
-                  class="promo-title"
-                  @click="showPromotionModal = true"
-                  @keydown.enter="showPromotionModal = true"
-                  @keydown.space.prevent="showPromotionModal = true"
-                  role="button"
-                  tabindex="0"
-                  aria-label="View promotional details and fee information"
-                >
-                  <span class="clickable-text">{{ t('card.enjoyZeroFeesUntil') }}</span>
-                  <v-icon small class="info-icon">mdi-information-outline</v-icon>
-                </p>
-                <div class="option-features promo-list">
-                  <div class="feature-item">
-                    <v-icon class="feature-icon">mdi-check-circle</v-icon>
-                    <span class="feature-text">{{ t('card.zeroMonthlyFees') }}</span>
-                  </div>
-                  <div class="feature-item">
-                    <v-icon class="feature-icon">mdi-check-circle</v-icon>
-                    <span class="feature-text">{{ t('card.zeroAdaEurFees') }}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+  <div class="kaiserex-auth-page card-hub">
+    <!-- Signed in, but Zione did not approve the application: signing in again cannot help. -->
+    <section v-if="isRejected" class="card-hub__rejected glass-panel" aria-labelledby="card-hub-rejected">
+      <IsoScene name="attention" class="card-hub__rejected-art" />
+      <div class="card-hub__rejected-copy">
+        <CardChip tone="error">{{ t('card.rejected') }}</CardChip>
+        <h1 id="card-hub-rejected" class="t-title">{{ t('card.applicationNotApproved') }}</h1>
+        <p class="t-body">{{ t('card.applicationNotApprovedDesc') }}</p>
+        <div class="card-hub__row">
+          <GButton tier="secondary" :href="`mailto:${CARD_PROVIDER.supportEmail}`">
+            <v-icon small left>mdi-email-outline</v-icon>
+            {{ t('card.contactSupport') }}
+          </GButton>
         </div>
+      </div>
+    </section>
 
-        <!-- Register Option -->
-        <div class="auth-option register-option liquid-glass-card">
-          <div class="default-card-view">
-            <div class="option-icon">
-            <div class="icon-circle new-user">
-              <v-icon>mdi-account-plus</v-icon>
-            </div>
+    <!-- One path: the value and the primary action above the fold, then benefits, how it
+         works, pricing and the partner's legal facts, in that order of importance. -->
+    <template v-else>
+      <header class="card-hub__hero" aria-labelledby="card-hub-title">
+        <div class="card-hub__intro">
+          <div class="card-hub__headline">
+            <h1 id="card-hub-title" class="t-display">{{ t('card.getYourGeroCryptoCard') }}</h1>
+            <p class="card-hub__lead">{{ t('card.hubLead') }}</p>
           </div>
-
-          <div class="option-content">
-            <h3 class="option-title">{{ t('card.registerToOrderCard') }}</h3>
-            <p class="option-description">
-              {{ t('card.createKaiserexAccount') }}
-            </p>
-          </div>
-
-          <div class="option-action">
-            <p class="new-to-kaiserex">
+          <div class="card-hub__primary">
+            <GButton tier="primary" @click="showRegistrationModal = true">{{ t('card.orderYourGeroCard') }}</GButton>
+            <p class="t-body-sm">
               {{ t('card.newToKaiserex') }}
-              <v-tooltip top :open-delay="300" content-class="custom-tooltip">
-                <template v-slot:activator="{ on, attrs }">
-                  <span v-bind="attrs" v-on="on" class="kaiserex-hover">{{ t('card.kaiserex') }}</span>
+              <v-tooltip top :open-delay="300" max-width="320">
+                <template #activator="{ on, attrs }">
+                  <button type="button" class="card-hub__term" v-bind="attrs" v-on="on">{{ t('card.kaiserex') }}</button>
                 </template>
-                <div class="tooltip-content">
-                  {{ t('card.kaiserexTooltip') }}
-                </div>
+                <span class="t-caption">{{ t('card.kaiserexTooltip') }}</span>
               </v-tooltip>?
             </p>
-            <GradientButton
-              :text="t('card.orderYourGeroCard')"
-              @click="handleRegister"
-              class="full-width"
-            />
           </div>
+          <div class="card-hub__row">
+            <span class="t-body-sm">{{ t('card.alreadyHaveAccount') }}</span>
+            <GButton tier="secondary" compact :loading="signingIn" @click="handleLogin">{{ t('card.signIn') }}</GButton>
           </div>
+          <ul class="card-hub__trust">
+            <li><v-icon x-small>mdi-lock-outline</v-icon>{{ t('card.secureSignInWindow') }}</li>
+            <li><v-icon x-small>mdi-shield-check-outline</v-icon>{{ t('card.licensedRegulated') }} · FSP {{ CARD_PROVIDER.fspNumber }}</li>
+          </ul>
         </div>
+        <IsoScene name="hero" animated class="card-hub__art" :label="t('card.heroArtLabel')" />
+      </header>
 
-        <!-- Login Option -->
-        <div class="auth-option login-option liquid-glass-card">
-          <!-- Default Login Card View -->
-          <div class="default-card-view">
-            <div class="option-icon">
-              <div class="icon-circle existing-user">
-                <v-icon>mdi-account-check</v-icon>
-              </div>
-            </div>
+      <FeatureGridSection animated />
 
-            <div class="option-content">
-              <h3 class="option-title">{{ t('card.alreadyHaveAccount') }}</h3>
-              <p class="option-description">
-                {{ t('card.signInTopUpCheck') }}
-              </p>
+      <section class="card-hub__how glass-panel" aria-labelledby="card-hub-how">
+        <h2 id="card-hub-how" class="t-heading">{{ t('card.howItWorks') }}</h2>
+        <ol class="card-hub__steps">
+          <li v-for="(step, i) in steps" :key="step" class="glass-tier">
+            <span class="card-hub__num g-num" aria-hidden="true">{{ i + 1 }}</span>
+            <span class="card-hub__step">{{ step }}</span>
+          </li>
+        </ol>
+      </section>
 
-              <div class="option-features">
-                <div class="feature-item">
-                  <v-icon class="feature-icon">mdi-check-circle</v-icon>
-                  <span class="feature-text">{{ t('card.checkOrderStatus') }}</span>
-                </div>
-                <div class="feature-item">
-                  <v-icon class="feature-icon">mdi-check-circle</v-icon>
-                  <span class="feature-text">{{ $t('card.topUpCardWithAda') }}</span>
-                </div>
-                <div class="feature-item">
-                  <v-icon class="feature-icon">mdi-check-circle</v-icon>
-                  <span class="feature-text">{{ t('card.orderAdditionalCards') }}</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="option-action">
-              <SecondaryButton
-                :text="kaiserExLoading ? t('card.signingIn') : t('card.signIn')"
-                :disabled="kaiserExLoading"
-                @click="handleLogin"
-                class="full-width gradient-text-button"
-              />
-            </div>
-          </div>
+      <section class="card-hub__pricing glass-panel" aria-labelledby="card-hub-pricing">
+        <div class="card-hub__pricing-col">
+          <h2 id="card-hub-pricing" class="t-heading">{{ t('card.pricingTitle') }}</h2>
+          <p class="t-body-sm">{{ t('card.enjoyZeroFeesUntil') }}</p>
+          <ul class="card-hub__checks">
+            <li><v-icon small>mdi-check</v-icon>{{ t('card.zeroMonthlyFees') }}</li>
+            <li><v-icon small>mdi-check</v-icon>{{ t('card.zeroAdaEurFees') }}</li>
+          </ul>
         </div>
-      </div>
+        <div class="card-hub__pricing-col">
+          <p class="t-body-sm">
+            {{ t('card.startingMayFirst') }} <strong>{{ t('card.geroHolders') }}</strong>
+            {{ t('card.willEnjoyTokenIncentives') }}
+          </p>
+          <GButton tier="secondary" @click="showPromotionModal = true">{{ t('card.viewFees') }}</GButton>
+        </div>
+      </section>
 
-      <!-- Kaiserex Partnership Info -->
-      <KaiserexPartnershipSection />
-    </div>
+      <KaiserexPartnershipSection animated />
+    </template>
 
-    <!-- Modals -->
     <KaiserexRegistrationModal
       :open="showRegistrationModal"
       @close="showRegistrationModal = false"
-      @complete="handleRegistrationComplete"
+      @sign-in="signInFromRegistration"
     />
     <PromotionModal :open="showPromotionModal" @close="showPromotionModal = false" />
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed, ref } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref } from 'vue';
-import GradientButton from './GradientButton.vue';
-import SecondaryButton from './SecondaryButton.vue';
-import KaiserexRegistrationModal from './KaiserexRegistrationModal.vue';
-import PromotionModal from './PromotionModal.vue';
-import KaiserexPartnershipSection from './KaiserexPartnershipSection.vue';
 import { receiveKaiserExToken } from '@/services/kaiserEx.service';
 import cardStore from '@/stores/modules/card';
 import { debugLog } from '@/utils/debug';
+import { CARD_PROVIDER } from '@/modules/wallet/cardProvider';
+import GButton from '@/shared/components/GButton/GButton.vue';
+import IsoScene from '@/shared/components/iso/IsoScene.vue';
+import CardChip from './ui/CardChip.vue';
+import FeatureGridSection from './FeatureGridSection.vue';
+import KaiserexRegistrationModal from './KaiserexRegistrationModal.vue';
+import PromotionModal from './PromotionModal.vue';
+import KaiserexPartnershipSection from './KaiserexPartnershipSection.vue';
 
 const { t } = useTranslation();
 const emit = defineEmits<{
@@ -180,439 +113,263 @@ const emit = defineEmits<{
 
 const showRegistrationModal = ref(false);
 const showPromotionModal = ref(false);
-const kaiserExLoading = ref(false);
+const signingIn = ref(false);
 
-const handleRegister = () => {
-  showRegistrationModal.value = true;
-};
+// The card page maps a rejected application to this page, so tell the user instead of
+// offering a sign-in they already did.
+const isRejected = computed(() => cardStore.isAuthenticated && cardStore.state.walletStatus.kycStatus === 'rejected');
 
-const handleLogin = async () => {
+const steps = computed(() => [
+  t('card.registerOnKaiserex'),
+  t('card.activateViaEmail'),
+  t('card.signInCompleteKYC'),
+  t('card.onceApprovedOrder'),
+]);
+
+async function handleLogin(): Promise<void> {
+  signingIn.value = true;
   try {
-    kaiserExLoading.value = true;
-
     await receiveKaiserExToken(async tokenData => {
       try {
         await cardStore.setKaiserExTokens(tokenData);
-        kaiserExLoading.value = false;
         emit('auth-complete');
       } catch (error) {
-        console.error('❌ Failed to store card session:', error instanceof Error ? error.message : error);
-        kaiserExLoading.value = false;
+        console.error('Failed to store card session:', error instanceof Error ? error.message : error);
+      } finally {
+        signingIn.value = false;
       }
     });
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    if (errorMessage === 'Authentication window was closed by user') {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message === 'Authentication window was closed by user') {
       debugLog('Card sign-in cancelled by user');
     } else {
-      console.error('❌ Card sign-in failed:', errorMessage);
+      console.error('Card sign-in failed:', message);
     }
-    kaiserExLoading.value = false;
+    signingIn.value = false;
   }
-};
+}
 
-const handleRegistrationComplete = () => {
+function signInFromRegistration(): void {
   showRegistrationModal.value = false;
-  emit('auth-complete');
-};
+  handleLogin();
+}
 </script>
 
 <style lang="scss" scoped>
-@import '../styles/variables';
-@import '../styles/mixins';
-
-.kaiserex-auth-page {
-  display: flex;
-  align-items: flex-start; // Changed from center to flex-start
-  justify-content: center;
-  padding-top: $spacing-2xl; // Reduced top padding
-  padding-left: $spacing-xl;
-  padding-right: $spacing-xl;
-  padding-bottom: $spacing-xl;
-  position: relative;
-
-  // Background image with blend mode
-  &::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-image: url('@/assets/emptyStateNew.png');
-    background-size: 100%;
-    background-position: center center;
-    background-repeat: no-repeat;
-    mix-blend-mode: screen; // Creates a lighter, more ethereal effect
-    z-index: 0;
-  }
-}
-
-.auth-container {
-  max-width: 1400px;
-  width: 100%;
-  position: relative;
-  z-index: 1; // Above the background
-  margin-top: $spacing-xl; // Add some top margin for better spacing
-}
-
-.auth-header {
-  text-align: center;
-  margin-bottom: $spacing-4xl; // Increased back to original spacing
-}
-
-.page-title {
-  @include heading-style($font-size-3xl);
-  color: $text-primary;
-  margin: 0 0 $spacing-md 0;
-}
-
-.page-description {
-  @include body-text($font-size-lg);
-  color: $text-secondary;
-  margin: 0;
-  margin-left: auto;
-  margin-right: auto;
-  white-space: nowrap;
-}
-
-.auth-options {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: $spacing-2xl;
-  margin-bottom: $spacing-4xl;
-
-  @media (max-width: 1400px) {
-    grid-template-columns: 1fr;
-    gap: $spacing-2xl;
-  }
-}
-
-.auth-option {
-  background: $background-card;
-  border: 1px solid $border-secondary;
-  border-radius: $border-radius-xl;
-  padding: 24px; // Reduced further for compactness
+.card-hub {
   display: flex;
   flex-direction: column;
-  transition: background-color var(--g-dur-slow) ease, border-color var(--g-dur-slow) ease;
-  position: relative;
-  overflow: hidden;
-  min-height: 480px; // Fixed height for consistency
-
-  &:hover {
-    border-color: color-mix(in srgb, var(--g-accent) 30%, transparent);
-  }
-
-  &::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
-    background: linear-gradient(90deg, var(--g-grad-1) 0%, var(--g-grad-2) 100%);
-    opacity: 0;
-    transition: opacity var(--g-dur-slow) ease;
-  }
-
-  &:hover::before {
-    opacity: 1;
-  }
+  gap: var(--g-s-6);
+  width: 100%;
+  max-width: var(--g-content-max);
+  margin: 0 auto;
+  padding: var(--g-s-6) clamp(16px, 3vw, 32px);
 }
 
-// Liquid glass effect for cards - using the same style as dialogStyle
-.liquid-glass-card {
-  -webkit-backdrop-filter: blur(12px) brightness(0.2) !important;
-  backdrop-filter: blur(12px) !important;
-  background: #000000ab !important;
-  border: solid 2px #ffffff44 !important;
-
-  &:hover {
-    background: #000000bb !important;
-    border-color: rgba(0, 199, 243, 0.4) !important;
-    -webkit-backdrop-filter: blur(15px) brightness(0.3) !important;
-    backdrop-filter: blur(15px) !important;
-  }
-}
-
-.option-icon {
-  display: flex;
-  justify-content: center;
-  margin-top: 40px; // Position icon between top and header
-  margin-bottom: 30px; // Space before header
-
-  .card-image {
-    width: 120px;
-    height: auto;
-  }
-}
-
-.icon-circle {
-  width: 72px; // Reduced from 80px
-  height: 72px; // Reduced from 80px
-  border-radius: 50%;
-  display: flex;
+/* Hero: the value, one primary action, the secondary path, then trust. */
+.card-hub__hero {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr));
+  gap: var(--g-s-6);
   align-items: center;
-  justify-content: center;
+}
+
+.card-hub__intro {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--g-s-5);
+}
+
+.card-hub__headline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-3);
+
+  h1 {
+    margin: 0;
+  }
+}
+
+.card-hub__lead {
+  margin: 0;
+  max-width: 460px;
+  font-size: 16px;
+  color: var(--g-text-2);
+}
+
+.card-hub__primary {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--g-s-2);
+
+  p {
+    margin: 0;
+  }
+}
+
+.card-hub__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--g-s-2) var(--g-s-3);
+}
+
+.card-hub__trust {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--g-s-2) var(--g-s-5);
+  align-self: stretch;
+  margin: 0;
+  padding: var(--g-s-4) 0 0;
+  border-top: 1px solid var(--g-hairline-1);
+  list-style: none;
+
+  li {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--g-s-1);
+    font-size: 12px;
+    color: var(--g-text-3);
+  }
 
   .v-icon {
-    font-size: 32px; // Reduced from 36px
-  }
-
-  &.new-user {
-    background: color-mix(in srgb, var(--g-accent) 10%, transparent);
-    color: $primary-cyan;
-  }
-
-  &.existing-user {
-    background: var(--g-hairline-2);
-    color: $text-secondary;
+    color: var(--g-text-3);
   }
 }
 
-.option-content {
-  flex: 1;
-  text-align: center;
+.card-hub__art {
+  max-width: 560px;
+  justify-self: end;
+}
+
+.card-hub__term {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--g-accent);
+  font: inherit;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: help;
+}
+
+/* How it works: the process once, as four numbered steps. */
+.card-hub__how {
   display: flex;
   flex-direction: column;
-  justify-content: flex-start; // Align headers at same position
-}
+  gap: var(--g-s-4);
+  padding: var(--g-s-5);
 
-.option-title {
-  @include heading-style($font-size-xl);
-  color: $text-primary;
-  margin: 0 0 $spacing-sm 0; // Reduced from $spacing-md
-}
-
-.option-description {
-  @include body-text($font-size-base);
-  color: $text-secondary; // Slightly off-white color (same as management description)
-  margin: 0 0 $spacing-md 0; // Reduced from $spacing-lg
-  line-height: 1.6;
-}
-
-.new-to-kaiserex {
-  @include body-text($font-size-sm);
-  color: $text-secondary;
-  margin: 0 0 $spacing-sm 0;
-  text-align: center;
-}
-
-.option-steps {
-  display: flex;
-  justify-content: center;
-  gap: $spacing-lg;
-}
-
-.step-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: $spacing-xs;
-}
-
-.step-number {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--g-accent) 20%, transparent);
-  color: $primary-cyan;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: $font-size-sm;
-  font-weight: $font-weight-semibold;
-}
-
-.step-text {
-  @include text-style($font-size-xs, $font-weight-medium, $line-height-normal);
-  color: $text-muted;
-  text-align: center;
-}
-
-.option-features {
-  display: flex;
-  flex-direction: column;
-  gap: $spacing-sm;
-}
-
-.feature-item {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: $spacing-sm;
-}
-
-.feature-icon {
-  font-size: 16px;
-  color: color-mix(in srgb, var(--g-accent) 70%, transparent);
-}
-
-.feature-text {
-  @include body-text($font-size-sm);
-  color: $text-secondary;
-}
-
-.step-number-inline {
-  @include text-style($font-size-sm, $font-weight-semibold);
-  color: $primary-cyan;
-  min-width: 20px;
-}
-
-.steps-list {
-  margin-bottom: $spacing-lg;
-
-  .feature-item {
-    justify-content: flex-start;
-    text-align: left;
+  h2 {
+    margin: 0;
   }
 }
 
-.promo-section {
-  margin-top: $spacing-lg;
-  padding-top: $spacing-lg;
-  border-top: 1px solid var(--g-hairline-2);
+.card-hub__steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: var(--g-s-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
 
-  .promo-title {
-    @include text-style($font-size-base, $font-weight-semibold);
-    color: $text-primary;
-    text-align: center;
-    margin: 0 0 $spacing-md 0;
+  li {
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 6px;
-    cursor: pointer;
-
-    .clickable-text {
-      color: $primary-cyan;
-      border-bottom: 1px dotted $primary-cyan;
-      transition: color var(--g-dur-base) ease, border-bottom-color var(--g-dur-base) ease;
-    }
-
-    &:hover {
-      .clickable-text {
-        color: lighten($primary-cyan, 10%);
-        border-bottom-color: lighten($primary-cyan, 10%);
-      }
-
-      .info-icon {
-        color: lighten($primary-cyan, 10%);
-      }
-    }
-
-    .info-icon {
-      color: $primary-cyan;
-      transition: color var(--g-dur-base) ease;
-    }
-  }
-
-  .promo-list {
-    .feature-item {
-      justify-content: center;
-    }
+    gap: var(--g-s-3);
+    padding: var(--g-s-4);
   }
 }
 
-.option-action {
-  margin-top: auto;
-  flex-shrink: 0;
-  width: 100%;
-
-  .gradient-button,
-  .secondary-button,
-  :deep(.gradient-button),
-  :deep(.secondary-button) {
-    width: 100% !important;
-    height: 48px;
-    font-size: $font-size-base;
-    font-weight: $font-weight-semibold;
-  }
+.card-hub__num {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: var(--g-r-pill);
+  border: 1px solid color-mix(in srgb, var(--g-accent) 40%, transparent);
+  color: var(--g-accent);
+  font-size: 13px;
+  font-weight: 600;
 }
 
-.full-width {
-  width: 100%;
-
-  :deep(.gradient-button),
-  :deep(.secondary-button) {
-    width: 100% !important;
-    height: 48px;
-    font-size: $font-size-base;
-    font-weight: $font-weight-semibold;
-  }
+.card-hub__step {
+  font-size: 14px;
+  color: var(--g-text-1);
 }
 
-.gradient-text-button {
-  :deep(.button-text) {
-    background: linear-gradient(135deg, var(--g-grad-1) 0%, var(--g-grad-2) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    font-weight: $font-weight-semibold;
-  }
+/* Pricing: what applies now and what changes after the promotion. */
+.card-hub__pricing {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+  gap: var(--g-s-5);
+  align-items: center;
+  padding: var(--g-s-5);
 }
 
-// Responsive Design
-@media (max-width: $breakpoint-lg) {
-  .auth-options {
-    grid-template-columns: 1fr;
-    gap: $spacing-2xl;
-  }
-
-  .auth-option {
-    padding: $spacing-2xl;
-  }
-}
-
-@media (max-width: $breakpoint-md) {
-  .kaiserex-auth-page {
-    padding: $spacing-lg;
-  }
-
-  .page-title {
-    font-size: $font-size-2xl;
-  }
-
-  .auth-option {
-    padding: $spacing-xl;
-  }
-
-  .option-steps {
-    flex-direction: column;
-    gap: $spacing-md;
-  }
-}
-
-// Kaiserex hover tooltip styling
-.kaiserex-hover {
-  color: $primary-cyan;
-  cursor: help;
-  border-bottom: 1px dotted $primary-cyan;
-  transition: color var(--g-dur-base) ease, border-bottom-color var(--g-dur-base) ease;
-
-  &:hover {
-    color: lighten($primary-cyan, 10%);
-    border-bottom-color: lighten($primary-cyan, 10%);
-  }
-}
-
-// Tooltip content styling
-.tooltip-content {
-  font-size: $font-size-sm;
-  line-height: 1.5;
-
-  strong {
-    color: $primary-cyan;
-    font-weight: $font-weight-semibold;
-  }
-}
-
-// Card view consistency
-.default-card-view {
+.card-hub__pricing-col {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  justify-content: space-between; // Distribute content evenly
+  align-items: flex-start;
+  gap: var(--g-s-3);
+
+  h2,
+  p {
+    margin: 0;
+  }
+
+  strong {
+    color: var(--g-text-1);
+  }
+}
+
+.card-hub__checks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  color: var(--g-text-2);
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: var(--g-s-2);
+  }
+
+  .v-icon {
+    color: var(--g-accent);
+  }
+}
+
+.card-hub__rejected {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+  gap: var(--g-s-5);
+  align-items: center;
+  padding: var(--g-s-6);
+}
+
+.card-hub__rejected-art {
+  max-width: 340px;
+  justify-self: center;
+}
+
+.card-hub__rejected-copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-4);
+  align-items: flex-start;
+
+  h1,
+  p {
+    margin: 0;
+  }
 }
 </style>
