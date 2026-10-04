@@ -577,6 +577,14 @@ watch(swapScope, (scope) => {
   if (swapDialogOpen.value && scope !== activeSwapScope.value) closeSwapDialog(false);
 });
 
+// The USDrf swap flag is live: switching it off closes an open USDCx → USDrf dialog. The
+// ADA → USDCx swap does not depend on it and stays open.
+watch(canSwapUsdrf, (canSwap) => {
+  if (!canSwap && swapDialogOpen.value && swapBuyTokenUnit.value === mainnetUsdrfUnit) {
+    closeSwapDialog(false);
+  }
+});
+
 function openUsdrfSwap(): void {
   if (!canSwapUsdrf.value) return;
   swapSellTokenUnit.value = MAINNET_USDCX_UNIT;

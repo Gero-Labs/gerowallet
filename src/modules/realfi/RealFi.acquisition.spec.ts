@@ -319,6 +319,31 @@ describe('RealFi acquisition', () => {
     expect(state.load).not.toHaveBeenCalled();
   });
 
+  it('closes an open USDrf swap when the USDrf swap flag is switched off', async () => {
+    swapEnabled.value = true;
+    const page = await mountPage();
+    await button(page, 'realfi.gettingStarted.getUsdrf').trigger('click');
+    await settle(page);
+    expect(page.findComponent({ name: 'SwapDialog' }).exists()).toBe(true);
+    state.load.mockClear();
+    usdrfSwapFlag.value = false;
+    await page.vm.$nextTick();
+    expect(page.findComponent({ name: 'SwapDialog' }).exists()).toBe(false);
+    expect(state.load).not.toHaveBeenCalled();
+  });
+
+  it('keeps an open ADA to USDCx swap when the USDrf swap flag is switched off', async () => {
+    swapEnabled.value = true;
+    const page = await mountPage();
+    await button(page, 'realfi.gettingStarted.getUsdcx').trigger('click');
+    await settle(page);
+    usdrfSwapFlag.value = false;
+    await page.vm.$nextTick();
+    const dialog = page.findComponent({ name: 'SwapDialog' });
+    expect(dialog.exists()).toBe(true);
+    expect(dialog.props('buyTokenUnit')).toBe(USDCX);
+  });
+
   it('closes an open dialog when the wallet changes and does not refresh the new wallet as a close side effect', async () => {
     swapEnabled.value = true;
     const page = await mountPage();
