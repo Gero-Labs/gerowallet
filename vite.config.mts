@@ -26,14 +26,15 @@ const sassQuiet = {
 
 // @effect/platform (via the Midnight wallet SDK's prover client) ships
 // HttpApiScalar and HttpApiSwagger: server-side OpenAPI docs pages. Scalar's
-// HTML template carries a `<script src="https://cdn.jsdelivr.net/...">`, and the
-// UI build (treeshake: false) shipped it, so the Chrome Web Store rejected 2.7.2
-// for remotely hosted code. The wallet never serves API docs, so both modules
-// become stubs that throw if called. That also drops the multi-MB Scalar and
-// Swagger UI bundles they import. Export names are read from the installed file
-// so the stub keeps the module's shape across @effect/platform upgrades. The
-// `vite` dev server pre-bundles deps with esbuild, which skips this hook; dev is
-// never shipped.
+// HTML template carries a `<script src="https://cdn.jsdelivr.net/...">`. The UI
+// build, then running with tree-shaking off, shipped it, so the Chrome Web Store
+// rejected 2.7.2 for remotely hosted code. Tree-shaking now drops it there; the
+// stub stays so no build can ship it again, whatever its tree-shaking settings.
+// The wallet never serves API docs, so both modules become stubs that throw if
+// called, without the multi-MB Scalar and Swagger UI bundles they import. Export
+// names are read from the installed file so the stub keeps the module's shape
+// across @effect/platform upgrades. The `vite` dev server pre-bundles deps with
+// esbuild, which skips this hook; dev is never shipped.
 const EFFECT_API_DOCS_MODULE = /[\\/]@effect[\\/]platform[\\/]dist[\\/](?:esm|cjs)[\\/]HttpApi(Scalar|Swagger)\.js$/;
 
 const stubEffectApiDocs: Plugin = {
@@ -341,7 +342,10 @@ export default defineConfig(({ command }) => {
       rollupOptions: {
         maxParallelFileOps: 50, // Increase parallel processing
         cache: true,
-        treeshake: false, // Disable for faster builds
+        // Tree-shaking stays on (Rollup's default). With it off, every module of
+        // every imported package shipped, used or not, and the Chrome Web Store
+        // rejected 2.7.2 for one of them: an unused @effect/platform docs page
+        // carrying a CDN <script> (remotely hosted code).
         input: {
           options: r('src/options/index.html'),
           sidepanel: r('src/sidepanel/index.html'),
