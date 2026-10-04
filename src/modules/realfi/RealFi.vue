@@ -62,6 +62,7 @@
               :canStakeExternally="!canTransact && !ordersLocked"
               :canAcquire="canAcquireUsdrf"
               :canAcquireUsdcx="canAcquireUsdrf && hasUsdcxSwapAvailability"
+              :canSwapUsdrf="canSwapUsdrf"
               :swapStatus="swapStatusForGuide"
               :canRetryAvailability="canRetryUsdrfAvailability"
               @check-eligibility="openRealFiApp()"
@@ -90,10 +91,10 @@
             <div class="realfi-hero__top">
               <span class="t-label">{{ $t('realfi.position.label') }}</span>
               <div
-                v-if="(canTransact && !ordersLocked && (hasUsdr || canUnstake)) || (hasPosition && canAcquireUsdrf)"
+                v-if="(canTransact && !ordersLocked && (hasUsdr || canUnstake)) || (hasPosition && canSwapUsdrf)"
                 class="realfi-hero__actions"
               >
-                <GButton v-if="hasPosition && canAcquireUsdrf" tier="secondary" compact @click="openUsdrfSwap()">
+                <GButton v-if="hasPosition && canSwapUsdrf" tier="secondary" compact @click="openUsdrfSwap()">
                   {{ $t('realfi.gettingStarted.getUsdrf') }}
                 </GButton>
                 <GButton v-if="canTransact && !ordersLocked && hasUsdr" tier="primary" compact @click="openAmount('stake')">
@@ -171,6 +172,7 @@
               :canStakeExternally="!canTransact && !ordersLocked"
               :canAcquire="canAcquireUsdrf"
               :canAcquireUsdcx="canAcquireUsdrf && hasUsdcxSwapAvailability"
+              :canSwapUsdrf="canSwapUsdrf"
               :swapStatus="swapStatusForGuide"
               :canRetryAvailability="canRetryUsdrfAvailability"
               @check-eligibility="openRealFiApp()"
@@ -556,6 +558,11 @@ const canRetryUsdrfAvailability = computed(
 const canAcquireUsdrf = computed(
   () => isMainnet.value && !unavailableReason.value && hasUsdrfSwapAvailability.value,
 );
+// The USDCx → USDrf swap is a separate, default-off flag: its only route is the SundaeSwap
+// V4 pool, which the aggregator serves only after V4 is promoted.
+const canSwapUsdrf = computed(
+  () => canAcquireUsdrf.value && featureFlagsStore.isRealFiUsdrfSwapEnabled(),
+);
 const mainnetUsdrfUnit = usdrAssetIdFor(Network.MAINNET) ?? '';
 const swapDialogOpen = ref(false);
 const swapSellTokenUnit = ref('');
@@ -571,7 +578,7 @@ watch(swapScope, (scope) => {
 });
 
 function openUsdrfSwap(): void {
-  if (!canAcquireUsdrf.value) return;
+  if (!canSwapUsdrf.value) return;
   swapSellTokenUnit.value = MAINNET_USDCX_UNIT;
   swapBuyTokenUnit.value = mainnetUsdrfUnit;
   activeSwapScope.value = swapScope.value;
@@ -587,7 +594,7 @@ function openUsdcxSwap(): void {
 }
 
 function onGetUsdrf(): void {
-  if (canAcquireUsdrf.value) openUsdrfSwap();
+  if (canSwapUsdrf.value) openUsdrfSwap();
   else if (isTestnet.value) openRealFiApp();
 }
 

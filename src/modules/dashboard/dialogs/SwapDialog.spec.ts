@@ -1,3 +1,5 @@
+import type Vue from 'vue';
+import type { CreateElement } from 'vue';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -8,10 +10,10 @@ vi.mock('@/shared/dialogs/BaseDialog.vue', () => ({
   default: {
     name: 'BaseDialog',
     props: ['isOpen', 'title', 'subtitle', 'minHeight', 'width', 'persistent', 'img', 'imgStyle'],
-    render(h) {
+    render(this: Vue, h: CreateElement) {
       return h('div', [
         h('button', { attrs: { 'data-test': 'dismiss' }, on: { click: () => this.$emit('close') } }),
-        ...(this.$slots.default || []),
+        ...(this.$slots['default'] || []),
       ]);
     },
   },

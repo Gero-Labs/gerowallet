@@ -33,14 +33,17 @@
           <span class="t-label">{{ $t('realfi.gettingStarted.acquireTitle') }}</span>
           <p class="t-body-sm">{{ $t(mainnet ? 'realfi.gettingStarted.acquireBody' : 'realfi.gettingStarted.preprodAcquireBody') }}</p>
           <div v-if="canAcquire" class="realfi-getting-started__actions">
-            <GButton tier="secondary" compact @click="$emit('get-usdrf')">
+            <GButton v-if="canSwapUsdrf" tier="secondary" compact @click="$emit('get-usdrf')">
               {{ $t('realfi.gettingStarted.getUsdrf') }}
             </GButton>
             <GButton v-if="canAcquireUsdcx" tier="tertiary" compact @click="$emit('get-usdcx')">
               {{ $t('realfi.gettingStarted.getUsdcx') }}
             </GButton>
           </div>
-          <p v-else-if="mainnet" class="t-caption">
+          <p v-if="canAcquire && !canSwapUsdrf" class="t-caption">
+            {{ $t('realfi.gettingStarted.usdrfSwapPending') }}
+          </p>
+          <p v-else-if="!canAcquire && mainnet" class="t-caption">
             {{ $t(`realfi.gettingStarted.swapStatus.${swapStatus}`) }}
           </p>
           <GButton
@@ -55,7 +58,7 @@
             {{ $t('realfi.gettingStarted.preprodCta') }}
           </GButton>
           <p v-if="mainnet" class="t-caption">{{ $t('realfi.gettingStarted.routeNote') }}</p>
-          <p v-if="mainnet && canAcquireUsdcx" class="t-caption">
+          <p v-if="mainnet && canAcquireUsdcx && canSwapUsdrf" class="t-caption">
             {{ $t('realfi.gettingStarted.getUsdcxNote') }}
           </p>
         </div>
@@ -91,6 +94,8 @@ withDefaults(
     canStakeExternally: boolean;
     canAcquire: boolean;
     canAcquireUsdcx: boolean;
+    // USDCx → USDrf in Gero; off until the aggregator serves that route.
+    canSwapUsdrf: boolean;
     swapStatus: 'disabled' | 'unknown' | 'loading' | 'available' | 'unavailable';
     canRetryAvailability: boolean;
     compact?: boolean;

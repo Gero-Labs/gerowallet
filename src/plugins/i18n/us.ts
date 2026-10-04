@@ -5441,4 +5441,5 @@ export default {
   'realfi.gettingStarted.swapStatus.loading': 'Checking whether the required tokens are available in Gero’s swap catalogue.',
   'realfi.gettingStarted.swapStatus.unavailable': 'Gero could not confirm the required tokens in its swap catalogue. Wallet acquisition is unavailable for now.',
   'realfi.gettingStarted.retryAvailability': 'Check again',
+  'realfi.gettingStarted.usdrfSwapPending': 'Swapping USDCx for USDrf in Gero isn’t available yet. You can get USDrf in RealFi’s app.',
 }

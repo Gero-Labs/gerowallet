@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const swapEnabled = ref(false);
+const usdrfSwapFlag = ref(true);
 const openSpy = vi.fn();
 const tokenCatalogStore = vi.hoisted(() => {
   const store: {
@@ -14,7 +15,7 @@ const tokenCatalogStore = vi.hoisted(() => {
   return store;
 });
 const mountedPages: Array<{ destroy: () => void }> = [];
-const wallet = reactive<Record<string, unknown>>({
+const wallet = reactive<{ id: number; network: string; chain: string; baseAddress: string }>({
   id: 1,
   network: 'Mainnet',
   chain: 'Cardano',
@@ -55,7 +56,10 @@ vi.mock('./components/RealFiAmountDialog.vue', () => ({
   default: { name: 'RealFiAmountDialog', render: (h: (tag: string) => unknown) => h('div') },
 }));
 vi.mock('@/stores/featureFlagsStore', () => ({
-  default: { isSwapEnabled: () => swapEnabled.value },
+  default: {
+    isSwapEnabled: () => swapEnabled.value,
+    isRealFiUsdrfSwapEnabled: () => usdrfSwapFlag.value,
+  },
 }));
 vi.mock('@/stores/walletStore', () => ({
   default: {
@@ -127,6 +131,7 @@ describe('RealFi acquisition', () => {
     wallet.chain = 'Cardano';
     wallet.baseAddress = 'addr_main_a';
     swapEnabled.value = false;
+    usdrfSwapFlag.value = true;
     tokenCatalogStore.tokens = {};
     tokenCatalogStore.state.tokens = tokenCatalogStore.tokens;
     tokenCatalogStore.loadTokens.mockReset().mockImplementation(async (shouldApply?: () => boolean) => {
@@ -186,6 +191,22 @@ describe('RealFi acquisition', () => {
     expect(page.text()).toContain('realfi.gettingStarted.getUsdrf');
     expect(tokenCatalogStore.loadTokens).toHaveBeenCalled();
     expect(tokenCatalogStore.tokens[USDRF]).toEqual({ unit: USDRF, decimals: 6 });
+  });
+
+  it('keeps USDCx acquisition but holds the USDCx to USDrf swap while its flag is off', async () => {
+    swapEnabled.value = true;
+    usdrfSwapFlag.value = false;
+    state.hasPosition.value = true;
+    state.position.value = { totalSUSDr: '1000000', totalUSDrValue: '1000000', principal: '1000000', earned: '0', yieldPercent: 0 };
+    const page = await mountPage();
+    expect(page.text()).not.toContain('realfi.gettingStarted.getUsdrf');
+    expect(page.text()).toContain('realfi.gettingStarted.usdrfSwapPending');
+    expect(page.text()).not.toContain('realfi.gettingStarted.getUsdcxNote');
+    await button(page, 'realfi.gettingStarted.getUsdcx').trigger('click');
+    await settle(page);
+    const dialog = page.findComponent({ name: 'SwapDialog' });
+    expect(dialog.props('sellTokenUnit')).toBe('lovelace');
+    expect(dialog.props('buyTokenUnit')).toBe(USDCX);
   });
 
   it('preselects USDCx to USDrf in the mainnet acquisition dialog', async () => {
