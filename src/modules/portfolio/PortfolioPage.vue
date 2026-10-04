@@ -869,7 +869,11 @@ function openToken(token: MarketToken) {
 }
 
 function openTokenByUnit(unit: string) {
-  const token = allTokens.value.find(t => t.unit === unit);
+  // Same rule as openToken: the panel is Cardano DEX data, which an Apex token has none of.
+  if (isApex.value) return;
+  // Holdings first: a held token the market feed does not list has no row in
+  // allTokens, and global search links to it all the same.
+  const token = myHoldings.value.find(t => t.unit === unit) ?? allTokens.value.find(t => t.unit === unit);
   if (token) {
     selectedToken.value = token;
     panelOpen.value = true;
@@ -1102,11 +1106,12 @@ watch(isEmptyMainnet, (empty) => {
 // Cardano unit/policyId validation — only hex characters, reasonable length
 const CARDANO_ID_RE = /^[0-9a-f]{1,120}$/i;
 
-// Handle /?token=<unit> deep-link (e.g. from Global Search)
+// Handle /?token=<unit> deep-link (e.g. from Global Search). The native coin's
+// unit is the literal 'lovelace', which the hex check would refuse.
 watch(
   () => instance?.proxy?.$route?.query?.['token'],
   (unit) => {
-    if (unit && typeof unit === 'string' && CARDANO_ID_RE.test(unit)) {
+    if (unit && typeof unit === 'string' && (unit === 'lovelace' || CARDANO_ID_RE.test(unit))) {
       openTokenByUnit(unit);
     }
   },

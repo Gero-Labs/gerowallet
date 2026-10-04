@@ -9,6 +9,12 @@ type PoolWallet = { chain: string; network: string };
 
 export interface StakingStore {
   pools: Pool[];
+  /**
+   * `chain:network` the `pools` page was loaded for, or null. Nothing clears the
+   * page on a wallet switch, so a reader outside the staking page (global
+   * search) checks this before trusting the rows belong to the current wallet.
+   */
+  poolsFor: string | null;
   currentPool: Pool | null;
   paginationMeta: PaginationMeta | null;
   loading: boolean;
@@ -24,6 +30,7 @@ export interface StakingStore {
 
 export const stakingStore = Vue.observable<StakingStore>({
   pools: [],
+  poolsFor: null,
   currentPool: null,
   paginationMeta: null,
   loading: false,
@@ -63,6 +70,7 @@ const stakingStoreActions = {
 
       // For server-side pagination, always replace pools with current page data
       stakingStore.pools = response.items || [];
+      stakingStore.poolsFor = `${wallet.chain}:${wallet.network}`;
 
       stakingStore.paginationMeta = response.meta;
     } catch (error) {
@@ -101,12 +109,15 @@ const stakingStoreActions = {
 
   resetPools() {
     stakingStore.pools = [];
+    stakingStore.poolsFor = null;
     stakingStore.paginationMeta = null;
     stakingStore.error = null;
   },
 
   setPools(pools: Pool[]) {
     stakingStore.pools = pools;
+    // Origin unknown, so no reader may assume these belong to the current wallet.
+    stakingStore.poolsFor = null;
   },
 
   setPaginationMeta(meta: PaginationMeta) {

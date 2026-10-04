@@ -124,6 +124,12 @@ async function fetchVotePages(
 
 export interface GovernanceActionsState {
   actions: GovProposal[];
+  /**
+   * The network `actions` was loaded for, or null. A wallet switch does not
+   * clear the list, so a reader outside the board (global search) checks this
+   * before offering another network's actions.
+   */
+  actionsNetwork: string | null;
   page: number;
   pageSize: number;
   total: number | null;
@@ -210,6 +216,7 @@ export function awaitingVoteCount(yourVotes: YourVotesState): number | null {
 
 const state = Vue.observable<GovernanceActionsState>({
   actions: [],
+  actionsNetwork: null,
   page: 1,
   pageSize: 50,
   total: null,
@@ -307,12 +314,14 @@ const actions = {
         status: state.filters.status ?? undefined,
       });
       state.actions = result.items ?? [];
+      state.actionsNetwork = network;
       state.page = result.page ?? page;
       state.total = result.total ?? null;
       state.fetchedAt = Date.now();
     } catch (error) {
       state.error = message(error, 'Failed to load governance actions');
       state.actions = [];
+      state.actionsNetwork = null;
     } finally {
       state.loading = false;
     }
@@ -501,6 +510,7 @@ const actions = {
 
   reset(): void {
     state.actions = [];
+    state.actionsNetwork = null;
     state.page = 1;
     state.total = null;
     state.loading = false;
