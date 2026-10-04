@@ -8,8 +8,8 @@ import { isDev, port, r } from './scripts/utils';
 import packageJson from './package.json';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import copy from 'rollup-plugin-copy';
-import { existsSync, createReadStream } from 'node:fs';
-import { findRemoteCode, formatHits, isScannable } from './scripts/remote-code-guard.mjs';
+import { existsSync, createReadStream, readFileSync } from 'node:fs';
+import { forbidRemoteCode } from './scripts/remote-code-guard.mjs';
 
 // Absolute POSIX path: sass `@import` does not reliably resolve vite's `@/`
 // alias on Windows (r() yields backslashes), so we hand it a literal path.
@@ -30,47 +30,29 @@ const sassQuiet = {
 // UI build (treeshake: false) shipped it, so the Chrome Web Store rejected 2.7.2
 // for remotely hosted code. The wallet never serves API docs, so both modules
 // become stubs that throw if called. That also drops the multi-MB Scalar and
-// Swagger UI bundles they import.
+// Swagger UI bundles they import. Export names are read from the installed file
+// so the stub keeps the module's shape across @effect/platform upgrades. The
+// `vite` dev server pre-bundles deps with esbuild, which skips this hook; dev is
+// never shipped.
 const EFFECT_API_DOCS_MODULE = /[\\/]@effect[\\/]platform[\\/]dist[\\/](?:esm|cjs)[\\/]HttpApi(Scalar|Swagger)\.js$/;
-const EFFECT_API_DOCS_EXPORTS: Record<string, string[]> = {
-  Scalar: ['layer', 'layerCdn', 'layerHttpLayerRouter', 'layerHttpLayerRouterCdn'],
-  Swagger: ['layer', 'layerHttpLayerRouter'],
-};
 
 const stubEffectApiDocs: Plugin = {
   name: 'stub-effect-api-docs',
   enforce: 'pre',
   load(id) {
-    const match = EFFECT_API_DOCS_MODULE.exec(id.split('?')[0]);
+    // `\0` and query ids are commonjs proxies and other generated helpers. They
+    // import the plain file id, which is the one that gets the stub.
+    if (id.startsWith('\0') || id.includes('?')) return null;
+    const match = EFFECT_API_DOCS_MODULE.exec(id);
     if (!match) return null;
     const [, kind] = match;
-    const exports = EFFECT_API_DOCS_EXPORTS[kind]
-      .map((name) => `export const ${name} = unavailable;`)
-      .join('\n');
+    const names = [...readFileSync(id, 'utf8').matchAll(/^export (?:const|let|var|function\*?|class) (\w+)/gm)];
+    const exports = names.map(([, name]) => `export const ${name} = unavailable;`).join('\n');
     return `const unavailable = () => {
   throw new Error('@effect/platform HttpApi${kind} is not bundled in the Gero extension');
 };
 ${exports}
 `;
-  },
-};
-
-// Backstop for the stub above: fail any build whose output would load code
-// from a URL, whichever dependency brings it in. See scripts/remote-code-guard.mjs.
-const forbidRemoteCode: Plugin = {
-  name: 'forbid-remote-code',
-  apply: 'build',
-  generateBundle(_options, bundle) {
-    const report = Object.values(bundle)
-      .filter((file) => isScannable(file.fileName))
-      .map((file) => {
-        const code = file.type === 'chunk' ? file.code : file.source;
-        return typeof code === 'string' ? formatHits(file.fileName, findRemoteCode(code)) : '';
-      })
-      .filter(Boolean);
-    if (report.length) {
-      this.error(`Chrome Web Store MV3 forbids remotely hosted code:\n${report.join('\n')}`);
-    }
   },
 };
 
@@ -250,6 +232,7 @@ export const sharedConfig: UserConfig = {
   },
   worker: {
     plugins: [
+      stubEffectApiDocs,
       wasm(),
       // topLevelAwait() // Temporarily disabled
     ],

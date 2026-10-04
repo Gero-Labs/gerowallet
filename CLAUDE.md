@@ -178,8 +178,10 @@ function broadcastFromBackground(updates: Partial<StoreType>) {
 
 ## Chrome Web Store: No Remotely Hosted Code
 - MV3 policy rejects a package if any shipped JS/HTML could load code from a URL (`<script src="https://…">`, remote `importScripts()` / `import()`, script-CDN URLs), **even inside unused dependency code**. 2.7.2 was rejected ("Blue Argon") for `@effect/platform`'s `HttpApiScalar` docs page, which the Midnight SDK pulls in. It shipped because the UI build runs with `treeshake: false`, so every module of every imported package lands in `extension/js/`.
-- `stubEffectApiDocs` (`vite.config.mts`) replaces `HttpApiScalar`/`HttpApiSwagger` in every build. `forbid-remote-code` fails any build whose output matches `scripts/remote-code-guard.mjs`. If it fires on a new dependency, stub or drop the offending module; never loosen the patterns to get the build green.
-- Before uploading a release zip: `node scripts/remote-code-guard.mjs extension`.
+- `stubEffectApiDocs` (`vite.config.mts`) replaces `HttpApiScalar`/`HttpApiSwagger` in every Vite build, worker bundles included (not under the `vite` dev server, whose esbuild pre-bundle skips plugins; dev is never shipped).
+- `scripts/remote-code-guard.mjs` holds the rules. Its `forbid-remote-code` plugin fails a build whose emitted JS/HTML matches one, and `npm run build`, `build:beta` and CI also run it as a CLI over all of `extension/`, which covers vendored files copied in outside Rollup. The rules catch the common literal forms (remote `<script src>`, injected `<script>` elements, `importScripts()` / `import()` / `new Worker()` of a URL, JavaScript CDN hosts); a URL assembled at runtime gets past them, so review new dependencies anyway.
+- If a rule fires on a new dependency, stub or drop the offending module. If it fires on something that is not code (an image or data URL), narrow that rule and add the case to the spec's negatives. Don't weaken a rule just to get a build green.
+- Any release zip built some other way: `node scripts/remote-code-guard.mjs extension` before uploading.
 
 ## Design System (Gero Design Language)
 One token layer, four surfaces, scarce chain accent, motion as feedback, enforced by a ratchet.
