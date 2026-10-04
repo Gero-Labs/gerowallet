@@ -1,5 +1,5 @@
 import wasm from 'vite-plugin-wasm';
-import { defineConfig, UserConfig } from 'vite';
+import { defineConfig, Plugin, UserConfig } from 'vite';
 import Vue from '@vitejs/plugin-vue2';
 import { VuetifyResolver } from 'unplugin-vue-components/resolvers';
 import Components from 'unplugin-vue-components/vite';
@@ -9,6 +9,7 @@ import packageJson from './package.json';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import copy from 'rollup-plugin-copy';
 import { existsSync, createReadStream } from 'node:fs';
+import { findRemoteCode, formatHits, isScannable } from './scripts/remote-code-guard.mjs';
 
 // Absolute POSIX path: sass `@import` does not reliably resolve vite's `@/`
 // alias on Windows (r() yields backslashes), so we hand it a literal path.
@@ -21,6 +22,56 @@ const tokensScss = r('src/shared/styles/_tokens.scss').replace(/\\/g, '/');
 const sassQuiet = {
   quietDeps: true,
   silenceDeprecations: ['legacy-js-api', 'import', 'global-builtin', 'slash-div', 'color-functions', 'if-function'],
+};
+
+// @effect/platform (via the Midnight wallet SDK's prover client) ships
+// HttpApiScalar and HttpApiSwagger: server-side OpenAPI docs pages. Scalar's
+// HTML template carries a `<script src="https://cdn.jsdelivr.net/...">`, and the
+// UI build (treeshake: false) shipped it, so the Chrome Web Store rejected 2.7.2
+// for remotely hosted code. The wallet never serves API docs, so both modules
+// become stubs that throw if called. That also drops the multi-MB Scalar and
+// Swagger UI bundles they import.
+const EFFECT_API_DOCS_MODULE = /[\\/]@effect[\\/]platform[\\/]dist[\\/](?:esm|cjs)[\\/]HttpApi(Scalar|Swagger)\.js$/;
+const EFFECT_API_DOCS_EXPORTS: Record<string, string[]> = {
+  Scalar: ['layer', 'layerCdn', 'layerHttpLayerRouter', 'layerHttpLayerRouterCdn'],
+  Swagger: ['layer', 'layerHttpLayerRouter'],
+};
+
+const stubEffectApiDocs: Plugin = {
+  name: 'stub-effect-api-docs',
+  enforce: 'pre',
+  load(id) {
+    const match = EFFECT_API_DOCS_MODULE.exec(id.split('?')[0]);
+    if (!match) return null;
+    const [, kind] = match;
+    const exports = EFFECT_API_DOCS_EXPORTS[kind]
+      .map((name) => `export const ${name} = unavailable;`)
+      .join('\n');
+    return `const unavailable = () => {
+  throw new Error('@effect/platform HttpApi${kind} is not bundled in the Gero extension');
+};
+${exports}
+`;
+  },
+};
+
+// Backstop for the stub above: fail any build whose output would load code
+// from a URL, whichever dependency brings it in. See scripts/remote-code-guard.mjs.
+const forbidRemoteCode: Plugin = {
+  name: 'forbid-remote-code',
+  apply: 'build',
+  generateBundle(_options, bundle) {
+    const report = Object.values(bundle)
+      .filter((file) => isScannable(file.fileName))
+      .map((file) => {
+        const code = file.type === 'chunk' ? file.code : file.source;
+        return typeof code === 'string' ? formatHits(file.fileName, findRemoteCode(code)) : '';
+      })
+      .filter(Boolean);
+    if (report.length) {
+      this.error(`Chrome Web Store MV3 forbids remotely hosted code:\n${report.join('\n')}`);
+    }
+  },
 };
 
 export const sharedConfig: UserConfig = {
@@ -95,6 +146,8 @@ export const sharedConfig: UserConfig = {
     'process.env.NODE_ENV': JSON.stringify(isDev ? 'development' : 'production'),
   },
   plugins: [
+    stubEffectApiDocs,
+    forbidRemoteCode,
     // Dev only: serve the vendored gero-swap widget from src/vendor at the same
     // /vendor/gero-swap/ path the built extension uses. Production wires these up
     // via the copy plugin + CSS href-rewrite at writeBundle, which don't run

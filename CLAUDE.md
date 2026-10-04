@@ -176,6 +176,11 @@ function broadcastFromBackground(updates: Partial<StoreType>) {
 - **"window/window" error**: Don't use `define: { 'global': ... }` with `nodePolyfills` plugin
 - **pbkdf2 build issues**: Virtual module plugin with `enforce: 'pre'` in background config
 
+## Chrome Web Store: No Remotely Hosted Code
+- MV3 policy rejects a package if any shipped JS/HTML could load code from a URL (`<script src="https://…">`, remote `importScripts()` / `import()`, script-CDN URLs), **even inside unused dependency code**. 2.7.2 was rejected ("Blue Argon") for `@effect/platform`'s `HttpApiScalar` docs page, which the Midnight SDK pulls in. It shipped because the UI build runs with `treeshake: false`, so every module of every imported package lands in `extension/js/`.
+- `stubEffectApiDocs` (`vite.config.mts`) replaces `HttpApiScalar`/`HttpApiSwagger` in every build. `forbid-remote-code` fails any build whose output matches `scripts/remote-code-guard.mjs`. If it fires on a new dependency, stub or drop the offending module; never loosen the patterns to get the build green.
+- Before uploading a release zip: `node scripts/remote-code-guard.mjs extension`.
+
 ## Design System (Gero Design Language)
 One token layer, four surfaces, scarce chain accent, motion as feedback, enforced by a ratchet.
 
@@ -222,4 +227,4 @@ Use these slash commands when working on this project:
 - `/simplify` — Review changed code for quality and efficiency
 
 ---
-**Last Updated**: 2026-07-29
+**Last Updated**: 2026-10-04
