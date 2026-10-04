@@ -166,6 +166,9 @@ const selectTransactionFromQuery = () => {
     : walletStore.transactions?.find((tx: any) => tx.id === txId);
   if (found) {
     transactionInfo.value = found;
+    // `?tx=` asks to SEE this transaction. The page is kept alive, so it may
+    // still be on UTxOs from an earlier visit, where the selection is hidden.
+    activeTab.value = 0;
     nextTick(() => {
       setTimeout(() => {
         const el = document.querySelector('.selected-transaction');

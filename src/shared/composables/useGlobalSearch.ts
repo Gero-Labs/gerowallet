@@ -13,7 +13,7 @@ import governanceApi from '@/api/governance-api';
 import governanceActionsStore from '@/stores/governanceActionsStore';
 import networks from '@/utils/networks';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
-import { Blockchain } from '@/models/types';
+import { Blockchain, type Wallet } from '@/models/types';
 import { scoreMatch } from '@/shared/utils/searchScore';
 import { drepResults, governanceActionResults, governancePageResults } from '@/shared/utils/governanceSearch';
 import { actionResults, pageResults, searchGates, settingResults, type SearchGate } from '@/shared/utils/walletSearchIndex';
@@ -423,11 +423,14 @@ export function useGlobalSearch() {
     if (q.length < 3) return [];
 
     const found: SearchResult[] = [];
-    const wallet = walletStore.loggedWallet;
-    if (!wallet) return found;
+    // Typed, and not named `wallet`: shadowing the computed above let
+    // `wallet.value` compile against the untyped store object and read undefined.
+    const logged: Wallet | null = walletStore.loggedWallet;
+    if (!logged) return found;
 
-    const chain = wallet.chain;
-    const network = wallet.network;
+    // Captured once: every request below must ask about the wallet the search started on.
+    const chain = logged.chain;
+    const network = logged.network;
 
     // Run API searches in parallel
     const apiSearches = [];
@@ -475,7 +478,7 @@ export function useGlobalSearch() {
       apiSearches.push(
         loadGovActionCache(network)
           .then(() => {
-            found.push(...governanceActionResults(govActionPool(wallet.value?.network), q, govSearchOptions()));
+            found.push(...governanceActionResults(govActionPool(network), q, govSearchOptions()));
           })
           .catch(() => {})
       );
