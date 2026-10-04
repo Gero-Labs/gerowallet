@@ -11,7 +11,12 @@
     imgStyle="filter: brightness(0) saturate(100%) invert(100%) sepia(49%) saturate(2%) hue-rotate(47deg) brightness(118%) contrast(101%);"
   >
     <v-card-text class="text-center justify-center pt-6" style="position: relative;">
-      <GeroSwapEmbed :token-out="props.buyTokenUnit" context="dialog" @swap-submitted="$emit('close')" />
+      <GeroSwapEmbed
+        :token-in="props.sellTokenUnit"
+        :token-out="props.buyTokenUnit"
+        context="dialog"
+        @swap-submitted="onSwapSubmitted"
+      />
     </v-card-text>
   </BaseDialog>
 </template>
@@ -23,10 +28,19 @@ import assets from '@/utils/assets';
 
 interface Props {
   isOpen: boolean;
+  sellTokenUnit?: string;
   buyTokenUnit?: string;
 }
 const props = defineProps<Props>();
-defineEmits(['close']);
+const emit = defineEmits<{
+  (event: 'close'): void;
+  (event: 'swap-submitted', detail: unknown): void;
+}>();
+
+function onSwapSubmitted(detail: unknown) {
+  emit('swap-submitted', detail);
+  emit('close');
+}
 
 const { t } = useTranslation();
 </script>

@@ -176,6 +176,13 @@ function broadcastFromBackground(updates: Partial<StoreType>) {
 - **"window/window" error**: Don't use `define: { 'global': ... }` with `nodePolyfills` plugin
 - **pbkdf2 build issues**: Virtual module plugin with `enforce: 'pre'` in background config
 
+## Chrome Web Store: No Remotely Hosted Code
+- MV3 policy rejects a package if any shipped JS/HTML could load code from a URL (`<script src="https://…">`, remote `importScripts()` / `import()`, script-CDN URLs), **even inside unused dependency code**. 2.7.2 was rejected ("Blue Argon") for `@effect/platform`'s `HttpApiScalar` docs page, which the Midnight SDK pulls in. It shipped because the UI build runs with `treeshake: false`, so every module of every imported package lands in `extension/js/`.
+- `stubEffectApiDocs` (`vite.config.mts`) replaces `HttpApiScalar`/`HttpApiSwagger` in every Vite build, worker bundles included (not under the `vite` dev server, whose esbuild pre-bundle skips plugins; dev is never shipped).
+- `scripts/remote-code-guard.mjs` holds the rules. Its `forbid-remote-code` plugin fails a build whose emitted JS/HTML matches one, and `npm run build`, `build:beta` and CI also run it as a CLI over all of `extension/`, which covers vendored files copied in outside Rollup. The rules catch the common literal forms (remote `<script src>`, injected `<script>` elements, static `import` / `export … from` a URL, `importScripts()` / `import()` / `new Worker()` of a URL, JavaScript CDN hosts); a URL assembled at runtime gets past them, so review new dependencies anyway.
+- If a rule fires on a new dependency, stub or drop the offending module. If it fires on something that is not code (an image or data URL), narrow that rule and add the case to the spec's negatives. Don't weaken a rule just to get a build green.
+- Any release zip built some other way: `node scripts/remote-code-guard.mjs extension` before uploading.
+
 ## Design System (Gero Design Language)
 One token layer, four surfaces, scarce chain accent, motion as feedback, enforced by a ratchet.
 
@@ -222,4 +229,4 @@ Use these slash commands when working on this project:
 - `/simplify` — Review changed code for quality and efficiency
 
 ---
-**Last Updated**: 2026-07-29
+**Last Updated**: 2026-10-04

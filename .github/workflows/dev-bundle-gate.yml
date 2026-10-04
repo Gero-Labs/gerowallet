@@ -118,8 +118,11 @@ jobs:
       # whitespace-sensitive regex and reported "0 known offenders" for every
       # production build. These cover how it locates a namespace declaration,
       # which is the part that decides whether a hazard is reported at all.
-      - name: Bundle TDZ guard logic
-        run: npx vitest run scripts/check-bundle-tdz.spec.mjs
+      # The remote-code guard is the same kind of artifact check (it fails the
+      # build:web step below on Web Store "remotely hosted code"), so its
+      # matcher and its Vite plugin wiring are pinned here too.
+      - name: Bundle TDZ and remote-code guard logic
+        run: npx vitest run scripts/check-bundle-tdz.spec.mjs scripts/remote-code-guard.spec.mjs
 
       # i18n parity. vue-i18n renders English (or the raw key) for a missing
       # translation and its warnings are silenced, so a key added to us.ts
@@ -151,3 +154,6 @@ jobs:
           grep -rhoE 'VITE_[A-Z0-9_]+' src/ scripts/ 2>/dev/null             | sort -u | sed 's/$/=placeholder/' > .env.production
           echo "Wrote placeholder .env.production ($(grep -c '^VITE_' .env.production) vars)"
           npm run build:web -- --mode production
+          # The build plugin only sees Rollup output; this also covers the
+          # vendored SDKs build:web copies into extension/.
+          node scripts/remote-code-guard.mjs extension
