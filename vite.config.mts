@@ -1,5 +1,5 @@
 import wasm from 'vite-plugin-wasm';
-import { defineConfig, UserConfig } from 'vite';
+import { defineConfig, Plugin, UserConfig } from 'vite';
 import Vue from '@vitejs/plugin-vue2';
 import { VuetifyResolver } from 'unplugin-vue-components/resolvers';
 import Components from 'unplugin-vue-components/vite';
@@ -8,7 +8,8 @@ import { isDev, port, r } from './scripts/utils';
 import packageJson from './package.json';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import copy from 'rollup-plugin-copy';
-import { existsSync, createReadStream } from 'node:fs';
+import { existsSync, createReadStream, readFileSync } from 'node:fs';
+import { forbidRemoteCode } from './scripts/remote-code-guard.mjs';
 
 // Absolute POSIX path: sass `@import` does not reliably resolve vite's `@/`
 // alias on Windows (r() yields backslashes), so we hand it a literal path.
@@ -21,6 +22,38 @@ const tokensScss = r('src/shared/styles/_tokens.scss').replace(/\\/g, '/');
 const sassQuiet = {
   quietDeps: true,
   silenceDeprecations: ['legacy-js-api', 'import', 'global-builtin', 'slash-div', 'color-functions', 'if-function'],
+};
+
+// @effect/platform (via the Midnight wallet SDK's prover client) ships
+// HttpApiScalar and HttpApiSwagger: server-side OpenAPI docs pages. Scalar's
+// HTML template carries a `<script src="https://cdn.jsdelivr.net/...">`, and the
+// UI build (treeshake: false) shipped it, so the Chrome Web Store rejected 2.7.2
+// for remotely hosted code. The wallet never serves API docs, so both modules
+// become stubs that throw if called. That also drops the multi-MB Scalar and
+// Swagger UI bundles they import. Export names are read from the installed file
+// so the stub keeps the module's shape across @effect/platform upgrades. The
+// `vite` dev server pre-bundles deps with esbuild, which skips this hook; dev is
+// never shipped.
+const EFFECT_API_DOCS_MODULE = /[\\/]@effect[\\/]platform[\\/]dist[\\/](?:esm|cjs)[\\/]HttpApi(Scalar|Swagger)\.js$/;
+
+const stubEffectApiDocs: Plugin = {
+  name: 'stub-effect-api-docs',
+  enforce: 'pre',
+  load(id) {
+    // `\0` and query ids are commonjs proxies and other generated helpers. They
+    // import the plain file id, which is the one that gets the stub.
+    if (id.startsWith('\0') || id.includes('?')) return null;
+    const match = EFFECT_API_DOCS_MODULE.exec(id);
+    if (!match) return null;
+    const [, kind] = match;
+    const names = [...readFileSync(id, 'utf8').matchAll(/^export (?:const|let|var|function\*?|class) (\w+)/gm)];
+    const exports = names.map(([, name]) => `export const ${name} = unavailable;`).join('\n');
+    return `const unavailable = () => {
+  throw new Error('@effect/platform HttpApi${kind} is not bundled in the Gero extension');
+};
+${exports}
+`;
+  },
 };
 
 export const sharedConfig: UserConfig = {
@@ -95,6 +128,8 @@ export const sharedConfig: UserConfig = {
     'process.env.NODE_ENV': JSON.stringify(isDev ? 'development' : 'production'),
   },
   plugins: [
+    stubEffectApiDocs,
+    forbidRemoteCode,
     // Dev only: serve the vendored gero-swap widget from src/vendor at the same
     // /vendor/gero-swap/ path the built extension uses. Production wires these up
     // via the copy plugin + CSS href-rewrite at writeBundle, which don't run
@@ -197,6 +232,7 @@ export const sharedConfig: UserConfig = {
   },
   worker: {
     plugins: [
+      stubEffectApiDocs,
       wasm(),
       // topLevelAwait() // Temporarily disabled
     ],
