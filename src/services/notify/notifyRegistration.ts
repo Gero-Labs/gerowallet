@@ -19,6 +19,7 @@
 // randomness) so the whole machine is unit-testable without chrome.
 
 import { bytesToHex } from './notifyAuth';
+import { isEligibleWallet } from './notifyEligibility';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { NotifyDeferred, NotifyError, type NotifyClient } from './notifyClient';
 import type { NotifyStore, NotifyWalletState } from './notifyStore';
@@ -118,13 +119,9 @@ export function toBcp47(locale: string): string {
   return (l === 'us' ? 'en' : l).slice(0, 16);
 }
 
-/** §1.3 plus handover B2: Normal Cardano software wallets with a key-hash reward address, on a served network. */
-export function isEligibleWallet(w: { chain: string; network: string; type?: string; stakeAddress?: string }): boolean {
-  return w.chain === 'Cardano'
-    && (w.type === undefined || w.type === 'Normal')
-    && ['Mainnet', 'Preprod', 'Preview'].includes(w.network)
-    && typeof w.stakeAddress === 'string' && /^stake(_test)?1[a-z0-9]+$/.test(w.stakeAddress);
-}
+// Lives in its own module so the UI can import it without this one; re-exported
+// for the background and the existing tests.
+export { isEligibleWallet };
 
 /**
  * This device's credential set for PUT /device/wallets (§4.5). `derivePaymentCredentials()`

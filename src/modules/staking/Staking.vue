@@ -699,13 +699,20 @@ const poolIcon = (pool: PoolRow | null | undefined): string => {
 onMounted(() => {
   // Load initial paginated pools data
   reloadWithFilters();
-
-  // Handle ?pool=<id> deep-link from Global Search — pre-fill search
-  const poolQuery = instance?.proxy?.$route?.query?.pool;
-  if (poolQuery && typeof poolQuery === 'string') {
-    searchInput.value = poolQuery;
-  }
 });
+
+// Handle ?pool=<id> deep-link from Global Search — pre-fill search. A watcher,
+// not a mount-time read: the page sits in ContentLayout's keep-alive, so a
+// second pool picked from search arrives on an already-mounted page.
+watch(
+  () => instance?.proxy?.$route?.query?.pool,
+  (poolQuery) => {
+    if (poolQuery && typeof poolQuery === 'string') {
+      searchInput.value = poolQuery;
+    }
+  },
+  { immediate: true },
+);
 
 onBeforeUnmount(() => {
   stakingStore.clearCurrentPool();
