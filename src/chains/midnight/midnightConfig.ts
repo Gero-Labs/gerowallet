@@ -83,23 +83,24 @@ const NEXUS_BASE = (typeof import.meta !== 'undefined'
   && import.meta.env
   && import.meta.env['VITE_NEXUS_API_URL']) || 'https://nexus.gerowallet.io';
 
-const GERO_SYNC_WS = (typeof import.meta !== 'undefined'
+/**
+ * gero-sync base URL — the same `VITE_SYNC_WS_URL` the sync WebSocket service
+ * uses (`src/services/websocket.service.ts`), e.g. `wss://sync.gerowallet.io`.
+ */
+const GERO_SYNC_BASE = ((typeof import.meta !== 'undefined'
   && import.meta.env
-  && import.meta.env['VITE_GERO_SYNC_WS_URL']) || 'wss://sync.gerowallet.io/ws/sync';
+  && import.meta.env['VITE_SYNC_WS_URL']) || 'wss://sync.gerowallet.io').replace(/\/+$/, '');
+
+const GERO_SYNC_WS = `${GERO_SYNC_BASE}/ws/sync`;
 
 /**
- * Base URL of gero-sync's restricted Midnight indexer relay
- * (`/midnight/{network}/graphql` and `/midnight/{network}/graphql/ws`). The
- * wallet SDKs sync through it; Gero's indexers stay in-cluster.
+ * gero-sync's restricted Midnight indexer relay for one network
+ * (`/midnight/{network}/graphql`, WebSocket at `.../graphql/ws`). The wallet
+ * SDKs sync through it; Gero's indexers stay in-cluster.
  */
-const GERO_SYNC_HTTP = (typeof import.meta !== 'undefined'
-  && import.meta.env
-  && import.meta.env['VITE_GERO_SYNC_HTTP_URL']) || 'https://sync.gerowallet.io';
-
-/** gero-sync relay endpoints for one Midnight network. */
 function geroSyncIndexerRelay(network: 'mainnet' | 'preprod'): { publicIndexerUrl: string; publicIndexerWsUrl: string } {
-  const http = `${GERO_SYNC_HTTP.replace(/\/+$/, '')}/midnight/${network}/graphql`;
-  return { publicIndexerUrl: http, publicIndexerWsUrl: `${http.replace(/^http/, 'ws')}/ws` };
+  const wsBase = `${GERO_SYNC_BASE}/midnight/${network}/graphql`;
+  return { publicIndexerUrl: wsBase.replace(/^ws/, 'http'), publicIndexerWsUrl: `${wsBase}/ws` };
 }
 
 /**
