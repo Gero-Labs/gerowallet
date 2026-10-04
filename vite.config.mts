@@ -305,7 +305,10 @@ export default defineConfig(({ command }) => {
       rollupOptions: {
         maxParallelFileOps: 50, // Increase parallel processing
         cache: true,
-        treeshake: false, // Disable for faster builds
+        // Tree-shaking stays on (Rollup's default). With it off, every module of
+        // every imported package shipped, used or not, and the Chrome Web Store
+        // rejected 2.7.2 for one of them: an unused @effect/platform docs page
+        // carrying a CDN <script> (remotely hosted code).
         input: {
           options: r('src/options/index.html'),
           sidepanel: r('src/sidepanel/index.html'),
