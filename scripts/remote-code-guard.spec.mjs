@@ -30,6 +30,28 @@ describe('findRemoteCode', () => {
     expect(reasons('new Worker("//example.com/w.js")')).toEqual(['a Worker loaded from a remote URL']);
   });
 
+  it('flags static imports and re-exports from any remote host', () => {
+    const forms = [
+      'import "https://example.com/remote.js";',
+      "import x from 'https://evil.example/x.js';",
+      'import{a as b,c}from"//evil.example/x.js"',
+      'import * as ns from `https://example.com/ns.js`;',
+      'export * from "https://example.com/m.js";',
+      "export { y as z } from 'https://example.com/m.js';",
+    ];
+    for (const code of forms) expect(reasons(code)).toEqual(['a static import or re-export from a remote URL']);
+  });
+
+  it('ignores local static imports and lookalike identifiers', () => {
+    const local = [
+      'import "./polyfills.js";',
+      "import x from '../x.js'; export * from './y.js';",
+      'const important = from("https://example.com/data.json");',
+      'exportFrom("https://example.com/feed")',
+    ];
+    for (const code of local) expect(findRemoteCode(code)).toEqual([]);
+  });
+
   it('flags an injected <script> element and a protocol-relative src', () => {
     const loader = 'const s=document.createElement("script");s.src="https://www.googletagmanager.com/gtag/js?id="+id;document.head.appendChild(s)';
     expect(reasons(loader)).toEqual(['an injected <script> element with a remote src']);
@@ -72,10 +94,10 @@ describe('isScannable', () => {
 });
 
 /** Runs a real Vite build of one page with only the guard plugin installed. */
-async function buildPage(html) {
+async function buildPage(html, mainJs = 'document.title = "fixture";\n') {
   const root = mkdtempSync(join(tmpdir(), 'remote-code-guard-'));
   writeFileSync(join(root, 'index.html'), html);
-  writeFileSync(join(root, 'main.js'), 'document.title = "fixture";\n');
+  writeFileSync(join(root, 'main.js'), mainJs);
   try {
     return await build({ root, configFile: false, logLevel: 'silent', plugins: [forbidRemoteCode], build: { write: false } });
   } finally {
@@ -89,6 +111,13 @@ describe('forbidRemoteCode plugin', () => {
   it('fails the build on a remote <script src> in the HTML page', async () => {
     const page = '<script src="https://cdn.example.com/widget.js"></script><script type="module" src="./main.js"></script>';
     await expect(buildPage(page)).rejects.toThrow(/index\.html: <script src> pointing at a remote URL/);
+  });
+
+  // Rollup keeps a URL specifier as an external, so the import reaches the chunk.
+  it('fails the build on a static import from a remote URL', async () => {
+    const page = '<script type="module" src="./main.js"></script>';
+    await expect(buildPage(page, 'import "https://example.com/remote.js";\n'))
+      .rejects.toThrow(/\.js: a static import or re-export from a remote URL/);
   });
 
   it('passes a page with only bundled scripts', async () => {

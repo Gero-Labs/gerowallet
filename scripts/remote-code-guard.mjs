@@ -8,8 +8,8 @@
  * would have caught it.
  *
  * The rules catch the common literal forms (remote `<script src>`, injected
- * `<script>` elements, `importScripts()` / `import()` / `new Worker()` of a URL,
- * JavaScript CDN hosts). A URL assembled at runtime gets past them, so new
+ * `<script>` elements, static `import` / `export … from` a URL, `importScripts()` /
+ * `import()` / `new Worker()` of a URL, JavaScript CDN hosts). A URL assembled at runtime gets past them, so new
  * dependencies still need a look.
  *
  * `forbidRemoteCode` fails a Vite build whose emitted JS/HTML matches a rule.
@@ -42,6 +42,12 @@ export const REMOTE_CODE_RULES = [
   },
   { pattern: new RegExp(String.raw`\bimportScripts\(\s*${QUOTE}${REMOTE_URL}`), reason: 'importScripts() of a remote URL' },
   { pattern: new RegExp(String.raw`\bimport\(\s*${QUOTE}${REMOTE_URL}`), reason: 'dynamic import() of a remote URL' },
+  {
+    // `import "url"`, `import x from "url"`, `export * from "url"`, minified or not.
+    // Rollup keeps URL specifiers as externals, so they reach the output as-is.
+    pattern: new RegExp(String.raw`(?:\bimport\s*|\b(?:import|export)\b[^;"'\`()]{0,500}?\bfrom\s*)${QUOTE}${REMOTE_URL}`),
+    reason: 'a static import or re-export from a remote URL',
+  },
   { pattern: new RegExp(String.raw`\bnew\s+(?:Shared)?Worker\(\s*${QUOTE}${REMOTE_URL}`), reason: 'a Worker loaded from a remote URL' },
   {
     // Images, fonts, stylesheets and JSON on these hosts are data, not code.
