@@ -267,6 +267,14 @@
 
       <GlobalSearch />
 
+      <!-- Inside v-app, and beside v-main rather than inside it. Vuetify's dialog
+           scroll lock walks up from the wheel target until it finds [data-app] and
+           throws on `document` when it never does, and this layout's stacking
+           rule on .v-application (see the scoped style below) would let a sibling
+           dock paint above every modal scrim. v-main's own stacking context would
+           trap it under the scrim for good. -->
+      <AgentDock v-if="isAgentVisible" />
+
     </v-app>
   </div>
 </template>
@@ -303,6 +311,8 @@ import { musicStore } from '@/stores/musicStore';
 import { hasNewFeaturesInPath } from '@/shared/composables/useFeatureNotifications';
 import GlobalSearch from '@/shared/components/GlobalSearch.vue';
 import { useGlobalSearch, settingsNavRequest } from '@/shared/composables/useGlobalSearch';
+import AgentDock from '@/sidepanel/components/AgentDock.vue';
+import { agentDockPrefsStore } from '@/stores/agentDockPrefsStore';
 
 const { t } = useTranslation();
 const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true');
@@ -418,6 +428,20 @@ const kesWarningVisible = computed(() => {
   if (!featureFlagsStore.isPoolOperatorEnabled()) return false;
   return kesRemainingGlobal.value !== null && kesRemainingGlobal.value < 50;
 });
+
+// Gero Companion (support chat + assistant). It mounts on EITHER flag:
+// isCopilotEnabled alone (legacy copilot-only dock) or isLiveChatEnabled alone
+// (support-only dock, Assistant tab visible but disabled) — see
+// featureFlagsStore's doc blocks for both. Living in this layout is what keeps
+// it off the dApp popup windows and the standalone BlankLayout screens, where a
+// floating FAB only obstructs signing content.
+const isAgentVisible = computed(() =>
+  (featureFlagsStore.isCopilotEnabled() || featureFlagsStore.isLiveChatEnabled())
+  && !!loggedWallet.value && !walletStore.isLocked
+  // Wait for the persisted preference before the first render, otherwise a
+  // user who hid the dock sees it flash on every dashboard load.
+  && agentDockPrefsStore.hydrated && !agentDockPrefsStore.hidden
+);
 
 const epochSlotPercentage = computed(() => {
   // Midnight has no epoch concept — show 0 (the progress bar will render flat).
