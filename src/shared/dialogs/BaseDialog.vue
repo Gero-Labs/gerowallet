@@ -122,8 +122,9 @@ const props = defineProps({
   subtitle2: {
     type: String
   },
+  /** The card's max-height: pixels, or a CSS length such as '90vh'. */
   height: {
-    type: Number,
+    type: [Number, String],
     default: 800
   },
   minHeight: {

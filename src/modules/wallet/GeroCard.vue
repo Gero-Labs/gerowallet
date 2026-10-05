@@ -1,18 +1,13 @@
 <template>
   <div class="gero-wallet">
-    <header class="gero-wallet__bar">
-      <div class="gero-wallet__brand">
-        <span class="t-heading">{{ t('card.geroCard') }}</span>
-        <CardChip>{{ t('card.poweredByKaiserex') }}</CardChip>
-      </div>
-      <div v-if="isSignedIn" class="gero-wallet__identity">
-        <template v-if="email">
-          <span class="t-caption">{{ t('card.signedInAs') }}</span>
-          <span class="t-body-sm gero-wallet__email">{{ email }}</span>
-        </template>
-        <GButton tier="tertiary" compact @click="handleLogout">{{ t('card.signOut') }}</GButton>
-      </div>
-    </header>
+    <!-- Signed in: who is signed in, and the only place to sign out of the card account. -->
+    <div v-if="isSignedIn" class="gero-wallet__account">
+      <template v-if="email">
+        <span class="t-caption">{{ t('card.signedInAs') }}</span>
+        <span class="t-body-sm gero-wallet__email">{{ email }}</span>
+      </template>
+      <GButton tier="tertiary" compact @click="handleLogout">{{ t('card.signOut') }}</GButton>
+    </div>
 
     <div v-if="showLoadingState" class="gero-wallet__state" role="status">
       <IsoScene name="empty" class="gero-wallet__state-art" />
@@ -44,7 +39,6 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import cardStore from '@/stores/modules/card';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import IsoScene from '@/shared/components/iso/IsoScene.vue';
-import CardChip from '@/modules/wallet/components/ui/CardChip.vue';
 import KaiserexAuthPage from '@/modules/wallet/components/KaiserexAuthPage.vue';
 import OrderCardSection from '@/modules/wallet/pages/OrderCardSection.vue';
 import PendingSection from '@/modules/wallet/pages/PendingSection.vue';
@@ -135,22 +129,13 @@ onMounted(async () => {
   position: relative;
 }
 
-.gero-wallet__bar {
+.gero-wallet__account {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--g-s-3) var(--g-s-4);
-  padding: var(--g-s-4) clamp(16px, 3vw, 32px);
-  border-bottom: 1px solid var(--g-hairline-1);
-}
-
-.gero-wallet__brand,
-.gero-wallet__identity {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  justify-content: flex-end;
   gap: var(--g-s-2);
+  padding: var(--g-s-3) clamp(16px, 3vw, 32px) 0;
 }
 
 .gero-wallet__email {
