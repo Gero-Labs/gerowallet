@@ -17,6 +17,14 @@ import { Blockchain, type Wallet } from '@/models/types';
 import { scoreMatch } from '@/shared/utils/searchScore';
 import { drepResults, governanceActionResults, governancePageResults } from '@/shared/utils/governanceSearch';
 import { actionResults, pageResults, searchGates, settingResults, type SearchGate } from '@/shared/utils/walletSearchIndex';
+import { cnightUnit } from '@/shared/utils/cnightAssets';
+
+/** Whether the logged-in wallet holds a positive balance of `unit`. */
+function holdsUnit(unit: string): boolean {
+  if (!unit) return false;
+  const tokens = (walletStore.tokens || {}) as Record<string, { quantity?: number | string }>;
+  return Number(tokens[unit]?.quantity ?? 0) > 0;
+}
 import type { GovProposal } from '@/api/governance.types';
 
 export type SearchResultType =
@@ -165,6 +173,7 @@ export function useGlobalSearch() {
     flags: featureFlagsStore,
     hasBackupState: !!walletStore.config && WalletStore.hasBackup(),
     playlistLength: musicStore.musicPlaylist?.length ?? 0,
+    holdsCnight: holdsUnit(cnightUnit(wallet.value?.network)),
   }));
   /** `chain:network` of the logged-in wallet, matched against the stores' own stamps. */
   const walletKey = computed(() => `${wallet.value?.chain}:${wallet.value?.network}`);
