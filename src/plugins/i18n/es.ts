@@ -3013,6 +3013,7 @@ export default {
   'errors.insufficientBalance': 'Saldo insuficiente',
   'errors.noCollateral': 'Esta transacción ejecuta un contrato inteligente, que necesita un pequeño UTxO solo con ADA como colateral, pero todo tu ADA está agrupado con tokens. Envía unos 6 ADA a la dirección de tu propia billetera para crear uno y luego inténtalo de nuevo.',
   'errors.insufficientAdaForTx': 'No hay suficiente ADA para completar esta transacción una vez cubiertas las comisiones de red y el mínimo por salida. Agrega un poco más de ADA e inténtalo de nuevo.',
+  'errors.submitUnconfirmed': 'No pudimos confirmar si tu transacción llegó a la red. Aún podría completarse, así que revisa tu historial de transacciones antes de enviarla de nuevo.',
   'errors.collateralPoolEmpty': 'El servicio de colateral compartido no está disponible temporalmente. Inténtalo de nuevo en un momento.',
   'errors.invalidAddress': 'Dirección no válida',
   'errors.invalidOrder': 'Datos de la orden no válidos',

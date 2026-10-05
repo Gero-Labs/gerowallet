@@ -4,8 +4,12 @@ import { type StoredTransaction } from '@/models/transaction.types';
 import { Api } from '@/api/api';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
-import { APIError, CIP113_SIGN_REFUSAL_MESSAGE, TxSendError } from '@/chrome/config';
-import { classifySubmitFailure } from '@/chrome/submitFailure';
+import { CIP113_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
+import {
+  describeSubmitFailure,
+  isUnexpectedSubmitResponseError,
+  unexpectedSubmitResponseError,
+} from '@/chrome/submitErrors';
 import networks from '@/utils/networks';
 import { blockChainDBSchema, blockChainDBVersion } from '@/db/schema';
 import {
@@ -2191,7 +2195,9 @@ export class WalletBg {
       const isValidTxId = /^[a-f0-9]{64}$/i.test(txIdResponse);
       if (!isValidTxId) {
         console.error(txIdResponse);
-        throw new Error(txIdResponse);
+        // Tagged, so the catch below reports what the endpoint actually said instead
+        // of treating a status-less error as a lost response.
+        throw unexpectedSubmitResponseError(txIdResponse);
       }
       // Create transaction record using sync service pattern
       const txDeserialized: Cardano.Tx = Serialization.TxCBOR.deserialize(Serialization.TxCBOR(txCbor));
@@ -2217,19 +2223,11 @@ export class WalletBg {
     } catch (error) {
       console.error('Transaction submission error:', error);
 
-      // Handle different error types
-      const failure = classifySubmitFailure(error['response']?.status);
-      if (failure === 'failure') {
-        throw new Error(TxSendError.Failure.info.concat('', ' ', JSON.stringify(error['response'].data)));
-      } else if (failure === 'internal') {
-        throw new Error(APIError.InternalError.info);
-      } else if (failure === 'refused') {
-        throw new Error(TxSendError.Refused.info);
-      } else if (failure === 'mempoolFull') {
-        throw new Error(ERROR.fullMempool);
-      } else {
-        throw new Error(APIError.InvalidRequest.info.concat('', ' ', JSON.stringify(error)));
-      }
+      // Keep the node's rejection reason, or explain that a lost response leaves
+      // the submission outcome unknown.
+      if (isUnexpectedSubmitResponseError(error)) throw error;
+      const response = error?.['response'];
+      throw new Error(describeSubmitFailure(response?.status, response?.data));
     }
   }
 

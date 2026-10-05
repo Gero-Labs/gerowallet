@@ -8,6 +8,11 @@ import { Messaging } from '@/chrome/messaging';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
 import { mergeWitnessSets } from '@/shared/utils/witnessSets';
 import { isStakeKeyRegistered, StakeAccountError } from '@/shared/utils/stakeRegistration';
+import {
+  dappSubmitError,
+  describeSubmitFailure,
+  describeUnexpectedSubmitResponse,
+} from '@/chrome/submitErrors';
 import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, POPUP, SENDER, TARGET, TxSendError, TxSignError } from '@/chrome/config';
 import { toDappError } from '@/chrome/dappError';
 import { applyDappRequestBadge } from '@/chrome/dappRequestBadge';
@@ -35,8 +40,7 @@ import {
   submitTx,
   urlScan,
 } from '@/chrome/serialization';
-import { Blockchain, coin_type, ERROR, Network, Paginate, purpose } from '@/models/types';
-import { classifySubmitFailure } from '@/chrome/submitFailure';
+import { Blockchain, coin_type, Network, Paginate, purpose } from '@/models/types';
 import networks from '@/utils/networks';
 import coinGeckoStore from '@/stores/coinGeckoStore';
 import { getDomain } from 'tldts';
@@ -1645,23 +1649,11 @@ app.add(METHOD.submitTx, async (request, sendResponse) => {
     }
     const response = await submitTx(request.data.tx, loggedWallet['chain'], loggedWallet['network'])
     if (!response.ok) {
-      let error: unknown;
-      switch (classifySubmitFailure(response.status)) {
-        case 'failure':
-          error = { ...TxSendError.Failure, message: response.statusText };
-          break;
-        case 'internal':
-          error = APIError.InternalError;
-          break;
-        case 'refused':
-          error = TxSendError.Refused;
-          break;
-        case 'mempoolFull':
-          error = ERROR.fullMempool;
-          break;
-        default:
-          error = APIError.InvalidRequest;
-      }
+      // The node's rejection reason is in the BODY, not in statusText -- reading it is
+      // the difference between "value not conserved" and a bare "Bad Request". Never
+      // let a failed read of it mask the real failure.
+      const body = await response.text().catch(() => '');
+      const error = dappSubmitError(response.status, body);
       console.error("Error in submitTx:", error);
       sendResponse({
         id: request.id,
@@ -1680,7 +1672,7 @@ app.add(METHOD.submitTx, async (request, sendResponse) => {
       console.error(txIdResponse);
       sendResponse({
         id: request.id,
-        error: txIdResponse,
+        error: { ...TxSendError.Failure, info: describeUnexpectedSubmitResponse(txIdResponse) },
         target: TARGET,
         sender: SENDER.extension,
       });
@@ -4796,7 +4788,9 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
               const txHash = await response.text();
               await wcService.respondSuccess(topic, id, txHash);
             } else {
-              await wcService.respondError(topic, id, 4100, `Submit failed: ${response.statusText}`);
+              // statusText is "Bad Gateway" at best -- the node's reason is in the body.
+              const body = await response.text().catch(() => '');
+              await wcService.respondError(topic, id, 4100, describeSubmitFailure(response.status, body));
             }
             return;
           }
@@ -5108,7 +5102,10 @@ app.addToOptions(MessageTypes.CIP45_INVOKE, async (request, sendResponse) => {
         if (response.ok) {
           reply({ success: true, result: await response.text() });
         } else {
-          fail(TxSendError.Failure.code, `Submit failed: ${response.statusText}`);
+          // Same as the WalletConnect and CIP-30 paths: report the node's own reason
+          // or explain that the outcome is unknown, instead of a bare status phrase.
+          const body = await response.text().catch(() => '');
+          fail(TxSendError.Failure.code, describeSubmitFailure(response.status, body));
         }
         break;
       }
