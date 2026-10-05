@@ -37,6 +37,7 @@ export const EXTENSION_PAGE_ONLY_METHODS = new Set<string>([
   'NOTIFY_INBOX_READ',
   'NOTIFY_INBOX_CLEAR',
   'NOTIFY_WATCH_ORDERS',
+  'NOTIFY_INTRO_ANSWER',
   // Part of signing: only the wallet's own pages sign (Trezor over WebUSB, trezorDispatch.ts).
   'CIP113_SIGN_PREFLIGHT',
 ]);

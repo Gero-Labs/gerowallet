@@ -259,6 +259,12 @@
 
       <BackupWalletDialog :isOpen="backupWalletDialog" @close="backupWalletDialog = false" />
 
+      <!-- The offer to turn push notifications on for an eligible, unlinked wallet (notifyIntro.ts): waits its turn behind every other dialog. -->
+      <NotifyIntroPrompt
+        :suppressed="!isWelcomeDone || !!currentDialog || backupWalletDialog || changeLog.enabled || vmProxy.$route.query['changeLog'] === 'true'"
+        @turn-on="openNotifySettingsFromIntro"
+      />
+
       <GlobalSearch />
 
     </v-app>
@@ -286,7 +292,9 @@ import WalletStore from '@/stores/walletStore';
 import { poolOperatorStore } from '@/stores/poolOperatorStore';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import NotifyInbox from '@/shared/components/NotifyInbox.vue';
+import NotifyIntroPrompt from '@/shared/components/NotifyIntroPrompt.vue';
 import { notifyInboxStore } from '@/stores/notifyInboxStore';
+import { notifySettingsStore } from '@/stores/notifySettingsStore';
 import { networkStore, isBitcoinTip } from '@/stores/networkStore';
 import { midnightStore } from '@/stores/midnightStore';
 import { setConfiguration } from '@/db/gero-db';
@@ -486,6 +494,11 @@ function openNotifySettings() {
   settingsInitialTab.value = 'notifications';
   currentDialog.value = dialogs.SETTINGS;
 }
+/** "Turn on" on the offer (notifyIntro.ts): the same landing as its system notification's click. */
+function openNotifySettingsFromIntro() {
+  notifySettingsStore.requestEnable();
+  openNotifySettings();
+}
 
 function navigateToPoolOperator() {
   notificationsMenu.value = false;
@@ -583,6 +596,8 @@ const preloadBackgroundImage = () => {
 const openSettingsFromFlag = (flag: unknown) => {
   const tab = flag && typeof flag === 'object' && typeof (flag as { tab?: unknown }).tab === 'string' ? (flag as { tab: string }).tab : undefined;
   if (tab) settingsInitialTab.value = tab;
+  // The offer's system notification (notifyIntro.ts): the Notifications tab starts the enable step itself.
+  if (flag && typeof flag === 'object' && (flag as { enable?: unknown }).enable === 'notify') notifySettingsStore.requestEnable();
   currentDialog.value = dialogs.SETTINGS;
   chrome.storage.local.remove('openSettingsOnLoad');
 };
