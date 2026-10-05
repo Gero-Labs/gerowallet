@@ -21,6 +21,15 @@
             </div>
             <span v-if="statusHint" class="helper my-0 d-block mt-1">{{ statusHint }}</span>
             <span v-if="browserError" class="helper my-0 d-block mt-1 error--text">{{ browserError }}</span>
+            <!-- Chrome's own switch for this extension's bubbles: off means a push arrives and shows nothing. -->
+            <template v-if="chromeDenied">
+              <span class="helper my-0 d-block mt-1 warning--text">{{ $t('notify.chrome.denied') }}</span>
+              <button type="button" class="notify-types__toggle" @click="openChromeSettings">{{ $t('notify.chrome.openSettings') }}</button>
+            </template>
+            <template v-else-if="browserOn && !serverDisabled">
+              <button type="button" class="notify-types__toggle" :disabled="busy" @click="sendTestNotification">{{ $t('notify.chrome.test') }}</button>
+              <span v-if="testSent" class="helper my-0 d-block">{{ $t('notify.chrome.testHint') }}</span>
+            </template>
           </v-col>
           <v-col cols="3" style="display: flex;">
             <ToggleSwitch :key="browserSwitchKey" text-left="OFF" text-right="ON" font-size="10px" v-model="browserOn" :disabled="busy || serverDisabled" style="margin: auto" />
@@ -219,8 +228,10 @@
 <script setup lang="ts">
 // Notifications settings tab (handover B7 + B9). The worker owns every subscription
 // and API call; this tab reads notifySettingsStore and sends the NOTIFY_* messages.
-// Opt-in only: the browser switch first, then each wallet, each with its own auth
-// step when no wallet proof is cached yet.
+// Opt-in only, in one step: turning the open wallet on turns the browser switch on
+// with it (an auth step when no wallet proof is cached yet); the browser switch alone
+// silences or re-arms every linked wallet on this browser. Opened from the offer
+// (notifyIntro.ts), the tab starts that enable step by itself.
 import { computed, onMounted, ref, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
@@ -250,6 +261,35 @@ const unsupported = computed(() => {
   if (state.value && !state.value.pushSupported) return t('notify.unsupported.browser');
   return '';
 });
+
+// ---- Chrome's own permission for this extension's bubbles ----
+// The manifest permission grants it, but the user can turn notifications from an extension
+// off (a bubble's menu, chrome://settings/content/notifications); a push then arrives and
+// shows nothing. Read on every opening of the tab.
+const chromeDenied = ref(false);
+function readChromePermission(): void {
+  if (typeof chrome === 'undefined' || !chrome.notifications?.getPermissionLevel) return;
+  try {
+    chrome.notifications.getPermissionLevel((level) => { chromeDenied.value = level === 'denied'; });
+  } catch { chromeDenied.value = false; }
+}
+function openChromeSettings(): void {
+  void chrome.tabs.create({ url: 'chrome://settings/content/notifications' });
+}
+// A local bubble, so the user sees what an alert looks like and where it shows up; on macOS it is
+// also what raises the system's own permission prompt for Chrome the first time.
+const testSent = ref(false);
+function sendTestNotification(): void {
+  try {
+    chrome.notifications.create('notifyTestNotification', {
+      type: 'basic',
+      title: t('notify.chrome.testTitle'),
+      message: t('notify.chrome.testBody'),
+      iconUrl: chrome.runtime.getURL('public/logo128.png'),
+    });
+  } catch { /* the hint below covers a bubble that never shows */ }
+  testSent.value = true;
+}
 
 // ---- This browser ----
 /** No usable /config (not served yet, unreachable, enabled:false or no VAPID key): the feature stays dark here. */
@@ -298,11 +338,10 @@ const walletOn = computed({
   get: () => !!link.value && link.value.registeredAt !== null,
   set: (on: boolean) => { void (on ? turnWalletOn() : turnWalletOff()); },
 });
-/** Turning ON needs the browser switch; turning OFF (unlinking) is always allowed, since links survive a browser-off (§4.2). */
-const walletDisabled = computed(() => busy.value || !logged.value?.eligible || (!walletOn.value && !browserOn.value));
+/** Turning ON turns the browser switch on with it; turning OFF (unlinking) is always allowed, since links survive a browser-off (§4.2). */
+const walletDisabled = computed(() => busy.value || !logged.value?.eligible);
 const walletHint = computed(() => {
   if (!logged.value?.eligible) return t('notify.wallet.ineligible');
-  if (!browserOn.value) return t('notify.wallet.browserOff');
   if (walletOn.value && link.value?.needsProof) return t('notify.wallet.reconfirmHint');
   return t('notify.wallet.hint');
 });
@@ -322,7 +361,6 @@ function walletResultError(r: string): string {
   if (r === 'ok') return '';
   if (r === 'proof_failed' || r === 'proof_invalid') return t('notify.wallet.authFailed');
   if (r === 'ineligible') return t('notify.wallet.ineligible');
-  if (r === 'browser_off') return t('notify.wallet.browserOff');
   if (r === 'limit') return registeredCount.value >= (config.value?.limits.walletsPerDevice ?? Infinity) ? t('notify.wallet.limitWallets') : t('notify.wallet.limitDevices');
   if (r === 'deferred') return '';
   return t('notify.saveFailed');
@@ -423,16 +461,23 @@ onMounted(async () => {
 // Every opening of the tab re-reads the worker (and, through it, /config and this wallet's server prefs).
 let retries = 0;
 async function refreshWhenActive(): Promise<void> {
-  await store.refresh(true);
+  await store.refresh({ config: true, sync: true });
   // Right after an extension reload the worker answers before its wallets are hydrated: ask again.
   const s = store.state.state;
   const pageHasWallet = !!walletStore.loggedWallet;
   if (props.active && (!s || (pageHasWallet && !s.logged) || store.state.error) && retries < 4) {
     retries++;
     setTimeout(() => { if (props.active) void refreshWhenActive(); }, 1500 * retries);
-  } else if (s?.logged) retries = 0;
+  } else if (s?.logged) {
+    retries = 0;
+    // Opened from the offer (notifyIntro.ts): run the enable step now, auth prompt included.
+    if (store.takeEnableRequest() && props.active && s.logged.eligible && !walletOn.value) void turnWalletOn();
+  }
 }
-watch(() => props.active, (active) => { if (active) void refreshWhenActive(); }, { immediate: true });
+watch(() => props.active, (active) => {
+  if (active) { readChromePermission(); void refreshWhenActive(); }
+  else store.takeEnableRequest(); // a request the tab could not serve does not linger for the next opening
+}, { immediate: true });
 </script>
 
 <style scoped lang="scss">

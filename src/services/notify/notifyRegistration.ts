@@ -5,7 +5,9 @@
 //
 // - Opt-in only. Nothing subscribes until the user turns notifications on for this
 //   browser (`browserEnabled`), and a wallet is registered only when the user turns it
-//   on. New and restored wallets start off.
+//   on. New and restored wallets start off. Turning a wallet on is the one step that
+//   matters: it turns the browser switch on as well when that is still off, so the
+//   offer (notifyIntro.ts) needs a single confirmation.
 // - Opt-out rule (F7, §8.2 step 0): with `browserEnabled: false` no trigger ever calls
 //   `subscribe()` or sends `PUT /device` with `transport: webpush`. Pending deletes
 //   still flush.
@@ -80,7 +82,7 @@ export interface NotifyRegistrationDeps {
 export type ReassertTrigger = 'start' | 'alarm' | 'retry' | 'login' | 'pushsubscriptionchange' | 'credentials' | 'settings';
 export type ReassertResult = 'opted_out' | 'registered' | 'reasserted' | 'recovered' | 'needs_attention' | 'unavailable' | 'deferred' | 'error' | 'skipped';
 export type BrowserEnableResult = 'ok' | 'unavailable' | 'subscribe_failed' | 'endpoint_not_allowed' | 'needs_attention' | 'deferred' | 'error';
-export type WalletEnableResult = 'ok' | 'browser_off' | 'no_wallet' | 'ineligible' | 'needs_auth' | 'proof_failed' | 'proof_invalid' | 'limit' | 'deferred' | 'error';
+export type WalletEnableResult = 'ok' | 'no_wallet' | 'ineligible' | 'needs_auth' | 'proof_failed' | 'proof_invalid' | 'limit' | 'deferred' | 'error';
 
 /** A submitted swap to register: the wallet, the payment key hash it was placed with, and the transaction hash(es). */
 export interface WatchOrdersInput {
@@ -470,8 +472,6 @@ export function createNotifyRegistration(deps: NotifyRegistrationDeps): NotifyRe
       const logged = deps.logged();
       if (!logged) return 'no_wallet';
       if (!isEligibleWallet(logged)) return 'ineligible';
-      const device = await store.getDevice();
-      if (!device.browserEnabled) return 'browser_off';
       const stakeAddress = logged.stakeAddress as string;
       const identity = await deps.identity();
       let proof = await deps.loadProof(identity.deviceId, stakeAddress);
@@ -481,6 +481,11 @@ export function createNotifyRegistration(deps: NotifyRegistrationDeps): NotifyRe
         proof = await deps.loadProof(identity.deviceId, stakeAddress);
         if (!proof) return 'proof_failed';
       }
+      // One confirmation turns everything on: a browser switch still off (a fresh install, or
+      // off since the last wallet was removed, §8.6) goes on here, only once the proof is in
+      // hand, so a cancelled auth step leaves the browser as it was.
+      let device = await store.getDevice();
+      if (!device.browserEnabled) device = await store.updateDevice({ browserEnabled: true, unavailable: null });
       // Make sure the device exists on the server first (a PUT /device on device_unknown also happens in the client).
       if (device.targetStatus !== 'active') {
         const r = await registerDevice();

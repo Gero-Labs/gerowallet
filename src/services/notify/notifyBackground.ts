@@ -24,6 +24,7 @@ import {
   type LoggedWallet, type NotifyRegistration, type PushManagerLike, type ReassertTrigger, type WatchOrdersInput,
 } from './notifyRegistration';
 import { notifyHooks } from './notifyHooks';
+import { systemIntroWanted } from './notifyIntro';
 import { createNotifyPushHandlers, type ToastRequest } from './notifyPush';
 import { pushLocale, type RouteIntent, type TokenInfo } from './notifyRender';
 import type { NotifyConfig, WalletPrefsWrite } from './notifyTypes';
@@ -115,14 +116,14 @@ function installedEligible(w: { chain: string; network: string; type?: string })
   return w.chain === 'Cardano' && (w.type === undefined || w.type === 'Normal') && ['Mainnet', 'Preprod', 'Preview'].includes(w.network);
 }
 
-export async function getNotifyState(opts: { refreshConfig?: boolean } = {}): Promise<NotifyState> {
+export async function getNotifyState(opts: { refreshConfig?: boolean; syncServer?: boolean } = {}): Promise<NotifyState> {
   const logged = loggedWallet();
   let config: NotifyConfig | null = (await notifyStore.getConfigCache())?.config ?? null;
   if (opts.refreshConfig) {
     try { config = await notifyClient.getConfig({ force: !config }); } catch (e) { log(`config refresh failed: ${String(e)}`); }
   }
   // The tab opening also pulls GET /device, so a preference another device wrote (iOS) shows here (§4.8).
-  if (opts.refreshConfig && (await notifyStore.getDevice()).browserEnabled) {
+  if (opts.syncServer && (await notifyStore.getDevice()).browserEnabled) {
     await reassert('settings');
     if (logged) await notifyRegistration.refreshPrefs(logged.id).catch((e) => log(`prefs refresh failed: ${String(e)}`));
   }
@@ -187,8 +188,21 @@ function presentToPages(request: ToastRequest): Promise<boolean> {
 /** B4: focus the dashboard tab on the route, or open one. The side panel route waits on B0's click test. */
 async function openDashboard(route: RouteIntent): Promise<void> {
   if (route.settingsTab) await chrome.storage.local.set({ openSettingsOnLoad: { tab: route.settingsTab } });
+  await focusDashboard(route.dashboard);
+}
+
+/**
+ * The offer's system notification was clicked (notifyIntro.ts): Settings > Notifications on the
+ * dashboard, with the enable step started (`enable: 'notify'` is read by ContentLayout).
+ */
+export async function openNotifySettings(): Promise<void> {
+  await chrome.storage.local.set({ openSettingsOnLoad: { tab: 'notifications', enable: 'notify' } });
+  await focusDashboard('/');
+}
+
+async function focusDashboard(path: string): Promise<void> {
   const base = chrome.runtime.getURL('index.html');
-  const url = `${base}#${route.dashboard}`;
+  const url = `${base}#${path}`;
   const tabs = await chrome.tabs.query({ url: `${base}*` });
   const existing = tabs.find((t) => typeof t.id === 'number');
   if (existing && typeof existing.id === 'number') {
@@ -259,8 +273,30 @@ export function onNotifyAlarm(name: string): boolean {
   return false;
 }
 
+/**
+ * After an update (notifyIntro.ts): should the worker offer notifications by a system
+ * notification? Once per install, while no wallet is linked and some wallet could be.
+ * Fetches /config when none is cached; unreachable means "not now" (the dashboard prompt
+ * asks again once it is).
+ */
+export async function notifyIntroWanted(): Promise<boolean> {
+  const state = await getNotifyState({ refreshConfig: true });
+  return systemIntroWanted({
+    intro: await notifyStore.getIntro(),
+    pushSupported: state.pushSupported,
+    config: state.config,
+    wallets: state.installed.map((w) => ({ eligible: w.eligible, registered: state.wallets[String(w.id)]?.registeredAt != null })),
+  });
+}
+
 export const notifyActions = {
   setBrowserEnabled: (enabled: boolean) => notifyRegistration.setBrowserEnabled(enabled),
+  introShown: () => notifyStore.updateIntro({ systemShownAt: Date.now() }),
+  /** "Turn on" for one wallet (never prompted again for it) or "Not now" for this install. */
+  introAnswer: (answer: { walletId?: number; dismiss?: boolean }) => notifyStore.updateIntro({
+    ...(typeof answer.walletId === 'number' ? { offered: { [String(answer.walletId)]: Date.now() } } : {}),
+    ...(answer.dismiss === true ? { dismissedAt: Date.now() } : {}),
+  }),
   enableWallet: (auth?: { password?: string; privateKeyBytes?: Uint8Array }) => notifyRegistration.enableWallet(auth),
   disableWallet: (walletId: number) => notifyRegistration.disableWallet(walletId),
   setPrefs: (walletId: number, write: WalletPrefsWrite) => notifyRegistration.setPrefs(walletId, write),

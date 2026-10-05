@@ -213,8 +213,25 @@ describe('opt-in (§8.1)', () => {
     expect(m.produceProof).toHaveBeenCalledWith({ password: 'pw' });
   });
 
-  it('wallet on refuses when the browser switch is off, the wallet is ineligible, or none is logged in', async () => {
-    expect(await machine().reg.enableWallet()).toBe('browser_off');
+  it('wallet on with the browser switch off turns the browser on too: one confirmation for both', async () => {
+    const m = machine();
+    expect(await m.reg.enableWallet()).toBe('ok');
+    expect(await m.store.getDevice()).toMatchObject({ browserEnabled: true, targetStatus: 'active', unavailable: null });
+    expect(m.push.subscribe).toHaveBeenCalledTimes(1);
+    expect(m.fake.calls.map((c) => c.m)).toEqual(['GET /config', 'PUT /device', 'PUT /wallet']);
+    expect((await m.store.getWallet(4))?.registeredAt).not.toBeNull();
+  });
+
+  it('wallet on with the browser off and no proof: the browser stays off until the auth step is passed', async () => {
+    const m = machine({ proof: null });
+    expect(await m.reg.enableWallet()).toBe('needs_auth');
+    expect(await m.store.getDevice()).toMatchObject({ browserEnabled: false });
+    expect(m.push.subscribe).not.toHaveBeenCalled();
+    expect(await m.reg.enableWallet({ password: 'pw' })).toBe('ok');
+    expect(await m.store.getDevice()).toMatchObject({ browserEnabled: true, targetStatus: 'active' });
+  });
+
+  it('wallet on refuses when the wallet is ineligible, or none is logged in', async () => {
     const ledger = machine({ logged: loggedWallet({ type: 'Ledger' }) });
     await ledger.reg.setBrowserEnabled(true);
     expect(await ledger.reg.enableWallet()).toBe('ineligible');

@@ -149,7 +149,7 @@ function open(item: NotifyInboxItem) {
 
 onMounted(() => notifyInboxStore.init());
 // Opening the menu refreshes the push status line (cheap: the worker's stored state, no /config).
-watch(() => props.open, (isOpen) => { if (isOpen) void notifySettingsStore.refresh(false); }, { immediate: true });
+watch(() => props.open, (isOpen) => { if (isOpen) void notifySettingsStore.refresh(); }, { immediate: true });
 </script>
 
 <style scoped lang="scss">
