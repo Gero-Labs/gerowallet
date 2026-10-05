@@ -10,6 +10,7 @@
  */
 import i18n from '@/plugins/i18n';
 import { CIP113_SIGN_REFUSAL_MESSAGE, TX_SUBMIT_UNCONFIRMED_MESSAGE } from '@/chrome/config';
+import { InputLimitError } from '@/api/nexusInputSelection';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -113,10 +114,30 @@ export function isInsufficientAdaError(message: string): boolean {
 }
 
 /**
+ * How much lovelace a rejected build was short, read from the two Nexus shortfall
+ * messages the send flow parses: "{ada in inputs: X, ada in outputs: Y, fee Z"
+ * (outputs plus fee, minus inputs) and "Available: X lovelace, required: Y lovelace"
+ * (required minus available). Undefined for anything else.
+ */
+export function shortfallLovelaceFromMessage(message: string): bigint | undefined {
+  const inputs = message.match(/ada in inputs:\s*(\d+),\s*ada in outputs:\s*(\d+),\s*fee\s*(\d+)/);
+  if (inputs) return BigInt(inputs[2]) + BigInt(inputs[3]) - BigInt(inputs[1]);
+  const change = message.match(/Available:\s*(\d+)\s*lovelace,\s*required:\s*(\d+)\s*lovelace/);
+  if (change) return BigInt(change[2]) - BigInt(change[1]);
+  return undefined;
+}
+
+/**
  * Map a raw tx build/submit error to a friendly, localized message. Returns the
  * original message unchanged when it isn't a collateral / insufficient-ADA error.
  */
 export function friendlyTxError(raw: unknown): string {
+  // Raised by the wallet before any request goes out: the assets to send sit on
+  // more UTxOs than one transaction may spend, so only consolidating helps.
+  if (raw instanceof InputLimitError) {
+    return i18n.t('send.inputLimitFragmented', { count: raw.total, max: raw.limit }) as string;
+  }
+
   const message = unwrapPlainOgmiosRejection(
     extractNexusErrorMessage(raw instanceof Error ? raw.message : String(raw ?? '')),
   );
@@ -135,5 +156,11 @@ export function friendlyTxError(raw: unknown): string {
   if (l.includes('collateral pool')) return i18n.t('errors.collateralPoolEmpty') as string;
   if (isCollateralError(message)) return i18n.t('errors.noCollateral') as string;
   if (isInsufficientAdaError(message)) return i18n.t('errors.insufficientAdaForTx') as string;
+
+  // Nexus bean validation: the envelope is always "Validation failed"; the field
+  // reasons the client appends to it (nexusErrorMessage) are the useful part.
+  const validation = message.match(/^Validation failed:\s*(.+)$/s);
+  if (validation) return i18n.t('errors.txRequestRejected', { reason: validation[1].trim() }) as string;
+
   return message;
 }

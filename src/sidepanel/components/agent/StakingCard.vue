@@ -81,7 +81,7 @@ import { resolvePoolSymbolToId } from '@/services/agent/poolResolver';
 import { deserializeCardanoJsSdkTx, serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { toDecodedStakeTx } from '@/services/agent/decodeStakeTx';
 import { verifyDelegateTx, verifyWithdrawTx } from '@/services/agent/stakingGuardrail';
-import { nexusTxApi, cardanoUtxoToNexusInput } from '@/api/nexus-tx-api';
+import { nexusTxApi, walletUtxosToNexusInputs } from '@/api/nexus-tx-api';
 import { Cardano } from '@cardano-sdk/core';
 import { Messaging, type BackgroundResponse } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
@@ -254,7 +254,7 @@ export default defineComponent({
         stakeAddress,
         amount: amount.toString(),
         changeAddress: keys.payment[0].address,
-        utxos: (walletStore.utxos as Cardano.Utxo[]).map(cardanoUtxoToNexusInput),
+        utxos: walletUtxosToNexusInputs(walletStore.utxos as Cardano.Utxo[], undefined, false),
       };
       const { tx_cbor } = await nexusTxApi.buildWithdrawalTx(request, network);
       if (!tx_cbor) throw new Error('Nexus returned an empty transaction CBOR.');

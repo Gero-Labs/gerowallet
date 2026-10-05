@@ -17,6 +17,10 @@ import { Cardano } from '@cardano-sdk/core';
 import { Network } from '@/models/types';
 import { filterOutCollateralFromUTxOs } from '@/chrome/serialization';
 import { inlineDatumPlutusData } from '@/shared/utils/utxoCbor';
+import { forEachAsset, selectInputCandidates, type InputSelectionOptions } from './nexusInputSelection';
+
+export { InputLimitError, NEXUS_MAX_INPUTS, selectInputCandidates } from './nexusInputSelection';
+export type { InputSelection, InputSelectionOptions } from './nexusInputSelection';
 
 // ── Request / response types matching nexus's BuildTxRequest / BuildTxResponse ──
 
@@ -206,18 +210,34 @@ const nexusTxClient = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+/**
+ * The message a Nexus error body carries, with the field-level reasons a bean
+ * validation rejection lists beside it (`ErrorResponse.validationErrors`, e.g.
+ * "utxos: Maximum 200 UTXOs allowed per request"). Without them a 400 reads as
+ * the bare "Validation failed" and nothing says which field was refused.
+ */
+export function nexusErrorMessage(
+  body: { message?: unknown; validationErrors?: unknown } | undefined,
+): string | undefined {
+  if (typeof body?.message !== 'string' || !body.message) return undefined;
+  const details = Array.isArray(body.validationErrors)
+    ? body.validationErrors.filter((d): d is string => typeof d === 'string' && d.trim().length > 0)
+    : [];
+  return details.length ? `${body.message}: ${details.join('; ')}` : body.message;
+}
+
 // Surface the Nexus error body's message so callers can parse it
 // (e.g. "Insufficient ADA to cover minimum UTXO for change output...").
 // The backend proxy forwards the upstream status + JSON body verbatim.
 nexusTxClient.interceptors.response.use(
   (res) => res,
   async (error: AxiosError) => {
-    const body = error.response?.data as { message?: string } | undefined;
-    if (body?.message) {
+    const message = nexusErrorMessage(error.response?.data as Parameters<typeof nexusErrorMessage>[0]);
+    if (message) {
       // Pass the raw message through so callers that parse it (SendDialog's
       // inline ADA-shortage display) still work; friendly mapping happens at the
       // display layer (useTransactionSigning / DAppOverlay) via friendlyTxError.
-      const enriched = new Error(body.message);
+      const enriched = new Error(message);
       (enriched as Error & { response?: unknown }).response = error.response;
       throw enriched;
     }
@@ -254,27 +274,10 @@ export function cardanoUtxoToNexusInput(utxo: Cardano.Utxo): NexusTxInput {
   const txOut = utxo[1];
 
   const assets: NexusTxAsset[] = [];
-  const rawAssets = txOut.value.assets as unknown;
-  if (rawAssets) {
-    const pushAsset = (unit: string, quantity: unknown) => {
-      const { policyId, assetName } = splitAssetUnit(unit);
-      assets.push({ policyId, assetName, quantity: String(quantity) });
-    };
-
-    if (rawAssets instanceof Map) {
-      rawAssets.forEach((quantity, unit) => pushAsset(String(unit), quantity));
-    } else if (Array.isArray(rawAssets)) {
-      // Already serialized form from sync: [{ unit, quantity }]
-      for (const a of rawAssets as { unit: string; quantity: unknown }[]) {
-        pushAsset(String(a.unit), a.quantity);
-      }
-    } else if (typeof rawAssets === 'object') {
-      // Object form from chrome.storage round-trip: { [unit]: quantity }
-      for (const [unit, quantity] of Object.entries(rawAssets as Record<string, unknown>)) {
-        pushAsset(unit, quantity);
-      }
-    }
-  }
+  forEachAsset(txOut, (unit, quantity) => {
+    const { policyId, assetName } = splitAssetUnit(unit);
+    assets.push({ policyId, assetName, quantity: quantity.toString() });
+  });
 
   // The datum's CBOR hex, as the builder's cardano-client-lib Utxo takes it. An output
   // holds an inline datum or a datum hash, never both: the hash beside an inline datum is
@@ -300,25 +303,10 @@ export function cardanoUtxoToNexusInput(utxo: Cardano.Utxo): NexusTxInput {
  */
 export function txOutToNexusOutput(out: Cardano.TxOut): NexusTxOutput {
   const assets: NexusTxAsset[] = [];
-  const rawAssets = out.value.assets as unknown;
-  if (rawAssets) {
-    const pushAsset = (unit: string, quantity: unknown) => {
-      const { policyId, assetName } = splitAssetUnit(unit);
-      assets.push({ policyId, assetName, quantity: String(quantity) });
-    };
-
-    if (rawAssets instanceof Map) {
-      rawAssets.forEach((quantity, unit) => pushAsset(String(unit), quantity));
-    } else if (Array.isArray(rawAssets)) {
-      for (const a of rawAssets as { unit: string; quantity: unknown }[]) {
-        pushAsset(String(a.unit), a.quantity);
-      }
-    } else if (typeof rawAssets === 'object') {
-      for (const [unit, quantity] of Object.entries(rawAssets as Record<string, unknown>)) {
-        pushAsset(unit, quantity);
-      }
-    }
-  }
+  forEachAsset(out, (unit, quantity) => {
+    const { policyId, assetName } = splitAssetUnit(unit);
+    assets.push({ policyId, assetName, quantity: quantity.toString() });
+  });
 
   return {
     address: String(out.address),
@@ -336,18 +324,46 @@ export function txOutToNexusOutput(out: Cardano.TxOut): NexusTxOutput {
  *
  * Pass `excludeCollateral: false` for a flow that must be free to spend the collateral
  * UTxO (mirrors the builder's `excludeCollateral` param, e.g. CollateralTab's Set-Collateral).
+ *
+ * Never sends more than NEXUS_MAX_INPUTS: over that, selectInputCandidates picks the
+ * candidates, so pass the outputs' asset needs in `selection` when there are any.
  */
 export function walletUtxosToNexusInputs(
   utxos: Cardano.Utxo[],
   collateral?: Cardano.Utxo | null,
-  excludeCollateral = true
+  excludeCollateral = true,
+  selection?: InputSelectionOptions,
 ): NexusTxInput[] {
   let list = utxos;
   if (excludeCollateral && collateral) {
     const filtered = filterOutCollateralFromUTxOs(utxos, collateral);
     if (filtered.length > 0) list = filtered;
   }
-  return list.map(cardanoUtxoToNexusInput);
+  return nexusInputsFrom(list, selection);
+}
+
+/** Map UTxOs to Nexus inputs under the request limit; over it, selectInputCandidates chooses the candidates. */
+function nexusInputsFrom(utxos: Cardano.Utxo[], selection?: InputSelectionOptions): NexusTxInput[] {
+  return selectInputCandidates(utxos, selection).utxos.map(cardanoUtxoToNexusInput);
+}
+
+/**
+ * Base units of every non-ADA asset the outputs carry, keyed by unit, so
+ * selectInputCandidates keeps their holders ahead of plain lovelace.
+ */
+export function requiredAssetsFromOutputs(outputs: NexusTxOutput[]): Map<string, bigint> {
+  const required = new Map<string, bigint>();
+  for (const output of outputs) {
+    for (const asset of output.assets ?? []) {
+      const unit = asset.policyId + asset.assetName;
+      try {
+        required.set(unit, (required.get(unit) ?? BigInt(0)) + BigInt(asset.quantity));
+      } catch {
+        /* non-numeric quantity: Nexus rejects that output itself */
+      }
+    }
+  }
+  return required;
 }
 
 // ── Public API ──
