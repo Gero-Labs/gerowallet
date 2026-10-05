@@ -223,7 +223,7 @@ export default {
   'card.allEuIntPosFeesWaived': 'Alle EU- und INT-POS-Gebühren entfallen',
   'card.allFeesWaived': 'ALLE GEBÜHREN entfallen',
   'card.allInOnePlatform': 'Eine All-in-One-Plattform, die Ihnen hilft, alles rund um Ihre Gero Card zu verwalten.',
-  'card.alreadyHaveAccount': 'Haben Sie bereits ein Kaiserex-Konto?',
+  'card.alreadyHaveAccount': 'Haben Sie bereits ein Zione-Konto?',
   'card.alreadyOrdered': 'Bereits bestellt.',
   'card.amount': 'Betrag',
   'card.apply': 'Anwenden',
@@ -236,10 +236,10 @@ export default {
   'card.balanceOverTime': 'Kontostand im Zeitverlauf',
   'card.balanceUpdatedReady': 'Ihr Kontostand wurde aktualisiert und kann jetzt verwendet werden.',
   'card.basicPlus': 'Basis +',
-  'card.beforeOrderingKYC': 'Bevor Sie Ihre Gero Card bestellen, führen Sie bitte einen kurzen KYC-Prozess mit unserem institutionellen Partner Kaiserex durch.',
+  'card.beforeOrderingKYC': 'Bevor Sie Ihre Gero Card bestellen, führen Sie bitte einen kurzen KYC-Prozess mit unserem Kartenprogramm-Partner Zione durch.',
   'card.blockCard': 'Karte sperren',
   'card.blockCardTab': 'Karte sperren',
-  'card.blockingCardWarning': 'Das Sperren Ihrer Karte stoppt sofort alle Transaktionen. Diese Aktion kann nicht sofort rückgängig gemacht werden - Sie müssen unser Support-Team kontaktieren, um sie wieder freizuschalten.',
+  'card.blockingCardWarning': 'Durch das Sperren werden alle neuen Transaktionen sofort gestoppt. Sie können die Karte hier jederzeit wieder entsperren.',
   'card.capturedPhoto': 'Aufgenommenes Foto',
   'card.cardAlreadyBlocked': 'Karte bereits gesperrt',
   'card.cardIssuance': 'Kartenausgabe',
@@ -247,7 +247,7 @@ export default {
   'card.cardOrderInProgress': 'Kartenbestellung in Bearbeitung',
   'card.cardOrderProcessing': 'Ihre Kartenbestellung wird bearbeitet.',
   'card.cardOrderedSuccess': 'Karte erfolgreich bestellt! Ihre Karte wird bearbeitet.',
-  'card.cardPoweredByKaiser': 'Ihre Gero Card wird von Kaiser Exchange International betrieben, einem vollständig lizenzierten und regulierten Anbieter von Finanzdienstleistungen für Kryptowährungen.',
+  'card.cardPoweredByKaiser': 'Ihre Gero Card wird von der Digi Ex Pro (Pty) Ltd (Handelsname Zione) bereitgestellt, einem zugelassenen Finanzdienstleister unter Aufsicht der FSCA in Südafrika (FSP 53786).',
   'card.cardRejected': 'Kartenanfrage abgelehnt',
   'card.cardRejectedMessage': 'Ihre Kartenanfrage wurde abgelehnt. Sie können eine neue Karte bestellen, nachdem Sie diese Nachricht bestätigt haben.',
   'card.cardType': 'Kartentyp',
@@ -260,7 +260,12 @@ export default {
   'card.city': 'Stadt',
   'card.cityWithAsterisk': 'Stadt *',
   'card.close': 'Schließen',
-  'card.companyDetails': 'Firma #21766401 · Tschechische Republik',
+  'card.companyDetails': 'Reg.-Nr. 2023/150340/07 · FSCA FSP 53786 · Südafrika',
+  'card.providerRegisteredOffice': 'Eingetragener Sitz',
+  'card.providerRegulated': 'In Südafrika reguliert',
+  'card.providerRegulatedDesc': 'Zugelassener Finanzdienstleister (FSCA, FSP 53786) und meldepflichtiges Institut nach dem Financial Intelligence Centre Act.',
+  'card.providerAmlKyc': 'AML/KYC für jedes Konto',
+  'card.providerAmlKycDesc': 'Identitätsprüfung, Sanktionsprüfung und Transaktionsüberwachung gelten für jedes Konto und jede Transaktion.',
   'card.completeKYC': 'KYC abschließen',
   'card.completePayment': 'Zahlung abschließen',
   'card.completePaymentToProceed': 'Zahlung abschließen, um mit Ihrer Bestellung fortzufahren.',
@@ -269,6 +274,194 @@ export default {
   'card.confirmPayment': 'Zahlung bestätigen',
   'card.confirmPreferredPayment': 'Bestätigen Sie Ihre bevorzugte Zahlungsart',
   'card.confirmationEmailSent': 'Eine Bestätigungs-E-Mail wurde gesendet',
+
+  'card.howItWorks': 'So erhalten Sie Ihre Karte',
+
+  'card.hubLead': 'Laden Sie Ihre Karte mit ADA aus dieser Wallet auf und bezahlen Sie in Euro – online, im Geschäft und am Geldautomaten.',
+
+  'card.pricingTitle': 'Was es kostet',
+
+  'card.activateAutoCheck': 'Wir prüfen die Aktivierung automatisch. Ihre Karte wird als aktiv angezeigt, sobald Zione sie bestätigt.',
+
+  'card.activateCard': 'Karte aktivieren',
+
+  'card.activateDesc': 'Geben Sie die Nummer ein, die auf der Vorderseite der erhaltenen Karte aufgedruckt ist. Ihre virtuelle Karte funktioniert während der Aktivierung weiter.',
+
+  'card.activateHint': 'Wird nur verwendet, um zu bestätigen, dass diese Karte bei Ihnen angekommen ist.',
+
+  'card.activateInvalidPan': 'Prüfen Sie die Kartennummer: Sie sollte 16 bis 19 Ziffern haben, genau wie aufgedruckt.',
+
+  'card.activateTitle': 'Physische Karte aktivieren',
+
+  'card.activationEmailNote': 'Sie erhalten eine E-Mail von Zione, um Ihr Konto zu aktivieren.',
+
+  'card.activationFailed': 'Die Karte konnte nicht aktiviert werden. Prüfen Sie die Nummer und versuchen Sie es erneut.',
+
+  'card.activationStarted': 'Die Aktivierung wurde gestartet. Sie dauert in der Regel einige Minuten.',
+
+  'card.addressValidFor': 'Einmalige Adresse, gültig für {time}',
+
+  'card.alreadyRegisteredSignIn': 'Bereits registriert? Anmelden',
+
+  'card.applicationNotApproved': 'Ihr Antrag wurde nicht genehmigt',
+
+  'card.applicationNotApprovedDesc': 'Zione konnte Ihren Kartenantrag nicht genehmigen. Wenden Sie sich an den Zione-Support, um den Grund und die nächsten Schritte zu erfahren.',
+
+  'card.blocked': 'Gesperrt',
+
+  'card.buildingTransaction': 'Transaktion wird erstellt',
+
+  'card.cardActivated': 'Ihre Karte ist aktiv.',
+
+  'card.cardBlockedNotice': 'Karte gesperrt.',
+
+  'card.cardControls': 'Karteneinstellungen',
+
+  'card.cardProgramPartner': 'Kartenprogrammpartner',
+
+  'card.cardUnblocked': 'Karte entsperrt.',
+
+  'card.changePin': 'PIN ändern',
+
+  'card.changePinSubtitle': 'Legen Sie eine neue 4-stellige PIN für Kartenzahlungen und Geldautomaten fest',
+
+  'card.confirmNewPin': 'Neue PIN bestätigen',
+
+  'card.declined': 'Abgelehnt',
+
+  'card.depositAddressVerified': 'Verifizierte Adresse',
+
+  'card.feeEstimateNote': 'Geschätzt zum heutigen Kurs. Der genaue Betrag wird bei der Bestellung festgelegt.',
+
+  'card.fieldTooLong': 'Verwenden Sie höchstens {max} Zeichen.',
+
+  'card.followOrderOnDashboard': 'Verfolgen Sie die Bestellung in Ihrer Kartenübersicht.',
+
+  'card.heroArtLabel': 'ADA fließt in die Gero Card, ausgegeben mit Zione',
+
+  'card.hideCardDetails': 'Kartendaten ausblenden',
+
+  'card.hidePin': 'PIN ausblenden',
+
+  'card.journeyActivate': 'Aktivieren',
+
+  'card.journeyLabel': 'Ihr Weg zur Karte',
+
+  'card.journeyOrder': 'Karte bestellen',
+
+  'card.journeySpend': 'Bezahlen',
+
+  'card.journeyVerify': 'Identität bestätigen',
+
+  'card.kycLinkFailed': 'Die Identitätsprüfung konnte nicht geöffnet werden. Bitte versuchen Sie es erneut.',
+
+  'card.kycOpensNewTab': 'Die Identitätsprüfung von Zione öffnet sich in einem neuen Tab.',
+
+  'card.last30DaysLabel': 'Letzte 30 Tage',
+
+  'card.legalEntity': 'Rechtsträger',
+
+  'card.minimumTopUp': 'Mindestbetrag für die Aufladung: {amount} ADA',
+
+  'card.newPin': 'Neue PIN',
+
+  'card.noTransactionsInPeriod': 'Keine Transaktionen in diesem Zeitraum.',
+
+  'card.orderAnotherCard': 'Weitere Karte bestellen',
+
+  'card.payLaterNote': 'Ihre Bestellung ist gespeichert. Sie können die Gebühr auch später in Ihrer Kartenübersicht bezahlen.',
+
+  'card.payTo': 'Zahlung an',
+
+  'card.physicalCardOrder': 'Bestellung der physischen Karte',
+
+  'card.pinChangeFailed': 'Die PIN konnte nicht geändert werden. Bitte versuchen Sie es erneut.',
+
+  'card.pinChanged': 'PIN geändert.',
+
+  'card.pinHidden': 'PIN verborgen',
+
+  'card.pinMismatch': 'Die beiden PINs stimmen nicht überein.',
+
+  'card.pinWeak': 'Vermeiden Sie wiederholte Ziffern oder Folgen wie 1234.',
+
+  'card.rateLine': '1 ADA = {rate}',
+
+  'card.registrationDetails': 'Registrierung',
+
+  'card.restartVerification': 'Verifizierung neu starten',
+
+  'card.savePin': 'PIN speichern',
+
+  'card.secureFormBy': 'Sicheres Formular von Zione',
+
+  'card.secureSignInWindow': 'Die Anmeldung bei Zione öffnet sich in einem sicheren Fenster',
+
+  'card.showCardDetails': 'Kartendaten anzeigen',
+
+  'card.showPin': 'PIN anzeigen',
+
+  'card.signInFailed': 'Die Anmeldung ist fehlgeschlagen. Bitte versuchen Sie es erneut.',
+
+  'card.signOut': 'Abmelden',
+
+  'card.signedInAs': 'Angemeldet als',
+
+  'card.signingAndSubmitting': 'Signieren und senden',
+
+  'card.switchCurrency': 'Zwischen ADA und EUR wechseln',
+
+  'card.topUpCredited': 'Ihr Kartenguthaben ist aktualisiert.',
+
+  'card.topUpSubmitted': 'Aufladung gesendet',
+
+  'card.topUpSubmittedDesc': 'Ihr Guthaben wird aktualisiert, sobald das Netzwerk die Transaktion bestätigt, in der Regel innerhalb weniger Minuten.',
+
+  'card.trackerActivated': 'Aktiviert',
+
+  'card.trackerActivating': 'Ihre Karte wird aktiviert',
+
+  'card.trackerAutoRefresh': 'Diese Seite sucht automatisch nach Neuigkeiten. Ihre Karte erscheint hier, sobald Zione sie ausgibt.',
+
+  'card.trackerAwaitingPayment': 'Warten auf die Versandgebühr',
+
+  'card.trackerDispatched': 'Versandt',
+
+  'card.trackerIssuing': 'Ihre virtuelle Karte wird ausgegeben',
+
+  'card.trackerOnItsWay': 'Unterwegs. Aktivieren Sie die Karte, sobald sie ankommt.',
+
+  'card.trackerPaid': 'Versandgebühr bezahlt',
+
+  'card.trackerPaymentDetected': 'Zahlung erkannt, Bestätigungen stehen noch aus',
+
+  'card.trackerPlaced': 'Bestellung aufgegeben',
+
+  'card.trackerPreparing': 'Ihre Karte wird für den Versand vorbereitet',
+
+  'card.trackerReady': 'Einsatzbereit',
+
+  'card.trackerTitlePhysical': 'Ihre Karte wird vorbereitet',
+
+  'card.trackerTitleVirtual': 'Ihre virtuelle Karte wird ausgegeben',
+
+  'card.typePhysical': 'Physisch',
+
+  'card.typeVirtual': 'Virtuell',
+
+  'card.unblockCard': 'Karte entsperren',
+
+  'card.verificationFailed': 'Verifizierung fehlgeschlagen',
+
+  'card.verificationFailedDesc': 'Zione konnte Ihre Identität diesmal nicht bestätigen. Sie können die Prüfung erneut starten; halten Sie ein gültiges Ausweisdokument und Ihre Kamera bereit.',
+
+  'card.verificationFailedTitle': 'Ihre Identitätsprüfung war nicht erfolgreich',
+
+  'card.viewFees': 'Gebühren ansehen',
+
+  'card.virtualCardOrder': 'Bestellung der virtuellen Karte',
+
+  'card.waitingForBalance': 'Warten auf die Aktualisierung Ihres Kartenguthabens…',
   'card.confirmingAdaTransaction': 'ADA-Transaktion wird auf der Blockchain bestätigt...',
   'card.confirmingPayment': 'Ihre Zahlung wird bestätigt...',
   'card.contactSupport': 'Support kontaktieren',
@@ -279,31 +472,25 @@ export default {
   'card.countryCode': 'Code',
   'card.countryWithAsterisk': 'Land *',
   'card.createAccount': 'Konto erstellen',
-  'card.createKaiserexAccount': 'Erstellen Sie Ihr Kaiserex-Konto und schließen Sie den Verifizierungsprozess ab, um Ihre Karte zu bestellen.',
+  'card.createKaiserexAccount': 'Erstellen Sie Ihr Zione-Konto und schließen Sie den Verifizierungsprozess ab, um Ihre Karte zu bestellen.',
   'card.customDateRange': 'Benutzerdefinierter Datumsbereich',
   'card.cvv': 'CVV',
-  'card.dateRangeExceeds3Months': 'Der Datumsbereich darf aufgrund einer Satchel-Einschränkung 3 Monate nicht überschreiten.',
+  'card.dateRangeExceeds3Months': 'Wählen Sie einen Zeitraum von höchstens 89 Tagen.',
   'card.dateTime': 'Datum & Uhrzeit',
   'card.documentsReceivedReview': 'Ihre Dokumente wurden empfangen und Ihr Antrag wird derzeit geprüft.',
   'card.ecommerce': 'E-Commerce',
   'card.enjoyMonthsZeroFees': 'Genießen Sie 6 Monate ohne Gebühren.',
-  'card.enjoyZeroFeesUntil': 'Genießen Sie bis zum 1. August gebührenfreie Nutzung',
-  'card.enter6DigitCode': 'Geben Sie den 6-stelligen Code aus Ihrer Authenticator-App ein, um fortzufahren.',
+  'card.enjoyZeroFeesUntil': 'Genießen Sie bis zum 1. Mai 2027 gebührenfreie Nutzung',
   'card.enterCity': 'Stadt eingeben',
-  'card.enterCredentialsToContinue': 'Geben Sie Ihre Zugangsdaten ein, um mit Ihrer Kartenbestellung fortzufahren.',
   'card.enterNewAddress': 'Neue Adresse eingeben',
-  'card.enterPassword': 'Geben Sie Ihr Passwort ein',
   'card.enterPasswordToConfirm': 'Geben Sie das Passwort ein, um die Aktion zu bestätigen*',
   'card.enterPhone': 'Telefonnummer eingeben',
   'card.enterSpendingPassword': 'Geben Sie Ihr Ausgabepasswort ein',
   'card.enterState': 'Bundesland/Provinz eingeben',
   'card.enterStreetAddress': 'Straßenadresse eingeben',
   'card.enterTwoAda': 'Bitte geben Sie einen Betrag von mindestens 2 ADA ein, um fortzufahren.',
-  'card.enterUsernameOrEmail': 'Geben Sie Ihren Benutzernamen oder Ihre E-Mail ein.',
   'card.enterYourName': 'Geben Sie Ihren Namen ein',
   'card.enterZipCode': 'Postleitzahl eingeben',
-  'card.enterpriseSecurity': 'Unternehmenssicherheit',
-  'card.enterpriseSecurityDesc': 'Dezentrale Sicherheitsprotokolle mit regelmäßigen Plattform-Audits und Einhaltung globaler Vorschriften',
   'card.entertainment': 'Unterhaltung',
   'card.estimatedDelivery': 'Voraussichtliche Lieferung: 7–14 Werktage',
   'card.euOrWorldwide': 'EU oder weltweit',
@@ -321,15 +508,15 @@ export default {
   'card.expressShippingWorldwideTime': '3-7 Werktage',
   'card.expressWorldwide': 'Express (weltweit)',
   'card.failedToGetPaymentDetails': 'Zahlungsdetails konnten nicht abgerufen werden. Bitte versuchen Sie es erneut.',
+  'card.paymentDetailsRefreshed': 'Ihre Zahlungsdetails wurden aktualisiert. Prüfen Sie den neuen Betrag und die Adresse und bestätigen Sie erneut.',
   'card.failedToLoadOrderDetails': 'Bestelldetails konnten nicht geladen werden.',
   'card.failedToOrderCard': 'Bestellung der Karte fehlgeschlagen.',
   'card.fee': 'Gebühr',
   'card.feeOrderSummary': 'Gebühren- und Bestellübersicht',
   'card.feePayment': 'Gebührenzahlung',
   'card.feeType': 'Gebührenart',
-  'card.firstCreateKaiserex': 'Zuerst erstellen Sie ein Konto bei Kaiserex, unserem vertrauenswürdigen Bankpartner. Schließen Sie dann die Verifizierung ab, um Ihre Karte zu bestellen.',
+  'card.firstCreateKaiserex': 'Zuerst erstellen Sie ein Konto bei Zione, unserem Kartenprogramm-Partner. Schließen Sie dann die Verifizierung ab, um Ihre Karte zu bestellen.',
   'card.foodAndDining': 'Essen und Gastronomie',
-  'card.forgotPassword': 'Passwort vergessen?',
   'card.free': 'KOSTENLOS',
   'card.freeAtmWithdrawals': 'Kostenlose Abhebungen am Geldautomaten',
   'card.from': 'Von',
@@ -359,11 +546,11 @@ export default {
   'card.inactive': 'Inaktiv',
   'card.instantActivation': 'Sofortige Aktivierung',
   'card.invalidPhone': 'Bitte geben Sie eine gültige Telefonnummer ein.',
-  'card.kaiserExchangeInternational': 'SmartAtlas Ltd. s.r.o.',
-  'card.kaiserex': 'Kaiserex',
-  'card.kaiserexAccountCreated': 'Ihr Kaiserex-Konto wurde erstellt. Sie können jetzt mit der KYC-Verifizierung fortfahren, um Ihre Gero Crypto Card zu bestellen.',
-  'card.kaiserexRegistration': 'Kaiserex-Registrierung',
-  'card.kaiserexTooltip': 'Kaiserex ist Geros vertrauenswürdiger Finanzpartner, der die Kartenausgabe, KYC-Verifizierung und Zahlungsabwicklung für die Gero Crypto Card übernimmt.',
+  'card.kaiserExchangeInternational': 'Digi Ex Pro (Pty) Ltd, Handelsname Zione',
+  'card.kaiserex': 'Zione',
+  'card.kaiserexAccountCreated': 'Ihr Zione-Konto wurde erstellt. Sie können jetzt mit der KYC-Verifizierung fortfahren, um Ihre Gero Crypto Card zu bestellen.',
+  'card.kaiserexRegistration': 'Zione-Registrierung',
+  'card.kaiserexTooltip': 'Zione ist Geros Kartenprogramm-Partner und übernimmt die KYC-Verifizierung und die Zahlungsabwicklung für die Gero Crypto Card.',
   'card.kycApprovalInProgress': 'KYC-Genehmigung läuft',
   'card.kycApprovalInProgressDesc': 'Ihre KYC-Verifizierung wurde eingereicht und wird derzeit überprüft. Sie werden benachrichtigt, sobald sie genehmigt wurde.',
   'card.kycRegistered': 'Registriert',
@@ -374,8 +561,8 @@ export default {
   'card.last30Days': '30 Tage',
   'card.last7Days': '7 Tage',
   'card.last90Days': '90 Tage',
-  'card.learnMoreKaiserex': 'Mehr über Kaiserex erfahren',
-  'card.licensedRegulated': 'Lizenzierte und regulierte Finanzdienstleistungen',
+  'card.learnMoreKaiserex': 'Mehr über Zione erfahren',
+  'card.licensedRegulated': 'Von der FSCA zugelassener Finanzdienstleister',
   'card.loading': 'Laden',
   'card.loadingCardDetails': 'Kartendaten werden geladen...',
   'card.loadingCardStatus': 'Kartenstatus wird geladen...',
@@ -394,8 +581,7 @@ export default {
   'card.missingPaymentAddress': 'Zahlungsadresse nicht verfügbar. Bitte versuchen Sie es erneut.',
   'card.monthlyFee': 'Monatliche Gebühr',
   'card.nameWithAsterisk': 'Name *',
-  'card.needHelpContactSupport': 'Brauchen Sie Hilfe? Kontaktieren Sie unser Support-Team, um Ihre Karte zu entsperren oder zu ersetzen.',
-  'card.newCodeSent': 'Neuer Code an Ihre Authenticator-App gesendet',
+  'card.needHelpContactSupport': 'Brauchen Sie Hilfe? Für eine Ersatzkarte wenden Sie sich an den Zione-Support:',
   'card.newToKaiserex': 'Neu bei',
   'card.next': 'Weiter',
   'card.noMonthlyFee': 'Keine monatliche Gebühr',
@@ -420,7 +606,6 @@ export default {
   'card.orderYourCard': 'Bestellen Sie Ihre Karte',
   'card.orderYourGeroCard': 'Bestellen Sie Ihre Gero Card',
   'card.other': 'Andere',
-  'card.password': 'Passwort',
   'card.paymentComingSoon': 'Die Zahlungsabwicklung wird aktiviert, sobald die Backend-Integration abgeschlossen ist',
   'card.paymentConfirmed': 'Zahlung bestätigt!',
   'card.paymentCoversShippingOnly': 'Diese Zahlung deckt NUR die Versandkosten für Ihre physische Karte ab.',
@@ -451,7 +636,7 @@ export default {
   'card.posPurchasesEu': 'POS-Käufe (EU)',
   'card.posPurchasesIntl': 'POS-Käufe (Intl)',
   'card.postalCodeWithAsterisk': 'Postleitzahl *',
-  'card.poweredByKaiserex': 'Bereitgestellt von Kaiserex',
+  'card.poweredByKaiserex': 'Bereitgestellt von Zione',
   'card.preparingAdaTransaction': 'ADA-Transaktion wird vorbereitet...',
   'card.prfAuthenticationRequired': 'Für die Zahlungsbestätigung ist eine PassKey-Authentifizierung erforderlich',
   'card.priceNotAvailable': 'Preis nicht verfügbar',
@@ -459,12 +644,11 @@ export default {
   'card.processingPayment': 'Zahlung wird verarbeitet',
   'card.processingYourApplication': 'Wir bearbeiten Ihren Antrag...',
   'card.provideNewShippingAddress': 'Eine abweichende Versandadresse angeben',
-  'card.readOurAnnouncement': 'Lesen Sie unsere Ankündigung',
   'card.realTimeConversion': 'Konvertierung in Echtzeit',
   'card.realTimeConversionDesc': 'Ihre Kryptowährung wird beim Aufladen sofort in Fiat umgewandelt.',
   'card.recentActivities': 'Letzte Aktivitäten',
   'card.reference': 'Referenz',
-  'card.registerOnKaiserex': 'Bei Kaiserex registrieren',
+  'card.registerOnKaiserex': 'Bei Zione registrieren',
   'card.registerToOrderCard': 'Registrieren, um Ihre Karte zu bestellen',
   'card.registrationComplete': 'Registrierung abgeschlossen!',
   'card.regularShipping': 'Regulärer Versand',
@@ -493,7 +677,6 @@ export default {
   'card.signIn': 'Anmelden',
   'card.signInCompleteKYC': 'Anmelden und KYC abschließen',
   'card.signInToExisting': 'Melden Sie sich bei Ihrem bestehenden Konto an, um mit Ihrer Kartenbestellung fortzufahren oder Ihren Status zu überprüfen.',
-  'card.signInToKaiserex': 'Bei Kaiserex anmelden',
   'card.signInTopUpCheck': 'Melden Sie sich bei Ihrem bestehenden Konto an, um Ihre Karte aufzuladen, zusätzliche Karten zu bestellen oder Ihr Guthaben zu überprüfen.',
   'card.signingIn': 'Anmeldung...',
   'card.spendAdaAnywhere': 'Verwenden Sie ADA überall!',
@@ -502,10 +685,10 @@ export default {
   'card.standardShipping': 'Standardversand',
   'card.startDateAfterEndDate': 'Das Startdatum darf nicht nach dem Enddatum liegen.',
   'card.startKYCProcess': 'KYC-Prozess starten',
-  'card.startingMayFirst': 'Ab dem 1. Mai 2026',
+  'card.startingMayFirst': 'Ab dem 1. Mai 2027',
   'card.stateProvince': 'Bundesland/Provinz',
   'card.stateProvinceWithAsterisk': 'Bundesland / Provinz *',
-  'card.step1CreateKaiserex': 'Schritt 1: Erstellen Sie Ihr Kaiserex-Konto (unser Bankpartner)',
+  'card.step1CreateKaiserex': 'Schritt 1: Erstellen Sie Ihr Zione-Konto (unser Kartenprogramm-Partner)',
   'card.step2CompleteKYC': 'Schritt 2: Schließen Sie die KYC-Verifizierung mit Ausweis und Gesichtsscan ab.',
   'card.step3ReceiveCard': 'Schritt 3: Erhalten Sie Ihre Gero Crypto Card',
   'card.streetAddress': 'Straßenadresse *',
@@ -540,13 +723,10 @@ export default {
   'card.transferringEurToCard': 'Übertrage EUR auf Ihre Gero Card...',
   'card.transportation': 'Transport',
   'card.travel': 'Reisen',
-  'card.twoFactorAuthentication': 'Zwei-Faktor-Authentifizierung',
   'card.updatingCardBalance': 'Kartensaldo wird aktualisiert...',
   'card.uploadedId': 'Hochgeladener Ausweis',
-  'card.useAddressRegisteredWithKaiserex': 'Die bei Ihrem KaiserEx-Konto hinterlegte Adresse verwenden',
+  'card.useAddressRegisteredWithKaiserex': 'Die bei Ihrem Zione-Konto hinterlegte Adresse verwenden',
   'card.useExistingAddress': 'Vorhandene Adresse verwenden',
-  'card.usernameOrEmail': 'Benutzername oder E-Mail',
-  'card.verificationCode': 'Verifizierungscode',
   'card.verifyingTransaction': 'Transaktion wird überprüft',
   'card.viewCardDetails': 'Kartendetails anzeigen',
   'card.viewCardDetailsSubtitle': 'Die Details Ihrer Karte anzeigen. Diese Aktion kann nicht rückgängig gemacht werden.',
@@ -559,8 +739,6 @@ export default {
   'card.whereToShipCard': 'Wohin sollen wir Ihre Karte schicken?',
   'card.willEnjoyTokenIncentives': 'Profitieren von Token-Anreizen in Form von Gebührenerlässen',
   'card.writeDeliveryDetails': 'Geben Sie Ihre Lieferdetails an, wir versenden die Karte in 10-20 Tagen.',
-  'card.yearsExperience': 'Mehr als 10 Jahre Erfahrung',
-  'card.yearsExperienceDesc': 'Mehr als ein Jahrzehnt Branchenerfahrung mit der Betreuung von über 200 hochwertigen Kunden in verschiedenen Branchen und Ländern',
   'card.yourAdaBalance': 'Ihr ADA-Guthaben:',
   'card.yourDetails': 'Ihre Angaben',
   'card.yourGeroBalance': 'Ihr $GERO-Guthaben:',
@@ -1300,6 +1478,7 @@ export default {
   'errors.insufficientBalance': 'Unzureichendes Guthaben',
   'errors.noCollateral': 'Diese Transaktion führt einen Smart Contract aus und benötigt einen kleinen reinen ADA-UTxO als Collateral, aber deine gesamte ADA ist mit Tokens gebündelt. Sende etwa 6 ADA an deine eigene Wallet-Adresse, um einen zu erstellen, und versuche es dann erneut.',
   'errors.insufficientAdaForTx': 'Nicht genug ADA, um diese Transaktion nach Netzwerkgebühren und dem Minimum pro Ausgabe abzuschließen. Füge etwas mehr ADA hinzu und versuche es erneut.',
+  'errors.submitUnconfirmed': 'Wir konnten nicht bestätigen, ob deine Transaktion das Netzwerk erreicht hat. Sie kann trotzdem noch durchgehen. Prüfe deinen Transaktionsverlauf, bevor du sie erneut sendest.',
   'errors.collateralPoolEmpty': 'Der gemeinsame Collateral-Dienst ist vorübergehend nicht verfügbar. Bitte versuche es gleich noch einmal.',
   'errors.invalidAddress': 'Ungültige Adresse',
   'errors.invalidAmount': 'Ungültiger Betrag. Bitte überprüfen Sie den Zahlungsbetrag und versuchen Sie es erneut.',
@@ -2523,6 +2702,11 @@ export default {
   'perps.connect.gateDeposit': 'Mit Strike verbinden, um Guthaben einzuzahlen.',
   'perps.connect.gateWithdraw': 'Mit Strike verbinden, um Guthaben auszuzahlen.',
   'perps.connect.submitCta': 'Mit Strike Verbinden',
+  'perps.connect.signCta': 'Signieren und verbinden',
+  'perps.connect.messageHint': 'Strike bittet Ihre Wallet, diese Nachricht mit Ihrem Zahlungsschlüssel zu signieren. Lesen Sie sie, bevor Sie signieren.',
+  'perps.connect.boundNote': 'Diese Nachricht enthält den neuen API-Schlüssel, der für diese Verbindung erstellt wurde.',
+  'perps.connect.unboundWarning': 'Diese Nachricht enthält nicht den neuen API-Schlüssel, der für diese Verbindung erstellt wurde. Signieren Sie sie nur, wenn sie eindeutig von Strike stammt und diese Wallet nennt.',
+  'perps.connect.messageRefused': 'Strike hat eine Nachricht gesendet, die Gero nicht signiert. Versuchen Sie es später erneut.',
   'perps.passkeySignHint': 'Mit Ihrem PassKey authentifizieren, um diese Transaktion zu signieren.',
 
   // Strike v2 Einzahlung/Auszahlung
@@ -2865,10 +3049,10 @@ export default {
   'security.passKeyPasswordUpdateFailed': 'Aktualisierung des mit PassKey verschlüsselten Passworts fehlgeschlagen. Bitte aktivieren Sie die PassKey-Autofill-Funktion in den Sperreinstellungen erneut.',
   'security.passKeyPrfDisabled': 'PRF nicht verfügbar',
   'security.passKeyPrfEnabled': 'PRF-sichere Verschlüsselung aktiviert',
-  'security.passKeyPrfNotSupported': 'PassKey-Registrierung erfolgreich, aber die PRF-Erweiterung wird nicht unterstützt. Für PassKey-Autofill werden Chrome, Edge oder Firefox mit einem kompatiblen Authentifikator benötigt.',
+  'security.passKeyPrfNotSupported': 'PassKey-Registrierung erfolgreich, aber die PRF-Erweiterung wird nicht unterstützt. Für PassKey-Autofill werden Chrome oder Edge mit einem kompatiblen Authentifikator benötigt.',
   'security.passKeyUnsupportedBrowser': 'Dieser Browser oder dieses Gerät unterstützt keine PassKey-Wallets. Verwende Chrome oder Edge, oder gehe zurück und erstelle stattdessen eine passwortgeschützte Wallet.',
-  'security.passKeyPrfRequired': 'Für PassKey-Autofill ist ein Browser mit WebAuthn-PRF-Unterstützung erforderlich (Chrome, Edge oder Firefox)',
-  'security.passKeyPrfUnavailable': 'Die PRF-Erweiterung wird in diesem Browser nicht unterstützt. Für PassKey-Autofill werden Chrome, Edge oder Firefox benötigt.',
+  'security.passKeyPrfRequired': 'Für PassKey-Autofill ist ein Browser mit WebAuthn-PRF-Unterstützung erforderlich (Chrome oder Edge)',
+  'security.passKeyPrfUnavailable': 'Die PRF-Erweiterung wird in diesem Browser nicht unterstützt. Für PassKey-Autofill werden Chrome oder Edge benötigt.',
   'security.passKeyPrfWalletDescription': 'PassKey ist die primäre Verschlüsselung Ihrer Wallet - sie kann nicht entfernt werden',
   'security.passKeyRegistered': 'PassKey registriert',
   'security.passKeyRegisteredDescription': 'Der PassKey Ihres Geräts ist für dieses Wallet eingerichtet',
@@ -2910,7 +3094,7 @@ export default {
   'security.mpcRecoveryChangeTitle': 'Wiederherstellungspasswort ändern',
   'security.mpcRecoveryChangeRowSubtitle': 'Aktualisiere das Passwort, das deinen Wiederherstellungsanteil schützt',
   'security.mpcRecoveryChangeSubtitle': 'Lege ein neues Wiederherstellungspasswort fest - das alte wird nicht abgefragt.',
-  'security.mpcRecoveryChangeInfo': 'Dies verschlüsselt deinen Wiederherstellungsanteil neu und rotiert alle drei Schlüsselanteile. Ein zuvor geleaktes Backup wird dadurch unbrauchbar.',
+  'security.mpcRecoveryChangeInfo': 'Dies legt ein neues Wiederherstellungspasswort fest und ersetzt alle drei Schlüsselanteile. Neue Anteile lassen sich nicht mit alten kombinieren, aber zwei beliebige alte Anteile zusammen öffnen die Wallet weiterhin. Wenn du glaubst, dass ein Backup geleakt ist, verschiebe dein Guthaben in eine neue Wallet.',
   'security.mpcRecoveryNewPassword': 'Neues Wiederherstellungspasswort',
   'security.mpcRecoveryConfirmPassword': 'Wiederherstellungspasswort bestätigen',
   'security.mpcRecoveryMinLength': 'Verwende mindestens 12 Zeichen',
@@ -3144,7 +3328,7 @@ export default {
   'notify.others.title': 'Andere Wallets',
   'notify.others.open': 'Wallet öffnen, um einzuschalten',
   'notify.others.ineligible': 'Für diese Wallet nicht verfügbar',
-  'notify.unsupported.firefox': 'Push-Benachrichtigungen sind in Firefox noch nicht verfügbar.',
+  'notify.unsupported.browser': 'Push-Benachrichtigungen sind in diesem Browser nicht verfügbar.',
   'notify.unsupported.beta': 'Push-Benachrichtigungen sind im Beta-Build nicht enthalten.',
   'notify.pendingOpen.title': 'Andere Wallet öffnen?',
   'notify.pendingOpen.body': 'Dieser Hinweis betrifft {wallet}. Jetzt dorthin wechseln?',
@@ -3187,6 +3371,8 @@ export default {
   'settings.walletNameUpdated': 'Wallet-Name aktualisiert',
   'settings.walletProfilePicture': 'Wallet-Profilbild',
   'settings.websiteProtection': 'Website-Schutz',
+  'settings.verifyAddress': 'Adresse verifizieren',
+  'settings.verifyAddressOnDevice': 'Zeigen Sie Ihre Empfangsadresse auf Ihrem Hardware-Wallet an, um sie zu bestätigen',
   'settings.welcomeGuide': 'Willkommensanleitung',
   'settings.welcomeGuideHelper': 'Eine Einführungsanleitung zur Navigation in Ihrer Wallet anzeigen',
   'settings.whatIsCollateral': 'Was sind Sicherheiten?',
@@ -3671,7 +3857,6 @@ export default {
   'wallet.paymentAddress': 'Zahlungsadresse',
   'wallet.paymentAddressInfo': 'Teilen Sie Ihre Zahlungsadresse, um {ticker} sicher zu empfangen.',
   'wallet.pleaseAllowCameraAccess': 'Bitte erlauben Sie den Kamerazugriff in den Browsereinstellungen.',
-  'wallet.pleaseEnterAll6Digits': 'Bitte geben Sie alle 6 Ziffern ein.',
   'wallet.pleaseEnterPasswordToContinue': 'Bitte geben Sie Ihr Passwort ein, um fortzufahren.',
   'wallet.pleaseReviewCarefully': 'Bitte prüfen Sie die Transaktionsdetails sorgfältig, bevor Sie fortfahren. Bestätigen Sie die Transaktion, indem Sie sie mit Ihrem {walletType}-Gerät signieren.',
   'wallet.pointCameraAtQR': 'Richten Sie Ihre Kamera auf einen QR-Code mit einer Adresse',
@@ -3809,7 +3994,7 @@ export default {
   'welcome.approveOnKeystone': 'Bestätigen Sie auf dem Keystone-Gerät und klicken Sie dann auf \'Weiter\', um es mit Gero zu scannen.',
   'welcome.back': 'Zurück',
   'welcome.backupMnemonicOption': 'Wiederherstellungsphrase zur Sicherung speichern',
-  'welcome.backupMnemonicOptionDesc': 'Empfohlen – ermöglicht die Wiederherstellung Ihrer Wallet, falls Sie Ihr Gerät verlieren',
+  'welcome.backupMnemonicOptionDesc': 'Empfohlen: speichert eine verschlüsselte Kopie Ihrer Wiederherstellungsphrase auf diesem Gerät, damit Sie sie später ansehen und aufschreiben können',
   'welcome.cantRecoverPassword': 'GeroWallet kann dieses Passwort nicht für Sie wiederherstellen. Mehr erfahren',
   'welcome.checkedTimes': 'Überprüft {count} Mal | Überprüft {count} Mal',
   'welcome.chooseAWallet': 'Wählen Sie eine Wallet zum Anmelden',
@@ -3856,7 +4041,7 @@ export default {
   'welcome.passKeySecurityKeyHint': 'Erfordert in diesem Browser einen Hardware-Sicherheitsschlüssel (YubiKey oder ähnlich)',
   'welcome.securityKeyRequired': 'Sicherheitsschlüssel erforderlich',
   'welcome.passKeyBenefitKeysSecure': 'Schlüssel verlassen nie Ihr Gerät',
-  'welcome.passKeyLearnMoreFull': 'PassKey nutzt die integrierte sichere Hardware Ihres Geräts, um Ihre Wallet zu schützen. Der Verschlüsselungsschlüssel verlässt Ihr Gerät nie und ist dadurch sicherer als herkömmliche Passwörter. Hinweis: Ihr PassKey ist an dieses Gerät gebunden – bei Verlust des Zugangs ist Ihre Wiederherstellungsphrase der einzige Weg, Ihre Wallet wiederherzustellen.',
+  'welcome.passKeyLearnMoreFull': 'PassKey nutzt die sichere Hardware Ihres Geräts, um Ihre Wallet zu schützen. Ihre Wallet-Schlüssel bleiben verschlüsselt auf diesem Gerät, und der Verschlüsselungsschlüssel stammt von Ihrem PassKey. Wenn Ihr PassKey geräteübergreifend synchronisiert wird (zum Beispiel mit dem Google Passwortmanager oder dem iCloud-Schlüsselbund), schützt dieses Konto Ihre Wallet mit. Sichern Sie es daher gut. Wenn Sie dieses Gerät oder Ihren PassKey verlieren, ist Ihre Wiederherstellungsphrase der einzige Weg, Ihre Wallet wiederherzustellen.',
   'welcome.passKeyMethod': 'PassKey',
   'welcome.password': 'Passwort',
   'welcome.passwordEncryption': 'Passwortverschlüsselung',
@@ -3870,8 +4055,8 @@ export default {
   'welcome.prfEncryptionDesc': 'Hardwaregestützte PassKey-Authentifizierung',
   'welcome.prfNotSupported': 'PassKey wird in diesem Browser nicht unterstützt. Stattdessen wird Passwortverschlüsselung verwendet.',
   'welcome.prfTooltipDesc1': 'PassKey PRF (Pseudo-Random Function) verwendet die in Ihrem Gerät integrierte biometrische Authentifizierung (Fingerabdruck, Gesichtserkennung oder Geräte-PIN), um die privaten Schlüssel Ihrer Wallet zu verschlüsseln.',
-  'welcome.prfTooltipDesc2': 'Der Verschlüsselungsschlüssel wird von der sicheren Hardware Ihres Geräts erzeugt und verlässt Ihr Gerät niemals, wodurch er sicherer ist als traditionelle Passwörter.',
-  'welcome.prfTooltipDesc3': 'Ihre Wiederherstellungsphrase wird immer als Backup gespeichert, falls Sie den Zugriff auf Ihr Gerät oder Ihren PassKey verlieren.',
+  'welcome.prfTooltipDesc2': 'Der Verschlüsselungsschlüssel stammt von Ihrem PassKey und wird von Gero nie gespeichert. Wenn Ihr PassKey geräteübergreifend synchronisiert wird (zum Beispiel mit dem Google Passwortmanager oder dem iCloud-Schlüsselbund), schützt dieses Konto Ihre Wallet mit. Sichern Sie es daher gut.',
+  'welcome.prfTooltipDesc3': 'Schreiben Sie Ihre Wiederherstellungsphrase auf und bewahren Sie sie sicher auf. Sie ist der einzige Weg, Ihre Wallet wiederherzustellen, wenn Sie dieses Gerät oder Ihren PassKey verlieren.',
   'welcome.prfTooltipTitle': 'Warum wird kein Passwort benötigt?',
   'welcome.recommended': 'Empfohlen',
   'welcome.recoveryPhrase': 'Wiederherstellungsphrase',
@@ -3976,7 +4161,7 @@ export default {
   'welcome.savingRecovery': 'Wiederherstellung wird gespeichert…',
   'welcome.recoverySaved': 'Wiederherstellung gespeichert',
   'welcome.recoverySaveFailed': 'Wiederherstellung konnte nicht gespeichert werden. Bitte erneut versuchen.',
-  'welcome.recoveryPasswordTooWeak': 'Wählen Sie ein stärkeres Wiederherstellungspasswort (mindestens 12 Zeichen).',
+  'welcome.recoveryPasswordTooWeak': 'Wählen Sie ein stärkeres Wiederherstellungspasswort: mindestens 12 Zeichen, Buchstaben gemischt mit Zahlen oder Symbolen, ohne gängige Wörter oder Zeichenfolgen.',
   'welcome.restoreRecoveryPasswordHint': 'Das Wiederherstellungspasswort, das Sie beim Erstellen dieser Wallet gewählt haben.',
   'welcome.recoveryStrengthWeak': 'Schwach',
   'welcome.recoveryStrengthFair': 'Ausreichend',
@@ -4179,6 +4364,7 @@ export default {
   'search.contacts': 'Kontakte',
   'search.settings': 'Einstellungen',
   'search.pages': 'Seiten',
+  'search.actions': 'Aktionen',
   'search.noResults': 'Keine Ergebnisse gefunden',
   'search.searching': 'Suche läuft...',
   'search.pressEsc': 'Drücke Esc zum Schließen',
@@ -4228,11 +4414,26 @@ export default {
   'signTx.burnsAsset': 'Verbrennt {quantity} {name}',
   'signTx.reservesCollateral': 'Reserviert {count} UTXO als Sicherheit | Reserviert {count} UTXOs als Sicherheit',
   'signTx.includesMetadata': 'Enthält Metadaten',
+  'signTx.delegatesVoteTo': 'Delegiert Stimmrecht an {drep}',
+  'signTx.notYourStakeKey': 'Verwendet einen Stake-Schlüssel, der nicht Ihnen gehört',
+  'signTx.withdrawsFrom': 'Hebt {amount} ADA Rewards von {account} ab',
+  'signTx.notYourAccount': 'nicht Ihr Konto',
+  'signTx.votesOn': 'Stimmt mit {vote} über Governance-Aktion {action} ab',
+  'signTx.asYourDrep': 'Abgegeben als Ihr DRep',
+  'signTx.asOtherVoter': 'Abgegeben von einem anderen Wähler',
+  'signTx.submitsProposal': 'Reicht einen Antrag ({type}) mit {amount} ADA Kaution ein, Rückzahlung an {account}',
+  'signTx.donatesToTreasury': 'Spendet {amount} ADA an die Cardano-Treasury (nicht erstattbar)',
+  'signTx.totalCollateral': 'Bis zu {amount} ADA sind gefährdet, falls das Skript fehlschlägt',
+  'signTx.collateralReturnTo': 'Gibt {amount} ADA Sicherheit an {address} zurück, falls das Skript fehlschlägt',
+  'signTx.referenceInputs': 'Liest {count} Referenz-Input | Liest {count} Referenz-Inputs',
+  'signTx.requiredSigners': 'Erfordert {count} zusätzliche Signatur | Erfordert {count} zusätzliche Signaturen',
+  'signTx.requiredSignersForeign': '{count} von Schlüsseln, die nicht Ihnen gehören',
+  'signTx.validFrom': 'Nicht gültig vor Slot {slot}',
   'signTx.decodeFailedTitle': 'Diese Transaktion konnte nicht entschlüsselt werden',
   'signTx.decodeFailedBody': 'Gero konnte nicht lesen, was diese Transaktion tatsächlich bewirkt. Blind zu signieren ist unsicher - fahren Sie nur fort, wenn Sie dieser dApp voll vertrauen.',
   'signTx.decodeFailedAck': 'Ich verstehe das Risiko und möchte trotzdem signieren',
   'signTx.networkMismatchTitle': 'Diese Transaktion zielt auf ein anderes Netzwerk ab',
-  'signTx.networkMismatchBody': 'Eine Empfängeradresse gehört zu einem anderen Netzwerk als Ihre aktive Wallet. Das bedeutet meist, dass die dApp die Transaktion falsch erstellt hat - das Signieren kann fehlschlagen oder Gelder an eine unerwartete Adresse senden.',
+  'signTx.networkMismatchBody': 'Diese Transaktion oder eine ihrer Adressen gehört zu einem anderen Netzwerk als Ihre aktive Wallet. Das bedeutet meist, dass die dApp die Transaktion falsch erstellt hat - das Signieren kann fehlschlagen oder Gelder an eine unerwartete Adresse senden.',
   'signTx.networkMismatchAck': 'Ich verstehe das Risiko und möchte trotzdem signieren',
   'signTx.signingAddress': 'Signiert als',
   'signTx.malformedSignData': 'Diese Website hat eine fehlerhafte Anfrage gesendet. Das Signieren ist deaktiviert, bis eine gültige Anfrage gesendet wird.',
@@ -4249,6 +4450,7 @@ export default {
   'signTx.rejected': 'Transaktionssignierung abgebrochen',
   'miniGero.futureTransactionsNote': 'Zu Ihrer Sicherheit erfordern zukünftige Transaktionen von dieser Website eine zusätzliche Verifizierung vor der Signierung.',
   'miniGero.requestQueueIndicator': 'Anfrage {current} von {total}',
+  'miniGero.embeddedIn': 'Diese Anfrage stammt von einer Seite, die in {site} eingebettet ist. Fahren Sie nur fort, wenn Sie beiden Seiten vertrauen.',
   'miniGero.rejectAll': 'Alle ablehnen',
   'miniGero.pendingRequestBanner': 'Entsperren, um die Anfrage von {domain} zu prüfen',
   'miniGero.pendingRequestBannerNoDomain': 'Entsperren, um eine ausstehende dApp-Anfrage zu prüfen',
@@ -4709,11 +4911,11 @@ export default {
   'realfi.title': 'Mit RealFi verdienen',
   'realfi.preview': 'Du bist auf Cardano Preprod. Die angezeigten Beträge sind Testguthaben.',
   'realfi.apy': 'RealFi-Fondsrendite: {rate} % (veröffentlicht am {date})',
-  'realfi.start.title': 'Lass deine Dollar arbeiten',
-  'realfi.start.body': 'Stake USDrf und erhalte sUSDrf, das gegenüber USDrf wächst, während Erträge aus realen Vermögenswerten eingehen. Das Entstaken dauert 7 Tage.',
+  'realfi.start.title': 'Mit RealFi loslegen',
+  'realfi.start.body': 'Prüfe deine Berechtigung bei RealFi, bevor du USDrf kaufst und für sUSDrf stakest.',
   'realfi.start.cta': 'USDrf auf RealFi holen',
-  'realfi.start.readyTitle': 'Du kannst loslegen',
-  'realfi.start.readyBody': 'Du hältst {amount}. Stake sie, um sUSDrf zu erhalten, das gegenüber USDrf wächst, während Erträge aus realen Vermögenswerten eingehen. Das Entstaken dauert 7 Tage.',
+  'realfi.start.readyTitle': 'Du hältst USDrf',
+  'realfi.start.readyBody': 'Du hältst {amount}. Prüfe deine Berechtigung bei RealFi, bevor du für sUSDrf stakest.',
   'realfi.start.readyCta': 'Auf RealFi staken',
   'realfi.start.note': 'Staking direkt in Gero kommt bald. Stake bis dahin auf RealFi – deine Position erscheint dann hier.',
   'realfi.position.label': 'Deine Position',
@@ -4967,7 +5169,7 @@ export default {
   'midnight.privateBalances.openFullWallet': 'Private Token in der vollständigen Wallet senden',
   'midnight.privateBalances.title': 'Private Token',
   'midnight.privateBalances.refresh': 'Private Guthaben entsperren',
-  'midnight.privateBalances.explanation': 'Private Token-Guthaben werden auf diesem Gerät synchronisiert. NIGHT bleibt öffentlich.',
+  'midnight.privateBalances.explanation': 'Private Token-Guthaben werden auf diesem Gerät ermittelt: Gero prüft den öffentlichen Midnight-Ereignisstrom lokal und sendet deinen Viewing Key nie an einen Server. NIGHT bleibt öffentlich.',
   'midnight.privateBalances.syncing': 'Private Notizen werden synchronisiert…',
   'midnight.privateBalances.progress': '{applied} / {highest} Ereignisse angewendet',
   'midnight.privateBalances.locked': 'Entsperren, um Ihre privaten Token zu synchronisieren.',
@@ -5020,6 +5222,7 @@ export default {
   'midnight.connector.walletTypeUnsupported': 'Dieser Wallet-Typ kann hier keine Midnight-Transaktionen signieren.',
   'midnight.connector.transferTitle': 'Überweisung genehmigen',
   'midnight.connector.transferFeesNote': 'Netzwerkgebühren werden von deiner Wallet in DUST bezahlt.',
+  'midnight.connector.transferProvedBy': 'Beweis erstellt durch: {prover}',
   'midnight.connector.balanceTitle': 'Finanzieren und Gebühren zahlen',
   'midnight.connector.balanceBody': 'Diese Seite bittet deine Wallet, die unten aufgeführten Beträge zu einer von ihr erstellten Transaktion beizusteuern und die Netzwerkgebühr zu zahlen.',
   'midnight.connector.balanceNothing': 'Es werden keine Beträge benötigt; deine Wallet zahlt nur die Netzwerkgebühr.',
@@ -5040,24 +5243,24 @@ export default {
   // Shielded-Proving-Consent-Dialog
   'midnight.consent.title': "Datenschutz bei Transaktionsbeweisen",
   'midnight.consent.subtitle': "Wählen Sie, wer Ihre Beweiseingaben erhält",
-  'midnight.consent.intro': "Midnight-Überweisungen benötigen einen Beweis. Das gilt für öffentliche Token mit DUST-Gebühren und für private Token. Ein entfernter Beweisdienst erhält die dafür erforderlichen Witness-Daten.",
+  'midnight.consent.intro': 'Midnight-Transaktionen brauchen einen Beweis. Das gilt für öffentliche Token-Transaktionen, die DUST ausgeben, für private Token-Transaktionen und für Überweisungen, die du verbundenen Seiten erlaubst. Ein entfernter Prover erhält die dafür nötigen Beweiseingaben.',
   'midnight.consent.whatGeroSees': 'Was Gero Cloud sieht',
-  'midnight.consent.whatGeroSeesBody': "Gero Cloud erhält die Beweiseingaben jeder darüber gesendeten Transaktion, einschließlich DUST-Gebührennotizen und gegebenenfalls privater Token-Notizen. Wer diese Eingaben lesen kann, kann die Notizen und die gebührenzahlende Wallet mit der Transaktion verknüpfen.",
+  'midnight.consent.whatGeroSeesBody': 'Gero Cloud erhält die Beweiseingaben jeder darüber gesendeten Transaktion, einschließlich DUST-Gebührennotizen und privater Token-Notizen. Diese Eingaben können Schlüsselmaterial für die ausgegebenen Notizen enthalten, sodass der Betreiber des Provers sie ebenfalls ausgeben könnte. Wer die Eingaben lesen kann, kann Notizen und die gebührenzahlende Wallet mit der Transaktion verknüpfen.',
   'midnight.consent.whatWeDoNot': 'Was wir nicht tun',
-  'midnight.consent.whatWeDoNotBody': 'Wir loggen oder speichern die Witness-Daten nicht. Wir verknüpfen sie nicht mit deinem Konto, deiner IP oder einem anderen Identifier, der nicht im Request selbst enthalten ist.',
+  'midnight.consent.whatWeDoNotBody': 'Gero Cloud protokolliert oder speichert die Beweiseingaben nicht. Anfragen enthalten das Gero-Sitzungstoken dieses Geräts und laufen über Cloudflare, wo die verschlüsselte Verbindung endet, bevor sie Gero erreicht.',
   'midnight.consent.localOption': 'Möchtest du deinen eigenen Proof-Server betreiben?',
-  'midnight.consent.localOptionBody': 'Betreibe den offiziellen Midnight-Proof-Server auf deinem eigenen Rechner und Gero erstellt Beweise lokal. Deine privaten Transaktionsdaten verlassen deinen Computer nie. Einrichtung unter Einstellungen.',
-  'midnight.consent.acknowledge': "Ich erlaube Gero Cloud, DUST- und private Token-Beweiseingaben für darüber gesendete Transaktionen zu erhalten. Ich verstehe, dass diese Eingaben Verbindungen zwischen Notizen, Gebührenzahler und Transaktion offenlegen können.",
+  'midnight.consent.localOptionBody': 'Führe den offiziellen Midnight-Proof-Server auf diesem Computer aus, dann erstellt Gero die Beweise dort. Deine Beweiseingaben bleiben auf diesem Computer. Richte ihn in den Einstellungen ein.',
+  'midnight.consent.acknowledge': 'Ich erlaube Gero Cloud, die Beweiseingaben für darüber gesendete Transaktionen zu erhalten. Ich verstehe, dass diese Eingaben Schlüsselmaterial für die ausgegebenen Notizen enthalten und Verbindungen zwischen Notizen, Gebührenzahler und Transaktion offenlegen können.',
   'midnight.consent.acceptCloud': 'Gero Cloud nutzen',
   'midnight.consent.useLocalInstead': 'Stattdessen lokalen Proof-Server nutzen',
   'midnight.consent.cancel': 'Abbrechen',
   // Arkhia-zkPaaS-Variante derselben Einwilligung (die Witness-Daten gehen
   // an Arkhia, nicht an Gero, also muss der Text das echte Ziel nennen)
   'midnight.consent.zkpaasWhatSees': 'Was Arkhia zkPaaS sieht',
-  'midnight.consent.zkpaasWhatSeesBody': "Arkhia zkPaaS erhält die Beweiseingaben jeder darüber gesendeten Transaktion, einschließlich DUST-Gebührennotizen und gegebenenfalls privater Token-Notizen. Gero erhält diese Eingaben auf diesem Weg nicht. Wer sie lesen kann, kann die Notizen und die gebührenzahlende Wallet mit der Transaktion verknüpfen.",
+  'midnight.consent.zkpaasWhatSeesBody': 'Arkhia zkPaaS erhält die Beweiseingaben jeder darüber gesendeten Transaktion, einschließlich DUST-Gebührennotizen und privater Token-Notizen. Diese Eingaben können Schlüsselmaterial für die ausgegebenen Notizen enthalten. Gero erhält sie auf diesem Weg nicht. Wer sie lesen kann, kann Notizen und die gebührenzahlende Wallet mit der Transaktion verknüpfen.',
   'midnight.consent.zkpaasWhatThisMeans': 'Was das bedeutet',
   'midnight.consent.zkpaasWhatThisMeansBody': 'Arkhia betreibt den Prover auf vertraulicher Google-Cloud-Hardware und erklärt, Witness-Daten nicht zu speichern. Gero kann das nicht für jede Anfrage überprüfen; behandle den Dienst daher wie jeden anderen entfernten Prover.',
-  'midnight.consent.zkpaasAcknowledge': "Ich erlaube Arkhia zkPaaS, DUST- und private Token-Beweiseingaben für darüber gesendete Transaktionen zu erhalten. Ich verstehe, dass diese Eingaben Verbindungen zwischen Notizen, Gebührenzahler und Transaktion offenlegen können.",
+  'midnight.consent.zkpaasAcknowledge': 'Ich erlaube Arkhia zkPaaS, die Beweiseingaben für darüber gesendete Transaktionen zu erhalten. Ich verstehe, dass diese Eingaben Schlüsselmaterial für die ausgegebenen Notizen enthalten und Verbindungen zwischen Notizen, Gebührenzahler und Transaktion offenlegen können.',
   'midnight.consent.zkpaasAccept': 'Arkhia zkPaaS nutzen',
   // Ablaufdiagramm (DustRegistrationDialog)
   'midnight.flowSign': 'Signieren',
@@ -5167,7 +5370,7 @@ export default {
   'midnight.proofServer.remoteLabel': 'Gero Cloud (Standard)',
   'midnight.proofServer.remoteHint': 'Beweise werden auf Gero-Servern erstellt. Dafür werden private Transaktionsdaten für den Beweis-Schritt geteilt.',
   'midnight.proofServer.localLabel': 'Lokaler Proof-Server',
-  'midnight.proofServer.localHint': 'Beweise werden auf deinem Rechner erstellt. Gero-Server sehen deine privaten Transaktionsdaten nie.',
+  'midnight.proofServer.localHint': 'Beweise werden auf diesem Computer erzeugt. Deine Beweiseingaben erreichen nie die Server von Gero.',
   'midnight.proofServer.runCommand': 'Führe dies in einem Terminal aus (Docker erforderlich):',
   'midnight.proofServer.firstRunNote': 'Der erste Start lädt mehrere GB an Beweis-Parametern herunter. Lass das Terminal beim Senden geöffnet.',
   'midnight.proofServer.urlLabel': 'Proof-Server-URL',
@@ -5185,6 +5388,8 @@ export default {
   'midnight.proofServer.notDetectedSend': 'Lokaler Ledger-8-Proof-Server nicht erkannt. Starte ihn oder nutze Gero Cloud für diese Transaktion.',
   'midnight.proofServer.notDetectedSendLedger9': 'Lokaler Ledger-9-Proof-Server nicht erkannt. Starte ihn oder nutze Gero Cloud für diese Transaktion.',
   'midnight.proofServer.localUrlMissingSend': 'Für dieses Netzwerk ist keine lokale Proof-Server-URL gesetzt. Füge eine in den Proof-Server-Einstellungen hinzu oder nutze Gero Cloud für diese Transaktion.',
+  'midnight.proofServer.urlNotLoopback': 'Der lokale Proof-Server muss auf diesem Computer laufen (localhost oder 127.0.0.1).',
+  'midnight.proofServer.localUrlNotLoopbackSend': 'Die URL Ihres lokalen Proof-Servers liegt nicht auf diesem Computer, daher sendet Gero keine Beweisdaten dorthin. Ändern Sie sie in den Einstellungen oder nutzen Sie Gero Cloud für diese Transaktion.',
   'midnight.proofServer.useCloudOnce': 'Gero Cloud für diese Transaktion nutzen',
   'midnight.proofServer.openSettings': 'Einstellungen öffnen',
   // Arkhia zkPaaS (gehosteter Midnight-Prover hinter dem Arkhia-Gateway)
@@ -5194,14 +5399,14 @@ export default {
   // Proof-Server-Seite + Dashboard-/Mini-Gero-Widgets
   'midnight.proofServerPage.title': 'Proof-Server',
   'midnight.proofServerPage.openPage': 'Öffnen',
-  'midnight.proofServerPage.settingsSummary': 'Wähle, wo Proofs für geschützte Transaktionen erzeugt werden.',
-  'midnight.proofServerPage.subtitle': 'Wähle, wo deine Proofs für geschützte Transaktionen erzeugt werden.',
+  'midnight.proofServerPage.settingsSummary': 'Wähle, wo Beweise für Midnight-Transaktionen erzeugt werden.',
+  'midnight.proofServerPage.subtitle': 'Wähle, wo die Beweise für deine Midnight-Transaktionen erzeugt werden.',
   'midnight.proofServerPage.notMidnightTitle': 'Nicht verfügbar',
   'midnight.proofServerPage.notMidnightBody': 'Die Proof-Server-Einstellung gilt nur für Midnight-Wallets. Wechsle zu einer Midnight-Wallet, um sie zu konfigurieren.',
   'midnight.proofServerPage.activeBadge': 'Aktiv',
   'midnight.proofServerPage.remoteCardBody': 'Keine Einrichtung nötig. Proofs werden auf Geros Servern erzeugt.',
   'midnight.proofServerPage.zkpaasCardBody': 'Gehostet auf vertraulicher Google-Cloud-Hardware. Benötigt einen Arkhia-API-Key; private Daten gehen an Arkhia, nicht an Gero.',
-  'midnight.proofServerPage.localCardBody': 'Volle Privatsphäre. Erfordert einen laufenden Docker-Dienst auf diesem Gerät.',
+  'midnight.proofServerPage.localCardBody': 'Behält deine Beweiseingaben auf diesem Computer. Erfordert, dass Docker hier läuft.',
   'midnight.proofServerPage.widgetStatus': 'Status',
   'midnight.proofServerPage.widgetLatency': 'Latenz',
   'midnight.proofServerPage.widgetLastProof': 'Letzter Proof',
@@ -5230,22 +5435,26 @@ export default {
   'midnight.proofServerPage.provedIn': 'Bewiesen in {seconds}s',
   'midnight.proofServerPage.provingFailed': 'Beweiserstellung fehlgeschlagen',
   'midnight.proofServerPage.howItWorksTitle': 'Wie die Beweiserstellung funktioniert',
-  'midnight.proofServerPage.howItWorksBody': 'Jede geschützte Midnight-Transaktion benötigt vor dem Senden einen Zero-Knowledge-Proof. Dieser Proof kann in der Cloud oder auf deinem eigenen Gerät erzeugt werden.',
+  'midnight.proofServerPage.howItWorksBody': 'Midnight-Transaktionen, die DUST (Gebühren) oder private Token ausgeben, brauchen vor dem Absenden einen Zero-Knowledge-Beweis. Dieser kann in der Cloud oder auf deinem eigenen Rechner erzeugt werden.',
   'midnight.proofServerPage.compareRemoteTitle': 'Gero Cloud',
   'midnight.proofServerPage.compareRemoteBody': 'Schnell und ohne Einrichtung. Geros Server erzeugen den Proof, wofür die dafür nötigen privaten Transaktionsdaten geteilt werden müssen.',
   'midnight.proofServerPage.compareZkpaasTitle': 'Arkhia',
   'midnight.proofServerPage.compareZkpaasBody': 'Schnell, nur ein API-Key nötig. Arkhias zkPaaS-Dienst erzeugt den Proof in Google Cloud Confidential Computing und erhält die privaten Transaktionsdaten anstelle von Gero.',
   'midnight.proofServerPage.compareLocalTitle': 'Lokal',
-  'midnight.proofServerPage.compareLocalBody': 'Aufwendiger einzurichten, dafür vollständig privat. Dein eigenes Gerät erzeugt den Proof, und Gero sieht die privaten Transaktionsdaten nie.',
+  'midnight.proofServerPage.compareLocalBody': 'Aufwendiger einzurichten, am privatesten. Dieser Computer erzeugt den Beweis, Gero erhält deine Beweiseingaben also nie.',
   'midnight.proofServerPage.faqTitle': 'Häufig gestellte Fragen',
+  'midnight.proofServerPage.consentNeededTitle': 'Diesen Prover erlauben',
+  'midnight.proofServerPage.consentNeededBody': '{provider} erhält die Beweiseingaben für deine Transaktionen und für Beweise, die verbundene Seiten anfordern. Prüfe, was er sieht, und erlaube ihn, bevor er genutzt wird.',
+  'midnight.proofServerPage.consentReview': 'Prüfen und erlauben',
+  'midnight.proofServerPage.consentGiven': 'Du hast {provider} erlaubt, Beweiseingaben zu erhalten.',
   'midnight.proofServerPage.faq1Q': 'Was ist ein Proof-Server?',
-  'midnight.proofServerPage.faq1A': 'Er erzeugt den Zero-Knowledge-Proof, der für geschützte (private) Midnight-Transaktionen benötigt wird. Jede geschützte Transaktion braucht einen, bevor sie gesendet werden kann.',
+  'midnight.proofServerPage.faq1A': 'Er erzeugt den Zero-Knowledge-Beweis, den Midnight-Transaktionen brauchen, wenn sie DUST (Gebühren) oder private Token ausgeben. Das betrifft die meisten Transaktionen.',
   'midnight.proofServerPage.faq2Q': 'Ist Gero Cloud sicher?',
-  'midnight.proofServerPage.faq2A': 'Gero Cloud erhält nur die Daten, die für die Erzeugung deines Proofs nötig sind, über eine verschlüsselte Verbindung, und hat nie Zugriff auf deine Schlüssel. Für maximale Privatsphäre nutze stattdessen einen lokalen Proof-Server.',
+  'midnight.proofServerPage.faq2A': 'Gero Cloud erhält die Beweiseingaben deiner Transaktion über eine verschlüsselte Verbindung und speichert sie nicht. Diese Eingaben können Schlüsselmaterial für die ausgegebenen Notizen enthalten. Für die meiste Privatsphäre und Kontrolle nutze stattdessen einen lokalen Proof-Server.',
   'midnight.proofServerPage.faq3Q': 'Warum sollte ich einen lokalen Proof-Server betreiben?',
-  'midnight.proofServerPage.faq3A': 'Ein lokaler Proof-Server behält deine privaten Transaktionsdaten auf deinem eigenen Gerät, sodass sie Geros Infrastruktur nie erreichen.',
+  'midnight.proofServerPage.faq3A': 'Ein lokaler Proof-Server behält deine Beweiseingaben auf deinem eigenen Rechner, sodass sie nie die Infrastruktur von Gero erreichen.',
   'midnight.proofServerPage.faq4Q': 'Betrifft das auch ungeschützte (öffentliche) Transaktionen?',
-  'midnight.proofServerPage.faq4A': 'Nein. Nur geschützte (private) Transaktionen benötigen einen Proof. Öffentliche NIGHT-Überweisungen sind von dieser Einstellung nicht betroffen.',
+  'midnight.proofServerPage.faq4A': 'Ja. Öffentliche NIGHT-Überweisungen zahlen ihre Gebühr in DUST, und das Ausgeben von DUST braucht einen Beweis. Sie nutzen also ebenfalls den hier gewählten Prover.',
   'midnight.proofServerPage.faq5Q': 'Was ist Arkhia zkPaaS?',
   'midnight.proofServerPage.faq5A': 'Ein gehosteter Beweis-Dienst für das Midnight-Ökosystem, betrieben hinter dem Arkhia-API-Gateway auf Google Cloud Confidential Computing (einer Trusted Execution Environment, sodass Proof-Daten selbst während der Verarbeitung verschlüsselt bleiben). Er benötigt einen API-Key aus dem Arkhia-Dashboard. Wie jeder entfernte Prover erhält er deine privaten Transaktionsdaten für den Beweis-Schritt; anders als bei Gero Cloud gehen diese Daten an Arkhia statt an Gero.',
   // Non-NIGHT-Token-Zeilen (Dezimalstellen unbekannt, bis Token-Metadaten verfügbar sind)
@@ -5312,4 +5521,30 @@ export default {
   'common.offBadge': 'Aus',
   'common.extensionUpdatedTitle': 'Erweiterung aktualisiert',
   'common.extensionUpdatedMessage': 'Gero Dashboard wurde auf Version {version} aktualisiert!',
+  'realfi.gettingStarted.eligibilityTitle': 'Prüfe zuerst deine Berechtigung',
+  'realfi.gettingStarted.eligibilityBody': 'Prüfe deine Berechtigung bei RealFi und befolge alle dort erforderlichen Schritte zur Identitätsprüfung. Gero kann deine Berechtigung oder deinen KYC-Status nicht bestätigen.',
+  'realfi.gettingStarted.eligibilityRestrictions': 'RealFi legt Standort- und Anlegerkriterien fest. Prüfe vor dem Fortfahren die aktuelle Richtlinie.',
+  'realfi.gettingStarted.checkRestrictions': 'Länderbeschränkungen prüfen',
+  'realfi.gettingStarted.eligibilityCta': 'Berechtigung bei RealFi prüfen',
+  'realfi.gettingStarted.preprodEligibilityBody': 'Öffne RealFi Preprod, um es mit Testguthaben zu erkunden. Dadurch wird kein Mainnet-Konto freigegeben.',
+  'realfi.gettingStarted.preprodCta': 'RealFi Preprod öffnen',
+  'realfi.gettingStarted.acquireTitle': 'USDrf erhalten',
+  'realfi.gettingStarted.acquireBody': 'RealFi nennt diesen Token USDr; Gero führt ihn als USDrf. Tausche USDCx gegen USDrf, nachdem du die Richtlinie geprüft hast.',
+  'realfi.gettingStarted.preprodAcquireBody': 'Nutze die RealFi-Preprod-App und Testguthaben. Wallet-Tausch ist nur auf Mainnet verfügbar.',
+  'realfi.gettingStarted.getUsdrf': 'USDrf erhalten',
+  'realfi.gettingStarted.getUsdcx': 'USDCx mit ADA erhalten',
+  'realfi.gettingStarted.needUsdcx': 'Du hältst noch kein USDCx. Tausche zuerst ADA gegen USDCx und dann USDCx gegen USDrf.',
+  'realfi.gettingStarted.haveUsdcx': 'Du hältst {amount}, bereit zum Tausch gegen USDrf.',
+  'realfi.gettingStarted.getUsdcxNote': 'Dies ist ein separater Tausch. Warte, bis USDCx in deiner Wallet angekommen ist, und tausche es dann gegen USDrf.',
+  'realfi.gettingStarted.swapUnavailable': 'Wallet-Tausch ist derzeit nicht verfügbar. Du kannst die Berechtigungsschritte oben trotzdem ansehen.',
+  'realfi.gettingStarted.routeNote': 'Tauschrouten oder Kurse sind möglicherweise nicht verfügbar. Prüfe den Kurs vor dem Signieren; ein Verhältnis von 1:1 ist nicht garantiert.',
+  'realfi.gettingStarted.stakeTitle': 'USDrf für sUSDrf staken',
+  'realfi.gettingStarted.stakeBody': 'Sobald RealFi deine Berechtigung bestätigt hat und USDrf in deiner Wallet angekommen ist, stake USDrf für sUSDrf.',
+  'realfi.gettingStarted.showGuide': 'Schritte zu Berechtigung und Kauf',
+  'realfi.gettingStarted.swapStatus.disabled': 'Wallet-Tausch ist derzeit deaktiviert. Du kannst oben weiterhin die Berechtigungsregeln von RealFi ansehen.',
+  'realfi.gettingStarted.swapStatus.unknown': 'Die Verfügbarkeit von USDrf für Wallet-Tausch wurde für diese Wallet noch nicht bestätigt.',
+  'realfi.gettingStarted.swapStatus.loading': 'Prüfe, ob die benötigten Token im Swap-Katalog von Gero verfügbar sind.',
+  'realfi.gettingStarted.swapStatus.unavailable': 'Gero konnte die benötigten Token nicht im Swap-Katalog bestätigen. Der Erwerb per Wallet-Tausch ist derzeit nicht verfügbar.',
+  'realfi.gettingStarted.retryAvailability': 'Erneut prüfen',
+  'realfi.gettingStarted.usdrfSwapPending': 'Der Tausch von USDCx gegen USDrf ist in Gero noch nicht verfügbar. Du kannst USDrf in der RealFi-App erhalten.',
 }

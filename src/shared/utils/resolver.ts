@@ -317,9 +317,23 @@ export function applyTokenImageOverride(name: string | undefined, originalImg: s
   return originalImg;
 }
 
+/** yaci's `<policy id>.<hex name>`: a 28-byte policy id, a dot, an asset name of up to 32 bytes. */
+const YACI_DOTTED_UNIT = /^[0-9a-fA-F]{56}\.(?:[0-9a-fA-F]{2}){0,32}$/;
+
+/**
+ * The unit every lookup in this file is keyed on: policy id and hex asset name concatenated.
+ * gero-sync's live-block push relayed yaci's dotted form until gero-sync PR 100, and
+ * transaction records stored from those pushes keep it until the CBOR backfill rebuilds them,
+ * so a dotted unit still reaches resolveAsset(). `lovelace` and anything that is not exactly
+ * that shape pass through unchanged.
+ */
+export function normalizeAssetUnit(unit: string): string {
+  return typeof unit === 'string' && YACI_DOTTED_UNIT.test(unit) ? unit.replace('.', '') : unit;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- token records mix provider payload + chain-specific metadata shapes; resolves to a dynamic display bag consumed across the app
 export function resolveAsset(token: any): any {
-  const unit = token.unit;
+  const unit = normalizeAssetUnit(token.unit);
   let metadata = null;
   let onchain_metadata = null;
   let isScam: boolean = false;
@@ -329,7 +343,7 @@ export function resolveAsset(token: any): any {
   let policy_id: string;
   let asset_name: string;
 
-  const asset = structuredClone(NetworkStore.state.assets[token.unit]);
+  const asset = structuredClone(NetworkStore.state.assets[unit]);
   if (!asset) {
     // TODO
   }
@@ -349,27 +363,27 @@ export function resolveAsset(token: any): any {
       risk: 'AAA',
     };
   } else {
-    // `token.unit` should be a hex AssetId (policyId + assetName). Some tx assets
+    // `unit` should be a hex AssetId (policyId + assetName). Some tx assets
     // arrive with a malformed/non-hex unit, which makes Cardano.AssetId.* throw
     // "expected hex string" and crashes the entire TransactionDetails render. Only
     // parse the unit when it's valid hex; otherwise fall back to the explicit
     // policy_id / asset_name fields.
     const unitIsHexAssetId =
-      typeof token.unit === 'string' &&
-      token.unit.length >= 56 &&
-      token.unit.length % 2 === 0 &&
-      /^[0-9a-fA-F]+$/.test(token.unit);
+      typeof unit === 'string' &&
+      unit.length >= 56 &&
+      unit.length % 2 === 0 &&
+      /^[0-9a-fA-F]+$/.test(unit);
 
     if (token.policy_id) {
       policy_id = token.policy_id;
     } else if (unitIsHexAssetId) {
-      policy_id = Cardano.AssetId.getPolicyId(token.unit);
+      policy_id = Cardano.AssetId.getPolicyId(unit);
     }
 
     if (token.asset_name) {
       asset_name = token.asset_name;
     } else if (unitIsHexAssetId) {
-      asset_name = Cardano.AssetId.getAssetName(token.unit);
+      asset_name = Cardano.AssetId.getAssetName(unit);
     }
     if (policy_id) {
       isScam = TokenMetadataStore.state.blacklistPolicies.includes(policy_id)
@@ -640,6 +654,20 @@ export function analyzeTransactionForSignatures(
 ): Array<{ derivationPath: number[], type: string }> {
   const requiredSigners: Array<{ derivationPath: number[], type: string }> = [];
 
+  // Only sign for credentials this wallet owns. A stake/DRep/CC witness for a
+  // credential that isn't ours authorises nothing, and adding it hides what the
+  // tx really does. If the key set carries no creds of a kind (not expected
+  // for a normal wallet), fall back to the old behaviour rather than drop a
+  // witness the wallet's own action needs.
+  const credsOf = (...lists: Array<Array<{ cred?: string }> | undefined>) =>
+    new Set(lists.flatMap((l) => (Array.isArray(l) ? l : []).map((k) => String(k?.cred ?? '').toLowerCase()).filter(Boolean)));
+  const keySet = (addresses ?? {}) as Partial<Keys>;
+  const ownStakeCreds = credsOf(keySet.stake);
+  const ownDrepCreds = credsOf(keySet.drep105, keySet.drep129);
+  const ownCcHotCreds = credsOf(keySet.ccHot);
+  const ownedOrUnknown = (owned: Set<string>, hash: unknown) =>
+    owned.size === 0 || (typeof hash === 'string' && owned.has(hash.toLowerCase()));
+
   // Check transaction inputs
   for (const input of transaction.body.inputs) {
     const utxo = utxos.find(u =>
@@ -693,11 +721,15 @@ export function analyzeTransactionForSignatures(
           certificate.__typename === Cardano.CertificateType.VoteDelegation ||
           certificate.__typename === Cardano.CertificateType.VoteRegistrationDelegation ||
           certificate.__typename === Cardano.CertificateType.StakeVoteRegistrationDelegation) {
-        // Need stake key signature for both staking and governance operations (including Conway-era certificates)
-        requiredSigners.push({
-          derivationPath: [ChainDerivations.CHIMERIC_ACCOUNT, 0],
-          type: 'stake'
-        });
+        // Need stake key signature for both staking and governance operations
+        // (including Conway-era certificates), but only for OUR stake credential.
+        const certStakeHash = (certificate as { stakeCredential?: { hash?: unknown } }).stakeCredential?.hash;
+        if (certStakeHash === undefined || ownedOrUnknown(ownStakeCreds, certStakeHash)) {
+          requiredSigners.push({
+            derivationPath: [ChainDerivations.CHIMERIC_ACCOUNT, 0],
+            type: 'stake'
+          });
+        }
       }
 
       // Pool operator certificates
@@ -739,10 +771,13 @@ export function analyzeTransactionForSignatures(
     for (const group of transaction.body.votingProcedures) {
       switch (group.voter?.__typename) {
         case Cardano.VoterType.dRepKeyHash:
-          requiredSigners.push({
-            derivationPath: [ChainDerivations.DREP, 0],
-            type: 'drep'
-          });
+          // Only when the voter is this wallet's own DRep key.
+          if (ownedOrUnknown(ownDrepCreds, group.voter.credential?.hash)) {
+            requiredSigners.push({
+              derivationPath: [ChainDerivations.DREP, 0],
+              type: 'drep'
+            });
+          }
           break;
         case Cardano.VoterType.stakePoolKeyHash:
           // The pool cold key lives outside the HD tree — it is imported or
@@ -751,10 +786,12 @@ export function analyzeTransactionForSignatures(
           (requiredSigners as unknown as { requiresColdKeySignature?: boolean }).requiresColdKeySignature = true;
           break;
         case Cardano.VoterType.ccHotKeyHash:
-          requiredSigners.push({
-            derivationPath: [ChainDerivations.CONSTITUTIONAL_COMMITTEE_HOT, 0],
-            type: 'ccHot'
-          });
+          if (ownedOrUnknown(ownCcHotCreds, group.voter.credential?.hash)) {
+            requiredSigners.push({
+              derivationPath: [ChainDerivations.CONSTITUTIONAL_COMMITTEE_HOT, 0],
+              type: 'ccHot'
+            });
+          }
           break;
         // Script-credential voters (dRepScriptHash, ccHotScriptHash) are
         // witnessed by the script itself, not by a key from this wallet.

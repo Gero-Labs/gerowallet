@@ -1,100 +1,99 @@
 <template>
-  <div class="success-step">
-    <!-- Success Icon -->
-    <div class="success-icon">
-      <v-icon color="#47CD89" size="24">mdi-check-circle</v-icon>
+  <div class="topup-done">
+    <div class="topup-done__status" role="status" aria-live="polite">
+      <template v-if="credited">
+        <v-icon small class="topup-done__ok">mdi-check-circle-outline</v-icon>
+        <span class="t-body">{{ t('card.topUpCredited') }}</span>
+      </template>
+      <template v-else-if="watching">
+        <v-progress-circular indeterminate size="16" width="2" color="primary" />
+        <span class="t-body">{{ t('card.waitingForBalance') }}</span>
+      </template>
+      <template v-else>
+        <v-icon small>mdi-clock-outline</v-icon>
+        <span class="t-body">{{ t('card.topUpSubmittedDesc') }}</span>
+      </template>
     </div>
 
-    <!-- Title and Subtitle -->
-    <div class="header-text">
-      <h2 class="modal-title">{{ t('card.topUpSuccess') }}</h2>
-      <p class="modal-subtitle">{{ t('card.balanceUpdatedReady') }}</p>
-      <p class="transaction-id">
-        {{ t('card.transactionId') }}
-        <a :href="`https://cexplorer.io/tx/${transactionId}`" target="_blank"
-          >#{{ transactionId.slice(0, 8) }}...{{ transactionId.slice(-8) }}</a
-        >
-      </p>
+    <div class="topup-done__tx">
+      <span class="t-label">{{ t('card.transactionId') }}</span>
+      <span class="topup-done__tx-row">
+        <span class="g-mono" :title="transactionId">{{ shortId }}</span>
+        <CopyButton x-small :value="transactionId" />
+      </span>
+      <a :href="explorerUrl" target="_blank" rel="noopener noreferrer" class="topup-done__link">
+        {{ t('market.viewOnExplorer') }}
+        <v-icon x-small>mdi-open-in-new</v-icon>
+      </a>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import { Blockchain } from '@/models/types';
+import { getExplorerUrl } from '@/shared/utils/explorer';
+import { walletStore } from '@/stores/walletStore';
+import CopyButton from '@/shared/components/CopyButton.vue';
+
+const props = defineProps<{
+  transactionId: string;
+  /** The card balance went up after this top-up. */
+  credited: boolean;
+  /** Still checking the balance. */
+  watching: boolean;
+}>();
 
 const { t } = useTranslation();
 
-// Props
-interface Props {
-  transactionId?: string;
-}
-
-withDefaults(defineProps<Props>(), {
-  transactionId: '20023952',
-});
-
-// Emits
-defineEmits<{
-  (e: 'back-to-account'): void;
-}>();
+const shortId = computed(() =>
+  props.transactionId.length > 20 ? `${props.transactionId.slice(0, 10)}…${props.transactionId.slice(-8)}` : props.transactionId,
+);
+const explorerUrl = computed(() =>
+  getExplorerUrl(Blockchain.CARDANO, props.transactionId, 'tx', walletStore.loggedWallet?.network),
+);
 </script>
 
 <style lang="scss" scoped>
-@import '../../../styles/variables';
-@import '../../../styles/mixins';
-
-.success-step {
+.topup-done {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 32px;
-  padding: $spacing-2xl $spacing-2xl $spacing-md;
+  gap: var(--g-s-4);
 }
 
-.success-icon {
-  width: 48px;
-  height: 48px;
-  background: $background-secondary;
-  border-radius: 50%;
+.topup-done__status {
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: var(--g-s-2);
 }
 
-.header-text {
+.topup-done__ok {
+  color: var(--g-success);
+}
+
+.topup-done__tx {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
+  gap: var(--g-s-2);
+}
+
+.topup-done__tx-row {
+  display: inline-flex;
   align-items: center;
-  gap: $spacing-sm;
-  width: 100%;
+  gap: var(--g-s-1);
+
+  .g-mono {
+    word-break: normal;
+  }
 }
 
-.modal-title {
-  @include heading-style($font-size-2xl);
-  color: $text-primary;
-  margin: 0;
-  line-height: 1.17;
-  text-align: center;
-  font-weight: 600;
-  font-size: 24px;
-}
-
-.modal-subtitle {
-  @include body-text($font-size-base);
-  color: $text-secondary;
-  margin: 0;
-  line-height: 1.5;
-  text-align: center;
-  font-size: 16px;
-}
-
-.transaction-id {
-  font-family: var(--g-font-ui);
-  font-weight: 600;
-  font-size: 16px;
-  line-height: 1.25;
-  color: #cecfd2;
-  margin: 0;
-  text-align: center;
+.topup-done__link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--g-s-1);
+  color: var(--g-accent);
+  font-size: 13px;
 }
 </style>

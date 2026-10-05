@@ -6,7 +6,7 @@ vi.mock('@/utils/debug', () => ({ debugLog: vi.fn() }));
 
 beforeEach(() => {
   vi.resetModules();
-  vi.stubGlobal('chrome', { runtime: { id: 'wallet-extension', onConnect: { addListener: (fn: typeof env.connect) => { env.connect = fn; } } } });
+  vi.stubGlobal('chrome', { runtime: { id: 'wallet-extension', getURL: (path: string) => `chrome-extension://wallet-extension/${path}`, onConnect: { addListener: (fn: typeof env.connect) => { env.connect = fn; } } } });
 });
 
 function port(sender: chrome.runtime.MessageSender = { id: 'wallet-extension', url: 'chrome-extension://wallet-extension/index.html' }) {

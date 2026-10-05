@@ -42,6 +42,7 @@ import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 import { debugLog } from '@/utils/debug';
 import { DEFAULT_LOCAL_PROOF_SERVER_URL, DEFAULT_LOCAL_PROOF_SERVER_URL_LEDGER9 } from '@/chains/midnight/midnightConfig';
+import { isLoopbackProverUrl } from '@/chains/midnight/midnightProvingTarget';
 import { isNativeNight } from '@/chains/midnight/midnightTokenBalances';
 import { midnightTxRowKey, normalizeMidnightTxHash } from '@/chains/midnight/midnightTxHash';
 import type {
@@ -588,7 +589,7 @@ if (context === 'browser') {
       next.addresses = safeStored;
       next.shieldedSyncAvailable = typeof stored.shieldedSyncAvailable === 'boolean'
         ? stored.shieldedSyncAvailable
-        : isValidMidnightViewingKey(stored.addresses.zswapViewingKey);
+        : hasMidnightShieldedAddress(safeStored.shielded) || isValidMidnightViewingKey(stored.addresses.zswapViewingKey);
     } else {
       next.addresses = { ...EMPTY_ADDRESSES };
       next.shieldedSyncAvailable = !!stored.shieldedSyncAvailable;
@@ -700,6 +701,17 @@ function hydrateShieldedProvingConsent(
 }
 
 /**
+ * A local proof-server slot must also point at this machine (PRIV-01). Older
+ * releases accepted any host, but a non-loopback "local" URL is refused at use
+ * and rejected on save, so a stored one would leave Settings unable to save
+ * anything (each save re-sends both slots). It is replaced by that ledger's
+ * localhost default instead.
+ */
+function isValidLocalProofServerUrl(value: unknown): value is string {
+  return isValidProofServerUrl(value) && isLoopbackProverUrl(value);
+}
+
+/**
  * `localUrl` must be a well-formed http(s) URL - guards against a corrupted
  * or tampered stored value silently routing proving to an unexpected origin.
  */
@@ -759,15 +771,15 @@ export function hydrateProofServer(stored: unknown): MidnightStore['proofServer'
   // as a profile mismatch. The default profile ('legacy') needs no move.
   const legacyProfileWasStagenet = storedLedger9 === undefined
     && (stored as { localProfile?: unknown }).localProfile === 'stagenet'
-    && isValidProofServerUrl(localUrl);
+    && isValidLocalProofServerUrl(localUrl);
   return {
     mode: mode === 'remote' || mode === 'local' || mode === 'zkpaas' ? mode : DEFAULT_PROOF_SERVER.mode,
     localUrl: legacyProfileWasStagenet
       ? DEFAULT_PROOF_SERVER.localUrl
-      : (isValidProofServerUrl(localUrl) ? localUrl : DEFAULT_PROOF_SERVER.localUrl),
+      : (isValidLocalProofServerUrl(localUrl) ? localUrl : DEFAULT_PROOF_SERVER.localUrl),
     localUrlLedger9: legacyProfileWasStagenet
       ? localUrl as string
-      : (isValidProofServerUrl(storedLedger9) ? storedLedger9 : DEFAULT_PROOF_SERVER.localUrlLedger9),
+      : (isValidLocalProofServerUrl(storedLedger9) ? storedLedger9 : DEFAULT_PROOF_SERVER.localUrlLedger9),
     // '' is the valid "derive per network" state, distinct from a corrupted
     // value — only non-empty overrides must parse as http(s) URLs.
     zkpaasUrl: zkpaasUrl === '' || isValidProofServerUrl(zkpaasUrl) ? zkpaasUrl as string : '',
@@ -857,8 +869,30 @@ function broadcastFromBackground(updates: Partial<MidnightStore>, immediate = fa
  * `walletManager.initializeWallet` (to decide the sync subscription) so the
  * two can never disagree on what "shielded available" means.
  */
+/**
+ * A prover / WASM error message as it may be persisted in `provingHistory`:
+ * long hex or base64 runs (transaction, preimage or key bytes a library may
+ * echo) are replaced, and the text is capped (PRIV-01).
+ */
+export function sanitizeProvingError(message: string): string {
+  return String(message)
+    .replace(/(?:0x)?[0-9a-fA-F]{32,}/g, '[hex]')
+    .replace(/[A-Za-z0-9+/_-]{48,}={0,2}/g, '[data]')
+    .slice(0, 200);
+}
+
 export function isValidMidnightViewingKey(vk: string | undefined | null): boolean {
   return typeof vk === 'string' && vk.startsWith('mn_shield-esk_');
+}
+
+/**
+ * True when the wallet has a shielded receive address, which is all the
+ * on-device private sync needs (it derives its keys from the seed at unlock).
+ * Public material, so it can gate the shielded-balance UI without the
+ * viewing key ever being stored.
+ */
+export function hasMidnightShieldedAddress(address: string | undefined | null): boolean {
+  return typeof address === 'string' && address.startsWith('mn_shield-addr');
 }
 
 /**
@@ -931,10 +965,11 @@ export const midnightActions = {
     // at-rest copy of the key. Strip it here, at the single chokepoint every
     // caller (walletManager.initializeWallet, midnight-sync.service.start,
     // DustRegistrationDialog) passes through, and publish only the boolean
-    // `shieldedSyncAvailable`. The raw key never travels via the store: the
-    // background reads it straight from the wallet record and hands it to the
-    // sync service (walletManager.initializeWallet → midnightSyncService.start).
-    const shieldedSyncAvailable = isValidMidnightViewingKey(addresses.zswapViewingKey);
+    // `shieldedSyncAvailable`, derived from the PUBLIC shielded address. The
+    // key itself is no longer persisted or sent anywhere (PRIV-01); this strip
+    // only guards against a legacy record that still carries one.
+    const shieldedSyncAvailable = hasMidnightShieldedAddress(addresses.shielded)
+      || isValidMidnightViewingKey(addresses.zswapViewingKey);
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { zswapViewingKey: _zswapViewingKey, ...safeAddresses } = addresses;
 
@@ -1028,6 +1063,36 @@ export const midnightActions = {
    * balances. Only in-flight proving operations are dropped — they don't
    * survive a session.
    */
+  /**
+   * Wallet deletion (PRIV-01): drop everything this store persisted for the
+   * wallet whose unshielded address is `address` (balances, shielded history,
+   * UTxOs, DUST state, cursor, site activity). Unlike {@link clear}, nothing is
+   * kept for a fast re-login, because the wallet is gone. No-op when another
+   * wallet is the active one; its own state stays.
+   */
+  forgetWallet(address: string) {
+    if (!address || midnightStore.activeWalletKey !== address) return;
+    const wiped = {
+      isActive: false,
+      networkStatus: 'disconnected' as const,
+      lastSync: null,
+      balances: { ...EMPTY_BALANCES },
+      transactions: [],
+      utxos: [],
+      dustState: null,
+      lastMidnightTxId: null,
+      chainIdentity: null,
+      privateSyncStatus: 'idle' as const,
+      privateSyncProgress: null,
+      siteActivity: null,
+      addresses: { ...EMPTY_ADDRESSES },
+      activeWalletKey: null,
+      shieldedSyncAvailable: false,
+    };
+    Object.assign(midnightStore, wiped);
+    broadcastFromBackground(wiped, true);
+  },
+
   clear() {
     Object.assign(midnightStore, {
       isActive: false,
@@ -1095,7 +1160,7 @@ export const midnightActions = {
   recordLocalProvingAttempt(entry: { durationMs: number; success: boolean; error?: string }) {
     bgDurableTouched.provingHistory = true;
     const next = [
-      { timestamp: Date.now(), ...entry },
+      { timestamp: Date.now(), ...entry, ...(entry.error !== undefined ? { error: sanitizeProvingError(entry.error) } : {}) },
       ...midnightStore.provingHistory,
     ].slice(0, PROVING_HISTORY_LIMIT);
     midnightStore.provingHistory = next;

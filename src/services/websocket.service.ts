@@ -79,14 +79,6 @@ class WebSocketService {
   private network: string | null = null;
   private lastSyncedBlock: number = 0;
   private midnightLastTxId: number | null = null;
-  /**
-   * Midnight shielded-only: hex-encoded Zswap viewing key. Sent on every
-   * SUBSCRIBE so gero-sync can open the indexer's shielded-tx subscription
-   * on this wallet's behalf. NEVER LOGGED — only "set"/"unset" via a derived
-   * boolean. See {@link openConnection} log line.
-   */
-  private midnightShieldedViewingKey: string | null = null;
-  private midnightShieldedLastIndex: number | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private syncCheckTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectAttempt: number = 0;
@@ -134,34 +126,6 @@ class WebSocketService {
      * re-pay replay cost on every dropped WS.
      */
     midnightLastTxId?: number | null,
-    /**
-     * Midnight shielded-only: opt-in to gero-sync's shielded-tx subscription
-     * by supplying the wallet's Zswap viewing key (hex). When non-null,
-     * gero-sync opens an indexer session via `mutation connect(viewingKey)`
-     * and forwards shielded events to this WS. Null = unshielded-only sync
-     * (current default until the shielded SDK derivation lands).
-     *
-     * Held in-memory here for the WS session, but sourced from the wallet
-     * record's `publicKey` JSON (walletManager.initializeWallet), which stores
-     * it in PLAINTEXT at rest — currently in several extension-local on-disk
-     * copies (the IndexedDB wallet record, plus the chrome.storage.local
-     * geroStore/walletStore snapshots). All of those share one trust domain
-     * (anyone who can read the extension's on-disk profile can read any of
-     * them), so the real hardening is getting the key OFF plaintext disk
-     * entirely — encrypted-at-rest or memory-only chrome.storage.session,
-     * populated at credentialed unlock — NOT shuffling plaintext copies
-     * around. Tracked as Phase 2 (needs a UX decision: shielded sync is
-     * unavailable after a browser restart until first unlock). Blast radius:
-     * anyone who reads this string can decrypt every incoming shielded note
-     * for this wallet, forever (cannot spend).
-     */
-    midnightShieldedViewingKey?: string | null,
-    /**
-     * Midnight shielded-only: resume cursor for the shielded-tx subscription
-     * (mirrors {@code midnightLastTxId} for the shielded side). Null =
-     * full replay from genesis.
-     */
-    midnightShieldedLastIndex?: number | null,
   ): void {
     this.close();
     this.chain = chain;
@@ -172,8 +136,6 @@ class WebSocketService {
     this.credentials = credentials || null;
     this.addresses = addresses || null;
     this.midnightLastTxId = midnightLastTxId ?? null;
-    this.midnightShieldedViewingKey = midnightShieldedViewingKey ?? null;
-    this.midnightShieldedLastIndex = midnightShieldedLastIndex ?? null;
     this.intentionallyClosed = false;
     this.reconnectAttempt = 0;
     this.openConnection();
@@ -223,11 +185,7 @@ class WebSocketService {
         const live = (midnightStore as { lastMidnightTxId?: number | null }).lastMidnightTxId;
         if (typeof live === 'number' && live >= 0) liveMidnightCursor = live;
       }
-      // Privacy: log only that a shielded viewing key is in play, never the
-      // value itself. The hex bytes de-anonymize the user's incoming notes.
-      const shieldedRequested = this.midnightShieldedViewingKey != null
-        && this.midnightShieldedViewingKey.length > 0;
-      debugLog(`📤 SUBSCRIBE: chain=${this.chain} network=${this.network} address=${this.stakeAddress} lastSyncedBlock=${this.lastSyncedBlock} midnightLastTxId=${liveMidnightCursor} shieldedRequested=${shieldedRequested} midnightShieldedLastIndex=${this.midnightShieldedLastIndex}`);
+      debugLog(`📤 SUBSCRIBE: chain=${this.chain} network=${this.network} address=${this.stakeAddress} lastSyncedBlock=${this.lastSyncedBlock} midnightLastTxId=${liveMidnightCursor}`);
       if (this.chain === 'BITCOIN') {
         // BTC subscribes with the explicit derived address set + snake_case
         // progress unit (block height). No `credentials` (no stake fan-out).
@@ -254,13 +212,11 @@ class WebSocketService {
           // non-Midnight chains. Null = no persisted cursor (gero-sync full
           // replay).
           midnightLastTxId: liveMidnightCursor,
-          // Midnight shielded-only: pair of fields that opt this WS session
-          // into gero-sync's shielded-tx subscription. Both null → unshielded-
-          // only sync (today's default).
+          // Never the shielded viewing key: shielded notes are found by local
+          // trial decryption of the public zswap event stream, so the server
+          // has no need to see this wallet's incoming payments.
           midnightChainGeneration: midnightStore.chainIdentity?.network === this.network
             ? midnightStore.chainIdentity.generation : null,
-          midnightShieldedViewingKey: this.midnightShieldedViewingKey,
-          midnightShieldedLastIndex: this.midnightShieldedLastIndex,
         });
       }
 
@@ -638,9 +594,7 @@ class WebSocketService {
       // strip Midnight-only resume cursors and re-trigger full replay.
       midnightLastTxId: liveMidnightCursor,
       midnightChainGeneration: midnightStore.chainIdentity?.network === this.network
-            ? midnightStore.chainIdentity.generation : null,
-          midnightShieldedViewingKey: this.midnightShieldedViewingKey,
-      midnightShieldedLastIndex: this.midnightShieldedLastIndex,
+        ? midnightStore.chainIdentity.generation : null,
     });
   }
 

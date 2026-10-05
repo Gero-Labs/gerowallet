@@ -42,6 +42,7 @@ vi.mock('@/shared/composables/useTranslation', () => ({ useTranslation: () => ({
 import CashbackPortal from './CashbackPortal.vue';
 import { walletStore } from '@/stores/walletStore';
 import snackbar from '@/plugins/snackbar';
+import cashbackApi from '@/api/cashback-api';
 
 const ORIGIN = 'https://portal.bringweb3.io';
 const ADDRESS = 'addr1qy44ytv354nqrs0f3hfsecj45w623wgqskt7nx84qd8v6lgxeg90kc8dfzpcg9xl8nuhvdesgq5cz6ejq83vk60hpns2c2kwh';
@@ -236,5 +237,15 @@ describe('cashback claim signing bridge', () => {
     expect(dialog().attributes('data-open')).toBe('false');
     expect(replies()).toEqual([{ to: 'bringweb3', action: 'ABORT_SIGN_MESSAGE' }]);
     expect(snackbar.setError).toHaveBeenCalledWith('cashback.signUnsupportedNetwork');
+  });
+
+  it('never loads, or trusts, a portal URL on an origin that is not pinned', async () => {
+    vi.mocked(cashbackApi.portal).mockResolvedValueOnce({ portalUrl: 'https://evil.example/?token=abc', token: 'tok' });
+    await mountPortal();
+    expect(wrapper.find('iframe').attributes('src') || '').toBe('');
+    await signRequest('Claim 12.5 ADA nonce 42');
+    await portalMessage({ from: 'bringweb3', action: 'SIGN_MESSAGE', messageToSign: 'x' }, { origin: 'https://evil.example' });
+    expect(dialog().attributes('data-open')).toBe('false');
+    expect(postMessage).not.toHaveBeenCalled();
   });
 });

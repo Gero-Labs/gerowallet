@@ -1,11 +1,16 @@
 import Vue from 'vue';
 import type {
   AuthTokens, HistoryParams, CardState, CardTransactionHistory, CardInfo, ExchangeRate, CardData,
+  KycLinkResponse, CardOrderResponse, CardOrderStatus,
 } from '@/models/card';
 import type { KaiserExTokenData } from '@/services/kaiserEx.service';
 import { Api } from '@/api/api';
 import { Provider } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
+import { handleCardApiError } from './cardApiErrors';
+import { endProviderSession } from './cardSession';
+import { cardUuidFromOrderStatus, depositAddressFromResponse } from '@/modules/wallet/utils/cardApiCompat';
+import { kycStatusToCardState } from '@/modules/wallet/utils/cardKycState';
 
 export interface OrderPhysicalCardPayload {
   address: string;
@@ -30,8 +35,8 @@ export const cardStore = Vue.observable<CardState>({
   walletStatus: {
     currentState: 'loading' as 'loading' | 'auth' | 'new' | 'pending' | 'approved' | 'error',
     isKaiserexAuthenticated: false,
-    kycStatus: 'not_started' as 'approved' | 'rejected' | 'verified' | 'registered' | 'verification_started',
-    kycData: null as any,
+    kycStatus: 'not_started' as 'approved' | 'rejected' | 'verified' | 'registered' | 'verification_started' | 'verification_failed',
+    kycData: null,
     loadingMessage: '',
     error: null as string | null,
   },
@@ -166,93 +171,25 @@ function getCardApi(): Api {
     }
   );
 
-  // Add response interceptor for token refresh and 401 handling
+  // The provider has no refresh-token endpoint, so a 401 ends the card session
+  // (the card page falls back to sign-in) instead of attempting a refresh.
   api.axiosInstance.interceptors.response.use(
     response => response,
-    async error => {
-      // Handle 401 Unauthorized errors
-      if (error.response?.status === 401) {
-        const originalRequest = error.config;
-
-        // Prevent infinite retry loops
-        if (originalRequest._retry) {
-          throw error;
-        }
-
-        // If we have a refresh token, try to refresh
-        if (cardStore.refreshToken) {
-          originalRequest._retry = true;
-
-          try {
-            await cardStoreInstance.refreshAccessToken();
-            // Retry original request with new token
-            originalRequest.headers.Authorization = `Bearer ${cardStore.accessToken}`;
-            return api.axiosInstance(originalRequest);
-          } catch (refreshError) {
-            throw refreshError;
-          }
-        } else {
-          // No refresh token available - session is invalid, clear everything
-          await clearStoredTokens();
-          cardStore.accessToken = null;
-          cardStore.refreshToken = null;
-          cardStore.tokenExpiry = null;
-          cardStore.walletStatus.isKaiserexAuthenticated = false;
-          throw error;
-        }
-      }
-
-      throw error;
-    }
+    error => handleCardApiError(error, expireCardSession),
   );
 
   return api;
 }
 
 const cardStoreInstance = {
-  async refreshAccessToken(): Promise<void> {
-    if (!cardStore.refreshToken) {
-      throw new Error('No refresh token available');
-    }
-
-    try {
-      const api = getCardApi();
-      const response = await api.axiosInstance.post('/api/token/refresh', {
-        refresh_token: cardStore.refreshToken,
-      });
-
-      const tokens: AuthTokens = response.data;
-      cardStore.accessToken = tokens.access_token;
-      cardStore.refreshToken = tokens.refresh_token;
-      cardStore.tokenExpiry = Date.now() + tokens.expires_in * 1000;
-
-      // Update tokens in cookies
-      await storeTokens(tokens);
-    } catch (error) {
-      throw error;
-    }
-  },
-
   async logout(): Promise<void> {
     try {
       const wasLoggedIn = cardStore.accessToken !== null;
 
-      cardStore.accessToken = null;
-      cardStore.refreshToken = null;
-      cardStore.tokenExpiry = null;
-      cardStore.userInfo = null;
-      cardStore.cardanoAddress = null;
-      cardStore.cards = [];
-      cardStore.selectedCardId = null;
-      cardStore.exchangeRate = null;
-      cardStore.walletStatus.isKaiserexAuthenticated = false;
+      resetCardAccountState();
 
       if (wasLoggedIn) {
-        try {
-          const api = getCardApi();
-          await api.axiosInstance.get('/api/kaiserex/logout');
-        } catch (backendError) {
-        }
+        await endProviderSession(getCardApi().axiosInstance);
       }
 
       await clearStoredTokens();
@@ -325,6 +262,31 @@ async function clearStoredTokens(): Promise<void> {
   } catch (error) {
   }
 }
+
+/**
+ * Forgets the signed-in provider account: its tokens and everything loaded for
+ * it. fetchCardData() only upserts, so cards, the selection and cached details
+ * would otherwise carry over to the next account that signs in.
+ */
+function resetCardAccountState(): void {
+  cardStore.accessToken = null;
+  cardStore.refreshToken = null;
+  cardStore.tokenExpiry = null;
+  cardStore.userInfo = null;
+  cardStore.cardanoAddress = null;
+  cardStore.cards = [];
+  cardStore.selectedCardId = null;
+  cardStore.currentCardIndex = 0;
+  cardStore.exchangeRate = null;
+  cardStore.walletStatus.isKaiserexAuthenticated = false;
+}
+
+/** Drops the card session after the provider rejected its token. */
+async function expireCardSession(): Promise<void> {
+  resetCardAccountState();
+  await clearStoredTokens();
+}
+
 export default {
   // ============================================================================
   // Multi-Card Helper Methods
@@ -417,20 +379,7 @@ export default {
     if (!this.isAuthenticated) {
       return 'auth';
     }
-    switch (walletStatus.kycStatus) {
-      case 'registered':
-        return 'new';
-      case 'verification_started':
-        return 'pending';
-      case 'approved':
-        return 'approved';
-      case 'verified':
-        return 'pending';
-      case 'rejected':
-        return 'auth';
-      default:
-        return 'new';
-    }
+    return kycStatusToCardState(walletStatus.kycStatus);
   },
 
   // Auth methods
@@ -489,16 +438,24 @@ export default {
     }
   },
 
+  /**
+   * The card's ADA deposit address, fetched now. Top-up calls this right before
+   * building the transaction instead of trusting the copy cached at sign-in
+   * (which is also persisted in chrome.storage.local).
+   */
+  async fetchFreshDepositAddress(): Promise<string | null> {
+    await this.fetchCardanoAddress();
+    return depositAddressFromResponse(cardStore.cardanoAddress);
+  },
+
   // Card methods
   async fetchCardData(): Promise<void> {
-    console.log('Fetching card data');
     cardStore.loading.cardData = true;
     cardStore.errors.cardData = null;
 
     try {
       const response = await getCardApi().axiosInstance.get<CardData[]>('/api/kaiserex/cards');
       const cardsData = response.data || [];
-      console.log('Fetched card data', cardsData);
 
       for (const cardData of cardsData) {
         const existingCard = cardStore.cards.find(c => {
@@ -526,8 +483,9 @@ export default {
           this.upsertCard(newCard);
         }
       }
-    } catch (error: any) {
-      if (error?.response?.status >= 500) {
+    } catch (error: unknown) {
+      const status = (error as { response?: { status?: number } } | null)?.response?.status;
+      if (status !== undefined && status >= 500) {
         cardStore.walletStatus.currentState = 'error';
         cardStore.walletStatus.error = 'Server error. Please try again later.';
       }
@@ -677,7 +635,7 @@ export default {
     }
   },
 
-  async fetchKYCLink(): Promise<any> {
+  async fetchKYCLink(): Promise<KycLinkResponse> {
     try {
       const api = getCardApi();
       const response = await api.axiosInstance.get('/api/kaiserex/verification-link');
@@ -693,7 +651,7 @@ export default {
     }
   },
 
-  async orderCard(): Promise<any> {
+  async orderCard(): Promise<CardOrderResponse> {
     try {
       const api = getCardApi();
       const response = await api.axiosInstance.post('/api/kaiserex/cards/order');
@@ -703,7 +661,7 @@ export default {
     }
   },
 
-  async orderPhysicalCard(payload: OrderPhysicalCardPayload): Promise<any> {
+  async orderPhysicalCard(payload: OrderPhysicalCardPayload): Promise<CardOrderResponse> {
     try {
       const api = getCardApi();
       const response = await api.axiosInstance.post('/api/kaiserex/cards/order/physical', payload);
@@ -713,7 +671,7 @@ export default {
     }
   },
 
-  async getOrderDetails(orderUuid: string): Promise<any> {
+  async getOrderDetails(orderUuid: string): Promise<CardOrderStatus> {
     try {
       const response = await getCardApi().axiosInstance.get(`/api/kaiserex/cards/order/${orderUuid}/status`);
       return response.data;
@@ -736,15 +694,15 @@ export default {
       const api = getCardApi();
       const response = await api.axiosInstance.get(`/api/kaiserex/cards/delivery-payment/${orderUuid}`);
       return response.data || null;
-    } catch (error: any) {
-      if (error?.response?.status === 410) {
-        const errorData = error?.response?.data;
+    } catch (error: unknown) {
+      const response = (error as { response?: { status?: number; data?: { expires_at?: string } } } | null)?.response;
+      if (response?.status === 410) {
         return {
           status: 'expired',
-          expires_at: errorData?.expires_at || undefined,
+          expires_at: response.data?.expires_at || undefined,
         };
       }
-      if (error?.response?.status === 404) {
+      if (response?.status === 404) {
         return {
           status: 'rejected',
         };
@@ -874,6 +832,46 @@ export default {
     } catch (error) {
       throw error;
     }
+  },
+
+  /**
+   * GET /cards/card-uuid/{orderUuid}: the UUID of the card issued for an order, or null
+   * while there is none yet. The provider asks clients to poll this after ordering.
+   */
+  async fetchCardUuidForOrder(orderUuid: string): Promise<string | null> {
+    try {
+      const response = await getCardApi().axiosInstance.get(`/api/kaiserex/cards/card-uuid/${orderUuid}`);
+      return cardUuidFromOrderStatus(response.data);
+    } catch (error: unknown) {
+      if ((error as { response?: { status?: number } } | null)?.response?.status === 404) return null;
+      throw error;
+    }
+  },
+
+  /** GET /cards/state/{cardUuid}: NEW, SET, ACTIVATION_IN_PROGRESS, ACTIVE, INACTIVE or BLOCKED. */
+  async fetchCardState(cardUuid: string): Promise<string | null> {
+    const response = await getCardApi().axiosInstance.get(`/api/kaiserex/cards/state/${cardUuid}`);
+    const state = (response.data as { state?: unknown } | null)?.state;
+    return typeof state === 'string' ? state : null;
+  },
+
+  /**
+   * PATCH /cards/activate: activates a delivered physical card with the number printed on
+   * it. Returns the card UUID when the provider already sends one (202 { cardUuid }).
+   */
+  async activatePhysicalCard(orderUuid: string, pan: string): Promise<string | null> {
+    const response = await getCardApi().axiosInstance.patch('/api/kaiserex/cards/activate', {
+      pan,
+      order_uuid: orderUuid,
+    });
+    return cardUuidFromOrderStatus(response.data);
+  },
+
+  /** PUT /cards/pin/{cardUuid}. Drops the cached PIN so the next reveal fetches the new one. */
+  async changeCardPin(cardUuid: string, pin: string): Promise<void> {
+    await getCardApi().axiosInstance.put(`/api/kaiserex/cards/pin/${cardUuid}`, { pin });
+    const card = this.getCard(cardUuid);
+    if (card) card.cardPin = null;
   },
 
   // State getter for compatibility

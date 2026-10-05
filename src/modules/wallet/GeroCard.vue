@@ -1,30 +1,27 @@
 <template>
   <div class="gero-wallet">
-    <!-- Logout Button (shown for all states except auth, loading, and pending) -->
-    <v-btn
-      v-if="!showAuthPage && !showLoadingState && !showErrorState && currentState !== 'pending'"
-      icon
-      class="logout-btn my-3"
-      @click="handleLogout"
-      :title="$t('wallet.logout')"
-    >
-      <v-icon>mdi-logout</v-icon>
-    </v-btn>
-
-    <!-- Loading State -->
-    <div v-if="devState === 'loading' || showLoadingState" class="loading-container">
-      <div class="loading-spinner"></div>
-      <p class="loading-message">{{ loadingMessage || $t('wallet.loadingYourWallet') }}</p>
+    <!-- Signed in: who is signed in, and the only place to sign out of the card account. -->
+    <div v-if="isSignedIn" class="gero-wallet__account">
+      <template v-if="email">
+        <span class="t-caption">{{ t('card.signedInAs') }}</span>
+        <span class="t-body-sm gero-wallet__email">{{ email }}</span>
+      </template>
+      <GButton tier="tertiary" compact @click="handleLogout">{{ t('card.signOut') }}</GButton>
     </div>
 
-    <!-- Error State -->
-    <div v-else-if="devState === 'error' || showErrorState" class="error-container">
-      <div class="error-icon">⚠️</div>
-      <h3 class="error-title">{{ $t('wallet.somethingWentWrong') }}</h3>
-      <p class="error-message">{{ error || $t('wallet.unexpectedError') }}</p>
-      <button @click="handleRetry" class="retry-button">{{ $t('wallet.tryAgain') }}</button>
+    <div v-if="showLoadingState" class="gero-wallet__state" role="status">
+      <IsoScene name="empty" class="gero-wallet__state-art" />
+      <v-progress-circular indeterminate color="primary" size="28" width="2" />
+      <p class="t-body">{{ loadingMessage || t('wallet.loadingYourWallet') }}</p>
     </div>
-    <!-- Main Content -->
+
+    <div v-else-if="showErrorState" class="gero-wallet__state" role="alert">
+      <IsoScene name="attention" class="gero-wallet__state-art" />
+      <h1 class="t-title">{{ t('wallet.somethingWentWrong') }}</h1>
+      <p class="t-body">{{ error || t('wallet.unexpectedError') }}</p>
+      <GButton tier="primary" @click="handleRetry">{{ t('wallet.tryAgain') }}</GButton>
+    </div>
+
     <component
       v-else
       :is="currentComponent"
@@ -32,42 +29,22 @@
       @kyc-complete="handleKYCComplete"
       @error="setError"
     />
-
-    <!-- Dev State Toggler (Bottom Right) -->
-    <div class="dev-state-toggler" v-if="false">
-      <v-select
-        v-model="devState"
-        :items="devStateOptions"
-        dense
-        outlined
-        hide-details
-        label="Dev State"
-        clearable
-        attach=".dev-state-toggler"
-        :menu-props="{ top: true, offsetY: true }"
-      >
-        <template #prepend-inner>
-          <v-icon small color="warning">mdi-wrench</v-icon>
-        </template>
-      </v-select>
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted } from 'vue';
 import { useWalletStatus } from '@/composables/useWalletStatus';
+import { useTranslation } from '@/shared/composables/useTranslation';
 import cardStore from '@/stores/modules/card';
-
-// Import components
+import GButton from '@/shared/components/GButton/GButton.vue';
+import IsoScene from '@/shared/components/iso/IsoScene.vue';
 import KaiserexAuthPage from '@/modules/wallet/components/KaiserexAuthPage.vue';
 import OrderCardSection from '@/modules/wallet/pages/OrderCardSection.vue';
 import PendingSection from '@/modules/wallet/pages/PendingSection.vue';
 import HomeSection from '@/modules/wallet/pages/HomeSection.vue';
 
-// ============================================================================
-// COMPOSABLES AND STORES
-// ============================================================================
+const { t } = useTranslation();
 
 const {
   currentState,
@@ -75,7 +52,6 @@ const {
   loadingMessage,
   showLoadingState,
   showErrorState,
-  showAuthPage,
   initialize,
   handleAuthComplete: onAuthComplete,
   handleKYCComplete: onKYCComplete,
@@ -84,317 +60,106 @@ const {
 } = useWalletStatus();
 
 const WALLET_COMPONENTS = {
-  auth: KaiserexAuthPage, // Authentication required
-  new: OrderCardSection, // Order Gero Card
-  pending: PendingSection, // KYC under review
-  approved: HomeSection, // Full wallet access
-  loading: null, // Keep current component
-  error: null, // Error handled in template
+  auth: KaiserexAuthPage, // signed out (or the application was rejected)
+  new: OrderCardSection, // verify identity
+  pending: PendingSection, // verification under review
+  approved: HomeSection, // card dashboard
 } as const;
 
-// ============================================================================
-// DEVELOPMENT STATE TOGGLER
-// ============================================================================
+const currentComponent = computed(
+  () => WALLET_COMPONENTS[currentState.value as keyof typeof WALLET_COMPONENTS] || KaiserexAuthPage,
+);
 
-const devState = ref<string | null>(null);
-const devStateOptions = [
-  { text: 'Auth (Login/Register)', value: 'auth' },
-  { text: 'New (Order Card)', value: 'new' },
-  { text: 'Pending (KYC Review)', value: 'pending' },
-  { text: 'Approved (Full Access)', value: 'approved' },
-  { text: 'Loading', value: 'loading' },
-  { text: 'Error', value: 'error' },
-];
-
-// Override currentState when devState is set
-const effectiveState = computed(() => {
-  return devState.value || currentState.value;
-});
-
-const currentComponent = computed(() => {
-  const state = effectiveState.value;
-  return WALLET_COMPONENTS[state] || KaiserexAuthPage;
-});
+const isSignedIn = computed(() => cardStore.isAuthenticated);
+const email = computed(() => cardStore.state.userInfo?.email || '');
 
 async function handleAuthComplete(): Promise<void> {
   try {
     await onAuthComplete();
     clearError();
-  } catch (error) {
-    console.error('Authentication completion failed:', error);
-    setError('Authentication failed. Please try again.');
+  } catch (failure) {
+    console.error('Authentication completion failed:', failure);
+    setError(t('card.signInFailed'));
   }
 }
 
-/**
- * Handle KYC completion
- */
-async function handleKYCComplete(status: string = 'pending', data?: any): Promise<void> {
+async function handleKYCComplete(status = 'pending', data?: unknown): Promise<void> {
   try {
-    await onKYCComplete(status as any, data);
+    await onKYCComplete(status, data);
     clearError();
-  } catch (error) {
-    console.error('KYC completion failed:', error);
-    setError('KYC submission failed. Please try again.');
+  } catch (failure) {
+    console.error('KYC completion failed:', failure);
+    setError(t('card.pleaseTryAgain'));
   }
 }
 
-/**
- * Handle retry action from error state
- */
 async function handleRetry(): Promise<void> {
   clearError();
-
   try {
     await cardStore.initialize();
-  } catch (error) {
-    setError('Failed to retry. Please refresh the page.');
+  } catch {
+    setError(t('card.pleaseTryAgain'));
   }
 }
 
-/**
- * Handle logout action
- */
 async function handleLogout(): Promise<void> {
   try {
     await cardStore.logout();
-  } catch (error) {
-    console.error('Logout failed:', error);
-    setError('Logout failed. Please try again.');
+  } catch (failure) {
+    console.error('Logout failed:', failure);
+    setError(t('card.pleaseTryAgain'));
   }
 }
-
-// ============================================================================
-// DEVELOPMENT HELPERS
-// ============================================================================
-
-/**
- * Set development status for testing different states
- */
-
-// ============================================================================
-// WATCHERS
-// ============================================================================
-
-/**
- * Watch for changes in wallet status and update dropdown
- */
-
-// ============================================================================
-// LIFECYCLE
-// ============================================================================
 
 onMounted(async () => {
   try {
     await initialize();
-  } catch (error) {
-    setError('Failed to initialize wallet. Please refresh the page.');
+  } catch {
+    setError(t('card.pleaseTryAgain'));
   }
 });
 </script>
 
 <style lang="scss" scoped>
-@import './styles/index.scss';
-
 .gero-wallet {
   display: flex;
   flex-direction: column;
-  gap: 32px;
   width: 100%;
   height: 100%;
   position: relative;
-
-  // Only add padding for non-auth pages (auth page handles its own layout)
-  &:not(:has(.kaiserex-auth-page)) {
-    padding: 32px 0 0;
-  }
 }
 
-// ============================================================================
-// LOGOUT BUTTON
-// ============================================================================
-
-.logout-btn {
-  position: absolute;
-  top: 32px;
-  right: 32px;
-  background: var(--g-hairline-1) !important;
-  border: 1px solid var(--g-hairline-2);
-  transition: background-color var(--g-dur-base) ease, border-color var(--g-dur-base) ease;
-  z-index: var(--g-z-sticky);
-
-  &:hover {
-    background: var(--g-error-fill) !important;
-    border-color: var(--g-error-line);
-  }
-
-  :deep(.v-icon) {
-    color: var(--g-text-2);
-  }
-
-  &:hover :deep(.v-icon) {
-    color: var(--g-error);
-  }
-}
-
-// ============================================================================
-// LOADING STATE
-// ============================================================================
-
-.loading-container {
+.gero-wallet__account {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
-  min-height: 400px;
-  text-align: center;
-  padding: 40px;
+  justify-content: flex-end;
+  gap: var(--g-s-2);
+  padding: var(--g-s-3) clamp(16px, 3vw, 32px) 0;
 }
 
-.loading-spinner {
-  width: 48px;
-  height: 48px;
-  border: 4px solid var(--g-hairline-2);
-  border-left: 4px solid var(--g-accent);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-bottom: 24px;
-}
-
-@keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
-.loading-message {
-  color: var(--g-text-2);
-  font-size: 16px;
-  margin: 0;
-}
-
-// ============================================================================
-// ERROR STATE
-// ============================================================================
-
-.error-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 400px;
-  text-align: center;
-  padding: 40px;
-}
-
-.error-icon {
-  font-size: 64px;
-  margin-bottom: 24px;
-}
-
-.error-title {
+.gero-wallet__email {
   color: var(--g-text-1);
-  font-size: 24px;
-  font-weight: 600;
-  margin: 0 0 16px 0;
 }
 
-.error-message {
-  color: var(--g-text-2);
-  font-size: 16px;
-  margin: 0 0 32px 0;
-  max-width: 400px;
-  line-height: 1.5;
-}
+.gero-wallet__state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--g-s-4);
+  min-height: 400px;
+  padding: var(--g-s-6) var(--g-s-4);
+  text-align: center;
 
-.retry-button {
-  background: var(--g-grad);
-  border: none;
-  border-radius: var(--g-r-control);
-  color: var(--g-on-grad);
-  font-size: 16px;
-  font-weight: 600;
-  padding: 12px 24px;
-  cursor: pointer;
-  transition: transform var(--g-dur-base) ease;
-
-  &:hover {
-    transform: translateY(-2px);
-  }
-
-  &:active {
-    transform: translateY(0);
+  h1,
+  p {
+    margin: 0;
+    max-width: 420px;
   }
 }
 
-// ============================================================================
-// DEV STATE TOGGLER
-// ============================================================================
-
-.dev-state-toggler {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  width: 280px;
-  z-index: var(--g-z-toast);
-  background: var(--g-surface);
-  border: 2px solid var(--g-warning-line);
-  border-radius: var(--g-r-control);
-  padding: 12px;
-  box-shadow: var(--g-shadow-menu);
-
-  :deep(.v-input__control) {
-    background: var(--g-raised);
-    border-radius: 4px;
-  }
-
-  :deep(.v-select__selection) {
-    color: var(--g-text-1);
-    font-size: 13px;
-  }
-
-  :deep(.v-input__slot) {
-    min-height: 36px !important;
-  }
-
-  :deep(.v-label) {
-    color: var(--g-warning);
-    font-weight: 600;
-    font-size: 12px;
-  }
-}
-
-// ============================================================================
-// RESPONSIVE DESIGN
-// ============================================================================
-
-@media (max-width: 768px) {
-  .gero-wallet {
-    padding: 16px;
-    gap: 24px;
-  }
-
-  .loading-container,
-  .error-container {
-    min-height: 300px;
-    padding: 24px;
-  }
-
-  .error-title {
-    font-size: 20px;
-  }
-
-  .error-message {
-    font-size: 14px;
-  }
-
-  .dev-state-toggler {
-    bottom: 10px;
-    right: 10px;
-    width: 240px;
-  }
+.gero-wallet__state-art {
+  width: 200px;
 }
 </style>

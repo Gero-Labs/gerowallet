@@ -41,6 +41,10 @@ export interface FeatureFlags {
   // Nexus, signed here). Default OFF: without it the Earn page hands transacting to
   // RealFi's own app. Only meaningful with `isRealFiEnabled` on.
   isRealFiStakingEnabled: boolean;
+  // The Earn page's in-wallet USDCx → USDrf swap. Default OFF: the only route is the
+  // SundaeSwap V4 pool, which the aggregator serves only once V4 is promoted. Until then
+  // the swap would open with no route.
+  isRealFiUsdrfSwapEnabled: boolean;
   isNexusWithdrawalEnabled: boolean;
   isNexusUnstakeEnabled: boolean;
   isNexusDelegateEnabled: boolean;
@@ -121,6 +125,7 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
     isGovernanceVotingEnabled: false,
     isRealFiEnabled: false,
     isRealFiStakingEnabled: false,
+    isRealFiUsdrfSwapEnabled: false,
     isNexusWithdrawalEnabled: false,
     isNexusUnstakeEnabled: false,
     isNexusDelegateEnabled: false,
@@ -196,6 +201,7 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isGovernanceVotingEnabled = featureFlagService.getFlag('isGovernanceVotingEnabled', false);
     featureFlagsState.flags.isRealFiEnabled = featureFlagService.getFlag('isRealFiEnabled', false);
     featureFlagsState.flags.isRealFiStakingEnabled = featureFlagService.getFlag('isRealFiStakingEnabled', false);
+    featureFlagsState.flags.isRealFiUsdrfSwapEnabled = featureFlagService.getFlag('isRealFiUsdrfSwapEnabled', false);
     featureFlagsState.flags.isNexusWithdrawalEnabled = featureFlagService.getFlag('isNexusWithdrawalEnabled', false);
     featureFlagsState.flags.isNexusUnstakeEnabled = featureFlagService.getFlag('isNexusUnstakeEnabled', false);
     featureFlagsState.flags.isNexusDelegateEnabled = featureFlagService.getFlag('isNexusDelegateEnabled', false);
@@ -259,6 +265,9 @@ export const featureFlagsStore = {
     });
     featureFlagService.onFlagChange('isRealFiStakingEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isRealFiStakingEnabled', newValue);
+    });
+    featureFlagService.onFlagChange('isRealFiUsdrfSwapEnabled', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'isRealFiUsdrfSwapEnabled', newValue);
     });
     featureFlagService.onFlagChange('isNexusWithdrawalEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isNexusWithdrawalEnabled', newValue);
@@ -415,6 +424,11 @@ export const featureFlagsStore = {
     return featureFlagsState.flags.isRealFiStakingEnabled;
   },
 
+  /** In-wallet USDCx → USDrf swap on the Earn page; off until SundaeSwap V4 is promoted. */
+  isRealFiUsdrfSwapEnabled(): boolean {
+    return featureFlagsState.flags.isRealFiUsdrfSwapEnabled;
+  },
+
   /**
    * Check if reward withdrawals should be built server-side via Nexus
    * (`/api/tx/build/withdrawal`) instead of the client-side @cardano-sdk builder.
@@ -564,6 +578,7 @@ export const featureFlagsStore = {
       isGovernanceVotingEnabled: false,
       isRealFiEnabled: false,
       isRealFiStakingEnabled: false,
+      isRealFiUsdrfSwapEnabled: false,
       isNexusWithdrawalEnabled: false,
       isNexusUnstakeEnabled: false,
       isNexusDelegateEnabled: false,

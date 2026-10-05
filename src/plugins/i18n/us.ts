@@ -116,7 +116,7 @@ export default {
   'card.allEuIntPosFeesWaived': 'All EU + INT POS fees waived',
   'card.allFeesWaived': 'ALL FEES waived',
   'card.allInOnePlatform': 'An all-in-one platform that helps you manage everything about your Gero Card',
-  'card.alreadyHaveAccount': 'Already have a Kaiserex account?',
+  'card.alreadyHaveAccount': 'Already have a Zione account?',
   'card.amount': 'Amount',
   'card.atmWithdrawalEu': 'ATM Withdrawal (EU)',
   'card.atmWithdrawalIntl': 'ATM Withdrawal (Intl)',
@@ -126,10 +126,10 @@ export default {
   'card.balanceOverTime': 'Balance over time',
   'card.balanceUpdatedReady': 'Your balance has been updated and is ready to use',
   'card.basicPlus': 'Basic +',
-  'card.beforeOrderingKYC': 'Before ordering your Gero Card, please complete a quick KYC process with our institutional partner, Kaiserex.',
+  'card.beforeOrderingKYC': 'Before ordering your Gero Card, please complete a quick KYC process with our card program partner, Zione.',
   'card.blockCard': 'Block Card',
   'card.blockCardTab': 'Block Card',
-  'card.blockingCardWarning': 'Blocking your card will immediately stop all transactions. This action can\'t be reversed instantly - you\'ll need to contact our support team to unblock it.',
+  'card.blockingCardWarning': 'Blocking stops all new transactions straight away. You can unblock the card here at any time.',
   'card.capturedPhoto': 'Captured Photo',
   'card.cardAlreadyBlocked': 'Card Blocked',
   'card.cardIssuance': 'Card Issuance',
@@ -149,14 +149,19 @@ export default {
   'card.paymentInProgress': 'Payment is being processed.',
   'card.pleaseWaitForConfirmation': 'Please wait for transaction confirmation.',
   'card.alreadyOrdered': 'Already Ordered',
-  'card.cardPoweredByKaiser': 'Your Gero Card is powered by Kaiser Exchange International, a fully licensed and regulated cryptocurrency financial services provider',
+  'card.cardPoweredByKaiser': 'Your Gero Card is provided by Digi Ex Pro (Pty) Ltd, trading as Zione, an authorized financial services provider regulated by the FSCA in South Africa (FSP 53786).',
   'card.cardWillReceiveExactly': 'Card will receive exactly',
   'card.cardholderName': 'CARDHOLDER NAME',
   'card.category': 'Category',
   'card.checkOrderStatus': 'Check order status',
   'card.chooseOptionBelow': 'Choose an option below to get started with your crypto card order',
   'card.cityWithAsterisk': 'City *',
-  'card.companyDetails': 'Company #21766401 · Czech Republic',
+  'card.companyDetails': 'Reg. 2023/150340/07 · FSCA FSP 53786 · South Africa',
+  'card.providerRegisteredOffice': 'Registered office',
+  'card.providerRegulated': 'Regulated in South Africa',
+  'card.providerRegulatedDesc': 'Authorized financial services provider (FSCA, FSP 53786) and an accountable institution under the Financial Intelligence Centre Act.',
+  'card.providerAmlKyc': 'AML/KYC on every account',
+  'card.providerAmlKycDesc': 'Identity verification, sanctions screening and transaction monitoring apply to every account and every transaction.',
   'card.completeKYC': 'Complete KYC',
   'card.confirm': 'Confirm',
   'card.confirmAction': 'Confirm Action',
@@ -168,7 +173,7 @@ export default {
   'card.convertingAdaToEur': 'Converting ADA to EUR at current rate...',
   'card.countryWithAsterisk': 'Country *',
   'card.createAccount': 'Create account',
-  'card.createKaiserexAccount': 'Create your Kaiserex account and complete the verification process to order your card.',
+  'card.createKaiserexAccount': 'Create your Zione account and complete the verification process to order your card.',
   'card.cvv': 'CVV',
   'card.dateTime': 'Date & Time',
   'card.customDateRange': 'Custom Date Range',
@@ -184,21 +189,15 @@ export default {
   'card.to': 'To',
   'card.apply': 'Apply',
   'card.close': 'Close',
-  'card.dateRangeExceeds3Months': 'Date range cannot exceed 3 months due to Satchel limitation',
+  'card.dateRangeExceeds3Months': 'Choose a range of 89 days or less.',
   'card.startDateAfterEndDate': 'Start date cannot be after end date',
   'card.documentsReceivedReview': 'Your documents has been received and your application is currently under review.',
   'card.ecommerce': 'Ecommerce',
   'card.enjoyMonthsZeroFees': 'Enjoy 6 months of ZERO FEES',
-  'card.enjoyZeroFeesUntil': 'Enjoy ZERO FEES until August 1st',
-  'card.enter6DigitCode': 'Enter the 6-digit code from your authenticator app to continue.',
-  'card.enterCredentialsToContinue': 'Enter your credentials to continue with your card order.',
-  'card.enterPassword': 'Enter your password',
+  'card.enjoyZeroFeesUntil': 'Enjoy ZERO FEES until May 1st, 2027',
   'card.enterPasswordToConfirm': 'Enter Password to confirm action*',
-  'card.enterUsernameOrEmail': 'Enter your username or email',
   'card.enterYourName': 'Enter your name',
   'card.enterTwoAda': 'Please enter an amount greater than or equal to 2 ADA to continue',
-  'card.enterpriseSecurity': 'Enterprise Security',
-  'card.enterpriseSecurityDesc': 'Decentralized security protocols with frequent platform audits and compliance with global regulations',
   'card.entertainment': 'Entertainment',
   'card.exp': 'EXP.',
   'card.expiry': 'Expiry',
@@ -213,9 +212,8 @@ export default {
   'card.feeOrderSummary': 'Fee & Order Summary',
   'card.feePayment': 'Fee Payment',
   'card.feeType': 'Fee Type',
-  'card.firstCreateKaiserex': 'First, you\'ll create an account with Kaiserex, our trusted banking partner. Then complete verification to order your card.',
+  'card.firstCreateKaiserex': 'First, you\'ll create an account with Zione, our card program partner. Then complete verification to order your card.',
   'card.foodAndDining': 'Food and dining',
-  'card.forgotPassword': 'Forgot your password?',
   'card.freeAtmWithdrawals': 'Free ATM withdrawals',
   'card.fxConversionMarkup': 'FX Conversion Markup',
   'card.geroCard': 'Gero Card',
@@ -236,19 +234,19 @@ export default {
   'card.groceries': 'Groceries',
   'card.inGero': 'in $GERO',
   'card.inactive': 'Inactive',
-  'card.kaiserExchangeInternational': 'SmartAtlas Ltd. s.r.o.',
-  'card.kaiserex': 'Kaiserex',
-  'card.kaiserexAccountCreated': 'Your Kaiserex account has been created. You can now proceed with the KYC verification to order your Gero Crypto Card.',
-  'card.kaiserexRegistration': 'Kaiserex Registration',
-  'card.kaiserexTooltip': 'Kaiserex is Gero\'s trusted financial partner that handles card issuance, KYC verification, and payment processing for the Gero Crypto Card.',
+  'card.kaiserExchangeInternational': 'Digi Ex Pro (Pty) Ltd, trading as Zione',
+  'card.kaiserex': 'Zione',
+  'card.kaiserexAccountCreated': 'Your Zione account has been created. You can now proceed with the KYC verification to order your Gero Crypto Card.',
+  'card.kaiserexRegistration': 'Zione registration',
+  'card.kaiserexTooltip': 'Zione is Gero\'s card program partner. It handles KYC verification and payment processing for the Gero Crypto Card.',
   'card.kycRegistered': 'Registered',
   'card.kycRegisteredDesc': 'KYC process not started yet',
   'card.kycVerificationStarted': 'Verifying',
   'card.kycVerificationStartedDesc': 'KYC in progress, pending approval',
   'card.kycApprovalInProgress': 'KYC Approval in Progress',
   'card.kycApprovalInProgressDesc': 'Your KYC verification has been submitted and is currently being reviewed. You\'ll be notified once it\'s approved.',
-  'card.learnMoreKaiserex': 'Learn more about Kaiserex',
-  'card.licensedRegulated': 'Licensed & Regulated Financial Services',
+  'card.learnMoreKaiserex': 'Learn more about Zione',
+  'card.licensedRegulated': 'FSCA-authorized financial services provider',
   'card.loadingCardDetails': 'Loading card details...',
   'card.loadingCardStatus': 'Loading card status...',
   'card.loadingSecureForm': 'Loading secure registration form...',
@@ -265,8 +263,7 @@ export default {
   'card.mastercard': 'Mastercard',
   'card.monthlyFee': 'Monthly Fee',
   'card.nameWithAsterisk': 'Name *',
-  'card.needHelpContactSupport': 'Need help? Contact our support team to unblock or replace your card.',
-  'card.newCodeSent': 'New code sent to your authenticator app',
+  'card.needHelpContactSupport': 'Need help? To replace your card, contact Zione support:',
   'card.newToKaiserex': 'New to',
   'card.next': 'Next',
   'card.noMonthlyFee': 'No Monthly Fee',
@@ -281,7 +278,6 @@ export default {
   'card.orderYourCard': 'Order your card',
   'card.orderYourGeroCard': 'Order Your Gero Card',
   'card.other': 'Other',
-  'card.password': 'Password',
   'card.pending': 'Pending',
   'card.pendingApproval': 'Pending Approval',
   'card.rejected': 'Rejected',
@@ -306,15 +302,14 @@ export default {
   'card.posPurchasesEu': 'POS Purchases (EU)',
   'card.posPurchasesIntl': 'POS Purchases (Intl)',
   'card.postalCodeWithAsterisk': 'Postal Code *',
-  'card.poweredByKaiserex': 'Powered by Kaiserex',
+  'card.poweredByKaiserex': 'Powered by Zione',
   'card.preparingAdaTransaction': 'Preparing ADA transaction...',
   'card.processingYourApplication': 'Processing your application...',
-  'card.readOurAnnouncement': 'Read our announcement',
   'card.realTimeConversion': 'Real-Time Conversion',
   'card.realTimeConversionDesc': 'Your crypto is instantly converted to fiat at the moment of top-up.',
   'card.recentActivities': 'Recent Activities',
   'card.reference': 'Reference',
-  'card.registerOnKaiserex': 'Register on Kaiserex',
+  'card.registerOnKaiserex': 'Register with Zione',
   'card.registerToOrderCard': 'Register to order your card',
   'card.registrationComplete': 'Registration Complete!',
   'card.replacementCard': 'Replacement Card (Physical)',
@@ -331,16 +326,15 @@ export default {
   'card.signIn': 'Sign In',
   'card.signInCompleteKYC': 'Sign in and complete KYC',
   'card.signInToExisting': 'Sign in to your existing account to continue with your card order or check your status.',
-  'card.signInToKaiserex': 'Sign in to Kaiserex',
   'card.signInTopUpCheck': 'Sign in to your existing account to top up your card, order additional cards, or check your balance.',
   'card.signingIn': 'Signing In...',
   'card.spendAdaAnywhere': 'Spend ADA anywhere!',
   'card.spendCryptoAnywhere': 'Spend your crypto anywhere with your Gero Card.',
   'card.standardFees': 'Standard Fees (After Promotional Period)',
   'card.startKYCProcess': 'Start KYC Process',
-  'card.startingMayFirst': 'Starting August 1st, 2026',
+  'card.startingMayFirst': 'Starting May 1st, 2027',
   'card.stateProvinceWithAsterisk': 'State / Province *',
-  'card.step1CreateKaiserex': 'Step 1: Create your Kaiserex account (our banking partner)',
+  'card.step1CreateKaiserex': 'Step 1: Create your Zione account (our card program partner)',
   'card.step2CompleteKYC': 'Step 2: Complete KYC verification with ID and face scan',
   'card.step3ReceiveCard': 'Step 3: Receive your Gero Crypto Card',
   'card.streetAddress': 'Street address',
@@ -373,18 +367,13 @@ export default {
   'card.transferringEurToCard': 'Transferring EUR to your Gero Card...',
   'card.transportation': 'Transportation',
   'card.travel': 'Travel',
-  'card.twoFactorAuthentication': 'Two-Factor Authentication',
   'card.updatingCardBalance': 'Updating card balance...',
   'card.uploadedId': 'Uploaded ID',
-  'card.usernameOrEmail': 'Username or Email',
-  'card.verificationCode': 'Verification Code',
   'card.viewCardDetails': 'View Card Details',
   'card.viewCardDetailsSubtitle': 'View the details of your card. This action cannot be undone.',
   'card.viewCardDetailsTab': 'View Card Details',
   'card.willEnjoyTokenIncentives': 'will enjoy token incentives in the form of fee waivers',
   'card.writeDeliveryDetails': 'Write your delivery details, we will ship the card in 10-20 days.',
-  'card.yearsExperience': '10+ Years Experience',
-  'card.yearsExperienceDesc': 'Over a decade of industry expertise serving 200+ high-value clients across multiple industries and countries',
   'card.yourAdaBalance': 'Your ADA Balance:',
   'card.yourDetails': 'Your Details',
   'card.yourGeroBalance': 'Your $GERO Balance:',
@@ -431,7 +420,7 @@ export default {
   'card.shippingAddress': 'Address',
   'card.whereToShipCard': 'Where should we ship your card?',
   'card.useExistingAddress': 'Use existing address',
-  'card.useAddressRegisteredWithKaiserex': 'Use the address registered with your KaiserEx account',
+  'card.useAddressRegisteredWithKaiserex': 'Use the address registered with your Zione account',
   'card.enterNewAddress': 'Enter new address',
   'card.provideNewShippingAddress': 'Provide a different shipping address',
   'card.enterStreetAddress': 'Enter street address',
@@ -466,6 +455,7 @@ export default {
   'card.prfAuthenticationRequired': 'PassKey authentication will be required to confirm payment',
   'card.missingPaymentAddress': 'Payment address not available. Please try again.',
   'card.failedToGetPaymentDetails': 'Failed to get payment details. Please try again.',
+  'card.paymentDetailsRefreshed': 'Your payment details were updated. Review the new amount and address, then confirm again.',
   'card.processingOrder': 'Processing Order',
   'card.pleaseWait': 'Please wait while we process your order...',
   'card.confirmingPayment': 'Confirming your payment...',
@@ -480,6 +470,194 @@ export default {
   'card.orderPlacedSuccessfully': 'Your physical card order has been placed successfully',
   'card.estimatedDelivery': 'Estimated delivery: 7-14 business days',
   'card.confirmationEmailSent': 'A confirmation email has been sent',
+
+  'card.howItWorks': 'How to get your card',
+
+  'card.hubLead': 'Top up with ADA from this wallet and pay in euros online, in stores and at ATMs.',
+
+  'card.pricingTitle': 'What it costs',
+
+  'card.activateAutoCheck': 'We check the activation automatically. Your card shows as Active as soon as Zione confirms it.',
+
+  'card.activateCard': 'Activate card',
+
+  'card.activateDesc': 'Enter the number printed on the front of the card you received. Your virtual card keeps working while we activate it.',
+
+  'card.activateHint': 'Only used to confirm this card reached you.',
+
+  'card.activateInvalidPan': 'Check the card number: it should be 16 to 19 digits, exactly as printed.',
+
+  'card.activateTitle': 'Activate your physical card',
+
+  'card.activationEmailNote': 'You\'ll get an email from Zione to activate your account.',
+
+  'card.activationFailed': 'We couldn\'t activate the card. Check the number and try again.',
+
+  'card.activationStarted': 'Activation started. It usually takes a few minutes.',
+
+  'card.addressValidFor': 'One-time address, valid for {time}',
+
+  'card.alreadyRegisteredSignIn': 'Already registered? Sign in',
+
+  'card.applicationNotApproved': 'Your application wasn\'t approved',
+
+  'card.applicationNotApprovedDesc': 'Zione couldn\'t approve your card application. Contact Zione support to find out why and what you can do next.',
+
+  'card.blocked': 'Blocked',
+
+  'card.buildingTransaction': 'Building transaction',
+
+  'card.cardActivated': 'Your card is active.',
+
+  'card.cardBlockedNotice': 'Card blocked.',
+
+  'card.cardControls': 'Card controls',
+
+  'card.cardProgramPartner': 'Card program partner',
+
+  'card.cardUnblocked': 'Card unblocked.',
+
+  'card.changePin': 'Change PIN',
+
+  'card.changePinSubtitle': 'Set a new 4-digit PIN for card payments and ATMs',
+
+  'card.confirmNewPin': 'Confirm new PIN',
+
+  'card.declined': 'Declined',
+
+  'card.depositAddressVerified': 'Verified address',
+
+  'card.feeEstimateNote': 'Estimated at today\'s rate. The exact amount is set when your order is placed.',
+
+  'card.fieldTooLong': 'Use at most {max} characters.',
+
+  'card.followOrderOnDashboard': 'Follow the order from your card dashboard.',
+
+  'card.heroArtLabel': 'ADA flowing into the Gero Card, issued with Zione',
+
+  'card.hideCardDetails': 'Hide card details',
+
+  'card.hidePin': 'Hide PIN',
+
+  'card.journeyActivate': 'Activate',
+
+  'card.journeyLabel': 'Card journey',
+
+  'card.journeyOrder': 'Order card',
+
+  'card.journeySpend': 'Spend',
+
+  'card.journeyVerify': 'Verify identity',
+
+  'card.kycLinkFailed': 'We couldn\'t open the identity check. Please try again.',
+
+  'card.kycOpensNewTab': 'Zione\'s identity check opens in a new tab.',
+
+  'card.last30DaysLabel': 'Last 30 days',
+
+  'card.legalEntity': 'Legal entity',
+
+  'card.minimumTopUp': 'Minimum top-up amount: {amount} ADA',
+
+  'card.newPin': 'New PIN',
+
+  'card.noTransactionsInPeriod': 'No transactions in this period.',
+
+  'card.orderAnotherCard': 'Order another card',
+
+  'card.payLaterNote': 'Your order is saved. You can also pay the fee later from your card dashboard.',
+
+  'card.payTo': 'Pay to',
+
+  'card.physicalCardOrder': 'Physical card order',
+
+  'card.pinChangeFailed': 'We couldn\'t change the PIN. Please try again.',
+
+  'card.pinChanged': 'PIN changed.',
+
+  'card.pinHidden': 'PIN hidden',
+
+  'card.pinMismatch': 'The two PINs don\'t match.',
+
+  'card.pinWeak': 'Avoid repeated digits or sequences like 1234.',
+
+  'card.rateLine': '1 ADA = {rate}',
+
+  'card.registrationDetails': 'Registration',
+
+  'card.restartVerification': 'Restart verification',
+
+  'card.savePin': 'Save PIN',
+
+  'card.secureFormBy': 'Secure form by Zione',
+
+  'card.secureSignInWindow': 'Zione\'s sign-in opens in a secure window',
+
+  'card.showCardDetails': 'Show card details',
+
+  'card.showPin': 'Show PIN',
+
+  'card.signInFailed': 'Sign-in failed. Please try again.',
+
+  'card.signOut': 'Sign out',
+
+  'card.signedInAs': 'Signed in as',
+
+  'card.signingAndSubmitting': 'Signing and submitting',
+
+  'card.switchCurrency': 'Switch between ADA and EUR',
+
+  'card.topUpCredited': 'Your card balance is updated.',
+
+  'card.topUpSubmitted': 'Top-up submitted',
+
+  'card.topUpSubmittedDesc': 'Your balance updates once the network confirms the transaction, usually within a few minutes.',
+
+  'card.trackerActivated': 'Activated',
+
+  'card.trackerActivating': 'Activating your card',
+
+  'card.trackerAutoRefresh': 'This page checks for updates automatically. Your card appears here as soon as Zione issues it.',
+
+  'card.trackerAwaitingPayment': 'Waiting for the delivery fee',
+
+  'card.trackerDispatched': 'Dispatched',
+
+  'card.trackerIssuing': 'Issuing your virtual card',
+
+  'card.trackerOnItsWay': 'On its way. Activate it when it arrives.',
+
+  'card.trackerPaid': 'Delivery fee paid',
+
+  'card.trackerPaymentDetected': 'Payment detected, waiting for confirmations',
+
+  'card.trackerPlaced': 'Order placed',
+
+  'card.trackerPreparing': 'Preparing your card for dispatch',
+
+  'card.trackerReady': 'Ready to use',
+
+  'card.trackerTitlePhysical': 'Your card is being prepared',
+
+  'card.trackerTitleVirtual': 'Your virtual card is being issued',
+
+  'card.typePhysical': 'Physical',
+
+  'card.typeVirtual': 'Virtual',
+
+  'card.unblockCard': 'Unblock card',
+
+  'card.verificationFailed': 'Verification failed',
+
+  'card.verificationFailedDesc': 'Zione couldn\'t confirm your identity this time. You can start the check again; have a valid ID document and your camera ready.',
+
+  'card.verificationFailedTitle': 'Your identity check didn\'t go through',
+
+  'card.viewFees': 'View fees',
+
+  'card.virtualCardOrder': 'Virtual card order',
+
+  'card.waitingForBalance': 'Waiting for your card balance to update…',
   'cashback.adaCashback': 'ADA Cashback',
   'cashback.allCategories': 'All Categories',
   'cashback.availableIn': 'Available In',
@@ -2274,6 +2452,11 @@ export default {
   'perps.connect.gateDeposit': 'Connect to Strike to deposit funds.',
   'perps.connect.gateWithdraw': 'Connect to Strike to withdraw funds.',
   'perps.connect.submitCta': 'Connect to Strike',
+  'perps.connect.signCta': 'Sign and connect',
+  'perps.connect.messageHint': 'Strike asks your wallet to sign this message with your payment key. Read it before you sign.',
+  'perps.connect.boundNote': 'This message includes the new API key created for this connection.',
+  'perps.connect.unboundWarning': 'This message does not include the new API key created for this connection. Sign it only if it clearly comes from Strike and names this wallet.',
+  'perps.connect.messageRefused': 'Strike sent a message that Gero will not sign. Try again later.',
   'perps.passkeySignHint': 'Authenticate with your PassKey to sign this transaction.',
 
   // Strike v2 deposit/withdraw
@@ -2658,7 +2841,7 @@ export default {
   'notify.others.title': 'Other wallets',
   'notify.others.open': 'Open wallet to turn on',
   'notify.others.ineligible': 'Not available for this wallet',
-  'notify.unsupported.firefox': 'Push notifications are not available in Firefox yet.',
+  'notify.unsupported.browser': 'Push notifications are not available in this browser.',
   'notify.unsupported.beta': 'Push notifications are not included in the beta build.',
   'notify.pendingOpen.title': 'Open another wallet?',
   'notify.pendingOpen.body': 'This alert is about {wallet}. Switch to it now?',
@@ -2700,6 +2883,8 @@ export default {
   'settings.walletNameUpdated': 'Wallet name updated',
   'settings.walletProfilePicture': 'Wallet Profile Picture',
   'settings.websiteProtection': 'Website Protection',
+  'settings.verifyAddress': 'Verify Address',
+  'settings.verifyAddressOnDevice': 'Show your receive address on your hardware wallet to confirm it',
   'settings.welcomeGuide': 'Welcome Guide',
   'settings.welcomeGuideHelper': 'Display an introductory guide for navigating the wallet',
   'settings.whatIsCollateral': 'What is Collateral?',
@@ -2896,6 +3081,7 @@ export default {
   'errors.insufficientBalance': 'Insufficient balance',
   'errors.noCollateral': 'This transaction runs a smart contract, which needs a small ADA-only UTxO for collateral, but all your ADA is bundled with tokens. Send about 6 ADA to your own wallet address to create one, then try again.',
   'errors.insufficientAdaForTx': 'Not enough ADA to complete this transaction once network fees and the minimum per-output are covered. Add a little more ADA and try again.',
+  'errors.submitUnconfirmed': 'We could not confirm whether your transaction reached the network. It may still go through, so check your transaction history before sending it again.',
   'errors.collateralPoolEmpty': 'The shared collateral service is temporarily unavailable. Please try again in a moment.',
   'errors.invalidAddress': 'Invalid address',
   'errors.invalidOrder': 'Invalid order data',
@@ -3160,7 +3346,6 @@ export default {
   'wallet.paymentAddress': 'Payment Address',
   'wallet.paymentAddressInfo': 'Share your payment address to receive {ticker} safely',
   'wallet.pleaseAllowCameraAccess': 'Please allow camera access in your browser settings.',
-  'wallet.pleaseEnterAll6Digits': 'Please enter all 6 digits',
   'wallet.pointCameraAtQR': 'Point your camera at a QR code containing an address',
   'wallet.pleaseEnterPasswordToContinue': 'Please enter your password to continue.',
   'wallet.pleaseReviewCarefully': 'Please review the transaction details carefully before proceeding. Confirm the transaction by signing with your {walletType} device.',
@@ -3335,10 +3520,10 @@ export default {
   'welcome.prfEncryptionDesc': 'Hardware-backed PassKey authentication',
   'welcome.prfTooltipTitle': 'Why is no password needed?',
   'welcome.prfTooltipDesc1': 'PassKey PRF (Pseudo-Random Function) uses your device\'s built-in biometric authentication (Fingerprint, Face Recognition, or Device PIN) to encrypt your wallet\'s private keys.',
-  'welcome.prfTooltipDesc2': 'The encryption key is generated by your device\'s secure hardware and never leaves your device, making it more secure than traditional passwords.',
-  'welcome.prfTooltipDesc3': 'Your recovery phrase is always saved as a backup in case you lose access to your device or PassKey.',
+  'welcome.prfTooltipDesc2': 'The encryption key comes from your PassKey and is never stored by Gero. If your PassKey syncs across devices (for example with Google Password Manager or iCloud Keychain), that account also protects your wallet, so keep it secure.',
+  'welcome.prfTooltipDesc3': 'Write down your recovery phrase and keep it safe. It is the only way to restore your wallet if you lose this device or your PassKey.',
   'welcome.backupMnemonicOption': 'Save recovery phrase for backup',
-  'welcome.backupMnemonicOptionDesc': 'Recommended - allows wallet recovery if you lose your device',
+  'welcome.backupMnemonicOptionDesc': 'Recommended - keeps an encrypted copy of your recovery phrase on this device, so you can view it and write it down later',
   'welcome.optionalSpendingPassword': 'Optional spending password',
   'welcome.enablePasswordUnlock': 'Enable password unlock',
   'welcome.enablePasswordUnlockDesc': 'Add a spending password in addition to PassKey authentication',
@@ -3384,7 +3569,7 @@ export default {
   'welcome.passKeySecurityKeyHint': 'Requires a hardware security key (YubiKey or similar) in this browser',
   'welcome.securityKeyRequired': 'Security key required',
   'welcome.passKeyBenefitKeysSecure': 'Keys never leave your device',
-  'welcome.passKeyLearnMoreFull': 'PassKey uses your device\'s built-in secure hardware to protect your wallet. The encryption key never leaves your device, making it more secure than traditional passwords. Note: your PassKey is tied to this device - if you lose access, your recovery phrase is the only way to restore your wallet.',
+  'welcome.passKeyLearnMoreFull': 'PassKey uses your device\'s secure hardware to protect your wallet. Your wallet keys stay encrypted on this device, and the encryption key comes from your PassKey. If your PassKey syncs across devices (for example with Google Password Manager or iCloud Keychain), that account also protects your wallet, so keep it secure. If you lose this device or your PassKey, your recovery phrase is the only way to restore your wallet.',
   'welcome.securityMethod': 'Security',
   'welcome.almostDone': 'Almost Done!',
   'welcome.reviewYourChoices': 'Review your wallet configuration below',
@@ -3454,7 +3639,7 @@ export default {
   'welcome.savingRecovery': 'Saving recovery…',
   'welcome.recoverySaved': 'Recovery saved',
   'welcome.recoverySaveFailed': 'Could not save your recovery. Please try again.',
-  'welcome.recoveryPasswordTooWeak': 'Choose a stronger recovery password (at least 12 characters).',
+  'welcome.recoveryPasswordTooWeak': 'Choose a stronger recovery password: at least 12 characters, letters mixed with numbers or symbols, and no common words or sequences.',
   'welcome.restoreRecoveryPasswordHint': 'The recovery password you chose when you created this wallet.',
   'welcome.recoveryStrengthWeak': 'Weak',
   'welcome.recoveryStrengthFair': 'Fair',
@@ -3494,7 +3679,7 @@ export default {
   'security.mpcRecoveryChangeTitle': 'Change recovery password',
   'security.mpcRecoveryChangeRowSubtitle': 'Update the password that protects your recovery share',
   'security.mpcRecoveryChangeSubtitle': 'Set a new recovery password - you will not be asked for the old one.',
-  'security.mpcRecoveryChangeInfo': 'This re-encrypts your recovery share and rotates all three key shares. Any previously leaked recovery backup stops working.',
+  'security.mpcRecoveryChangeInfo': 'This sets a new recovery password and replaces all three key shares. New shares cannot be combined with old ones, but any two old shares together still open the wallet. If you think a backup leaked, move your funds to a new wallet.',
   'security.mpcRecoveryNewPassword': 'New recovery password',
   'security.mpcRecoveryConfirmPassword': 'Confirm recovery password',
   'security.mpcRecoveryMinLength': 'Use at least 12 characters',
@@ -3622,11 +3807,11 @@ export default {
   'security.passKeyDeregistrationFailed': 'Failed to deregister PassKey',
 
   // Security - PassKey PRF Extension
-  'security.passKeyPrfNotSupported': 'PassKey registration succeeded but PRF extension is not supported. PassKey autofill requires Chrome, Edge, or Firefox with a compatible authenticator.',
+  'security.passKeyPrfNotSupported': 'PassKey registration succeeded but PRF extension is not supported. PassKey autofill requires Chrome or Edge with a compatible authenticator.',
   'security.passKeyUnsupportedBrowser': "This browser or device doesn't support PassKey wallets. Try Chrome or Edge, or go back and create a password-protected wallet instead.",
-  'security.passKeyPrfUnavailable': 'PRF extension not supported in this browser. PassKey autofill requires Chrome, Edge, or Firefox.',
+  'security.passKeyPrfUnavailable': 'PRF extension not supported in this browser. PassKey autofill requires Chrome or Edge.',
   'security.passKeyLegacyDetected': 'Your existing PassKey does not support the new secure PRF encryption method. Please delete and re-register your PassKey to continue using autofill.',
-  'security.passKeyPrfRequired': 'PassKey autofill requires a browser with WebAuthn PRF support (Chrome, Edge, or Firefox)',
+  'security.passKeyPrfRequired': 'PassKey autofill requires a browser with WebAuthn PRF support (Chrome or Edge)',
   'security.passKeyUpgradeRequired': 'PassKey Upgrade Required',
   'security.passKeyUpgradeRequiredMessage': 'Your PassKey uses an older encryption method. To continue using PassKey autofill, you must delete and re-register your PassKey with the new secure PRF method.',
   'security.deleteAndReRegister': 'Delete & Re-register',
@@ -3850,6 +4035,7 @@ export default {
   'search.contacts': 'Contacts',
   'search.settings': 'Settings',
   'search.pages': 'Pages',
+  'search.actions': 'Actions',
   'search.noResults': 'No results found',
   'search.searching': 'Searching...',
   'search.pressEsc': 'Press Esc to close',
@@ -3918,11 +4104,26 @@ export default {
   'signTx.burnsAsset': 'Burns {quantity} {name}',
   'signTx.reservesCollateral': 'Reserves {count} UTXO as collateral | Reserves {count} UTXOs as collateral',
   'signTx.includesMetadata': 'Includes metadata',
+  'signTx.delegatesVoteTo': 'Delegates voting power to {drep}',
+  'signTx.notYourStakeKey': 'Uses a stake key that is not yours',
+  'signTx.withdrawsFrom': 'Withdraws {amount} ADA rewards from {account}',
+  'signTx.notYourAccount': 'not your account',
+  'signTx.votesOn': 'Votes {vote} on governance action {action}',
+  'signTx.asYourDrep': 'Cast as your DRep',
+  'signTx.asOtherVoter': 'Cast by a voter that is not you',
+  'signTx.submitsProposal': 'Submits a {type} proposal with a {amount} ADA deposit, refunded to {account}',
+  'signTx.donatesToTreasury': 'Donates {amount} ADA to the Cardano treasury (not refundable)',
+  'signTx.totalCollateral': 'Up to {amount} ADA is at risk if the script fails',
+  'signTx.collateralReturnTo': 'Returns {amount} ADA of collateral to {address} if the script fails',
+  'signTx.referenceInputs': 'Reads {count} reference input | Reads {count} reference inputs',
+  'signTx.requiredSigners': 'Requires {count} extra signature | Requires {count} extra signatures',
+  'signTx.requiredSignersForeign': '{count} from keys that are not yours',
+  'signTx.validFrom': 'Not valid before slot {slot}',
   'signTx.decodeFailedTitle': 'Could not decode this transaction',
   'signTx.decodeFailedBody': 'Gero could not read what this transaction actually does. Signing blind is unsafe - only continue if you fully trust this dApp.',
   'signTx.decodeFailedAck': 'I understand the risk and want to sign anyway',
   'signTx.networkMismatchTitle': 'This transaction targets a different network',
-  'signTx.networkMismatchBody': 'A recipient address belongs to a different network than your active wallet. This usually means the dApp built the transaction incorrectly - signing it may fail or send funds somewhere unexpected.',
+  'signTx.networkMismatchBody': 'This transaction, or one of its addresses, belongs to a different network than your active wallet. This usually means the dApp built the transaction incorrectly - signing it may fail or send funds somewhere unexpected.',
   'signTx.networkMismatchAck': 'I understand the risk and want to sign anyway',
   'signTx.signingAddress': 'Signing as',
   'signTx.malformedSignData': 'This site sent a malformed request. Signing is disabled until it sends a valid one.',
@@ -3939,6 +4140,7 @@ export default {
   'signTx.rejected': 'Transaction signing cancelled',
   'miniGero.futureTransactionsNote': 'For your security, any future transactions from this website will require additional verification before signing.',
   'miniGero.requestQueueIndicator': 'Request {current} of {total}',
+  'miniGero.embeddedIn': 'This request comes from a page embedded in {site}. Continue only if you trust both sites.',
   'miniGero.rejectAll': 'Reject all',
   'miniGero.pendingRequestBanner': 'Unlock to review the request from {domain}',
   'miniGero.pendingRequestBannerNoDomain': 'Unlock to review a pending dApp request',
@@ -4814,11 +5016,11 @@ export default {
   'realfi.title': 'Earn with RealFi',
   'realfi.preview': 'You\'re on Cardano preprod. Amounts shown are test funds.',
   'realfi.apy': 'RealFi fund yield: {rate}% (published {date})',
-  'realfi.start.title': 'Put your dollars to work',
-  'realfi.start.body': 'Stake USDrf to receive sUSDrf, which grows against USDrf as yield from real-world assets lands. Unstaking takes 7 days.',
+  'realfi.start.title': 'Get started with RealFi',
+  'realfi.start.body': 'Check your eligibility in RealFi before acquiring USDrf and staking for sUSDrf.',
   'realfi.start.cta': 'Get USDrf on RealFi',
-  'realfi.start.readyTitle': 'You\'re ready to earn',
-  'realfi.start.readyBody': 'You hold {amount}. Stake it to receive sUSDrf, which grows against USDrf as yield from real-world assets lands. Unstaking takes 7 days.',
+  'realfi.start.readyTitle': 'You hold USDrf',
+  'realfi.start.readyBody': 'You hold {amount}. Check your eligibility in RealFi before staking for sUSDrf.',
   'realfi.start.readyCta': 'Stake on RealFi',
   'realfi.start.note': 'Staking from Gero is coming. For now, stake on RealFi and your position will appear here.',
   'realfi.position.label': 'Your position',
@@ -5073,7 +5275,7 @@ export default {
   'midnight.privateBalances.openFullWallet': 'Send private tokens in the full wallet',
   'midnight.privateBalances.title': 'Private tokens',
   'midnight.privateBalances.refresh': 'Unlock private balances',
-  'midnight.privateBalances.explanation': 'Private token balances are synchronized on this device. NIGHT remains public.',
+  'midnight.privateBalances.explanation': 'Private token balances are found on this device: Gero checks the public Midnight event stream locally and never sends your viewing key to a server. NIGHT remains public.',
   'midnight.privateBalances.syncing': 'Synchronizing private notes…',
   'midnight.privateBalances.progress': '{applied} / {highest} events applied',
   'midnight.privateBalances.locked': 'Unlock to synchronize your private tokens.',
@@ -5126,6 +5328,7 @@ export default {
   'midnight.connector.walletTypeUnsupported': 'This wallet type cannot sign Midnight transactions here.',
   'midnight.connector.transferTitle': 'Approve transfer',
   'midnight.connector.transferFeesNote': 'Network fees are paid by your wallet in DUST.',
+  'midnight.connector.transferProvedBy': 'Proved by: {prover}',
   'midnight.connector.balanceTitle': 'Fund and pay fees',
   'midnight.connector.balanceBody': 'This site asks your wallet to add the funds below to a transaction it built, and to pay its network fee.',
   'midnight.connector.balanceNothing': 'No funds are needed; your wallet only pays the network fee.',
@@ -5146,24 +5349,24 @@ export default {
   // Shielded proving consent dialog
   'midnight.consent.title': "Transaction proving privacy",
   'midnight.consent.subtitle': "Choose who receives your proof inputs",
-  'midnight.consent.intro': "Midnight sends require a proof. This includes public-token sends that spend DUST and private-token sends. A remote prover receives the transaction witness needed to create that proof.",
+  'midnight.consent.intro': 'Midnight sends need a proof. This includes public-token sends that spend DUST, private-token sends and transfers you approve for connected sites. A remote prover receives the proof inputs needed to create that proof.',
   'midnight.consent.whatGeroSees': 'What Gero Cloud sees',
-  'midnight.consent.whatGeroSeesBody': "Gero Cloud receives proof inputs for each send routed through it, including DUST fee notes and any private token notes. Anyone who can read those inputs may link the notes and the fee-paying wallet to that transaction.",
+  'midnight.consent.whatGeroSeesBody': 'Gero Cloud receives the proof inputs for each send routed through it, including DUST fee notes and any private token notes. These inputs can include key material for the notes being spent, so whoever runs the prover could also spend them. Anyone who can read the inputs may link the notes and the fee-paying wallet to that transaction.',
   'midnight.consent.whatWeDoNot': 'What we do not do',
-  'midnight.consent.whatWeDoNotBody': 'We do not log or persist the witness data. We do not associate it with your account, IP, or any other identifier beyond what the request itself contains.',
+  'midnight.consent.whatWeDoNotBody': 'Gero Cloud does not log or store the proof inputs. Requests carry this device\'s Gero session token and pass through Cloudflare, which terminates the encrypted connection before it reaches Gero.',
   'midnight.consent.localOption': 'Prefer to run your own proof server?',
-  'midnight.consent.localOptionBody': 'Run the official Midnight proof server on your own machine and Gero will prove transactions locally. Your private transaction data never leaves your computer. Set it up under Settings.',
-  'midnight.consent.acknowledge': "I allow Gero Cloud to receive DUST and private-token proof inputs for sends using Gero Cloud. I understand that these inputs can reveal links between notes, the fee payer and the transaction.",
+  'midnight.consent.localOptionBody': 'Run the official Midnight proof server on this computer and Gero will prove transactions there. Your proof inputs stay on this computer. Set it up under Settings.',
+  'midnight.consent.acknowledge': 'I allow Gero Cloud to receive the proof inputs for sends using Gero Cloud. I understand that these inputs can include key material for the notes being spent and can reveal links between notes, the fee payer and the transaction.',
   'midnight.consent.acceptCloud': 'Use Gero Cloud',
   'midnight.consent.useLocalInstead': 'Use a local proof server instead',
   'midnight.consent.cancel': 'Cancel',
   // Arkhia zkPaaS variant of the same consent (the witness goes to Arkhia,
   // not Gero, so the copy must name the actual destination)
   'midnight.consent.zkpaasWhatSees': 'What Arkhia zkPaaS sees',
-  'midnight.consent.zkpaasWhatSeesBody': "Arkhia zkPaaS receives proof inputs for each send routed through it, including DUST fee notes and any private token notes. Gero does not receive those inputs on this path. Anyone who can read them may link the notes and the fee-paying wallet to that transaction.",
+  'midnight.consent.zkpaasWhatSeesBody': 'Arkhia zkPaaS receives the proof inputs for each send routed through it, including DUST fee notes and any private token notes. These inputs can include key material for the notes being spent. Gero does not receive them on this path. Anyone who can read them may link the notes and the fee-paying wallet to that transaction.',
   'midnight.consent.zkpaasWhatThisMeans': 'What this means',
   'midnight.consent.zkpaasWhatThisMeansBody': 'Arkhia runs the prover inside Google Cloud confidential hardware and states that witness data is not stored. Gero cannot verify that for each request, so give this service the same consideration as any remote prover.',
-  'midnight.consent.zkpaasAcknowledge': "I allow Arkhia zkPaaS to receive DUST and private-token proof inputs for sends using Arkhia zkPaaS. I understand that these inputs can reveal links between notes, the fee payer and the transaction.",
+  'midnight.consent.zkpaasAcknowledge': 'I allow Arkhia zkPaaS to receive the proof inputs for sends using Arkhia zkPaaS. I understand that these inputs can include key material for the notes being spent and can reveal links between notes, the fee payer and the transaction.',
   'midnight.consent.zkpaasAccept': 'Use Arkhia zkPaaS',
   // Flow diagram labels (DustRegistrationDialog)
   'midnight.flowSign': 'Sign',
@@ -5274,7 +5477,7 @@ export default {
   'midnight.proofServer.remoteLabel': 'Gero Cloud (default)',
   'midnight.proofServer.remoteHint': 'Proofs are generated on Gero\'s servers. Requires sharing private transaction data for the proving step.',
   'midnight.proofServer.localLabel': 'Local proof server',
-  'midnight.proofServer.localHint': 'Proofs are generated on your machine. Gero\'s servers never see your private transaction data.',
+  'midnight.proofServer.localHint': 'Proofs are generated on this computer. Your proof inputs never reach Gero\'s servers.',
   'midnight.proofServer.runCommand': 'Run this in a terminal (Docker required):',
   'midnight.proofServer.firstRunNote': 'The first start downloads several GB of proving parameters. Keep the terminal open while sending.',
   'midnight.proofServer.urlLabel': 'Proof server URL',
@@ -5292,6 +5495,8 @@ export default {
   'midnight.proofServer.notDetectedSend': 'Local ledger-8 proof server not detected. Start it, or use Gero Cloud for this transaction.',
   'midnight.proofServer.notDetectedSendLedger9': 'Local ledger-9 proof server not detected. Start it, or use Gero Cloud for this transaction.',
   'midnight.proofServer.localUrlMissingSend': 'No local proof server URL is set for this network. Add one in the proof server settings, or use Gero Cloud for this transaction.',
+  'midnight.proofServer.urlNotLoopback': 'The local proof server must run on this computer (localhost or 127.0.0.1).',
+  'midnight.proofServer.localUrlNotLoopbackSend': 'Your local proof server URL is not on this computer, so Gero will not send proving data to it. Change it in Settings, or use Gero Cloud for this transaction.',
   'midnight.proofServer.useCloudOnce': 'Use Gero Cloud for this transaction',
   'midnight.proofServer.openSettings': 'Open settings',
   // Arkhia zkPaaS (hosted Midnight prover behind the Arkhia gateway)
@@ -5301,14 +5506,14 @@ export default {
   // Dedicated Proof Server page + dashboard/mini-Gero widgets
   'midnight.proofServerPage.title': 'Proof server',
   'midnight.proofServerPage.openPage': 'Open',
-  'midnight.proofServerPage.settingsSummary': 'Choose where shielded transaction proofs are generated.',
-  'midnight.proofServerPage.subtitle': 'Choose where your shielded transaction proofs are generated.',
+  'midnight.proofServerPage.settingsSummary': 'Choose where Midnight transaction proofs are generated.',
+  'midnight.proofServerPage.subtitle': 'Choose where your Midnight transaction proofs are generated.',
   'midnight.proofServerPage.notMidnightTitle': 'Not available',
   'midnight.proofServerPage.notMidnightBody': 'The proof server setting only applies to Midnight wallets. Switch to a Midnight wallet to configure it.',
   'midnight.proofServerPage.activeBadge': 'Active',
   'midnight.proofServerPage.remoteCardBody': 'No setup required. Proofs are generated on Gero\'s servers.',
   'midnight.proofServerPage.zkpaasCardBody': 'Hosted on Google Cloud confidential hardware. Needs an Arkhia API key; private data goes to Arkhia, not Gero.',
-  'midnight.proofServerPage.localCardBody': 'Full privacy. Requires Docker running on this machine.',
+  'midnight.proofServerPage.localCardBody': 'Keeps your proof inputs on this computer. Requires Docker running here.',
   'midnight.proofServerPage.widgetStatus': 'Status',
   'midnight.proofServerPage.widgetLatency': 'Latency',
   'midnight.proofServerPage.widgetLastProof': 'Last proof',
@@ -5337,22 +5542,26 @@ export default {
   'midnight.proofServerPage.provedIn': 'Proved in {seconds}s',
   'midnight.proofServerPage.provingFailed': 'Proving failed',
   'midnight.proofServerPage.howItWorksTitle': 'How proving works',
-  'midnight.proofServerPage.howItWorksBody': 'Every shielded Midnight transaction needs a zero-knowledge proof before it can be submitted. That proof can be generated in the cloud or on your own machine.',
+  'midnight.proofServerPage.howItWorksBody': 'Midnight transactions that spend DUST (fees) or private tokens need a zero-knowledge proof before they can be submitted. That proof can be generated in the cloud or on your own machine.',
   'midnight.proofServerPage.compareRemoteTitle': 'Gero Cloud',
   'midnight.proofServerPage.compareRemoteBody': 'Fast, with no setup. Gero\'s servers generate the proof, which requires sharing the private transaction data needed for that step.',
   'midnight.proofServerPage.compareZkpaasTitle': 'Arkhia',
   'midnight.proofServerPage.compareZkpaasBody': 'Fast, needs only an API key. Arkhia\'s zkPaaS service generates the proof inside Google Cloud confidential computing and receives the private transaction data instead of Gero.',
   'midnight.proofServerPage.compareLocalTitle': 'Local',
-  'midnight.proofServerPage.compareLocalBody': 'Slower to set up, fully private. Your own machine generates the proof and Gero never sees the private transaction data.',
+  'midnight.proofServerPage.compareLocalBody': 'Slower to set up, most private. This computer generates the proof, so Gero never receives your proof inputs.',
   'midnight.proofServerPage.faqTitle': 'Frequently asked questions',
+  'midnight.proofServerPage.consentNeededTitle': 'Allow this prover',
+  'midnight.proofServerPage.consentNeededBody': '{provider} receives the proof inputs for your sends and for proofs that connected sites ask for. Review what it sees and allow it before it is used.',
+  'midnight.proofServerPage.consentReview': 'Review and allow',
+  'midnight.proofServerPage.consentGiven': 'You allowed {provider} to receive proof inputs.',
   'midnight.proofServerPage.faq1Q': 'What is a proof server?',
-  'midnight.proofServerPage.faq1A': 'It generates the zero-knowledge proof required for shielded (private) Midnight transactions. Every shielded transaction needs one before it can be submitted.',
+  'midnight.proofServerPage.faq1A': 'It generates the zero-knowledge proof that Midnight transactions need when they spend DUST (fees) or private tokens, which covers most sends.',
   'midnight.proofServerPage.faq2Q': 'Is Gero Cloud safe to use?',
-  'midnight.proofServerPage.faq2A': 'Gero Cloud only receives the data needed to generate your proof, over an encrypted connection, and never has access to your keys. For maximum privacy, run a local proof server instead.',
+  'midnight.proofServerPage.faq2A': 'Gero Cloud receives the proof inputs for your transaction over an encrypted connection and does not store them. Those inputs can include key material for the notes being spent, so for the most privacy and control, run a local proof server instead.',
   'midnight.proofServerPage.faq3Q': 'Why would I run a local proof server?',
-  'midnight.proofServerPage.faq3A': 'A local proof server keeps your private transaction data on your own machine, so it never reaches Gero\'s infrastructure.',
+  'midnight.proofServerPage.faq3A': 'A local proof server keeps your proof inputs on your own machine, so they never reach Gero\'s infrastructure.',
   'midnight.proofServerPage.faq4Q': 'Does this affect unshielded (public) transactions?',
-  'midnight.proofServerPage.faq4A': 'No. Only shielded (private) transactions require a proof. Public NIGHT transfers are unaffected by this setting.',
+  'midnight.proofServerPage.faq4A': 'Yes. Public NIGHT transfers pay their fee in DUST, and spending DUST needs a proof, so they use the prover you choose here too.',
   'midnight.proofServerPage.faq5Q': 'What is Arkhia zkPaaS?',
   'midnight.proofServerPage.faq5A': 'A hosted proving service for the Midnight ecosystem, run behind the Arkhia API gateway on Google Cloud confidential computing (a trusted execution environment, so proof data stays encrypted even while in use). It needs an API key from the Arkhia dashboard. Like any remote prover it receives your private transaction data for the proving step; unlike Gero Cloud, that data goes to Arkhia rather than Gero.',
   // Non-NIGHT token holdings rows (decimals unknown until token metadata lands)
@@ -5419,4 +5628,30 @@ export default {
   'common.offBadge': 'Off',
   'common.extensionUpdatedTitle': 'Extension updated',
   'common.extensionUpdatedMessage': 'Gero Dashboard has been updated to version {version}!',
+  'realfi.gettingStarted.eligibilityTitle': 'Check eligibility first',
+  'realfi.gettingStarted.eligibilityBody': 'Check your eligibility with RealFi and follow any identity-verification steps it requires. Gero cannot confirm your eligibility or KYC status.',
+  'realfi.gettingStarted.eligibilityRestrictions': 'RealFi sets location and investor eligibility rules. Review its current policy before proceeding.',
+  'realfi.gettingStarted.checkRestrictions': 'Check country restrictions',
+  'realfi.gettingStarted.eligibilityCta': 'Check eligibility in RealFi',
+  'realfi.gettingStarted.preprodEligibilityBody': 'Open RealFi preprod to explore with test funds. This does not approve a mainnet account.',
+  'realfi.gettingStarted.preprodCta': 'Open RealFi preprod',
+  'realfi.gettingStarted.acquireTitle': 'Get USDrf',
+  'realfi.gettingStarted.acquireBody': 'RealFi calls this token USDr; Gero lists it as USDrf. Swap USDCx for USDrf after reviewing eligibility.',
+  'realfi.gettingStarted.preprodAcquireBody': 'Use the RealFi preprod app and test funds to explore. Mainnet wallet swaps are only offered on mainnet.',
+  'realfi.gettingStarted.getUsdrf': 'Get USDrf',
+  'realfi.gettingStarted.getUsdcx': 'Get USDCx with ADA',
+  'realfi.gettingStarted.needUsdcx': 'You don’t hold USDCx yet. Swap ADA for USDCx first, then swap it for USDrf.',
+  'realfi.gettingStarted.haveUsdcx': 'You hold {amount}, ready to swap for USDrf.',
+  'realfi.gettingStarted.getUsdcxNote': 'This is a separate swap. Wait for USDCx to arrive in your wallet, then return to swap for USDrf.',
+  'realfi.gettingStarted.swapUnavailable': 'Wallet swaps are currently unavailable. You can still review the eligibility steps above.',
+  'realfi.gettingStarted.routeNote': 'Swap routes or quotes may be unavailable. Review the quote before signing; the exchange rate is not guaranteed to be 1:1.',
+  'realfi.gettingStarted.stakeTitle': 'Stake USDrf for sUSDrf',
+  'realfi.gettingStarted.stakeBody': 'Once RealFi confirms eligibility and USDrf arrives in your wallet, stake it to receive sUSDrf.',
+  'realfi.gettingStarted.showGuide': 'Eligibility and acquisition steps',
+  'realfi.gettingStarted.swapStatus.disabled': 'Wallet swaps are currently disabled. You can still review RealFi’s eligibility policy above.',
+  'realfi.gettingStarted.swapStatus.unknown': 'USDrf swap availability has not been confirmed for this wallet.',
+  'realfi.gettingStarted.swapStatus.loading': 'Checking whether the required tokens are available in Gero’s swap catalogue.',
+  'realfi.gettingStarted.swapStatus.unavailable': 'Gero could not confirm the required tokens in its swap catalogue. Wallet acquisition is unavailable for now.',
+  'realfi.gettingStarted.retryAvailability': 'Check again',
+  'realfi.gettingStarted.usdrfSwapPending': 'Swapping USDCx for USDrf in Gero isn’t available yet. You can get USDrf in RealFi’s app.',
 }

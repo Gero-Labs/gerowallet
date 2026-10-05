@@ -2,6 +2,7 @@
   <v-form ref="form" v-model="valid" class="fill-height">
     <PopupHeader :title="$t('bitcoin.signPsbt')" :show-website="hasWebsite" :disabled="loading">
       <v-card-text class="d-flex flex-column pa-0 fill-height">
+        <EmbeddedSiteWarning class="mb-2" :embedded-in="request?.embeddedIn" />
         <v-card-title class="pa-0 mb-2" style="color: white; font-size: 14px">
           {{ $t('bitcoin.signPsbtRequest') }}
         </v-card-title>
@@ -129,6 +130,20 @@ import { computed, getCurrentInstance, onMounted, ref } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import rules from '@/utils/rules';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
+import EmbeddedSiteWarning from '@/shared/components/EmbeddedSiteWarning.vue';
+import { getErrorMessage } from '@/shared/utils/errorHandler';
+import type { Psbt } from 'bitcoinjs-lib';
+
+interface BtcSignPsbtOptions {
+  autoFinalized?: boolean;
+  toSignInputs?: unknown[];
+}
+/** What the background hands this popup (see BITCOIN_METHOD.signPsbt / signPsbts). */
+interface BtcSignPsbtRequest {
+  /** Browser-derived embedding site, set by the background. */
+  embeddedIn?: string | null;
+  data?: { psbtHex: string; options?: BtcSignPsbtOptions };
+}
 import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
 import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
@@ -154,7 +169,7 @@ const spendingPassword = ref('');
 const passwordField = ref(null);
 const privateKeyBytes = ref<Uint8Array | null>(null);
 const controller = ref(null);
-const request = ref<any>(null);
+const request = ref<BtcSignPsbtRequest | null>(null);
 const signed = ref(false);
 const signedHex = ref('');
 const isBT = ref(false);
@@ -210,7 +225,7 @@ const doSign = async () => {
   loading.value = true;
   try {
     const { psbtHex, options } = request.value.data;
-    const signingData: any = { psbtHex, options };
+    const signingData: { psbtHex: string; options?: BtcSignPsbtOptions; privateKeyBytes?: number[]; password?: string } = { psbtHex, options };
 
     if (isPrfWallet.value && privateKeyBytes.value) {
       signingData.privateKeyBytes = Array.from(privateKeyBytes.value);
@@ -218,10 +233,10 @@ const doSign = async () => {
       signingData.password = spendingPassword.value;
     }
 
-    const response: any = await Messaging.sendToBackgroundFromOptions({
+    const response = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.BITCOIN_DAPP_SIGN_PSBT,
       data: signingData,
-    });
+    }) as { data: { success: boolean; error?: string; signedHex?: string } };
 
     if (!response.data.success) throw new Error(response.data.error || 'Signing failed');
 
@@ -231,8 +246,8 @@ const doSign = async () => {
     // Auto-confirm (txAutoSubmit or after PRF)
     await controller.value.returnData({ data: signedHex.value });
     window.close();
-  } catch (e: any) {
-    snackbar.setError(e.message || 'Failed to sign PSBT');
+  } catch (e: unknown) {
+    snackbar.setError(getErrorMessage(e, 'Failed to sign PSBT') || 'Failed to sign PSBT');
     loading.value = false;
   }
 };
@@ -284,8 +299,8 @@ const signWithLedger = async () => {
 
     await controller.value.returnData({ data: returnHex });
     window.close();
-  } catch (e: any) {
-    snackbar.setError(e.message || t('wallet.ledgerDeviceError', { message: '' }));
+  } catch (e: unknown) {
+    snackbar.setError(getErrorMessage(e, t('wallet.ledgerDeviceError', { message: '' })) || t('wallet.ledgerDeviceError', { message: '' }));
     loading.value = false;
   } finally {
     hardwareLoading.end();
@@ -319,8 +334,8 @@ const signWithTrezor = async () => {
 
     await controller.value.returnData({ data: returnHex });
     window.close();
-  } catch (e: any) {
-    snackbar.setError(e.message || t('wallet.trezorSigningFailed'));
+  } catch (e: unknown) {
+    snackbar.setError(getErrorMessage(e, t('wallet.trezorSigningFailed')) || t('wallet.trezorSigningFailed'));
     loading.value = false;
   } finally {
     hardwareLoading.end();
@@ -336,8 +351,8 @@ const showKeystoneQR = async () => {
     keystoneCbor.value = result.keystoneQrCbor!;
     keystoneOverlay.value = true;
     keystoneScan.value = false;
-  } catch (e: any) {
-    snackbar.setError(e.message || 'Failed to generate Keystone QR code');
+  } catch (e: unknown) {
+    snackbar.setError(getErrorMessage(e, 'Failed to generate Keystone QR code') || 'Failed to generate Keystone QR code');
   }
 };
 
@@ -363,8 +378,8 @@ const onKeystoneScan = async (ur: UR) => {
 
     await controller.value.returnData({ data: returnHex });
     window.close();
-  } catch (e: any) {
-    snackbar.setError(e.message || t('wallet.keystoneQRScanError'));
+  } catch (e: unknown) {
+    snackbar.setError(getErrorMessage(e, t('wallet.keystoneQRScanError')) || t('wallet.keystoneQRScanError'));
     keystoneOverlay.value = false;
     keystoneScan.value = false;
   }
@@ -379,10 +394,10 @@ const backKeystoneScan = () => {
   else keystoneOverlay.value = false;
 };
 
-const decodePsbt = async (psbtHex: string, options: any) => {
+const decodePsbt = async (psbtHex: string, options: BtcSignPsbtOptions | undefined) => {
   try {
     const bitcoin = await import('bitcoinjs-lib');
-    let psbt: any;
+    let psbt: Psbt;
     try { psbt = bitcoin.Psbt.fromHex(psbtHex); }
     catch { psbt = bitcoin.Psbt.fromBase64(psbtHex); }
     psbtInfo.value = {

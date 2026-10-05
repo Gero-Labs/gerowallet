@@ -56,3 +56,33 @@ export function susdrAssetIdFor(network: string | null | undefined): string | nu
   if (network === 'Preprod') return REALFI_ASSETS.preprod.susdr;
   return null;
 }
+
+/**
+ * USDCx on Cardano mainnet: Circle's USDC, the stablecoin a user swaps for USDrf.
+ *
+ * Not a RealFi asset, but the first leg of getting one. Verified 2026-10-05 against
+ * Gero's swap catalogue (`/api/v2/swap/tokens`: ticker USDCx, 6 decimals, verified).
+ * No preprod id: wallet swaps are a mainnet-only path.
+ */
+export const MAINNET_USDCX_UNIT =
+  '1f3aec8bfe7ea4fe14c5f121e2a92e301afe414147860d557cac7e345553444378';
+
+/** The USDCx id for a wallet network, or null where Gero has none. */
+export function usdcxAssetIdFor(network: string | null | undefined): string | null {
+  return network === 'Mainnet' ? MAINNET_USDCX_UNIT : null;
+}
+
+/**
+ * A held token's quantity in smallest units, as an exact decimal string; '0' when the
+ * wallet does not hold it or the stored quantity is not a whole, non-negative number.
+ */
+export function heldUnits(tokens: unknown, assetId: string | null): string {
+  if (!assetId || !tokens || typeof tokens !== 'object') return '0';
+  const quantity = (tokens as Record<string, { quantity?: unknown } | undefined>)[assetId]?.quantity;
+  if (typeof quantity === 'bigint') return quantity >= 0n ? quantity.toString() : '0';
+  if (typeof quantity === 'string' && /^\d+$/.test(quantity)) return quantity;
+  if (typeof quantity === 'number' && Number.isSafeInteger(quantity) && quantity >= 0) {
+    return String(quantity);
+  }
+  return '0';
+}

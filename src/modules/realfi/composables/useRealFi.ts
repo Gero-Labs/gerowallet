@@ -15,7 +15,7 @@ import NetworkStore from '@/stores/networkStore';
 import networks from '@/utils/networks';
 import { debugLog } from '@/utils/debug';
 import { resolveRealFiReadClient, type RealFiReadClient } from '../services/realfiClient';
-import { susdrAssetIdFor, usdrAssetIdFor } from '../assets';
+import { heldUnits as heldTokenUnits, susdrAssetIdFor, usdrAssetIdFor } from '../assets';
 import { hasReferralOptIn, rememberReferralOptIn } from '../referralOptIn';
 import {
   EMPTY_POINTS,
@@ -68,15 +68,7 @@ export function useRealFi() {
 
   /** A held token's quantity in smallest units, as the exact decimal string. */
   function heldUnits(assetId: string | null): SmallestUnit {
-    if (!assetId) return '0';
-    const held = (walletStore.tokens as Record<string, { quantity?: unknown }>)[assetId];
-    const quantity = held?.quantity;
-    if (typeof quantity === 'bigint') return quantity.toString();
-    if (typeof quantity === 'string' && /^\d+$/.test(quantity)) return quantity;
-    if (typeof quantity === 'number' && Number.isSafeInteger(quantity) && quantity >= 0) {
-      return String(quantity);
-    }
-    return '0';
+    return heldTokenUnits(walletStore.tokens, assetId);
   }
 
   /**

@@ -45,34 +45,34 @@
                with no explanation, and at launch that is every user's first look. -->
           <section v-if="isEmpty && !pendingOrders.length" class="realfi-start">
             <span class="realfi-glyph realfi-glyph--lg" aria-hidden="true"></span>
-            <!-- Holding USDrf but nothing staked is a DIFFERENT state from holding
-                 nothing: telling someone with 9,994 USDrf to "get USDrf" is noise. -->
             <template v-if="hasUsdr">
               <h2 class="t-heading realfi-start__title">{{ $t('realfi.start.readyTitle') }}</h2>
               <p class="t-body realfi-start__body">
                 {{ $t('realfi.start.readyBody', { amount: usdrLabel }) }}
               </p>
-              <template v-if="canTransact">
-                <GButton
-                  v-if="!ordersLocked"
-                  tier="primary"
-                  class="mt-4"
-                  @click="openAmount('stake')"
-                >
-                  {{ $t('realfi.start.stakeCta') }}
-                </GButton>
-              </template>
-              <GButton v-else tier="primary" class="mt-4" @click="openRealFiApp()">
-                {{ $t('realfi.start.readyCta') }}
-              </GButton>
             </template>
             <template v-else>
               <h2 class="t-heading realfi-start__title">{{ $t('realfi.start.title') }}</h2>
               <p class="t-body realfi-start__body">{{ $t('realfi.start.body') }}</p>
-              <GButton tier="primary" class="mt-4" @click="openRealFiApp()">
-                {{ $t('realfi.start.cta') }}
-              </GButton>
             </template>
+            <RealFiGettingStarted
+              :mainnet="isMainnet"
+              :hasUsdr="hasUsdr"
+              :canStake="canTransact && !ordersLocked"
+              :canStakeExternally="!canTransact && !ordersLocked"
+              :canAcquire="canSwapUsdcx"
+              :canSwapUsdrf="canSwapUsdrf"
+              :hasUsdcx="hasUsdcx"
+              :usdcxLabel="usdcxLabel"
+              :swapStatus="swapStatusForGuide"
+              :canRetryAvailability="canRetryUsdrfAvailability"
+              @check-eligibility="openRealFiApp()"
+              @get-usdrf="onGetUsdrf"
+              @get-usdcx="openUsdcxSwap()"
+              @open-realfi="openRealFiApp()"
+              @retry-availability="refreshUsdrfAvailability()"
+              @stake="onStake"
+            />
             <RealFiYieldChart
               v-if="showYieldChart"
               class="realfi-start__yield"
@@ -93,14 +93,17 @@
             <div class="realfi-hero__top">
               <span class="t-label">{{ $t('realfi.position.label') }}</span>
               <div
-                v-if="canTransact && !ordersLocked && (hasUsdr || canUnstake)"
+                v-if="(canTransact && !ordersLocked && (hasUsdr || canUnstake)) || (hasPosition && canSwapUsdrf)"
                 class="realfi-hero__actions"
               >
-                <GButton v-if="hasUsdr" tier="primary" compact @click="openAmount('stake')">
+                <GButton v-if="hasPosition && canSwapUsdrf" tier="secondary" compact @click="openUsdrfSwap()">
+                  {{ $t('realfi.gettingStarted.getUsdrf') }}
+                </GButton>
+                <GButton v-if="canTransact && !ordersLocked && hasUsdr" tier="primary" compact @click="openAmount('stake')">
                   {{ $t('realfi.stakeAction') }}
                 </GButton>
                 <GButton
-                  v-if="canUnstake"
+                  v-if="canTransact && !ordersLocked && canUnstake"
                   tier="secondary"
                   compact
                   @click="openAmount('unstake')"
@@ -159,6 +162,30 @@
               </div>
             </dl>
           </section>
+
+          <details v-if="isMainnet" class="realfi-guide-disclosure">
+            <summary class="t-body-sm">{{ $t('realfi.gettingStarted.showGuide') }}</summary>
+            <RealFiGettingStarted
+              class="mt-3"
+              compact
+              :mainnet="isMainnet"
+              :hasUsdr="hasUsdr"
+              :canStake="canTransact && !ordersLocked"
+              :canStakeExternally="!canTransact && !ordersLocked"
+              :canAcquire="canSwapUsdcx"
+              :canSwapUsdrf="canSwapUsdrf"
+              :hasUsdcx="hasUsdcx"
+              :usdcxLabel="usdcxLabel"
+              :swapStatus="swapStatusForGuide"
+              :canRetryAvailability="canRetryUsdrfAvailability"
+              @check-eligibility="openRealFiApp()"
+              @get-usdrf="onGetUsdrf"
+              @get-usdcx="openUsdcxSwap()"
+              @open-realfi="openRealFiApp()"
+              @retry-availability="refreshUsdrfAvailability()"
+              @stake="onStake"
+            />
+          </details>
 
           <!-- Unstaked but not claimed: the USDrf sits in RealFi's cooldown timelock,
                in neither the wallet nor the position. Each one shows how much, how far
@@ -427,6 +454,13 @@
           />
           <RealFiOrderFlow ref="flow" @placed="onPlaced" @support="openRealFiSupport()" />
         </template>
+        <SwapDialog
+          v-if="swapDialogOpen && canSwapUsdcx"
+          :isOpen="swapDialogOpen"
+          :sellTokenUnit="swapSellTokenUnit"
+          :buyTokenUnit="swapBuyTokenUnit"
+          @close="closeSwapDialog()"
+        />
       </v-col>
     </v-row>
   </v-layout>
@@ -439,9 +473,13 @@ import { formatUsd, formatInt, formatSignedChange } from '@/shared/utils/format'
 import i18n from '@/plugins/i18n';
 import snackbar from '@/plugins/snackbar';
 import WalletStore from '@/stores/walletStore';
-import { Network } from '@/models/types';
+import { Blockchain, Network } from '@/models/types';
+import featureFlagsStore from '@/stores/featureFlagsStore';
 import { useRealFi } from './composables/useRealFi';
 import RealFiYieldChart from './components/RealFiYieldChart.vue';
+import RealFiGettingStarted from './components/RealFiGettingStarted.vue';
+import { heldUnits, MAINNET_USDCX_UNIT, usdcxAssetIdFor, usdrAssetIdFor } from './assets';
+import { useRealFiSwapAvailability } from './composables/useRealFiSwapAvailability';
 import type { RealFiBuildRequest, RealFiOrderKind } from './services/realfiOrders';
 import {
   PENDING_MAX_AGE_MS,
@@ -469,6 +507,9 @@ const RealFiAmountDialog = defineAsyncComponent(
   () => import('./components/RealFiAmountDialog.vue'),
 );
 const RealFiOrderFlow = defineAsyncComponent(() => import('./components/RealFiOrderFlow.vue'));
+const SwapDialog = defineAsyncComponent(
+  () => import('@/modules/dashboard/dialogs/SwapDialog.vue'),
+);
 
 const {
   isLoading,
@@ -500,6 +541,97 @@ const t = (key: string, values?: Record<string, unknown>) => i18n.t(key, values)
 /* ── Network ──────────────────────────────────────────────────────────────── */
 
 const isTestnet = computed(() => WalletStore.state.loggedWallet?.network !== Network.MAINNET);
+const isMainnet = computed(() => {
+  const w = WalletStore.state.loggedWallet;
+  return w?.chain === Blockchain.CARDANO && w.network === Network.MAINNET;
+});
+const swapEnabled = computed(() => featureFlagsStore.isSwapEnabled());
+const {
+  status: usdrfSwapStatus,
+  isUsdcxAvailable: hasUsdcxSwapAvailability,
+  isUsdrfAvailable: hasUsdrfSwapAvailability,
+  canCheck: canCheckUsdrfAvailability,
+  refresh: refreshUsdrfAvailability,
+} = useRealFiSwapAvailability();
+const swapStatusForGuide = computed(() =>
+  swapEnabled.value ? usdrfSwapStatus.value : 'disabled',
+);
+const canRetryUsdrfAvailability = computed(
+  () => canCheckUsdrfAvailability.value && ['unknown', 'unavailable'].includes(usdrfSwapStatus.value),
+);
+// ADA → USDCx, the first leg. It needs only USDCx in the swap catalogue: tying it to
+// USDrf being listed hid a working swap behind one that does not exist yet.
+const canSwapUsdcx = computed(
+  () => isMainnet.value && !unavailableReason.value && hasUsdcxSwapAvailability.value,
+);
+// USDCx → USDrf is a separate, default-off flag: its only route is the SundaeSwap V4
+// pool, which the aggregator serves only after V4 is promoted.
+const canSwapUsdrf = computed(
+  () => canSwapUsdcx.value && hasUsdrfSwapAvailability.value && featureFlagsStore.isRealFiUsdrfSwapEnabled(),
+);
+// USDCx already in the wallet: the guide skips the ADA swap and goes to the USDrf leg.
+const usdcxUnits = computed<SmallestUnit>(() =>
+  heldUnits(WalletStore.state.tokens, usdcxAssetIdFor(WalletStore.state.loggedWallet?.network)),
+);
+const hasUsdcx = computed(() => BigInt(usdcxUnits.value) > 0n);
+const usdcxLabel = computed(() => unitsLabel(usdcxUnits.value, 'USDCx'));
+const mainnetUsdrfUnit = usdrAssetIdFor(Network.MAINNET) ?? '';
+const swapDialogOpen = ref(false);
+const swapSellTokenUnit = ref('');
+const swapBuyTokenUnit = ref('');
+const activeSwapScope = ref('');
+const swapScope = computed(() => {
+  const w = WalletStore.state.loggedWallet;
+  return `${w?.id ?? ''}:${w?.chain ?? ''}:${w?.network ?? ''}:${w?.baseAddress ?? ''}:${canSwapUsdcx.value}`;
+});
+
+watch(swapScope, (scope) => {
+  if (swapDialogOpen.value && scope !== activeSwapScope.value) closeSwapDialog(false);
+});
+
+// The USDrf swap flag is live: switching it off closes an open USDCx → USDrf dialog. The
+// ADA → USDCx swap does not depend on it and stays open.
+watch(canSwapUsdrf, (canSwap) => {
+  if (!canSwap && swapDialogOpen.value && swapBuyTokenUnit.value === mainnetUsdrfUnit) {
+    closeSwapDialog(false);
+  }
+});
+
+function openUsdrfSwap(): void {
+  if (!canSwapUsdrf.value) return;
+  swapSellTokenUnit.value = MAINNET_USDCX_UNIT;
+  swapBuyTokenUnit.value = mainnetUsdrfUnit;
+  activeSwapScope.value = swapScope.value;
+  swapDialogOpen.value = true;
+}
+
+function openUsdcxSwap(): void {
+  if (!canSwapUsdcx.value) return;
+  swapSellTokenUnit.value = 'lovelace';
+  swapBuyTokenUnit.value = MAINNET_USDCX_UNIT;
+  activeSwapScope.value = swapScope.value;
+  swapDialogOpen.value = true;
+}
+
+function onGetUsdrf(): void {
+  if (canSwapUsdrf.value) openUsdrfSwap();
+  else if (isTestnet.value) openRealFiApp();
+}
+
+function onStake(): void {
+  if (ordersLocked.value) return;
+  if (canTransact.value) openAmount('stake');
+  else openRealFiApp();
+}
+
+function closeSwapDialog(refresh = true): void {
+  const wasOpen = swapDialogOpen.value;
+  swapDialogOpen.value = false;
+  swapSellTokenUnit.value = '';
+  swapBuyTokenUnit.value = '';
+  activeSwapScope.value = '';
+  if (refresh && wasOpen) void load({ quiet: true });
+}
 
 /**
  * RealFi's own app for the wallet's network. Constants, never built from remote data,

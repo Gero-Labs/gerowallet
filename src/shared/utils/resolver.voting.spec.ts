@@ -78,3 +78,38 @@ describe('analyzeTransactionForSignatures — voting procedures', () => {
     expect(analyze(plain)).toHaveLength(0);
   });
 });
+
+describe('analyzeTransactionForSignatures — only signs for the wallet’s own credentials', () => {
+  const FOREIGN = 'f'.repeat(56);
+  const keys = (over: Record<string, unknown>) => ({ payment: [], change: [], stake: [], drep105: [], drep129: [], ccHot: [], ccCold: [], script: [], ...over }) as never;
+  const voteBy = (voterType: Cardano.VoterType, hash: string) => ({
+    body: { inputs: [], outputs: [], votingProcedures: [{
+      voter: { __typename: voterType, credential: { type: Cardano.CredentialType.KeyHash, hash } },
+      votes: [{ actionId: { id: 'a'.repeat(64), actionIndex: 0 }, votingProcedure: { vote: Cardano.Vote.yes, anchor: null } }],
+    }] },
+  }) as never;
+
+  it('adds the DRep witness for our own DRep voter, not for someone else’s', () => {
+    const own = keys({ drep129: [{ cred: CRED, path: '' }] });
+    expect(analyzeTransactionForSignatures(voteBy(Cardano.VoterType.dRepKeyHash, CRED), [], own, 0, '')
+      .some(s => s.derivationPath[0] === ChainDerivations.DREP)).toBe(true);
+    expect(analyzeTransactionForSignatures(voteBy(Cardano.VoterType.dRepKeyHash, FOREIGN), [], own, 0, '')
+      .some(s => s.derivationPath[0] === ChainDerivations.DREP)).toBe(false);
+  });
+
+  it('adds the CC-hot witness only for our own CC-hot voter', () => {
+    const own = keys({ ccHot: [{ cred: CRED, path: '' }] });
+    expect(analyzeTransactionForSignatures(voteBy(Cardano.VoterType.ccHotKeyHash, FOREIGN), [], own, 0, '')).toHaveLength(0);
+  });
+
+  it('adds the stake witness only for a certificate on our own stake credential', () => {
+    const own = keys({ stake: [{ cred: CRED, path: '', address: 'stake_test1' }] });
+    const cert = (hash: string) => ({ body: { inputs: [], outputs: [], certificates: [{
+      __typename: Cardano.CertificateType.VoteDelegation,
+      stakeCredential: { type: Cardano.CredentialType.KeyHash, hash },
+      dRep: { __typename: 'AlwaysAbstain' },
+    }] } }) as never;
+    expect(analyzeTransactionForSignatures(cert(CRED), [], own, 0, '').some(s => s.type === 'stake')).toBe(true);
+    expect(analyzeTransactionForSignatures(cert(FOREIGN), [], own, 0, '').some(s => s.type === 'stake')).toBe(false);
+  });
+});

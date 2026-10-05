@@ -61,6 +61,12 @@ describe('Midnight full HD derivation across ledger versions', () => {
     }
   });
 
+  it.each(networks)('%s never puts the viewing key in the persisted addresses (PRIV-01)', (network) => {
+    const derived = keys.get(network)!;
+    expect(derived.addresses).not.toHaveProperty('zswapViewingKey');
+    expect(JSON.stringify(derived.addresses)).not.toContain('mn_shield-esk');
+  });
+
   it.each(networks)('%s addresses and viewing key decode with the matching ledger', (network) => {
     const derived = keys.get(network)!;
     const sdkNetwork = network.toLowerCase();

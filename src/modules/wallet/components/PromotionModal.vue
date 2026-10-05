@@ -1,453 +1,217 @@
 <template>
-  <v-dialog v-model="isOpen" max-width="800px" @click:outside="closeModal">
-    <v-card class="promotion-modal">
-      <v-card-title class="modal-header">
-        <v-btn icon @click="closeModal" class="close-btn" aria-label="Close promotional modal">
-          <v-icon>mdi-close</v-icon>
-        </v-btn>
-      </v-card-title>
+  <BaseDialog
+    :isOpen="open"
+    :title="t('card.enjoyZeroFeesUntil')"
+    :subtitle="t('card.getStartedFree')"
+    :width="900"
+    :min-height="0"
+    @close="emit('close')"
+  >
+    <template #art>
+      <IsoScene name="hero" />
+    </template>
 
-      <v-card-text class="modal-content">
-        <!-- Zero Fees Promotion -->
-        <div class="promo-banner">
-          <div class="promo-text">
-            <h3 class="promo-heading">{{ t('card.enjoyZeroFeesUntil') }}</h3>
-            <p class="promo-subheading">{{ t('card.getStartedFree') }}</p>
+    <div class="card-fees">
+      <section class="card-fees__tiers" aria-labelledby="card-fees-tiers">
+        <p id="card-fees-tiers" class="card-fees__banner">
+          <v-icon small>mdi-star-circle-outline</v-icon>
+          <span>
+            {{ t('card.startingMayFirst') }} <strong>{{ t('card.geroHolders') }}</strong>
+            {{ t('card.willEnjoyTokenIncentives') }}
+          </span>
+        </p>
+        <article v-for="tier in tiers" :key="tier.name" class="card-fees__tier glass-tier">
+          <div class="card-fees__tier-head">
+            <h3 class="t-body-lg">{{ tier.name }}</h3>
+            <span class="t-body-sm">
+              <span class="card-fees__price g-num">{{ tier.price }}</span> {{ t('card.inGero') }}
+            </span>
           </div>
-        </div>
+          <ul class="card-fees__benefits">
+            <li v-for="benefit in tier.benefits" :key="benefit">
+              <v-icon small>mdi-check</v-icon>
+              {{ benefit }}
+            </li>
+          </ul>
+        </article>
+      </section>
 
-        <!-- Two Column Layout -->
-        <div class="content-grid">
-          <!-- Left Column: $GERO Token Incentives -->
-          <div class="token-section">
-            <div class="token-banner">
-              <v-icon class="token-icon">mdi-star-circle</v-icon>
-              <p class="token-message">{{ t('card.startingMayFirst') }} <strong>{{ t('card.geroHolders') }}</strong> {{ t('card.willEnjoyTokenIncentives') }}</p>
-            </div>
+      <section class="card-fees__table-wrap" aria-labelledby="card-fees-standard">
+        <h3 id="card-fees-standard" class="t-body-lg">{{ t('card.standardFees') }}</h3>
+        <table class="card-fees__table">
+          <thead>
+            <tr>
+              <th scope="col">{{ t('card.feeType') }}</th>
+              <th scope="col" class="card-fees__num">{{ t('card.fee') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="fee in fees" :key="fee.label">
+              <td>{{ fee.label }}</td>
+              <td class="card-fees__num g-num">{{ fee.value }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </div>
 
-            <div class="tiers-vertical">
-              <!-- Basic Tier -->
-              <div class="tier-card basic-tier">
-                <div class="tier-header">
-                  <div class="tier-title-row">
-                    <h4 class="tier-name">{{ t('card.babyGero') }}</h4>
-                    <div class="tier-requirement">
-                      <span class="tier-price">€15</span>
-                      <span class="tier-details">{{ t('card.inGero') }}</span>
-                    </div>
-                  </div>
-                </div>
-                <div class="tier-benefits">
-                  <div class="benefit-item">
-                    <v-icon class="benefit-icon">mdi-check-circle</v-icon>
-                    <span>{{ t('card.freeAtmWithdrawals') }}</span>
-                  </div>
-                  <div class="benefit-item">
-                    <v-icon class="benefit-icon">mdi-check-circle</v-icon>
-                    <span>{{ t('card.noMonthlyFee') }}</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Core Tier -->
-              <div class="tier-card core-tier">
-                <div class="tier-header">
-                  <div class="tier-title-row">
-                    <h4 class="tier-name">{{ t('card.geroPro') }}</h4>
-                    <div class="tier-requirement">
-                      <span class="tier-price">€50</span>
-                      <span class="tier-details">{{ t('card.inGero') }}</span>
-                    </div>
-                  </div>
-                </div>
-                <div class="tier-benefits">
-                  <div class="benefit-item">
-                    <v-icon class="benefit-icon">mdi-check-circle</v-icon>
-                    <span>{{ t('card.basicPlus') }}</span>
-                  </div>
-                  <div class="benefit-item">
-                    <v-icon class="benefit-icon">mdi-check-circle</v-icon>
-                    <span>{{ t('card.allEuIntPosFeesWaived') }}</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Pro Tier -->
-              <div class="tier-card pro-tier">
-                <div class="tier-header">
-                  <div class="tier-title-row">
-                    <h4 class="tier-name">{{ t('card.gerobanga') }}</h4>
-                    <div class="tier-requirement">
-                      <span class="tier-price">€200</span>
-                      <span class="tier-details">{{ t('card.inGero') }}</span>
-                    </div>
-                  </div>
-                </div>
-                <div class="tier-benefits">
-                  <div class="benefit-item">
-                    <v-icon class="benefit-icon">mdi-check-circle</v-icon>
-                    <span>{{ t('card.allFeesWaived') }}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Right Column: Standard Fees Table -->
-          <div class="fees-section">
-            <h3 class="section-title">{{ t('card.standardFees') }}</h3>
-            <div class="fees-table">
-              <div class="table-row table-header">
-                <div class="table-cell">{{ t('card.feeType') }}</div>
-                <div class="table-cell">{{ t('card.fee') }}</div>
-              </div>
-              <div class="table-row">
-                <div class="table-cell">{{ t('card.cardIssuance') }}</div>
-                <div class="table-cell">€3</div>
-              </div>
-              <div class="table-row">
-                <div class="table-cell">{{ t('card.monthlyFee') }}</div>
-                <div class="table-cell">€3 {{ t('card.physicalVirtual') }}</div>
-              </div>
-              <div class="table-row">
-                <div class="table-cell">{{ t('card.topUpAdaEur') }}</div>
-                <div class="table-cell">1.5%</div>
-              </div>
-              <div class="table-row">
-                <div class="table-cell">{{ t('card.atmWithdrawalEu') }}</div>
-                <div class="table-cell">€1.50</div>
-              </div>
-              <div class="table-row">
-                <div class="table-cell">{{ t('card.atmWithdrawalIntl') }}</div>
-                <div class="table-cell">2% + €2</div>
-              </div>
-              <div class="table-row">
-                <div class="table-cell">{{ t('card.posPurchasesEu') }}</div>
-                <div class="table-cell">0.5% + €0.15</div>
-              </div>
-              <div class="table-row">
-                <div class="table-cell">{{ t('card.posPurchasesIntl') }}</div>
-                <div class="table-cell">2.0% + €0.75</div>
-              </div>
-              <div class="table-row">
-                <div class="table-cell">{{ t('card.fxConversionMarkup') }}</div>
-                <div class="table-cell">1%</div>
-              </div>
-              <div class="table-row">
-                <div class="table-cell">{{ t('card.transactionDecline') }}</div>
-                <div class="table-cell">€0.50</div>
-              </div>
-              <div class="table-row">
-                <div class="table-cell">{{ t('card.replacementCard') }}</div>
-                <div class="table-cell">+€5 ({{ t('card.expressShipping') }} +€10)</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </v-card-text>
-
-      <div class="modal-footer">
-        <v-icon small class="footer-icon">mdi-wallet-outline</v-icon>
-        <span>{{ t('card.tierDetectedAutomatically') }}</span>
-      </div>
-    </v-card>
-  </v-dialog>
+    <p class="card-fees__footer t-caption">
+      <v-icon small>mdi-wallet-outline</v-icon>
+      {{ t('card.tierDetectedAutomatically') }}
+    </p>
+  </BaseDialog>
 </template>
 
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed } from 'vue';
+import { useTranslation } from '@/shared/composables/useTranslation';
+import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
+import IsoScene from '@/shared/components/iso/IsoScene.vue';
+
+withDefaults(defineProps<{ open?: boolean }>(), { open: false });
+const emit = defineEmits<{ (e: 'close'): void }>();
 
 const { t } = useTranslation();
 
-interface Props {
-  open: boolean;
-}
+// $GERO holder tiers and the standard fee schedule. Amounts are the published card terms.
+const tiers = computed(() => [
+  { name: t('card.babyGero'), price: '€15', benefits: [t('card.freeAtmWithdrawals'), t('card.noMonthlyFee')] },
+  { name: t('card.geroPro'), price: '€50', benefits: [t('card.basicPlus'), t('card.allEuIntPosFeesWaived')] },
+  { name: t('card.gerobanga'), price: '€200', benefits: [t('card.allFeesWaived')] },
+]);
 
-const props = withDefaults(defineProps<Props>(), {
-  open: false,
-});
-const emit = defineEmits<{
-  (e: 'close'): void;
-}>();
-
-const isOpen = computed({
-  get: () => props.open,
-  set: (value) => {
-    if (!value) {
-      emit('close');
-    }
-  },
-});
-
-const closeModal = () => {
-  emit('close');
-};
+const fees = computed(() => [
+  { label: t('card.cardIssuance'), value: '€3' },
+  { label: t('card.monthlyFee'), value: `€3 ${t('card.physicalVirtual')}` },
+  { label: t('card.topUpAdaEur'), value: '1.5%' },
+  { label: t('card.atmWithdrawalEu'), value: '€1.50' },
+  { label: t('card.atmWithdrawalIntl'), value: '2% + €2' },
+  { label: t('card.posPurchasesEu'), value: '0.5% + €0.15' },
+  { label: t('card.posPurchasesIntl'), value: '2.0% + €0.75' },
+  { label: t('card.fxConversionMarkup'), value: '1%' },
+  { label: t('card.transactionDecline'), value: '€0.50' },
+  { label: t('card.replacementCard'), value: `+€5 (${t('card.expressShipping')} +€10)` },
+]);
 </script>
 
 <style lang="scss" scoped>
-@import '../styles/_variables';
-@import '../styles/_mixins';
-
-.promotion-modal {
-  background: $background-card;
-  border: 1px solid $border-secondary;
-  border-radius: $border-radius-xl;
-  overflow: hidden;
-}
-
-.modal-header {
-  padding: $spacing-md $spacing-md;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  min-height: 48px;
-
-  .close-btn {
-    color: $text-secondary;
-
-    &:hover {
-      color: $text-primary;
-    }
-  }
-}
-
-.modal-content {
-  padding: $spacing-2xl;
-  max-height: 70vh;
-  overflow-y: auto;
-}
-
-// Promo Banner
-.promo-banner {
-  display: flex;
-  align-items: center;
-  gap: $spacing-lg;
-  padding: $spacing-xl;
-  background: linear-gradient(135deg, rgba(0, 199, 243, 0.15) 0%, rgba(0, 255, 209, 0.15) 100%);
-  border-radius: $border-radius-lg;
-  border: 1px solid rgba(0, 199, 243, 0.3);
-  margin-bottom: $spacing-2xl;
-
-  .promo-icon {
-    font-size: 48px;
-    color: $primary-cyan;
-  }
-
-  .promo-text {
-    flex: 1;
-
-    .promo-heading {
-      @include heading-style($font-size-xl);
-      color: $text-primary;
-      margin: 0 0 $spacing-xs 0;
-    }
-
-    .promo-subheading {
-      @include body-text($font-size-base);
-      color: $text-secondary;
-      margin: 0;
-    }
-  }
-}
-
-// Two Column Layout
-.content-grid {
+.card-fees {
   display: grid;
-  grid-template-columns: 45% 55%;
-  gap: $spacing-2xl;
-  margin-top: $spacing-2xl;
-
-  @media (max-width: $breakpoint-md) {
-    grid-template-columns: 1fr;
-  }
+  grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr));
+  gap: var(--g-s-5);
+  padding: var(--g-s-4) var(--g-s-2) 0;
 }
 
-// Fees Section
-.fees-section {
-  .section-title {
-    @include heading-style($font-size-lg);
-    color: $text-primary;
-    margin: 0 0 $spacing-lg 0;
-  }
-}
-
-.fees-table {
-  border: 1px solid $border-secondary;
-  border-radius: $border-radius-md;
-  overflow: hidden;
-
-  .table-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    border-bottom: 1px solid $border-secondary;
-
-    &:last-child {
-      border-bottom: none;
-    }
-
-    &.table-header {
-      background: rgba(0, 199, 243, 0.1);
-      font-weight: $font-weight-semibold;
-      color: $text-primary;
-    }
-
-    .table-cell {
-      padding: $spacing-md $spacing-lg;
-      @include body-text($font-size-sm);
-      color: $text-secondary;
-
-      &:first-child {
-        border-right: 1px solid $border-secondary;
-        color: $text-primary;
-      }
-    }
-  }
-
-  .table-header .table-cell {
-    color: $primary-cyan;
-  }
-}
-
-// Token Section
-.token-section {
-  .section-title {
-    @include heading-style($font-size-lg);
-    color: $text-primary;
-    margin: 0 0 $spacing-lg 0;
-  }
-}
-
-.token-banner {
-  display: flex;
-  align-items: center;
-  gap: $spacing-md;
-  padding: $spacing-lg;
-  border-radius: $border-radius-md;
-  margin-bottom: $spacing-xl;
-
-  .token-icon {
-    font-size: 32px;
-    color: $tier-gold;
-  }
-
-  .token-message {
-    @include body-text($font-size-sm);
-    color: $text-secondary;
-    margin: 0;
-
-    strong {
-      color: $tier-gold;
-      font-weight: $font-weight-semibold;
-    }
-  }
-}
-
-// Tiers Vertical (Left Column)
-.tiers-vertical {
+.card-fees__tiers {
   display: flex;
   flex-direction: column;
-  gap: $spacing-lg;
+  gap: var(--g-s-3);
 }
 
-.tier-card {
-  background: $background-secondary;
-  border: 1px solid $border-secondary;
-  border-radius: $border-radius-lg;
-  padding: $spacing-xl;
-  transition: transform var(--g-dur-slow) ease, box-shadow var(--g-dur-slow) ease;
+.card-fees__banner {
+  display: flex;
+  gap: var(--g-s-3);
+  align-items: flex-start;
+  margin: 0;
+  padding: var(--g-s-3) var(--g-s-4);
+  border-radius: var(--g-r-control);
+  background: color-mix(in srgb, var(--g-accent) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--g-accent) 22%, transparent);
+  color: var(--g-text-1);
+  font-size: 13px;
 
-  &:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-  }
-
-  &.basic-tier {
-    border-top: 3px solid $tier-basic-green;
-  }
-
-  &.core-tier {
-    border-top: 3px solid $tier-core-blue;
-  }
-
-  &.pro-tier {
-    border-top: 3px solid $tier-pro-purple;
-    background: linear-gradient(135deg, rgba($tier-pro-purple, 0.15) 0%, rgba($tier-pro-pink, 0.15) 100%);
-    box-shadow: 0 0 30px rgba($tier-pro-purple, 0.4), 0 0 60px rgba($tier-pro-pink, 0.2);
-  }
-
-  .tier-header {
-    margin-bottom: $spacing-lg;
-
-    .tier-title-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: $spacing-md;
-    }
-
-    .tier-name {
-      @include heading-style($font-size-xl);
-      color: $text-primary;
-      margin: 0;
-    }
-
-    .tier-requirement {
-      display: flex;
-      align-items: baseline;
-      gap: $spacing-xs;
-      white-space: nowrap;
-
-      .tier-price {
-        @include heading-style($font-size-xl);
-        color: $text-primary;
-        font-weight: $font-weight-bold;
-        margin: 0;
-      }
-
-      .tier-details {
-        @include body-text($font-size-sm);
-        color: $text-muted;
-        font-style: italic;
-      }
-    }
-  }
-
-  .tier-benefits {
-    .benefit-item {
-      display: flex;
-      align-items: center;
-      gap: $spacing-sm;
-      margin-bottom: $spacing-sm;
-
-      .benefit-icon {
-        font-size: 18px;
-        color: $primary-cyan;
-      }
-
-      span {
-        @include body-text($font-size-sm);
-        color: $text-secondary;
-      }
-    }
+  .v-icon {
+    color: var(--g-accent);
   }
 }
 
-// Modal Footer
-.modal-footer {
+.card-fees__tier {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-2);
+  padding: var(--g-s-3) var(--g-s-4);
+
+  h3 {
+    margin: 0;
+  }
+}
+
+.card-fees__tier-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--g-s-2);
+}
+
+.card-fees__price {
+  color: var(--g-text-1);
+  font-weight: 600;
+}
+
+.card-fees__benefits {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  color: var(--g-text-2);
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: var(--g-s-2);
+  }
+
+  .v-icon {
+    color: var(--g-accent);
+  }
+}
+
+.card-fees__table-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-2);
+
+  h3 {
+    margin: 0;
+  }
+}
+
+.card-fees__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+
+  th {
+    padding: var(--g-s-2) var(--g-s-3);
+    text-align: left;
+    border-bottom: 1px solid var(--g-hairline-2);
+    color: var(--g-text-3);
+    font-size: 11px;
+    font-weight: 550;
+  }
+
+  td {
+    padding: var(--g-s-2) var(--g-s-3);
+    border-bottom: 1px solid var(--g-hairline-1);
+    color: var(--g-text-2);
+  }
+
+  .card-fees__num {
+    text-align: right;
+  }
+
+  td.card-fees__num {
+    color: var(--g-text-1);
+  }
+}
+
+.card-fees__footer {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: $spacing-sm;
-  padding: $spacing-lg $spacing-2xl;
-  background: rgba(0, 199, 243, 0.05);
-  border-top: 1px solid $border-secondary;
-  font-size: $font-size-xs;
-  color: $text-muted;
-  font-style: italic;
-
-  .footer-icon {
-    color: $primary-cyan;
-  }
+  gap: var(--g-s-2);
+  margin: var(--g-s-4) var(--g-s-2) 0;
 }
 </style>

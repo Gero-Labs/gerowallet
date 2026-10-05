@@ -1,5 +1,5 @@
 import fs from 'fs-extra'
-import { isDev, isFirefox, log, r } from './utils';
+import { isDev, log, r } from './utils';
 import type PkgType from '../package.json';
 import type { Manifest } from 'webextension-polyfill';
 import dotenv from 'dotenv';
@@ -122,7 +122,10 @@ function buildCSP(dev: boolean): string {
           'ws://*.gerowallet.io',
           'https://fastly.jsdelivr.net/npm/@sec-ant/zxing-wasm@2.1.5/dist/reader/zxing_reader.wasm',
         ]
-      : ['ws://127.0.0.1:*', 'http://localhost:6300', 'http://127.0.0.1:6300']),
+      // Local Midnight proof servers: ledger 8 (mainnet, preprod) on 6300 and
+      // ledger 9 (stagenet) on 6301. Loopback only; the wallet refuses a
+      // "local" prover anywhere else (PRIV-01).
+      : ['ws://127.0.0.1:*', 'http://localhost:6300', 'http://127.0.0.1:6300', 'http://localhost:6301', 'http://127.0.0.1:6301']),
     // SPO Node Monitor (Cloudflare Tunnel)
     'https://*.trycloudflare.com',
   ];
@@ -157,8 +160,8 @@ function buildCSP(dev: boolean): string {
     ...(dev ? ['http://localhost:*'] : ['https://api.gerowallet.io/', 'https://guardarian.com/']),
     'https://*.moonpay.com/',
     'https://connect.trezor.io/',
-    'https://www.kaiserex.com/',
-    'https://kaiserex.com/',
+    // Gero Card registration (Zione) and the Zoho form it submits to inside the frame.
+    'https://zione.com/',
     'https://forms.zohopublic.eu/',
     'https://*.bringweb3.io/',
   ];
@@ -223,16 +226,11 @@ async function getManifest() {
         }
       }
       : {}),
-    background: isFirefox
-      ? {
-        scripts: ['background/_virtual_index.js'],
-        persistent: true,
-      }
-      : {
-        service_worker: './background/index.js',
-        // Note: We build with format: 'iife', not ES modules, so don't use type: 'module'
-        // This was causing "Failed to resolve module specifier" errors
-      },
+    background: {
+      service_worker: './background/index.js',
+      // Note: We build with format: 'iife', not ES modules, so don't use type: 'module'
+      // This was causing "Failed to resolve module specifier" errors
+    },
     permissions: [
       'tabs',
       'activeTab',
@@ -251,14 +249,12 @@ async function getManifest() {
       'notifications',
       'identity',
       'sidePanel',
-      'scripting',
       'declarativeNetRequest',
     ],
-    declarative_net_request: {
-      rule_resources: [
-        { id: 'moonpay_iframe', enabled: true, path: 'public/dnr_rules.json' },
-      ],
-    },
+    // The MoonPay frame-header rule is a SESSION rule scoped to frames this
+    // extension initiates (src/chrome/moonpayFrameRule.ts), not a static ruleset:
+    // a static rule can't name the runtime extension id, and without that
+    // condition it stripped MoonPay's anti-framing headers for every site.
     host_permissions: ['*://*/*'],
     web_accessible_resources: [
       {

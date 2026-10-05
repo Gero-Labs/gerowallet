@@ -263,6 +263,8 @@ export interface DappProvingContext {
   /** SDK network id (`mainnet` / `preprod` / `stagenet`) — selects the ledger 8 vs 9 payload codec. */
   sdkNetworkId: string;
   proofServer: ProofServerPreference;
+  /** The user's recorded remote-prover consent (`midnightStore.shieldedProvingConsent`). */
+  provingConsent: unknown;
   /** Sender tab; needed to park a "proof server needed" prompt. Absent → no parking. */
   tabId?: number;
 }
@@ -280,7 +282,7 @@ export interface DappProvingDeps {
  * resolved source for logging; the page never receives the URL/headers.
  */
 export function assertDappProvingAvailable(ctx: DappProvingContext): DappProvingTarget['source'] {
-  return resolveDappProvingTarget(ctx.network, ctx.proofServer).source;
+  return resolveDappProvingTarget(ctx.network, ctx.proofServer, ctx.provingConsent).source;
 }
 
 function requireKeyLocation(data: Record<string, unknown>): string {
@@ -316,7 +318,7 @@ async function withProvingTarget<T>(
   keyLocation: string,
   run: (target: DappProvingTarget) => Promise<T>,
 ): Promise<T> {
-  const target = resolveDappProvingTarget(ctx.network, ctx.proofServer);
+  const target = resolveDappProvingTarget(ctx.network, ctx.proofServer, ctx.provingConsent);
   const startedAt = Date.now();
   debugLog(`🌙 connector ${op}: start`, { origin: ctx.origin, keyLocation, source: target.source });
   try {

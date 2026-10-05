@@ -54,7 +54,7 @@ vi.mock('./components/RealFiAmountDialog.vue', () => ({
 
 // Reactive, so a test can switch wallets under a page that stays mounted.
 // baseAddress is declared up front: Vue 2 does not track a property added later.
-const wallet = reactive<Record<string, unknown>>({ network: 'Preprod', baseAddress: undefined });
+const wallet = reactive<Record<string, unknown>>({ network: 'Preprod', chain: 'Cardano', baseAddress: undefined });
 vi.mock('@/stores/walletStore', () => ({
   default: {
     state: {

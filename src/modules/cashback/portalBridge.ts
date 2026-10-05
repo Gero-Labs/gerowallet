@@ -11,6 +11,27 @@ export type PortalInboundAction = 'LOGIN' | 'SIGN_MESSAGE' | 'POPUP_CLOSED';
 export const MAX_SIGN_MESSAGE_LENGTH = 2048;
 
 /**
+ * The only origins the Cashback Portal may be loaded from. Reviewed constants,
+ * not backend config: the portal URL arrives from gero-backend, and whatever
+ * origin it names becomes the one allowed to ask the payment key for a
+ * signature. A backend that could choose that origin could choose who asks.
+ * Add a host here (in a reviewed change) if Bring moves or adds a portal.
+ */
+export const BRING_PORTAL_ORIGINS: readonly string[] = ['https://portal.bringweb3.io'];
+
+/**
+ * The bootstrap's portal URL when it points at a pinned portal origin over
+ * https, otherwise null (the portal is then not loaded at all).
+ */
+export function pinnedPortalUrl(url: unknown): string | null {
+  if (typeof url !== 'string' || !url) return null;
+  let parsed: URL;
+  try { parsed = new URL(url); } catch { return null; }
+  if (parsed.protocol !== 'https:' || parsed.username || parsed.password) return null;
+  return BRING_PORTAL_ORIGINS.includes(parsed.origin) ? parsed.href : null;
+}
+
+/**
  * A portal message is trusted only when it comes from the exact portal origin
  * and is tagged `from: 'bringweb3'` with an action. Never widen this.
  */
@@ -23,15 +44,16 @@ export function isTrustedPortalMessage(event: MessageEvent, portalOrigin: string
 /**
  * The challenge of a `SIGN_MESSAGE` request, or null when the message carries
  * none the wallet should sign: not a string, empty, oversized, or containing
- * control characters (a challenge is one printable line; anything else could
- * hide text from the approval prompt).
+ * control characters or bidi overrides / isolates (a challenge is one
+ * printable line; anything else could hide or reorder text in the approval
+ * prompt).
  */
 export function signRequestMessage(data: unknown): string | null {
   const message = (data as { messageToSign?: unknown } | null | undefined)?.messageToSign;
   if (typeof message !== 'string') return null;
   if (message.length === 0 || message.length > MAX_SIGN_MESSAGE_LENGTH) return null;
   // eslint-disable-next-line no-control-regex -- rejecting control characters is the point
-  if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(message)) return null;
+  if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u202A-\u202E\u2066-\u2069]/.test(message)) return null;
   return message;
 }
 

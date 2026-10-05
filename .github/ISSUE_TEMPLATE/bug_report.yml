@@ -52,7 +52,6 @@ body:
         - Chrome
         - Brave
         - Edge
-        - Firefox
         - Other (note it below)
     validations:
       required: true

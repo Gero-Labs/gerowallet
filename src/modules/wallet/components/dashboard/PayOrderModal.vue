@@ -1,345 +1,233 @@
 <template>
-  <v-dialog v-model="dialog" max-width="600" persistent content-class="pay-order-modal">
-    <v-card class="modal-card">
-      <!-- Header -->
-      <div class="modal-header">
-        <div class="header-content">
-          <h2 class="modal-title">{{ $t('card.completePayment') }}</h2>
-          <p class="modal-subtitle">{{ $t('card.paymentRequired') }}</p>
-        </div>
-        <v-btn icon class="close-btn" @click="handleClose" :disabled="isProcessing">
-          <v-icon>mdi-close</v-icon>
-        </v-btn>
+  <BaseDialog
+    :isOpen="open"
+    :title="done ? t('card.paymentConfirmed') : t('card.completePayment')"
+    :subtitle="done ? t('card.orderPlacedSuccessfully') : t('card.paymentRequired')"
+    :width="600"
+    :min-height="0"
+    :persistent="busy"
+    @close="close"
+  >
+    <template #art>
+      <IsoScene :name="done ? 'approved' : 'payment'" />
+    </template>
+
+    <div class="pay-order">
+      <div v-if="loading" class="pay-order__loading" role="status">
+        <div class="g-skeleton pay-order__skeleton" aria-hidden="true"></div>
+        <span class="t-caption">{{ t('card.loadingCardDetails') }}</span>
       </div>
 
-      <!-- Step Content -->
-      <div class="modal-content">
-        <!-- Payment Step -->
-        <CardOrderPaymentStep
-          v-if="!orderSuccess && orderResponse"
-          :amount-ada="paymentAmount.ada"
-          :amount-eur="paymentAmount.eur"
-          :exchange-rate="orderResponse ? parseFloat(String(orderResponse.exchangeRate)) : undefined"
-          :payment-status="orderResponse?.paymentStatus"
-          @back="handleClose"
-          @confirm="handlePaymentConfirm"
-        />
-        <!-- Loading State -->
-        <div v-else-if="isProcessing && !orderResponse" class="loading-state">
-          <v-progress-circular indeterminate color="primary"></v-progress-circular>
-          <p class="loading-text">{{ $t('card.loadingCardDetails') }}</p>
+      <template v-else-if="done">
+        <PaymentConfirmationStep />
+        <div class="pay-order__actions">
+          <GButton tier="primary" @click="close">{{ t('common.done') }}</GButton>
         </div>
+      </template>
 
-        <!-- Success State -->
-        <PaymentConfirmationStep
-          v-else
-          :is-loading="isProcessing"
-          :is-success="orderSuccess"
-          @complete="handleOrderComplete"
+      <template v-else-if="details">
+        <p v-if="refreshed" class="pay-order__refreshed t-body-sm" role="alert">
+          <v-icon small>mdi-refresh</v-icon>
+          {{ t('card.paymentDetailsRefreshed') }}
+        </p>
+        <DeliveryFeePanel
+          :amount-ada="parseFloat(details.amountAda)"
+          :amount-eur="details.amountEur"
+          :address="details.depositAddress"
+          :expires-at="details.expiresAt || undefined"
         />
-      </div>
-    </v-card>
-  </v-dialog>
+        <CardSignSection
+          ref="signSection"
+          :label="t('card.confirmPayment')"
+          :prepare="prepareFeeTx"
+          :disabled="expired"
+          @busy="busy = $event"
+          @submitted="onSubmitted"
+        />
+        <GButton tier="tertiary" block :disabled="busy" @click="close">{{ t('common.cancel') }}</GButton>
+      </template>
+    </div>
+  </BaseDialog>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
+import { Cardano, Serialization } from '@cardano-sdk/core';
+import { HexBlob } from '@cardano-sdk/util';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { useRouter } from 'vue-router/composables';
-import CardOrderPaymentStep from './card-order-steps/CardOrderPaymentStep.vue';
-import PaymentConfirmationStep from './card-order-steps/PaymentConfirmationStep.vue';
+import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
+import GButton from '@/shared/components/GButton/GButton.vue';
+import IsoScene from '@/shared/components/iso/IsoScene.vue';
 import cardStore from '@/stores/modules/card';
-import snackbar from '@/plugins/snackbar';
-import { Messaging } from '@/chrome/messaging';
-import { MessageTypes } from '@/models/MessageTypes';
-import { Cardano } from '@cardano-sdk/core';
 import { walletStore } from '@/stores/walletStore';
+import snackbar from '@/plugins/snackbar';
 import { nexusTxApi, walletUtxosToNexusInputs, txOutToNexusOutput, type BuildTxRequest } from '@/api/nexus-tx-api';
+import { isCardDepositAddress, networkIdOfAddress } from '@/modules/wallet/utils/cardDepositAddress';
+import { checkDeliveryPayment } from '@/modules/wallet/utils/cardDeliveryPayment';
+import { lovelaceFromAda } from '@/modules/wallet/utils/cardOrder';
+import CardSignSection from '../ui/CardSignSection.vue';
+import DeliveryFeePanel from './card-order-steps/DeliveryFeePanel.vue';
+import PaymentConfirmationStep from './card-order-steps/PaymentConfirmationStep.vue';
 
-const { t } = useTranslation();
-const router = useRouter();
-
-interface Props {
+const props = defineProps<{
   open: boolean;
   orderUuid: string;
-}
+}>();
 
-interface Emits {
+const emit = defineEmits<{
   (e: 'close'): void;
   (e: 'success'): void;
+}>();
+
+const { t } = useTranslation();
+
+interface PaymentDetails {
+  depositAddress: Cardano.PaymentAddress;
+  amountAda: string;
+  amountEur: number;
+  expiresAt: string | null;
 }
 
-const props = defineProps<Props>();
-const emit = defineEmits<Emits>();
+const details = ref<PaymentDetails | null>(null);
+const loading = ref(false);
+const busy = ref(false);
+const done = ref(false);
+const refreshed = ref(false);
+const now = ref(Date.now());
+const signSection = ref<{ reset: () => void } | null>(null);
 
-// Dialog state
-const dialog = computed({
-  get: () => props.open,
-  set: value => {
-    if (!value) {
-      emit('close');
-    }
-  },
+const expired = computed(() => {
+  const deadline = details.value?.expiresAt ? Date.parse(details.value.expiresAt) : NaN;
+  return Number.isFinite(deadline) && deadline <= now.value;
 });
 
-// Payment
-const paymentAmount = ref({
-  ada: 0,
-  eur: 0,
-});
+const walletNetworkId = () => networkIdOfAddress(walletStore.loggedWallet.baseAddress);
 
-// Order response data
-const orderResponse = ref<{
-  paymentId: number;
-  depositAddress: string;
-  depositAmountEur: string | number;
-  depositAmountAda: string | number;
-  exchangeRate: string | number;
-  depositExpiresAt: string;
-  depositQrCode: string;
-  orderUuid?: string;
-  paymentStatus?: string;
-} | null>(null);
-
-// Processing states
-const isProcessing = ref(false);
-const orderSuccess = ref(false);
-
-const loadOrderDetails = async () => {
-  try {
-    isProcessing.value = true;
-    
-    const paymentDetails = await cardStore.getDeliveryPayment(props.orderUuid);
-    
-    if (!paymentDetails) {
-      throw new Error(t('card.failedToLoadOrderDetails'));
-    }
-    
-    orderResponse.value = {
-      paymentId: typeof paymentDetails.payment_id === 'string' 
-        ? parseInt(paymentDetails.payment_id, 10) || 0
-        : (paymentDetails.payment_id || 0),
-      depositAddress: paymentDetails.deposit_address || '',
-      depositAmountEur: String(paymentDetails.amount_eur || 0),
-      depositAmountAda: String(paymentDetails.amount_ada || 0),
-      exchangeRate: String(paymentDetails.exchange_rate || 0),
-      depositExpiresAt: paymentDetails.expires_at || '',
-      depositQrCode: paymentDetails.qr_code_data || '',
-      orderUuid: props.orderUuid,
-      paymentStatus: paymentDetails.status || '',
-    };
-    
-    paymentAmount.value = {
-      ada: parseFloat(String(paymentDetails.amount_ada)) || 0,
-      eur: parseFloat(String(paymentDetails.amount_eur)) || 0,
-    };
-  } catch (error: any) {
-    snackbar.setError(error?.message || t('card.failedToLoadOrderDetails'));
-    handleClose();
-  } finally {
-    isProcessing.value = false;
+/** Reads the delivery-fee payment; false (with a message) when it cannot be paid now. */
+async function loadDetails(): Promise<boolean> {
+  const fresh = await cardStore.getDeliveryPayment(props.orderUuid);
+  now.value = Date.now();
+  if (fresh?.status === 'expired') {
+    snackbar.setError(t('card.paymentExpiredMessage'));
+    return false;
   }
-};
+  const amountAda = String(fresh?.amount_ada ?? '');
+  if (!fresh || fresh.status !== 'pending' || lovelaceFromAda(amountAda) === null) {
+    snackbar.setError(t('card.failedToLoadOrderDetails'));
+    return false;
+  }
+  if (!isCardDepositAddress(fresh.deposit_address, walletNetworkId())) {
+    snackbar.setError(t('errors.invalidAddress'));
+    return false;
+  }
+  details.value = {
+    depositAddress: fresh.deposit_address,
+    amountAda,
+    amountEur: parseFloat(String(fresh.amount_eur ?? 0)) || 0,
+    expiresAt: fresh.expires_at ?? null,
+  };
+  return true;
+}
+
+async function prepareFeeTx(): Promise<Cardano.Tx> {
+  const shown = details.value;
+  if (!shown) throw new Error(t('errors.invalidOrder'));
+
+  // The deposit address rotates after 60 minutes: re-read right before paying, and if
+  // anything moved, show the new details instead of signing them unseen.
+  const fresh = await cardStore.getDeliveryPayment(props.orderUuid);
+  const verdict = checkDeliveryPayment(
+    fresh,
+    { depositAddress: shown.depositAddress, depositAmountAda: shown.amountAda },
+    Date.now(),
+  );
+  if (verdict === 'expired') throw new Error(t('card.paymentExpired'));
+  if (verdict === 'changed') {
+    if (await loadDetails()) refreshed.value = true;
+    throw new Error(t('card.paymentDetailsRefreshed'));
+  }
+  if (verdict !== 'ok') throw new Error(t('errors.invalidPaymentDetails'));
+
+  const lovelace = lovelaceFromAda(shown.amountAda);
+  if (lovelace === null) throw new Error(t('errors.invalidAmount'));
+  const outputs: Cardano.TxOut[] = [
+    { address: shown.depositAddress, value: { coins: lovelace as Cardano.Lovelace, assets: new Map() } },
+  ];
+  const request: BuildTxRequest = {
+    outputs: outputs.map(txOutToNexusOutput),
+    changeAddress: walletStore.loggedWallet.baseAddress,
+    utxos: walletUtxosToNexusInputs(walletStore.utxos as Cardano.Utxo[], walletStore.collateral),
+  };
+  const { tx_cbor: txCbor } = await nexusTxApi.buildTransferTx(request, walletStore.loggedWallet.network);
+  if (!txCbor) throw new Error(t('errors.buildTransactionFailed'));
+  return Serialization.Transaction.fromCbor(HexBlob(txCbor)).toCore();
+}
+
+function onSubmitted(): void {
+  done.value = true;
+  emit('success');
+}
+
+function close(): void {
+  if (busy.value) return;
+  emit('close');
+}
 
 watch(
   () => props.open,
-  async newVal => {
-    if (newVal && props.orderUuid) {
-      orderResponse.value = null;
-      orderSuccess.value = false;
-      paymentAmount.value = { ada: 0, eur: 0 };
-      await loadOrderDetails();
-    } else {
-      orderResponse.value = null;
-      orderSuccess.value = false;
-      isProcessing.value = false;
-      paymentAmount.value = { ada: 0, eur: 0 };
+  async open => {
+    signSection.value?.reset();
+    details.value = null;
+    done.value = false;
+    refreshed.value = false;
+    if (!open || !props.orderUuid) return;
+    loading.value = true;
+    try {
+      if (!(await loadDetails())) emit('close');
+    } finally {
+      loading.value = false;
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
-
-const handlePaymentConfirm = async (spendingPassword: string) => {
-  isProcessing.value = true;
-
-  try {
-    if (!orderResponse.value) {
-      throw new Error(t('errors.invalidOrder'));
-    }
-
-    const cardanoAddress = orderResponse.value.depositAddress;
-    const adaAmount = parseFloat(String(orderResponse.value.depositAmountAda));
-
-    if (!cardanoAddress || isNaN(adaAmount) || adaAmount <= 0) {
-      throw new Error(t('errors.invalidPaymentDetails'));
-    }
-
-    const lovelaceAmount = BigInt(Math.floor(adaAmount * 1_000_000)) as Cardano.Lovelace;
-
-    const outputs: Cardano.TxOut[] = [
-      {
-        address: cardanoAddress as Cardano.PaymentAddress,
-        value: {
-          coins: lovelaceAmount,
-          assets: new Map(),
-        },
-      },
-    ];
-
-    // Build the payment server-side via Nexus (unconditional), signing the returned CBOR directly.
-    const request: BuildTxRequest = {
-      outputs: outputs.map(txOutToNexusOutput),
-      changeAddress: walletStore.loggedWallet.baseAddress,
-      utxos: walletUtxosToNexusInputs(walletStore.utxos as Cardano.Utxo[], walletStore.collateral),
-    };
-    const { tx_cbor: txCbor } = await nexusTxApi.buildTransferTx(request, walletStore.loggedWallet.network);
-    if (!txCbor) throw new Error('Nexus returned an empty transaction CBOR');
-
-    const witnessResult = (await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.SIGN_TX,
-      data: {
-        txCbor: txCbor,
-        partialSign: false,
-        password: spendingPassword,
-        accountIndex: 0,
-        utxos: walletStore.utxos,
-        addresses: walletStore.keys,
-        mergeWitnesses: false,
-      },
-    })) as { data: { witnesses?: any; error?: string } };
-
-    if (witnessResult.data.error) {
-      throw new Error(witnessResult.data.error);
-    }
-
-    const txWitnesses = witnessResult.data.witnesses;
-
-    const submitResult = (await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.SUBMIT_TX,
-      data: {
-        txCbor: txCbor,
-        witnessHex: txWitnesses,
-        utxos: walletStore.utxos,
-      },
-    })) as { data: { txId?: string; error?: string } };
-
-    if (submitResult.data.error) {
-      throw new Error(submitResult.data.error);
-    }
-
-    snackbar.fireSuccess(t('notifications.transactionSubmitted'));
-
-    // Refresh card data to get updated order info
-    await cardStore.fetchCardData();
-
-    orderSuccess.value = true;
-    emit('success');
-  } catch (error: any) {
-    snackbar.setError(error?.message || t('card.failedToOrderCard') + ' ' + t('card.pleaseTryAgain'));
-  } finally {
-    isProcessing.value = false;
-  }
-};
-
-const handleOrderComplete = async () => {
-  await cardStore.fetchCardData();
-  handleClose();
-  router.push('/card');
-};
-
-const handleClose = async () => {
-  await cardStore.fetchCardData();
-  orderResponse.value = null;
-  isProcessing.value = false;
-  orderSuccess.value = false;
-  paymentAmount.value = { ada: 0, eur: 0 };
-  emit('close');
-};
 </script>
 
 <style lang="scss" scoped>
-@import '../../styles/variables';
-@import '../../styles/mixins';
-
-.pay-order-modal {
-  border-radius: $border-radius-lg;
-}
-
-.modal-card {
-  background: $background-dark !important;
-  border-radius: $border-radius-lg !important;
-  overflow: hidden;
-}
-
-.modal-header {
-  position: relative;
-  padding: $spacing-3xl $spacing-3xl $spacing-lg;
-  display: flex;
-  align-items: flex-start;
-}
-
-.header-content {
-  flex: 1;
-}
-
-.modal-title {
-  font-family: $font-family-primary;
-  font-weight: $font-weight-bold;
-  font-size: $font-size-2xl;
-  line-height: $line-height-tight;
-  color: $text-primary;
-  margin: 0 0 $spacing-sm 0;
-}
-
-.modal-subtitle {
-  font-family: $font-family-primary;
-  font-weight: $font-weight-normal;
-  font-size: $font-size-base;
-  line-height: $line-height-relaxed;
-  color: $text-muted;
-  margin: 0;
-}
-
-.close-btn {
-  position: absolute;
-  right: $spacing-lg;
-  top: $spacing-lg;
-  width: 44px;
-  height: 44px;
-
-  .v-icon {
-    color: #85888e;
-    font-size: $font-size-xl;
-  }
-}
-
-.modal-content {
-  padding: 0 $spacing-3xl $spacing-3xl;
-}
-
-.loading-state {
+.pay-order {
   display: flex;
   flex-direction: column;
+  gap: var(--g-s-4);
+  padding: var(--g-s-2) var(--g-s-2) 0;
+}
+
+.pay-order__loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-2);
+}
+
+.pay-order__skeleton {
+  height: 160px;
+}
+
+.pay-order__refreshed {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  padding: $spacing-3xl;
-  gap: $spacing-md;
-  
-  .loading-text {
-    font-family: $font-family-primary;
-    font-size: $font-size-base;
-    color: $text-secondary;
-    margin: 0;
+  gap: var(--g-s-2);
+  margin: 0;
+  padding: var(--g-s-3) var(--g-s-4);
+  border-radius: var(--g-r-control);
+  background: var(--g-warning-fill);
+  border: 1px solid var(--g-warning-line);
+  color: var(--g-text-1);
+
+  .v-icon {
+    color: var(--g-warning);
   }
 }
 
-@media (max-width: $breakpoint-sm) {
-  .modal-header {
-    padding: $spacing-2xl $spacing-2xl $spacing-md;
-  }
-
-  .modal-content {
-    padding: 0 $spacing-2xl $spacing-2xl;
-  }
+.pay-order__actions {
+  display: flex;
+  justify-content: flex-end;
 }
 </style>

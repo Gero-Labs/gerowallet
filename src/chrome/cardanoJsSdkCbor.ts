@@ -39,11 +39,6 @@ export function serializeCardanoJsSdkTx(tx: Cardano.Tx): string {
     return serializedTx.toCbor();
   } catch (error) {
     console.error('Error serializing Cardano JS SDK transaction to CBOR:', error);
-    console.error('Transaction structure that failed:', JSON.stringify(tx, (key, value) => {
-      if (typeof value === 'bigint') return value.toString();
-      if (value instanceof Map) return Object.fromEntries(value);
-      return value;
-    }, 2));
     throw new Error(`Failed to serialize transaction: ${getErrorMessage(error)}`);
   }
 }
@@ -80,7 +75,7 @@ export class BrowserTxConstruction {
   static minFee(
     tx: Cardano.Tx,
     resolvedInputs: Cardano.Utxo[],
-    protocolParams: any,
+    protocolParams: Parameters<typeof minFeeSDK>[2],
     walletContext?: {
       keys: Keys;
       stakeAddress: string;

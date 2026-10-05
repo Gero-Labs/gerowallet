@@ -1,369 +1,338 @@
 <template>
   <BaseDialog
     :isOpen="open"
-    @close="$emit('close')"
-    :title="t('card.manageCardTitle')"
-    :subtitle="t('card.manageCardSubtitleSecurely')"
+    :title="view === 'pin' ? t('card.changePin') : t('card.manageCardTitle')"
+    :subtitle="view === 'pin' ? t('card.changePinSubtitle') : t('card.manageCardSubtitleSecurely')"
     :width="600"
     :min-height="0"
-    persistent
-    icon="mdi-account-credit-card"
+    :loading="busy"
+    @close="close"
   >
-    <v-card-text class="pb-0">
-      <v-card flat class="transparent px-0">
-        <v-card-title class="px-0">{{ t('card.pin') }}</v-card-title>
-        <v-card-text class="pa-0">
-          <div class="pin-container">
-            <v-otp-input
-              length="4"
-              :readonly="true"
-              :type="showPin ? 'text' : 'password'"
-              :value="displayPin"
-              class="pin-input"
-            />
-            <v-btn icon class="eye-btn" :loading="loadingPin" @click="togglePinVisibility">
-              <v-icon>{{ showPin ? 'mdi-eye' : 'mdi-eye-off' }}</v-icon>
+    <template #art>
+      <IsoScene name="pin" />
+    </template>
+
+    <!-- Card controls -->
+    <div v-if="view === 'controls'" class="card-controls">
+      <div class="card-controls__card glass-tier">
+        <img :src="assets.frontCardNoMcx2" alt="" class="card-controls__thumb" />
+        <div class="card-controls__card-text">
+          <span class="t-body-lg">{{ typeLabel }}</span>
+          <span v-if="last4" class="t-caption g-num">•••• {{ last4 }}</span>
+        </div>
+        <CardChip :tone="isBlocked ? 'error' : 'success'">{{ isBlocked ? t('card.blocked') : t('card.active') }}</CardChip>
+      </div>
+
+      <section class="card-controls__section" aria-labelledby="card-controls-pin">
+        <h3 id="card-controls-pin" class="t-label">{{ t('card.pin') }}</h3>
+        <div class="card-controls__pin-row">
+          <span class="card-controls__pin g-num" :aria-label="showPin ? t('card.pin') : t('card.pinHidden')">
+            <span v-for="(digit, i) in pinDigits" :key="i" class="card-controls__pin-digit">{{ digit }}</span>
+          </span>
+          <div class="card-controls__pin-actions">
+            <v-btn
+              icon
+              outlined
+              class="card-controls__icon-btn"
+              :loading="loadingPin"
+              :aria-label="showPin ? t('card.hidePin') : t('card.showPin')"
+              :aria-pressed="showPin ? 'true' : 'false'"
+              @click="togglePinVisibility"
+            >
+              <v-icon>{{ showPin ? 'mdi-eye-off-outline' : 'mdi-eye-outline' }}</v-icon>
             </v-btn>
+            <GButton tier="secondary" compact :disabled="!cardUuid" @click="openChangePin">{{ t('card.changePin') }}</GButton>
           </div>
-        </v-card-text>
-        <v-card-title class="px-0">{{ t('card.temporarilyBlockCard') }}</v-card-title>
-        <v-card-text class="pa-0">
-          <v-alert type="warning" prominent border="left" outlined color="error">
-            <div class="px-2">
-              {{ t('card.blockingCardWarning') }}
-            </div>
+        </div>
+      </section>
 
-            <div style="width: 100%" class="pt-4 text-center">
-              <v-btn
-                color="error"
-                :disabled="isCardBlocked"
-                :loading="loading"
-                @click="handleConfirmBlock"
-                small
-              >
-                {{ isCardBlocked ? t('card.cardAlreadyBlocked') : t('card.blockCard') }}
-              </v-btn>
-            </div>
+      <hr class="card-controls__rule" />
 
-          </v-alert>
-          <div class="block-content">
-            <div class="warning-section">
+      <section class="card-controls__section" aria-labelledby="card-controls-block">
+        <h3 id="card-controls-block" class="t-label">{{ t('card.temporarilyBlockCard') }}</h3>
+        <p class="t-body-sm">{{ t('card.blockingCardWarning') }}</p>
+        <div>
+          <GButton v-if="isBlocked" tier="secondary" :loading="blocking" @click="toggleBlock">
+            <v-icon small left>mdi-lock-open-variant-outline</v-icon>
+            {{ t('card.unblockCard') }}
+          </GButton>
+          <GButton v-else tier="destructive" :loading="blocking" @click="toggleBlock">
+            <v-icon small left>mdi-lock-outline</v-icon>
+            {{ t('card.blockCard') }}
+          </GButton>
+        </div>
+      </section>
 
-            </div>
-            <div class="action-section">
+      <p class="t-caption card-controls__help">
+        {{ t('card.needHelpContactSupport') }}
+        <a :href="`mailto:${CARD_PROVIDER.supportEmail}`">{{ CARD_PROVIDER.supportEmail }}</a>
+      </p>
+    </div>
 
-            </div>
-          </div>
-          <div class="help-section">
-            <p class="help-text">{{ t('card.needHelpContactSupport') }}</p>
-          </div>
-        </v-card-text>
-      </v-card>
-    </v-card-text>
+    <!-- Change PIN -->
+    <form v-else class="card-controls" novalidate @submit.prevent="savePin">
+      <div class="card-controls__field">
+        <span id="card-new-pin" class="t-label">{{ t('card.newPin') }}</span>
+        <div role="group" aria-labelledby="card-new-pin">
+          <NumericOtpInput :value="newPin" :length="4" @input="newPin = $event" />
+        </div>
+      </div>
+      <div class="card-controls__field">
+        <span id="card-confirm-pin" class="t-label">{{ t('card.confirmNewPin') }}</span>
+        <div role="group" aria-labelledby="card-confirm-pin">
+          <NumericOtpInput :value="confirmPin" :length="4" @input="confirmPin = $event" />
+        </div>
+      </div>
+      <p class="t-caption" :class="{ 'card-controls__error': pinError }" aria-live="polite">
+        {{ pinError || t('card.pinWeak') }}
+      </p>
+      <div class="card-controls__actions">
+        <GButton tier="secondary" :disabled="savingPin" @click="backToControls">{{ t('common.cancel') }}</GButton>
+        <GButton tier="primary" type="submit" :loading="savingPin" :disabled="!canSavePin">{{ t('card.savePin') }}</GButton>
+      </div>
+    </form>
   </BaseDialog>
 </template>
 
 <script setup lang="ts">
+import { computed, ref, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref, computed } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
+import GButton from '@/shared/components/GButton/GButton.vue';
+import NumericOtpInput from '@/shared/components/NumericOtpInput.vue';
+import IsoScene from '@/shared/components/iso/IsoScene.vue';
 import cardStoreModule from '@/stores/modules/card';
+import snackbar from '@/plugins/snackbar';
+import assets from '@/utils/assets';
+import { CARD_PROVIDER } from '@/modules/wallet/cardProvider';
+import { pinProblem } from '@/modules/wallet/utils/cardSecrets';
+import CardChip from '../ui/CardChip.vue';
 
-defineProps<{
-  open: boolean;
-}>();
-
-interface Emits {
-  (e: 'close'): void;
-}
-
-defineEmits<Emits>();
+const props = defineProps<{ open: boolean }>();
+const emit = defineEmits<{ (e: 'close'): void }>();
 
 const { t } = useTranslation();
 
-const loading = ref(false);
+const view = ref<'controls' | 'pin'>('controls');
 const showPin = ref(false);
 const loadingPin = ref(false);
+const blocking = ref(false);
+const savingPin = ref(false);
+const newPin = ref('');
+const confirmPin = ref('');
 
-// Get selected card data from store
-const selectedCard = computed(() => {
-  return cardStoreModule.getSelectedCard();
+const selectedCard = computed(() => cardStoreModule.getSelectedCard());
+const cardData = computed(() => selectedCard.value?.cardData);
+const cardUuid = computed(() => cardData.value?.card_uuid || '');
+const busy = computed(() => blocking.value || savingPin.value);
+
+const isBlocked = computed(
+  () => selectedCard.value?.cardBalance?.state === 'BLOCKED' || cardData.value?.card_status === 'TEMPORARY_BLOCKED',
+);
+const typeLabel = computed(() => (cardData.value?.own_type === 'physical' ? t('card.typePhysical') : t('card.typeVirtual')));
+const last4 = computed(() => String(cardData.value?.pan ?? '').replace(/\D/g, '').slice(-4));
+
+const pinDigits = computed(() => {
+  const pin = showPin.value ? selectedCard.value?.cardPin?.pin || '' : '';
+  return /^\d{4}$/.test(pin) ? pin.split('') : ['•', '•', '•', '•'];
 });
 
-const cardData = computed(() => {
-  return selectedCard.value?.cardData;
-});
-
-const togglePinVisibility = async () => {
-  if (!showPin.value && !selectedCard.value?.cardPin?.pin && cardData.value?.card_uuid) {
-    // Fetch PIN if not already fetched and user wants to show it
+async function togglePinVisibility(): Promise<void> {
+  if (showPin.value) {
+    showPin.value = false;
+    return;
+  }
+  if (!selectedCard.value?.cardPin?.pin && cardUuid.value) {
     loadingPin.value = true;
     try {
-      await cardStoreModule.fetchCardPin(cardData.value.card_uuid);
-    } catch (error) {
-      console.error('Failed to fetch card PIN:', error);
+      await cardStoreModule.fetchCardPin(cardUuid.value);
+    } catch {
+      snackbar.setError(t('card.pleaseTryAgain'));
+      return;
+    } finally {
+      loadingPin.value = false;
     }
-    loadingPin.value = false;
   }
-  showPin.value = !showPin.value;
-};
+  showPin.value = true;
+}
 
-const cardDetailsFull = computed(() => {
-  const card = selectedCard.value;
-  if (!card) return null;
-  return {
-    pin: card.cardPin?.pin,
-  };
-});
-
-// Display PIN: show dots when loading, actual PIN when loaded and visible, or masked when hidden
-const displayPin = computed(() => {
-  if (loadingPin.value) {
-    return '••••';
-  }
-  return cardDetailsFull.value?.pin || '••••';
-});
-
-// Check if card is blocked based on state
-const isCardBlocked = computed(() => {
-  return selectedCard.value?.cardBalance?.state === 'BLOCKED';
-});
-
-const handleConfirmBlock = async () => {
-  loading.value = true;
+async function toggleBlock(): Promise<void> {
+  if (!cardUuid.value) return;
+  blocking.value = true;
+  const unblocking = isBlocked.value;
   try {
-    if (isCardBlocked.value) {
-      await cardStoreModule.unblockCard(cardData.value?.card_uuid);
-    } else {
-      await cardStoreModule.blockCard(cardData.value?.card_uuid);
-    }
-  } catch (error) {
-    console.error('Failed to block card:', error);
+    if (unblocking) await cardStoreModule.unblockCard(cardUuid.value);
+    else await cardStoreModule.blockCard(cardUuid.value);
+    await cardStoreModule.fetchCardBalance(cardUuid.value).catch(() => undefined);
+    snackbar.fireSuccess(unblocking ? t('card.cardUnblocked') : t('card.cardBlockedNotice'));
+  } catch {
+    snackbar.setError(t('card.pleaseTryAgain'));
+  } finally {
+    blocking.value = false;
   }
-  loading.value = false;
-};
+}
+
+// Change PIN
+const problem = computed(() => pinProblem(newPin.value, confirmPin.value));
+const canSavePin = computed(() => !!cardUuid.value && problem.value === null);
+const pinError = computed(() => {
+  if (newPin.value.length < 4) return '';
+  if (problem.value === 'weak') return t('card.pinWeak');
+  if (problem.value === 'mismatch' && confirmPin.value.length === 4) return t('card.pinMismatch');
+  return '';
+});
+
+function clearPinForm(): void {
+  newPin.value = '';
+  confirmPin.value = '';
+}
+
+function openChangePin(): void {
+  clearPinForm();
+  view.value = 'pin';
+}
+
+function backToControls(): void {
+  clearPinForm();
+  view.value = 'controls';
+}
+
+async function savePin(): Promise<void> {
+  if (!canSavePin.value) return;
+  savingPin.value = true;
+  try {
+    await cardStoreModule.changeCardPin(cardUuid.value, newPin.value);
+    showPin.value = false;
+    snackbar.fireSuccess(t('card.pinChanged'));
+    backToControls();
+  } catch {
+    snackbar.setError(t('card.pinChangeFailed'));
+  } finally {
+    savingPin.value = false;
+  }
+}
+
+function close(): void {
+  emit('close');
+}
+
+// Never keep a revealed PIN or a half-typed new one around between openings.
+watch(
+  () => props.open,
+  open => {
+    if (!open) {
+      showPin.value = false;
+      backToControls();
+    }
+  },
+);
 </script>
 
 <style lang="scss" scoped>
-@import '../../styles/variables';
-@import '../../styles/mixins';
+.card-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-4);
+  padding: var(--g-s-2) var(--g-s-2) 0;
 
-.manage-card-modal {
-  .v-dialog__content {
-    align-items: center;
-    justify-content: center;
+  p {
+    margin: 0;
   }
 }
 
-.manage-card-dialog {
-  @include g-glass-overlay(true);
-  border-radius: var(--g-r-card) !important;
-  overflow: hidden;
-  width: 100%;
-  max-width: 700px;
-}
-
-.modal-header {
-  position: relative;
-  padding: 32px 32px 0;
+.card-controls__card {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
+  gap: var(--g-s-3);
+  padding: var(--g-s-3) var(--g-s-4);
 }
 
-.modal-title {
-  font-family: var(--g-font-ui);
-  font-weight: 600;
-  font-size: 24px;
-  line-height: 1.17;
-  color: var(--g-text-1);
-  margin: 0 0 8px 0;
+.card-controls__thumb {
+  width: 56px;
+  border-radius: var(--g-r-chip);
 }
 
-.modal-subtitle {
-  font-family: var(--g-font-ui);
-  font-weight: 400;
-  font-size: 16px;
-  line-height: 1.5;
-  color: var(--g-text-3);
-  margin: 0;
-  text-align: center;
+.card-controls__card-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
 }
 
-.close-btn {
-  position: absolute;
-  right: 16px;
-  top: 16px;
+.card-controls__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-2);
+
+  h3 {
+    margin: 0;
+  }
+}
+
+.card-controls__pin-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--g-s-3);
+}
+
+.card-controls__pin {
+  display: flex;
+  gap: var(--g-s-2);
+}
+
+/* Justified solid: PIN digits are control-scale value boxes. */
+.card-controls__pin-digit {
+  display: grid;
+  place-items: center;
   width: 44px;
   height: 44px;
+  border-radius: var(--g-r-control);
+  background: var(--g-raised);
+  border: 1px solid var(--g-hairline-2);
+  color: var(--g-text-1);
+  font-size: 20px;
+}
+
+.card-controls__pin-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-2);
+}
+
+.card-controls__icon-btn {
+  border-color: var(--g-hairline-2);
 
   .v-icon {
-    color: var(--g-text-3);
-    font-size: 24px;
+    color: var(--g-text-2);
   }
 }
 
-.tabs-container {
-  padding: 32px 32px 0;
-  border-bottom: 1px solid var(--g-hairline-2);
-}
-
-.tabs-wrapper {
-  display: flex;
-  gap: 12px;
-}
-
-.tab-btn {
-  font-family: var(--g-font-ui);
-  font-weight: 600;
-  font-size: 14px;
-  line-height: 1.43;
-  color: var(--g-text-3) !important;
-  text-transform: none;
-  padding: 0 4px 12px !important;
-  min-width: auto !important;
-  height: 32px !important;
-  border-radius: 0 !important;
-
-  &.active {
-    color: var(--g-accent) !important;
-    border-bottom: 2px solid var(--g-accent);
-  }
-
-  &:hover {
-    background: transparent !important;
-  }
-}
-
-.tab-content {
-  padding: 32px;
-}
-
-// BlockCard styles
-.block-card {
-  width: 100%;
-  @include flex-column;
-  gap: $spacing-xl;
-}
-
-.block-content {
-  display: flex;
-  align-items: center;
-  gap: $spacing-sm;
-}
-
-.warning-section {
-  @include flex-column;
-  gap: $spacing-xs;
-}
-
-.warning-title {
-  @include heading-style($font-size-lg);
+.card-controls__rule {
+  border: 0;
+  height: 1px;
   margin: 0;
+  background: var(--g-hairline-1);
 }
 
-.warning-text {
-  @include body-text($font-size-sm);
-  color: $text-muted;
-  margin: 0;
+.card-controls__help a {
+  color: var(--g-accent);
 }
 
-.action-section {
+.card-controls__field {
   display: flex;
-  justify-content: center;
-  align-items: center;
+  flex-direction: column;
+  gap: var(--g-s-2);
+  max-width: 280px;
 }
 
-.block-btn {
-  background: var(--g-error) !important;
-  border: 1px solid $border-primary !important;
-  border-radius: $border-radius-md !important;
-  color: var(--g-text-1) !important;
-  font-family: $font-family-primary;
-  font-weight: $font-weight-semibold;
-  font-size: $font-size-sm;
-  line-height: $line-height-normal;
-  text-transform: none;
-  padding: $spacing-sm $spacing-sm !important;
-  min-width: 120px;
-
-  &:hover {
-    background: var(--g-error) !important;
-  }
-
-  &:disabled {
-    background: var(--g-raised) !important;
-  }
+.card-controls__error {
+  color: var(--g-error);
 }
 
-.help-section {
-  margin-top: $spacing-sm;
-}
-
-.help-text {
-  @include body-text($font-size-sm);
-  color: $text-muted;
-}
-
-.small-input {
-  width: 112px !important;
-  flex: none;
-}
-
-.input-label {
-  @include body-text($font-size-sm);
-  font-weight: $font-weight-medium;
-  color: $text-secondary;
-  margin: 0 0 6px 0;
-}
-
-.pin-input {
-  :deep(.v-otp-input) {
-    gap: 8px !important;
-  }
-
-  :deep(input) {
-    width: 32px !important;
-    height: 32px !important;
-    font-size: 20px !important;
-    background: transparent !important;
-  }
-
-  :deep(.v-input__control) {
-    background: transparent !important;
-  }
-
-  :deep(.v-input__slot) {
-    background: transparent !important;
-  }
-
-  :deep(.v-text-field__slot) {
-    background: transparent !important;
-  }
-
-  :deep(.v-text-field) {
-    background: transparent !important;
-  }
-}
-
-.form-row {
+.card-controls__actions {
   display: flex;
-  justify-content: center;
-  gap: $spacing-md;
-  width: 100%;
-  margin: 0 auto;
-}
-
-.pin-container {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.eye-btn {
-  position: absolute;
-  left: 50%;
-  transform: translateX(150px);
-  bottom: 20px;
+  justify-content: flex-end;
+  gap: var(--g-s-3);
 }
 </style>
