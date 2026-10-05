@@ -19,9 +19,18 @@ interface NotifySettingsState {
   /** The last mutation's outcome, for inline hints. */
   lastResult: string | null;
   error: string | null;
+  /** Settings was opened from the offer (notifyIntro.ts): the tab starts the enable step as soon as it is ready. */
+  enableRequested: boolean;
 }
 
-const state = Vue.observable<NotifySettingsState>({ state: null, loaded: false, loading: false, lastResult: null, error: null });
+const state = Vue.observable<NotifySettingsState>({ state: null, loaded: false, loading: false, lastResult: null, error: null, enableRequested: false });
+
+export interface NotifyRefreshOptions {
+  /** Also refetch /config (cached up to 1 h). */
+  config?: boolean;
+  /** Also pull GET /device and this wallet's server prefs, so another device's choices show (the tab opening). */
+  sync?: boolean;
+}
 
 interface Reply { success: boolean; result?: string; state?: NotifyState; error?: string }
 
@@ -39,17 +48,31 @@ function apply(reply: Reply): void {
 export const notifySettingsStore = {
   state,
 
-  /** Load the worker's state; `refreshConfig` also refetches /config (the tab opening). */
-  async refresh(refreshConfig = false): Promise<void> {
+  /** Load the worker's state. With no options this is a storage read, no network. */
+  async refresh(opts: NotifyRefreshOptions = {}): Promise<void> {
     state.loading = true;
     try {
-      apply(await send(MessageTypes.NOTIFY_GET_STATE, { refreshConfig }));
+      apply(await send(MessageTypes.NOTIFY_GET_STATE, { refreshConfig: opts.config === true, syncServer: opts.sync === true }));
       state.loaded = true;
     } catch (e) {
       state.error = (e as Error)?.message || 'failed';
     } finally {
       state.loading = false;
     }
+  },
+
+  /** The offer's "Turn on": Settings > Notifications opens and runs the enable step once the tab is ready. */
+  requestEnable(): void { state.enableRequested = true; },
+  /** Consumed by the tab: true once per request. */
+  takeEnableRequest(): boolean {
+    const requested = state.enableRequested;
+    state.enableRequested = false;
+    return requested;
+  },
+
+  /** The offer was answered: "Turn on" for one wallet (`walletId`), or "Not now" for this install (`dismiss`). */
+  async answerIntro(answer: { walletId?: number; dismiss?: boolean }): Promise<void> {
+    await send(MessageTypes.NOTIFY_INTRO_ANSWER, answer);
   },
 
   async setBrowserEnabled(enabled: boolean): Promise<BrowserEnableResult | 'off' | 'error'> {

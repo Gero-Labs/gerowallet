@@ -11,7 +11,9 @@
 //   notifyConfigCache     the last /config, cached at most 1 h (§4.1)
 //   notifyRetry           one scheduled retry (chrome.alarms) after a long Retry-After (§2.5, G2)
 //   notifySeen            LRU of event tags `e` (B-M2 uses it; declared here so the shape is in one place)
+//   notifyIntro           the offer to turn notifications on: shown / dismissed / answered per wallet (notifyIntro.ts)
 
+import { NOTIFY_INTRO_KEY, readIntroState, type NotifyIntroState } from './notifyIntro';
 import type { NotifyConfig, WalletPrefs } from './notifyTypes';
 
 export interface NotifyStorage {
@@ -128,6 +130,7 @@ const KEYS = {
   seen: 'notifySeen',
   pendingOpen: 'notifyPendingOpen',
   inbox: 'notifyInbox',
+  intro: NOTIFY_INTRO_KEY,
 } as const;
 
 function chromeStorage(): NotifyStorage {
@@ -164,6 +167,10 @@ export interface NotifyStore {
   /** Mark one row (`e`) or every row (null) read. */
   markInboxRead(e: string | null, now: number): Promise<void>;
   clearInbox(): Promise<void>;
+  /** The offer to turn notifications on (notifyIntro.ts): a complete state, never missing a field. */
+  getIntro(): Promise<NotifyIntroState>;
+  /** Merge: `offered` entries are added to, never replaced. */
+  updateIntro(patch: Partial<NotifyIntroState>): Promise<NotifyIntroState>;
 }
 
 export function createNotifyStore(storage: NotifyStorage = chromeStorage(), log: (m: string, e?: unknown) => void = () => undefined): NotifyStore {
@@ -243,6 +250,13 @@ export function createNotifyStore(storage: NotifyStorage = chromeStorage(), log:
       await write(KEYS.inbox, all.map((i) => ((e === null || i.e === e) && i.readAt === null ? { ...i, readAt: now } : i)));
     },
     clearInbox: () => write(KEYS.inbox, null),
+    getIntro: async () => readIntroState(await read(KEYS.intro, undefined as unknown, (v): v is unknown => true)),
+    async updateIntro(patch) {
+      const current = readIntroState(await read(KEYS.intro, undefined as unknown, (v): v is unknown => true));
+      const next: NotifyIntroState = { ...current, ...patch, offered: { ...current.offered, ...(patch.offered ?? {}) } };
+      await write(KEYS.intro, next);
+      return next;
+    },
   };
 }
 

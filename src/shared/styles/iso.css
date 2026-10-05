@@ -43,6 +43,8 @@
 .g-iso .iso-stripe { fill: var(--g-accent); fill-opacity: 0.85; }
 .g-iso .iso-tape { fill: var(--g-iso-tape); }
 .g-iso .iso-coin-ring { fill: none; stroke: var(--g-on-grad); stroke-opacity: 0.35; stroke-width: 1; }
+/* RealFi's mark, dark on the face it is painted on, as RealFi draws it */
+.g-iso .iso-realfi { fill: none; stroke: var(--g-on-grad); stroke-opacity: 0.8; stroke-width: 0.8; stroke-linecap: round; }
 .g-iso .iso-slot { fill: none; stroke: var(--g-text-3); stroke-dasharray: 3 3; stroke-width: 1.2; }
 
 /* A floating card's shadow on the lit pad beneath it, which places the card in depth */

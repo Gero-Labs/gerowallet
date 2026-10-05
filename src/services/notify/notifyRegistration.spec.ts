@@ -213,8 +213,55 @@ describe('opt-in (§8.1)', () => {
     expect(m.produceProof).toHaveBeenCalledWith({ password: 'pw' });
   });
 
-  it('wallet on refuses when the browser switch is off, the wallet is ineligible, or none is logged in', async () => {
-    expect(await machine().reg.enableWallet()).toBe('browser_off');
+  it('wallet on with the browser switch off turns the browser on too: one confirmation for both', async () => {
+    const m = machine();
+    expect(await m.reg.enableWallet()).toBe('ok');
+    expect(await m.store.getDevice()).toMatchObject({ browserEnabled: true, targetStatus: 'active', unavailable: null });
+    expect(m.push.subscribe).toHaveBeenCalledTimes(1);
+    expect(m.fake.calls.map((c) => c.m)).toEqual(['GET /config', 'PUT /device', 'PUT /wallet']);
+    expect((await m.store.getWallet(4))?.registeredAt).not.toBeNull();
+  });
+
+  it('wallet on with the browser off and no proof: the browser stays off until the auth step is passed', async () => {
+    const m = machine({ proof: null });
+    expect(await m.reg.enableWallet()).toBe('needs_auth');
+    expect(await m.store.getDevice()).toMatchObject({ browserEnabled: false });
+    expect(m.push.subscribe).not.toHaveBeenCalled();
+    expect(await m.reg.enableWallet({ password: 'pw' })).toBe('ok');
+    expect(await m.store.getDevice()).toMatchObject({ browserEnabled: true, targetStatus: 'active' });
+  });
+
+  it('re-enabling after the last wallet went drains the queued DELETE /device before registering anew', async () => {
+    const m = await optedIn();
+    m.fake.server.fail.push({ m: 'DELETE /device', error: new NotifyError(503, 'unavailable') });
+    await m.reg.walletRemoved(4);
+    expect(await m.store.getPendingDeletes()).toMatchObject([{ kind: 'device' }]);
+    m.fake.calls.length = 0;
+    expect(await m.reg.enableWallet()).toBe('ok');
+    expect(m.fake.calls.map((c) => c.m)).toEqual(['DELETE /device', 'GET /config', 'PUT /device', 'PUT /wallet']);
+    expect(await m.store.getPendingDeletes()).toEqual([]);
+    expect(m.fake.server.links.size).toBe(1);
+    // The next re-assertion has nothing left to delete: the new device and its link stay.
+    m.fake.calls.length = 0;
+    expect(await m.reg.reassert('alarm')).toBe('reasserted');
+    expect(m.fake.calls.map((c) => c.m)).not.toContain('DELETE /device');
+    expect(m.fake.server.device).not.toBeNull();
+    expect(m.fake.server.links.size).toBe(1);
+  });
+
+  it('a queue that still cannot be drained blocks the registration and leaves the browser switch as it was', async () => {
+    const m = await optedIn();
+    m.fake.server.fail.push({ m: 'DELETE /device', error: new NotifyError(503, 'unavailable'), times: 2 });
+    await m.reg.walletRemoved(4);
+    m.push.subscribe.mockClear();
+    expect(await m.reg.enableWallet()).toBe('error');
+    expect(m.push.subscribe).not.toHaveBeenCalled();
+    expect(await m.store.getDevice()).toMatchObject({ browserEnabled: false });
+    expect(await m.store.getPendingDeletes()).toMatchObject([{ kind: 'device' }]);
+    expect(await m.store.getWallet(4)).toBeNull();
+  });
+
+  it('wallet on refuses when the wallet is ineligible, or none is logged in', async () => {
     const ledger = machine({ logged: loggedWallet({ type: 'Ledger' }) });
     await ledger.reg.setBrowserEnabled(true);
     expect(await ledger.reg.enableWallet()).toBe('ineligible');
