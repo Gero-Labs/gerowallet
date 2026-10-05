@@ -251,7 +251,7 @@ describe('chain isolation', () => {
   it('offers only the quick actions the chain has', () => {
     expect(offeredActions(cardanoMainnet)).toEqual(['send', 'receive', 'buy', 'perpetuals', 'toggleBalances']);
     expect(offeredActions(bitcoinMainnet)).toEqual(['send', 'receive', 'buy', 'toggleBalances']);
-    expect(offeredActions(midnightMainnet)).toEqual(['send', 'receive', 'toggleBalances']);
+    expect(offeredActions(midnightMainnet)).toEqual(['send', 'receive', 'toggleBalances', 'dustRegistration']);
   });
 
   it('keeps chain-specific settings rows on their chain', () => {
@@ -286,5 +286,46 @@ describe('chain isolation', () => {
     for (const gates of [apexVector, bitcoinMainnet, midnightMainnet]) {
       expect(gates.governance).toBe(false);
     }
+  });
+});
+
+describe('Midnight and DUST', () => {
+  const flags: SearchFlags = {
+    isBitcoinEnabled: () => true, isRealFiEnabled: () => true, isGeroCardEnabled: () => true,
+    isGoMiningEnabled: () => true, isBlogEnabled: () => true, isCopilotEnabled: () => true,
+    isPoolOperatorEnabled: () => true, isGovernanceEnabled: () => true, isGovernanceVotingEnabled: () => true,
+    isCrossDeviceSigningEnabled: () => true, isLiveChatEnabled: () => true,
+  };
+  const gates = (chain: string, network: string, holdsCnight = false): SearchGates =>
+    searchGates({ wallet: { chain, network, type: 'Normal' }, flags, hasBackupState: true, playlistLength: 0, holdsCnight });
+  const can = (g: SearchGates) => (gate: SearchGate) => g[gate];
+  const dustActions = (g: SearchGates) =>
+    actionResults('dust', { t, can: can(g), balancesHidden: false }).map(result => result.id);
+
+  it('finds the proof server from a partial word', () => {
+    // Typing "proof" must already land on the page, before "server" is typed.
+    const routes = pageResults('proof', { t, can: can(gates('Midnight', 'Mainnet')) }).map(result => result.route);
+    expect(routes).toContain('/proof-server');
+  });
+
+  it('offers a Midnight wallet its DUST registration', () => {
+    const [result] = actionResults('dust', { t, can: can(gates('Midnight', 'Preprod')), balancesHidden: false });
+    expect(result).toMatchObject({
+      id: 'action-dustRegistration',
+      title: 'DUST registration',
+      data: { action: { kind: 'route', route: '/?dust=register' } },
+    });
+  });
+
+  it('offers a Cardano wallet the cNIGHT route only while it holds cNIGHT', () => {
+    expect(dustActions(gates('Cardano', 'Mainnet', true))).toEqual(['action-cnightDust']);
+    expect(dustActions(gates('Cardano', 'Mainnet', false))).toEqual([]);
+  });
+
+  it('keeps each DUST entry on its own chain', () => {
+    // holdsCnight cannot open the Cardano entry on another chain.
+    expect(dustActions(gates('Midnight', 'Mainnet', true))).toEqual(['action-dustRegistration']);
+    expect(dustActions(gates('Bitcoin', 'Mainnet', true))).toEqual([]);
+    expect(dustActions(gates('Apex Fusion Prime', 'Mainnet', true))).toEqual([]);
   });
 });

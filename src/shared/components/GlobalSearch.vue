@@ -182,9 +182,12 @@ function navigateTo(result: SearchResult) {
       // A single NFT's id is its asset unit; both kinds carry their collection's policy.
       router.push({ path: '/', query: { view: 'collectibles', nft: result.data?.policyId || result.id } }).catch(() => {});
       break;
-    case 'action':
-      performAction(result.data?.action);
+    case 'action': {
+      const action: SearchAction | undefined = result.data?.action;
+      if (action?.kind === 'route') router.push(action.route).catch(() => {});
+      else performAction(action);
       break;
+    }
     case 'transaction':
       router.push({ path: '/transactions', query: { tx: result.id } }).catch(() => {});
       break;
@@ -218,6 +221,7 @@ function navigateTo(result: SearchResult) {
   }
 }
 
+/** The actions that act in place; a `route` action is a plain navigation above. */
 function performAction(action: SearchAction | undefined) {
   if (action?.kind === 'dialog') {
     openDialog(action.dialog);
