@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { extractNexusErrorMessage, friendlyTxError, isCollateralError, isInsufficientAdaError } from './txErrors';
 import { TX_SUBMIT_UNCONFIRMED_MESSAGE } from '@/chrome/config';
+import { InputLimitError } from '@/api/nexusInputSelection';
 
 describe('isCollateralError', () => {
   it('matches a genuine missing-collateral error', () => {
@@ -104,5 +105,20 @@ describe('friendlyTxError on submit failures', () => {
       + 'The \'data\' field, therefore, contains errors for each era.';
     expect(friendlyTxError(new Error(essay)))
       .toBe('Invalid transaction; It looks like the given transaction wasn\'t well-formed.');
+  });
+});
+
+describe('friendlyTxError on Nexus input limits', () => {
+  it('explains a wallet too fragmented for one transaction, with both counts', () => {
+    const localized = friendlyTxError(new InputLimitError(439, 200));
+    expect(localized).toContain('439');
+    expect(localized).toContain('200');
+    expect(localized.toLowerCase()).toContain('consolidate');
+  });
+
+  it('shows the reason behind a Nexus validation rejection, not the bare envelope', () => {
+    const localized = friendlyTxError(new Error('Validation failed: utxos: Maximum 200 UTXOs allowed per request'));
+    expect(localized).toContain('Maximum 200 UTXOs allowed per request');
+    expect(localized).not.toBe('Validation failed');
   });
 });

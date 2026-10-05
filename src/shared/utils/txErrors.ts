@@ -10,6 +10,7 @@
  */
 import i18n from '@/plugins/i18n';
 import { CIP113_SIGN_REFUSAL_MESSAGE, TX_SUBMIT_UNCONFIRMED_MESSAGE } from '@/chrome/config';
+import { InputLimitError } from '@/api/nexusInputSelection';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -117,6 +118,12 @@ export function isInsufficientAdaError(message: string): boolean {
  * original message unchanged when it isn't a collateral / insufficient-ADA error.
  */
 export function friendlyTxError(raw: unknown): string {
+  // Raised by the wallet before any request goes out: the assets to send sit on
+  // more UTxOs than one transaction may spend, so only consolidating helps.
+  if (raw instanceof InputLimitError) {
+    return i18n.t('send.inputLimitFragmented', { count: raw.total, max: raw.limit }) as string;
+  }
+
   const message = unwrapPlainOgmiosRejection(
     extractNexusErrorMessage(raw instanceof Error ? raw.message : String(raw ?? '')),
   );
@@ -135,5 +142,11 @@ export function friendlyTxError(raw: unknown): string {
   if (l.includes('collateral pool')) return i18n.t('errors.collateralPoolEmpty') as string;
   if (isCollateralError(message)) return i18n.t('errors.noCollateral') as string;
   if (isInsufficientAdaError(message)) return i18n.t('errors.insufficientAdaForTx') as string;
+
+  // Nexus bean validation: the envelope is always "Validation failed"; the field
+  // reasons the client appends to it (nexusErrorMessage) are the useful part.
+  const validation = message.match(/^Validation failed:\s*(.+)$/s);
+  if (validation) return i18n.t('errors.txRequestRejected', { reason: validation[1].trim() }) as string;
+
   return message;
 }

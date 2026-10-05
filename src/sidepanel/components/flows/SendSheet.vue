@@ -554,7 +554,7 @@ import { networkStore } from '@/stores/networkStore';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
-import { nexusTxApi, walletUtxosToNexusInputs, txOutToNexusOutput, type BuildTxRequest } from '@/api/nexus-tx-api';
+import { nexusTxApi, walletUtxosToNexusInputs, txOutToNexusOutput, requiredAssetsFromOutputs, type BuildTxRequest } from '@/api/nexus-tx-api';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { computeMinimumCoinQuantity } from '@cardano-sdk/tx-construction';
 import { Messaging, BackgroundResponse, VerifyPasswordResponse, SignTxResponse } from '@/chrome/messaging';
@@ -1032,10 +1032,13 @@ async function buildTransaction() {
 
     // Build the transfer server-side via Nexus (protocol params + fee always fresh,
     // upgradable without an extension release). All send flows use Nexus unconditionally.
+    const nexusOutputs = outputs.map(txOutToNexusOutput);
     const request: BuildTxRequest = {
-      outputs: outputs.map(txOutToNexusOutput),
+      outputs: nexusOutputs,
       changeAddress: loggedWallet.value.baseAddress,
-      utxos: walletUtxosToNexusInputs(utxos.value as Cardano.Utxo[], walletStore.collateral),
+      utxos: walletUtxosToNexusInputs(utxos.value as Cardano.Utxo[], walletStore.collateral, true, {
+        requiredAssets: requiredAssetsFromOutputs(nexusOutputs),
+      }),
     };
     const { tx_cbor } = await nexusTxApi.buildTransferTx(request, loggedWallet.value.network);
     if (!tx_cbor) throw new Error('Nexus returned an empty transaction CBOR');

@@ -5,7 +5,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { buildCardanoTransaction } from '@/shared/utils/builder';
-import { nexusTxApi, cardanoUtxoToNexusInput, type BuildStakeRegistrationTxRequest } from '@/api/nexus-tx-api';
+import { nexusTxApi, walletUtxosToNexusInputs, type BuildStakeRegistrationTxRequest } from '@/api/nexus-tx-api';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import snackbar from '@/plugins/snackbar';
 import { isStakeKeyRegistered, StakeAccountError } from '@/shared/utils/stakeRegistration';
@@ -102,7 +102,7 @@ export function useUnstake() {
         const request: BuildStakeRegistrationTxRequest = {
           stakeAddress: loggedWallet.value.stakeAddress,
           changeAddress: keys.value.payment[0].address,
-          utxos: (utxos.value as Cardano.Utxo[]).map(cardanoUtxoToNexusInput),
+          utxos: walletUtxosToNexusInputs(utxos.value as Cardano.Utxo[], undefined, false),
           deregister: true,
         };
         const { tx_cbor } = await nexusTxApi.buildStakeRegistrationTx(request, loggedWallet.value.network);

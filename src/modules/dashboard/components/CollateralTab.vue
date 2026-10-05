@@ -89,7 +89,7 @@ import { walletStore } from '@/stores/walletStore';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { MessageTypes } from '@/models/MessageTypes';
 import { HexBlob } from '@cardano-sdk/util';
-import { nexusTxApi, cardanoUtxoToNexusInput, type BuildTxRequest } from '@/api/nexus-tx-api';
+import { nexusTxApi, walletUtxosToNexusInputs, type BuildTxRequest } from '@/api/nexus-tx-api';
 import { currentRewardWithdrawals } from '@/shared/utils/autoWithdraw';
 
 // Define emits
@@ -127,7 +127,7 @@ const setCollateral = async () => {
         },
       ],
       changeAddress: keys.value.payment[0].address,
-      utxos: (utxos.value as Cardano.Utxo[]).map(cardanoUtxoToNexusInput),
+      utxos: walletUtxosToNexusInputs(utxos.value as Cardano.Utxo[], undefined, false),
       withdrawals: currentRewardWithdrawals(),
     };
 

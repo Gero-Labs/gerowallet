@@ -63,7 +63,7 @@ import GButton from '@/shared/components/GButton/GButton.vue';
 import IsoScene from '@/shared/components/iso/IsoScene.vue';
 import cardStore from '@/stores/modules/card';
 import { walletStore } from '@/stores/walletStore';
-import { nexusTxApi, walletUtxosToNexusInputs, txOutToNexusOutput, type BuildTxRequest } from '@/api/nexus-tx-api';
+import { nexusTxApi, walletUtxosToNexusInputs, txOutToNexusOutput, requiredAssetsFromOutputs, type BuildTxRequest } from '@/api/nexus-tx-api';
 import { isCardDepositAddress, networkIdOfAddress } from '@/modules/wallet/utils/cardDepositAddress';
 import CardSignSection from '../ui/CardSignSection.vue';
 import AmountInputStep from './top-up/AmountInputStep.vue';
@@ -147,10 +147,13 @@ async function buildTx(): Promise<Cardano.Tx> {
   const lovelace = BigInt(Math.floor(ada * 1_000_000)) as Cardano.Lovelace;
 
   const outputs: Cardano.TxOut[] = [{ address, value: { coins: lovelace, assets: new Map() } }];
+  const nexusOutputs = outputs.map(txOutToNexusOutput);
   const request: BuildTxRequest = {
-    outputs: outputs.map(txOutToNexusOutput),
+    outputs: nexusOutputs,
     changeAddress: walletStore.loggedWallet.baseAddress,
-    utxos: walletUtxosToNexusInputs(walletStore.utxos as Cardano.Utxo[], walletStore.collateral),
+    utxos: walletUtxosToNexusInputs(walletStore.utxos as Cardano.Utxo[], walletStore.collateral, true, {
+      requiredAssets: requiredAssetsFromOutputs(nexusOutputs),
+    }),
   };
   const { tx_cbor: txCbor } = await nexusTxApi.buildTransferTx(request, walletStore.loggedWallet.network);
   if (!txCbor) throw new Error(t('errors.buildTransactionFailed'));

@@ -112,7 +112,7 @@ import cardStore from '@/stores/modules/card';
 import { providerReason } from '@/stores/modules/cardApiErrors';
 import { walletStore } from '@/stores/walletStore';
 import snackbar from '@/plugins/snackbar';
-import { nexusTxApi, walletUtxosToNexusInputs, txOutToNexusOutput, type BuildTxRequest } from '@/api/nexus-tx-api';
+import { nexusTxApi, walletUtxosToNexusInputs, txOutToNexusOutput, requiredAssetsFromOutputs, type BuildTxRequest } from '@/api/nexus-tx-api';
 import { isCardDepositAddress, networkIdOfAddress } from '@/modules/wallet/utils/cardDepositAddress';
 import { checkDeliveryPayment } from '@/modules/wallet/utils/cardDeliveryPayment';
 import {
@@ -329,10 +329,13 @@ async function prepareFeeTx(): Promise<Cardano.Tx> {
   const outputs: Cardano.TxOut[] = [
     { address: order.depositAddress, value: { coins: lovelace as Cardano.Lovelace, assets: new Map() } },
   ];
+  const nexusOutputs = outputs.map(txOutToNexusOutput);
   const request: BuildTxRequest = {
-    outputs: outputs.map(txOutToNexusOutput),
+    outputs: nexusOutputs,
     changeAddress: walletStore.loggedWallet.baseAddress,
-    utxos: walletUtxosToNexusInputs(walletStore.utxos as Cardano.Utxo[], walletStore.collateral),
+    utxos: walletUtxosToNexusInputs(walletStore.utxos as Cardano.Utxo[], walletStore.collateral, true, {
+      requiredAssets: requiredAssetsFromOutputs(nexusOutputs),
+    }),
   };
   const { tx_cbor: txCbor } = await nexusTxApi.buildTransferTx(request, walletStore.loggedWallet.network);
   if (!txCbor) throw new Error(t('errors.buildTransactionFailed'));
