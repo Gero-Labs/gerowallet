@@ -44,17 +44,28 @@
           <!-- Nothing staked and no activity. Rendering the hero here would show "$0.00"
                with no explanation, and at launch that is every user's first look. -->
           <section v-if="isEmpty && !pendingOrders.length" class="realfi-start">
-            <span class="realfi-glyph realfi-glyph--lg" aria-hidden="true"></span>
-            <template v-if="hasUsdr">
-              <h2 class="t-heading realfi-start__title">{{ $t('realfi.start.readyTitle') }}</h2>
-              <p class="t-body realfi-start__body">
-                {{ $t('realfi.start.readyBody', { amount: usdrLabel }) }}
-              </p>
-            </template>
-            <template v-else>
-              <h2 class="t-heading realfi-start__title">{{ $t('realfi.start.title') }}</h2>
-              <p class="t-body realfi-start__body">{{ $t('realfi.start.body') }}</p>
-            </template>
+            <!-- The Gero Card hub's layout and scene kit: the promise on the left, the flow
+                 it describes on the right (USDCx into the vault, RealFi feeding the stake). -->
+            <header class="realfi-start__hero">
+              <div class="realfi-start__intro">
+                <template v-if="hasUsdr">
+                  <h2 class="t-title realfi-start__title">{{ $t('realfi.start.readyTitle') }}</h2>
+                  <p class="t-body realfi-start__body">
+                    {{ $t('realfi.start.readyBody', { amount: usdrLabel }) }}
+                  </p>
+                </template>
+                <template v-else>
+                  <h2 class="t-title realfi-start__title">{{ $t('realfi.start.title') }}</h2>
+                  <p class="t-body realfi-start__body">{{ $t('realfi.start.body') }}</p>
+                </template>
+              </div>
+              <IsoScene
+                name="earnHero"
+                animated
+                class="realfi-start__art"
+                :label="$t('realfi.start.artLabel')"
+              />
+            </header>
             <RealFiGettingStarted
               :mainnet="isMainnet"
               :hasUsdr="hasUsdr"
@@ -469,6 +480,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
+import IsoScene from '@/shared/components/iso/IsoScene.vue';
 import { formatUsd, formatInt, formatSignedChange } from '@/shared/utils/format';
 import i18n from '@/plugins/i18n';
 import snackbar from '@/plugins/snackbar';
@@ -1595,15 +1607,18 @@ onMounted(load);
   border-radius: var(--g-r-card);
 }
 
-.realfi-glyph--lg {
-  width: 32px;
-  height: 32px;
-  margin-bottom: var(--g-s-4);
-  border-width: 2px;
+.realfi-start__hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 420px);
+  gap: var(--g-s-5);
+  align-items: center;
+  width: 100%;
+  text-align: left;
+}
 
-  &::after {
-    width: 2px;
-  }
+.realfi-start__art {
+  width: 100%;
+  justify-self: end;
 }
 
 .realfi-start__title {
@@ -1613,6 +1628,17 @@ onMounted(load);
 .realfi-start__body {
   max-width: 46ch;
   margin: 0;
+}
+
+@media (max-width: 720px) {
+  .realfi-start__hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .realfi-start__art {
+    max-width: 320px;
+    justify-self: center;
+  }
 }
 
 .realfi-start__note {
