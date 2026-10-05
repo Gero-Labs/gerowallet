@@ -122,7 +122,7 @@ jobs:
       # build:web step below on Web Store "remotely hosted code"), so its
       # matcher and its Vite plugin wiring are pinned here too.
       - name: Bundle TDZ and remote-code guard logic
-        run: npx vitest run scripts/check-bundle-tdz.spec.mjs scripts/remote-code-guard.spec.mjs
+        run: npx vitest run scripts/check-bundle-tdz.spec.mjs scripts/remote-code-guard.spec.mjs scripts/precommit-lint.spec.mjs
 
       # i18n parity. vue-i18n renders English (or the raw key) for a missing
       # translation and its warnings are silenced, so a key added to us.ts
