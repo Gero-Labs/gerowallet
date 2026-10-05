@@ -504,6 +504,107 @@ scene('stage', [24, 24], s => {
   s.stack({ x: 0, y: 0, w: 7, d: 7 }, p => p.box({ x: 0, y: 0, z: 0, w: 7, d: 7, h: 7, tone: 'cyan', edge: false }));
 }, 2);
 
+// ── Earn (RealFi) ─────────────────────────────────────────────────────────────
+// Gero is navy and cyan, RealFi is green: a cyan coin is USDCx, a green coin is USDrf, and
+// green stacked in the vault is the stake.
+
+// Earn hero: USDCx rides the rail into the Gero vault, where it sits as a green stack; the
+// RealFi plinth feeds yield back over the partner rail.
+scene('earnHero', [320, 200], s => {
+  s.stack({ x: -60, y: 21, w: 18, d: 18 }, p => {
+    p.box({ x: -60, y: 21, z: 0, w: 18, d: 18, h: 6, tone: 'slate' });
+    p.coin(-51, 30, 6 + COIN_T, 5, 'cyan');
+    p.coin(-51, 30, 6 + 2 * COIN_T, 5, 'cyan');
+  });
+  s.rail([[-42, 30], [0, 30]]);
+  s.flow([[-42, 30], [0, 30]], { kind: 'coin', count: 2 });
+  // Resting coins stay left of x = -20: nearer the vault, its left face covers them.
+  s.coinAt([-33, 30], { still: true });
+  s.coinAt([-21, 30], { still: true });
+  const pad = { x: 10, y: 8, z: 14, w: 68, d: 44, h: 5 };
+  s.floor({ x: 0, y: 0, w: 88, d: 60, k: 0.95 });
+  s.stack({ x: 0, y: 0, w: 88, d: 60 }, p => {
+    p.box({ x: 0, y: 0, z: 0, w: 88, d: 60, h: 14, tone: 'navy' });
+    p.box({ ...pad, tone: 'cyan' });
+    for (let i = 1; i <= 6; i++) p.coin(44, 30, pad.z + pad.h + i * COIN_T, 10, 'green');
+  });
+  s.rail([[114, 30], [88, 30]], { partner: true });
+  s.flow([[114, 30], [88, 30]], { tone: 'green', count: 2 });
+  s.packet([101, 30], { tone: 'green', still: true });
+  s.floor({ x: 114, y: 12, w: 36, d: 36 });
+  s.stack({ x: 114, y: 12, w: 36, d: 36 }, p => {
+    p.box({ x: 114, y: 12, z: 0, w: 36, d: 36, h: 12, tone: 'navy' });
+    p.box({ x: 122, y: 20, z: 12, w: 20, d: 20, h: 10, tone: 'green' });
+  });
+}, 8);
+
+// Where RealFi is available: four plots; one lit with the pin, one restricted (amber, sunk).
+scene('earnRegion', [200, 140], s => {
+  const lit = { x: 33, y: 9, z: 10, w: 18, d: 18, h: 10 };
+  s.floor({ x: 0, y: 0, w: 60, d: 60 });
+  s.stack({ x: 0, y: 0, w: 60, d: 60 }, p => {
+    p.box({ x: 0, y: 0, z: 0, w: 60, d: 60, h: 10, tone: 'navy' });
+    // Back to front (x + y), so nearer plots are painted over farther ones.
+    p.box({ x: 9, y: 9, z: 10, w: 18, d: 18, h: 4, tone: 'slate' });
+    p.box({ ...lit, tone: 'cyan' });
+    p.box({ x: 9, y: 33, z: 10, w: 18, d: 18, h: 2, tone: 'amber' });
+    p.box({ x: 33, y: 33, z: 10, w: 18, d: 18, h: 4, tone: 'slate' });
+  });
+  s.mark({ on: lit, glyph: 'pin' });
+});
+
+// A swap: `from` coins leave their tile, pass the swap block and arrive as `to` coins.
+function swapScene(name, from, to) {
+  scene(name, [220, 140], s => {
+    s.stack({ x: -66, y: 13, w: 18, d: 18 }, p => {
+      p.box({ x: -66, y: 13, z: 0, w: 18, d: 18, h: 6, tone: 'slate' });
+      p.coin(-57, 22, 6 + COIN_T, 5, from);
+      p.coin(-57, 22, 6 + 2 * COIN_T, 5, from);
+    });
+    s.rail([[-48, 22], [-20, 22]]);
+    s.flow([[-48, 22], [-20, 22]], { kind: 'coin', tone: from, count: 1 });
+    s.coinAt([-34, 22], { tone: from, still: true });
+    s.floor({ x: -20, y: 10, w: 24, d: 24 });
+    s.stack({ x: -20, y: 10, w: 24, d: 24 }, p => {
+      p.box({ x: -20, y: 10, z: 0, w: 24, d: 24, h: 12, tone: 'navy' });
+      p.box({ x: -14, y: 16, z: 12, w: 12, d: 12, h: 6, tone: 'cyan' });
+    });
+    s.rail([[4, 22], [30, 22]]);
+    s.flow([[4, 22], [30, 22]], { kind: 'coin', tone: to, count: 1 });
+    s.coinAt([17, 22], { tone: to, still: true });
+    s.stack({ x: 30, y: 13, w: 18, d: 18 }, p => {
+      p.box({ x: 30, y: 13, z: 0, w: 18, d: 18, h: 6, tone: 'slate' });
+      p.coin(39, 22, 6 + COIN_T, 5, to);
+      p.coin(39, 22, 6 + 2 * COIN_T, 5, to);
+      p.coin(39, 22, 6 + 3 * COIN_T, 5, to);
+    });
+  });
+}
+
+// Get USDCx: graphite ADA in, cyan USDCx out. (On the RealFi page cyan is USDCx and green is
+// USDrf, so ADA takes the neutral tone here rather than the card scenes' cyan.)
+swapScene('earnUsdcx', 'graphite', 'cyan');
+// Get USDrf: cyan USDCx in, green USDrf out.
+swapScene('earnSwap', 'cyan', 'green');
+
+// Stake: green USDrf rides into the vault and stacks up as the stake.
+scene('earnStake', [200, 140], s => {
+  s.stack({ x: -54, y: 13, w: 18, d: 18 }, p => {
+    p.box({ x: -54, y: 13, z: 0, w: 18, d: 18, h: 6, tone: 'slate' });
+    p.coin(-45, 22, 6 + COIN_T, 5, 'green');
+  });
+  s.rail([[-36, 22], [0, 22]]);
+  s.flow([[-36, 22], [0, 22]], { kind: 'coin', tone: 'green', count: 2 });
+  s.coinAt([-18, 22], { tone: 'green', still: true });
+  const pad = { x: 8, y: 8, z: 12, w: 36, d: 28, h: 4 };
+  s.floor({ x: 0, y: 0, w: 52, d: 44 });
+  s.stack({ x: 0, y: 0, w: 52, d: 44 }, p => {
+    p.box({ x: 0, y: 0, z: 0, w: 52, d: 44, h: 12, tone: 'navy' });
+    p.box({ ...pad, tone: 'cyan' });
+    for (let i = 1; i <= 4; i++) p.coin(26, 22, pad.z + pad.h + i * COIN_T, 8, 'green');
+  });
+});
+
 const names = Object.keys(scenes);
 const quote = text => `'${text}'`;
 const out = `// GENERATED by scripts/design/iso-scenes.mjs. Do not edit by hand.
