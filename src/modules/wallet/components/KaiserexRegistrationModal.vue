@@ -1,9 +1,13 @@
 <template>
+  <!-- Zione's page switches to its desktop layout (form beside the card art) at 1025 px of
+       iframe width; 1200 leaves the iframe about 1140. Narrower windows get its stacked layout.
+       The card may be as tall as the dialog (90vh), so it never cuts off its own content. -->
   <BaseDialog
     :isOpen="open"
     :title="t('card.kaiserexRegistration')"
     :subtitle="t('card.createKaiserexAccount')"
-    :width="1040"
+    :width="1200"
+    height="90vh"
     :min-height="0"
     persistent
     @close="emit('close')"
@@ -124,10 +128,12 @@ function onIframeLoad(): void {
   font-size: 12px;
 }
 
-/* Justified solid: the provider's page is light; a dark frame edge keeps it legible. */
+/* Justified solid: the frame holds a third-party page; a solid edge sets it apart from glass.
+   260px is the rest of the dialog (padding, header, note, buttons), so the whole dialog fits
+   the 90vh Vuetify allows and only the provider's page scrolls. Its desktop form is ~880px. */
 .card-register__frame {
   position: relative;
-  height: min(70vh, 720px);
+  height: clamp(360px, calc(90vh - 260px), 960px);
   border-radius: var(--g-r-card);
   border: 1px solid var(--g-hairline-2);
   background: var(--g-raised);
