@@ -46,7 +46,7 @@ describe('RealFiGettingStarted: getting USDrf', () => {
     expect(guide.text()).toContain('realfi.gettingStarted.needUsdcx');
     expect(acquireButtons(guide)).toEqual([
       'realfi.gettingStarted.getUsdcx (secondary)',
-      'realfi.gettingStarted.getUsdrf (tertiary)',
+      'realfi.gettingStarted.getUsdrf (secondary)',
     ]);
     // Both swaps are offered, so say they are separate and USDCx has to land first.
     expect(guide.text()).toContain('realfi.gettingStarted.getUsdcxNote');
@@ -75,7 +75,7 @@ describe('RealFiGettingStarted: getting USDrf', () => {
     const guide = mountGuide({ canSwapUsdrf: false });
     expect(acquireButtons(guide)).toEqual([
       'realfi.gettingStarted.getUsdcx (secondary)',
-      'realfi.start.cta (tertiary)',
+      'realfi.start.cta (secondary)',
     ]);
     expect(guide.text()).not.toContain('realfi.gettingStarted.getUsdcxNote');
   });
@@ -143,6 +143,14 @@ describe('RealFiGettingStarted: steps you tick off', () => {
     expect(stake.text()).toBe('realfi.start.stakeCta');
     await stake.trigger('click');
     expect(guide.emitted('stake')).toHaveLength(1);
+  });
+
+  it('makes every action on mainnet an outlined button, none a bare text button', () => {
+    const tiers = (guide: Guide) => guide.findAll('button').wrappers.map((b) => b.classes().find((c) => c.startsWith('g-btn--') && c !== 'g-btn--compact'));
+    expect(tiers(mountGuide())).toEqual(['g-btn--secondary', 'g-btn--secondary', 'g-btn--secondary']);
+    expect(tiers(mountGuide({ canSwapUsdrf: false }))).toEqual(['g-btn--secondary', 'g-btn--secondary', 'g-btn--secondary']);
+    expect(tiers(mountGuide({ canAcquire: false, canSwapUsdrf: false, swapStatus: 'unavailable', canRetryAvailability: true })))
+      .toEqual(['g-btn--secondary', 'g-btn--secondary']);
   });
 
   it('on preprod, has no USDCx step and numbers the rest 1 to 3', () => {

@@ -18,7 +18,7 @@
               >
                 {{ $t('realfi.gettingStarted.checkRestrictions') }}
               </a>
-              <GButton class="realfi-getting-started__eligibility-cta" tier="tertiary" compact @click="$emit('check-eligibility')">
+              <GButton class="realfi-getting-started__eligibility-cta" tier="secondary" compact @click="$emit('check-eligibility')">
                 {{ $t('realfi.gettingStarted.eligibilityCta') }}
               </GButton>
             </div>
@@ -29,8 +29,8 @@
         </div>
       </li>
       <!-- Mainnet buys USDrf in two swaps, ADA → USDCx → USDrf, one step each. A step ticks
-           itself off from what the wallet holds (USDrf counts for both), and its button goes;
-           the first open step gets the stronger button. -->
+           itself off from what the wallet holds (USDrf counts for both), and its button goes.
+           Every step's action is an outlined button, flush with the copy. -->
       <li
         v-if="mainnet"
         class="realfi-getting-started__step"
@@ -60,7 +60,7 @@
           </p>
           <template v-if="!canAcquire && !usdcxDone">
             <p class="t-caption">{{ $t(`realfi.gettingStarted.swapStatus.${swapStatus}`) }}</p>
-            <GButton v-if="canRetryAvailability" tier="tertiary" compact @click="$emit('retry-availability')">
+            <GButton v-if="canRetryAvailability" tier="secondary" compact @click="$emit('retry-availability')">
               {{ $t('realfi.gettingStarted.retryAvailability') }}
             </GButton>
           </template>
@@ -81,11 +81,11 @@
           <p class="t-body-sm">{{ $t(mainnet ? 'realfi.gettingStarted.acquireBody' : 'realfi.gettingStarted.preprodAcquireBody') }}</p>
           <template v-if="mainnet && !usdrfDone">
             <div v-if="canAcquire" class="realfi-getting-started__actions">
-              <GButton v-if="canSwapUsdrf" :tier="usdrfTier" compact @click="$emit('get-usdrf')">
+              <GButton v-if="canSwapUsdrf" tier="secondary" compact @click="$emit('get-usdrf')">
                 {{ $t('realfi.gettingStarted.getUsdrf') }}
               </GButton>
               <!-- Until Gero can swap USDCx for USDrf, RealFi's own app is the way there. -->
-              <GButton v-else :tier="usdrfTier" compact @click="$emit('open-realfi')">
+              <GButton v-else tier="secondary" compact @click="$emit('open-realfi')">
                 {{ $t('realfi.start.cta') }}
               </GButton>
             </div>
@@ -95,7 +95,7 @@
             <!-- Swaps that are off show their status at the first step still open. -->
             <template v-else-if="!canAcquire && usdcxDone">
               <p class="t-caption">{{ $t(`realfi.gettingStarted.swapStatus.${swapStatus}`) }}</p>
-              <GButton v-if="canRetryAvailability" tier="tertiary" compact @click="$emit('retry-availability')">
+              <GButton v-if="canRetryAvailability" tier="secondary" compact @click="$emit('retry-availability')">
                 {{ $t('realfi.gettingStarted.retryAvailability') }}
               </GButton>
             </template>
@@ -157,7 +157,6 @@ const usdcxDone = computed(() => props.hasUsdcx || props.hasUsdr);
 const usdrfDone = computed(() => props.hasUsdr);
 // Preprod has no USDCx step, so the later steps move up a number.
 const usdrfStep = computed(() => (props.mainnet ? 3 : 2));
-const usdrfTier = computed(() => (usdcxDone.value ? 'secondary' : 'tertiary'));
 
 defineEmits<{
   (event: 'check-eligibility'): void;
