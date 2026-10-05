@@ -60,14 +60,16 @@
               :hasUsdr="hasUsdr"
               :canStake="canTransact && !ordersLocked"
               :canStakeExternally="!canTransact && !ordersLocked"
-              :canAcquire="canAcquireUsdrf"
-              :canAcquireUsdcx="canAcquireUsdrf && hasUsdcxSwapAvailability"
+              :canAcquire="canSwapUsdcx"
               :canSwapUsdrf="canSwapUsdrf"
+              :hasUsdcx="hasUsdcx"
+              :usdcxLabel="usdcxLabel"
               :swapStatus="swapStatusForGuide"
               :canRetryAvailability="canRetryUsdrfAvailability"
               @check-eligibility="openRealFiApp()"
               @get-usdrf="onGetUsdrf"
               @get-usdcx="openUsdcxSwap()"
+              @open-realfi="openRealFiApp()"
               @retry-availability="refreshUsdrfAvailability()"
               @stake="onStake"
             />
@@ -170,14 +172,16 @@
               :hasUsdr="hasUsdr"
               :canStake="canTransact && !ordersLocked"
               :canStakeExternally="!canTransact && !ordersLocked"
-              :canAcquire="canAcquireUsdrf"
-              :canAcquireUsdcx="canAcquireUsdrf && hasUsdcxSwapAvailability"
+              :canAcquire="canSwapUsdcx"
               :canSwapUsdrf="canSwapUsdrf"
+              :hasUsdcx="hasUsdcx"
+              :usdcxLabel="usdcxLabel"
               :swapStatus="swapStatusForGuide"
               :canRetryAvailability="canRetryUsdrfAvailability"
               @check-eligibility="openRealFiApp()"
               @get-usdrf="onGetUsdrf"
               @get-usdcx="openUsdcxSwap()"
+              @open-realfi="openRealFiApp()"
               @retry-availability="refreshUsdrfAvailability()"
               @stake="onStake"
             />
@@ -451,7 +455,7 @@
           <RealFiOrderFlow ref="flow" @placed="onPlaced" @support="openRealFiSupport()" />
         </template>
         <SwapDialog
-          v-if="swapDialogOpen && canAcquireUsdrf"
+          v-if="swapDialogOpen && canSwapUsdcx"
           :isOpen="swapDialogOpen"
           :sellTokenUnit="swapSellTokenUnit"
           :buyTokenUnit="swapBuyTokenUnit"
@@ -474,7 +478,7 @@ import featureFlagsStore from '@/stores/featureFlagsStore';
 import { useRealFi } from './composables/useRealFi';
 import RealFiYieldChart from './components/RealFiYieldChart.vue';
 import RealFiGettingStarted from './components/RealFiGettingStarted.vue';
-import { usdrAssetIdFor } from './assets';
+import { heldUnits, MAINNET_USDCX_UNIT, usdcxAssetIdFor, usdrAssetIdFor } from './assets';
 import { useRealFiSwapAvailability } from './composables/useRealFiSwapAvailability';
 import type { RealFiBuildRequest, RealFiOrderKind } from './services/realfiOrders';
 import {
@@ -544,8 +548,8 @@ const isMainnet = computed(() => {
 const swapEnabled = computed(() => featureFlagsStore.isSwapEnabled());
 const {
   status: usdrfSwapStatus,
-  isAvailable: hasUsdrfSwapAvailability,
   isUsdcxAvailable: hasUsdcxSwapAvailability,
+  isUsdrfAvailable: hasUsdrfSwapAvailability,
   canCheck: canCheckUsdrfAvailability,
   refresh: refreshUsdrfAvailability,
 } = useRealFiSwapAvailability();
@@ -555,14 +559,22 @@ const swapStatusForGuide = computed(() =>
 const canRetryUsdrfAvailability = computed(
   () => canCheckUsdrfAvailability.value && ['unknown', 'unavailable'].includes(usdrfSwapStatus.value),
 );
-const canAcquireUsdrf = computed(
-  () => isMainnet.value && !unavailableReason.value && hasUsdrfSwapAvailability.value,
+// ADA → USDCx, the first leg. It needs only USDCx in the swap catalogue: tying it to
+// USDrf being listed hid a working swap behind one that does not exist yet.
+const canSwapUsdcx = computed(
+  () => isMainnet.value && !unavailableReason.value && hasUsdcxSwapAvailability.value,
 );
-// The USDCx → USDrf swap is a separate, default-off flag: its only route is the SundaeSwap
-// V4 pool, which the aggregator serves only after V4 is promoted.
+// USDCx → USDrf is a separate, default-off flag: its only route is the SundaeSwap V4
+// pool, which the aggregator serves only after V4 is promoted.
 const canSwapUsdrf = computed(
-  () => canAcquireUsdrf.value && featureFlagsStore.isRealFiUsdrfSwapEnabled(),
+  () => canSwapUsdcx.value && hasUsdrfSwapAvailability.value && featureFlagsStore.isRealFiUsdrfSwapEnabled(),
 );
+// USDCx already in the wallet: the guide skips the ADA swap and goes to the USDrf leg.
+const usdcxUnits = computed<SmallestUnit>(() =>
+  heldUnits(WalletStore.state.tokens, usdcxAssetIdFor(WalletStore.state.loggedWallet?.network)),
+);
+const hasUsdcx = computed(() => BigInt(usdcxUnits.value) > 0n);
+const usdcxLabel = computed(() => unitsLabel(usdcxUnits.value, 'USDCx'));
 const mainnetUsdrfUnit = usdrAssetIdFor(Network.MAINNET) ?? '';
 const swapDialogOpen = ref(false);
 const swapSellTokenUnit = ref('');
@@ -570,7 +582,7 @@ const swapBuyTokenUnit = ref('');
 const activeSwapScope = ref('');
 const swapScope = computed(() => {
   const w = WalletStore.state.loggedWallet;
-  return `${w?.id ?? ''}:${w?.chain ?? ''}:${w?.network ?? ''}:${w?.baseAddress ?? ''}:${canAcquireUsdrf.value}`;
+  return `${w?.id ?? ''}:${w?.chain ?? ''}:${w?.network ?? ''}:${w?.baseAddress ?? ''}:${canSwapUsdcx.value}`;
 });
 
 watch(swapScope, (scope) => {
@@ -594,7 +606,7 @@ function openUsdrfSwap(): void {
 }
 
 function openUsdcxSwap(): void {
-  if (!canAcquireUsdrf.value) return;
+  if (!canSwapUsdcx.value) return;
   swapSellTokenUnit.value = 'lovelace';
   swapBuyTokenUnit.value = MAINNET_USDCX_UNIT;
   activeSwapScope.value = swapScope.value;
@@ -620,9 +632,6 @@ function closeSwapDialog(refresh = true): void {
   activeSwapScope.value = '';
   if (refresh && wasOpen) void load({ quiet: true });
 }
-
-const MAINNET_USDCX_UNIT =
-  '1f3aec8bfe7ea4fe14c5f121e2a92e301afe414147860d557cac7e345553444378';
 
 /**
  * RealFi's own app for the wallet's network. Constants, never built from remote data,

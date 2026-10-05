@@ -5638,6 +5638,8 @@ export default {
   'realfi.gettingStarted.preprodAcquireBody': 'Use the RealFi preprod app and test funds to explore. Mainnet wallet swaps are only offered on mainnet.',
   'realfi.gettingStarted.getUsdrf': 'Get USDrf',
   'realfi.gettingStarted.getUsdcx': 'Get USDCx with ADA',
+  'realfi.gettingStarted.needUsdcx': 'You don’t hold USDCx yet. Swap ADA for USDCx first, then swap it for USDrf.',
+  'realfi.gettingStarted.haveUsdcx': 'You hold {amount}, ready to swap for USDrf.',
   'realfi.gettingStarted.getUsdcxNote': 'This is a separate swap. Wait for USDCx to arrive in your wallet, then return to swap for USDrf.',
   'realfi.gettingStarted.swapUnavailable': 'Wallet swaps are currently unavailable. You can still review the eligibility steps above.',
   'realfi.gettingStarted.routeNote': 'Swap routes or quotes may be unavailable. Review the quote before signing; the exchange rate is not guaranteed to be 1:1.',

@@ -32,11 +32,35 @@
         <div class="realfi-getting-started__copy">
           <span class="t-label">{{ $t('realfi.gettingStarted.acquireTitle') }}</span>
           <p class="t-body-sm">{{ $t(mainnet ? 'realfi.gettingStarted.acquireBody' : 'realfi.gettingStarted.preprodAcquireBody') }}</p>
+          <!-- What the wallet already holds picks the next step: with USDCx the ADA swap
+               is skipped, without it that swap comes first. -->
+          <p v-if="canAcquire" class="t-body-sm realfi-getting-started__holding">
+            {{ hasUsdcx
+              ? $t('realfi.gettingStarted.haveUsdcx', { amount: usdcxLabel })
+              : $t('realfi.gettingStarted.needUsdcx') }}
+          </p>
           <div v-if="canAcquire" class="realfi-getting-started__actions">
-            <GButton v-if="canSwapUsdrf" tier="secondary" compact @click="$emit('get-usdrf')">
+            <GButton v-if="!hasUsdcx" tier="secondary" compact @click="$emit('get-usdcx')">
+              {{ $t('realfi.gettingStarted.getUsdcx') }}
+            </GButton>
+            <GButton
+              v-if="canSwapUsdrf"
+              :tier="hasUsdcx ? 'secondary' : 'tertiary'"
+              compact
+              @click="$emit('get-usdrf')"
+            >
               {{ $t('realfi.gettingStarted.getUsdrf') }}
             </GButton>
-            <GButton v-if="canAcquireUsdcx" tier="tertiary" compact @click="$emit('get-usdcx')">
+            <!-- Until Gero can swap USDCx for USDrf, RealFi's own app is the way there. -->
+            <GButton
+              v-else
+              :tier="hasUsdcx ? 'secondary' : 'tertiary'"
+              compact
+              @click="$emit('open-realfi')"
+            >
+              {{ $t('realfi.start.cta') }}
+            </GButton>
+            <GButton v-if="hasUsdcx" tier="tertiary" compact @click="$emit('get-usdcx')">
               {{ $t('realfi.gettingStarted.getUsdcx') }}
             </GButton>
           </div>
@@ -58,7 +82,7 @@
             {{ $t('realfi.gettingStarted.preprodCta') }}
           </GButton>
           <p v-if="mainnet" class="t-caption">{{ $t('realfi.gettingStarted.routeNote') }}</p>
-          <p v-if="mainnet && canAcquireUsdcx && canSwapUsdrf" class="t-caption">
+          <p v-if="mainnet && canAcquire && canSwapUsdrf && !hasUsdcx" class="t-caption">
             {{ $t('realfi.gettingStarted.getUsdcxNote') }}
           </p>
         </div>
@@ -92,21 +116,25 @@ withDefaults(
     hasUsdr: boolean;
     canStake: boolean;
     canStakeExternally: boolean;
+    // ADA → USDCx in Gero: the first leg, available whenever Gero can swap into USDCx.
     canAcquire: boolean;
-    canAcquireUsdcx: boolean;
     // USDCx → USDrf in Gero; off until the aggregator serves that route.
     canSwapUsdrf: boolean;
+    // USDCx already in the wallet, and how much ("12.50 USDCx").
+    hasUsdcx?: boolean;
+    usdcxLabel?: string;
     swapStatus: 'disabled' | 'unknown' | 'loading' | 'available' | 'unavailable';
     canRetryAvailability: boolean;
     compact?: boolean;
   }>(),
-  { compact: false },
+  { compact: false, hasUsdcx: false, usdcxLabel: '' },
 );
 
 defineEmits<{
   (event: 'check-eligibility'): void;
   (event: 'get-usdrf'): void;
   (event: 'get-usdcx'): void;
+  (event: 'open-realfi'): void;
   (event: 'retry-availability'): void;
   (event: 'stake'): void;
 }>();
@@ -178,6 +206,10 @@ defineEmits<{
 
 .realfi-getting-started__eligibility-cta ::v-deep .v-btn__content {
   white-space: normal;
+}
+
+.realfi-getting-started__copy > .realfi-getting-started__holding {
+  color: var(--g-text-1);
 }
 
 .realfi-getting-started__actions {

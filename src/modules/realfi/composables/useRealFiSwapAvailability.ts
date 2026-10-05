@@ -3,11 +3,9 @@ import { Blockchain, Network } from '@/models/types';
 import WalletStore from '@/stores/walletStore';
 import featureFlagsStore from '@/stores/featureFlagsStore';
 import TokenMetadataStore from '@/stores/tokenMetadataStore';
-import { REALFI_ASSETS } from '../assets';
+import { MAINNET_USDCX_UNIT, REALFI_ASSETS } from '../assets';
 
 export type RealFiSwapAvailability = 'unknown' | 'loading' | 'available' | 'unavailable';
-const MAINNET_USDCX_UNIT =
-  '1f3aec8bfe7ea4fe14c5f121e2a92e301afe414147860d557cac7e345553444378';
 
 interface SwapCatalogEntry {
   unit?: unknown;
@@ -25,12 +23,17 @@ export function hasSupportedSwapToken(
 }
 
 /**
- * Refreshes the shared swap-token catalogue and reports RealFi token availability.
+ * Refreshes the shared swap-token catalogue and reports which leg of getting USDrf Gero
+ * can swap: ADA → USDCx needs only USDCx listed; USDCx → USDrf needs both. `status` is
+ * about the first leg, so a catalogue without USDrf still offers ADA → USDCx.
+ *
  * A stale result from a previous wallet, account, network, or feature-flag scope cannot
- * unlock the acquisition action for the currently displayed wallet.
+ * unlock an acquisition action for the currently displayed wallet.
  */
 export function useRealFiSwapAvailability() {
   const status = ref<RealFiSwapAvailability>('unknown');
+  // Whether the last applied catalogue also listed USDrf: the second leg's own gate.
+  const usdrfListed = ref(false);
   const walletScope = computed(() => {
     const wallet = WalletStore.state.loggedWallet;
     return JSON.stringify([
@@ -57,6 +60,7 @@ export function useRealFiSwapAvailability() {
     const requestScope = walletScope.value;
     if (!canCheck.value) {
       status.value = 'unknown';
+      usdrfListed.value = false;
       return;
     }
 
@@ -68,12 +72,9 @@ export function useRealFiSwapAvailability() {
     if (thisRequest !== requestId || requestScope !== walletScope.value) return;
 
     const catalog = TokenMetadataStore.state.tokens as Record<string, unknown>;
-    status.value =
-      loaded &&
-      hasSupportedSwapToken(catalog, REALFI_ASSETS.mainnet.usdr) &&
-      hasSupportedSwapToken(catalog, MAINNET_USDCX_UNIT)
-        ? 'available'
-        : 'unavailable';
+    const usdcxListed = loaded && hasSupportedSwapToken(catalog, MAINNET_USDCX_UNIT);
+    usdrfListed.value = usdcxListed && hasSupportedSwapToken(catalog, REALFI_ASSETS.mainnet.usdr);
+    status.value = usdcxListed ? 'available' : 'unavailable';
   }
 
   watch(
@@ -81,6 +82,7 @@ export function useRealFiSwapAvailability() {
     () => {
       requestId += 1;
       status.value = 'unknown';
+      usdrfListed.value = false;
       if (canCheck.value) void refresh();
     },
     { immediate: true },
@@ -90,16 +92,13 @@ export function useRealFiSwapAvailability() {
     requestId += 1;
   });
 
+  const isUsdcxAvailable = computed(() => canCheck.value && status.value === 'available');
   return {
     status,
-    isAvailable: computed(() => canCheck.value && status.value === 'available'),
-    isUsdcxAvailable: computed(() => {
-      if (!canCheck.value || status.value !== 'available') return false;
-      return hasSupportedSwapToken(
-        TokenMetadataStore.state.tokens as Record<string, unknown>,
-        MAINNET_USDCX_UNIT,
-      );
-    }),
+    /** ADA → USDCx: the first leg, and all a wallet without USDCx can do in Gero. */
+    isUsdcxAvailable,
+    /** USDCx → USDrf: listed in the catalogue. The page adds its own flag on top. */
+    isUsdrfAvailable: computed(() => isUsdcxAvailable.value && usdrfListed.value),
     canCheck,
     refresh,
   };
