@@ -5531,6 +5531,8 @@ export default {
   'realfi.gettingStarted.preprodAcquireBody': 'Nutze die RealFi-Preprod-App und Testguthaben. Wallet-Tausch ist nur auf Mainnet verfügbar.',
   'realfi.gettingStarted.getUsdrf': 'USDrf erhalten',
   'realfi.gettingStarted.getUsdcx': 'USDCx mit ADA erhalten',
+  'realfi.gettingStarted.needUsdcx': 'Du hältst noch kein USDCx. Tausche zuerst ADA gegen USDCx und dann USDCx gegen USDrf.',
+  'realfi.gettingStarted.haveUsdcx': 'Du hältst {amount}, bereit zum Tausch gegen USDrf.',
   'realfi.gettingStarted.getUsdcxNote': 'Dies ist ein separater Tausch. Warte, bis USDCx in deiner Wallet angekommen ist, und tausche es dann gegen USDrf.',
   'realfi.gettingStarted.swapUnavailable': 'Wallet-Tausch ist derzeit nicht verfügbar. Du kannst die Berechtigungsschritte oben trotzdem ansehen.',
   'realfi.gettingStarted.routeNote': 'Tauschrouten oder Kurse sind möglicherweise nicht verfügbar. Prüfe den Kurs vor dem Signieren; ein Verhältnis von 1:1 ist nicht garantiert.',

@@ -84,6 +84,7 @@ vi.mock('@/modules/dashboard/dialogs/SwapDialog.vue', () => ({
 }));
 
 import RealFiSfc from './RealFi.vue';
+import WalletStoreMock from '@/stores/walletStore';
 
 const RealFi = RealFiSfc as unknown as Parameters<typeof mount>[0];
 const USDCX = '1f3aec8bfe7ea4fe14c5f121e2a92e301afe414147860d557cac7e345553444378';
@@ -368,5 +369,47 @@ describe('RealFi acquisition', () => {
     expect(page.text()).toContain('realfi.gettingStarted.getUsdrf');
     expect(page.findAll('button').wrappers.map((item) => item.text())).not.toContain('realfi.stakeAction');
     expect(page.find('.realfi-guide-disclosure').exists()).toBe(true);
+  });
+
+  describe('holdings-aware acquisition', () => {
+    // The walletStore mock above exposes only loggedWallet; these cases add balances.
+    const walletState = WalletStoreMock.state as unknown as Record<string, unknown>;
+    afterEach(() => {
+      delete walletState['tokens'];
+    });
+
+    function guideButtons(page: Page): string[] {
+      return page.findAll('.realfi-getting-started__actions button').wrappers.map((item) => item.text());
+    }
+
+    it('offers ADA to USDCx while USDrf is missing from the swap catalogue', async () => {
+      swapEnabled.value = true;
+      tokenCatalogStore.loadTokens.mockImplementation(async (shouldApply?: () => boolean) => {
+        if (shouldApply && !shouldApply()) return false;
+        tokenCatalogStore.tokens = { [USDCX]: { unit: USDCX, decimals: 6 } };
+        tokenCatalogStore.state.tokens = tokenCatalogStore.tokens;
+        return true;
+      });
+      const page = await mountPage();
+      expect(page.text()).not.toContain('realfi.gettingStarted.swapStatus.unavailable');
+      expect(page.text()).toContain('realfi.gettingStarted.needUsdcx');
+      expect(guideButtons(page)).toEqual(['realfi.gettingStarted.getUsdcx', 'realfi.start.cta']);
+      await button(page, 'realfi.gettingStarted.getUsdcx').trigger('click');
+      await settle(page);
+      const dialog = page.findComponent({ name: 'SwapDialog' });
+      expect(dialog.props('sellTokenUnit')).toBe('lovelace');
+      expect(dialog.props('buyTokenUnit')).toBe(USDCX);
+      await button(page, 'realfi.start.cta').trigger('click');
+      expect(openSpy).toHaveBeenCalledWith('https://app.realfi.co', '_blank', 'noopener,noreferrer');
+    });
+
+    it('reads USDCx from the wallet and leads with the USDrf swap', async () => {
+      swapEnabled.value = true;
+      walletState['tokens'] = { [USDCX]: { quantity: '12500000' } };
+      const page = await mountPage();
+      expect(page.text()).toContain('realfi.gettingStarted.haveUsdcx');
+      expect(page.text()).toContain('12.50 USDCx');
+      expect(guideButtons(page)[0]).toBe('realfi.gettingStarted.getUsdrf');
+    });
   });
 });

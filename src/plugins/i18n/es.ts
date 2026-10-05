@@ -5407,6 +5407,8 @@ export default {
   'realfi.gettingStarted.preprodAcquireBody': 'Usa la app de RealFi preprod y los fondos de prueba. El cambio desde la billetera solo se ofrece en mainnet.',
   'realfi.gettingStarted.getUsdrf': 'Obtener USDrf',
   'realfi.gettingStarted.getUsdcx': 'Obtener USDCx con ADA',
+  'realfi.gettingStarted.needUsdcx': 'Aún no tienes USDCx. Primero cambia ADA por USDCx y luego cambia USDCx por USDrf.',
+  'realfi.gettingStarted.haveUsdcx': 'Tienes {amount}, listo para cambiar por USDrf.',
   'realfi.gettingStarted.getUsdcxNote': 'Este es un cambio aparte. Espera a que USDCx llegue a tu billetera y luego vuelve para cambiarlo por USDrf.',
   'realfi.gettingStarted.swapUnavailable': 'Los cambios desde la billetera no están disponibles ahora. Aún puedes revisar los pasos de elegibilidad anteriores.',
   'realfi.gettingStarted.routeNote': 'Es posible que no haya rutas ni cotizaciones disponibles. Revisa la cotización antes de firmar; no se garantiza un cambio 1:1.',
