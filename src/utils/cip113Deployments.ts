@@ -38,8 +38,8 @@ export const CIP113_BASE_PREVIEW: readonly string[] = [
  * the deployment that now exists". Keeping the allowlist separate means enabling a network
  * is always a deliberate two-line change here, reviewed together.
  *
- * Preview only. CIP-113 is still a candidate — PR #444 against cardano-foundation/CIPs,
- * with no CIP-0113 directory merged — and the reference implementation was last seen at
- * `0.5.0-alpha.4` with a `programmable_logic_base` hash not yet deployed on any network.
+ * Mainnet, preprod and preview are all allowlisted and all carry a deployment, so on every
+ * Cardano network the `isCip113Enabled` flag is now the only thing standing between a
+ * build and live CIP-113 discovery. Turning that flag on enables mainnet too.
  */
-export const CIP113_ALLOWED_NETWORKS: readonly string[] = [Network.PREVIEW];
+export const CIP113_ALLOWED_NETWORKS: readonly string[] = [Network.MAINNET, Network.PREPROD, Network.PREVIEW];
