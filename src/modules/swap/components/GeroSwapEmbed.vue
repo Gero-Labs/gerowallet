@@ -123,6 +123,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useNativeSwapSigner } from '../composables/useNativeSwapSigner';
 import { useSwapTokenResolver, buildHeldBalanceMap } from '../composables/useSwapTokenResolver';
 import TokenMetadataStore from '@/stores/tokenMetadataStore';
+import { refreshSwapTokensIfStale } from '../swapTokenRefresh';
 import { getTokenByUnit, marketTokensRef } from '@/modules/market/composables/useMarketData';
 import { resolveAsset, resolvePaymentKeyHash } from '@/shared/utils/resolver';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
@@ -533,6 +534,10 @@ function detach() {
 }
 
 onMounted(attach);
+// The token list is loaded at login and kept; refresh it if this page's copy is old, so a
+// newly listed token appears in the picker without a lock/unlock. The catalog watch below
+// rebuilds the picker when it lands.
+onMounted(() => { void refreshSwapTokensIfStale(); });
 onBeforeUnmount(detach);
 
 // Re-seed the pair when the host changes tokenIn/tokenOut props (attributes update
