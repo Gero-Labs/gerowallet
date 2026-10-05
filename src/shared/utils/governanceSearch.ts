@@ -2,7 +2,7 @@ import { parseGovActionId, type GovActionId } from '@/shared/utils/govActionId';
 import { drepDisplayName } from '@/shared/utils/drepView';
 import { formatCompact } from '@/shared/utils/format';
 import { toLovelace } from '@/shared/utils/lovelace';
-import { foldForSearch, scoreMatch } from '@/shared/utils/searchScore';
+import { scoreIndexEntry, scoreMatch } from '@/shared/utils/searchScore';
 import type { GovProposal } from '@/api/governance.types';
 // TYPE-ONLY on purpose. A value import here would pull the whole search
 // composable (and its store/API graph) into every consumer of these mappers,
@@ -124,9 +124,9 @@ function byScoreDesc(a: SearchResult, b: SearchResult): number {
 /**
  * Governance hub pages matching `query`.
  *
- * Scored on the same curve as the settings index (exact keyword 100,
- * keyword-prefix 90, keyword-substring 50) so a page and a setting typed for
- * with the same intent rank against each other honestly.
+ * Scored by `scoreIndexEntry`, the curve the settings index and the wallet's
+ * other pages use, so a page and a setting typed for with the same intent rank
+ * against each other honestly.
  */
 export function governancePageResults(
   query: string,
@@ -140,16 +140,7 @@ export function governancePageResults(
   return GOVERNANCE_PAGES.filter(page => !page.requiresVoting || votingEnabled)
     .map(page => {
       const title = String(t(page.titleKey));
-      let best = 0;
-      const folded = foldForSearch(lower);
-      for (const keyword of page.keywords) {
-        const kw = foldForSearch(keyword);
-        if (kw === folded) { best = 100; break; }
-        if (kw.startsWith(folded)) best = Math.max(best, 90);
-        else if (kw.includes(folded)) best = Math.max(best, 50);
-      }
-      best = Math.max(best, scoreMatch(title, lower));
-      return { page, title, score: best };
+      return { page, title, score: scoreIndexEntry(page.keywords, title, lower) };
     })
     .filter(entry => entry.score > 0)
     .sort((a, b) => b.score - a.score)
@@ -225,10 +216,9 @@ export function governanceActionResults(
 /**
  * DReps matching `query`, by published name or by `drep1…` id fragment.
  *
- * Rows come either from the in-memory directory page or from
- * `getDRepsPaginated({ search })`, which filters server-side. Both are mapped
- * here so the two phases of a search cannot disagree about a DRep's name,
- * power or destination.
+ * Rows come from `getDRepsPaginated({ search })`, which filters server-side
+ * on the wallet's own network. Mapped here so a DRep's name, power and
+ * destination are decided in one testable place.
  */
 export function drepResults(
   rows: readonly DRepSearchRow[] | null | undefined,

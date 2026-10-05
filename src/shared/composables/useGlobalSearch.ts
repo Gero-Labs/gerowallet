@@ -1,18 +1,22 @@
 import { ref, computed, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { walletStore } from '@/stores/walletStore';
+import WalletStore, { walletStore } from '@/stores/walletStore';
 import { stakingStore } from '@/stores/stakingStore';
-import { governanceStore } from '@/stores/governanceStore';
+import { midnightStore } from '@/stores/midnightStore';
+import { musicStore } from '@/stores/musicStore';
 import { useMarketData, type MarketToken } from '@/modules/market/composables/useMarketData';
 import { useNftMarketData } from '@/modules/market/composables/useNftMarketData';
+import { useHoldingsValuation } from '@/shared/composables/useHoldingsValuation';
 import blockchainApi from '@/api/blockchain-api';
 import cashbackApi from '@/api/cashback-api';
 import governanceApi from '@/api/governance-api';
 import governanceActionsStore from '@/stores/governanceActionsStore';
 import networks from '@/utils/networks';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
-import { foldForSearch, scoreMatch } from '@/shared/utils/searchScore';
+import { Blockchain, type Wallet } from '@/models/types';
+import { scoreMatch } from '@/shared/utils/searchScore';
 import { drepResults, governanceActionResults, governancePageResults } from '@/shared/utils/governanceSearch';
+import { actionResults, pageResults, searchGates, settingResults, type SearchGate } from '@/shared/utils/walletSearchIndex';
 import type { GovProposal } from '@/api/governance.types';
 
 export type SearchResultType =
@@ -23,6 +27,7 @@ export type SearchResultType =
   | 'drep'
   | 'govAction'
   | 'page'
+  | 'action'
   | 'retailer'
   | 'contact'
   | 'setting';
@@ -35,7 +40,7 @@ export interface SearchResult {
   icon?: string;
   route?: string;
   // Original object for navigation handlers — a grab-bag by design (token, pool,
-  // DRep, contact or settings target), consumed untyped by GlobalSearch.vue.
+  // DRep, contact, action or settings target), consumed untyped by GlobalSearch.vue.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   data?: any;
   _score?: number; // Relevance score for sorting (higher = better match)
@@ -62,15 +67,18 @@ let govActionCacheNetwork: string | null = null;
 let govActionCacheRequest: Promise<void> | null = null;
 
 /**
- * Governance actions to search over.
+ * Governance actions on `network` to search over.
  *
  * The store's list wins when the user has already been on the actions board:
  * that is the page they just paged and filtered, so it is the set they mean.
- * Otherwise this falls back to the cache below.
+ * Only while it is this network's list, though: a wallet switch does not clear
+ * the board, and another network's action would open as "not found". Otherwise
+ * this falls back to the cache below, under the same rule.
  */
-function govActionPool(): GovProposal[] {
-  const loaded = governanceActionsStore.state.actions;
-  return loaded?.length ? loaded : govActionCache;
+function govActionPool(network: string | undefined): GovProposal[] {
+  const { actions, actionsNetwork } = governanceActionsStore.state;
+  if (actions?.length && actionsNetwork === network) return actions;
+  return govActionCacheNetwork === network ? govActionCache : [];
 }
 
 /**
@@ -138,71 +146,38 @@ async function loadRetailerCache() {
 // Settings navigation — ContentLayout watches this to open SettingsDialog
 export const settingsNavRequest = ref<{ tab: string; highlight?: string } | null>(null);
 
-// Searchable settings index with optional feature requirement. Keywords carry
-// EN, DE and ES terms; matching folds accents on both sides (foldForSearch).
-// `requires`: if set, the setting only appears when the chain supports that feature
-// `titleKey`/`subtitleKey`: i18n keys resolved at search time for locale-aware display
-type SettingsEntry = { keywords: string[]; tab: string; titleKey: string; subtitleKey: string; icon: string; requires?: 'cashback' | 'governance' };
-
-const SETTINGS_INDEX: SettingsEntry[] = [
-  // Profile
-  { keywords: ['wallet name', 'rename wallet', 'edit name', 'wallet-name', 'umbenennen', 'nombre de la billetera', 'renombrar', 'cambiar nombre'], tab: 'profile', titleKey: 'settings.walletName', subtitleKey: 'settings.profile', icon: 'mdi-pencil' },
-  { keywords: ['profile picture', 'avatar', 'wallet picture', 'photo', 'profilbild', 'foto de perfil', 'imagen de la billetera'], tab: 'profile', titleKey: 'settings.walletProfilePicture', subtitleKey: 'settings.profile', icon: 'mdi-account-circle' },
-  { keywords: ['currency', 'usd', 'eur', 'dollar', 'euro', 'currency preference', 'währung', 'moneda', 'divisa'], tab: 'profile', titleKey: 'settings.currencyPreference', subtitleKey: 'settings.profile', icon: 'mdi-currency-usd' },
-  { keywords: ['language', 'german', 'english', 'deutsch', 'display language', 'sprache', 'anzeigesprache', 'spanish', 'spanisch', 'español', 'idioma', 'inglés', 'alemán'], tab: 'profile', titleKey: 'settings.displayLanguage', subtitleKey: 'settings.profile', icon: 'mdi-translate' },
-  { keywords: ['region', 'región'], tab: 'profile', titleKey: 'settings.region', subtitleKey: 'settings.profile', icon: 'mdi-map-marker' },
-  { keywords: ['welcome guide', 'onboarding', 'tutorial', 'anleitung', 'guía de bienvenida'], tab: 'profile', titleKey: 'settings.welcomeGuide', subtitleKey: 'settings.profile', icon: 'mdi-book-open-variant' },
-  // Collateral
-  { keywords: ['collateral', 'set collateral', '5 ada', 'kollateral', 'sicherheit', 'colateral', 'garantía'], tab: 'collateral', titleKey: 'settings.collateral', subtitleKey: 'settings.collateral', icon: 'mdi-shield-lock' },
-  // Contacts
-  { keywords: ['contacts', 'address book', 'add contact', 'saved addresses', 'kontakte', 'adressbuch', 'contactos', 'libreta de direcciones', 'agregar contacto'], tab: 'contacts', titleKey: 'settings.contacts', subtitleKey: 'settings.contacts', icon: 'mdi-contacts' },
-  // Connected DApps
-  { keywords: ['dapps', 'connected dapps', 'connected sites', 'remove dapp', 'disconnect dapp', 'verbundene dapps', 'dapps conectadas', 'sitios conectados', 'desconectar dapp'], tab: 'connectedDapps', titleKey: 'settings.connectedDApps', subtitleKey: 'settings.connectedDApps', icon: 'mdi-application-brackets' },
-  // Security
-  { keywords: ['public key', 'extended public key', 'ed25519', 'xpub', 'öffentlicher schlüssel', 'clave pública', 'clave pública extendida'], tab: 'security', titleKey: 'settings.extendedPublicKey', subtitleKey: 'settings.security', icon: 'mdi-key' },
-  { keywords: ['recovery phrase', 'seed phrase', 'mnemonic', 'backup', 'back up', 'wiederherstellungsphrase', 'sicherung', 'frase de recuperación', 'frase semilla', 'semilla', 'respaldo', 'respaldar'], tab: 'security', titleKey: 'settings.recoveryPhrase', subtitleKey: 'settings.security', icon: 'mdi-shield-key' },
-  { keywords: ['spending password', 'change password', 'spending security', 'ausgabenpasswort', 'passwort ändern', 'contraseña', 'contraseña de gasto', 'cambiar contraseña', 'seguridad de las transacciones', 'autorizar transacciones'], tab: 'security', titleKey: 'settings.spendingSecuritySettings', subtitleKey: 'settings.security', icon: 'mdi-lock' },
-  { keywords: ['lock settings', 'auto lock', 'auto-lock', 'unlock method', 'pin', 'pattern', 'sperreinstellungen', 'entsperrmethode', 'bloqueo', 'bloqueo automático', 'método de desbloqueo', 'patrón'], tab: 'security', titleKey: 'security.lockSettings', subtitleKey: 'settings.security', icon: 'mdi-lock-clock' },
-  { keywords: ['passkey', 'biometric', 'webauthn', 'fingerprint', 'face id', 'biometrisch', 'fingerabdruck', 'biometría', 'huella digital'], tab: 'security', titleKey: 'security.lockSettings', subtitleKey: 'settings.security', icon: 'mdi-fingerprint' },
-  { keywords: ['website protection', 'malicious', 'cardano shield', 'phishing', 'webseiten-schutz', 'bösartig', 'protección de sitios web', 'protección contra sitios maliciosos', 'sitio malicioso'], tab: 'security', titleKey: 'settings.websiteProtection', subtitleKey: 'settings.security', icon: 'mdi-shield-check' },
-  { keywords: ['two factor', '2fa', 'two-factor', 'authenticator', 'zwei-faktor', 'authentifizierung', 'dos factores', 'verificación en dos pasos', 'autenticación'], tab: 'security', titleKey: 'security.twoFactorAuth', subtitleKey: 'settings.security', icon: 'mdi-two-factor-authentication' },
-  // Notifications
-  { keywords: ['notifications', 'push', 'alerts', 'notify', 'benachrichtigungen', 'mitteilungen', 'notificaciones', 'alertas'], tab: 'notifications', titleKey: 'notify.browser.title', subtitleKey: 'settings.notifications', icon: 'mdi-bell-outline' },
-  { keywords: ['show amounts', 'minimum amount', 'mute wallet', 'beträge anzeigen', 'mindestbetrag', 'stummschalten', 'mostrar montos', 'monto mínimo', 'silenciar billetera'], tab: 'notifications', titleKey: 'notify.wallet.title', subtitleKey: 'settings.notifications', icon: 'mdi-bell-ring-outline' },
-  // Advanced
-  { keywords: ['shop earn', 'cashback popups', 'bring', 'shop and earn', 'einkaufen', 'cashback', 'compras'], tab: 'advanced', titleKey: 'settings.shopEarnPopups', subtitleKey: 'settings.advanced', icon: 'mdi-shopping', requires: 'cashback' },
-  { keywords: ['auto submit', 'tx auto submit', 'transaction auto', 'automatisch senden', 'envío automático'], tab: 'advanced', titleKey: 'settings.txAutoSubmit', subtitleKey: 'settings.advanced', icon: 'mdi-send-check' },
-  { keywords: ['resync', 're-sync', 'sync wallet', 'refresh', 'synchronisieren', 'aktualisieren', 'resincronizar', 'sincronizar billetera', 'actualizar'], tab: 'advanced', titleKey: 'settings.reSyncWallet', subtitleKey: 'settings.advanced', icon: 'mdi-sync' },
-  { keywords: ['delete wallet', 'remove wallet', 'danger', 'wallet löschen', 'entfernen', 'eliminar billetera', 'borrar billetera'], tab: 'advanced', titleKey: 'settings.deleteWallet', subtitleKey: 'settings.advanced', icon: 'mdi-delete' },
-];
-
 export function useGlobalSearch() {
   const { t } = useTranslation();
   const { allTokens } = useMarketData();
   const { collections: nftCollections } = useNftMarketData();
+  // The wallet's own token rows, exactly as the holdings table builds them. The
+  // market list alone misses every held token the market feed does not carry.
+  const { holdings } = useHoldingsValuation();
 
-  // Resolve feature support for the active wallet's chain/network
   const wallet = computed(() => walletStore.loggedWallet);
-  const hasCashback = computed(() => networks.resolveCashbackSupport(wallet.value?.chain, wallet.value?.network));
-  const hasGovernance = computed(
-    () =>
-      networks.resolveGovernanceSupport(wallet.value?.chain, wallet.value?.network) &&
-      featureFlagsStore.isGovernanceEnabled(),
-  );
-  const hasStaking = computed(() => networks.resolveStakingSupport(wallet.value?.chain, wallet.value?.network));
-  // Registration rides the voting sub-flag on top of the master gate, exactly as
-  // the router's `governanceRegister` case and the nav drawer's child item do.
-  const hasGovernanceVoting = computed(() => hasGovernance.value && featureFlagsStore.isGovernanceVotingEnabled());
+  /**
+   * What the logged-in wallet can reach. Every source below reads it, so no
+   * result for another chain (or another network) can surface; see
+   * `searchGates` for the contract.
+   */
+  const gates = computed(() => searchGates({
+    wallet: wallet.value,
+    flags: featureFlagsStore,
+    hasBackupState: !!walletStore.config && WalletStore.hasBackup(),
+    playlistLength: musicStore.musicPlaylist?.length ?? 0,
+  }));
+  /** `chain:network` of the logged-in wallet, matched against the stores' own stamps. */
+  const walletKey = computed(() => `${wallet.value?.chain}:${wallet.value?.network}`);
 
   function open() {
     isOpen.value = true;
     query.value = '';
     results.value = [];
     // Lazy-load retailer cache on first open (only if chain supports cashback)
-    if (!retailerCacheLoaded && hasCashback.value) loadRetailerCache();
+    if (!retailerCacheLoaded && gates.value.cashback) loadRetailerCache();
     // Same for governance actions: the list has no server-side search, so the
     // rows have to be here before the user finishes typing.
-    if (hasGovernance.value) void loadGovActionCache(wallet.value?.network);
+    if (gates.value.governance) void loadGovActionCache(wallet.value?.network);
   }
 
   function close() {
@@ -228,37 +203,72 @@ export function useGlobalSearch() {
     const lower = q.toLowerCase();
     const found: SearchResult[] = [];
 
-    // 1. Tokens — from market data (all tokens, not just owned)
-    const tokenMatches = allTokens.value
-      .filter((t: MarketToken) =>
-        t.ticker?.toLowerCase().includes(lower) ||
-        t.name?.toLowerCase().includes(lower) ||
-        (lower.length >= 8 && t.unit?.toLowerCase().includes(lower))
-      )
+    // 1. Tokens — the wallet's own holdings first (unlisted ones included), then
+    //    every market-listed token. A held token opens on Holdings, any other on
+    //    Market. The market list is the CARDANO MAINNET feed whatever the wallet
+    //    (a Midnight wallet still loads it, a Bitcoin wallet keeps the last one),
+    //    so it is searched only where the Market view exists: Cardano mainnet.
+    const tokenPool: { token: MarketToken; owned: boolean }[] = [];
+    const ownedUnits = new Set<string>();
+    if (gates.value.cardanoFamily) {
+      for (const token of holdings.value) {
+        // A unit can carry a spendable and a locked (CIP-113) row; one result is enough.
+        if (ownedUnits.has(token.unit)) continue;
+        ownedUnits.add(token.unit);
+        tokenPool.push({ token, owned: true });
+      }
+    }
+    if (gates.value.market) {
+      for (const token of allTokens.value) {
+        if (!ownedUnits.has(token.unit)) tokenPool.push({ token, owned: false });
+      }
+    }
+    const holdingsLabel = String(t('portfolio.myHoldings'));
+    const tokenMatches = tokenPool
+      .map(({ token, owned }) => ({
+        token,
+        owned,
+        score: Math.max(
+          scoreMatch(token.ticker, lower),
+          scoreMatch(token.name, lower),
+          lower.length >= 8 ? scoreMatch(token.unit, lower) : 0,
+        ),
+      }))
+      .filter(match => match.score > 0)
+      // Stable, so a held token wins a tie against a listed one.
+      .sort((a, b) => b.score - a.score)
       .slice(0, 8)
-      .map((t: MarketToken) => ({
+      .map(({ token, owned, score }) => ({
         type: 'token' as const,
-        id: t.unit,
-        title: t.ticker || t.name || t.unit.slice(0, 12),
-        subtitle: t.name || '',
-        icon: t.img || '',
-        data: t,
-        _score: Math.max(scoreMatch(t.ticker, lower), scoreMatch(t.name, lower)),
+        id: token.unit,
+        title: token.ticker || token.name || token.unit.slice(0, 12),
+        subtitle: owned ? [token.name, holdingsLabel].filter(Boolean).join(' · ') : token.name || '',
+        icon: token.img || '',
+        data: { view: owned ? 'holdings' : 'market' },
+        _score: score,
       }));
     found.push(...tokenMatches);
 
-    // 2. Transactions — match by tx hash (only for longer queries)
+    // 2. Transactions — match by tx hash (only for longer queries). Midnight's
+    //    history lives in midnightStore, one row per hash+token; every other
+    //    chain's in walletStore.
     if (lower.length >= 8) {
-      const txs = walletStore.transactions || [];
-      const txArr = Array.isArray(txs) ? txs : [];
-      const txMatches = txArr
-        .filter((tx) => tx.id?.toLowerCase().includes(lower))
+      const txRows: { id?: string; type?: string }[] = wallet.value?.chain === Blockchain.MIDNIGHT
+        ? midnightStore.transactions.map(tx => ({ id: tx.hash, type: tx.type }))
+        : Array.isArray(walletStore.transactions) ? walletStore.transactions : [];
+      const seenTx = new Set<string>();
+      const txMatches = txRows
+        .filter((tx): tx is { id: string; type?: string } => {
+          if (!tx.id || seenTx.has(tx.id) || !tx.id.toLowerCase().includes(lower)) return false;
+          seenTx.add(tx.id);
+          return true;
+        })
         .slice(0, 5)
         .map((tx) => ({
           type: 'transaction' as const,
           id: tx.id,
           title: `${tx.id.slice(0, 12)}...${tx.id.slice(-8)}`,
-          subtitle: tx.type || 'Transaction',
+          subtitle: tx.type || String(t('navigation.transactions')),
           icon: 'mdi-swap-horizontal',
           route: `/transactions?tx=${tx.id}`,
           _score: scoreMatch(tx.id, lower),
@@ -266,23 +276,51 @@ export function useGlobalSearch() {
       found.push(...txMatches);
     }
 
-    // 3. NFT Collections — from wallet collections enriched with market data
-    const nftMatches = nftCollections.value
-      .filter(c =>
-        c.name?.toLowerCase().includes(lower) ||
-        (lower.length >= 8 && c.policyId?.toLowerCase().includes(lower))
-      )
-      .slice(0, 5)
-      .map(c => ({
-        type: 'nft' as const,
-        id: c.policyId,
-        title: c.name,
-        subtitle: `${c.quantity} ${t('search.nftCollections')}`,
-        icon: c.img || 'mdi-image-multiple',
-        data: c,
-        _score: scoreMatch(c.name, lower),
-      }));
-    found.push(...nftMatches);
+    // 3. NFTs — collections by name or policy id, then single NFTs by name. Both
+    //    open the collection on the Collectibles view, which only the
+    //    Cardano-family portfolio has.
+    if (gates.value.cardanoFamily) {
+      const nftMatches = nftCollections.value
+        .map(c => ({
+          c,
+          score: Math.max(scoreMatch(c.name, lower), lower.length >= 8 ? scoreMatch(c.policyId, lower) : 0),
+        }))
+        .filter(match => match.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5)
+        .map(({ c, score }) => ({
+          type: 'nft' as const,
+          id: c.policyId,
+          title: c.name,
+          subtitle: `${c.quantity} ${t('search.nftCollections')}`,
+          icon: c.img || 'mdi-image-multiple',
+          data: { policyId: c.policyId },
+          _score: score,
+        }));
+      found.push(...nftMatches);
+
+      type CollectionItem = { unit?: string; name?: string; img?: string };
+      const walletCollections = (walletStore.collections || {}) as Record<string, { name?: string; items?: CollectionItem[] }>;
+      const nftItemMatches: SearchResult[] = [];
+      for (const [policyId, collection] of Object.entries(walletCollections)) {
+        for (const item of collection?.items || []) {
+          // A one-piece collection usually carries its NFT's name; the collection row covers it.
+          if (!item?.unit || !item.name || item.name === collection.name) continue;
+          const score = scoreMatch(item.name, lower);
+          if (score <= 0) continue;
+          nftItemMatches.push({
+            type: 'nft',
+            id: item.unit,
+            title: item.name,
+            subtitle: collection.name || `${policyId.slice(0, 12)}...`,
+            icon: item.img || 'mdi-image',
+            data: { policyId },
+            _score: score,
+          });
+        }
+      }
+      found.push(...nftItemMatches.sort((a, b) => (b._score || 0) - (a._score || 0)).slice(0, 5));
+    }
 
     // 4. Contacts — from wallet contacts
     const contacts = walletStore.contacts || {};
@@ -304,8 +342,11 @@ export function useGlobalSearch() {
       }));
     found.push(...contactMatches);
 
-    // 5. Stake pools — from in-memory store (only if chain supports staking)
-    if (hasStaking.value) {
+    // 5. Stake pools — the staking page's in-memory page, only while it was
+    //    loaded for this wallet's chain and network: nothing clears it on a
+    //    wallet switch, and Cardano and Apex Prime both stake. The async phase
+    //    below searches the right chain whatever this holds.
+    if (gates.value.staking && stakingStore.poolsFor === walletKey.value) {
       try {
         const pools = stakingStore.pools || [];
         if (pools.length > 0) {
@@ -333,60 +374,29 @@ export function useGlobalSearch() {
       }
     }
 
-    // 6. Governance: DReps, actions and the hub's own pages. One gate for all
-    //    three: no governance result may appear when the chain does not support
-    //    governance or the master feature flag is off.
-    if (hasGovernance.value) {
+    // 6. Governance: actions and the hub's own pages. No governance result may
+    //    appear when the chain does not support governance or the master
+    //    feature flag is off. DReps come from the async phase only: the
+    //    in-memory directory (`governanceStore.dreps`) is filled by the side
+    //    panel alone and records no network, so it never belonged here.
+    if (gates.value.governance) {
       try {
-        found.push(...drepResults(governanceStore.dreps, q, govSearchOptions()));
-        found.push(...governanceActionResults(govActionPool(), q, govSearchOptions()));
-        found.push(...governancePageResults(q, { ...govSearchOptions(), votingEnabled: hasGovernanceVoting.value }));
+        found.push(...governanceActionResults(govActionPool(wallet.value?.network), q, govSearchOptions()));
+        found.push(...governancePageResults(q, { ...govSearchOptions(), votingEnabled: gates.value.governanceVoting }));
       } catch {
         // governance stores not available
       }
     }
 
-    // 7. Settings — match against keywords index, filtered by chain feature support
-    const featureSupported = (req?: string) => {
-      if (!req) return true;
-      if (req === 'cashback') return hasCashback.value;
-      if (req === 'governance') return hasGovernance.value;
-      return true;
-    };
-    const settingMatches = SETTINGS_INDEX
-      .filter(s => featureSupported(s.requires))
-      .map(s => {
-        const title = String(t(s.titleKey));
-        const subtitle = String(t(s.subtitleKey));
-        // Score: exact keyword match = 100, keyword starts with = 90, keyword contains = 50, title match = 40
-        let best = 0;
-        const folded = foldForSearch(lower);
-        for (const keyword of s.keywords) {
-          const kw = foldForSearch(keyword);
-          if (kw === folded) { best = Math.max(best, 100); break; }
-          if (kw.startsWith(folded)) best = Math.max(best, 90);
-          else if (kw.includes(folded)) best = Math.max(best, 50);
-        }
-        // Also match against the resolved (possibly translated) title
-        best = Math.max(best, scoreMatch(title, lower));
-        return { ...s, title, subtitle, _score: best };
-      })
-      .filter(s => s._score > 0)
-      .sort((a, b) => b._score - a._score)
-      .slice(0, 5)
-      .map(s => ({
-        type: 'setting' as const,
-        id: `setting-${s.tab}-${s.titleKey}`,
-        title: s.title,
-        subtitle: `${String(t('common.settings'))} → ${s.subtitle}`,
-        icon: s.icon,
-        data: { tab: s.tab, highlight: s.title },
-        _score: s._score,
-      }));
-    found.push(...settingMatches);
+    // 7. The wallet's own pages, quick actions and settings rows, each offered
+    //    only where `gates` says its destination exists for this wallet.
+    const indexOptions = { t: (key: string) => String(t(key)), can: (gate: SearchGate) => gates.value[gate] };
+    found.push(...pageResults(q, indexOptions));
+    found.push(...actionResults(q, { ...indexOptions, balancesHidden: !!walletStore.config?.hideBalances }));
+    found.push(...settingResults(q, indexOptions));
 
     // 8. Cashback retailers — only if chain supports cashback
-    if (hasCashback.value && retailerCache.length > 0) {
+    if (gates.value.cashback && retailerCache.length > 0) {
       const retailerMatches = retailerCache
         .map(r => ({ ...r, _score: scoreMatch(r.name, lower) }))
         .filter(r => r._score > 0)
@@ -413,17 +423,20 @@ export function useGlobalSearch() {
     if (q.length < 3) return [];
 
     const found: SearchResult[] = [];
-    const wallet = walletStore.loggedWallet;
-    if (!wallet) return found;
+    // Typed, and not named `wallet`: shadowing the computed above let
+    // `wallet.value` compile against the untyped store object and read undefined.
+    const logged: Wallet | null = walletStore.loggedWallet;
+    if (!logged) return found;
 
-    const chain = wallet.chain;
-    const network = wallet.network;
+    // Captured once: every request below must ask about the wallet the search started on.
+    const chain = logged.chain;
+    const network = logged.network;
 
     // Run API searches in parallel
     const apiSearches = [];
 
     // Stake pools — only if chain supports staking
-    if (hasStaking.value) {
+    if (gates.value.staking) {
       apiSearches.push(
         blockchainApi.getPoolsPaginated({ search: q, page: 1, per_page: 5 }, chain, network)
           .then((res) => {
@@ -446,7 +459,7 @@ export function useGlobalSearch() {
     }
 
     // Governance: only if chain supports it AND the master flag is on
-    if (hasGovernance.value) {
+    if (gates.value.governance) {
       // DReps: `/api/dreps` filters server-side on `search` (verified in
       // blockchain-api.ts, which also falls back to filtering an unpaginated
       // response itself), so the query goes over the wire rather than locally.
@@ -465,7 +478,7 @@ export function useGlobalSearch() {
       apiSearches.push(
         loadGovActionCache(network)
           .then(() => {
-            found.push(...governanceActionResults(govActionPool(), q, govSearchOptions()));
+            found.push(...governanceActionResults(govActionPool(network), q, govSearchOptions()));
           })
           .catch(() => {})
       );

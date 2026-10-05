@@ -24,6 +24,7 @@ const state = {
   hasPointsRecord: ref(false),
   usdrBalance: ref(0),
   hasUsdr: ref(false),
+  canTransact: ref(false),
   isRequestingCode: ref(false),
   load: vi.fn(),
   requestReferralCode: vi.fn(),
@@ -31,7 +32,7 @@ const state = {
 
 vi.mock('./composables/useRealFi', () => ({ useRealFi: () => state }));
 
-const wallet = { network: 'Mainnet' };
+const wallet = { network: 'Mainnet', chain: 'Cardano' };
 vi.mock('@/stores/walletStore', () => ({
   default: {
     state: {
@@ -147,13 +148,13 @@ describe('RealFi Earn page', () => {
     });
 
     it('sends mainnet wallets to RealFi mainnet, never preprod', async () => {
-      await button(mountPage(), 'realfi.start.cta').trigger('click');
+      await button(mountPage(), 'realfi.gettingStarted.eligibilityCta').trigger('click');
       expect(openSpy).toHaveBeenCalledWith('https://app.realfi.co', '_blank', 'noopener,noreferrer');
     });
 
     it('sends preprod wallets to RealFi preprod', async () => {
       wallet.network = 'Preprod';
-      await button(mountPage(), 'realfi.start.cta').trigger('click');
+      await button(mountPage(), 'realfi.gettingStarted.preprodCta').trigger('click');
       expect(openSpy).toHaveBeenCalledWith('https://preprod.realfi.co', '_blank', 'noopener,noreferrer');
     });
 
