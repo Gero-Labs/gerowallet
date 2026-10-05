@@ -844,8 +844,14 @@ async function setMax(recipientId: string, tokenIndex: number) {
       const updated = { ...recipient, selectedTokens: sendTokensCopy };
       recipients.value.splice(recipientIdx, 1, updated);
       await buildTx();
-    } catch { /* ignore */ }
+    } catch (e) {
+      // The watcher is muted while Max runs and nothing else rebuilds, so say
+      // what failed now; the fallback build below then classifies it the way an
+      // ordinary build would (shortage hint, fragmentation, or the raw reason).
+      buildError.value = friendlyTxError(e);
+    }
     isCalculatingMax.value = false;
+    if (!txValid.value) debouncedBuild();
     return;
   }
 
