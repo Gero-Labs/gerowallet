@@ -58,7 +58,9 @@ export type SearchGate =
   | 'remoteSigning'
   | 'verifyAddress'
   | 'supportChat'
-  | 'notify';
+  | 'notify'
+  // Cardano wallets holding their network's cNIGHT: the DUST strip under the NIGHT row
+  | 'cnightDust';
 
 export type SearchGates = Record<SearchGate, boolean>;
 
@@ -85,6 +87,11 @@ export interface GateInputs {
   hasBackupState: boolean;
   /** Tracks in the media player's playlist. */
   playlistLength: number;
+  /**
+   * The wallet holds its network's cNIGHT: the condition MarketTokenTable
+   * renders the "generate DUST" strip under. Optional, absent means no.
+   */
+  holdsCnight?: boolean;
 }
 
 /**
@@ -100,7 +107,7 @@ export interface GateInputs {
  * `src/modules/navigation/router.ts`, which the navigation drawer mirrors) and
  * a settings gate is the `v-if` on its row. Keep each in step with its source.
  */
-export function searchGates({ wallet, flags, hasBackupState, playlistLength }: GateInputs): SearchGates {
+export function searchGates({ wallet, flags, hasBackupState, playlistLength, holdsCnight = false }: GateInputs): SearchGates {
   const chain = wallet?.chain ?? '';
   const network = wallet?.network ?? '';
   const isCardanoFamily = chain === Blockchain.CARDANO || chain === Blockchain.APEX_PRIME || chain === Blockchain.APEX_VECTOR;
@@ -153,6 +160,9 @@ export function searchGates({ wallet, flags, hasBackupState, playlistLength }: G
     // The Notifications tab's per-wallet rows: the tab shows "not available for
     // this wallet" to anything the push service cannot serve.
     notify: !!wallet && isEligibleWallet({ chain, network, type: wallet.type, stakeAddress: wallet.stakeAddress }),
+    // cNIGHT is a Cardano asset; a Midnight wallet registers from its own
+    // DUST battery instead (the `midnight` gate).
+    cnightDust: chain === Blockchain.CARDANO && holdsCnight,
   };
 }
 
@@ -178,7 +188,9 @@ interface PageEntry extends IndexEntry {
 /** What selecting an action result does. Performed by `GlobalSearch.vue`. */
 export type SearchAction =
   | { kind: 'dialog'; dialog: Exclude<QuickActionDialog, null> }
-  | { kind: 'toggleBalances' };
+  | { kind: 'toggleBalances' }
+  /** A deep link whose page opens the dialog itself, e.g. `/?dust=register`. */
+  | { kind: 'route'; route: string };
 
 interface ActionEntry extends IndexEntry {
   id: string;
@@ -230,6 +242,11 @@ export const ACTION_INDEX: readonly ActionEntry[] = [
   { id: 'buy', action: { kind: 'dialog', dialog: 'BUY' }, titleKey: 'navigation.buySell', icon: 'mdi-cash-plus', requires: 'buy', keywords: ['buy', 'sell', 'on-ramp', 'off-ramp', 'moonpay', 'kaufen', 'verkaufen', 'comprar', 'vender'] },
   { id: 'perpetuals', action: { kind: 'dialog', dialog: 'PERPETUALS' }, titleKey: 'perpetuals.perpetuals', icon: 'mdi-chart-areaspline', requires: 'perpetuals', keywords: ['perpetuals', 'perps', 'futures', 'leverage', 'hebel', 'perpetuos', 'futuros', 'apalancamiento'] },
   { id: 'toggleBalances', action: { kind: 'toggleBalances' }, titleKey: 'dashboard.hideBalances', icon: 'mdi-eye-off-outline', keywords: ['hide balances', 'show balances', 'privacy mode', 'hide amounts', 'guthaben ausblenden', 'guthaben anzeigen', 'ocultar saldos', 'mostrar saldos', 'modo privado'] },
+  // DUST, one entry per chain that has a way in: a Midnight wallet's DUST
+  // battery, or the cNIGHT strip on a Cardano wallet holding NIGHT. Both open
+  // through PortfolioPage's `?dust=register`, which picks the chain's dialog.
+  { id: 'dustRegistration', action: { kind: 'route', route: '/?dust=register' }, titleKey: 'midnight.dustRegistrationChip', icon: 'mdi-battery-charging-outline', requires: 'midnight', keywords: ['dust', 'dust registration', 'register for dust', 'dust battery', 'dust generation', 'dust balance', 'dust address', 'dust-registrierung', 'dust-batterie', 'registro de dust', 'batería de dust', 'generación de dust'] },
+  { id: 'cnightDust', action: { kind: 'route', route: '/?dust=register' }, titleKey: 'midnight.cnightRegisterTitle', icon: 'mdi-battery-charging-outline', requires: 'cnightDust', keywords: ['dust', 'generate dust', 'dust registration', 'register for dust', 'dust generation', 'cnight', 'dust erzeugen', 'dust-registrierung', 'generar dust', 'registro de dust'] },
 ];
 
 /**

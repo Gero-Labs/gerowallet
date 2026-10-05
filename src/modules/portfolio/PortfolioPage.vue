@@ -71,7 +71,7 @@
 
       <DustRegistrationDialog
         :is-open="dustRegistrationOpen"
-        @close="dustRegistrationOpen = false"
+        @close="closeDustRegistration()"
       />
     </template>
 
@@ -385,7 +385,7 @@
       <SwapDialog :isOpen="swapDialogOpen" @close="swapDialogOpen = false; swapToken = null" :buy-token-unit="swapToken?.unit" />
 
       <!-- cNIGHT → DUST registration -->
-      <CnightDustRegistrationDialog :isOpen="cnightDialogOpen" @close="cnightDialogOpen = false" />
+      <CnightDustRegistrationDialog :isOpen="cnightDialogOpen" @close="closeDustRegistration()" />
     </template>
   </v-layout>
 </template>
@@ -1128,6 +1128,35 @@ watch(
   },
   { immediate: true }
 );
+
+// Handle /?dust=register (e.g. from Global Search): open this chain's DUST
+// registration, the dialog its DUST battery (Midnight) or cNIGHT strip
+// (Cardano) opens. closeDustRegistration drops the parameter again.
+watch(
+  () => instance?.proxy?.$route?.query?.['dust'],
+  (dust) => {
+    if (dust !== 'register') return;
+    if (loggedWallet.value?.chain === Blockchain.MIDNIGHT) dustRegistrationOpen.value = true;
+    else if (loggedWallet.value?.chain === Blockchain.CARDANO) cnightDialogOpen.value = true;
+  },
+  { immediate: true }
+);
+
+/**
+ * Close whichever DUST dialog is open, and drop the `?dust=` that may have
+ * opened it: the page is kept alive, so a link left in place would make the
+ * next identical search a no-op.
+ */
+function closeDustRegistration() {
+  dustRegistrationOpen.value = false;
+  cnightDialogOpen.value = false;
+  const query = instance?.proxy?.$route?.query;
+  if (query?.['dust']) {
+    const rest = { ...query };
+    delete rest['dust'];
+    instance?.proxy?.$router?.replace({ query: rest }).catch(() => {});
+  }
+}
 </script>
 
 <style scoped>
