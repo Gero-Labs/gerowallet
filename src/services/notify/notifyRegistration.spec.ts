@@ -231,6 +231,36 @@ describe('opt-in (§8.1)', () => {
     expect(await m.store.getDevice()).toMatchObject({ browserEnabled: true, targetStatus: 'active' });
   });
 
+  it('re-enabling after the last wallet went drains the queued DELETE /device before registering anew', async () => {
+    const m = await optedIn();
+    m.fake.server.fail.push({ m: 'DELETE /device', error: new NotifyError(503, 'unavailable') });
+    await m.reg.walletRemoved(4);
+    expect(await m.store.getPendingDeletes()).toMatchObject([{ kind: 'device' }]);
+    m.fake.calls.length = 0;
+    expect(await m.reg.enableWallet()).toBe('ok');
+    expect(m.fake.calls.map((c) => c.m)).toEqual(['DELETE /device', 'GET /config', 'PUT /device', 'PUT /wallet']);
+    expect(await m.store.getPendingDeletes()).toEqual([]);
+    expect(m.fake.server.links.size).toBe(1);
+    // The next re-assertion has nothing left to delete: the new device and its link stay.
+    m.fake.calls.length = 0;
+    expect(await m.reg.reassert('alarm')).toBe('reasserted');
+    expect(m.fake.calls.map((c) => c.m)).not.toContain('DELETE /device');
+    expect(m.fake.server.device).not.toBeNull();
+    expect(m.fake.server.links.size).toBe(1);
+  });
+
+  it('a queue that still cannot be drained blocks the registration and leaves the browser switch as it was', async () => {
+    const m = await optedIn();
+    m.fake.server.fail.push({ m: 'DELETE /device', error: new NotifyError(503, 'unavailable'), times: 2 });
+    await m.reg.walletRemoved(4);
+    m.push.subscribe.mockClear();
+    expect(await m.reg.enableWallet()).toBe('error');
+    expect(m.push.subscribe).not.toHaveBeenCalled();
+    expect(await m.store.getDevice()).toMatchObject({ browserEnabled: false });
+    expect(await m.store.getPendingDeletes()).toMatchObject([{ kind: 'device' }]);
+    expect(await m.store.getWallet(4)).toBeNull();
+  });
+
   it('wallet on refuses when the wallet is ineligible, or none is logged in', async () => {
     const ledger = machine({ logged: loggedWallet({ type: 'Ledger' }) });
     await ledger.reg.setBrowserEnabled(true);

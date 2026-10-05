@@ -49,7 +49,7 @@ const wanted = computed(() => {
     intro: intro.value,
     pushSupported: s.pushSupported,
     config: s.config,
-    wallet: { id: s.logged.walletId, eligible: s.logged.eligible, registered: s.wallets[String(s.logged.walletId)]?.registeredAt != null },
+    wallet: { id: s.logged.walletId, eligible: s.logged.eligible, network: s.logged.network, registered: s.wallets[String(s.logged.walletId)]?.registeredAt != null },
   });
 });
 const open = computed(() => !props.suppressed && unlocked.value && settled.value && !answered.value && wanted.value);
@@ -63,11 +63,13 @@ async function loadState(): Promise<void> {
     intro.value = readIntroState(got?.[NOTIFY_INTRO_KEY]);
   } catch { intro.value = readIntroState(undefined); }
   if (intro.value.dismissedAt !== null) return; // nothing is offered on this install any more
-  // Storage first, no network. /config is fetched only when it is missing and would decide the offer.
+  // Storage first, no network: a linked or ineligible wallet needs no /config at all.
   await store.refresh();
   const s = store.state.state;
-  if (!s?.logged?.eligible || s.config) return;
+  if (!s?.logged?.eligible) return;
   if (s.wallets[String(s.logged.walletId)]?.registeredAt != null) return;
+  // /config decides the offer, so ask for it every time: the client serves its copy for an hour
+  // and refetches after that, so an `enabled: false` cached before the rollout does not stick.
   await store.refresh({ config: true });
 }
 

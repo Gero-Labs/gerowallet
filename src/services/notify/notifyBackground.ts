@@ -20,7 +20,7 @@ import { loadDeviceRegisterProof } from '@/services/crossDevice/deviceProofStore
 import { createNotifyClient, DEFAULT_NOTIFY_API_URL } from './notifyClient';
 import { createNotifyStore, type NotifyDeviceState, type NotifyWalletState } from './notifyStore';
 import {
-  createNotifyRegistration, isEligibleWallet, NOTIFY_REASSERT_ALARM, NOTIFY_RETRY_ALARM, toBcp47,
+  createNotifyRegistration, isEligibleWallet, NOTIFY_REASSERT_ALARM, NOTIFY_RETRY_ALARM, toBcp47, wireNetworkOf,
   type LoggedWallet, type NotifyRegistration, type PushManagerLike, type ReassertTrigger, type WatchOrdersInput,
 } from './notifyRegistration';
 import { notifyHooks } from './notifyHooks';
@@ -285,7 +285,7 @@ export async function notifyIntroWanted(): Promise<boolean> {
     intro: await notifyStore.getIntro(),
     pushSupported: state.pushSupported,
     config: state.config,
-    wallets: state.installed.map((w) => ({ eligible: w.eligible, registered: state.wallets[String(w.id)]?.registeredAt != null })),
+    wallets: state.installed.map((w) => ({ eligible: w.eligible, network: wireNetworkOf(w.network), registered: state.wallets[String(w.id)]?.registeredAt != null })),
   });
 }
 

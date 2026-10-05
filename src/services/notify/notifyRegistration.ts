@@ -217,6 +217,12 @@ export function createNotifyRegistration(deps: NotifyRegistrationDeps): NotifyRe
   async function registerDevice(replaceCurrent = false): Promise<BrowserEnableResult> {
     const device = await store.getDevice();
     if (!device.browserEnabled) return 'unavailable';
+    // Pending DELETEs first (§8.5). A DELETE /device left over from the last wallet's removal
+    // would otherwise go out AFTER this registration and take the new device and its links
+    // with it, while local state still says "on". A queue that still cannot be drained means
+    // the server is not taking a PUT either: stop here, nothing half-registered.
+    await flushPendingDeletes();
+    if ((await store.getPendingDeletes()).length) return 'error';
     const config = await usableConfig();
     if (!config) return 'unavailable';
     const pm = deps.pushManager();
@@ -485,11 +491,16 @@ export function createNotifyRegistration(deps: NotifyRegistrationDeps): NotifyRe
       // off since the last wallet was removed, §8.6) goes on here, only once the proof is in
       // hand, so a cancelled auth step leaves the browser as it was.
       let device = await store.getDevice();
-      if (!device.browserEnabled) device = await store.updateDevice({ browserEnabled: true, unavailable: null });
+      const browserWasOff = !device.browserEnabled;
+      if (browserWasOff) device = await store.updateDevice({ browserEnabled: true, unavailable: null });
       // Make sure the device exists on the server first (a PUT /device on device_unknown also happens in the client).
       if (device.targetStatus !== 'active') {
         const r = await registerDevice();
-        if (r !== 'ok') return r === 'deferred' ? 'deferred' : 'error';
+        if (r !== 'ok') {
+          // A start that failed leaves the browser as it was; 'deferred' keeps it on for the scheduled retry.
+          if (browserWasOff && r !== 'deferred') await store.updateDevice({ browserEnabled: false });
+          return r === 'deferred' ? 'deferred' : 'error';
+        }
       }
       const existing = await store.getWallet(logged.id);
       const state: NotifyWalletState = existing ?? {

@@ -48,21 +48,29 @@ export function notifyServiceAvailable(pushSupported: boolean, config: NotifyCon
 
 export interface IntroWallet {
   id: number;
-  /** Could be registered at all (Cardano software wallet on a served network). */
+  /** Could be registered at all on this side (a Normal Cardano software wallet on a known network). */
   eligible: boolean;
+  /** Wire network (`cardano-mainnet`, …): offered only when the server lists it in `/config.networks`. */
+  network: string;
   /** Has a link on the server already. */
   registered: boolean;
 }
 
+/** Eligible here AND served there: an offer for a network the server rejects would end in `unsupported_network` after the auth step. */
+function canBeLinked(w: Pick<IntroWallet, 'eligible' | 'network'>, config: NotifyConfig): boolean {
+  return w.eligible && config.networks.includes(w.network);
+}
+
 /**
  * The in-app prompt for the open wallet: push available, not dismissed on this install,
- * the wallet eligible, not linked, and not already answered "Turn on".
+ * the wallet linkable, not linked, and not already answered "Turn on".
  */
 export function promptWanted(input: { intro: NotifyIntroState; pushSupported: boolean; config: NotifyConfig | null; wallet: IntroWallet | null }): boolean {
-  if (!notifyServiceAvailable(input.pushSupported, input.config)) return false;
+  const { config } = input;
+  if (!config || !notifyServiceAvailable(input.pushSupported, config)) return false;
   if (input.intro.dismissedAt !== null) return false;
   const w = input.wallet;
-  if (!w || !w.eligible || w.registered) return false;
+  if (!w || w.registered || !canBeLinked(w, config)) return false;
   return !(String(w.id) in input.intro.offered);
 }
 
@@ -71,9 +79,10 @@ export function promptWanted(input: { intro: NotifyIntroState; pushSupported: bo
  * linked yet (early adopters are not told about what they already use) and some wallet
  * could be.
  */
-export function systemIntroWanted(input: { intro: NotifyIntroState; pushSupported: boolean; config: NotifyConfig | null; wallets: Array<Pick<IntroWallet, 'eligible' | 'registered'>> }): boolean {
-  if (!notifyServiceAvailable(input.pushSupported, input.config)) return false;
+export function systemIntroWanted(input: { intro: NotifyIntroState; pushSupported: boolean; config: NotifyConfig | null; wallets: Array<Pick<IntroWallet, 'eligible' | 'network' | 'registered'>> }): boolean {
+  const { config } = input;
+  if (!config || !notifyServiceAvailable(input.pushSupported, config)) return false;
   if (input.intro.dismissedAt !== null || input.intro.systemShownAt !== null) return false;
   if (input.wallets.some((w) => w.registered)) return false;
-  return input.wallets.some((w) => w.eligible);
+  return input.wallets.some((w) => canBeLinked(w, config));
 }
