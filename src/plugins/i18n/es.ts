@@ -1051,6 +1051,7 @@ export default {
   'support.auth.body': 'Confirma una vez para que soporte pueda reconocerte de forma anónima. Tu billetera firma un mensaje de un solo uso. No se realiza ninguna transacción ni se mueven fondos.',
   'support.error.unavailable': 'El chat en vivo no está disponible temporalmente. Inténtalo de nuevo más tarde.',
   'support.error.sendFailed': 'No se pudo enviar tu mensaje. Inténtalo de nuevo.',
+  'support.error.sessionExpired': 'Tu chat de soporte anterior ya no está disponible. Envía un mensaje para iniciar uno nuevo.',
   'support.error.fileTooLarge': 'Los archivos deben pesar menos de 20 MB.',
   'support.error.tooManyFiles': 'Puedes adjuntar hasta 5 archivos por mensaje.',
   'support.hide.action': 'Ocultar el botón de soporte',

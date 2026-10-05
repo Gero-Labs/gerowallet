@@ -194,7 +194,9 @@ export function createSupportCable(options: SupportCableOptions): SupportCable {
         armWatchdog(pingTimeoutMs, 'went quiet');
         return;
       case 'ping':
-        armWatchdog(pingTimeoutMs, 'went quiet');
+        // Heartbeats prove only that the socket is open, not that RoomChannel
+        // accepted our token. A missing confirmation must still time out.
+        if (subscribed) armWatchdog(pingTimeoutMs, 'went quiet');
         return;
       case 'confirm_subscription': {
         subscribed = true;

@@ -1065,6 +1065,7 @@ export default {
   'support.auth.body': 'Confirm once so support can recognize you anonymously. Your wallet signs a one-time message. No transaction is made and no funds move.',
   'support.error.unavailable': 'Live chat is temporarily unavailable. Please try again later.',
   'support.error.sendFailed': 'Your message could not be sent. Please try again.',
+  'support.error.sessionExpired': 'Your previous support chat is no longer available. Send a message to start a new chat.',
   'support.error.fileTooLarge': 'Files must be under 20 MB.',
   'support.error.tooManyFiles': 'You can attach up to 5 files per message.',
   'support.hide.action': 'Hide the support button',
