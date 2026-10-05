@@ -27,6 +27,10 @@
          your device" prompt without each dialog re-declaring it. -->
     <HardwareSignPrompt />
     <notifications></notifications>
+    <!-- Pushes that arrive while this page is focused (B8): top right, its own host. -->
+    <NotifySnackbar />
+    <!-- A notification about a wallet other than the open one asks before switching (B4). -->
+    <NotifyPendingOpen v-if="isDashboardShell" />
     <v-snackbar
       content-class="custom-snackbar"
       outlined
@@ -53,11 +57,17 @@ import { MessageTypes } from '@/models/MessageTypes';
 import AgentDock from '@/sidepanel/components/AgentDock.vue';
 import ContentLayout from '@/modules/navigation/layouts/ContentLayout.vue';
 import HardwareSignPrompt from '@/shared/components/HardwareSignPrompt.vue';
+import NotifyPendingOpen from '@/shared/components/NotifyPendingOpen.vue';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { agentDockPrefsStore } from '@/stores/agentDockPrefsStore';
 import { useChainAccent } from '@/shared/composables/useChainAccent';
 import { useGovernanceHydration } from '@/shared/composables/useGovernanceHydration';
+import NotifySnackbar from '@/shared/components/NotifySnackbar.vue';
+import { useNotifyPresent } from '@/shared/composables/useNotifyPresent';
 import { debugLog } from '@/utils/debug';
+
+// Answer the worker's NOTIFY_PRESENT when this page is the focused one (B8).
+useNotifyPresent('dashboard');
 
 // Bootstrap the single chain-accent writer at the dashboard root. It lives here
 // rather than in ContentLayout because ContentLayout unmounts on the welcome
@@ -177,9 +187,10 @@ watch(() => geroConfig.value?.locale, async (newLocale, oldLocale) => {
 .v-card {
   background-color: var(--v-cardBackground-base) !important;
 }
+/* Softens the page around an open dialog so the dialog's glass reads as the top layer. */
 .v-dialog__content--active {
-  -webkit-backdrop-filter: blur(4px);
-  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
 }
 .v-carousel__controls {
   background-color: transparent!important;

@@ -152,14 +152,14 @@ const volume24h = computed(() => {
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 /* ── Container ────────────────────────────────────────── */
 .price-ticker {
+  @include g-glass-tier(false);
   display: flex;
   align-items: center;
   gap: 0;
   padding: 6px 12px;
-  background: var(--g-surface);
   border-bottom: 1px solid var(--g-hairline-1);
   overflow-x: auto;
   scrollbar-width: none;

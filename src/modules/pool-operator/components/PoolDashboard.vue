@@ -409,6 +409,65 @@ import { poolOperatorStore } from '@/stores/poolOperatorStore';
 import { walletStore } from '@/stores/walletStore';
 import blockchainApi from '@/api/blockchain-api';
 import snackbar from '@/plugins/snackbar';
+import { getErrorMessage } from '@/shared/utils/errorHandler';
+
+interface Ratio {
+  numerator: number;
+  denominator: number;
+}
+
+/** Pool record from `blockchainApi.getPoolById()` (`/api/pools/:id`); only the fields read here. */
+interface PoolInfo {
+  ticker?: string;
+  name?: string;
+  description?: string;
+  live_saturation?: number;
+  live_pledge?: string | number | null;
+  pledge?: string | number | null;
+  live_stake?: string | number;
+  live_delegators?: number;
+  block_count?: number;
+  ros?: number;
+  fixed_cost?: string | number;
+  cost?: string | number;
+  margin_of_cost?: number | null;
+  margin?: number | Ratio;
+  relays?: unknown[];
+  owners?: string[];
+  pool_extended_info?: string;
+}
+
+/** gero-node-monitor `/status` payload; only the epoch fields read by `epochPct()`. */
+interface NodeStatus {
+  epochSlot?: number;
+  epochSlotsRemaining?: number;
+}
+
+/** gero-node-monitor `/versions` payload. */
+interface NodeVersions {
+  versions?: { cardanoNode?: string; cncli?: string; geroNodeMonitor?: string };
+  updates?: Record<string, { current?: string; latest?: string }>;
+}
+
+/** gero-node-monitor `/leader-schedule` payload. */
+interface LeaderScheduleSlot {
+  timestamp: number;
+  produced: boolean | null;
+}
+interface LeaderSchedule {
+  epoch: number;
+  totalSlots: number;
+  producedCount: number;
+  missedCount: number;
+  slots?: LeaderScheduleSlot[];
+}
+
+/** gero-node-monitor `/kes-rotate` response body. */
+interface KesRotateResponse {
+  success?: boolean;
+  error?: string;
+  steps?: string[];
+}
 
 const { t } = useTranslation();
 const { poolId, isRegistered, isRetiring, retirementEpoch, registeredParams } = toRefs(poolOperatorStore);
@@ -417,11 +476,11 @@ const { loggedWallet } = toRefs(walletStore);
 defineEmits(['add-node', 'remove-node', 'edit-node', 'retire', 'update']);
 
 const loading = ref(false);
-const poolInfo = ref<any>(null);
+const poolInfo = ref<PoolInfo | null>(null);
 const pledgeMet = ref(true);
 const poolIcon = ref<string | null>(null);
 const showKesRotation = ref(false);
-const nodeVersions = ref<Record<string, any>>({});
+const nodeVersions = ref<Record<string, NodeVersions>>({});
 const kesRotating = ref(false);
 const coldKeyEncryption = ref('prf'); // Will be loaded from DB
 const kesRotateError = ref('');
@@ -430,13 +489,13 @@ const kesRotateSuccess = ref(false);
 
 // Leader schedule
 const scheduleLoading = ref(false);
-const currentSchedule = ref<any>(null);
-const nextSchedule = ref<any>(null);
+const currentSchedule = ref<LeaderSchedule | null>(null);
+const nextSchedule = ref<LeaderSchedule | null>(null);
 
 const currentNextSlot = computed(() => {
   if (!currentSchedule.value?.slots) return null;
   const now = Date.now() / 1000;
-  return currentSchedule.value.slots.find((s: any) => s.timestamp > now && s.produced === null);
+  return currentSchedule.value.slots.find(s => s.timestamp > now && s.produced === null);
 });
 
 const currentNextCountdown = computed(() => {
@@ -471,10 +530,10 @@ function formatMem(mb: number): string {
   return mb >= 1024 ? (mb / 1024).toFixed(1) + 'G' : mb + 'M';
 }
 
-function epochPct(data: any): string {
+function epochPct(data: NodeStatus | null | undefined): string {
   if (!data) return '0';
   const total = (data.epochSlot || 0) + (data.epochSlotsRemaining || 0);
-  return total ? ((data.epochSlot / total) * 100).toFixed(1) : '0';
+  return total ? ((Number(data.epochSlot) / total) * 100).toFixed(1) : '0';
 }
 
 // KES computations
@@ -556,12 +615,12 @@ const saturationDisplay = computed(() => {
   return (poolInfo.value?.live_saturation || 0).toFixed(1);
 });
 
-function formatAda(lovelace: any): string {
+function formatAda(lovelace: string | number | null | undefined): string {
   if (!lovelace && lovelace !== 0) return '0';
   return (Number(lovelace) / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
 
-function formatAdaShort(lovelace: any): string {
+function formatAdaShort(lovelace: string | number | null | undefined): string {
   if (!lovelace) return '0';
   const ada = Number(lovelace) / 1_000_000;
   if (ada >= 1_000_000) return (ada / 1_000_000).toFixed(2) + 'M';
@@ -569,7 +628,7 @@ function formatAdaShort(lovelace: any): string {
   return ada.toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
 
-function formatMargin(margin: any): string {
+function formatMargin(margin: Ratio | null | undefined): string {
   if (!margin || !margin.denominator) return '0';
   const val = (margin.numerator / margin.denominator) * 100;
   return isNaN(val) ? '0' : val.toFixed(2);
@@ -633,7 +692,7 @@ async function rotateKesRemote() {
         method: 'POST',
         body: JSON.stringify({ coldKeyHex }),
       },
-    }) as any;
+    }) as { data?: KesRotateResponse & { body?: KesRotateResponse } } | undefined;
 
     const data = result?.data?.body || result?.data;
 
@@ -646,8 +705,8 @@ async function rotateKesRemote() {
     } else {
       kesRotateError.value = 'Unexpected response from node';
     }
-  } catch (e: any) {
-    kesRotateError.value = e.message || 'Failed to rotate KES';
+  } catch (e) {
+    kesRotateError.value = getErrorMessage(e, 'Failed to rotate KES');
   } finally {
     kesRotating.value = false;
   }
@@ -696,7 +755,7 @@ function copyPoolId() {
   }
 }
 
-function parsePoolExtendedInfo(data: any) {
+function parsePoolExtendedInfo(data: PoolInfo) {
   try {
     if (data?.pool_extended_info) {
       const parsed = JSON.parse(data.pool_extended_info);
@@ -737,8 +796,9 @@ async function fetchPoolData() {
         };
       }
     }
-  } catch (e: any) {
-    if (e.message?.includes('404') || e.response?.status === 404) {
+  } catch (e) {
+    const status = (e as { response?: { status?: number } } | null)?.response?.status;
+    if (getErrorMessage(e, '').includes('404') || status === 404) {
       poolOperatorStore.isRegistered = false;
       poolInfo.value = null;
     } else {

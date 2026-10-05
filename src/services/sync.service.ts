@@ -9,8 +9,10 @@ import { AxiosResponse } from 'axios';
 import { parseHttpError } from '@/shared/utils/parser';
 import { WalletBg } from '@/chrome/walletBg';
 import { debugLog } from '@/utils/debug';
+import { notifyHooks } from '@/services/notify/notifyHooks';
 import blockchainApi from '@/api/blockchain-api';
 import webSocketService, { type WsSyncMessage } from '@/services/websocket.service';
+import { convertNexusUtxos } from '@/services/nexusUtxo';
 import WalletStore, { walletStore } from '@/stores/walletStore';
 import type { BitcoinTip } from '@/stores/networkStore';
 import {
@@ -22,6 +24,7 @@ import {
   type BtcAccount,
 } from '@/chains/bitcoin/bitcoinWireSync';
 import type { UnifiedTransaction } from '@/chains/bitcoin/bitcoinTransactionParser';
+import { getStakeRegistrationState, StakeAccountError } from '@/shared/utils/stakeRegistration';
 
 /**
  * SyncService handles all wallet synchronization operations
@@ -41,6 +44,9 @@ export class SyncService {
   private lastRewardsRefreshAt: number | null = null;
   private lastRewardsEpoch: number | undefined;
   private lastRewardsSum: string | undefined;
+  private stakeAccountRefreshInFlight: Promise<unknown> | null = null;
+  private lastStakeAccountRepairAt: number | null = null;
+  private lastStakeAccountRefreshAt: number | null = null;
 
   constructor(walletBg: WalletBg) {
     this.walletBg = walletBg;
@@ -343,12 +349,13 @@ export class SyncService {
         if (expanded) {
           debugLog(`🔄 Resubscribing with expanded credentials (${expanded.length})`);
           webSocketService.resubscribe(0, expanded);
+          notifyHooks.credentialsChanged(); // the push registration's credential set grew too (§8.2 step 4)
           return; // resubscribe will trigger a new catch-up with the full credential set
         }
       }
       // Apply server-provided UTxOs — set on store, resolve assets, persist to DB
       if (syncObject.utxos && Array.isArray(syncObject.utxos)) {
-        const converted = this.convertNexusUtxos(syncObject.utxos);
+        const converted = convertNexusUtxos(syncObject.utxos);
         debugLog(`Applying ${converted.length} server UTxOs`);
         promises.push(this.walletBg.applyUtxos(converted, true));
       }
@@ -365,6 +372,11 @@ export class SyncService {
       // message without one, so keying off syncObject.chain would silently never fire.
       if (accountIsEmpty && this.walletBg?.chain === Blockchain.CARDANO) {
         await this.reconcileControlledAmountFromUtxos();
+      }
+      // A UTxO-derived balance does not tell us whether the stake key is registered.
+      // Repair thin push records through REST without delaying block processing.
+      if (accountIsEmpty || getStakeRegistrationState(syncObject.account) === undefined) {
+        this.repairStakeAccountInfo();
       }
       debugLog('setSync', syncObject);
       // Heal any "thin" tx records (stored without CBOR) in the background —
@@ -614,6 +626,43 @@ export class SyncService {
     } catch (e) {
       // console.log(e);
     }
+  }
+
+  /** Authoritative preflight shared by pool delegation, voting and unstaking. */
+  async refreshStakeAccountInfo(): Promise<unknown> {
+    if (!this.walletBg?.stakeAddress || this.walletBg.isEnterpriseAddress()) {
+      throw new Error(StakeAccountError.NoStakeAddress);
+    }
+    if (this.stakeAccountRefreshInFlight) return this.stakeAccountRefreshInFlight;
+    const refresh = async () => {
+      const account = await this.api.getAccountInfo(this.walletBg.stakeAddress, true);
+      if (getStakeRegistrationState(account) === undefined) {
+        throw new Error(StakeAccountError.RegistrationUnavailable);
+      }
+      const saved = await this.walletBg.setAccountInfo(account);
+      this.lastStakeAccountRefreshAt = Date.now();
+      return saved;
+    };
+    this.stakeAccountRefreshInFlight = refresh();
+    try {
+      return await this.stakeAccountRefreshInFlight;
+    } finally {
+      this.stakeAccountRefreshInFlight = null;
+    }
+  }
+
+  private repairStakeAccountInfo(): void {
+    if (this.walletBg?.chain !== Blockchain.CARDANO || this.walletBg.isEnterpriseAddress()) return;
+    const now = Date.now();
+    // Thin pushes omit registration even after a successful REST repair. Recheck
+    // hourly, while failed attempts can retry after a minute. Explicit transaction
+    // preflight always fetches, regardless of this background-only throttle.
+    if (this.lastStakeAccountRefreshAt !== null && now - this.lastStakeAccountRefreshAt < 3_600_000) return;
+    if (this.lastStakeAccountRepairAt !== null && now - this.lastStakeAccountRepairAt < 60_000) return;
+    this.lastStakeAccountRepairAt = now;
+    void this.refreshStakeAccountInfo().catch(error => {
+      debugLog('Could not repair stake account info:', error);
+    });
   }
 
   /**
@@ -933,56 +982,6 @@ export class SyncService {
       debugLog('Error getting latest transaction block height:', e);
       return 0;
     }
-  }
-
-  /**
-   * Convert Nexus UTxO format to Cardano.Utxo[] (TxIn/TxOut tuples).
-   * Nexus: {txHash, txIndex, address, value, assetList, datumHash, inlineDatum, referenceScript}
-   * Wallet: [[{txId, index, address}, {address, value: {coins, assets}, datumHash, datum, scriptReference}]]
-   */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Nexus payload shape documented above; fields normalized defensively below
-  private convertNexusUtxos(nexusUtxos: any[]): Cardano.Utxo[] {
-    const result: Cardano.Utxo[] = [];
-    for (const u of nexusUtxos) {
-      try {
-        const txHash = u.txHash || u.tx_hash;
-        const txIndex = u.txIndex ?? u.tx_index ?? u.output_index ?? 0;
-        const address = u.address || u.owner_addr;
-        const lovelace = BigInt(u.value || u.lovelace_amount || '0');
-
-        // Build assets map from assetList
-        const assets = new Map<Cardano.AssetId, bigint>();
-        const assetList = u.assetList || u.assets || u.amounts || [];
-        for (const a of assetList) {
-          const unit = a.unit || (a.policyId && a.assetName ? a.policyId + a.assetName : null);
-          if (unit && unit !== 'lovelace') {
-            assets.set(Cardano.AssetId(unit), BigInt(a.quantity || '0'));
-          }
-        }
-
-        const txIn: Cardano.HydratedTxIn = {
-          txId: Cardano.TransactionId(txHash),
-          index: txIndex,
-          address: address as Cardano.PaymentAddress,
-        };
-
-        const txOut: Cardano.TxOut = {
-          address: address as Cardano.PaymentAddress,
-          value: {
-            coins: lovelace,
-            assets: assets.size > 0 ? assets : undefined,
-          },
-          datumHash: u.datumHash || undefined,
-          datum: u.inlineDatum || undefined,
-          scriptReference: u.referenceScript || undefined,
-        };
-
-        result.push([txIn, txOut]);
-      } catch (e) {
-        debugLog('Failed to convert Nexus UTxO:', e, u);
-      }
-    }
-    return result;
   }
 }
 

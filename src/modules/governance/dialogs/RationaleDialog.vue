@@ -233,7 +233,7 @@ async function load(): Promise<void> {
 watch(() => [props.isOpen, props.url, props.hash], () => void load(), { immediate: true });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .rationale-dialog {
   display: flex;
   flex-direction: column;
@@ -277,12 +277,12 @@ watch(() => [props.isOpen, props.url, props.hash], () => void load(), { immediat
 }
 
 .rationale-dialog__banner {
+  @include g-glass-tier(false);
   display: flex;
   align-items: flex-start;
   gap: var(--g-s-2);
   padding: var(--g-s-3) var(--g-s-4);
   border-radius: var(--g-r-control);
-  background: var(--g-raised);
   border: 1px solid var(--g-hairline-1);
 }
 .rationale-dialog__banner--verified {

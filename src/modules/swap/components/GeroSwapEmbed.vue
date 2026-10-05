@@ -54,6 +54,32 @@
         </v-card-text>
       </BaseDialog>
 
+      <!-- Ledger transport host prompt — `btSupported` means the device CAN use
+           Bluetooth, not that it is connected that way, so a plugged-in Ledger must
+           not be forced onto Bluetooth. Ask before signing, like the Send and
+           governance dialogs' USB/Bluetooth toggle. Backs the signer's getIsBT(). -->
+      <BaseDialog
+        v-if="transportPromptVisible"
+        :isOpen="transportPromptVisible"
+        :width="380"
+        :min-height="0"
+        persistent
+        :title="$t('wallet.ledgerTransport')"
+        :subtitle="$t('miniGero.connectLedger')"
+        @close="onTransportCancel"
+      >
+        <v-card-text class="pt-4">
+          <div class="gero-swap-embed__actions">
+            <GButton tier="secondary" @click="onTransportChosen(true)">
+              {{ $t('governance.bluetooth') }}
+            </GButton>
+            <GButton tier="primary" @click="onTransportChosen(false)">
+              {{ $t('governance.usb') }}
+            </GButton>
+          </div>
+        </v-card-text>
+      </BaseDialog>
+
       <!-- Spending-password host prompt — no reusable "enter spending password" dialog
            exists; SwapSheet.vue collects it inline via a v-text-field in its own review
            step (SwapSheet.vue:200-221). We recreate that same input inside BaseDialog
@@ -105,7 +131,11 @@ import { toNexusNetwork } from '@/api/nexus-tx-api';
 import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
 import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
+import GButton from '@/shared/components/GButton/GButton.vue';
+import { WalletType } from '@/models/types';
 import snackbar from '@/plugins/snackbar';
+import { Messaging } from '@/chrome/messaging';
+import { MessageTypes } from '@/models/MessageTypes';
 import i18n from '@/plugins/i18n';
 
 interface Props {
@@ -233,13 +263,55 @@ function onPassKeyCancel() {
   prfReject = null;
 }
 
-const { signer, keystone } = useNativeSwapSigner({
+// ── Ledger transport host prompt ──
+// USB unless the user picks Bluetooth for this signature. `btSupported` says the device
+// CAN do Bluetooth, not that it is connected that way, so it only decides whether to
+// ask — the same choice the Send and governance dialogs offer (`isBT`, default false).
+const isBT = ref(false);
+const transportPromptVisible = ref(false);
+let transportResolve: (() => void) | null = null;
+let transportReject: ((e: Error) => void) | null = null;
+
+function chooseTransport(): Promise<void> {
+  transportPromptVisible.value = true;
+  return new Promise<void>((resolve, reject) => {
+    transportResolve = resolve;
+    transportReject = reject;
+  });
+}
+
+function onTransportChosen(bluetooth: boolean) {
+  isBT.value = bluetooth;
+  transportPromptVisible.value = false;
+  transportResolve?.();
+  transportResolve = null;
+  transportReject = null;
+}
+
+function onTransportCancel() {
+  transportPromptVisible.value = false;
+  transportReject?.(new Error('Ledger transport selection cancelled'));
+  transportResolve = null;
+  transportReject = null;
+}
+
+const { signer: sharedSigner, keystone } = useNativeSwapSigner({
   getPassword,
   getPrfBytes,
-  // Wire the wallet's actual Bluetooth-Ledger support so BT users aren't forced onto
-  // USB (see useTransactionSigning.ts's isBTSupported for the same field usage).
-  getIsBT: () => walletStore.loggedWallet?.btSupported ?? false,
+  getIsBT: () => isBT.value,
 });
+
+// The widget signs both swaps and order cancels through signTx, so the question sits
+// in front of every Ledger signature. Everything else passes through unchanged.
+const signer = {
+  ...sharedSigner,
+  async signTx(unsignedTxCbor: string): Promise<string> {
+    const w = walletStore.loggedWallet;
+    isBT.value = false;
+    if (w?.type === WalletType.Ledger && w.btSupported) await chooseTransport();
+    return sharedSigner.signTx(unsignedTxCbor);
+  },
+};
 const { resolveToken } = useSwapTokenResolver();
 
 // PASSIVE market-cache access: `getTokenByUnit` (token logos) and `marketTokensRef`
@@ -250,17 +322,13 @@ const { resolveToken } = useSwapTokenResolver();
 // and reacts when that updates. Icons stay empty only if nothing else ever polled.
 const allTokens = marketTokensRef;
 
-// ── MAX button: no host wiring needed ──
-// Investigated src/vendor/gero-swap/gero-swap.js: the widget's internal
-// TokenSelector emits a local `setMax` event that the top-level widget
-// component already handles itself (never dispatched as a CustomEvent on the
-// <gero-swap> host element, so there's nothing for GeroSwapEmbed.vue to
-// listen for). Its handler reads `token.balance` directly off the resolved
-// TokenMeta we now supply, subtracts a fixed 3,000,000-lovelace (3 ADA)
-// reserve when the From side is lovelace, and writes the result straight into
-// the amount field. So supplying `balance` via resolveToken()/buildTokenCatalog()
-// above is the ONLY host-side requirement — MAX is fully functional end-to-end
-// with no further wiring here.
+// ── Balance line + MAX button: no host wiring needed ──
+// The widget handles MAX internally (no CustomEvent reaches the <gero-swap> host).
+// It reads the balance from signer.getUtxos(), the same set the aggregator
+// coin-selects from, and falls back to the `balance` we supply via
+// resolveToken()/buildTokenCatalog() when the signer can't be read. MAX on ADA
+// subtracts the quoted route's fee leg (12 ADA before a quote exists), so the
+// filled amount can always be built.
 
 /**
  * Shape of an entry in `tokenMetadataStore.state.tokens` (see
@@ -392,8 +460,28 @@ function wireProps() {
   node.ownerPkh = resolveOwnerPkh(); // for in-widget swap history (indexed orders lookup)
 }
 
+// Ask the worker to watch this swap for a fill or cancel push. Fire-and-forget: a wallet that has not
+// opted in to notifications answers not_registered, and nothing here may block or break the emit.
+function registerSwapForAlerts(detail: unknown) {
+  const txHash = (detail as { txHash?: unknown } | undefined)?.txHash;
+  if (typeof txHash !== 'string' || !/^[0-9a-f]{64}$/.test(txHash)) return;
+  const ownerPkh = resolveOwnerPkh();
+  const walletId = walletStore.loggedWallet?.id;
+  if (!ownerPkh || walletId === undefined) return;
+  try {
+    Messaging.sendToBackgroundFromOptions({
+      method: MessageTypes.NOTIFY_WATCH_ORDERS,
+      data: { walletId, ownerPkh, txHashes: [txHash] },
+    }).catch(() => undefined);
+  } catch {
+    // alerts are best-effort
+  }
+}
+
 function onSwapSubmitted(e: Event) {
-  emit('swap-submitted', (e as CustomEvent).detail);
+  const detail = (e as CustomEvent).detail;
+  emit('swap-submitted', detail);
+  registerSwapForAlerts(detail);
 }
 
 // Widget error codes observed in src/vendor/gero-swap/gero-swap.js — mapped to existing
@@ -473,6 +561,9 @@ const CATALOG_REBUILD_DEBOUNCE_MS = 200;
 // the entire catalog (churning every TokenSelector/SelectTokenDialog row) for nothing.
 // Sorted-units string is cheap to compute and cheap to compare.
 let lastCatalogUnitsKey = '';
+// Set when the wallet's UTxO set changes; forces the next rebuild even if the token set
+// did not change (see the walletStore.utxos watch below).
+let holdingsChanged = false;
 function computeCatalogUnitsKey(): string {
   const stored = Object.values(TokenMetadataStore.state.tokens || {}) as StoredCatalogToken[];
   const units = stored.filter(token => !isAdaLike(token)).map(token => token.unit);
@@ -490,8 +581,10 @@ function scheduleCatalogRebuild() {
     tryResolveDefaultGeroTokenOut();
 
     const key = computeCatalogUnitsKey();
-    if (key === lastCatalogUnitsKey) return; // token SET unchanged — skip the rebuild
+    // Token SET unchanged and holdings unchanged: skip the rebuild.
+    if (key === lastCatalogUnitsKey && !holdingsChanged) return;
     lastCatalogUnitsKey = key;
+    holdingsChanged = false;
     wireProps();
   }, CATALOG_REBUILD_DEBOUNCE_MS);
 }
@@ -507,6 +600,17 @@ watch(() => TokenMetadataStore.state.tokens, scheduleCatalogRebuild);
 // in place), so a shallow watch is sufficient and far cheaper than a deep watch over
 // what can be a large array of MarketToken objects (each carrying a sparkline array).
 watch(allTokens, scheduleCatalogRebuild);
+
+// Holdings changed: sync hydrated after login, funds arrived, a swap settled. The signer
+// keeps its identity, so the widget only re-reads the wallet's UTxOs when `tokens` is
+// reassigned (or the pair changes). Re-send the catalog, which also refreshes its balances,
+// or a balance read before the change stays on screen and can block Swap.
+// `setUtxos()` and the browser-context broadcast both reassign the array, so a shallow
+// watch fires on every real change.
+watch(() => walletStore.utxos, () => {
+  holdingsChanged = true;
+  scheduleCatalogRebuild();
+});
 
 // isSwapEnabled can flip the maintenance overlay in/out while mounted, which
 // destroys/recreates the <gero-swap> element (v-if/v-else) — re-attach on re-entry.
@@ -538,6 +642,12 @@ watch(network, async (value) => {
 .gero-swap-embed > gero-swap { display: block; }
 .gero-swap-embed--dialog > gero-swap,
 .gero-swap-embed--sidepanel > gero-swap { height: 100%; min-height: 0; }
+
+.gero-swap-embed__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--g-s-2);
+}
 
 .gero-swap-embed__maintenance {
   display: flex;

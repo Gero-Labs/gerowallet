@@ -12,7 +12,7 @@
         class="mr-2"
         @click="loadTrades"
       >
-        {{ newTradeCount }} {{ $t('market.newTrades').replace('{count}', '') }}
+        {{ $t('market.newTrades', { count: newTradeCount }) }}
         <v-icon x-small class="ml-1">mdi-refresh</v-icon>
       </v-chip>
       <!-- Auto-refresh toggle -->

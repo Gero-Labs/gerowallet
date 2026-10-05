@@ -57,7 +57,7 @@ Mini-Gero is a focused subset of the dashboard. Anything not in the side panel i
 - Perpetuals trading via Strike Finance: order book, market and limit orders, TWAP orders, positions and order history
 - Vaults via Strike Finance: deposit into yield vaults and track positions
 - Portfolio tracking, analytics, and real-time price feeds
-- Fiat on-ramp via MoonPay and Guardarian
+- Fiat on-ramp via MoonPay
 
 **🎁 Rewards**
 - Cashback via the Bring portal (on supported networks)
@@ -205,7 +205,6 @@ npm run dev:web          # Web UI only (faster for UI work)
 npm run dev:background   # Background script only
 npm run dev:content      # Content scripts only
 npm run dev:inject       # Inject scripts only
-npm run dev-firefox      # Firefox development build
 ```
 
 ### Build and Package
@@ -216,7 +215,7 @@ npm run build            # Optimized production build
 npm run build:beta       # Beta build with beta environment
 
 # Package extension
-npm run pack             # Create .zip, .crx, and .xpi packages
+npm run pack             # Create .zip and .crx packages
 npm run pack:zip         # Chrome Web Store .zip
 npm run pack:zip:beta    # Beta .zip
 
@@ -408,7 +407,7 @@ Check our [GitHub Issues](https://github.com/Gero-Labs/gerowallet/issues) for is
 - ✅ **Chrome/Chromium** (Manifest V3) - Primary platform
 - ✅ **Edge** (Chromium-based)
 - ✅ **Brave** (Chromium-based)
-- ⚠️ **Firefox** (Manifest V2 compatibility mode - some limitations)
+- ❌ Firefox (not supported)
 - ❌ Safari (not currently supported)
 
 ---

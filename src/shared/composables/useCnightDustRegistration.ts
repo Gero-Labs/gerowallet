@@ -39,6 +39,7 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { clearDustPending, getDustPending, markDustPending, reconcileDustPending, DustPendingRecord } from '@/shared/composables/useDustPending';
 import { extractNexusErrorMessage, isCollateralError } from '@/shared/utils/txErrors';
 import { debugLog } from '@/utils/debug';
+import { CNIGHT_ASSETS } from '@/shared/utils/cnightAssets';
 
 /** A place DUST from this wallet's NIGHT can be directed. */
 export interface DustDestination {
@@ -50,36 +51,9 @@ export interface DustDestination {
   dustAddress: string;
 }
 
-/**
- * cNIGHT asset identity, keyed by network. Values verified 2026-07-14 from
- * the official DUST Generator portal's baked config (Next.js bundle) —
- * mainnet name is `NIGHT` (`4e49474854`); the testnet asset has an empty
- * asset name. Preview, preprod and stagenet share one policy (same token
- * deployment), which is also what Nexus pins as `stagenet-cnight-unit`.
- *
- * Keyed by network NAME, and read with either vocabulary: a Cardano wallet
- * looks up its own network, a Midnight wallet looks up its Midnight network
- * (see `useDustSources`). `Network.PREVIEW` therefore stays here for Cardano
- * preview even though Midnight preview is gone.
- */
-export const CNIGHT_ASSETS: Record<string, { policyId: string; assetNameHex: string }> = {
-  [Network.MAINNET]: {
-    policyId: '0691b2fecca1ac4f53cb6dfb00b7013e561d1f34403b957cbb5af1fa',
-    assetNameHex: '4e49474854',
-  },
-  [Network.PREPROD]: {
-    policyId: 'd2dbff622e509dda256fedbd31ef6e9fd98ed49ad91d5c0e07f68af1',
-    assetNameHex: '',
-  },
-  [Network.PREVIEW]: {
-    policyId: 'd2dbff622e509dda256fedbd31ef6e9fd98ed49ad91d5c0e07f68af1',
-    assetNameHex: '',
-  },
-  [Network.STAGENET]: {
-    policyId: 'd2dbff622e509dda256fedbd31ef6e9fd98ed49ad91d5c0e07f68af1',
-    assetNameHex: '',
-  },
-};
+// cNIGHT asset identity lives in a dependency-free module; re-exported for
+// the existing importers.
+export { CNIGHT_ASSETS };
 
 /**
  * DUST mapping validator (`cnight_generates_dust`) per Cardano network — the
@@ -502,9 +476,9 @@ export function useCnightDustRegistration() {
     if (!wallet.encryptedMnemonic) {
       throw new Error('Wallet has no encrypted mnemonic. Hardware wallets register via the official portal.');
     }
-    const { decrypt } = await import('@/shared/utils/crypto');
+    const { decrypt, SecretPurpose } = await import('@/shared/utils/crypto');
     try {
-      return decrypt(wallet.encryptedMnemonic, credentials.password ?? '');
+      return decrypt(wallet.encryptedMnemonic, credentials.password ?? '', SecretPurpose.Mnemonic);
     } catch {
       throw new Error('WRONG_PASSWORD');
     }

@@ -146,12 +146,15 @@
 <script setup lang="ts">
 import { ref, computed, toRefs, watch, onMounted } from 'vue';
 import { walletStore } from '@/stores/walletStore';
-import stakingStoreActions, { stakingStore as stakingStoreState } from '@/stores/stakingStore';
+import stakingStoreActions, { stakingStore as stakingStoreState, StakingStore } from '@/stores/stakingStore';
 import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
 import BottomSheet from '../../components/BottomSheet.vue';
 import { useChainContext } from '../../composables/useChainContext';
 import debounce from 'lodash/debounce';
+
+// Element type of the store's paginated pool list, so this view tracks the backend pool shape.
+type Pool = StakingStore['pools'][number];
 
 const { themeColors } = useChainContext();
 const primaryColor = computed(() => themeColors.value.primary);
@@ -170,7 +173,7 @@ const search = ref('');
 const hideSaturated = ref(true);
 const page = ref(1);
 const showDelegateSheet = ref(false);
-const selectedPool = ref<any>(null);
+const selectedPool = ref<Pool | null>(null);
 const delegating = ref(false);
 
 const totalPages = computed(() => {
@@ -185,7 +188,7 @@ const currencySymbol = computed(() => {
   return networks.resolveCurrencySymbol(loggedWallet.value?.chain, loggedWallet.value?.network);
 });
 
-const formatFee = (pool: any) => {
+const formatFee = (pool: Pool | null | undefined) => {
   if (!pool?.fixed_cost) return '0';
   return filters.toCurrency(pool.fixed_cost, false, 0, currencySymbol.value);
 };
@@ -218,7 +221,7 @@ watch(hideSaturated, () => {
   loadPools(1);
 });
 
-const selectPool = (pool: any) => {
+const selectPool = (pool: Pool) => {
   selectedPool.value = pool;
   showDelegateSheet.value = true;
 };

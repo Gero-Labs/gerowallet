@@ -26,6 +26,7 @@ import { getMidnightApi } from '@/api/midnight-api';
 import { midnightStore } from '@/stores/midnightStore';
 import { assertNativeNightConversionSupported, validateShieldedTokenType } from '@/chains/midnight/midnightTokenCapabilities';
 import { resolveProvingTarget, type ProvingUnconfiguredTarget } from '@/chains/midnight/midnightProvingTarget';
+import { hasMidnightProvingConsent, type MidnightRemoteProver } from '@/chains/midnight/midnightProvingConsent';
 import type {
   BuildMidnightTxRequest,
   MidnightSegmentToSign,
@@ -222,6 +223,7 @@ export async function sendUnshieldedNight(
   forceRemote = false,
 ): Promise<SubmitMidnightTxResponse> {
   const target = forceRemote ? null : resolveWalletProvingTarget(network);
+  assertWalletProving(target);
   if (target) {
     const { checkProofServerHealth } = await import('@/chains/midnight/midnightLocalProver');
     if (!await checkProofServerHealth(target.url, { headers: target.headers, acceptNotFound: target.lenientHealth })) {
@@ -247,24 +249,39 @@ export async function sendUnshieldedNight(
 }
 
 /**
- * Phase-2 DApp-connector `makeTransfer`: run steps 1-3 of the unshielded NIGHT
- * transfer (getWalletKeys → Nexus build → BG DUST-balance + sign) and STOP —
- * do NOT submit. Returns the signed-but-unproven hex.
- *
- * The dapp is expected to submit the returned tx via the connector's own
- * `submitTransaction`, which relays to Nexus `/tx/submit` → sidecar
- * `/tx/finalize` (prove + bind + submit). This is literally
- * `sendUnshieldedNight` minus step 4, so it reuses the exact build+sign path
- * the dashboard send uses — no separate tx-building logic.
+ * DApp-connector `makeTransfer`: build, DUST-balance and sign the unshielded
+ * transfer, and do NOT submit. Proving follows the user's own preference,
+ * exactly like a dashboard send:
+ *   - local / zkPaaS: the wallet proves and seals it here, so the dapp gets a
+ *     sealed tx and its `submitTransaction` goes to `/tx/submit-proven`. No
+ *     proving data reaches Gero.
+ *   - remote (Gero Cloud): returned signed-but-unproven; `submitTransaction`
+ *     relays it to Nexus `/tx/submit`, which proves, binds and submits. The
+ *     approval UI requires the user's Gero Cloud consent first.
+ * An unusable local/zkPaaS preference throws ProofServerUnreachableError
+ * rather than silently falling back to Gero Cloud.
  */
 export async function buildAndSignUnshieldedTransfer(
   network: string,
   baseRequest: Omit<BuildMidnightTxRequest, 'publicKeyHex' | 'addressHex'>,
   credentials: MidnightSendCredentials,
+  /** The prover the user approved this transfer for; the build refuses if it changed. */
+  expectedProver?: WalletProver,
 ): Promise<{ tx: string }> {
+  const target = resolveWalletProvingTarget(network);
+  assertWalletProving(target, expectedProver);
+  if (target) {
+    const { checkProofServerHealth } = await import('@/chains/midnight/midnightLocalProver');
+    if (!await checkProofServerHealth(target.url, { headers: target.headers, acceptNotFound: target.lenientHealth })) {
+      throw new ProofServerUnreachableError(target.url);
+    }
+  }
   const { publicKeyHex, addressHex } = await getWalletKeys(credentials);
   const built = await buildUnshielded(network, { ...baseRequest, publicKeyHex, addressHex });
-  const { signedTxHex } = await balanceAndSignInBg(built.unprovenTxHex, baseRequest.ttlMs, credentials);
+  const { signedTxHex } = await balanceAndSignInBg(
+    built.unprovenTxHex, baseRequest.ttlMs, credentials, undefined,
+    target ? { url: target.url, headers: target.headers } : undefined,
+  );
   return { tx: signedTxHex };
 }
 
@@ -431,6 +448,47 @@ function resolveWalletProvingTarget(
   };
 }
 
+/** Which prover a resolved wallet-side target is (null target = Gero Cloud). */
+export type WalletProver = 'local' | 'zkpaas' | 'cloud';
+
+function proverOf(target: ReturnType<typeof resolveWalletProvingTarget>): WalletProver {
+  if (!target) return 'cloud';
+  return target.stage === 'provingZkpaas' ? 'zkpaas' : 'local';
+}
+
+/** A remote prover would receive proof inputs the user has not agreed to send it. */
+export class ProvingConsentRequiredError extends Error {
+  constructor(public readonly provider: MidnightRemoteProver) {
+    super(`Proving with ${provider === 'zkpaas' ? 'Arkhia zkPaaS' : 'Gero Cloud'} needs your consent first`);
+    this.name = 'ProvingConsentRequiredError';
+  }
+}
+
+/** The proof-server setting changed between the user's approval and the build. */
+export class ProvingPreferenceChangedError extends Error {
+  constructor() {
+    super('The proof-server setting changed during approval. Review the transaction again.');
+    this.name = 'ProvingPreferenceChangedError';
+  }
+}
+
+/**
+ * Last gate before any credential is used to build a transaction that a
+ * prover will see (PRIV-01). Consent dialogs run first, but authentication
+ * (a PassKey popup) can take a minute and the proof-server setting can change
+ * meanwhile, so the decision is re-made here, against the prover this send
+ * would actually use:
+ *   - `expected` (what the user approved) must still be the prover;
+ *   - a remote prover (Gero Cloud, Arkhia zkPaaS) needs its recorded consent.
+ */
+function assertWalletProving(target: ReturnType<typeof resolveWalletProvingTarget>, expected?: WalletProver): void {
+  const prover = proverOf(target);
+  if (expected && expected !== prover) throw new ProvingPreferenceChangedError();
+  if (prover !== 'local' && !hasMidnightProvingConsent(midnightStore.shieldedProvingConsent, prover)) {
+    throw new ProvingConsentRequiredError(prover);
+  }
+}
+
 /**
  * Fast pre-auth preflight for the send/convert dialogs (WP-P5 pattern):
  * `true` when the current proof-server preference can accept a send right
@@ -508,6 +566,7 @@ export async function sendShieldedNight(
   const api = getMidnightApi(network);
 
   const target = forceRemote ? null : resolveWalletProvingTarget(network);
+  assertWalletProving(target);
   if (target) {
     const { checkProofServerHealth } = await import('@/chains/midnight/midnightLocalProver');
     const healthy = await checkProofServerHealth(target.url, {

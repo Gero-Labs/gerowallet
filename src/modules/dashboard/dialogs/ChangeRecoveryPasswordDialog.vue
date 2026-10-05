@@ -140,9 +140,13 @@ const isMpcPasskeyWallet = computed(() =>
 
 const strength = computed(() => scoreRecoveryPassword(newPassword.value));
 const strengthColor = computed(() => (['error', 'error', 'warning', 'success', 'success'][strength.value.score]));
-const lengthError = computed(() =>
-  newPassword.value && newPassword.value.length < 12 ? t('security.mpcRecoveryMinLength') : '',
-);
+// Say why a long-enough password is still refused (one class, or a common
+// word / sequence), instead of leaving the submit button silently disabled.
+const lengthError = computed(() => {
+  if (!newPassword.value) return '';
+  if (newPassword.value.length < 12) return t('security.mpcRecoveryMinLength');
+  return isAcceptableRecoveryPassword(newPassword.value) ? '' : t('welcome.recoveryPasswordTooWeak');
+});
 const mismatchError = computed(() =>
   confirmPassword.value && confirmPassword.value !== newPassword.value ? t('security.mpcRecoveryMismatch') : '',
 );

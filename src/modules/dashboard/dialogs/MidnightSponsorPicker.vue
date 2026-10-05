@@ -161,9 +161,9 @@ watch(() => `${props.senderWalletId}|${props.network}`, refresh);
 
 <style lang="scss" scoped>
 .sponsor-picker {
+  @include g-glass-tier(false);
   margin-top: var(--g-s-3);
   padding: var(--g-s-3);
-  background: var(--g-raised);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-card);
 }
@@ -190,12 +190,12 @@ watch(() => `${props.senderWalletId}|${props.network}`, refresh);
 }
 
 .sponsor-row {
+  @include g-glass-tier(false);
   display: flex;
   align-items: center;
   justify-content: space-between;
   width: 100%;
   padding: var(--g-s-2);
-  background: var(--g-surface);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-control);
   color: var(--g-text-1);

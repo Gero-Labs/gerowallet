@@ -285,9 +285,9 @@ function tooltipKeyForKind(kind: TxOutputKind): string {
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .tx-details {
-  background: var(--g-raised);
+  @include g-glass-panel(false);
   border: 1px solid var(--g-hairline-2);
   border-radius: var(--g-r-control);
   overflow: hidden;

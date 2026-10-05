@@ -136,10 +136,12 @@ export interface GovVote {
 /**
  * Stake-weighted tally, sourced from Koios's proposal_voting_summary.
  *
- * Several fields are always null upstream — `abstainVotePower`, `ccThreshold`,
- * `spoAbstainVotePower`, `spoNotVotedPower` and `notVotedPower` — so the UI must
- * treat absence as "not available", never as zero. Verify against a captured
- * fixture before relying on any one of them.
+ * Several fields are always null upstream — `ccThreshold`, `spoNotVotedPower`
+ * and `notVotedPower` — so the UI must treat absence as "not available", never
+ * as zero. Verify against a captured fixture before relying on any one of them.
+ * `abstainVotePower` and `spoAbstainVotePower` were null too until Nexus mapped
+ * Koios's `*_active_abstain_vote_power` names (Sep 2026); an older Nexus still
+ * sends null, and the shares never use them (abstain is outside the denominator).
  */
 export interface GovVotingSummary {
   epochNo: number | null;
@@ -207,6 +209,15 @@ export interface CommitteeMember {
    * empty name: it means the row falls back to its hash.
    */
   displayName?: string | null;
+  /**
+   * Hot credentials this member has authorised: authorisation HISTORY, not a
+   * current-eligibility flag. OPTIONAL: newer Nexus sends it (every mainnet
+   * member had one on 2026-09-24), older projections do not, and Nexus omits it
+   * for a member with no known authorisation. An EMPTY array is a fact (no hot
+   * key); absent means eligibility is unknown, so `activeCommitteeSize` gives
+   * up and the server's share is used.
+   */
+  hotHashes?: string[] | null;
 }
 
 export interface Committee {

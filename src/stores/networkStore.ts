@@ -1,6 +1,7 @@
 import Vue from 'vue';
 import { Cardano } from '@cardano-sdk/core';
 import { getContextType } from '@/utils/storageSync';
+import { StorePersister } from '@/utils/storePersistence';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 import { debugLog } from '@/utils/debug';
@@ -62,31 +63,38 @@ export const networkStore = Vue.observable<NetworkStore>({
 const STORE_NAME = 'networkStore';
 const context = getContextType();
 
+// `assets` (every native-asset row this profile has seen, metadata included) goes to
+// IndexedDB; the tip, epoch parameters and genesis stay in the small chrome.storage
+// record. Without the split, every new block rewrote the whole asset map through
+// chrome.storage (see storeCache.ts).
+const persister = new StorePersister(networkStore as unknown as Record<string, unknown>, {
+  storeName: STORE_NAME,
+  bulkFields: ['assets'],
+  replacer: serializeValue,
+});
+
 // Initialize messaging based on context
 // IMPORTANT: Only browser context subscribes to background updates
 // Background context directly updates local store via broadcastFromBackground()
 if (context === 'browser') {
+  // Fields the port has delivered: fresher than anything hydration reads back.
+  const deliveredFields = new Set<string>();
+
   // Browser context: Subscribe to updates from background
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<NetworkStore>) => {
 
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
       if (key in networkStore) {
+        deliveredFields.add(key);
         (networkStore as unknown as Record<string, unknown>)[key] = updates[key as keyof NetworkStore];
       }
     });
   });
 
-  // Initial hydration from chrome.storage (fallback for initial state)
-  chrome.storage.local.get(STORE_NAME, (result) => {
-    if (result[STORE_NAME]) {
-      Object.assign(networkStore, result[STORE_NAME]);
-    }
-  });
+  // Initial hydration from persisted state (fallback for initial state)
+  void persister.hydrate({ skip: deliveredFields });
 }
-
-// Debounced storage write to reduce I/O operations
-let storageWriteTimeout: ReturnType<typeof setTimeout> | null = null;
 
 // Serializer function for complex data types
 function serializeValue(key: string, value: unknown): unknown {
@@ -115,23 +123,8 @@ function broadcastFromBackground(updates: Partial<NetworkStore>) {
     // Broadcast to all connected browser contexts (immediate)
     backgroundStoreMessaging.broadcastUpdate(STORE_NAME, serializedUpdates);
 
-    // Debounced storage write to reduce I/O operations during rapid updates
-    if (storageWriteTimeout) {
-      clearTimeout(storageWriteTimeout);
-    }
-
-    storageWriteTimeout = setTimeout(() => {
-      try {
-        // Use current local store state as the base to avoid race conditions
-        const finalState = { ...networkStore };
-
-        chrome.storage.local.set({
-          [STORE_NAME]: JSON.parse(JSON.stringify(finalState, serializeValue))
-        });
-      } catch (error) {
-        console.error('Failed to persist network store to storage:', Object.keys(updates), error);
-      }
-    }, 300); // 300ms debounce
+    // Persist only what changed: a new tip no longer rewrites the asset map.
+    persister.markDirty(Object.keys(updates));
   }
 }
 

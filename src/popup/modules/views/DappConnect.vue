@@ -4,6 +4,7 @@
       <v-card-title class="justify-center text-center pt-0" style="color: white; font-size: 14px; word-break: break-word">
         {{ $t('navigation.confirmUrlBeforeGranting') }}
       </v-card-title>
+      <EmbeddedSiteWarning class="mb-2" :embedded-in="embeddedIn" />
           <section style="font-weight: bold; color: white; font-size: 16px">
             {{ $t('navigation.allowTheSiteTo') }}
           </section>
@@ -45,6 +46,7 @@
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { onMounted, ref, toRefs, getCurrentInstance } from 'vue';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
+import EmbeddedSiteWarning from '@/shared/components/EmbeddedSiteWarning.vue';
 import { Messaging } from '@/chrome/messaging';
 import { APIError } from '@/chrome/config';
 import WalletStore, { walletStore } from '@/stores/walletStore';
@@ -52,20 +54,26 @@ import filters from '@/shared/utils/filters';
 
 const { t } = useTranslation();
 
-const vmProxy = getCurrentInstance()!.proxy as any
+const vmProxy = getCurrentInstance()!.proxy as unknown as {
+  $refs: { popupHeader: { domain: string } };
+  $route: { query?: Record<string, string | undefined> };
+};
 
 // Get store values
 const { loggedWallet } = toRefs(walletStore);
 
 // Reactive data
 const consent = ref<boolean>(false);
-const controller = ref<any>(null);
-const popupHeader = ref<any>(null);
+const controller = ref<ReturnType<typeof Messaging.createInternalController> | null>(null);
+const popupHeader = ref<unknown>(null);
+// Browser-derived embedding site, set by the background on the request.
+const embeddedIn = ref<unknown>(null);
 
 // Methods
 const decline = async () => {
   try {
-    await controller.value.returnData({ data: {}, error: APIError.Refused });
+    // `data: false`, never a truthy placeholder: Decline must not read as consent.
+    await controller.value?.returnData({ data: false, error: APIError.Refused });
   } catch (e) {
     console.warn('[DappConnect] returnData failed on decline:', e);
   }
@@ -73,9 +81,21 @@ const decline = async () => {
 };
 
 const confirm = async () => {
-  await WalletStore.addConnectedDapp(loggedWallet.value.id, vmProxy.$refs.popupHeader.domain);
+  // Store the full origin (scheme + host + port), never the bare hostname: a
+  // hostname entry would also authorise http:// and other ports of that name.
+  let origin = '';
   try {
-    await controller.value.returnData({ data: true, error: {} });
+    origin = new URL(String(vmProxy.$route.query?.website ?? '')).origin;
+  } catch {
+    origin = '';
+  }
+  if (!origin || origin === 'null') {
+    await decline();
+    return;
+  }
+  await WalletStore.addConnectedDapp(loggedWallet.value.id, origin);
+  try {
+    await controller.value?.returnData({ data: true, error: {} });
   } catch (e) {
     console.warn('[DappConnect] returnData failed:', e);
   }
@@ -93,6 +113,9 @@ onMounted(() => {
   // this fallback view was reached (same bug fixed in 371b9ce for the other
   // five popup dApp views).
   controller.value = Messaging.createInternalController();
+  controller.value.requestData()
+    .then((req) => { embeddedIn.value = (req as { embeddedIn?: unknown } | undefined)?.embeddedIn ?? null; })
+    .catch(() => { /* no request: nothing to warn about */ });
 
   // Set document title with domain
   const route = vmProxy.$route;

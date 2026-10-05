@@ -1,6 +1,7 @@
 import Vue from 'vue';
 import { Cardano } from '@cardano-sdk/core';
 import { getContextType } from '@/utils/storageSync';
+import { StorePersister } from '@/utils/storePersistence';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 import { addConnectedDapp, removeDapp, setWalletConfiguration } from '@/db/wallet-db';
@@ -14,13 +15,21 @@ interface WhitelistedEntry {
   id: number;
 }
 
+const LOCAL_DEV_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
 /**
- * Exact origin/host match for the connected-dApp whitelist. Entries store the
- * dApp's full origin (scheme+host+port) captured at connect time. Compare by
- * canonicalized-origin equality — NEVER substring, which would let
+ * Exact origin match for the connected-dApp whitelist. Entries store the dApp's
+ * full origin (scheme+host+port) captured at connect time. Compare by
+ * canonicalized-origin equality, NEVER substring, which would let
  * `https://app.trusted.com.evil.com` match an entry for `https://app.trusted.com`
- * and bypass the connect/sign consent gate. Falls back to exact host equality for
- * any legacy entry stored as a bare hostname.
+ * and bypass the connect/sign consent gate.
+ *
+ * Legacy entries stored as a bare hostname (older popup connects) carry no
+ * scheme or port. They used to match any scheme and port, so approving
+ * https://dapp.example also authorised http://dapp.example, which anyone on
+ * the network path can inject into. They now match only https on the default
+ * port (or the explicit `host:port` they were stored with), plus http/https
+ * on any port for local development hosts.
  */
 export function matchesDappWhitelistEntry(origin: string, entryDomain: string): boolean {
   if (!origin || !entryDomain) return false;
@@ -30,13 +39,24 @@ export function matchesDappWhitelistEntry(origin: string, entryDomain: string): 
   } catch {
     return false;
   }
+  if (reqUrl.origin === 'null') return false; // opaque origins never match
+  let entryOrigin: string | null = null;
   try {
-    return new URL(entryDomain).origin === reqUrl.origin;
+    entryOrigin = new URL(entryDomain).origin;
   } catch {
-    // Legacy entry stored as a bare hostname → exact host match (case-insensitive).
-    const host = entryDomain.toLowerCase();
-    return host === reqUrl.host.toLowerCase() || host === reqUrl.hostname.toLowerCase();
+    entryOrigin = null;
   }
+  // A full http(s) origin entry: exact equality. Anything else (a bare host,
+  // or `host:port`, which URL parses as an opaque `host:` scheme) is legacy.
+  if (entryOrigin && entryOrigin !== 'null') return entryOrigin === reqUrl.origin;
+
+  const entry = entryDomain.toLowerCase();
+  const hostname = reqUrl.hostname.toLowerCase();
+  if (LOCAL_DEV_HOSTS.has(hostname) && (entry === hostname || entry === reqUrl.host.toLowerCase())) {
+    return reqUrl.protocol === 'http:' || reqUrl.protocol === 'https:';
+  }
+  if (reqUrl.protocol !== 'https:') return false;
+  return entry === reqUrl.host.toLowerCase();
 }
 
 /**
@@ -192,51 +212,85 @@ export const walletStore = Vue.observable<WalletStore>({
 const STORE_NAME = 'walletStore';
 const context = getContextType();
 
+/**
+ * Persisted to IndexedDB, not chrome.storage (see storeCache.ts). These are the
+ * multi-MB fields. Everything else stays in the small `walletStore` record that
+ * new contexts read at boot.
+ */
+const BULK_FIELDS: (keyof WalletStore)[] = [
+  'transactions', 'utxos', 'tokens', 'collections', 'programmableTokens', 'rewards', 'keys',
+];
+
+const persister = new StorePersister(walletStore as unknown as Record<string, unknown>, {
+  storeName: STORE_NAME,
+  bulkFields: BULK_FIELDS,
+  replacer: serializeValue,
+  // Who is logged in, and whether the wallet is locked, must survive a worker that
+  // dies right after the change.
+  immediateFields: ['loggedWallet', 'isLocked'],
+  // Bulk data is tagged with its wallet so it can never hydrate into another wallet's session.
+  scope: (state) => {
+    const id = (state['loggedWallet'] as { id?: unknown } | null)?.id;
+    return id == null ? null : String(id);
+  },
+});
+
+let hydration: Promise<void> | null = null;
+
 // Initialize messaging based on context
 if (context === 'browser') {
+  // Fields the port has delivered: fresher than anything hydration reads back.
+  const deliveredFields = new Set<string>();
+
   // Browser context: Subscribe to updates from background
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<WalletStore>) => {
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
       if (key in walletStore) {
+        deliveredFields.add(key);
         (walletStore as unknown as Record<string, unknown>)[key] = updates[key as keyof WalletStore];
       }
     });
   });
 
-  // Initial hydration from chrome.storage (fallback for initial state)
-  chrome.storage.local.get(STORE_NAME, (result) => {
-    if (result[STORE_NAME]) {
-      Object.assign(walletStore, result[STORE_NAME]);
-
-      // Initialize price service if wallet is logged in
-      const hydratedWallet = result[STORE_NAME].loggedWallet;
-      if (hydratedWallet && (hydratedWallet.chain === 'Cardano' || hydratedWallet.chain === 'Bitcoin')) {
-        priceService.initialize(hydratedWallet.chain).catch(error => {
-          console.error('Failed to initialize price service on hydration:', error);
-        });
-      }
+  // Initial hydration from persisted state (fallback for initial state)
+  hydration = persister.hydrate({ skip: deliveredFields }).then((stored) => {
+    // Initialize price service if wallet is logged in
+    const hydratedWallet = stored?.['loggedWallet'] as WalletStore['loggedWallet'];
+    if (hydratedWallet && (hydratedWallet.chain === 'Cardano' || hydratedWallet.chain === 'Bitcoin')) {
+      priceService.initialize(hydratedWallet.chain).catch(error => {
+        console.error('Failed to initialize price service on hydration:', error);
+      });
     }
   });
 }
 
-// Promise-based storage hydration for backward compatibility
+if (context === 'background') {
+  // Start at once, not when background.ts reaches hydrateWalletStore() after
+  // loadWallets(): message handlers (LOCK from the dashboard can wake the worker) run
+  // before then, and until hydration has read the stored record the persister holds
+  // their writes back rather than replace it with the store's defaults. The worker owns
+  // the data, so it also moves a record in the old format out of chrome.storage.
+  hydration = persister.hydrate({ migrate: true }).then(() => undefined);
+  backgroundStoreMessaging.registerSnapshot(
+    STORE_NAME,
+    () => JSON.parse(JSON.stringify(walletStore, serializeValue)),
+    hydration,
+  );
+}
+
+// Promise-based storage hydration for backward compatibility. One read per context:
+// the options page and the worker await the same hydration the module started above.
 export const hydrateWalletStore = (): Promise<void> => {
-  return new Promise((resolve) => {
-    chrome.storage.local.get(STORE_NAME, (result) => {
-      if (result[STORE_NAME]) {
-        Object.assign(walletStore, result[STORE_NAME]);
-      }
-      resolve();
-    });
-  });
+  if (!hydration) hydration = persister.hydrate().then(() => undefined);
+  return hydration;
 };
 
-// Debounced storage write to reduce I/O operations
-let storageWriteTimeout: ReturnType<typeof setTimeout> | null = null;
+/** Write any pending walletStore persistence now (worker only; resolves once attempted). */
+export const flushWalletStorePersistence = (): Promise<void> => persister.flush();
 
 // Serializer function for complex data types
-function serializeValue(key: string, value: unknown): unknown {
+export function serializeValue(key: string, value: unknown): unknown {
   if (typeof value === 'bigint') {
     return value.toString();
   } else if (value instanceof Map) {
@@ -262,23 +316,9 @@ function broadcastFromBackground(updates: Partial<WalletStore>) {
     // Broadcast to all connected browser contexts (immediate)
     backgroundStoreMessaging.broadcastUpdate(STORE_NAME, serializedUpdates);
 
-    // Debounced storage write to reduce I/O operations during rapid updates
-    // This batches multiple updates together while maintaining data consistency
-    if (storageWriteTimeout) {
-      clearTimeout(storageWriteTimeout);
-    }
-
-    storageWriteTimeout = setTimeout(() => {
-      try {
-        // Use the current local store state as the base to avoid race conditions
-        const finalState = { ...(walletStore) };
-        chrome.storage.local.set({
-          [STORE_NAME]: JSON.parse(JSON.stringify(finalState, serializeValue))
-        });
-      } catch (error) {
-        console.error('Failed to persist wallet store to storage:', Object.keys(updates), error);
-      }
-    }, 300); // 300ms debounce - balances performance with data safety
+    // Persist only what changed. The persister reads the in-memory store when it
+    // writes, so rapid updates still coalesce into one write per debounce window.
+    persister.markDirty(Object.keys(updates));
   }
 }
 
@@ -528,6 +568,7 @@ export default {
     const clearedState: Partial<WalletStore> = {
       loggedWallet: null,
       isLocked: false,  // Reset locked state on logout
+      isSyncing: false,
       account: null,
       transactions: [],
       contacts: {},

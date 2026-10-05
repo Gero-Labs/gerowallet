@@ -19,7 +19,10 @@
           :key="item.requestId"
           class="queue-strip-row"
         >
-          <span class="grey--text text-caption queue-strip-label">{{ queuedItemLabel(item) }}</span>
+          <span class="grey--text text-caption queue-strip-label">
+            <span class="queue-strip-method">{{ queuedItemMethod(item) }}</span>
+            <span class="queue-strip-domain">· {{ queuedItemDomain(item) }}</span>
+          </span>
           <v-btn icon x-small :aria-label="$t('miniGero.reject')" @click="rejectQueued(item.requestId)">
             <v-icon size="14" color="var(--g-text-3)">mdi-close</v-icon>
           </v-btn>
@@ -33,6 +36,14 @@
         <v-icon size="13" color="rgba(255,255,255,0.45)" class="mr-1">mdi-wallet-outline</v-icon>
         <span class="grey--text text-caption">{{ loggedWallet.name }}</span>
         <span v-if="loggedWallet.network !== Network.MAINNET" class="network-badge ml-2">{{ loggedWallet.network }}</span>
+      </div>
+
+      <!-- The request came from a frame embedded in a different top-level
+           site. The domain shown below is the embedded frame's; say which site
+           it sits inside so a trusted dApp framed by a hostile page stands out. -->
+      <div v-if="embeddedInSite" class="embedded-site-strip mb-2">
+        <v-icon size="13" color="warning" class="mr-1">mdi-picture-in-picture-top-right-outline</v-icon>
+        <span class="warning--text text-caption">{{ $t('miniGero.embeddedIn', { site: embeddedInSite }) }}</span>
       </div>
 
       <!-- DApp Connect -->
@@ -117,47 +128,16 @@
           {{ formatFiatFromAda(signTxSummary.totals.youPayAda) }}
         </div>
 
-        <!-- Non-output intents: certificates, mint/burn, collateral, metadata.
-             Rendered only when at least one is present — an ordinary payment
-             shows nothing here. This is what stops a delegation/mint/vote
-             transaction from presenting as just an address and an amount. -->
-        <div
-          v-if="signTxSummary && (signTxSummary.certificates.length || signTxSummary.mints.length || signTxSummary.collateralCount > 0 || signTxSummary.hasMetadata)"
-          class="tx-intents mb-3"
-        >
-          <div class="tx-intents-header text-caption grey--text text-uppercase">{{ $t('signTx.thisTransactionWill') }}</div>
-          <div
-            v-for="(cert, i) in signTxSummary.certificates"
-            :key="'cert-' + i"
-            class="tx-intent-row"
-          >
-            <v-icon size="14" :color="primaryColor" class="mr-1">mdi-certificate-outline</v-icon>
-            <div class="tx-intent-text">
-              <span class="white--text text-caption">{{ cert.label }}</span>
-              <span v-if="cert.poolId" class="grey--text text-caption ml-1">{{ cert.poolId }}</span>
-              <span v-if="cert.depositAda" class="grey--text text-caption ml-1">({{ $t('signTx.depositAmount', { amount: cert.depositAda }) }})</span>
-              <span v-if="cert.drepSentinel" class="grey--text text-caption ml-1">{{ $t(`governance.${cert.drepSentinel === 'alwaysAbstain' ? 'alwaysAbstain' : 'alwaysNoConfidence'}`) }}</span>
-            </div>
-          </div>
-          <div
-            v-for="(mint, i) in signTxSummary.mints"
-            :key="'mint-' + i"
-            class="tx-intent-row"
-          >
-            <v-icon size="14" :color="mint.isBurn ? 'error' : 'success'" class="mr-1">{{ mint.isBurn ? 'mdi-fire' : 'mdi-file-plus-outline' }}</v-icon>
-            <span class="white--text text-caption">
-              {{ $t(mint.isBurn ? 'signTx.burnsAsset' : 'signTx.mintsAsset', { quantity: mint.formattedQuantity, name: mint.label }) }}
-            </span>
-          </div>
-          <div v-if="signTxSummary.collateralCount > 0" class="tx-intent-row">
-            <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-shield-lock-outline</v-icon>
-            <span class="white--text text-caption">{{ $tc('signTx.reservesCollateral', signTxSummary.collateralCount, { count: signTxSummary.collateralCount }) }}</span>
-          </div>
-          <div v-if="signTxSummary.hasMetadata" class="tx-intent-row">
-            <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-tag-text-outline</v-icon>
-            <span class="white--text text-caption">{{ $t('signTx.includesMetadata') }}</span>
-          </div>
-        </div>
+        <!-- Every non-output effect (certificates, withdrawals, votes,
+             proposals, mint/burn, collateral, reference inputs, required
+             signers, validity) plus the blocking network banner. Shared with
+             the popup fallback so both approval surfaces show the same thing. -->
+        <TxApprovalIntents
+          v-if="approvalSummary"
+          :summary="approvalSummary"
+          :network-ack.sync="networkMismatchAck"
+          :primary-color="primaryColor"
+        />
 
         <!-- Decode-failure guard: CBOR parse failed (signTxSummary is null while
              the payload itself decoded to a tx). Blocking — the user must
@@ -175,25 +155,6 @@
               dense
               class="mt-2"
               :label="$t('signTx.decodeFailedAck')"
-            />
-          </div>
-        </div>
-
-        <!-- Network mismatch guard: an external output address belongs to a
-             different network (mainnet/testnet) than the active wallet. -->
-        <div v-if="signTxNetworkMismatch" class="tx-decode-failed-banner mb-3">
-          <v-icon color="error" size="20" class="mr-2">mdi-swap-horizontal-circle-outline</v-icon>
-          <div class="tx-expired-text">
-            <div class="tx-expired-title">{{ $t('signTx.networkMismatchTitle') }}</div>
-            <div class="tx-expired-body">{{ $t('signTx.networkMismatchBody') }}</div>
-            <v-checkbox
-              v-model="networkMismatchAck"
-              color="error"
-              hide-details
-              dark
-              dense
-              class="mt-2"
-              :label="$t('signTx.networkMismatchAck')"
             />
           </div>
         </div>
@@ -702,6 +663,11 @@
             <span class="warning--text text-caption">{{ $t('midnight.send.dustResetWarning') }}</span>
           </div>
           <p class="grey--text text-caption mt-2 mb-0">{{ $t('midnight.connector.transferFeesNote') }}</p>
+          <!-- Who proves this transfer: the user's own setting, never silently Gero Cloud. -->
+          <div class="d-flex align-start mt-2" data-testid="midnight-transfer-prover">
+            <v-icon size="14" color="var(--g-text-3)" class="mr-1">mdi-shield-key-outline</v-icon>
+            <span class="grey--text text-caption">{{ $t('midnight.connector.transferProvedBy', { prover: transferProverLabel }) }}</span>
+          </div>
         </div>
 
         <template v-if="(walletType === WalletType.Normal || walletType === WalletType.Google) && !isPrfWallet">
@@ -1075,6 +1041,12 @@
         <v-btn outlined rounded dark block @click="rejectSign">{{ $t('miniGero.reject') }}</v-btn>
       </div>
     </template>
+    <ShieldedProvingConsentDialog
+      :is-open="transferConsentOpen"
+      :provider="transferProver === 'zkpaas' ? 'zkpaas' : 'cloud'"
+      @close="transferConsentOpen = false"
+      @accepted="transferConsentOpen = false"
+    />
   </BottomSheet>
 </template>
 
@@ -1089,9 +1061,12 @@ import { useDAppOverlay, type DAppRequest } from '../composables/useDAppOverlay'
 import { useChainContext } from '../composables/useChainContext';
 import BottomSheet from './BottomSheet.vue';
 import TransactionDetailsCard, {
+  type TxDetailsOutput,
   type TxDetailsWithdrawal,
   type TxDetailsTotals,
 } from '@/shared/components/TransactionDetailsCard.vue';
+import TxApprovalIntents from '@/shared/components/TxApprovalIntents.vue';
+import { approvalContextFromKeys, buildTxApprovalSummary, toTransactionDetailsCardProps, type TxApprovalSummary } from '@/shared/utils/txApprovalSummary';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import WalletStore from '@/stores/walletStore';
@@ -1121,6 +1096,8 @@ import { toAmountInput } from '@/chains/midnight/midnightAmount';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
 import { privateSyncPercent } from '@/chains/midnight/midnightPrivateSyncProgress';
 import { midnightStore } from '@/stores/midnightStore';
+import { hasMidnightProvingConsent } from '@/chains/midnight/midnightProvingConsent';
+import ShieldedProvingConsentDialog from '@/modules/dashboard/dialogs/ShieldedProvingConsentDialog.vue';
 import { resolveGeroChain } from '@/services/walletConnect/chainUtils';
 
 interface BackgroundResponse<T> { data: T }
@@ -1140,11 +1117,15 @@ const { t } = useTranslation();
 // Domain + method label for a queued (not-yet-shown) request, for the queue
 // strip below. Reuses the same URL-hostname extraction as enableDomain/
 // signDataDomain (identical parsing, different source object).
-function queuedItemLabel(item: DAppRequest): string {
+// Method first, domain second: Spanish method labels all open with "Solicitud
+// de …", so with the domain first the ellipsis cut exactly the word that says
+// what the request is. Only the domain shrinks now.
+function queuedItemDomain(item: DAppRequest): string {
   const payload = item.payload as { website?: string } | undefined;
   const website = payload?.website || '';
-  let domain = website;
-  try { domain = new URL(website).hostname; } catch { /* leave as-is */ }
+  try { return new URL(website).hostname; } catch { return website; }
+}
+function queuedItemMethod(item: DAppRequest): string {
   const methodKeys: Record<string, string> = {
     enable: 'miniGero.connectRequest',
     signTx: 'miniGero.signTxRequest',
@@ -1155,8 +1136,7 @@ function queuedItemLabel(item: DAppRequest): string {
     midnight_balanceUnsealedTransaction: 'miniGero.balanceRequest',
     wcSessionProposal: 'miniGero.connectRequest',
   };
-  const methodLabel = methodKeys[item.method] ? t(methodKeys[item.method]) : item.method;
-  return `${domain} - ${methodLabel}`;
+  return methodKeys[item.method] ? t(methodKeys[item.method]) : item.method;
 }
 const { themeColors } = useChainContext();
 const primaryColor = computed(() => themeColors.value.primary);
@@ -1382,9 +1362,13 @@ const nightCurrency = computed(() =>
 // on !signDataDecodeError means malformed input never reaches the signer, so
 // by the time signing happens the lenient decode has no invalid input left to
 // diverge from this preview on.
-const signDataRawPayload = computed(() =>
-  currentRequest.value?.payload?.message || currentRequest.value?.payload?.payload || ''
-);
+// Preview ONLY the bytes that get signed (payload.payload). Never prefer a
+// separate display field: anything else could show one text while the
+// signer signs different bytes.
+const signDataRawPayload = computed(() => {
+  const signed = currentRequest.value?.payload?.payload;
+  return typeof signed === 'string' ? signed : '';
+});
 // payload.address is signed against (see signDataNormal/signDataPrf/signDataHw
 // below) but was never shown — the user could not see which key attests.
 const signDataAddress = computed(() => currentRequest.value?.payload?.address || '');
@@ -1609,57 +1593,15 @@ const midnightSignDataMessage = computed(() => {
 
 // ── Sign Tx — decoded summary so users see what they're signing ──
 
-interface SignTxAssetInfo {
-  unit: string;
-  label: string;             // human-readable name (ticker, asset_name, or "Unknown token")
-  quantity: string;          // raw quantity as string (always integer)
-  formattedQuantity: string; // decimal-adjusted quantity for display (e.g. "94.07059" for 94070590 USDM @ 6 decimals)
-}
-
-type OutputKind = 'change' | 'external';
-
-interface SignTxOutputSummary {
-  address: string;
-  truncatedAddress: string;
-  ada: string;
-  kind: OutputKind;
-  isOwn: boolean; // convenience: kind !== 'external'
-  assets: SignTxAssetInfo[];
-  // Compact pill label: empty if no assets, single token name if one, "+N" if many
-  assetPillLabel: string;
-}
-
-interface SignTxCertificateRow {
-  label: string;       // human-readable certificate type (mirrors TransactionDetails.vue's getCertificateType)
-  poolId?: string;      // truncated bech32 pool id, when present (delegation/registration/retirement)
-  depositAda?: string;  // formatted ADA deposit, when present (registration certs)
-  drepSentinel?: string; // 'alwaysAbstain' | 'alwaysNoConfidence' — only for sentinel DRep targets
-}
-
-interface SignTxMintRow {
-  label: string;            // resolved asset name or 'Unknown token'
-  formattedQuantity: string; // absolute value, decimal-adjusted
-  isBurn: boolean;
-}
-
+// Card-shaped view of the shared approval summary (TransactionDetailsCard props).
 interface SignTxSummary {
-  outputs: SignTxOutputSummary[];
-  /** Null when no withdrawals; the shared card uses this to render the row. */
+  outputs: TxDetailsOutput[];
+  /** The wallet's own withdrawals; foreign ones are listed in TxApprovalIntents. */
   withdrawal: TxDetailsWithdrawal | null;
   totals: TxDetailsTotals;
   isInternal: boolean;
-  // Non-output intents — certs/mint/collateral/metadata. All empty/falsy for
-  // an ordinary payment. When any of these is present, `isInternal` is forced
-  // false even if every output happens to return to the wallet: a tx that
-  // delegates stake while returning all ADA to you is NOT "just moving money
-  // between your own addresses".
-  certificates: SignTxCertificateRow[];
-  mints: SignTxMintRow[];
-  collateralCount: number;
-  hasMetadata: boolean;
   // TTL — only the absolute slot is computed here. The live "in Xh Ym Zs" string
-  // is derived in `ttlDisplay` so the expensive CBOR parse below doesn't re-run
-  // every tick of the 1-second timer.
+  // is derived in `ttlDisplay` so the CBOR parse doesn't re-run every tick.
   ttlSlot: number | null;
 }
 
@@ -1689,34 +1631,6 @@ watch(
 );
 
 onBeforeUnmount(stopTtlTicker);
-
-// Two separate sets so we can tell residual change apart from explicit self-outputs.
-const paymentAddresses = computed<Set<string>>(() => {
-  const set = new Set<string>();
-  const k = WalletStore.state.keys;
-  if (k?.payment) for (const p of k.payment) set.add(p.address);
-  return set;
-});
-
-const changeAddresses = computed<Set<string>>(() => {
-  const set = new Set<string>();
-  const k = WalletStore.state.keys;
-  if (k?.change) for (const p of k.change) set.add(p.address);
-  return set;
-});
-
-function classifyAddress(addr: string): OutputKind {
-  if (changeAddresses.value.has(addr)) return 'change';
-  if (paymentAddresses.value.has(addr)) return 'payment';
-  return 'external';
-}
-
-function formatLovelace(lovelace: bigint): string {
-  // 6 decimals, trim trailing zeros but keep at least 2
-  const ada = Number(lovelace) / 1_000_000;
-  const fixed = ada.toFixed(6);
-  return fixed.replace(/(\.\d*[1-9])0+$/, '$1').replace(/\.0+$/, '.00');
-}
 
 /**
  * Format a positive number of seconds as a compact "Xh Ym Zs" / "Xm Ys" /
@@ -1849,38 +1763,6 @@ const assetInfoLookup = computed<Map<string, KnownAssetInfo>>(() => {
 });
 
 /**
- * Format a raw integer token quantity with decimals applied. Uses BigInt
- * arithmetic to avoid precision loss for large values. Trims trailing zeros
- * but keeps at least one digit after the decimal point for non-whole values.
- *
- * Examples:
- *   formatTokenQuantity("94070590", 6)   → "94.07059"
- *   formatTokenQuantity("1000000000", 6) → "1000"
- *   formatTokenQuantity("1", 0)          → "1"
- *   formatTokenQuantity("12345", 2)      → "123.45"
- */
-function formatTokenQuantity(rawQuantity: string, decimals: number): string {
-  if (!rawQuantity) return '0';
-  if (decimals <= 0) return rawQuantity;
-  try {
-    const raw = BigInt(rawQuantity);
-    const negative = raw < 0n;
-    const absRaw = negative ? -raw : raw;
-    const divisor = 10n ** BigInt(decimals);
-    const intPart = absRaw / divisor;
-    const fracPart = absRaw % divisor;
-    const intStr = intPart.toString();
-    if (fracPart === 0n) return negative ? `-${intStr}` : intStr;
-    // Pad fractional part to full decimal width, then trim trailing zeros
-    const fracStr = fracPart.toString().padStart(decimals, '0').replace(/0+$/, '');
-    const result = `${intStr}.${fracStr}`;
-    return negative ? `-${result}` : result;
-  } catch {
-    return rawQuantity;
-  }
-}
-
-/**
  * Resolve a Cardano asset unit (policy + assetName hex) to both a human-readable
  * label and its decimals. Resolution order:
  *   1. Wallet token/NFT lookup (with hex-name filtering)
@@ -1925,30 +1807,13 @@ function resolveAssetInfo(unit: string): KnownAssetInfo {
  * transaction detail view; duplicated here rather than imported since it's
  * a private inline function there, not exported.
  */
-function getCertificateLabel(certificateType: Cardano.CertificateType): string {
-  switch (certificateType) {
-    case Cardano.CertificateType.StakeRegistration: return 'Stake Registration';
-    case Cardano.CertificateType.StakeDeregistration: return 'Stake De-Registration';
-    case Cardano.CertificateType.PoolRegistration: return 'Pool Registration';
-    case Cardano.CertificateType.PoolRetirement: return 'Pool Retirement';
-    case Cardano.CertificateType.StakeDelegation: return 'Stake Delegation';
-    case Cardano.CertificateType.MIR: return 'MIR';
-    case Cardano.CertificateType.GenesisKeyDelegation: return 'Genesis Key Delegation';
-    case Cardano.CertificateType.Registration: return 'Registration';
-    case Cardano.CertificateType.Unregistration: return 'Unregistration';
-    case Cardano.CertificateType.VoteDelegation: return 'Vote Delegation';
-    case Cardano.CertificateType.StakeVoteDelegation: return 'Stake Vote Delegation';
-    case Cardano.CertificateType.StakeRegistrationDelegation: return 'Stake Registration Delegation';
-    case Cardano.CertificateType.VoteRegistrationDelegation: return 'Vote Registration Delegation';
-    case Cardano.CertificateType.StakeVoteRegistrationDelegation: return 'Stake Vote Registration Delegation';
-    case Cardano.CertificateType.AuthorizeCommitteeHot: return 'Authorize Committee Hot';
-    case Cardano.CertificateType.ResignCommitteeCold: return 'Resign Committee Cold';
-    case Cardano.CertificateType.RegisterDelegateRepresentative: return 'Register Delegate Representative';
-    case Cardano.CertificateType.UnregisterDelegateRepresentative: return 'Unregister Delegate Representative';
-    case Cardano.CertificateType.UpdateDelegateRepresentative: return 'Update Delegate Representative';
-    default: return 'Unknown certificate';
-  }
-}
+
+// Top-level site embedding the requesting frame, when that differs from the
+// requesting origin (set by the background from the real MessageSender).
+const embeddedInSite = computed(() => {
+  const v = (currentRequest.value?.payload as { embeddedIn?: unknown } | undefined)?.embeddedIn;
+  return typeof v === 'string' && v ? v : '';
+});
 
 // Raw CBOR hex of the current sign request — used by the parser below.
 const txCborForSummary = computed<string | null>(() => {
@@ -1956,176 +1821,29 @@ const txCborForSummary = computed<string | null>(() => {
   return (currentRequest.value.payload?.tx as string | undefined) || null;
 });
 
-const signTxSummary = computed<SignTxSummary | null>(() => {
+// The full approval summary, from the same CBOR the signer hashes. Shared
+// builder (txApprovalSummary.ts) so the popup fallback shows the same effects.
+const approvalSummary = computed<TxApprovalSummary | null>(() => {
   const txCbor = txCborForSummary.value;
   if (!txCbor) return null;
-
   try {
     const tx: Cardano.Tx = deserializeCardanoJsSdkTx(txCbor);
-    const body = tx?.body;
-    if (!body) return null;
-
-    const rawOutputs = (body.outputs || []) as Cardano.TxOut[];
-    const outputs: SignTxOutputSummary[] = rawOutputs.map((o) => {
-      const addr = String(o.address);
-      const kind = classifyAddress(addr);
-
-      const assets: SignTxAssetInfo[] = [];
-      const pushAsset = (unit: string, quantity: unknown) => {
-        const info = resolveAssetInfo(unit);
-        const rawQty = String(quantity);
-        assets.push({
-          unit,
-          label: info.name,
-          quantity: rawQty,
-          formattedQuantity: formatTokenQuantity(rawQty, info.decimals),
-        });
-      };
-
-      const rawAssets = o.value?.assets;
-      if (rawAssets) {
-        if (rawAssets instanceof Map) {
-          rawAssets.forEach((quantity, unit) => pushAsset(String(unit), quantity));
-        } else if (typeof rawAssets === 'object') {
-          for (const [unit, quantity] of Object.entries(rawAssets as Record<string, unknown>)) {
-            pushAsset(unit, quantity);
-          }
-        }
-      }
-
-      // Always +N regardless of count — names are surfaced via the tooltip,
-      // never in the compact pill. This keeps row width predictable.
-      const assetPillLabel = assets.length > 0 ? `+${assets.length}` : '';
-
-      return {
-        address: addr,
-        truncatedAddress: filters.truncate(addr),
-        ada: formatLovelace(BigInt(o.value?.coins ?? 0n)),
-        kind,
-        isOwn: kind !== 'external',
-        assets,
-        assetPillLabel,
-      };
-    });
-
-    const feeLovelace = BigInt(body.fee ?? 0n);
-    const feeAda = formatLovelace(feeLovelace);
-
-    // Stake reward withdrawals attached to the tx — come in as fresh input
-    // coin from the stake account, so they offset the "You pay" total.
-    const withdrawalsRaw = (body as { withdrawals?: Array<{ quantity?: unknown; stakeAddress?: unknown }> }).withdrawals;
-    const withdrawalsLovelace = Array.isArray(withdrawalsRaw)
-      ? withdrawalsRaw.reduce<bigint>((acc, w) => acc + BigInt(String(w?.quantity ?? '0')), 0n)
-      : 0n;
-    const withdrawal: TxDetailsWithdrawal | null = withdrawalsLovelace > 0n
-      ? {
-          truncatedStakeAddress: filters.truncate(String(withdrawalsRaw?.[0]?.stakeAddress ?? '')),
-          ada: formatLovelace(withdrawalsLovelace),
-        }
+    if (!tx?.body) return null;
+    const wallet = loggedWallet.value;
+    const walletNetworkId = wallet
+      ? (wallet.network === Network.MAINNET ? Cardano.NetworkId.Mainnet : Cardano.NetworkId.Testnet)
       : null;
-
-    // ── Certificates: delegation/registration/DRep/vote actions. These carry
-    // NO output of their own — a tx that delegates stake while returning
-    // every ADA to the wallet must not read as "just an internal transfer"
-    // (see isInternal below). Mirrors TransactionDetails.vue's proven
-    // Cardano.CertificateType mapping via getCertificateLabel above.
-    const rawCertificates = (body.certificates || []) as Cardano.Certificate[];
-    const certificates: SignTxCertificateRow[] = rawCertificates.map((cert) => {
-      const row: SignTxCertificateRow = {
-        label: getCertificateLabel(cert.__typename as Cardano.CertificateType),
-      };
-      if ('poolId' in cert && cert.poolId) {
-        row.poolId = filters.truncate(String(cert.poolId));
-      }
-      if ('deposit' in cert && cert.deposit != null) {
-        row.depositAda = formatLovelace(BigInt(cert.deposit as unknown as bigint));
-      }
-      if ('dRep' in cert && cert.dRep && typeof cert.dRep === 'object' && '__typename' in cert.dRep) {
-        const drepTypename = (cert.dRep as { __typename: string }).__typename;
-        if (drepTypename === 'AlwaysAbstain') row.drepSentinel = 'alwaysAbstain';
-        else if (drepTypename === 'AlwaysNoConfidence') row.drepSentinel = 'alwaysNoConfidence';
-      }
-      return row;
-    });
-
-    // ── Mint/burn: body.mint is a Cardano.TokenMap (Map<AssetId, bigint>);
-    // negative quantity = burn, positive = mint (standard Cardano semantics).
-    // Reuses the same asset-name resolution as output token pills.
-    const mints: SignTxMintRow[] = [];
-    const rawMint = body.mint as Map<string, bigint> | Record<string, unknown> | undefined;
-    if (rawMint) {
-      const mintEntries: [string, unknown][] = rawMint instanceof Map
-        ? Array.from(rawMint.entries())
-        : Object.entries(rawMint);
-      for (const [unit, quantity] of mintEntries) {
-        const qty = BigInt(String(quantity));
-        const info = resolveAssetInfo(unit);
-        const absQty = qty < 0n ? -qty : qty;
-        mints.push({
-          label: info.name,
-          formattedQuantity: formatTokenQuantity(absQty.toString(), info.decimals),
-          isBurn: qty < 0n,
-        });
-      }
-    }
-
-    // ── Collateral: count only. Resolving the reserved ADA amount would need
-    // a wallet-UTxO lookup per txId#index; showing a wrong amount is worse
-    // than showing none, so this stays a plain count until that's verified.
-    const collateralCount = Array.isArray(body.collaterals) ? body.collaterals.length : 0;
-
-    // ── Metadata presence flag only — content is not decoded/shown here.
-    const hasMetadata = !!(body as { auxiliaryDataHash?: unknown }).auxiliaryDataHash;
-
-    // Sum lovelace going to external addresses (excludes change AND self-payments)
-    const totalSendingLovelace = outputs.reduce<bigint>((sum, o) => {
-      if (o.isOwn) return sum;
-      return sum + BigInt(Math.round(parseFloat(o.ada) * 1_000_000));
-    }, 0n);
-    const totalSendingAda = formatLovelace(totalSendingLovelace);
-
-    // What the user is actually paying out of pocket: ADA leaving the wallet +
-    // network fee, minus any rewards pulled in via withdrawals.
-    const youPayLovelace = feeLovelace + totalSendingLovelace - withdrawalsLovelace;
-    const youPayAda = formatLovelace(youPayLovelace < 0n ? 0n : youPayLovelace);
-
-    // "Internal transfer" = every output address belongs to the wallet AND
-    // there is no certificate/mint/collateral action attached. A tx that
-    // delegates stake or mints an asset is never "just moving money between
-    // your own addresses", even if every output happens to return to you.
-    const isInternal = outputs.length > 0 && outputs.every(o => o.isOwn)
-      && certificates.length === 0 && mints.length === 0 && collateralCount === 0;
-
-    // TTL: invalidHereafter is the absolute slot at which this tx becomes
-    // invalid. We only capture the absolute slot here — the live "in Xh Ym Zs"
-    // string is computed in `ttlDisplay` so the timer can tick once per second
-    // without re-running this CBOR parse.
-    const invalidHereafter = body.validityInterval?.invalidHereafter;
-    const ttlSlot = invalidHereafter !== undefined && invalidHereafter !== null
-      ? Number(invalidHereafter)
-      : null;
-
-    return {
-      outputs,
-      withdrawal,
-      totals: {
-        totalSendingAda,
-        feeAda,
-        withdrawalAda: withdrawalsLovelace > 0n ? formatLovelace(withdrawalsLovelace) : undefined,
-        youPayAda,
-        isInternal,
-      },
-      isInternal,
-      certificates,
-      mints,
-      collateralCount,
-      hasMetadata,
-      ttlSlot,
-    };
+    return buildTxApprovalSummary(tx, approvalContextFromKeys(WalletStore.state.keys, walletNetworkId, resolveAssetInfo));
   } catch (e) {
     console.error('[DAppOverlay] Failed to decode signTx CBOR:', e);
     return null;
   }
+});
+
+const signTxSummary = computed<SignTxSummary | null>(() => {
+  const s = approvalSummary.value;
+  if (!s) return null;
+  return { ...toTransactionDetailsCardProps(s, filters.truncate), isInternal: s.isInternal, ttlSlot: s.ttlSlot };
 });
 
 // Phase 1b: on CBOR decode failure, signTxSummary is null and the details
@@ -2165,26 +1883,13 @@ const ttlDisplay = computed<{ relative: string | null; expired: boolean }>(() =>
   };
 });
 
-// Network mismatch: does any EXTERNAL output address belong to a different
-// network (mainnet vs testnet) than the active wallet? Cardano addresses only
-// encode mainnet-vs-testnet in their header byte, not which specific testnet
-// (preprod/preview/sanchonet all read as Testnet) — so this catches "wallet
-// is on mainnet but this address is testnet" and its inverse, not a
-// preprod-vs-preview mixup. Own/change outputs are skipped (trivially
-// correct — they came from the wallet's own key set).
+// Network mismatch (blocking, acknowledged in TxApprovalIntents): the body
+// network id, or ANY output (own included) or the collateral return, is on a
+// different network than the active wallet. Addresses only encode mainnet vs
+// testnet, so a preprod-vs-preview mixup is caught only via the body id.
 const signTxNetworkMismatch = computed(() => {
-  const summary = signTxSummary.value;
-  const wallet = loggedWallet.value;
-  if (!summary || !wallet) return false;
-  const expectedNetworkId = wallet.network === Network.MAINNET
-    ? Cardano.NetworkId.Mainnet
-    : Cardano.NetworkId.Testnet;
-  return summary.outputs.some((o) => {
-    if (o.isOwn) return false;
-    const parsed = Cardano.Address.fromString(o.address);
-    if (!parsed) return false; // unparseable — don't false-flag on a shape we don't recognize
-    return parsed.getNetworkId() !== expectedNetworkId;
-  });
+  const s = approvalSummary.value;
+  return !!s && (s.bodyNetworkMismatch || s.outputNetworkMismatch);
 });
 const networkMismatchAck = ref(false);
 
@@ -2269,7 +1974,7 @@ watch(
 
     // Use the first non-own recipient if any (for external txs), otherwise own address
     // (for internal/self transfers — Cardano Shield can still scan the URL/CBOR)
-    const summary = signTxSummary.value;
+    const summary = approvalSummary.value;
     const toAddress = summary?.outputs.find(o => !o.isOwn)?.address
       || WalletStore.state.loggedWallet?.baseAddress
       || '';
@@ -3120,6 +2825,7 @@ function rejectMidnightMakeTransfer() {
 
 async function buildMidnightTransferTx(
   credentials: { password?: string; prfSecret?: Uint8Array },
+  approvedProver: 'local' | 'cloud' | 'zkpaas',
 ): Promise<{ tx: string }> {
   const wallet = loggedWallet.value;
   if (!wallet) throw new Error('No wallet logged in');
@@ -3131,15 +2837,44 @@ async function buildMidnightTransferTx(
     token: outputToken(o),
   }));
   const { buildAndSignUnshieldedTransfer } = await import('@/services/midnight-tx.service');
+  // The service re-checks that this is still the prover in use, and that it
+  // has consent, after authentication: the setting can change while a
+  // PassKey prompt is open (PRIV-01 review).
   return buildAndSignUnshieldedTransfer(
     wallet.network,
     { fromAddress: wallet.baseAddress, outputs, ttlMs: Date.now() + 5 * 60_000 },
     credentials,
+    approvedProver,
   );
+}
+
+// The transfer is proved by the user's chosen prover (buildAndSignUnshieldedTransfer).
+// A remote prover receives the DUST-fee proof inputs, so it needs the same
+// consent the wallet's own sends require. The consent dialog records it
+// asynchronously, so the user approves the transfer again afterwards (a PassKey
+// popup must open inside that click).
+const transferConsentOpen = ref(false);
+const transferProver = computed<'local' | 'cloud' | 'zkpaas'>(() => {
+  const mode = midnightStore.proofServer.mode;
+  return mode === 'local' ? 'local' : mode === 'zkpaas' ? 'zkpaas' : 'cloud';
+});
+const transferProverLabel = computed(() => t(
+  transferProver.value === 'local' ? 'midnight.proofServer.localLabel'
+    : transferProver.value === 'zkpaas' ? 'midnight.proofServer.zkpaasLabel' : 'midnight.proofServer.remoteLabel',
+));
+/** True (and the consent dialog opens) when the chosen remote prover has no recorded consent yet. */
+function transferNeedsProvingConsent(): boolean {
+  const prover = transferProver.value;
+  if (prover === 'local' || hasMidnightProvingConsent(midnightStore.shieldedProvingConsent, prover)) return false;
+  transferConsentOpen.value = true;
+  return true;
 }
 
 async function signMidnightTransferNormal() {
   if (!currentRequest.value || !spendingPassword.value) return;
+  if (transferNeedsProvingConsent()) return;
+  // The prover the user is approving this transfer for, fixed at the click.
+  const approvedProver = transferProver.value;
   // Capture the request identity BEFORE the multi-second build round-trip. If
   // the request is settled meanwhile (Reject clicked, wallet switched → queue
   // advances), currentRequest becomes a DIFFERENT request — never deliver this
@@ -3149,12 +2884,14 @@ async function signMidnightTransferNormal() {
   signError.value = '';
 
   try {
-    const { tx } = await buildMidnightTransferTx({ password: spendingPassword.value });
+    const { tx } = await buildMidnightTransferTx({ password: spendingPassword.value }, approvedProver);
     if (currentRequest.value?.requestId !== reqId) return; // request superseded — drop
     approve({ tx });
     spendingPassword.value = '';
   } catch (e) {
     console.error('[DApp] Midnight makeTransfer error:', e);
+    // A remote prover without consent (setting changed during authentication): ask for it.
+    if ((e as Error)?.name === 'ProvingConsentRequiredError') transferConsentOpen.value = true;
     signError.value = (e as Error)?.message || 'Transfer failed';
   } finally {
     signing.value = false;
@@ -3163,6 +2900,9 @@ async function signMidnightTransferNormal() {
 
 async function signMidnightTransferPrf() {
   if (!currentRequest.value) return;
+  if (transferNeedsProvingConsent()) return;
+  // The prover the user is approving this transfer for, fixed at the click.
+  const approvedProver = transferProver.value;
   // Capture identity before the PRF popup wait + build (up to ~60s) — see
   // signMidnightTransferNormal; don't deliver this tx to a superseded request.
   const reqId = currentRequest.value.requestId;
@@ -3193,11 +2933,13 @@ async function signMidnightTransferPrf() {
       }, 60000);
     });
 
-    const { tx } = await buildMidnightTransferTx({ prfSecret: prfBytes });
+    const { tx } = await buildMidnightTransferTx({ prfSecret: prfBytes }, approvedProver);
     if (currentRequest.value?.requestId !== reqId) return; // request superseded — drop
     approve({ tx });
   } catch (e) {
     console.error('[DApp] Midnight PRF makeTransfer error:', e);
+    // A remote prover without consent (setting changed during authentication): ask for it.
+    if ((e as Error)?.name === 'ProvingConsentRequiredError') transferConsentOpen.value = true;
     signError.value = (e as Error)?.message || 'PassKey signing failed';
   } finally {
     signing.value = false;
@@ -3477,7 +3219,7 @@ function approveWcSession() {
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .dapp-overlay {
   display: flex;
   flex-direction: column;
@@ -3506,10 +3248,27 @@ function approveWcSession() {
 }
 
 .queue-strip-label {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.queue-strip-method,
+.queue-strip-domain {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+/* The domain gives way first; the method keeps its width unless the row is
+   narrower than the method alone. */
+.queue-strip-method {
+  flex: 0 1 auto;
+}
+
+.queue-strip-domain {
+  flex: 1 1 0;
 }
 
 /* ── Enable / Connect ── */
@@ -3517,6 +3276,12 @@ function approveWcSession() {
 .wallet-identity-strip {
   display: flex;
   align-items: center;
+}
+
+.embedded-site-strip {
+  display: flex;
+  align-items: flex-start;
+  overflow-wrap: anywhere;
 }
 
 .network-badge {
@@ -3585,8 +3350,8 @@ function approveWcSession() {
 }
 
 .permissions-section {
+  @include g-glass-tier(false);
   padding: var(--g-s-3);
-  background: var(--g-raised);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-control);
 }
@@ -3915,5 +3680,20 @@ function approveWcSession() {
 .action-buttons .v-btn {
   width: 100%;
   min-width: 0;
+}
+/* Longer labels (Spanish "Desbloquear y compartir") wrap inside the button
+   instead of running into the one next to it. Doubled class to beat Vuetify's
+   (0,3,0) size rule; ::v-deep because .v-btn__content is Vuetify's own markup
+   (same recipe as MyGovernance's change row). */
+.action-buttons .v-btn.v-btn {
+  height: auto;
+  min-height: 36px;
+  white-space: normal;
+}
+.action-buttons ::v-deep .v-btn__content {
+  min-width: 0;
+  white-space: normal;
+  line-height: 1.25;
+  text-align: center;
 }
 </style>

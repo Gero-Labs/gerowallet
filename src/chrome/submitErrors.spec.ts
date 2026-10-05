@@ -48,7 +48,7 @@ describe('describeSubmitFailure', () => {
   // gateway failure. Telling the user it was not sent invites a second send of a
   // payment that is already on chain (PR #1129 review, reproduced with ECONNRESET).
   it('never claims the transaction was not sent', () => {
-    for (const status of [undefined, 502, 503, 504]) {
+    for (const status of [undefined, 500, 502, 503, 504, 599]) {
       const message = describeSubmitFailure(status, '').toLowerCase();
       expect(message).not.toContain('was not sent');
       expect(message).toContain('may still have reached the network');
@@ -66,11 +66,27 @@ describe('describeSubmitFailure', () => {
 });
 
 describe('dappSubmitError', () => {
-  it('no longer blames the dApp transaction for a gateway failure', () => {
-    const error = dappSubmitError(502, GATEWAY_BODY) as { code: number; info: string; message: string };
-    expect(error.code).toBe(TxSendError.Failure.code);
+  it.each([500, 502, 503, 504, 599])('preserves the internal-error code for HTTP %i with an unknown outcome', (status) => {
+    const error = dappSubmitError(status, GATEWAY_BODY) as { code: number; info: string; message: string };
+    expect(error.code).toBe(APIError.InternalError.code);
     expect(error.info).toContain(TX_SUBMIT_UNCONFIRMED_MESSAGE);
+    expect(error.info).toContain('check your transaction history');
     expect(error.message).toBe(error.info);
+  });
+
+  it('reports a missing response without blaming the request', () => {
+    expect(dappSubmitError(undefined, undefined)).toMatchObject({
+      code: TxSendError.Failure.code,
+      info: expect.stringContaining(TX_SUBMIT_UNCONFIRMED_MESSAGE),
+    });
+  });
+
+  it.each([401, 403, 404, 600, 0])('preserves the invalid-request code for HTTP %i and includes the body', (status) => {
+    expect(dappSubmitError(status, 'Request rejected')).toMatchObject({
+      code: APIError.InvalidRequest.code,
+      info: 'Request rejected',
+      message: 'Request rejected',
+    });
   });
 
   // CIP-30 defines TxSendError as {code, info}, so a conforming dApp renders `info`.
@@ -88,8 +104,7 @@ describe('dappSubmitError', () => {
     expect(error.info).toBe(REJECTION_BODY);
   });
 
-  it('keeps the established mapping for 500, 429 and 425', () => {
-    expect(dappSubmitError(500, '')).toBe(APIError.InternalError);
+  it('keeps the established mapping for 429 and 425', () => {
     expect(dappSubmitError(429, '')).toBe(TxSendError.Refused);
     expect(dappSubmitError(425, '')).toBe(ERROR.fullMempool);
   });

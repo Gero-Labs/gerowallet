@@ -1,5 +1,6 @@
 import * as OTPAuth from 'otpauth';
-import { decrypt, encrypt } from '@/shared/utils/crypto';
+import { SecretPurpose, decrypt } from '@/shared/utils/crypto';
+import { sealTextSecret } from '@/shared/utils/secretWriters';
 import cryptoRandomString from 'crypto-random-string';
 import { Buffer } from 'buffer';
 import { debugLog } from '@/utils/debug';
@@ -230,11 +231,11 @@ export function generateBackupCodes(count: number = BACKUP_CODES_COUNT): string[
  * @param password - Spending password
  * @returns Encrypted data
  */
-export function encryptSecurityData(data: string | string[], password: string): string | string[] {
+export async function encryptSecurityData(data: string | string[], password: string): Promise<string | string[]> {
   if (Array.isArray(data)) {
-    return data.map(item => encrypt(item, password));
+    return Promise.all(data.map(item => sealTextSecret(item, password, SecretPurpose.SecurityData)));
   }
-  return encrypt(data, password);
+  return sealTextSecret(data, password, SecretPurpose.SecurityData);
 }
 
 /**
@@ -245,9 +246,9 @@ export function encryptSecurityData(data: string | string[], password: string): 
  */
 export function decryptSecurityData(encryptedData: string | string[], password: string): string | string[] {
   if (Array.isArray(encryptedData)) {
-    return encryptedData.map(item => decrypt(item, password));
+    return encryptedData.map(item => decrypt(item, password, SecretPurpose.SecurityData));
   }
-  return decrypt(encryptedData, password);
+  return decrypt(encryptedData, password, SecretPurpose.SecurityData);
 }
 
 /**
@@ -368,9 +369,7 @@ export async function registerWebAuthnCredential(
       hasExtensions: !!extensionResults,
       hasPrf: !!prfResults,
       prfEnabled: prfResults?.enabled,
-      hasProbeResult: !!prfResults?.results?.first,
-      fullPrfResults: prfResults,
-      allExtensions: extensionResults
+      hasProbeResult: !!prfResults?.results?.first
     });
 
     debugLog('[WebAuthn] Credential registered with PRF:', prfEnabled ? '✅ Enabled' : '❌ Not supported');

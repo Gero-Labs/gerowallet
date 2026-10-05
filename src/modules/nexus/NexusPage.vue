@@ -261,7 +261,7 @@ const whys = ['failover', 'oneKey', 'flatPricing', 'openapi', 'sdks'];
 }
 
 .nx-card {
-  background: var(--g-surface);
+  @include g-glass-panel(false);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-card);
   padding: 16px 15px;

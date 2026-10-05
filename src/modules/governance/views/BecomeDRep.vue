@@ -1143,7 +1143,7 @@ async function loadRegistration(): Promise<void> {
 onMounted(loadRegistration);
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .become-drep {
   display: flex;
   flex-direction: column;
@@ -1295,11 +1295,11 @@ onMounted(loadRegistration);
 }
 
 .become-drep__fact {
+  @include g-glass-tier(false);
   display: flex;
   flex-direction: column;
   gap: var(--g-s-1);
   padding: var(--g-s-4);
-  background: var(--g-raised);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-control);
 }
@@ -1524,11 +1524,11 @@ onMounted(loadRegistration);
 /* Preview ----------------------------------------------------------------- */
 
 .become-drep__preview {
+  @include g-glass-tier(false);
   display: flex;
   flex-direction: column;
   gap: var(--g-s-2);
   padding: var(--g-s-4);
-  background: var(--g-raised);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-control);
 }

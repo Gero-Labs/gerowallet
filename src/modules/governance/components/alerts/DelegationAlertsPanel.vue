@@ -346,7 +346,7 @@ onMounted(() => {
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .delegation-alerts {
   display: flex;
   flex-direction: column;
@@ -370,12 +370,12 @@ onMounted(() => {
    there. A small column card is the shape the column actually has, and it is
    width-independent: the same card works at 360px in the popup. */
 .delegation-alerts__strip {
+  @include g-glass-tier(false);
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: var(--g-s-2);
   padding: var(--g-s-4);
-  background: var(--g-surface);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-card);
 }
@@ -419,11 +419,11 @@ onMounted(() => {
 
 /* Elevation is surface plus a hairline; the severity only tints the hairline. */
 .delegation-alerts__card {
+  @include g-glass-panel(false);
   display: flex;
   gap: var(--g-s-3);
   align-items: flex-start;
   padding: var(--g-s-4);
-  background: var(--g-raised);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-control);
 }

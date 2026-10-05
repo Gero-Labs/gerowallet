@@ -9,6 +9,7 @@ vi.mock('@/stores/priceStore', () => ({ default: { initialize: vi.fn(), disconne
 import { WalletBg } from './walletBg';
 import WalletStore, { walletStore } from '@/stores/walletStore';
 import { Blockchain, type Wallet } from '@/models/types';
+import { TX_SUBMIT_UNCONFIRMED_MESSAGE } from '@/chrome/config';
 
 vi.stubGlobal('chrome', {
   alarms: {
@@ -69,5 +70,38 @@ describe('submitted transaction visibility', () => {
     await bg.setAccountTransactions([{ ...stored, pending: false, block_height: 100, tx_timestamp: stored.tx_timestamp + 20 }]);
     await vi.waitFor(() => expect(walletStore.transactions[0].pending).toBe(false));
     expect(walletStore.transactions).toHaveLength(1);
+  });
+});
+
+describe('failed submission history', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it.each([
+    { error: { response: { status: 400, data: 'Ogmios rejected tx: Reward balance mismatch.' } }, message: 'Reward balance mismatch.' },
+    { error: { response: { status: 500, data: 'Internal server error' } }, message: TX_SUBMIT_UNCONFIRMED_MESSAGE },
+    { error: { response: { status: 502, data: 'Bad Gateway' } }, message: TX_SUBMIT_UNCONFIRMED_MESSAGE },
+    { error: new Error('Connection reset'), message: TX_SUBMIT_UNCONFIRMED_MESSAGE },
+  ])('keeps the failure reason without writing a pending transaction: $message', async ({ error, message }) => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const receiver = {
+      api: { submitTx: vi.fn().mockRejectedValue(error) },
+      setAccountTransactions: vi.fn(),
+    };
+
+    await expect(WalletBg.prototype.submitTx.call(receiver as unknown as WalletBg, '00', []))
+      .rejects.toThrow(message);
+    expect(receiver.setAccountTransactions).not.toHaveBeenCalled();
+  });
+
+  it.each(['maintenance in progress', ''])('preserves an unexpected success body without writing a pending transaction: %s', async (body) => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const receiver = {
+      api: { submitTx: vi.fn().mockResolvedValue(body) },
+      setAccountTransactions: vi.fn(),
+    };
+
+    await expect(WalletBg.prototype.submitTx.call(receiver as unknown as WalletBg, '00', []))
+      .rejects.toThrow(body || 'unexpected response');
+    expect(receiver.setAccountTransactions).not.toHaveBeenCalled();
   });
 });

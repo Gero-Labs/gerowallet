@@ -10,11 +10,15 @@
     overlay-opacity="0.6"
   >
     <v-card class="pa-5 liquid-glass-dialog" :class="{ 'liquid-glass-dialog--solid': solid }" :min-height="minHeight" :max-height="height" :disabled="loading">
-      <div class="rings-container">
-        <div class="rings"></div>
-        <div class="rings"></div>
-        <div class="rings"></div>
-        <div class="rings"></div>
+      <!-- Decoration, clipped to the card: the rings are a fixed 180px, taller than a
+           short dialog, and unclipped they overflowed it and gave it a scrollbar. -->
+      <div class="rings-clip" aria-hidden="true">
+        <div class="rings-container">
+          <div class="rings"></div>
+          <div class="rings"></div>
+          <div class="rings"></div>
+          <div class="rings"></div>
+        </div>
       </div>
       <v-card-title class="pa-0 pb-0">
         <v-list-item class="px-0" :two-line="!!subtitle" style="z-index: 1;">
@@ -31,6 +35,10 @@
           <v-list-item-icon class="ml-5 mr-3 my-4" v-if="icon">
             <v-icon style="font-size: 56px">{{icon}}</v-icon>
           </v-list-item-icon>
+          <!-- Header illustration (e.g. an IsoScene) in place of img/icon. -->
+          <div v-if="$slots.art" class="base-dialog-art ml-5 mr-3 my-3" aria-hidden="true">
+            <slot name="art"></slot>
+          </div>
           <v-list-item-content>
             <v-list-item-title class="t-heading" style="max-width: 90%; display: -webkit-box; -webkit-line-clamp: 1;-webkit-box-orient: vertical;overflow: hidden;text-overflow: ellipsis;white-space: normal;">
               {{ title }}
@@ -114,8 +122,9 @@ const props = defineProps({
   subtitle2: {
     type: String
   },
+  /** The card's max-height: pixels, or a CSS length such as '90vh'. */
   height: {
-    type: Number,
+    type: [Number, String],
     default: 800
   },
   minHeight: {
@@ -179,6 +188,11 @@ const isDialogOpen = computed({
   z-index: 1;
 }
 
+.base-dialog-art {
+  flex: none;
+  width: 96px;
+}
+
 .base-dialog-img-mask {
   display: block;
   width: 100%;
@@ -191,6 +205,14 @@ const isDialogOpen = computed({
   position: relative;
   z-index: 1;
   height: 100%;
+}
+
+.rings-clip {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
 }
 
 .rings-container {

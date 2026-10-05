@@ -12,7 +12,7 @@
         >
           <template v-slot:[`item.domain`]="{ item }">
             <v-avatar size="16">
-              <v-img :src="`https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${item.domain}&size=16`" contain></v-img>
+              <v-img :src="faviconFor(item.domain)" contain></v-img>
             </v-avatar>&nbsp;
             {{item.domain}}
           </template>
@@ -191,6 +191,15 @@ import assets from '@/utils/assets';
 const { t } = useTranslation();
 
 const walletConnectLogo = assets.walletConnectLogo;
+
+// Favicons come from the browser's own cache (manifest `favicon` permission),
+// so the list of connected dApps is never sent to a third-party favicon service.
+// Entries are full origins; legacy bare-hostname entries are read as https.
+function faviconFor(domain: string): string {
+  const pageUrl = domain.includes('://') ? domain : `https://${domain}`;
+  if (typeof chrome === 'undefined' || !chrome.runtime?.id) return '';
+  return chrome.runtime.getURL(`/_favicon/?pageUrl=${encodeURIComponent(pageUrl)}&size=16`);
+}
 
 interface ConnectedDapp {
   id: string;

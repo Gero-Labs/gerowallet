@@ -13,11 +13,13 @@
  *     marker after the gap.
  *
  * Reference metadata is authored by whoever submitted the action, so the uri is
- * attacker-controlled: only http(s) survives, and the brand icon is matched on
- * the parsed hostname rather than on a substring.
+ * attacker-controlled: only http(s) survives, plus an `ipfs://` whose CID
+ * parses, which is opened through a public gateway (see `toLinkHref`). The
+ * brand icon is matched on the parsed hostname rather than on a substring.
  */
 
 import { iconForUrl, parseSafeUrl } from '@/shared/utils/externalLink';
+import { toLinkHref } from '@/modules/governance/utils/govAnchor';
 import type { GovReference } from '@/api/governance.types';
 
 export interface ReferenceLink {
@@ -31,11 +33,11 @@ export interface ReferenceLink {
 export function toReferenceLinks(references: GovReference[] | null | undefined): ReferenceLink[] {
   if (!Array.isArray(references)) return [];
   return references.reduce<ReferenceLink[]>((acc, reference, i) => {
-    const url = parseSafeUrl(reference?.uri);
+    const url = parseSafeUrl(toLinkHref(reference?.uri));
     if (!url) return acc;
     acc.push({
       href: url.href,
-      icon: iconForUrl(reference?.uri),
+      icon: iconForUrl(url.href),
       // An EMPTY-STRING label is real in this data, not merely absent, so the
       // fallback chain stays `||` and must never become `??`.
       label: reference?.label || url.hostname,

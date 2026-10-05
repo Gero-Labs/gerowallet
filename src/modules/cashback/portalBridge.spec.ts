@@ -4,6 +4,11 @@ import {
   sessionUpdateMessage,
   signatureMessage,
   abortSignMessage,
+  signRequestMessage,
+  signPayloadHex,
+  pinnedPortalUrl,
+  BRING_PORTAL_ORIGINS,
+  MAX_SIGN_MESSAGE_LENGTH,
 } from './portalBridge';
 
 const ORIGIN = 'https://portal.bringweb3.io';
@@ -36,5 +41,68 @@ describe('outbound builders', () => {
   });
   it('builds ABORT_SIGN_MESSAGE', () => {
     expect(abortSignMessage()).toEqual({ to: 'bringweb3', action: 'ABORT_SIGN_MESSAGE' });
+  });
+});
+
+describe('signRequestMessage', () => {
+  it('returns the challenge of a well-formed request', () => {
+    expect(signRequestMessage({ from: 'bringweb3', action: 'SIGN_MESSAGE', messageToSign: 'Claim 12.5 ADA nonce 42' })).toBe('Claim 12.5 ADA nonce 42');
+  });
+  it.each([
+    ['no challenge', {}],
+    ['a non-string challenge', { messageToSign: 42 }],
+    ['an empty challenge', { messageToSign: '' }],
+    ['an oversized challenge', { messageToSign: 'a'.repeat(MAX_SIGN_MESSAGE_LENGTH + 1) }],
+    ['a control character', { messageToSign: 'claim\u0000hidden' }],
+    ['null data', null],
+  ])('refuses %s', (_name, data) => {
+    expect(signRequestMessage(data)).toBeNull();
+  });
+  it('keeps line breaks, which the prompt renders', () => {
+    expect(signRequestMessage({ messageToSign: 'Claim 1 ADA\nNonce: 42' })).toBe('Claim 1 ADA\nNonce: 42');
+  });
+  it('accepts a challenge at the length limit', () => {
+    expect(signRequestMessage({ messageToSign: 'a'.repeat(MAX_SIGN_MESSAGE_LENGTH) })).toHaveLength(MAX_SIGN_MESSAGE_LENGTH);
+  });
+});
+
+describe('signPayloadHex', () => {
+  it('hex-encodes the UTF-8 bytes, not UTF-16 code units', () => {
+    expect(signPayloadHex('Claim 1 ADA')).toBe('436c61696d203120414441');
+    expect(signPayloadHex('€')).toBe('e282ac');
+  });
+});
+
+describe('pinnedPortalUrl', () => {
+  it('pins the production portal origin', () => {
+    expect(BRING_PORTAL_ORIGINS).toEqual([ORIGIN]);
+  });
+  it('accepts a portal URL on the pinned origin', () => {
+    expect(pinnedPortalUrl(`${ORIGIN}/gero?token=abc`)).toBe(`${ORIGIN}/gero?token=abc`);
+  });
+  it('rejects any other origin the backend might name', () => {
+    for (const url of [
+      'https://evil.example/portal',
+      'https://other.bringweb3.io/portal',
+      'http://portal.bringweb3.io/portal',
+      'https://portal.bringweb3.io:8443/portal',
+      'https://portal.bringweb3.io.evil.example/portal',
+      'https://user:pw@portal.bringweb3.io/portal',
+      'javascript:alert(1)',
+      'not a url',
+      '',
+      undefined,
+      42,
+    ]) {
+      expect(pinnedPortalUrl(url)).toBeNull();
+    }
+  });
+});
+
+describe('signRequestMessage bidi', () => {
+  it('rejects bidi overrides and isolates that reorder the shown text', () => {
+    expect(signRequestMessage({ messageToSign: 'claim \u202Ereward' })).toBeNull();
+    expect(signRequestMessage({ messageToSign: 'claim \u2067reward' })).toBeNull();
+    expect(signRequestMessage({ messageToSign: 'claim reward 42' })).toBe('claim reward 42');
   });
 });

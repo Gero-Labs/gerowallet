@@ -168,13 +168,13 @@ async function refreshBalance(): Promise<void> {
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 /* ─── Liquid Glass Card ─────────────────────────────────────── */
 .btc-glass-card {
+  @include g-glass-panel(false);
   position: relative;
   height: 100%;
   min-height: 220px;
-  background: var(--g-surface);
   border: 1px solid var(--g-hairline-3);
   border-radius: var(--g-r-sheet);
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif;

@@ -97,11 +97,20 @@ jobs:
       - name: Wallet database and onboarding regressions
         run: npx vitest run src/db/wallet-db.spec.ts src/modules/welcome/components/WalletOnboarding/steps/StepSecurity.spec.ts
 
+      - name: Stored-secret formats, writers and migration (every historical format must still open)
+        run: npx vitest run src/shared/utils/secretEnvelope.spec.ts src/shared/utils/secretReaders.spec.ts src/shared/utils/secretWriters.spec.ts src/chrome/secretMigration.spec.ts src/shared/utils/legacyCryptoJs.spec.ts src/shared/utils/mpc/deviceShareCipher.spec.ts scripts/check-secret-envelope-readers.spec.mjs
+
       - name: Pending transaction visibility regressions
         run: npx vitest run src/chrome/pendingTransactions.spec.ts src/chrome/injectCip30Extensions.spec.ts src/modules/dashboard/components/TransactionsCard.pending.spec.ts
 
+      - name: Token metadata persistence regressions
+        run: npx vitest run src/stores/tokenMetadataPersistence.spec.ts src/utils/storePersistence.spec.ts
+
+      - name: Wallet restart and store subscription regressions
+        run: npx vitest run src/chrome/storeMessagingBg.snapshot.spec.ts src/services/walletManager.login.spec.ts src/stores/storePersistence.integration.spec.ts
+
       - name: Navigation loading regressions
-        run: npx vitest run src/modules/navigation/lazyPage.spec.ts src/modules/navigation/components/governanceNav.spec.ts
+        run: npx vitest run src/modules/navigation/lazyPage.spec.ts src/modules/navigation/components/governanceNav.spec.ts src/options/startup.spec.ts src/options/main.spec.ts
 
       # The bundle TDZ guard runs against a built artifact (in the workflow
       # named above), so a hole in its own logic passes silently — it already
@@ -109,8 +118,19 @@ jobs:
       # whitespace-sensitive regex and reported "0 known offenders" for every
       # production build. These cover how it locates a namespace declaration,
       # which is the part that decides whether a hazard is reported at all.
-      - name: Bundle TDZ guard logic
-        run: npx vitest run scripts/check-bundle-tdz.spec.mjs
+      # The remote-code guard is the same kind of artifact check (it fails the
+      # build:web step below on Web Store "remotely hosted code"), so its
+      # matcher and its Vite plugin wiring are pinned here too.
+      - name: Bundle TDZ and remote-code guard logic
+        run: npx vitest run scripts/check-bundle-tdz.spec.mjs scripts/remote-code-guard.spec.mjs
+
+      # i18n parity. vue-i18n renders English (or the raw key) for a missing
+      # translation and its warnings are silenced, so a key added to us.ts
+      # without de/es ships unseen. These fail on a missing key, placeholder or
+      # plural drift in any READY_LANGUAGES locale, and on advice-worded
+      # Copilot narration in any language.
+      - name: i18n parity and Copilot no-advice copy
+        run: npx vitest run src/plugins/i18n.parity.spec.ts src/services/copilot/noAdvice.spec.ts src/modules/realfi/i18n.spec.ts
 
       # Design ratchet. Unlike tsc/eslint (see the header note) these gates are
       # green today and may only get greener: audit.mjs fails if any style-debt
@@ -134,3 +154,6 @@ jobs:
           grep -rhoE 'VITE_[A-Z0-9_]+' src/ scripts/ 2>/dev/null             | sort -u | sed 's/$/=placeholder/' > .env.production
           echo "Wrote placeholder .env.production ($(grep -c '^VITE_' .env.production) vars)"
           npm run build:web -- --mode production
+          # The build plugin only sees Rollup output; this also covers the
+          # vendored SDKs build:web copies into extension/.
+          node scripts/remote-code-guard.mjs extension

@@ -50,7 +50,9 @@ import {
 } from '@/chrome/serialization';
 import { isCip113Enabled } from '@/chrome/cip113Flag';
 import { readCachedUtxoRows, serializeUtxoRows, type CachedUtxoRow } from '@/chrome/utxoCache';
-import { decryptPrivateKey, encryptWithPassword, isRawEncryptedKey } from '@/shared/utils/crypto';
+import { SecretPurpose, decryptPrivateKey, encryptWithPassword, isLegacyNestedKey } from '@/shared/utils/crypto';
+import { refreshEnvelopeV2Flag } from '@/shared/utils/envelopeV2Flag';
+import { migrateWalletSecrets } from '@/chrome/secretMigration';
 import type { IUnifiedUtxo } from '@/chains/common/interfaces';
 import type { BitcoinUtxo } from '@/api/bitcoin-api';
 import type { Psbt } from 'bitcoinjs-lib';
@@ -1397,15 +1399,42 @@ export class WalletBg {
 
       try {
         const buffer: Buffer = decryptPrivateKey(this.encryptedPrivateKey, password);
-        // One-time silent upgrade of legacy weak-outer-KDF blobs. Non-blocking:
-        // a failed rewrite must never break signing; it retries on next unlock.
-        if (!isRawEncryptedKey(this.encryptedPrivateKey)) {
-          void this.migrateEncryptedPrivateKeyFormat(buffer, password);
-        }
+        // Silent upgrade of stored secrets. Non-blocking: a failed rewrite must
+        // never break signing; it retries on the next password decrypt.
+        void this.upgradeStoredSecrets(buffer, password);
         return Bip32PrivateKey.fromBytes(buffer);
       } catch (e) {
         throw ERROR.wrongPassword;
       }
+    }
+  }
+
+  /** Set once this session's stored secrets are known to be fully `gpw2`, so later signs skip the check. */
+  private storedSecretsCurrent = false;
+
+  /**
+   * Upgrade stored secrets after a successful password decrypt. With
+   * `isKeyEnvelopeV2Enabled` on, every password secret of the wallet moves to
+   * `gpw2` (see `secretMigration.ts`). With it off, only the legacy nested
+   * root-key blob is rewritten to raw PBKDF2 hex, as before.
+   */
+  private async upgradeStoredSecrets(rootKeyBuffer: Buffer, password: string): Promise<void> {
+    if (this.storedSecretsCurrent) return;
+    try {
+      if (!(await refreshEnvelopeV2Flag())) {
+        if (isLegacyNestedKey(this.encryptedPrivateKey)) {
+          await this.migrateEncryptedPrivateKeyFormat(rootKeyBuffer, password);
+        }
+        return;
+      }
+      const result = await migrateWalletSecrets(this.id, password);
+      if (result.encryptedPrivateKey) this.encryptedPrivateKey = result.encryptedPrivateKey;
+      if (result.encryptedMnemonic) this.encryptedMnemonic = result.encryptedMnemonic;
+      if (result.outcome === 'migrated' || result.outcome === 'already-current' || result.outcome === 'not-applicable') {
+        this.storedSecretsCurrent = true;
+      }
+    } catch (e) {
+      debugLog('🔐 Stored-secret upgrade deferred (will retry on next unlock):', e);
     }
   }
 
@@ -1793,7 +1822,7 @@ export class WalletBg {
         }
 
         // Decrypt mnemonic with password
-        const decryptedMnemonic = decrypt(this.encryptedMnemonic, password);
+        const decryptedMnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
 
         // Sign and finalize PSBT
         const signedTx = await signAndFinalizePsbt(
@@ -1879,7 +1908,7 @@ export class WalletBg {
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
       if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
-      mnemonic = decrypt(this.encryptedMnemonic, password);
+      mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
     }
 
     const bitcoin = await import('bitcoinjs-lib');
@@ -1932,7 +1961,7 @@ export class WalletBg {
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
       if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
-      mnemonic = decrypt(this.encryptedMnemonic, password);
+      mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
     }
 
     // Derive signing key (first receiving address: m/purpose'/coinType'/0'/0/0)
@@ -2167,7 +2196,7 @@ export class WalletBg {
       if (!isValidTxId) {
         console.error(txIdResponse);
         // Tagged, so the catch below reports what the endpoint actually said instead
-        // of mapping a status-less error onto "submission is temporarily unavailable".
+        // of treating a status-less error as a lost response.
         throw unexpectedSubmitResponseError(txIdResponse);
       }
       // Create transaction record using sync service pattern
@@ -2194,9 +2223,8 @@ export class WalletBg {
     } catch (error) {
       console.error('Transaction submission error:', error);
 
-      // A rejection carries the node's reason in the body; a 5xx (or no response at
-      // all) is our submission path being down. describeSubmitFailure keeps the two
-      // apart so neither is reported as the other -- see submitErrors.ts.
+      // Keep the node's rejection reason, or explain that a lost response leaves
+      // the submission outcome unknown.
       if (isUnexpectedSubmitResponseError(error)) throw error;
       const response = error?.['response'];
       throw new Error(describeSubmitFailure(response?.status, response?.data));
@@ -2225,23 +2253,6 @@ export class WalletBg {
    * @param prfSecret Raw PRF output bytes (PRF/PassKey wallets)
    * @returns         Array of `{ index, signatureHex }` matching input order
    */
-  /**
-   * Stash a freshly re-derived Midnight viewing key in RAM-only session storage
-   * so shielded sync can resume across service-worker cold starts without the
-   * key ever being persisted on disk. Covers PRF wallets, whose only
-   * credentialed background moment is a send/ceremony (they can't silently
-   * re-derive at unlock). Fire-and-forget: never throws into the signing path.
-   */
-  private cacheMidnightViewingKeyToSession(viewingKey: string | undefined): void {
-    if (!viewingKey) return;
-    void (async () => {
-      try {
-        const { setSessionViewingKey } = await import('@/chains/midnight/midnightViewingKeySession');
-        await setSessionViewingKey(this.id, this.network, viewingKey);
-      } catch { /* non-fatal: session cache is best-effort */ }
-    })();
-  }
-
   /** Unlock a private balance session without persisting a spending key or submitting a transaction. */
   /**
    * DApp Connector `balanceUnsealedTransaction`: fund + fee-pay a dapp's
@@ -2281,7 +2292,7 @@ export class WalletBg {
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
       if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
-      mnemonic = decrypt(this.encryptedMnemonic, password);
+      mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
     }
 
     try {
@@ -2294,7 +2305,7 @@ export class WalletBg {
         assertSession();
         const endpoints = getMidnightEndpoints(network);
         if (!endpoints) throw new Error(`No Midnight endpoints configured for network ${network}`);
-        const target = resolveDappProvingTarget(network, midnightStore.proofServer);
+        const target = resolveDappProvingTarget(network, midnightStore.proofServer, midnightStore.shieldedProvingConsent);
         // Registration lower bound for the dust snapshot bootstrap (see
         // balanceAndSignMidnightUnshieldedTransfer): creation time, else a
         // conservative 90-day lookback.
@@ -2340,7 +2351,7 @@ export class WalletBg {
       } else {
         if (!password || !this.encryptedMnemonic) throw new Error('Spending password is required');
         const { decrypt } = await import('@/shared/utils/crypto');
-        mnemonic = decrypt(this.encryptedMnemonic, password);
+        mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
       }
       const { deriveMidnightKeys } = await import('@/chains/midnight/midnightKeyManager');
       const derived = await deriveMidnightKeys(mnemonic, network, 0, { skipCardano: true });
@@ -2381,7 +2392,7 @@ export class WalletBg {
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
       if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
-      mnemonic = decrypt(this.encryptedMnemonic, password);
+      mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
     }
 
     try {
@@ -2506,7 +2517,7 @@ export class WalletBg {
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
       if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
-      mnemonic = decrypt(this.encryptedMnemonic, password);
+      mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
     }
 
     try {
@@ -2621,7 +2632,7 @@ export class WalletBg {
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
       if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
-      mnemonic = decrypt(this.encryptedMnemonic, password);
+      mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
     }
 
     try {
@@ -2643,7 +2654,6 @@ export class WalletBg {
       let sponsorDustSeed: Uint8Array | undefined;
       try {
         assertSession();
-        this.cacheMidnightViewingKeyToSession(derived.zswapViewingKey);
         let sdkNetworkId: string;
         switch (network) {
           case Network.MAINNET: sdkNetworkId = 'mainnet'; break;
@@ -2821,7 +2831,7 @@ export class WalletBg {
     } else {
       if (!password) throw new Error('Password is required for password wallet signing');
       if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
-      mnemonic = decrypt(this.encryptedMnemonic, password);
+      mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
     }
 
     try {
@@ -2838,7 +2848,6 @@ export class WalletBg {
       let sponsorDustSeed: Uint8Array | undefined;
       try {
       assertSession();
-      this.cacheMidnightViewingKeyToSession(derived.zswapViewingKey);
       let sdkNetworkId: string;
       switch (network) {
         case Network.MAINNET: sdkNetworkId = 'mainnet'; break;
@@ -2852,27 +2861,24 @@ export class WalletBg {
         throw new Error(`No Midnight endpoints configured for network ${this.network}`);
       }
 
-      // Sanity check the stored viewing key matches what we just re-derived.
-      // If they diverge, sync was running against a different key than this
-      // tx — the indexer's session was scanning the wrong viewing key, the
-      // wallet sees stale notes, and the tx may try to spend phantom inputs.
-      // Fail loud rather than build a tx the chain will reject.
+      // Sanity check the wallet record's shielded address matches the keys we
+      // just re-derived. If they diverge, the local note set belongs to a
+      // different key than this tx and the tx may try to spend phantom inputs.
+      // Fail loud rather than build a tx the chain will reject. (Compared on the
+      // PUBLIC shielded address: the viewing key is no longer stored.)
       try {
         const parsed = this.publicKey ? JSON.parse(this.publicKey) : null;
-        const storedViewingKey = parsed?.zswapViewingKey;
-        if (storedViewingKey && storedViewingKey !== derived.zswapViewingKey) {
+        const storedShielded = parsed?.shielded;
+        if (storedShielded && storedShielded !== derived.addresses.shielded) {
           throw new Error(
-            `Midnight viewing-key mismatch: BG-derived viewing key ` +
-            `(${derived.zswapViewingKey.slice(0, 16)}…) doesn't match the ` +
-            `wallet record's stored viewing key (${storedViewingKey.slice(0, 16)}…). ` +
-            `Sync was running against the wrong key; the local note set is unsound.`,
+            'Midnight shielded-address mismatch: the keys derived for this send do not ' +
+            "match the wallet record's shielded address, so the local note set is unsound.",
           );
         }
       } catch (e) {
-        if (e instanceof Error && e.message.startsWith('Midnight viewing-key mismatch')) throw e;
-        // Parse failures fall through — the publicKey JSON may not have the
-        // field yet on legacy wallets. The build will still produce a valid
-        // tx; sync correctness is the user's responsibility on legacy wallets.
+        if (e instanceof Error && e.message.startsWith('Midnight shielded-address mismatch')) throw e;
+        // Parse failures fall through: a malformed publicKey JSON cannot be
+        // compared, and the build will still produce a valid tx.
       }
 
       {
@@ -3054,7 +3060,7 @@ export class WalletBg {
     } else {
       if (!password) throw new Error('Password required to sign DUST registration tx');
       if (!this.encryptedMnemonic) throw new Error('Wallet has no encrypted mnemonic');
-      mnemonic = decrypt(this.encryptedMnemonic, password);
+      mnemonic = decrypt(this.encryptedMnemonic, password, SecretPurpose.Mnemonic);
     }
 
     try {

@@ -99,6 +99,121 @@ export function convertDustStatus(wire: MidnightDustRegistrationStatusWire): Mid
 }
 
 /**
+ * Why Nexus counts a stake in a DUST destination. Mirrors `DustDestinationStatusDto.Stake.State`.
+ * - `active`     the indexer counts a registration that points at this destination.
+ * - `relaying`   on Cardano but not counted for this destination yet (not relayed, or the
+ *                indexer still points the stake elsewhere).
+ * - `duplicated` more than one live registration UTxO: the pairing rule invalidates all of them.
+ */
+export type DustDestinationStakeState = 'active' | 'relaying' | 'duplicated';
+
+export interface MidnightDustDestinationStakeDto {
+  cardanoRewardAddress: string;
+  state: DustDestinationStakeState;
+  registrationUtxoTxHash: string | null;
+  registrationUtxoOutputIndex: number | null;
+}
+
+/**
+ * DUST status for one DUST ADDRESS, from Nexus's `GET dust/destination`.
+ *
+ * The four figures are the destination's totals, counted ONCE. They are per DUST address, not
+ * per stake: the indexer attributes the same total to every stake registered to the address, so
+ * adding `dust/status` rows across stakes multiplies it. Never sum them across `stakes`.
+ * "0" when nothing is registered. Strings for BigInt portability across JSON.
+ */
+export interface MidnightDustDestinationDto {
+  dustAddress: string;
+  /** True iff at least one stake is `active`. */
+  registered: boolean;
+  nightBalance: string;
+  generationRate: string;
+  maxCapacity: string;
+  currentCapacity: string;
+  stakes: MidnightDustDestinationStakeDto[];
+}
+
+/** Wire-shape (snake_case) of one entry of `DustDestinationStatusDto.stakes`. */
+interface MidnightDustDestinationStakeWire {
+  cardano_reward_address?: unknown;
+  state?: unknown;
+  registration_utxo_tx_hash?: unknown;
+  registration_utxo_output_index?: unknown;
+}
+
+/** Wire-shape (snake_case) of Nexus's `DustDestinationStatusDto`. */
+interface MidnightDustDestinationWire {
+  dust_address?: unknown;
+  registered?: unknown;
+  night_balance?: unknown;
+  generation_rate?: unknown;
+  max_capacity?: unknown;
+  current_capacity?: unknown;
+  stakes?: unknown;
+}
+
+const DESTINATION_STAKE_STATES: readonly string[] = ['active', 'relaying', 'duplicated'];
+
+/**
+ * Wire-conversion for `GET dust/destination`, exported for `midnight-api.spec.ts`.
+ *
+ * Strict on purpose. Nexus always sends the address, `registered`, all four figures and `stakes`,
+ * so a payload missing any of them is not a destination the battery can trust: it throws, and the
+ * caller treats that like any failed poll (keeps the last reading) rather than reading a missing
+ * figure as a confident zero. A stake with a state this client does not know is dropped: it is
+ * neither active nor relaying, so it cannot change a total.
+ */
+export function convertDustDestination(wire: MidnightDustDestinationWire): MidnightDustDestinationDto {
+  const invalid = () => new Error('Invalid Midnight DUST destination response');
+  if (!wire || typeof wire !== 'object') throw invalid();
+  const { dust_address: dustAddress, registered, night_balance: nightBalance,
+    generation_rate: generationRate, max_capacity: maxCapacity,
+    current_capacity: currentCapacity, stakes } = wire;
+  const figure = (v: unknown): string => {
+    if (typeof v !== 'string' || !/^\d+$/.test(v)) throw invalid();
+    return v;
+  };
+  if (typeof dustAddress !== 'string' || typeof registered !== 'boolean' || !Array.isArray(stakes)) {
+    throw invalid();
+  }
+  return {
+    dustAddress,
+    registered,
+    nightBalance: figure(nightBalance),
+    generationRate: figure(generationRate),
+    maxCapacity: figure(maxCapacity),
+    currentCapacity: figure(currentCapacity),
+    stakes: stakes.flatMap((entry: unknown): MidnightDustDestinationStakeDto[] => {
+      if (!entry || typeof entry !== 'object') throw invalid();
+      const s = entry as MidnightDustDestinationStakeWire;
+      if (typeof s.cardano_reward_address !== 'string' || typeof s.state !== 'string') throw invalid();
+      if (!DESTINATION_STAKE_STATES.includes(s.state)) return [];
+      return [{
+        cardanoRewardAddress: s.cardano_reward_address,
+        state: s.state as DustDestinationStakeState,
+        registrationUtxoTxHash: typeof s.registration_utxo_tx_hash === 'string' ? s.registration_utxo_tx_hash : null,
+        registrationUtxoOutputIndex: typeof s.registration_utxo_output_index === 'number'
+          ? s.registration_utxo_output_index : null,
+      }];
+    }),
+  };
+}
+
+/**
+ * Thrown by `getDustDestination` when Nexus answers 404 or 501: this Nexus does not have the
+ * destination endpoint (yet). Callers fall back to the per-stake `dust/status` path, taking its
+ * figures once. Delete together with those fallbacks once every Nexus serves the endpoint.
+ */
+export class DustDestinationUnsupportedError extends Error {
+  readonly status: number;
+  constructor(status: number) {
+    super(`Nexus does not serve DUST destination status (HTTP ${status}).`);
+    this.name = 'DustDestinationUnsupportedError';
+    this.status = status;
+  }
+}
+
+/**
  * A single live DUST registration UTxO for a stake credential, from Nexus's
  * `GET dust/registrations`. Midnight's pairing rule allows exactly ONE live
  * registration per stake credential — more than one invalidates the whole
@@ -668,6 +783,33 @@ export class MidnightApi {
     } catch (error) {
       throw parseHttpError(error);
     }
+  }
+
+  /**
+   * DUST status for a DUST ADDRESS: the destination's totals counted once, plus every stake
+   * registered to it and its state. Backed by Nexus's `GET dust/destination`.
+   *
+   * Unlike `getDustStatusBatch` this needs no list of stakes, so it also sees a registration
+   * made from a Cardano wallet this profile does not hold.
+   *
+   * @throws DustDestinationUnsupportedError when Nexus answers 404 or 501 (no such endpoint).
+   *         Any other failure throws the usual `parseHttpError` string.
+   */
+  async getDustDestination(dustAddress: string): Promise<MidnightDustDestinationDto> {
+    let wire: MidnightDustDestinationWire;
+    try {
+      const url = nexusMidnightPathFor(this.network, 'dust/destination') +
+        `?dustAddress=${encodeURIComponent(dustAddress)}`;
+      const { data, status } = await this.axiosInstance.get<MidnightDustDestinationWire>(url);
+      if (status !== 200) throw parseHttpError(data);
+      wire = data;
+    } catch (error) {
+      const httpStatus = axios.isAxiosError(error) ? error.response?.status : undefined;
+      if (httpStatus === 404 || httpStatus === 501) throw new DustDestinationUnsupportedError(httpStatus);
+      throw parseHttpError(error);
+    }
+    // Outside the try: a malformed payload is an Error to report, not an HTTP failure to stringify.
+    return convertDustDestination(wire);
   }
 
   /**

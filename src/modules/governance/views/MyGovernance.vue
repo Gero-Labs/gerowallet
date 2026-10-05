@@ -978,7 +978,7 @@ async function loadDRep(): Promise<void> {
 watch(() => walletStore.account?.drep_id, () => void loadDRep(), { immediate: true });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .my-governance {
   display: flex;
   flex-direction: column;
@@ -1124,11 +1124,11 @@ watch(() => walletStore.account?.drep_id, () => void loadDRep(), { immediate: tr
 }
 
 .my-governance__locked {
+  @include g-glass-tier(false);
   display: flex;
   align-items: center;
   gap: var(--g-s-3);
   padding: var(--g-s-3) var(--g-s-4);
-  background: var(--g-raised);
   border: 1px solid var(--g-error-line);
   border-radius: var(--g-r-control);
 }
@@ -1159,11 +1159,11 @@ watch(() => walletStore.account?.drep_id, () => void loadDRep(), { immediate: tr
   gap: var(--g-s-3);
 }
 .my-governance__tile {
+  @include g-glass-tier(false);
   display: flex;
   flex-direction: column;
   gap: var(--g-s-1);
   padding: var(--g-s-3) var(--g-s-4);
-  background: var(--g-raised);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-control);
 }
@@ -1223,6 +1223,7 @@ watch(() => walletStore.account?.drep_id, () => void loadDRep(), { immediate: tr
    caveat on the state below, not a state of its own, and a full-width banner
    would read as the more important of the two. */
 .my-governance__pending {
+  @include g-glass-tier(false);
   display: flex;
   align-items: flex-start;
   gap: var(--g-s-3);
@@ -1230,7 +1231,6 @@ watch(() => walletStore.account?.drep_id, () => void loadDRep(), { immediate: tr
   margin-bottom: var(--g-s-3);
   border: 1px solid var(--g-hairline-2);
   border-radius: var(--g-r-control);
-  background: var(--g-raised);
 }
 .my-governance__pending-text {
   display: flex;
@@ -1364,11 +1364,11 @@ watch(() => walletStore.account?.drep_id, () => void loadDRep(), { immediate: tr
   padding: var(--g-s-2) var(--g-s-3);
   white-space: normal;
 }
-/* `>>>`, not a plain descendant: `.v-btn__content` lives inside GButton's own
+/* ` ::v-deep `, not a plain descendant: `.v-btn__content` lives inside GButton's own
    template, and a scoped rule never reaches it — the parent's data-v attribute
    only lands on the child's ROOT. That is why the earlier wrap did nothing and
    the label kept spilling past the border, icon and all. */
-.my-governance__change-row >>> .v-btn__content {
+.my-governance__change-row ::v-deep .v-btn__content {
   flex: 1 1 auto;
   min-width: 0;
   white-space: normal;
@@ -1378,7 +1378,7 @@ watch(() => walletStore.account?.drep_id, () => void loadDRep(), { immediate: tr
 /* Vuetify pulls a `left` icon 4px outside the content box. Harmless at its
    default 16px padding; here it is the difference between the icon sitting
    inside the button and hanging off it. */
-.my-governance__change-row >>> .v-icon--left {
+.my-governance__change-row ::v-deep .v-icon--left {
   margin-left: 0;
   margin-right: var(--g-s-2);
 }
@@ -1408,11 +1408,11 @@ watch(() => walletStore.account?.drep_id, () => void loadDRep(), { immediate: tr
 }
 
 .my-governance__honesty {
+  @include g-glass-tier(false);
   display: flex;
   align-items: center;
   gap: var(--g-s-3);
   padding: var(--g-s-3) var(--g-s-4);
-  background: var(--g-surface);
   border: 1px solid var(--g-hairline-2);
   border-radius: var(--g-r-card);
 }

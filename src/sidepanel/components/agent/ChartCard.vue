@@ -48,11 +48,11 @@ export default defineComponent({
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .agent-chart-card {
+  @include g-glass-panel(false);
   border-radius: var(--g-r-card);
   padding: 8px;
-  background: var(--g-raised);
 }
 
 .agent-chart-card__header {

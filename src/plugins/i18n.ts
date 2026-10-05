@@ -1,49 +1,94 @@
 import Vue from 'vue';
-import VueI18n from 'vue-i18n';
+import VueI18n, { type LocaleMessageObject, type LocaleMessages } from 'vue-i18n';
 
 
-// Vuetify locales — only import supported languages (us, de)
+// Vuetify locales — only import supported languages (us, de, es)
 import {
   de as vuetifyDe,
   en as vuetifyEn,
+  es as vuetifyEs,
 } from 'vuetify/src/locale';
 
 // Only load US English by default (other languages lazy-loaded on demand)
 import us from '@/plugins/i18n/us';
+import { pushStrings, type PushLocale } from '@/plugins/i18n/push';
 
 /**
  * Wrap translations with Vuetify locale support
  */
-const wrapWithVuetify = (translations: any, vuetifyLocale: any, rtl = false, locale = 'en-US') => ({
+type Messages = LocaleMessageObject;
+const wrapWithVuetify = (translations: Messages, vuetifyLocale: Messages, rtl = false, locale = 'en-US'): Messages => ({
   rtl, // Fixed: Boolean instead of string
   locale,
   $vuetify: { ...vuetifyLocale },
   ...translations,
-});
+} as unknown as Messages);
+
+// Vuetify's own es table still has English (loading, input actions) and the
+// formal "Pulse"; these surface as screen-reader labels, so match our tú register.
+type VuetifyTable = Messages & { dataTable: { ariaLabel: Record<string, string> } };
+const vuetifyEsBase = vuetifyEs as unknown as VuetifyTable;
+const vuetifyEsPatched = {
+  ...vuetifyEsBase,
+  badge: 'Insignia',
+  loading: 'Cargando...',
+  dataTable: {
+    ...vuetifyEsBase.dataTable,
+    ariaLabel: {
+      ...vuetifyEsBase.dataTable.ariaLabel,
+      activateNone: 'Haz clic para quitar el orden.',
+      activateDescending: 'Haz clic para ordenar de forma descendente.',
+      activateAscending: 'Haz clic para ordenar de forma ascendente.',
+    },
+  },
+  input: {
+    clear: 'Borrar {0}',
+    prependAction: 'Acción inicial de {0}',
+    appendAction: 'Acción final de {0}',
+  },
+} as unknown as Messages;
 
 // Vuetify locale mapping — only supported languages
-const vuetifyLocales: Record<string, any> = {
+const vuetifyLocales: Record<string, Messages> = {
   de: vuetifyDe,
+  es: vuetifyEsPatched,
   us: vuetifyEn,
 };
 
+// Push notification strings live in their own table (the service worker renders
+// from it without vue-i18n); merged here so the settings UI sees the same keys.
+const withPush = (lang: string, translations: Record<string, unknown>) => ({ ...translations, ...(pushStrings[lang as PushLocale] ?? {}) });
+
 // Initial messages with only US English
-const messages: Record<string, any> = {
-  us: wrapWithVuetify(us, vuetifyEn, false, 'en-US'),
+const messages: LocaleMessages = {
+  us: wrapWithVuetify(withPush('us', us), vuetifyEn, false, 'en-US'),
 };
 
 /**
  * Lazy load language file
  */
+// An explicit, filtered map rather than a template-literal import: that form
+// globbed every module in the directory (push.ts, and any spec someone adds)
+// into the candidate set, and the background iife inlines all of them.
+const LOCALE_LOADERS = import.meta.glob<{ default: Record<string, string> }>([
+  './i18n/*.ts',
+  '!./i18n/us.ts',
+  '!./i18n/push.ts',
+  '!./i18n/*.spec.ts',
+  '!./i18n/*.test.ts',
+]);
+
 async function loadLanguage(lang: string): Promise<void> {
   if (messages[lang]) return; // Already loaded
 
   try {
-    const translations = await import(`@/plugins/i18n/${lang}.ts`);
+    const loader = LOCALE_LOADERS[`./i18n/${lang}.ts`];
+    if (!loader) throw new Error(`No locale file for ${lang}`);
+    const translations = await loader();
     const vuetifyLocale = vuetifyLocales[lang] || vuetifyEn;
     const isRTL = false; // No RTL languages currently supported
 
-    messages[lang] = wrapWithVuetify(translations.default, vuetifyLocale, isRTL, getLocaleCode(lang));
+    messages[lang] = wrapWithVuetify(withPush(lang, translations.default), vuetifyLocale, isRTL, getLocaleCode(lang));
 
     i18n.setLocaleMessage(lang, messages[lang]);
   } catch (error) {
@@ -60,6 +105,8 @@ async function loadLanguage(lang: string): Promise<void> {
 function getLocaleCode(lang: string): string {
   const localeCodes: Record<string, string> = {
     de: 'de-DE',
+    // Neutral Latin American Spanish, the same register Lace ships.
+    es: 'es-419',
     us: 'en-US',
   };
   return localeCodes[lang] || 'en-US';
@@ -124,5 +171,5 @@ async function updateI18nLocale(locale: string): Promise<boolean> {
 }
 
 // Export i18n instance and helper functions
-export { loadLanguage, updateI18nLocale };
+export { loadLanguage, updateI18nLocale, getLocaleCode };
 export default i18n;

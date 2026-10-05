@@ -143,12 +143,12 @@ onUnmounted(() => {
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 /* ─── Liquid Glass Shell ────────────────────────────────────── */
 .mempool-widget {
+  @include g-glass-panel(false);
   position: relative;
   height: 100%;
-  background: var(--g-surface);
   border: 1px solid var(--g-hairline-2);
   border-radius: var(--g-r-sheet);
   overflow: hidden;

@@ -27,8 +27,14 @@ import { safeExternalHref } from '@/shared/utils/externalLink';
 /**
  * The public gateway an `ipfs://` link is opened through OUTSIDE the extension.
  * Only ever used to build an href for a new tab — never as a fetch target.
+ *
+ * `inbrowser.link` is the service-worker gateway IPFS points browsers at since
+ * ipfs.io and dweb.link were retired on 2026-09-21: it hands the tab a service
+ * worker that fetches and verifies the content itself. ipfs.io now only
+ * redirects browsers there (and refuses anything it takes for a bot), so
+ * linking to it directly saves a hop that can fail.
  */
-export const PUBLIC_IPFS_GATEWAY = 'https://ipfs.io/ipfs/';
+export const PUBLIC_IPFS_GATEWAY = 'https://inbrowser.link/ipfs/';
 
 function text(raw: unknown): string {
   return typeof raw === 'string' ? raw.trim() : '';
@@ -109,6 +115,20 @@ export function toExternalHref(raw: unknown): string | null {
   const path = ipfsPathOf(raw);
   if (path) return `${PUBLIC_IPFS_GATEWAY}${path}`;
   return safeExternalHref(raw) ?? null;
+}
+
+/**
+ * An author-supplied LINK for a new tab: an http(s) URL exactly as written, or
+ * an `ipfs://<cid>[/path]` through the public gateway. Null for everything
+ * else, which keeps the shared guard's refusals (`javascript:`, `data:`,
+ * `mailto:`, junk) and adds one: an ipfs URI whose CID does not parse.
+ *
+ * Unlike {@link toExternalHref}, a working http(s) link is never re-pointed. An
+ * author who linked their own gateway gets their own gateway; only a URI no
+ * browser can open is rewritten.
+ */
+export function toLinkHref(raw: unknown): string | null {
+  return safeExternalHref(raw) ?? toExternalHref(raw);
 }
 
 /**

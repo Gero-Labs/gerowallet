@@ -229,7 +229,7 @@ describe('RationaleDialog', () => {
 
     expect(String(fetchMock.mock.calls[0][0])).toContain(`/api/ipfs?path=${CID_V1}`);
     // The link is for a real browser tab, where the gateway answers normally.
-    expect(wrapper.find('a').attributes('href')).toBe(`https://ipfs.io/ipfs/${CID_V1}`);
+    expect(wrapper.find('a').attributes('href')).toBe(`https://inbrowser.link/ipfs/${CID_V1}`);
   });
 
   it('carries an abort signal, so a host that never answers cannot hang the dialog', async () => {

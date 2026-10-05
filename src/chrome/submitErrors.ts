@@ -11,11 +11,11 @@
  * spec or are otherwise invalid." plus "Request failed with status code 502", which
  * names neither the real cause nor anything the user can do (2026-09-21 ticket).
  *
- * Split by who is at fault:
- *  - 4xx — the node rejected THIS transaction; surface its reason verbatim.
- *  - 5xx / no response — our submission path is down; say so, and say it's retryable.
+ * Preserve the status classification from submitFailure.ts, while retaining the
+ * server's reason and treating 5xx / no response as an unknown submission outcome.
  */
 import { APIError, TX_SUBMIT_UNCONFIRMED_MESSAGE, TxSendError } from '@/chrome/config';
+import { classifySubmitFailure } from '@/chrome/submitFailure';
 import { ERROR } from '@/models/types';
 
 /**
@@ -40,9 +40,9 @@ export function submitFailureDetail(body: unknown): string {
   return '';
 }
 
-/** True when the failure is ours (gateway/outage) rather than a rejection of this tx. */
+/** True when the response cannot establish whether the transaction was accepted. */
 function isInfrastructureFailure(status: number | undefined): boolean {
-  return status === undefined || status >= 500;
+  return status === undefined || classifySubmitFailure(status) === 'internal';
 }
 
 /**
@@ -95,9 +95,8 @@ export function isUnexpectedSubmitResponseError(error: unknown): boolean {
 
 /**
  * CIP-30 error object for dApp callers. Keeps the spec's `{code, info}` shape and the
- * existing mapping for 400/425/429/500; the change is that a 502/503/504 no longer
- * claims `APIError.InvalidRequest` (code -1, "inputs do not conform to this spec"),
- * which blamed the dApp's transaction for our gateway being down.
+ * status codes established by classifySubmitFailure, including InternalError for
+ * every 5xx. Missing responses use TxSendError.Failure with an unknown outcome.
  *
  * The reason goes in `info`, because that is the field CIP-30 defines and the one a
  * conforming dApp renders; `message` carries the same text for callers that already
@@ -106,11 +105,14 @@ export function isUnexpectedSubmitResponseError(error: unknown): boolean {
  */
 export function dappSubmitError(status: number | undefined, body: unknown): unknown {
   const detail = submitFailureDetail(body);
-  if (status === 425) return ERROR.fullMempool;
-  if (status === 429) return TxSendError.Refused;
-  if (status === 500) return APIError.InternalError;
+  const kind = classifySubmitFailure(status);
+  if (kind === 'mempoolFull') return ERROR.fullMempool;
+  if (kind === 'refused') return TxSendError.Refused;
+  const error = kind === 'internal' ? APIError.InternalError
+    : kind === 'invalidRequest' && status !== undefined ? APIError.InvalidRequest
+    : TxSendError.Failure;
   const info = isInfrastructureFailure(status)
     ? describeSubmitFailure(status, body)
-    : detail || TxSendError.Failure.info;
-  return { ...TxSendError.Failure, info, message: info };
+    : detail || error.info;
+  return { ...error, info, message: info };
 }

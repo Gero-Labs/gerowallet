@@ -10,7 +10,8 @@ import {
   requestBuilderSignature,
   verifyBuilderSignature,
 } from '@/api/strike-v2.builder-connect';
-import { encryptWithPassword, decryptWithPassword } from '@/shared/utils/crypto';
+import { SecretPurpose, decryptKeyBlob } from '@/shared/utils/crypto';
+import { sealKeySecret } from '@/shared/utils/secretWriters';
 import {
   encryptPrivateKeyWithPrf,
   decryptPrivateKeyWithPrf,
@@ -19,6 +20,7 @@ import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { useStrikeTrading } from './useStrikeTrading';
+import i18n from '@/plugins/i18n';
 
 /**
  * True when the active wallet is a pure-PRF (passkey) wallet that has no
@@ -55,13 +57,13 @@ async function encryptStrikePrivateKey(
       w.id.toString(),
     );
   }
-  return encryptWithPassword(password, privateKeyHex);
+  return sealKeySecret(Uint8Array.from(Buffer.from(privateKeyHex, 'hex')), password, SecretPurpose.StrikeKey);
 }
 
 /**
  * Decrypt the stored Strike API-wallet private key.
  *
- * - Password wallets: decryptWithPassword (existing behaviour) → hex.
+ * - Password wallets: decryptKeyBlob (gpw2 or raw PBKDF2 hex) → hex.
  * - PRF wallets: decryptPrivateKeyWithPrf prompts the passkey and returns the
  *   raw key bytes, which we re-encode to hex for setStrikeApiKeys().
  */
@@ -78,7 +80,7 @@ async function decryptStrikePrivateKey(
     );
     return Buffer.from(keyBytes).toString('hex');
   }
-  const decrypted = decryptWithPassword(password, privateKeyEncrypted);
+  const decrypted = decryptKeyBlob(privateKeyEncrypted, password, SecretPurpose.StrikeKey);
   return decrypted.toString('hex');
 }
 
@@ -177,6 +179,7 @@ function clearInMemoryState(): void {
   clearStrikeApiKeys();
   publicKey.value = null;
   isConnected.value = false;
+  clearPendingConnect();
   // Trading state is keyed off the active wallet too, so wipe it on
   // disconnect / wallet switch to avoid showing stale balances or orders.
   useStrikeTrading().reset();
@@ -328,21 +331,88 @@ function utf8ToHex(input: string): string {
   return hex;
 }
 
+/** Longest builder message the wallet will sign. Strike's is a few lines. */
+const BUILDER_MESSAGE_MAX = 2048;
+
 /**
- * Strike's full builder-connect flow:
+ * Characters that never belong in a sign-in message: C0 controls other than
+ * tab / newline / carriage return, DEL, and the bidi overrides / isolates
+ * that can make the text on screen read differently from the signed bytes.
+ */
+// eslint-disable-next-line no-control-regex
+const UNSAFE_MESSAGE_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u202A-\u202E\u2066-\u2069]/;
+
+export type BuilderMessageCheck =
+  | { ok: true; boundToKey: boolean }
+  | { ok: false; reason: 'empty' | 'tooLong' | 'unsafeChars' };
+
+/**
+ * Screen Strike's `message_to_sign` before the payment key signs it.
+ *
+ * The message is chosen by Strike's server and signed with the wallet's
+ * payment key (CIP-8), so a hostile or compromised API could hand back some
+ * other site's login challenge. Two defences:
+ *  - refuse text that is empty, oversized, or carries control / bidi
+ *    characters (it is always shown verbatim before signing);
+ *  - report whether the message names the API public key generated for this
+ *    connect. A third party's challenge cannot contain a key that did not
+ *    exist until now, so a bound message is a strong sign it is Strike's own.
+ *    Strike's exact template is not published, so an unbound message is
+ *    shown with a warning instead of being refused outright.
+ */
+export function assessBuilderMessage(message: string, apiPublicKeyHex: string): BuilderMessageCheck {
+  if (!message || !message.trim()) return { ok: false, reason: 'empty' };
+  if (message.length > BUILDER_MESSAGE_MAX) return { ok: false, reason: 'tooLong' };
+  if (UNSAFE_MESSAGE_CHARS.test(message)) return { ok: false, reason: 'unsafeChars' };
+  const key = apiPublicKeyHex.toLowerCase();
+  return { ok: true, boundToKey: key.length > 0 && message.toLowerCase().includes(key) };
+}
+
+/** The builder message awaiting the user's approval, as shown on screen. */
+export interface PendingBuilderMessage {
+  message: string;
+  boundToKey: boolean;
+}
+
+/**
+ * Everything `connectWithWallet` needs to finish a prepared connect. Kept out
+ * of reactive state so the API private key never lands in a Vue ref.
+ */
+let pendingConnect: {
+  walletId: string;
+  address: string;
+  nonce: string;
+  message: string;
+  keyPair: { privateKeyHex: string; publicKeyHex: string };
+} | null = null;
+
+const pendingMessage = ref<PendingBuilderMessage | null>(null);
+
+function clearPendingConnect(): void {
+  pendingConnect = null;
+  pendingMessage.value = null;
+}
+
+/**
+ * Turn a failed builder-connect step into `error.value`, preferring the API
+ * error body over a generic axios message when present.
+ */
+function setConnectError(e: unknown): void {
+  const axiosErr = e as { response?: { data?: { message?: string; error?: string } }; message?: string };
+  const apiMessage = axiosErr?.response?.data?.message || axiosErr?.response?.data?.error;
+  error.value = apiMessage || (e instanceof Error ? e.message : String(e));
+}
+
+/**
+ * Step one of builder connect, run BEFORE the user authenticates:
  *   1. Generate a fresh Ed25519 API-wallet key pair.
  *   2. Ask Strike for a `message_to_sign` bound to (address, public_key, code).
- *   3. Sign that message with the wallet's payment key (CIP-8 via the existing
- *      background `signData` path — same code the dApp connector uses).
- *   4. Verify with Strike → receive `account_id` + API-wallet metadata.
- *   5. Persist the encrypted private key + accountId, load keys into the API
- *      client, and flip `isConnected` to true.
- *
- * Failures at any step leave storage untouched and surface a human-readable
- * error message via `error.value`.
+ *   3. Screen it (assessBuilderMessage) and expose it as `pendingMessage`, so
+ *      the user reads the exact text before giving a password or PassKey.
  */
-async function connectWithWallet(password: string, pkBytes?: Uint8Array): Promise<boolean> {
+async function prepareConnect(): Promise<boolean> {
   if (isLoading.value) return false;
+  clearPendingConnect();
   const wallet = walletStore.loggedWallet;
   const walletId = wallet?.id;
   if (!walletId) {
@@ -352,6 +422,77 @@ async function connectWithWallet(password: string, pkBytes?: Uint8Array): Promis
   const address: string | undefined = wallet?.baseAddress;
   if (!address) {
     error.value = 'Active wallet has no payment address';
+    return false;
+  }
+
+  try {
+    isLoading.value = true;
+    error.value = null;
+    connectStep.value = 'requesting';
+
+    const keyPair = await generateStrikeKeyPair();
+    const reqResp = await requestBuilderSignature({
+      address,
+      chain: 'cardano',
+      public_key: keyPair.publicKeyHex,
+      code: BUILDER_CODE,
+      max_fee_bps: MAX_FEE_BPS,
+    });
+
+    if (typeof reqResp?.message_to_sign !== 'string' || !reqResp?.nonce) {
+      throw new Error('Strike returned an invalid request-signature response');
+    }
+    const check = assessBuilderMessage(reqResp.message_to_sign, keyPair.publicKeyHex);
+    if (!check.ok) {
+      error.value = i18n.t('perps.connect.messageRefused') as string;
+      return false;
+    }
+
+    pendingConnect = { walletId, address, nonce: reqResp.nonce, message: reqResp.message_to_sign, keyPair };
+    pendingMessage.value = { message: reqResp.message_to_sign, boundToKey: check.boundToKey };
+    return true;
+  } catch (e) {
+    setConnectError(e);
+    return false;
+  } finally {
+    connectStep.value = 'idle';
+    isLoading.value = false;
+  }
+}
+
+/** Drop a prepared connect without signing. */
+function cancelConnect(): void {
+  if (isLoading.value) return;
+  clearPendingConnect();
+  error.value = null;
+}
+
+/**
+ * Step two of builder connect, run after the user has read `pendingMessage`
+ * and authenticated:
+ *   1. Sign exactly the prepared message with the wallet's payment key (CIP-8
+ *      via the existing background `signData` path, the same code the dApp
+ *      connector uses).
+ *   2. Verify with Strike, which returns `account_id` + API-wallet metadata.
+ *   3. Persist the encrypted private key + accountId, load keys into the API
+ *      client, and flip `isConnected` to true.
+ *
+ * Failures at any step leave storage untouched, drop the prepared message
+ * (its nonce is single-use) and surface an error via `error.value`.
+ */
+async function connectWithWallet(password: string, pkBytes?: Uint8Array): Promise<boolean> {
+  if (isLoading.value) return false;
+  const pending = pendingConnect;
+  if (!pending) {
+    error.value = 'Review the Strike message before signing';
+    return false;
+  }
+  // The prepared message names one wallet and address. Never sign it as a
+  // different wallet if the user switched in between.
+  const wallet = walletStore.loggedWallet;
+  if (!wallet || wallet.id !== pending.walletId || wallet.baseAddress !== pending.address) {
+    clearPendingConnect();
+    error.value = 'The active wallet changed. Start the connection again';
     return false;
   }
   const isPrf = isActiveWalletPrf();
@@ -368,39 +509,22 @@ async function connectWithWallet(password: string, pkBytes?: Uint8Array): Promis
     return false;
   }
 
+  const { walletId, address, nonce, message, keyPair } = pending;
   try {
     isLoading.value = true;
     error.value = null;
-    connectStep.value = 'requesting';
 
-    // 1. Generate API-wallet keypair locally
-    const keyPair = await generateStrikeKeyPair();
-
-    // 2. Request the message-to-sign from Strike
-    const reqResp = await requestBuilderSignature({
-      address,
-      chain: 'cardano',
-      public_key: keyPair.publicKeyHex,
-      code: BUILDER_CODE,
-      max_fee_bps: MAX_FEE_BPS,
-    });
-
-    if (!reqResp?.message_to_sign || !reqResp?.nonce) {
-      throw new Error('Strike returned an invalid request-signature response');
-    }
-
-    // 3. Sign the message with the wallet's payment key.
-    //    Background handler: src/chrome/background.ts -> MessageTypes.SIGN_DATA
-    //    -> walletBg.signData() -> signDataCip8() in src/chrome/serialization.ts
-    //    Returns CIP-30 DataSignature ({ signature, key }) — both hex-encoded
-    //    COSE structures (COSE_Sign1 + COSE_Key). Strike's verify-signature
-    //    endpoint accepts this serialised envelope as `wallet_signature`.
+    // Background handler: src/chrome/background.ts -> MessageTypes.SIGN_DATA
+    // -> walletBg.signData() -> signDataCip8() in src/chrome/serialization.ts
+    // Returns CIP-30 DataSignature ({ signature, key }), both hex-encoded
+    // COSE structures (COSE_Sign1 + COSE_Key). Strike's verify-signature
+    // endpoint accepts this serialised envelope as `wallet_signature`.
     connectStep.value = 'awaitingSignature';
     const signResp = (await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SIGN_DATA,
       data: {
         address,
-        payload: utf8ToHex(reqResp.message_to_sign),
+        payload: utf8ToHex(message),
         // PRF wallets: pass the pre-decrypted root key bytes (no password).
         // Password wallets: pass the spending password.
         password: isPrf ? '' : password,
@@ -415,18 +539,19 @@ async function connectWithWallet(password: string, pkBytes?: Uint8Array): Promis
     if (!signResp.data.signature || !signResp.data.key) {
       throw new Error('Wallet returned an invalid signature payload');
     }
+    // The nonce is spent once a signature exists; a retry must fetch a new one.
+    clearPendingConnect();
 
     // Strike expects the Cardano signature as the CIP-30 COSE pair joined by a
-    // colon: `${coseSign1Hex}:${coseKeyHex}` (per the Strike builder reference —
+    // colon: `${coseSign1Hex}:${coseKeyHex}` (per the Strike builder reference,
     // strike-builder-reference/src/api/withdraw.ts + strike-finance-skills).
     const walletSignature = `${signResp.data.signature}:${signResp.data.key}`;
 
-    // 4. Verify with Strike — receive account_id + API-wallet metadata
     connectStep.value = 'verifying';
     const verifyResp = await verifyBuilderSignature({
       address,
       chain: 'cardano',
-      nonce: reqResp.nonce,
+      nonce,
       wallet_signature: walletSignature,
     });
 
@@ -434,7 +559,7 @@ async function connectWithWallet(password: string, pkBytes?: Uint8Array): Promis
       throw new Error('Strike did not return an account id');
     }
 
-    // 5. Persist + load keys. PRF wallets encrypt the Strike key with the
+    // Persist + load keys. PRF wallets encrypt the Strike key with the
     // passkey (a second authenticator prompt); password wallets use ChaCha20.
     connectStep.value = 'finalizing';
     const privateKeyEncrypted = await encryptStrikePrivateKey(keyPair.privateKeyHex, password);
@@ -452,10 +577,9 @@ async function connectWithWallet(password: string, pkBytes?: Uint8Array): Promis
     return true;
   } catch (e) {
     connectStep.value = 'idle';
-    // Prefer the API error body over a generic axios message when present.
-    const axiosErr = e as { response?: { data?: { message?: string; error?: string } }; message?: string };
-    const apiMessage = axiosErr?.response?.data?.message || axiosErr?.response?.data?.error;
-    error.value = apiMessage || (e instanceof Error ? e.message : String(e));
+    // A wrong password leaves the nonce unspent, so the prepared message stays
+    // for another attempt. Any later failure has already cleared it.
+    setConnectError(e);
     return false;
   } finally {
     isLoading.value = false;
@@ -543,14 +667,18 @@ export function useStrikeOnboarding() {
     publicKey,
     error,
     connectStep,
+    pendingMessage,
     checkConnection,
     unlock,
     /**
-     * Full Strike builder-connect flow — generates keys, signs a Strike-issued
-     * message with the user's wallet, and binds the API key to a Strike
-     * account. Use this for first-time setup.
+     * Strike builder connect, first-time setup, in two steps:
+     * `prepareConnect()` generates keys and fetches the Strike-issued message
+     * for the user to read; `connectWithWallet()` signs exactly that message
+     * and binds the API key to a Strike account. `cancelConnect()` drops it.
      */
+    prepareConnect,
     connectWithWallet,
+    cancelConnect,
     /**
      * Manual override — generates and persists a keypair WITHOUT going through
      * Strike's builder-connect flow. Only useful when the API wallet has

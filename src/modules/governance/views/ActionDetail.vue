@@ -27,7 +27,7 @@
           <span class="t-label action-detail__type">{{ typeLabel }}</span>
           <StatusPill :status="action.status" />
           <AnchorBadge
-            :hash-valid="action.hashValid"
+            :hash-valid="hashVerdict"
             :has-anchor="!!action.anchorUrl"
             :failure-reason="anchorFailureReason"
           />
@@ -93,6 +93,27 @@
           :class="{ 'action-detail__overview-grid--single': !hasRail }"
         >
           <div class="action-detail__prose-col">
+            <!-- What a treasury withdrawal pays and to whom, read from the
+                 on-chain payload rather than the metadata document, so it is
+                 there even when that document could not be read. -->
+            <section v-if="treasuryWithdrawals.length" class="action-detail__section">
+              <h2 class="t-heading">{{ $t('governance.actionType.treasurywithdrawals') }}</h2>
+              <ul class="action-detail__withdrawals">
+                <li
+                  v-for="(withdrawal, i) in treasuryWithdrawals"
+                  :key="`${withdrawal.rewardAddress}-${i}`"
+                  class="action-detail__withdrawal"
+                >
+                  <span class="t-heading g-num" :title="`${withdrawal.exactAda} ₳`">{{ withdrawal.ada }} ₳</span>
+                  <span class="action-detail__withdrawal-to t-caption">
+                    <span>{{ $t('governance.recipientAddress') }}</span>
+                    <span class="g-mono" :title="withdrawal.rewardAddress">{{ withdrawal.shortAddress }}</span>
+                    <CopyButton x-small :value="withdrawal.rewardAddress" />
+                  </span>
+                </li>
+              </ul>
+            </section>
+
             <!-- CIP-108 bodies are markdown documents, not captions: headings,
                  tables and lists all appear in real proposals. Everything is
                  HTML-escaped before a single markdown rule runs, so a proposal
@@ -110,12 +131,30 @@
               <div class="g-prose" v-html="renderedRationale"></div>
             </section>
 
-            <section v-if="anchorHref || referenceLinks.length" class="action-detail__section">
+            <!-- Every prose section above comes from the metadata document.
+                 Without one the column would sit blank under a bare id, so say
+                 why, and offer the document itself when there is one to open. -->
+            <div v-if="overviewNotice" class="action-detail__notice glass-panel">
+              <v-icon small color="var(--g-text-3)">mdi-file-document-outline</v-icon>
+              <span class="t-body-2">{{ $t(overviewNotice) }}</span>
+              <a
+                v-if="noticeLinksAnchor"
+                :href="anchorHref"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="action-detail__link t-body-2"
+              >
+                {{ $t('governance.metadataDocument') }}
+                <v-icon x-small class="ml-1">mdi-open-in-new</v-icon>
+              </a>
+            </div>
+
+            <section v-if="showAnchorReference || referenceLinks.length" class="action-detail__section">
               <h2 class="t-heading">{{ $t('governance.references') }}</h2>
               <!-- The anchor document is not a numbered reference, so it sits
                    outside the list the [n] markers point into. -->
               <a
-                v-if="anchorHref"
+                v-if="showAnchorReference"
                 :href="anchorHref"
                 target="_blank"
                 rel="noopener noreferrer"
@@ -173,15 +212,19 @@
             <div v-if="summary" class="action-detail__rail-card glass-panel">
               <span class="t-label">{{ $t('governance.positionsTitle') }}</span>
               <div v-if="drepCastCounts" class="action-detail__rail-row">
-                <span class="t-body-2">{{ $t('governance.dReps') }}</span>
-                <span class="t-caption g-num">{{ $t('governance.votesCount', drepCastCounts) }}</span>
+                <span class="action-detail__rail-label t-body-2">{{ $t('governance.dReps') }}</span>
+                <span class="action-detail__rail-value t-caption g-num">
+                  {{ $t('governance.votesCount', drepCastCounts) }}
+                </span>
               </div>
               <GButton tier="tertiary" compact block @click="openVotesFor('DRep')">
                 {{ $t('governance.viewDRepVotes') }}
               </GButton>
               <div v-if="ccCounts" class="action-detail__rail-row">
-                <span class="t-body-2">{{ $t('governance.constitutionalCommittee') }}</span>
-                <span class="t-caption g-num">{{ $t('governance.votesCount', ccCounts) }}</span>
+                <span class="action-detail__rail-label t-body-2">{{ $t('governance.constitutionalCommittee') }}</span>
+                <span class="action-detail__rail-value t-caption g-num">
+                  {{ $t(ccCounts.notVoted === null ? 'governance.votesCount' : 'governance.votesCountWithNotVoted', ccCounts) }}
+                </span>
               </div>
               <GButton tier="tertiary" compact block @click="openVotesFor('ConstitutionalCommittee')">
                 {{ $t('governance.viewCommitteeVotes') }}
@@ -234,7 +277,9 @@ import NetworkStore, { networkStore } from '@/stores/networkStore';
 import governanceActionsStore from '@/stores/governanceActionsStore';
 import { toDisplayGovActionId } from '@/shared/utils/govActionId';
 import { toLovelace } from '@/shared/utils/lovelace';
-import { drepTallies, spoTallies, ccProgress } from '@/shared/utils/govTally';
+import { formatBalance } from '@/shared/utils/format';
+import filters from '@/shared/utils/filters';
+import { drepTallies, spoTallies, ccTallies, ccProgress, activeCommitteeSize } from '@/shared/utils/govTally';
 import type { Composition } from '@/shared/utils/govTally';
 import { evaluateThresholds } from '@/shared/utils/govThresholds';
 import type { BodyResult, GovThresholdParams } from '@/shared/utils/govThresholds';
@@ -245,7 +290,6 @@ import {
   formatApproxExpiry,
   isOpen,
 } from '@/shared/utils/govLifecycle';
-import { safeExternalHref } from '@/shared/utils/externalLink';
 import { renderMarkdown, referenceMarkerIndex } from '@/shared/utils/renderMarkdown';
 import { governanceStatus } from '@/shared/composables/useGovernanceStatus';
 import { useTranslation } from '@/shared/composables/useTranslation';
@@ -261,9 +305,12 @@ import {
   referenceElementId,
   toReferenceLinks,
 } from '@/modules/governance/components/actions/references';
+import { toLinkHref } from '@/modules/governance/utils/govAnchor';
+import { treasuryWithdrawalsOf } from '@/modules/governance/utils/treasuryWithdrawals';
 import EmptyState from '@/shared/components/feedback/EmptyState.vue';
 import ErrorState from '@/shared/components/feedback/ErrorState.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
+import CopyButton from '@/shared/components/CopyButton.vue';
 
 const TABS = [
   { id: 'overview', labelKey: 'governance.overview' },
@@ -345,22 +392,41 @@ function toGovThresholdParams(): GovThresholdParams {
     pvtHardFork: fractionToNumber(pool?.['hardForkInitiation']),
     pvtSecurityGroup: fractionToNumber(pool?.['securityRelevantParamVotingThreshold']),
     committeeMinSize: typeof params?.minCommitteeSize === 'number' ? params.minCommitteeSize : undefined,
+    // The committee's own quorum (mainnet 2/3), from the committee this view
+    // loaded — undefined, and so "unknown", until that lands.
+    committeeQuorum: fractionToNumber({
+      numerator: state.committee?.thresholdNumerator ?? undefined,
+      denominator: state.committee?.thresholdDenominator ?? undefined,
+    }),
   };
 }
 
 const drepComposition = computed(() => drepTallies(summary.value));
 const spoComposition = computed(() => spoTallies(summary.value));
 
-/** CC votes by member count, not stake — only the server pcts are renderable. */
-const ccComposition = computed<Composition>(() => {
-  const s = summary.value;
-  if (typeof s?.ccYesPct === 'number' || typeof s?.ccNoPct === 'number') {
-    return { yesPct: s.ccYesPct ?? null, noPct: s.ccNoPct ?? null, available: true };
-  }
-  return { yesPct: null, noPct: null, available: false };
-});
+const actionIsOpen = computed(() => isOpen(action.value?.status));
 
-const ccCounts = computed(() => ccProgress(summary.value, null, null));
+/**
+ * Committee seats that can vote on this action now. Only for an open action:
+ * the committee in hand is the CURRENT one, and a closed action may have been
+ * voted on by a different one, so there it stays unknown and the tally falls
+ * back to the server's figures.
+ */
+const activeSeats = computed(() =>
+  actionIsOpen.value ? activeCommitteeSize(state.committee, currentEpoch.value) : null,
+);
+
+/** CC votes by member count, not stake — see `ccTallies` for why not the server pct. */
+const ccComposition = computed<Composition>(() => ccTallies(summary.value, activeSeats.value));
+
+const ccCounts = computed(() =>
+  ccProgress(
+    summary.value,
+    state.committee?.thresholdNumerator,
+    state.committee?.thresholdDenominator,
+    activeSeats.value,
+  ),
+);
 
 /** Head-counts of DRep ballots cast, for the rail. Null when the summary has none. */
 const drepCastCounts = computed(() => {
@@ -380,7 +446,7 @@ function openVotesFor(role: string): void {
 interface BodyCard {
   result: BodyResult;
   composition: Composition;
-  counts: { yes: number; no: number; abstain: number } | null;
+  counts: { yes: number; no: number; abstain: number; notVoted: number | null } | null;
   thresholdNote?: string;
 }
 
@@ -392,10 +458,12 @@ interface BodyCard {
  */
 const bodyResults = computed<BodyCard[]>(() => {
   if (!action.value || isInfoAction.value) return [];
+  // The UNROUNDED shares: the display figures are rounded to two decimals, and
+  // a share that only rounds up to the threshold has not cleared it.
   const observed = {
-    drepYesPct: drepComposition.value.yesPct,
-    spoYesPct: spoComposition.value.yesPct,
-    ccYesPct: summary.value?.ccYesPct ?? null,
+    drepYesPct: drepComposition.value.yesShare ?? drepComposition.value.yesPct,
+    spoYesPct: spoComposition.value.yesShare ?? spoComposition.value.yesPct,
+    ccYesPct: ccComposition.value.yesShare ?? ccComposition.value.yesPct,
   };
   const results = evaluateThresholds(String(action.value.type), toGovThresholdParams(), observed, null);
   return results.map(result => {
@@ -403,13 +471,14 @@ const bodyResults = computed<BodyCard[]>(() => {
       return { result, composition: spoComposition.value, counts: null };
     }
     if (result.body === 'CC') {
-      // The CC threshold is a member-count quorum (ccThreshold is null
-      // upstream), so its "unknown threshold" note names the quorum, not the
-      // epoch parameters.
+      // The CC threshold is a member-count quorum read from the committee (the
+      // summary's ccThreshold is null upstream), so when it is unknown the note
+      // names the quorum, not the epoch parameters.
+      const counts = ccCounts.value;
       return {
         result,
         composition: ccComposition.value,
-        counts: ccCounts.value ? { yes: ccCounts.value.yes, no: ccCounts.value.no, abstain: ccCounts.value.abstain } : null,
+        counts: counts ? { yes: counts.yes, no: counts.no, abstain: counts.abstain, notVoted: counts.notVoted } : null,
         thresholdNote: String(t('governance.quorumUnavailable')),
       };
     }
@@ -440,15 +509,47 @@ const typeLabel = computed(() => {
   return translated === key ? type : translated;
 });
 
-const title = computed(() => {
-  if (action.value?.title) return action.value.title;
-  return govActionId.value ? `${govActionId.value.slice(0, 10)}…#${action.value?.index ?? 0}` : '';
+/** The id in the same short form the action list shows: `418df5…a9f#0`. */
+const shortId = computed(() => {
+  const hash = String(action.value?.txHash ?? route.params['txHash'] ?? '');
+  const index = action.value?.index ?? Number(route.params['index'] ?? 0);
+  return hash.length > 9 ? `${hash.slice(0, 6)}…${hash.slice(-3)}#${index}` : `${hash}#${index}`;
 });
 
-/** Deposit in ADA. Gov deposits are far below 2^53 lovelace, so the division is exact enough to display. */
-const depositAda = computed(() => {
-  const lovelace = toLovelace(action.value?.deposit);
+/**
+ * The CIP-108 title, or — when the metadata document could not be read — what
+ * the chain itself says: the action's type and a short id. Never the raw id
+ * alone, which reads as an error.
+ */
+const title = computed(() => {
+  if (action.value?.title) return action.value.title;
+  if (!action.value) return '';
+  return String(t('governance.untitledActionTitle', { type: typeLabel.value, id: shortId.value }));
+});
+
+/**
+ * Lovelace in ADA, full precision. Treasury and deposit amounts sit far below
+ * 2^53 lovelace (the whole treasury is ~1.7e15), so the division is exact.
+ */
+function exactAda(lovelace: bigint): string {
   return (Number(lovelace) / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 6 });
+}
+
+const depositAda = computed(() => exactAda(toLovelace(action.value?.deposit)));
+
+/**
+ * What a TreasuryWithdrawals action pays out, from its on-chain payload. The
+ * amount is shown compact (11.79M) with the exact figure on hover, and the
+ * recipient as a truncated stake address with the full one one click away.
+ */
+const treasuryWithdrawals = computed(() => {
+  if (action.value?.type !== 'TreasuryWithdrawals') return [];
+  return treasuryWithdrawalsOf(action.value.govAction).map(withdrawal => ({
+    rewardAddress: withdrawal.rewardAddress,
+    shortAddress: filters.truncate(withdrawal.rewardAddress),
+    ada: formatBalance(Number(withdrawal.lovelace) / 1_000_000),
+    exactAda: exactAda(withdrawal.lovelace),
+  }));
 });
 
 const epochsLeft = computed(() => {
@@ -468,6 +569,25 @@ const expiresOn = computed(() => {
   return formatApproxExpiry(approxExpiryDate(currentEpoch.value, action.value?.expiresEpoch));
 });
 
+/** Whether the metadata document itself is in hand. */
+const hasDocument = computed(() => action.value?.rawMetadata !== null && action.value?.rawMetadata !== undefined);
+
+/**
+ * The hash verdict, read the same way whichever Nexus answered.
+ *
+ * `false` means "fetched, and the blake2b-256 digest differs" — a fact about
+ * the document. Nexus before the hashValid=null fix also sent `false` when it
+ * could not fetch the document at all (an IPFS gateway answering 429), which
+ * put "hash mismatch" on proposals whose metadata is fine. A mismatch can only
+ * be known once the document has been read, so a `false` with no document in
+ * hand is that old "could not fetch", and is no verdict.
+ */
+const hashVerdict = computed<boolean | null>(() => {
+  const value = action.value?.hashValid;
+  if (value === false && !hasDocument.value) return null;
+  return typeof value === 'boolean' ? value : null;
+});
+
 /**
  * Why the hash check produced no verdict, when that is knowable.
  *
@@ -478,13 +598,32 @@ const expiresOn = computed(() => {
  * so the badge keeps its plain "unverified" state.
  */
 const anchorFailureReason = computed<'fetchFailed' | null>(() => {
-  const value = action.value;
-  if (!value?.anchorUrl || value.hashValid !== null) return null;
-  return value.rawMetadata === null ? 'fetchFailed' : null;
+  if (!action.value?.anchorUrl || hashVerdict.value !== null) return null;
+  return hasDocument.value ? null : 'fetchFailed';
 });
 
-/** Anchor and reference URLs are author-controlled — everything goes through the safe-link parser. */
-const anchorHref = computed(() => safeExternalHref(action.value?.anchorUrl));
+/**
+ * Anchor and reference URLs are author-controlled — everything goes through the
+ * safe-link mapping: http(s) as written, `ipfs://<cid>` through a public
+ * gateway, anything else dropped.
+ */
+const anchorHref = computed(() => toLinkHref(action.value?.anchorUrl) ?? undefined);
+
+/**
+ * What the Overview says when the metadata gave it nothing to show. Null when
+ * there is prose. Every action carries an anchor on chain, so "none" is only
+ * reached when the projection omits it.
+ */
+const overviewNotice = computed<string | null>(() => {
+  const value = action.value;
+  if (!value || value.abstractText || value.motivation || value.rationale) return null;
+  if (!value.anchorUrl) return 'governance.anchorNone';
+  return hasDocument.value ? 'governance.metadataNoSummary' : 'governance.metadataUnavailable';
+});
+
+/** The notice links the document it could not load; the References list then skips it. */
+const noticeLinksAnchor = computed(() => !!anchorHref.value && overviewNotice.value === 'governance.metadataUnavailable');
+const showAnchorReference = computed(() => !!anchorHref.value && !noticeLinksAnchor.value);
 
 const referenceLinks = computed(() => toReferenceLinks(action.value?.references));
 
@@ -532,8 +671,6 @@ function renderProse(source: string | null | undefined): string {
 const renderedAbstract = computed(() => renderProse(action.value?.abstractText));
 const renderedMotivation = computed(() => renderProse(action.value?.motivation));
 const renderedRationale = computed(() => renderProse(action.value?.rationale));
-
-const actionIsOpen = computed(() => isOpen(action.value?.status));
 
 /**
  * Whose position the panel should call out.
@@ -746,11 +883,67 @@ onBeforeUnmount(() => proseRoot.value?.removeEventListener('click', onProseClick
   gap: var(--g-s-3);
   padding: var(--g-s-4);
 }
+/* Label left, counts right, in a 300px rail. When the two do not fit on one
+   line the counts drop to their own line WHOLE rather than breaking inside a
+   figure: the label ellipsizes, and the counts only break between their
+   "·"-separated pairs (each "Yes 9" is joined by a no-break space in the
+   string itself). */
 .action-detail__rail-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
+  gap: var(--g-s-1) var(--g-s-2);
+  min-width: 0;
+}
+.action-detail__rail-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.action-detail__rail-value {
+  margin-left: auto;
+  color: var(--g-text-2);
+  text-align: right;
+}
+/* Said in place of the prose when the metadata gave the Overview nothing.
+   Surface, border and radius come from `glass-panel`. */
+.action-detail__notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: var(--g-s-2);
+  padding: var(--g-s-4);
+  color: var(--g-text-2);
+}
+.action-detail__withdrawals {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+/* One row per recipient: the amount, then who receives it. Hairline rules
+   between rows rather than a surface per row — the page itself is the card. */
+.action-detail__withdrawal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--g-s-1) var(--g-s-3);
+  padding: var(--g-s-2) 0;
+  border-bottom: 1px solid var(--g-hairline-1);
+}
+.action-detail__withdrawal:last-child {
+  border-bottom: none;
+}
+.action-detail__withdrawal-to {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--g-s-1);
+  min-width: 0;
+  color: var(--g-text-3);
 }
 .action-detail__section {
   display: flex;

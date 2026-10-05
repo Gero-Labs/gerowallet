@@ -16,6 +16,7 @@ import axios, { AxiosError } from 'axios';
 import { Cardano } from '@cardano-sdk/core';
 import { Network } from '@/models/types';
 import { filterOutCollateralFromUTxOs } from '@/chrome/serialization';
+import { inlineDatumPlutusData } from '@/shared/utils/utxoCbor';
 
 // ── Request / response types matching nexus's BuildTxRequest / BuildTxResponse ──
 
@@ -275,14 +276,19 @@ export function cardanoUtxoToNexusInput(utxo: Cardano.Utxo): NexusTxInput {
     }
   }
 
+  // The datum's CBOR hex, as the builder's cardano-client-lib Utxo takes it. An output
+  // holds an inline datum or a datum hash, never both: the hash beside an inline datum is
+  // derived, and sending it would describe a datum-HASH output.
+  const inlineDatum = txOut.datum != null ? inlineDatumPlutusData(txOut.datum).toCbor() : undefined;
+
   return {
     txHash: String(txIn.txId),
     outputIndex: txIn.index,
     address: String(txOut.address),
     lovelace: String(txOut.value.coins),
     assets: assets.length > 0 ? assets : undefined,
-    dataHash: txOut.datumHash ? String(txOut.datumHash) : undefined,
-    inlineDatum: txOut.datum ? String(txOut.datum) : undefined,
+    dataHash: !inlineDatum && txOut.datumHash ? String(txOut.datumHash) : undefined,
+    inlineDatum,
   };
 }
 

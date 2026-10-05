@@ -108,7 +108,7 @@ const stepSubtitle = computed(() => {
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .onboarding-wrap {
   display: flex;
   align-items: center;
@@ -118,13 +118,13 @@ const stepSubtitle = computed(() => {
 }
 
 .onboarding-card {
+  @include g-glass-panel(false);
   width: 100%;
   max-width: 340px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 14px;
-  background: var(--g-surface);
   border-radius: var(--g-r-sheet);
   border: 1px solid var(--g-hairline-2);
   padding: 26px 20px 20px;

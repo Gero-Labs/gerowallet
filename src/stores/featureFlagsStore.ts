@@ -37,6 +37,14 @@ export interface FeatureFlags {
   // `networks.resolveRealFiSupport` currently returns true for Cardano preprod only —
   // so both must pass before the route or the nav item appears.
   isRealFiEnabled: boolean;
+  // Staking, unstaking, claiming and cancelling from inside Gero (orders built by
+  // Nexus, signed here). Default OFF: without it the Earn page hands transacting to
+  // RealFi's own app. Only meaningful with `isRealFiEnabled` on.
+  isRealFiStakingEnabled: boolean;
+  // The Earn page's in-wallet USDCx → USDrf swap. Default OFF: the only route is the
+  // SundaeSwap V4 pool, which the aggregator serves only once V4 is promoted. Until then
+  // the swap would open with no route.
+  isRealFiUsdrfSwapEnabled: boolean;
   isNexusWithdrawalEnabled: boolean;
   isNexusUnstakeEnabled: boolean;
   isNexusDelegateEnabled: boolean;
@@ -77,6 +85,12 @@ export interface FeatureFlags {
   // rebuild and a Web Store review. Read in the background through the
   // chrome.storage mirror; see src/chrome/cip113Flag.ts.
   isCip113Enabled: boolean;
+  // Default OFF and ships dark. Kill switch for WRITING the gpw2 secret envelope
+  // and for the on-unlock migration to it. Every release since the reader-only one
+  // opens gpw2, so turning this off only stops new gpw2 writes. Read by the
+  // background and the UI through the chrome.storage mirror; see
+  // src/shared/utils/envelopeV2Flag.ts.
+  isKeyEnvelopeV2Enabled: boolean;
   /**
    * Origins allowed to draw from the Nexus shared-pool collateral. A dApp must be
    * on this Gero-curated list AND already connected by the user before the wallet
@@ -110,6 +124,8 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
     isGovernanceEnabled: false,
     isGovernanceVotingEnabled: false,
     isRealFiEnabled: false,
+    isRealFiStakingEnabled: false,
+    isRealFiUsdrfSwapEnabled: false,
     isNexusWithdrawalEnabled: false,
     isNexusUnstakeEnabled: false,
     isNexusDelegateEnabled: false,
@@ -123,6 +139,7 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
     isCip45Enabled: CIP45_DEFAULT_ENABLED,
     isLiveChatEnabled: false,
     isCip113Enabled: false,
+    isKeyEnvelopeV2Enabled: false,
     collateralTrustedDapps: [],
   },
   isInitialized: false,
@@ -183,6 +200,8 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isGovernanceEnabled = featureFlagService.getFlag('isGovernanceEnabled', false);
     featureFlagsState.flags.isGovernanceVotingEnabled = featureFlagService.getFlag('isGovernanceVotingEnabled', false);
     featureFlagsState.flags.isRealFiEnabled = featureFlagService.getFlag('isRealFiEnabled', false);
+    featureFlagsState.flags.isRealFiStakingEnabled = featureFlagService.getFlag('isRealFiStakingEnabled', false);
+    featureFlagsState.flags.isRealFiUsdrfSwapEnabled = featureFlagService.getFlag('isRealFiUsdrfSwapEnabled', false);
     featureFlagsState.flags.isNexusWithdrawalEnabled = featureFlagService.getFlag('isNexusWithdrawalEnabled', false);
     featureFlagsState.flags.isNexusUnstakeEnabled = featureFlagService.getFlag('isNexusUnstakeEnabled', false);
     featureFlagsState.flags.isNexusDelegateEnabled = featureFlagService.getFlag('isNexusDelegateEnabled', false);
@@ -204,6 +223,8 @@ export const featureFlagsStore = {
     // CIP-113 ships DARK (default false); the background reads this mirror to decide
     // whether to partition UTxOs at all.
     featureFlagsState.flags.isCip113Enabled = featureFlagService.getFlag('isCip113Enabled', false);
+    // gpw2 writer + migration ships DARK; writers read this mirror before each write.
+    featureFlagsState.flags.isKeyEnvelopeV2Enabled = featureFlagService.getFlag('isKeyEnvelopeV2Enabled', false);
     featureFlagsState.flags.collateralTrustedDapps = featureFlagService.getFlag<string[]>('collateralTrustedDapps', []);
     persistFlagsForBackground();
   },
@@ -241,6 +262,12 @@ export const featureFlagsStore = {
     });
     featureFlagService.onFlagChange('isRealFiEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isRealFiEnabled', newValue);
+    });
+    featureFlagService.onFlagChange('isRealFiStakingEnabled', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'isRealFiStakingEnabled', newValue);
+    });
+    featureFlagService.onFlagChange('isRealFiUsdrfSwapEnabled', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'isRealFiUsdrfSwapEnabled', newValue);
     });
     featureFlagService.onFlagChange('isNexusWithdrawalEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isNexusWithdrawalEnabled', newValue);
@@ -289,6 +316,11 @@ export const featureFlagsStore = {
     featureFlagService.onFlagChange('isCip113Enabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isCip113Enabled', newValue);
       // Mirror the live flip so the background gate picks it up without a re-login.
+      persistFlagsForBackground();
+    });
+    featureFlagService.onFlagChange('isKeyEnvelopeV2Enabled', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'isKeyEnvelopeV2Enabled', newValue === true);
+      // Mirror the live flip (on or off) so writers and the migration see it immediately.
       persistFlagsForBackground();
     });
     featureFlagService.onFlagChange('collateralTrustedDapps', (newValue) => {
@@ -385,6 +417,16 @@ export const featureFlagsStore = {
    */
   isRealFiEnabled(): boolean {
     return featureFlagsState.flags.isRealFiEnabled;
+  },
+
+  /** In-wallet RealFi orders. Callers AND it with `isRealFiEnabled`. */
+  isRealFiStakingEnabled(): boolean {
+    return featureFlagsState.flags.isRealFiStakingEnabled;
+  },
+
+  /** In-wallet USDCx → USDrf swap on the Earn page; off until SundaeSwap V4 is promoted. */
+  isRealFiUsdrfSwapEnabled(): boolean {
+    return featureFlagsState.flags.isRealFiUsdrfSwapEnabled;
   },
 
   /**
@@ -535,6 +577,8 @@ export const featureFlagsStore = {
       isGovernanceEnabled: false,
       isGovernanceVotingEnabled: false,
       isRealFiEnabled: false,
+      isRealFiStakingEnabled: false,
+      isRealFiUsdrfSwapEnabled: false,
       isNexusWithdrawalEnabled: false,
       isNexusUnstakeEnabled: false,
       isNexusDelegateEnabled: false,
@@ -548,6 +592,7 @@ export const featureFlagsStore = {
       isCip45Enabled: CIP45_DEFAULT_ENABLED,
       isLiveChatEnabled: false,
       isCip113Enabled: false,
+      isKeyEnvelopeV2Enabled: false,
       collateralTrustedDapps: [],
     });
     featureFlagsState.isInitialized = false;

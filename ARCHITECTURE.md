@@ -360,11 +360,10 @@ function broadcastUpdate(storeName: string, updates: any) {
   ports.forEach(port => {
     port.postMessage({ storeName, updates: serialized });
   });
-
-  // Persist to Chrome storage as fallback
-  chrome.storage.local.set({ [storeName]: serialized });
 }
 ```
+
+Each store persists its own state after the broadcast. `walletStore`, `networkStore` and `midnightStore` use `StorePersister` (`src/utils/storePersistence.ts`). It writes only the fields that changed: small ones to `chrome.storage.local[storeName]`, and bulk ones (transactions, UTxOs, tokens, collections, assets) to the `gero-store-cache` IndexedDB. Large values must stay out of `chrome.storage`. Chrome copies every changed value (old and new) on its browser UI thread into every `storage.onChanged` listener, including the content script in every tab. Whole-store rewrites froze the entire browser.
 
 #### Browser Context (`src/services/storeMessaging.service.ts`)
 ```typescript
@@ -477,21 +476,27 @@ await db.open();
 
 #### 1. **Private Key Protection**
 
-**Storage**: All private keys encrypted with **AES-256** (CryptoTS) and **ChaCha20-Poly1305** (EMIP3):
+**Storage**: Every secret stored under the spending password is encrypted at rest. Writers:
 
 ```typescript
-// High-level encryption (mnemonics, general data)
-import { encrypt, decrypt } from '@/shared/utils/crypto';
+// Small UTF-8 secrets (mnemonic, MPC device share, 2FA data): gpw1 = Argon2id -> XChaCha20-Poly1305
+import { encrypt } from '@/shared/utils/crypto';
 const encryptedMnemonic = encrypt(mnemonic, password);
 
-// Private key encryption (ChaCha20-Poly1305 AEAD)
-import { encryptWithPassword, decryptWithPassword } from '@/shared/utils/crypto';
-const encrypted = encryptWithPassword(password, rootKeyBytes);
+// Root key, SPO cold key, Strike key: PBKDF2-HMAC-SHA512 (19,162 iter) -> ChaCha20-Poly1305
+// Format: salt (32B) + nonce (12B) + tag (16B) + ciphertext, compatible with CSL's EMIP3
+import { encryptPrivateKey, encryptWithPassword } from '@/shared/utils/crypto';
+const encryptedRootKey = encryptPrivateKey(rootKey, password);
 ```
 
-**Format**: `salt (32B) + nonce (12B) + tag (16B) + ciphertext`
-- PBKDF2-HMAC-SHA512 (19,162 iterations)
-- 100% compatible with Cardano Serialization Library's EMIP3
+**Reading**: always go through the single reader for the field. Never call `decryptWithPassword` or the legacy reader on a stored blob directly: fields hold several historical formats (including the purpose-bound `gpw2` envelope, legacy crypto-ts blobs and raw PBKDF2 hex), and only these readers handle all of them.
+
+```typescript
+import { SecretPurpose, decrypt, decryptPrivateKey, decryptKeyBlob } from '@/shared/utils/crypto';
+const rootKeyBytes = decryptPrivateKey(wallet.encryptedPrivateKey, password);        // Cardano, BTC, Midnight
+const mnemonic = decrypt(wallet.encryptedMnemonic, password, SecretPurpose.Mnemonic); // also MpcShare, SecurityData
+const coldKey = decryptKeyBlob(coldKeyBlob, password, SecretPurpose.ColdKey);        // also StrikeKey
+```
 
 #### 2. **Context Isolation**
 
@@ -924,7 +929,7 @@ function updateWalletState(updates: Partial<WalletStore>) {
 
   if (context === 'background') {
     backgroundStoreMessaging.broadcastUpdate('walletStore', updates);
-    chrome.storage.local.set({ walletStore: { ...walletStore } });
+    persister.markDirty(Object.keys(updates)); // only the touched fields; bulk ones to IndexedDB
   }
 }
 ```

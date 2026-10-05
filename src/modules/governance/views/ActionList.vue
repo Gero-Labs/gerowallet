@@ -414,7 +414,7 @@ onMounted(() => {
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .action-list {
   display: flex;
   flex-direction: column;
@@ -508,6 +508,7 @@ onMounted(() => {
   cursor: pointer;
 }
 .action-list__batch-bar {
+  @include g-glass-tier(false);
   position: sticky;
   bottom: var(--g-s-2);
   z-index: var(--g-z-sticky);
@@ -516,7 +517,6 @@ onMounted(() => {
   justify-content: space-between;
   gap: var(--g-s-3);
   padding: var(--g-s-2) var(--g-s-3);
-  background: var(--g-overlay);
   border: 1px solid var(--g-hairline-2);
   border-radius: var(--g-r-card);
 }

@@ -113,10 +113,10 @@ function formatDrawdown(raw: string): string {
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 /* ── Card ── */
 .vault-card {
-  background: var(--g-surface);
+  @include g-glass-panel(false);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-card);
   padding: 12px 14px;
@@ -180,11 +180,11 @@ function formatDrawdown(raw: string): string {
 
 /* ── Primary Metrics Row ── */
 .vault-card__metrics-row {
+  @include g-glass-tier(false);
   display: flex;
   align-items: center;
   gap: 0;
   margin-bottom: 8px;
-  background: var(--g-raised);
   border-radius: var(--g-r-control);
   padding: 8px 10px;
 }

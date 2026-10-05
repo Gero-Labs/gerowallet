@@ -49,15 +49,15 @@ const eyebrow = computed(() =>
 );
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 /* Solid surface with an accent hairline, not a gradient and not a glow: the
    screen's one gradient belongs to the vote CTA in the header. */
 .your-position {
+  @include g-glass-tier(false);
   display: flex;
   flex-direction: column;
   gap: var(--g-s-2);
   padding: var(--g-s-4);
-  background: var(--g-raised);
   border: 1px solid var(--g-accent);
   border-radius: var(--g-r-card);
 }

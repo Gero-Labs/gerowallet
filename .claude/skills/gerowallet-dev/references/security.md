@@ -62,11 +62,27 @@ Do not invent a scheme. Two exist:
 
 The old crypto-ts/CryptoJS outer AES wrap (MD5, one iteration) was **removed** because it negated PBKDF2 under the same password. Legacy nested blobs are still readable and are migrated to the single strong layer on first password unlock, best-effort so a failed rewrite can never break signing. Do not reintroduce an outer wrap.
 
+A third format, `gpw2.` (`src/shared/utils/secretEnvelope.ts`), is Argon2id -> XChaCha20-Poly1305 with the header as AEAD associated data and a purpose byte that binds each blob to its field (`SecretPurpose`). It is written only while the `isKeyEnvelopeV2Enabled` kill switch is on (ships dark); readers shipped one release earlier, so a rollback can never meet a blob it cannot open.
+
+**Always write stored password secrets through `sealTextSecret` / `sealKeySecret`** (`src/shared/utils/secretWriters.ts`), never `encrypt` / `encryptWithPassword` directly: they pick `gpw2` or the current format from the flag. With the flag on, `src/chrome/secretMigration.ts` upgrades a wallet's existing secrets after a successful password decrypt (key-equivalence check, in-memory read-back, compare-and-swap per IndexedDB, storage read-back). A new secret stored under the spending password must be added to `CONFIG_SECRET_FIELDS` (`walletSecretFields.ts`) or it keeps the old password after a password change.
+
+Release, rollout, rollback and device-test procedure: `.github/runbooks/secret-envelope.md`. **Never publish a build that fails `node scripts/check-secret-envelope-readers.mjs`** (run it against the tag before cutting a hotfix): it cannot open migrated wallets.
+
+**Always read stored password secrets through the single reader for the field**, never with `decryptWithPassword` or `decryptLegacyAes` directly:
+
+| Field | Reader |
+|---|---|
+| Root key (Cardano, BTC, Midnight) | `decryptPrivateKey(blob, pw)` |
+| Mnemonic (incl. a Midnight sponsor wallet's), MPC device share, 2FA data | `decrypt(blob, pw, SecretPurpose.X)` |
+| SPO cold key, Strike key | `decryptKeyBlob(blob, pw, SecretPurpose.X)` |
+
+The unlock-time root-key rewrite is gated on `isLegacyNestedKey()`, not `!isRawEncryptedKey()`: a `gpw2` blob is not raw hex either, and rewriting it would downgrade it to PBKDF2. Every historical format has a frozen fixture in `src/shared/utils/__fixtures__/secretFormats.ts`; never regenerate those.
+
 Import note: use `blake2b` as a direct dependency - `@noble/hashes/blake2` does not resolve here.
 
 ## Non-negotiables for any change in this area
 
-- **Never log key material, mnemonics, addresses, or transaction contents.** Use `debugLog()`, which compiles out unless `VITE_DEBUG_STORES=true`. Strip ad-hoc `console.log` before committing. This is an open-source wallet; a stray log ships to production consoles. Note `debugLog` is **not** an unconditional safety net: `ci-cd.yml` passes `VITE_DEBUG_STORES` through from a repo variable, so a release build can be produced with debug logging on. Write every log as if it will ship.
+- **Never log key material, mnemonics, addresses, or transaction contents.** Use `debugLog()`, which compiles out unless `VITE_DEBUG_STORES=true`. Strip ad-hoc `console.log` before committing. This is an open-source wallet; a stray log ships to production consoles. `ci-cd.yml` pins `VITE_DEBUG_STORES=false` for release builds, but a build made by hand from a local `.env.production` can still turn it on. Write every log as if it will ship.
 - **Never widen a refusal.** If you add a signing path, add its preflight.
 - **Validate at the boundary.** Escape data you serialize. The existing CSV export quotes naively and escapes nothing, and the rows carry attacker-influenced strings (asset names, ADA Handles, metadata) - do not copy that into a new exporter without fixing the formula-injection surface.
 - **URL safety has one SSOT**: `parseSafeUrl()` in `src/shared/utils/externalLink.ts`. It parses with `new URL()`, allows only http/https, and matches brands on the parsed `hostname` exactly or as a subdomain. **Never** `url.includes('github.com')` - `https://evil.example/?github.com` satisfies it.

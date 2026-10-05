@@ -135,6 +135,9 @@ export default {
       mempoolSupport: false,
       lightningSupport: false,
       programmableLogicBaseScriptHashes: CIP113_BASE_MAINNET,
+      // RealFi launched on mainnet 2026-10-01. Still behind isRealFiEnabled: this says
+      // the network CAN reach RealFi, the flag says whether it is switched on.
+      realFiSupport: true,
       networkParams: {
         networkMagic: 764824073
       }

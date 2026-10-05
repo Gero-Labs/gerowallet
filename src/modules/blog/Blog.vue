@@ -166,7 +166,7 @@ onMounted(() => loadPosts(true));
 onUnmounted(() => { /* observer stops with the component */ });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .blog-page {
   max-width: var(--g-content-max);
   margin: 0 auto;
@@ -191,10 +191,10 @@ onUnmounted(() => { /* observer stops with the component */ });
 }
 
 .blog-card {
+  @include g-glass-tier(false);
   display: flex;
   text-align: left;
   width: 100%;
-  background: var(--g-raised);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-card);
   overflow: hidden;

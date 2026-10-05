@@ -1,67 +1,45 @@
 <template>
-  <div class="feature-card">
-    <div class="feature-icon">
-      <img src="@/modules/wallet/icons/global.svg" alt="global" v-if="icon === 'global'" />
-
-      <img src="@/modules/wallet/icons/conversion.svg" alt="conversion" v-if="icon === 'conversion'" />
-
-      <img src="@/modules/wallet/icons/track.svg" alt="track" v-if="icon === 'track'" />
-    </div>
-    <div class="feature-card-content">
-      <h4 class="feature-title">{{ title }}</h4>
-      <p class="feature-description">{{ description }}</p>
-    </div>
-  </div>
+  <article class="feature-card glass-panel">
+    <IsoScene :name="SCENES[icon]" :animated="animated" class="feature-card__art" />
+    <h3 class="t-body-lg">{{ title }}</h3>
+    <p class="t-body-sm">{{ description }}</p>
+  </article>
 </template>
 
 <script setup lang="ts">
-interface Props {
-  icon: 'conversion' | 'global' | 'track';
+import type { FeatureCardProps } from '@/models/types';
+import type { IsoSceneName } from '@/shared/components/iso/isoScenes';
+import IsoScene from '@/shared/components/iso/IsoScene.vue';
+
+// Vue 2.7 cannot take an imported type as the whole props type, so it is spelled out here.
+withDefaults(defineProps<{
+  icon: FeatureCardProps['icon'];
   title: string;
   description: string;
-}
+  animated?: boolean;
+}>(), { animated: false });
 
-defineProps<Props>();
+const SCENES: Record<FeatureCardProps['icon'], IsoSceneName> = {
+  conversion: 'payment',
+  global: 'virtual',
+  track: 'pin',
+};
 </script>
 
 <style lang="scss" scoped>
-@import '../styles/variables';
-@import '../styles/mixins';
 .feature-card {
-  padding: $spacing-2xl;
-  @include flex-column;
-  gap: $spacing-3xl;
-  text-align: center;
-  transition: transform var(--g-dur-slow) ease, box-shadow var(--g-dur-slow) ease;
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-3);
+  padding: var(--g-s-5);
 
-  &:hover {
-    transform: translateY(-4px);
-    box-shadow: $shadow-lg;
+  h3,
+  p {
+    margin: 0;
   }
+}
 
-  .feature-icon {
-    margin: 0 auto;
-    width: 48px;
-    height: 48px;
-    border-radius: $border-radius-md;
-    padding: $spacing-md;
-    @include flex-center;
-    border: 1px solid $border-primary;
-    background: $background-dark;
-    box-shadow: $shadow-button;
-  }
-
-  .feature-card-content {
-    @include flex-column;
-    gap: $spacing-sm;
-  }
-
-  .feature-title {
-    @include text-style($font-size-xl, $font-weight-semibold, $line-height-tight);
-  }
-
-  .feature-description {
-    @include body-text($font-size-base);
-  }
+.feature-card__art {
+  width: 140px;
 }
 </style>

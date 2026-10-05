@@ -71,45 +71,87 @@
         </div>
       </template>
 
-      <!-- PRF (passkey) wallet: authenticate with PassKey instead of password -->
-      <template v-else-if="!isConnected && isPrfWallet">
-        <PassKeyAuthButton
-          :disabled="isLoading"
-          :text="needsUnlock ? $t('perpetuals.unlockStrike') : $t('perps.connect.cta')"
-          @success="onPassKeySuccess"
-          @error="onPassKeyError"
-        />
-      </template>
-
-      <!-- Password wallet: spending password field + action button -->
-      <template v-else-if="!isConnected">
-        <!-- Spending password (required to encrypt/decrypt the Strike key) -->
-        <v-text-field
-          v-model="password"
-          :type="showPassword ? 'text' : 'password'"
-          :label="$t('perpetuals.spendingPassword')"
-          :append-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
-          outlined
-          dense
-          hide-details
-          autocomplete="current-password"
-          class="password-field"
-          :disabled="isLoading"
-          @click:append="showPassword = !showPassword"
-          @keyup.enter="onSubmit()"
-        />
-
-        <!-- Action button: Unlock if encrypted blob exists, otherwise Connect -->
+      <!-- First-time connect, step one: fetch Strike's message BEFORE any
+           password or PassKey, so the user reads exactly what will be signed. -->
+      <template v-else-if="!isConnected && !needsUnlock && !pendingMessage">
         <v-btn
           block
           depressed
           :loading="isLoading"
-          :disabled="!password"
           class="connect-btn"
-          @click="onSubmit()"
+          @click="onPrepare()"
         >
-          <v-icon size="16" class="mr-2">{{ needsUnlock ? 'mdi-lock-open-variant' : 'mdi-link-variant' }}</v-icon>
-          {{ needsUnlock ? $t('perpetuals.unlockStrike') : $t('perps.connect.cta') }}
+          <v-icon size="16" class="mr-2">mdi-link-variant</v-icon>
+          {{ $t('perps.connect.cta') }}
+        </v-btn>
+      </template>
+
+      <template v-else-if="!isConnected">
+        <!-- Step two: the verbatim message, then authentication signs it. -->
+        <div v-if="showMessage" class="message-card">
+          <div class="message-label">{{ $t('perps.withdraw.messageToSign') }}</div>
+          <pre class="message-body">{{ pendingMessage.message }}</pre>
+          <div class="message-hint">{{ $t('perps.connect.messageHint') }}</div>
+          <div v-if="pendingMessage.boundToKey" class="message-bound">
+            <v-icon size="12" color="success" class="mr-1">mdi-check-circle</v-icon>
+            <span>{{ $t('perps.connect.boundNote') }}</span>
+          </div>
+          <div v-else class="message-unbound" role="alert">
+            <v-icon size="12" color="warning" class="mr-1">mdi-alert-outline</v-icon>
+            <span>{{ $t('perps.connect.unboundWarning') }}</span>
+          </div>
+        </div>
+
+        <!-- PRF (passkey) wallet: authenticate with PassKey instead of password -->
+        <PassKeyAuthButton
+          v-if="isPrfWallet"
+          :disabled="isLoading"
+          :text="needsUnlock ? t('perpetuals.unlockStrike') : t('perps.connect.signCta')"
+          @success="onPassKeySuccess"
+          @error="onPassKeyError"
+        />
+
+        <!-- Password wallet: spending password field + action button -->
+        <template v-else>
+          <!-- Spending password (required to encrypt/decrypt the Strike key) -->
+          <v-text-field
+            v-model="password"
+            :type="showPassword ? 'text' : 'password'"
+            :label="$t('perpetuals.spendingPassword')"
+            :append-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+            outlined
+            dense
+            hide-details
+            autocomplete="current-password"
+            class="password-field"
+            :disabled="isLoading"
+            @click:append="showPassword = !showPassword"
+            @keyup.enter="onSubmit()"
+          />
+
+          <!-- Action button: Unlock if encrypted blob exists, otherwise sign + connect -->
+          <v-btn
+            block
+            depressed
+            :loading="isLoading"
+            :disabled="!password"
+            class="connect-btn"
+            @click="onSubmit()"
+          >
+            <v-icon size="16" class="mr-2">{{ needsUnlock ? 'mdi-lock-open-variant' : 'mdi-draw' }}</v-icon>
+            {{ needsUnlock ? $t('perpetuals.unlockStrike') : $t('perps.connect.signCta') }}
+          </v-btn>
+        </template>
+
+        <v-btn
+          v-if="showMessage"
+          block
+          text
+          :disabled="isLoading"
+          class="disconnect-btn"
+          @click="onCancel()"
+        >
+          {{ $t('common.cancel') }}
         </v-btn>
       </template>
 
@@ -156,9 +198,12 @@ const {
   publicKey,
   error,
   connectStep,
+  pendingMessage,
   checkConnection,
   unlock,
+  prepareConnect,
   connectWithWallet,
+  cancelConnect,
   disconnect,
 } = useStrikeOnboarding();
 
@@ -198,6 +243,19 @@ const activeIndex = computed(() => {
     default: return -1;
   }
 });
+
+/** The prepared Strike message, shown only on the first-time connect path. */
+const showMessage = computed(() => !needsUnlock.value && !!pendingMessage.value);
+
+async function onPrepare() {
+  await prepareConnect();
+}
+
+function onCancel() {
+  cancelConnect();
+  password.value = '';
+  showPassword.value = false;
+}
 
 async function onSubmit() {
   if (!password.value) return;
@@ -251,7 +309,7 @@ watch(isConnected, (val) => {
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .onboarding-wrap {
   display: flex;
   align-items: center;
@@ -261,13 +319,13 @@ watch(isConnected, (val) => {
 }
 
 .onboarding-card {
+  @include g-glass-panel(false);
   width: 100%;
   max-width: 300px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 16px;
-  background: var(--g-surface);
   border-radius: var(--g-r-sheet);
   border: 1px solid var(--g-hairline-2);
   padding: 28px 20px 24px;
@@ -390,12 +448,12 @@ watch(isConnected, (val) => {
 }
 
 .hw-notice {
+  @include g-glass-tier(false);
   display: flex;
   align-items: flex-start;
   padding: var(--g-s-3);
   border: 1px solid var(--g-hairline-2);
   border-radius: var(--g-r-control);
-  background: var(--g-raised);
   color: var(--g-text-2);
   font-size: 12px;
   line-height: 1.45;
@@ -440,24 +498,81 @@ watch(isConnected, (val) => {
   width: 100%;
 }
 
-.password-field >>> .v-input__slot {
+.password-field ::v-deep .v-input__slot {
   background: var(--g-raised) !important;
   border-radius: var(--g-r-control) !important;
   min-height: 42px;
 }
 
-.password-field >>> fieldset {
+.password-field ::v-deep fieldset {
   border-color: var(--g-hairline-2) !important;
 }
 
-.password-field >>> input {
+.password-field ::v-deep input {
   color: var(--g-text-1) !important;
   font-size: 13px !important;
 }
 
-.password-field >>> .v-label {
+.password-field ::v-deep .v-label {
   font-size: 12px !important;
   color: var(--g-text-3) !important;
+}
+
+/* Verbatim Strike message. A control-style code block, so it is a solid fill
+   (readability of the exact signed text), not a glass surface. */
+.message-card {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-2);
+  padding: 10px 12px;
+  border-radius: var(--g-r-control);
+  border: 1px solid var(--g-hairline-2);
+  background: var(--g-raised);
+}
+
+.message-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--g-text-3);
+}
+
+.message-body {
+  margin: 0;
+  font-family: var(--g-font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--g-text-1);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.message-hint {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--g-text-3);
+}
+
+.message-bound,
+.message-unbound {
+  display: flex;
+  align-items: flex-start;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.message-bound {
+  color: var(--g-text-2);
+}
+
+.message-unbound {
+  padding: var(--g-s-2);
+  border-radius: var(--g-r-chip);
+  border: 1px solid var(--g-warning-line);
+  background: var(--g-warning-fill);
+  color: var(--g-text-1);
 }
 
 .disconnect-btn {

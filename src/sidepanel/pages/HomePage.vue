@@ -127,6 +127,8 @@
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router/composables';
 import { walletStore } from '@/stores/walletStore';
+import { midnightStore } from '@/stores/midnightStore';
+import { midnightTokenBalances } from '@/chains/midnight/midnightTokenBalances';
 import { Blockchain, Network } from '@/models/types';
 import { useMarketData } from '@/modules/market/composables/useMarketData';
 import { useAdaLovelace } from '../composables/useAdaLovelace';
@@ -196,7 +198,9 @@ const ftCount = computed(() => {
 // wallet (0 ADA, no tokens) shows no rows, so the header count is 0 (hidden).
 // Otherwise ADA is pinned → +1.
 const tokenCount = computed(() => {
-  if (isMidnight.value) return 2; // NIGHT + DUST rows
+  // NIGHT is pinned; every other unshielded colour the wallet holds is a row
+  // (TokenList's midnightTokenRows). DUST lives in its own gauge, not the list.
+  if (isMidnight.value) return 1 + Object.keys(midnightTokenBalances(midnightStore.utxos)).length;
   if (adaLovelace.value === 0 && ftCount.value === 0) return 0;
   return ftCount.value + 1; // +1 for ADA
 });

@@ -2,7 +2,7 @@ import { parseGovActionId, type GovActionId } from '@/shared/utils/govActionId';
 import { drepDisplayName } from '@/shared/utils/drepView';
 import { formatCompact } from '@/shared/utils/format';
 import { toLovelace } from '@/shared/utils/lovelace';
-import { scoreMatch } from '@/shared/utils/searchScore';
+import { scoreIndexEntry, scoreMatch } from '@/shared/utils/searchScore';
 import type { GovProposal } from '@/api/governance.types';
 // TYPE-ONLY on purpose. A value import here would pull the whole search
 // composable (and its store/API graph) into every consumer of these mappers,
@@ -45,7 +45,7 @@ export interface DRepSearchRow {
 }
 
 interface GovernancePage {
-  /** Extra terms beyond the translated title, EN and DE both, as SETTINGS_INDEX does. */
+  /** Extra terms beyond the translated title, EN, DE and ES, as SETTINGS_INDEX does. */
   keywords: string[];
   titleKey: string;
   route: string;
@@ -65,25 +65,25 @@ interface GovernancePage {
  */
 const GOVERNANCE_PAGES: GovernancePage[] = [
   {
-    keywords: ['my governance', 'my vote', 'my votes', 'delegation', 'meine governance', 'delegierung'],
+    keywords: ['my governance', 'my vote', 'my votes', 'delegation', 'meine governance', 'delegierung', 'mi gobernanza', 'mi voto', 'mis votos', 'delegación'],
     titleKey: 'navigation.governanceMe',
     route: '/governance/me',
     icon: 'mdi-account-check',
   },
   {
-    keywords: ['dreps', 'drep', 'delegate', 'representative', 'directory', 'delegieren', 'vertreter', 'verzeichnis'],
+    keywords: ['dreps', 'drep', 'delegate', 'representative', 'directory', 'delegieren', 'vertreter', 'verzeichnis', 'delegar', 'representante', 'representantes', 'directorio'],
     titleKey: 'governance.dReps',
     route: '/governance/dreps',
     icon: 'mdi-account-group',
   },
   {
-    keywords: ['governance actions', 'gov actions', 'proposals', 'vote', 'governance-aktionen', 'vorschlage', 'vorschläge', 'abstimmen'],
+    keywords: ['governance actions', 'gov actions', 'proposals', 'vote', 'governance-aktionen', 'vorschlage', 'vorschläge', 'abstimmen', 'acciones de gobernanza', 'propuestas', 'votar'],
     titleKey: 'governance.actionsTitle',
     route: '/governance/actions',
     icon: 'mdi-gavel',
   },
   {
-    keywords: ['become a drep', 'register as a drep', 'drep registration', 'drep werden', 'drep registrierung'],
+    keywords: ['become a drep', 'register as a drep', 'drep registration', 'drep werden', 'drep registrierung', 'ser drep', 'registrarse como drep', 'registro de drep'],
     titleKey: 'navigation.becomeDRep',
     route: '/governance/register',
     icon: 'mdi-account-plus',
@@ -124,9 +124,9 @@ function byScoreDesc(a: SearchResult, b: SearchResult): number {
 /**
  * Governance hub pages matching `query`.
  *
- * Scored on the same curve as the settings index (exact keyword 100,
- * keyword-prefix 90, keyword-substring 50) so a page and a setting typed for
- * with the same intent rank against each other honestly.
+ * Scored by `scoreIndexEntry`, the curve the settings index and the wallet's
+ * other pages use, so a page and a setting typed for with the same intent rank
+ * against each other honestly.
  */
 export function governancePageResults(
   query: string,
@@ -140,14 +140,7 @@ export function governancePageResults(
   return GOVERNANCE_PAGES.filter(page => !page.requiresVoting || votingEnabled)
     .map(page => {
       const title = String(t(page.titleKey));
-      let best = 0;
-      for (const keyword of page.keywords) {
-        if (keyword === lower) { best = 100; break; }
-        if (keyword.startsWith(lower)) best = Math.max(best, 90);
-        else if (keyword.includes(lower)) best = Math.max(best, 50);
-      }
-      best = Math.max(best, scoreMatch(title, lower));
-      return { page, title, score: best };
+      return { page, title, score: scoreIndexEntry(page.keywords, title, lower) };
     })
     .filter(entry => entry.score > 0)
     .sort((a, b) => b.score - a.score)
@@ -223,10 +216,9 @@ export function governanceActionResults(
 /**
  * DReps matching `query`, by published name or by `drep1…` id fragment.
  *
- * Rows come either from the in-memory directory page or from
- * `getDRepsPaginated({ search })`, which filters server-side. Both are mapped
- * here so the two phases of a search cannot disagree about a DRep's name,
- * power or destination.
+ * Rows come from `getDRepsPaginated({ search })`, which filters server-side
+ * on the wallet's own network. Mapped here so a DRep's name, power and
+ * destination are decided in one testable place.
  */
 export function drepResults(
   rows: readonly DRepSearchRow[] | null | undefined,

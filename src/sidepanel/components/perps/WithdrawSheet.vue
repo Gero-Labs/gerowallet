@@ -543,9 +543,9 @@ watch(() => props.value, (val) => {
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .perps-action-dialog {
-  background: var(--g-overlay);
+  @include g-glass-overlay(false);
   border: 1px solid var(--g-hairline-1);
 }
 

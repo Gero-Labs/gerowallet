@@ -366,9 +366,9 @@ watch(() => props.isOpen, (open) => {
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .dest-card {
-  background: var(--g-surface);
+  @include g-glass-tier(false);
   border: 1px solid var(--g-hairline-2);
   border-radius: var(--g-r-card);
   padding: 12px 14px;

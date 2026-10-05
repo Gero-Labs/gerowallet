@@ -385,9 +385,9 @@ export function useDustSources() {
     if (!record.encryptedMnemonic) {
       throw new Error('Wallet has no local mnemonic (hardware or watch-only)');
     }
-    const { decrypt } = await import('@/shared/utils/crypto');
+    const { decrypt, SecretPurpose } = await import('@/shared/utils/crypto');
     try {
-      return decrypt(record.encryptedMnemonic, credentials.password ?? '');
+      return decrypt(record.encryptedMnemonic, credentials.password ?? '', SecretPurpose.Mnemonic);
     } catch {
       throw new Error('WRONG_PASSWORD');
     }

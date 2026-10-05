@@ -2,6 +2,7 @@
   <v-form ref="form" v-model="valid" class="fill-height">
     <PopupHeader :title="t('navigation.signData')" :show-website="!(vmProxy.$route.query['website'] === 'undefined' || Object.keys(vmProxy.$route.query).length === 0)" :disabled="loading">
       <v-card-text class="d-flex flex-column align-content-space-between pa-0 fill-height">
+        <EmbeddedSiteWarning class="mb-2" :embedded-in="request?.embeddedIn" />
         <v-card-title class="pa-0" style="color: white; font-size: 14px">
           The website requested a signature
         </v-card-title>
@@ -175,6 +176,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, getCurrentInstance, onMounted, ref, toRefs } from 'vue';
 import rules from '@/utils/rules';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
+import EmbeddedSiteWarning from '@/shared/components/EmbeddedSiteWarning.vue';
 import { BackgroundResponse, Messaging, SignDataResponse, VerifyPasswordResponse } from '@/chrome/messaging';
 import { DataSignError } from '@/chrome/config';
 import { Key, WalletType } from '@/models/types';
@@ -648,10 +650,8 @@ const sign = async () => {
 const onKeystoneScan = async (ur: UR) => {
   try {
     await validateCip45Signing(request.value?.data);
-    console.log('[Keystone] Received UR object:', ur);
     console.log('[Keystone] UR type:', ur?.type);
     console.log('[Keystone] UR cbor type:', typeof ur?.cbor);
-    console.log('[Keystone] UR cbor:', ur?.cbor);
 
     // Parse the signature using stored builder and addressBytes
     if (!keystoneBuilder.value || !keystoneAddressBytes.value) {

@@ -55,6 +55,7 @@ vi.mock('@/stores/loading', () => ({
     setConnected: () => {},
     setText: () => {},
     setProgress: () => {},
+    setSyncPending: () => {},
   },
   loadingState: {},
 }));

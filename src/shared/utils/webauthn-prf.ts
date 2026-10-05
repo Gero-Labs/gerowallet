@@ -46,9 +46,7 @@ export class PrfUnsupportedError extends Error {
  *
  * Browser Support (2026):
  * ✅ Chrome/Edge (Windows, macOS, Linux, Android)
- * ✅ Firefox (Linux with authenticator-rs)
- * ⚠️ Firefox (Windows, macOS) - Partial support
- * ❌ Safari (macOS, iOS) - Not supported yet
+ * (The extension targets Chromium browsers only.)
  *
  * References:
  * - https://github.com/w3c/webauthn/wiki/Explainer:-PRF-extension
@@ -124,7 +122,7 @@ async function detectPrfSupportMode(): Promise<PrfSupportMode> {
     // Detection failure ≠ Brave; fall through to the capability probe.
   }
 
-  // Check if getClientCapabilities is available (Chrome 128+, Firefox 134+)
+  // Check if getClientCapabilities is available (Chrome 128+)
   if (typeof PublicKeyCredential.getClientCapabilities === 'function') {
     try {
       const caps = await PublicKeyCredential.getClientCapabilities();
@@ -204,8 +202,7 @@ export async function isCredentialPrfEnabled(credentialId: string): Promise<bool
       hasPrf: !!prfResults,
       prfEnabled: prfResults?.enabled,
       hasResults: !!prfResults?.results,
-      hasFirst: !!prfResults?.results?.first,
-      fullPrfResults: prfResults
+      hasFirst: !!prfResults?.results?.first
     });
 
     // During authentication, the 'enabled' field may be undefined

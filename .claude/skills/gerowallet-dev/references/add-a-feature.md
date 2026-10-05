@@ -109,7 +109,7 @@ Not uniform, despite what CLAUDE.md says. Copy the right shape:
 - [ ] `NavigationDrawer.vue` item with a textually identical `enabled`
 - [ ] Feature flag added in all five places, if flagged
 - [ ] Capability field on every network entry + resolver, if chain-gated
-- [ ] i18n keys in **both** `us.ts` and `de.ts` (see `i18n.md`)
+- [ ] i18n keys in `us.ts`, `de.ts` **and** `es.ts` (see `i18n.md`)
 - [ ] Checked on Cardano, Bitcoin and Midnight, or explicitly scoped to one (see `chains.md`)
 - [ ] Side panel considered - separate router, separate components
 - [ ] `npm run design:check` and `npx eslint <your files>` clean

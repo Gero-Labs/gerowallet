@@ -66,7 +66,7 @@ function onConfigured() {
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .spo-setup {
   max-width: 900px;
   margin: 0 auto;
@@ -124,9 +124,9 @@ function onConfigured() {
 }
 
 .feature-card {
+  @include g-glass-tier(false);
   position: relative;
   overflow: hidden;
-  background: var(--g-surface);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-card);
   padding: 14px;

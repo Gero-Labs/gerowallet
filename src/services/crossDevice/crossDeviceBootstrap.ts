@@ -19,8 +19,12 @@ import { createCrossDeviceSigning, type CrossDeviceSigning } from './crossDevice
 import { createProveService, type ProveService } from './proveService';
 import type { PairConfirm } from './protocol';
 import { createWsTransport, createProveWsTransport, feedCrossDeviceMessage } from './wsTransport';
-import { isDevicesSnapshot, type DeviceRegister, type DevicePlatform, type DeviceInfo, type DeviceRegisterProof } from './protocol';
+import {
+  isDevicesSnapshot, isDeviceRegisterAck,
+  type DeviceRegister, type DevicePlatform, type DeviceInfo, type DeviceRegisterProof, type DeviceChallenge,
+} from './protocol';
 import { emptyRegistry, applyDevicesSnapshot, pubKeyOf, checkProverEcho, type DeviceRegistryState } from './deviceRegistry';
+import { classifyRegisterAck, signDeviceRegisterSession } from './sessionBinding';
 
 /**
  * XDP serving wiring (R3/R6). Absent => this desktop never serves proofs: no
@@ -52,19 +56,23 @@ export interface CrossDeviceHandles {
    * Publish this device's DEVICE_REGISTER over the transport. MUST be called only
    * once the socket is OPEN and has already SUBSCRIBE'd on the same ordered stream:
    * the relay rejects a DEVICE_REGISTER from a session that has not SUBSCRIBE'd, and
-   * an unopened socket silently drops the send. Wire this to the WS onopen path so it
-   * fires on the initial connect and on every reconnect (the relay upserts by
-   * deviceId, so repeat registers are idempotent).
+   * an unopened socket silently drops the send. Do NOT call this directly from the
+   * WS onopen path: walletManager's registration session (registrationSession.ts)
+   * is the single entry point, so that each relay challenge gets exactly one frame
+   * signed with it (contract §5.2) and the legacy unsigned frame goes out only when
+   * no challenge arrived (§5.5). The bridge keeps no challenge state of its own.
    */
   register(): void;
   dispose(): void;
 }
 
 /**
- * Build a DEVICE_REGISTER for this device and send it over the transport.
- * Unsigned (trust-on-first-use for the registry): the pubKey it announces is what
- * subsequently verifies this device's SIGN_REQUEST/SIGN_RESPONSE messages. The
- * wallet is inferred server-side from the socket's SUBSCRIBE.
+ * Build a DEVICE_REGISTER for this device and send it over the transport. The
+ * pubKey it announces is what subsequently verifies this device's SIGN_REQUEST /
+ * SIGN_RESPONSE messages; the wallet is inferred server-side from the socket's
+ * SUBSCRIBE. With `session` (contract §5.3) the frame echoes the relay's challenge
+ * and carries the relay-key signature that binds it to this socket session;
+ * without one it is the legacy trust-on-first-use frame.
  */
 function publishDeviceRegister(
   send: (msg: DeviceRegister) => void,
@@ -75,6 +83,7 @@ function publishDeviceRegister(
     hasSigningKey: boolean;
     proof?: DeviceRegisterProof;
     prover?: { hasProver: boolean; proverLedgerVersion: string };
+    session?: { challenge: string; sessionSig: string };
   },
 ): void {
   const register: DeviceRegister = {
@@ -85,6 +94,7 @@ function publishDeviceRegister(
     pubKey: identity.pubKeyHex,
     hasSigningKey: opts.hasSigningKey,
     ...(opts.proof ? { proof: opts.proof } : {}),
+    ...(opts.session ? { challenge: opts.session.challenge, sessionSig: opts.session.sessionSig } : {}),
     // XDP R2. Only announced when actually serving: advertising a prover we
     // would then reject on every gate is worse than staying silent, because the
     // phone would build + encrypt a payload before learning it cannot be served.
@@ -123,6 +133,19 @@ export function bootstrapCrossDeviceSigning(opts: {
   // as getProof — the user can flip the serving toggle after bootstrap, and the
   // next register (every reconnect) should carry the truth.
   getProver?: () => { hasProver: boolean; proverLedgerVersion: string } | undefined;
+  // Relay contract §5.2: the socket's current DEVICE_CHALLENGE, read at each
+  // register() and signed into the frame. Kept by walletManager per SOCKET (not
+  // here: this bridge is rebuilt on every toggle and is null while the feature is
+  // off, so a challenge stored here would be lost or never seen). Null / omitted =>
+  // the legacy unsigned frame (only right when no challenge arrived, §5.5).
+  getChallenge?: () => DeviceChallenge | null;
+  // §5.5 ack, proofStatus absent/invalid: the relay saw no valid wallet proof on our
+  // frame. The user must re-confirm (fresh proof under auth); walletManager flags it
+  // for the Security tab. Never fired for a legacy `{type, deviceId}` ack.
+  onRegisterRejected?: () => void;
+  // §5.5 ack, sessionStatus stale_challenge: a SUBSCRIBE raced our frame. The
+  // caller re-registers through its dedupe (at most once per challenge).
+  onStaleChallenge?: () => void;
   // QR pairing: a verified inbound PAIR_CONFIRM (already frame-sig-checked by the
   // service). The caller (walletManager) does the nonce consume + proof verify + pin.
   onPairConfirm?: (frame: PairConfirm) => void;
@@ -149,8 +172,36 @@ export function bootstrapCrossDeviceSigning(opts: {
   // Latch so a stripped-field relay logs once per session, not once per snapshot
   // (DEVICES arrives on every reconnect and every sibling change).
   let proverEchoReported = false;
+  // §5.5: "log once per session" latches for the ack outcomes that are client bugs.
+  const ackLogged = new Set<string>();
   const unsubRegistry = transport.onMessage((raw) => {
+    if (isDeviceRegisterAck(raw)) {
+      // Explicit-value rule (F4): a legacy relay answers {type, deviceId} only and
+      // that classifies as 'none'. Never test `!== 'verified'` here.
+      const action = classifyRegisterAck(raw);
+      if (action === 'needs_proof') {
+        debugLog('🔗 DEVICE_REGISTER_ACK: proofStatus=' + raw.proofStatus + ' — re-confirm needed');
+        opts.onRegisterRejected?.();
+      } else if (action === 'stale_challenge') {
+        debugLog('🔗 DEVICE_REGISTER_ACK: stale_challenge — a SUBSCRIBE raced the frame');
+        opts.onStaleChallenge?.();
+      } else if (action !== 'none' && !ackLogged.has(action)) {
+        ackLogged.add(action);
+        debugLog(action === 'session_rejected'
+          ? '⚠️ xdev session sig rejected by the relay (sessionStatus=' + raw.sessionStatus + ')'
+          : '⚠️ xdev register not accepted by the relay (registered=false)');
+      }
+      return;
+    }
     if (isDevicesSnapshot(raw)) {
+      if (raw.restricted === true) {
+        // §5.6 (enforce mode): THIS session is not registered yet, e.g. right after
+        // any SUBSCRIBE until the frame signed with the new challenge is accepted.
+        // It is NOT "no other devices": keep the last full registry so siblings do
+        // not vanish (and their pubkeys keep resolving) in between.
+        debugLog('🔗 DEVICES restricted (session not registered yet): keeping', Object.keys(registry.byId).length, 'known devices');
+        return;
+      }
       registry = applyDevicesSnapshot(registry, raw);
       // gero-sync Q1b, answered from production instead of by waiting: if the
       // relay rebuilds DeviceInfo against a fixed schema, our own advertised
@@ -192,11 +243,17 @@ export function bootstrapCrossDeviceSigning(opts: {
   // NOTE: DEVICE_REGISTER is NOT sent here. At bootstrap time the socket is not yet
   // open (walletManager builds this before webSocketService.connect), so a send would
   // be dropped, and the relay would reject it anyway because SUBSCRIBE has not gone
-  // out. It is published from the WS onopen path via register() below instead.
+  // out. walletManager's registration session calls register() below instead.
   const register = (): void => {
     try {
       const proof = opts.getProof?.();
       const prover = opts.getProver?.();
+      // §5.3: sign the socket's current challenge with the relay key. Synchronous,
+      // so the frame is on the wire before the caller's next statement runs.
+      const challenge = opts.getChallenge?.() ?? null;
+      const session = challenge
+        ? { challenge: challenge.challenge, sessionSig: signDeviceRegisterSession(challenge, deviceId, identity.privKeyHex) }
+        : undefined;
       // Record for the Q1b echo check, and re-arm it: a toggle change means the
       // next snapshot is a fresh round-trip worth reporting on.
       if (prover?.hasProver !== advertisedProver?.hasProver
@@ -210,9 +267,11 @@ export function bootstrapCrossDeviceSigning(opts: {
         hasSigningKey: opts.hasSigningKey,
         proof,
         prover,
+        session,
       });
       debugLog('📇 DEVICE_REGISTER sent:', deviceId, 'proof=' + (proof ? 'yes' : 'no'),
-        'prover=' + (prover?.hasProver ? prover.proverLedgerVersion : 'no'));
+        'prover=' + (prover?.hasProver ? prover.proverLedgerVersion : 'no'),
+        'session=' + (session ? session.challenge.slice(0, 8) : 'unsigned(legacy)'));
     } catch (e) {
       debugLog('cross-device DEVICE_REGISTER failed:', e);
     }

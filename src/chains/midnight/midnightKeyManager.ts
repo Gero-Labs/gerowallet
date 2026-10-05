@@ -126,10 +126,8 @@ export interface MidnightDerivedKeys {
    *
    * BLAST RADIUS: anyone with this string can decrypt every incoming
    * shielded note for this wallet, forever. Cannot spend (spend requires
-   * the coin secret key) but can de-anonymize. Currently persisted on the
-   * wallet record in plain form alongside the public addresses (sandbox
-   * is extension-scoped IndexedDB); followup is encrypted-at-rest storage
-   * alongside the mnemonic.
+   * the coin secret key) but can de-anonymize. In memory only: it is NOT
+   * part of `addresses`, is never persisted, and is never sent to a server.
    */
   zswapViewingKey: string;
   /** Computed bech32m unshielded address (`mn_addr_<network>1...`). */
@@ -248,11 +246,8 @@ export async function deriveMidnightKeys(
   const dustSecretKey = dustRoleKey.key;
 
   // Zswap (shielded) keys: Roles.Zswap at index 0 gives a 32-byte seed for
-  // ZswapSecretKeys.fromSeed. The encryptionPublicKey is the wallet's viewing
-  // key — what gero-sync forwards to the indexer's connect mutation. Coin and
-  // encryption secret keys stay in BG memory only for signing paths; public
-  // viewing key is safe to persist on the wallet record so login can supply
-  // it to gero-sync without re-decrypting the mnemonic.
+  // ZswapSecretKeys.fromSeed. Coin and encryption secret keys stay in BG
+  // memory only, for signing and the on-device private sync.
   const zswapRoleKey = accountKey.selectRole(Roles.Zswap).deriveKeyAt(0);
   if (zswapRoleKey.type !== 'keyDerived') {
     throw new Error('Midnight key derivation out of bounds');
@@ -289,15 +284,12 @@ export async function deriveMidnightKeys(
   // PUBLIC key under HRP `shield-epk`. That looks like it should work —
   // it's still bech32m — but the indexer rejects it with InvalidHrp /
   // SecretKey-deserialize failure. The wallet SDK's
-  // ShieldedEncryptionSecretKey codec is the one whose output the
-  // indexer accepts.
+  // ShieldedEncryptionSecretKey codec (the indexer's "viewing key" form).
   //
-  // PRIVACY: this is encryption SECRET-key material persisted in plain
-  // form on the wallet record. The blast radius is "anyone with this
-  // can decrypt every incoming shielded note for this wallet, forever"
-  // — strictly worse than a viewing key in the Zcash IPK sense. Sandbox
-  // is IndexedDB (extension-scoped). Followup: move to encrypted-at-rest
-  // storage alongside the mnemonic.
+  // PRIVACY: this is encryption SECRET-key material: anyone with it can
+  // decrypt every incoming shielded note for this wallet, forever. It is
+  // returned for in-memory use only and deliberately kept OUT of
+  // `addresses`, which is what gets persisted on the wallet record.
   const zswapKeys = ZswapSecretKeys.fromSeed(zswapSecretKey);
   const zswapViewingKey = await encodeViewingKey(networkId, zswapSecretKey);
 
@@ -335,7 +327,6 @@ export async function deriveMidnightKeys(
     dust: dustAddress,
     publicKeyHex,
     addressHex,
-    zswapViewingKey,
     cardanoXpub: cardano.cardanoXpub,
     cardanoBaseAddress: cardano.cardanoBaseAddress,
     cardanoStakeAddress: cardano.cardanoStakeAddress,
@@ -368,6 +359,12 @@ export async function deriveMidnightAddresses(
   account = 0,
 ): Promise<MidnightAddresses> {
   const derived = await deriveMidnightKeys(mnemonic, network, account);
+  // Callers only want the public addresses, often in a page context: zero the
+  // seed and role secret keys now rather than leave them to the GC (PRIV-01).
+  derived.seed.fill(0);
+  derived.unshieldedSecretKey.fill(0);
+  derived.dustSecretKey.fill(0);
+  derived.zswapSecretKey.fill(0);
   return derived.addresses;
 }
 

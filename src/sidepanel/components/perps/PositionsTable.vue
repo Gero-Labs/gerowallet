@@ -387,7 +387,7 @@ function liqClass(row: Row): string {
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .positions-table {
   display: flex;
   flex-direction: column;
@@ -442,7 +442,7 @@ function liqClass(row: Row): string {
 
 /* ── Card ── */
 .pt-card {
-  background: var(--g-raised);
+  @include g-glass-panel(false);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-control);
   padding: 10px 12px;

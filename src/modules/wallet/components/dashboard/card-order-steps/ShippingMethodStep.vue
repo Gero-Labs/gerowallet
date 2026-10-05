@@ -1,310 +1,70 @@
 <template>
-  <div class="shipping-method-selection">
-    <!-- Shipping Options -->
-    <div class="shipping-options">
-      <div
-        v-for="option in shippingOptions"
+  <div class="order-shipping">
+    <div class="order-shipping__options" role="radiogroup" :aria-label="t('card.selectShippingMethod')">
+      <CardOption
+        v-for="option in options"
         :key="option.id"
-        class="shipping-option"
-        :class="{ selected: localSelectedMethod === option.id, disabled: option.disabled }"
-        @click="!option.disabled && selectMethod(option.id)"
-        @keydown.enter="!option.disabled && selectMethod(option.id)"
-        @keydown.space.prevent="!option.disabled && selectMethod(option.id)"
-        role="button"
-        :tabindex="option.disabled ? -1 : 0"
+        name="shipping-method"
+        :value="option.id"
+        :title="option.label"
+        :description="option.description"
+        :selected="selectedMethod === option.id"
+        :disabled="option.disabled"
+        @select="emit('select', option.id)"
       >
-        <div class="option-left">
-          <div class="option-icon">
-            <v-icon>{{ option.icon }}</v-icon>
-          </div>
-          <div class="option-content">
-            <h4 class="option-title">
-              {{ option.label }}
-              <span v-if="option.disabled" class="disabled-badge">{{ $t('common.comingSoon') }}</span>
-            </h4>
-            <p class="option-description">{{ option.description }}</p>
-          </div>
-        </div>
-        <div class="option-right">
-          <span class="option-price" :class="{ muted: option.disabled }">{{ option.price }}</span>
-          <div class="selection-indicator">
-            <v-icon v-if="!option.disabled && localSelectedMethod === option.id" color="#00c7f3">mdi-check-circle</v-icon>
-            <v-icon v-else color="#373a41">mdi-circle-outline</v-icon>
-          </div>
-        </div>
-      </div>
+        <template #aside>
+          <span v-if="!option.disabled" class="t-body-lg g-num">{{ option.price }}</span>
+          <CardChip v-else>{{ t('common.comingSoon') }}</CardChip>
+        </template>
+      </CardOption>
     </div>
+    <p class="t-caption order-shipping__eta">
+      <v-icon x-small>mdi-truck-outline</v-icon>
+      {{ t('card.estimatedDelivery') }}
+    </p>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { computed } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import { cardMoney } from '@/modules/wallet/utils/cardFormat';
+import CardChip from '../../ui/CardChip.vue';
+import CardOption from '../../ui/CardOption.vue';
+import type { ShippingMethod } from '@/modules/wallet/utils/cardOrder';
 
-type ShippingMethod = 'regular' | 'express-eu' | 'express-worldwide';
+defineProps<{ selectedMethod: ShippingMethod }>();
+const emit = defineEmits<{ (e: 'select', method: ShippingMethod): void }>();
 
-interface Props {
-  selectedMethod: ShippingMethod;
-  isLoading?: boolean;
-}
-
-interface Emits {
-  (e: 'back'): void;
-  (e: 'select', method: ShippingMethod): void;
-}
-
-const props = defineProps<Props>();
-const emit = defineEmits<Emits>();
 const { t } = useTranslation();
 
-// Local state
-const localSelectedMethod = ref<ShippingMethod>(props.selectedMethod);
+/** The only live method today; express prices are not published by the provider yet. */
+const STANDARD_FEE_EUR = 10;
 
-// Shipping options configuration
-const shippingOptions = computed(() => [
-  {
-    id: 'regular' as ShippingMethod,
-    label: t('card.standardShipping'),
-    description: t('card.euOrWorldwide'),
-    price: '\u20AC10.00',
-    icon: 'mdi-truck-delivery-outline',
-    disabled: false,
-  },
-  {
-    id: 'express-eu' as ShippingMethod,
-    label: t('card.expressShippingEU'),
-    description: t('card.expressShippingEUTime'),
-    price: t('card.priceNotAvailable'),
-    icon: 'mdi-truck-fast-outline',
-    disabled: true,
-  },
-  {
-    id: 'express-worldwide' as ShippingMethod,
-    label: t('card.expressShippingWorldwide'),
-    description: t('card.expressShippingWorldwideTime'),
-    price: t('card.priceNotAvailable'),
-    icon: 'mdi-airplane',
-    disabled: true,
-  },
+const options = computed(() => [
+  { id: 'regular' as ShippingMethod, label: t('card.standardShipping'), description: t('card.euOrWorldwide'), price: cardMoney(STANDARD_FEE_EUR), disabled: false },
+  { id: 'express-eu' as ShippingMethod, label: t('card.expressShippingEU'), description: t('card.expressShippingEUTime'), price: '', disabled: true },
+  { id: 'express-worldwide' as ShippingMethod, label: t('card.expressShippingWorldwide'), description: t('card.expressShippingWorldwideTime'), price: '', disabled: true },
 ]);
-
-// Get selected option price
-const _selectedOptionPrice = computed(() => {
-  const option = shippingOptions.value.find(o => o.id === localSelectedMethod.value);
-  return option?.price || '\u20AC10.00';
-});
-
-// Watch for prop changes
-watch(
-  () => props.selectedMethod,
-  newVal => {
-    localSelectedMethod.value = newVal;
-  }
-);
-
-// Handlers
-const selectMethod = (method: ShippingMethod) => {
-  localSelectedMethod.value = method;
-};
-
-const handleBack = () => {
-  emit('back');
-};
-
-const handleContinue = () => {
-  emit('select', localSelectedMethod.value);
-};
-
-// Expose handlers so parent can call them
-defineExpose({
-  handleBack,
-  handleContinue
-});
 </script>
 
 <style lang="scss" scoped>
-@import '../../../styles/variables';
-@import '../../../styles/mixins';
-
-.shipping-method-selection {
-  width: 100%;
-  @include flex-column;
-  gap: $spacing-xl;
+.order-shipping {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-3);
 }
 
-.shipping-options {
-  @include flex-column;
-  gap: $spacing-md;
+.order-shipping__options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-3);
 }
 
-.shipping-option {
+.order-shipping__eta {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: $spacing-lg;
-  background: $background-card;
-  border: 2px solid $border-primary;
-  border-radius: $border-radius-lg;
-  cursor: pointer;
-  transition: background-color var(--g-dur-slow) ease, border-color var(--g-dur-slow) ease, opacity var(--g-dur-slow) ease;
-
-  &:hover {
-    border-color: rgba($primary-cyan, 0.5);
-    background: rgba($primary-cyan, 0.05);
-  }
-
-  &.selected {
-    border-color: $primary-cyan;
-    background: rgba($primary-cyan, 0.1);
-  }
-
-  &:focus {
-    outline: none;
-    border-color: $primary-cyan;
-  }
-
-  &.disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    pointer-events: none;
-
-    &:hover {
-      border-color: $border-primary;
-      background: $background-card;
-    }
-  }
-}
-
-.option-left {
-  display: flex;
-  align-items: center;
-  gap: $spacing-md;
-}
-
-.option-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: $border-radius-md;
-  background: rgba($primary-cyan, 0.15);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-
-  .v-icon {
-    color: $primary-cyan;
-    font-size: $font-size-xl;
-  }
-}
-
-.option-content {
-  @include flex-column;
-  gap: $spacing-xs;
-}
-
-.option-title {
-  font-family: $font-family-primary;
-  font-weight: $font-weight-semibold;
-  font-size: $font-size-base;
-  color: $text-primary;
+  gap: var(--g-s-1);
   margin: 0;
-  display: flex;
-  align-items: center;
-  gap: $spacing-sm;
-}
-
-.disabled-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  background: rgba(#ff9800, 0.15);
-  color: #ff9800;
-  font-size: $font-size-xs;
-  font-weight: $font-weight-medium;
-  border-radius: 4px;
-}
-
-.option-description {
-  font-family: $font-family-primary;
-  font-size: $font-size-sm;
-  color: $text-muted;
-  margin: 0;
-}
-
-.option-right {
-  display: flex;
-  align-items: center;
-  gap: $spacing-lg;
-}
-
-.option-price {
-  font-family: $font-family-primary;
-  font-weight: $font-weight-bold;
-  font-size: $font-size-lg;
-  color: $text-primary;
-
-  &.muted {
-    color: $text-muted;
-    font-weight: $font-weight-normal;
-    font-size: $font-size-sm;
-  }
-}
-
-.selection-indicator {
-  display: flex;
-  align-items: center;
-}
-
-.cost-summary {
-  padding: $spacing-lg;
-  background: $background-card;
-  border-radius: $border-radius-lg;
-}
-
-.summary-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: $spacing-sm 0;
-
-  &.total {
-    .summary-label,
-    .summary-value {
-      font-weight: $font-weight-bold;
-      font-size: $font-size-lg;
-      color: $text-primary;
-    }
-  }
-}
-
-.summary-label {
-  font-family: $font-family-primary;
-  font-size: $font-size-base;
-  color: $text-secondary;
-}
-
-.summary-value {
-  font-family: $font-family-primary;
-  font-weight: $font-weight-semibold;
-  font-size: $font-size-base;
-  color: $text-primary;
-}
-
-.summary-divider {
-  height: 1px;
-  background: $border-primary;
-  margin: $spacing-sm 0;
-}
-
-@media (max-width: $breakpoint-sm) {
-  .shipping-option {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: $spacing-md;
-  }
-
-  .option-right {
-    width: 100%;
-    justify-content: space-between;
-  }
 }
 </style>

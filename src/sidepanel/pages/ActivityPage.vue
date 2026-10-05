@@ -95,6 +95,7 @@ import { isCardanoTx } from '@/models/transaction.types';
 import filters from '@/shared/utils/filters';
 import TxDetailSheet from '../components/flows/TxDetailSheet.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import i18n, { getLocaleCode } from '@/plugins/i18n';
 
 const { t } = useTranslation();
 
@@ -166,7 +167,7 @@ const groupedTransactions = computed<TxGroup[]>(() => {
     } else if (dateStr === yesterdayStr) {
       label = t('miniGero.yesterday');
     } else {
-      label = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      label = date.toLocaleDateString(getLocaleCode(i18n.locale), { month: 'short', day: 'numeric', year: 'numeric' });
     }
 
     if (!groups.has(label)) {
@@ -245,7 +246,7 @@ function openTxDetail(tx: StoredTransaction) {
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .activity-page {
   min-height: 100%;
 }
@@ -271,11 +272,11 @@ function openTxDetail(tx: StoredTransaction) {
 }
 
 .tx-item:hover {
-  background: var(--g-raised);
+  @include g-glass-tier-hover(false);
 }
 
 .tx-item:active {
-  background: var(--g-overlay);
+  @include g-glass-tier-active(false);
 }
 
 .tx-icon-wrapper {

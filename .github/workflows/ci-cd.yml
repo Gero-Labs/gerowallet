@@ -52,7 +52,6 @@ jobs:
           VITE_CASHBACK_ENVIRONMENT: ${{ vars.VITE_CASHBACK_ENVIRONMENT }}
           VITE_CASHBACK_IDENTIFIER: ${{ vars.VITE_CASHBACK_IDENTIFIER }}
           VITE_IS_BETA: ${{ vars.VITE_IS_BETA }}
-          VITE_DEBUG_STORES: ${{ vars.VITE_DEBUG_STORES }}
           VITE_USE_MOCK_PROOF: ${{ vars.VITE_USE_MOCK_PROOF }}
           VITE_MOONPAY_API_KEY: ${{ secrets.VITE_MOONPAY_API_KEY }}
           VITE_GUARDARIAN_API_KEY: ${{ secrets.VITE_GUARDARIAN_API_KEY }}
@@ -72,12 +71,20 @@ jobs:
             echo "VITE_CASHBACK_ENVIRONMENT=$VITE_CASHBACK_ENVIRONMENT"
             echo "VITE_CASHBACK_IDENTIFIER=$VITE_CASHBACK_IDENTIFIER"
             echo "VITE_IS_BETA=$VITE_IS_BETA"
-            echo "VITE_DEBUG_STORES=$VITE_DEBUG_STORES"
+            # Pinned off: debugLog() output includes wallet records, unlock
+            # responses and PRF metadata, so a release must never enable it.
+            echo "VITE_DEBUG_STORES=false"
             echo "VITE_USE_MOCK_PROOF=$VITE_USE_MOCK_PROOF"
             echo "VITE_MOONPAY_API_KEY=$VITE_MOONPAY_API_KEY"
             echo "VITE_GUARDARIAN_API_KEY=$VITE_GUARDARIAN_API_KEY"
           } > .env.production
           echo "Wrote .env.production ($(grep -c '^VITE_' .env.production) vars)"
+
+      # A build that cannot open the gpw2 secret envelope locks out every wallet
+      # already migrated to it. Refuse to produce one (e.g. a rollback cut from an
+      # old ref). See .github/runbooks/secret-envelope.md.
+      - name: Secret envelope readers present
+        run: node scripts/check-secret-envelope-readers.mjs
 
       - name: Build Chrome Extension
         run: npm run build

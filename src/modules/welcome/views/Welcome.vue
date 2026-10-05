@@ -5,7 +5,7 @@
       <!-- Two separate images for cross-fade transition -->
       <img
         :src="assets.cardanoBg"
-        class="welcome-background-image"
+        class="welcome-background-image welcome-background-image--cardano"
         :class="{ 'background-active': selectedNetwork?.blockchain?.includes('Cardano') }"
       />
       <img
@@ -122,7 +122,7 @@ const onWalletListNetwork = (n: NetworkInfo): void => {
   if (!started.value) selectedNetwork.value = n;
 };
 </script>
-<style scoped>
+<style scoped lang="scss">
 .welcome-root {
   position: fixed;
   top: 0;
@@ -159,6 +159,12 @@ const onWalletListNetwork = (n: NetworkInfo): void => {
 
 .welcome-background-image.background-active {
   opacity: 1;
+}
+
+/* cardanoBg.png ships pre-flipped on both axes for the dashboard backdrop;
+   the welcome canvas wants the original orientation. */
+.welcome-background-image--cardano {
+  transform: scale(-1, -1);
 }
 
 .language-selector-container {

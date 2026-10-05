@@ -1,6 +1,38 @@
 import { describe, it, expect } from 'vitest';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { utxoToCip30Hex } from '../utxoToCip30Hex';
+import { convertNexusUtxos } from '@/services/nexusUtxo';
+import {
+  HASH_ONLY_DATUM_UTXO,
+  INLINE_DATUM_UTXOS,
+  type MainnetDatumUtxo,
+} from '@/shared/utils/__fixtures__/mainnetDatumUtxos';
+
+/** The CIP-30 TransactionUnspentOutput of the UTxO as the chain holds it: [[txId, index], output]. */
+const onChainCip30 = ({ nexusRow, outputCbor }: MainnetDatumUtxo): string =>
+  `82825820${nexusRow.txHash}${Number(nexusRow.txIndex).toString(16).padStart(2, '0')}${outputCbor}`;
+
+describe('utxoToCip30Hex: datums', () => {
+  it('writes an inline datum inline, over its original bytes', () => {
+    const utxos = convertNexusUtxos(INLINE_DATUM_UTXOS.map((f) => f.nexusRow));
+    expect(utxos.map(utxoToCip30Hex)).toEqual(INLINE_DATUM_UTXOS.map(onChainCip30));
+  });
+
+  it('ignores the hash stored beside an inline datum by earlier versions', () => {
+    const [fixture] = INLINE_DATUM_UTXOS;
+    const [[txIn, txOut]] = convertNexusUtxos([fixture.nexusRow]);
+    const storedBeforeFix: Cardano.Utxo = [
+      txIn,
+      { ...txOut, datum: fixture.nexusRow.inlineDatum as unknown as Cardano.PlutusData, datumHash: fixture.datumHash as Cardano.DatumHash },
+    ];
+    expect(utxoToCip30Hex(storedBeforeFix)).toBe(onChainCip30(fixture));
+  });
+
+  it('keeps a hash-only datum as a hash', () => {
+    const [utxo] = convertNexusUtxos([HASH_ONLY_DATUM_UTXO.nexusRow]);
+    expect(utxoToCip30Hex(utxo)).toBe(onChainCip30(HASH_ONLY_DATUM_UTXO));
+  });
+});
 
 describe('utxoToCip30Hex', () => {
   it('round-trips a minimal Cardano.Utxo to a non-empty cbor hex string', () => {

@@ -3,6 +3,8 @@ import { poolOperatorStore } from '@/stores/poolOperatorStore';
 import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
+import { sealKeySecret } from '@/shared/utils/secretWriters';
+import { SecretPurpose } from '@/shared/utils/secretEnvelope';
 
 /**
  * Cold-key import for pool setup.
@@ -103,8 +105,7 @@ export function useColdKeyImport() {
       })) as { data: { success: boolean; error?: string } };
       if (!verification.data.success) throw new Error(t('errors.wrongPassword'));
     }
-    const { encryptWithPassword } = await import('@/shared/utils/crypto');
-    const encrypted = encryptWithPassword(password, rawKeyBytes);
+    const encrypted = await sealKeySecret(rawKeyBytes, password, SecretPurpose.ColdKey);
     const { coldKeyHash, poolIdBech32 } = await derivePoolId(rawKeyBytes);
     await saveColdKey(encrypted, coldKeyHash, poolIdBech32, 'password');
     return { coldKeyHash, poolId: poolIdBech32 };

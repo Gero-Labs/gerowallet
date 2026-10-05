@@ -12,6 +12,7 @@ import { dispatchTrezor } from '@/shared/utils/trezorDispatch';
 import { createKeystoneSignRequest, parseSignature } from '@/shared/utils/keystone';
 import networks from '@/utils/networks';
 import { utxoToCip30Hex } from './utxoToCip30Hex';
+import { cosignLentCollateral, lendPoolCollateral } from './swapCollateral';
 
 /**
  * Native `Signer` for the embedded `<gero-swap>` widget — dispatches signing across
@@ -31,9 +32,10 @@ export interface NativeSwapSignerOptions {
   getPrfBytes: () => Promise<Uint8Array>;
   /**
    * Whether to use the Bluetooth Ledger transport instead of USB. Mirrors the `isBT`
-   * UI toggle every other Ledger-signing flow exposes (SwapSheet.vue:549, SendSheet.vue:635,
-   * etc.) — the swap widget has no such toggle yet, so this defaults to USB (false).
-   * Gap: if/when the embed adds a BT toggle, wire it through here.
+   * UI toggle every other Ledger-signing flow exposes (SendSheet.vue, CastVoteDialog.vue,
+   * etc.) and defaults to USB (false). Return the user's choice, never
+   * `loggedWallet.btSupported`: that says the device CAN use Bluetooth, not that it is
+   * connected that way. GeroSwapEmbed.vue asks before each Ledger signature.
    */
   getIsBT?: () => boolean;
 }
@@ -78,11 +80,13 @@ export function useNativeSwapSigner(opts: NativeSwapSignerOptions) {
   }
 
   // Collateral for a Plutus script spend (order-cancel): the smallest ADA-only wallet UTxO
-  // holding at least 5 ADA. Returns CIP-30 hex TransactionUnspentOutput(s), or [] when none
-  // (the widget then prompts the user to receive ~5 ADA).
+  // holding at least 5 ADA, else one borrowed from the Nexus pool (the wallet covers its
+  // users' collateral, as it does for trusted dApps through CIP-30). Returns CIP-30 hex
+  // TransactionUnspentOutput(s), or [] when the pool cannot lend either (the widget then
+  // prompts the user to set collateral aside).
   async function getCollateral() {
     const COLLATERAL_MIN = 5_000_000n;
-    return cardanoUtxos()
+    const own = cardanoUtxos()
       .filter((u) => {
         const value = u[1]?.value;
         const adaOnly = !value?.assets || value.assets.size === 0;
@@ -91,6 +95,12 @@ export function useNativeSwapSigner(opts: NativeSwapSignerOptions) {
       .sort((a, b) => Number((a[1].value.coins ?? 0n) - (b[1].value.coins ?? 0n))) // smallest first
       .slice(0, 1)
       .map(utxoToCip30Hex);
+    if (own.length) return own;
+    try {
+      return [await lendPoolCollateral(walletStore.loggedWallet?.network)];
+    } catch {
+      return [];
+    }
   }
 
   // ── Password / PRF (background SIGN_TX) — SwapSheet.vue:1043-1102 / :1117-1160 ──
@@ -217,9 +227,12 @@ export function useNativeSwapSigner(opts: NativeSwapSignerOptions) {
 
   async function signTx(unsignedTxCbor: string): Promise<string> {
     const type = walletStore.loggedWallet?.type;
-    if (type === WalletType.Ledger) return signLedger(unsignedTxCbor);
-    if (type === WalletType.Trezor) return signTrezor(unsignedTxCbor);
-    if (type === WalletType.Keystone) return signKeystone(unsignedTxCbor);
+    // Hardware wallets sign in the page, so a collateral input borrowed from the Nexus pool
+    // gets its co-signature here; password and PRF wallets get it in the worker's SIGN_TX.
+    const network = walletStore.loggedWallet?.network;
+    if (type === WalletType.Ledger) return cosignLentCollateral(unsignedTxCbor, await signLedger(unsignedTxCbor), network);
+    if (type === WalletType.Trezor) return cosignLentCollateral(unsignedTxCbor, await signTrezor(unsignedTxCbor), network);
+    if (type === WalletType.Keystone) return cosignLentCollateral(unsignedTxCbor, await signKeystone(unsignedTxCbor), network);
     return signPasswordOrPrf(unsignedTxCbor); // Normal (password) + PRF flag on Normal
   }
 

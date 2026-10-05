@@ -168,7 +168,7 @@ function formatTvl(n: number): string {
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 /* ── Root ── */
 .vpc-root {
   display: flex;
@@ -207,9 +207,9 @@ function formatTvl(n: number): string {
 
 /* ── Chart Wrapper ── */
 .vpc-chart-wrap {
+  @include g-glass-tier(false);
   position: relative;
   height: 100px;
-  background: var(--g-raised);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-control);
   overflow: hidden;

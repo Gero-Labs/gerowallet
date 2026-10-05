@@ -46,16 +46,23 @@ export function sumLovelace(values: LovelaceLike[]): bigint {
 }
 
 /**
- * `numerator / denominator` as a percentage with two decimal places.
+ * `numerator / denominator` as a percentage, ROUNDED to two decimal places
+ * (half away from zero), so 2/3 reads 66.67, not 66.66.
  *
  * Scales by 10000n BEFORE dividing so the division happens in BigInt and only
- * the final small quotient is converted to Number. Returns 0 when the
- * denominator is zero — callers that need to distinguish "0%" from "no data"
- * must check the denominator themselves.
+ * the final small quotient is converted to Number. BigInt division truncates,
+ * so the remainder decides the last digit. Returns 0 when the denominator is
+ * zero — callers that need to distinguish "0%" from "no data" must check the
+ * denominator themselves.
  */
 export function pctOf(numerator: LovelaceLike, denominator: LovelaceLike): number {
   const den = toLovelace(denominator);
   if (den === 0n) return 0;
-  const num = toLovelace(numerator);
-  return Number((num * 10000n) / den) / 100;
+  const scaled = toLovelace(numerator) * 10000n;
+  let quotient = scaled / den;
+  const remainder = scaled % den;
+  const absRemainder = remainder < 0n ? -remainder : remainder;
+  const absDen = den < 0n ? -den : den;
+  if (absRemainder * 2n >= absDen) quotient += scaled < 0n !== den < 0n ? -1n : 1n;
+  return Number(quotient) / 100;
 }

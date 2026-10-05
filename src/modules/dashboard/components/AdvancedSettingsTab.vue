@@ -322,8 +322,15 @@ const deleteWalletConfirm = async () => {
   const walletId = loggedWallet.value.id;
   const name = loggedWallet.value.name;
 
+  await handleCardLogout();
+  // Push notifications: queue the server-side unlink durably BEFORE the wallet record
+  // and its keys are deleted (the worker retries it on later starts if it fails now).
+  await Messaging.sendToBackgroundFromOptions({ method: MessageTypes.NOTIFY_WALLET_REMOVED, data: { walletId } });
+  // Midnight: drop this wallet's coin state, history and balances (PRIV-01).
+  // Also BEFORE removeWallet: the background reads the address from the record.
+  await Messaging.sendToBackgroundFromOptions({ method: MessageTypes.FORGET_MIDNIGHT_WALLET_DATA, data: { walletId } });
   // Remove wallet from geroStore (this will also delete from database)
-  await handleCardLogout().then(() => GeroStore.removeWallet(walletId));
+  GeroStore.removeWallet(walletId);
 
   // Then logout
   await submitLogout();
@@ -362,7 +369,7 @@ onMounted(() => {
   });
 });
 </script>
-<style scoped>
+<style scoped lang="scss">
 .custom-loader {
   animation: loader 1s infinite;
   display: flex;
@@ -403,10 +410,10 @@ onMounted(() => {
 /* ── Midnight proof server (at-a-glance summary; full UI on its own page) ── */
 
 .proof-server-summary {
+  @include g-glass-tier(false);
   display: flex;
   align-items: center;
   gap: 12px;
-  background: var(--g-surface);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-card);
   padding: 12px 14px;

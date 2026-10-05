@@ -68,6 +68,7 @@ const defaultStep = computed(() =>
 
 <style scoped lang="scss">
 .hw-sign-prompt__card {
+  @include g-glass-panel(false);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -76,7 +77,6 @@ const defaultStep = computed(() =>
   padding: var(--g-s-5) var(--g-s-4);
   border: 1px solid var(--g-hairline-2);
   border-radius: var(--g-r-card);
-  background: var(--g-overlay);
   text-align: center;
 }
 

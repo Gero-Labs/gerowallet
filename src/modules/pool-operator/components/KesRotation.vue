@@ -107,6 +107,7 @@ import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import snackbar from '@/plugins/snackbar';
+import { getErrorMessage } from '@/shared/utils/errorHandler';
 
 const { t } = useTranslation();
 const { coldKeySource } = toRefs(poolOperatorStore);
@@ -162,8 +163,8 @@ async function rotateKes() {
     const encryptedEntry = await configTable.where({ key: 'spo_encryptedColdKey' }).first();
     if (!encryptedEntry?.value) throw new Error('No cold key configured');
 
-    const { decryptWithPassword } = await import('@/shared/utils/crypto');
-    const coldKeyBytes = new Uint8Array(decryptWithPassword(password.value, encryptedEntry.value));
+    const { decryptKeyBlob, SecretPurpose } = await import('@/shared/utils/crypto');
+    const coldKeyBytes = new Uint8Array(decryptKeyBlob(encryptedEntry.value, password.value, SecretPurpose.ColdKey));
     const coldPubKey = ed25519.getPublicKey(coldKeyBytes);
 
     // Build op cert payload
@@ -211,8 +212,8 @@ async function rotateKes() {
     poolOperatorStore.kesCounter = newCounter;
     showOutput.value = true;
     snackbar.fireSuccess(t('poolOperator.kesKeysGenerated'));
-  } catch (e: any) {
-    snackbar.setError(e.message || t('errors.unknownError'));
+  } catch (e) {
+    snackbar.setError(getErrorMessage(e, t('errors.unknownError')));
   } finally {
     loading.value = false;
   }

@@ -88,7 +88,9 @@ import { MessageTypes } from '@/models/MessageTypes';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { buildCardanoTransaction } from '@/shared/utils/builder';
-import { isStakeKeyRegistered } from '@/shared/utils/stakeRegistration';
+import { isStakeKeyRegistered, StakeAccountError } from '@/shared/utils/stakeRegistration';
+import { refreshStakeAccount, assertStakeWalletUnchanged } from '@/shared/composables/refreshStakeAccount';
+import { useTranslation } from '@/shared/composables/useTranslation';
 import { Blockchain } from '@/models/types';
 import type { Keys } from '@/models/types';
 
@@ -103,6 +105,7 @@ export default defineComponent({
   },
 
   setup(props) {
+    const { t } = useTranslation();
     const busy = ref(false);
     const stakingError = ref('');
     const proposal = ref<StakingProposal | null>(null);
@@ -177,7 +180,9 @@ export default defineComponent({
         hash: keys.stake[0].cred,
       };
       const poolIdBech32 = Cardano.PoolId(poolId);
-      const account = walletStore.account;
+      const wallet = walletStore.loggedWallet ? { ...walletStore.loggedWallet } : null;
+      if (!wallet) throw new Error(t(StakeAccountError.WalletChanged));
+      const account = await refreshStakeAccount(wallet, t);
       const certificates: Cardano.Certificate[] = [];
       const stakeKeyDepositLovelace = BigInt(epochParams.stakeKeyDeposit ?? 2_000000);
       let implicitCoin = 0n;
@@ -222,7 +227,7 @@ export default defineComponent({
           accountIndex: 0,
         },
       });
-
+      assertStakeWalletUnchanged(wallet, t);
       return serializeCardanoJsSdkTx(tx);
     }
 
@@ -403,11 +408,11 @@ export default defineComponent({
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .staking-card {
+  @include g-glass-panel(false);
   border-radius: var(--g-r-card);
   padding: 10px;
-  background: var(--g-raised);
   font-size: 13px;
 }
 

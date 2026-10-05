@@ -14,7 +14,7 @@ import type {
   IBuildTxParams,
   IUnsignedTx,
 } from '@/chains/common/interfaces';
-import type { BitcoinUtxo } from '@/api/bitcoin-api';
+import type { BitcoinApi, BitcoinUtxo } from '@/api/bitcoin-api';
 import {
   parseBitcoinUtxos,
   calculateBitcoinBalance,
@@ -30,7 +30,7 @@ import {
   deriveBitcoinAddress,
   validateBitcoinAddress,
 } from './bitcoinKeyManager';
-import { encryptWithPassword, decryptWithPassword } from '@/shared/utils/crypto';
+import { encryptWithPassword, decryptPrivateKey as decryptRootKey } from '@/shared/utils/crypto';
 import {
   buildPsbt,
   buildSimpleSendPsbt,
@@ -64,7 +64,7 @@ export class BitcoinAdapter implements IChainAdapter {
   /**
    * Initialize fee estimator with Bitcoin API
    */
-  initializeFeeEstimator(api: any): void {
+  initializeFeeEstimator(api: BitcoinApi): void {
     this.feeEstimator.setApi(api);
   }
 
@@ -78,7 +78,7 @@ export class BitcoinAdapter implements IChainAdapter {
   /**
    * Derive keys from mnemonic (not used for Bitcoin adapter, kept for interface compatibility)
    */
-  deriveKeysFromMnemonic(mnemonic: string, network: string, addressType?: string): any {
+  deriveKeysFromMnemonic(mnemonic: string, network: string, addressType?: string): { xpub: string; addressType: string } {
     const actualAddressType = addressType || this.defaultAddressType;
     const xpub = deriveBitcoinAccountXpub(mnemonic, network, actualAddressType, 0);
     return { xpub, addressType: actualAddressType };
@@ -190,7 +190,7 @@ export class BitcoinAdapter implements IChainAdapter {
    * Decrypt private key (reuses existing crypto utilities)
    */
   decryptPrivateKey(encrypted: string, password: string): Uint8Array {
-    const decrypted = decryptWithPassword(password, encrypted);
+    const decrypted = decryptRootKey(encrypted, password);
     return new Uint8Array(decrypted);
   }
 

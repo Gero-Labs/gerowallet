@@ -615,8 +615,9 @@ watch(selectedCurrency, () => {
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .token-detail-panel {
+  @include g-glass-panel(true);
   position: fixed;
   top: 0;
   right: 0;
@@ -626,7 +627,6 @@ watch(selectedCurrency, () => {
   z-index: var(--g-z-sticky);
   /* Darker surface so the chart / swap / info cards read as RAISED above the
      drawer frame (they were all the same overlay tone = flat). */
-  background: var(--g-surface) !important;
   border-left: 1px solid var(--g-hairline-2) !important;
   border-radius: 0 var(--g-r-card) var(--g-r-card) 0;
   overflow: hidden;
@@ -638,7 +638,7 @@ watch(selectedCurrency, () => {
    darker drawer frame. */
 .chart-shell,
 .swap-shell {
-  background: var(--g-raised);
+  @include g-glass-tier(false);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-card);
   padding: 10px;
@@ -781,19 +781,19 @@ watch(selectedCurrency, () => {
 }
 
 .info-item {
+  @include g-glass-tier(false);
   display: flex;
   flex-direction: column;
   gap: 2px;
   padding: 7px 9px;
-  background: var(--g-raised);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-control);
   transition: border-color var(--g-dur-fast) ease, background-color var(--g-dur-fast) ease;
 }
 
 .info-item:hover {
+  @include g-glass-tier-hover(false);
   border-color: var(--g-hairline-2);
-  background: var(--g-overlay);
 }
 
 /* Label is the quiet tier; the value is the bright answer. The tone gap is the
@@ -857,11 +857,11 @@ watch(selectedCurrency, () => {
   color: var(--g-text-1);
 }
 
-.stats-table >>> td {
+.stats-table ::v-deep td {
   border-bottom: 1px solid var(--g-hairline-1) !important;
 }
 
-.stats-table >>> tr:last-child td {
+.stats-table ::v-deep tr:last-child td {
   border-bottom: none !important;
 }
 
@@ -898,7 +898,7 @@ watch(selectedCurrency, () => {
 }
 
 /* ═══ Tabs ═══ */
-.detail-sub-tabs >>> .v-tab {
+.detail-sub-tabs ::v-deep .v-tab {
   text-transform: none !important;
   font-size: 12px;
   min-width: unset;
@@ -907,7 +907,7 @@ watch(selectedCurrency, () => {
   transition: color 0.15s ease;
 }
 
-.detail-sub-tabs >>> .v-tabs-slider {
+.detail-sub-tabs ::v-deep .v-tabs-slider {
   height: 2px;
   transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -944,8 +944,8 @@ watch(selectedCurrency, () => {
 }
 
 .chart-no-data {
+  @include g-glass-tier(false);
   border-radius: var(--g-r-control);
   border: 1px solid var(--g-hairline-1);
-  background: var(--g-surface);
 }
 </style>

@@ -157,9 +157,9 @@ const riskFillClass = computed((): string => {
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .account-panel {
-  background: var(--g-surface);
+  @include g-glass-panel(false);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-card);
   padding: 14px 14px 12px;

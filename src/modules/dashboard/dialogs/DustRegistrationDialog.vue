@@ -427,9 +427,9 @@ async function runUpgrade() {
       if (!wallet.encryptedMnemonic) {
         throw new Error('Wallet has no encrypted mnemonic. Re-restore from your seed phrase.');
       }
-      const { decrypt } = await import('@/shared/utils/crypto');
+      const { decrypt, SecretPurpose } = await import('@/shared/utils/crypto');
       try {
-        mnemonic = decrypt(wallet.encryptedMnemonic, upgradePassword.value);
+        mnemonic = decrypt(wallet.encryptedMnemonic, upgradePassword.value, SecretPurpose.Mnemonic);
       } catch {
         throw new Error('Wrong spending password');
       }
@@ -597,7 +597,7 @@ async function confirmRegistration() {
 void props;
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 /* ── Status pill ─────────────────────────────────────────────────────────────
    Compact one-liner replacing the previous full-bleed alert. Color-coded dot
    communicates state at a glance without dominating the dialog. */
@@ -816,7 +816,7 @@ void props;
 /* ── Generation stats (post-registration) ──────────────────────────────────── */
 
 .generation-stats {
-  background: var(--g-surface);
+  @include g-glass-tier(false);
   border-radius: var(--g-r-control);
   padding: 12px 14px;
   margin-top: 8px;

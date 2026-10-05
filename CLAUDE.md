@@ -44,6 +44,7 @@ src/
 - Stores use `broadcastFromBackground()` to sync across contexts
 - **ALWAYS use in-memory state** as base for Chrome storage updates (prevents race conditions)
 - Browser contexts subscribe via `storeMessaging.subscribe(STORE_NAME, handler)`
+- **Never put multi-MB values in `chrome.storage.local`.** Each changed value is copied old+new, on Chrome's browser UI thread, into every `storage.onChanged` listener: the worker, every dashboard, and the Bring SDK in the content script of every frame of every tab. Whole-store rewrites froze all Chrome windows, other profiles included. `walletStore`/`networkStore`/`midnightStore` persist through `StorePersister` (`src/utils/storePersistence.ts`): a small record in `chrome.storage.local` plus bulk fields (transactions, UTxOs, tokens, collections, assets, …) in the `gero-store-cache` IndexedDB, written only when that field changed
 
 ### Database
 - **App-level** (`gero-db.ts`): `GeroWalletDatabase` — wallets list, config, provider
@@ -67,7 +68,7 @@ npm run dev              # Dev (all contexts)
 npm run build            # Production build
 npm run typecheck        # TypeScript check
 npm run lint             # ESLint
-npm run pack             # Package .zip/.crx/.xpi
+npm run pack             # Package .zip/.crx
 ```
 
 ## Key Rules
@@ -77,8 +78,8 @@ npm run pack             # Package .zip/.crx/.xpi
 
 ### i18n
 - **Always use `$t()` for user-facing text** — never hardcode strings
-- Translation files: `src/plugins/i18n/us.ts` (English), `de.ts` (German)
-- **When adding keys to `us.ts`, always add corresponding German in `de.ts`**
+- Translation files: `src/plugins/i18n/us.ts` (English), `de.ts` (German), `es.ts` (Spanish: neutral Latin American, tú, Lace terminology)
+- **When adding keys to `us.ts`, always add the corresponding German in `de.ts` and Spanish in `es.ts`**. `src/plugins/i18n.parity.spec.ts` fails on any missing key, placeholder or plural drift
 - **Before creating a new i18n key, search for an existing key with the same text** (e.g., `errors.insufficientBalance` already exists — reuse it instead of creating `perpetuals.insufficientBalance`)
 
 ### Vuetify
@@ -108,8 +109,9 @@ function broadcastFromBackground(updates: Partial<StoreType>) {
       return value;
     }));
     backgroundStoreMessaging.broadcastUpdate(STORE_NAME, serialized);
-    const current = store; // Use in-memory state, NOT chrome.storage.local.get()
-    chrome.storage.local.set({ [STORE_NAME]: { ...current, ...serialized } });
+    // Persists only the touched fields, from in-memory state (NOT chrome.storage.local.get()).
+    // Small fields go to chrome.storage.local[STORE_NAME]; `bulkFields` go to IndexedDB.
+    persister.markDirty(Object.keys(updates));
   }
 }
 ```
@@ -174,6 +176,13 @@ function broadcastFromBackground(updates: Partial<StoreType>) {
 - **"window/window" error**: Don't use `define: { 'global': ... }` with `nodePolyfills` plugin
 - **pbkdf2 build issues**: Virtual module plugin with `enforce: 'pre'` in background config
 
+## Chrome Web Store: No Remotely Hosted Code
+- MV3 policy rejects a package if any shipped JS/HTML could load code from a URL (`<script src="https://…">`, remote `importScripts()` / `import()`, script-CDN URLs), **even inside unused dependency code**. 2.7.2 was rejected ("Blue Argon") for `@effect/platform`'s `HttpApiScalar` docs page, which the Midnight SDK pulls in. It shipped because the UI build then ran with `treeshake: false`, which kept unused code reachable through dependency imports. Tree-shaking is back on (PR 1253) and must stay on; the stub and guard below are the second line of defence.
+- `stubEffectApiDocs` (`vite.config.mts`) replaces `HttpApiScalar`/`HttpApiSwagger` in every Vite build, worker bundles included (not under the `vite` dev server, whose esbuild pre-bundle skips plugins; dev is never shipped).
+- `scripts/remote-code-guard.mjs` holds the rules. Its `forbid-remote-code` plugin fails a build whose emitted JS/HTML matches one, and `npm run build`, `build:beta` and CI also run it as a CLI over all of `extension/`, which covers vendored files copied in outside Rollup. The rules catch the common literal forms (remote `<script src>`, injected `<script>` elements, static `import` / `export … from` a URL, `importScripts()` / `import()` / `new Worker()` of a URL, JavaScript CDN hosts); a URL assembled at runtime gets past them, so review new dependencies anyway.
+- If a rule fires on a new dependency, stub or drop the offending module. If it fires on something that is not code (an image or data URL), narrow that rule and add the case to the spec's negatives. Don't weaken a rule just to get a build green.
+- Any release zip built some other way: `node scripts/remote-code-guard.mjs extension` before uploading.
+
 ## Design System (Gero Design Language)
 One token layer, four surfaces, scarce chain accent, motion as feedback, enforced by a ratchet.
 
@@ -186,6 +195,11 @@ One token layer, four surfaces, scarce chain accent, motion as feedback, enforce
 
 ### Primitives
 - `GButton` (four tiers) and the `.geroButton` gradient CTA. `BaseDialog` is THE modal primitive (`size` prop, tokenized surface, esc-to-close, house transition). Formatting: import from `src/shared/utils/format.ts` — do NOT fork `formatPrice`/`formatSignedChange`/etc. (the audit counts forks). Deltas use `formatSignedChange()` (glyph carries direction) + `delta-up`/`delta-down`, never a colored chip.
+
+### Glass (surfaces)
+- **Glass is the baseline.** Every surface — page cards, nested cards/rows/tiles, dialog internals — is a see-through material; a solid token (`--g-raised/--g-surface/--g-overlay`) on a surface needs a UX justification in a comment (readability/accessibility). Justified solids: menus/tooltips (`glass-popover`), controls (inputs, chips, pills, avatars, tracks, code blocks), `<table>` rows (the card carries the material), QR boxes.
+- Materials live in `src/shared/styles/liquid-glass.css` (classes) and are mirrored as mixins in `src/shared/styles/_glass.scss` (auto-injected into every SFC `<style lang="scss">`): `glass-panel` = default in-page card; `glass-tier` = a card nested inside another glass surface (`g-glass-tier-hover` / `-active` for states); `glass-overlay` = dialogs/sheets; `glass-chrome` = app frame; `glass-liquid` = cards directly on imagery. Change a class and its mixin together. The legacy `liquid-glass` / `-subtle` / `-compact` names alias the PANEL material.
+- Never write `backdrop-filter` in a component — use the class or `@include g-glass-<material>(<important?>)`; the `backdropFilters` ratchet counts raw occurrences.
 
 ### Gates (run before every commit; wired into the pre-commit hook)
 ```bash
@@ -200,7 +214,7 @@ node scripts/design/contrast.mjs         # 56 WCAG checks against the real token
 Motion is feedback, not decoration. Keep spinners, ~1.4s skeleton shimmers, typing/dot indicators, and status/sync/connection pulses. Delete decorative loops (glow/breathe/float/aurora/color-shift). Durations resolve to `--g-dur-*`; prefer explicit `transition` property lists over `transition: all` (and never comma-list properties with a single trailing duration — that only animates the last one).
 
 ## External Integrations
-Data layer: **Nexus** (via gero-backend) — blockchain data, prices, DeFi/swap routing, and risk scores are all brokered server-side; the client carries no third-party data keys. Real-time: **Gero Sync** (WebSocket push). Fiat on-ramp: MoonPay, Guardarian. Other: ADA Handle, Bring Cashback. Hardware: Ledger, Trezor, Keystone.
+Data layer: **Nexus** (via gero-backend) — blockchain data, prices, DeFi/swap routing, and risk scores are all brokered server-side; the client carries no third-party data keys. Real-time: **Gero Sync** (WebSocket push). Fiat on-ramp: MoonPay (Guardarian removed 2026-09). Other: ADA Handle, Bring Cashback. Hardware: Ledger, Trezor, Keystone.
 
 ## Relevant Skills
 Use these slash commands when working on this project:
@@ -208,11 +222,11 @@ Use these slash commands when working on this project:
 - `/bitcoin` — Bitcoin transactions, wallets, Lightning (multi-chain support)
 - `/blockchain-expert` — DeFi, smart contracts, Web3 patterns
 - `/browser-extension-builder` — Chrome extension architecture, Manifest V3, content scripts, messaging
-- `/i18n` — Sync and translate `us.ts`/`de.ts` language files
+- `/i18n` — Sync and translate `us.ts`/`de.ts`/`es.ts` language files
 - `/content-design` — UI copy: button labels, error messages, tooltips, empty states
 - `/frontend-design` — Production-grade Vue/Vuetify UI components
 - `/senior-security` — Crypto implementation, security architecture, wallet security audits
 - `/simplify` — Review changed code for quality and efficiency
 
 ---
-**Last Updated**: 2026-07-29
+**Last Updated**: 2026-10-04

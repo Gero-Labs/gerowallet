@@ -183,7 +183,7 @@
           <v-list-item-title class="text-left">
             <h3 style="color: white; font-size: 16px;">{{ $t('crossDevice.settings.title') }}</h3>
           </v-list-item-title>
-          <v-list-item-subtitle class="text-left">
+          <v-list-item-subtitle class="text-left" :class="{ 'warning--text': remoteSigningNeedsProof }">
             {{ remoteSigningSubtitle }}
           </v-list-item-subtitle>
         </v-list-item-content>
@@ -280,7 +280,7 @@
       <v-card class="verification-card px-3 pa-2 liquid-glass" elevation="8" max-width="400" rounded="lg">
         <v-card-title class="justify-center">
           <v-icon left color="primary" large>mdi-lock-check</v-icon>
-          {{ $t('security.verify') + ' ' + getUnlockMethodTitle(unlockMethod) }}
+          {{ getVerifyTitle(unlockMethod) }}
         </v-card-title>
 
         <v-card-text class="pt-4">
@@ -513,16 +513,18 @@ const websiteProtection = computed({
   }
 });
 
-const getUnlockMethodTitle = (method: string | null) => {
+// One whole title per method rather than "Verify" + method name: the glued form
+// kept English word order and mid-sentence title case in other languages.
+const getVerifyTitle = (method: string | null) => {
   switch (method) {
     case 'password':
-      return t('security.spendingPassword');
+      return t('security.verifySpendingPassword');
     case 'pin':
-      return t('security.pin');
+      return t('security.verifyPin');
     case 'pattern':
-      return t('security.pattern');
+      return t('security.verifyPattern');
     default:
-      return ''
+      return t('security.verify');
   }
 };
 
@@ -546,9 +548,16 @@ const canRemoteSigning = computed(() =>
   loggedWallet.value?.type === WalletType.Normal,
 );
 
+// Remote signing is on but this device has no valid wallet-control proof (never
+// produced, storage cleared, or rejected by the relay). Tapping the row opens the
+// existing auth step, which signs a fresh one; without it the relay will stop
+// registering this browser once it enforces proofs.
+const remoteSigningNeedsProof = computed(() => remoteSigningStore.needsProof());
+
 const remoteSigningSubtitle = computed(() => {
   const s = remoteSigningStore.state.settings;
   if (!s.enabled) return t('crossDevice.settings.subtitleOff');
+  if (remoteSigningNeedsProof.value) return t('crossDevice.settings.reconfirmSubtitle');
   const count = Object.keys(s.trustedDevices).length;
   const policyText = s.policy === 'require_remote'
     ? t('crossDevice.settings.policyRequire')
@@ -601,7 +610,7 @@ const passKeyText = computed(() => {
   const features: string[] = [];
 
   if (passKeyForUnlock.value) {
-    features.push(t('security.unlock'));
+    features.push(t('security.unlockFeature'));
   }
 
   if (passKeyForPasswordAutofill.value && loggedWallet.value?.type === WalletType.Normal) {

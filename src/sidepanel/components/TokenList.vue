@@ -24,6 +24,36 @@
         </div>
       </div>
     </div>
+    <!-- Every other unshielded token colour the wallet holds (USDM, …), mirroring
+         the dashboard's MidnightHoldingsTable rows: registry metadata when the
+         colour is listed, otherwise the raw colour prefix and base units. -->
+    <div v-for="row in midnightTokenRows" :key="row.color" class="token-item">
+      <div class="token-left">
+        <v-avatar size="36" class="token-avatar" :class="{ 'ada-avatar': !row.image }">
+          <img v-if="row.image" :src="row.image" :alt="row.ticker" />
+          <v-icon v-else size="20" color="grey">mdi-circle-multiple-outline</v-icon>
+        </v-avatar>
+        <div class="token-info">
+          <div class="token-name text-body-2 white--text text-truncate" style="font-weight: 600">{{ row.ticker }}</div>
+          <div class="token-amount text-caption grey--text">
+            {{ hideBalances ? '••••••' : row.balanceFormatted }}
+          </div>
+        </div>
+      </div>
+      <div class="token-right">
+        <div v-if="row.valueFormatted" class="token-value text-body-2 white--text">
+          {{ hideBalances ? '$•••' : row.valueFormatted }}
+        </div>
+        <div v-else class="token-value text-body-2 grey--text">--</div>
+        <div
+          v-if="row.change24h !== null"
+          class="token-change text-caption"
+          :class="row.change24h >= 0 ? 'green-text' : 'red-text'"
+        >
+          {{ row.change24h >= 0 ? '+' : '' }}{{ row.change24h.toFixed(2) }}%
+        </div>
+      </div>
+    </div>
   </div>
 
   <div v-else class="token-list">
@@ -152,6 +182,10 @@ import midnightLogo from '@/assets/svg/midnight.svg';
 import { midnightStore } from '@/stores/midnightStore';
 import { Blockchain, Network } from '@/models/types';
 import { MIDNIGHT_DECIMALS } from '@/chains/midnight/midnightTypes';
+import { midnightTokenBalances } from '@/chains/midnight/midnightTokenBalances';
+import { midnightTokenMeta } from '@/chains/midnight/midnightTokenRegistry';
+import { getTokenByUnit } from '@/modules/market/composables/useMarketData';
+import { formatUsd } from '@/shared/utils/format';
 import { useTranslation } from '@/shared/composables/useTranslation';
 
 const { t } = useTranslation();
@@ -192,6 +226,50 @@ const nightBreakdownText = computed(() => {
   const pub = formatMidnightUnits(midnightStore.balances.nightUnshielded ?? 0n, MN_NIGHT_DIVISOR, 2);
   const priv = formatMidnightUnits(midnightStore.balances.nightShielded ?? 0n, MN_NIGHT_DIVISOR, 2);
   return `${t('midnight.common.public')} ${pub} / ${t('midnight.common.private')} ${priv}`;
+});
+
+interface MidnightTokenRow {
+  color: string;
+  ticker: string;
+  balanceFormatted: string;
+  valueFormatted: string;
+  change24h: number | null;
+  image?: string;
+}
+
+// Non-native unshielded colours, one row each — the same derivation as the
+// dashboard's MidnightHoldingsTable (registry metadata; price and logo
+// borrowed from the Cardano token the registry names, see
+// midnightTokenRegistry.ts). An unlisted colour shows its prefix and base units.
+const midnightTokenRows = computed<MidnightTokenRow[]>(() => {
+  if (!isMidnight.value) return [];
+  return Object.entries(midnightTokenBalances(midnightStore.utxos)).map(([color, amount]) => {
+    const meta = midnightTokenMeta(color);
+    if (!meta) {
+      return {
+        color,
+        // Head+tail, as the dashboard's MidnightHoldingsTable: a prefix-only
+        // label lets an issuer grind a colliding prefix and pass one unlisted
+        // token off as another.
+        ticker: `${color.slice(0, 8)}…${color.slice(-6)}`,
+        balanceFormatted: amount.toString(),
+        valueFormatted: '',
+        change24h: null,
+      };
+    }
+    const divisor = 10n ** BigInt(meta.decimals);
+    const market = meta.cardanoPriceUnit ? getTokenByUnit(meta.cardanoPriceUnit) : undefined;
+    const priceUsd = market?.price ?? 0;
+    const units = Number(amount) / Number(divisor);
+    return {
+      color,
+      ticker: meta.symbol,
+      balanceFormatted: `${formatMidnightUnits(amount, divisor, 2)} ${meta.symbol}`,
+      valueFormatted: priceUsd > 0 ? formatUsd(units * priceUsd) : '',
+      change24h: priceUsd > 0 && market?.change24h != null ? market.change24h : null,
+      image: market?.img || undefined,
+    };
+  });
 });
 interface TokenMetadata {
   ticker?: string;

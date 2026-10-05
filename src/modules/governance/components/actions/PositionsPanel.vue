@@ -494,7 +494,7 @@ onMounted(async () => {
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .positions {
   display: flex;
   flex-direction: column;
@@ -516,11 +516,11 @@ onMounted(async () => {
   gap: var(--g-s-3);
 }
 .positions__tile {
+  @include g-glass-tier(false);
   display: flex;
   flex-direction: column;
   gap: var(--g-s-1);
   padding: var(--g-s-3) var(--g-s-4);
-  background: var(--g-raised);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-control);
 }

@@ -757,7 +757,7 @@ onMounted(() => {
 defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQuantityToSend, increaseQuantityToSend, getAvailableTokens, totalAmounts, lockedAdaForTokens, isAutoMinAda });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .assets-to-send {
   display: flex;
   flex-direction: column;
@@ -776,9 +776,9 @@ defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQu
 }
 
 .token-row {
+  @include g-glass-tier(false);
   display: flex;
   align-items: center;
-  background: var(--g-raised);
   border-radius: var(--g-r-control);
   padding: 6px 10px;
   gap: 6px;

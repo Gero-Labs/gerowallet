@@ -107,11 +107,11 @@ onMounted(() => prompt.register());
 onBeforeUnmount(() => prompt.unregister());
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .support-auth {
+  @include g-glass-panel(false);
   padding: 16px;
   border-radius: var(--g-r-sheet);
-  background: var(--g-overlay);
   border: 1px solid var(--g-hairline-2);
   box-shadow: var(--g-shadow-menu);
 }

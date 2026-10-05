@@ -16,10 +16,12 @@ The flow:
 background mutates store
   -> serialize (bigint -> string, Map -> object, Set -> array)
   -> broadcastUpdate over the 'store-sync' chrome.runtime port
-  -> chrome.storage.local.set (300ms debounce, WHOLE store snapshot)
+  -> persist, 300ms debounce. walletStore/networkStore/midnightStore/tokenMetadataStore (StorePersister): only the
+     touched fields; small ones to chrome.storage.local, bulk ones to IndexedDB
+     `gero-store-cache`. Most other stores: WHOLE store snapshot to chrome.storage.local
 
 UI page
-  -> one-shot hydrate from chrome.storage.local on cold start
+  -> one-shot hydrate on cold start (chrome.storage.local, plus the IndexedDB cache for StorePersister stores)
   -> storeMessaging.subscribe(STORE_NAME, handler) for live updates
   -> handler applies key-by-key:  if (key in store) store[key] = updates[key]
 ```
@@ -28,7 +30,9 @@ Two rules fall straight out of that:
 
 **Declare every field in the `Vue.observable({...})` literal with a default.** The subscribe handler drops unknown keys via `if (key in store)`, and Vue 2 only installs reactive getters on properties present at creation. A field added only to the type and the setter works in the background and never appears in the UI, with no error.
 
-**Use the in-memory store as the base for the `chrome.storage` write**, never `chrome.storage.local.get()`. The read-modify-write version races the Dexie liveQuery; the fix is commented in `geroStore.ts:108`. Copy `broadcastFromBackground` from `walletStore.ts`, `geroStore.ts`, `networkStore.ts`, `cip45Store.ts` or `loading.ts`. Do **not** copy it from `tapToolsStore`, `tokenMetadataStore`, `coinGeckoStore`, `charli3Store` or `musicStore` - those still carry the racy pattern. (`stores/modules/card.ts` has no `broadcastFromBackground` at all and never persists, so it is not a store template either.)
+**Use the in-memory store as the base for the `chrome.storage` write**, never `chrome.storage.local.get()`. The read-modify-write version races the Dexie liveQuery; the fix is commented in `geroStore.ts:108`. Copy `broadcastFromBackground` from `walletStore.ts`, `geroStore.ts`, `networkStore.ts`, `tokenMetadataStore.ts`, `cip45Store.ts` or `loading.ts`. Do **not** copy it from `tapToolsStore`, `coinGeckoStore`, `charli3Store` or `musicStore` - those still carry the racy pattern. (`stores/modules/card.ts` has no `broadcastFromBackground` at all and never persists, so it is not a store template either.)
+
+**Keep `chrome.storage.local` values small.** Every write that changes a value makes Chrome copy the old and new value, on the browser UI thread, into every `storage.onChanged` listener. The Bring SDK registers one in the content script, which runs in every frame of every tab. A 27 MB `walletStore` rewritten on each `setSyncing` blocked that thread for 1-4 s per write, and froze Chrome windows in other profiles too. Give a store with large or fast-changing fields a `StorePersister` (`src/utils/storePersistence.ts`) and list those fields in `bulkFields`. `walletStore`, `networkStore` and `midnightStore` use one. A store whose fields need revival (BigInts, validation) reads the merged record with `persister.read()` and runs its own hydrators, as `midnightStore` does.
 
 **BigInt survives the trip out but not back.** The serializer stringifies `bigint`, and nothing revives it: both `storeMessaging.subscribe` and the cold-start hydrate assign the raw JSON. So in every browser context `walletStore.bitcoinBalance.{available,total,locked}` are **strings**, while in the background they are real BigInts. Arithmetic or a comparison written against the background's view throws `Cannot mix BigInt and other types` - or worse, silently compares strings - in UI contexts only, where no vitest run will see it. Coerce at the read site.
 
@@ -42,7 +46,12 @@ import { walletStore as store } from '@/stores/walletStore';  // the observable
 const { config, loggedWallet } = toRefs(store);
 ```
 
-`src/options/main.ts` awaits hydration of `geroStore` and `walletStore` **before** mounting Vue, because the router's `beforeEach` would otherwise see `loggedWallet === null` and bounce to `/welcome`.
+`src/options/main.ts` waits up to five seconds for `geroStore`, `walletStore`,
+and locale initialization before mounting Vue. The shared startup budget prevents
+a stalled Chrome storage, IndexedDB, or locale load from leaving a blank page.
+Timed-out operations continue in the background. Late wallet readiness revisits
+the requested route through the normal guards; locked wallets, signing popups,
+and an explicit `addWallet=1` flow retain their existing restrictions.
 
 Lightweight UI-owned preferences use a simpler pattern - `Vue.observable` + direct `chrome.storage.local` + an `onChanged` listener + an explicit `hydrated` flag so the UI does not flash the default. See `src/stores/agentDockPrefsStore.ts`.
 
@@ -80,7 +89,7 @@ And do not latch the first read: `config` is `{}` until the liveQuery delivers. 
 
 **The round trip needs a live service worker.** The liveQuery loaders run in the background, so while the worker is torn down a Dexie write from a UI page persists but **does not propagate**: other open contexts keep their last `chrome.storage` snapshot until something wakes the worker. For a control where stale means wrong - anything privacy- or security-shaped - that is a fail-open, and it is invisible in local dev where the worker is usually warm. QA step: make the change, confirm at `chrome://extensions` that the service worker shows inactive, then open the side panel and check it reflects the new value.
 
-**A durable preference written only through `broadcastFromBackground` silently resets on every worker restart**, because the broadcast persists the whole in-memory snapshot and a freshly booted worker is at defaults. If the background owns a durable field, give it a background-side hydrate guarded by an "already touched" flag. This shipped once as the Midnight proof-server mode flipping back to Gero Cloud.
+**A durable preference written only through `broadcastFromBackground` silently resets on every worker restart**, because every write saves the store's small `chrome.storage` record from the worker's in-memory state, and a freshly booted worker is at defaults. If the background owns a durable field, give it a background-side hydrate guarded by an "already touched" flag, and run that read through `StorePersister.hydrate()` or `hydrateWith()` so no write can land before it: an immediate write on the worker's first tick otherwise saves the defaults over the stored values. This shipped twice in Midnight: the proof-server mode flipping back to Gero Cloud, then a lost `chainIdentity` forcing a full private-note rescan (fixed in PR 1134).
 
 ## Dexie
 

@@ -413,11 +413,11 @@ export default defineComponent({
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .allowance-card {
+  @include g-glass-panel(false);
   border-radius: var(--g-r-card);
   padding: 10px;
-  background: var(--g-surface);
   font-size: 13px;
 }
 
@@ -574,10 +574,10 @@ export default defineComponent({
 }
 
 .allowance-card__adjust {
+  @include g-glass-tier(false);
   margin-top: 10px;
   padding: 8px;
   border-radius: var(--g-r-control);
-  background: var(--g-raised);
   border: 1px solid var(--g-hairline-2);
 }
 

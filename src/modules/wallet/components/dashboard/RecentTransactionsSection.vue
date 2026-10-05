@@ -1,598 +1,309 @@
 <template>
-  <v-card class="transactions-card pa-2" outlined>
-    <v-card-title class="d-flex justify-space-between align-center">
-      <span>{{ t('card.transactions') }}</span>
-      <div class="d-flex align-center gap-2">
-        <ExportPeriodMenu :disabled="loading || formattedTransactions.length === 0" />
+  <section class="card-tx glass-panel" aria-labelledby="card-tx-title">
+    <header class="card-tx__head">
+      <h2 id="card-tx-title" class="t-heading">{{ t('card.recentTransactions') }}</h2>
+      <div class="card-tx__tools">
+        <CardChip>{{ t('card.last30DaysLabel') }}</CardChip>
+        <ExportPeriodMenu :disabled="loading || rows.length === 0" />
       </div>
-    </v-card-title>
-    <v-card-text>
-      <v-data-table
-        :header-props="{ 'sort-icon': 'mdi-menu-up' }"
-        :headers="headers"
-        :items="formattedTransactions"
-        :loading="loading"
-        :page.sync="currentPage"
-        :items-per-page="10"
-        dense
-        :server-items-length="cardStore.cardHistoryMeta?.totalRecords || 0"
-        hide-default-footer
-        class="transactions-table"
-        :no-data-text="t('card.noTransactionsYet')"
-        :loading-text="t('card.loadingTransactions')"
-      >
-        <template v-slot:item.reference="{ item }">
-          <v-list-item class="px-0">
-            <v-list-item-content class="px-0">
-              <v-list-item-title class="px-0">
-                {{ filters.truncate(item.reference)
-                }}<CopyButton style="margin-bottom: 1px" x-small :value="item.reference" />
-              </v-list-item-title>
-            </v-list-item-content>
-          </v-list-item>
-        </template>
+    </header>
 
-        <!-- Date & Time column -->
-        <template v-slot:item.datetime="{ item }">
-          <v-list-item class="px-0">
-            <v-list-item-content class="px-0">
-              <v-list-item-title class="px-0" style="font-size: 13px">
-                {{ item.dateFormatted }}
-              </v-list-item-title>
-              <v-list-item-subtitle class="px-0" style="font-size: 12px">
-                {{ item.timeFormatted }}
-              </v-list-item-subtitle>
-            </v-list-item-content>
-          </v-list-item>
-        </template>
+    <div v-if="loading && !rows.length" class="card-tx__skeleton" aria-hidden="true">
+      <div v-for="n in 4" :key="n" class="g-skeleton card-tx__skeleton-row"></div>
+    </div>
 
-        <!-- Amount column -->
-        <template v-slot:item.amount="{ item }">
-          <v-list-item class="px-0">
-            <v-list-item-content class="px-0">
-              <v-list-item-title class="px-0">
-                <span class="amount" :class="{ negative: item.amount < 0 }">
-                  {{ filters.toCurrency(item.amount, true, 2, item.currency, '', true, 0) }}
-                </span>
-              </v-list-item-title>
-              <v-list-item-subtitle v-if="item.isTopUp && item.adaAmount" class="px-0 ada-equivalent">
-                ₳{{ filters.toCurrency(item.adaAmount, false, 2, '', '', false, 0) }}
-              </v-list-item-subtitle>
-            </v-list-item-content>
-          </v-list-item>
-        </template>
+    <div v-else-if="!rows.length" class="card-tx__empty">
+      <IsoScene name="empty" class="card-tx__empty-art" />
+      <p class="t-body">{{ t('card.noTransactionsYet') }}</p>
+    </div>
 
-        <!-- Category column -->
-        <template v-slot:item.category="{ item }">
-          <div class="category-badge" :class="item.categoryClass">
-            <div class="category-dot" :class="item.categoryDotClass"></div>
-            <span class="category-text">{{ item.category }}</span>
-          </div>
-        </template>
-      </v-data-table>
-    </v-card-text>
-    <v-card-actions v-if="totalPages > 1 && !loading" class="pagination-container">
-      <v-pagination
-        v-model="currentPage"
-        :length="totalPages"
-        :total-visible="7"
-        class="custom-pagination"
-        @input="handlePageChange"
-      ></v-pagination>
-    </v-card-actions>
+    <div v-else class="card-tx__scroll">
+      <table class="card-tx__table">
+        <thead>
+          <tr>
+            <th scope="col">{{ t('card.transaction') }}</th>
+            <th scope="col">{{ t('card.dateTime') }}</th>
+            <th scope="col">{{ t('card.reference') }}</th>
+            <th scope="col" class="card-tx__num">{{ t('card.amount') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="row in pageRows" :key="row.key" :class="{ 'is-declined': row.declined }">
+            <td>
+              <span class="card-tx__merchant">{{ row.name }}</span>
+              <span class="t-caption">
+                {{ row.category }}
+                <CardChip v-if="row.declined" tone="error" class="card-tx__declined" :title="row.reason">
+                  {{ t('card.declined') }}
+                </CardChip>
+              </span>
+            </td>
+            <td class="g-num card-tx__when">{{ row.when }}</td>
+            <td>
+              <span class="card-tx__ref">
+                <span class="g-mono">{{ row.shortRef }}</span>
+                <CopyButton x-small :value="row.reference" />
+              </span>
+            </td>
+            <td class="card-tx__num g-num">
+              <span :class="{ 'delta-up': row.credit && !row.declined }">{{ row.amount }}</span>
+              <span v-if="row.ada" class="t-caption">≈ {{ row.ada }} ADA</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
-    <!-- Vuetify Pagination -->
-  </v-card>
+    <v-pagination
+      v-if="pageCount > 1"
+      v-model="page"
+      :length="pageCount"
+      :total-visible="7"
+      class="card-tx__pager"
+    />
+  </section>
 </template>
 
 <script setup lang="ts">
-import { useTranslation } from '@/shared/composables/useTranslation';
-import { ref, computed, onMounted } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import { useIntervalFn } from '@vueuse/core';
 import type { CardTransactionHistory } from '@/models/card';
 import cardStore from '@/stores/modules/card';
-import filters from '@/shared/utils/filters';
+import { useTranslation } from '@/shared/composables/useTranslation';
+import { adaFigure, cardMoney, uiLocale } from '@/modules/wallet/utils/cardFormat';
 import CopyButton from '@/shared/components/CopyButton.vue';
+import IsoScene from '@/shared/components/iso/IsoScene.vue';
+import CardChip from '../ui/CardChip.vue';
 import ExportPeriodMenu from './ExportPeriodMenu.vue';
 
-interface Props {
-  transactions?: CardTransactionHistory[];
-  loading?: boolean;
-}
-
-const props = defineProps<Props>();
-
-defineEmits(['orderCard', 'dateRangeChange']);
+const PAGE_SIZE = 10;
+const TOP_UP_MCC = '6012';
 
 const { t } = useTranslation();
+const page = ref(1);
 
-// Initialize with default date range (last 30 days)
-onMounted(() => {
+const loading = computed(() => cardStore.state.loading.cardHistory);
+const records = computed<CardTransactionHistory[]>(() => cardStore.getSelectedCard()?.cardHistory?.records || []);
+
+const MCC_CATEGORY: Record<string, string> = {
+  '4899': 'card.subscriptions',
+  '5942': 'card.ecommerce',
+  '5814': 'card.foodAndDining',
+  '5411': 'card.groceries',
+  '5541': 'card.transportation',
+  '7011': 'card.travel',
+  '8099': 'card.entertainment',
+  [TOP_UP_MCC]: 'card.topUpCategory',
+};
+
+/** Provider timestamps are "DD.MM.YYYY HH:mm". */
+function parseProviderDate(value: string): Date | null {
+  const match = /^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{2}):(\d{2}))?/.exec(value || '');
+  if (!match) return null;
+  const [, day, month, year, hours = '0', minutes = '0'] = match;
+  return new Date(Number(year), Number(month) - 1, Number(day), Number(hours), Number(minutes));
+}
+
+const buyRate = computed(() => {
+  const rate = parseFloat(String(cardStore.state.exchangeRate?.buy ?? ''));
+  return Number.isFinite(rate) && rate > 0 ? rate : 0;
+});
+
+const rows = computed(() => {
+  const dateFormat = new Intl.DateTimeFormat(uiLocale(), { dateStyle: 'medium', timeStyle: 'short' });
+  return records.value
+    .map((tx, index) => {
+      const date = parseProviderDate(tx.createTime);
+      const signed = Number(tx.amount?.amount) || 0;
+      const value = Math.abs(signed);
+      // `debit` decides when present; older records only carry the sign of the amount.
+      const credit = typeof tx.debit === 'boolean' ? !tx.debit : signed > 0;
+      const isTopUp = tx.mcc?.code === TOP_UP_MCC;
+      const reference = tx.reference || '';
+      return {
+        key: `${reference}-${index}`,
+        time: date?.getTime() ?? 0,
+        name: tx.narrative || tx.cardAcceptorNameAndLocation || t('card.other'),
+        category: t(MCC_CATEGORY[tx.mcc?.code] || 'card.other'),
+        when: date ? dateFormat.format(date) : tx.createTime,
+        reference,
+        shortRef: reference.length > 12 ? `${reference.slice(0, 6)}…${reference.slice(-4)}` : reference,
+        credit,
+        declined: !!tx.rejectReason,
+        reason: tx.rejectReason || '',
+        amount: `${credit ? '+' : '−'}${cardMoney(value, tx.amount?.currencyCode || 'EUR')}`,
+        ada: isTopUp && buyRate.value ? adaFigure(value / buyRate.value) : '',
+      };
+    })
+    .sort((a, b) => b.time - a.time);
+});
+
+const pageCount = computed(() => Math.ceil(rows.value.length / PAGE_SIZE));
+const pageRows = computed(() => rows.value.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE));
+
+function formatForApi(date: Date): string {
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  return `${day}.${month}.${date.getFullYear()}`;
+}
+
+async function load(): Promise<void> {
+  if (!cardStore.state.selectedCardId) return;
   const end = new Date();
   const start = new Date();
   start.setDate(start.getDate() - 30);
-
-  const params = {
-    periodFrom: formatDateForAPI(start),
-    periodTo: formatDateForAPI(end),
-    page: 1,
-    size: 1000,
-  };
-
-  cardStore
-    .fetchCardHistory(params)
-    .then(() => {
-      currentPage.value = 1;
-    })
-    .catch(error => {
-      console.error('Failed to fetch transactions:', error);
-    });
-});
-
-// Format date for API (dd.mm.yyyy)
-const formatDateForAPI = (date: Date): string => {
-  const day = date.getDate().toString().padStart(2, '0');
-  const month = (date.getMonth() + 1).toString().padStart(2, '0');
-  const year = date.getFullYear();
-  return `${day}.${month}.${year}`;
-};
-
-// Exchange rate from store (same as other components)
-const EXCHANGE_RATE = computed(() => {
-  return Number(cardStore.state.exchangeRate?.buy) || 0;
-});
-
-// Define table headers
-const headers = [
-  { text: t('card.dateTime'), value: 'datetime', sortable: true, align: 'start', width: '150' },
-  { text: t('card.category'), value: 'category', sortable: false, align: 'start' },
-  { text: t('card.transaction'), value: 'name', sortable: false, align: 'start' },
-  { text: t('card.reference'), value: 'reference', sortable: true, align: 'start', width: '150' },
-  { text: t('card.amount'), value: 'amount', sortable: false, align: 'start' },
-];
-
-// Parse European date format DD.MM.YYYY HH:mm
-const parseEuropeanDate = (dateStr: string): Date => {
-  // Split date and time
-  const [datePart, timePart] = dateStr.split(' ');
-  const [day, month, year] = datePart.split('.');
-  const [hours, minutes] = timePart.split(':');
-
-  // Create Date object (month is 0-indexed)
-  return new Date(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hours), parseInt(minutes));
-};
-
-const resolveCurrencySymbol = (currencyName: string) => {
-  switch (currencyName) {
-    case 'EUR':
-    default:
-      return '€';
+  try {
+    await cardStore.fetchCardHistory({ periodFrom: formatForApi(start), periodTo: formatForApi(end), page: 1, size: 1000 });
+  } catch {
+    // The rows already on screen stay; the next refresh retries.
   }
-};
+}
 
-// Transform API transactions to UI format
-const formattedTransactions = computed(() => {
-  const transactionsToDisplay = props.transactions || [];
-
-  const allTransactions = transactionsToDisplay.map((tx, index) => {
-    // Extract merchant name from cardAcceptorNameAndLocation
-    const merchantName: string = tx.narrative || 'Unknown';
-
-    // Determine category based on MCC code
-    const category = getCategoryFromMCC(tx.mcc.code);
-    const categoryClass = getCategoryClass(category);
-    const categoryDotClass = getCategoryDotClass(category);
-
-    // Check if this is a top-up transaction (MCC code '6012')
-    const isTopUp = tx.mcc.code === '6012';
-
-    // Calculate ADA equivalent for top-up transactions
-    const adaAmount = isTopUp && EXCHANGE_RATE.value > 0 ? tx.amount.amount / EXCHANGE_RATE.value : null;
-
-    // Parse date and convert to local time
-    const localDate = parseEuropeanDate(tx.createTime);
-
-    // Format date as MM/DD/YYYY
-    const dateFormatted = localDate.toLocaleDateString('en-US', {
-      month: '2-digit',
-      day: '2-digit',
-      year: 'numeric',
-    });
-
-    // Format time as HH:mm AM/PM
-    const timeFormatted = localDate.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true,
-    });
-
-    return {
-      id: index + 1,
-      date: localDate.getTime(),
-      dateFormatted,
-      timeFormatted,
-      name: merchantName,
-      avatarText: merchantName.substring(0, 2).toUpperCase(),
-      avatarClass: 'avatar-default',
-      icon: undefined, // No icon for now
-      amount: tx.amount.amount,
-      currency: resolveCurrencySymbol(tx.amount.currencyCode),
-      category,
-      categoryClass,
-      categoryDotClass,
-      reference: tx.reference,
-      isTopUp,
-      adaAmount,
-    };
-  });
-
-  // Slice data for pagination (10 items per page)
-  const startIndex = (currentPage.value - 1) * 10;
-  const endIndex = startIndex + 10;
-  return allTransactions.slice(startIndex, endIndex);
+watch(() => cardStore.state.selectedCardId, () => {
+  page.value = 1;
+  load();
+});
+watch(pageCount, count => {
+  if (page.value > Math.max(1, count)) page.value = 1;
 });
 
-// Helper functions
-const getCategoryFromMCC = (mccCode: string): string => {
-  const mccCategories: Record<string, string> = {
-    '4899': t('card.subscriptions'),
-    '5942': t('card.ecommerce'),
-    '5814': t('card.foodAndDining'),
-    '5411': t('card.groceries'),
-    '5541': t('card.transportation'),
-    '7011': t('card.travel'),
-    '8099': t('card.entertainment'),
-    '6012': t('card.topUpCategory'),
-  };
-
-  return mccCategories[mccCode] || t('card.other');
-};
-
-const getCategoryClass = (category: string): string => {
-  const categoryClasses: Record<string, string> = {
-    'Subscriptions': 'category-green',
-    'Ecommerce': 'category-blue',
-    'Food and dining': 'category-pink',
-    'Groceries': 'category-orange',
-    'Transportation': 'category-purple',
-    'Travel': 'category-cyan',
-    'Entertainment': 'category-red',
-    'Top-up': 'category-green', // Green for positive/credit transactions
-    'Other': 'category-gray',
-  };
-
-  return categoryClasses[category] || 'category-gray';
-};
-
-const getCategoryDotClass = (category: string): string => {
-  const dotClasses: Record<string, string> = {
-    'Subscriptions': 'dot-green',
-    'Ecommerce': 'dot-blue',
-    'Food and dining': 'dot-pink',
-    'Groceries': 'dot-orange',
-    'Transportation': 'dot-purple',
-    'Travel': 'dot-cyan',
-    'Entertainment': 'dot-red',
-    'Top-up': 'dot-green', // Green dot for top-up transactions
-    'Other': 'dot-gray',
-  };
-
-  return dotClasses[category] || 'dot-gray';
-};
-
-const currentPage = ref(1);
-const totalPages = computed(() => {
-  const totalRecords = cardStore.cardHistoryMeta?.totalRecords || props.transactions?.length || 0;
-  return Math.ceil(totalRecords / 10);
-});
-
-const handlePageChange = (page: number) => {
-  currentPage.value = page;
-  console.log('Page changed to:', page);
-  // TODO: Emit event or call API to fetch new page data
-};
+useIntervalFn(load, 60000);
+onMounted(load);
 </script>
 
 <style lang="scss" scoped>
-@import '../../styles/variables';
-@import '../../styles/mixins';
+.card-tx {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-4);
+  padding: var(--g-s-5);
+}
 
-.transactions-card {
-  background: $background-card;
-  border: 1px solid $border-secondary;
-  border-radius: $border-radius-md;
-  padding: $spacing-lg;
-  width: 100%;
+.card-tx__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--g-s-3);
 
-  .card-header {
-    margin-bottom: $spacing-2xl;
-  }
-
-  .card-title {
-    font-family: $font-family-primary;
-    font-weight: $font-weight-semibold;
-    font-size: $font-size-xl;
-    line-height: 1.4;
-    color: $text-primary;
+  h2 {
     margin: 0;
   }
+}
 
-  // v-data-table styling
-  :deep(.v-data-table) {
-    background: transparent;
+.card-tx__tools {
+  display: flex;
+  align-items: center;
+  gap: var(--g-s-2);
+}
 
-    .v-data-table__wrapper {
-      overflow-x: auto;
-    }
+.card-tx__scroll {
+  overflow-x: auto;
+}
 
-    thead {
-      th {
-        font-family: $font-family-primary !important;
-        font-weight: $font-weight-semibold !important;
-        font-size: $font-size-xs !important;
-        line-height: 1.5 !important;
-        color: $text-muted !important;
-        background: transparent !important;
-        border-bottom: 1px solid $border-secondary !important;
-        padding: 0 8px 0 8px !important;
-      }
-    }
+.card-tx__table {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  font-size: 13px;
 
-    tbody {
-      tr {
-        border-bottom: 1px solid $border-secondary !important;
-
-        &:last-child {
-          border-bottom: none !important;
-        }
-
-        &:hover {
-          background: transparent !important;
-        }
-
-        td {
-          padding: 0 8px 0 8px !important;
-          border: none !important;
-          background: transparent !important;
-        }
-      }
-    }
+  th {
+    padding: var(--g-s-2) var(--g-s-3);
+    text-align: left;
+    border-bottom: 1px solid var(--g-hairline-2);
+    color: var(--g-text-3);
+    font-size: 11px;
+    font-weight: 550;
   }
 
-  // Date cell styling
-  .date-cell {
-    font-family: $font-family-primary;
-    font-weight: $font-weight-medium;
-    font-size: $font-size-sm;
-    line-height: 1.43;
-    color: $text-primary;
-  }
-
-  // Transaction info styling
-  .transaction-info {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-
-    .transaction-name {
-      font-family: $font-family-primary;
-      font-weight: $font-weight-medium;
-      font-size: $font-size-sm;
-      line-height: 1.43;
-      color: $text-primary;
-    }
-  }
-
-  // Amount styling
-  .amount {
-    display: inline-block;
-    font-family: $font-family-primary;
-    font-weight: $font-weight-normal;
-    font-size: $font-size-sm;
-    line-height: 1.43;
-    color: var(--v-primary-base);
-    white-space: nowrap;
+  td {
+    padding: var(--g-s-3);
+    border-bottom: 1px solid var(--g-hairline-1);
+    color: var(--g-text-2);
     vertical-align: middle;
-
-    &.negative {
-      color: var(--v-error-base);
-    }
   }
 
-  // ADA equivalent styling (for top-ups)
-  .ada-equivalent {
-    font-family: $font-family-primary;
-    font-weight: $font-weight-normal;
-    font-size: $font-size-xs;
-    line-height: 1.5;
-    color: $text-muted;
-    margin-top: 2px;
-  }
-
-  // Category badge styling
-  .category-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 2px 6px;
-    border-radius: $border-radius-sm;
-    background: $background-card;
-    border: 1px solid $border-primary;
-    box-shadow: $shadow-sm;
-    width: fit-content;
-    white-space: nowrap;
-    vertical-align: middle;
-
-    .category-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      flex-shrink: 0;
-
-      &.dot-pink {
-        background: #ee46bc;
-      }
-      &.dot-green {
-        background: #17b26a;
-      }
-      &.dot-blue {
-        background: #36bffa;
-      }
-      &.dot-red {
-        background: #fecdca;
-      }
-      &.dot-orange {
-        background: #ff9f00;
-      }
-      &.dot-purple {
-        background: #9c27b0;
-      }
-      &.dot-cyan {
-        background: #00bcd4;
-      }
-      &.dot-gray {
-        background: #fecdca;
-      }
-    }
-
-    .category-text {
-      font-family: $font-family-primary;
-      font-weight: $font-weight-medium;
-      font-size: $font-size-xs;
-      line-height: 1.5;
-      color: $text-secondary;
-      white-space: nowrap;
-    }
-  }
-
-  // Card info styling
-  .card-info {
+  td:first-child > span {
     display: flex;
     align-items: center;
-    gap: 12px;
-    width: 100%;
-
-    .card-icon {
-      width: 46px;
-      height: 32px;
-      border: 1px solid $border-secondary;
-      border-radius: 4px;
-
-      img {
-        width: 46px;
-        height: 32px;
-      }
-    }
-
-    .card-details {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-
-      .card-number {
-        font-family: $font-family-primary;
-        font-weight: $font-weight-medium;
-        font-size: $font-size-sm;
-        line-height: 1.43;
-        color: $text-primary;
-      }
-
-      .card-expiry {
-        font-family: $font-family-primary;
-        font-weight: $font-weight-normal;
-        font-size: $font-size-sm;
-        line-height: 1.43;
-        color: $text-muted;
-      }
-    }
-  }
-
-  // v-pagination styling
-  .pagination-container {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    margin-top: $spacing-2xl;
-    padding-top: $spacing-lg;
-    border-top: 1px solid $border-secondary;
-  }
-
-  :deep(.v-pagination) {
-    .v-pagination__list {
-      justify-content: center;
-    }
-
-    .v-pagination__item,
-    .v-pagination__navigation {
-      background: transparent;
-      color: $text-muted;
-      font-family: $font-family-primary;
-      font-weight: $font-weight-medium;
-      font-size: 14px;
-      box-shadow: none;
-      min-width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      transition: color var(--g-dur-base) ease, background-color var(--g-dur-base) ease, opacity var(--g-dur-base) ease;
-
-      &:hover {
-        background: lighten($background-card, 2%);
-      }
-
-      &.v-pagination__item--active {
-        background: $background-secondary !important;
-        color: $text-secondary !important;
-      }
-
-      &:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
-    }
-
-    .v-pagination__more {
-      color: $text-muted;
-    }
+    gap: var(--g-s-2);
   }
 }
 
-@media (max-width: $breakpoint-lg) {
-  .transactions-card {
-    :deep(.v-data-table) {
-      thead th,
-      tbody td {
-        padding: 0 8px 0 8px !important;
-      }
-    }
+.card-tx__merchant {
+  color: var(--g-text-1);
+}
+
+.card-tx__when {
+  white-space: nowrap;
+}
+
+.card-tx__ref {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--g-s-1);
+
+  .g-mono {
+    word-break: normal;
   }
 }
 
-@media (max-width: $breakpoint-md) {
-  .transactions-card {
-    .v-card-title {
-      flex-direction: column;
-      align-items: flex-start !important;
-      gap: 12px;
+.card-tx__num {
+  text-align: right;
 
-      .date-filter-container {
-        width: 100%;
-        justify-content: flex-start;
-      }
-
-      .quick-date-buttons {
-        flex-wrap: wrap;
-      }
-    }
-
-    .pagination-container {
-      flex-direction: column;
-      gap: $spacing-lg;
-    }
-
-    :deep(.v-data-table) {
-      .v-data-table__wrapper {
-        overflow-x: scroll;
-      }
-    }
+  > span {
+    display: block;
   }
+
+  > span:first-child {
+    color: var(--g-text-1);
+  }
+
+  > span.delta-up {
+    color: var(--g-success);
+  }
+}
+
+th.card-tx__num {
+  text-align: right;
+}
+
+.is-declined .card-tx__num > span:first-child {
+  color: var(--g-text-3);
+  text-decoration: line-through;
+}
+
+.card-tx__declined {
+  height: 20px;
+}
+
+.card-tx__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-2);
+}
+
+.card-tx__skeleton-row {
+  height: var(--g-row-h-table);
+}
+
+.card-tx__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--g-s-3);
+  padding: var(--g-s-5) 0;
+
+  p {
+    margin: 0;
+  }
+}
+
+.card-tx__empty-art {
+  width: 180px;
+}
+
+.card-tx__pager {
+  align-self: center;
 }
 </style>

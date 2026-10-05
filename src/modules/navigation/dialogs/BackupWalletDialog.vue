@@ -249,7 +249,7 @@ import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
 import * as bip39 from 'bip39';
 import rules from '@/utils/rules';
-import { decrypt } from '@/shared/utils/crypto';
+import { SecretPurpose, decrypt } from '@/shared/utils/crypto';
 import snackbar from '@/plugins/snackbar';
 import WalletStore, { walletStore } from '@/stores/walletStore';
 import assets from '@/utils/assets';
@@ -422,7 +422,7 @@ const randomReplace = (array: string[], count: number) => {
 const decryptMnemonic = async (): Promise<void> => {
   if (vmProxy.$refs['formUnlock'].validate()) {
     try {
-      const decryptedMnemonic = decrypt(loggedWallet.value.encryptedMnemonic, password.value)
+      const decryptedMnemonic = decrypt(loggedWallet.value.encryptedMnemonic, password.value, SecretPurpose.Mnemonic)
       if (!bip39.validateMnemonic(decryptedMnemonic)) {
         throw new Error('Invalid Password')
       }

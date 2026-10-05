@@ -184,7 +184,7 @@ watch(
 );
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .staking-page {
   padding: 12px 14px;
   display: flex;
@@ -222,7 +222,7 @@ watch(
 
 /* Claim confirmation */
 .claim-info-card {
-  background: var(--g-raised);
+  @include g-glass-panel(false);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-control);
   padding: 14px;

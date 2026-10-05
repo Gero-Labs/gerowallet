@@ -13,6 +13,21 @@
 import { getMidnightEndpoints, isLedger9Network } from '@/chains/midnight/midnightConfig';
 import { resolveZkpaasUrl, buildZkpaasHeaders, isZkpaasConfigured } from '@/chains/midnight/midnightZkpaas';
 import type { ZkpaasSettings } from '@/chains/midnight/midnightZkpaas';
+import { hasMidnightProvingConsent } from '@/chains/midnight/midnightProvingConsent';
+
+/**
+ * True when `url` points at this machine. "Local" proving means the proof
+ * inputs (which can carry key material for the notes being proved) never
+ * leave the device, so only a loopback host qualifies: a LAN box or a public
+ * tunnel would ship them elsewhere with none of the remote-prover consent.
+ */
+export function isLoopbackProverUrl(url: string): boolean {
+  let parsed: URL;
+  try { parsed = new URL(url); } catch { return false; }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+  const host = parsed.hostname.toLowerCase();
+  return host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1';
+}
 
 /** The slice of `midnightStore.proofServer` target resolution needs. */
 export interface ProofServerPreference extends ZkpaasSettings {
@@ -64,7 +79,9 @@ export interface ProvingUnconfiguredTarget {
     /** zkPaaS selected but no API key and no override URL — nothing to talk to. */
     | 'zkpaas-unconfigured'
     /** Local mode, but no URL is stored for this network's circuit family. */
-    | 'local-url-missing';
+    | 'local-url-missing'
+    /** Local mode, but the stored URL is not on this machine (see isLoopbackProverUrl). */
+    | 'local-url-not-loopback';
 }
 
 export type ProvingTarget =
@@ -88,6 +105,9 @@ export function resolveProvingTarget(network: string, ps: ProofServerPreference)
     const url = localUrlForNetwork(network, ps);
     if (!url) {
       return { kind: 'unconfigured', mode: 'local', url: '', reason: 'local-url-missing' };
+    }
+    if (!isLoopbackProverUrl(url)) {
+      return { kind: 'unconfigured', mode: 'local', url, reason: 'local-url-not-loopback' };
     }
     return { kind: 'server', mode: 'local', url, lenientHealth: false };
   }
@@ -134,18 +154,29 @@ export class DappProvingUnavailableError extends Error {
  * connected dapp via `getProvingProvider()`.
  *
  * Privacy note: `local` and the `default` fallback never leave the user's
- * machine. `zkpaas` sends the dapp's proof preimages (the private inputs
- * the proof hides) to Arkhia — the proof-server settings page states that
- * plainly when the user picks that mode ("private data goes to Arkhia, not
- * Gero"), so the stored selection is treated as the user's informed choice
- * here; no additional per-proof prompt is raised.
+ * machine (both are loopback URLs). `zkpaas` sends the proof preimages (the
+ * private inputs the proof hides, which can include key material) to Arkhia,
+ * so it requires the user's recorded zkPaaS consent, the same consent the
+ * wallet's own sends require; without it the request is refused.
  */
-export function resolveDappProvingTarget(network: string, ps: ProofServerPreference): DappProvingTarget {
+export function resolveDappProvingTarget(network: string, ps: ProofServerPreference, consent: unknown): DappProvingTarget {
   const target = resolveProvingTarget(network, ps);
   if (target.kind === 'server') {
+    if (target.mode === 'zkpaas' && !hasMidnightProvingConsent(consent, 'zkpaas')) {
+      throw new DappProvingUnavailableError(
+        'GeroWallet has not been allowed to send proving data to Arkhia zkPaaS yet. '
+        + "Accept the Arkhia proving notice in GeroWallet's Midnight proof-server settings, or switch to a local proof server.",
+      );
+    }
     return { url: target.url, headers: target.headers, source: target.mode };
   }
   if (target.kind === 'unconfigured') {
+    if (target.reason === 'local-url-not-loopback') {
+      throw new DappProvingUnavailableError(
+        'GeroWallet\'s local proof server must run on this computer (localhost). '
+        + "Change the local proof server URL in GeroWallet's Midnight proof-server settings.",
+      );
+    }
     if (target.reason === 'local-url-missing') {
       throw new DappProvingUnavailableError(
         `GeroWallet has no local proof server URL for the ${isLedger9Network(network) ? 'ledger-9 (Stagenet)' : 'ledger-8'} `

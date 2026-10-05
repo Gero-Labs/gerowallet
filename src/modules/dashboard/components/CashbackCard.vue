@@ -58,7 +58,9 @@ const navigateToCashback = () => {
   right: 0;
   bottom: 0;
   background-image: url('@/assets/cardanoBg.png') !important;
-  background-size: auto !important;
+  /* The previous image's native size, so the card keeps the same crop now that
+     cardanoBg.png is the 2x original (5824x3264); `auto` would zoom it 2x. */
+  background-size: 2912px 1632px !important;
   background-position: bottom left !important;
   background-repeat: no-repeat !important;
   opacity: 0.4;

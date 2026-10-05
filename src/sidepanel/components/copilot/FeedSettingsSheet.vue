@@ -48,9 +48,9 @@ function onReRunSetup() {
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .settings-dialog {
-  background: var(--g-overlay);
+  @include g-glass-overlay(false);
   border-radius: var(--g-r-sheet);
   border: 1px solid var(--g-hairline-2);
   display: flex;

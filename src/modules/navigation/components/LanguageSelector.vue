@@ -9,7 +9,7 @@
         <v-icon class="toggleUpDown" :class='{ "rotate": value }' small>mdi-chevron-down</v-icon>
       </v-btn>
     </template>
-    <v-card outlined class="liquid-glass-dialog" style="border: 1px solid rgba(255, 255, 255, 0.15) !important;">
+    <v-card outlined class="glass-popover">
       <v-list dense class="pa-0 transparent">
         <v-list-item-group v-model="selectedLang" mandatory>
           <v-list-item v-for="(item, index) in availableLanguages" :key="index">
@@ -92,20 +92,5 @@ onMounted(() => {
 
 .toggleUpDown.rotate {
   transform: rotate(180deg);
-}
-</style>
-
-<style>
-/* Liquid glass styling for the language selector dropdown */
-.liquid-glass-dialog.v-card {
-  background-color: rgba(0, 0, 0, 0.4) !important;
-  background-image: none !important;
-  backdrop-filter: blur(20px) saturate(1.8) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
-  border-radius: 12px !important;
-  position: relative !important;
-  overflow: hidden !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
-  isolation: isolate !important;
 }
 </style>

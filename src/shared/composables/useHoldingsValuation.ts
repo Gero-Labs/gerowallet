@@ -26,6 +26,7 @@ import type { Cardano } from '@cardano-sdk/core';
 import { useMarketData, type MarketToken } from '@/modules/market/composables/useMarketData';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
+import { isRealFiAsset } from '@/modules/realfi/assets';
 
 export function useHoldingsValuation() {
   const { loggedWallet, utxos, collateral, tokens: walletTokens, programmableTokens, programmableLockedLovelace } = toRefs(walletStore);
@@ -152,7 +153,10 @@ export function useHoldingsValuation() {
           || token.name
           || '',
         img: marketToken?.img || (token as { img?: string }).img || '',
-        verified: marketToken?.verified ?? dhToken?.verified ?? isNativeToken,
+        // RealFi's USDrf/sUSDrf are canonical but new, so neither the market API nor
+        // DexHunter vouches for them yet — without this, verified-only (the mainnet
+        // default) hides a user's staked balance from their own portfolio.
+        verified: (marketToken?.verified ?? dhToken?.verified ?? isNativeToken) || isRealFiAsset(unit),
         // Graduated snek.fun tokens are unverified but legit — carry the market
         // flag through so the verified-only filter exempts them and the snek
         // badge renders (mirrors the market list). Missing here = held snek

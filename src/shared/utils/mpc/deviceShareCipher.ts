@@ -1,5 +1,6 @@
 import { Buffer } from 'buffer';
-import { encrypt as pwEncrypt, decrypt as pwDecrypt } from '@/shared/utils/crypto';
+import { SecretPurpose, decrypt as pwDecrypt } from '@/shared/utils/crypto';
+import { sealTextSecret } from '@/shared/utils/secretWriters';
 
 const PW_TAG = 'pw.v1';
 const PRF_TAG = 'prf.v1';
@@ -33,7 +34,7 @@ async function prfAesKey(prfOutput: Uint8Array, saltId: string): Promise<CryptoK
 
 export async function encryptDeviceShare(deviceShare: string, secret: DeviceShareSecret): Promise<string> {
   if (secret.kind === 'password') {
-    return `${PW_TAG}:${pwEncrypt(deviceShare, secret.password)}`;
+    return `${PW_TAG}:${await sealTextSecret(deviceShare, secret.password, SecretPurpose.MpcShare)}`;
   }
   const key = await prfAesKey(secret.prfOutput, secret.saltId);
   const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -70,7 +71,7 @@ export async function decryptDeviceShare(envelope: string, secret: DeviceShareSe
   // pw.v1 tag, or a legacy untagged blob — both are password AEAD from crypto.decrypt.
   if (tag === PW_TAG || sep < 0) {
     if (secret.kind !== 'password') throw new Error('Password device share requires a spending password');
-    return pwDecrypt(body, secret.password);
+    return pwDecrypt(body, secret.password, SecretPurpose.MpcShare);
   }
 
   throw new Error(`Unknown device-share envelope tag: ${tag}`);

@@ -84,6 +84,32 @@
               </button>
             </div>
 
+            <!-- Remote-prover consent. Gero Cloud and Arkhia receive proof
+                 inputs, so each needs the user's recorded consent before it is
+                 used, for the wallet's sends and for connected sites' proofs.
+                 This is where it can be given without starting a send. -->
+            <div v-if="remoteProver" class="ps-card" data-testid="ps-consent-card">
+              <template v-if="remoteProverConsented">
+                <p class="t-body-sm mb-0">
+                  <v-icon size="14" color="success" class="mr-1">mdi-check-circle-outline</v-icon>
+                  {{ t('midnight.proofServerPage.consentGiven', { provider: remoteProverName }) }}
+                </p>
+              </template>
+              <template v-else>
+                <h2 class="t-heading mb-2">{{ t('midnight.proofServerPage.consentNeededTitle') }}</h2>
+                <p class="t-body-sm ps-step-hint">{{ t('midnight.proofServerPage.consentNeededBody', { provider: remoteProverName }) }}</p>
+                <GButton tier="primary" compact data-testid="ps-consent-review" @click="consentOpen = true">
+                  {{ t('midnight.proofServerPage.consentReview') }}
+                </GButton>
+              </template>
+            </div>
+            <ShieldedProvingConsentDialog
+              :is-open="consentOpen"
+              :provider="remoteProver === 'zkpaas' ? 'zkpaas' : 'cloud'"
+              @close="consentOpen = false"
+              @accepted="consentOpen = false"
+            />
+
             <!-- Local setup guide -->
             <div v-if="proofServerMode === 'local'" class="ps-card">
               <h2 class="t-heading mb-3">{{ t('midnight.proofServerPage.setupTitle') }}</h2>
@@ -407,6 +433,9 @@ import { Blockchain } from '@/models/types';
 import { useMidnightProofServer, formatRelativeTime } from '@/chains/midnight/useProofServerSettings';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
+import ShieldedProvingConsentDialog from '@/modules/dashboard/dialogs/ShieldedProvingConsentDialog.vue';
+import { midnightStore } from '@/stores/midnightStore';
+import { hasMidnightProvingConsent } from '@/chains/midnight/midnightProvingConsent';
 
 const { t } = useTranslation();
 const { loggedWallet } = toRefs(walletStore);
@@ -443,6 +472,16 @@ const {
   provingHistory,
 } = useMidnightProofServer();
 
+// The remote prover the selected mode uses, if any, and whether its consent is on record.
+const remoteProver = computed<'cloud' | 'zkpaas' | null>(() => (
+  proofServerMode.value === 'zkpaas' ? 'zkpaas' : proofServerMode.value === 'remote' ? 'cloud' : null
+));
+const remoteProverName = computed(() => t(remoteProver.value === 'zkpaas'
+  ? 'midnight.proofServerPage.compareZkpaasTitle' : 'midnight.proofServerPage.compareRemoteTitle'));
+const remoteProverConsented = computed(() => !!remoteProver.value
+  && hasMidnightProvingConsent(midnightStore.shieldedProvingConsent, remoteProver.value));
+const consentOpen = ref(false);
+
 const showZkpaasKey = ref(false);
 const showZkpaasSecret = ref(false);
 
@@ -455,7 +494,7 @@ const faqs = computed(() => ([
 ]));
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .proof-server-page {
   max-width: 760px;
   margin: 0 auto;
@@ -488,7 +527,7 @@ const faqs = computed(() => ([
 }
 
 .ps-card {
-  background: var(--g-surface);
+  @include g-glass-panel(false);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-sheet);
   padding: var(--g-s-5);
@@ -519,11 +558,11 @@ const faqs = computed(() => ([
 }
 
 .ps-mode-card {
+  @include g-glass-tier(false);
   display: flex;
   align-items: flex-start;
   gap: var(--g-s-3);
   text-align: left;
-  background: var(--g-surface);
   border: 1px solid var(--g-hairline-1);
   border-radius: var(--g-r-sheet);
   padding: var(--g-s-4);
