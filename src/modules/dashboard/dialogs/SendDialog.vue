@@ -815,6 +815,8 @@ async function setMax(recipientId: string, tokenIndex: number) {
   // re-clicked MAX). tx.value is repopulated only when build succeeds.
   txValid.value = false;
   tx.value = undefined;
+  // A fresh attempt, like runBuild: whatever the last build said no longer applies.
+  buildError.value = null;
   // Track ADA MAX recipients for auto-adjust on build failure
   const recipientForMax = recipients.value.find((r: SendRecipient) => r.id === recipientId);
   if (recipientForMax && recipientForMax.selectedTokens[tokenIndex]?.ticker === nativeTicker.value) {

@@ -96,6 +96,44 @@ function byLovelaceDesc(a: Cardano.Utxo, b: Cardano.Utxo): number {
 }
 
 /**
+ * A pick made for one asset can turn redundant once later assets bring in inputs
+ * that also carry it, and the other way round when the assets are listed in the
+ * opposite order. Drop every input the remaining picks still cover without,
+ * smallest lovelace first, so the result does not depend on the asset order.
+ * Each asset's target is what the wallet can supply at most, so an asset the
+ * wallet lacks does not pin every other pick in place.
+ */
+function pruneRedundant(chosen: Map<string, Cardano.Utxo>, required: [string, bigint][], utxos: Cardano.Utxo[]): void {
+  const target = new Map<string, bigint>();
+  for (const [unit, needed] of required) {
+    let available = BigInt(0);
+    for (const utxo of utxos) available += assetQuantity(utxo, unit);
+    target.set(unit, available < needed ? available : needed);
+  }
+  const holdings = new Map<string, Map<string, bigint>>();
+  const coverage = new Map<string, bigint>();
+  for (const [key, utxo] of chosen) {
+    const held = new Map<string, bigint>();
+    for (const [unit] of required) {
+      const quantity = assetQuantity(utxo, unit);
+      held.set(unit, quantity);
+      coverage.set(unit, (coverage.get(unit) ?? BigInt(0)) + quantity);
+    }
+    holdings.set(key, held);
+  }
+  const smallestFirst = [...chosen.values()].sort((a, b) => byLovelaceDesc(b, a));
+  for (const candidate of smallestFirst) {
+    const key = refOf(candidate);
+    const held = holdings.get(key) ?? new Map<string, bigint>();
+    const stillCovered = required.every(([unit]) =>
+      (coverage.get(unit) ?? BigInt(0)) - (held.get(unit) ?? BigInt(0)) >= (target.get(unit) ?? BigInt(0)));
+    if (!stillCovered) continue;
+    chosen.delete(key);
+    for (const [unit, quantity] of held) coverage.set(unit, (coverage.get(unit) ?? BigInt(0)) - quantity);
+  }
+}
+
+/**
  * Choose which UTxOs a Nexus build request carries.
  *
  * A wallet that fits under the limit is sent as-is. Over it, the candidates are
@@ -116,9 +154,9 @@ export function selectInputCandidates(utxos: Cardano.Utxo[], options: InputSelec
   if (total <= limit) return { utxos, truncated: false, total, limit };
 
   const chosen = new Map<string, Cardano.Utxo>();
-  if (options.requiredAssets) {
-    for (const [unit, needed] of options.requiredAssets) {
-      if (needed <= BigInt(0)) continue;
+  const required = [...(options.requiredAssets ?? [])].filter(([, needed]) => needed > BigInt(0));
+  if (required.length > 0) {
+    for (const [unit, needed] of required) {
       // Inputs picked for an earlier asset may carry this one too; count them
       // first so no input is added for a quantity that is already on board.
       let covered = BigInt(0);
@@ -135,6 +173,7 @@ export function selectInputCandidates(utxos: Cardano.Utxo[], options: InputSelec
         if (covered >= needed) break;
       }
     }
+    pruneRedundant(chosen, required, utxos);
     if (chosen.size > limit) throw new InputLimitError(total, limit);
   }
 
