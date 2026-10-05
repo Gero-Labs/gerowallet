@@ -276,7 +276,7 @@ import {
   type NexusTxInput,
   selectInputCandidates,
 } from '@/api/nexus-tx-api';
-import { friendlyTxError } from '@/shared/utils/txErrors';
+import { friendlyTxError, shortfallLovelaceFromMessage } from '@/shared/utils/txErrors';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import { BrowserTxConstruction } from '@/chrome/cardanoJsSdkCbor';
@@ -475,6 +475,8 @@ const resetData = () => {
   currentStep.value = 1;
   tx.value = undefined;
   txValid.value = false;
+  buildError.value = null;
+  inputSelection.value = null;
   maxRecipientIds.value = new Set();
   recipients.value = [createEmptyRecipient()];
   expandedRecipientId.value = recipients.value[0].id;
@@ -731,6 +733,17 @@ function nexusInputs(): NexusTxInput[] {
   });
   inputSelection.value = selection;
   return selection.utxos.map(cardanoUtxoToNexusInput);
+}
+
+/** Lovelace held by a list of UTxOs, whatever shape the coin field is stored in. */
+function lovelaceOf(list: Cardano.Utxo[]): bigint {
+  let total = BigInt(0);
+  for (const utxo of list) {
+    try {
+      total += BigInt(String(utxo[1].value.coins ?? 0));
+    } catch { /* an unparseable coin field holds nothing */ }
+  }
+  return total;
 }
 
 /**
@@ -1098,6 +1111,7 @@ async function runBuild(): Promise<void> {
 
   if (!hasAnyAmount()) {
     txValid.value = false;
+    buildError.value = null;
     return;
   }
 
@@ -1112,11 +1126,14 @@ async function runBuild(): Promise<void> {
     recipients.value.forEach((r: SendRecipient) => { r.adaShortage = 0; });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    // Nexus only saw the candidates one request may carry. When those fall short
-    // while the wallet as a whole does not, the problem is fragmentation, and a
-    // "need X more ADA" hint would contradict the balance on screen.
+    // Nexus only saw the candidates one request may carry. When the lovelace the
+    // rest of the wallet still holds would have closed the gap it reports, the
+    // problem is fragmentation, and a "need X more ADA" hint would contradict the
+    // balance on screen. A wallet short even as a whole gets the real shortfall.
     const selection = inputSelection.value;
-    const fragmented = !!selection?.truncated && /insufficient input|insufficient ada to cover/i.test(msg);
+    const shortfall = shortfallLovelaceFromMessage(msg);
+    const outside = selection?.truncated ? lovelaceOf(utxos.value as Cardano.Utxo[]) - lovelaceOf(selection.utxos) : BigInt(0);
+    const fragmented = !!selection?.truncated && shortfall !== undefined && outside >= shortfall;
     if (e instanceof InputLimitError) {
       buildError.value = friendlyTxError(e);
     } else if (fragmented && selection) {
@@ -1238,6 +1255,7 @@ async function runBuild(): Promise<void> {
         try {
           await buildTx({ selectAll: true });
           txValid.value = true;
+          buildError.value = null;
           recipients.value.forEach((r: SendRecipient) => { r.adaShortage = 0; });
         } catch (retryErr) {
           const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
@@ -1261,6 +1279,7 @@ async function runBuild(): Promise<void> {
             try {
               await buildTx({ selectAll: true });
               txValid.value = true;
+              buildError.value = null;
               recipients.value.forEach((r: SendRecipient) => { r.adaShortage = 0; });
             } catch { /* still invalid — leave adaShortage set */ }
           }

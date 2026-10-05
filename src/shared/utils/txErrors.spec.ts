@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractNexusErrorMessage, friendlyTxError, isCollateralError, isInsufficientAdaError } from './txErrors';
+import { extractNexusErrorMessage, friendlyTxError, isCollateralError, isInsufficientAdaError, shortfallLovelaceFromMessage } from './txErrors';
 import { TX_SUBMIT_UNCONFIRMED_MESSAGE } from '@/chrome/config';
 import { InputLimitError } from '@/api/nexusInputSelection';
 
@@ -120,5 +120,22 @@ describe('friendlyTxError on Nexus input limits', () => {
     const localized = friendlyTxError(new Error('Validation failed: utxos: Maximum 200 UTXOs allowed per request'));
     expect(localized).toContain('Maximum 200 UTXOs allowed per request');
     expect(localized).not.toBe('Validation failed');
+  });
+});
+
+describe('shortfallLovelaceFromMessage', () => {
+  it('reads outputs plus fee minus inputs from an insufficient-input rejection', () => {
+    expect(shortfallLovelaceFromMessage('Insufficient input in transaction. {ada in inputs: 1000000, ada in outputs: 5000000, fee 170000}'))
+      .toBe(BigInt(4_170_000));
+  });
+
+  it('reads required minus available from a change min-UTxO rejection', () => {
+    expect(shortfallLovelaceFromMessage('Insufficient ADA to cover minimum UTXO for change output. Available: 800000 lovelace, required: 1200000 lovelace'))
+      .toBe(BigInt(400_000));
+  });
+
+  it('returns undefined for anything else', () => {
+    expect(shortfallLovelaceFromMessage('Validation failed')).toBeUndefined();
+    expect(shortfallLovelaceFromMessage('')).toBeUndefined();
   });
 });

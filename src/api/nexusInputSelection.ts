@@ -119,14 +119,18 @@ export function selectInputCandidates(utxos: Cardano.Utxo[], options: InputSelec
   if (options.requiredAssets) {
     for (const [unit, needed] of options.requiredAssets) {
       if (needed <= BigInt(0)) continue;
+      // Inputs picked for an earlier asset may carry this one too; count them
+      // first so no input is added for a quantity that is already on board.
+      let covered = BigInt(0);
+      for (const picked of chosen.values()) covered += assetQuantity(picked, unit);
+      if (covered >= needed) continue;
       const holders = utxos
+        .filter((utxo) => !chosen.has(refOf(utxo)))
         .map((utxo) => ({ utxo, quantity: assetQuantity(utxo, unit) }))
         .filter((holder) => holder.quantity > BigInt(0))
         .sort((a, b) => (a.quantity === b.quantity ? byLovelaceDesc(a.utxo, b.utxo) : a.quantity > b.quantity ? -1 : 1));
-      let covered = BigInt(0);
       for (const holder of holders) {
-        const key = refOf(holder.utxo);
-        if (!chosen.has(key)) chosen.set(key, holder.utxo);
+        chosen.set(refOf(holder.utxo), holder.utxo);
         covered += holder.quantity;
         if (covered >= needed) break;
       }

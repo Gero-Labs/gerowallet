@@ -121,6 +121,28 @@ describe('selectInputCandidates', () => {
     expect((thrown as InputLimitError).total).toBe(3);
   });
 
+  it('credits assets already held by chosen inputs before adding more holders', () => {
+    // 200 inputs are needed for A, and one of them also carries the 1 B requested.
+    // A 201st input holding 2 B must not be pulled in: that would breach the limit
+    // although the first 200 already satisfy both assets.
+    const A = POLICY + '41';
+    const B = POLICY + '42';
+    const set: Cardano.Utxo[] = [];
+    for (let i = 0; i < 200; i++) {
+      const held = new Map<string, bigint>([[A, BigInt(1)]]);
+      if (i === 0) held.set(B, BigInt(1));
+      set.push(utxo(i, 2_000_000, held));
+    }
+    set.push(utxo(200, 2_000_000, new Map([[B, BigInt(2)]])));
+    set.push(utxo(201, 9_000_000));
+    const selection = selectInputCandidates(set, {
+      limit: 200,
+      requiredAssets: new Map([[A, BigInt(200)], [B, BigInt(1)]]),
+    });
+    expect(selection.utxos).toHaveLength(200);
+    expect(refs(selection.utxos)).not.toContain(`${TX}#200`);
+  });
+
   it('does not refuse when the wallet simply lacks the asset; Nexus reports that shortfall', () => {
     const set = [utxo(0, 2_000_000, new Map([[GERO, BigInt(1)]])), utxo(1, 5_000_000)];
     const selection = selectInputCandidates(set, { limit: 1, requiredAssets: new Map([[GERO, BigInt(3)]]) });

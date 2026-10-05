@@ -114,6 +114,20 @@ export function isInsufficientAdaError(message: string): boolean {
 }
 
 /**
+ * How much lovelace a rejected build was short, read from the two Nexus shortfall
+ * messages the send flow parses: "{ada in inputs: X, ada in outputs: Y, fee Z"
+ * (outputs plus fee, minus inputs) and "Available: X lovelace, required: Y lovelace"
+ * (required minus available). Undefined for anything else.
+ */
+export function shortfallLovelaceFromMessage(message: string): bigint | undefined {
+  const inputs = message.match(/ada in inputs:\s*(\d+),\s*ada in outputs:\s*(\d+),\s*fee\s*(\d+)/);
+  if (inputs) return BigInt(inputs[2]) + BigInt(inputs[3]) - BigInt(inputs[1]);
+  const change = message.match(/Available:\s*(\d+)\s*lovelace,\s*required:\s*(\d+)\s*lovelace/);
+  if (change) return BigInt(change[2]) - BigInt(change[1]);
+  return undefined;
+}
+
+/**
  * Map a raw tx build/submit error to a friendly, localized message. Returns the
  * original message unchanged when it isn't a collateral / insufficient-ADA error.
  */
