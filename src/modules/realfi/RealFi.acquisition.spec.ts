@@ -176,8 +176,9 @@ describe('RealFi acquisition', () => {
     swapEnabled.value = true;
     const page = await mountPage();
     const labels = page.findAll('.realfi-getting-started__step .t-label').wrappers.map((item) => item.text());
-    expect(labels.slice(0, 3)).toEqual([
+    expect(labels.slice(0, 4)).toEqual([
       'realfi.gettingStarted.eligibilityTitle',
+      'realfi.gettingStarted.usdcxTitle',
       'realfi.gettingStarted.acquireTitle',
       'realfi.gettingStarted.stakeTitle',
     ]);

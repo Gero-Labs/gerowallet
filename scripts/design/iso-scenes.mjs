@@ -8,7 +8,8 @@
 // (a quadratic Bezier stays exact under this affine projection), packets and coins are
 // centred on a point of a rail, and glyph markers stand on the vertical through the centre
 // of a top face, lifted clear of every silhouette beneath them. A card slab carries the real
-// card artwork (__CARD_IMG__), mapped onto its top face by the same affine projection.
+// card artwork (__CARD_IMG__), mapped onto its top face by the same affine projection. The
+// RealFi mark is painted flat on a top face the same way (drawn, not shipped as an asset).
 //
 // Every scene has a still `body`. Scenes that move also get `live`: the rail dashes march
 // with the flow, packets and coins travel the rails (drawn under every object, so they
@@ -37,6 +38,7 @@ const GLYPHS = {
 
 const TONES = ['cyan', 'navy', 'green', 'amber', 'violet', 'graphite', 'slate'];
 const COIN_T = 2.4; // coin thickness, world units (= screen px vertically)
+const COIN_RING = 0.58; // a coin face's inner ring, as a share of the coin's radius
 const CARD_ART = { w: 1080, h: 692 }; // src/assets/front_card_no_mcx2.png
 const DASH_PERIOD = 7; // .iso-rail stroke-dasharray 2 5
 const FLOW_SPEED = 26; // screen units per second
@@ -133,7 +135,7 @@ function makeWorld() {
     }
     return `<g class="iso-coin"><path class="iso-${tone}-r" d="M${xy([c[0] - rx, c[1]])} v${COIN_T} a${R(rx)},${R(ry)} 0 0 0 ${R(2 * rx)},0 v-${COIN_T} Z"/>`
       + `<ellipse fill="url(#__UID__-${tone})" cx="${R(c[0])}" cy="${R(c[1])}" rx="${R(rx)}" ry="${R(ry)}"/>`
-      + `<ellipse class="iso-coin-ring" cx="${R(c[0])}" cy="${R(c[1])}" rx="${R(rx * 0.58)}" ry="${R(ry * 0.58)}"/></g>`;
+      + `<ellipse class="iso-coin-ring" cx="${R(c[0])}" cy="${R(c[1])}" rx="${R(rx * COIN_RING)}" ry="${R(ry * COIN_RING)}"/></g>`;
   }
 
   // A payment card slab with the real card artwork on its top face. The image is laid out in
@@ -151,6 +153,29 @@ function makeWorld() {
     if (!hover) return slab;
     const shadow = placement.over ? shadowSvg(b, placement.over) : '';
     return both(shadow + slab, `${shadow}<g>${slab}<animateTransform attributeName="transform" type="translate" values="0 0;0 -2.5;0 0" ${EASE} dur="4s" repeatCount="indefinite"/></g>`);
+  }
+
+  // The RealFi mark, painted flat on the centre of a box's top face (`on`) or on a coin's
+  // (`coin: [wx, wy, z, rho]`, the coin's own arguments): RealFi's ring, three hairline
+  // ellipses of one height whose widths differ by about a tenth (one ellipse with `rings: 1`,
+  // for small marks), and the rule through it, 1.28 times the ring's height (25 / 19.6 in
+  // RealFi's logo), so it overshoots at both ends. A circle of radius r on a top face
+  // projects to a 2:1 ellipse, as a coin does; the rule runs along the face diagonal that
+  // projects to the screen vertical, so it stands upright as it does in the logo. On a coin
+  // the mark takes the coin's own ring, so the face does not carry two.
+  function realfiSvg({ on, coin, r, rings = 3 }) {
+    if (coin) {
+      const [wx, wy, z, rho] = coin;
+      return realfiSvg({ on: { x: wx, y: wy, z, w: 0, d: 0, h: 0 }, r: rho * COIN_RING, rings: 1 });
+    }
+    const [cx, cy] = P(on.x + on.w / 2, on.y + on.d / 2, on.z + on.h);
+    const rx = r * Math.SQRT2;
+    const ry = rx / 2;
+    const widths = rings === 1 ? [1] : [0.9, 1, 1.1];
+    const half = ry * 1.28;
+    return '<g class="iso-realfi">'
+      + widths.map(k => `<ellipse cx="${R(cx)}" cy="${R(cy)}" rx="${R(rx * k)}" ry="${R(ry)}"/>`).join('')
+      + `<line x1="${R(cx)}" y1="${R(cy - half)}" x2="${R(cx)}" y2="${R(cy + half)}"/></g>`;
   }
 
   // The part of a footprint that falls on the top face of the box beneath it.
@@ -221,6 +246,7 @@ function makeWorld() {
         quad: q => parts.push(quadSvg(q)),
         coin: (...args) => parts.push(coinSvg(...args)),
         card: c => parts.push(cardSvg(c)),
+        realfi: m => parts.push(realfiSvg(m)),
       });
       objects.push({ depth: x + w / 2 + y + d / 2, parts });
     },
@@ -503,6 +529,113 @@ scene('bridge', [240, 120], s => {
 scene('stage', [24, 24], s => {
   s.stack({ x: 0, y: 0, w: 7, d: 7 }, p => p.box({ x: 0, y: 0, z: 0, w: 7, d: 7, h: 7, tone: 'cyan', edge: false }));
 }, 2);
+
+// ── Earn (RealFi) ─────────────────────────────────────────────────────────────
+// Gero is navy and cyan, RealFi is green: a cyan coin is USDCx, a green coin is USDrf, and
+// green stacked in the vault is the stake.
+
+// Earn hero: USDCx rides the rail into the Gero vault, where it sits as a green stack; the
+// RealFi plinth feeds yield back over the partner rail.
+scene('earnHero', [320, 200], s => {
+  s.stack({ x: -60, y: 21, w: 18, d: 18 }, p => {
+    p.box({ x: -60, y: 21, z: 0, w: 18, d: 18, h: 6, tone: 'slate' });
+    p.coin(-51, 30, 6 + COIN_T, 5, 'cyan');
+    p.coin(-51, 30, 6 + 2 * COIN_T, 5, 'cyan');
+  });
+  s.rail([[-42, 30], [0, 30]]);
+  s.flow([[-42, 30], [0, 30]], { kind: 'coin', count: 2 });
+  // Resting coins stay left of x = -20: nearer the vault, its left face covers them.
+  s.coinAt([-33, 30], { still: true });
+  s.coinAt([-21, 30], { still: true });
+  const pad = { x: 10, y: 8, z: 14, w: 68, d: 44, h: 5 };
+  s.floor({ x: 0, y: 0, w: 88, d: 60, k: 0.95 });
+  s.stack({ x: 0, y: 0, w: 88, d: 60 }, p => {
+    p.box({ x: 0, y: 0, z: 0, w: 88, d: 60, h: 14, tone: 'navy' });
+    p.box({ ...pad, tone: 'cyan' });
+    for (let i = 1; i <= 6; i++) p.coin(44, 30, pad.z + pad.h + i * COIN_T, 10, 'green');
+    p.realfi({ coin: [44, 30, pad.z + pad.h + 6 * COIN_T, 10] });
+  });
+  s.rail([[114, 30], [88, 30]], { partner: true });
+  s.flow([[114, 30], [88, 30]], { tone: 'green', count: 2 });
+  s.packet([101, 30], { tone: 'green', still: true });
+  // The RealFi plinth wears RealFi's mark on its green block.
+  const realfi = { x: 118, y: 16, z: 12, w: 28, d: 28, h: 8 };
+  s.floor({ x: 114, y: 12, w: 36, d: 36 });
+  s.stack({ x: 114, y: 12, w: 36, d: 36 }, p => {
+    p.box({ x: 114, y: 12, z: 0, w: 36, d: 36, h: 12, tone: 'navy' });
+    p.box({ ...realfi, tone: 'green' });
+    p.realfi({ on: realfi, r: 10 });
+  });
+}, 8);
+
+// Where RealFi is available: four plots; one lit with the pin, one restricted (amber, sunk).
+scene('earnRegion', [200, 140], s => {
+  const lit = { x: 33, y: 9, z: 10, w: 18, d: 18, h: 10 };
+  s.floor({ x: 0, y: 0, w: 60, d: 60 });
+  s.stack({ x: 0, y: 0, w: 60, d: 60 }, p => {
+    p.box({ x: 0, y: 0, z: 0, w: 60, d: 60, h: 10, tone: 'navy' });
+    // Back to front (x + y), so nearer plots are painted over farther ones.
+    p.box({ x: 9, y: 9, z: 10, w: 18, d: 18, h: 4, tone: 'slate' });
+    p.box({ ...lit, tone: 'cyan' });
+    p.box({ x: 9, y: 33, z: 10, w: 18, d: 18, h: 2, tone: 'amber' });
+    p.box({ x: 33, y: 33, z: 10, w: 18, d: 18, h: 4, tone: 'slate' });
+  });
+  s.mark({ on: lit, glyph: 'pin' });
+});
+
+// A swap: `from` coins leave their tile, pass the swap block and arrive as `to` coins.
+function swapScene(name, from, to) {
+  scene(name, [220, 140], s => {
+    s.stack({ x: -66, y: 13, w: 18, d: 18 }, p => {
+      p.box({ x: -66, y: 13, z: 0, w: 18, d: 18, h: 6, tone: 'slate' });
+      p.coin(-57, 22, 6 + COIN_T, 5, from);
+      p.coin(-57, 22, 6 + 2 * COIN_T, 5, from);
+    });
+    s.rail([[-48, 22], [-20, 22]]);
+    s.flow([[-48, 22], [-20, 22]], { kind: 'coin', tone: from, count: 1 });
+    s.coinAt([-34, 22], { tone: from, still: true });
+    s.floor({ x: -20, y: 10, w: 24, d: 24 });
+    s.stack({ x: -20, y: 10, w: 24, d: 24 }, p => {
+      p.box({ x: -20, y: 10, z: 0, w: 24, d: 24, h: 12, tone: 'navy' });
+      p.box({ x: -14, y: 16, z: 12, w: 12, d: 12, h: 6, tone: 'cyan' });
+    });
+    s.rail([[4, 22], [30, 22]]);
+    s.flow([[4, 22], [30, 22]], { kind: 'coin', tone: to, count: 1 });
+    s.coinAt([17, 22], { tone: to, still: true });
+    s.stack({ x: 30, y: 13, w: 18, d: 18 }, p => {
+      p.box({ x: 30, y: 13, z: 0, w: 18, d: 18, h: 6, tone: 'slate' });
+      p.coin(39, 22, 6 + COIN_T, 5, to);
+      p.coin(39, 22, 6 + 2 * COIN_T, 5, to);
+      p.coin(39, 22, 6 + 3 * COIN_T, 5, to);
+    });
+  });
+}
+
+// Get USDCx: graphite ADA in, cyan USDCx out. (On the RealFi page cyan is USDCx and green is
+// USDrf, so ADA takes the neutral tone here rather than the card scenes' cyan.)
+swapScene('earnUsdcx', 'graphite', 'cyan');
+// Get USDrf: cyan USDCx in, green USDrf out.
+swapScene('earnSwap', 'cyan', 'green');
+
+// Stake: green USDrf rides into the vault and stacks up as the stake.
+scene('earnStake', [200, 140], s => {
+  s.stack({ x: -54, y: 13, w: 18, d: 18 }, p => {
+    p.box({ x: -54, y: 13, z: 0, w: 18, d: 18, h: 6, tone: 'slate' });
+    p.coin(-45, 22, 6 + COIN_T, 5, 'green');
+  });
+  s.rail([[-36, 22], [0, 22]]);
+  s.flow([[-36, 22], [0, 22]], { kind: 'coin', tone: 'green', count: 2 });
+  s.coinAt([-18, 22], { tone: 'green', still: true });
+  const pad = { x: 8, y: 8, z: 12, w: 36, d: 28, h: 4 };
+  s.floor({ x: 0, y: 0, w: 52, d: 44 });
+  s.stack({ x: 0, y: 0, w: 52, d: 44 }, p => {
+    p.box({ x: 0, y: 0, z: 0, w: 52, d: 44, h: 12, tone: 'navy' });
+    p.box({ ...pad, tone: 'cyan' });
+    for (let i = 1; i <= 4; i++) p.coin(26, 22, pad.z + pad.h + i * COIN_T, 8, 'green');
+    // USDrf is RealFi's coin: the top of the stake carries RealFi's mark.
+    p.realfi({ coin: [26, 22, pad.z + pad.h + 4 * COIN_T, 8] });
+  });
+});
 
 const names = Object.keys(scenes);
 const quote = text => `'${text}'`;
