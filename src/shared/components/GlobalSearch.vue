@@ -93,10 +93,16 @@
 <script setup lang="ts">
 import { computed, ref, watch, nextTick, getCurrentInstance } from 'vue';
 import { useGlobalSearch, settingsNavRequest, type SearchResult, type SearchResultType } from '@/shared/composables/useGlobalSearch';
+import { useQuickActionDialogs } from '@/shared/composables/useQuickActionDialogs';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import WalletStore, { walletStore } from '@/stores/walletStore';
+import type { SearchAction } from '@/shared/utils/walletSearchIndex';
 
 const { t } = useTranslation();
 const { isOpen, query, results, searching, close } = useGlobalSearch();
+// QuickActionsBox (always mounted in ContentLayout, like this dialog) hosts the
+// Send/Receive/Buy/Perps dialogs; opening one here opens it there.
+const { openDialog } = useQuickActionDialogs();
 
 const vmProxy = getCurrentInstance()?.proxy;
 // The Vuetify text field, narrowed to the one method this component calls.
@@ -105,7 +111,7 @@ const selectedIndex = ref(0);
 
 // All category types for grouping labels. A type missing from this list is
 // dropped from `groupedResults` entirely, so every new source must land here.
-const allTypes: SearchResultType[] = ['setting', 'page', 'token', 'nft', 'transaction', 'pool', 'drep', 'govAction', 'retailer', 'contact'];
+const allTypes: SearchResultType[] = ['action', 'page', 'setting', 'token', 'nft', 'transaction', 'pool', 'drep', 'govAction', 'retailer', 'contact'];
 
 // Flat list sorted by relevance score, with indices for keyboard navigation
 const flatResults = computed(() => {
@@ -137,6 +143,7 @@ function groupLabel(type: SearchResultType): string {
     drep: t('search.dreps'),
     govAction: t('governance.actionsTitle'),
     page: t('search.pages'),
+    action: t('search.actions'),
     retailer: t('search.cashbackStores'),
     contact: t('search.contacts'),
     setting: t('search.settings'),
@@ -164,12 +171,23 @@ function navigateTo(result: SearchResult) {
   if (!router) return;
 
   switch (result.type) {
-    case 'token':
-      router.push({ path: '/', query: { view: 'all', token: result.id } }).catch(() => {});
+    case 'token': {
+      // Held tokens open on Holdings, listed ones on Market (mainnet only); the
+      // composable leaves `view` out where neither applies.
+      const view = result.data?.view;
+      router.push({ path: '/', query: { ...(view ? { view } : {}), token: result.id } }).catch(() => {});
       break;
+    }
     case 'nft':
-      router.push({ path: '/', query: { view: 'collectibles', nft: result.id } }).catch(() => {});
+      // A single NFT's id is its asset unit; both kinds carry their collection's policy.
+      router.push({ path: '/', query: { view: 'collectibles', nft: result.data?.policyId || result.id } }).catch(() => {});
       break;
+    case 'action': {
+      const action: SearchAction | undefined = result.data?.action;
+      if (action?.kind === 'route') router.push(action.route).catch(() => {});
+      else performAction(action);
+      break;
+    }
     case 'transaction':
       router.push({ path: '/transactions', query: { tx: result.id } }).catch(() => {});
       break;
@@ -200,6 +218,15 @@ function navigateTo(result: SearchResult) {
       if (result.route) {
         router.push(result.route).catch(() => {});
       }
+  }
+}
+
+/** The actions that act in place; a `route` action is a plain navigation above. */
+function performAction(action: SearchAction | undefined) {
+  if (action?.kind === 'dialog') {
+    openDialog(action.dialog);
+  } else if (action?.kind === 'toggleBalances') {
+    WalletStore.setHideBalances(!walletStore.config?.hideBalances);
   }
 }
 

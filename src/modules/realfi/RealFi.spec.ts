@@ -24,6 +24,7 @@ const state = {
   hasPointsRecord: ref(false),
   usdrBalance: ref(0),
   hasUsdr: ref(false),
+  canTransact: ref(false),
   isRequestingCode: ref(false),
   load: vi.fn(),
   requestReferralCode: vi.fn(),
@@ -31,7 +32,7 @@ const state = {
 
 vi.mock('./composables/useRealFi', () => ({ useRealFi: () => state }));
 
-const wallet = { network: 'Mainnet' };
+const wallet = { network: 'Mainnet', chain: 'Cardano' };
 vi.mock('@/stores/walletStore', () => ({
   default: {
     state: {
@@ -50,6 +51,7 @@ vi.mock('@/plugins/i18n', () => ({
 }));
 
 import RealFiSfc from './RealFi.vue';
+import IsoSceneSfc from '@/shared/components/iso/IsoScene.vue';
 
 // test-utils v1's mount() typings predate <script setup> components.
 const RealFi = RealFiSfc as unknown as Parameters<typeof mount>[0];
@@ -147,13 +149,13 @@ describe('RealFi Earn page', () => {
     });
 
     it('sends mainnet wallets to RealFi mainnet, never preprod', async () => {
-      await button(mountPage(), 'realfi.start.cta').trigger('click');
+      await button(mountPage(), 'realfi.gettingStarted.eligibilityCta').trigger('click');
       expect(openSpy).toHaveBeenCalledWith('https://app.realfi.co', '_blank', 'noopener,noreferrer');
     });
 
     it('sends preprod wallets to RealFi preprod', async () => {
       wallet.network = 'Preprod';
-      await button(mountPage(), 'realfi.start.cta').trigger('click');
+      await button(mountPage(), 'realfi.gettingStarted.preprodCta').trigger('click');
       expect(openSpy).toHaveBeenCalledWith('https://preprod.realfi.co', '_blank', 'noopener,noreferrer');
     });
 
@@ -168,6 +170,20 @@ describe('RealFi Earn page', () => {
       const text = mountPage().text();
       expect(text).toContain('realfi.position.label');
       expect(text).not.toContain('realfi.start.title');
+    });
+  });
+
+  describe('start screen art', () => {
+    it('shows the animated Earn scene, named for assistive tech, until there is a position', () => {
+      const start = mountPage().findAllComponents(IsoSceneSfc as never).wrappers
+        .find((scene) => scene.props('name') === 'earnHero');
+      expect(start, 'no Earn hero scene').toBeDefined();
+      expect(start!.props('animated')).toBe(true);
+      expect(start!.props('label')).toBe('realfi.start.artLabel');
+
+      withOrders([]);
+      const names = mountPage().findAllComponents(IsoSceneSfc as never).wrappers.map((scene) => scene.props('name'));
+      expect(names).not.toContain('earnHero');
     });
   });
 

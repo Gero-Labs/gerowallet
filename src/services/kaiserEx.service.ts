@@ -2,8 +2,11 @@
  * KaiserEx OAuth Service
  * Handles PKCE authentication flow for KaiserEx token reception
  */
+import { CARD_PROVIDER } from '@/modules/wallet/cardProvider';
+import { debugLog } from '@/utils/debug';
+
 const viteBackendUrl = import.meta.env['VITE_BACKEND_URL'];
-const backendUrl = import.meta.env['VITE_KAISEREX_OAUTH_URL'] || 'https://oauth-sa.kaiserex.com';
+const backendUrl = import.meta.env['VITE_KAISEREX_OAUTH_URL'] || CARD_PROVIDER.defaultOAuthUrl;
 
 export interface KaiserExTokenData {
   access_token: string;
@@ -30,6 +33,40 @@ export interface KaiserExService {
   issueToken(code: string): void;
 }
 
+/**
+ * Origins allowed to deliver the authorization code. The local gero-backend is
+ * trusted in dev builds only; import.meta.env.DEV is baked in at build time,
+ * which is exactly what keeps it out of release builds.
+ */
+export function trustedOAuthOrigins(oauthBaseUrl: string, dev: boolean): string[] {
+  const origins = [new URL(oauthBaseUrl).origin];
+  if (dev) origins.push('http://localhost:8081');
+  return origins;
+}
+
+/** An OAUTH_CODE message from the sign-in popup we opened, on a trusted origin. */
+export function isOAuthCodeMessage(
+  message: Pick<MessageEvent, 'origin' | 'source' | 'data'>,
+  trustedOrigins: string[],
+  popup: Window | null | undefined,
+): message is MessageEvent<{ type: 'OAUTH_CODE'; code: string }> {
+  return trustedOrigins.includes(message.origin)
+    && !!popup && message.source === popup
+    && message.data?.type === 'OAUTH_CODE'
+    && typeof message.data.code === 'string' && message.data.code.length > 0;
+}
+
+/** Parses the /api/token reply, refusing anything that is not a token. */
+export async function readTokenResponse(
+  response: Pick<Response, 'ok' | 'status' | 'json'>,
+): Promise<KaiserExTokenData> {
+  const body = await response.json().catch(() => null);
+  if (!response.ok || !body || typeof body.access_token !== 'string' || !body.access_token) {
+    throw new Error(`Card sign-in failed (HTTP ${response.status})`);
+  }
+  return body as KaiserExTokenData;
+}
+
 class KaiserExServiceImpl implements KaiserExService {
   baseUrl = `${backendUrl}`;
 
@@ -43,6 +80,11 @@ class KaiserExServiceImpl implements KaiserExService {
   completeCallback?: (tokenData: KaiserExTokenData) => void;
   KaiserExWindow?: Window | null;
   checkClosedTimeouts = new Set<NodeJS.Timeout>();
+  // State of the in-flight sign-in, cleared by cleanup()
+  private boundListener?: (message: MessageEvent) => void;
+  private authResolve?: (value: void) => void;
+  private authReject?: (error: unknown) => void;
+  private markAuthCompleted?: () => void;
 
   loginUrl(codeChallenge: string): string {
     const params = new URLSearchParams({
@@ -101,14 +143,14 @@ class KaiserExServiceImpl implements KaiserExService {
         window.addEventListener("message", boundListener);
 
         // Store the bound listener for cleanup
-        (this as any)._boundListener = boundListener;
-        (this as any)._authResolve = resolve;
-        (this as any)._authReject = reject;
+        this.boundListener = boundListener;
+        this.authResolve = resolve;
+        this.authReject = reject;
 
         // Monitor popup window closure to reject the promise (but only if auth hasn't completed)
         if (this.KaiserExWindow) {
           let authCompleted = false;
-          (this as any)._markAuthCompleted = () => { authCompleted = true; };
+          this.markAuthCompleted = () => { authCompleted = true; };
 
           const checkClosed = () => {
             if (this.KaiserExWindow?.closed) {
@@ -144,38 +186,27 @@ class KaiserExServiceImpl implements KaiserExService {
   }
 
   async oauthCodeMessageListener(message: MessageEvent): Promise<void> {
-
-    // Accept messages from either the KaiserEx OAuth domain or backend (for local development)
-    const allowedOrigins = [
-      this.baseUrl,
-      'http://localhost:8081', // Local backend
-      window.location.origin // Allow the same origin for development
-    ];
-
-
-    if (!allowedOrigins.includes(message.origin)) {
-      console.warn('[KaiserEx] ❌ Rejected message from unauthorized origin:', message.origin);
-      console.warn('[KaiserEx] Expected one of:', allowedOrigins);
+    const trustedOrigins = trustedOAuthOrigins(this.baseUrl, import.meta.env.DEV);
+    if (!isOAuthCodeMessage(message, trustedOrigins, this.KaiserExWindow)) {
+      if (message.data?.type === 'OAUTH_CODE') {
+        debugLog('[KaiserEx] Ignored OAUTH_CODE from untrusted sender', message.origin);
+      }
       return;
     }
 
-
-    if (message.data.type === "OAUTH_CODE") {
-      const code = message.data.code;
-
-      // Mark auth as completed to prevent race condition with window close detection
-      if ((this as any)._markAuthCompleted) {
-        (this as any)._markAuthCompleted();
-      }
-
-      if (this.KaiserExWindow) {
-        this.KaiserExWindow.close();
-      }
-      // Remove the event listener
-      window.removeEventListener("message", (this as any)._boundListener);
-      this.issueToken(code);
-    } else {
+    // Mark auth as completed to prevent race condition with window close detection
+    if (this.markAuthCompleted) {
+      this.markAuthCompleted();
     }
+
+    if (this.KaiserExWindow) {
+      this.KaiserExWindow.close();
+    }
+    // Remove the event listener
+    if (this.boundListener) {
+      window.removeEventListener("message", this.boundListener);
+    }
+    this.issueToken(message.data.code);
   }
 
   issueToken(code: string): void {
@@ -191,11 +222,11 @@ class KaiserExServiceImpl implements KaiserExService {
       },
       body: JSON.stringify(data),
     })
-      .then(response => response.json())
+      .then(readTokenResponse)
       .then(async (data: KaiserExTokenData) => {
         // Mark authentication as completed
-        if ((this as any)._markAuthCompleted) {
-          (this as any)._markAuthCompleted();
+        if (this.markAuthCompleted) {
+          this.markAuthCompleted();
         }
         
         // Clean up all resources
@@ -205,10 +236,10 @@ class KaiserExServiceImpl implements KaiserExService {
           this.completeCallback(data);
         }
         // Resolve the auth promise
-        if ((this as any)._authResolve) {
-          (this as any)._authResolve();
-          delete (this as any)._authResolve;
-          delete (this as any)._authReject;
+        if (this.authResolve) {
+          this.authResolve();
+          this.authResolve = undefined;
+          this.authReject = undefined;
         }
       })
       .catch(error => {
@@ -218,10 +249,10 @@ class KaiserExServiceImpl implements KaiserExService {
         this.cleanup();
         
         // Reject the auth promise
-        if ((this as any)._authReject) {
-          (this as any)._authReject(error);
-          delete (this as any)._authResolve;
-          delete (this as any)._authReject;
+        if (this.authReject) {
+          this.authReject(error);
+          this.authResolve = undefined;
+          this.authReject = undefined;
         }
       });
   }
@@ -235,9 +266,9 @@ class KaiserExServiceImpl implements KaiserExService {
     this.checkClosedTimeouts.clear();
 
     // Clean up the message listener
-    if ((this as any)._boundListener) {
-      window.removeEventListener("message", (this as any)._boundListener);
-      delete (this as any)._boundListener;
+    if (this.boundListener) {
+      window.removeEventListener("message", this.boundListener);
+      this.boundListener = undefined;
     }
 
     // Close the popup window
@@ -247,7 +278,7 @@ class KaiserExServiceImpl implements KaiserExService {
     }
 
     // Clear completion callback
-    delete (this as any)._markAuthCompleted;
+    this.markAuthCompleted = undefined;
   }
 }
 

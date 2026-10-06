@@ -8,6 +8,11 @@ import { Messaging } from '@/chrome/messaging';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
 import { mergeWitnessSets } from '@/shared/utils/witnessSets';
 import { isStakeKeyRegistered, StakeAccountError } from '@/shared/utils/stakeRegistration';
+import {
+  dappSubmitError,
+  describeSubmitFailure,
+  describeUnexpectedSubmitResponse,
+} from '@/chrome/submitErrors';
 import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, POPUP, SENDER, TARGET, TxSendError, TxSignError } from '@/chrome/config';
 import { toDappError } from '@/chrome/dappError';
 import { applyDappRequestBadge } from '@/chrome/dappRequestBadge';
@@ -35,8 +40,7 @@ import {
   submitTx,
   urlScan,
 } from '@/chrome/serialization';
-import { Blockchain, coin_type, ERROR, Network, Paginate, purpose } from '@/models/types';
-import { classifySubmitFailure } from '@/chrome/submitFailure';
+import { Blockchain, coin_type, Network, Paginate, purpose } from '@/models/types';
 import networks from '@/utils/networks';
 import coinGeckoStore from '@/stores/coinGeckoStore';
 import { getDomain } from 'tldts';
@@ -48,7 +52,7 @@ import { installLocaleFor } from '@/chrome/installLocale';
 import GeroStore from '@/stores/geroStore';
 import WalletStore, { hydrateWalletStore, matchesDappWhitelistEntry, walletStore } from '@/stores/walletStore';
 import { walletManager } from '@/services/walletManager.service';
-import { getNotifyState, installNotifyListeners, notifyActions, onNotifyAlarm, reassert as notifyReassert } from '@/services/notify/notifyBackground';
+import { getNotifyState, installNotifyListeners, notifyActions, notifyIntroWanted, onNotifyAlarm, openNotifySettings, reassert as notifyReassert } from '@/services/notify/notifyBackground';
 import { shouldAutoLock } from '@/services/autoLock';
 import { nexusCollateralApi } from '@/api/nexus-collateral-api';
 import { toNexusNetwork } from '@/api/nexus-tx-api';
@@ -247,13 +251,18 @@ const currentVersion: string = chrome.runtime.getManifest().version;
 
 // The worker's i18n is still on its 'us' default when onInstalled fires (gero-db
 // config has not loaded yet), so the saved language is read directly.
-async function showUpdateNotification(): Promise<void> {
+async function workerLocale(): Promise<string> {
   let locale = 'us';
   try {
     const saved = (await chrome.storage.local.get('geroStore')) as { geroStore?: { config?: { locale?: string } } };
     locale = saved.geroStore?.config?.locale || 'us';
     await loadLanguage(locale);
   } catch { /* fall back to English */ }
+  return locale;
+}
+
+async function showUpdateNotification(): Promise<void> {
+  const locale = await workerLocale();
   chrome.notifications.create('updateNotification', {
     type: 'image',
     title: String(i18n.t('common.extensionUpdatedTitle', locale)),
@@ -263,9 +272,34 @@ async function showUpdateNotification(): Promise<void> {
   });
 }
 
+const NOTIFY_INTRO_NOTIFICATION = 'notifyIntroNotification';
+
+// The offer to turn push notifications on (notifyIntro.ts): once per install, after an
+// update, while no wallet is linked yet. Waits for the wallet list, since the gate needs
+// to know whether any installed wallet could be registered at all. A click lands on
+// Settings > Notifications with the enable step started.
+async function showNotifyIntroNotification(): Promise<void> {
+  try {
+    await booted();
+    if (!(await notifyIntroWanted())) return;
+    const locale = await workerLocale();
+    chrome.notifications.create(NOTIFY_INTRO_NOTIFICATION, {
+      type: 'basic',
+      title: String(i18n.t('notify.intro.title', locale)),
+      message: String(i18n.t('notify.intro.message', locale)),
+      iconUrl: chrome.runtime.getURL('public/logo128.png'),
+    });
+    await notifyActions.introShown();
+  } catch (e) {
+    debugLog('notify intro notification skipped:', e);
+  }
+}
+
 if (!isBeta) {
   chrome.runtime.onInstalled.addListener((details) => {
-    if (details.reason === 'update') void showUpdateNotification();
+    if (details.reason !== 'update') return;
+    void showUpdateNotification();
+    void showNotifyIntroNotification();
   });
   chrome.notifications.onClicked.addListener(function(notificationId) {
     if (notificationId === 'updateNotification') {
@@ -273,6 +307,9 @@ if (!isBeta) {
       chrome.tabs.create({ url: chrome.runtime.getURL("index.html#/?changeLog=true") });
 
       // Optionally, clear the notification if needed
+      chrome.notifications.clear(notificationId);
+    } else if (notificationId === NOTIFY_INTRO_NOTIFICATION) {
+      void openNotifySettings();
       chrome.notifications.clear(notificationId);
     }
   });
@@ -1645,23 +1682,11 @@ app.add(METHOD.submitTx, async (request, sendResponse) => {
     }
     const response = await submitTx(request.data.tx, loggedWallet['chain'], loggedWallet['network'])
     if (!response.ok) {
-      let error: unknown;
-      switch (classifySubmitFailure(response.status)) {
-        case 'failure':
-          error = { ...TxSendError.Failure, message: response.statusText };
-          break;
-        case 'internal':
-          error = APIError.InternalError;
-          break;
-        case 'refused':
-          error = TxSendError.Refused;
-          break;
-        case 'mempoolFull':
-          error = ERROR.fullMempool;
-          break;
-        default:
-          error = APIError.InvalidRequest;
-      }
+      // The node's rejection reason is in the BODY, not in statusText -- reading it is
+      // the difference between "value not conserved" and a bare "Bad Request". Never
+      // let a failed read of it mask the real failure.
+      const body = await response.text().catch(() => '');
+      const error = dappSubmitError(response.status, body);
       console.error("Error in submitTx:", error);
       sendResponse({
         id: request.id,
@@ -1680,7 +1705,7 @@ app.add(METHOD.submitTx, async (request, sendResponse) => {
       console.error(txIdResponse);
       sendResponse({
         id: request.id,
-        error: txIdResponse,
+        error: { ...TxSendError.Failure, info: describeUnexpectedSubmitResponse(txIdResponse) },
         target: TARGET,
         sender: SENDER.extension,
       });
@@ -2864,7 +2889,7 @@ function crossDeviceReply(id: string, data: unknown) {
 app.addToOptions(MessageTypes.NOTIFY_GET_STATE, async (request, sendResponse) => {
   try {
     await booted();
-    sendResponse(crossDeviceReply(request.id, { success: true, state: await getNotifyState({ refreshConfig: request.data?.refreshConfig === true }) }));
+    sendResponse(crossDeviceReply(request.id, { success: true, state: await getNotifyState({ refreshConfig: request.data?.refreshConfig === true, syncServer: request.data?.syncServer === true }) }));
   } catch (error) {
     sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
   }
@@ -2947,6 +2972,18 @@ app.addToOptions(MessageTypes.NOTIFY_WATCH_ORDERS, async (request, sendResponse)
       txHashes,
     });
     sendResponse(crossDeviceReply(request.id, { success: result.result !== 'failed', result }));
+  } catch (error) {
+    sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
+  }
+});
+
+// The offer to turn notifications on was answered on the dashboard (notifyIntro.ts).
+app.addToOptions(MessageTypes.NOTIFY_INTRO_ANSWER, async (request, sendResponse) => {
+  try {
+    await booted();
+    const walletId = typeof request.data?.walletId === 'number' ? request.data.walletId : undefined;
+    await notifyActions.introAnswer({ ...(walletId !== undefined ? { walletId } : {}), dismiss: request.data?.dismiss === true });
+    sendResponse(crossDeviceReply(request.id, { success: true }));
   } catch (error) {
     sendResponse(crossDeviceReply(request.id, { success: false, error: getErrorMessage(error) }));
   }
@@ -4796,7 +4833,9 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
               const txHash = await response.text();
               await wcService.respondSuccess(topic, id, txHash);
             } else {
-              await wcService.respondError(topic, id, 4100, `Submit failed: ${response.statusText}`);
+              // statusText is "Bad Gateway" at best -- the node's reason is in the body.
+              const body = await response.text().catch(() => '');
+              await wcService.respondError(topic, id, 4100, describeSubmitFailure(response.status, body));
             }
             return;
           }
@@ -5108,7 +5147,10 @@ app.addToOptions(MessageTypes.CIP45_INVOKE, async (request, sendResponse) => {
         if (response.ok) {
           reply({ success: true, result: await response.text() });
         } else {
-          fail(TxSendError.Failure.code, `Submit failed: ${response.statusText}`);
+          // Same as the WalletConnect and CIP-30 paths: report the node's own reason
+          // or explain that the outcome is unknown, instead of a bare status phrase.
+          const body = await response.text().catch(() => '');
+          fail(TxSendError.Failure.code, describeSubmitFailure(response.status, body));
         }
         break;
       }

@@ -71,7 +71,7 @@
 
       <DustRegistrationDialog
         :is-open="dustRegistrationOpen"
-        @close="dustRegistrationOpen = false"
+        @close="closeDustRegistration()"
       />
     </template>
 
@@ -385,7 +385,7 @@
       <SwapDialog :isOpen="swapDialogOpen" @close="swapDialogOpen = false; swapToken = null" :buy-token-unit="swapToken?.unit" />
 
       <!-- cNIGHT → DUST registration -->
-      <CnightDustRegistrationDialog :isOpen="cnightDialogOpen" @close="cnightDialogOpen = false" />
+      <CnightDustRegistrationDialog :isOpen="cnightDialogOpen" @close="closeDustRegistration()" />
     </template>
   </v-layout>
 </template>
@@ -869,7 +869,11 @@ function openToken(token: MarketToken) {
 }
 
 function openTokenByUnit(unit: string) {
-  const token = allTokens.value.find(t => t.unit === unit);
+  // Same rule as openToken: the panel is Cardano DEX data, which an Apex token has none of.
+  if (isApex.value) return;
+  // Holdings first: a held token the market feed does not list has no row in
+  // allTokens, and global search links to it all the same.
+  const token = myHoldings.value.find(t => t.unit === unit) ?? allTokens.value.find(t => t.unit === unit);
   if (token) {
     selectedToken.value = token;
     panelOpen.value = true;
@@ -1102,11 +1106,12 @@ watch(isEmptyMainnet, (empty) => {
 // Cardano unit/policyId validation — only hex characters, reasonable length
 const CARDANO_ID_RE = /^[0-9a-f]{1,120}$/i;
 
-// Handle /?token=<unit> deep-link (e.g. from Global Search)
+// Handle /?token=<unit> deep-link (e.g. from Global Search). The native coin's
+// unit is the literal 'lovelace', which the hex check would refuse.
 watch(
   () => instance?.proxy?.$route?.query?.['token'],
   (unit) => {
-    if (unit && typeof unit === 'string' && CARDANO_ID_RE.test(unit)) {
+    if (unit && typeof unit === 'string' && (unit === 'lovelace' || CARDANO_ID_RE.test(unit))) {
       openTokenByUnit(unit);
     }
   },
@@ -1123,6 +1128,35 @@ watch(
   },
   { immediate: true }
 );
+
+// Handle /?dust=register (e.g. from Global Search): open this chain's DUST
+// registration, the dialog its DUST battery (Midnight) or cNIGHT strip
+// (Cardano) opens. closeDustRegistration drops the parameter again.
+watch(
+  () => instance?.proxy?.$route?.query?.['dust'],
+  (dust) => {
+    if (dust !== 'register') return;
+    if (loggedWallet.value?.chain === Blockchain.MIDNIGHT) dustRegistrationOpen.value = true;
+    else if (loggedWallet.value?.chain === Blockchain.CARDANO) cnightDialogOpen.value = true;
+  },
+  { immediate: true }
+);
+
+/**
+ * Close whichever DUST dialog is open, and drop the `?dust=` that may have
+ * opened it: the page is kept alive, so a link left in place would make the
+ * next identical search a no-op.
+ */
+function closeDustRegistration() {
+  dustRegistrationOpen.value = false;
+  cnightDialogOpen.value = false;
+  const query = instance?.proxy?.$route?.query;
+  if (query?.['dust']) {
+    const rest = { ...query };
+    delete rest['dust'];
+    instance?.proxy?.$router?.replace({ query: rest }).catch(() => {});
+  }
+}
 </script>
 
 <style scoped>

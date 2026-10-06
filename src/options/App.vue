@@ -3,7 +3,6 @@
     <component :is="$route.meta['layout'] || 'div'">
       <router-view></router-view>
     </component>
-    <AgentDock v-if="isAgentVisible" />
     <v-overlay v-show="isLoading" opacity="0.9" style="text-align: center;">
       <v-card flat style="background-color: transparent!important; text-align: -webkit-center;">
         <video :src="assetsUtil.loadingAnimation" playsinline autoplay muted loop style="width: 120px; object-fit: contain; object-position: center bottom; left: 0; top: 0;">
@@ -51,15 +50,11 @@ import snackbar from "@/plugins/snackbar";
 import assts from '@/utils/assets';
 import { loadingState } from '@/stores/loading';
 import { geroStore } from '@/stores/geroStore';
-import { walletStore } from '@/stores/walletStore';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
-import AgentDock from '@/sidepanel/components/AgentDock.vue';
 import ContentLayout from '@/modules/navigation/layouts/ContentLayout.vue';
 import HardwareSignPrompt from '@/shared/components/HardwareSignPrompt.vue';
 import NotifyPendingOpen from '@/shared/components/NotifyPendingOpen.vue';
-import { featureFlagsStore } from '@/stores/featureFlagsStore';
-import { agentDockPrefsStore } from '@/stores/agentDockPrefsStore';
 import { useChainAccent } from '@/shared/composables/useChainAccent';
 import { useGovernanceHydration } from '@/shared/composables/useGovernanceHydration';
 import NotifySnackbar from '@/shared/components/NotifySnackbar.vue';
@@ -89,27 +84,16 @@ const isLoading = computed(() => {
   return loading.value || isRestoring.value;
 });
 
-// The dock belongs to the full-page dashboard and nowhere else. This options
-// entry also renders the dApp popup windows (PopupLayout: connect / sign-tx /
-// sign-data / WC proposal) and the standalone BlankLayout screens (welcome,
-// passkey-auth, ledger-ble-sign) — all of them small, single-purpose windows
-// where a floating FAB is pure obstruction, and where it sat on top of signing
-// content. Comparing against the layout COMPONENT (not a route name list) is
-// what keeps a future route correct by default: it inherits the right answer
-// from the layout it already declares in router.ts.
+// Full-page dashboard only. This options entry also renders the dApp popup
+// windows (PopupLayout: connect / sign-tx / sign-data / WC proposal) and the
+// standalone BlankLayout screens (welcome, passkey-auth, ledger-ble-sign) —
+// small, single-purpose windows where a wallet-switch prompt has no place.
+// Comparing against the layout COMPONENT (not a route name list) is what keeps
+// a future route correct by default: it inherits the right answer from the
+// layout it already declares in router.ts. The Gero Companion dock used to be
+// gated here too; it now lives inside ContentLayout's <v-app>, where Vuetify's
+// overlay stacking and scroll lock can see it.
 const isDashboardShell = computed(() => vmProxy.$route?.meta?.['layout'] === ContentLayout);
-
-const isAgentVisible = computed(() => {
-  // Gero Companion mounts on EITHER flag: isCopilotEnabled alone (legacy
-  // copilot-only dock) or isLiveChatEnabled alone (support-only dock, Assistant
-  // tab visible but disabled) — see featureFlagsStore's doc blocks for both.
-  return (featureFlagsStore.isCopilotEnabled() || featureFlagsStore.isLiveChatEnabled())
-    && !!walletStore.loggedWallet && !walletStore.isLocked
-    && isDashboardShell.value
-    // Wait for the persisted preference before the first render, otherwise a
-    // user who hid the dock sees it flash on every dashboard load.
-    && agentDockPrefsStore.hydrated && !agentDockPrefsStore.hidden;
-});
 
 // Check auto-lock immediately when page loads/becomes visible
 onMounted(async () => {

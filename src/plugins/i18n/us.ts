@@ -116,7 +116,7 @@ export default {
   'card.allEuIntPosFeesWaived': 'All EU + INT POS fees waived',
   'card.allFeesWaived': 'ALL FEES waived',
   'card.allInOnePlatform': 'An all-in-one platform that helps you manage everything about your Gero Card',
-  'card.alreadyHaveAccount': 'Already have a Kaiserex account?',
+  'card.alreadyHaveAccount': 'Already have a Zione account?',
   'card.amount': 'Amount',
   'card.atmWithdrawalEu': 'ATM Withdrawal (EU)',
   'card.atmWithdrawalIntl': 'ATM Withdrawal (Intl)',
@@ -126,10 +126,10 @@ export default {
   'card.balanceOverTime': 'Balance over time',
   'card.balanceUpdatedReady': 'Your balance has been updated and is ready to use',
   'card.basicPlus': 'Basic +',
-  'card.beforeOrderingKYC': 'Before ordering your Gero Card, please complete a quick KYC process with our institutional partner, Kaiserex.',
+  'card.beforeOrderingKYC': 'Before ordering your Gero Card, please complete a quick KYC process with our card program partner, Zione.',
   'card.blockCard': 'Block Card',
   'card.blockCardTab': 'Block Card',
-  'card.blockingCardWarning': 'Blocking your card will immediately stop all transactions. This action can\'t be reversed instantly - you\'ll need to contact our support team to unblock it.',
+  'card.blockingCardWarning': 'Blocking stops all new transactions straight away. You can unblock the card here at any time.',
   'card.capturedPhoto': 'Captured Photo',
   'card.cardAlreadyBlocked': 'Card Blocked',
   'card.cardIssuance': 'Card Issuance',
@@ -149,14 +149,19 @@ export default {
   'card.paymentInProgress': 'Payment is being processed.',
   'card.pleaseWaitForConfirmation': 'Please wait for transaction confirmation.',
   'card.alreadyOrdered': 'Already Ordered',
-  'card.cardPoweredByKaiser': 'Your Gero Card is powered by Kaiser Exchange International, a fully licensed and regulated cryptocurrency financial services provider',
+  'card.cardPoweredByKaiser': 'Your Gero Card is provided by Digi Ex Pro (Pty) Ltd, trading as Zione, an authorized financial services provider regulated by the FSCA in South Africa (FSP 53786).',
   'card.cardWillReceiveExactly': 'Card will receive exactly',
   'card.cardholderName': 'CARDHOLDER NAME',
   'card.category': 'Category',
   'card.checkOrderStatus': 'Check order status',
   'card.chooseOptionBelow': 'Choose an option below to get started with your crypto card order',
   'card.cityWithAsterisk': 'City *',
-  'card.companyDetails': 'Company #21766401 · Czech Republic',
+  'card.companyDetails': 'Reg. 2023/150340/07 · FSCA FSP 53786 · South Africa',
+  'card.providerRegisteredOffice': 'Registered office',
+  'card.providerRegulated': 'Regulated in South Africa',
+  'card.providerRegulatedDesc': 'Authorized financial services provider (FSCA, FSP 53786) and an accountable institution under the Financial Intelligence Centre Act.',
+  'card.providerAmlKyc': 'AML/KYC on every account',
+  'card.providerAmlKycDesc': 'Identity verification, sanctions screening and transaction monitoring apply to every account and every transaction.',
   'card.completeKYC': 'Complete KYC',
   'card.confirm': 'Confirm',
   'card.confirmAction': 'Confirm Action',
@@ -168,7 +173,7 @@ export default {
   'card.convertingAdaToEur': 'Converting ADA to EUR at current rate...',
   'card.countryWithAsterisk': 'Country *',
   'card.createAccount': 'Create account',
-  'card.createKaiserexAccount': 'Create your Kaiserex account and complete the verification process to order your card.',
+  'card.createKaiserexAccount': 'Create your Zione account and complete the verification process to order your card.',
   'card.cvv': 'CVV',
   'card.dateTime': 'Date & Time',
   'card.customDateRange': 'Custom Date Range',
@@ -184,21 +189,15 @@ export default {
   'card.to': 'To',
   'card.apply': 'Apply',
   'card.close': 'Close',
-  'card.dateRangeExceeds3Months': 'Date range cannot exceed 3 months due to Satchel limitation',
+  'card.dateRangeExceeds3Months': 'Choose a range of 89 days or less.',
   'card.startDateAfterEndDate': 'Start date cannot be after end date',
   'card.documentsReceivedReview': 'Your documents has been received and your application is currently under review.',
   'card.ecommerce': 'Ecommerce',
   'card.enjoyMonthsZeroFees': 'Enjoy 6 months of ZERO FEES',
-  'card.enjoyZeroFeesUntil': 'Enjoy ZERO FEES until August 1st',
-  'card.enter6DigitCode': 'Enter the 6-digit code from your authenticator app to continue.',
-  'card.enterCredentialsToContinue': 'Enter your credentials to continue with your card order.',
-  'card.enterPassword': 'Enter your password',
+  'card.enjoyZeroFeesUntil': 'Enjoy ZERO FEES until May 1st, 2027',
   'card.enterPasswordToConfirm': 'Enter Password to confirm action*',
-  'card.enterUsernameOrEmail': 'Enter your username or email',
   'card.enterYourName': 'Enter your name',
   'card.enterTwoAda': 'Please enter an amount greater than or equal to 2 ADA to continue',
-  'card.enterpriseSecurity': 'Enterprise Security',
-  'card.enterpriseSecurityDesc': 'Decentralized security protocols with frequent platform audits and compliance with global regulations',
   'card.entertainment': 'Entertainment',
   'card.exp': 'EXP.',
   'card.expiry': 'Expiry',
@@ -213,9 +212,8 @@ export default {
   'card.feeOrderSummary': 'Fee & Order Summary',
   'card.feePayment': 'Fee Payment',
   'card.feeType': 'Fee Type',
-  'card.firstCreateKaiserex': 'First, you\'ll create an account with Kaiserex, our trusted banking partner. Then complete verification to order your card.',
+  'card.firstCreateKaiserex': 'First, you\'ll create an account with Zione, our card program partner. Then complete verification to order your card.',
   'card.foodAndDining': 'Food and dining',
-  'card.forgotPassword': 'Forgot your password?',
   'card.freeAtmWithdrawals': 'Free ATM withdrawals',
   'card.fxConversionMarkup': 'FX Conversion Markup',
   'card.geroCard': 'Gero Card',
@@ -236,19 +234,19 @@ export default {
   'card.groceries': 'Groceries',
   'card.inGero': 'in $GERO',
   'card.inactive': 'Inactive',
-  'card.kaiserExchangeInternational': 'SmartAtlas Ltd. s.r.o.',
-  'card.kaiserex': 'Kaiserex',
-  'card.kaiserexAccountCreated': 'Your Kaiserex account has been created. You can now proceed with the KYC verification to order your Gero Crypto Card.',
-  'card.kaiserexRegistration': 'Kaiserex Registration',
-  'card.kaiserexTooltip': 'Kaiserex is Gero\'s trusted financial partner that handles card issuance, KYC verification, and payment processing for the Gero Crypto Card.',
+  'card.kaiserExchangeInternational': 'Digi Ex Pro (Pty) Ltd, trading as Zione',
+  'card.kaiserex': 'Zione',
+  'card.kaiserexAccountCreated': 'Your Zione account has been created. You can now proceed with the KYC verification to order your Gero Crypto Card.',
+  'card.kaiserexRegistration': 'Zione registration',
+  'card.kaiserexTooltip': 'Zione is Gero\'s card program partner. It handles KYC verification and payment processing for the Gero Crypto Card.',
   'card.kycRegistered': 'Registered',
   'card.kycRegisteredDesc': 'KYC process not started yet',
   'card.kycVerificationStarted': 'Verifying',
   'card.kycVerificationStartedDesc': 'KYC in progress, pending approval',
   'card.kycApprovalInProgress': 'KYC Approval in Progress',
   'card.kycApprovalInProgressDesc': 'Your KYC verification has been submitted and is currently being reviewed. You\'ll be notified once it\'s approved.',
-  'card.learnMoreKaiserex': 'Learn more about Kaiserex',
-  'card.licensedRegulated': 'Licensed & Regulated Financial Services',
+  'card.learnMoreKaiserex': 'Learn more about Zione',
+  'card.licensedRegulated': 'FSCA-authorized financial services provider',
   'card.loadingCardDetails': 'Loading card details...',
   'card.loadingCardStatus': 'Loading card status...',
   'card.loadingSecureForm': 'Loading secure registration form...',
@@ -265,8 +263,7 @@ export default {
   'card.mastercard': 'Mastercard',
   'card.monthlyFee': 'Monthly Fee',
   'card.nameWithAsterisk': 'Name *',
-  'card.needHelpContactSupport': 'Need help? Contact our support team to unblock or replace your card.',
-  'card.newCodeSent': 'New code sent to your authenticator app',
+  'card.needHelpContactSupport': 'Need help? To replace your card, contact Zione support:',
   'card.newToKaiserex': 'New to',
   'card.next': 'Next',
   'card.noMonthlyFee': 'No Monthly Fee',
@@ -281,7 +278,6 @@ export default {
   'card.orderYourCard': 'Order your card',
   'card.orderYourGeroCard': 'Order Your Gero Card',
   'card.other': 'Other',
-  'card.password': 'Password',
   'card.pending': 'Pending',
   'card.pendingApproval': 'Pending Approval',
   'card.rejected': 'Rejected',
@@ -306,15 +302,14 @@ export default {
   'card.posPurchasesEu': 'POS Purchases (EU)',
   'card.posPurchasesIntl': 'POS Purchases (Intl)',
   'card.postalCodeWithAsterisk': 'Postal Code *',
-  'card.poweredByKaiserex': 'Powered by Kaiserex',
+  'card.poweredByKaiserex': 'Powered by Zione',
   'card.preparingAdaTransaction': 'Preparing ADA transaction...',
   'card.processingYourApplication': 'Processing your application...',
-  'card.readOurAnnouncement': 'Read our announcement',
   'card.realTimeConversion': 'Real-Time Conversion',
   'card.realTimeConversionDesc': 'Your crypto is instantly converted to fiat at the moment of top-up.',
   'card.recentActivities': 'Recent Activities',
   'card.reference': 'Reference',
-  'card.registerOnKaiserex': 'Register on Kaiserex',
+  'card.registerOnKaiserex': 'Register with Zione',
   'card.registerToOrderCard': 'Register to order your card',
   'card.registrationComplete': 'Registration Complete!',
   'card.replacementCard': 'Replacement Card (Physical)',
@@ -331,16 +326,15 @@ export default {
   'card.signIn': 'Sign In',
   'card.signInCompleteKYC': 'Sign in and complete KYC',
   'card.signInToExisting': 'Sign in to your existing account to continue with your card order or check your status.',
-  'card.signInToKaiserex': 'Sign in to Kaiserex',
   'card.signInTopUpCheck': 'Sign in to your existing account to top up your card, order additional cards, or check your balance.',
   'card.signingIn': 'Signing In...',
   'card.spendAdaAnywhere': 'Spend ADA anywhere!',
   'card.spendCryptoAnywhere': 'Spend your crypto anywhere with your Gero Card.',
   'card.standardFees': 'Standard Fees (After Promotional Period)',
   'card.startKYCProcess': 'Start KYC Process',
-  'card.startingMayFirst': 'Starting August 1st, 2026',
+  'card.startingMayFirst': 'Starting May 1st, 2027',
   'card.stateProvinceWithAsterisk': 'State / Province *',
-  'card.step1CreateKaiserex': 'Step 1: Create your Kaiserex account (our banking partner)',
+  'card.step1CreateKaiserex': 'Step 1: Create your Zione account (our card program partner)',
   'card.step2CompleteKYC': 'Step 2: Complete KYC verification with ID and face scan',
   'card.step3ReceiveCard': 'Step 3: Receive your Gero Crypto Card',
   'card.streetAddress': 'Street address',
@@ -373,18 +367,13 @@ export default {
   'card.transferringEurToCard': 'Transferring EUR to your Gero Card...',
   'card.transportation': 'Transportation',
   'card.travel': 'Travel',
-  'card.twoFactorAuthentication': 'Two-Factor Authentication',
   'card.updatingCardBalance': 'Updating card balance...',
   'card.uploadedId': 'Uploaded ID',
-  'card.usernameOrEmail': 'Username or Email',
-  'card.verificationCode': 'Verification Code',
   'card.viewCardDetails': 'View Card Details',
   'card.viewCardDetailsSubtitle': 'View the details of your card. This action cannot be undone.',
   'card.viewCardDetailsTab': 'View Card Details',
   'card.willEnjoyTokenIncentives': 'will enjoy token incentives in the form of fee waivers',
   'card.writeDeliveryDetails': 'Write your delivery details, we will ship the card in 10-20 days.',
-  'card.yearsExperience': '10+ Years Experience',
-  'card.yearsExperienceDesc': 'Over a decade of industry expertise serving 200+ high-value clients across multiple industries and countries',
   'card.yourAdaBalance': 'Your ADA Balance:',
   'card.yourDetails': 'Your Details',
   'card.yourGeroBalance': 'Your $GERO Balance:',
@@ -431,7 +420,7 @@ export default {
   'card.shippingAddress': 'Address',
   'card.whereToShipCard': 'Where should we ship your card?',
   'card.useExistingAddress': 'Use existing address',
-  'card.useAddressRegisteredWithKaiserex': 'Use the address registered with your KaiserEx account',
+  'card.useAddressRegisteredWithKaiserex': 'Use the address registered with your Zione account',
   'card.enterNewAddress': 'Enter new address',
   'card.provideNewShippingAddress': 'Provide a different shipping address',
   'card.enterStreetAddress': 'Enter street address',
@@ -466,6 +455,7 @@ export default {
   'card.prfAuthenticationRequired': 'PassKey authentication will be required to confirm payment',
   'card.missingPaymentAddress': 'Payment address not available. Please try again.',
   'card.failedToGetPaymentDetails': 'Failed to get payment details. Please try again.',
+  'card.paymentDetailsRefreshed': 'Your payment details were updated. Review the new amount and address, then confirm again.',
   'card.processingOrder': 'Processing Order',
   'card.pleaseWait': 'Please wait while we process your order...',
   'card.confirmingPayment': 'Confirming your payment...',
@@ -480,6 +470,194 @@ export default {
   'card.orderPlacedSuccessfully': 'Your physical card order has been placed successfully',
   'card.estimatedDelivery': 'Estimated delivery: 7-14 business days',
   'card.confirmationEmailSent': 'A confirmation email has been sent',
+
+  'card.howItWorks': 'How to get your card',
+
+  'card.hubLead': 'Top up with ADA from this wallet and pay in euros online, in stores and at ATMs.',
+
+  'card.pricingTitle': 'What it costs',
+
+  'card.activateAutoCheck': 'We check the activation automatically. Your card shows as Active as soon as Zione confirms it.',
+
+  'card.activateCard': 'Activate card',
+
+  'card.activateDesc': 'Enter the number printed on the front of the card you received. Your virtual card keeps working while we activate it.',
+
+  'card.activateHint': 'Only used to confirm this card reached you.',
+
+  'card.activateInvalidPan': 'Check the card number: it should be 16 to 19 digits, exactly as printed.',
+
+  'card.activateTitle': 'Activate your physical card',
+
+  'card.activationEmailNote': 'You\'ll get an email from Zione to activate your account.',
+
+  'card.activationFailed': 'We couldn\'t activate the card. Check the number and try again.',
+
+  'card.activationStarted': 'Activation started. It usually takes a few minutes.',
+
+  'card.addressValidFor': 'One-time address, valid for {time}',
+
+  'card.alreadyRegisteredSignIn': 'Already registered? Sign in',
+
+  'card.applicationNotApproved': 'Your application wasn\'t approved',
+
+  'card.applicationNotApprovedDesc': 'Zione couldn\'t approve your card application. Contact Zione support to find out why and what you can do next.',
+
+  'card.blocked': 'Blocked',
+
+  'card.buildingTransaction': 'Building transaction',
+
+  'card.cardActivated': 'Your card is active.',
+
+  'card.cardBlockedNotice': 'Card blocked.',
+
+  'card.cardControls': 'Card controls',
+
+  'card.cardProgramPartner': 'Card program partner',
+
+  'card.cardUnblocked': 'Card unblocked.',
+
+  'card.changePin': 'Change PIN',
+
+  'card.changePinSubtitle': 'Set a new 4-digit PIN for card payments and ATMs',
+
+  'card.confirmNewPin': 'Confirm new PIN',
+
+  'card.declined': 'Declined',
+
+  'card.depositAddressVerified': 'Verified address',
+
+  'card.feeEstimateNote': 'Estimated at today\'s rate. The exact amount is set when your order is placed.',
+
+  'card.fieldTooLong': 'Use at most {max} characters.',
+
+  'card.followOrderOnDashboard': 'Follow the order from your card dashboard.',
+
+  'card.heroArtLabel': 'ADA flowing into the Gero Card, issued with Zione',
+
+  'card.hideCardDetails': 'Hide card details',
+
+  'card.hidePin': 'Hide PIN',
+
+  'card.journeyActivate': 'Activate',
+
+  'card.journeyLabel': 'Card journey',
+
+  'card.journeyOrder': 'Order card',
+
+  'card.journeySpend': 'Spend',
+
+  'card.journeyVerify': 'Verify identity',
+
+  'card.kycLinkFailed': 'We couldn\'t open the identity check. Please try again.',
+
+  'card.kycOpensNewTab': 'Zione\'s identity check opens in a new tab.',
+
+  'card.last30DaysLabel': 'Last 30 days',
+
+  'card.legalEntity': 'Legal entity',
+
+  'card.minimumTopUp': 'Minimum top-up amount: {amount} ADA',
+
+  'card.newPin': 'New PIN',
+
+  'card.noTransactionsInPeriod': 'No transactions in this period.',
+
+  'card.orderAnotherCard': 'Order another card',
+
+  'card.payLaterNote': 'Your order is saved. You can also pay the fee later from your card dashboard.',
+
+  'card.payTo': 'Pay to',
+
+  'card.physicalCardOrder': 'Physical card order',
+
+  'card.pinChangeFailed': 'We couldn\'t change the PIN. Please try again.',
+
+  'card.pinChanged': 'PIN changed.',
+
+  'card.pinHidden': 'PIN hidden',
+
+  'card.pinMismatch': 'The two PINs don\'t match.',
+
+  'card.pinWeak': 'Avoid repeated digits or sequences like 1234.',
+
+  'card.rateLine': '1 ADA = {rate}',
+
+  'card.registrationDetails': 'Registration',
+
+  'card.restartVerification': 'Restart verification',
+
+  'card.savePin': 'Save PIN',
+
+  'card.secureFormBy': 'Secure form by Zione',
+
+  'card.secureSignInWindow': 'Zione\'s sign-in opens in a secure window',
+
+  'card.showCardDetails': 'Show card details',
+
+  'card.showPin': 'Show PIN',
+
+  'card.signInFailed': 'Sign-in failed. Please try again.',
+
+  'card.signOut': 'Sign out',
+
+  'card.signedInAs': 'Signed in as',
+
+  'card.signingAndSubmitting': 'Signing and submitting',
+
+  'card.switchCurrency': 'Switch between ADA and EUR',
+
+  'card.topUpCredited': 'Your card balance is updated.',
+
+  'card.topUpSubmitted': 'Top-up submitted',
+
+  'card.topUpSubmittedDesc': 'Your balance updates once the network confirms the transaction, usually within a few minutes.',
+
+  'card.trackerActivated': 'Activated',
+
+  'card.trackerActivating': 'Activating your card',
+
+  'card.trackerAutoRefresh': 'This page checks for updates automatically. Your card appears here as soon as Zione issues it.',
+
+  'card.trackerAwaitingPayment': 'Waiting for the delivery fee',
+
+  'card.trackerDispatched': 'Dispatched',
+
+  'card.trackerIssuing': 'Issuing your virtual card',
+
+  'card.trackerOnItsWay': 'On its way. Activate it when it arrives.',
+
+  'card.trackerPaid': 'Delivery fee paid',
+
+  'card.trackerPaymentDetected': 'Payment detected, waiting for confirmations',
+
+  'card.trackerPlaced': 'Order placed',
+
+  'card.trackerPreparing': 'Preparing your card for dispatch',
+
+  'card.trackerReady': 'Ready to use',
+
+  'card.trackerTitlePhysical': 'Your card is being prepared',
+
+  'card.trackerTitleVirtual': 'Your virtual card is being issued',
+
+  'card.typePhysical': 'Physical',
+
+  'card.typeVirtual': 'Virtual',
+
+  'card.unblockCard': 'Unblock card',
+
+  'card.verificationFailed': 'Verification failed',
+
+  'card.verificationFailedDesc': 'Zione couldn\'t confirm your identity this time. You can start the check again; have a valid ID document and your camera ready.',
+
+  'card.verificationFailedTitle': 'Your identity check didn\'t go through',
+
+  'card.viewFees': 'View fees',
+
+  'card.virtualCardOrder': 'Virtual card order',
+
+  'card.waitingForBalance': 'Waiting for your card balance to update…',
   'cashback.adaCashback': 'ADA Cashback',
   'cashback.allCategories': 'All Categories',
   'cashback.availableIn': 'Available In',
@@ -887,6 +1065,7 @@ export default {
   'support.auth.body': 'Confirm once so support can recognize you anonymously. Your wallet signs a one-time message. No transaction is made and no funds move.',
   'support.error.unavailable': 'Live chat is temporarily unavailable. Please try again later.',
   'support.error.sendFailed': 'Your message could not be sent. Please try again.',
+  'support.error.sessionExpired': 'Your previous support chat is no longer available. Send a message to start a new chat.',
   'support.error.fileTooLarge': 'Files must be under 20 MB.',
   'support.error.tooManyFiles': 'You can attach up to 5 files per message.',
   'support.hide.action': 'Hide the support button',
@@ -2605,7 +2784,6 @@ export default {
   'notify.wallet.title': 'Notify me about this wallet',
   'notify.wallet.hint': 'Alerts for this wallet on this browser.',
   'notify.wallet.ineligible': 'Notifications are available for Cardano software wallets only.',
-  'notify.wallet.browserOff': 'Turn on notifications for this browser first.',
   'notify.wallet.reconfirm': 'Re-confirm to keep notifications',
   'notify.wallet.reconfirmHint': 'This browser\'s proof for the wallet is missing. Confirm once more to keep alerts coming.',
   'notify.wallet.authTitle': 'Confirm notifications',
@@ -2669,6 +2847,17 @@ export default {
   'notify.pendingOpen.switch': 'Switch',
   'notify.pendingOpen.stay': 'Stay here',
   'notify.saveFailed': 'Could not save the setting. Try again.',
+  'notify.intro.title': 'Turn on wallet alerts?',
+  'notify.intro.message': 'Received funds, staking rewards and swap fills, even while Gero is closed. Click to set it up.',
+  'notify.intro.promptBody': 'Get alerts for received funds, staking rewards and swap fills, even while Gero is closed. One confirmation turns them on for this wallet.',
+  'notify.intro.turnOn': 'Turn on',
+  'notify.intro.notNow': 'Not now',
+  'notify.chrome.denied': 'Chrome is blocking notifications from Gero. Allow them in Chrome\'s notification settings, then try again.',
+  'notify.chrome.openSettings': 'Open Chrome notification settings',
+  'notify.chrome.test': 'Send a test notification',
+  'notify.chrome.testTitle': 'Notifications are working',
+  'notify.chrome.testBody': 'This is how a Gero alert looks on this computer.',
+  'notify.chrome.testHint': 'Didn\'t see it? Check that Chrome may show notifications in your system\'s notification settings.',
   'notify.inbox.new': '{n} new',
   'notify.inbox.needsYou': 'Needs you',
   'notify.inbox.activity': 'Activity',
@@ -2704,6 +2893,8 @@ export default {
   'settings.walletNameUpdated': 'Wallet name updated',
   'settings.walletProfilePicture': 'Wallet Profile Picture',
   'settings.websiteProtection': 'Website Protection',
+  'settings.verifyAddress': 'Verify Address',
+  'settings.verifyAddressOnDevice': 'Show your receive address on your hardware wallet to confirm it',
   'settings.welcomeGuide': 'Welcome Guide',
   'settings.welcomeGuideHelper': 'Display an introductory guide for navigating the wallet',
   'settings.whatIsCollateral': 'What is Collateral?',
@@ -2900,6 +3091,8 @@ export default {
   'errors.insufficientBalance': 'Insufficient balance',
   'errors.noCollateral': 'This transaction runs a smart contract, which needs a small ADA-only UTxO for collateral, but all your ADA is bundled with tokens. Send about 6 ADA to your own wallet address to create one, then try again.',
   'errors.insufficientAdaForTx': 'Not enough ADA to complete this transaction once network fees and the minimum per-output are covered. Add a little more ADA and try again.',
+  'errors.txRequestRejected': 'The transaction request was rejected: {reason}',
+  'errors.submitUnconfirmed': 'We could not confirm whether your transaction reached the network. It may still go through, so check your transaction history before sending it again.',
   'errors.collateralPoolEmpty': 'The shared collateral service is temporarily unavailable. Please try again in a moment.',
   'errors.invalidAddress': 'Invalid address',
   'errors.invalidOrder': 'Invalid order data',
@@ -3164,7 +3357,6 @@ export default {
   'wallet.paymentAddress': 'Payment Address',
   'wallet.paymentAddressInfo': 'Share your payment address to receive {ticker} safely',
   'wallet.pleaseAllowCameraAccess': 'Please allow camera access in your browser settings.',
-  'wallet.pleaseEnterAll6Digits': 'Please enter all 6 digits',
   'wallet.pointCameraAtQR': 'Point your camera at a QR code containing an address',
   'wallet.pleaseEnterPasswordToContinue': 'Please enter your password to continue.',
   'wallet.pleaseReviewCarefully': 'Please review the transaction details carefully before proceeding. Confirm the transaction by signing with your {walletType} device.',
@@ -3854,6 +4046,7 @@ export default {
   'search.contacts': 'Contacts',
   'search.settings': 'Settings',
   'search.pages': 'Pages',
+  'search.actions': 'Actions',
   'search.noResults': 'No results found',
   'search.searching': 'Searching...',
   'search.pressEsc': 'Press Esc to close',
@@ -4228,6 +4421,8 @@ export default {
   'send.total': 'Total',
   'send.insufficientBalance': 'Insufficient balance',
   'send.insufficientBalanceBy': 'Insufficient balance. Need {amount} more ADA.',
+  'send.inputLimitFragmented': 'Your balance is spread across {count} UTxOs, and one transaction can spend at most {max} of them. Send a smaller amount, or consolidate your UTxOs first.',
+  'send.inputLimitMaxNote': 'Max uses your {max} largest UTxOs; the other {remaining} stay in the wallet.',
   'send.transactionSummary': 'Transaction Summary',
   'send.to': 'To',
   'send.spendingPassword': 'Spending Password',
@@ -4834,11 +5029,12 @@ export default {
   'realfi.title': 'Earn with RealFi',
   'realfi.preview': 'You\'re on Cardano preprod. Amounts shown are test funds.',
   'realfi.apy': 'RealFi fund yield: {rate}% (published {date})',
-  'realfi.start.title': 'Put your dollars to work',
-  'realfi.start.body': 'Stake USDrf to receive sUSDrf, which grows against USDrf as yield from real-world assets lands. Unstaking takes 7 days.',
+  'realfi.start.title': 'Get started with RealFi',
+  'realfi.start.body': 'Get USDrf in Gero, then stake it for sUSDrf. Staking needs no identity verification, but RealFi isn’t offered in every country.',
   'realfi.start.cta': 'Get USDrf on RealFi',
-  'realfi.start.readyTitle': 'You\'re ready to earn',
-  'realfi.start.readyBody': 'You hold {amount}. Stake it to receive sUSDrf, which grows against USDrf as yield from real-world assets lands. Unstaking takes 7 days.',
+  'realfi.start.readyTitle': 'You hold USDrf',
+  'realfi.start.readyBody': 'You hold {amount}, ready to stake for sUSDrf.',
+  'realfi.start.artLabel': 'USDCx flowing into a RealFi stake',
   'realfi.start.readyCta': 'Stake on RealFi',
   'realfi.start.note': 'Staking from Gero is coming. For now, stake on RealFi and your position will appear here.',
   'realfi.position.label': 'Your position',
@@ -5446,4 +5642,32 @@ export default {
   'common.offBadge': 'Off',
   'common.extensionUpdatedTitle': 'Extension updated',
   'common.extensionUpdatedMessage': 'Gero Dashboard has been updated to version {version}!',
+  'realfi.gettingStarted.eligibilityTitle': 'Check where RealFi is available',
+  'realfi.gettingStarted.eligibilityBody': 'RealFi isn’t offered in some countries. Staking needs no identity verification: RealFi screens your wallet address when you stake.',
+  'realfi.gettingStarted.eligibilityRestrictions': 'In some countries sUSDrf is only for accredited or institutional investors. Check RealFi’s list before you start.',
+  'realfi.gettingStarted.checkRestrictions': 'Check country restrictions',
+  'realfi.gettingStarted.eligibilityCta': 'Open RealFi',
+  'realfi.gettingStarted.preprodEligibilityBody': 'Open RealFi preprod to explore with test funds.',
+  'realfi.gettingStarted.preprodCta': 'Open RealFi preprod',
+  'realfi.gettingStarted.usdcxTitle': 'Get USDCx',
+  'realfi.gettingStarted.usdcxBody': 'You need USDCx to get USDrf.',
+  'realfi.gettingStarted.acquireTitle': 'Get USDrf',
+  'realfi.gettingStarted.acquireBody': 'RealFi calls this token USDr; Gero lists it as USDrf. Swap USDCx for it right here.',
+  'realfi.gettingStarted.preprodAcquireBody': 'Use the RealFi preprod app and test funds to explore. Mainnet wallet swaps are only offered on mainnet.',
+  'realfi.gettingStarted.getUsdrf': 'Get USDrf',
+  'realfi.gettingStarted.getUsdcx': 'Get USDCx with ADA',
+  'realfi.gettingStarted.needUsdcx': 'You don’t hold USDCx yet. Swap ADA for USDCx first, then swap it for USDrf.',
+  'realfi.gettingStarted.haveUsdcx': 'You hold {amount}, ready to swap for USDrf.',
+  'realfi.gettingStarted.getUsdcxNote': 'This is a separate swap. Wait for USDCx to arrive in your wallet, then return to swap for USDrf.',
+  'realfi.gettingStarted.swapUnavailable': 'Wallet swaps are currently unavailable. You can still get USDrf in RealFi’s app.',
+  'realfi.gettingStarted.routeNote': 'Swap routes or quotes may be unavailable. Review the quote before signing; the exchange rate is not guaranteed to be 1:1.',
+  'realfi.gettingStarted.stakeTitle': 'Stake USDrf for sUSDrf',
+  'realfi.gettingStarted.stakeBody': 'Stake USDrf to receive sUSDrf. RealFi screens your wallet address when you stake; a flagged wallet can’t stake.',
+  'realfi.gettingStarted.showGuide': 'Availability and getting USDrf',
+  'realfi.gettingStarted.swapStatus.disabled': 'Wallet swaps are currently disabled. You can still get USDrf in RealFi’s app.',
+  'realfi.gettingStarted.swapStatus.unknown': 'USDrf swap availability has not been confirmed for this wallet.',
+  'realfi.gettingStarted.swapStatus.loading': 'Checking whether the required tokens are available in Gero’s swap catalogue.',
+  'realfi.gettingStarted.swapStatus.unavailable': 'Gero could not confirm the required tokens in its swap catalogue. Wallet acquisition is unavailable for now.',
+  'realfi.gettingStarted.retryAvailability': 'Check again',
+  'realfi.gettingStarted.usdrfSwapPending': 'Swapping USDCx for USDrf in Gero isn’t available yet. You can get USDrf in RealFi’s app.',
 }

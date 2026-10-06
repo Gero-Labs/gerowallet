@@ -160,8 +160,8 @@ function buildCSP(dev: boolean): string {
     ...(dev ? ['http://localhost:*'] : ['https://api.gerowallet.io/', 'https://guardarian.com/']),
     'https://*.moonpay.com/',
     'https://connect.trezor.io/',
-    'https://www.kaiserex.com/',
-    'https://kaiserex.com/',
+    // Gero Card registration (Zione) and the Zoho form it submits to inside the frame.
+    'https://zione.com/',
     'https://forms.zohopublic.eu/',
     'https://*.bringweb3.io/',
   ];

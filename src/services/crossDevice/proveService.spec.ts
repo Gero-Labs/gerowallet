@@ -164,27 +164,6 @@ const settle = async () => {
   for (let i = 0; i < 6; i++) await tick();
 };
 
-/**
- * Wait until the desktop has stopped sending, so a count taken afterwards is a
- * stable baseline. Accepting a job is not the end of its output — it also
- * reports status — so waiting for one named frame still banks a baseline that
- * the same job then walks past.
- */
-async function waitUntilQuiet(t: { sent: ProveMessage[] }, quietTicks = 6, budgetMs = 5000) {
-  const deadline = Date.now() + budgetMs;
-  let seen = -1;
-  let quiet = 0;
-  while (Date.now() < deadline) {
-    if (t.sent.length === seen) {
-      if (++quiet >= quietTicks) return;
-    } else {
-      seen = t.sent.length;
-      quiet = 0;
-    }
-    await tick();
-  }
-}
-
 describe('createProveService — happy path', () => {
   it('proves a job and streams back a decryptable finalized tx', async () => {
     const { t, deps } = makeDeps();
@@ -360,19 +339,21 @@ describe('gate order', () => {
   });
 
   it('drops a replayed PROVE_INIT silently', async () => {
-    const { t, deps } = makeDeps();
+    const log = vi.fn();
+    const { t, deps } = makeDeps({ log });
     svc = createProveService(deps);
     const phone = await makePhone();
     t.deliver(phone.init);
-    // Let the FIRST job finish talking before snapshotting. Anything shorter
-    // banks a baseline the same job then walks past — it sends PROVE_ACCEPT and
-    // then PROVE_STATUS — and the late frame gets counted against the replay.
-    // The replay was being dropped correctly the whole time; the baseline was
-    // what moved.
-    await waitUntilQuiet(t);
+    // A quiet event loop can precede completion of WebCrypto on a loaded runner.
+    // Await the last initial response before taking the baseline.
+    await t.waitUntilSent('PROVE_STATUS');
     const afterFirst = t.sent.length;
     t.deliver(phone.init); // byte-identical replay
-    await settle();
+    // Observe the replay decision itself instead of assuming six ticks are enough.
+    const dropped = await waitFor(() => log.mock.calls.some(
+      ([message]) => message === `drop stale/replayed PROVE_INIT ${phone.init.reqId}`,
+    ));
+    expect(dropped).toBe(true);
     expect(t.sent).toHaveLength(afterFirst);
   });
 

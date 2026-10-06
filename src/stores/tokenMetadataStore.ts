@@ -86,11 +86,11 @@ export default {
     broadcastFromBackground({ blacklistPolicies });
   },
 
-  async loadTokens() {
+  async loadTokens(shouldApply: () => boolean = () => true): Promise<boolean> {
     try {
       const res = await swapApi.getSwapTokens();
       if (res.status === 200) {
-        this.setTokens(res.data.reduce(function(map, token) {
+        const tokens = res.data.reduce(function(map, token) {
           // Images/metadata for display come from market data (useMarketData), keyed by unit.
           // Registry tokens only define what is swappable + provide pricing/routing.
           map[token.token_id] = {
@@ -104,13 +104,17 @@ export default {
             price: token.price,
           }
           return map;
-        }, {}));
+        }, {});
+        if (!shouldApply()) return false;
+        this.setTokens(tokens);
+        return true;
       } else {
         console.warn(parseHttpError(res))
       }
     } catch (error) {
       console.error(error);
     }
+    return false;
   },
 
   async loadBlacklistPolicies() {

@@ -259,7 +259,21 @@
 
       <BackupWalletDialog :isOpen="backupWalletDialog" @close="backupWalletDialog = false" />
 
+      <!-- The offer to turn push notifications on for an eligible, unlinked wallet (notifyIntro.ts): waits its turn behind every other dialog. -->
+      <NotifyIntroPrompt
+        :suppressed="!isWelcomeDone || !!currentDialog || backupWalletDialog || changeLog.enabled || vmProxy.$route.query['changeLog'] === 'true'"
+        @turn-on="openNotifySettingsFromIntro"
+      />
+
       <GlobalSearch />
+
+      <!-- Inside v-app, and beside v-main rather than inside it. Vuetify's dialog
+           scroll lock walks up from the wheel target until it finds [data-app] and
+           throws on `document` when it never does, and this layout's stacking
+           rule on .v-application (see the scoped style below) would let a sibling
+           dock paint above every modal scrim. v-main's own stacking context would
+           trap it under the scrim for good. -->
+      <AgentDock v-if="isAgentVisible" />
 
     </v-app>
   </div>
@@ -286,7 +300,9 @@ import WalletStore from '@/stores/walletStore';
 import { poolOperatorStore } from '@/stores/poolOperatorStore';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import NotifyInbox from '@/shared/components/NotifyInbox.vue';
+import NotifyIntroPrompt from '@/shared/components/NotifyIntroPrompt.vue';
 import { notifyInboxStore } from '@/stores/notifyInboxStore';
+import { notifySettingsStore } from '@/stores/notifySettingsStore';
 import { networkStore, isBitcoinTip } from '@/stores/networkStore';
 import { midnightStore } from '@/stores/midnightStore';
 import { setConfiguration } from '@/db/gero-db';
@@ -295,6 +311,8 @@ import { musicStore } from '@/stores/musicStore';
 import { hasNewFeaturesInPath } from '@/shared/composables/useFeatureNotifications';
 import GlobalSearch from '@/shared/components/GlobalSearch.vue';
 import { useGlobalSearch, settingsNavRequest } from '@/shared/composables/useGlobalSearch';
+import AgentDock from '@/sidepanel/components/AgentDock.vue';
+import { agentDockPrefsStore } from '@/stores/agentDockPrefsStore';
 
 const { t } = useTranslation();
 const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true');
@@ -411,6 +429,20 @@ const kesWarningVisible = computed(() => {
   return kesRemainingGlobal.value !== null && kesRemainingGlobal.value < 50;
 });
 
+// Gero Companion (support chat + assistant). It mounts on EITHER flag:
+// isCopilotEnabled alone (legacy copilot-only dock) or isLiveChatEnabled alone
+// (support-only dock, Assistant tab visible but disabled) — see
+// featureFlagsStore's doc blocks for both. Living in this layout is what keeps
+// it off the dApp popup windows and the standalone BlankLayout screens, where a
+// floating FAB only obstructs signing content.
+const isAgentVisible = computed(() =>
+  (featureFlagsStore.isCopilotEnabled() || featureFlagsStore.isLiveChatEnabled())
+  && !!loggedWallet.value && !walletStore.isLocked
+  // Wait for the persisted preference before the first render, otherwise a
+  // user who hid the dock sees it flash on every dashboard load.
+  && agentDockPrefsStore.hydrated && !agentDockPrefsStore.hidden
+);
+
 const epochSlotPercentage = computed(() => {
   // Midnight has no epoch concept — show 0 (the progress bar will render flat).
   if (isMidnight.value) return 0;
@@ -485,6 +517,11 @@ function openNotifySettings() {
   notificationsMenu.value = false;
   settingsInitialTab.value = 'notifications';
   currentDialog.value = dialogs.SETTINGS;
+}
+/** "Turn on" on the offer (notifyIntro.ts): the same landing as its system notification's click. */
+function openNotifySettingsFromIntro() {
+  notifySettingsStore.requestEnable();
+  openNotifySettings();
 }
 
 function navigateToPoolOperator() {
@@ -583,6 +620,8 @@ const preloadBackgroundImage = () => {
 const openSettingsFromFlag = (flag: unknown) => {
   const tab = flag && typeof flag === 'object' && typeof (flag as { tab?: unknown }).tab === 'string' ? (flag as { tab: string }).tab : undefined;
   if (tab) settingsInitialTab.value = tab;
+  // The offer's system notification (notifyIntro.ts): the Notifications tab starts the enable step itself.
+  if (flag && typeof flag === 'object' && (flag as { enable?: unknown }).enable === 'notify') notifySettingsStore.requestEnable();
   currentDialog.value = dialogs.SETTINGS;
   chrome.storage.local.remove('openSettingsOnLoad');
 };

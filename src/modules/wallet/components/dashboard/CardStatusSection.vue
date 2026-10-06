@@ -1,752 +1,240 @@
 <template>
-  <v-col cols="12" md="6" class="py-0 card-status-column" style="align-content: center; justify-items: center; min-height: 144px">
-    <div class="balance-section" v-if="currentCardHasUUID">
-      <div class="balance-container">
-        <p class="balance-label t-label">{{ $t('card.totalBalance') }}</p>
-        <p class="balance-amount">
-          {{
-            currentCard?.cardBalance?.currentBalance?.amount
-              ? formatCurrency(currentCard.cardBalance.currentBalance.amount)
-              : '€0.00'
-          }}
-        </p>
-        <p class="balance-conversion">
-          ≈ {{ formatADA(currentCard?.cardBalance?.currentBalance?.amount || 0) }} ADA
-        </p>
-
-        <!-- Action Buttons -->
-        <div class="balance-actions">
-          <v-btn class="action-btn top-up-btn" variant="outlined" @click="$emit('top-up')">
-            <img src="@/modules/wallet/icons/currency-euro.svg" :alt="String($t('card.topUp'))" class="btn-icon" />
-            {{ $t('card.topUp') }}
-          </v-btn>
-          <v-btn
-            class="action-btn eye-btn"
-            variant="outlined"
-            @click="$emit('toggle-card-visibility')"
-          >
-            <v-icon>{{ showCardDetails ? 'mdi-eye-off' : 'mdi-eye' }}</v-icon>
-          </v-btn>
-        </div>
+  <div class="card-status">
+    <!-- An issued card: balance and controls -->
+    <section v-if="hasCard" class="card-balance glass-panel" aria-labelledby="card-balance-label">
+      <div class="card-balance__head">
+        <span id="card-balance-label" class="t-label">{{ t('card.totalBalance') }}</span>
+        <span class="card-balance__chips">
+          <CardChip>{{ typeLabel }}<template v-if="last4"> •••• {{ last4 }}</template></CardChip>
+          <CardChip v-if="activating" tone="accent" icon="mdi-progress-clock">{{ t('card.trackerActivating') }}</CardChip>
+          <CardChip v-else-if="blocked" tone="error" icon="mdi-lock-outline">{{ t('card.blocked') }}</CardChip>
+        </span>
       </div>
-    </div>
-    <!-- Waiting Status Card - Show when order is in progress -->
-    <v-card
-      v-else-if="cardsWithOrderSlot[currentCardIndex]?.cardData.id"
-      outlined
-      class="waiting-status-card mt-6"
-    >
-      <div class="status-card-gradient"></div>
-      <v-card-text class="status-card-content">
-        <div class="status-icon-wrapper">
-          <v-progress-circular
-            v-if="loadingOrderDetails"
-            indeterminate
-            size="24"
-            width="2"
-            color="primary"
-            class="status-loading"
-          ></v-progress-circular>
-          <v-icon
-            v-else
-            class="status-icon"
-            :class="{ 'rejection-icon': isRejectedOrExpired }"
-          >
-            {{ isRejectedOrExpired ? 'mdi-close-circle' : 'mdi-credit-card-clock-outline' }}
-          </v-icon>
-        </div>
-        <div class="status-text-wrapper">
-          <!-- Loading State -->
-          <template v-if="loadingOrderDetails">
-            <div class="status-title-wrapper">
-              <p class="status-title">
-                {{ $t('card.loadingCardStatus') }}
-              </p>
-            </div>
-            <p class="status-subtitle">
-              {{ $t('card.pleaseWait') }}
-            </p>
-          </template>
-          <!-- Rejected or Expired Card Status -->
-          <template v-else-if="isRejectedOrExpired">
-            <div class="status-title-wrapper">
-              <p class="status-title">
-                {{ isCurrentCardExpired ? $t('card.paymentExpired') : $t('card.cardRejected') }}
-              </p>
-            </div>
-            <p class="status-subtitle">
-              {{ isCurrentCardExpired ? $t('card.orderNewCardToContinue') : $t('card.cardRejectedMessage') }}
-            </p>
-            <v-btn
-              class="order-new-card-btn mt-4"
-              @click="$emit('order-new-card-after-rejection')"
-            >
-              <v-icon left>mdi-credit-card-plus</v-icon>
-              {{ $t('card.orderNewCard') }}
-            </v-btn>
-          </template>
-          <!-- Pending Card Status -->
-          <template v-else>
-            <div class="status-title-wrapper">
-              <p class="status-title">
-                {{ currentCardType === 'physical' ? $t('card.physicalCardOrderInProgress') : $t('card.virtualCardOrderInProgress') }}
-              </p>
-            </div>
-            <p class="status-subtitle">
-              <template v-if="currentOrderNeedsPayment">
-                <template v-if="!isPaymentStatusCompleted">
-                  {{ $t('card.paymentReceived') }} <br />
-                  {{ $t('card.waitingForOrderProcessing') }} <br />
-                </template>
-                <template v-else-if="!isPaymentStatusCompleted && isPaymentInProgress">
-                  {{ $t('card.paymentInProgress') }} <br />
-                  {{ $t('card.pleaseWaitForConfirmation') }}
-                </template>
-                <template v-else>
-                  {{ $t('card.physicalCardPaymentRequired') }} <br />
-                  {{ $t('card.completePaymentToProceed') }}
-                </template>
-              </template>
-              <template v-else>
-                {{ $t('card.paymentReceived') }} <br />
-              </template>
-            </p>
-          </template>
-        </div>
-      </v-card-text>
-    </v-card>
-    <div v-if="shouldShowOrderCardSection" class="order-card-section mt-10">
-      <h2 class="order-title">{{ $t('card.getYourGeroCard') }}</h2>
-      <p class="order-description">{{ $t('card.spendCryptoAnywhere') }}</p>
 
-      <!-- Promo and Button Row -->
-      <div class="promo-button-row">
-        <!-- Promo Section -->
-        <div class="promo-section">
-          <p
-            class="promo-title"
-            @click="$emit('show-promotion-modal')"
-            @keydown.enter="$emit('show-promotion-modal')"
-            @keydown.space.prevent="$emit('show-promotion-modal')"
-            role="button"
-            tabindex="0"
-            aria-label="View promotional details and fee information"
-          >
-            <span class="clickable-text">{{ $t('card.enjoyZeroFeesUntil') }}</span>
-            <v-icon small class="info-icon">mdi-information-outline</v-icon>
-          </p>
-          <div class="promo-features">
-            <div class="promo-item">
-              <v-icon class="promo-icon">mdi-check-circle</v-icon>
-              <span class="promo-text">{{ $t('card.zeroMonthlyFees') }}</span>
-            </div>
-            <div class="promo-item">
-              <v-icon class="promo-icon">mdi-check-circle</v-icon>
-              <span class="promo-text">{{ $t('card.zeroAdaEurFees') }}</span>
-            </div>
-          </div>
-        </div>
+      <div class="card-balance__figures">
+        <span class="t-display g-num">{{ balanceText }}</span>
+        <span class="t-body g-num">≈ {{ adaText }} ADA</span>
+      </div>
 
-        <!-- Button -->
+      <div class="card-balance__actions">
+        <GButton tier="primary" @click="emit('top-up')">{{ t('card.topUp') }}</GButton>
+        <GButton tier="secondary" @click="emit('manage')">{{ t('card.cardControls') }}</GButton>
         <v-btn
-          class="order-card-btn"
-          large
-          :loading="orderingCard"
-          @click="$emit('open-order-card-flow')"
+          icon
+          outlined
+          class="card-balance__eye"
+          :loading="detailsLoading"
+          :aria-label="showCardDetails ? t('card.hideCardDetails') : t('card.showCardDetails')"
+          :aria-pressed="showCardDetails ? 'true' : 'false'"
+          @click="emit('toggle-card-visibility')"
         >
-          <v-icon left>mdi-credit-card-plus</v-icon>
-          {{ $t('card.orderNewCard') }}
+          <v-icon>{{ showCardDetails ? 'mdi-eye-off-outline' : 'mdi-eye-outline' }}</v-icon>
         </v-btn>
       </div>
-    </div>
-  </v-col>
+
+      <hr class="card-balance__rule" />
+      <div class="card-balance__foot">
+        <span class="t-caption g-num">{{ rateLine }}</span>
+        <GButton v-if="canOrder" tier="tertiary" compact @click="emit('open-order-card-flow')">
+          {{ t('card.orderAnotherCard') }}
+        </GButton>
+      </div>
+    </section>
+
+    <!-- An order that has no card yet -->
+    <OrderTracker
+      v-else-if="card && tracker"
+      :card="card"
+      :view="tracker"
+      :expires-at="expiresAt"
+      @pay="emit('complete-payment')"
+      @order-new="emit('open-order-card-flow')"
+      @activated="emit('activated', $event)"
+    />
+
+    <!-- The empty slot: order a card -->
+    <section v-else class="card-order glass-panel" aria-labelledby="card-order-title">
+      <IsoScene name="hero" class="card-order__art" />
+      <h2 id="card-order-title" class="t-heading">{{ t('card.getYourGeroCard') }}</h2>
+      <p class="t-body">{{ t('card.spendCryptoAnywhere') }}</p>
+      <CardChip tone="accent" icon="mdi-tag-outline" clickable @click="emit('show-promotion-modal')">
+        {{ t('card.enjoyZeroFeesUntil') }}
+      </CardChip>
+      <ul class="card-order__checks">
+        <li><v-icon small>mdi-check</v-icon>{{ t('card.zeroMonthlyFees') }}</li>
+        <li><v-icon small>mdi-check</v-icon>{{ t('card.zeroAdaEurFees') }}</li>
+      </ul>
+      <GButton tier="primary" @click="emit('open-order-card-flow')">{{ t('card.orderNewCard') }}</GButton>
+    </section>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { computed, toRefs } from 'vue';
-import { CardInfo } from '@/models/card';
-import cardStoreModule from '@/stores/modules/card';
-import { walletStore } from '@/stores/walletStore';
+import { computed } from 'vue';
+import type { CardInfo } from '@/models/card';
+import { useTranslation } from '@/shared/composables/useTranslation';
+import type { OrderTrackerView } from '@/modules/wallet/utils/cardOrderTracker';
+import { adaFigure, cardMoney } from '@/modules/wallet/utils/cardFormat';
+import GButton from '@/shared/components/GButton/GButton.vue';
+import IsoScene from '@/shared/components/iso/IsoScene.vue';
+import CardChip from '../ui/CardChip.vue';
+import OrderTracker from './OrderTracker.vue';
 
-const { transactions } = toRefs(walletStore);
+const props = withDefaults(defineProps<{
+  /** The carousel slot in view; undefined or an empty placeholder for the "order a card" slot. */
+  card?: CardInfo;
+  tracker?: OrderTrackerView;
+  expiresAt?: string;
+  canOrder?: boolean;
+  showCardDetails?: boolean;
+  detailsLoading?: boolean;
+  /** EUR per ADA (the provider's sell rate). */
+  exchangeRate?: number;
+  /** The card was just activated and is waiting for the provider to confirm. */
+  activating?: boolean;
+}>(), {
+  card: undefined,
+  tracker: undefined,
+  expiresAt: undefined,
+  canOrder: false,
+  showCardDetails: false,
+  detailsLoading: false,
+  exchangeRate: 0,
+  activating: false,
+});
 
-interface Props {
-  cards: CardInfo[];
-  currentCardIndex: number;
-  cardsWithOrderSlot: CardInfo[];
-  currentCardHasUUID: boolean;
-  currentCardType: string;
-  currentCardStatus?: string | null;
-  isCurrentCardRejected: boolean;
-  shouldShowOrderCardSection: boolean;
-  showOrderTimer: boolean;
-  timerDisplay: string;
-  loadingOrderDetails: boolean;
-  orderingCard: boolean;
-  showCardDetails: boolean;
-  exchangeRate: number;
-  paymentDetailsCache: Record<string, { expires_at?: string; status?: string }>;
-}
-
-interface Emits {
+const emit = defineEmits<{
   (e: 'top-up'): void;
+  (e: 'manage'): void;
   (e: 'toggle-card-visibility'): void;
-  (e: 'order-new-card-after-rejection'): void;
-  (e: 'complete-payment'): void;
   (e: 'open-order-card-flow'): void;
+  (e: 'complete-payment'): void;
   (e: 'show-promotion-modal'): void;
-  (e: 'update:timerDisplay', value: string): void;
-}
+  (e: 'activated', cardUuid: string | null): void;
+}>();
 
-const props = withDefaults(defineProps<Props>(), {
-  currentCardStatus: null,
-});
-defineEmits<Emits>();
+const { t } = useTranslation();
 
-const currentCardIndex = computed(() => cardStoreModule.state.currentCardIndex);
+const hasCard = computed(() => !!props.card?.cardData?.card_uuid);
 
-const currentCard = computed(() => {
-  return props.cardsWithOrderSlot[currentCardIndex.value];
-});
-
-const isPaymentStatusCompleted = computed(() => {
-  if (!currentCard.value?.cardData?.order_uuid) return false;
-  const paymentDetails = props.paymentDetailsCache[currentCard.value.cardData.order_uuid];
-  return paymentDetails?.status === 'completed';
+// The per-card balance call is authoritative; the card list's own `balance` shows meanwhile.
+const amount = computed<number | null>(() => {
+  const live = props.card?.cardBalance?.currentBalance?.amount;
+  if (typeof live === 'number' && Number.isFinite(live)) return live;
+  const listed = parseFloat(String(props.card?.cardData?.balance ?? ''));
+  return Number.isFinite(listed) ? listed : null;
 });
 
-const isPaymentInProgress = computed(() => {
-  const depositAddress = currentCard.value?.cardData?.delivery?.deposit_address;
-  let adaAmount = currentCard.value?.cardData?.delivery?.deposit_amount_ada;
-  const [integerPart = '0', decimalPart = ''] = adaAmount.split('.');
-  // Take only first 6 decimal digits (ADA precision)
-  const truncatedDecimal = decimalPart.substring(0, 6).padEnd(6, '0');
-  adaAmount = integerPart + truncatedDecimal
-  return transactions.value.some(tx => tx.body.outputs.some(output => output.address === depositAddress && output.value.coins === adaAmount));
-})
+const currency = computed(
+  () => props.card?.cardBalance?.currentBalance?.currencyCode || props.card?.cardData?.currency || 'EUR',
+);
 
-const isCurrentCardExpired = computed(() => {
-  return props.currentCardStatus === 'expired';
-});
+const balanceText = computed(() => (amount.value === null ? '—' : cardMoney(amount.value, currency.value)));
+const adaText = computed(() =>
+  amount.value === null || !(props.exchangeRate > 0) ? '—' : adaFigure(amount.value / props.exchangeRate),
+);
+const rateLine = computed(() =>
+  props.exchangeRate > 0 ? t('card.rateLine', { rate: cardMoney(props.exchangeRate, currency.value) }) : '',
+);
 
-const isRejectedOrExpired = computed(() => {
-  return props.isCurrentCardRejected || isCurrentCardExpired.value;
-});
-
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'EUR',
-    minimumFractionDigits: 2,
-  }).format(amount);
-};
-
-const formatADA = (eurAmount: number) => {
-  const adaAmount = eurAmount / props.exchangeRate;
-  return adaAmount.toFixed(2);
-};
-
-const currentOrderNeedsPayment = computed(() => {
-  return !!(
-    currentCard?.value.cardData?.id &&
-    currentCard?.value.cardData?.order_uuid &&
-    !currentCard?.value.cardData?.card_uuid &&
-    currentCard?.value.cardData?.own_type === 'physical' &&
-      currentCard?.value.cardData?.delivery?.payment_status !== 'completed'
-  );
-});
+const blocked = computed(
+  () => props.card?.cardBalance?.state === 'BLOCKED' || props.card?.cardData?.card_status === 'TEMPORARY_BLOCKED',
+);
+const typeLabel = computed(() =>
+  props.card?.cardData?.own_type === 'physical' ? t('card.typePhysical') : t('card.typeVirtual'),
+);
+const last4 = computed(() => String(props.card?.cardData?.pan ?? '').replace(/\D/g, '').slice(-4));
 </script>
 
 <style lang="scss" scoped>
-@import '../../styles/variables';
-@import '../../styles/mixins';
-
-.card-status-column {
-  min-height: 200px;
+.card-status {
   display: flex;
-  align-items: center;
-  justify-content: center;
+  width: 100%;
 }
 
-.payment-timer {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 8px 16px;
-  background: rgba(0, 199, 243, 0.1);
-  border: 1px solid rgba(0, 199, 243, 0.3);
-  border-radius: var(--g-r-control);
-
-  .timer-icon {
-    color: $primary-cyan;
-    font-size: 20px;
-  }
-
-  .timer-text {
-    font-family: var(--g-font-mono);
-    font-size: $font-size-base;
-    font-weight: $font-weight-semibold;
-    color: $primary-cyan;
-  }
-}
-
-.complete-payment-btn {
-  :deep(.v-icon) {
-    color: var(--g-on-grad) !important;
-  }
-}
-
-.balance-section {
-  justify-self: center;
+.card-balance,
+.card-order {
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  gap: var(--g-s-4);
+  width: 100%;
+  padding: var(--g-s-5);
+}
+
+.card-balance__head,
+.card-balance__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--g-s-2);
+}
+
+.card-balance__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--g-s-2);
+}
+
+.card-balance__figures {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-1);
+}
+
+.card-balance__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--g-s-3);
+}
+
+.card-balance__eye {
+  border-color: var(--g-hairline-2);
+
+  .v-icon {
+    color: var(--g-text-2);
+  }
+}
+
+.card-balance__rule {
+  border: 0;
+  height: 1px;
+  margin: 0;
+  background: var(--g-hairline-1);
+}
+
+.card-order {
   align-items: flex-start;
-  flex-shrink: 0;
-  min-width: 300px;
 
-  .balance-container {
-    align-self: center;
-    text-align: center;
-  }
-
-  .balance-label {
-    justify-self: center;
-    font-family: $font-family-primary;
-    font-size: $font-size-sm;
-    font-weight: $font-weight-medium;
-    color: $text-secondary;
-    margin: 0 0 0.5rem 0;
-  }
-
-  .balance-amount {
-    justify-self: center;
-    font-family: $font-family-primary;
-    font-size: $font-size-3xl;
-    font-weight: $font-weight-bold;
-    color: $text-primary;
-    margin: 0 0 0.5rem 0;
-  }
-
-  .balance-conversion {
-    justify-self: center;
-    font-family: $font-family-primary;
-    font-size: $font-size-base;
-    font-weight: $font-weight-medium;
-    color: $text-muted;
-    margin: 0 0 $spacing-lg 0;
-  }
-
-  .balance-actions {
-    display: flex;
-    gap: $spacing-md;
-    justify-content: center;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-
-  .action-btn {
-    font-family: $font-family-primary;
-    font-weight: $font-weight-semibold;
-    text-transform: none;
-    border-radius: $border-radius-md;
-    box-shadow: $shadow-button;
-
-    &.top-up-btn {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 10px 16px;
-      background: $background-card;
-      color: $text-primary;
-      border: 1px solid $primary-cyan !important;
-
-      &:hover {
-        background: lighten($background-card, 5%);
-      }
-
-      &:focus {
-        outline: none;
-      }
-
-      .btn-icon {
-        width: 20px;
-        height: 20px;
-        flex-shrink: 0;
-        margin-right: 6px;
-      }
-    }
-
-    &.eye-btn {
-      background: $background-card;
-      border: 1px solid $primary-cyan !important;
-      color: $text-primary;
-
-      &:hover {
-        background: lighten($background-card, 5%);
-      }
-
-      &:focus {
-        outline: none;
-      }
-    }
+  h2,
+  p {
+    margin: 0;
   }
 }
 
-.order-card-section {
-  @include g-glass-panel(false);
-  max-width: 600px;
-  width: 100%;
-  min-height: 180px;
-  margin: 0 auto;
-  text-align: center;
-  padding: 24px;
-  border-radius: var(--g-r-sheet);
-  border: 1px solid var(--g-hairline-1);
-  position: relative;
-  overflow: hidden;
-  box-sizing: border-box;
-
-  &::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 4px;
-    background: linear-gradient(90deg, var(--g-grad-1), var(--g-grad-2));
-  }
-
-  .order-title {
-    font-family: $font-family-primary;
-    font-size: 1.5rem;
-    font-weight: $font-weight-bold;
-    color: $text-primary;
-    margin: 0 0 8px 0;
-    letter-spacing: 0.02em;
-    position: relative;
-    z-index: 1;
-  }
-
-  .order-description {
-    font-family: $font-family-primary;
-    font-size: $font-size-sm;
-    color: var(--g-text-2);
-    line-height: 1.6;
-    max-width: 500px;
-    margin: 0 auto 16px;
-    position: relative;
-    z-index: 1;
-  }
-
-  .promo-button-row {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 32px;
-    margin-top: 24px;
-    position: relative;
-    z-index: 1;
-  }
-
-  .promo-section {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-
-    .promo-title {
-      font-family: $font-family-primary;
-      font-size: $font-size-base;
-      font-weight: $font-weight-semibold;
-      color: $text-primary;
-      text-align: center;
-      margin: 0 0 12px 0;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      cursor: pointer;
-
-      .clickable-text {
-        color: $primary-cyan;
-        border-bottom: 1px dotted $primary-cyan;
-        transition: color var(--g-dur-base) ease, border-bottom-color var(--g-dur-base) ease;
-      }
-
-      &:hover {
-        .clickable-text {
-          color: lighten($primary-cyan, 10%);
-          border-bottom-color: lighten($primary-cyan, 10%);
-        }
-
-        .info-icon {
-          color: lighten($primary-cyan, 10%);
-        }
-      }
-
-      .info-icon {
-        color: $primary-cyan;
-        transition: color var(--g-dur-base) ease;
-      }
-    }
-
-    .promo-features {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      align-items: flex-start;
-    }
-
-    .promo-item {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .promo-icon {
-      font-size: 16px;
-      color: var(--g-accent);
-    }
-
-    .promo-text {
-      font-family: $font-family-primary;
-      font-size: $font-size-sm;
-      color: $text-secondary;
-    }
-  }
-
-  .order-card-btn {
-    background: linear-gradient(135deg, var(--g-grad-1), var(--g-grad-2)) !important;
-    color: var(--g-on-grad) !important;
-    font-family: $font-family-primary;
-    font-size: $font-size-base;
-    font-weight: $font-weight-bold;
-    text-transform: none;
-    letter-spacing: 0.02em;
-    border-radius: var(--g-r-card);
-    padding: 10px 24px !important;
-    height: auto !important;
-    min-height: 44px;
-    transition: transform var(--g-dur-slow) ease;
-    position: relative;
-    z-index: 1;
-
-    &:hover {
-      transform: translateY(-2px);
-    }
-
-    &:active {
-      transform: translateY(0);
-    }
-
-    :deep(.v-icon) {
-      color: var(--g-on-grad) !important;
-    }
-  }
+.card-order__art {
+  max-width: 280px;
 }
 
-.waiting-status-card {
-  @include g-glass-panel(false);
-  max-width: 600px;
-  width: 100%;
-  margin: 0 auto;
-  position: relative;
-  border: 1px solid var(--g-hairline-1) !important;
-  border-radius: var(--g-r-sheet);
-  overflow: hidden;
-  box-sizing: border-box;
+.card-order__checks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--g-s-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  color: var(--g-text-2);
 
-  .status-card-gradient {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 4px;
-    background: linear-gradient(90deg, var(--g-grad-1), var(--g-grad-2));
-  }
-
-  .status-card-content {
-    display: flex;
-    gap: 24px;
-    align-items: center;
-    padding: 32px 24px !important;
-    position: relative;
-    z-index: 1;
-    min-height: 132px;
-  }
-
-  .status-icon-wrapper {
-    position: relative;
-    flex-shrink: 0;
-    width: 56px;
-    height: 56px;
+  li {
     display: flex;
     align-items: center;
-    justify-content: center;
-    background: var(--g-raised);
-    border-radius: var(--g-r-card);
-    border: 1px solid var(--g-hairline-3);
-
-    .status-icon {
-      font-size: 28px !important;
-      color: $primary-cyan;
-      animation: pulse 2s ease-in-out infinite;
-    }
-
-    .status-loading {
-      color: $primary-cyan !important;
-    }
+    gap: var(--g-s-2);
   }
 
-  .status-text-wrapper {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-  }
-
-  .status-title-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 12px;
-  }
-
-  .status-title {
-    font-family: $font-family-primary;
-    font-size: 1.5rem;
-    font-weight: $font-weight-bold;
-    color: $text-primary;
-    margin: 0 !important;
-    letter-spacing: 0.02em;
-  }
-
-  .status-subtitle {
-    font-family: $font-family-primary;
-    font-size: $font-size-sm;
-    color: var(--g-text-2);
-    line-height: 1.6;
-    margin: 0 !important;
-  }
-
-  .complete-payment-btn {
-    background: linear-gradient(135deg, var(--g-grad-1), var(--g-grad-2)) !important;
-    color: var(--g-on-grad) !important;
-    font-family: $font-family-primary;
-    font-size: $font-size-sm;
-    font-weight: $font-weight-bold;
-  }
-
-  .order-new-card-btn {
-    background: linear-gradient(135deg, var(--g-grad-1), var(--g-grad-2)) !important;
-    color: var(--g-on-grad) !important;
-    font-family: $font-family-primary;
-    font-size: $font-size-sm;
-    font-weight: $font-weight-bold;
-    text-transform: none;
-    border-radius: var(--g-r-control);
-    padding: 8px 20px !important;
-    height: auto !important;
-    min-height: 40px;
-    transition: color var(--g-dur-slow) ease, background-color var(--g-dur-slow) ease, opacity var(--g-dur-slow) ease, transform var(--g-dur-slow) ease, box-shadow var(--g-dur-slow) ease, filter var(--g-dur-slow) ease;
-
-    &:hover:not(:disabled) {
-      transform: translateY(-2px);
-    }
-
-    &:active {
-      transform: translateY(0);
-    }
-
-    &.v-btn--disabled,
-    &:disabled {
-      opacity: 0.4 !important;
-      background: var(--g-raised) none !important;
-      color: var(--g-text-3) !important;
-      box-shadow: none !important;
-      filter: grayscale(1) !important;
-      pointer-events: none !important;
-      cursor: not-allowed !important;
-
-      :deep(.v-icon) {
-        color: var(--g-text-3) !important;
-      }
-    }
-
-    :deep(.v-icon) {
-      color: var(--g-on-grad) !important;
-    }
-  }
-
-  .acknowledgment-section {
-    margin-top: $spacing-md;
-  }
-
-  .acknowledgment-checkbox {
-    :deep(.v-input__control) {
-      .v-input__slot {
-        .v-input--selection-controls__input {
-          .v-icon {
-            color: $primary-cyan;
-          }
-        }
-      }
-    }
-
-    :deep(.v-label) {
-      color: $text-secondary;
-      font-size: $font-size-sm;
-    }
-  }
-
-  .rejection-icon {
-    color: var(--g-error) !important;
-  }
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.7;
-    transform: scale(0.95);
-  }
-}
-
-@media (max-width: $breakpoint-md) {
-  .order-card-section {
-    padding: 24px;
-
-    .order-title {
-      font-size: 1.5rem;
-    }
-
-    .order-description {
-      font-size: $font-size-sm;
-    }
-  }
-}
-
-@media (max-width: 425px) {
-  .order-card-section {
-    padding: 20px;
-
-    .order-title {
-      font-size: 1.25rem;
-    }
-
-    .order-description {
-      font-size: 0.875rem;
-      margin-bottom: 24px;
-    }
-
-    .order-card-btn {
-      width: 100%;
-    }
+  .v-icon {
+    color: var(--g-accent);
   }
 }
 </style>

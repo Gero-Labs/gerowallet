@@ -1,705 +1,393 @@
 <template>
   <BaseDialog
-    :is-open="dialog"
-    :title="currentTitle"
-    :subtitle="currentSubtitle"
-    :width="650"
-    :persistent="true"
-    :loading="isLoadingAdaAmountToPay || isProcessing"
-    @close="handleClose"
-    :min-height="600"
-    icon="mdi-credit-card-plus"
-    scrollable
+    :isOpen="open"
+    :title="title"
+    :subtitle="subtitle"
+    :width="680"
+    :min-height="0"
+    :persistent="locked"
+    @close="close"
   >
-    <!-- Progress Stepper -->
-    <v-stepper
-      v-if="selectedCardType === 'physical' && currentStep > 1 && currentStep < 6"
-      :value="Number(currentStep)"
-      @change="currentStep = Number($event)"
-      flat
-      class="transparent px-2"
-      style="min-height: 72px;"
-    >
-      <v-stepper-header>
-        <v-stepper-step :complete="currentStep > 1" step="1" color="primary" class="pa-2">
-          {{ $t('card.cardType') }}
-        </v-stepper-step>
-        <v-divider></v-divider>
-        <v-stepper-step :complete="currentStep > 2" step="2" color="primary" class="pa-2">
-          {{ $t('card.shippingAddress') }}
-        </v-stepper-step>
-        <v-divider></v-divider>
-        <v-stepper-step :complete="currentStep > 3" step="3" color="primary" class="pa-2">
-          {{ $t('card.shippingMethod') }}
-        </v-stepper-step>
-        <v-divider></v-divider>
-        <v-stepper-step :complete="currentStep > 4" step="4" color="primary" class="pa-2">
-          {{ $t('card.paymentDetails') }}
-        </v-stepper-step>
-        <v-divider></v-divider>
-        <v-stepper-step step="5" color="primary" class="pa-2">
-          {{ $t('card.confirm') }}
-        </v-stepper-step>
-      </v-stepper-header>
-    </v-stepper>
+    <template #art>
+      <IsoScene :name="art" />
+    </template>
 
-    <!-- Step Content -->
-    <v-card-text class="modal-content px-3">
-      <!-- Step 1: Card Type Selection -->
-      <CardTypeSelectionStep
-        v-if="currentStep === 1"
-        :selected-type="selectedCardType"
-        :has-virtual-card="hasVirtualCard"
-        :has-physical-card="hasPhysicalCard"
-        @select="handleCardTypeSelect"
+    <div class="order-flow">
+      <CardSteps
+        v-if="selectedType === 'physical' && step > 1"
+        compact
+        :steps="stepLabels"
+        :current="step === 5 ? 5 : step - 1"
+        :label="t('card.orderYourGeroCard')"
       />
 
-      <!-- Step 2: Shipping Address Selection (Physical only) -->
-      <ShippingAddressSelectionStep
-        v-if="currentStep === 2"
-        ref="addressStepRef"
-        :address="shippingAddress"
-        @back="handleBack"
-        @submit="handleAddressSubmit"
-      />
+      <!-- 1. Card type -->
+      <template v-if="step === 1">
+        <CardTypeSelectionStep
+          :selected-type="selectedType || undefined"
+          :has-virtual-card="hasVirtualCard"
+          :has-physical-card="hasPhysicalCard"
+          @select="selectedType = $event"
+        />
+        <div class="order-flow__actions">
+          <GButton tier="secondary" @click="close">{{ t('common.cancel') }}</GButton>
+          <GButton tier="primary" :disabled="!selectedType" :loading="orderingVirtual" @click="continueFromType">
+            {{ t('card.continueButton') }}
+          </GButton>
+        </div>
+      </template>
 
-      <!-- Step 3: Shipping Method Selection (Physical only) -->
-      <ShippingMethodStep
-        v-if="currentStep === 3"
-        ref="methodStepRef"
-        :selected-method="shippingMethod"
-        :is-loading="isLoadingAdaAmountToPay"
-        @back="handleBack"
-        @select="handleShippingMethodSelect"
-      />
+      <!-- 2. Address -->
+      <template v-else-if="step === 2">
+        <ShippingAddressSelectionStep
+          ref="addressStep"
+          :address="address"
+          :saved-address="savedAddress || undefined"
+          @update:address="address = $event"
+        />
+        <div class="order-flow__actions">
+          <GButton tier="secondary" @click="step = 1">{{ t('common.back') }}</GButton>
+          <GButton tier="primary" @click="continueFromAddress">{{ t('card.continueButton') }}</GButton>
+        </div>
+      </template>
 
-      <!-- Step 4: Payment Info (Physical only) -->
-      <CardOrderPaymentStep
-        v-if="currentStep === 4"
-        ref="paymentStepRef"
-        :amount-eur="paymentAmount.eur"
-        @back="handleBack"
-        @confirm="handlePaymentConfirm"
-      />
+      <!-- 3. Shipping method -->
+      <template v-else-if="step === 3">
+        <ShippingMethodStep :selected-method="shippingMethod" @select="shippingMethod = $event" />
+        <div class="order-flow__actions">
+          <GButton tier="secondary" @click="step = 2">{{ t('common.back') }}</GButton>
+          <GButton tier="primary" :loading="loadingRate" @click="continueFromShipping">{{ t('card.continueButton') }}</GButton>
+        </div>
+      </template>
 
-      <!-- Step 5: Payment Confirmation (Physical only) -->
-      <PaymentConfirmationStep
-        v-if="currentStep === 5"
-        :is-loading="isProcessing"
-        :is-success="orderSuccess"
-        @complete="handleClose"
-      />
-    </v-card-text>
+      <!-- 4. Delivery fee: place the order first, then pay the exact quote -->
+      <template v-else-if="step === 4">
+        <DeliveryFeePanel
+          v-if="placed"
+          :amount-ada="parseFloat(placed.amountAda)"
+          :amount-eur="placed.amountEur"
+          :address="placed.depositAddress"
+          :expires-at="placed.expiresAt || undefined"
+        />
+        <DeliveryFeePanel v-else :amount-ada="estimatedAda ?? undefined" :amount-eur="STANDARD_FEE_EUR" estimate />
 
-    <!-- Actions for Step 1 -->
-    <v-card-actions v-if="currentStep === 1" class="modal-actions px-3">
-      <SecondaryButton :text="t('common.cancel')" @click="handleClose" />
-      <GradientButton
-        :text="t('card.continueButton')"
-        @click="handleContinueFromTypeSelection"
-        :disabled="!selectedCardType"
-        :loading="orderingVirtualCard"
-      />
-    </v-card-actions>
+        <template v-if="placed">
+          <CardPhases v-if="signBusy" :phases="payPhases" :current="signPhase + 1" />
+          <CardSignSection
+            ref="signSection"
+            :label="t('card.confirmPayment')"
+            :prepare="prepareFeeTx"
+            @busy="signBusy = $event"
+            @submitted="onSubmitted"
+          />
+          <p class="t-caption order-flow__later">{{ t('card.payLaterNote') }}</p>
+        </template>
+        <div v-else class="order-flow__actions">
+          <GButton tier="secondary" :disabled="placing" @click="step = 3">{{ t('common.back') }}</GButton>
+          <GButton tier="primary" :loading="placing" @click="placeOrder">{{ t('card.placeOrder') }}</GButton>
+        </div>
+      </template>
 
-    <!-- Actions for Step 2 -->
-    <v-card-actions v-if="currentStep === 2" class="modal-actions px-3">
-      <SecondaryButton :text="t('common.back')" @click="addressStepRef?.handleBack()" />
-      <GradientButton
-        :text="t('card.continueButton')"
-        @click="addressStepRef?.handleContinue()"
-      />
-    </v-card-actions>
-
-    <!-- Actions for Step 3 -->
-    <v-card-actions v-if="currentStep === 3" class="modal-actions px-3">
-      <SecondaryButton :text="t('common.back')" @click="methodStepRef?.handleBack()" :disabled="isLoadingAdaAmountToPay" />
-      <GradientButton
-        :text="t('card.continueButton')"
-        @click="methodStepRef?.handleContinue()"
-        :loading="isLoadingAdaAmountToPay"
-        :disabled="isLoadingAdaAmountToPay"
-      />
-    </v-card-actions>
-
-    <!-- Actions for Step 4 -->
-    <v-card-actions v-if="currentStep === 4" class="modal-actions px-3">
-      <SecondaryButton :text="t('common.back')" @click="paymentStepRef?.handleBack()" :disabled="paymentStepRef?.isValidating" />
-      <GradientButton
-        :text="t('card.confirmPayment')"
-        :icon-image="paymentStepRef?.isPrfWallet ? assets.passKeySvg : undefined"
-        @click="paymentStepRef?.handleConfirm()"
-        :disabled="(!paymentStepRef?.isPrfWallet && !paymentStepRef?.spendingPassword) || paymentStepRef?.isValidating || paymentStepRef?.isExpired"
-        :loading="paymentStepRef?.isValidating"
-      />
-    </v-card-actions>
+      <!-- 5. Done -->
+      <template v-else>
+        <PaymentConfirmationStep />
+        <div class="order-flow__actions">
+          <GButton tier="primary" @click="close">{{ t('common.done') }}</GButton>
+        </div>
+      </template>
+    </div>
   </BaseDialog>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue';
+import { computed, ref, watch } from 'vue';
+import { Cardano, Serialization } from '@cardano-sdk/core';
+import { HexBlob } from '@cardano-sdk/util';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
-import SecondaryButton from '../SecondaryButton.vue';
-import GradientButton from '../GradientButton.vue';
+import GButton from '@/shared/components/GButton/GButton.vue';
+import IsoScene from '@/shared/components/iso/IsoScene.vue';
+import type { IsoSceneName } from '@/shared/components/iso/isoScenes';
+import cardStore from '@/stores/modules/card';
+import { providerReason } from '@/stores/modules/cardApiErrors';
+import { walletStore } from '@/stores/walletStore';
+import snackbar from '@/plugins/snackbar';
+import { nexusTxApi, walletUtxosToNexusInputs, txOutToNexusOutput, requiredAssetsFromOutputs, type BuildTxRequest } from '@/api/nexus-tx-api';
+import { isCardDepositAddress, networkIdOfAddress } from '@/modules/wallet/utils/cardDepositAddress';
+import { checkDeliveryPayment } from '@/modules/wallet/utils/cardDeliveryPayment';
+import {
+  emptyAddress, lovelaceFromAda, savedDeliveryAddress, toOrderPayload,
+  type ShippingAddress, type ShippingMethod,
+} from '@/modules/wallet/utils/cardOrder';
+import CardSteps from '../ui/CardSteps.vue';
+import CardPhases from '../ui/CardPhases.vue';
+import CardSignSection from '../ui/CardSignSection.vue';
 import CardTypeSelectionStep from './card-order-steps/CardTypeSelectionStep.vue';
 import ShippingAddressSelectionStep from './card-order-steps/ShippingAddressSelectionStep.vue';
 import ShippingMethodStep from './card-order-steps/ShippingMethodStep.vue';
-import CardOrderPaymentStep from './card-order-steps/CardOrderPaymentStep.vue';
+import DeliveryFeePanel from './card-order-steps/DeliveryFeePanel.vue';
 import PaymentConfirmationStep from './card-order-steps/PaymentConfirmationStep.vue';
-import cardStore, { OrderPhysicalCardPayload } from '@/stores/modules/card';
-import snackbar from '@/plugins/snackbar';
-import { Messaging } from '@/chrome/messaging';
-import { MessageTypes } from '@/models/MessageTypes';
-import assets from '@/utils/assets';
-import { Cardano } from '@cardano-sdk/core';
-import { walletStore } from '@/stores/walletStore';
-import { nexusTxApi, walletUtxosToNexusInputs, txOutToNexusOutput, type BuildTxRequest } from '@/api/nexus-tx-api';
+
+const props = defineProps<{ open: boolean }>();
+const emit = defineEmits<{ (e: 'close'): void }>();
 
 const { t } = useTranslation();
 
-// Check if user already has virtual or physical cards
-// For physical cards, also check if payment is pending - if so, allow continuing payment
-const hasVirtualCard = computed(() => {
-  return cardStore.state.cards.some(
-    card => {
-      const isVirtual = card.cardData?.own_type === 'virtual';
-      if (!isVirtual) return false;
+/** Standard delivery, in EUR. Express prices are not published yet. */
+const STANDARD_FEE_EUR = 10;
+/** Details older than this are re-read before paying (the address rotates hourly). */
+const FRESH_FOR_MS = 5 * 60 * 1000;
 
-      const hasCardOrOrder = card.cardData?.card_uuid || card.cardData?.order_uuid;
-      if (!hasCardOrOrder) return false;
-
-      // Check if card is rejected (case-insensitive)
-      const status = card.cardData?.status?.toLowerCase() || '';
-      const isRejected = status === 'rejected';
-
-      // If virtual card exists but is rejected, allow ordering new one
-      return !isRejected;
-    }
-  );
-});
-
-const hasPhysicalCard = computed(() => {
-  return cardStore.state.cards.some(
-    card => {
-      const isPhysical = card.cardData?.own_type === 'physical';
-      if (!isPhysical) return false;
-
-      const hasCardUuid = !!card.cardData?.card_uuid;
-      const hasOrderUuid = !!card.cardData?.order_uuid;
-      const hasCardOrOrder = hasCardUuid || hasOrderUuid;
-
-      if (!hasCardOrOrder) return false;
-
-      // Check if card is rejected FIRST (case-insensitive) - this takes priority
-      const status = card.cardData?.status?.toLowerCase() || '';
-      const isRejected = status === 'rejected';
-
-      // If physical card exists but is rejected, allow ordering new one
-      if (isRejected) {
-        return false;
-      }
-
-      // If card has UUID, it's active - already ordered
-      if (hasCardUuid) {
-        return true;
-      }
-
-      // If card has order_uuid but no card_uuid, check payment status
-      if (hasOrderUuid && !hasCardUuid) {
-        // Check payment status from delivery object
-        const delivery = card.cardData?.delivery;
-        if (delivery) {
-          const paymentStatus = delivery.payment_status?.toLowerCase();
-          // If payment status is 'pending', allow continuing payment
-          if (paymentStatus === 'pending') {
-            return false; // Allow continuing payment
-          }
-          // If payment status is not pending (detected, confirming, confirmed, completed), card is being processed
-          // But if it's failed or expired, allow re-ordering
-          if (paymentStatus === 'failed' || paymentStatus === 'expired') {
-            return false; // Allow re-ordering
-          }
-          // Otherwise, payment is in progress, consider it as already ordered
-          return true;
-        }
-
-        // If no delivery object, assume payment is pending and allow continuing
-        return false;
-      }
-
-      return false;
-    }
-  );
-});
-
-interface Props {
-  open: boolean;
+interface PlacedOrder {
+  orderUuid: string;
+  depositAddress: Cardano.PaymentAddress;
+  /** The provider's quote, kept as its decimal string. */
+  amountAda: string;
+  amountEur: number;
+  expiresAt: string | null;
+  readAt: number;
 }
 
-interface Emits {
-  (e: 'close'): void;
-}
+const step = ref<1 | 2 | 3 | 4 | 5>(1);
+const selectedType = ref<'virtual' | 'physical' | null>(null);
+const address = ref<ShippingAddress>(emptyAddress());
+const shippingMethod = ref<ShippingMethod>('regular');
+const placed = ref<PlacedOrder | null>(null);
+const orderingVirtual = ref(false);
+const loadingRate = ref(false);
+const placing = ref(false);
+const signBusy = ref(false);
+const signPhase = ref(0);
+const addressStep = ref<{ validate: () => boolean } | null>(null);
+const signSection = ref<{ reset: () => void } | null>(null);
 
-const props = defineProps<Props>();
-const emit = defineEmits<Emits>();
+const cards = computed(() => cardStore.state.cards || []);
+const savedAddress = computed(() => savedDeliveryAddress(cards.value));
 
-// Dialog state
-const dialog = computed({
-  get: () => props.open,
-  set: value => {
-    if (!value) {
-      emit('close');
-    }
-  },
-});
+const hasVirtualCard = computed(() =>
+  cards.value.some(card =>
+    card.cardData?.own_type === 'virtual' &&
+    !!(card.cardData.card_uuid || card.cardData.order_uuid) &&
+    card.cardData.status?.toLowerCase() !== 'rejected',
+  ),
+);
 
-// Refs for steps
-const addressStepRef = ref(null);
-const methodStepRef = ref(null);
-const paymentStepRef = ref(null);
+// An unpaid or failed delivery fee leaves the physical card orderable again.
+const hasPhysicalCard = computed(() =>
+  cards.value.some(card => {
+    const data = card.cardData;
+    if (data?.own_type !== 'physical' || data.status?.toLowerCase() === 'rejected') return false;
+    if (data.card_uuid) return true;
+    if (!data.order_uuid) return false;
+    const payment = data.delivery?.payment_status?.toLowerCase();
+    return !!payment && !['pending', 'failed', 'expired'].includes(payment);
+  }),
+);
 
-// Step management
-const currentStep = ref(1);
+const locked = computed(() => placing.value || signBusy.value || orderingVirtual.value);
 
-// Ensure currentStep is always a number (v-stepper can set it as string)
-watch(currentStep, (newVal) => {
-  if (typeof newVal === 'string') {
-    currentStep.value = Number(newVal);
+const stepLabels = computed(() => [
+  t('card.cardType'), t('card.shippingAddress'), t('card.shippingMethod'), t('card.paymentDetails'), t('card.confirm'),
+]);
+const payPhases = computed(() => [t('card.placingOrder'), t('card.buildingTransaction'), t('card.signingAndSubmitting')]);
+
+const title = computed(() => {
+  switch (step.value) {
+    case 2: return t('card.whereToShipCard');
+    case 3: return t('card.selectShippingMethod');
+    case 4: return t('card.shippingFeePayment');
+    case 5: return t('card.paymentConfirmed');
+    default: return t('card.orderYourGeroCard');
   }
 });
 
-// Card type selection
-const selectedCardType = ref<'virtual' | 'physical' | null>(null);
-
-// Get saved delivery address from last physical card
-const getSavedDeliveryAddress = () => {
-  const cards = cardStore.state.cards || [];
-  const physicalCards = cards.filter(card => card.cardData?.own_type === 'physical');
-
-  if (physicalCards.length === 0) return null;
-
-  // Get the most recent physical card (by created_at or updated_at)
-  const lastPhysicalCard = physicalCards.sort((a, b) => {
-    const dateA = new Date(b.cardData?.updated_at || b.cardData?.created_at || 0).getTime();
-    const dateB = new Date(a.cardData?.updated_at || a.cardData?.created_at || 0).getTime();
-    return dateA - dateB;
-  })[0];
-
-  // Check if card has delivery object
-  const delivery = lastPhysicalCard.cardData?.delivery;
-  if (!delivery) return null;
-
-  return {
-    streetAddress: delivery.address || '',
-    city: delivery.city || '',
-    stateProvince: delivery.region || '',
-    zipCode: delivery.zip || '',
-    countryCode: delivery.country_code || '',
-    phone: delivery.phone || '',
-  };
-};
-
-// Shipping address
-const savedDeliveryAddress = getSavedDeliveryAddress();
-const shippingAddress = ref(savedDeliveryAddress || {
-  streetAddress: '',
-  city: '',
-  stateProvince: '',
-  zipCode: '',
-  countryCode: '',
-  phone: '',
-});
-
-// Shipping method
-const shippingMethod = ref<'regular' | 'express-eu' | 'express-worldwide'>('regular');
-
-// Payment
-const paymentAmount = ref({
-  eur: 0,
-});
-const paymentAddress = ref('');
-const orderUuid = ref('');
-const paymentId = ref(0);
-const exchangeRate = ref('');
-const depositExpiresAt = ref('');
-const depositQrCode = ref('');
-
-// Processing states
-const isLoadingAdaAmountToPay = ref(false);
-const isProcessing = ref(false);
-const orderingVirtualCard = ref(false);
-const orderSuccess = ref(false);
-
-// Computed titles based on current step
-const currentTitle = computed(() => {
-  switch (currentStep.value) {
-    case 1:
-      return t('card.orderYourGeroCard');
-    case 2:
-      return t('card.shippingAddress');
-    case 3:
-      return t('card.selectShippingMethod');
-    case 4:
-      return t('card.paymentDetails');
-    case 5:
-      return orderSuccess.value ? t('card.orderConfirmed') : t('card.processingOrder');
-    default:
-      return t('card.orderYourGeroCard');
+const subtitle = computed(() => {
+  switch (step.value) {
+    case 3: return t('card.selectDeliverySpeed');
+    case 4: return t('card.reviewPaymentDetails');
+    case 5: return t('card.orderPlacedSuccessfully');
+    case 2: return '';
+    default: return t('card.chooseOptionBelow');
   }
 });
 
-const currentSubtitle = computed(() => {
-  switch (currentStep.value) {
-    case 1:
-      return t('card.chooseOptionBelow');
-    case 2:
-      return t('card.whereToShipCard');
-    case 3:
-      return t('card.selectDeliverySpeed');
-    case 4:
-      return t('card.reviewPaymentDetails');
-    case 5:
-      return orderSuccess.value ? t('card.yourOrderHasBeenPlaced') : t('card.pleaseWait');
-    default:
-      return '';
+const art = computed<IsoSceneName>(() => {
+  switch (step.value) {
+    case 2: return 'shipping';
+    case 3: return 'physical';
+    case 4: return 'payment';
+    case 5: return 'approved';
+    default: return selectedType.value === 'physical' ? 'physical' : 'virtual';
   }
 });
 
-// Handlers
-const handleCardTypeSelect = (type: 'virtual' | 'physical') => {
-  selectedCardType.value = type;
-};
+const estimatedAda = computed(() => {
+  const rate = parseFloat(String(cardStore.state.exchangeRate?.buy ?? ''));
+  return Number.isFinite(rate) && rate > 0 ? STANDARD_FEE_EUR / rate : null;
+});
 
-const handleContinueFromTypeSelection = async () => {
-  if (!selectedCardType.value) return;
+const walletNetworkId = () => networkIdOfAddress(walletStore.loggedWallet.baseAddress);
 
-  if (selectedCardType.value === 'virtual') {
-    // Virtual card flow - order immediately
-    await orderVirtualCard();
-  } else {
-    // Physical card flow - go to address step
-    currentStep.value = 2;
+async function continueFromType(): Promise<void> {
+  if (selectedType.value === 'physical') {
+    address.value = savedAddress.value ? { ...savedAddress.value } : emptyAddress();
+    step.value = 2;
+    return;
   }
-};
-
-const orderVirtualCard = async () => {
+  if (selectedType.value !== 'virtual') return;
+  orderingVirtual.value = true;
   try {
-    orderingVirtualCard.value = true;
     await cardStore.orderCard();
     snackbar.fireSuccess(t('card.cardOrderedSuccess'));
-    handleClose();
-  } catch (error: any) {
-    let errorReason: string;
-    if (typeof error?.response?.data === 'string' && error.response.data) {
-      errorReason = '<b>' + t('card.failedToOrderCard') + '</b><br>' + error.response.data;
-    } else {
-      errorReason =
-        t('card.failedToOrderCard') +
-        ' ' +
-        (error?.response?.data?.error?.message ||
-          error?.response?.data?.error ||
-          error?.response?.data?.reason ||
-          error?.response?.data?.message ||
-          error?.message ||
-          t('card.pleaseTryAgain'));
-    }
-    snackbar.setError(errorReason);
+    orderingVirtual.value = false;
+    close();
+  } catch (error: unknown) {
+    snackbar.setError(`${t('card.failedToOrderCard')} ${providerReason(error) || t('card.pleaseTryAgain')}`);
   } finally {
-    orderingVirtualCard.value = false;
+    orderingVirtual.value = false;
   }
-};
+}
 
-const handleBack = () => {
-  if (currentStep.value > 1) {
-    currentStep.value--;
-  }
-};
+function continueFromAddress(): void {
+  if (addressStep.value?.validate()) step.value = 3;
+}
 
-const handleAddressSubmit = async (payload: { address?: typeof shippingAddress.value }) => {
-  if (payload.address) {
-    console.log(payload.address);
-    shippingAddress.value = payload.address;
-  }
-  currentStep.value = 3;
-};
-
-const handleShippingMethodSelect = async (method: 'regular' | 'express-eu' | 'express-worldwide') => {
-  isLoadingAdaAmountToPay.value = true;
-  shippingMethod.value = method;
-  if (method === 'regular') {
-    paymentAmount.value.eur = 10;
-  }
-  await cardStore.getExchangeRate();
-  currentStep.value = 4;
-  isLoadingAdaAmountToPay.value = false;
-};
-
-const handlePaymentConfirm = async (spendingPassword: string, privateKeyBytes?: Uint8Array) => {
-  isProcessing.value = true;
-  currentStep.value = 5;
-  await nextTick();
-
+async function continueFromShipping(): Promise<void> {
+  loadingRate.value = true;
   try {
-    // TODO Check balance first
-    const payload: OrderPhysicalCardPayload = {
-      address: shippingAddress.value.streetAddress,
-      region: shippingAddress.value.stateProvince,
-      city: shippingAddress.value.city,
-      zipCode: shippingAddress.value.zipCode,
-      countryCode: shippingAddress.value.countryCode,
-      phone: shippingAddress.value.phone,
-      deliveryMethod: shippingMethod.value,
-    };
-    const orderResponse = await cardStore.orderPhysicalCard(payload);
-
-    if (!orderResponse) {
-      throw new Error(t('card.failedToGetPaymentDetails'));
-    }
-
-    // Store order details
-    orderUuid.value = orderResponse.orderUuid || '';
-    paymentId.value = orderResponse.paymentId || 0;
-
-    // Get payment address (depositAddress)
-    paymentAddress.value = orderResponse.depositAddress || '';
-
-    // Get payment amount (depositAmountAda, depositAmountEur)
-    const amountAda = parseFloat(orderResponse.depositAmountAda || '0');
-    if (isNaN(amountAda) || amountAda <= 0) {
-      throw new Error(t('errors.invalidAmount'));
-    }
-    const amountEur = parseFloat(orderResponse.depositAmountEur || '0');
-
-    paymentAmount.value = {
-      eur: amountEur,
-    };
-
-    // Store additional payment info
-    exchangeRate.value = orderResponse.exchangeRate || '';
-    depositExpiresAt.value = orderResponse.depositExpiresAt || '';
-    depositQrCode.value = orderResponse.depositQrCode || '';
-
-    if (!paymentAddress.value || amountAda <= 0) {
-      throw new Error(t('card.failedToGetPaymentDetails'));
-    }
-
-    if (!paymentAddress.value) {
-      throw new Error(t('card.missingPaymentAddress'));
-    }
-
-    // Convert ADA to lovelace (6 decimal precision)
-    // depositAmountAda comes as string like "47.99946773" with 8 decimals
-    // ADA only supports 6 decimals, so we truncate to 6 and convert to integer lovelace
-    const adaString = orderResponse.depositAmountAda || '0';
-    const [integerPart = '0', decimalPart = ''] = adaString.split('.');
-    // Take only first 6 decimal digits (ADA precision)
-    const truncatedDecimal = decimalPart.substring(0, 6).padEnd(6, '0');
-    const lovelaceAmount = BigInt(integerPart + truncatedDecimal) as Cardano.Lovelace;
-    const outputs: Cardano.TxOut[] = [
-      {
-        address: paymentAddress.value as Cardano.PaymentAddress,
-        value: {
-          coins: lovelaceAmount,
-          assets: new Map(),
-        },
-      },
-    ];
-
-    // Build the payment server-side via Nexus (unconditional), signing the returned CBOR directly.
-    const request: BuildTxRequest = {
-      outputs: outputs.map(txOutToNexusOutput),
-      changeAddress: walletStore.loggedWallet.baseAddress,
-      utxos: walletUtxosToNexusInputs(walletStore.utxos as Cardano.Utxo[], walletStore.collateral),
-    };
-    const { tx_cbor: txCbor } = await nexusTxApi.buildTransferTx(request, walletStore.loggedWallet.network);
-    if (!txCbor) throw new Error('Nexus returned an empty transaction CBOR');
-
-    const witnessResult = (await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.SIGN_TX,
-      data: {
-        txCbor: txCbor,
-        partialSign: false,
-        password: spendingPassword,
-        accountIndex: 0,
-        utxos: walletStore.utxos,
-        addresses: walletStore.keys,
-        mergeWitnesses: false,
-        privateKeyBytes: privateKeyBytes ? Array.from(privateKeyBytes) : undefined,
-      },
-    })) as { data: { witnesses?: any; error?: string } };
-
-    if (witnessResult.data.error) {
-      throw new Error(witnessResult.data.error);
-    }
-
-    const txWitnesses = witnessResult.data.witnesses;
-    const submitResult = (await Messaging.sendToBackgroundFromOptions({
-      method: MessageTypes.SUBMIT_TX,
-      data: {
-        txCbor: txCbor,
-        witnessHex: txWitnesses,
-        utxos: walletStore.utxos,
-      },
-    })) as { data: { txId?: string; error?: string } };
-
-    if (submitResult.data.error) {
-      throw new Error(submitResult.data.error);
-    }
-
-    snackbar.fireSuccess(t('wallet.txSubmittedSuccess', { txId: submitResult.data.txId }));
-
-    await cardStore.fetchCardData();
-
-    orderSuccess.value = true;
-  } catch (error: any) {
-    snackbar.setError(error?.message || t('card.failedToOrderCard') + ' ' + t('card.pleaseTryAgain'));
-    currentStep.value = 4;
+    await cardStore.getExchangeRate();
+  } catch {
+    // The fee panel shows "—" for the estimate; the order quote is what gets paid.
   } finally {
-    isProcessing.value = false;
+    loadingRate.value = false;
   }
-};
+  step.value = 4;
+}
 
-const handleClose = () => {
-  currentStep.value = 1;
-  selectedCardType.value = null;
-  shippingAddress.value = {
-    streetAddress: '',
-    city: '',
-    stateProvince: '',
-    zipCode: '',
-    countryCode: '',
-    phone: '',
+async function placeOrder(): Promise<void> {
+  placing.value = true;
+  try {
+    const response = await cardStore.orderPhysicalCard(toOrderPayload(address.value, shippingMethod.value));
+    const depositAddress = response?.depositAddress;
+    const amountAda = String(response?.depositAmountAda ?? '');
+    if (!response?.orderUuid || lovelaceFromAda(amountAda) === null) throw new Error(t('card.failedToGetPaymentDetails'));
+    if (!isCardDepositAddress(depositAddress, walletNetworkId())) {
+      // The order exists; never offer to pay an address that fails validation. The
+      // dashboard re-reads the payment and offers it again if it becomes valid.
+      snackbar.setError(t('errors.invalidAddress'));
+      placing.value = false;
+      close();
+      return;
+    }
+    placed.value = {
+      orderUuid: response.orderUuid,
+      depositAddress,
+      amountAda,
+      amountEur: parseFloat(String(response.depositAmountEur ?? STANDARD_FEE_EUR)) || STANDARD_FEE_EUR,
+      expiresAt: response.depositExpiresAt || null,
+      readAt: Date.now(),
+    };
+  } catch (error: unknown) {
+    const reason = providerReason(error) || (error instanceof Error ? error.message : '');
+    snackbar.setError(`${t('card.failedToOrderCard')} ${reason || t('card.pleaseTryAgain')}`);
+  } finally {
+    placing.value = false;
+  }
+}
+
+async function prepareFeeTx(): Promise<Cardano.Tx> {
+  signPhase.value = 0;
+  let order = placed.value;
+  if (!order) throw new Error(t('errors.invalidOrder'));
+
+  if (Date.now() - order.readAt > FRESH_FOR_MS) {
+    const fresh = await cardStore.getDeliveryPayment(order.orderUuid);
+    const verdict = checkDeliveryPayment(
+      fresh,
+      { depositAddress: order.depositAddress, depositAmountAda: order.amountAda },
+      Date.now(),
+    );
+    if (verdict === 'expired') throw new Error(t('card.paymentExpired'));
+    if (verdict === 'changed' && fresh && isCardDepositAddress(fresh.deposit_address, walletNetworkId())) {
+      placed.value = {
+        ...order,
+        depositAddress: fresh.deposit_address,
+        amountAda: String(fresh.amount_ada),
+        amountEur: parseFloat(String(fresh.amount_eur ?? order.amountEur)) || order.amountEur,
+        expiresAt: fresh.expires_at ?? null,
+        readAt: Date.now(),
+      };
+      throw new Error(t('card.paymentDetailsRefreshed'));
+    }
+    if (verdict !== 'ok') throw new Error(t('errors.invalidPaymentDetails'));
+    order = { ...order, readAt: Date.now() };
+    placed.value = order;
+  }
+
+  const lovelace = lovelaceFromAda(order.amountAda);
+  if (lovelace === null) throw new Error(t('errors.invalidAmount'));
+  const outputs: Cardano.TxOut[] = [
+    { address: order.depositAddress, value: { coins: lovelace as Cardano.Lovelace, assets: new Map() } },
+  ];
+  const nexusOutputs = outputs.map(txOutToNexusOutput);
+  const request: BuildTxRequest = {
+    outputs: nexusOutputs,
+    changeAddress: walletStore.loggedWallet.baseAddress,
+    utxos: walletUtxosToNexusInputs(walletStore.utxos as Cardano.Utxo[], walletStore.collateral, true, {
+      requiredAssets: requiredAssetsFromOutputs(nexusOutputs),
+    }),
   };
-  shippingMethod.value = 'regular';
-  paymentAmount.value = { eur: 0 };
-  paymentAddress.value = '';
-  orderUuid.value = '';
-  paymentId.value = 0;
-  exchangeRate.value = '';
-  depositExpiresAt.value = '';
-  depositQrCode.value = '';
-  isProcessing.value = false;
-  orderSuccess.value = false;
-  orderingVirtualCard.value = false;
-  emit('close');
-};
+  const { tx_cbor: txCbor } = await nexusTxApi.buildTransferTx(request, walletStore.loggedWallet.network);
+  if (!txCbor) throw new Error(t('errors.buildTransactionFailed'));
+  signPhase.value = 1;
+  return Serialization.Transaction.fromCbor(HexBlob(txCbor)).toCore();
+}
 
-// Reset state when dialog opens
+function onSubmitted(): void {
+  step.value = 5;
+  cardStore.fetchCardData().catch(() => undefined);
+}
+
+function reset(): void {
+  step.value = 1;
+  selectedType.value = null;
+  address.value = emptyAddress();
+  shippingMethod.value = 'regular';
+  placed.value = null;
+  signPhase.value = 0;
+  signSection.value?.reset();
+}
+
+function close(): void {
+  if (locked.value) return;
+  reset();
+  emit('close');
+}
+
 watch(
   () => props.open,
-  async newVal => {
-    if (newVal) {
-      currentStep.value = 1;
-      selectedCardType.value = null;
-      orderSuccess.value = false;
-    }
-  }
+  open => {
+    if (open) reset();
+  },
 );
 </script>
+
 <style lang="scss" scoped>
-@import '../../styles/variables';
-@import '../../styles/mixins';
-
-.order-stepper {
-  background: transparent !important;
-  box-shadow: none !important;
-  padding: 0 $spacing-xl $spacing-lg;
-
-  :deep(.v-stepper__header) {
-    box-shadow: none;
-    background: transparent;
-    padding: 0;
-  }
-
-  :deep(.v-stepper__step) {
-    padding: $spacing-xs;
-
-    .v-stepper__step__step {
-      background: $background-secondary;
-      border: 2px solid $border-primary;
-      color: $text-muted;
-      font-family: $font-family-primary;
-      font-weight: $font-weight-semibold;
-      font-size: $font-size-sm;
-      width: 28px;
-      height: 28px;
-      min-width: 28px;
-    }
-
-    &.v-stepper__step--active .v-stepper__step__step {
-      background: rgba($primary-cyan, 0.2);
-      border-color: $primary-cyan;
-      color: $primary-cyan;
-    }
-
-    &.v-stepper__step--complete .v-stepper__step__step {
-      background: $primary-cyan;
-      border-color: $primary-cyan;
-      color: $background-dark;
-
-      .v-icon {
-        color: $background-dark;
-        font-size: $font-size-base;
-      }
-    }
-  }
-
-  :deep(.v-stepper__label) {
-    font-family: $font-family-primary;
-    font-size: $font-size-xs;
-    color: $text-muted;
-    text-align: center;
-    line-height: $line-height-tight;
-  }
-
-  :deep(.v-stepper__step--active .v-stepper__label) {
-    color: $primary-cyan;
-  }
-
-  :deep(.v-stepper__step--complete .v-stepper__label) {
-    color: $text-secondary;
-  }
-
-  :deep(.v-divider) {
-    border-color: $border-primary;
-    margin: 0 $spacing-xs;
-  }
-}
-
-.modal-content {
-  align-content: center;
-  padding: $spacing-lg 0;
-}
-
-.modal-actions {
+.order-flow {
   display: flex;
-  gap: $spacing-md;
-  padding: $spacing-lg 0;
+  flex-direction: column;
+  gap: var(--g-s-4);
+  padding: var(--g-s-2) var(--g-s-2) 0;
 }
 
-.modal-actions :deep(.secondary-button),
-.modal-actions :deep(.gradient-button) {
-  flex: 1;
-  width: 100%;
-  height: 44px;
-  font-size: $font-size-base;
-  font-weight: $font-weight-semibold;
-  text-transform: none;
+.order-flow__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--g-s-3);
 }
 
-@media (max-width: $breakpoint-sm) {
-  .modal-content {
-    padding: $spacing-md 0;
-  }
-
-  .modal-actions {
-    padding: $spacing-md 0;
-    flex-direction: column;
-  }
-
-  .order-stepper {
-    padding: 0 $spacing-md $spacing-md;
-  }
+.order-flow__later {
+  margin: 0;
+  text-align: center;
 }
 </style>

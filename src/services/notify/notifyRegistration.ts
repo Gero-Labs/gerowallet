@@ -5,7 +5,9 @@
 //
 // - Opt-in only. Nothing subscribes until the user turns notifications on for this
 //   browser (`browserEnabled`), and a wallet is registered only when the user turns it
-//   on. New and restored wallets start off.
+//   on. New and restored wallets start off. Turning a wallet on is the one step that
+//   matters: it turns the browser switch on as well when that is still off, so the
+//   offer (notifyIntro.ts) needs a single confirmation.
 // - Opt-out rule (F7, §8.2 step 0): with `browserEnabled: false` no trigger ever calls
 //   `subscribe()` or sends `PUT /device` with `transport: webpush`. Pending deletes
 //   still flush.
@@ -19,6 +21,7 @@
 // randomness) so the whole machine is unit-testable without chrome.
 
 import { bytesToHex } from './notifyAuth';
+import { isEligibleWallet } from './notifyEligibility';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { NotifyDeferred, NotifyError, type NotifyClient } from './notifyClient';
 import type { NotifyStore, NotifyWalletState } from './notifyStore';
@@ -79,7 +82,7 @@ export interface NotifyRegistrationDeps {
 export type ReassertTrigger = 'start' | 'alarm' | 'retry' | 'login' | 'pushsubscriptionchange' | 'credentials' | 'settings';
 export type ReassertResult = 'opted_out' | 'registered' | 'reasserted' | 'recovered' | 'needs_attention' | 'unavailable' | 'deferred' | 'error' | 'skipped';
 export type BrowserEnableResult = 'ok' | 'unavailable' | 'subscribe_failed' | 'endpoint_not_allowed' | 'needs_attention' | 'deferred' | 'error';
-export type WalletEnableResult = 'ok' | 'browser_off' | 'no_wallet' | 'ineligible' | 'needs_auth' | 'proof_failed' | 'proof_invalid' | 'limit' | 'deferred' | 'error';
+export type WalletEnableResult = 'ok' | 'no_wallet' | 'ineligible' | 'needs_auth' | 'proof_failed' | 'proof_invalid' | 'limit' | 'deferred' | 'error';
 
 /** A submitted swap to register: the wallet, the payment key hash it was placed with, and the transaction hash(es). */
 export interface WatchOrdersInput {
@@ -118,13 +121,9 @@ export function toBcp47(locale: string): string {
   return (l === 'us' ? 'en' : l).slice(0, 16);
 }
 
-/** §1.3 plus handover B2: Normal Cardano software wallets with a key-hash reward address, on a served network. */
-export function isEligibleWallet(w: { chain: string; network: string; type?: string; stakeAddress?: string }): boolean {
-  return w.chain === 'Cardano'
-    && (w.type === undefined || w.type === 'Normal')
-    && ['Mainnet', 'Preprod', 'Preview'].includes(w.network)
-    && typeof w.stakeAddress === 'string' && /^stake(_test)?1[a-z0-9]+$/.test(w.stakeAddress);
-}
+// Lives in its own module so the UI can import it without this one; re-exported
+// for the background and the existing tests.
+export { isEligibleWallet };
 
 /**
  * This device's credential set for PUT /device/wallets (§4.5). `derivePaymentCredentials()`
@@ -218,6 +217,12 @@ export function createNotifyRegistration(deps: NotifyRegistrationDeps): NotifyRe
   async function registerDevice(replaceCurrent = false): Promise<BrowserEnableResult> {
     const device = await store.getDevice();
     if (!device.browserEnabled) return 'unavailable';
+    // Pending DELETEs first (§8.5). A DELETE /device left over from the last wallet's removal
+    // would otherwise go out AFTER this registration and take the new device and its links
+    // with it, while local state still says "on". A queue that still cannot be drained means
+    // the server is not taking a PUT either: stop here, nothing half-registered.
+    await flushPendingDeletes();
+    if ((await store.getPendingDeletes()).length) return 'error';
     const config = await usableConfig();
     if (!config) return 'unavailable';
     const pm = deps.pushManager();
@@ -473,8 +478,6 @@ export function createNotifyRegistration(deps: NotifyRegistrationDeps): NotifyRe
       const logged = deps.logged();
       if (!logged) return 'no_wallet';
       if (!isEligibleWallet(logged)) return 'ineligible';
-      const device = await store.getDevice();
-      if (!device.browserEnabled) return 'browser_off';
       const stakeAddress = logged.stakeAddress as string;
       const identity = await deps.identity();
       let proof = await deps.loadProof(identity.deviceId, stakeAddress);
@@ -484,10 +487,20 @@ export function createNotifyRegistration(deps: NotifyRegistrationDeps): NotifyRe
         proof = await deps.loadProof(identity.deviceId, stakeAddress);
         if (!proof) return 'proof_failed';
       }
+      // One confirmation turns everything on: a browser switch still off (a fresh install, or
+      // off since the last wallet was removed, §8.6) goes on here, only once the proof is in
+      // hand, so a cancelled auth step leaves the browser as it was.
+      let device = await store.getDevice();
+      const browserWasOff = !device.browserEnabled;
+      if (browserWasOff) device = await store.updateDevice({ browserEnabled: true, unavailable: null });
       // Make sure the device exists on the server first (a PUT /device on device_unknown also happens in the client).
       if (device.targetStatus !== 'active') {
         const r = await registerDevice();
-        if (r !== 'ok') return r === 'deferred' ? 'deferred' : 'error';
+        if (r !== 'ok') {
+          // A start that failed leaves the browser as it was; 'deferred' keeps it on for the scheduled retry.
+          if (browserWasOff && r !== 'deferred') await store.updateDevice({ browserEnabled: false });
+          return r === 'deferred' ? 'deferred' : 'error';
+        }
       }
       const existing = await store.getWallet(logged.id);
       const state: NotifyWalletState = existing ?? {

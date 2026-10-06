@@ -346,11 +346,6 @@ export interface FeatureCardProps {
   description: string;
 }
 
-export interface FeatureListItemProps {
-  text: string;
-  icon?: string;
-}
-
 export interface ModalProps {
   open: boolean;
   onClose?: () => void;

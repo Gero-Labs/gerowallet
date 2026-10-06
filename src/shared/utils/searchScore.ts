@@ -32,3 +32,25 @@ export function scoreMatch(text: string | null | undefined, rawQuery: string): n
   if (t.includes(query)) return 30;      // substring
   return 0;
 }
+
+/**
+ * Relevance of a static index entry (a setting, a page or an action) for
+ * `query`: the best of its keywords (exact 100, keyword-prefix 90,
+ * keyword-substring 50) or its resolved title on the `scoreMatch` curve.
+ *
+ * One curve for every static index, so a page and a setting typed for with
+ * the same intent rank against each other honestly. Keywords carry EN, DE and
+ * ES terms; both sides are accent-folded.
+ */
+export function scoreIndexEntry(keywords: readonly string[], title: string, rawQuery: string): number {
+  const query = foldForSearch(rawQuery.trim());
+  if (!query) return 0;
+  let best = 0;
+  for (const keyword of keywords) {
+    const kw = foldForSearch(keyword);
+    if (kw === query) return 100;
+    if (kw.startsWith(query)) best = Math.max(best, 90);
+    else if (kw.includes(query)) best = Math.max(best, 50);
+  }
+  return Math.max(best, scoreMatch(title, query));
+}

@@ -51,6 +51,16 @@ describe('notifyStore', () => {
     expect(await corrupt.getRetry()).toBeNull();
   });
 
+  it('intro state is complete from nothing, merges patches and keeps earlier "offered" wallets', async () => {
+    const s = createNotifyStore(memoryNotifyStorage());
+    expect(await s.getIntro()).toEqual({ systemShownAt: null, dismissedAt: null, offered: {} });
+    await s.updateIntro({ systemShownAt: 10 });
+    await s.updateIntro({ offered: { '4': 20 } });
+    expect(await s.updateIntro({ offered: { '5': 30 }, dismissedAt: 40 })).toEqual({ systemShownAt: 10, dismissedAt: 40, offered: { '4': 20, '5': 30 } });
+    const corrupt = createNotifyStore(memoryNotifyStorage({ notifyIntro: 'x' }));
+    expect(await corrupt.getIntro()).toEqual({ systemShownAt: null, dismissedAt: null, offered: {} });
+  });
+
   it('config cache and retry round-trip, and null clears them', async () => {
     const s = createNotifyStore(memoryNotifyStorage());
     const config = { protocol: 1, protocols: [1], minClientProtocol: 1, enabled: true, vapidPublicKey: 'k', vapidKid: 'v1', categories: [], securityCategories: [], networks: [], servedCategories: {}, limits: { walletsPerDevice: 20, devicesPerWallet: 50, paymentCredsPerLink: 200, paymentCredsPerWallet: 200 }, serverTime: 1 };

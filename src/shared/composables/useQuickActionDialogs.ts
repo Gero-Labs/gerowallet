@@ -1,6 +1,6 @@
 import Vue from 'vue';
 
-type QuickActionDialog = 'BUY' | 'SEND' | 'RECEIVE' | 'SWAP' | 'PERPETUALS' | null;
+export type QuickActionDialog ='BUY' | 'SEND' | 'RECEIVE' | 'SWAP' | 'PERPETUALS' | null;
 
 // Vue.observable ensures reactivity works across component boundaries (Vue 2 pattern)
 const state = Vue.observable({ activeDialog: null as QuickActionDialog });

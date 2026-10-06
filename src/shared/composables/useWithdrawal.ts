@@ -5,7 +5,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { walletStore } from '@/stores/walletStore';
 import { networkStore } from '@/stores/networkStore';
 import { buildCardanoTransaction } from '@/shared/utils/builder';
-import { nexusTxApi, cardanoUtxoToNexusInput, type BuildWithdrawalTxRequest } from '@/api/nexus-tx-api';
+import { nexusTxApi, walletUtxosToNexusInputs, type BuildWithdrawalTxRequest } from '@/api/nexus-tx-api';
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import snackbar from '@/plugins/snackbar';
 import { Blockchain } from '@/models/types';
@@ -109,7 +109,7 @@ export function useWithdrawal() {
           // (this branch only runs when withdrawals.length > 0).
           amount: withdrawals[0].quantity.toString(),
           changeAddress: keys.value.payment[0].address,
-          utxos: (utxos.value as Cardano.Utxo[]).map(cardanoUtxoToNexusInput),
+          utxos: walletUtxosToNexusInputs(utxos.value as Cardano.Utxo[], undefined, false),
         };
         const { tx_cbor } = await nexusTxApi.buildWithdrawalTx(request, loggedWallet.value.network);
         if (!tx_cbor) throw new Error('Nexus returned an empty transaction CBOR');

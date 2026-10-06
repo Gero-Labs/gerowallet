@@ -151,24 +151,24 @@ const handleOnUtxoRowClick = (row: any) => {
   selectedUtxo.value = row;
 };
 
-// Try to select a transaction by its ID from route query. Cardano-only:
-// walletStore.transactions/tx_timestamp are Cardano-shaped and don't apply to
-// a Midnight wallet (which has its own history in midnightStore, keyed by
-// hash+token, with no equivalent auto-select today).
+// Try to select a transaction by its ID from route query. A Midnight wallet's
+// history lives in midnightStore, one row per hash+token: the first row for
+// the hash stands for the transaction there.
 const selectTransactionFromQuery = () => {
-  if (isMidnight.value) return false;
   // The live route, not the one captured at setup: a notification opened while this page is
   // already showing navigates to the same path with a different `tx`.
   const txId = vmProxy.$route.query?.tx?.toString();
   if (!txId) return false;
 
-  const transactions = walletStore.transactions;
-  if (!transactions || transactions.length === 0) return false;
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const found = transactions.find((tx: any) => tx.id === txId);
+  const found = isMidnight.value
+    ? midnightStore.transactions.find((tx) => tx.hash === txId)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    : walletStore.transactions?.find((tx: any) => tx.id === txId);
   if (found) {
     transactionInfo.value = found;
+    // `?tx=` asks to SEE this transaction. The page is kept alive, so it may
+    // still be on UTxOs from an earlier visit, where the selection is hidden.
+    activeTab.value = 0;
     nextTick(() => {
       setTimeout(() => {
         const el = document.querySelector('.selected-transaction');
@@ -181,7 +181,7 @@ const selectTransactionFromQuery = () => {
 };
 
 // Auto-select: query param tx takes priority, then latest transaction.
-// Cardano-only — see selectTransactionFromQuery's note.
+// Cardano-only; Midnight's history is followed by the watcher further down.
 watch(() => walletStore.transactions, (transactions) => {
   if (isMidnight.value) return;
   if (transactions && transactions.length > 0 && !transactionInfo.value) {
@@ -199,12 +199,23 @@ watch(() => vmProxy.$route.query?.tx, (txId, previous) => {
   if (txId && txId !== previous) selectTransactionFromQuery();
 });
 
+// Same for `?tab=utxos`: the page sits in ContentLayout's keep-alive, so the
+// setup-time read above only covers its first visit.
+watch(() => vmProxy.$route.query?.tab, (tab) => {
+  if (tab === 'utxos') selectUtxosTab();
+});
+
 // Midnight rows are replaced, not mutated (see liveMidnightRow): a pane holding
 // the clicked object kept rendering the dead pending row — "Pending", and a
 // UTxO fetch that failed while the tx was still unindexed — after the list had
-// moved on. Follow the row by key on every list change.
+// moved on. Follow the row by key on every list change. Until something is
+// selected, a `?tx=` that arrived before the history did gets another try.
 watch(() => midnightStore.transactions, (transactions) => {
-  if (!isMidnight.value || !transactionInfo.value) return;
+  if (!isMidnight.value) return;
+  if (!transactionInfo.value) {
+    selectTransactionFromQuery();
+    return;
+  }
   const live = liveMidnightRow(transactionInfo.value, transactions);
   if (live !== transactionInfo.value) transactionInfo.value = live;
 });

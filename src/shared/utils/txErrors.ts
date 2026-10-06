@@ -9,7 +9,8 @@
  * the user's locale is active). Anything not recognized is returned unchanged.
  */
 import i18n from '@/plugins/i18n';
-import { CIP113_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
+import { CIP113_SIGN_REFUSAL_MESSAGE, TX_SUBMIT_UNCONFIRMED_MESSAGE } from '@/chrome/config';
+import { InputLimitError } from '@/api/nexusInputSelection';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -44,6 +45,23 @@ function unwrapOgmiosRejection(message: string): string {
   const error = inner ? inner['error'] : undefined;
   const nodeMessage = isRecord(error) ? error['message'] : undefined;
   return typeof nodeMessage === 'string' && nodeMessage.trim() ? firstSentence(nodeMessage) : message;
+}
+
+/**
+ * The backend answers a rejected submission with plain text, not JSON:
+ * `Ogmios rejected tx: Invalid transaction; It looks like ...`. Keep the node's own
+ * sentence and drop our prefix; only cut to the first sentence when the remainder is
+ * one of Ogmios's protocol essays, so a short rejection keeps the numbers in it.
+ */
+const OGMIOS_PLAIN_PREFIX = 'Ogmios rejected tx:';
+const OGMIOS_FULL_TEXT_LIMIT = 300;
+
+function unwrapPlainOgmiosRejection(message: string): string {
+  const at = message.indexOf(OGMIOS_PLAIN_PREFIX);
+  if (at < 0) return message;
+  const reason = message.slice(at + OGMIOS_PLAIN_PREFIX.length).trim();
+  if (!reason) return message;
+  return reason.length <= OGMIOS_FULL_TEXT_LIMIT ? reason : firstSentence(reason);
 }
 
 /**
@@ -96,20 +114,53 @@ export function isInsufficientAdaError(message: string): boolean {
 }
 
 /**
+ * How much lovelace a rejected build was short, read from the two Nexus shortfall
+ * messages the send flow parses: "{ada in inputs: X, ada in outputs: Y, fee Z"
+ * (outputs plus fee, minus inputs) and "Available: X lovelace, required: Y lovelace"
+ * (required minus available). Undefined for anything else.
+ */
+export function shortfallLovelaceFromMessage(message: string): bigint | undefined {
+  const inputs = message.match(/ada in inputs:\s*(\d+),\s*ada in outputs:\s*(\d+),\s*fee\s*(\d+)/);
+  if (inputs) return BigInt(inputs[2]) + BigInt(inputs[3]) - BigInt(inputs[1]);
+  const change = message.match(/Available:\s*(\d+)\s*lovelace,\s*required:\s*(\d+)\s*lovelace/);
+  if (change) return BigInt(change[2]) - BigInt(change[1]);
+  return undefined;
+}
+
+/**
  * Map a raw tx build/submit error to a friendly, localized message. Returns the
  * original message unchanged when it isn't a collateral / insufficient-ADA error.
  */
 export function friendlyTxError(raw: unknown): string {
-  const message = extractNexusErrorMessage(raw instanceof Error ? raw.message : String(raw ?? ''));
+  // Raised by the wallet before any request goes out: the assets to send sit on
+  // more UTxOs than one transaction may spend, so only consolidating helps.
+  if (raw instanceof InputLimitError) {
+    return i18n.t('send.inputLimitFragmented', { count: raw.total, max: raw.limit }) as string;
+  }
+
+  const message = unwrapPlainOgmiosRejection(
+    extractNexusErrorMessage(raw instanceof Error ? raw.message : String(raw ?? '')),
+  );
   const l = message.toLowerCase();
 
   // The CIP-113 signing refusal is thrown from the background as a fixed English
   // string, so it has to be mapped back to a key here or a non-English user sees it raw.
   if (message === CIP113_SIGN_REFUSAL_MESSAGE) return i18n.t('programmableTokens.signRefused') as string;
 
+  // We never learned the transaction's fate (5xx / no response), which is NOT the
+  // same as it being rejected -- the localized copy has to keep that uncertainty.
+  // Same fixed-English-string contract as the CIP-113 refusal above.
+  if (message.startsWith(TX_SUBMIT_UNCONFIRMED_MESSAGE)) return i18n.t('errors.submitUnconfirmed') as string;
+
   // Nexus's shared collateral pool is exhausted — transient infra, retryable.
   if (l.includes('collateral pool')) return i18n.t('errors.collateralPoolEmpty') as string;
   if (isCollateralError(message)) return i18n.t('errors.noCollateral') as string;
   if (isInsufficientAdaError(message)) return i18n.t('errors.insufficientAdaForTx') as string;
+
+  // Nexus bean validation: the envelope is always "Validation failed"; the field
+  // reasons the client appends to it (nexusErrorMessage) are the useful part.
+  const validation = message.match(/^Validation failed:\s*(.+)$/s);
+  if (validation) return i18n.t('errors.txRequestRejected', { reason: validation[1].trim() }) as string;
+
   return message;
 }
