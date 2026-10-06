@@ -1,10 +1,11 @@
 /**
  * Remote kill-switch for CIP-113 programmable-token support.
  *
- * `cip113Deployments.ts` is a build-time constant: emptying it to turn the feature off
- * costs a rebuild plus a Web Store review, which is days. This flag is the runtime half —
- * gero-sync can take the whole surface down without a client release. Both gates must
- * pass, and either one alone disables CIP-113.
+ * `cip113Deployments.ts` holds the two build-time gates (the network allowlist and the
+ * per-network deployment list): changing either to turn the feature off costs a rebuild
+ * plus a Web Store review, which is days. This flag is the runtime gate — gero-sync can
+ * take the whole surface down without a client release. All three must pass, and any one
+ * alone disables CIP-113.
  *
  * Ships DARK (default false), like every other value-adjacent flag. Off is not a
  * degraded mode: `WalletBg.programmableBaseScriptHashes()` returns an empty set, so the

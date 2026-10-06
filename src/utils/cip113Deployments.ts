@@ -7,22 +7,78 @@ import { Network } from '@/models/types';
 // wrong hash here makes Gero render UTxOs the user does not own as their own holdings,
 // badged CIP-113 — treat a PR touching this file like a change to the scam blacklist.
 //
-// One array per network, newest deployment first. A re-bootstrap changes the hash while
-// existing holdings stay at the old script, so superseded entries are kept until nobody
-// holds tokens under them. An EMPTY array means CIP-113 is unsupported on that network
-// and discovery fails closed.
+// One array per network. An EMPTY array means CIP-113 is unsupported on that network and
+// discovery fails closed.
+//
+// Superseded deployments are REMOVED, not retained. Each list carries only the deployment
+// built from the current contracts; an older bootstrap does not match them, and surfacing
+// holdings the wallet cannot reason about is worse than not showing them. Removed (and
+// deliberately excluded) hashes are recorded below each list so nobody re-adds one by
+// mistake. What removal means for a UTxO still sitting at a removed script, which
+// classifyUtxoAddress then calls 'foreign':
+//  - it is not displayed;
+//  - it is not in the signing refusal index;
+//  - it never reaches coin selection (a base address with a script payment credential is
+//    never 'spendable');
+//  - its lovelace is NOT subtracted as locked. The provider's stake-level
+//    `controlled_amount` includes it, so the balance figure that max-send, swap sizing and
+//    the portfolio read as spendable overstates what coin selection can actually use, by
+//    exactly that amount. Accepted: superseded deployments exist only on preview and
+//    preprod.
 //
 // Format: blake2b-224, 56 lowercase hex characters, no 0x prefix. `networks.ts`
 // re-validates that shape at module scope as defence against a mistyped literal here.
+//
+// Provenance of the current deployments (all three bootstrapped 2026-10-02, with
+// upgradability):
+//  - source: cardano-foundation/cip113-programmable-tokens @
+//    `6b75ba3286b4692ca23059ff51285db357fb09c6`, the "Fixes Verified Commit" of the
+//    published upgradability audit
+//    (documentation/audit/cip-113-programmable-tokens-upgradability-audit-report.pdf)
+//  - compiler: Aiken `v1.1.23+8949565`
+//  - verification: the uplc.link record per network below rebuilds the script from that
+//    commit and compares it with the bytes deployed on-chain.
+//
+// KEEP THE PROVENANCE IN STEP WITH THE VALUE. A hash swapped without updating its bootstrap
+// tx and verification link leaves this file asserting provenance for a deployment it no
+// longer lists, and the provenance is the only check there is.
 
+/**
+ * Mainnet. Bootstrap tx `bfefbd222e40d88f5d4454e92b24062533070f41a3e25c0a23383264650cdb72`,
+ * verified at https://uplc.link/verify?txHash=bfefbd222e40d88f5d4454e92b24062533070f41a3e25c0a23383264650cdb72
+ *
+ * No earlier mainnet deployment exists, so nothing has been removed.
+ */
 export const CIP113_BASE_MAINNET: readonly string[] = [
-  'd91d08e381f8ef95ffbb3f8048f020d7361ded8f3abfdf66c25fa838'
+  'd91d08e381f8ef95ffbb3f8048f020d7361ded8f3abfdf66c25fa838',
 ];
 
+/**
+ * Preprod. Bootstrap tx `f4118e53fc0fac1dddf96c6dcc3b4670265f25558d9943feb4ee564488f5c896`,
+ * verified at https://preprod.uplc.link/verify?txHash=f4118e53fc0fac1dddf96c6dcc3b4670265f25558d9943feb4ee564488f5c896
+ *
+ * Removed, do not re-add: `a48744c1584c58c2995cba1fa26b37f3999ee8cedac0ef241662f53d` (the
+ * reference platform's earlier preprod bootstrap).
+ */
 export const CIP113_BASE_PREPROD: readonly string[] = [
-  'be59f7750a5d947bb649e70d574d066791ec34a1dfee2a087c8511e3'
+  'be59f7750a5d947bb649e70d574d066791ec34a1dfee2a087c8511e3',
 ];
 
+/**
+ * Preview. Bootstrap tx `8e9668a6432ea4567bb1deba919c0f76adcce8373d6d89d1a06faee2c83d00f9`,
+ * verified at https://preview.uplc.link/verify?txHash=8e9668a6432ea4567bb1deba919c0f76adcce8373d6d89d1a06faee2c83d00f9
+ *
+ * Removed or excluded, do not re-add:
+ *  - `698c48a630206282690774aebcfa9410895c09f85bc103b19f9888dc` — the 2026-08-26
+ *    re-bootstrap (creation tx
+ *    `a432339cbd7318222c8c51ed4fb52ee4c68f676037622aa7361dd45d897324a4`), which this entry
+ *    replaced
+ *  - `33ceea92481cd6cc5b9ad1750302642042bb8ea5d028b830ad86fc31` — the 2026-08-13 bootstrap
+ *  - `8adfe689f4049706f893745f9e8af24cc2cade650de9bac05e3d403f` — the bootstrap before that
+ *  - `f2182b00a37bd746e20575c9af01ab31312213514cd31e872e0a2a3e` — never shipped: the value
+ *    CIP-113's own "Preview testnet parameters" section documents, excluded because it
+ *    does not match the contracts Gero supports; do not add it on that basis
+ */
 export const CIP113_BASE_PREVIEW: readonly string[] = [
   '35622813d81ba2d6e068c7d52f6fdad5aa2a5d84b212ec3e28716c16',
 ];
@@ -38,8 +94,13 @@ export const CIP113_BASE_PREVIEW: readonly string[] = [
  * the deployment that now exists". Keeping the allowlist separate means enabling a network
  * is always a deliberate two-line change here, reviewed together.
  *
- * Mainnet, preprod and preview are all allowlisted and all carry a deployment, so on every
- * Cardano network the `isCip113Enabled` flag is now the only thing standing between a
- * build and live CIP-113 discovery. Turning that flag on enables mainnet too.
+ * MAINNET ROLLOUT: mainnet, preprod and preview are all allowlisted and all carry a
+ * deployment. This is a deliberate rollout, not only a record of the deployments: on every
+ * Cardano network the `isCip113Enabled` flag is now the only gate left, so a build carrying
+ * this list makes CIP-113 live on mainnet as soon as that flag is (or already is) on.
+ *
+ * What going live changes on mainnet beyond the display: `WalletBg.subscriptionCredentials()`
+ * sends gero-sync an empty credential list, so UTxOs are resolved by stake address instead
+ * of being pre-filtered by payment key, and `classifyUtxoAddress` filters client-side.
  */
 export const CIP113_ALLOWED_NETWORKS: readonly string[] = [Network.MAINNET, Network.PREPROD, Network.PREVIEW];

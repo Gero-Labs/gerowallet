@@ -79,10 +79,11 @@ export interface FeatureFlags {
   // KILL-SWITCH, mirroring isWalletConnectEnabled.
   isCip45Enabled: boolean;
   // Master gate for CIP-113 programmable-token support (display only in Stage 1).
-  // Default OFF and ships dark. The per-network deployment list in
-  // `cip113Deployments.ts` is a SEPARATE gate — both must pass — but that one is a
-  // build-time constant, so this flag is the only kill-switch that does not need a
-  // rebuild and a Web Store review. Read in the background through the
+  // Default OFF and ships dark. The network allowlist and per-network deployment list in
+  // `cip113Deployments.ts` are SEPARATE gates — all three must pass — but those are
+  // build-time constants, so this flag is the only kill-switch that does not need a
+  // rebuild and a Web Store review. Mainnet is allowlisted and configured, so turning
+  // this on enables mainnet too. Read in the background through the
   // chrome.storage mirror; see src/chrome/cip113Flag.ts.
   isCip113Enabled: boolean;
   // Default OFF and ships dark. Kill switch for WRITING the gpw2 secret envelope
