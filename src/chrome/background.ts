@@ -1507,7 +1507,7 @@ function refusalForProgrammableInputs(txCbor: unknown): string | null {
   const wallet = walletManager.getWallet();
   if (!wallet?.findProgrammableInputs) return null;
   // Before the parse, not after: an empty index cannot produce a refusal, and every
-  // signTx on a network without a CIP-113 deployment (mainnet included) takes this
+  // signTx with CIP-113 off, or from a wallet holding no programmable tokens, takes this
   // branch. deserializeCardanoJsSdkTx() on the request path is not free.
   if (wallet.hasProgrammableInputs && !wallet.hasProgrammableInputs()) return null;
   try {

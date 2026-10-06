@@ -476,9 +476,10 @@ export class WalletBg {
   /**
    * Empty when CIP-113 is off, which disables the feature everywhere downstream: no
    * partition, no refusal index, and `subscriptionCredentials()` keeps the server-side
-   * allowlist. Two independent gates, both of which must pass:
+   * allowlist. Three independent gates, all of which must pass:
    *
-   *  - the network has a configured deployment (`cip113Deployments.ts`, build-time), and
+   *  - the network is in `CIP113_ALLOWED_NETWORKS` (`cip113Deployments.ts`, build-time),
+   *  - the network has a configured deployment (same file, build-time), and
    *  - the `isCip113Enabled` remote flag is on (runtime kill-switch, ships dark).
    */
   private programmableBaseScriptHashes(): Set<string> {
@@ -611,8 +612,8 @@ export class WalletBg {
 
   /**
    * True when the refusal index holds anything at all. Lets a caller skip deserializing a
-   * transaction it could not possibly have to refuse — the common case on any network
-   * without a CIP-113 deployment, mainnet included.
+   * transaction it could not possibly have to refuse — the common case whenever CIP-113
+   * is off and for any wallet that holds no programmable tokens.
    */
   hasProgrammableInputs(): boolean {
     return this.programmableInputRefs.size > 0;
