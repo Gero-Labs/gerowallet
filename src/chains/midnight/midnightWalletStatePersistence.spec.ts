@@ -19,20 +19,31 @@ describe('Midnight provider checkpoint migration', () => {
     });
   });
 
-  it.each(['dust', 'shielded', 'unshielded'] as const)('discards old mainnet %s state and restores a new checkpoint', async (kind) => {
-    await saveWalletState('mainnet', kind, seed, 'old-provider-state');
-    const key = Object.keys(storage)[0];
-    storage[key].schemaVersion = 1;
-    expect(await loadWalletState('mainnet', kind, seed)).toBeNull();
-    expect(storage[key].serializedState).toBe('old-provider-state');
-    await saveWalletState('mainnet', kind, seed, 'blockfrost-state');
-    expect(await loadWalletState('mainnet', kind, seed)).toBe('blockfrost-state');
+  it.each(['mainnet', 'preprod'] as const)('discards old-provider %s checkpoints and restores new ones', async (network) => {
+    for (const kind of ['dust', 'shielded', 'unshielded'] as const) {
+      storage = {};
+      await saveWalletState(network, kind, seed, 'old-provider-state');
+      const key = Object.keys(storage)[0];
+      storage[key].schemaVersion = 1;
+      expect(await loadWalletState(network, kind, seed)).toBeNull();
+      expect(storage[key].serializedState).toBe('old-provider-state');
+      await saveWalletState(network, kind, seed, 'new-provider-state');
+      expect(storage[key].schemaVersion).toBe(2);
+      expect(await loadWalletState(network, kind, seed)).toBe('new-provider-state');
+    }
   });
 
-  it('retains preprod checkpoints', async () => {
-    await saveWalletState('preprod', 'dust', seed, 'preprod-state');
+  it('retains mainnet checkpoints made against the current provider', async () => {
+    await saveWalletState('mainnet', 'dust', seed, 'mainnet-state');
+    const key = Object.keys(storage)[0];
+    expect(storage[key].schemaVersion).toBe(2);
+    expect(await loadWalletState('mainnet', 'dust', seed)).toBe('mainnet-state');
+  });
+
+  it('retains stagenet checkpoints', async () => {
+    await saveWalletState('stagenet', 'dust', seed, 'stagenet-state');
     const key = Object.keys(storage)[0];
     expect(storage[key].schemaVersion).toBe(1);
-    expect(await loadWalletState('preprod', 'dust', seed)).toBe('preprod-state');
+    expect(await loadWalletState('stagenet', 'dust', seed)).toBe('stagenet-state');
   });
 });
