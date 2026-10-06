@@ -160,9 +160,8 @@ describe('cip68Label — CIP-67 prefix decoding', () => {
   });
 });
 
-// The network allowlist is a second gate, independent of the hash lists and of the global
-// `isCip113Enabled` flag. It exists so that recording a newly-deployed hash cannot, by
-// itself, bring a network live while that flag happens to be on.
+// The network allowlist is a second gate, independent of the hash lists. It exists so that
+// recording a newly-deployed hash cannot, by itself, bring a network live.
 describe('networks — CIP-113 network allowlist', () => {
   beforeEach(() => {
     vi.doUnmock('@/utils/cip113Deployments');
@@ -184,8 +183,7 @@ describe('networks — CIP-113 network allowlist', () => {
   });
 
   // Pins what actually ships. Changing this is the deliberate act of enabling (or
-  // disabling) CIP-113 on a network, and should not pass review as a drive-by edit. With
-  // mainnet in the list, the `isCip113Enabled` flag is the only remaining mainnet gate.
+  // disabling) CIP-113 on a network, and should not pass review as a drive-by edit.
   it('ships allowing mainnet, preprod and preview', async () => {
     const { CIP113_ALLOWED_NETWORKS } = await import('./cip113Deployments');
 

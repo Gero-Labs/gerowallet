@@ -703,8 +703,7 @@ export default {
       return []
     }
     // Allowlist first, before the configured hashes are even consulted: a hash list on its
-    // own must never be enough to bring a network up, because the flag that would also
-    // have to be on is global and may already be. See CIP113_ALLOWED_NETWORKS.
+    // own must never be enough to bring a network up. See CIP113_ALLOWED_NETWORKS.
     if (!CIP113_ALLOWED_NETWORKS.includes(network)) {
       return []
     }

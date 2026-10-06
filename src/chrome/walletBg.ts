@@ -48,7 +48,6 @@ import {
   submitTx as submitTxFn,
   toStakeAddress,
 } from '@/chrome/serialization';
-import { isCip113Enabled } from '@/chrome/cip113Flag';
 import { readCachedUtxoRows, serializeUtxoRows, type CachedUtxoRow } from '@/chrome/utxoCache';
 import { SecretPurpose, decryptPrivateKey, encryptWithPassword, isLegacyNestedKey } from '@/shared/utils/crypto';
 import { refreshEnvelopeV2Flag } from '@/shared/utils/envelopeV2Flag';
@@ -474,16 +473,12 @@ export class WalletBg {
   private programmableUtxos: Cardano.Utxo[] = [];
 
   /**
-   * Empty when CIP-113 is off, which disables the feature everywhere downstream: no
-   * partition, no refusal index, and `subscriptionCredentials()` keeps the server-side
-   * allowlist. Three independent gates, all of which must pass:
-   *
-   *  - the network is in `CIP113_ALLOWED_NETWORKS` (`cip113Deployments.ts`, build-time),
-   *  - the network has a configured deployment (same file, build-time), and
-   *  - the `isCip113Enabled` remote flag is on (runtime kill-switch, ships dark).
+   * Empty when CIP-113 is off for this network, which disables the feature everywhere
+   * downstream: no partition, no refusal index, and `subscriptionCredentials()` keeps the
+   * server-side allowlist. Both build-time gates in `cip113Deployments.ts` must pass: the
+   * network is in `CIP113_ALLOWED_NETWORKS` and it has a configured deployment.
    */
   private programmableBaseScriptHashes(): Set<string> {
-    if (!isCip113Enabled()) return new Set();
     return new Set(networks.resolveProgrammableLogicBaseScriptHashes(this.chain, this.network));
   }
 
@@ -585,8 +580,7 @@ export class WalletBg {
 
   /** Restore the refusal index at login, before any sign request can arrive. */
   public async loadProgrammableRefs() {
-    // Killed remotely (or unconfigured for this network) means the feature is absent, not
-    // half-on. With the gate shut those UTxOs do not come back as spendable — the gate
+    // Unconfigured for this network means the feature is absent, not half-on. With the gate shut those UTxOs do not come back as spendable — the gate
     // also restores the server-side credential allowlist, so gero-sync stops returning
     // them, and classifyUtxoAddress would call one 'foreign' if it arrived anyway. What
     // must not survive is this index: it is state belonging to a feature that is off, it

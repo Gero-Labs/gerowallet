@@ -84,20 +84,17 @@ export const CIP113_BASE_PREVIEW: readonly string[] = [
 ];
 
 /**
- * Networks where CIP-113 may run at all — a SECOND per-network gate, independent of both
- * the hash lists above and the `isCip113Enabled` flag.
+ * Networks where CIP-113 may run at all — a SECOND per-network gate, independent of the
+ * hash lists above.
  *
- * Why this exists rather than relying on an empty array: `isCip113Enabled` is a single
- * GLOBAL boolean with no network in it, so once it is on, adding a hash to one of the
- * arrays above is by itself enough to bring that network live on the next build. That
- * collapses two intended approvals into one edit, by someone whose intent was only "record
- * the deployment that now exists". Keeping the allowlist separate means enabling a network
- * is always a deliberate two-line change here, reviewed together.
+ * Why this exists rather than relying on an empty array: there is no runtime gate, so
+ * adding a hash to one of the arrays above would by itself bring that network live on the
+ * next build. That collapses two intended approvals into one edit, by someone whose intent
+ * was only "record the deployment that now exists". Keeping the allowlist separate means
+ * enabling a network is always a deliberate two-line change here, reviewed together.
  *
  * MAINNET ROLLOUT: mainnet, preprod and preview are all allowlisted and all carry a
- * deployment. This is a deliberate rollout, not only a record of the deployments: on every
- * Cardano network the `isCip113Enabled` flag is now the only gate left, so a build carrying
- * this list makes CIP-113 live on mainnet as soon as that flag is (or already is) on.
+ * deployment, so a build carrying this list makes CIP-113 live on every Cardano network.
  *
  * What going live changes on mainnet beyond the display: `WalletBg.subscriptionCredentials()`
  * sends gero-sync an empty credential list, so UTxOs are resolved by stake address instead

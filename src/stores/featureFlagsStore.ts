@@ -78,14 +78,6 @@ export interface FeatureFlags {
   // section stay dark until flipped ON via gero-sync — acts as a remote
   // KILL-SWITCH, mirroring isWalletConnectEnabled.
   isCip45Enabled: boolean;
-  // Master gate for CIP-113 programmable-token support (display only in Stage 1).
-  // Default OFF and ships dark. The network allowlist and per-network deployment list in
-  // `cip113Deployments.ts` are SEPARATE gates — all three must pass — but those are
-  // build-time constants, so this flag is the only kill-switch that does not need a
-  // rebuild and a Web Store review. Mainnet is allowlisted and configured, so turning
-  // this on enables mainnet too. Read in the background through the
-  // chrome.storage mirror; see src/chrome/cip113Flag.ts.
-  isCip113Enabled: boolean;
   // Default OFF and ships dark. Kill switch for WRITING the gpw2 secret envelope
   // and for the on-unlock migration to it. Every release since the reader-only one
   // opens gpw2, so turning this off only stops new gpw2 writes. Read by the
@@ -139,7 +131,6 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
     isWalletConnectEnabled: false,
     isCip45Enabled: CIP45_DEFAULT_ENABLED,
     isLiveChatEnabled: false,
-    isCip113Enabled: false,
     isKeyEnvelopeV2Enabled: false,
     collateralTrustedDapps: [],
   },
@@ -221,9 +212,6 @@ export const featureFlagsStore = {
     featureFlagsState.flags.isCip45Enabled = featureFlagService.getFlag('isCip45Enabled', CIP45_DEFAULT_ENABLED);
     // Live support chat ships DARK (default false) until the Chatwoot inbox is staffed.
     featureFlagsState.flags.isLiveChatEnabled = featureFlagService.getFlag('isLiveChatEnabled', false);
-    // CIP-113 ships DARK (default false); the background reads this mirror to decide
-    // whether to partition UTxOs at all.
-    featureFlagsState.flags.isCip113Enabled = featureFlagService.getFlag('isCip113Enabled', false);
     // gpw2 writer + migration ships DARK; writers read this mirror before each write.
     featureFlagsState.flags.isKeyEnvelopeV2Enabled = featureFlagService.getFlag('isKeyEnvelopeV2Enabled', false);
     featureFlagsState.flags.collateralTrustedDapps = featureFlagService.getFlag<string[]>('collateralTrustedDapps', []);
@@ -313,11 +301,6 @@ export const featureFlagsStore = {
     });
     featureFlagService.onFlagChange('isLiveChatEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isLiveChatEnabled', newValue);
-    });
-    featureFlagService.onFlagChange('isCip113Enabled', (newValue) => {
-      Vue.set(featureFlagsState.flags, 'isCip113Enabled', newValue);
-      // Mirror the live flip so the background gate picks it up without a re-login.
-      persistFlagsForBackground();
     });
     featureFlagService.onFlagChange('isKeyEnvelopeV2Enabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isKeyEnvelopeV2Enabled', newValue === true);
@@ -553,17 +536,6 @@ export const featureFlagsStore = {
   },
 
   /**
-   * Check if CIP-113 programmable-token support is enabled.
-   *
-   * Network support is a SEPARATE gate (`networks.resolveProgrammableTokenSupport`), so
-   * both must pass. Background code reads the chrome.storage mirror via
-   * `isCip113Enabled()` in src/chrome/cip113Flag.ts instead of this getter.
-   */
-  isCip113Enabled(): boolean {
-    return featureFlagsState.flags.isCip113Enabled;
-  },
-
-  /**
    * Reset flags (disable all until re-initialized).
    */
   reset(): void {
@@ -592,8 +564,7 @@ export const featureFlagsStore = {
       isWalletConnectEnabled: false,
       isCip45Enabled: CIP45_DEFAULT_ENABLED,
       isLiveChatEnabled: false,
-      isCip113Enabled: false,
-      isKeyEnvelopeV2Enabled: false,
+        isKeyEnvelopeV2Enabled: false,
       collateralTrustedDapps: [],
     });
     featureFlagsState.isInitialized = false;

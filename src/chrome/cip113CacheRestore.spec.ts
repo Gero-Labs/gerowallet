@@ -21,7 +21,6 @@ import { getAddress, getStakeKey } from './serialization';
 import { serializeUtxoRows } from './utxoCache';
 import { getDb, setWalletConfiguration } from '@/db/wallet-db';
 import { CIP113_BASE_PREVIEW } from '@/utils/cip113Deployments';
-import { setCip113EnabledForTest } from './cip113Flag';
 import { Blockchain } from '@/models/types';
 
 // clearForWalletSwitch() clears the wallet-scoped alarms; there is no extension API here.
@@ -124,9 +123,6 @@ async function loginFromCache(bg: WalletBg) {
 describe('CIP-113 locked share across a service-worker restart', () => {
   beforeEach(() => {
     WalletStore.clearForWalletSwitch();
-    // CIP-113 ships behind a remote kill-switch that defaults OFF. Everything below
-    // exercises the feature, so turn it on explicitly; the last case turns it back off.
-    setCip113EnabledForTest(true);
   });
 
   it('keeps the locked lovelace out of the spendable balance after a live push', async () => {
@@ -254,32 +250,6 @@ describe('CIP-113 partition when the holdings go away', () => {
 
     expect(walletStore.programmableLockedLovelace).toBe('0');
   });
-
-  // The remote kill-switch has to leave the wallet in its pre-CIP-113 shape, not a
-  // half-on one: partition gone AND refusal index gone. Note what "pre-CIP-113" means
-  // here — the programmable UTxOs are not spendable again, they are simply not returned
-  // (the gate also restores gero-sync's credential allowlist). It is the stake-level
-  // BALANCE that goes back to its unadjusted figure, which is what the last assertion
-  // pins; the locked lovelace was always part of that total before this feature existed.
-  it('with the flag off, partitions nothing and refuses nothing', async () => {
-    const wallet = makeWallet();
-    const armed = bootWallet(wallet);
-    await armed.applyUtxos([spendableUtxo(), programmableUtxo()], true);
-    expect(armed.findProgrammableInputs(txSpendingProgrammable)).not.toEqual([]);
-
-    setCip113EnabledForTest(false);
-    simulateWorkerRestart();
-    const killed = bootWallet(wallet);
-    await loginFromCache(killed);
-
-    expect(walletStore.programmableLockedLovelace).toBe('0');
-    expect(walletStore.programmableTokens).toEqual({});
-    expect(killed.hasProgrammableInputs()).toBe(false);
-    expect(killed.findProgrammableInputs(txSpendingProgrammable)).toEqual([]);
-    // Balance figure back to the provider's unadjusted total, exactly as before the feature.
-    WalletStore.setAccount({ controlled_amount: CONTROLLED_TOTAL } as Account);
-    expect(walletStore.account?.controlled_amount).toBe(CONTROLLED_TOTAL);
-  });
 });
 
 // Superseded deployments are removed from cip113Deployments.ts rather than retained (see
@@ -304,7 +274,6 @@ describe('CIP-113 holdings at a removed deployment', () => {
 
   beforeEach(() => {
     WalletStore.clearForWalletSwitch();
-    setCip113EnabledForTest(true);
   });
 
   it('is not a configured deployment', () => {
