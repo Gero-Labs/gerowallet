@@ -6,6 +6,7 @@ export default {
   'walletLibrary.search': 'Buscar billeteras',
   'walletLibrary.searchPlaceholder': 'Nombre, billetera o dirección de staking',
   'walletLibrary.filter': 'Filtrar billeteras',
+  'walletLibrary.sortedBy': 'Ordenar por {sort}',
   'walletLibrary.allWallets': 'Todas las billeteras',
   'walletLibrary.favorites': 'Favoritos',
   'walletLibrary.newCategory': 'Nueva categoría',
