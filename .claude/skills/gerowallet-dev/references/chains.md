@@ -41,6 +41,10 @@ Two consequences that catch people:
 - **`isBitcoinGeroSyncEnabled`** defaults to **true** and is a kill-switch, not an enablement flag: false switches to the 60s Esplora poller.
 - **There is no `isMidnightEnabled`.** Midnight Mainnet is already selectable by ordinary users. Only Bitcoin is release-gated.
 - **CIP-113 has two build-time gates**: `CIP113_ALLOWED_NETWORKS` (mainnet, preprod and preview, checked first) and the per-network script-hash list. There is no runtime flag.
+  - **Decided, don't reopen:** CIP-113 is live on all three networks with no runtime kill-switch. `isCip113Enabled` was removed on purpose (#1256), so don't propose bringing it back.
+  - **Mainnet keeps superseded hashes.** If a mainnet PLB hash ever changes, append the new one and keep the old one until its holdings drain. Testnets may remove superseded hashes. The deployments are meant to be upgraded in place, not re-bootstrapped.
+  - **gero-sync's credential allowlist only filters the set found under the stake address.** It never reaches past it (checked against mainnet, 2026-10-07). So `credentials: []` loses nothing, and own enterprise addresses aren't synced either way. That is an existing gap, not one CIP-113 introduced.
+  - **Known open gap:** UTxOs at the PLB address are badged without a registry check, so anyone can airdrop dust there and it shows with the lock badge. Tracked in #1267. Use the `cip-113` label for CIP-113 issues.
 
 ## Adding chain-specific behaviour to an existing screen
 

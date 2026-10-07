@@ -93,6 +93,13 @@ gh pr view <n> --json state,mergedAt,mergeCommit
 
 `references/security.md` lists what reviewers block on. Resolve only threads you actually addressed; for one you are accepting rather than fixing, reply saying so before resolving, or a live gap reads as a closed defect.
 
+When an agent reviews a contributor's PR for a maintainer:
+
+- **Show the maintainer the draft first.** Post nothing until they approve it.
+- **Request changes and let the contributor make them.** Don't push to a contributor's fork.
+- **Google wallets are not released to users yet.** A finding that only affects Google wallets doesn't block a PR.
+- **Watch wallets are dev-only** (`StepStart.vue` gates them on `import.meta.env.DEV`). Fix bugs that only affect watch wallets, but they are not user-facing.
+
 ## Dependencies
 
 `.github/dependabot.yml` suppresses all majors and documents hard pins. Two that bite:
