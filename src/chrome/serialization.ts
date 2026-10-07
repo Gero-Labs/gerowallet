@@ -243,8 +243,9 @@ export type UtxoPartition = 'spendable' | 'programmable' | 'programmable-other' 
  * programmable branch below.
  *
  * @param programmableBaseScriptHashes the deployments to recognise on this network (a
- *        set so a rollover can overlap; superseded deployments are removed, see
- *        cip113Deployments.ts). Empty disables the programmable branch.
+ *        set so a rollover can overlap; superseded deployments are removed on testnets
+ *        and retained on mainnet until drained, see cip113Deployments.ts). Empty disables
+ *        the programmable branch.
  * @param programmableOwnerCredentials the wallet's payment credentials and its stake
  *        credential, since which one occupies the stake slot is a per-deployment choice.
  */
@@ -256,8 +257,8 @@ export function classifyUtxoAddress(
 ): UtxoPartition {
   // With CIP-113 configured, walletBg sends an empty `credentials` list so gero-sync
   // stops pre-filtering by payment credential — which makes these fallbacks the only
-  // gate, so it fails closed. With the gate shut (flag off, or a network not allowlisted or
-  // without a deployment) the server-side filter stays on and this stays permissive, so an
+  // gate, so it fails closed. With the gate shut (a network not allowlisted or without a
+  // deployment) the server-side filter stays on and this stays permissive, so an
   // enterprise-address wallet keeps seeing its own non-base UTxOs.
   const gateActive = programmableBaseScriptHashes.size > 0;
 

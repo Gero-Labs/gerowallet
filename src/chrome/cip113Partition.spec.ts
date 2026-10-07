@@ -147,7 +147,8 @@ describe('classifyUtxoAddress — CIP-113 partition', () => {
 describe('classifyUtxoAddress — multiple deployments per network', () => {
   // Preview was re-bootstrapped on 2026-08-13; tokens minted before that stay at the
   // older base address. The list mechanism can recognise both during a rollover; the
-  // shipped policy is to remove the superseded one (see cip113Deployments.ts).
+  // shipped testnet policy is to remove the superseded one, while mainnet must retain it
+  // until it drains (see cip113Deployments.ts).
   const OLD_PLB = '8adfe689f4049706f893745f9e8af24cc2cade650de9bac05e3d403f';
   const NEW_PLB = '33ceea92481cd6cc5b9ad1750302642042bb8ea5d028b830ad86fc31';
   const bothDeployments = new Set([NEW_PLB, OLD_PLB]);
@@ -167,7 +168,7 @@ describe('classifyUtxoAddress — multiple deployments per network', () => {
   });
 
   // Exercises the list mechanism, not today's shipped config: each network ships only its
-  // current deployment and superseded ones are removed (see cip113Deployments.ts). This
+  // current deployment and superseded testnet ones were removed (see cip113Deployments.ts). This
   // pins what removal means for the classifier — a still-held but unconfigured hash reads
   // as 'foreign' and its UTxOs drop out of the portfolio.
   it('loses the superseded deployment if only the newest is configured', () => {

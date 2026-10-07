@@ -10,11 +10,25 @@ import { Network } from '@/models/types';
 // One array per network. An EMPTY array means CIP-113 is unsupported on that network and
 // discovery fails closed.
 //
-// Superseded deployments are REMOVED, not retained. Each list carries only the deployment
-// built from the current contracts; an older bootstrap does not match them, and surfacing
-// holdings the wallet cannot reason about is worse than not showing them. Removed (and
-// deliberately excluded) hashes are recorded below each list so nobody re-adds one by
-// mistake. What removal means for a UTxO still sitting at a removed script, which
+// THESE DEPLOYMENTS ARE PERMANENT. CIP-113 is live on all three networks and is not going
+// to be re-bootstrapped: the current deployments were built with upgradability, and any
+// contract change is made by upgrading them in place. An upgrade is not expected to change
+// these hashes; if one ever does, handle it as a rotation under the rules below.
+//
+// If a hash ever does change:
+//  - Mainnet (hard rule): RETAIN the superseded hash next to its replacement until its
+//    holdings drain. Removing it would hide every user's existing holdings at once and
+//    leave their lovelace inside the balance as apparently spendable ADA (see the last
+//    point below), so max-send and swap sizing would build transactions that fail. APPEND
+//    the new hash (classifyUtxoAddress already takes a set) and remove the old one only once
+//    nothing meaningful is left at it.
+//  - Preview and preprod: upgrading in place is preferred there too, but not a hard rule.
+//    The earlier testnet bootstraps listed below predate the current contracts and were
+//    REMOVED rather than retained; surfacing holdings the wallet cannot reason about is
+//    worse than not showing them on a testnet. Removed (and deliberately excluded) hashes
+//    are recorded below each list so nobody re-adds one by mistake.
+//
+// What removal means for a UTxO still sitting at a removed script, which
 // classifyUtxoAddress then calls 'foreign':
 //  - it is not displayed;
 //  - it is not in the signing refusal index;
@@ -23,8 +37,8 @@ import { Network } from '@/models/types';
 //  - its lovelace is NOT subtracted as locked. The provider's stake-level
 //    `controlled_amount` includes it, so the balance figure that max-send, swap sizing and
 //    the portfolio read as spendable overstates what coin selection can actually use, by
-//    exactly that amount. Accepted: superseded deployments exist only on preview and
-//    preprod.
+//    exactly that amount. Accepted on preview and preprod only; it is why mainnet must
+//    retain a superseded hash instead.
 //
 // Format: blake2b-224, 56 lowercase hex characters, no 0x prefix. `networks.ts`
 // re-validates that shape at module scope as defence against a mistyped literal here.
@@ -47,7 +61,9 @@ import { Network } from '@/models/types';
  * Mainnet. Bootstrap tx `bfefbd222e40d88f5d4454e92b24062533070f41a3e25c0a23383264650cdb72`,
  * verified at https://uplc.link/verify?txHash=bfefbd222e40d88f5d4454e92b24062533070f41a3e25c0a23383264650cdb72
  *
- * No earlier mainnet deployment exists, so nothing has been removed.
+ * No earlier mainnet deployment exists, and none is planned: changes ship as upgrades. If
+ * this hash is ever superseded anyway, keep it here next to its replacement until its
+ * holdings drain (see above).
  */
 export const CIP113_BASE_MAINNET: readonly string[] = [
   'd91d08e381f8ef95ffbb3f8048f020d7361ded8f3abfdf66c25fa838',
@@ -84,20 +100,17 @@ export const CIP113_BASE_PREVIEW: readonly string[] = [
 ];
 
 /**
- * Networks where CIP-113 may run at all — a SECOND per-network gate, independent of both
- * the hash lists above and the `isCip113Enabled` flag.
+ * Networks where CIP-113 may run at all. Together with the hash lists above this is the
+ * whole gate: two build-time constants, both of which must pass.
  *
- * Why this exists rather than relying on an empty array: `isCip113Enabled` is a single
- * GLOBAL boolean with no network in it, so once it is on, adding a hash to one of the
- * arrays above is by itself enough to bring that network live on the next build. That
- * collapses two intended approvals into one edit, by someone whose intent was only "record
- * the deployment that now exists". Keeping the allowlist separate means enabling a network
- * is always a deliberate two-line change here, reviewed together.
+ * Why this exists rather than relying on an empty array: otherwise adding a hash to one of
+ * the lists would by itself bring that network live on the next build. That collapses two
+ * intended approvals into one edit, by someone whose intent was only "record the
+ * deployment that now exists". Keeping the allowlist separate means enabling a network is
+ * always a deliberate two-line change here, reviewed together.
  *
- * MAINNET ROLLOUT: mainnet, preprod and preview are all allowlisted and all carry a
- * deployment. This is a deliberate rollout, not only a record of the deployments: on every
- * Cardano network the `isCip113Enabled` flag is now the only gate left, so a build carrying
- * this list makes CIP-113 live on mainnet as soon as that flag is (or already is) on.
+ * LIVE ON ALL THREE NETWORKS: mainnet, preprod and preview are all allowlisted and all
+ * carry a deployment, so CIP-113 is live on each of them.
  *
  * What going live changes on mainnet beyond the display: `WalletBg.subscriptionCredentials()`
  * sends gero-sync an empty credential list, so UTxOs are resolved by stake address instead
