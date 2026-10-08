@@ -20,7 +20,7 @@
       :wallet-id="walletId"
       :network="network"
       :saved="savedConfig"
-      :has-stored-row="storedRow !== null"
+      :has-stored-row="hasStoredRow"
       @close="dialogOpen = false"
     />
   </v-row>
@@ -49,13 +49,16 @@ const { loggedWallet, config } = toRefs(walletStore);
 const walletId = computed<number | null>(() => loggedWallet.value?.id ?? null);
 const network = computed<string>(() => loggedWallet.value?.network ?? '');
 const storedRow = computed<unknown>(() => config.value?.[SUBMIT_API_CONFIG_KEY] ?? null);
+// Key presence, not a non-null value: a row holding null is a corrupted setting (shown as Invalid,
+// resettable), and the router fails closed on it rather than treating it as absent.
+const hasStoredRow = computed(() => !!config.value && SUBMIT_API_CONFIG_KEY in config.value);
 const savedConfig = computed(() => validateStoredSubmitApiConfig(storedRow.value, network.value));
 // Flag on, OR a setting already saved: a user can always see and clear what routes their txs.
-const visible = computed(() => featureFlagsStore.isSubmitApiEnabled() || storedRow.value !== null);
+const visible = computed(() => featureFlagsStore.isSubmitApiEnabled() || hasStoredRow.value);
 const isNew = computed(() => isFeatureNew(FEATURE_ID));
 
 const statusText = computed(() => {
-  if (storedRow.value === null) return t('settings.submitApi.statusDefault');
+  if (!hasStoredRow.value) return t('settings.submitApi.statusDefault');
   return savedConfig.value ? t('settings.submitApi.statusCustom') : t('settings.submitApi.statusInvalid');
 });
 
@@ -104,7 +107,7 @@ onBeforeUnmount(() => {
 
 const lastResultText = computed(() => {
   const result = lastResult.value;
-  if (!result || storedRow.value === null) return '';
+  if (!result || !hasStoredRow.value) return '';
   const time = new Date(result.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   if (!result.error) return t('settings.submitApi.lastSubmitCustom', { time });
   const reason = t(`settings.submitApi.reasons.${result.error.code}`, { status: result.error.status ?? '' });

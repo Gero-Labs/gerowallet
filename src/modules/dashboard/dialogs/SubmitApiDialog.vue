@@ -23,6 +23,7 @@
         :error-messages="fieldError('url')"
       />
       <p class="t-caption submit-api-note">{{ t('settings.submitApi.networkHint', { network }) }}</p>
+      <p class="t-caption submit-api-note">{{ t('settings.submitApi.urlKeyHint') }}</p>
       <v-alert v-if="validation.insecureWarning" type="warning" text dense>
         {{ t('settings.submitApi.httpWarning') }}
       </v-alert>
@@ -158,9 +159,13 @@ function fieldError(field: SubmitApiField): string {
   return key ? t(key, { network: nexusNetwork.value }) : '';
 }
 
-async function send<T = undefined>(method: MessageTypes, data: object): Promise<SubmitApiSettingsResult<T>> {
+async function send<T = undefined>(
+  method: MessageTypes,
+  data: object,
+  failure: 'saveFailed' | 'testFailed' = 'saveFailed',
+): Promise<SubmitApiSettingsResult<T>> {
   const response = (await Messaging.sendToBackgroundFromOptions({ method, data })) as { data?: SubmitApiSettingsResult<T> } | undefined;
-  return response?.data ?? { success: false, error: 'saveFailed' };
+  return response?.data ?? { success: false, error: failure };
 }
 
 function failureText(result: Extract<SubmitApiSettingsResult, { success: false }>): string {
@@ -190,7 +195,7 @@ async function runTest(): Promise<void> {
   serverError.value = '';
   testResult.value = null;
   try {
-    const result = await send<SubmitApiTestResult>(MessageTypes.TEST_SUBMIT_API, form.payload(props.walletId));
+    const result = await send<SubmitApiTestResult>(MessageTypes.TEST_SUBMIT_API, form.payload(props.walletId), 'testFailed');
     if (result.success === false) serverError.value = failureText(result);
     else testResult.value = result.result ?? null;
   } finally {
