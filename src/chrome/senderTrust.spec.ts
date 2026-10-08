@@ -56,6 +56,12 @@ describe('isOwnExtensionPageSender', () => {
     expect(EXTENSION_PAGE_ONLY_METHODS.has('CIP113_SIGN_PREFLIGHT')).toBe(true);
   });
 
+  it('gates the Submit API settings (they choose where signed transactions go and hold the auth header)', () => {
+    for (const method of ['SET_SUBMIT_API', 'TEST_SUBMIT_API', 'CLEAR_SUBMIT_API']) {
+      expect(EXTENSION_PAGE_ONLY_METHODS.has(method)).toBe(true);
+    }
+  });
+
   it('rejects another extension page and look-alike id prefixes', () => {
     expect(isOwnExtensionPageSender({ id: OWN, url: 'chrome-extension://someotherextensionidsomeotherext/a.html' } as unknown as S, CHROME)).toBe(false);
     expect(isOwnExtensionPageSender({ id: OWN, url: `chrome-extension://${OWN}evil/a.html` } as unknown as S, CHROME)).toBe(false);

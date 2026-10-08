@@ -27,6 +27,14 @@ describe('submitApiStore', () => {
     expect(await readSubmitApi(WALLET_ID)).toEqual({ config: null, auth: null });
   });
 
+  it('reads a present row holding null as an empty config, so the router fails closed instead of treating it as absent', async () => {
+    const db = await getDb(WALLET_ID);
+    await db!.table('config').put({ key: 'submitApi', value: null });
+    expect(await readSubmitApi(WALLET_ID)).toEqual({ config: {}, auth: null });
+    await db!.table('config').put({ key: 'submitApi', value: undefined });
+    expect(await readSubmitApi(WALLET_ID)).toEqual({ config: {}, auth: null });
+  });
+
   it('writes the public row and the secret row separately', async () => {
     await writeSubmitApi(WALLET_ID, CONFIG, 'secret-key');
     expect(await row('submitApi')).toEqual(CONFIG);

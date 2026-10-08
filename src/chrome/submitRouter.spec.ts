@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { getDb } from '@/db/wallet-db';
+import * as submitApiStore from './submitApiStore';
 import { writeSubmitApi } from './submitApiStore';
 import {
   dappRoutedError,
@@ -16,6 +17,7 @@ import {
   SUBMIT_API_ENDPOINT_PREFIX,
   SUBMIT_API_HASH_MISMATCH_MESSAGE,
   SUBMIT_API_INVALID_MESSAGE,
+  SUBMIT_API_STORAGE_MESSAGE,
   TX_SUBMIT_UNCONFIRMED_MESSAGE,
 } from './config';
 import { dappSubmitError, describeSubmitFailure } from './submitErrors';
@@ -237,7 +239,19 @@ describe('submitCardanoTx: custom endpoint', () => {
     await expect(submitCardanoTx({ cbor, walletId: WALLET_ID, network: 'Mainnet', defaultSubmit }))
       .rejects.toThrow('gero unreachable');
     expect(sessionWritesWhenFallbackRan).toBe(0);
-    expect(sessionSet).toHaveBeenCalledWith(...lastResultCall('default', { code: 'http', status: 503 }));
+    // Nothing was submitted by the fallback, so the caption must not claim Gero took over.
+    expect(sessionSet).toHaveBeenCalledWith(...lastResultCall('custom', { code: 'http', status: 503 }));
+  });
+
+  it('records the endpoint failure as the last result when the fallback itself fails', async () => {
+    await writeSubmitApi(WALLET_ID, { ...CONFIG, fallbackToDefault: true }, undefined);
+    const { cbor } = signedTx();
+    fetchMock.mockResolvedValue(response(503, 'down'));
+    const defaultSubmit = vi.fn().mockResolvedValue({ ok: false, via: 'default', status: 502, body: 'Bad Gateway' });
+    const outcome = await submitCardanoTx({ cbor, walletId: WALLET_ID, network: 'Mainnet', defaultSubmit });
+    expect(outcome).toEqual({ ok: false, via: 'default', status: 502, body: 'Bad Gateway' });
+    expect(sessionSet).toHaveBeenCalledWith(...lastResultCall('custom', { code: 'http', status: 503 }));
+    expect(sessionSet).not.toHaveBeenCalledWith(...lastResultCall('default'));
   });
 
   it('calls a 400 from the fallback after a custom timeout "outcome unknown"', async () => {
@@ -256,6 +270,24 @@ describe('submitCardanoTx: custom endpoint', () => {
     expect(JSON.stringify(outcome)).not.toContain(SECRET);
     expect(describeRoutedFailure(outcome as Extract<SubmitOutcome, { ok: false }>)).not.toContain(SECRET);
     expect(JSON.stringify(sessionSet.mock.calls)).not.toContain(SECRET);
+  });
+
+  it('caps an endpoint body at 512 characters plus an ellipsis, after redaction', async () => {
+    const { cbor } = signedTx();
+    fetchMock.mockResolvedValue(response(401, 'x'.repeat(5000)));
+    const outcome = await submitCardanoTx({ cbor, walletId: WALLET_ID, network: 'Mainnet', defaultSubmit: defaultOk() });
+    expect(outcome).toMatchObject({ ok: false, via: 'custom', status: 401, reason: 'endpointPrefix' });
+    const { body } = outcome as Extract<SubmitOutcome, { ok: false }>;
+    expect((body as string).length).toBeLessThanOrEqual(513);
+    expect(body).toBe(`${'x'.repeat(512)}…`);
+  });
+
+  it('never leaks a header value that straddles the body cap', async () => {
+    const { cbor } = signedTx();
+    fetchMock.mockResolvedValue(response(401, `${'x'.repeat(505)}${SECRET}${'y'.repeat(100)}`));
+    const outcome = await submitCardanoTx({ cbor, walletId: WALLET_ID, network: 'Mainnet', defaultSubmit: defaultOk() });
+    expect(JSON.stringify(outcome)).not.toContain(SECRET);
+    expect(JSON.stringify(outcome)).not.toContain(SECRET.slice(0, 8));
   });
 
   it('never sends a body that is not hex CBOR', async () => {
@@ -288,6 +320,31 @@ describe('submitCardanoTx: invalid saved config fails closed', () => {
     expect(defaultSubmit).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
     expect(sessionSet).toHaveBeenCalledWith(...lastResultCall('custom', { code: 'invalidConfig' }));
+  });
+});
+
+describe('submitCardanoTx: unreadable or corrupted storage fails closed', () => {
+  it('treats a present submitApi row holding null as an invalid setting, never as "no setting"', async () => {
+    await (await getDb(WALLET_ID))?.table('config').put({ key: 'submitApi', value: null });
+    const defaultSubmit = defaultOk();
+    const outcome = await submitCardanoTx({ cbor: signedTx().cbor, walletId: WALLET_ID, network: 'Mainnet', defaultSubmit });
+    expect(outcome).toEqual({ ok: false, via: 'custom', reason: 'invalidConfig' });
+    expect(defaultSubmit).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('answers storageUnavailable, sending nothing, when the wallet database cannot be read', async () => {
+    const read = vi.spyOn(submitApiStore, 'readSubmitApi').mockRejectedValue(new Error('Failed to open database'));
+    try {
+      const defaultSubmit = defaultOk();
+      const outcome = await submitCardanoTx({ cbor: signedTx().cbor, walletId: WALLET_ID, network: 'Mainnet', defaultSubmit });
+      expect(outcome).toEqual({ ok: false, via: 'custom', reason: 'storageUnavailable' });
+      expect(defaultSubmit).not.toHaveBeenCalled();
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(describeRoutedFailure(outcome as Extract<SubmitOutcome, { ok: false }>)).toBe(SUBMIT_API_STORAGE_MESSAGE);
+    } finally {
+      read.mockRestore();
+    }
   });
 });
 
@@ -330,6 +387,9 @@ describe('describeRoutedFailure / dappRoutedError', () => {
       .toBe(`${SUBMIT_API_ENDPOINT_PREFIX}${describeSubmitFailure(503, 'x')}`);
     expect(describeRoutedFailure({ ok: false, via: 'custom', reason: 'invalidConfig' })).toBe(SUBMIT_API_INVALID_MESSAGE);
     expect(describeRoutedFailure({ ok: false, via: 'custom', reason: 'hashMismatch' })).toBe(SUBMIT_API_HASH_MISMATCH_MESSAGE);
+    expect(describeRoutedFailure({ ok: false, via: 'custom', reason: 'storageUnavailable' })).toBe(SUBMIT_API_STORAGE_MESSAGE);
+    expect(dappRoutedError({ ok: false, via: 'custom', reason: 'storageUnavailable' }))
+      .toMatchObject({ info: SUBMIT_API_STORAGE_MESSAGE, message: SUBMIT_API_STORAGE_MESSAGE });
     expect(describeRoutedFailure({ ok: false, via: 'default', reason: 'outcomeUnknown' })).toContain(TX_SUBMIT_UNCONFIRMED_MESSAGE);
     expect(dappRoutedError({ ok: false, via: 'custom', reason: 'invalidConfig' }))
       .toMatchObject({ info: SUBMIT_API_INVALID_MESSAGE, message: SUBMIT_API_INVALID_MESSAGE });

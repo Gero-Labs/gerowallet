@@ -30,6 +30,7 @@ export const SUBMIT_API_ENDPOINT_PREFIX = 'Your submit endpoint: ';
 export const SUBMIT_API_INVALID_MESSAGE = 'Your Submit API setting is invalid. Fix it in Settings > Advanced.';
 export const SUBMIT_API_HASH_MISMATCH_MESSAGE =
   'Your submit endpoint returned a different transaction ID. The outcome is unknown, so check your transaction history before sending again.';
+export const SUBMIT_API_STORAGE_MESSAGE = "Could not read this wallet's Submit API setting. Nothing was sent.";
 
 export const TARGET = 'gerowallet';
 export const SENDER = {

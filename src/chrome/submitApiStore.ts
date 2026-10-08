@@ -25,7 +25,10 @@ async function walletDb(walletId: number): Promise<Dexie> {
 export async function readSubmitApi(walletId: number): Promise<StoredSubmitApi> {
   const table = (await walletDb(walletId)).table('config');
   const [config, auth] = await Promise.all([table.get(SUBMIT_API_CONFIG_KEY), table.get(SUBMIT_API_AUTH_CONFIG_KEY)]);
-  return { config: config?.value ?? null, auth: auth?.value ?? null };
+  // A row that is present but holds null or undefined is a corrupted setting, not an absent one.
+  // An empty object fails validation, so the router fails closed instead of using Gero's path.
+  // OX Agent: Sensitive Data Protection prevented - a corrupted config row fails closed, never silently falls back to the default path
+  return { config: config ? (config.value ?? {}) : null, auth: auth?.value ?? null };
 }
 
 /** headerValue: undefined keeps the stored secret, null deletes it, a string replaces it. */

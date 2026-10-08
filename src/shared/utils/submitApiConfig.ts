@@ -92,7 +92,12 @@ export interface SubmitApiTestResult {
   status?: number;
 }
 
-export type SubmitApiSettingsError = SubmitApiErrorCode | 'walletMismatch' | 'unsupportedChain' | 'saveFailed';
+export type SubmitApiSettingsError =
+  | SubmitApiErrorCode
+  | 'walletMismatch'
+  | 'unsupportedChain'
+  | 'saveFailed'
+  | 'testFailed';
 
 export type SubmitApiSettingsResult<T = undefined> =
   | { success: true; result?: T }
@@ -106,8 +111,8 @@ const HEADER_TOKEN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 // OX Agent: HTTP Header Injection prevented - forbidden header name blocklist
 const FORBIDDEN_HEADER_NAMES = new Set([
   'accept-charset', 'accept-encoding', 'access-control-request-headers', 'access-control-request-method',
-  'connection', 'content-length', 'content-type', 'cookie', 'date', 'dnt', 'expect', 'host',
-  'keep-alive', 'origin', 'referer', 'te', 'trailer', 'transfer-encoding', 'upgrade', 'via',
+  'connection', 'content-length', 'content-type', 'cookie', 'cookie2', 'date', 'dnt', 'expect', 'host',
+  'keep-alive', 'origin', 'referer', 'set-cookie', 'te', 'trailer', 'transfer-encoding', 'upgrade', 'via',
 ]);
 
 const NEXUS_SUBMIT_PATH = '/api/transactions/submit';

@@ -11,6 +11,7 @@ import { isStakeKeyRegistered, StakeAccountError } from '@/shared/utils/stakeReg
 import { describeUnexpectedSubmitResponse } from '@/chrome/submitErrors';
 import { dappRoutedError, describeRoutedFailure, fromFetchSubmit, submitCardanoTx } from '@/chrome/submitRouter';
 import { resetSubmitApi, saveSubmitApi, testSubmitApi } from '@/chrome/submitApiSettings';
+import type { SubmitApiSettingsError } from '@/shared/utils/submitApiConfig';
 import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, POPUP, SENDER, TARGET, TxSendError, TxSignError } from '@/chrome/config';
 import { toDappError } from '@/chrome/dappError';
 import { applyDappRequestBadge } from '@/chrome/dappRequestBadge';
@@ -3342,6 +3343,7 @@ function submitApiWallet() {
 function registerSubmitApiHandler(
   method: MessageTypes,
   run: (wallet: ReturnType<typeof submitApiWallet>, data: Record<string, unknown>) => Promise<unknown>,
+  failure: SubmitApiSettingsError,
 ) {
   app.addToOptions(method, async (request, sendResponse) => {
     let data: unknown;
@@ -3349,15 +3351,15 @@ function registerSubmitApiHandler(
       data = await run(submitApiWallet(), (request.data ?? {}) as Record<string, unknown>);
     } catch {
       // OX Agent: Sensitive Data Protection prevented - errors answer a generic code, never their text
-      data = { success: false, error: 'saveFailed' };
+      data = { success: false, error: failure };
     }
     sendResponse({ id: request.id, data, target: TARGET, sender: SENDER.extension });
   });
 }
 
-registerSubmitApiHandler(MessageTypes.SET_SUBMIT_API, saveSubmitApi);
-registerSubmitApiHandler(MessageTypes.TEST_SUBMIT_API, testSubmitApi);
-registerSubmitApiHandler(MessageTypes.CLEAR_SUBMIT_API, resetSubmitApi);
+registerSubmitApiHandler(MessageTypes.SET_SUBMIT_API, saveSubmitApi, 'saveFailed');
+registerSubmitApiHandler(MessageTypes.TEST_SUBMIT_API, testSubmitApi, 'testFailed');
+registerSubmitApiHandler(MessageTypes.CLEAR_SUBMIT_API, resetSubmitApi, 'saveFailed');
 
 // Bitcoin transaction signing handler (software wallets)
 app.addToOptions(MessageTypes.SIGN_BITCOIN_TX, async (request, sendResponse) => {

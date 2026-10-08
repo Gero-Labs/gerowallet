@@ -82,6 +82,8 @@ describe('validateSubmitApiInput: header', () => {
     [{ headerName: 'a'.repeat(65), headerValue: 'v' }, 'headerName', 'headerNameInvalid'],
     [{ headerName: 'Host', headerValue: 'v' }, 'headerName', 'headerNameForbidden'],
     [{ headerName: 'content-type', headerValue: 'v' }, 'headerName', 'headerNameForbidden'],
+    [{ headerName: 'Cookie2', headerValue: 'v' }, 'headerName', 'headerNameForbidden'],
+    [{ headerName: 'Set-Cookie', headerValue: 'v' }, 'headerName', 'headerNameForbidden'],
     [{ headerName: 'Sec-Fetch-Mode', headerValue: 'v' }, 'headerName', 'headerNameForbidden'],
     [{ headerName: 'Proxy-Authorization', headerValue: 'v' }, 'headerName', 'headerNameForbidden'],
     [{ headerName: '', headerValue: 'v' }, 'headerName', 'headerNameRequired'],

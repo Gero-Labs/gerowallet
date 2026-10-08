@@ -1,10 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import i18n from '@/plugins/i18n';
 import { extractNexusErrorMessage, friendlyTxError, isCollateralError, isInsufficientAdaError, shortfallLovelaceFromMessage } from './txErrors';
 import {
   TX_SUBMIT_UNCONFIRMED_MESSAGE,
   SUBMIT_API_ENDPOINT_PREFIX,
   SUBMIT_API_HASH_MISMATCH_MESSAGE,
   SUBMIT_API_INVALID_MESSAGE,
+  SUBMIT_API_STORAGE_MESSAGE,
 } from '@/chrome/config';
 import { InputLimitError } from '@/api/nexusInputSelection';
 
@@ -153,6 +155,18 @@ describe('friendlyTxError: Submit API', () => {
   it('localizes the hash-mismatch message', () => {
     expect(friendlyTxError(new Error(SUBMIT_API_HASH_MISMATCH_MESSAGE)))
       .toBe('Your submit endpoint returned a different transaction ID. Check your transaction history before sending again.');
+  });
+
+  it('localizes the storage-unavailable message through its own key', () => {
+    // The English copy equals the constant, so the lookup itself is what proves the mapping.
+    const translate = vi.spyOn(i18n, 't');
+    try {
+      expect(friendlyTxError(new Error(SUBMIT_API_STORAGE_MESSAGE)))
+        .toBe("Could not read this wallet's Submit API setting. Nothing was sent.");
+      expect(translate).toHaveBeenCalledWith('settings.submitApi.errors.storageUnavailable');
+    } finally {
+      translate.mockRestore();
+    }
   });
 
   it('keeps the endpoint prefix and localizes the reason behind it', () => {

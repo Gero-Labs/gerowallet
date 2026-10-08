@@ -60,6 +60,12 @@ describe('hygiene tripwires', () => {
     return bg.slice(start, next < 0 ? undefined : next);
   };
 
+  it('Submit API handlers answer a thrown error with a code that names their own action', () => {
+    expect(bg).toContain("registerSubmitApiHandler(MessageTypes.SET_SUBMIT_API, saveSubmitApi, 'saveFailed');");
+    expect(bg).toContain("registerSubmitApiHandler(MessageTypes.TEST_SUBMIT_API, testSubmitApi, 'testFailed');");
+    expect(bg).toContain("registerSubmitApiHandler(MessageTypes.CLEAR_SUBMIT_API, resetSubmitApi, 'saveFailed');");
+  });
+
   it('drops the unused scripting permission', () => {
     expect(read('scripts/manifest.ts')).not.toContain("'scripting'");
   });

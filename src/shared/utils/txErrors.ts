@@ -14,6 +14,7 @@ import {
   SUBMIT_API_ENDPOINT_PREFIX,
   SUBMIT_API_HASH_MISMATCH_MESSAGE,
   SUBMIT_API_INVALID_MESSAGE,
+  SUBMIT_API_STORAGE_MESSAGE,
   TX_SUBMIT_UNCONFIRMED_MESSAGE,
 } from '@/chrome/config';
 import { InputLimitError } from '@/api/nexusInputSelection';
@@ -149,6 +150,7 @@ export function friendlyTxError(raw: unknown): string {
   const rawMessage = raw instanceof Error ? raw.message : String(raw ?? '');
   if (rawMessage === SUBMIT_API_INVALID_MESSAGE) return i18n.t('settings.submitApi.errors.invalidSaved') as string;
   if (rawMessage === SUBMIT_API_HASH_MISMATCH_MESSAGE) return i18n.t('settings.submitApi.errors.hashMismatch') as string;
+  if (rawMessage === SUBMIT_API_STORAGE_MESSAGE) return i18n.t('settings.submitApi.errors.storageUnavailable') as string;
   if (rawMessage.startsWith(SUBMIT_API_ENDPOINT_PREFIX)) {
     const reason = friendlyTxError(rawMessage.slice(SUBMIT_API_ENDPOINT_PREFIX.length));
     return i18n.t('settings.submitApi.errors.endpointFailed', { reason }) as string;

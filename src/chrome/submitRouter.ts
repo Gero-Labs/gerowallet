@@ -13,6 +13,7 @@ import {
   SUBMIT_API_ENDPOINT_PREFIX,
   SUBMIT_API_HASH_MISMATCH_MESSAGE,
   SUBMIT_API_INVALID_MESSAGE,
+  SUBMIT_API_STORAGE_MESSAGE,
   TxSendError,
 } from '@/chrome/config';
 import { dappSubmitError, describeSubmitFailure } from '@/chrome/submitErrors';
@@ -27,7 +28,13 @@ import {
 } from '@/shared/utils/submitApiConfig';
 import { debugLog } from '@/utils/debug';
 
-export type SubmitFailureReason = 'endpointPrefix' | 'hashMismatch' | 'unexpectedResponse' | 'outcomeUnknown' | 'invalidConfig';
+export type SubmitFailureReason =
+  | 'endpointPrefix'
+  | 'hashMismatch'
+  | 'unexpectedResponse'
+  | 'outcomeUnknown'
+  | 'invalidConfig'
+  | 'storageUnavailable';
 
 export type SubmitOutcome =
   | { ok: true; via: SubmitVia; body: unknown }
@@ -49,6 +56,8 @@ export interface SubmitCardanoTxInput {
 const CUSTOM_SUBMIT_TIMEOUT_MS = 30_000;
 const TEST_SUBMIT_TIMEOUT_MS = 10_000;
 const INVALID_CBOR_BODY = 'Transaction is not valid hex CBOR';
+/** An endpoint answer is shown in error messages, so a hostile endpoint cannot flood them. */
+const MAX_ENDPOINT_BODY_CHARS = 512;
 
 /** Statuses that mean the endpoint is the problem, not the transaction. 400 is never one. */
 const FALLBACK_STATUSES = new Set([401, 403, 404, 405, 408, 415, 425, 429]);
@@ -90,6 +99,11 @@ function redact(text: string, secret: string | null): string {
   return secret ? text.split(secret).join('***') : text;
 }
 
+function capBody(text: string): string {
+  // OX Agent: Sensitive Data Protection prevented - an endpoint answer is capped (after redaction) before it reaches messages
+  return text.length > MAX_ENDPOINT_BODY_CHARS ? `${text.slice(0, MAX_ENDPOINT_BODY_CHARS)}…` : text;
+}
+
 async function postToEndpoint(
   url: string,
   headerName: string | null,
@@ -113,7 +127,7 @@ async function postToEndpoint(
   } catch (error) {
     return { kind: 'transport', timedOut: (error as { name?: unknown } | null)?.name === 'TimeoutError' };
   }
-  const text = redact(await response.text().catch(() => ''), headerValue);
+  const text = capBody(redact(await response.text().catch(() => ''), headerValue));
   return response.ok ? { kind: 'accepted', body: text } : { kind: 'http', status: response.status, body: text };
 }
 
@@ -148,7 +162,14 @@ export async function submitCardanoTx(input: SubmitCardanoTxInput): Promise<Subm
   const { cbor, walletId, network, defaultSubmit } = input;
   if (walletId === null || walletId === undefined) return defaultSubmit();
 
-  const stored = await readSubmitApi(walletId);
+  let stored: Awaited<ReturnType<typeof readSubmitApi>>;
+  try {
+    stored = await readSubmitApi(walletId);
+  } catch {
+    // The wallet database could not be read, so nothing was sent. Never log the error: it may name rows.
+    // OX Agent: Sensitive Data Protection prevented - an unreadable setting fails closed, it never falls back to Gero's path
+    return { ok: false, via: 'custom', reason: 'storageUnavailable' };
+  }
   if (stored.config === null) return defaultSubmit();
 
   // OX Agent: SSRF prevented - the stored URL is re-validated (validateStoredSubmitApiConfig) before any request
@@ -179,8 +200,12 @@ export async function submitCardanoTx(input: SubmitCardanoTxInput): Promise<Subm
   // 408 or a 5xx says nothing about whether it reached a node. A 4xx like 401 or 404
   // means it was refused before any node saw it.
   const mayHaveReachedNode = result.kind === 'transport' || result.status === 408 || result.status >= 500;
+  // A fallback that succeeded is "fell back to Gero". One that failed or threw leaves the
+  // endpoint's own failure as the last result: nothing was submitted.
+  let recorded: Omit<SubmitApiLastResult, 'at'> = { via: 'custom', error: lastError(result) };
   try {
     const fallback = await defaultSubmit();
+    if (fallback.ok === true) recorded = { via: 'default', error: lastError(result) };
     if (fallback.ok === false && mayHaveReachedNode && fallback.status === 400) {
       // If the endpoint did submit it, Gero's node now sees spent inputs. That 400 does
       // not mean the tx was rejected.
@@ -189,7 +214,7 @@ export async function submitCardanoTx(input: SubmitCardanoTxInput): Promise<Subm
     return fallback;
   } finally {
     // After the fallback settles, so a throw from defaultSubmit still leaves a record.
-    await recordLastResult(walletId, { via: 'default', error: lastError(result) });
+    await recordLastResult(walletId, recorded);
   }
 }
 
@@ -223,6 +248,8 @@ export function describeRoutedFailure(failure: SubmitFailure): string {
       return SUBMIT_API_INVALID_MESSAGE;
     case 'hashMismatch':
       return SUBMIT_API_HASH_MISMATCH_MESSAGE;
+    case 'storageUnavailable':
+      return SUBMIT_API_STORAGE_MESSAGE;
     case 'unexpectedResponse':
       // The endpoint answered 2xx, so it may have accepted the tx: never invite a resend.
       return SUBMIT_API_ENDPOINT_PREFIX + describeSubmitFailure(undefined, undefined);

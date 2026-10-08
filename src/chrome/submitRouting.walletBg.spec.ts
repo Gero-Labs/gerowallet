@@ -88,6 +88,10 @@ describe('WalletBg.submitTx through the Submit API router', () => {
     fetchMock.mockResolvedValue(new Response('down', { status: 503 }));
 
     expect(await bg.submitTx(cbor, [])).toBe(id);
+    // The custom endpoint was tried first, then Gero.
+    expect(fetchMock).toHaveBeenCalledWith(URL_, expect.objectContaining({ method: 'POST' }));
     expect(gero).toHaveBeenCalledWith(cbor);
+    // The pending write is fire-and-forget; settle it before the wallet DB is torn down.
+    await vi.waitFor(async () => expect(await (await bg.getDb()).table('transactions').get(id)).toMatchObject({ pending: true }));
   });
 });
