@@ -91,6 +91,12 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     version: '2.7.0',
     path: ['settings', 'advanced', 'autoWithdrawRewards']
   },
+  // Settings > Advanced > Submit API
+  {
+    id: 'settings.advanced.submitApi',
+    version: '2.7.3',
+    path: ['settings', 'advanced', 'submitApi']
+  },
   // Add more features here as needed
 ];
 
