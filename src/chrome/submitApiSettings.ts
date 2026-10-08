@@ -63,6 +63,15 @@ async function validateRequest(wallet: SubmitApiWallet, request: Record<string, 
   return { stored, keepsSaved, validation };
 }
 
+/** Forgets the Settings status line's last result. Best effort: only that line reads it. */
+async function dropLastResult(walletId: number): Promise<void> {
+  try {
+    await chrome.storage.session.remove(submitApiLastResultKey(walletId));
+  } catch {
+    // Only the Settings status line reads it.
+  }
+}
+
 export async function saveSubmitApi(
   wallet: SubmitApiWallet | null,
   request: Record<string, unknown>,
@@ -84,6 +93,8 @@ export async function saveSubmitApi(
     },
     headerValue,
   );
+  // The last result describes the previous endpoint; a changed setting starts a fresh history.
+  await dropLastResult(wallet.id);
   return { success: true };
 }
 
@@ -109,10 +120,6 @@ export async function resetSubmitApi(
   const refusal = refusalFor(wallet, request);
   if (refusal !== null) return refusal;
   await clearSubmitApi(wallet.id);
-  try {
-    await chrome.storage.session.remove(submitApiLastResultKey(wallet.id));
-  } catch {
-    // Only the Settings status line reads it.
-  }
+  await dropLastResult(wallet.id);
   return { success: true };
 }

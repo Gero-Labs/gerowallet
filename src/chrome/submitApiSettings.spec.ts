@@ -34,17 +34,30 @@ describe('saveSubmitApi', () => {
     });
   });
 
+  it('drops the stale last-result entry after a successful save', async () => {
+    expect(await save()).toEqual({ success: true });
+    expect(sessionRemove).toHaveBeenCalledTimes(1);
+    expect(sessionRemove).toHaveBeenCalledWith(`submitApiLastResult:${WALLET.id}`);
+  });
+
+  it('still reports success when the session store cannot be cleared', async () => {
+    sessionRemove.mockRejectedValueOnce(new Error('session storage unavailable'));
+    expect(await save()).toEqual({ success: true });
+  });
+
   it('refuses without a logged-in wallet, on another chain, or for another wallet id', async () => {
     expect(await saveSubmitApi(null, { walletId: WALLET.id, url: URL_ })).toEqual({ success: false, error: 'walletMismatch' });
     expect(await saveSubmitApi({ ...WALLET, chain: Blockchain.BITCOIN }, { walletId: WALLET.id, url: URL_ }))
       .toEqual({ success: false, error: 'unsupportedChain' });
     expect(await save({ walletId: WALLET.id + 1 })).toEqual({ success: false, error: 'walletMismatch' });
     expect(await readSubmitApi(WALLET.id)).toEqual({ config: null, auth: null });
+    expect(sessionRemove).not.toHaveBeenCalled();
   });
 
   it('returns the first validation error and writes nothing', async () => {
     expect(await save({ url: 'ftp://x' })).toEqual({ success: false, error: 'urlInvalid', field: 'url' });
     expect(await readSubmitApi(WALLET.id)).toEqual({ config: null, auth: null });
+    expect(sessionRemove).not.toHaveBeenCalled();
   });
 
   it('keeps the saved secret when headerValue is absent', async () => {
@@ -92,6 +105,7 @@ describe('testSubmitApi', () => {
 describe('resetSubmitApi', () => {
   it('clears both rows and the last-result entry', async () => {
     await save();
+    sessionRemove.mockClear();
     expect(await resetSubmitApi(WALLET, { walletId: WALLET.id })).toEqual({ success: true });
     expect(await readSubmitApi(WALLET.id)).toEqual({ config: null, auth: null });
     expect(sessionRemove).toHaveBeenCalledWith(`submitApiLastResult:${WALLET.id}`);

@@ -69,13 +69,15 @@ const lastResult = ref<SubmitApiLastResult | null>(null);
 
 async function loadLastResult(): Promise<void> {
   lastResult.value = null;
-  if (walletId.value === null || typeof chrome === 'undefined' || !chrome.storage?.session) return;
-  const key = submitApiLastResultKey(walletId.value);
+  const id = walletId.value;
+  if (id === null || typeof chrome === 'undefined' || !chrome.storage?.session) return;
+  const key = submitApiLastResultKey(id);
   try {
     const stored = await chrome.storage.session.get(key);
-    lastResult.value = (stored[key] as SubmitApiLastResult | undefined) ?? null;
+    // The wallet may have switched while the read was in flight: never show its caption on another wallet.
+    if (walletId.value === id) lastResult.value = (stored[key] as SubmitApiLastResult | undefined) ?? null;
   } catch {
-    lastResult.value = null;
+    if (walletId.value === id) lastResult.value = null;
   }
 }
 
@@ -85,7 +87,7 @@ function onStorageChanged(changes: Record<string, chrome.storage.StorageChange>,
   if (change) lastResult.value = (change.newValue as SubmitApiLastResult | undefined) ?? null;
 }
 
-// A wallet switch must never leave the dialog editing the previous wallet's setting.
+// OX Agent: Sensitive Data Protection prevented - a wallet switch never leaves the dialog editing the previous wallet's endpoint
 watch(walletId, () => {
   dialogOpen.value = false;
   void loadLastResult();

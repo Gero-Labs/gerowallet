@@ -104,7 +104,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
@@ -131,6 +131,7 @@ const props = defineProps<{
 const emit = defineEmits(['close']);
 const { t } = useTranslation();
 
+// OX Agent: Sensitive Data Protection prevented - the saved header value is write-only and never sent back to the page
 const form = useSubmitApiForm(computed(() => props.saved), computed(() => props.network));
 const { url, headerName, headerValue, headerValueMode, fallbackToDefault, validation, canSubmit, replaceSavedValue, removeSavedValue } = form;
 form.reset();
@@ -142,6 +143,12 @@ const busy = computed(() => saving.value || testing.value || resetting.value);
 const confirmReset = ref(false);
 const serverError = ref('');
 const testResult = ref<SubmitApiTestResult | null>(null);
+
+// A result describes the values that were tested; any edit makes it stale.
+watch([url, headerName, headerValue, headerValueMode], () => {
+  testResult.value = null;
+  serverError.value = '';
+});
 
 const nexusNetwork = computed(() => nexusNetworkParam(props.network));
 const urlPlaceholder = computed(() => `https://nexus.gerowallet.io/api/transactions/submit?network=${nexusNetwork.value}`);
