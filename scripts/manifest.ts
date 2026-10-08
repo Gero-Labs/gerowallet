@@ -74,18 +74,11 @@ function buildCSP(dev: boolean): string {
     // overridable per environment and the intent should be visible here.
     'https://support.gerowallet.io',
     'wss://support.gerowallet.io',
-    // Midnight — the SDK's UnshieldedWallet/DustWallet/ShieldedWallet sync
-    // connects directly to the Midnight Foundation indexer (HTTP for queries,
-    // WS for subscriptions). Wildcard covers preview/preprod/mainnet plus
-    // any future subdomain the SDK reaches. RPC node URLs land here too
-    // (https://rpc.preview.midnight.network, etc).
-    'https://*.midnight.network',
-    'wss://*.midnight.network',
-    // Midnight mainnet is hosted by Blockfrost from 2026-09-30.
-    'https://midnight-mainnet.blockfrost.io',
-    'wss://midnight-mainnet.blockfrost.io',
-    'https://rpc.midnight-mainnet.blockfrost.io',
-    'wss://rpc.midnight-mainnet.blockfrost.io',
+    // Midnight mainnet/preprod: the SDK's UnshieldedWallet/DustWallet/
+    // ShieldedWallet sync goes through gero-sync's indexer relay
+    // (sync.gerowallet.io, covered by *.gerowallet.io above). Gero's indexer
+    // and node are private, and the extension no longer talks to the
+    // Foundation (*.midnight.network) or Blockfrost Midnight endpoints.
     // Stagenet moved off midnight.network; keep the direct SDK endpoints usable.
     'https://rpc.stagenet.shielded.tools',
     'wss://rpc.stagenet.shielded.tools',

@@ -34,10 +34,27 @@ import { debugLog } from '@/utils/debug';
 /** Bumped if the persisted shape or the SDK serialization contract changes. */
 const SCHEMA_VERSION = 1;
 
-// Indexer event IDs are provider-specific. Mainnet checkpoints made before
-// the Blockfrost migration must not resume against the new provider.
+// Indexer event IDs are provider-specific (each indexer database numbers its
+// ledger events itself), so checkpoints made against one provider must not
+// resume against another. Bump a network's version whenever its provider
+// changes.
+// - mainnet 2: Foundation -> Blockfrost (#1236). Moving to Gero's self-hosted
+//   indexer (via gero-sync) keeps 2: its ids matched Blockfrost's at the
+//   checked points (2026-10-03). Bump to 3 if the final dust-numbering check
+//   before the switch shows a mismatch.
+// - preprod 2: Foundation -> Gero's self-hosted indexer. The Foundation's
+//   preprod indexer has a 22-id hole (989781-989802, midnight-wallet#781), so
+//   its checkpoints cannot carry over.
 function schemaVersion(network: string): number {
-  return network === 'mainnet' || network === 'midnight-mainnet' ? 2 : SCHEMA_VERSION;
+  switch (network) {
+    case 'mainnet':
+    case 'midnight-mainnet':
+    case 'preprod':
+    case 'midnight-preprod':
+      return 2;
+    default:
+      return SCHEMA_VERSION;
+  }
 }
 const KEY_PREFIX = 'midnight_wallet_state';
 

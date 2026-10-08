@@ -50,15 +50,19 @@ export interface MidnightNetworkEndpoints {
    */
   zkpaasProofServerUrl: string;
   /**
-   * Public Foundation indexer endpoint (HTTP GraphQL). Used by the SDK for
-   * one-shot queries when the Nexus proxy is unavailable, or by power users who
-   * opt out of the Gero proxy.
+   * Indexer endpoint (HTTP GraphQL) the wallet SDKs sync against. For mainnet
+   * and preprod this is gero-sync's restricted indexer relay, which forwards
+   * only the operations the SDKs use to Gero's self-hosted (in-cluster)
+   * indexer. The indexer itself is never exposed publicly.
    */
   publicIndexerUrl: string;
-  /** Public Foundation indexer endpoint (WebSocket GraphQL subscriptions). */
+  /** Indexer endpoint (WebSocket GraphQL subscriptions, graphql-transport-ws). */
   publicIndexerWsUrl: string;
-  /** Public Foundation Substrate RPC. */
-  publicRpcUrl: string;
+  /**
+   * Public Substrate RPC. Only stagenet still has one (third-party, while
+   * stagenet self-hosting is parked); it is not advertised to dApps.
+   */
+  publicRpcUrl?: string;
   /** Faucet URL (testnets only). */
   faucetUrl?: string;
   /** Block explorer URL (for tx history links in the UI). */
@@ -79,9 +83,25 @@ const NEXUS_BASE = (typeof import.meta !== 'undefined'
   && import.meta.env
   && import.meta.env['VITE_NEXUS_API_URL']) || 'https://nexus.gerowallet.io';
 
-const GERO_SYNC_WS = (typeof import.meta !== 'undefined'
+/**
+ * gero-sync base URL — the same `VITE_SYNC_WS_URL` the sync WebSocket service
+ * uses (`src/services/websocket.service.ts`), e.g. `wss://sync.gerowallet.io`.
+ */
+const GERO_SYNC_BASE = ((typeof import.meta !== 'undefined'
   && import.meta.env
-  && import.meta.env['VITE_GERO_SYNC_WS_URL']) || 'wss://sync.gerowallet.io/ws/sync';
+  && import.meta.env['VITE_SYNC_WS_URL']) || 'wss://sync.gerowallet.io').replace(/\/+$/, '');
+
+const GERO_SYNC_WS = `${GERO_SYNC_BASE}/ws/sync`;
+
+/**
+ * gero-sync's restricted Midnight indexer relay for one network
+ * (`/midnight/{network}/graphql`, WebSocket at `.../graphql/ws`). The wallet
+ * SDKs sync through it; Gero's indexers stay in-cluster.
+ */
+function geroSyncIndexerRelay(network: 'mainnet' | 'preprod'): { publicIndexerUrl: string; publicIndexerWsUrl: string } {
+  const wsBase = `${GERO_SYNC_BASE}/midnight/${network}/graphql`;
+  return { publicIndexerUrl: wsBase.replace(/^ws/, 'http'), publicIndexerWsUrl: `${wsBase}/ws` };
+}
 
 /**
  * Arkhia zkPaaS bases. Path shape comes from the zkPaaS guide's Arkhia
@@ -129,9 +149,7 @@ const MIDNIGHT_NETWORK_ENDPOINTS: Record<string, MidnightNetworkEndpoints> = {
     geroSyncWsUrl: GERO_SYNC_WS,
     defaultProofServerUrl: 'http://localhost:6300',
     zkpaasProofServerUrl: ARKHIA_ZKPAAS_TESTNET,
-    publicIndexerUrl: 'https://indexer.preprod.midnight.network/api/v4/graphql',
-    publicIndexerWsUrl: 'wss://indexer.preprod.midnight.network/api/v4/graphql/ws',
-    publicRpcUrl: 'https://rpc.preprod.midnight.network',
+    ...geroSyncIndexerRelay('preprod'),
     faucetUrl: 'https://midnight-tmnight-preprod.nethermind.dev',
     blockExplorerUrl: 'https://polkadot.js.org/apps/?rpc=wss%3A%2F%2Frpc.preprod.midnight.network#/explorer',
     sdkNetworkId: 'preprod',
@@ -142,9 +160,7 @@ const MIDNIGHT_NETWORK_ENDPOINTS: Record<string, MidnightNetworkEndpoints> = {
     geroSyncWsUrl: GERO_SYNC_WS,
     defaultProofServerUrl: 'http://localhost:6300',
     zkpaasProofServerUrl: ARKHIA_ZKPAAS_MAINNET,
-    publicIndexerUrl: 'https://midnight-mainnet.blockfrost.io/api/v0?project_id=nightmainnetzRMSGIWUTMDhpW7pB91HUEtp8os5reDt',
-    publicIndexerWsUrl: 'wss://midnight-mainnet.blockfrost.io/api/v0/ws?project_id=nightmainnetzRMSGIWUTMDhpW7pB91HUEtp8os5reDt',
-    publicRpcUrl: 'https://rpc.midnight-mainnet.blockfrost.io?project_id=nightmainnetzRMSGIWUTMDhpW7pB91HUEtp8os5reDt',
+    ...geroSyncIndexerRelay('mainnet'),
     blockExplorerUrl: 'https://explorer.mainnet.cloudwalk.io',
     sdkNetworkId: 'mainnet',
   },

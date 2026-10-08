@@ -6526,10 +6526,14 @@ app.add(MIDNIGHT_METHOD.getConfiguration, async (request, sendResponse) => {
     sendResponse({
       id: request.id,
       data: {
-        indexerUri: endpoints.publicIndexerUrl,
-        indexerWsUri: endpoints.publicIndexerWsUrl,
+        // Gero does not hand dApps an indexer or node RPC: Gero's indexer and
+        // node are private, and the wallet's own indexer access goes through
+        // gero-sync's restricted relay, which only serves the wallet SDKs'
+        // operations. dApps bring their own Midnight services.
+        indexerUri: '',
+        indexerWsUri: '',
         proverServerUri,
-        substrateNodeUri: endpoints.publicRpcUrl,
+        substrateNodeUri: '',
         networkId: midnightSdkNetworkId(wallet.network),
       },
       target: TARGET,
