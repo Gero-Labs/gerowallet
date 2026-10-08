@@ -1,10 +1,34 @@
 # Help Center browser verification
 
-The **Ledger tests and extension bundles** workflow runs three browser scenarios
-against the complete production extension. Its **Help browser evidence** artifact
-contains JSON results and screenshots, available from the Actions run to reviewers
-with repository access. Download it within 30 days. The executable scenarios and
-synthetic fixtures remain in Git after the artifact expires.
+The **Help browser evidence** workflow runs three browser scenarios against the
+complete production extension. Its artifact contains JSON results and
+screenshots, available from the Actions run to reviewers with repository access.
+The workflow requests two days of retention. Use the actual expiry reported in
+the run summary or the artifact API's `expires_at` field; a workflow retention
+request does not guarantee that download window. Download before that timestamp.
+The executable scenarios and synthetic fixtures remain in Git after expiry.
+
+The previous claim of 30 days was incorrect. For example, artifact `11584382577`
+from the October 8, 2026 run expires on October 10, 2026, at 22:55:43 UTC, despite
+that run requesting 30 days.
+
+## CI scope
+
+The separate **Help browser scenarios** check runs for pull requests to
+`development` or `main` that change Help, Blog, support, welcome, navigation,
+related shared UI/state, the browser harness, or its build dependencies. You can
+also dispatch the workflow manually. Its `paths` list defines the exact scope;
+update that list when moving a covered module or adding a shared dependency.
+
+This check is optional under the current branch protection settings. Keep it
+separate from required checks because unrelated pull requests skip this workflow.
+Scenario failures remain visible as failures and upload any available evidence.
+The required **Ledger tests and extension bundles** check retains its broad
+trigger, ledger tests, and production build, without installing Chromium or
+running Help browser scenarios. Help unit tests remain in the production bundle
+gate.
+
+## Scenario coverage
 
 The scenarios cover public access with no wallet, setup preservation when Help
 tab creation fails, native-link fallback, saved and unlocked wallets, locking

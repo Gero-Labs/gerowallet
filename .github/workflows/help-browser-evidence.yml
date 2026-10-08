@@ -1,0 +1,102 @@
+name: Help browser evidence
+
+on:
+  # Optional evidence, separate from the required Ledger check. Do not require
+  # this path-filtered check in branch protection: unrelated PRs do not run it.
+  pull_request:
+    branches: [development, main]
+    paths:
+      - '.github/workflows/help-browser-evidence.yml'
+      - 'scripts/help-browser/**'
+      - 'scripts/build-isolated-extension.mjs'
+      - 'scripts/prepare.ts'
+      - 'docs/help-browser-verification.md'
+      - 'src/modules/help/**'
+      - 'src/modules/blog/**'
+      - 'src/modules/navigation/**'
+      - 'src/modules/welcome/**'
+      - 'src/options/**'
+      - 'src/api/help.api.ts'
+      - 'src/api/blog.api.ts'
+      - 'src/stores/featureFlagsStore.ts'
+      - 'src/stores/walletStore.ts'
+      - 'src/stores/geroStore.ts'
+      - 'src/stores/networkStore.ts'
+      - 'src/shared/components/iso/**'
+      - 'src/shared/utils/walletSearchIndex*'
+      - 'src/shared/styles/**'
+      - 'src/plugins/i18n*'
+      - 'src/plugins/i18n/**'
+      - 'src/plugins/vuetify*'
+      - 'src/sidepanel/components/AgentDock*'
+      - 'src/sidepanel/composables/useSupportChat*'
+      - 'src/sidepanel/composables/useAgentDock*'
+      - 'src/services/support/**'
+      - 'src/chrome/supportChatAuth*'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config*.mts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: help-browser-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser:
+    name: Help browser scenarios
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22.11.0'
+          cache: npm
+      - run: npm ci
+      - name: Build every production extension entry point
+        run: node scripts/build-isolated-extension.mjs .
+
+      - name: Install isolated Help browser runtime
+        run: |
+          npm install --prefix "$RUNNER_TEMP/help-browser" --no-audit --no-fund --ignore-scripts playwright@1.61.0
+          node "$RUNNER_TEMP/help-browser/node_modules/playwright/cli.js" install --with-deps chromium
+
+      - name: Help browser acceptance with synthetic API fixtures
+        env:
+          PLAYWRIGHT_MODULE: ${{ runner.temp }}/help-browser/node_modules/playwright
+          HELP_SMOKE_OUTPUT: ${{ runner.temp }}/help-browser-evidence
+        run: |
+          node scripts/help-browser/foundation-smoke.cjs
+          node scripts/help-browser/published-smoke.cjs
+          node scripts/help-browser/updates-smoke.cjs
+
+      - name: Upload reproducible Help browser evidence
+        id: evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: help-browser-evidence-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/help-browser-evidence
+          if-no-files-found: warn
+          retention-days: 2
+
+      - name: Report actual artifact expiry
+        if: always() && steps.evidence.outputs.artifact-id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ARTIFACT_ID: ${{ steps.evidence.outputs.artifact-id }}
+          ARTIFACT_URL: ${{ steps.evidence.outputs.artifact-url }}
+        run: |
+          expires_at="$(gh api "repos/$GH_REPO/actions/artifacts/$ARTIFACT_ID" --jq '.expires_at')"
+          {
+            printf '### Help browser evidence\n\n'
+            printf '[Download screenshots and JSON reports](%s)\n\n' "$ARTIFACT_URL"
+            printf 'GitHub reports expiry at **%s**. Download before that time.\n' "$expires_at"
+            printf 'The scenario scripts and synthetic fixtures remain in Git after expiry.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
