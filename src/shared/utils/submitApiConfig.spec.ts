@@ -41,6 +41,12 @@ describe('validateSubmitApiInput: URL', () => {
     expect(v.errors.url).toBe(code);
     expect(v.normalized).toBeNull();
   });
+
+  it('rejects URL when normalized form exceeds length limit (unicode expansion)', () => {
+    const v = validateSubmitApiInput(base({ url: `https://a.example/${'é'.repeat(400)}` }), 'Mainnet');
+    expect(v.errors.url).toBe('urlTooLong');
+    expect(v.normalized).toBeNull();
+  });
 });
 
 describe('validateSubmitApiInput: Nexus network guard', () => {
@@ -156,6 +162,17 @@ describe('helpers', () => {
     expect(isValidHeaderValue('a\nb')).toBe(false);
     expect(isValidHeaderValue('a\u0000b')).toBe(false);
     expect(isValidHeaderValue(42)).toBe(false);
+  });
+
+  it('isValidHeaderValue rejects non-Latin-1 characters', () => {
+    expect(isValidHeaderValue('key​')).toBe(false); // zero-width space
+    expect(isValidHeaderValue('ключ')).toBe(false); // Cyrillic
+  });
+
+  it('validateSubmitApiInput rejects non-Latin-1 header values', () => {
+    const v = validateSubmitApiInput(base({ headerName: 'project_id', headerValue: 'ключ' }), 'Mainnet');
+    expect(v.errors.headerValue).toBe('headerValueInvalid');
+    expect(v.normalized).toBeNull();
   });
 
   it('keys the last-result entry by wallet', () => {

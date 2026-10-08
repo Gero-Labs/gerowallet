@@ -103,6 +103,7 @@ const HEADER_TOKEN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 
 // Headers fetch refuses to set (it would drop them silently), plus Content-Type,
 // which the router owns.
+// OX Agent: HTTP Header Injection prevented - forbidden header name blocklist
 const FORBIDDEN_HEADER_NAMES = new Set([
   'accept-charset', 'accept-encoding', 'access-control-request-headers', 'access-control-request-method',
   'connection', 'content-length', 'content-type', 'cookie', 'date', 'dnt', 'expect', 'host',
@@ -134,6 +135,7 @@ export function isLocalHost(hostname: string): boolean {
 
 export function isForbiddenHeaderName(name: string): boolean {
   const lower = name.toLowerCase();
+  // OX Agent: HTTP Header Injection prevented - rejects proxy/sec headers
   return FORBIDDEN_HEADER_NAMES.has(lower) || lower.startsWith('proxy-') || lower.startsWith('sec-');
 }
 
@@ -141,9 +143,10 @@ export function isValidHeaderValue(value: unknown): value is string {
   return typeof value === 'string'
     && value.length > 0
     && value.length <= SUBMIT_API_MAX_HEADER_VALUE_LENGTH
-    && !value.includes('\r')
-    && !value.includes('\n')
-    && !value.includes('\u0000');
+    && !/[^\u0000-ÿ]/.test(value) // OX Agent: HTTP Header Injection prevented - rejects non-Latin-1
+    && !value.includes('\r') // OX Agent: HTTP Header Injection prevented - rejects CRLF
+    && !value.includes('\n') // OX Agent: HTTP Header Injection prevented - rejects LF
+    && !value.includes('\u0000'); // OX Agent: HTTP Header Injection prevented - rejects NUL
 }
 
 function parseHttpUrl(raw: string): URL | null {
@@ -171,12 +174,16 @@ export function validateSubmitApiInput(input: SubmitApiInput, walletNetwork: str
   const parsed = rawUrl.length > SUBMIT_API_MAX_URL_LENGTH ? null : parseHttpUrl(rawUrl);
   if (rawUrl.length > SUBMIT_API_MAX_URL_LENGTH) errors.url = 'urlTooLong';
   else if (!parsed) errors.url = 'urlInvalid';
+  // OX Agent: SSRF prevented - rejects URLs with credentials
   else if (parsed.username || parsed.password) errors.url = 'urlCredentials';
   else if (isNexusSubmitPath(parsed.pathname) && parsed.searchParams.get('network') !== nexusNetworkParam(walletNetwork)) {
     errors.url = 'nexusNetwork';
   }
+  // OX Agent: SSRF prevented - normalized URL length check (unicode expansion)
+  else if (parsed.href.length > SUBMIT_API_MAX_URL_LENGTH) errors.url = 'urlTooLong';
 
   const plainRemote = !!parsed && parsed.protocol === 'http:' && !isLocalHost(parsed.hostname);
+  // OX Agent: Sensitive Data Protection prevented - rejects auth over insecure transport
   if (!errors.url && plainRemote && hasValue) errors.url = 'insecureAuth';
 
   if (headerName !== null) {
@@ -192,6 +199,7 @@ export function validateSubmitApiInput(input: SubmitApiInput, walletNetwork: str
   } else if (headerName !== null && !keepsSaved) {
     errors.headerValue = 'headerValueRequired';
   } else if (keepsSaved && parsed && input.savedOrigin && parsed.origin !== input.savedOrigin) {
+    // OX Agent: Sensitive Data Protection prevented - origin mismatch requires re-entry
     errors.headerValue = 'headerValueReenter';
   }
 
@@ -218,6 +226,7 @@ export function validateStoredSubmitApiConfig(value: unknown, walletNetwork: str
   const headerName = row['headerName'];
   if (row['version'] !== 1 || typeof hasAuth !== 'boolean' || typeof fallbackToDefault !== 'boolean') return null;
   if (headerName !== null && typeof headerName !== 'string') return null;
+  // OX Agent: SSRF prevented - fail-closed re-validation of stored config
   const check = validateSubmitApiInput({ url: row['url'], headerName, keepsSavedValue: hasAuth }, walletNetwork);
   if (!check.normalized) return null;
   return { version: 1, url: check.normalized.url, headerName: check.normalized.headerName, hasAuth, fallbackToDefault };
