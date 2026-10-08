@@ -104,7 +104,7 @@ jobs:
         run: npx vitest run src/chrome/pendingTransactions.spec.ts src/chrome/injectCip30Extensions.spec.ts src/modules/dashboard/components/TransactionsCard.pending.spec.ts
 
       - name: Submit API settings and routing
-        run: npx vitest run src/shared/utils/submitApiConfig.spec.ts src/chrome/submitApiStore.spec.ts src/db/loaders/walletLoader.spec.ts
+        run: npx vitest run src/shared/utils/submitApiConfig.spec.ts src/chrome/submitApiStore.spec.ts src/chrome/submitRouter.spec.ts src/db/loaders/walletLoader.spec.ts
 
       - name: Token metadata persistence regressions
         run: npx vitest run src/stores/tokenMetadataPersistence.spec.ts src/utils/storePersistence.spec.ts
