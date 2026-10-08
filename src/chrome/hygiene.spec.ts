@@ -66,6 +66,13 @@ describe('hygiene tripwires', () => {
     expect(bg).toContain("registerSubmitApiHandler(MessageTypes.CLEAR_SUBMIT_API, resetSubmitApi, 'saveFailed');");
   });
 
+  it('connect-src carries the scheme sources a user-chosen Submit API endpoint needs', () => {
+    const manifest = read('scripts/manifest.ts');
+    const connectSrc = manifest.slice(manifest.indexOf('const connectSrc = ['), manifest.indexOf('const scriptSrc'));
+    expect(connectSrc).toContain("'https:',");
+    expect(connectSrc).toContain("'http:',");
+  });
+
   it('drops the unused scripting permission', () => {
     expect(read('scripts/manifest.ts')).not.toContain("'scripting'");
   });
