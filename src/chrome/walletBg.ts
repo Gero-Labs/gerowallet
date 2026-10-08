@@ -10,6 +10,7 @@ import {
   isUnexpectedSubmitResponseError,
   unexpectedSubmitResponseError,
 } from '@/chrome/submitErrors';
+import { fromAxiosSubmit, isRoutedSubmitError, routedSubmitError, submitCardanoTx } from '@/chrome/submitRouter';
 import networks from '@/utils/networks';
 import { blockChainDBSchema, blockChainDBVersion } from '@/db/schema';
 import {
@@ -2189,8 +2190,16 @@ export class WalletBg {
     }
 
     try {
-      // Submit transaction via API
-      const txIdResponse = await this.api.submitTx(txCbor);
+      // Submit through the router: the wallet's Submit API if one is saved, else the
+      // same Gero call as before (fromAxiosSubmit keeps its value and error shape).
+      const outcome = await submitCardanoTx({
+        cbor: txCbor,
+        walletId: this.id,
+        network: this.network,
+        defaultSubmit: fromAxiosSubmit(() => this.api.submitTx(txCbor)),
+      });
+      if (outcome.ok === false) throw routedSubmitError(outcome);
+      const txIdResponse = outcome.body as string;
 
       const isValidTxId = /^[a-f0-9]{64}$/i.test(txIdResponse);
       if (!isValidTxId) {
@@ -2225,7 +2234,7 @@ export class WalletBg {
 
       // Keep the node's rejection reason, or explain that a lost response leaves
       // the submission outcome unknown.
-      if (isUnexpectedSubmitResponseError(error)) throw error;
+      if (isUnexpectedSubmitResponseError(error) || isRoutedSubmitError(error)) throw error;
       const response = error?.['response'];
       throw new Error(describeSubmitFailure(response?.status, response?.data));
     }
