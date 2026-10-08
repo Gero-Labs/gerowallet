@@ -168,7 +168,7 @@ The failure goes back to the caller with a "Your submit endpoint: " prefix, so t
 
 An eligible failure resubmits through the default branch and returns `via: 'default'`.
 
-Edge case: after a custom **timeout** the transaction may already be in the mempool, so the fallback can come back 400 (inputs already spent). The router reports "timeout followed by a 400 from the fallback" as "outcome unknown, check your transaction history", not as a rejection.
+Edge case: after a custom **transport failure (timeout, network error, reset, blocked redirect), HTTP 408 or any 5xx** the transaction may already be in the mempool, so the fallback can come back 400 (inputs already spent). The router reports that 400 as "outcome unknown, check your transaction history", not as a rejection; after a 401, 403, 404, 405, 415, 425 or 429 the endpoint refused the request before any node saw it, so the fallback outcome is returned unchanged.
 
 ### 6.6 Last result
 

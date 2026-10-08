@@ -50,6 +50,10 @@ function response(status: number, body: string): Response {
   return new Response(body, { status });
 }
 
+function lastResultCall(via: 'custom' | 'default', error?: object): [Record<string, unknown>] {
+  return [{ [`submitApiLastResult:${WALLET_ID}`]: expect.objectContaining(error ? { via, error } : { via }) }];
+}
+
 function defaultOk(): () => Promise<SubmitOutcome> {
   return vi.fn().mockResolvedValue({ ok: true, via: 'default', body: 'default-hash' });
 }
@@ -124,6 +128,7 @@ describe('submitCardanoTx: custom endpoint', () => {
     fetchMock.mockResolvedValue(response(202, `"${'f'.repeat(64)}"`));
     const outcome = await submitCardanoTx({ cbor, walletId: WALLET_ID, network: 'Mainnet', defaultSubmit: defaultOk() });
     expect(outcome).toEqual({ ok: false, via: 'custom', reason: 'hashMismatch' });
+    expect(sessionSet).toHaveBeenCalledWith(...lastResultCall('custom', { code: 'hashMismatch' }));
   });
 
   it('reports an unparseable 2xx body as an unexpected response', async () => {
@@ -131,6 +136,7 @@ describe('submitCardanoTx: custom endpoint', () => {
     fetchMock.mockResolvedValue(response(200, 'maintenance'));
     const outcome = await submitCardanoTx({ cbor, walletId: WALLET_ID, network: 'Mainnet', defaultSubmit: defaultOk() });
     expect(outcome).toMatchObject({ ok: false, via: 'custom', reason: 'unexpectedResponse', body: 'maintenance' });
+    expect(sessionSet).toHaveBeenCalledWith(...lastResultCall('custom', { code: 'unexpectedResponse' }));
   });
 
   it('never falls back on a 400 node rejection, even with fallback on', async () => {
@@ -172,10 +178,66 @@ describe('submitCardanoTx: custom endpoint', () => {
     fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
     expect(await submitCardanoTx({ cbor, walletId: WALLET_ID, network: 'Mainnet', defaultSubmit: defaultOk() }))
       .toEqual({ ok: false, via: 'custom', reason: 'endpointPrefix' });
+    expect(sessionSet).toHaveBeenCalledWith(...lastResultCall('custom', { code: 'unreachable' }));
 
+    sessionSet.mockClear();
     await writeSubmitApi(WALLET_ID, { ...CONFIG, fallbackToDefault: true }, undefined);
     expect(await submitCardanoTx({ cbor, walletId: WALLET_ID, network: 'Mainnet', defaultSubmit: defaultOk() }))
       .toEqual({ ok: true, via: 'default', body: 'default-hash' });
+    expect(sessionSet).toHaveBeenCalledWith(...lastResultCall('default', { code: 'unreachable' }));
+  });
+
+  it('records a timeout as its own last-result code', async () => {
+    const { cbor } = signedTx();
+    fetchMock.mockRejectedValue(Object.assign(new Error('timed out'), { name: 'TimeoutError' }));
+    expect(await submitCardanoTx({ cbor, walletId: WALLET_ID, network: 'Mainnet', defaultSubmit: defaultOk() }))
+      .toEqual({ ok: false, via: 'custom', reason: 'endpointPrefix' });
+    expect(sessionSet).toHaveBeenCalledWith(...lastResultCall('custom', { code: 'timeout' }));
+  });
+
+  it.each([408, 500, 503])('calls a 400 from the fallback after a custom HTTP %i "outcome unknown"', async (status) => {
+    await writeSubmitApi(WALLET_ID, { ...CONFIG, fallbackToDefault: true }, undefined);
+    const { cbor } = signedTx();
+    fetchMock.mockResolvedValue(response(status, 'nope'));
+    const defaultSubmit = vi.fn().mockResolvedValue({ ok: false, via: 'default', status: 400, body: 'BadInputsUTxO' });
+    const outcome = await submitCardanoTx({ cbor, walletId: WALLET_ID, network: 'Mainnet', defaultSubmit });
+    expect(outcome).toEqual({ ok: false, via: 'default', reason: 'outcomeUnknown' });
+  });
+
+  it('calls a 400 from the fallback after a custom network error "outcome unknown"', async () => {
+    await writeSubmitApi(WALLET_ID, { ...CONFIG, fallbackToDefault: true }, undefined);
+    const { cbor } = signedTx();
+    fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
+    const defaultSubmit = vi.fn().mockResolvedValue({ ok: false, via: 'default', status: 400, body: 'BadInputsUTxO' });
+    const outcome = await submitCardanoTx({ cbor, walletId: WALLET_ID, network: 'Mainnet', defaultSubmit });
+    expect(outcome).toEqual({ ok: false, via: 'default', reason: 'outcomeUnknown' });
+  });
+
+  it.each([401, 403, 404, 405, 415, 425, 429])(
+    'passes a 400 from the fallback through unchanged after a custom HTTP %i (refused before any node)',
+    async (status) => {
+      await writeSubmitApi(WALLET_ID, { ...CONFIG, fallbackToDefault: true }, undefined);
+      const { cbor } = signedTx();
+      fetchMock.mockResolvedValue(response(status, 'nope'));
+      const defaultSubmit = vi.fn().mockResolvedValue({ ok: false, via: 'default', status: 400, body: 'BadInputsUTxO' });
+      const outcome = await submitCardanoTx({ cbor, walletId: WALLET_ID, network: 'Mainnet', defaultSubmit });
+      expect(outcome).toEqual({ ok: false, via: 'default', status: 400, body: 'BadInputsUTxO' });
+    },
+  );
+
+  it('records the fallback result only after the fallback settles, even when it throws', async () => {
+    await writeSubmitApi(WALLET_ID, { ...CONFIG, fallbackToDefault: true }, undefined);
+    const { cbor } = signedTx();
+    fetchMock.mockResolvedValue(response(503, 'down'));
+    let sessionWritesWhenFallbackRan = -1;
+    const defaultSubmit = vi.fn(async (): Promise<SubmitOutcome> => {
+      sessionWritesWhenFallbackRan = sessionSet.mock.calls.length;
+      throw new Error('gero unreachable');
+    });
+    await expect(submitCardanoTx({ cbor, walletId: WALLET_ID, network: 'Mainnet', defaultSubmit }))
+      .rejects.toThrow('gero unreachable');
+    expect(sessionWritesWhenFallbackRan).toBe(0);
+    expect(sessionSet).toHaveBeenCalledWith(...lastResultCall('default', { code: 'http', status: 503 }));
   });
 
   it('calls a 400 from the fallback after a custom timeout "outcome unknown"', async () => {
@@ -225,6 +287,7 @@ describe('submitCardanoTx: invalid saved config fails closed', () => {
     expect(outcome).toEqual({ ok: false, via: 'custom', reason: 'invalidConfig' });
     expect(defaultSubmit).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
+    expect(sessionSet).toHaveBeenCalledWith(...lastResultCall('custom', { code: 'invalidConfig' }));
   });
 });
 
@@ -251,6 +314,15 @@ describe('describeRoutedFailure / dappRoutedError', () => {
     const failure = { ok: false as const, via: 'default' as const, status: 400, body: 'rejected' };
     expect(describeRoutedFailure(failure)).toBe(describeSubmitFailure(400, 'rejected'));
     expect(dappRoutedError(failure)).toEqual(dappSubmitError(400, 'rejected'));
+  });
+
+  it('words an unparseable 2xx as unconfirmed, never as a failed send (the endpoint may have accepted it)', () => {
+    const failure = { ok: false as const, via: 'custom' as const, reason: 'unexpectedResponse' as const, body: 'maintenance' };
+    const text = describeRoutedFailure(failure);
+    expect(text.startsWith(SUBMIT_API_ENDPOINT_PREFIX)).toBe(true);
+    expect(text).toContain(TX_SUBMIT_UNCONFIRMED_MESSAGE);
+    expect(text).not.toContain('could not send');
+    expect(dappRoutedError(failure)).toMatchObject({ info: text, message: text });
   });
 
   it('names the custom endpoint and keeps the fixed messages', () => {

@@ -15,7 +15,7 @@ import {
   SUBMIT_API_INVALID_MESSAGE,
   TxSendError,
 } from '@/chrome/config';
-import { dappSubmitError, describeSubmitFailure, describeUnexpectedSubmitResponse } from '@/chrome/submitErrors';
+import { dappSubmitError, describeSubmitFailure } from '@/chrome/submitErrors';
 import { readSubmitApi } from '@/chrome/submitApiStore';
 import {
   isValidHeaderValue,
@@ -175,14 +175,22 @@ export async function submitCardanoTx(input: SubmitCardanoTxInput): Promise<Subm
       : { ok: false, via: 'custom', status: result.status, body: result.body, reason: 'endpointPrefix' };
   }
 
-  await recordLastResult(walletId, { via: 'default', error: lastError(result) });
-  const fallback = await defaultSubmit();
-  if (fallback.ok === false && result.kind === 'transport' && result.timedOut && fallback.status === 400) {
-    // The endpoint may have accepted the tx before timing out, in which case Gero's
-    // node now sees spent inputs. That 400 does not mean the tx was rejected.
-    return { ok: false, via: 'default', reason: 'outcomeUnknown' };
+  // The endpoint may have received the tx even though it failed: a transport error, a
+  // 408 or a 5xx says nothing about whether it reached a node. A 4xx like 401 or 404
+  // means it was refused before any node saw it.
+  const mayHaveReachedNode = result.kind === 'transport' || result.status === 408 || result.status >= 500;
+  try {
+    const fallback = await defaultSubmit();
+    if (fallback.ok === false && mayHaveReachedNode && fallback.status === 400) {
+      // If the endpoint did submit it, Gero's node now sees spent inputs. That 400 does
+      // not mean the tx was rejected.
+      return { ok: false, via: 'default', reason: 'outcomeUnknown' };
+    }
+    return fallback;
+  } finally {
+    // After the fallback settles, so a throw from defaultSubmit still leaves a record.
+    await recordLastResult(walletId, { via: 'default', error: lastError(result) });
   }
-  return fallback;
 }
 
 /** Wraps an axios-style call (resolves the value, throws `{ response: { status, data } }`). */
@@ -216,7 +224,8 @@ export function describeRoutedFailure(failure: SubmitFailure): string {
     case 'hashMismatch':
       return SUBMIT_API_HASH_MISMATCH_MESSAGE;
     case 'unexpectedResponse':
-      return SUBMIT_API_ENDPOINT_PREFIX + describeUnexpectedSubmitResponse(failure.body);
+      // The endpoint answered 2xx, so it may have accepted the tx: never invite a resend.
+      return SUBMIT_API_ENDPOINT_PREFIX + describeSubmitFailure(undefined, undefined);
     case 'outcomeUnknown':
       return describeSubmitFailure(undefined, undefined);
     case 'endpointPrefix':
