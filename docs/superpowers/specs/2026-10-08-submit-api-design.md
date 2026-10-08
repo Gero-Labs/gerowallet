@@ -38,6 +38,7 @@ Two kinds of users, one feature:
 ## 3. Non-goals
 
 - Bitcoin broadcast and Midnight submit endpoints.
+- Transactions that Nexus or Strike builds or submits on the user's behalf: swaps (the gero-swap widget, and the agent SwapCard through the Nexus aggregator), DUST registration and Strike perps. They reach Gero's services whatever this setting says, so the setting makes no promise about them.
 - Provider presets or a provider picker. A Nexus URL is entered like any other.
 - Custom endpoints for reads (UTxOs, history, protocol parameters). Only submission changes.
 - The Midnight wallet's cNIGHT registration submit (`WalletBg` around line 3108). It submits a Cardano tx from a Midnight wallet, which has no Cardano submit setting, so it stays on the default path.
@@ -54,7 +55,8 @@ New module `src/chrome/submitRouter.ts`, background worker only.
 type SubmitOutcome =
   | { ok: true; via: 'custom' | 'default'; body: string }
   | { ok: false; via: 'custom' | 'default'; status?: number; body?: unknown;
-      reason?: 'endpointPrefix' | 'hashMismatch' | 'outcomeUnknown' | 'invalidConfig' };
+      reason?: 'endpointPrefix' | 'hashMismatch' | 'unexpectedResponse' | 'outcomeUnknown' | 'invalidConfig'
+             | 'storageUnavailable' };
 
 submitCardanoTx(input: {
   cbor: string;                              // signed tx, hex
@@ -71,7 +73,7 @@ The **default branch** is the caller's existing call, passed in as `defaultSubmi
 - in-wallet path: `Api.submitTx(cbor)` (`src/api/api.ts`; Preview goes to Nexus, mainnet and preprod go to gero-backend). An axios adapter turns its string result or `error.response` into a `SubmitOutcome`.
 - dApp paths: `serialization.submitTx(cbor, chain, network)` (gero-backend, `provider=KOIOS`). A fetch adapter turns its `Response` into a `SubmitOutcome`.
 
-The two defaults are never merged. Each caller keeps its own, and the adapters pass status and body through untouched, so an unset config produces exactly the status and body each caller sees in 2.7.2. `status` and `body` feed the existing `describeSubmitFailure(status, body)` and `dappSubmitError(status, body)` helpers unchanged. `reason` marks the router's own outcomes (custom-endpoint prefix, hash mismatch, unknown outcome after timeout, invalid saved config) so callers can pick the matching message.
+The two defaults are never merged. Each caller keeps its own, and the adapters pass status and body through untouched, so an unset config produces exactly the status and body each caller sees in 2.7.2. `status` and `body` feed the existing `describeSubmitFailure(status, body)` and `dappSubmitError(status, body)` helpers unchanged. `reason` marks the router's own outcomes (custom-endpoint prefix, hash mismatch, unparseable 2xx, unknown outcome, invalid saved config, unreadable wallet DB) so callers can pick the matching message.
 
 ### 4.2 Call sites
 
@@ -140,6 +142,7 @@ body: raw CBOR bytes (hex decoded)
 - `redirect: 'error'`. On a cross-origin redirect fetch drops `Authorization` but keeps custom headers such as `project_id` and `X-Api-Key`, so following a redirect could hand the key to another host. A real submit API never redirects.
 - `credentials: 'omit'`.
 - Timeout 30 s (`AbortSignal.timeout`).
+- The response text is redacted (the header value becomes `***`) and then capped at 512 characters plus an ellipsis, so a hostile endpoint cannot flood error messages.
 
 ### 6.2 Success
 
@@ -180,7 +183,9 @@ After every submit from a wallet **with a custom endpoint configured**, the rout
 
 ### 6.7 Invalid saved config
 
-The router re-validates the stored `submitApi` row on every submit. If the row fails validation (corrupted or tampered), the submit **fails closed** with "Your Submit API setting is invalid. Fix it in Settings → Advanced." It never silently uses the default path, because that would break the privacy promise.
+The router re-validates the stored `submitApi` row on every submit. If the row fails validation (corrupted or tampered), the submit **fails closed** with "Your Submit API setting is invalid. Fix it in Settings → Advanced." It never silently uses the default path, because that would break the privacy promise. A `submitApi` row that exists but holds `null` is such a row, not an absent one.
+
+If the wallet DB cannot be read at all, the submit fails with `storageUnavailable`: "Could not read this wallet's Submit API setting. Nothing was sent." It is not reported as a possibly-sent transaction, because nothing left the wallet.
 
 ### 6.8 Feature flag
 
@@ -201,7 +206,7 @@ The background posts a single `0x00` byte as `application/cbor`, with a 10 s tim
 | 5xx | The endpoint answered with a server error |
 | Network error, timeout, redirect | Unreachable |
 
-The test runs in the background because extension pages are CSP-limited to an allowlist (`connect-src` in `scripts/manifest.ts`), while the worker can reach any host. The SPO `nodeFetch` already relies on this.
+The test runs in the background, in the same place as real submits. The extension CSP is static and its `connect-src` also governs the MV3 service worker; `host_permissions` does not bypass it. A user-chosen endpoint can be any host, and a CSP cannot be extended at runtime, so `connect-src` has to carry the scheme sources `https:` and `http:` (the explicit entries stay, to document intent). The router is the only code that sends to a user-chosen URL, and only to the saved, validated endpoint. `connect-src` is not remote code, so the remote-code guard is unaffected.
 
 ## 8. Validation
 
@@ -225,14 +230,14 @@ Shown only for `Blockchain.CARDANO` wallets, after "Re-sync wallet". Visible whe
 - Title **Submit API**. Helper: "Send this wallet's transactions through your own endpoint."
 - Right side: status text **Default** or **Custom**, plus a **Configure** button.
 - With a custom endpoint, a caption shows the last result: "Last submit: sent via your endpoint, 10:32" or "Fell back to Gero, 10:35 (503)".
-- A "new" dot through `FEATURE_DEFINITIONS`: `{ id: 'settings.advanced.submitApi', version: '2.7.3', path: ['settings', 'advanced', 'submitApi'] }`, marked seen when the dialog opens. Same pattern as auto-withdraw.
+- A "new" dot through `FEATURE_DEFINITIONS`: `{ id: 'settings.advanced.submitApi', version: '2.7.3', path: ['settings', 'advanced', 'submitApi'] }`, marked seen when the dialog opens, and also when the Advanced tab was visited before Settings closed (Bitcoin, Midnight and Apex wallets never show the row, so the dot would otherwise stay). Same pattern as auto-withdraw.
 
 ### 9.2 `SubmitApiDialog.vue` (on `BaseDialog`)
 
-1. **Submit URL.** Placeholder `https://nexus.gerowallet.io/api/transactions/submit?network=cardano-mainnet`. Caption: "Works with Nexus, cardano-submit-api, Blockfrost and Koios submit URLs." Network line: "Must point at Cardano Mainnet", taken from the wallet's network.
+1. **Submit URL.** Placeholder `https://nexus.gerowallet.io/api/transactions/submit?network=cardano-mainnet`. Caption: "Works with Nexus, cardano-submit-api, Blockfrost and Koios submit URLs." Network line: "Must point at Cardano Mainnet", taken from the wallet's network. Under it: "Put API keys in the header fields, not in the URL." (the URL is stored in the public, broadcast row).
 2. **Header name** (optional). Placeholder `X-Api-Key`.
 3. **Header value** (optional). Password-type field. A saved value is never sent back to the page: the field reads "Saved" with **Replace** and **Remove**.
-4. **Fall back to Gero if my endpoint fails** toggle, default off. Caption: "If on, a failed submit is retried through Gero's servers. Leave off if your transactions must never reach Gero."
+4. **Fall back to Gero if my endpoint fails** toggle, default off. Caption: "If on, a failed submit is retried through Gero's servers. Leave off if Gero must never submit your transactions."
 5. Plain-http warning or block, per section 8.
 6. Actions:
    - **Test**, with an inline result line and icon.
@@ -294,7 +299,10 @@ public ResponseEntity<String> submitTransactionCbor(
   - custom success (202 with a quoted body, 200 with a bare body)
   - hash mismatch
   - every failure class × fallback on/off
-  - timeout followed by a fallback 400 gives "unknown"
+  - a transport failure, 408 or 5xx followed by a fallback 400 gives "unknown"; a 401, 403, 404, 405, 415, 425 or 429 followed by a fallback 400 passes the 400 through unchanged
+  - a fallback that fails or throws leaves the endpoint failure as the last result (`via: 'custom'`)
+  - an endpoint body of 5,000 characters comes back capped at 512 plus an ellipsis
+  - a `submitApi` row holding `null` fails closed; an unreadable wallet DB gives `storageUnavailable` and sends nothing
   - redirect blocked
   - header sent exactly once with the right name
   - the header value never appears in any thrown error or last-result entry

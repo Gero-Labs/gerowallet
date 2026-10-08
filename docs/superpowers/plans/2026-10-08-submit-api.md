@@ -3282,7 +3282,7 @@ After opening it, call `ccd_pr get_status` and bind the PR if it is not reported
 - [ ] **Step 1: Create an isolated worktree**
 
 ```bash
-cd "/Users/dudiedri/IdeaProjects/A.D. Labs/nexus"
+cd ../nexus   # sibling checkout of the nexus repo
 git fetch origin
 git worktree add -b feat/submit-application-cbor ../nexus-submit-cbor origin/development
 cd ../nexus-submit-cbor
