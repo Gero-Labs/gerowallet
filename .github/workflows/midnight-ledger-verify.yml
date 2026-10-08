@@ -36,3 +36,26 @@ jobs:
         run: npx vitest run src/chains/midnight src/services/midnight-tx.ledger.spec.ts src/services/__tests__/midnightTxPerToken.test.ts src/services/__tests__/midnightSyncStatus.test.ts src/services/__tests__/midnightResumeCursor.test.ts src/services/crossDevice src/stores/midnightStore.spec.ts src/shared/composables/useMidnightDustLive.spec.ts
       - name: Build every production extension entry point
         run: node scripts/build-isolated-extension.mjs .
+
+      - name: Install isolated Help browser runtime
+        run: |
+          npm install --prefix "$RUNNER_TEMP/help-browser" --no-audit --no-fund --ignore-scripts playwright@1.61.0
+          node "$RUNNER_TEMP/help-browser/node_modules/playwright/cli.js" install --with-deps chromium
+
+      - name: Help browser acceptance with synthetic API fixtures
+        env:
+          PLAYWRIGHT_MODULE: ${{ runner.temp }}/help-browser/node_modules/playwright
+          HELP_SMOKE_OUTPUT: ${{ runner.temp }}/help-browser-evidence
+        run: |
+          node scripts/help-browser/foundation-smoke.cjs
+          node scripts/help-browser/published-smoke.cjs
+          node scripts/help-browser/updates-smoke.cjs
+
+      - name: Upload reproducible Help browser evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: help-browser-evidence-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/help-browser-evidence
+          if-no-files-found: warn
+          retention-days: 30
