@@ -16,11 +16,15 @@ export function blogHelpRedirect(initialized: boolean, enabled: boolean): string
   return initialized && enabled ? '/help/updates?source=blog' : null;
 }
 
-export async function openWelcomeHelp(onboardingActive: boolean, support: boolean, push: (path: string) => unknown): Promise<void> {
+export async function openWelcomeHelp(onboardingActive: boolean, support: boolean, push: (path: string) => unknown): Promise<boolean> {
   const path = support ? '/help?support=1' : '/help';
-  if (onboardingActive) {
-    await chrome.tabs.create({ url: chrome.runtime.getURL(`index.html#${path}`) });
-  } else {
-    await push(path);
-  }
+  try {
+    if (onboardingActive) {
+      if (typeof chrome === 'undefined' || !chrome.tabs?.create || !chrome.runtime?.getURL) return false;
+      await chrome.tabs.create({ url: chrome.runtime.getURL(`index.html#${path}`) });
+    } else {
+      await push(path);
+    }
+    return true;
+  } catch { return false; }
 }

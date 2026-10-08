@@ -38,6 +38,8 @@ export default {
   "help.notPublished": "Guides coming soon",
   "help.matchCount": "{count} matches · {shown} shown for this wallet",
   "help.title": "Help Center",
+  "help.openFailed": "Help could not open automatically. Your setup is still here.",
+  "help.openNewTab": "Open Help in a new tab",
   "help.contact": "Contact support",
   "help.supportLabel": "Human support",
   "help.eligibility": "Live chat currently supports Cardano mainnet software wallets.",

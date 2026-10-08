@@ -38,6 +38,10 @@
     </div>
 
     <!-- Main container -->
+    <p v-if="helpOpenFailed" role="status" class="welcome-help-error t-body-sm">
+      {{ $t('help.openFailed') }}
+      <a :href="helpFallbackPath" target="_blank" rel="noopener noreferrer">{{ $t('help.openNewTab') }}</a>
+    </p>
     <div class="welcome-container">
       <!-- Left column - logo + existing wallet list. With zero wallets there
            is nothing to sign in to, so the whole panel yields to the
@@ -93,7 +97,12 @@ import { useAvailableWallets } from '@/shared/composables/useAvailableWallets';
 import { applyChainAccent } from '@/shared/composables/useChainAccent';
 
 const helpRouter = useRouter();
-const enterHelp = (support: boolean) => openWelcomeHelp(started.value, support, path => helpRouter.push(path));
+const helpOpenFailed = ref(false);
+const helpFallbackPath = ref('#/help');
+const enterHelp = async (support: boolean) => {
+  helpFallbackPath.value = support ? '#/help?support=1' : '#/help';
+  helpOpenFailed.value = !await openWelcomeHelp(started.value, support, path => helpRouter.push(path));
+};
 
 const DEV_NETWORKS_KEY = 'gero:devNetworks';
 
@@ -131,6 +140,19 @@ const onWalletListNetwork = (n: NetworkInfo): void => {
 };
 </script>
 <style scoped lang="scss">
+.welcome-help-error {
+  position: absolute;
+  top: calc(var(--g-s-6) * 3);
+  right: var(--g-s-6);
+  z-index: 100;
+  max-width: min(440px, 90vw);
+  padding: var(--g-s-4);
+  color: var(--g-text-1);
+  background: var(--g-surface);
+  border: 1px solid var(--g-hairline-2);
+  border-radius: var(--g-r-card);
+  a { color: var(--g-accent); }
+}
 .welcome-root {
   position: fixed;
   top: 0;

@@ -38,6 +38,8 @@ export default {
   "help.notPublished": "Anleitungen folgen in Kürze",
   "help.matchCount": "{count} Treffer · {shown} für diese Wallet angezeigt",
   "help.title": "Hilfe-Center",
+  "help.openFailed": "Die Hilfe konnte nicht automatisch geöffnet werden. Deine Einrichtung bleibt erhalten.",
+  "help.openNewTab": "Hilfe in einem neuen Tab öffnen",
   "help.contact": "Support kontaktieren",
   "help.supportLabel": "Persönlicher Support",
   "help.eligibility": "Live-Chat unterstützt derzeit Software-Wallets im Cardano-Mainnet.",

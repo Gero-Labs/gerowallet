@@ -38,6 +38,8 @@ export default {
   "help.notPublished": "Guías próximamente",
   "help.matchCount": "{count} resultados · {shown} mostrados para esta billetera",
   "help.title": "Centro de ayuda",
+  "help.openFailed": "No se pudo abrir la ayuda automáticamente. Tu configuración sigue aquí.",
+  "help.openNewTab": "Abrir la ayuda en una pestaña nueva",
   "help.contact": "Contactar con soporte",
   "help.supportLabel": "Soporte humano",
   "help.eligibility": "El chat en vivo admite actualmente billeteras de software en la red principal de Cardano.",

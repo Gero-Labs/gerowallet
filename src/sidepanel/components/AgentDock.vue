@@ -559,11 +559,6 @@ export default defineComponent({
       dock.open();
     }, { immediate: true });
     watch(() => dock.isOpen.value, open => { if (!open) clearHelpSupport(); });
-    watch(() => [walletStore.loggedWallet?.id, walletStore.isLocked], () => {
-      draft.value = '';
-      dock.close();
-      clearHelpSupport();
-    });
     // Live-chat-off is byte-identical to the dock's pre-support-chat existence:
     // always 'copilot', regardless of `mode`/copilotEnabled. Live-chat-on with
     // the Assistant tab off (copilotEnabled false) forces 'support' even if
@@ -572,6 +567,15 @@ export default defineComponent({
     const activeMode = computed<DockMode>(() => {
       if (!liveChatEnabled.value) return 'copilot';
       return copilotEnabled.value ? mode.value : 'support';
+    });
+    watch(() => [walletStore.loggedWallet?.id, walletStore.isLocked], () => {
+      if (walletStore.isLocked || activeMode.value === 'support' || helpSupportIntent.active) {
+        draft.value = '';
+        pendingFiles.value = [];
+        tooManyFilesNotice.value = false;
+        dock.close();
+      }
+      clearHelpSupport();
     });
     watch(activeMode, (next, previous) => {
       // Support context and attachments must never carry into the AI composer,

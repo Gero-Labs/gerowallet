@@ -60,15 +60,11 @@ interface FlagsHolder {
 interface SheetVisibility {
   isAnySheetOpen: { value: boolean };
 }
-// Mirrors the one property NavigationDrawer.vue's own isApex/isMidnight
-// derivation reads (walletStore.loggedWallet?.chain) — a plain mutable
-// object, not a ref: the chain-accent tests below only need to set it BEFORE
-// each fresh mountDock() call (a new component instance re-evaluates its
-// computed from scratch), not react to it changing on an already-mounted
-// instance, so the ref-based reactivity flagsHolder needed above is
-// unnecessary machinery here.
+// Observe this shared object after Vue loads so mounted dock watchers can
+// exercise wallet switches and locks as well as chain-specific branding.
 interface MockWalletStore {
   loggedWallet?: { chain?: string; id?: number };
+  isLocked: boolean;
 }
 
 // vi.mock(...) factories are hoisted above every import in this file — including
@@ -110,7 +106,7 @@ const { mockSupportChat, mockDock, flagsHolder, sheetVisibility, mockWalletStore
     // optional chaining, so no logged wallet falls through to the default
     // (Cardano) mark, matching every pre-existing test that doesn't care about
     // chain at all.
-    mockWalletStore: { loggedWallet: undefined } as MockWalletStore,
+    mockWalletStore: { loggedWallet: undefined, isLocked: false } as MockWalletStore,
   };
 });
 
@@ -200,6 +196,7 @@ function setCopilotEnabled(on: boolean): void {
 // later render (mount() only happens inside a test's it() callback, well after this
 // module has finished initializing).
 Object.assign(sheetVisibility, { isAnySheetOpen: ref(false) });
+Vue.observable(mockWalletStore);
 
 Object.assign(mockSupportChat, {
   messages: ref<SupportMessage[]>([]),
@@ -303,6 +300,7 @@ beforeEach(() => {
   setLiveChatEnabled(true);
   setCopilotEnabled(true);
   setWalletChain(undefined);
+  mockWalletStore.isLocked = false;
 
   mockDock.isOpen.value = true;
   mockDock.busy.value = false;
@@ -325,6 +323,25 @@ afterEach(() => {
 });
 
 describe('AgentDock Help entry', () => {
+  it('preserves the Assistant draft and open state when switching wallets', async () => {
+    mockWalletStore.loggedWallet = { id: 7, chain: 'Cardano' };
+    const wrapper = mountDock(); await clickCopilotToggle(wrapper);
+    vmOf(wrapper).draft = 'Assistant question'; vi.mocked(mockDock.close).mockClear();
+    mockWalletStore.loggedWallet = { id: 8, chain: 'Cardano' }; await Vue.nextTick();
+    expect(vmOf(wrapper).draft).toBe('Assistant question'); expect(mockDock.close).not.toHaveBeenCalled();
+    mockWalletStore.isLocked = true; await Vue.nextTick();
+    expect(vmOf(wrapper).draft).toBe(''); expect(mockDock.close).toHaveBeenCalled();
+  });
+  it('clears Support draft and attachments on wallet switch and on entering Assistant', async () => {
+    mockWalletStore.loggedWallet = { id: 7, chain: 'Cardano' };
+    const wrapper = mountDock(); const vm = vmOf(wrapper);
+    vm.draft = 'Support question'; vm.pendingFiles = [makeFile('private.txt', 8)];
+    mockWalletStore.loggedWallet = { id: 8, chain: 'Cardano' }; await Vue.nextTick();
+    expect(vm.draft).toBe(''); expect(vm.pendingFiles).toEqual([]); expect(mockDock.close).toHaveBeenCalled();
+    vm.draft = 'Another support question'; vm.pendingFiles = [makeFile('private.txt', 8)];
+    await clickCopilotToggle(wrapper);
+    expect(vm.draft).toBe(''); expect(vm.pendingFiles).toEqual([]);
+  });
   it('clears Help context if the live-chat flag switches the dock to Assistant', async () => {
     mockWalletStore.loggedWallet = { id: 7, chain: 'Cardano' };
     openWalletSupport('Support-only question and context', 7);

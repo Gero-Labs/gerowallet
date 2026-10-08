@@ -1,6 +1,7 @@
 import { documentToHtmlString } from '@contentful/rich-text-html-renderer';
 import { BLOCKS, INLINES } from '@contentful/rich-text-types';
 import type { PublishedHelpArticle } from '@/api/help.api';
+import { updateImage } from './helpUpdates';
 
 const escape = (value: string): string => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 /** Reject CMS-supplied asset origins, executable links, and unresolved embedded entries. */
@@ -11,9 +12,9 @@ export function renderHelpArticle(article: PublishedHelpArticle, baseUrl: string
       const asset = id ? article.assets[id] : undefined;
       if (!asset || !/^\/api\/help\/assets\/[a-f0-9]{64}$/.test(asset.url)
         || !['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(asset.contentType)) return '';
-      const url = new URL(asset.url, baseUrl);
-      if (!['https:', 'http:'].includes(url.protocol)) return '';
-      return `<img src="${escape(url.href)}" alt="${escape(asset.title)}" loading="lazy" />`;
+      const url = updateImage(asset.url, baseUrl);
+      if (!url) return '';
+      return `<img src="${escape(url)}" alt="${escape(asset.title)}" loading="lazy" />`;
     },
     [INLINES.HYPERLINK]: (node, next) => {
       const uri = String(node.data?.uri ?? '');

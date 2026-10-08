@@ -18,18 +18,19 @@
       <article v-for="item in items" :key="item.id" class="update-row">
         <div class="t-label update-meta"><span>{{ sourceLabel(item.source) }}</span><time v-if="item.publishedAt" :datetime="item.publishedAt">{{ date(item.publishedAt) }}</time><span v-else>{{ t('help.dateUnknown') }}</span></div>
         <div class="update-copy">
-          <router-link v-if="item.kind === 'blog'" :to="{ path: updateLink(item), query: { chain } }" class="update-title"><h2 class="t-heading" :lang="item.locale">{{ item.title }}</h2></router-link>
-          <a v-else :href="updateLink(item)" target="_blank" rel="noopener noreferrer" class="update-title"><h2 class="t-heading" :lang="item.locale">{{ item.title }} <span aria-hidden="true">↗</span></h2></a>
+          <router-link v-if="item.kind === 'blog' && updateLink(item)" :to="{ path: updateLink(item), query: { chain } }" class="update-title"><h2 class="t-heading" :lang="item.locale">{{ item.title }}</h2></router-link>
+          <a v-else-if="updateLink(item)" :href="updateLink(item)" target="_blank" rel="noopener noreferrer" class="update-title"><h2 class="t-heading" :lang="item.locale">{{ item.title }} <span aria-hidden="true">↗</span></h2></a>
+          <h2 v-else class="t-heading" :lang="item.locale">{{ item.title }}</h2>
           <p class="t-body update-text" :lang="item.locale">{{ item.text || item.summary }}</p>
           <p v-if="item.isLocaleFallback" class="t-label">{{ t('help.englishFallback') }}</p>
           <div v-if="item.media.length" class="update-media"><img v-for="media in item.media.filter(m => image(m.url))" :key="media.url" :src="image(media.url)" :alt="media.alt" loading="lazy" /></div>
-          <p class="t-label update-attribution">{{ item.publisher }}<span v-if="item.source === 'cardano-news' && item.publisher !== 'cardano.org'"> · via cardano.org</span><span v-if="item.timestampStatus === 'x-snowflake'"> · {{ t('help.postDate') }}</span></p>
+          <p class="t-label update-attribution">{{ item.publisher }}<span v-if="item.timestampStatus === 'x-snowflake'"> · {{ t('help.postDate') }}</span></p>
         </div>
       </article>
       <GButton v-if="page?.nextCursor" :disabled="loading" @click="loadMore()">{{ t('help.loadMoreUpdates') }}</GButton>
     </div>
-    <p v-else-if="!loading && !failed" role="status" class="t-body updates-status">{{ t('help.noUpdates') }}</p>
-    <Blog v-if="failed && !items.length && source === 'gero-blog'" />
+    <p v-else-if="!loading && !failed && !legacyBlog" role="status" class="t-body updates-status">{{ t('help.noUpdates') }}</p>
+    <Blog v-if="legacyBlog" />
     <aside v-if="!items.length && !loading && source !== 'gero-blog'" class="updates-originals">
       <p class="t-body-sm">{{ t('help.sourceIntro') }}</p>
       <a v-for="link in originals" :key="link.id" :href="link.url" target="_blank" rel="noopener noreferrer" class="t-label">{{ sourceLabel(link.id) }} ↗</a>
@@ -52,7 +53,9 @@ const route = useRoute(), { t } = useTranslation();
 const source = computed(() => updateSource(route.query.source));
 const request = computed(() => ({ source: source.value, chain: props.chain, locale: helpLocale(i18n.locale) }));
 const { page, loading, failed, retry, loadMore } = useHelpUpdates(request);
-const items = computed(() => page.value?.items.filter(item => updateLink(item)) ?? []);
+const items = computed(() => page.value?.items ?? []);
+const legacyBlog = computed(() => source.value === 'gero-blog' && !loading.value && !items.value.length
+  && (failed.value || page.value?.sources.some(item => item.source === 'gero-blog' && item.status === 'unavailable')));
 const visibleSources = computed(() => page.value?.sources.filter(item => (source.value === 'all' || source.value === item.source || source.value === 'ecosystem-news' && item.source.endsWith('-news'))
   && (props.chain === 'all' || !item.source.endsWith('-news') || item.source === props.chain + '-news')) ?? []);
 const originals = computed(() => [

@@ -4,6 +4,15 @@ import { readFileSync } from 'node:fs';
 
 afterEach(() => vi.unstubAllGlobals());
 describe('welcome help entry', () => {
+  it('preserves setup and reports missing or rejected tab creation without an unhandled rejection', async () => {
+    const push = vi.fn();
+    vi.stubGlobal('chrome', undefined);
+    expect(await openWelcomeHelp(true, false, push)).toBe(false);
+    vi.stubGlobal('chrome', { tabs: { create: vi.fn().mockRejectedValue(new Error('Unavailable')) }, runtime: { getURL: (path: string) => path } });
+    expect(await openWelcomeHelp(true, true, push)).toBe(false);
+    expect(push).not.toHaveBeenCalled();
+    expect(await openWelcomeHelp(false, false, vi.fn().mockRejectedValue(new Error('Navigation failed')))).toBe(false);
+  });
   it('opens another extension tab while setup remains mounted', async () => {
     const push = vi.fn();
     const create = vi.fn().mockResolvedValue({});
