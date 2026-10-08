@@ -15,13 +15,23 @@ that run requesting 30 days.
 ## CI scope
 
 The separate **Help browser scenarios** check runs for pull requests to
-`development` or `main` that change Help, Blog, support, welcome, navigation,
-related shared UI/state, the browser harness, or its build dependencies. You can
-also dispatch the workflow manually. Its `paths` list defines the exact scope;
-update that list when moving a covered module or adding a shared dependency.
+`development` or `main` that change any application source (`src/**`), build or
+test script (`scripts/**`), package manifest or lockfile, TypeScript/JavaScript
+configuration, Vite configuration, this document, or the workflow itself. This
+covers shared components, models, network utilities, support transport, CSP,
+and the chunks imported by the scenarios without maintaining individual imports.
+
+A nightly run at 03:17 UTC also checks the default branch, currently
+`development`, without a path filter. GitHub activates that schedule only after
+the workflow is merged into the default branch; it has not run from this PR.
+You can also dispatch the workflow manually. The nightly run is a safety net
+for path-filter limits and environment changes; it uses the same synthetic
+fixtures and does not test live services.
 
 This check is optional under the current branch protection settings. Keep it
-separate from required checks because unrelated pull requests skip this workflow.
+separate from required checks because documentation-only pull requests can skip
+this workflow. Application changes intentionally run the optional browser check,
+even outside Help, because the extension shares runtime dependencies.
 Scenario failures remain visible as failures and upload any available evidence.
 The required **Ledger tests and extension bundles** check retains its broad
 trigger, ledger tests, and production build, without installing Chromium or

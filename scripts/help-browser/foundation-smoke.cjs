@@ -138,9 +138,9 @@ const extension = path.join(process.env.WALLET_REPO || path.resolve(__dirname, '
     await page.waitForURL('**#/help/updates?source=blog*');
     assert.ok(page.url().includes('source=blog'));
     assert.equal(requests.filter(url => /chatwoot|support\.gerowallet|support-chat/i.test(url)).length, 0, 'No chat identity/message created before Send');
+    assert.deepEqual(errors, []);
     console.log(JSON.stringify({ stage: 'complete', errors, blockedExternalRequests: requests.length, profile, screenshots: out }));
     fs.writeFileSync(path.join(out, 'browser-results.json'), JSON.stringify({ errors, blockedExternalRequests: requests.length, passed: true }, null, 2));
-    assert.deepEqual(errors, []);
   } catch (error) {
     const page = context.pages().at(-1);
     if (page) {

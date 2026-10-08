@@ -2,40 +2,25 @@ name: Help browser evidence
 
 on:
   # Optional evidence, separate from the required Ledger check. Do not require
-  # this path-filtered check in branch protection: unrelated PRs do not run it.
+  # this path-filtered check in branch protection: docs-only PRs may skip it.
   pull_request:
     branches: [development, main]
     paths:
       - '.github/workflows/help-browser-evidence.yml'
-      - 'scripts/help-browser/**'
-      - 'scripts/build-isolated-extension.mjs'
-      - 'scripts/prepare.ts'
+      # Cover application and build dependencies without maintaining an import
+      # allowlist. Shared UI, support transport, CSP, and chunks all affect Help.
+      - 'src/**'
+      - 'scripts/**'
       - 'docs/help-browser-verification.md'
-      - 'src/modules/help/**'
-      - 'src/modules/blog/**'
-      - 'src/modules/navigation/**'
-      - 'src/modules/welcome/**'
-      - 'src/options/**'
-      - 'src/api/help.api.ts'
-      - 'src/api/blog.api.ts'
-      - 'src/stores/featureFlagsStore.ts'
-      - 'src/stores/walletStore.ts'
-      - 'src/stores/geroStore.ts'
-      - 'src/stores/networkStore.ts'
-      - 'src/shared/components/iso/**'
-      - 'src/shared/utils/walletSearchIndex*'
-      - 'src/shared/styles/**'
-      - 'src/plugins/i18n*'
-      - 'src/plugins/i18n/**'
-      - 'src/plugins/vuetify*'
-      - 'src/sidepanel/components/AgentDock*'
-      - 'src/sidepanel/composables/useSupportChat*'
-      - 'src/sidepanel/composables/useAgentDock*'
-      - 'src/services/support/**'
-      - 'src/chrome/supportChatAuth*'
       - 'package.json'
       - 'package-lock.json'
+      - 'tsconfig*.json'
+      - 'jsconfig*.json'
       - 'vite.config*.mts'
+  # GitHub schedules run on the default branch, currently development. This
+  # safety net becomes active only after the workflow is merged there.
+  schedule:
+    - cron: '17 3 * * *'
   workflow_dispatch:
 
 permissions:
