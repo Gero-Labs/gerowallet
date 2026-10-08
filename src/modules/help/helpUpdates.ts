@@ -1,0 +1,20 @@
+import type { HelpUpdate } from '@/api/help.api';
+export const updateSources = ['all', 'gero-blog', 'ecosystem-news', 'gero-x', 'nexus-x'] as const;
+export function updateSource(value: unknown): string {
+  if (value === 'blog') return 'gero-blog';
+  return typeof value === 'string' && [...updateSources, 'cardano-news', 'midnight-news', 'bitcoin-news'].includes(value) ? value : 'all';
+}
+export function updateLink(item: HelpUpdate): string | null {
+  if (item.kind === 'blog' && item.destination?.type === 'blog' && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(item.destination.slug)) return '/blog/' + item.destination.slug;
+  try {
+    const uri = new URL(item.canonicalUrl ?? '');
+    const host = ({ 'cardano-news': 'cardano.org', 'midnight-news': 'midnight.network', 'bitcoin-news': 'bitcoincore.org', 'gero-x': 'x.com', 'nexus-x': 'x.com' } as Record<string, string>)[item.source];
+    if (uri.protocol !== 'https:' || uri.hostname !== host || uri.username || uri.password || uri.port) return null;
+    if (item.kind === 'social' && !/^\/i\/web\/status\/[1-9][0-9]{0,19}$/.test(uri.pathname)) return null;
+    return uri.href;
+  } catch { return null; }
+}
+export function updateImage(path: string, backend: string): string | null {
+  if (!/^\/api\/help\/assets\/[a-f0-9]{64}$/.test(path)) return null;
+  try { const uri = new URL(path, backend); return ['https:', 'http:'].includes(uri.protocol) ? uri.href : null; } catch { return null; }
+}

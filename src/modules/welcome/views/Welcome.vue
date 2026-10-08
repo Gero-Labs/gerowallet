@@ -32,6 +32,8 @@
 
     <!-- Language Selector - Floating top-right -->
     <div class="language-selector-container">
+      <GButton compact tier="tertiary" @click="enterHelp(false)">{{ $t('help.title') }}</GButton>
+      <GButton compact tier="tertiary" @click="enterHelp(true)">{{ $t('help.contact') }}</GButton>
       <LanguageSelector />
     </div>
 
@@ -84,8 +86,14 @@ import WalletCreation from '@/modules/welcome/components/WalletCreation/WalletCr
 import LegalFooter from '@/modules/welcome/components/LegalFooter/LegalFooter.vue';
 import LanguageSelector from '@/modules/navigation/components/LanguageSelector.vue';
 import OnboardingHero from '@/modules/welcome/components/onboarding/OnboardingHero.vue';
+import GButton from '@/shared/components/GButton/GButton.vue';
+import { useRouter } from 'vue-router/composables';
+import { openWelcomeHelp } from '@/modules/navigation/helpAccess';
 import { useAvailableWallets } from '@/shared/composables/useAvailableWallets';
 import { applyChainAccent } from '@/shared/composables/useChainAccent';
+
+const helpRouter = useRouter();
+const enterHelp = (support: boolean) => openWelcomeHelp(started.value, support, path => helpRouter.push(path));
 
 const DEV_NETWORKS_KEY = 'gero:devNetworks';
 
@@ -168,6 +176,10 @@ const onWalletListNetwork = (n: NetworkInfo): void => {
 }
 
 .language-selector-container {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--g-s-2);
   position: fixed;
   top: 0;
   right: 0;

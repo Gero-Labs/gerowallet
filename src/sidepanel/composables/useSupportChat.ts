@@ -13,11 +13,9 @@
 // and lets the UI render it. It also never logs identifiers, tokens, or
 // addresses.
 //
-// NOT flag-gated by design. `isAvailable` answers "can this wallet sign the
-// handshake", which is a capability question; whether the feature is offered at
-// all is `featureFlags.isLiveChatEnabled()`, checked by the UI that owns the
-// entry point. Keeping the two separate means the flag has exactly one owner and
-// this composable stays testable without a flag store.
+// The production wallet reader also enforces session/flag readiness: public
+// Help stays mounted on lock, so unmounting the dock is no longer enough to
+// retire a signed connection. Tests can inject a wallet reader independently.
 //
 // Structural model: `useAgentDock.ts` — an injectable factory plus a singleton.
 
@@ -25,6 +23,7 @@ import { computed, ref, watch, type Ref } from 'vue';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { Blockchain, WalletType } from '@/models/types';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { walletStore } from '@/stores/walletStore';
 import { debugLog } from '@/utils/debug';
 import {
@@ -230,8 +229,14 @@ function defaultPromptAuth(): Promise<SupportAuthInput | null> {
 }
 
 function defaultWallet(): SupportWalletSnapshot | null {
+  // Public Help stays mounted on lock. Stop the signed thread and invalidate
+  // pending work even when the saved wallet object remains in the store.
+  if (walletStore.isLocked || walletStore.isSyncing || !featureFlagsStore.state.isInitialized
+    || !featureFlagsStore.isLiveChatEnabled()) return null;
   const logged = walletStore.loggedWallet as SupportWalletSnapshot | null;
-  return logged && typeof logged.id === 'number' ? logged : null;
+  return logged && typeof logged.id === 'number' && logged.chain === Blockchain.CARDANO
+    && !!logged.type && SIGNABLE_WALLET_TYPES.has(logged.type)
+    && logged.stakeAddress?.startsWith('stake1') ? logged : null;
 }
 
 export function createSupportChat(deps: SupportChatDeps = {}): SupportChat {

@@ -9,6 +9,7 @@ export interface FeatureFlags {
   swapEnabled: boolean;
   isGeroCardEnabled: boolean;
   isBlogEnabled: boolean;
+  isHelpCenterEnabled: boolean;
   isPhysicalCardOrderingEnabled: boolean;
   isGoMiningEnabled: boolean;
   // Master visibility gate for the Bitcoin chain in onboarding. Default OFF: Bitcoin
@@ -116,6 +117,7 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
     swapEnabled: false,
     isGeroCardEnabled: false,
     isBlogEnabled: false,
+    isHelpCenterEnabled: false,
     isPhysicalCardOrderingEnabled: false,
     isGoMiningEnabled: false,
     isBitcoinEnabled: false,
@@ -192,6 +194,7 @@ export const featureFlagsStore = {
     featureFlagsState.flags.swapEnabled = featureFlagService.getFlag('isSwapEnabled', false);
     featureFlagsState.flags.isGeroCardEnabled = featureFlagService.getFlag('isGeroCardEnabled', false);
     featureFlagsState.flags.isBlogEnabled = featureFlagService.getFlag('isBlogEnabled', false);
+    featureFlagsState.flags.isHelpCenterEnabled = featureFlagService.getFlag('isHelpCenterEnabled', false);
     featureFlagsState.flags.isPhysicalCardOrderingEnabled = featureFlagService.getFlag('isPhysicalCardOrderingEnabled', false);
     featureFlagsState.flags.isGoMiningEnabled = featureFlagService.getFlag('isGoMiningEnabled', false);
     featureFlagsState.flags.isBitcoinEnabled = featureFlagService.getFlag('isBitcoinEnabled', false);
@@ -238,6 +241,9 @@ export const featureFlagsStore = {
     });
     featureFlagService.onFlagChange('isGeroCardEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isGeroCardEnabled', newValue);
+    });
+    featureFlagService.onFlagChange('isHelpCenterEnabled', (value) => {
+      Vue.set(featureFlagsState.flags, 'isHelpCenterEnabled', value);
     });
     featureFlagService.onFlagChange('isBlogEnabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isBlogEnabled', newValue);
@@ -344,9 +350,11 @@ export const featureFlagsStore = {
     return featureFlagsState.flags.isGeroCardEnabled;
   },
 
-  /**
-   * Check if Blog Page is enabled
-   */
+  /** Dashboard discovery and Blog-index migration only; public Help is always routable. */
+  isHelpCenterEnabled(): boolean {
+    return featureFlagsState.isInitialized && featureFlagsState.flags.isHelpCenterEnabled;
+  },
+
   isBlogEnabled(): boolean {
     return featureFlagsState.flags.isBlogEnabled;
   },
@@ -570,6 +578,7 @@ export const featureFlagsStore = {
       swapEnabled: false,
       isGeroCardEnabled: false,
       isBlogEnabled: false,
+      isHelpCenterEnabled: false,
       isPhysicalCardOrderingEnabled: false,
       isGoMiningEnabled: false,
       isBitcoinEnabled: false,

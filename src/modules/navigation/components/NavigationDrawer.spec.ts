@@ -10,8 +10,9 @@ import { mount, type Wrapper } from '@vue/test-utils';
 import Vue from 'vue';
 
 const h = vi.hoisted(() => ({
-  route: { path: '/governance/dreps', query: {} as Record<string, unknown> },
+  route: { path: '/governance/dreps', query: {} as Record<string, unknown>, meta: { public: false } },
   push: vi.fn(),
+  replace: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@/chrome/messaging', () => ({
@@ -20,6 +21,7 @@ vi.mock('@/chrome/messaging', () => ({
 vi.mock('@/plugins/vuetify', () => ({ updateVuetifyTheme: vi.fn() }));
 vi.mock('@/plugins/changeLog', () => ({ default: { setEnabled: vi.fn() } }));
 vi.mock('@/plugins/snackbar', () => ({ default: { setError: vi.fn(), setSuccess: vi.fn() } }));
+vi.mock('@/db/wallet-db', () => ({ getDb: async () => ({ table: () => ({ where: () => ({ first: async () => ({ value: 'password' }) }) }) }) }));
 // Relies on the build's auto-import plugin for `ref`, which the test runner does
 // not load. Nothing here is about feature badges.
 vi.mock('@/shared/composables/useFeatureNotifications', () => ({
@@ -36,6 +38,8 @@ import NavigationDrawer from './NavigationDrawer.vue';
 import { walletStore } from '@/stores/walletStore';
 import featureFlagsStore from '@/stores/featureFlagsStore';
 import { GOVERNANCE_ITEMS } from './governanceNav';
+import { Messaging } from '@/chrome/messaging';
+import cardStore from '@/stores/modules/card';
 
 function mountDrawer(path: string): Wrapper<Vue> {
   h.route.path = path;
@@ -44,7 +48,7 @@ function mountDrawer(path: string): Wrapper<Vue> {
     mocks: {
       $t,
       $route: h.route,
-      $router: { push: h.push, currentRoute: h.route },
+      $router: { push: h.push, replace: h.replace, currentRoute: h.route },
       $vuetify: { breakpoint: { mobile: false }, theme: { dark: true } },
     },
     stubs: {
@@ -123,6 +127,7 @@ vi.stubGlobal('APP_VERSION', '0.0.0-test');
 
 beforeEach(() => {
   vi.clearAllMocks();
+  h.route.meta.public = false;
   // The drawer's footer card reads name/icon off the logged wallet.
   walletStore.loggedWallet = {
     chain: 'Cardano',
@@ -133,6 +138,33 @@ beforeEach(() => {
   } as never;
   vi.spyOn(featureFlagsStore, 'isGovernanceEnabled').mockReturnValue(true);
   vi.spyOn(featureFlagsStore, 'isGovernanceVotingEnabled').mockReturnValue(true);
+});
+
+describe('NavigationDrawer: public Help session actions', () => {
+  it.each(['lock', 'logout', 'logout-error'])('keeps a public article visible after %s', async action => {
+    h.route.meta.public = true;
+    walletStore.loggedWallet = { ...walletStore.loggedWallet, id: 1 } as never;
+    vi.spyOn(cardStore, 'logout').mockResolvedValue(undefined);
+    vi.mocked(Messaging.sendToBackgroundFromOptions).mockImplementation(async () => {
+      if (action === 'logout-error') throw new Error('background unavailable');
+    });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    wrapper = mountDrawer('/help/articles/backup');
+    for (let i = 0; i < 8; i++) await Vue.nextTick();
+    await wrapper.find(`[aria-label="${action === 'lock' ? 'security.lock' : 'wallet.logout'}"]`).trigger('click');
+    for (let i = 0; i < 8; i++) await Vue.nextTick();
+    expect(Messaging.sendToBackgroundFromOptions).toHaveBeenCalled();
+    expect(h.replace).not.toHaveBeenCalled();
+  });
+  it('still leaves private wallet pages after locking', async () => {
+    walletStore.loggedWallet = { ...walletStore.loggedWallet, id: 1 } as never;
+    vi.mocked(Messaging.sendToBackgroundFromOptions).mockResolvedValue(undefined);
+    wrapper = mountDrawer('/governance');
+    for (let i = 0; i < 8; i++) await Vue.nextTick();
+    await wrapper.find('[aria-label="security.lock"]').trigger('click');
+    for (let i = 0; i < 8; i++) await Vue.nextTick();
+    expect(h.replace).toHaveBeenCalledWith('/welcome');
+  });
 });
 
 afterEach(() => {

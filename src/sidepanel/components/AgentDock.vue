@@ -244,6 +244,9 @@
           role="alert"
         >
           {{ $t(noticeKey) }}
+          <a href="mailto:support@gerowallet.io">support@gerowallet.io</a>
+          <button type="button" @click="copySupportEmail">{{ $t(emailCopied ? 'help.copied' : 'help.copyEmail') }}</button>
+          <span v-if="emailCopyFailed" role="status">{{ $t('help.copyFailed') }}</span>
         </div>
 
         <div
@@ -285,7 +288,15 @@
           >
             <v-icon size="16" color="var(--g-text-2)">mdi-paperclip</v-icon>
           </button>
+          <textarea
+            v-if="helpSupportIntent.active && activeMode === 'support'"
+            v-model="draft"
+            rows="6"
+            :aria-label="$t('help.context.preview')"
+            :placeholder="inputPlaceholder"
+          />
           <input
+            v-else
             v-model="draft"
             :placeholder="inputPlaceholder"
             @keyup.enter="submit()"
@@ -357,6 +368,7 @@ import {
 import { featureFlagsStore } from '@/stores/featureFlagsStore';
 import { agentDockPrefsStore } from '@/stores/agentDockPrefsStore';
 import { walletStore } from '@/stores/walletStore';
+import { clearHelpSupport, helpSupportIntent } from '@/modules/help/supportIntent';
 import { Blockchain } from '@/models/types';
 import { debugWarn } from '@/utils/debug';
 import i18n from '@/plugins/i18n';
@@ -387,6 +399,12 @@ export default defineComponent({
   components: { ChartCard, SwapCard, StakingCard, AllowanceCard, SupportAuthPrompt },
   setup() {
     const draft = ref('');
+    const emailCopied = ref(false);
+    const emailCopyFailed = ref(false);
+    async function copySupportEmail() {
+      try { await navigator.clipboard.writeText('support@gerowallet.io'); emailCopied.value = true; }
+      catch { emailCopyFailed.value = true; }
+    }
     const dock = agentDock;
     const scroll = ref<HTMLElement | null>(null);
     const { isAnySheetOpen } = useSheetVisibility();
@@ -532,6 +550,20 @@ export default defineComponent({
     // gates when copilotEnabled is off (the toggle renders that segment
     // disabled), so a copilot-off session can never actually land there.
     const mode = ref<DockMode>('support');
+    watch(() => helpSupportIntent.dockRequest, request => {
+      if (!request || !liveChatEnabled.value || walletStore.isLocked || walletStore.isSyncing
+        || walletStore.loggedWallet?.id !== request.walletId || !supportChat.isAvailable.value) return;
+      draft.value = request.draft;
+      mode.value = 'support';
+      helpSupportIntent.dockRequest = null;
+      dock.open();
+    }, { immediate: true });
+    watch(() => dock.isOpen.value, open => { if (!open) clearHelpSupport(); });
+    watch(() => [walletStore.loggedWallet?.id, walletStore.isLocked], () => {
+      draft.value = '';
+      dock.close();
+      clearHelpSupport();
+    });
     // Live-chat-off is byte-identical to the dock's pre-support-chat existence:
     // always 'copilot', regardless of `mode`/copilotEnabled. Live-chat-on with
     // the Assistant tab off (copilotEnabled false) forces 'support' even if
@@ -540,6 +572,16 @@ export default defineComponent({
     const activeMode = computed<DockMode>(() => {
       if (!liveChatEnabled.value) return 'copilot';
       return copilotEnabled.value ? mode.value : 'support';
+    });
+    watch(activeMode, (next, previous) => {
+      // Support context and attachments must never carry into the AI composer,
+      // including when a remote flag changes the active tab.
+      if (previous === 'support' && next !== 'support') {
+        draft.value = '';
+        pendingFiles.value = [];
+        tooManyFilesNotice.value = false;
+        clearHelpSupport();
+      }
     });
 
     function enterCopilotMode(): void {
@@ -737,6 +779,7 @@ export default defineComponent({
 
     return {
       draft,
+      emailCopied, emailCopyFailed, copySupportEmail, helpSupportIntent,
       dock,
       submit,
       quickSend,
@@ -1402,7 +1445,8 @@ export default defineComponent({
   text-align: center;
 }
 
-.agent-dock__input input {
+.agent-dock__input input,
+.agent-dock__input textarea {
   flex: 1;
   background: var(--input-bg);
   border: 1px solid var(--input-border);
@@ -1415,11 +1459,15 @@ export default defineComponent({
   transition: border-color 180ms ease;
 }
 
-.agent-dock__input input::placeholder {
+.agent-dock__input textarea { resize: vertical; min-width: 0; max-height: 240px; }
+
+.agent-dock__input input::placeholder,
+.agent-dock__input textarea::placeholder {
   color: var(--text-placeholder);
 }
 
-.agent-dock__input input:focus {
+.agent-dock__input input:focus,
+.agent-dock__input textarea:focus {
   border-color: var(--accent-60);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--g-accent) 15%, transparent);
 }

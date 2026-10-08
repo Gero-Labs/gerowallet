@@ -68,7 +68,7 @@ interface SheetVisibility {
 // instance, so the ref-based reactivity flagsHolder needed above is
 // unnecessary machinery here.
 interface MockWalletStore {
-  loggedWallet?: { chain?: string };
+  loggedWallet?: { chain?: string; id?: number };
 }
 
 // vi.mock(...) factories are hoisted above every import in this file — including
@@ -221,6 +221,7 @@ Object.assign(mockDock, {
 // is just an in-memory Vue.observable — mocking it would only hide the behavior
 // the hide tests exist to check.
 import { agentDockPrefsStore } from '@/stores/agentDockPrefsStore';
+import { clearHelpSupport, helpSupportIntent, openWalletSupport } from '@/modules/help/supportIntent';
 
 // @ts-ignore — tsconfig has no `*.vue` module shim, so `tsc` cannot resolve an
 // SFC imported from a .ts file. Vite/vitest resolve it fine; this keeps the
@@ -298,6 +299,7 @@ async function pickFiles(wrapper: Wrapper<Vue>, files: File[]): Promise<void> {
 }
 
 beforeEach(() => {
+  clearHelpSupport();
   setLiveChatEnabled(true);
   setCopilotEnabled(true);
   setWalletChain(undefined);
@@ -319,6 +321,37 @@ beforeEach(() => {
 afterEach(() => {
   activeWrapper?.destroy();
   activeWrapper = null;
+  clearHelpSupport();
+});
+
+describe('AgentDock Help entry', () => {
+  it('clears Help context if the live-chat flag switches the dock to Assistant', async () => {
+    mockWalletStore.loggedWallet = { id: 7, chain: 'Cardano' };
+    openWalletSupport('Support-only question and context', 7);
+    const wrapper = mountDock();
+    await Vue.nextTick();
+    setLiveChatEnabled(false);
+    await Vue.nextTick();
+    expect(vmOf(wrapper).draft).toBe('');
+    expect(helpSupportIntent.active).toBe(false);
+    expect(mockDock.send).not.toHaveBeenCalled();
+  });
+
+  it('opens Support with editable multiline context and does not send until requested', async () => {
+    mockWalletStore.loggedWallet = { id: 7, chain: 'Cardano' };
+    const previousVisibility = agentDockPrefsStore.state.hidden;
+    openWalletSupport('My question\nGuide: receive\nChain: Cardano', 7);
+    const wrapper = mountDock();
+    await Vue.nextTick();
+    expect(mockDock.open).toHaveBeenCalled();
+    expect(helpSupportIntent.dockRequest).toBeNull();
+    expect(wrapper.find('textarea').element.value).toContain('\nGuide: receive');
+    expect(mockSupportChat.send).not.toHaveBeenCalled();
+    expect(agentDockPrefsStore.state.hidden).toBe(previousVisibility);
+    await wrapper.find('textarea').setValue('Only the question, context removed');
+    await wrapper.find('.agent-dock__send').trigger('click');
+    expect(mockSupportChat.send).toHaveBeenCalledWith('Only the question, context removed');
+  });
 });
 
 describe('AgentDock — flag off (isLiveChatEnabled: false)', () => {
@@ -638,7 +671,8 @@ describe('AgentDock — error banner', () => {
     mockSupportChat.errorKey.value = 'support.error.sendFailed';
     const wrapper = mountDock();
     await clickSupportToggle(wrapper);
-    expect(wrapper.find('.agent-dock__notice').text()).toBe('support.error.sendFailed');
+    expect(wrapper.find('.agent-dock__notice').text()).toContain('support.error.sendFailed');
+    expect(wrapper.find('.agent-dock__notice a').attributes('href')).toBe('mailto:support@gerowallet.io');
   });
 
   it('renders no banner when errorKey is null', async () => {
@@ -979,7 +1013,7 @@ describe('AgentDock — attachment picker and pending chips', () => {
     await pickFiles(wrapper, files);
 
     expect(wrapper.findAll('.agent-dock__pending-chip').length).toBe(5);
-    expect(wrapper.find('.agent-dock__notice').text()).toBe('support.error.tooManyFiles');
+    expect(wrapper.find('.agent-dock__notice').text()).toContain('support.error.tooManyFiles');
   });
 
   it('keeps the first 5 files when a later pick would exceed the cap across two picks', async () => {
@@ -991,7 +1025,7 @@ describe('AgentDock — attachment picker and pending chips', () => {
 
     const names = wrapper.findAll('.agent-dock__pending-chip').wrappers.map((w) => w.find('.agent-dock__pending-name').text());
     expect(names).toEqual(['a.txt', 'b.txt', 'c.txt', 'd.txt', 'e.txt']);
-    expect(wrapper.find('.agent-dock__notice').text()).toBe('support.error.tooManyFiles');
+    expect(wrapper.find('.agent-dock__notice').text()).toContain('support.error.tooManyFiles');
   });
 });
 

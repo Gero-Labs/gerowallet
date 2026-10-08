@@ -194,7 +194,7 @@
         <v-list-item-action style="margin: auto" class="d-flex flex-row">
           <v-tooltip v-if="hasUnlockMethod" top content-class="custom-tooltip">
             <template v-slot:activator="{ on, attrs }">
-              <v-btn icon @click="submitLock" v-bind="attrs" v-on="on">
+              <v-btn icon :aria-label="t('security.lock')" @click="submitLock" v-bind="attrs" v-on="on">
                 <v-icon size="18">mdi-lock</v-icon>
               </v-btn>
             </template>
@@ -203,7 +203,7 @@
 
           <v-tooltip top content-class="custom-tooltip">
             <template v-slot:activator="{ on, attrs }">
-              <v-btn icon @click="submitLogout" v-bind="attrs" v-on="on">
+              <v-btn icon :aria-label="t('wallet.logout')" @click="submitLogout" v-bind="attrs" v-on="on">
                 <v-avatar tile size="18">
                   <v-img :src="assts.logout" alt="logout"></v-img>
                 </v-avatar>
@@ -218,6 +218,7 @@
 </template>
 
 <script setup lang="ts">
+import { isPublicRoute } from '@/modules/navigation/helpAccess';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, watch, onMounted, nextTick, getCurrentInstance, toRefs } from 'vue'
 import networks from '@/utils/networks'
@@ -384,11 +385,11 @@ const items = computed((): NavigationItemUnion[] => {
   return [
     { title: t('navigation.dashboard'), icon: assts.barChart, link: '/', enabled: true },
     {
-      title: t('navigation.blog'),
+      title: t(featureFlagsStore.isHelpCenterEnabled() ? 'help.title' : 'navigation.blog'),
       icon: assts.blog,
-      link: '/blog',
+      link: featureFlagsStore.isHelpCenterEnabled() ? '/help' : '/blog',
       enabled: true,
-      underMaintenance: !isBlogEnabledByFeatureFlag.value,
+      underMaintenance: !featureFlagsStore.isHelpCenterEnabled() && !isBlogEnabledByFeatureFlag.value,
     },
     { title: t('navigation.copilotFeed'), icon: 'mdi-bell-outline', link: '/copilot-feed', enabled: featureFlagsStore.isCopilotEnabled() },
     { header: t('navigation.financialHub'), enabled: true },
@@ -605,7 +606,7 @@ async function submitLock() {
     debugLog('🔒 Wallet locked successfully');
 
     // Navigate to login screen
-    router.replace('/welcome').catch(err => {
+    !isPublicRoute(router.currentRoute) && router.replace('/welcome').catch(err => {
       debugLog('Navigation after lock handled:', err.message || err);
     });
   } catch (error) {
@@ -626,13 +627,13 @@ async function submitLogout() {
     updateVuetifyTheme('Cardano'); // logout resets to the default chain accent
     // Navigate to welcome page after store is cleared
     // Use replace to avoid adding to history, and catch navigation guard redirects
-    router.replace('/welcome').catch(err => {
+    !isPublicRoute(router.currentRoute) && router.replace('/welcome').catch(err => {
       debugLog('Navigation after logout handled (expected during logout):', err.message || err);
     });
   } catch (error) {
     console.error('Error during logout:', error);
     // Force navigation even on error
-    router.replace('/welcome').catch(err => {
+    !isPublicRoute(router.currentRoute) && router.replace('/welcome').catch(err => {
       debugLog('Navigation after logout error handled (expected during logout):', err.message || err);
       window.location.hash = '#/welcome';
     });

@@ -1,6 +1,9 @@
 import VueRouter, { NavigationGuardNext, Route, RouteRecord } from 'vue-router';
 import { Blockchain } from '@/models/types';
 import { lazyPage } from './lazyPage';
+import HelpLayout from '@/modules/help/HelpLayout.vue';
+import { blogHelpRedirect } from './helpAccess';
+const HelpCenter = lazyPage(() => import('@/modules/help/HelpCenter.vue'));
 
 // Critical layouts loaded immediately
 import BlankLayout from '@/modules/navigation/layouts/BlankLayout.vue';
@@ -219,13 +222,20 @@ const routes = [
       requiresAuth: true,
     },
   },
+  ...['/help', '/help/topics/:topic', '/help/articles/:slug', '/help/search', '/help/updates'].map((path, index) => ({
+    path, name: `help-${index}`, component: HelpCenter, meta: { public: true, layout: HelpLayout },
+  })),
   {
     path: '/blog',
     name: 'blog',
     component: Blog,
     meta: {
-      layout: ContentLayout,
-      requiresAuth: true,
+      layout: HelpLayout,
+      public: true,
+    },
+    beforeEnter: (_to, _from, next) => {
+      const target = blogHelpRedirect(featureFlagsStore.state.isInitialized, featureFlagsStore.isHelpCenterEnabled());
+      if (target) next(target); else next();
     },
   },
   {
@@ -234,8 +244,8 @@ const routes = [
     component: BlogPost,
     props: true,
     meta: {
-      layout: ContentLayout,
-      requiresAuth: true,
+      layout: HelpLayout,
+      public: true,
     },
   },
   {
