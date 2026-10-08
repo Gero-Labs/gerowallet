@@ -18,7 +18,6 @@ README.md and ARCHITECTURE.md are broadly reliable on structure and intent. CLAU
 | "WASM loading: files must be in `public/`" | Zero `.wasm` files in the repo and no `public/` dir. All WASM ships inside npm packages |
 | `popup/  # Extension popup entry` | `src/popup/{index.html,main.ts,Popup.vue}` is dead code - not a Vite input, no `action.default_popup`. The live popup views are `src/popup/modules/views/*.vue`, routed by the **options** router |
 | "`minFee()` adds witness overhead (witnessCount x 110 bytes x minFeeCoefficient)" | No such arithmetic exists. It inserts N dummy witnesses, lets the SDK size the CBOR, and adds a flat `80 * minFeeCoefficient` margin |
-| CIP-113 "two gates, both required" | Three. `CIP113_ALLOWED_NETWORKS` (Preview only) is checked first, before the hash list and the flag |
 | "Data layer: Nexus - blockchain data all brokered server-side, the client carries no third-party data keys" | True for Cardano. `BitcoinApi` calls Esplora directly (including broadcast), Midnight uses direct Foundation/Arkhia URLs, and `src/api/spo-api.ts` calls Koios directly |
 | "`api/` - data clients routed through gero-backend/Nexus: ... spo-api" | `spo-api.ts` has a hardcoded per-network Koios URL map and no env var |
 | "Sync throttled to every 2 min when locked" | No locked-state throttle exists. The only `2 * 60_000` is a mutex acquisition timeout |

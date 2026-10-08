@@ -1,4 +1,3 @@
-import { refreshCip113Flag } from '@/chrome/cip113Flag';
 import { WalletBg, alarmListener } from '@/chrome/walletBg';
 import LoadingState from '@/stores/loading';
 import WalletStore, { walletStore } from '@/stores/walletStore';
@@ -526,11 +525,6 @@ export class WalletManager {
       // Load holdings from cached UTxOs, keys and account immediately — no need to wait for
       // transactions or gero-sync. The cached account keeps the balance/empty-state showing the
       // last-known value on login instead of flashing empty until the first sync.
-      // Before loadProgrammableRefs(), which reads the gate to decide whether to restore
-      // the refusal index at all. A stale `false` here would partition nothing on a
-      // network that does support CIP-113, so it is awaited rather than fired alongside.
-      await refreshCip113Flag();
-
       await Promise.all([
         // Arms the CIP-113 signing guard before any sign request can arrive.
         walletBg.loadProgrammableRefs(),

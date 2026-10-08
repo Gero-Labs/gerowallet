@@ -18,8 +18,9 @@ vi.mock('@/stores/priceStore', () => ({ default: { initialize: vi.fn(), disconne
 import { WalletBg } from './walletBg';
 import WalletStore, { walletStore, type Account } from '@/stores/walletStore';
 import { getAddress, getStakeKey } from './serialization';
+import { serializeUtxoRows } from './utxoCache';
+import { getDb, setWalletConfiguration } from '@/db/wallet-db';
 import { CIP113_BASE_PREVIEW } from '@/utils/cip113Deployments';
-import { setCip113EnabledForTest } from './cip113Flag';
 import { Blockchain } from '@/models/types';
 
 // clearForWalletSwitch() clears the wallet-scoped alarms; there is no extension API here.
@@ -122,9 +123,6 @@ async function loginFromCache(bg: WalletBg) {
 describe('CIP-113 locked share across a service-worker restart', () => {
   beforeEach(() => {
     WalletStore.clearForWalletSwitch();
-    // CIP-113 ships behind a remote kill-switch that defaults OFF. Everything below
-    // exercises the feature, so turn it on explicitly; the last case turns it back off.
-    setCip113EnabledForTest(true);
   });
 
   it('keeps the locked lovelace out of the spendable balance after a live push', async () => {
@@ -252,30 +250,102 @@ describe('CIP-113 partition when the holdings go away', () => {
 
     expect(walletStore.programmableLockedLovelace).toBe('0');
   });
+});
 
-  // The remote kill-switch has to leave the wallet in its pre-CIP-113 shape, not a
-  // half-on one: partition gone AND refusal index gone. Note what "pre-CIP-113" means
-  // here — the programmable UTxOs are not spendable again, they are simply not returned
-  // (the gate also restores gero-sync's credential allowlist). It is the stake-level
-  // BALANCE that goes back to its unadjusted figure, which is what the last assertion
-  // pins; the locked lovelace was always part of that total before this feature existed.
-  it('with the flag off, partitions nothing and refuses nothing', async () => {
+// Superseded testnet deployments are removed from cip113Deployments.ts rather than
+// retained (see the policy in its header; mainnet must retain them). This pins what removal means for a UTxO still sitting at a
+// removed script with this wallet's stake key, next to one at the current deployment. The
+// removed hash is a literal on purpose: it must not follow the constants file.
+describe('CIP-113 holdings at a removed deployment', () => {
+  const REMOVED_PREVIEW_PLB = '698c48a630206282690774aebcfa9410895c09f85bc103b19f9888dc';
+  const REMOVED_TX = '3'.repeat(64);
+  const REMOVED_COINS = 4_000_000n;
+  const REMOVED_TOKEN = `${'b'.repeat(56)}${Buffer.from('OLD').toString('hex')}`;
+
+  const removedAddress = Cardano.BaseAddress.fromCredentials(
+    Cardano.NetworkId.Testnet,
+    { hash: Hash28ByteBase16(REMOVED_PREVIEW_PLB), type: Cardano.CredentialType.ScriptHash },
+    { hash: Hash28ByteBase16(getStakeKey(XPUB, 0).hash().hex()), type: Cardano.CredentialType.KeyHash },
+  ).toAddress().toBech32();
+  const removedUtxo = () => utxo(REMOVED_TX, removedAddress, REMOVED_COINS, [[REMOVED_TOKEN, 3n]]);
+  const txSpendingRemoved = {
+    body: { inputs: [{ txId: Cardano.TransactionId(REMOVED_TX), index: 0 }] },
+  } as Cardano.Tx;
+
+  beforeEach(() => {
+    WalletStore.clearForWalletSwitch();
+  });
+
+  it('is never spendable, so it cannot enter coin selection', async () => {
+    const bg = bootWallet(makeWallet());
+    await bg.applyUtxos([spendableUtxo(), programmableUtxo(), removedUtxo()], true);
+
+    expect(walletStore.utxos).toHaveLength(1);
+    expect(walletStore.utxos[0][0].txId).toBe(SPENDABLE_TX);
+  });
+
+  it('is not displayed and its lovelace is not counted as locked', async () => {
+    const bg = bootWallet(makeWallet());
+    await bg.applyUtxos([spendableUtxo(), programmableUtxo(), removedUtxo()], true);
+
+    expect(Object.keys(walletStore.programmableTokens)).toEqual([TOKEN]);
+    expect(walletStore.programmableLockedLovelace).toBe(LOCKED_COINS.toString());
+  });
+
+  // The stated cost of removal: the provider's stake-level total includes the removed
+  // deployment's lovelace, and only the current deployment's share is subtracted from it.
+  it('leaves its lovelace inside the stake-level account figure', async () => {
+    const bg = bootWallet(makeWallet());
+    await bg.applyUtxos([spendableUtxo(), programmableUtxo(), removedUtxo()], true);
+    WalletStore.setAccount({ controlled_amount: (SPENDABLE_COINS + LOCKED_COINS + REMOVED_COINS).toString() } as Account);
+
+    expect(walletStore.account?.controlled_amount).toBe((SPENDABLE_COINS + REMOVED_COINS).toString());
+  });
+
+  // Signing: only the current deployment's holdings are in the refusal index.
+  it('is not refused for signing, while the current deployment still is', async () => {
+    const bg = bootWallet(makeWallet());
+    await bg.applyUtxos([spendableUtxo(), programmableUtxo(), removedUtxo()], true);
+
+    expect(bg.findProgrammableInputs(txSpendingRemoved)).toEqual([]);
+    expect(bg.findProgrammableInputs(txSpendingProgrammable)).toEqual([`${PROGRAMMABLE_TX}#0`]);
+  });
+
+  // The upgrade path: a cache written by a build that still configured this hash holds the
+  // UTxO tagged 'programmable' and its ref in the persisted refusal index. Login must
+  // re-classify it rather than trust either row.
+  it('drops a cache written while the deployment was still configured', async () => {
     const wallet = makeWallet();
-    const armed = bootWallet(wallet);
-    await armed.applyUtxos([spendableUtxo(), programmableUtxo()], true);
-    expect(armed.findProgrammableInputs(txSpendingProgrammable)).not.toEqual([]);
+    const db = await getDb(wallet.id);
+    await db.table('utxos').bulkPut([
+      ...serializeUtxoRows([spendableUtxo()], 'spendable'),
+      ...serializeUtxoRows([removedUtxo()], 'programmable'),
+    ]);
+    await setWalletConfiguration(wallet.id, 'cip113ProgrammableInputRefs', JSON.stringify([`${REMOVED_TX}#0`]));
 
-    setCip113EnabledForTest(false);
-    simulateWorkerRestart();
-    const killed = bootWallet(wallet);
-    await loginFromCache(killed);
+    const upgraded = bootWallet(wallet);
+    await loginFromCache(upgraded);
 
-    expect(walletStore.programmableLockedLovelace).toBe('0');
+    expect(walletStore.utxos).toHaveLength(1);
     expect(walletStore.programmableTokens).toEqual({});
-    expect(killed.hasProgrammableInputs()).toBe(false);
-    expect(killed.findProgrammableInputs(txSpendingProgrammable)).toEqual([]);
-    // Balance figure back to the provider's unadjusted total, exactly as before the feature.
-    WalletStore.setAccount({ controlled_amount: CONTROLLED_TOTAL } as Account);
-    expect(walletStore.account?.controlled_amount).toBe(CONTROLLED_TOTAL);
+    expect(walletStore.programmableLockedLovelace).toBe('0');
+    expect(upgraded.findProgrammableInputs(txSpendingRemoved)).toEqual([]);
+    expect(upgraded.hasProgrammableInputs()).toBe(false);
+  });
+
+  it('behaves the same after a service-worker restart', async () => {
+    const wallet = makeWallet();
+    const bg = bootWallet(wallet);
+    await bg.applyUtxos([spendableUtxo(), programmableUtxo(), removedUtxo()], true);
+
+    simulateWorkerRestart();
+    const restarted = bootWallet(wallet);
+    await loginFromCache(restarted);
+
+    expect(walletStore.utxos).toHaveLength(1);
+    expect(Object.keys(walletStore.programmableTokens)).toEqual([TOKEN]);
+    expect(walletStore.programmableLockedLovelace).toBe(LOCKED_COINS.toString());
+    expect(restarted.findProgrammableInputs(txSpendingRemoved)).toEqual([]);
+    expect(restarted.findProgrammableInputs(txSpendingProgrammable)).toEqual([`${PROGRAMMABLE_TX}#0`]);
   });
 });

@@ -144,13 +144,13 @@ extension against a local backend. To list every variable the code reads:
 grep -rhoE 'VITE_[A-Z0-9_]+' src/ scripts/ | sort -u
 ```
 
-CIP-113 programmable-token display is behind two independent gates, both of which must
-pass. The per-network deployment list lives in
-[`src/utils/cip113Deployments.ts`](src/utils/cip113Deployments.ts) - the
-`programmable_logic_base` script hashes are reviewed protocol constants, an empty list
-disables the feature for that network, and mainnet ships empty. The `isCip113Enabled`
-feature flag is the runtime half: it ships off and is the only kill-switch that does not
-need a rebuild and a store review.
+CIP-113 programmable-token display is behind two build-time gates, both of which must
+pass. Both live in
+[`src/utils/cip113Deployments.ts`](src/utils/cip113Deployments.ts): the
+`CIP113_ALLOWED_NETWORKS` allowlist, and the per-network `programmable_logic_base` script
+hashes, which are reviewed protocol constants (an empty list disables the feature for that
+network). Mainnet, preprod and preview are all allowlisted and configured, so CIP-113 is
+live on all three.
 
 ### 3. Start Gero Backend
 

@@ -9,8 +9,8 @@
  *
  * Read from the `featureFlags` mirror in chrome.storage.local (the UI contexts
  * mirror flag values there; the EventSource flag service cannot run in the MV3
- * service worker). Same pattern as `src/chrome/cip113Flag.ts`, but this module is
- * context-agnostic because writers run in the UI and in the background.
+ * service worker). This module is context-agnostic because writers run in the UI
+ * and in the background.
  */
 const FLAG_KEY = 'isKeyEnvelopeV2Enabled';
 

@@ -32,7 +32,6 @@ vi.mock('@/stores/loading', () => ({ default: {
 vi.mock('@/services/websocket.service', () => ({ default: {
   waitForSync: env.waitForSync, pauseSyncCheck: vi.fn(), resumeSyncCheck: vi.fn(),
 } }));
-vi.mock('@/chrome/cip113Flag', () => ({ refreshCip113Flag: vi.fn() }));
 vi.mock('@/utils/networks', () => ({ default: {} }));
 vi.mock('@/stores/tokenMetadataStore', () => ({ default: {} }));
 vi.mock('@/stores/tapToolsStore', () => ({ default: { clear: vi.fn() } }));

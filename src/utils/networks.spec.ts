@@ -6,7 +6,7 @@ import { Blockchain, Network } from '@/models/types';
 // needs a fresh module instance — hence vi.resetModules() alongside the doMock.
 //
 // A syntactically valid (56-hex, lowercase) stand-in for exercising the parsing and
-// normalization below. Not a shipped value — cip113Deployments.ts ships preprod empty.
+// normalization below. Not a shipped value — it is the removed earlier preprod bootstrap.
 const VALID_PREPROD = 'a48744c1584c58c2995cba1fa26b37f3999ee8cedac0ef241662f53d';
 
 /** Stub the deployment constants, then load a fresh networks.ts that reads them. */
@@ -101,19 +101,44 @@ describe('networks — CIP-113 programmable token configuration', () => {
   });
 });
 
-// CIP-113 is `Proposed`, not Active, and the reference implementation's audit is
-// unpublished. The empty mainnet array is the only thing keeping the feature off there,
-// so this asserts it stays empty — enabling mainnet has to be a deliberate edit.
-describe('CIP-113 mainnet deployment list', () => {
+// Pins what actually ships, against the real module. A hash here is a trust anchor (see
+// cip113Deployments.ts), so changing one has to be a deliberate edit to this test too.
+describe('CIP-113 shipped deployment lists', () => {
   beforeEach(() => {
     vi.doUnmock('@/utils/cip113Deployments');
     vi.resetModules();
   });
 
-  it('ships empty', async () => {
-    const { CIP113_BASE_MAINNET } = await import('@/utils/cip113Deployments');
+  it('ships exactly the current deployment on each network', async () => {
+    const deployments = await import('@/utils/cip113Deployments');
 
-    expect(CIP113_BASE_MAINNET).toEqual([]);
+    expect([...deployments.CIP113_BASE_MAINNET]).toEqual(['d91d08e381f8ef95ffbb3f8048f020d7361ded8f3abfdf66c25fa838']);
+    expect([...deployments.CIP113_BASE_PREPROD]).toEqual(['be59f7750a5d947bb649e70d574d066791ec34a1dfee2a087c8511e3']);
+    expect([...deployments.CIP113_BASE_PREVIEW]).toEqual(['35622813d81ba2d6e068c7d52f6fdad5aa2a5d84b212ec3e28716c16']);
+  });
+
+  it('resolves the shipped deployment on each network', async () => {
+    const networks = (await import('./networks')).default;
+
+    expect(networks.resolveProgrammableLogicBaseScriptHashes(Blockchain.CARDANO, Network.MAINNET))
+      .toEqual(['d91d08e381f8ef95ffbb3f8048f020d7361ded8f3abfdf66c25fa838']);
+    expect(networks.resolveProgrammableLogicBaseScriptHashes(Blockchain.CARDANO, Network.PREPROD))
+      .toEqual(['be59f7750a5d947bb649e70d574d066791ec34a1dfee2a087c8511e3']);
+    expect(networks.resolveProgrammableLogicBaseScriptHashes(Blockchain.CARDANO, Network.PREVIEW))
+      .toEqual(['35622813d81ba2d6e068c7d52f6fdad5aa2a5d84b212ec3e28716c16']);
+  });
+
+  // Superseded testnet deployments are removed, not retained — see cip113Deployments.ts.
+  it.each([
+    [Network.PREPROD, 'a48744c1584c58c2995cba1fa26b37f3999ee8cedac0ef241662f53d'],
+    [Network.PREVIEW, '698c48a630206282690774aebcfa9410895c09f85bc103b19f9888dc'],
+    [Network.PREVIEW, '33ceea92481cd6cc5b9ad1750302642042bb8ea5d028b830ad86fc31'],
+    [Network.PREVIEW, '8adfe689f4049706f893745f9e8af24cc2cade650de9bac05e3d403f'],
+    [Network.PREVIEW, 'f2182b00a37bd746e20575c9af01ab31312213514cd31e872e0a2a3e'],
+  ])('does not recognise the removed %s deployment %s', async (network, removed) => {
+    const networks = (await import('./networks')).default;
+
+    expect(networks.resolveProgrammableLogicBaseScriptHashes(Blockchain.CARDANO, network)).not.toContain(removed);
   });
 });
 
@@ -135,9 +160,8 @@ describe('cip68Label — CIP-67 prefix decoding', () => {
   });
 });
 
-// The network allowlist is a second gate, independent of the hash lists and of the global
-// `isCip113Enabled` flag. It exists so that recording a newly-deployed hash cannot, by
-// itself, bring a network live while that flag happens to be on.
+// The network allowlist is a second gate, independent of the hash lists. It stops
+// recording a newly-deployed hash from bringing a network live by itself.
 describe('networks — CIP-113 network allowlist', () => {
   beforeEach(() => {
     vi.doUnmock('@/utils/cip113Deployments');
@@ -158,18 +182,11 @@ describe('networks — CIP-113 network allowlist', () => {
     expect(networks.resolveProgrammableTokenSupport(Blockchain.CARDANO, Network.PREVIEW)).toBe(true);
   });
 
-  // Pins what actually ships. Changing either of these is the deliberate act of enabling
-  // CIP-113 somewhere new, and should not pass review as a drive-by edit.
-  it('ships allowing preview only', async () => {
+  // Pins what actually ships. Changing this is the deliberate act of enabling (or
+  // disabling) CIP-113 on a network, and should not pass review as a drive-by edit.
+  it('ships allowing mainnet, preprod and preview', async () => {
     const { CIP113_ALLOWED_NETWORKS } = await import('./cip113Deployments');
 
-    expect([...CIP113_ALLOWED_NETWORKS]).toEqual([Network.PREVIEW]);
-  });
-
-  it('ships mainnet and preprod with no deployment configured', async () => {
-    const deployments = await import('./cip113Deployments');
-
-    expect([...deployments.CIP113_BASE_MAINNET]).toEqual([]);
-    expect([...deployments.CIP113_BASE_PREPROD]).toEqual([]);
+    expect([...CIP113_ALLOWED_NETWORKS]).toEqual([Network.MAINNET, Network.PREPROD, Network.PREVIEW]);
   });
 });

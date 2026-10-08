@@ -48,7 +48,6 @@ import {
   submitTx as submitTxFn,
   toStakeAddress,
 } from '@/chrome/serialization';
-import { isCip113Enabled } from '@/chrome/cip113Flag';
 import { readCachedUtxoRows, serializeUtxoRows, type CachedUtxoRow } from '@/chrome/utxoCache';
 import { SecretPurpose, decryptPrivateKey, encryptWithPassword, isLegacyNestedKey } from '@/shared/utils/crypto';
 import { refreshEnvelopeV2Flag } from '@/shared/utils/envelopeV2Flag';
@@ -469,20 +468,19 @@ export class WalletBg {
     }
   }
 
-  // CIP-113 programmable tokens — display only. See docs/cip113-programmable-tokens-plan.md.
+  // CIP-113 programmable tokens — display only. See docs/cip113-programmable-tokens-plan.md
 
   private programmableUtxos: Cardano.Utxo[] = [];
 
   /**
-   * Empty when CIP-113 is off, which disables the feature everywhere downstream: no
-   * partition, no refusal index, and `subscriptionCredentials()` keeps the server-side
-   * allowlist. Two independent gates, both of which must pass:
+   * Empty where CIP-113 is unsupported, which disables the feature everywhere downstream:
+   * no partition, no refusal index, and `subscriptionCredentials()` keeps the server-side
+   * allowlist. Two build-time gates, both in `cip113Deployments.ts`, both of which must pass:
    *
-   *  - the network has a configured deployment (`cip113Deployments.ts`, build-time), and
-   *  - the `isCip113Enabled` remote flag is on (runtime kill-switch, ships dark).
+   *  - the network is in `CIP113_ALLOWED_NETWORKS`, and
+   *  - the network has a configured deployment.
    */
   private programmableBaseScriptHashes(): Set<string> {
-    if (!isCip113Enabled()) return new Set();
     return new Set(networks.resolveProgrammableLogicBaseScriptHashes(this.chain, this.network));
   }
 
@@ -494,7 +492,13 @@ export class WalletBg {
   private programmableOwnerCredentials(paymentCredentials: Set<string>): Set<string> {
     const owners = new Set<string>(paymentCredentials);
     try {
-      owners.add(getStakeKey(this.publicKey, 0).hash().hex());
+      if (this.type === WalletType.Watch) {
+        // No xpub to derive from: the watched address's stake part is the owner.
+        const stakeCred = this.stakeAddress ? keyHashFromAddress(this.stakeAddress) : null;
+        if (stakeCred) owners.add(stakeCred as unknown as string);
+      } else {
+        owners.add(getStakeKey(this.publicKey, 0).hash().hex());
+      }
     } catch (e) {
       debugLog('CIP-113: could not derive stake credential', e);
     }
@@ -584,13 +588,14 @@ export class WalletBg {
 
   /** Restore the refusal index at login, before any sign request can arrive. */
   public async loadProgrammableRefs() {
-    // Killed remotely (or unconfigured for this network) means the feature is absent, not
+    // Not allowlisted or not configured for this network means the feature is absent, not
     // half-on. With the gate shut those UTxOs do not come back as spendable — the gate
     // also restores the server-side credential allowlist, so gero-sync stops returning
     // them, and classifyUtxoAddress would call one 'foreign' if it arrived anyway. What
     // must not survive is this index: it is state belonging to a feature that is off, it
     // names outputs no transaction the wallet builds can reference any more, and on a
-    // later re-enable it has to be rebuilt from live UTxOs rather than restored stale.
+    // later build that enables the network it has to be rebuilt from live UTxOs rather
+    // than restored stale.
     if (this.programmableBaseScriptHashes().size === 0) {
       this.programmableInputRefs = new Set();
       return;
@@ -611,8 +616,8 @@ export class WalletBg {
 
   /**
    * True when the refusal index holds anything at all. Lets a caller skip deserializing a
-   * transaction it could not possibly have to refuse — the common case on any network
-   * without a CIP-113 deployment, mainnet included.
+   * transaction it could not possibly have to refuse — the common case on a network
+   * without CIP-113 and for any wallet that holds no programmable tokens.
    */
   hasProgrammableInputs(): boolean {
     return this.programmableInputRefs.size > 0;
@@ -1258,9 +1263,20 @@ export class WalletBg {
       // server-reported address's payment cred instead. Converges: the
       // resubscribe triggered by a non-null return replays the same address
       // set, which then adds nothing and returns null.
+      //
+      // The absorbed creds feed the client-side partition, but the resubscribe
+      // still has to go through subscriptionCredentials(): resubscribe() REPLACES
+      // the socket's set, so returning the raw payment creds here would swap the
+      // empty CIP-113 subscription for an allowlist that never matches the
+      // programmable-token script address, and the next push would drop them.
       let added = false;
       for (const addr of serverAddresses) {
         try {
+          // Key credentials only, as on the HD branch below. With the CIP-113 filter
+          // off the server also reports the programmable-token SCRIPT address; absorbing
+          // its hash would make classifyUtxoAddress call those UTxOs spendable.
+          const paymentCred = Cardano.Address.fromString(addr)?.getProps().paymentPart;
+          if (paymentCred?.type === Cardano.CredentialType.ScriptHash) continue;
           const cred = keyHashFromAddress(addr) as unknown as string;
           if (cred && !this.watchCredentials.has(cred)) {
             this.watchCredentials.add(cred);
@@ -1270,7 +1286,7 @@ export class WalletBg {
           continue;
         }
       }
-      return added ? this.derivePaymentCredentials() : null;
+      return added ? this.subscriptionCredentials() : null;
     }
 
     const currentCreds = new Set(this.derivePaymentCredentials());
@@ -1319,6 +1335,12 @@ export class WalletBg {
    *
    * Networks without a deployment take the non-empty branch, so the server-side filter
    * stays active there exactly as it does for any other credential list.
+   *
+   * The empty list loses nothing the allowlist returned. Verified against mainnet gero-sync
+   * on 2026-10-07: the allowlist only FILTERS the stake-anchored set and never reaches past
+   * it — an allowlist naming a funded enterprise address's payment key returned none of its
+   * UTxOs. So own-payment-key addresses outside this stake address (enterprise, or another
+   * stake part) are not synced either way; that is a pre-existing gap, not a CIP-113 one.
    * Single source of truth: resubscribe() REPLACES the socket's credential set.
    *
    * LIMITATION — only the stake-key CIP-113 convention is discoverable this way. The
