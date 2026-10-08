@@ -92,6 +92,7 @@
           </v-btn>
         </v-col>
       </v-row>
+      <SubmitApiSettingsRow v-if="loggedWallet?.chain === Blockchain.CARDANO" />
 
       <!-- Midnight proof server. Full setup/details live on their own page
            (src/modules/midnight/ProofServerPage.vue, left-nav entry) - this
@@ -169,6 +170,7 @@ import networks from '@/utils/networks';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
+import SubmitApiSettingsRow from '@/modules/dashboard/components/SubmitApiSettingsRow.vue';
 import { walletStore } from '@/stores/walletStore';
 import { midnightStore } from '@/stores/midnightStore';
 import { Blockchain } from '@/models/types';
