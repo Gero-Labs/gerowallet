@@ -625,15 +625,15 @@ async function submitLogout() {
       data: { },
     });
     updateVuetifyTheme('Cardano'); // logout resets to the default chain accent
-    // Navigate to welcome page after store is cleared
+    // Explicit logout returns to the wallet list, including from public Help.
     // Use replace to avoid adding to history, and catch navigation guard redirects
-    !isPublicRoute(router.currentRoute) && router.replace('/welcome').catch(err => {
+    router.replace('/welcome').catch(err => {
       debugLog('Navigation after logout handled (expected during logout):', err.message || err);
     });
   } catch (error) {
     console.error('Error during logout:', error);
     // Force navigation even on error
-    !isPublicRoute(router.currentRoute) && router.replace('/welcome').catch(err => {
+    router.replace('/welcome').catch(err => {
       debugLog('Navigation after logout error handled (expected during logout):', err.message || err);
       window.location.hash = '#/welcome';
     });

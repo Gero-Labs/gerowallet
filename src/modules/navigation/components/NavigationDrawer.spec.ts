@@ -39,6 +39,7 @@ import { walletStore } from '@/stores/walletStore';
 import featureFlagsStore from '@/stores/featureFlagsStore';
 import { GOVERNANCE_ITEMS } from './governanceNav';
 import { Messaging } from '@/chrome/messaging';
+import { MessageTypes } from '@/models/MessageTypes';
 import cardStore from '@/stores/modules/card';
 
 function mountDrawer(path: string): Wrapper<Vue> {
@@ -127,6 +128,7 @@ vi.stubGlobal('APP_VERSION', '0.0.0-test');
 
 beforeEach(() => {
   vi.clearAllMocks();
+  h.replace.mockResolvedValue(undefined);
   h.route.meta.public = false;
   // The drawer's footer card reads name/icon off the logged wallet.
   walletStore.loggedWallet = {
@@ -141,20 +143,34 @@ beforeEach(() => {
 });
 
 describe('NavigationDrawer: public Help session actions', () => {
-  it.each(['lock', 'logout', 'logout-error'])('keeps a public article visible after %s', async action => {
+  it('keeps a public article visible after locking', async () => {
     h.route.meta.public = true;
     walletStore.loggedWallet = { ...walletStore.loggedWallet, id: 1 } as never;
-    vi.spyOn(cardStore, 'logout').mockResolvedValue(undefined);
-    vi.mocked(Messaging.sendToBackgroundFromOptions).mockImplementation(async () => {
-      if (action === 'logout-error') throw new Error('background unavailable');
-    });
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(Messaging.sendToBackgroundFromOptions).mockResolvedValue(undefined);
     wrapper = mountDrawer('/help/articles/backup');
     for (let i = 0; i < 8; i++) await Vue.nextTick();
-    await wrapper.find(`[aria-label="${action === 'lock' ? 'security.lock' : 'wallet.logout'}"]`).trigger('click');
+    await wrapper.find('[aria-label="security.lock"]').trigger('click');
     for (let i = 0; i < 8; i++) await Vue.nextTick();
-    expect(Messaging.sendToBackgroundFromOptions).toHaveBeenCalled();
+    expect(Messaging.sendToBackgroundFromOptions).toHaveBeenCalledWith({ method: MessageTypes.LOCK, data: {} });
     expect(h.replace).not.toHaveBeenCalled();
+  });
+
+  describe.each(['success', 'background error'])('explicit logout: %s', outcome => {
+    it.each(['/help', '/help/articles/backup', '/help/updates', '/blog/security', '/governance'])('returns from %s to the wallet list', async path => {
+      h.route.meta.public = path !== '/governance';
+      walletStore.loggedWallet = { ...walletStore.loggedWallet, id: 1 } as never;
+      vi.spyOn(cardStore, 'logout').mockResolvedValue(undefined);
+      vi.mocked(Messaging.sendToBackgroundFromOptions).mockImplementation(async () => {
+        if (outcome === 'background error') throw new Error('background unavailable');
+      });
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      wrapper = mountDrawer(path);
+      for (let i = 0; i < 8; i++) await Vue.nextTick();
+      await wrapper.find('[aria-label="wallet.logout"]').trigger('click');
+      for (let i = 0; i < 8; i++) await Vue.nextTick();
+      expect(Messaging.sendToBackgroundFromOptions).toHaveBeenCalledWith({ method: MessageTypes.LOGOUT, data: {} });
+      expect(h.replace).toHaveBeenCalledWith('/welcome');
+    });
   });
   it('still leaves private wallet pages after locking', async () => {
     walletStore.loggedWallet = { ...walletStore.loggedWallet, id: 1 } as never;
