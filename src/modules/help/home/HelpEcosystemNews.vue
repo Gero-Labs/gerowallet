@@ -6,7 +6,7 @@
     <HelpSceneFrame scene="helpUpdates" :scale="66" class="news-frame" />
     <ul v-if="items.length" class="news-list">
       <li v-for="item in items" :key="item.id">
-        <component :is="updateLink(item) ? 'a' : 'div'" class="news-row" v-bind="rowAttrs(item)">
+        <component :is="updateLink(item) ? 'a' : 'div'" class="news-row" v-bind="rowAttrs(item)" @click="openItem(item)">
           <span class="news-copy">
             <span class="t-caption g-num">{{ t('help.updateSource.' + item.source) }} · {{ dateOf(item) }}</span>
             <span class="news-title" :lang="item.locale">{{ item.title }}</span>
@@ -16,7 +16,7 @@
       </li>
     </ul>
     <p v-else class="t-body-sm news-status" role="status">{{ t(loading ? 'help.loadingUpdates' : failed ? 'help.updatesUnavailable' : 'help.noUpdates') }}</p>
-    <GButton tier="tertiary" compact class="news-all" :to="updatesTo()">{{ t('help.updateSource.all') }}</GButton>
+    <GButton tier="tertiary" compact class="news-all" :to="updatesTo()" @click="home('all_updates')">{{ t('help.updateSource.all') }}</GButton>
   </HelpCard>
 </template>
 
@@ -30,18 +30,26 @@ import { formatHelpDate } from '../helpFormat';
 import { newsIsFresh, relevantNewsSources } from '../helpHome';
 import { useHelpNavigation } from '../helpNavigation';
 import { updateLink } from '../helpUpdates';
+import { useHelpTracking } from '../useHelpTracking';
 import { useHelpUpdates } from '../useHelpUpdates';
 import HelpCard from './HelpCard.vue';
 import HelpSceneFrame from './HelpSceneFrame.vue';
 
 const { t } = useTranslation();
 const { chain, updatesTo } = useHelpNavigation();
+const { home, updateOpened } = useHelpTracking();
 const request = computed(() => ({ source: 'ecosystem-news', chain: chain.value, locale: helpLocale(i18n.locale), limit: 3 }));
 const { page, loading, failed } = useHelpUpdates(request);
 const items = computed(() => page.value?.items ?? []);
 const hasSources = computed(() => relevantNewsSources(page.value?.sources ?? [], chain.value).length > 0);
 const fresh = computed(() => newsIsFresh(page.value?.sources ?? [], chain.value));
 function dateOf(item: HelpUpdate): string { return formatHelpDate(item.publishedAt, helpLocale(i18n.locale)) || t('help.dateUnknown'); }
+// Only a headline that opens its original counts; an inert row does nothing.
+function openItem(item: HelpUpdate): void {
+  if (!updateLink(item)) return;
+  home('ecosystem_news');
+  updateOpened(item.source);
+}
 // Original publishers open in a new tab; an item without a safe link stays readable but inert.
 function rowAttrs(item: HelpUpdate): Record<string, string> {
   const href = updateLink(item);

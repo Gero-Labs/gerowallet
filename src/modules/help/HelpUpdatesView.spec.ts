@@ -2,7 +2,8 @@ import Vue, { ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { HelpUpdatesPage } from '@/api/help.api';
-const state = vi.hoisted(() => ({ route: { query: { source: 'blog' } as Record<string, string> }, push: vi.fn(), updates: {} as Record<string, unknown> }));
+const state = vi.hoisted(() => ({ route: { query: { source: 'blog' } as Record<string, string> }, push: vi.fn(), updates: {} as Record<string, unknown>, track: vi.fn() }));
+vi.mock('./helpAnalytics', () => ({ trackHelp: state.track }));
 vi.mock('vue-router/composables', () => ({ useRoute: () => state.route, useRouter: () => ({ push: state.push }) }));
 vi.mock('./useHelpUpdates', () => ({ useHelpUpdates: () => state.updates }));
 vi.mock('@/shared/composables/useTranslation', async () => {
@@ -15,6 +16,7 @@ beforeEach(() => {
   vi.stubEnv('VITE_BACKEND_URL', 'https://backend.test');
   state.route.query = { source: 'blog' };
   state.push.mockReset().mockResolvedValue(undefined);
+  state.track.mockReset();
   Object.assign(state.updates, { page: ref({ items: [], total: 0, nextCursor: null, sources: [{ source: 'gero-blog', status: 'unavailable' }] }), loading: ref(false), failed: ref(false), retry: vi.fn(), loadMore: vi.fn() });
 });
 afterEach(() => vi.unstubAllEnvs());
@@ -129,4 +131,39 @@ it('marks items from a stale source in their caption', () => {
     total: 1, nextCursor: null, sources: [{ ...fresh('cardano-news'), status: 'stale' }] }) });
   const wrapper = render(); expect(wrapper.find('.update-caption').text()).toBe('Cardano · Sep 30, 2026 · Last available snapshot');
   expect(wrapper.find('.update-arrow').exists()).toBe(true); wrapper.destroy();
+});
+
+const counted = () => state.track.mock.calls.map(([event]) => event);
+it('counts a source pill when it is selected, with the Help chain filter, but not a click on the pill already pressed', async () => {
+  state.route.query = { source: 'gero-x', chain: 'midnight' };
+  const wrapper = render('midnight');
+  await buttonLabelled(wrapper, 'Gero on X').trigger('click');
+  await buttonLabelled(wrapper, 'Midnight').trigger('click');
+  await buttonLabelled(wrapper, 'All updates').trigger('click');
+  expect(counted()).toEqual([
+    { type: 'updates_filter', subject: 'midnight-news', surface: 'help', chain: 'midnight' },
+    { type: 'updates_filter', subject: 'all', surface: 'help', chain: 'midnight' },
+  ]);
+  expect(state.push).toHaveBeenCalledTimes(3);
+  wrapper.destroy();
+});
+it('counts an opened update by its feed, for blog posts inside the wallet and for originals, but not for an inert row', async () => {
+  state.route.query = { source: 'all' };
+  Object.assign(state.updates, { page: ref({ total: 3, nextCursor: null, sources: [], items: [
+    { id: 'b', kind: 'blog', source: 'gero-blog', title: 'Wallet guide', summary: '', destination: { type: 'blog', slug: 'wallet-guide' }, publisher: 'Gero', publishedAt: '2026-08-20T00:00:00Z', media: [] },
+    { id: 'x', kind: 'social', source: 'nexus-x', title: 'Post', text: 'Post', canonicalUrl: 'https://x.com/i/web/status/12345', publisher: 'Nexus', publishedAt: '2026-10-07T09:00:00Z', media: [] },
+    { id: 'n', kind: 'news', source: 'cardano-news', title: 'Unsafe', summary: '', canonicalUrl: 'javascript:alert(1)', publisher: 'Cardano', publishedAt: '2026-09-30T00:00:00Z', media: [] },
+  ] }) });
+  const wrapper = render();
+  const rows = wrapper.findAll('.update-row');
+  const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+  rows.at(0).element.dispatchEvent(event);
+  expect(event.defaultPrevented).toBe(false);
+  await rows.at(1).trigger('click');
+  await rows.at(2).trigger('click');
+  expect(counted()).toEqual([
+    { type: 'update_open', subject: 'gero-blog', surface: 'help', chain: 'all' },
+    { type: 'update_open', subject: 'nexus-x', surface: 'help', chain: 'all' },
+  ]);
+  wrapper.destroy();
 });

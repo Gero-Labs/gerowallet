@@ -77,7 +77,7 @@
           </span>
           <div class="support-email-text">
             <span class="t-caption">{{ t('help.supportDialog.emailSupport') }}</span>
-            <a class="support-email-link" :href="mailto">{{ email }}</a>
+            <a class="support-email-link" :href="mailto" @click="trackEmail()">{{ email }}</a>
           </div>
           <GButton compact @click="copyEmail()">
             <v-icon left size="16">mdi-content-copy</v-icon>{{ t(copied ? 'help.copied' : 'help.copyEmail') }}
@@ -93,7 +93,7 @@
         <div class="support-footer">
           <GButton v-if="state === 'noWallets'" to="/welcome" @click="closeDialog()">{{ t('help.setup') }}</GButton>
           <GButton v-if="state === 'locked'" :to="unlockPath" @click="closeDialog()">{{ t('help.unlock') }}</GButton>
-          <GButton tier="primary" :href="mailto">{{ t('help.supportDialog.emailSupport') }}</GButton>
+          <GButton tier="primary" :href="mailto" @click="trackEmail()">{{ t('help.supportDialog.emailSupport') }}</GButton>
         </div>
       </template>
     </section>
@@ -110,6 +110,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import { helpUnlockPath } from '@/modules/navigation/helpAccess';
 import { clearHelpSupport, helpSupportIntent, openWalletSupport, supportNoticeFor } from './supportIntent';
+import { useHelpTracking } from './useHelpTracking';
 import { version } from '../../../package.json';
 
 const email = 'support@gerowallet.io';
@@ -118,6 +119,7 @@ const mailto = `mailto:${email}`;
 const { t } = useTranslation();
 const route = useRoute();
 const { hasWallets } = useAvailableWallets();
+const { track } = useHelpTracking();
 const dialogOpen = ref(false);
 // 'chat' is only ever shown while the wallet is eligible; everything else is the email view.
 const view = ref<'chat' | 'email'>('email');
@@ -141,6 +143,15 @@ const noticeText = computed(() => {
 });
 const unlockPath = computed(() => helpUnlockPath(route.fullPath));
 
+// The dialog counts anonymously when it opens, with the state it opens in (never who the person is).
+function showDialog(): void {
+  dialogOpen.value = true;
+  track({ type: 'support_open', subject: state.value });
+}
+function trackEmail(): void {
+  track({ type: 'support_email', subject: 'dialog' });
+}
+
 // Page-local, in-memory only: nothing is stored and nothing is sent until "Start live chat".
 function openDialog(articleId?: string): void {
   copied.value = false;
@@ -163,7 +174,7 @@ function openDialog(articleId?: string): void {
     showContext.value = false;
     view.value = 'email';
   }
-  dialogOpen.value = true;
+  showDialog();
 }
 
 watch(() => helpSupportIntent.request, request => {
@@ -182,7 +193,7 @@ watch(state, value => {
     copied.value = false;
     copyFailed.value = false;
     view.value = 'email';
-    dialogOpen.value = true;
+    showDialog();
   }
 });
 onBeforeUnmount(clearHelpSupport);
@@ -214,13 +225,14 @@ function startChat(): void {
     contextText ? `${t('help.context.preview')}\n${contextText}` : '',
   ].filter(Boolean).join('\n\n');
   openWalletSupport(draft, wallet.id);
+  track({ type: 'support_chat_started' });
   dialogOpen.value = false;
 }
 
 async function copyEmail(): Promise<void> {
   copied.value = false;
   copyFailed.value = false;
-  try { await navigator.clipboard.writeText(email); copied.value = true; }
+  try { await navigator.clipboard.writeText(email); copied.value = true; track({ type: 'support_email_copied', subject: 'dialog' }); }
   catch { copyFailed.value = true; }
 }
 </script>

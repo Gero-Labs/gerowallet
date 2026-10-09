@@ -58,7 +58,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from 'vue';
+import { computed, onBeforeUnmount, watch } from 'vue';
 import i18n from '@/plugins/i18n';
 import { helpLocale, type HelpResult } from '@/api/help.api';
 import { useRoute, useRouter } from 'vue-router/composables';
@@ -77,14 +77,17 @@ import HelpHomeDashboard from './home/HelpHomeDashboard.vue';
 import { answers, applies, asAnswer, featuredAnswers, parseHelpChain, searchAnswers, topicIndex, walletHelpChain } from './helpContent';
 import { latestTutorial, mostViewed } from './helpHome';
 import { useHelpNavigation } from './helpNavigation';
+import { helpSearchIntent } from './helpSearchIntent';
 import { openSupport } from './supportIntent';
 import { useHelpContent } from './useHelpContent';
+import { useHelpTracking } from './useHelpTracking';
 import { renderHelpArticle } from './helpRichText';
 
 const { t, tc } = useTranslation();
 const route = useRoute();
 const router = useRouter();
 const { chain, destination, answerDestination, selectChain } = useHelpNavigation();
+const { track } = useHelpTracking();
 const view = computed(() => route.path.startsWith('/help/articles/') ? 'article' : route.path.startsWith('/help/topics/') ? 'topic' : route.path === '/help/search' ? 'search' : route.path === '/help/updates' ? 'updates' : 'home');
 // Home is a dashboard; the reader and updates pages share a tighter top gutter, and results follow them.
 const layout = computed(() => view.value === 'home' ? 'home' : view.value === 'article' ? 'reader' : view.value === 'updates' ? 'updates' : 'results');
@@ -129,6 +132,20 @@ const remoteResultsActive = computed(() => resolved.value && !request.value.basi
 const filteredRemoteResults = computed(() => remoteResults.value.filter(answer => applies(asAnswer(answer), context.value)));
 const heading = computed(() => selectedTopic.value ? t('help.topic.' + selectedTopic.value.id) : t('help.answers'));
 const results = computed(() => searchAnswers(view.value === 'search' && typeof route.query.q === 'string' ? route.query.q : '', context.value, route.params.topic));
+// A submitted search is counted once its outcome is known: the published results, or the bundled ones when
+// the service is unreachable. Only "results" or "empty" is recorded, never the words that were typed.
+const searchOutcome = computed<'results' | 'empty' | null>(() => {
+  const submitted = helpSearchIntent.pending;
+  if (submitted === null || view.value !== 'search' || request.value.q !== submitted) return null;
+  if (loading.value || !(request.value.basic || resolved.value || failed.value)) return null;
+  return (remoteResultsActive.value ? filteredRemoteResults.value.length : results.value.length) > 0 ? 'results' : 'empty';
+});
+watch(searchOutcome, outcome => {
+  if (!outcome) return;
+  helpSearchIntent.pending = null;
+  track({ type: 'search', subject: outcome });
+}, { immediate: true });
+onBeforeUnmount(() => { helpSearchIntent.pending = null; });
 function remoteDestination(answer: HelpResult) {
   const type = answer.destination?.type ?? (answer.source === 'gero-blog' ? 'blog' : 'help-article');
   return destination((type === 'blog' ? '/blog/' : '/help/articles/') + encodeURIComponent(answer.destination?.slug || answer.slug), { basic: '' });

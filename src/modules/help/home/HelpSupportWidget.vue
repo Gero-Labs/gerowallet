@@ -17,7 +17,7 @@
     </div>
     <div class="glass-tier support-row support-row--mail">
       <v-icon :size="18" color="var(--g-text-2)" class="support-row__icon">mdi-email-outline</v-icon>
-      <a class="support-email" :href="'mailto:' + email">{{ email }}</a>
+      <a class="support-email" :href="'mailto:' + email" @click="track({ type: 'support_email', subject: 'widget' })">{{ email }}</a>
       <GButton tier="tertiary" compact class="support-copy" :aria-label="t('help.copyEmail')" @click="copyEmail()"><v-icon :size="18">mdi-content-copy</v-icon></GButton>
     </div>
     <p v-if="copyState" class="t-caption support-feedback" role="status">{{ t(copyState === 'copied' ? 'help.copied' : 'help.copyFailed') }}</p>
@@ -40,11 +40,13 @@ import IsoScene from '@/shared/components/iso/IsoScene.vue';
 import { helpUnlockPath } from '@/modules/navigation/helpAccess';
 import { supportNoticeFor, openSupport } from '../supportIntent';
 import { supportWidgetFor } from '../helpHome';
+import { useHelpTracking } from '../useHelpTracking';
 
 const email = 'support@gerowallet.io';
 const { t } = useTranslation();
 const route = useRoute();
 const { hasWallets } = useAvailableWallets();
+const { track } = useHelpTracking();
 // Same inputs as HelpSupportAction, so the card and the dialog always agree on what is available.
 const notice = computed(() => supportNoticeFor({
   wallet: walletStore.loggedWallet, locked: walletStore.isLocked, syncing: walletStore.isSyncing,
@@ -58,7 +60,7 @@ const copyState = ref<'copied' | 'failed' | null>(null);
 let resetTimer: ReturnType<typeof setTimeout> | undefined;
 async function copyEmail(): Promise<void> {
   clearTimeout(resetTimer);
-  try { await navigator.clipboard.writeText(email); copyState.value = 'copied'; }
+  try { await navigator.clipboard.writeText(email); copyState.value = 'copied'; track({ type: 'support_email_copied', subject: 'widget' }); }
   catch { copyState.value = 'failed'; }
   resetTimer = setTimeout(() => { copyState.value = null; }, 4000);
 }

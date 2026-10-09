@@ -29,7 +29,8 @@
     <section v-if="items.length" class="glass-panel updates-list" :aria-label="sourceLabel(source)">
       <ul>
         <li v-for="item in items" :key="item.id">
-          <component :is="rowTag(item)" class="update-row" v-bind="rowProps(item)">
+          <!-- Both listeners: a plain link takes @click, router-link needs @click.native; either way the open is counted once. -->
+          <component :is="rowTag(item)" class="update-row" v-bind="rowProps(item)" @click="openItem(item)" @click.native="openItem(item)">
             <HelpSourceBadge :source="item.source" class="update-icon" />
             <div class="update-body" :class="{ 'update-body--social': item.kind === 'social' }">
               <p class="t-caption g-num update-caption">{{ caption(item) }}</p>
@@ -77,14 +78,16 @@ import GButton from '@/shared/components/GButton/GButton.vue';
 import IsoScene from '@/shared/components/iso/IsoScene.vue';
 import Blog from '@/modules/blog/Blog.vue';
 import { formatHelpDate } from './helpFormat';
-import { updateImages, updateLink, updatePills, updateSource } from './helpUpdates';
+import { updateImages, updateLink, updatePills, updateSource, type UpdatePillSource } from './helpUpdates';
 import { staleStatusFor } from './helpUpdatesStatus';
+import { useHelpTracking } from './useHelpTracking';
 import { useHelpUpdates } from './useHelpUpdates';
 import HelpPill from './HelpPill.vue';
 import HelpSourceBadge from './HelpSourceBadge.vue';
 
 const props = defineProps<{ chain: string }>();
 const route = useRoute(), router = useRouter(), { t, tc } = useTranslation();
+const { track, updateOpened } = useHelpTracking();
 const source = computed(() => updateSource(route.query.source));
 const request = computed(() => ({ source: source.value, chain: props.chain, locale: helpLocale(i18n.locale) }));
 const { page, loading, failed, retry, loadMore } = useHelpUpdates(request);
@@ -114,7 +117,8 @@ const staleStatus = computed(() => staleStatusFor(visibleSources.value, {
   name: sourceLabel, date, text: (key, params) => t('help.updatesPage.' + key, params), othersText: count => tc('help.updatesPage.othersFresh', count),
 }));
 
-function select(value: string): void {
+function select(value: 'all' | UpdatePillSource): void {
+  if (value !== source.value) track({ type: 'updates_filter', subject: value });
   void router.push({ path: '/help/updates', query: { ...route.query, source: value, chain: props.chain } }).catch(() => {});
 }
 function sourceLabel(value: string): string { return t('help.updateSource.' + value); }
@@ -126,6 +130,10 @@ function caption(item: HelpUpdate): string {
 function images(item: HelpUpdate): { src: string; alt: string }[] { return updateImages(item, import.meta.env['VITE_BACKEND_URL']); }
 const linkOf = (item: HelpUpdate): string | null => updateLink(item);
 const isInternal = (item: HelpUpdate): boolean => item.kind === 'blog' && !!linkOf(item);
+// Opening an item is counted by its source; an item without a safe link is inert and counts nothing.
+function openItem(item: HelpUpdate): void {
+  if (linkOf(item)) updateOpened(item.source);
+}
 // Blog posts open inside the wallet, originals in a new tab, and an item without a safe link stays readable but inert.
 function rowTag(item: HelpUpdate): string { return !linkOf(item) ? 'article' : isInternal(item) ? 'router-link' : 'a'; }
 function rowProps(item: HelpUpdate): Record<string, unknown> {

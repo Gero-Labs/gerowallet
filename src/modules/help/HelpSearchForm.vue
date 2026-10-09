@@ -13,6 +13,7 @@ import { useRoute, useRouter } from 'vue-router/composables';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import { useHelpNavigation } from './helpNavigation';
+import { helpSearchIntent } from './helpSearchIntent';
 
 withDefaults(defineProps<{ variant?: 'hero' | 'compact'; inputId?: string }>(), { variant: 'compact', inputId: 'help-query' });
 const { t } = useTranslation();
@@ -22,7 +23,12 @@ const { destination } = useHelpNavigation();
 const query = ref(typeof route.query.q === 'string' ? route.query.q : '');
 watch(() => route.query.q, value => { query.value = typeof value === 'string' ? value : ''; });
 function submit(): void {
-  void router.push(destination('/help/search', { q: query.value.trim().slice(0, 200), basic: '' })).catch(() => {});
+  const q = query.value.trim().slice(0, 200);
+  const target = destination('/help/search', { q, basic: '' });
+  // Counted by the results page once its outcome is known, and only when this actually runs a new search.
+  const counted = !!q && router.resolve(target).route.fullPath !== route.fullPath;
+  if (counted) helpSearchIntent.pending = q;
+  void router.push(target).catch(() => { if (counted && helpSearchIntent.pending === q) helpSearchIntent.pending = null; });
 }
 </script>
 

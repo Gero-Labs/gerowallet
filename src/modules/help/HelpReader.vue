@@ -37,16 +37,16 @@
 
         <!-- The dedicated renderer escapes text and permits only mirrored images and safe links; ids are added to its output in an inert document. -->
         <!-- eslint-disable-next-line vue/no-v-html -->
-        <div v-if="response" class="g-prose article-body" :lang="article.locale" v-html="rendered.html"></div>
+        <div v-if="response" ref="bodyEl" class="g-prose article-body" :lang="article.locale" v-html="rendered.html"></div>
         <div v-else class="g-prose article-body"><p lang="en">{{ article.body }}</p></div>
 
         <div class="helpful">
           <span class="helpful-label">{{ t('help.reader.helpful') }}</span>
           <template v-if="!helpful">
-            <GButton tier="secondary" compact @click="helpful = 'yes'">{{ t('common.yes') }}</GButton>
-            <GButton tier="secondary" compact @click="helpful = 'no'">{{ t('common.no') }}</GButton>
+            <GButton tier="secondary" compact @click="vote('yes')">{{ t('common.yes') }}</GButton>
+            <GButton tier="secondary" compact @click="vote('no')">{{ t('common.no') }}</GButton>
           </template>
-          <!-- Nothing is sent anywhere: this only acknowledges the click. -->
+          <!-- The vote is only counted anonymously (article id and answer, no identity); this acknowledges the click. -->
           <p class="helpful-result" role="status">{{ helpful ? t(helpful === 'yes' ? 'help.reader.helpfulYes' : 'help.reader.helpfulNo') : '' }}</p>
         </div>
 
@@ -100,7 +100,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import i18n from '@/plugins/i18n';
 import { helpLocale, type HelpArticleResponse } from '@/api/help.api';
 import { useTranslation } from '@/shared/composables/useTranslation';
@@ -111,6 +111,7 @@ import { formatHelpDate } from './helpFormat';
 import { useHelpNavigation } from './helpNavigation';
 import { addHeadingIds } from './helpToc';
 import { openSupport } from './supportIntent';
+import { useHelpTracking } from './useHelpTracking';
 import HelpChip from './HelpChip.vue';
 import HelpContentStatus from './HelpContentStatus.vue';
 import HelpSearchForm from './HelpSearchForm.vue';
@@ -122,6 +123,7 @@ const props = defineProps<{
 defineEmits<{ (e: 'retry'): void }>();
 const { t } = useTranslation();
 const { answersTo, destination, answerDestination, selectChain } = useHelpNavigation();
+const { track } = useHelpTracking();
 
 const scene = computed(() => topics.find(topic => topic.id === props.article?.topic)?.scene ?? 'register');
 const rendered = computed(() => addHeadingIds(props.html));
@@ -135,8 +137,31 @@ const appliesTo = computed(() => {
   return chains.length ? chains.map(chain => chainNames[chain] ?? chain).join(', ') : t('help.reader.allWallets');
 });
 
+// An article counts as viewed once it has settled on screen: the published copy has loaded, or the bundled
+// answer is the final one. The counter keeps one view per article for the life of the page.
+watch(() => props.article && !props.loading ? props.article.id : '', id => {
+  if (id) track({ type: 'article_view', subject: id });
+}, { immediate: true });
+
 const helpful = ref<'yes' | 'no' | null>(null);
 watch(() => props.article?.id, () => { helpful.value = null; });
+function vote(answer: 'yes' | 'no'): void {
+  helpful.value = answer;
+  if (props.article) track({ type: answer === 'yes' ? 'article_helpful_yes' : 'article_helpful_no', subject: props.article.id });
+}
+
+// A mailto link to Support inside the article text counts as using the support email.
+const bodyEl = ref<HTMLElement | null>(null);
+const SUPPORT_MAILTO = /^mailto:support@gerowallet\.io(?:[?#]|$)/i;
+function onBodyClick(event: MouseEvent): void {
+  const link = event.target instanceof Element ? event.target.closest('a[href]') : null;
+  if (link && SUPPORT_MAILTO.test(link.getAttribute('href') ?? '')) track({ type: 'support_email', subject: 'reader' });
+}
+watch(bodyEl, (element, previous) => {
+  previous?.removeEventListener('click', onBodyClick);
+  element?.addEventListener('click', onBodyClick);
+});
+onBeforeUnmount(() => bodyEl.value?.removeEventListener('click', onBodyClick));
 
 const currentHeading = ref('');
 watch(() => rendered.value.headings, headings => { currentHeading.value = headings[0]?.id ?? ''; }, { immediate: true });

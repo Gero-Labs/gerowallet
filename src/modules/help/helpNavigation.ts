@@ -14,12 +14,18 @@ export function helpSectionFor(path: string): HelpSection {
   return null;
 }
 
+/** The Help Center's chain filter: the `chain` query, else the wallet's own chain while it is ready, else all. */
+export function useHelpChain() {
+  const route = useRoute();
+  return computed<HelpChain>(() => parseHelpChain(route.query['chain'])
+    ?? (isHelpReady(walletStore) ? walletHelpChain(walletStore.loggedWallet?.chain) : 'all'));
+}
+
 /** Chain, section and link builders shared by the header, tabs and every Help widget. */
 export function useHelpNavigation() {
   const route = useRoute();
   const router = useRouter();
-  const chain = computed<HelpChain>(() => parseHelpChain(route.query['chain'])
-    ?? (isHelpReady(walletStore) ? walletHelpChain(walletStore.loggedWallet?.chain) : 'all'));
+  const chain = useHelpChain();
   const section = computed(() => helpSectionFor(route.path));
 
   function destination(path: string, extra: Record<string, string> = {}) {

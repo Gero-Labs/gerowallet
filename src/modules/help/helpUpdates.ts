@@ -21,8 +21,13 @@ export function updateImage(path: string, backend: string): string | null {
 }
 /** Source pills on the Updates page. `ecosystem-news` stays valid in URLs but has no pill of its own. */
 export const updatePillSources = ['gero-blog', 'cardano-news', 'midnight-news', 'bitcoin-news', 'gero-x', 'nexus-x'] as const;
+export type UpdatePillSource = (typeof updatePillSources)[number];
+/** The feed an opened update belongs to, when it is one the Updates page lists; anything else is null. */
+export function updateOpenSource(source: string): UpdatePillSource | null {
+  return (updatePillSources as readonly string[]).includes(source) ? source as UpdatePillSource : null;
+}
 /** With a chain filter active only that chain's news pill is offered. */
-export function updatePills(chain: string): string[] {
+export function updatePills(chain: string): UpdatePillSource[] {
   return updatePillSources.filter(source => chain === 'all' || !source.endsWith('-news') || source === chain + '-news');
 }
 /** Icon well for a source: the Gero or Nexus mark, or an MDI glyph for the chain feeds. */

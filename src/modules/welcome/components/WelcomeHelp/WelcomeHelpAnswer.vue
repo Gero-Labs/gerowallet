@@ -23,7 +23,7 @@
       <span class="whelp-feedback__question">{{ t('help.welcome.helpful') }}</span>
       <GButton tier="secondary" compact :aria-pressed="choice === 'yes' ? 'true' : 'false'" data-test="helpful-yes" @click="choose('yes')">{{ t('common.yes') }}</GButton>
       <GButton tier="secondary" compact :aria-pressed="choice === 'no' ? 'true' : 'false'" data-test="helpful-no" @click="choose('no')">{{ t('common.no') }}</GButton>
-      <!-- Always mounted so the acknowledgement is announced when it appears. There is no feedback API: nothing is sent. -->
+      <!-- Always mounted so the acknowledgement is announced when it appears. Only an anonymous count (answer id and Yes/No) is kept. -->
       <p class="whelp-feedback__status t-body-sm" :class="{ 'whelp-feedback__status--shown': choice }" role="status" data-test="feedback-status">{{ acknowledgement }}</p>
     </div>
 
@@ -40,6 +40,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
+import { trackHelp } from '@/modules/help/helpAnalytics';
 import type { HelpAnswer } from '@/modules/help/helpContent';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
@@ -66,6 +67,8 @@ const steps = computed(() => answerSteps(props.answer.body, props.setupOpen));
 const acknowledgement = computed(() => choice.value === 'yes' ? t('help.welcome.thanksYes') : choice.value === 'no' ? t('help.welcome.thanksNo') : '');
 
 function choose(value: 'yes' | 'no'): void {
+  // The first answer on this view is the one counted; changing it afterwards only changes the highlight.
+  if (!choice.value) trackHelp({ type: value === 'yes' ? 'article_helpful_yes' : 'article_helpful_no', subject: props.answer.id, surface: 'welcome', chain: 'all' });
   choice.value = value;
 }
 

@@ -4,7 +4,7 @@
     <p class="whelp-support__text" :class="compact ? 't-caption' : 't-body-sm'">{{ notice }}</p>
     <div class="whelp-support__mail">
       <v-icon v-if="!compact" size="18" color="var(--g-text-2)">mdi-email-outline</v-icon>
-      <a class="whelp-support__link" :href="`mailto:${SUPPORT_EMAIL}`">{{ SUPPORT_EMAIL }}</a>
+      <a class="whelp-support__link" :href="`mailto:${SUPPORT_EMAIL}`" @click="track('support_email')">{{ SUPPORT_EMAIL }}</a>
       <GButton
         class="whelp-support__copy"
         tier="tertiary"
@@ -23,6 +23,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue';
+import { trackHelp } from '@/modules/help/helpAnalytics';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 
@@ -40,6 +41,11 @@ const copied = ref(false);
 const copyFailed = ref(false);
 let resetTimer: ReturnType<typeof setTimeout> | undefined;
 
+// Anonymous usage counts: which support email action was used, nothing about the person.
+function track(type: 'support_email' | 'support_email_copied'): void {
+  trackHelp({ type, subject: 'welcome', surface: 'welcome', chain: 'all' });
+}
+
 const notice = computed(() => t(props.hasWallets ? 'help.notice.locked' : 'help.notice.noWallets'));
 const status = computed(() => copyFailed.value ? t('help.copyFailed') : copied.value ? t('help.copied') : '');
 
@@ -48,6 +54,7 @@ async function copyEmail(): Promise<void> {
   try {
     await navigator.clipboard.writeText(SUPPORT_EMAIL);
     copied.value = true;
+    track('support_email_copied');
     copyFailed.value = false;
     resetTimer = setTimeout(() => { copied.value = false; }, COPIED_MS);
   } catch {

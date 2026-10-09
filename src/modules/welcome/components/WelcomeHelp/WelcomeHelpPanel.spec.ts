@@ -5,7 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const h = vi.hoisted(() => ({
   openTab: vi.fn(),
   updates: vi.fn(),
+  track: vi.fn(),
 }));
+vi.mock('@/modules/help/helpAnalytics', () => ({ trackHelp: h.track }));
 vi.mock('@/shared/composables/useTranslation', () => ({
   useTranslation: () => ({
     t: (key: string, params?: Record<string, unknown>) => params ? `${key}:${JSON.stringify(params)}` : key,
@@ -70,6 +72,7 @@ const byTest = (wrapper: Wrapper<Vue>, name: string) => wrapper.find(`[data-test
 
 beforeEach(() => {
   setViewport(false);
+  h.track.mockReset();
   h.openTab.mockReset().mockResolvedValue(true);
   h.updates.mockReset().mockResolvedValue({ items: [], total: 0, nextCursor: null, sources: [] });
 });
@@ -601,5 +604,95 @@ describe('welcome help panel: phone sheet', () => {
     expect(wrapper.find('.whelp-answer__related h3').text()).toBe('help.welcome.related');
     expect(wrapper.find('.whelp-support').classes()).toContain('whelp-support--compact');
     expect(byTest(wrapper, 'help-panel').attributes('aria-labelledby')).toBe('whelp-answer-title');
+  });
+});
+
+describe('welcome help panel: anonymous usage counts', () => {
+  const counted = () => h.track.mock.calls.map(([event]) => event);
+  const event = (type: string, subject?: string) => ({ type, ...(subject ? { subject } : {}), surface: 'welcome', chain: 'all' });
+  const open = async (wrapper: Wrapper<Vue>, title: string) => {
+    await wrapper.findAll('.whelp-row').wrappers.find(row => row.text().includes(title))!.trigger('click');
+  };
+
+  it.each([
+    [{ hasWallets: true }, 'saved'], [{ hasWallets: false }, 'new'], [{ started: true }, 'setup'], [{ started: true, hasWallets: true }, 'setup'],
+  ] as const)('counts the panel opening with the welcome state: %j', (props, state) => {
+    show(props);
+    expect(counted()).toEqual([event('welcome_open', state)]);
+  });
+
+  it('counts an answer when it opens, from the list and from a related row, once per answer', async () => {
+    const wrapper = show({ hasWallets: true });
+    await open(wrapper, 'Restore an existing wallet');
+    await wrapper.findAll('.whelp-answer__related .whelp-row').at(0).trigger('click');
+    expect(counted().slice(1)).toEqual([event('article_view', 'restore'), event('article_view', 'hardware')]);
+  });
+
+  it('counts the first Yes or No on an answer under the answer id, and a changed mind only changes the highlight', async () => {
+    const wrapper = show({ started: true });
+    await open(wrapper, 'Restore an existing wallet');
+    await byTest(wrapper, 'helpful-no').trigger('click');
+    await byTest(wrapper, 'helpful-yes').trigger('click');
+    expect(counted().slice(2)).toEqual([event('article_helpful_no', 'restore')]);
+    await wrapper.findAll('.whelp-answer__related .whelp-row').at(0).trigger('click');
+    await byTest(wrapper, 'helpful-yes').trigger('click');
+    expect(counted().slice(3).map(call => `${call.type}:${call.subject}`)).toEqual(['article_view:create', 'article_helpful_yes:create']);
+  });
+
+  it('counts a search only after 600 ms of quiet, as results or empty, and never with the words typed', async () => {
+    vi.useFakeTimers();
+    const wrapper = show({ hasWallets: true });
+    const input = wrapper.find('#whelp-search');
+    await input.setValue('hard');
+    vi.advanceTimersByTime(599);
+    await input.setValue('hardware');
+    vi.advanceTimersByTime(599);
+    expect(counted()).toEqual([event('welcome_open', 'saved')]);
+    vi.advanceTimersByTime(1);
+    expect(counted().slice(1)).toEqual([event('search', 'results')]);
+    await input.setValue('zzzzqqqq');
+    vi.advanceTimersByTime(600);
+    expect(counted().slice(2)).toEqual([event('search', 'empty')]);
+    expect(JSON.stringify(counted())).not.toMatch(/hard|zzzz/);
+  });
+
+  it('counts nothing for a cleared search or when the panel closes before the pause ends', async () => {
+    vi.useFakeTimers();
+    const wrapper = show({ hasWallets: true });
+    await wrapper.find('#whelp-search').setValue('hardware');
+    await wrapper.find('#whelp-search').setValue('   ');
+    vi.advanceTimersByTime(2000);
+    await wrapper.find('#whelp-search').setValue('hardware');
+    wrapper.destroy();
+    vi.advanceTimersByTime(2000);
+    expect(counted()).toEqual([event('welcome_open', 'saved')]);
+  });
+
+  it('counts the support email link and a successful copy as welcome, and not a refused copy', async () => {
+    const writeText = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('denied'));
+    vi.stubGlobal('navigator', { clipboard: { writeText } });
+    const wrapper = show({ hasWallets: true });
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+    wrapper.find('.whelp-support a').element.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(false);
+    await byTest(wrapper, 'copy-email').trigger('click'); await nextTick();
+    await byTest(wrapper, 'copy-email').trigger('click'); await nextTick();
+    expect(counted().slice(1)).toEqual([event('support_email', 'welcome'), event('support_email_copied', 'welcome')]);
+    vi.unstubAllGlobals();
+  });
+
+  it('counts the footer link in both its labels, and the What\'s new row, as opening the full Help Center', async () => {
+    vi.stubEnv('VITE_BACKEND_URL', 'https://backend.test');
+    h.updates.mockResolvedValue({ total: 1, nextCursor: null, sources: [], items: [{ id: 'blog:27', kind: 'blog', source: 'gero-blog', title: 'GeroWallet 2.7 Is Live', locale: 'en-US', publisher: 'Gero',
+      publishedAt: '2026-08-19T10:00:00.000Z', destination: { type: 'blog', slug: 'gerowallet-2-7-is-live' }, media: [] }] });
+    const wrapper = show({ hasWallets: true });
+    for (let i = 0; i < 4; i++) await nextTick();
+    await byTest(wrapper, 'open-full').trigger('click');
+    await byTest(wrapper, 'whats-new').find('a').trigger('click');
+    await wrapper.findAll('.whelp-row').at(0).trigger('click');
+    await byTest(wrapper, 'open-full').trigger('click');
+    expect(counted().filter(call => call.type === 'welcome_open_full')).toHaveLength(3);
+    expect(counted().map(call => call.type)).toEqual(['welcome_open', 'welcome_open_full', 'welcome_open_full', 'article_view', 'welcome_open_full']);
+    vi.unstubAllEnvs();
   });
 });

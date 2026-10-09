@@ -118,7 +118,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { trackHelp, type HelpEventInput } from '@/modules/help/helpAnalytics';
 import type { HelpAnswer } from '@/modules/help/helpContent';
 import { openWelcomeHelp } from '@/modules/navigation/helpAccess';
 import GButton from '@/shared/components/GButton/GButton.vue';
@@ -147,6 +148,8 @@ const props = defineProps<{
 const emit = defineEmits<{ (e: 'close'): void }>();
 
 const PHONE_QUERY = '(max-width: 600px)';
+/** A search is counted once the person has stopped typing for this long. */
+const SEARCH_IDLE_MS = 600;
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 const { t, tc } = useTranslation();
@@ -184,11 +187,25 @@ function close(): void {
   emit('close');
 }
 
+// Anonymous usage counts for this panel: what happened, never what was typed.
+function track(event: HelpEventInput): void {
+  trackHelp({ ...event, surface: 'welcome', chain: 'all' });
+}
+
+let searchTimer: ReturnType<typeof setTimeout> | undefined;
+watch(query, value => {
+  clearTimeout(searchTimer);
+  if (!value.trim()) return;
+  searchTimer = setTimeout(() => track({ type: 'search', subject: results.value.length ? 'results' : 'empty' }), SEARCH_IDLE_MS);
+});
+
 async function openTab(path: string): Promise<void> {
+  track({ type: 'welcome_open_full' });
   failedPath.value = (await openWelcomeHelp(path)) ? null : path;
 }
 
 function openAnswer(answer: HelpAnswer): void {
+  track({ type: 'article_view', subject: answer.id });
   if (!current.value) {
     savedScroll = scroller.value?.scrollTop ?? 0;
     lastOpenedId = answer.id;
@@ -232,6 +249,7 @@ function onKeydown(event: KeyboardEvent): void {
 }
 
 onMounted(() => {
+  track({ type: 'welcome_open', subject: state.value });
   document.addEventListener('keydown', onDocumentKeydown);
   phoneMedia?.addEventListener?.('change', onPhoneChange);
   // Desktop goes straight to the search box; on a phone that would raise the keyboard over the sheet.
@@ -239,6 +257,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  clearTimeout(searchTimer);
   document.removeEventListener('keydown', onDocumentKeydown);
   phoneMedia?.removeEventListener?.('change', onPhoneChange);
   const active = document.activeElement;

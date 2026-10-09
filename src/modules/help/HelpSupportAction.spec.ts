@@ -7,8 +7,10 @@ import { version } from '../../../package.json';
 const h = vi.hoisted(() => ({
   wallet: { loggedWallet: null as unknown, isLocked: true, isSyncing: false },
   flags: { isInitialized: false, live: false }, saved: { value: false },
-  route: { fullPath: '/help/articles/midnight-dust?chain=midnight', query: {} },
+  route: { fullPath: '/help/articles/midnight-dust?chain=midnight', query: {} as Record<string, string> },
+  track: vi.fn(),
 }));
+vi.mock('./helpAnalytics', () => ({ trackHelp: h.track }));
 vi.mock('@/stores/walletStore', async () => ({ walletStore: (await import('vue')).reactive(h.wallet) }));
 vi.mock('@/stores/featureFlagsStore', async () => {
   const state = (await import('vue')).reactive(h.flags);
@@ -56,7 +58,7 @@ const contextBox = (wrapper: Wrapper) => wrapper.find<HTMLTextAreaElement>('#hel
 const primaries = (wrapper: Wrapper) => wrapper.findAll('[data-tier="primary"]');
 
 beforeEach(() => {
-  clearHelpSupport();
+  clearHelpSupport(); h.track.mockReset(); h.route.query = {};
   h.wallet.loggedWallet = null; h.wallet.isLocked = true; h.wallet.isSyncing = false;
   h.flags.isInitialized = false; h.flags.live = false; h.saved.value = false;
 });
@@ -314,5 +316,56 @@ describe('Help support clearing', () => {
     wrapper.destroy();
     expect(helpSupportIntent.active).toBe(false);
     expect(helpSupportIntent.dockRequest).toBeNull();
+  });
+});
+
+describe('Help support anonymous usage counts', () => {
+  const counted = () => h.track.mock.calls.map(([event]) => event);
+  const event = (type: string, subject?: string, chain = 'all') => ({ type, ...(subject ? { subject } : {}), surface: 'help', chain });
+
+  it('counts the dialog opening with the eligibility state it opens in, under the Help chain filter', async () => {
+    eligibleSession(); h.route.query = { chain: 'midnight' };
+    show(); openSupport('receive'); await nextTick();
+    expect(counted()).toEqual([event('support_open', 'eligible', 'midnight')]);
+  });
+  // Without a chain in the URL the Help filter follows a ready wallet's own chain, exactly as the page shows it.
+  it.each([['noWallets', 'all'], ['locked', 'all'], ['syncing', 'all'], ['ineligible', 'midnight'], ['disabled', 'cardano']] as const)('counts the %s state when the email dialog opens', async (state, chain) => {
+    if (state === 'locked') h.saved.value = true;
+    if (state === 'ineligible' || state === 'disabled' || state === 'syncing') {
+      h.wallet.loggedWallet = { ...eligible, chain: state === 'ineligible' ? 'Midnight' : 'Cardano' }; h.wallet.isLocked = false; h.wallet.isSyncing = state === 'syncing';
+    }
+    show(); openSupport(); await nextTick();
+    expect(counted()).toEqual([event('support_open', state, chain)]);
+  });
+  it('counts "Start live chat" once, after the chat is handed to the dock, and nothing about the question or context', async () => {
+    eligibleSession();
+    const wrapper = show(); openSupport('receive'); await nextTick();
+    await question(wrapper).setValue('My secret question');
+    await buttonByText(wrapper, 'help.supportDialog.startChat').trigger('click');
+    expect(counted()).toEqual([event('support_open', 'eligible', 'cardano'), event('support_chat_started', undefined, 'cardano')]);
+    expect(JSON.stringify(counted())).not.toContain('secret');
+  });
+  it('does not count "Email instead" or closing as anything but what they are', async () => {
+    eligibleSession();
+    const wrapper = show(); openSupport(); await nextTick();
+    await buttonByText(wrapper, 'help.supportDialog.emailInstead').trigger('click');
+    await wrapper.find('button[aria-label="common.close"]').trigger('click');
+    expect(counted()).toEqual([event('support_open', 'eligible', 'cardano')]);
+  });
+  it('counts both mailto actions of the email dialog, without cancelling them', async () => {
+    const wrapper = show(); openSupport(); await nextTick();
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+    wrapper.find('a.support-email-link').element.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(false);
+    await primaries(wrapper).at(0).trigger('click');
+    expect(counted()).toEqual([event('support_open', 'noWallets'), event('support_email', 'dialog'), event('support_email', 'dialog')]);
+  });
+  it('counts a successful copy of the address, but not a failed one', async () => {
+    const writeText = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('denied'));
+    vi.stubGlobal('navigator', { clipboard: { writeText } });
+    const wrapper = show(); openSupport(); await nextTick();
+    await buttonByText(wrapper, 'help.copyEmail').trigger('click'); await nextTick();
+    await buttonByText(wrapper, 'help.copied').trigger('click'); await nextTick();
+    expect(counted()).toEqual([event('support_open', 'noWallets'), event('support_email_copied', 'dialog')]);
   });
 });

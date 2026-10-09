@@ -10,7 +10,9 @@ const h = vi.hoisted(() => ({
   wallet: { loggedWallet: null as unknown, isLocked: true, isSyncing: false },
   route: { path: '/help/articles/backup', fullPath: '/help/articles/backup', query: {} as Record<string, string> },
   replace: vi.fn().mockResolvedValue(undefined),
+  track: vi.fn(),
 }));
+vi.mock('./helpAnalytics', () => ({ trackHelp: h.track }));
 vi.mock('@/stores/walletStore', async () => ({ walletStore: (await import('vue')).reactive(h.wallet) }));
 vi.mock('vue-router/composables', () => ({ useRoute: () => h.route, useRouter: () => ({ replace: h.replace, push: vi.fn() }) }));
 vi.mock('@/shared/composables/useTranslation', async () => {
@@ -30,7 +32,7 @@ const stubs = { 'v-btn': vBtnStub, 'v-icon': true, 'router-link': { props: ['to'
 const wrappers: Array<ReturnType<typeof mount>> = [];
 const show = (propsData: Record<string, unknown> = {}) => { const wrapper = mount(HelpReader, { propsData: { ...base, ...propsData }, stubs, attachTo: document.body }); wrappers.push(wrapper); return wrapper; };
 const buttonNamed = (wrapper: ReturnType<typeof show>, text: string) => wrapper.findAll('button').wrappers.find(button => button.text() === text);
-beforeEach(() => { clearHelpSupport(); h.wallet.loggedWallet = null; h.wallet.isLocked = true; });
+beforeEach(() => { clearHelpSupport(); h.wallet.loggedWallet = null; h.wallet.isLocked = true; h.route.query = {}; h.track.mockReset(); });
 afterEach(() => { wrappers.splice(0).forEach(wrapper => wrapper.destroy()); clearHelpSupport(); });
 
 describe('article reader', () => {
@@ -118,5 +120,47 @@ describe('article reader', () => {
     const wrapper = show({ article: undefined });
     expect(wrapper.find('.article').exists()).toBe(false);
     expect(wrapper.text()).toContain('That answer was not found.');
+  });
+});
+
+describe('anonymous usage counts', () => {
+  const counted = () => h.track.mock.calls.map(([event]) => event);
+  it('counts a bundled answer as viewed once it is on screen, under the Help chain filter', () => {
+    h.route.query = { chain: 'midnight' };
+    show();
+    expect(counted()).toEqual([{ type: 'article_view', subject: 'backup', surface: 'help', chain: 'midnight' }]);
+  });
+  it('waits for a published guide to finish loading and counts the published id, not the fallback shown meanwhile', async () => {
+    const wrapper = show({ article: bundled, basic: false, loading: true });
+    expect(counted()).toEqual([]);
+    wrapper.setProps({ article: asAnswer(published.article), response: published, html, loading: false }); await nextTick();
+    expect(counted()).toEqual([{ type: 'article_view', subject: 'hw', surface: 'help', chain: 'all' }]);
+  });
+  it('counts the next article when the reader moves on, and nothing while an answer is not found', async () => {
+    const wrapper = show();
+    wrapper.setProps({ article: answers.find(answer => answer.id === 'restore') }); await nextTick();
+    wrapper.setProps({ article: undefined }); await nextTick();
+    expect(counted().map(event => event.subject)).toEqual(['backup', 'restore']);
+  });
+  it('counts Yes and No by article id, once per answer, and never sends the vote through the page', async () => {
+    const yes = show();
+    await buttonNamed(yes, 'Yes')!.trigger('click');
+    expect(counted()).toContainEqual({ type: 'article_helpful_yes', subject: 'backup', surface: 'help', chain: 'all' });
+    const no = show({ article: answers.find(answer => answer.id === 'restore') });
+    await buttonNamed(no, 'No')!.trigger('click');
+    expect(counted()).toContainEqual({ type: 'article_helpful_no', subject: 'restore', surface: 'help', chain: 'all' });
+    expect(counted().filter(event => event.type.startsWith('article_helpful'))).toHaveLength(2);
+  });
+  it('counts a click on a Support mailto inside the article text, and only that', async () => {
+    const body = '<p><a href="mailto:support@gerowallet.io">Write to us</a> <a href="mailto:someone@else.test">Else</a> <a href="https://gerowallet.io">Site</a></p>';
+    const wrapper = show({ article: asAnswer(published.article), response: published, html: body, basic: false });
+    await nextTick();
+    const links = wrapper.findAll('.article-body a');
+    // Links keep their normal behaviour: the click is not cancelled.
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+    links.at(0).element.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+    await links.at(1).trigger('click'); await links.at(2).trigger('click');
+    expect(counted().filter(call => call.type === 'support_email')).toEqual([{ type: 'support_email', subject: 'reader', surface: 'help', chain: 'all' }]);
   });
 });

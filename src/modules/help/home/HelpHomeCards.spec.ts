@@ -10,7 +10,9 @@ const h = vi.hoisted(() => ({
   flags: { isInitialized: false, live: false }, saved: { value: false },
   route: { path: '/help', fullPath: '/help?chain=all', query: {} as Record<string, string> },
   pages: {} as Record<string, HelpUpdatesPage>, request: null as unknown as Ref<{ source: string; chain: string; limit?: number }>,
+  track: vi.fn(),
 }));
+vi.mock('../helpAnalytics', () => ({ trackHelp: h.track }));
 vi.mock('@/stores/walletStore', async () => ({ walletStore: (await import('vue')).reactive(h.wallet) }));
 vi.mock('@/stores/featureFlagsStore', async () => {
   const state = (await import('vue')).reactive(h.flags);
@@ -39,6 +41,7 @@ import HelpXCard from './HelpXCard.vue';
 import HelpBlogCard from './HelpBlogCard.vue';
 import HelpEcosystemNews from './HelpEcosystemNews.vue';
 import HelpTopicsCard from './HelpTopicsCard.vue';
+import HelpLatestTutorial from './HelpLatestTutorial.vue';
 import { answers, topicIndex } from '../helpContent';
 
 const stubs = { 'v-btn': vBtnStub, 'v-icon': true, 'router-link': { props: ['to'], template: '<a :href="to.path"><slot /></a>' } };
@@ -46,7 +49,7 @@ const wrappers: Array<ReturnType<typeof mount>> = [];
 const show = (component: unknown, propsData: Record<string, unknown> = {}) => { const wrapper = mount(component as never, { propsData, stubs }); wrappers.push(wrapper); return wrapper; };
 const eligible = { id: 42, chain: 'Cardano', network: 'Mainnet', type: 'Normal', stakeAddress: 'stake1test' };
 beforeEach(() => {
-  clearHelpSupport(); h.pages = {};
+  clearHelpSupport(); h.pages = {}; h.track.mockReset(); h.route.query = {};
   h.wallet.loggedWallet = null; h.wallet.isLocked = true; h.wallet.isSyncing = false;
   h.flags.isInitialized = false; h.flags.live = false; h.saved.value = false;
   vi.stubEnv('VITE_BACKEND_URL', 'https://backend.test');
@@ -200,5 +203,75 @@ describe('topics card', () => {
     expect(card.text()).toContain('Cardano only');
     expect(card.text()).not.toContain('answers');
     expect(tiles.at(0).text()).toContain('answers');
+  });
+});
+
+describe('anonymous usage counts', () => {
+  const counted = () => h.track.mock.calls.map(([event]) => event);
+  const home = (subject: string, chain = 'all') => ({ type: 'home_click', subject, surface: 'help', chain });
+  const update = (subject: string, chain = 'all') => ({ type: 'update_open', subject, surface: 'help', chain });
+  const mail = (type: string, subject: string) => ({ type, subject, surface: 'help', chain: 'all' });
+  const social = (source: string): HelpUpdatesPage => ({ total: 1, nextCursor: null, sources: [], items: [{
+    id: source + ':1', source, kind: 'social', chain: 'all', title: 'Post', summary: 'Post', text: 'Post', canonicalUrl: 'https://x.com/i/web/status/777',
+    publishedAt: '2026-10-07T09:00:00Z', publisher: source, locale: 'en-US', media: [] }] });
+
+  it('counts a Most viewed row and its "All answers" link without stopping either from navigating', async () => {
+    h.route.query = { chain: 'cardano' };
+    const wrapper = show(HelpMostViewed, { items: answers.slice(0, 2), ranked: true });
+    expect(counted()).toEqual([]);
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+    wrapper.findAll('.viewed-row').at(1).element.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+    await wrapper.find('.g-btn').trigger('click');
+    expect(counted()).toEqual([home('most_viewed', 'cardano'), home('all_answers', 'cardano')]);
+  });
+  it('counts a topic tile and the topics card "Answers" link', async () => {
+    const wrapper = show(HelpTopicsCard, { topics: topicIndex({ chain: 'all', features: {} }), basic: false });
+    await wrapper.findAll('.topic-tile').at(2).trigger('click');
+    await wrapper.find('.g-btn').trigger('click');
+    expect(counted()).toEqual([home('topic'), home('all_answers')]);
+  });
+  it('counts the latest tutorial link and "All tutorials"', async () => {
+    const wrapper = show(HelpLatestTutorial, { tutorial: { answer: answers[0], remote: false } });
+    await wrapper.find('.tutorial-link').trigger('click');
+    await wrapper.find('.g-btn').trigger('click');
+    expect(counted()).toEqual([home('latest_tutorial'), home('all_tutorials')]);
+  });
+  it('counts a blog post as a widget click and as an opened update, and "All posts" as a widget click', async () => {
+    h.pages = { 'gero-blog': { total: 1, nextCursor: null, sources: [], items: [{ id: 'b', source: 'gero-blog', kind: 'blog', chain: 'all', title: 'Release', summary: 'Notes',
+      publishedAt: '2026-08-19T00:00:00Z', publisher: 'Gero blog', locale: 'en-US', destination: { type: 'blog', slug: 'release' }, media: [] }] } };
+    const wrapper = show(HelpBlogCard);
+    await wrapper.find('.blog-link').trigger('click');
+    await wrapper.find('.g-btn').trigger('click');
+    expect(counted()).toEqual([home('blog'), update('gero-blog'), home('all_posts')]);
+  });
+  it('counts "View on X" for the account on show, and for Nexus after the toggle', async () => {
+    h.pages = { 'gero-x': social('gero-x'), 'nexus-x': social('nexus-x') };
+    const wrapper = show(HelpXCard);
+    await wrapper.find('.x-toggle__button').trigger('click');
+    expect(counted()).toEqual([]);
+    await wrapper.find('.x-link').trigger('click');
+    await wrapper.findAll('.x-toggle__button').at(1).trigger('click'); await nextTick();
+    await wrapper.find('.x-link').trigger('click');
+    expect(counted()).toEqual([home('x_gero'), update('gero-x'), home('x_nexus'), update('nexus-x')]);
+  });
+  it('counts an ecosystem news headline with its own feed, ignores an inert one, and counts "All updates"', async () => {
+    const item = (id: string, canonicalUrl: string): HelpUpdate => ({ id, source: 'midnight-news', kind: 'news', chain: 'midnight', title: id, summary: '', canonicalUrl, publishedAt: '2026-09-28T00:00:00Z', publisher: 'Midnight', locale: 'en-US', media: [] });
+    h.pages = { 'ecosystem-news': { total: 2, nextCursor: null, sources: [], items: [item('a', 'https://midnight.network/blog/a'), item('b', 'javascript:alert(1)')] } };
+    const wrapper = show(HelpEcosystemNews);
+    const rows = wrapper.findAll('.news-row');
+    await rows.at(0).trigger('click');
+    await rows.at(1).trigger('click');
+    await wrapper.find('.news-all').trigger('click');
+    expect(counted()).toEqual([home('ecosystem_news'), update('midnight-news'), home('all_updates')]);
+  });
+  it('counts the mailto link and a successful copy on the support widget, but not a failed copy', async () => {
+    const writeText = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('denied'));
+    vi.stubGlobal('navigator', { clipboard: { writeText } });
+    const wrapper = show(HelpSupportWidget);
+    await wrapper.find('a.support-email').trigger('click');
+    await wrapper.find('.support-copy').trigger('click'); await nextTick(); await nextTick();
+    await wrapper.find('.support-copy').trigger('click'); await nextTick(); await nextTick();
+    expect(counted()).toEqual([mail('support_email', 'widget'), mail('support_email_copied', 'widget')]);
   });
 });

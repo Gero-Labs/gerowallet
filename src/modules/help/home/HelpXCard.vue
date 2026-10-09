@@ -18,7 +18,7 @@
       <img v-if="image" :src="image.src" :alt="image.alt" class="x-media" loading="lazy" />
     </article>
     <p v-else class="t-body-sm x-status" role="status">{{ t(loading ? 'help.loadingUpdates' : failed ? 'help.updatesUnavailable' : 'help.noUpdates') }}</p>
-    <GButton v-if="link" tier="tertiary" compact class="x-link" :href="link" target="_blank" rel="noopener noreferrer">
+    <GButton v-if="link" tier="tertiary" compact class="x-link" :href="link" target="_blank" rel="noopener noreferrer" @click="openPost()">
       {{ t('help.home.viewOnX') }}
       <v-icon :size="16">mdi-open-in-new</v-icon>
     </GButton>
@@ -34,12 +34,14 @@ import GButton from '@/shared/components/GButton/GButton.vue';
 import { formatHelpDate } from '../helpFormat';
 import { useHelpNavigation } from '../helpNavigation';
 import { updateImages, updateLink } from '../helpUpdates';
+import { useHelpTracking } from '../useHelpTracking';
 import { useHelpUpdates } from '../useHelpUpdates';
 import HelpSourceBadge from '../HelpSourceBadge.vue';
 import HelpCard from './HelpCard.vue';
 
 const { t } = useTranslation();
 const { chain } = useHelpNavigation();
+const { home, updateOpened } = useHelpTracking();
 type Account = 'gero-x' | 'nexus-x';
 // Brand names, so they are not translated. Only the selected account is requested; the other loads on first toggle.
 const accounts: { source: Account; label: string }[] = [{ source: 'gero-x', label: 'Gero' }, { source: 'nexus-x', label: 'Nexus' }];
@@ -49,6 +51,10 @@ const { page, loading, failed } = useHelpUpdates(request);
 const item = computed(() => page.value?.items[0] ?? null);
 const link = computed(() => item.value ? updateLink(item.value) : null);
 const image = computed(() => item.value ? updateImages(item.value, import.meta.env['VITE_BACKEND_URL'])[0] ?? null : null);
+function openPost(): void {
+  home(account.value === 'gero-x' ? 'x_gero' : 'x_nexus');
+  updateOpened(account.value);
+}
 const date = computed(() => formatHelpDate(item.value?.publishedAt, helpLocale(i18n.locale)) || t('help.dateUnknown'));
 </script>
 
