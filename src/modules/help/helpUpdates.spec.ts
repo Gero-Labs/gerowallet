@@ -15,6 +15,10 @@ describe('update destinations', () => {
     expect(updateLink(item({ kind: 'blog', destination: { type: 'blog', slug: '../welcome' } }))).toBeNull();
     expect(updateImage('/api/help/assets/' + 'a'.repeat(64), 'https://backend.test')).toContain('https://backend.test/api/help/assets/');
     expect(updateImage('https://private.test/image.png', 'https://backend.test')).toBeNull();
+    expect(updateImage('/api/blog/assets/6r7NEsr7Ll3uBD96mMkfFl_thumb_189832d0', 'https://backend.test'))
+      .toBe('https://backend.test/api/blog/assets/6r7NEsr7Ll3uBD96mMkfFl_thumb_189832d0');
+    for (const path of ['/api/blog/assets/../private', '//private.test/image', '/api/blog/assets/id_thumb_189832d0?redirect=evil', '/api/blog/assets/id_thumb_189832d0.svg'])
+      expect(updateImage(path, 'https://backend.test')).toBeNull();
   });
   it('keeps legacy blog-filter links and safely defaults unknown filters', () => {
     expect(updateSource('blog')).toBe('gero-blog'); expect(updateSource('bad')).toBe('all'); expect(updateSource('midnight-news')).toBe('midnight-news');

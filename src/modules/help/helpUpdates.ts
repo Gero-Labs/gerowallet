@@ -15,6 +15,7 @@ export function updateLink(item: HelpUpdate): string | null {
   } catch { return null; }
 }
 export function updateImage(path: string, backend: string): string | null {
-  if (!/^\/api\/help\/assets\/[a-f0-9]{64}$/.test(path)) return null;
+  if (!/^\/api\/help\/assets\/[a-f0-9]{64}$/.test(path)
+    && !/^\/api\/blog\/assets\/[A-Za-z0-9_-]{1,100}_thumb_[a-f0-9]{8}$/.test(path)) return null;
   try { const uri = new URL(path, backend); return ['https:', 'http:'].includes(uri.protocol) ? uri.href : null; } catch { return null; }
 }
