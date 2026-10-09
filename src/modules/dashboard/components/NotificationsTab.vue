@@ -522,6 +522,8 @@ watch(() => props.active, (active) => {
   cursor: pointer;
 }
 .notify-types__toggle { display: inline-flex; align-items: center; gap: 4px; padding: 4px 0; border: 0; background: none; color: var(--g-accent); font: inherit; font-size: 12px; cursor: pointer; }
+/* Inline right after the status pill (no hint/error line between): the template's whitespace is condensed away. */
+.notify-status + .notify-types__toggle { margin-left: var(--g-s-3); }
 .notify-type { padding-left: 14px; border-left: 2px solid var(--g-hairline-2); margin-left: 2px; }
 .notify-type--off { opacity: 0.6; }
 .notify-type__title { font-size: 13px; color: var(--g-text-1); }
