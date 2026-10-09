@@ -134,6 +134,14 @@ function broadcastFromBackground(updates: Partial<StoreType>) {
 - **Display**: `walletStore.programmableTokens` → `useHoldingsValuation()` (locked *tokens* priced at 0, locked ADA at the native rate, `isProgrammable`, distinct `rowKey` so a dual-held unit doesn't collide), rendered with a lock badge and the `programmableTokens.badge` chip.
 - **CIP-68**: label-100 reference tokens are filtered out of the display; `cip68Label()` in `resolver.ts` strips the label prefix so names don't render as truncated hex.
 
+## Submit API (per-wallet custom Cardano submit endpoint)
+- Settings → Advanced lets a Cardano wallet send its signed transactions to a user-chosen endpoint (POST `application/cbor`, 30 s timeout, `redirect: 'error'`); rows `submitApi` (public) and `submitApiAuth` (header value) live in the per-wallet `config` table, no schema bump.
+- `src/chrome/submitRouter.ts` is the single choke point (`submitCardanoTx`): every Cardano submit goes through it, each caller passing its own 2.7.2 call as `defaultSubmit`. The router re-validates the stored row on every submit and checks the returned hash against the local tx id.
+- The secret row `submitApiAuth` is filtered by `PRIVATE_CONFIG_KEYS` (`walletLoader.ts`), so it never reaches `walletStore`, broadcasts or `chrome.storage.local`. Only the background reads it (`submitApiStore.ts`).
+- Fail closed: an invalid, null or unreadable setting never falls back to Gero's path. Fallback happens only when the user opted in and the endpoint itself failed (never on a 400).
+- The extension CSP is static and also governs the MV3 worker, so a user-chosen endpoint needs `https:` and `http:` in `connect-src` (`scripts/manifest.ts`). The router is the only code that sends to a user-chosen URL.
+- Spec: `docs/superpowers/specs/2026-10-08-submit-api-design.md` (docs/ is gitignored).
+
 ## PRF (PassKey) Wallets
 - Core encryption via WebAuthn PRF extension (hardware-backed)
 - Credential stored in wallet record (`wallet.webAuthnCredentialId`), NOT config table
@@ -150,7 +158,7 @@ function broadcastFromBackground(updates: Partial<StoreType>) {
 ## Feature Flags
 - Self-hosted flag service (gero-sync): `src/services/featureFlag.service.ts` + `src/stores/featureFlagsStore.ts`
 - Backend URL: `VITE_FLAGS_BASE_URL` (see `.env.*`)
-- Flags: `isSwapEnabled`, `isGeroCardEnabled`, `isBlogEnabled`, `isHelpCenterEnabled` (dashboard discovery and Blog redirect only; public Help and welcome access remain available while off or loading), `isGoMiningEnabled`, `isPoolOperatorEnabled`, `isPhysicalCardOrderingEnabled`, `isBitcoinEnabled` (master visibility gate for the Bitcoin chain: onboarding tile + BTC route guards + BTC nav items), `isCip113Enabled` (runtime kill-switch for CIP-113; ANDed with the per-network deployment list)
+- Flags: `isSwapEnabled`, `isGeroCardEnabled`, `isBlogEnabled`, `isHelpCenterEnabled` (dashboard discovery and Blog redirect only; public Help and welcome access remain available while off or loading), `isGoMiningEnabled`, `isPoolOperatorEnabled`, `isPhysicalCardOrderingEnabled`, `isBitcoinEnabled` (master visibility gate for the Bitcoin chain: onboarding tile + BTC route guards + BTC nav items), `isCip113Enabled` (runtime kill-switch for CIP-113; ANDed with the per-network deployment list), `isSubmitApiEnabled` (UI-only gate for Settings → Advanced → Submit API; the background router honours a saved endpoint whatever the flag says)
 - Route gating: `isRouteUnderMaintenance()` in router.ts
 - Nav hiding: check flag in NavigationDrawer.vue menu items
 
