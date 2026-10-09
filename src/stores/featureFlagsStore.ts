@@ -85,6 +85,10 @@ export interface FeatureFlags {
   // rebuild and a Web Store review. Read in the background through the
   // chrome.storage mirror; see src/chrome/cip113Flag.ts.
   isCip113Enabled: boolean;
+  // Submit API (Settings → Advanced). Default OFF, ships dark. Gates the UI ONLY: the
+  // background router honours a saved endpoint whatever this says, because a remote
+  // flip must never reroute a privacy user's transactions to Gero.
+  isSubmitApiEnabled: boolean;
   // Default OFF and ships dark. Kill switch for WRITING the gpw2 secret envelope
   // and for the on-unlock migration to it. Every release since the reader-only one
   // opens gpw2, so turning this off only stops new gpw2 writes. Read by the
@@ -139,6 +143,7 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
     isCip45Enabled: CIP45_DEFAULT_ENABLED,
     isLiveChatEnabled: false,
     isCip113Enabled: false,
+    isSubmitApiEnabled: false,
     isKeyEnvelopeV2Enabled: false,
     collateralTrustedDapps: [],
   },
@@ -223,6 +228,8 @@ export const featureFlagsStore = {
     // CIP-113 ships DARK (default false); the background reads this mirror to decide
     // whether to partition UTxOs at all.
     featureFlagsState.flags.isCip113Enabled = featureFlagService.getFlag('isCip113Enabled', false);
+    // Submit API ships DARK (default false); UI-only gate for the Settings dialog.
+    featureFlagsState.flags.isSubmitApiEnabled = featureFlagService.getFlag('isSubmitApiEnabled', false);
     // gpw2 writer + migration ships DARK; writers read this mirror before each write.
     featureFlagsState.flags.isKeyEnvelopeV2Enabled = featureFlagService.getFlag('isKeyEnvelopeV2Enabled', false);
     featureFlagsState.flags.collateralTrustedDapps = featureFlagService.getFlag<string[]>('collateralTrustedDapps', []);
@@ -317,6 +324,9 @@ export const featureFlagsStore = {
       Vue.set(featureFlagsState.flags, 'isCip113Enabled', newValue);
       // Mirror the live flip so the background gate picks it up without a re-login.
       persistFlagsForBackground();
+    });
+    featureFlagService.onFlagChange('isSubmitApiEnabled', (newValue) => {
+      Vue.set(featureFlagsState.flags, 'isSubmitApiEnabled', newValue === true);
     });
     featureFlagService.onFlagChange('isKeyEnvelopeV2Enabled', (newValue) => {
       Vue.set(featureFlagsState.flags, 'isKeyEnvelopeV2Enabled', newValue === true);
@@ -563,6 +573,15 @@ export const featureFlagsStore = {
   },
 
   /**
+   * Check if the Submit API setting is enabled.
+   * Ships DARK (default false). Gates the UI only; the background router
+   * honours a saved endpoint whatever this says.
+   */
+  isSubmitApiEnabled(): boolean {
+    return featureFlagsState.flags.isSubmitApiEnabled;
+  },
+
+  /**
    * Reset flags (disable all until re-initialized).
    */
   reset(): void {
@@ -592,6 +611,7 @@ export const featureFlagsStore = {
       isCip45Enabled: CIP45_DEFAULT_ENABLED,
       isLiveChatEnabled: false,
       isCip113Enabled: false,
+      isSubmitApiEnabled: false,
       isKeyEnvelopeV2Enabled: false,
       collateralTrustedDapps: [],
     });

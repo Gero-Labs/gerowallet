@@ -1,6 +1,13 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import i18n from '@/plugins/i18n';
 import { extractNexusErrorMessage, friendlyTxError, isCollateralError, isInsufficientAdaError, shortfallLovelaceFromMessage } from './txErrors';
-import { TX_SUBMIT_UNCONFIRMED_MESSAGE } from '@/chrome/config';
+import {
+  TX_SUBMIT_UNCONFIRMED_MESSAGE,
+  SUBMIT_API_ENDPOINT_PREFIX,
+  SUBMIT_API_HASH_MISMATCH_MESSAGE,
+  SUBMIT_API_INVALID_MESSAGE,
+  SUBMIT_API_STORAGE_MESSAGE,
+} from '@/chrome/config';
 import { InputLimitError } from '@/api/nexusInputSelection';
 
 describe('isCollateralError', () => {
@@ -137,5 +144,41 @@ describe('shortfallLovelaceFromMessage', () => {
   it('returns undefined for anything else', () => {
     expect(shortfallLovelaceFromMessage('Validation failed')).toBeUndefined();
     expect(shortfallLovelaceFromMessage('')).toBeUndefined();
+  });
+});
+
+describe('friendlyTxError: Submit API', () => {
+  it('localizes the invalid-setting message', () => {
+    expect(friendlyTxError(new Error(SUBMIT_API_INVALID_MESSAGE))).toBe('Your Submit API setting is invalid. Fix it in Settings > Advanced.');
+  });
+
+  it('localizes the hash-mismatch message', () => {
+    expect(friendlyTxError(new Error(SUBMIT_API_HASH_MISMATCH_MESSAGE)))
+      .toBe('Your submit endpoint returned a different transaction ID. Check your transaction history before sending again.');
+  });
+
+  it('localizes the storage-unavailable message through its own key', () => {
+    // The English copy equals the constant, so the lookup itself is what proves the mapping.
+    const translate = vi.spyOn(i18n, 't');
+    try {
+      expect(friendlyTxError(new Error(SUBMIT_API_STORAGE_MESSAGE)))
+        .toBe("Could not read this wallet's Submit API setting. Nothing was sent.");
+      expect(translate).toHaveBeenCalledWith('settings.submitApi.errors.storageUnavailable');
+    } finally {
+      translate.mockRestore();
+    }
+  });
+
+  it('keeps the endpoint prefix and localizes the reason behind it', () => {
+    const raw = `${SUBMIT_API_ENDPOINT_PREFIX}${TX_SUBMIT_UNCONFIRMED_MESSAGE} (HTTP 503). It may still have reached the network.`;
+    const localized = friendlyTxError(new Error(raw));
+    expect(localized.startsWith('Your submit endpoint: ')).toBe(true);
+    expect(localized.toLowerCase()).toContain('could not confirm');
+  });
+
+  it('keeps a node rejection reason behind the prefix', () => {
+    const raw = `${SUBMIT_API_ENDPOINT_PREFIX}Wallet could not send the tx. Ogmios rejected tx: The withdrawal amount does not match the reward balance.`;
+    expect(friendlyTxError(new Error(raw))).toContain('Your submit endpoint: ');
+    expect(friendlyTxError(new Error(raw))).toContain('withdrawal amount does not match');
   });
 });

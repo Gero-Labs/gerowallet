@@ -9,7 +9,14 @@
  * the user's locale is active). Anything not recognized is returned unchanged.
  */
 import i18n from '@/plugins/i18n';
-import { CIP113_SIGN_REFUSAL_MESSAGE, TX_SUBMIT_UNCONFIRMED_MESSAGE } from '@/chrome/config';
+import {
+  CIP113_SIGN_REFUSAL_MESSAGE,
+  SUBMIT_API_ENDPOINT_PREFIX,
+  SUBMIT_API_HASH_MISMATCH_MESSAGE,
+  SUBMIT_API_INVALID_MESSAGE,
+  SUBMIT_API_STORAGE_MESSAGE,
+  TX_SUBMIT_UNCONFIRMED_MESSAGE,
+} from '@/chrome/config';
 import { InputLimitError } from '@/api/nexusInputSelection';
 
 type JsonRecord = Record<string, unknown>;
@@ -138,8 +145,19 @@ export function friendlyTxError(raw: unknown): string {
     return i18n.t('send.inputLimitFragmented', { count: raw.total, max: raw.limit }) as string;
   }
 
+  // Submit API failures are fixed English strings from the background router. The
+  // prefix is checked on the raw text: the Ogmios unwrapping below would drop it.
+  const rawMessage = raw instanceof Error ? raw.message : String(raw ?? '');
+  if (rawMessage === SUBMIT_API_INVALID_MESSAGE) return i18n.t('settings.submitApi.errors.invalidSaved') as string;
+  if (rawMessage === SUBMIT_API_HASH_MISMATCH_MESSAGE) return i18n.t('settings.submitApi.errors.hashMismatch') as string;
+  if (rawMessage === SUBMIT_API_STORAGE_MESSAGE) return i18n.t('settings.submitApi.errors.storageUnavailable') as string;
+  if (rawMessage.startsWith(SUBMIT_API_ENDPOINT_PREFIX)) {
+    const reason = friendlyTxError(rawMessage.slice(SUBMIT_API_ENDPOINT_PREFIX.length));
+    return i18n.t('settings.submitApi.errors.endpointFailed', { reason }) as string;
+  }
+
   const message = unwrapPlainOgmiosRejection(
-    extractNexusErrorMessage(raw instanceof Error ? raw.message : String(raw ?? '')),
+    extractNexusErrorMessage(rawMessage),
   );
   const l = message.toLowerCase();
 
