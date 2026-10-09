@@ -98,7 +98,7 @@
     "crx": "^5.0.1",
     "crypto-random-string": "^5.0.0",
     "dexie": "^4.4.6",
-    "dompurify": "^3.4.15",
+    "dompurify": "^3.4.16",
     "highcharts": "^11.4.0",
     "howler": "^2.2.4",
     "javascript-time-ago": "^2.6.4",
