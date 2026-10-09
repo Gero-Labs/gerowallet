@@ -1,9 +1,9 @@
 <template>
   <HelpCard id="help-viewed-title" :title="t(ranked ? 'help.home.mostViewed' : 'help.startHere')" inset class="viewed">
-    <template #action><GButton tier="tertiary" compact :to="answersTo()" @click="home('all_answers')">{{ t('help.home.allAnswers') }}</GButton></template>
+    <template #action><GButton tier="tertiary" compact :to="answersTo()" @click.native.capture="home('all_answers')">{{ t('help.home.allAnswers') }}</GButton></template>
     <ol class="viewed-list">
       <li v-for="(answer, index) in items" :key="answer.id">
-        <router-link :to="answerDestination(answer)" class="viewed-row" @click.native="home('most_viewed')">
+        <router-link :to="answerDestination(answer)" class="viewed-row" @click.native.capture="home('most_viewed')">
           <span class="g-num viewed-num">{{ index + 1 }}</span>
           <span class="viewed-copy">
             <span class="viewed-title" :lang="answer.locale || 'en-US'">{{ answer.title }}</span>

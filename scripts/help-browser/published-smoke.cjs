@@ -1,15 +1,19 @@
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), assert = require('node:assert/strict');
+const { fitShot, imageLoaded, scrollsSideways, acceptHelpEvents, anonymousEvents } = require('./helpers.cjs');
 // Each scenario uses a fresh browser profile and intercepted API responses.
 const out = process.env.HELP_SMOKE_OUTPUT || path.resolve(__dirname, '../../output/help-browser');
 fs.mkdirSync(out, { recursive: true });
 const wallet = process.env.WALLET_REPO || path.resolve(__dirname, '../..');
-const { guides: documents } = require('./fixtures.cjs');
+const shot = name => path.join(out, name);
+const { guides, updatesPage, updateSources, mediaResponse } = require('./fixtures.cjs');
+// `restore` is the one tutorial, so "Latest tutorial" has a published entry to show.
+const documents = guides.map(doc => doc.id === 'restore' ? { ...doc, kind: 'tutorial' } : doc);
 const topics = ['start','send','card','earn','security','fix'];
 const sources = [{source:'gero-help',status:'fresh',lastSuccessfulSyncAt:'2026-10-08T00:00:00Z'}];
 function summary(doc, locale) { const {body,assets,relatedArticleIds,...result}=doc; return {...result,requestedLocale:locale,resolvedLocale:'en-US',isLocaleFallback:locale!=='en-US'}; }
 let offline = false;
-const requests=[];
+const requests=[],eventBodies=[];
 (async()=>{
  const profile=fs.mkdtempSync(path.join(os.tmpdir(),'gero-help-stage3-'));
  const extension=path.join(wallet,'extension');
@@ -18,10 +22,14 @@ const requests=[];
  try {
   await context.route(/^https?:/, async route=>{
    const u=new URL(route.request().url()); requests.push({path:u.pathname,locale:u.searchParams.get('locale'),cursor:u.searchParams.get('cursor')});
+   if(!offline && await acceptHelpEvents(route,eventBodies)) return;
+   const media=mediaResponse(u.pathname);
+   if(media && !offline) return route.fulfill(media);
    if(!u.pathname.startsWith('/api/help/') || offline) return route.abort();
    const locale=u.searchParams.get('locale')||'en-US';
    const send = value=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(value),headers:{'access-control-allow-origin':'*'}});
-   if(u.pathname==='/api/help/home') return send({topics:topics.map(id=>({id,articles:documents.filter(doc=>doc.topic===id).map(doc=>summary(doc,locale))})),publicFeaturedArticles:documents.filter(doc=>['create','restore','backup'].includes(doc.id)).map(doc=>summary(doc,locale)),walletFeaturedArticles:Object.fromEntries(['cardano','midnight','bitcoin'].map(chain=>[chain,documents.filter(doc=>doc.applicability.chains.includes(chain)).slice(0,3).map(doc=>summary(doc,locale))])),sources,updatePreviews:[]});
+   if(u.pathname==='/api/help/updates') return send(updatesPage(u.searchParams,updateSources()));
+   if(u.pathname==='/api/help/home') return send({topics:topics.map(id=>({id,articles:documents.filter(doc=>doc.topic===id).map(doc=>summary(doc,locale))})),publicFeaturedArticles:documents.filter(doc=>['create','restore','backup'].includes(doc.id)).map(doc=>summary(doc,locale)),walletFeaturedArticles:Object.fromEntries(['cardano','midnight','bitcoin'].map(chain=>[chain,documents.filter(doc=>doc.applicability.chains.includes(chain)).slice(0,3).map(doc=>summary(doc,locale))])),popularArticles:['backup','restore','create'].map(id=>summary(documents.find(doc=>doc.id===id),locale)),sources,updatePreviews:[]});
    if(u.pathname.startsWith('/api/help/articles/')) {
     const doc=documents.find(doc=>doc.slug===decodeURIComponent(u.pathname.split('/').pop()));
     if(!doc) return route.fulfill({status:404,body:'',headers:{'access-control-allow-origin':'*'}});
@@ -36,53 +44,99 @@ const requests=[];
   const worker=context.serviceWorkers()[0]||await context.waitForEvent('serviceworker');
   const base=worker.url().split('/').slice(0,3).join('/');
   const page=await context.newPage(); page.on('pageerror',e=>errors.push(e.message));
+  const header=page.locator('header.help-header'), body=page.locator('.g-prose.article-body'), chainPills=page.locator('.chain-pills');
+
+  // --- Home: published guides, ranking, tutorial, and the update widgets with their media ---
   await page.goto(`${base}/index.html#/help`);
-  await page.locator('.help-ledger .help-answer-row').first().waitFor();
+  await page.locator('.viewed-row').first().waitFor();
   await page.waitForFunction(()=>!document.querySelector('.help-content-status'));
-  assert.equal(await page.locator('.help-topic').count(),6);
-  await page.screenshot({path:path.join(out,'stage3-published-home.png'),fullPage:true});
-  await page.locator('.help-chain select').selectOption('midnight');
-  await page.locator('a.help-topic[href*="/card"]').click();
+  assert.equal(await page.locator('.topic-tile').count(),6);
+  assert.equal(await page.locator('#help-viewed-title').textContent(),'Most viewed','popularArticles ranks the list');
+  assert.deepEqual(await page.locator('.viewed-title').allTextContents(),['backup','restore','create'].map(id=>`Fixture wallet guide ${id}`));
+  assert.ok((await page.locator('.viewed-note').innerText()).includes('Most read in the last 30 days'));
+  assert.equal(await page.locator('.tutorial-link').innerText(),'Fixture wallet guide restore');
+  assert.ok((await page.locator('.tutorial-foot').innerText()).includes('Checked for Gero 2.7.2'));
+  await imageLoaded(page.locator('.blog-thumb'));
+  await imageLoaded(page.locator('.x-media'));
+  await page.screenshot({path:shot('stage3-published-home.png'),fullPage:true});
+  await page.setViewportSize({width:1280,height:1900});
+  const homeSize=await fitShot(page,shot('help-home-desktop.png'));
+  await page.setViewportSize({width:390,height:844});
+  assert.equal(await scrollsSideways(page),false,'Published home has no horizontal scroll at 390px');
+  const phoneSize=await fitShot(page,shot('help-home-390.png'));
+  await page.setViewportSize({width:1360,height:1000});
+
+  await chainPills.getByRole('button',{name:'Midnight',exact:true}).click();
+  await page.locator('a.topic-tile[href*="/topics/card"]').click();
   await page.locator('.help-applicability').waitFor();
   await page.goto(`${base}/index.html#/help/search?q=wallet&chain=all`);
   await page.getByRole('button',{name:'Load more answers',exact:true}).waitFor();
-  assert.equal(await page.locator('.help-ledger .help-answer-row').count(),20);
+  assert.equal(await page.locator('.results .result-row').count(),20);
   await page.getByRole('button',{name:'Load more answers',exact:true}).click();
-  await page.waitForFunction(()=>document.querySelectorAll('.help-ledger .help-answer-row').length===25);
-  await page.locator('.help-ledger a[href*="midnight-proof"]').click();
-  await page.locator('.help-rich-text ol').waitFor();
+  await page.waitForFunction(()=>document.querySelectorAll('.results .result-row').length===25);
+
+  // --- Reader: breadcrumb, numbered steps, rail, related guides, end-of-article support ---
+  await page.locator('.results a[href*="midnight-proof"]').click();
+  await body.locator('ol').waitFor();
   assert.ok(page.url().includes('q=wallet'));
-  assert.equal(await page.locator('.help-rich-text li').count(),4);
-  await page.screenshot({path:path.join(out,'stage3-published-reader.png'),fullPage:true});
-  await page.locator('.help-public-header .v-btn').last().click();
+  const crumbs=page.getByRole('navigation',{name:'Breadcrumb'});
+  await crumbs.getByRole('link',{name:'Tutorials & answers'}).waitFor();
+  await crumbs.getByRole('link',{name:'Send, receive & swap'}).waitFor();
+  assert.equal(await crumbs.locator('[aria-current="page"]').textContent(),'Fixture wallet guide midnight-proof');
+  assert.equal(await page.getByRole('heading',{level:1}).textContent(),'Fixture wallet guide midnight-proof');
+  assert.ok((await page.locator('.article-verified').innerText()).includes('Checked for Gero 2.7.2 · Jan 1, 2026'));
+  assert.equal(await body.locator('ol > li').count(),4);
+  // The number is a CSS counter badge (list-style is off), so check that every step increments and draws it.
+  assert.deepEqual(await body.locator('ol > li').evaluateAll(items=>items.map(item=>[getComputedStyle(item).counterIncrement,getComputedStyle(item,'::before').content])),Array(4).fill(['step 1','counter(step)']),'Each step shows its number');
+  const rail=page.locator('aside.rail');
+  assert.deepEqual(await rail.locator('.toc-link').allTextContents(),['Fixture overview','Fixture steps']);
+  assert.ok((await rail.innerText()).includes('Midnight'),'Applies to names the chain');
+  assert.ok((await rail.locator('dl.facts').innerText()).includes('Gero 2.7.2'));
+  await rail.getByRole('button',{name:'Fixture steps',exact:true}).click();
+  assert.equal(await page.evaluate(()=>document.activeElement?.id),'help-section-2','The rail link focuses its heading');
+  assert.deepEqual(await page.locator('.related-title').allTextContents(),['Fixture wallet guide create','Fixture wallet guide restore']);
+  await page.getByRole('button',{name:'Contact support about this guide'}).waitFor();
+  await page.locator('.helpful').getByRole('button',{name:'Yes',exact:true}).click();
+  assert.equal(await page.locator('.helpful-result').innerText(),'Glad it helped.');
+  await fitShot(page,shot('stage3-published-reader.png'));
+  await fitShot(page,shot('help-reader-desktop.png'));
+
+  // --- Language fallback ---
+  await header.locator('.help-lang .v-btn').click();
   await page.getByText('Deutsch',{exact:true}).click();
   await page.waitForFunction(()=>document.body.innerText.includes('während eine geprüfte Übersetzung'));
-  assert.equal(await page.locator('.help-rich-text').getAttribute('lang'),'en-US');
+  assert.equal(await body.getAttribute('lang'),'en-US');
   assert.ok(requests.some(request=>request.locale==='de-DE'));
-  await page.screenshot({path:path.join(out,'stage3-language-fallback.png'),fullPage:true});
+  await fitShot(page,shot('stage3-language-fallback.png'));
   await page.setViewportSize({width:390,height:844});
-  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
-  await page.screenshot({path:path.join(out,'stage3-reader-mobile.png'),fullPage:true});
+  assert.equal(await scrollsSideways(page),false,'Reader has no horizontal scroll at 390px');
+  await fitShot(page,shot('stage3-reader-mobile.png'));
   await page.setViewportSize({width:1360,height:1000});
+
+  await page.waitForTimeout(2600); // Usage events are posted after 2 s without a new one; flush them before the outage below.
+
+  // --- A synthetic ready wallet, then a lock while the guide is open and the API is down ---
   await page.evaluate(async()=>{
     const m=await import('./js/activityTracker.service.js'); window.helpSmokeStores=m;
     const w={id:90010,name:'Synthetic Help reader',chain:'Midnight',network:'Mainnet',type:'Normal',icon:'gero'};
     m.geroStore.wallets={[w.id]:w};m.walletStore.loggedWallet=w;m.walletStore.isSyncing=false;m.walletStore.isLocked=false;
   });
-  await page.locator('.help-public-header').waitFor({state:'hidden'}); await page.locator('.help-rich-text ol').waitFor();
+  await header.waitFor({state:'hidden'}); await body.locator('ol').waitFor();
   const before=page.url(); offline=true;
   await page.evaluate(()=>{window.helpSmokeStores.walletStore.isLocked=true;});
-  await page.locator('.help-public-header').waitFor(); await page.locator('.help-rich-text ol').waitFor();
-  assert.equal(page.url(),before); assert.equal(await page.locator('.help-rich-text li').count(),4);
-  await page.screenshot({path:path.join(out,'stage3-offline-locked-reader.png'),fullPage:true});
+  await header.waitFor(); await body.locator('ol').waitFor();
+  assert.equal(page.url(),before); assert.equal(await body.locator('li').count(),4);
+  await fitShot(page,shot('stage3-offline-locked-reader.png'));
   offline=false;
   await page.goto(`${base}/index.html#/help/articles/withdrawn-guide`);
   await page.waitForFunction(()=>document.body.innerText.includes('Diese Antwort')||document.body.innerText.includes('nicht gefunden'));
-  assert.equal(await page.locator('.help-rich-text').count(),0);
-  assert.equal(await page.locator('.help-answer-body').count(),0);
+  assert.equal(await page.locator('.g-prose').count(),0);
+  assert.equal(await page.locator('.article-body').count(),0);
   assert.deepEqual(errors,[]);
   assert.equal(requests.filter(r=>/chatwoot|support-chat|support\.gerowallet/.test(r.path)).length,0);
-  fs.writeFileSync(path.join(out,'stage3-browser-results.json'),JSON.stringify({passed:true,syntheticPublishedFixtures:true,liveCms:false,guideCount:25,errors,requests:requests.filter(r=>r.path.startsWith('/api/help/'))},null,2));
+  const events=anonymousEvents(assert,eventBodies,['90010','Synthetic Help reader']);
+  for(const type of ['article_view','article_helpful_yes'])assert.ok(events.some(e=>e.type===type&&e.surface==='help'&&e.subject==='midnight-proof'),`${type} is counted for the guide that was read`);
+  fs.writeFileSync(path.join(out,'stage3-browser-results.json'),JSON.stringify({passed:true,syntheticPublishedFixtures:true,liveCms:false,guideCount:25,usageEvents:events.length,screenshotSizes:{'help-home-desktop':homeSize,'help-home-390':phoneSize},errors,requests:requests.filter(r=>r.path.startsWith('/api/help/'))},null,2));
   console.log(JSON.stringify({passed:true,errors,publishedFixtures:documents.length,profile}));
  } catch(error) {
   const page=context.pages().at(-1); await page.screenshot({path:path.join(out,'stage3-browser-failure.png'),fullPage:true}).catch(()=>{});

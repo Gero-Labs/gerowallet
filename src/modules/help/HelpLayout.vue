@@ -1,6 +1,7 @@
 <template>
   <div ref="root" class="help-layout">
-    <ContentLayout v-if="ready"><template #help-content><HelpPageHeader variant="embedded" /><slot /></template></ContentLayout>
+    <!-- One root: ContentLayout keeps this slot alive with <keep-alive>, which renders only its first child. -->
+    <ContentLayout v-if="ready"><template #help-content><div class="help-embedded-page"><HelpPageHeader variant="embedded" /><slot /></div></template></ContentLayout>
     <v-app v-else class="help-public-app">
       <v-main>
         <div class="help-public-scroll" data-help-scroll>

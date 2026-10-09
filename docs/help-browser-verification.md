@@ -40,17 +40,55 @@ gate.
 
 ## Scenario coverage
 
-The scenarios cover public access with no wallet, setup preservation when Help
-tab creation fails, native-link fallback, saved and unlocked wallets, locking
-while reading, support eligibility/context, published guide rendering, search
-pagination, language fallback, narrow layouts, update-source filters, offline
-snapshots, authoritative withdrawals, and legacy Blog fallback.
+The scenarios cover:
+
+- **Public Help with no wallet:** the home dashboard (hero, search, chain pills
+  with `aria-pressed`, six topic tiles), the Midnight pill demoting Gero Card to
+  "Cardano only", the topic applicability page, hero search, the 390 px layout
+  without horizontal scroll, and the Blog routes.
+- **Reader:** breadcrumb, `.g-prose` body with numbered steps, the "On this page"
+  / "Applies to" / "Checked for" rail, related guides, the local "Was this answer
+  helpful?" acknowledgement, and the language fallback.
+- **Support dialog:** the no-wallet email dialog (mailto primary, "Create or
+  import" secondary), the locked email dialog with its "Unlock wallet" link
+  (`redirect=`), and, for an eligible synthetic Cardano mainnet wallet with live
+  chat enabled, the pre-chat dialog: editable question and context (guide id and
+  chain, never the stake address), "Start live chat" handing that draft to the
+  agent dock with its preferences left hidden, and no chat or support request
+  before Send. Turning live chat off falls back to the email dialog.
+- **Welcome Help panel:** one "Help" button (no "Help Center" or "Contact
+  support" buttons) that opens a panel over the unchanged welcome screen, Escape
+  returning focus to the button, "About this step" and numbered in-panel answers
+  while setup is open, "Open the full Help Center" opening a new tab while the
+  welcome URL and setup stay put, the in-panel failure message with its "Open
+  Help in a new tab" link when `chrome.tabs.create` rejects, the saved-wallet
+  (locked) variant, and the 390 px bottom sheet with its scrim.
+- **Saved and unlocked wallets:** the public header disappearing for a ready
+  wallet while the reader stays, and locking in place keeping the URL and search
+  text, with the unlock action in the home support widget and the locked dialog
+  rather than in the header.
+- **Published content:** published guide rendering, popularity ranking,
+  "Latest tutorial", search pagination, offline snapshots, and withdrawn guides.
+- **Updates:** source pills with freshness dots, the always-visible stale-source
+  notice (one stale source in the fixtures), 20/40-row pagination, original
+  links, blog thumbnails and X post images on the Updates page and in the home
+  "From the Gero blog" and "Latest on X" widgets (with the Gero/Nexus switch),
+  the Midnight chain filter, offline snapshots, authoritative withdrawals, and
+  the legacy Blog fallback.
 
 These are browser acceptance tests using intercepted APIs and synthetic wallet
 metadata. They do not verify live Contentful publication, real account state,
 Chatwoot delivery, feed availability, or on-chain operations. No support message
-or transaction is submitted. Fixture guides and social posts are fabricated;
-no unpublished CMS drafts or private control-panel content is included.
+or transaction is submitted. Fixture guides, social posts and images are
+fabricated (images are solid-colour PNGs generated in memory); no unpublished CMS
+drafts or private control-panel content is included.
+
+Scripts live in `scripts/help-browser/`: `foundation-smoke.cjs` (offline, bundled
+answers, welcome panel, support dialogs), `published-smoke.cjs` (published
+guides), `updates-smoke.cjs` (Updates and home widgets), `fixtures.cjs`
+(synthetic DTOs, update sources, generated images) and `helpers.cjs` (tall
+full-page screenshots for views that scroll inside a container, image-load and
+overflow checks).
 
 ## Reproduce locally
 

@@ -1,10 +1,10 @@
 <template>
   <HelpCard id="help-blog-title" :title="t('help.home.fromBlog')" class="blog">
-    <template #action><GButton tier="tertiary" compact :to="updatesTo('gero-blog')" @click="home('all_posts')">{{ t('help.home.allPosts') }}</GButton></template>
+    <template #action><GButton tier="tertiary" compact :to="updatesTo('gero-blog')" @click.native.capture="home('all_posts')">{{ t('help.home.allPosts') }}</GButton></template>
     <template v-if="item">
       <img v-if="thumbnail" :src="thumbnail" alt="" class="blog-thumb" loading="lazy" />
       <h3 class="t-heading blog-title" :lang="item.locale">
-        <router-link v-if="link" :to="{ path: link, query: { chain } }" class="blog-link" @click.native="openPost()">{{ item.title }}</router-link>
+        <router-link v-if="link" :to="{ path: link, query: { chain } }" class="blog-link" @click.native.capture="openPost()">{{ item.title }}</router-link>
         <template v-else>{{ item.title }}</template>
       </h3>
       <p class="t-body blog-text" :lang="item.locale">{{ item.summary || item.text }}</p>

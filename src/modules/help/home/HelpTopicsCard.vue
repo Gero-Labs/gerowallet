@@ -1,10 +1,10 @@
 <template>
   <HelpCard id="help-topics-title" :title="t('help.topics')" class="topics">
-    <template #action><GButton tier="tertiary" compact :to="answersTo()" @click="home('all_answers')">{{ t('help.answers') }}</GButton></template>
+    <template #action><GButton tier="tertiary" compact :to="answersTo()" @click.native.capture="home('all_answers')">{{ t('help.answers') }}</GButton></template>
     <div class="topics-grid">
       <router-link
         v-for="topic in topics" :key="topic.id" :to="destination('/help/topics/' + topic.id, basic ? { basic: '1' } : {})"
-        class="glass-tier topic-tile" :class="{ 'topic-tile--muted': topic.demoted }" @click.native="home('topic')"
+        class="glass-tier topic-tile" :class="{ 'topic-tile--muted': topic.demoted }" @click.native.capture="home('topic')"
       >
         <span class="topic-copy">
           <span class="topic-title">{{ t('help.topic.' + topic.id) }}</span>

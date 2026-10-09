@@ -29,8 +29,9 @@
     <section v-if="items.length" class="glass-panel updates-list" :aria-label="sourceLabel(source)">
       <ul>
         <li v-for="item in items" :key="item.id">
-          <!-- Both listeners: a plain link takes @click, router-link needs @click.native; either way the open is counted once. -->
-          <component :is="rowTag(item)" class="update-row" v-bind="rowProps(item)" @click="openItem(item)" @click.native="openItem(item)">
+          <!-- Both listeners: a plain link takes @click, router-link needs @click.native; either way the open is counted once. Capture, because
+               router-link navigates in its own bubble handler and the row can unmount before a later listener runs. -->
+          <component :is="rowTag(item)" class="update-row" v-bind="rowProps(item)" @click="openItem(item)" @click.native.capture="openItem(item)">
             <HelpSourceBadge :source="item.source" class="update-icon" />
             <div class="update-body" :class="{ 'update-body--social': item.kind === 'social' }">
               <p class="t-caption g-num update-caption">{{ caption(item) }}</p>
