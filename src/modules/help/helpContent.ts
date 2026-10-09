@@ -1,3 +1,4 @@
+import type { HelpArticleSummary } from '@/api/help.api';
 import bundledAnswers from './bundledAnswers.json';
 import synonyms from './searchSynonyms.json';
 
@@ -6,6 +7,8 @@ export interface HelpAnswer {
   id: string; topic: string; title: string; chains: string[];
   requiredFeatures: string[]; keywords: string[]; body: string;
   slug?: string; locale?: string; remote?: boolean; networks?: string[]; walletTypes?: string[];
+  /** Published-article metadata; bundled answers carry none of it. */
+  kind?: string; lastVerifiedAt?: string; testedWalletVersion?: string;
 }
 export interface HelpContext {
   chain: HelpChain;
@@ -20,6 +23,17 @@ export const topics = [
   { id: 'card', scene: 'hero' }, { id: 'earn', scene: 'earnHero' },
   { id: 'security', scene: 'verify' }, { id: 'fix', scene: 'attention' },
 ] as const;
+/** A published article viewed as a catalog entry (the body holds its summary). */
+export function asAnswer(value: HelpArticleSummary): HelpAnswer {
+  return { id: value.id, slug: value.slug, topic: value.topic, title: value.title, body: value.summary,
+    chains: value.applicability.chains, requiredFeatures: value.applicability.requiredFeatures,
+    networks: value.applicability.networks, walletTypes: value.applicability.walletTypes, keywords: [], locale: value.locale, remote: true,
+    kind: value.kind, lastVerifiedAt: value.lastVerifiedAt, testedWalletVersion: value.applicability.testedWalletVersion };
+}
+/** i18n key for the kind chip: published tutorials say so, other published articles are guides, bundled ones quick answers. */
+export function kindLabelKey(answer: HelpAnswer): string {
+  return !answer.remote ? 'help.quickAnswer' : answer.kind === 'tutorial' ? 'help.home.tutorialKind' : 'help.guide';
+}
 export function parseHelpChain(value: unknown): HelpChain | null {
   return typeof value === 'string' && ['all', 'cardano', 'midnight', 'bitcoin'].includes(value) ? value as HelpChain : null;
 }
@@ -34,7 +48,8 @@ export function applies(answer: HelpAnswer, context: HelpContext): boolean {
   if (context.walletType && answer.walletTypes?.length && !answer.walletTypes.includes(context.walletType)) return false;
   return answer.topic !== 'card' || context.cardSupported !== false;
 }
-export function topicIndex(context: HelpContext, catalog: HelpAnswer[] = answers) {
+export type TopicEntry = (typeof topics)[number] & { index: number; count: number; demoted: boolean; reason: string };
+export function topicIndex(context: HelpContext, catalog: HelpAnswer[] = answers): TopicEntry[] {
   return topics.map((topic, index) => {
     const entries = catalog.filter(answer => answer.topic === topic.id);
     const count = entries.filter(answer => applies(answer, context)).length;

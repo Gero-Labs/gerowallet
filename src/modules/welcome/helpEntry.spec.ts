@@ -3,34 +3,73 @@ import { openWelcomeHelp } from '@/modules/navigation/helpAccess';
 import { readFileSync } from 'node:fs';
 
 afterEach(() => vi.unstubAllGlobals());
-describe('welcome help entry', () => {
-  it('preserves setup and reports missing or rejected tab creation without an unhandled rejection', async () => {
-    const push = vi.fn();
-    vi.stubGlobal('chrome', undefined);
-    expect(await openWelcomeHelp(true, false, push)).toBe(false);
-    vi.stubGlobal('chrome', { tabs: { create: vi.fn().mockRejectedValue(new Error('Unavailable')) }, runtime: { getURL: (path: string) => path } });
-    expect(await openWelcomeHelp(true, true, push)).toBe(false);
-    expect(push).not.toHaveBeenCalled();
-    expect(await openWelcomeHelp(false, false, vi.fn().mockRejectedValue(new Error('Navigation failed')))).toBe(false);
-  });
-  it('opens another extension tab while setup remains mounted', async () => {
-    const push = vi.fn();
+
+describe('opening Help in a new tab from the welcome screen', () => {
+  it('opens the extension page in a new tab and never navigates the welcome screen', async () => {
     const create = vi.fn().mockResolvedValue({});
-    vi.stubGlobal('chrome', { tabs: { create }, runtime: { getURL: (path: string) => `chrome-extension://test/${path}` } });
-    await openWelcomeHelp(true, true, push);
-    expect(create).toHaveBeenCalledWith({ url: 'chrome-extension://test/index.html#/help?support=1' });
-    expect(push).not.toHaveBeenCalled();
+    vi.stubGlobal('chrome', { runtime: { id: 'ext', getURL: (path: string) => `chrome-extension://test/${path}` }, tabs: { create } });
+    expect(await openWelcomeHelp('/help')).toBe(true);
+    expect(create).toHaveBeenCalledWith({ url: 'chrome-extension://test/index.html#/help' });
+    expect(await openWelcomeHelp('/help/articles/restore?basic=1')).toBe(true);
+    expect(create).toHaveBeenLastCalledWith({ url: 'chrome-extension://test/index.html#/help/articles/restore?basic=1' });
+    expect(await openWelcomeHelp('/blog/gerowallet-2-7-is-live')).toBe(true);
+    expect(create).toHaveBeenLastCalledWith({ url: 'chrome-extension://test/index.html#/blog/gerowallet-2-7-is-live' });
   });
-  it('uses ordinary public navigation before setup in either saved-wallet state', async () => {
-    const push = vi.fn();
-    await openWelcomeHelp(false, false, push);
-    expect(push).toHaveBeenCalledWith('/help');
+
+  it('reports a rejected tab creation instead of throwing', async () => {
+    vi.stubGlobal('chrome', {
+      runtime: { id: 'ext', getURL: (path: string) => path },
+      tabs: { create: vi.fn().mockRejectedValue(new Error('Unavailable')) },
+    });
+    expect(await openWelcomeHelp('/help')).toBe(false);
   });
-  it('keeps both entry controls outside wallet and onboarding branches', () => {
-    const source = readFileSync('src/modules/welcome/views/Welcome.vue', 'utf8');
-    const chrome = source.slice(source.indexOf('class="language-selector-container"'), source.indexOf('<!-- Main container -->'));
-    expect(chrome).toContain('enterHelp(false)');
-    expect(chrome).toContain('enterHelp(true)');
-    expect(chrome).not.toContain('v-if=');
+
+  it('reports an extension context without the tabs API', async () => {
+    vi.stubGlobal('chrome', { runtime: { id: 'ext', getURL: (path: string) => path } });
+    expect(await openWelcomeHelp('/help')).toBe(false);
+  });
+
+  it('uses window.open outside the extension and detaches the new window', async () => {
+    const child = { opener: window } as unknown as Window;
+    const open = vi.spyOn(window, 'open').mockReturnValue(child);
+    vi.stubGlobal('chrome', undefined);
+    expect(await openWelcomeHelp('/help')).toBe(true);
+    expect(open).toHaveBeenCalledWith(`${window.location.href.split('#')[0]}#/help`, '_blank');
+    expect(child.opener).toBeNull();
+    open.mockRestore();
+  });
+
+  it('treats a blocked window as a failure', async () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    vi.stubGlobal('chrome', undefined);
+    expect(await openWelcomeHelp('/help')).toBe(false);
+    open.mockRestore();
+    const throwing = vi.spyOn(window, 'open').mockImplementation(() => { throw new Error('blocked'); });
+    expect(await openWelcomeHelp('/help')).toBe(false);
+    throwing.mockRestore();
+  });
+});
+
+describe('welcome screen Help entry point', () => {
+  const source = readFileSync('src/modules/welcome/views/Welcome.vue', 'utf8');
+  const start = source.indexOf('class="language-selector-container"');
+  const corner = source.slice(start, source.indexOf('</div>', start));
+
+  it('replaces the two links with one toggle button beside the language selector, outside any wallet or setup branch', () => {
+    expect(corner).toContain('aria-controls="whelp-panel"');
+    expect(corner).toContain(':aria-expanded="helpOpen');
+    expect(corner).toContain('toggleHelp()');
+    expect(corner).toContain('<LanguageSelector />');
+    expect(corner).not.toContain('enterHelp');
+    expect(corner).not.toContain('help.contact');
+    expect(corner).not.toContain('v-if=');
+    expect(source.match(/<GButton/g)).toHaveLength(1);
+  });
+
+  it('no longer pushes the Help route or shows a page-level open failure', () => {
+    expect(source).not.toContain('helpRouter');
+    expect(source).not.toContain('helpOpenFailed');
+    expect(source).not.toContain('welcome-help-error');
+    expect(source).not.toContain('openWelcomeHelp');
   });
 });

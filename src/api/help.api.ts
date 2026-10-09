@@ -25,6 +25,8 @@ export interface HelpHome {
   walletFeaturedArticles: Record<string, HelpArticleSummary[]>;
   sources: HelpSource[];
   updatePreviews?: HelpUpdate[];
+  /** Articles ranked by views (most viewed first). Optional until the backend publishes the ranking. */
+  popularArticles?: HelpArticleSummary[];
 }
 export interface HelpResult extends HelpArticleSummary {
   snippet?: string; destination?: { type: 'help-article' | 'blog'; slug: string };
@@ -44,6 +46,8 @@ export async function getHelpPage(params: { locale: string; chain: string; topic
   return (await client.get<HelpPage>(search ? '/api/help/search' : '/api/help/articles', { params: { ...params, limit: 20 }, signal })).data;
 }
 export function isChangedHelpSnapshot(error: unknown): boolean { return axios.isAxiosError(error) && error.response?.status === 409; }
-export async function getHelpUpdates(params: { source: string; chain: string; locale: string; cursor?: string }, signal: AbortSignal): Promise<HelpUpdatesPage> {
-  return (await client.get<HelpUpdatesPage>('/api/help/updates', { params: { ...params, limit: 20 }, signal })).data;
+/** `limit` is 1-50 on the backend; the full Updates page uses the default of 20. */
+export async function getHelpUpdates(params: { source: string; chain: string; locale: string; cursor?: string; limit?: number }, signal: AbortSignal): Promise<HelpUpdatesPage> {
+  const { limit = 20, ...rest } = params;
+  return (await client.get<HelpUpdatesPage>('/api/help/updates', { params: { ...rest, limit }, signal })).data;
 }

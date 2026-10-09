@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { updateLink, updateImage, updateSource } from './helpUpdates';
+import { updateImages, updateLink, updateImage, updatePills, updateSource, updateSourceIcon } from './helpUpdates';
 import type { HelpUpdate } from '@/api/help.api';
 const item = (values: Partial<HelpUpdate>) => values as HelpUpdate;
 describe('update destinations', () => {
@@ -24,3 +24,24 @@ describe('update destinations', () => {
     expect(updateSource('blog')).toBe('gero-blog'); expect(updateSource('bad')).toBe('all'); expect(updateSource('midnight-news')).toBe('midnight-news');
   });
 });
+describe('Updates page sources', () => {
+  it('offers every source pill, and only the active chain\'s news pill under a chain filter', () => {
+    expect(updatePills('all')).toEqual(['gero-blog', 'cardano-news', 'midnight-news', 'bitcoin-news', 'gero-x', 'nexus-x']);
+    expect(updatePills('bitcoin')).toEqual(['gero-blog', 'bitcoin-news', 'gero-x', 'nexus-x']);
+    expect(updatePills('midnight')).not.toContain('cardano-news');
+  });
+  it('maps each source to the Gero or Nexus mark, or to its chain glyph', () => {
+    expect(updateSourceIcon('gero-blog')).toEqual({ mark: 'gero' });
+    expect(updateSourceIcon('gero-x')).toEqual({ mark: 'gero' });
+    expect(updateSourceIcon('nexus-x')).toEqual({ mark: 'nexus' });
+    expect(updateSourceIcon('cardano-news')).toEqual({ icon: 'mdi-web' });
+    expect(updateSourceIcon('midnight-news')).toEqual({ icon: 'mdi-weather-night' });
+    expect(updateSourceIcon('bitcoin-news')).toEqual({ icon: 'mdi-bitcoin' });
+  });
+  it('keeps only media that resolve to a mirrored image', () => {
+    const media = [{ url: '/api/help/assets/' + 'b'.repeat(64), alt: 'one' }, { url: 'https://elsewhere.test/a.png', alt: 'two' }, { url: '/api/blog/assets/id_thumb_189832d0', alt: 'three' }];
+    expect(updateImages(item({ media }), 'https://backend.test').map(image => image.alt)).toEqual(['one', 'three']);
+    expect(updateImages(item({ media: [] }), 'https://backend.test')).toEqual([]);
+  });
+});
+

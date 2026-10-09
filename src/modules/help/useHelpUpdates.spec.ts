@@ -31,3 +31,11 @@ it('restarts pagination on changed snapshots and keeps source/chain/locale', asy
   const { state, wrapper } = setup('midnight-news'); await flush(); await state.loadMore();
   expect(state.page.value?.items[0].id).toBe('fresh'); expect(api.updates.mock.calls[2][0]).toMatchObject({ source: 'midnight-news', chain: 'all', locale: 'en-US', cursor: undefined }); wrapper.destroy();
 });
+it('passes the requested limit to the API and caches per limit', async () => {
+  api.updates.mockResolvedValue(response('latest'));
+  const wrapper = mount(Vue.extend({ setup() { useHelpUpdates(ref<UpdateRequest>({ source: 'gero-blog', chain: 'all', locale: 'en-US', limit: 1 })); return {}; }, render: h => h('div') }));
+  await flush(); expect(api.updates.mock.calls[0][0]).toMatchObject({ source: 'gero-blog', limit: 1 });
+  const full = setup('gero-blog'); await flush(); expect(api.updates.mock.calls[1][0].limit).toBeUndefined();
+  wrapper.destroy(); full.wrapper.destroy();
+});
+

@@ -24,13 +24,16 @@ vi.mock('./HelpSupportAction.vue', () => ({ default: { render: (h: Vue.CreateEle
 vi.mock('@/modules/navigation/components/LanguageSelector.vue', () => ({ default: { render: (h: Vue.CreateElement) => h('div') } }));
 import HelpLayout from './HelpLayout.vue';
 
-beforeEach(() => { h.wallet.loggedWallet = null; h.wallet.isLocked = true; h.wallet.isSyncing = false; vi.clearAllMocks(); });
+beforeEach(() => {
+  h.wallet.loggedWallet = null; h.wallet.isLocked = true; h.wallet.isSyncing = false; vi.clearAllMocks();
+  h.route.path = '/help/articles/backup'; h.route.fullPath = '/help/articles/backup?q=recovery&chain=midnight';
+});
 describe('HelpLayout', () => {
   it('opens a new article at the top and restores the search position when returning', async () => {
     h.route.fullPath = '/help/search?q=proof';
     const wrapper = mount(HelpLayout, { slots: { default: '<article>Content</article>' }, stubs: {
       'v-app': { template: '<div><slot /></div>' }, 'v-main': { template: '<div><slot /></div>' },
-      'router-link': { template: '<a><slot /></a>' }, GButton: true,
+      'router-link': { template: '<a><slot /></a>' }, 'v-btn': { template: '<button><slot /></button>' }, 'v-icon': true,
     } });
     const scroll = wrapper.find('[data-help-scroll]').element as HTMLElement;
     scroll.scrollTop = 600;
@@ -42,7 +45,7 @@ describe('HelpLayout', () => {
   it('renders without wallet chrome when public or syncing, and retains route/content on lock', async () => {
     const wrapper = mount(HelpLayout, { slots: { default: '<article>Recovery answer</article>' }, stubs: {
       'v-app': { template: '<div><slot /></div>' }, 'v-main': { template: '<div><slot /></div>' },
-      'router-link': { template: '<a><slot /></a>' }, GButton: true,
+      'router-link': { template: '<a><slot /></a>' }, 'v-btn': { template: '<button><slot /></button>' }, 'v-icon': true,
     } });
     expect(wrapper.find('[data-test="wallet-chrome"]').exists()).toBe(false);
     expect(wrapper.text()).toContain('Recovery answer');
@@ -59,4 +62,43 @@ describe('HelpLayout', () => {
     expect(h.replace).not.toHaveBeenCalled();
     wrapper.destroy();
   });
+  it('puts the three tabs and one Contact support in the public header, with no unlock action', async () => {
+    h.route.path = '/help/updates'; h.route.fullPath = '/help/updates?chain=all';
+    const wrapper = mount(HelpLayout, { slots: { default: '<article>Content</article>' }, stubs: {
+      'v-app': { template: '<div><slot /></div>' }, 'v-main': { template: '<div><slot /></div>' },
+      'router-link': { props: ['to'], template: '<a><slot /></a>' }, 'v-btn': { template: '<button><slot /></button>' }, 'v-icon': true,
+    } });
+    const tabs = wrapper.findAll('nav a');
+    expect(tabs.wrappers.map(tab => tab.text())).toEqual(['help.overview', 'help.answers', 'help.updates']);
+    expect(tabs.wrappers.map(tab => tab.attributes('aria-current'))).toEqual([undefined, undefined, 'page']);
+    expect(wrapper.find('header').classes()).toContain('glass-chrome');
+    expect(wrapper.text().split('help.contact').length - 1).toBe(1);
+    expect(wrapper.text()).not.toContain('help.unlock');
+    expect(wrapper.text()).not.toContain('help.setup');
+    wrapper.destroy();
+  });
+  it('keeps the article tab current while reading an article', () => {
+    h.route.path = '/help/articles/backup'; h.route.fullPath = '/help/articles/backup';
+    const wrapper = mount(HelpLayout, { slots: { default: '<article>Content</article>' }, stubs: {
+      'v-app': { template: '<div><slot /></div>' }, 'v-main': { template: '<div><slot /></div>' },
+      'router-link': { props: ['to'], template: '<a><slot /></a>' }, 'v-btn': { template: '<button><slot /></button>' }, 'v-icon': true,
+    } });
+    expect(wrapper.findAll('nav a').wrappers.map(tab => tab.attributes('aria-current'))).toEqual([undefined, 'page', undefined]);
+    wrapper.destroy();
+  });
+  it('renders the same tab row and Contact support at the top of the page inside the wallet shell', async () => {
+    h.route.path = '/help'; h.route.fullPath = '/help?chain=all';
+    h.wallet.loggedWallet = { id: 1 }; h.wallet.isLocked = false; h.wallet.isSyncing = false;
+    const wrapper = mount(HelpLayout, { slots: { default: '<article>Content</article>' }, stubs: {
+      'router-link': { props: ['to'], template: '<a><slot /></a>' }, 'v-btn': { template: '<button><slot /></button>' }, 'v-icon': true,
+    } });
+    const chrome = wrapper.find('[data-test="wallet-chrome"]');
+    expect(chrome.exists()).toBe(true);
+    expect(chrome.findAll('nav a').wrappers.map(tab => tab.text())).toEqual(['help.overview', 'help.answers', 'help.updates']);
+    expect(chrome.find('nav a[aria-current="page"]').text()).toBe('help.overview');
+    expect(chrome.text().split('help.contact').length - 1).toBe(1);
+    expect(chrome.find('header').exists()).toBe(false);
+    wrapper.destroy();
+  });
 });
+
