@@ -106,10 +106,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import type { SponsoredTx } from '@/chains/midnight/midnightSponsorLinks';
 import BottomSheet from '../BottomSheet.vue';
 import filters from '@/shared/utils/filters';
-import { geroStore } from '@/stores/geroStore';
-import { walletStore } from '@/stores/walletStore';
-import { Blockchain } from '@/models/types';
-import { getExplorerUrl } from '@/shared/utils/explorer';
+import { useExplorer } from '@/shared/composables/useExplorer';
 import { useChainContext } from '../../composables/useChainContext';
 
 const { themeColors } = useChainContext();
@@ -228,12 +225,12 @@ function copyToClipboard(text: string) {
   navigator.clipboard.writeText(text);
 }
 
+// Chain, network and chosen explorer all come from the logged wallet.
+const { explorerUrl } = useExplorer();
+
 function openExplorer() {
-  if (!props.tx?.id) return;
-  const chain = walletStore.loggedWallet?.chain || Blockchain.CARDANO;
-  const network = geroStore.network?.network;
-  const url = getExplorerUrl(chain, props.tx.id, 'tx', network);
-  if (url) window.open(url, '_blank');
+  const url = explorerUrl('tx', props.tx?.id);
+  if (url) window.open(url, '_blank', 'noopener,noreferrer');
 }
 </script>
 

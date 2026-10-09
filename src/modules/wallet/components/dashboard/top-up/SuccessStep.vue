@@ -33,8 +33,7 @@
 import { computed } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { Blockchain } from '@/models/types';
-import { getExplorerUrl } from '@/shared/utils/explorer';
-import { walletStore } from '@/stores/walletStore';
+import { useExplorer } from '@/shared/composables/useExplorer';
 import CopyButton from '@/shared/components/CopyButton.vue';
 
 const props = defineProps<{
@@ -50,9 +49,8 @@ const { t } = useTranslation();
 const shortId = computed(() =>
   props.transactionId.length > 20 ? `${props.transactionId.slice(0, 10)}…${props.transactionId.slice(-8)}` : props.transactionId,
 );
-const explorerUrl = computed(() =>
-  getExplorerUrl(Blockchain.CARDANO, props.transactionId, 'tx', walletStore.loggedWallet?.network),
-);
+const { explorerUrl: explorerLink } = useExplorer();
+const explorerUrl = computed(() => explorerLink('tx', props.transactionId, { chain: Blockchain.CARDANO }));
 </script>
 
 <style lang="scss" scoped>

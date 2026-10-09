@@ -115,6 +115,12 @@ jobs:
       - name: Navigation loading regressions
         run: npx vitest run src/modules/navigation/lazyPage.spec.ts src/modules/navigation/components/governanceNav.spec.ts src/options/startup.spec.ts src/options/main.spec.ts
 
+      # Each explorer spells its paths differently (/stake/ vs /stakeKey/ vs
+      # /accounts/) and governance ids in three forms; a wrong template only
+      # shows up as a 404 on someone else's site.
+      - name: Block-explorer deep links
+        run: npx vitest run src/shared/utils/explorer.spec.ts src/shared/composables/useExplorer.spec.ts
+
       # The bundle TDZ guard runs against a built artifact (in the workflow
       # named above), so a hole in its own logic passes silently — it already
       # shipped one: it read the emitted, minified bundle with a

@@ -53,7 +53,7 @@
             <div class="d-flex mb-3" v-if="reportTx">
               <v-label small class="white--text" style="align-content: center;">{{ $t('navigation.transactionId') }}:</v-label>
               <div>
-                <a class="ml-1" style="color: var(--g-accent); align-items: center;" :href="`https://cexplorer.io/tx/${reportTx}`" target="_blank">{{ truncate(reportTx) }}</a>
+                <a class="ml-1" style="color: var(--g-accent); align-items: center;" :href="reportTxUrl" target="_blank" rel="noopener noreferrer">{{ truncate(reportTx) }}</a>
                 <CopyButton x-small :value="reportTx" class="ml-1"></CopyButton>
               </div>
             </div>
@@ -134,7 +134,7 @@
             </p>
             <v-label small class="grey--text" style="align-content: center;" v-if="reportTx">{{ $t('navigation.transactionId') }}</v-label>
             <p class="d-flex" v-if="reportTx" style="align-items: center;">
-              <a class="ml-1" style="color: var(--g-accent); align-items: center;" :href="`https://cexplorer.io/tx/${reportTx}`" target="_blank">{{ truncate(reportTx) }}</a>
+              <a class="ml-1" style="color: var(--g-accent); align-items: center;" :href="reportTxUrl" target="_blank" rel="noopener noreferrer">{{ truncate(reportTx) }}</a>
               <CopyButton x-small :value="reportTx" class="ml-1"></CopyButton>
               <v-chip class="ml-1" x-small outlined :color="label === 'Not Safe' ? 'error' : 'success'">{{label}}</v-chip>
             </p>
@@ -179,7 +179,8 @@ import { ReportLabel, ReportType } from '@/models/cardano-shield-types';
 import snackbar from '@/plugins/snackbar';
 import { AxiosError } from 'axios';
 import assets from '@/utils/assets';
-import { WalletType } from '@/models/types';
+import { Blockchain, WalletType } from '@/models/types';
+import { useExplorer } from '@/shared/composables/useExplorer';
 
 const { t } = useTranslation();
 
@@ -200,6 +201,10 @@ const emit = defineEmits(['close']);
 
 const { truncate } = filters;
 
+// Cardano Shield reports Cardano transactions.
+const { explorerUrl } = useExplorer();
+const reportTxUrl = computed(() => explorerUrl('tx', props.reportTx, { chain: Blockchain.CARDANO }));
+
 const cardanoShieldLogo = assets.cardanoShieldLogo;
 const currentStep = ref(1);
 const imageUrl = ref('');
@@ -210,8 +215,8 @@ const uploadFile = ref<File | null>(null);
 const labels = ['Not Safe', 'Safe'];
 const valid = ref(false);
 const loading = ref(false);
-const form = ref<any>(null);
-const fileInput = ref<any>(null);
+const form = ref<{ validate: () => boolean; resetValidation: () => void } | null>(null);
+const fileInput = ref<{ reset: () => void } | null>(null);
 
 const steps = [
   {
@@ -253,7 +258,7 @@ const createImage = (file: File) => {
 };
 
 const nextStep = () => {
-  if (form.value.validate()) {
+  if (form.value?.validate()) {
     currentStep.value++;
   }
 };
@@ -272,7 +277,7 @@ const clearForm = () => {
   if (fileInput.value) {
     fileInput.value.reset();
   }
-  form.value.resetValidation();
+  form.value?.resetValidation();
 };
 
 const submitReport = async () => {
