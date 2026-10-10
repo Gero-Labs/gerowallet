@@ -33,7 +33,7 @@
           {{ isWatched(token.unit) ? 'mdi-star' : 'mdi-star-outline' }}
         </v-icon>
       </v-btn>
-      <v-btn icon small @click="openExplorer" class="mr-1">
+      <v-btn v-if="tokenExplorerUrl" icon small @click="openExplorer" class="mr-1">
         <v-icon small>mdi-open-in-new</v-icon>
       </v-btn>
       <v-btn icon small @click="$emit('close')">
@@ -316,7 +316,7 @@ import networks from '@/utils/networks';
 import DustGenerationLine from '@/modules/dashboard/components/DustGenerationLine.vue';
 import { CNIGHT_ASSETS, isDustLineDismissed, dismissDustLineFor, useCnightDustRegistration } from '@/shared/composables/useCnightDustRegistration';
 import { getDustPending } from '@/shared/composables/useDustPending';
-import { getExplorerUrl } from '@/shared/utils/explorer';
+import { useExplorer } from '@/shared/composables/useExplorer';
 
 const chainLogo = computed(() =>
   networks.resolveCurrencyImage(walletStore.loggedWallet?.chain, walletStore.loggedWallet?.network) || ''
@@ -365,8 +365,8 @@ const dustRegTxHash = computed(() => {
 });
 const showDustRegInfo = computed(() => isNightToken.value && !!dustRegTxHash.value);
 const dustRegConfirmed = computed(() => dustRegStatus.value === 'Registered');
-const dustRegTxUrl = computed(() =>
-  getExplorerUrl(Blockchain.CARDANO, dustRegTxHash.value, 'tx', walletStore.loggedWallet?.network));
+const { explorerUrl } = useExplorer();
+const dustRegTxUrl = computed(() => explorerUrl('tx', dustRegTxHash.value, { chain: Blockchain.CARDANO }));
 function shortTx(h: string): string {
   return h.length > 18 ? `${h.slice(0, 10)}…${h.slice(-6)}` : h;
 }
@@ -590,12 +590,16 @@ function formatPnlSigned(adaValue: number): string {
 
 import { formatPriceRaw, formatPrice, formatCompact, formatSignedChange } from '@/modules/market/utils/formatters';
 
+// Market tokens are Cardano-native unless the wallet is on an Apex chain. ADA
+// itself has no fingerprint, so it gets no link.
+const tokenExplorerUrl = computed(() =>
+  explorerUrl('asset', props.token.fingerprint, {
+    chain: isApex.value ? walletStore.loggedWallet?.chain : Blockchain.CARDANO,
+  }),
+);
+
 function openExplorer() {
-  const fingerprint = props.token.fingerprint;
-  const url = isApex.value
-    ? `https://apexscan.org/en/token/${fingerprint}`
-    : `https://cardanoscan.io/token/${fingerprint}`;
-  window.open(url, '_blank', 'noopener,noreferrer');
+  if (tokenExplorerUrl.value) window.open(tokenExplorerUrl.value, '_blank', 'noopener,noreferrer');
 }
 
 // Reset timeframe and reload candles when token changes

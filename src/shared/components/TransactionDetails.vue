@@ -441,7 +441,7 @@ import stakingStoreActions from '@/stores/stakingStore';
 import blockchainApi from '@/api/blockchain-api';
 import { getBlockchainDb } from '@/db';
 import { Blockchain, Network } from '@/models/types';
-import { getExplorerUrl } from '@/shared/utils/explorer';
+import { useExplorer } from '@/shared/composables/useExplorer';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import { getCertificateBaseStatus } from '@/modules/dashboard/utils/transactionStatus';
 import {
@@ -1029,27 +1029,14 @@ function toggleSection(key: SectionKey) {
 // ---------------------------------------------------------------------------
 // Explorer links
 // ---------------------------------------------------------------------------
-// Use the shared explorer helper, which handles both Apex chains (Prime AND
-// Vector → apexscan) and Cardano networks. The previous inline branches only
-// special-cased APEX_PRIME, so a Vector wallet got a null tx link / a Cardano
-// cexplorer block link (bug 954).
-const transactionUrl = computed(() =>
-  getExplorerUrl(
-    loggedWallet.value?.chain ?? '',
-    liveTx.value['id'],
-    'tx',
-    loggedWallet.value?.network,
-  ) || null,
-);
+// The wallet's chosen explorer (Cardano) or its chain's only one (Apex Prime /
+// Vector → their apexscan hosts). Inline branches here once sent Vector wallets
+// to Cardano cexplorer (bug 954); keep every link on the shared helper.
+const { explorerUrl } = useExplorer();
 
-const blockUrl = computed(() =>
-  getExplorerUrl(
-    loggedWallet.value?.chain ?? '',
-    liveTx.value['block_hash'],
-    'block',
-    loggedWallet.value?.network,
-  ) || null,
-);
+const transactionUrl = computed(() => explorerUrl('tx', liveTx.value['id']) || null);
+
+const blockUrl = computed(() => explorerUrl('block', liveTx.value['block_hash']) || null);
 
 const getCertificateType = (certificate: Cardano.Certificate) => {
   const certificateType: Cardano.CertificateType = certificate.__typename;
