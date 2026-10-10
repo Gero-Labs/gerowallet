@@ -16,6 +16,7 @@
       </div>
       <p class="t-body x-text" :lang="item.locale">{{ item.text || item.summary || item.title }}</p>
       <img v-if="image" :src="image.src" :alt="image.alt" class="x-media" loading="lazy" />
+      <p v-if="failed" class="t-caption x-saved" role="status"><v-icon :size="14" color="var(--g-warning)" class="x-saved__icon">mdi-alert-outline</v-icon>{{ t('help.cachedUpdates') }}</p>
     </article>
     <p v-else class="t-body-sm x-status" role="status">{{ t(loading ? 'help.loadingUpdates' : failed ? 'help.updatesUnavailable' : 'help.noUpdates') }}</p>
     <GButton v-if="link" tier="tertiary" compact class="x-link" :href="link" target="_blank" rel="noopener noreferrer" @click="openPost()">
@@ -77,6 +78,8 @@ const date = computed(() => formatHelpDate(item.value?.publishedAt, helpLocale(i
   border-radius: var(--g-r-control); border: 1px solid var(--g-hairline-1); box-sizing: border-box;
 }
 .x-status { margin: 0; }
+.x-saved { display: flex; align-items: flex-start; gap: 6px; margin: 0; }
+.x-saved__icon { flex: none; margin-top: 1px; }
 .x-link { align-self: flex-start; margin: auto 0 0 calc(-1 * var(--g-s-3)); }
 .x-link .v-icon { margin-left: var(--g-s-1); }
 @media (max-width: 640px) {

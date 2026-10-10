@@ -356,8 +356,9 @@
 </template>
 
 <script lang="ts">
-import { computed, defineComponent, nextTick, ref, watch } from 'vue';
+import { computed, defineComponent, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { agentDock } from '@/sidepanel/composables/useAgentDock';
+import { attachAgentDockComposer, detachAgentDockComposer, type DockMode } from '@/sidepanel/composables/agentDockComposer';
 import { renderMarkdown } from '@/shared/utils/renderMarkdown';
 import { useSheetVisibility } from '@/sidepanel/composables/useSheetVisibility';
 import {
@@ -388,8 +389,6 @@ import SupportAuthPrompt from '@/sidepanel/components/SupportAuthPrompt.vue';
 // computed below, mirroring NavigationDrawer.vue's derivation exactly.
 import assets from '@/utils/assets';
 
-type DockMode = 'copilot' | 'support';
-
 // Only the COUNT cap is this component's job — the size cap is enforced by
 // the composable itself and surfaces through supportChat.errorKey.
 const MAX_PENDING_FILES = SUPPORT_MAX_FILES_PER_MESSAGE;
@@ -398,7 +397,11 @@ export default defineComponent({
   name: 'AgentDock',
   components: { ChartCard, SwapCard, StakingCard, AllowanceCard, SupportAuthPrompt },
   setup() {
-    const draft = ref('');
+    // Draft, picked files and tab are shared with the dock this one replaces when navigation
+    // crosses layouts, so moving between the dashboard and Help keeps an unsent message.
+    const composer = attachAgentDockComposer();
+    onBeforeUnmount(detachAgentDockComposer);
+    const draft = composer.draft;
     const emailCopied = ref(false);
     const emailCopyFailed = ref(false);
     async function copySupportEmail() {
@@ -444,7 +447,7 @@ export default defineComponent({
     });
 
     // ── Support attachments: pending picker state + sent-attachment bubbles ──
-    const pendingFiles = ref<File[]>([]);
+    const pendingFiles = composer.pendingFiles;
     const fileInputRef = ref<HTMLInputElement | null>(null);
     // Attachment ids whose thumbnail failed to load (signed URLs can expire) —
     // those bubbles fall back to the generic file row instead. Keyed
@@ -549,7 +552,7 @@ export default defineComponent({
     // toggle exists. `mode` only ever moves to 'copilot' through UI activeMode
     // gates when copilotEnabled is off (the toggle renders that segment
     // disabled), so a copilot-off session can never actually land there.
-    const mode = ref<DockMode>('support');
+    const mode = composer.mode;
     watch(() => helpSupportIntent.dockRequest, request => {
       if (!request || !liveChatEnabled.value || walletStore.isLocked || walletStore.isSyncing
         || walletStore.loggedWallet?.id !== request.walletId || !supportChat.isAvailable.value) return;

@@ -9,7 +9,7 @@ const h = vi.hoisted(() => ({
   wallet: { loggedWallet: null as unknown, isLocked: true, isSyncing: false },
   flags: { isInitialized: false, live: false }, saved: { value: false },
   route: { path: '/help', fullPath: '/help?chain=all', query: {} as Record<string, string> },
-  pages: {} as Record<string, HelpUpdatesPage>, request: null as unknown as Ref<{ source: string; chain: string; limit?: number }>,
+  pages: {} as Record<string, HelpUpdatesPage>, failed: [] as string[], request: null as unknown as Ref<{ source: string; chain: string; limit?: number }>,
   track: vi.fn(),
 }));
 vi.mock('../helpAnalytics', () => ({ trackHelp: h.track }));
@@ -32,7 +32,7 @@ vi.mock('../useHelpUpdates', async () => {
   const { ref: vueRef, computed: vueComputed } = await import('vue');
   return { useHelpUpdates: (request: Ref<{ source: string }>) => {
     h.request = request as never;
-    return { page: vueComputed(() => h.pages[request.value.source] ?? null), loading: vueRef(false), failed: vueRef(false), retry: vi.fn(), loadMore: vi.fn() };
+    return { page: vueComputed(() => h.pages[request.value.source] ?? null), loading: vueRef(false), failed: vueComputed(() => h.failed.includes(request.value.source)), retry: vi.fn(), loadMore: vi.fn() };
   } };
 });
 import HelpSupportWidget from './HelpSupportWidget.vue';
@@ -49,7 +49,7 @@ const wrappers: Array<ReturnType<typeof mount>> = [];
 const show = (component: unknown, propsData: Record<string, unknown> = {}) => { const wrapper = mount(component as never, { propsData, stubs }); wrappers.push(wrapper); return wrapper; };
 const eligible = { id: 42, chain: 'Cardano', network: 'Mainnet', type: 'Normal', stakeAddress: 'stake1test' };
 beforeEach(() => {
-  clearHelpSupport(); h.pages = {}; h.track.mockReset(); h.route.query = {};
+  clearHelpSupport(); h.pages = {}; h.failed = []; h.track.mockReset(); h.route.query = {};
   h.wallet.loggedWallet = null; h.wallet.isLocked = true; h.wallet.isSyncing = false;
   h.flags.isInitialized = false; h.flags.live = false; h.saved.value = false;
   vi.stubEnv('VITE_BACKEND_URL', 'https://backend.test');
@@ -189,6 +189,38 @@ describe('Gero blog and ecosystem news cards', () => {
     const behind = show(HelpEcosystemNews);
     expect(behind.find('.news-fresh').text()).toBe('Last available snapshot');
     expect(behind.find('.news-fresh__dot--stale').exists()).toBe(true);
+  });
+});
+
+describe('saved updates after a failed refresh', () => {
+  const update = (id: string, source: string, kind: HelpUpdate['kind']): HelpUpdate => ({ id, source, kind, chain: 'all', title: 'Saved ' + id, summary: 'Saved ' + id, text: 'Saved ' + id,
+    canonicalUrl: 'https://midnight.network/blog/' + id, publishedAt: '2026-09-28T00:00:00Z', publisher: 'Midnight', locale: 'en-US', media: [] });
+  const saved = 'Showing saved updates. New updates are temporarily unavailable.';
+  it('keeps saved news on screen but stops calling it up to date', () => {
+    h.pages = { 'ecosystem-news': { total: 1, nextCursor: null, sources: [{ source: 'midnight-news', status: 'fresh', lastSuccessfulSyncAt: null }], items: [update('a', 'midnight-news', 'news')] } };
+    h.failed = ['ecosystem-news'];
+    const wrapper = show(HelpEcosystemNews);
+    expect(wrapper.findAll('.news-row')).toHaveLength(1);
+    expect(wrapper.find('.news-fresh').text()).toBe('Last available snapshot');
+    expect(wrapper.find('.news-fresh__dot--stale').exists()).toBe(true);
+    expect(wrapper.find('.news-saved').text()).toContain(saved);
+    expect(wrapper.find('.news-status').exists()).toBe(false);
+  });
+  it('labels a saved blog post and a saved X post, and only when the refresh failed', () => {
+    h.pages = { 'gero-blog': { total: 1, nextCursor: null, sources: [], items: [update('b', 'gero-blog', 'blog')] }, 'gero-x': { total: 1, nextCursor: null, sources: [], items: [update('x', 'gero-x', 'social')] } };
+    expect(show(HelpBlogCard).find('.blog-saved').exists()).toBe(false);
+    expect(show(HelpXCard).find('.x-saved').exists()).toBe(false);
+    h.failed = ['gero-blog', 'gero-x'];
+    const blog = show(HelpBlogCard), x = show(HelpXCard);
+    expect(blog.find('.blog-title').text()).toBe('Saved b'); expect(blog.find('.blog-saved').text()).toContain(saved);
+    expect(x.find('.x-text').text()).toBe('Saved x'); expect(x.find('.x-saved').text()).toContain(saved);
+  });
+  it('says updates are unavailable, without the saved label, when nothing was saved', () => {
+    h.failed = ['ecosystem-news', 'gero-blog', 'gero-x'];
+    const news = show(HelpEcosystemNews), blog = show(HelpBlogCard), x = show(HelpXCard);
+    expect(news.find('.news-status').text()).toBe('Updates are temporarily unavailable.'); expect(news.find('.news-saved').exists()).toBe(false);
+    expect(blog.find('.blog-status').text()).toBe('Updates are temporarily unavailable.'); expect(blog.find('.blog-saved').exists()).toBe(false);
+    expect(x.find('.x-status').text()).toBe('Updates are temporarily unavailable.'); expect(x.find('.x-saved').exists()).toBe(false);
   });
 });
 

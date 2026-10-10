@@ -15,7 +15,8 @@
         </component>
       </li>
     </ul>
-    <p v-else class="t-body-sm news-status" role="status">{{ t(loading ? 'help.loadingUpdates' : failed ? 'help.updatesUnavailable' : 'help.noUpdates') }}</p>
+    <p v-if="failed && items.length" class="t-caption news-saved" role="status"><v-icon :size="14" color="var(--g-warning)" class="news-saved__icon">mdi-alert-outline</v-icon>{{ t('help.cachedUpdates') }}</p>
+    <p v-else-if="!items.length" class="t-body-sm news-status" role="status">{{ t(loading ? 'help.loadingUpdates' : failed ? 'help.updatesUnavailable' : 'help.noUpdates') }}</p>
     <GButton tier="tertiary" compact class="news-all" :to="updatesTo()" @click.native.capture="home('all_updates')">{{ t('help.updateSource.all') }}</GButton>
   </HelpCard>
 </template>
@@ -42,7 +43,8 @@ const request = computed(() => ({ source: 'ecosystem-news', chain: chain.value, 
 const { page, loading, failed } = useHelpUpdates(request);
 const items = computed(() => page.value?.items ?? []);
 const hasSources = computed(() => relevantNewsSources(page.value?.sources ?? [], chain.value).length > 0);
-const fresh = computed(() => newsIsFresh(page.value?.sources ?? [], chain.value));
+// A failed refresh leaves the last saved page on screen; its source states are as old as it is.
+const fresh = computed(() => !failed.value && newsIsFresh(page.value?.sources ?? [], chain.value));
 function dateOf(item: HelpUpdate): string { return formatHelpDate(item.publishedAt, helpLocale(i18n.locale)) || t('help.dateUnknown'); }
 // Only a headline that opens its original counts; an inert row does nothing.
 function openItem(item: HelpUpdate): void {
@@ -72,6 +74,8 @@ a.news-row:hover { background-color: rgba(255, 255, 255, 0.03); }
 .news-title { font-size: 14px; font-weight: 500; line-height: 20px; color: var(--g-text-1); }
 .news-arrow { flex: none; margin-top: 2px; }
 .news-status { margin: 0 var(--g-s-3); }
+.news-saved { display: flex; align-items: flex-start; gap: 6px; margin: 0 var(--g-s-3); }
+.news-saved__icon { flex: none; margin-top: 1px; }
 .news-all { align-self: flex-start; margin-top: auto; }
 @media (max-width: 640px) {
   .news-all { margin-top: 0; }

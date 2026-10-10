@@ -323,6 +323,29 @@ afterEach(() => {
 });
 
 describe('AgentDock Help entry', () => {
+  it('keeps the unsent draft, files and tab when navigation replaces the dock', async () => {
+    mockWalletStore.loggedWallet = { id: 7, chain: 'Cardano' };
+    const first = mountDock(); await clickCopilotToggle(first);
+    vmOf(first).draft = 'Assistant question';
+    // Crossing layouts (dashboard -> Help) mounts the new dock before destroying the old one.
+    const second = mount(AgentDock, { mocks: { $t } });
+    first.destroy(); activeWrapper = second;
+    expect(vmOf(second).mode).toBe('copilot'); expect(vmOf(second).draft).toBe('Assistant question');
+    await clickSupportToggle(second);
+    vmOf(second).draft = 'Support question'; vmOf(second).pendingFiles = [makeFile('notes.txt', 8)];
+    const third = mount(AgentDock, { mocks: { $t } });
+    second.destroy(); activeWrapper = third;
+    expect(vmOf(third).mode).toBe('support'); expect(vmOf(third).draft).toBe('Support question');
+    expect(vmOf(third).pendingFiles.map(file => file.name)).toEqual(['notes.txt']);
+  });
+  it('starts a dock empty when no other dock was alive to hand over', async () => {
+    mockWalletStore.loggedWallet = { id: 7, chain: 'Cardano' };
+    const first = mountDock(); await clickCopilotToggle(first);
+    vmOf(first).draft = 'Assistant question';
+    first.destroy(); activeWrapper = null;
+    const later = mountDock();
+    expect(vmOf(later).mode).toBe('support'); expect(vmOf(later).draft).toBe(''); expect(vmOf(later).pendingFiles).toEqual([]);
+  });
   it('preserves the Assistant draft and open state when switching wallets', async () => {
     mockWalletStore.loggedWallet = { id: 7, chain: 'Cardano' };
     const wrapper = mountDock(); await clickCopilotToggle(wrapper);

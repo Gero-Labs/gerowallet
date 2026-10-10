@@ -9,6 +9,7 @@
       </h3>
       <p class="t-body blog-text" :lang="item.locale">{{ item.summary || item.text }}</p>
       <p class="t-caption g-num blog-foot">{{ caption }}</p>
+      <p v-if="failed" class="t-caption blog-saved" role="status"><v-icon :size="14" color="var(--g-warning)" class="blog-saved__icon">mdi-alert-outline</v-icon>{{ t('help.cachedUpdates') }}</p>
     </template>
     <p v-else class="t-body-sm blog-status" role="status">{{ t(loading ? 'help.loadingUpdates' : failed ? 'help.updatesUnavailable' : 'help.noUpdates') }}</p>
   </HelpCard>
@@ -58,6 +59,8 @@ const caption = computed(() => {
 .blog-link:hover { color: var(--g-text-1); text-decoration: underline; text-underline-offset: 3px; }
 .blog-text { margin: 0; line-height: 1.55; }
 .blog-foot { margin: auto 0 0; padding-top: var(--g-s-1); }
+.blog-saved { display: flex; align-items: flex-start; gap: 6px; margin: 0; }
+.blog-saved__icon { flex: none; margin-top: 1px; }
 .blog-status { margin: 0; }
 @media (max-width: 640px) {
   .blog-text { font-size: 13px; }
