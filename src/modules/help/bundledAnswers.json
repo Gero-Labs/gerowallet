@@ -1,0 +1,328 @@
+[
+  {
+    "id": "receive",
+    "topic": "send",
+    "title": "How to receive ADA in your wallet",
+    "chains": [
+      "cardano"
+    ],
+    "requiredFeatures": [],
+    "keywords": [],
+    "body": "Open Receive in your Cardano wallet and copy the receiving address or show its QR code. Confirm the network with the sender. Receiving does not require sharing your recovery phrase or signing a support request."
+  },
+  {
+    "id": "pending",
+    "topic": "fix",
+    "title": "Why is my Cardano transaction still pending?",
+    "chains": [
+      "cardano"
+    ],
+    "requiredFeatures": [],
+    "keywords": [],
+    "body": "Check the transaction in your wallet’s transaction history and use its explorer link to check the network status. Allow the wallet to finish syncing. A pending display does not by itself mean you should send the same payment again."
+  },
+  {
+    "id": "create",
+    "topic": "start",
+    "title": "Set up your first Gero wallet",
+    "chains": [],
+    "requiredFeatures": [],
+    "keywords": [],
+    "body": "Choose Create your first wallet on the welcome screen, or Get Started if you already have wallets. Select your chain and follow the setup. Check which recovery method you selected and keep its recovery information somewhere only you control. Help stays available while setup is open."
+  },
+  {
+    "id": "restore",
+    "topic": "start",
+    "title": "Restore an existing wallet",
+    "chains": [],
+    "requiredFeatures": [],
+    "keywords": [],
+    "body": "Use the import or restore option on the welcome screen and select the correct chain. Enter recovery information only in the wallet restoration flow, never in chat or email. Check the restored addresses and network before moving funds."
+  },
+  {
+    "id": "send",
+    "topic": "send",
+    "title": "Send ADA and native tokens",
+    "chains": [
+      "cardano"
+    ],
+    "requiredFeatures": [],
+    "keywords": [],
+    "body": "Choose Send, check the recipient and network, then select the asset and amount. Review the fee and final transaction before signing. A submitted blockchain transfer cannot be reversed by support."
+  },
+  {
+    "id": "swap",
+    "topic": "send",
+    "title": "Make your first swap",
+    "chains": [
+      "cardano"
+    ],
+    "requiredFeatures": [],
+    "keywords": [],
+    "body": "Open Swap in a supported wallet. Review the assets, quote, slippage and fees before confirming. Check the order status after submission; a quote is not a promise that the final execution price will stay unchanged."
+  },
+  {
+    "id": "card",
+    "topic": "card",
+    "title": "Get started with Gero Card",
+    "chains": [
+      "cardano"
+    ],
+    "requiredFeatures": [
+      "isGeroCardEnabled"
+    ],
+    "keywords": [],
+    "body": "Gero Card is currently available through supported Cardano mainnet wallets when the feature is enabled. Open Gero Card from the wallet menu to see the current registration and eligibility requirements. Card services have their own account checks."
+  },
+  {
+    "id": "card-issue",
+    "topic": "card",
+    "title": "Find help with your card account",
+    "chains": [
+      "cardano"
+    ],
+    "requiredFeatures": [
+      "isGeroCardEnabled"
+    ],
+    "keywords": [],
+    "body": "Check the card account’s current status in Gero Card. For wallet-access problems, contact Gero support by email or eligible live chat. Never share card security codes or full card details in a general support message."
+  },
+  {
+    "id": "stake",
+    "topic": "earn",
+    "title": "Understand ADA staking",
+    "chains": [
+      "cardano"
+    ],
+    "requiredFeatures": [],
+    "keywords": [],
+    "body": "ADA staking is a Cardano feature. Open Staking in a supported Cardano wallet to inspect delegation and rewards. Review the network fees and the wallet’s confirmation screen before changing delegation."
+  },
+  {
+    "id": "realfi",
+    "topic": "earn",
+    "title": "Get ready to use Earn with RealFi",
+    "chains": [
+      "cardano"
+    ],
+    "requiredFeatures": [
+      "isRealFiEnabled"
+    ],
+    "keywords": [],
+    "body": "Earn with RealFi appears only on supported networks when it is enabled. Read the product’s current eligibility, assets, fees and withdrawal conditions inside the Earn screen before choosing an action."
+  },
+  {
+    "id": "backup",
+    "topic": "security",
+    "title": "Keep your recovery phrase safe",
+    "chains": [],
+    "requiredFeatures": [],
+    "keywords": [],
+    "body": "Keep recovery information private and offline. Never send your recovery phrase, spending password, or signing keys to support. Recovery differs for seed, passkey, and Google wallets: check your wallet’s backup options in Settings."
+  },
+  {
+    "id": "hardware",
+    "topic": "security",
+    "title": "Use Gero with a hardware wallet",
+    "chains": [
+      "cardano"
+    ],
+    "requiredFeatures": [],
+    "keywords": [],
+    "body": "Choose the hardware-wallet setup for your device and a supported network. Keep the device available when signing and verify the destination on the device screen. Hardware wallets use email support where live-chat signing is unavailable."
+  },
+  {
+    "id": "dapps",
+    "topic": "fix",
+    "title": "Troubleshoot a dApp connection",
+    "chains": [
+      "cardano"
+    ],
+    "requiredFeatures": [],
+    "keywords": [],
+    "body": "Check that the application supports your wallet’s chain and network. Review its wallet connection permissions, and reconnect if you selected the wrong wallet. Do not approve an unfamiliar signing request just to troubleshoot a connection."
+  },
+  {
+    "id": "missing",
+    "topic": "fix",
+    "title": "An asset is missing from my wallet",
+    "chains": [],
+    "requiredFeatures": [],
+    "keywords": [],
+    "body": "Confirm the selected wallet and network, let sync finish, and inspect transaction history and hidden-asset settings. The explorer can help distinguish a display issue from a transfer that has not reached the expected address."
+  },
+  {
+    "id": "network",
+    "topic": "start",
+    "title": "Choose the right network",
+    "chains": [],
+    "requiredFeatures": [],
+    "keywords": [],
+    "body": "A chain and its test networks are different destinations. Match the sending and receiving chain and network before transferring. A testnet asset is not a mainnet asset. If a feature is unavailable, check both your selected network and the feature’s availability."
+  },
+  {
+    "id": "midnight-start",
+    "topic": "start",
+    "title": "Get started with Midnight: NIGHT and DUST",
+    "chains": [
+      "midnight"
+    ],
+    "requiredFeatures": [],
+    "keywords": [
+      "NIGHT",
+      "DUST",
+      "Midnight"
+    ],
+    "body": "NIGHT is Midnight’s native token; cNIGHT is held on Cardano. DUST is a transaction resource generated from registered holdings. Check which chain holds your assets before choosing a registration or transfer action."
+  },
+  {
+    "id": "midnight-dust",
+    "topic": "start",
+    "title": "Register and check DUST",
+    "chains": [
+      "midnight"
+    ],
+    "requiredFeatures": [],
+    "keywords": [
+      "DUST",
+      "register",
+      "NIGHT",
+      "cNIGHT"
+    ],
+    "body": "Open the DUST registration view in the relevant wallet. Native NIGHT registration and Cardano cNIGHT mapping are different flows: follow the one matching your holding. Check the registration status and allow network synchronization before retrying."
+  },
+  {
+    "id": "midnight-proof",
+    "topic": "send",
+    "title": "Proof servers and shielded transactions",
+    "chains": [
+      "midnight"
+    ],
+    "requiredFeatures": [],
+    "keywords": [
+      "proof server",
+      "prover",
+      "shielded"
+    ],
+    "body": "Shielded transactions need a proof server. Open Proof server to review the available provider or local setup, connection status and consent information. Read what a remote provider receives before approving it."
+  },
+  {
+    "id": "midnight-balances",
+    "topic": "send",
+    "title": "Understand shielded and unshielded balances",
+    "chains": [
+      "midnight"
+    ],
+    "requiredFeatures": [],
+    "keywords": [
+      "shielded",
+      "unshielded",
+      "private balance"
+    ],
+    "body": "Midnight shows shielded and unshielded balances separately. Match the address and balance type to the action you want to perform, and allow sync to finish. DUST is shown as a transaction resource rather than a token to purchase."
+  },
+  {
+    "id": "midnight-fix",
+    "topic": "fix",
+    "title": "Fix a Midnight wallet problem",
+    "chains": [
+      "midnight"
+    ],
+    "requiredFeatures": [],
+    "keywords": [
+      "Midnight",
+      "DUST",
+      "proof server",
+      "sync"
+    ],
+    "body": "Check the selected network, wallet sync, DUST registration status and proof-server status separately. If the issue persists, email support with a description of the error. Do not include private keys or proof inputs."
+  },
+  {
+    "id": "bitcoin-start",
+    "topic": "start",
+    "title": "Get started with Bitcoin in Gero",
+    "chains": [
+      "bitcoin"
+    ],
+    "requiredFeatures": [
+      "isBitcoinEnabled"
+    ],
+    "keywords": [
+      "BTC",
+      "bitcoin"
+    ],
+    "body": "Bitcoin is currently available on Testnet4 when the feature and test-network setup are enabled. Mainnet is marked Soon. Use the matching test network and test funds; do not send Mainnet BTC to a test-network address."
+  },
+  {
+    "id": "bitcoin-receive",
+    "topic": "send",
+    "title": "Receive Bitcoin and choose an address",
+    "chains": [
+      "bitcoin"
+    ],
+    "requiredFeatures": [
+      "isBitcoinEnabled"
+    ],
+    "keywords": [
+      "BTC",
+      "receive",
+      "segwit",
+      "taproot"
+    ],
+    "body": "Open Receive and review the available Bitcoin address types. Check that the sender supports your chosen type and that both sides use the same network. Copy the address from the wallet instead of retyping it."
+  },
+  {
+    "id": "bitcoin-send",
+    "topic": "send",
+    "title": "Send Bitcoin and understand the fee",
+    "chains": [
+      "bitcoin"
+    ],
+    "requiredFeatures": [
+      "isBitcoinEnabled"
+    ],
+    "keywords": [
+      "BTC",
+      "send",
+      "sats",
+      "satoshi",
+      "fee"
+    ],
+    "body": "Open Send, verify the destination and amount, then review the available fee choices and final confirmation. Bitcoin fees are displayed in BTC or satoshis. A faster fee choice is not a guaranteed confirmation time."
+  },
+  {
+    "id": "bitcoin-pending",
+    "topic": "fix",
+    "title": "Check a pending Bitcoin transaction",
+    "chains": [
+      "bitcoin"
+    ],
+    "requiredFeatures": [
+      "isBitcoinEnabled"
+    ],
+    "keywords": [
+      "BTC",
+      "pending",
+      "confirmations"
+    ],
+    "body": "Open transaction details and check confirmations using the explorer link. Network congestion and fees affect confirmation time. Do not assume an unconfirmed transaction has failed or send a duplicate payment without checking its status."
+  },
+  {
+    "id": "bitcoin-fix",
+    "topic": "fix",
+    "title": "Fix a Bitcoin balance or connection problem",
+    "chains": [
+      "bitcoin"
+    ],
+    "requiredFeatures": [
+      "isBitcoinEnabled"
+    ],
+    "keywords": [
+      "BTC",
+      "missing",
+      "sync",
+      "connection"
+    ],
+    "body": "Check the wallet network, connection, receive address and transaction history. Let sync finish before comparing balances. Email support if you need help; the current signed live-chat identity does not support Bitcoin."
+  }
+]

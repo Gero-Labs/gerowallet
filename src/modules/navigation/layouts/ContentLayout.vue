@@ -31,7 +31,7 @@
 
           <v-layout :align-start="true">
             <NavigationDrawer v-model="drawer" />
-            <v-sheet ref="scrollContainer" style="height: 100vh; width: 100%; overflow-y: scroll; background-color: transparent" @scroll.native="onSheetScroll">
+            <v-sheet data-help-scroll ref="scrollContainer" style="height: 100vh; width: 100%; overflow-y: scroll; background-color: transparent" @scroll.native="onSheetScroll">
               <v-row no-gutters v-if="isBeta">
                 <v-col cols="12">
                   <v-alert color="warning" style="color: black" class="pa-2 px-3 text-center">
@@ -234,9 +234,9 @@
                 <SettingsDialog :isOpen="currentDialog === dialogs.SETTINGS" :initial-tab="settingsInitialTab" @close="closeDialog(); settingsInitialTab = undefined" />
                 <v-sheet class="transparent pt-2">
                   <keep-alive>
-                    <router-view
-                      @open-backup-dialog="handleOpenBackupDialog"
-                    />
+                    <slot name="help-content">
+                      <router-view @open-backup-dialog="handleOpenBackupDialog" />
+                    </slot>
                   </keep-alive>
                 </v-sheet>
               </v-layout>
@@ -312,6 +312,7 @@ import { hasNewFeaturesInPath } from '@/shared/composables/useFeatureNotificatio
 import GlobalSearch from '@/shared/components/GlobalSearch.vue';
 import { useGlobalSearch, settingsNavRequest } from '@/shared/composables/useGlobalSearch';
 import AgentDock from '@/sidepanel/components/AgentDock.vue';
+import { helpSupportIntent } from '@/modules/help/supportIntent';
 import { agentDockPrefsStore } from '@/stores/agentDockPrefsStore';
 
 const { t } = useTranslation();
@@ -440,7 +441,7 @@ const isAgentVisible = computed(() =>
   && !!loggedWallet.value && !walletStore.isLocked
   // Wait for the persisted preference before the first render, otherwise a
   // user who hid the dock sees it flash on every dashboard load.
-  && agentDockPrefsStore.hydrated && !agentDockPrefsStore.hidden
+  && agentDockPrefsStore.hydrated && (!agentDockPrefsStore.hidden || helpSupportIntent.active)
 );
 
 const epochSlotPercentage = computed(() => {

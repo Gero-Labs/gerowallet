@@ -121,6 +121,9 @@ jobs:
       - name: Block-explorer deep links
         run: npx vitest run src/shared/utils/explorer.spec.ts src/shared/composables/useExplorer.spec.ts
 
+      - name: Public Help and support entry regressions
+        run: npx vitest run src/modules/navigation/helpAccess.spec.ts src/modules/navigation/components/NavigationDrawer.spec.ts src/modules/welcome/helpEntry.spec.ts src/modules/help/HelpLayout.spec.ts src/modules/help/HelpSupportAction.spec.ts src/modules/help/HelpChainContent.spec.ts src/modules/help/useHelpContent.spec.ts src/modules/help/helpRichText.spec.ts src/modules/help/helpUpdates.spec.ts src/modules/help/HelpUpdatesView.spec.ts src/modules/help/useHelpUpdates.spec.ts src/sidepanel/components/AgentDock.spec.ts src/sidepanel/composables/useSupportChat.spec.ts src/shared/utils/walletSearchIndex.spec.ts src/shared/components/iso/isoScenes.spec.ts src/shared/components/iso/IsoScene.spec.ts
+
       # The bundle TDZ guard runs against a built artifact (in the workflow
       # named above), so a hole in its own logic passes silently — it already
       # shipped one: it read the emitted, minified bundle with a
