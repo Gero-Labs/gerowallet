@@ -32,16 +32,33 @@
 
     <!-- Language Selector - Floating top-right -->
     <div class="language-selector-container">
-      <GButton compact tier="tertiary" @click="enterHelp(false)">{{ $t('help.title') }}</GButton>
-      <GButton compact tier="tertiary" @click="enterHelp(true)">{{ $t('help.contact') }}</GButton>
+      <GButton
+        ref="helpButton"
+        class="welcome-help-button"
+        :class="{ 'welcome-help-button--open': helpOpen }"
+        compact
+        tier="tertiary"
+        aria-controls="whelp-panel"
+        :aria-expanded="helpOpen ? 'true' : 'false'"
+        data-test="help-button"
+        @click="toggleHelp()"
+      >
+        <v-icon left size="18">mdi-help-circle-outline</v-icon>{{ $t('help.welcome.title') }}
+      </GButton>
       <LanguageSelector />
     </div>
 
+    <!-- Help for someone outside their wallet. Floats over the welcome screen without taking it over,
+         so a setup in progress keeps going underneath. -->
+    <WelcomeHelpPanel
+      v-if="helpOpen"
+      :started="started"
+      :has-wallets="hasWallets"
+      :opener="helpButtonEl"
+      @close="helpOpen = false"
+    />
+
     <!-- Main container -->
-    <p v-if="helpOpenFailed" role="status" class="welcome-help-error t-body-sm">
-      {{ $t('help.openFailed') }}
-      <a :href="helpFallbackPath" target="_blank" rel="noopener noreferrer">{{ $t('help.openNewTab') }}</a>
-    </p>
     <div class="welcome-container">
       <!-- Left column - logo + existing wallet list. With zero wallets there
            is nothing to sign in to, so the whole panel yields to the
@@ -82,7 +99,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import networks, { NetworkInfo } from '@/utils/networks';
 import assets from '@/utils/assets';
 import WalletOnboarding from '@/modules/welcome/components/WalletOnboarding/WalletOnboarding.vue';
@@ -91,17 +108,16 @@ import LegalFooter from '@/modules/welcome/components/LegalFooter/LegalFooter.vu
 import LanguageSelector from '@/modules/navigation/components/LanguageSelector.vue';
 import OnboardingHero from '@/modules/welcome/components/onboarding/OnboardingHero.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
-import { useRouter } from 'vue-router/composables';
-import { openWelcomeHelp } from '@/modules/navigation/helpAccess';
+import WelcomeHelpPanel from '@/modules/welcome/components/WelcomeHelp/WelcomeHelpPanel.vue';
 import { useAvailableWallets } from '@/shared/composables/useAvailableWallets';
 import { applyChainAccent } from '@/shared/composables/useChainAccent';
 
-const helpRouter = useRouter();
-const helpOpenFailed = ref(false);
-const helpFallbackPath = ref('#/help');
-const enterHelp = async (support: boolean) => {
-  helpFallbackPath.value = support ? '#/help?support=1' : '#/help';
-  helpOpenFailed.value = !await openWelcomeHelp(started.value, support, path => helpRouter.push(path));
+// Help panel: one toggle button in the corner. The panel itself owns focus, Escape and its fallbacks.
+const helpOpen = ref(false);
+const helpButton = ref<InstanceType<typeof GButton> | null>(null);
+const helpButtonEl = computed<HTMLElement | null>(() => (helpButton.value?.$el as HTMLElement | undefined) ?? null);
+const toggleHelp = (): void => {
+  helpOpen.value = !helpOpen.value;
 };
 
 const DEV_NETWORKS_KEY = 'gero:devNetworks';
@@ -140,19 +156,6 @@ const onWalletListNetwork = (n: NetworkInfo): void => {
 };
 </script>
 <style scoped lang="scss">
-.welcome-help-error {
-  position: absolute;
-  top: calc(var(--g-s-6) * 3);
-  right: var(--g-s-6);
-  z-index: 100;
-  max-width: min(440px, 90vw);
-  padding: var(--g-s-4);
-  color: var(--g-text-1);
-  background: var(--g-surface);
-  border: 1px solid var(--g-hairline-2);
-  border-radius: var(--g-r-card);
-  a { color: var(--g-accent); }
-}
 .welcome-root {
   position: fixed;
   top: 0;
@@ -208,6 +211,16 @@ const onWalletListNetwork = (n: NetworkInfo): void => {
   z-index: 100;
   border-radius: var(--g-r-control);
   padding: 4px 8px;
+}
+
+/* The Help button keeps a transparent border so the pressed state (raised fill, hairline) never shifts layout. */
+.language-selector-container .v-btn.g-btn.welcome-help-button {
+  border: 1px solid transparent;
+}
+.language-selector-container .v-btn.g-btn.welcome-help-button--open {
+  --g-btn-fg: var(--g-text-1);
+  background: var(--g-raised);
+  border-color: var(--g-hairline-2);
 }
 
 .welcome-container {

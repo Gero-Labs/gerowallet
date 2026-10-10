@@ -1,17 +1,11 @@
 <template>
   <div ref="root" class="help-layout">
-    <ContentLayout v-if="ready"><template #help-content><slot /></template></ContentLayout>
+    <!-- One root: ContentLayout keeps this slot alive with <keep-alive>, which renders only its first child. -->
+    <ContentLayout v-if="ready"><template #help-content><div class="help-embedded-page"><HelpPageHeader variant="embedded" /><slot /></div></template></ContentLayout>
     <v-app v-else class="help-public-app">
       <v-main>
         <div class="help-public-scroll" data-help-scroll>
-          <header class="help-public-header">
-            <router-link to="/help" class="help-brand">Gero <span>{{ t('help.title') }}</span></router-link>
-            <nav :aria-label="t('help.title')">
-              <GButton compact tier="tertiary" @click="openSupport()">{{ t('help.contact') }}</GButton>
-              <GButton compact :to="welcomePath">{{ t(hasWallets ? 'help.unlock' : 'help.setup') }}</GButton>
-              <LanguageSelector />
-            </nav>
-          </header>
+          <HelpPageHeader variant="public" />
           <slot />
         </div>
       </v-main>
@@ -24,21 +18,15 @@
 import { computed, nextTick, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router/composables';
 import ContentLayout from '@/modules/navigation/layouts/ContentLayout.vue';
-import LanguageSelector from '@/modules/navigation/components/LanguageSelector.vue';
-import GButton from '@/shared/components/GButton/GButton.vue';
 import { walletStore } from '@/stores/walletStore';
-import { useAvailableWallets } from '@/shared/composables/useAvailableWallets';
-import { useTranslation } from '@/shared/composables/useTranslation';
-import { helpUnlockPath, isHelpReady } from '@/modules/navigation/helpAccess';
+import { isHelpReady } from '@/modules/navigation/helpAccess';
+import HelpPageHeader from './HelpPageHeader.vue';
 import HelpSupportAction from './HelpSupportAction.vue';
 import { openSupport } from './supportIntent';
 
 const route = useRoute();
 const router = useRouter();
-const { t } = useTranslation();
-const { hasWallets } = useAvailableWallets();
 const ready = computed(() => isHelpReady(walletStore));
-const welcomePath = computed(() => hasWallets.value ? helpUnlockPath(route.fullPath) : '/welcome');
 const root = ref<HTMLElement | null>(null);
 const scrollPositions = new Map<string, number>();
 watch(() => route.fullPath, async (path, previous) => {
@@ -70,9 +58,4 @@ watch(() => route.query.support, async intent => {
 
 <style scoped>
 .help-public-scroll { height: 100vh; overflow-y: auto; background: var(--g-canvas); color: var(--g-text-1); }
-.help-public-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--g-s-4); padding: var(--g-s-5) var(--g-s-6); border-bottom: 1px solid var(--g-hairline-1); }
-.help-public-header nav { display: flex; flex-wrap: wrap; align-items: center; gap: var(--g-s-2); }
-.help-brand { color: var(--g-text-1); text-decoration: none; font: 600 1.25rem var(--g-font-ui); }
-.help-brand span { margin-left: var(--g-s-3); color: var(--g-text-2); font: 400 0.875rem var(--g-font-mono); }
-@media (max-width: 600px) { .help-public-header { padding: var(--g-s-4); } }
 </style>

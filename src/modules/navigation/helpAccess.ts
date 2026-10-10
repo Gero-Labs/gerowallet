@@ -16,15 +16,23 @@ export function blogHelpRedirect(initialized: boolean, enabled: boolean): string
   return initialized && enabled ? '/help/updates?source=blog' : null;
 }
 
-export async function openWelcomeHelp(onboardingActive: boolean, support: boolean, push: (path: string) => unknown): Promise<boolean> {
-  const path = support ? '/help?support=1' : '/help';
+/**
+ * Opens an in-app path (`/help`, `/help/articles/restore?basic=1`, `/blog/<slug>`) in a NEW tab, so
+ * the welcome screen, and any setup in progress on it, stays exactly as it is. Resolves false when
+ * the browser refuses, so the caller can offer a plain link instead of failing silently.
+ */
+export async function openWelcomeHelp(path: string): Promise<boolean> {
   try {
-    if (onboardingActive) {
-      if (typeof chrome === 'undefined' || !chrome.tabs?.create || !chrome.runtime?.getURL) return false;
+    if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
+      if (!chrome.tabs?.create) return false;
       await chrome.tabs.create({ url: chrome.runtime.getURL(`index.html#${path}`) });
-    } else {
-      await push(path);
+      return true;
     }
+    if (typeof window === 'undefined') return false;
+    const opened = window.open(`${window.location.href.split('#')[0]}#${path}`, '_blank');
+    if (!opened) return false;
+    // `noopener` as a window feature makes window.open return null, so detach by hand.
+    opened.opener = null;
     return true;
   } catch { return false; }
 }

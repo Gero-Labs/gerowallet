@@ -19,3 +19,29 @@ export function updateImage(path: string, backend: string): string | null {
     && !/^\/api\/blog\/assets\/[A-Za-z0-9_-]{1,100}_thumb_[a-f0-9]{8}$/.test(path)) return null;
   try { const uri = new URL(path, backend); return ['https:', 'http:'].includes(uri.protocol) ? uri.href : null; } catch { return null; }
 }
+/** Source pills on the Updates page. `ecosystem-news` stays valid in URLs but has no pill of its own. */
+export const updatePillSources = ['gero-blog', 'cardano-news', 'midnight-news', 'bitcoin-news', 'gero-x', 'nexus-x'] as const;
+export type UpdatePillSource = (typeof updatePillSources)[number];
+/** The feed an opened update belongs to, when it is one the Updates page lists; anything else is null. */
+export function updateOpenSource(source: string): UpdatePillSource | null {
+  return (updatePillSources as readonly string[]).includes(source) ? source as UpdatePillSource : null;
+}
+/** With a chain filter active only that chain's news pill is offered. */
+export function updatePills(chain: string): UpdatePillSource[] {
+  return updatePillSources.filter(source => chain === 'all' || !source.endsWith('-news') || source === chain + '-news');
+}
+/** Icon well for a source: the Gero or Nexus mark, or an MDI glyph for the chain feeds. */
+export function updateSourceIcon(source: string): { mark: 'gero' | 'nexus' } | { icon: string } {
+  if (source === 'nexus-x') return { mark: 'nexus' };
+  if (source.startsWith('gero-')) return { mark: 'gero' };
+  if (source === 'midnight-news') return { icon: 'mdi-weather-night' };
+  if (source === 'bitcoin-news') return { icon: 'mdi-bitcoin' };
+  return { icon: 'mdi-web' };
+}
+/** The item's media that resolves to a safe mirrored image, in order. Anything else is dropped, never framed empty. */
+export function updateImages(item: HelpUpdate, backend: string): { src: string; alt: string }[] {
+  return (item.media ?? []).flatMap(media => {
+    const src = updateImage(media.url, backend);
+    return src ? [{ src, alt: media.alt }] : [];
+  });
+}

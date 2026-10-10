@@ -1,6 +1,7 @@
 import { ref, watch, onBeforeUnmount, type Ref } from 'vue';
 import { getHelpUpdates, isChangedHelpSnapshot, type HelpUpdatesPage } from '@/api/help.api';
-export interface UpdateRequest { source: string; chain: string; locale: string }
+/** `limit` (1-50, default 20) lets the home cards ask for just the newest item. */
+export interface UpdateRequest { source: string; chain: string; locale: string; limit?: number }
 const cache = new Map<string, HelpUpdatesPage>();
 export function useHelpUpdates(request: Ref<UpdateRequest>) {
   const page = ref<HelpUpdatesPage | null>(null), loading = ref(false), failed = ref(false);
