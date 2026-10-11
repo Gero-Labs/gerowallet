@@ -3841,6 +3841,7 @@ export default {
   'security.savingPattern': 'Guardando patrón...',
   'market.allTokens': 'Todos los tokens',
   'market.trending': 'En tendencia',
+  'market.resizePanel': 'Cambiar el tamaño del panel',
   'market.topGainers': 'Mayores alzas',
   'market.topLosers': 'Mayores bajas',
   'market.newTokens': 'Tokens nuevos',

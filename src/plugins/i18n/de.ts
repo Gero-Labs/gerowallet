@@ -4273,6 +4273,7 @@ export default {
   // Market
   'market.allTokens': 'Alle Token',
   'market.trending': 'Im Trend',
+  'market.resizePanel': 'Panelgröße ändern',
   'market.topGainers': 'Top-Gewinner',
   'market.topLosers': 'Top-Verlierer',
   'market.newTokens': 'Neue Token',

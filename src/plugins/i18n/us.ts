@@ -3942,6 +3942,7 @@ export default {
   // Market Page
   'market.allTokens': 'All Tokens',
   'market.trending': 'Trending',
+  'market.resizePanel': 'Resize panel',
   'market.topGainers': 'Top Gainers',
   'market.topLosers': 'Top Losers',
   'market.newTokens': 'New Tokens',
