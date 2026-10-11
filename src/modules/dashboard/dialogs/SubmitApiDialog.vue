@@ -9,7 +9,40 @@
     :loading="busy"
     @close="emit('close')"
   >
-    <v-card-text class="px-3 pb-4">
+    <!-- pt-4: Vuetify zeroes padding-top on card text after a title, which hid the top
+         of the first outlined field's floating label under the header. -->
+    <v-card-text class="px-3 pt-4 pb-4">
+      <v-select
+        :value="provider"
+        :items="providerItems"
+        item-value="id"
+        item-text="label"
+        :label="t('settings.submitApi.providerLabel')"
+        outlined
+        dense
+        attach
+        hide-details
+        class="mb-5"
+        :disabled="busy"
+        @change="selectProvider"
+      >
+        <template #selection="{ item }">
+          <span class="submit-api-provider">
+            <img v-if="item.logo" :src="item.logo" alt="" class="submit-api-provider-logo">
+            <v-icon v-else small class="submit-api-provider-logo">mdi-server</v-icon>
+            {{ item.label }}
+          </span>
+        </template>
+        <template #item="{ item }">
+          <span class="submit-api-provider">
+            <img v-if="item.logo" :src="item.logo" alt="" class="submit-api-provider-logo">
+            <v-icon v-else small class="submit-api-provider-logo">mdi-server</v-icon>
+            {{ item.label }}
+          </span>
+        </template>
+      </v-select>
+      <!-- Default (Gero) keeps this same layout with the fields disabled, so switching
+           provider never resizes the dialog. Saving Default deletes any saved endpoint. -->
       <v-text-field
         v-model="url"
         :label="t('settings.submitApi.urlLabel')"
@@ -19,7 +52,7 @@
         outlined
         dense
         autocomplete="off"
-        :disabled="busy"
+        :disabled="fieldsDisabled"
         :error-messages="fieldError('url')"
       />
       <p class="t-caption submit-api-note">{{ t('settings.submitApi.networkHint', { network }) }}</p>
@@ -35,16 +68,16 @@
         outlined
         dense
         autocomplete="off"
-        :disabled="busy"
+        :disabled="fieldsDisabled"
         :error-messages="fieldError('headerName')"
       />
       <template v-if="headerValueMode === 'saved'">
         <div class="submit-api-saved">
           <span class="t-body">{{ t('settings.submitApi.headerValueSaved') }}</span>
-          <GButton tier="tertiary" compact :disabled="busy" @click="replaceSavedValue()">
+          <GButton tier="tertiary" compact :disabled="fieldsDisabled" @click="replaceSavedValue()">
             {{ t('settings.submitApi.replace') }}
           </GButton>
-          <GButton tier="tertiary" compact :disabled="busy" @click="removeSavedValue()">
+          <GButton tier="tertiary" compact :disabled="fieldsDisabled" @click="removeSavedValue()">
             {{ t('common.remove') }}
           </GButton>
         </div>
@@ -58,7 +91,7 @@
         outlined
         dense
         autocomplete="off"
-        :disabled="busy"
+        :disabled="fieldsDisabled"
         :error-messages="fieldError('headerValue')"
       />
 
@@ -72,31 +105,24 @@
             :text-left="t('common.off')"
             :text-right="t('common.on')"
             font-size="10px"
+            :disabled="fieldsDisabled"
             v-model="fallbackToDefault"
           />
         </v-col>
       </v-row>
-      <p class="t-caption submit-api-note">{{ t('settings.submitApi.trustNote') }}</p>
+      <!-- One slot for both notes, so picking Default (Gero) does not resize the dialog either. -->
+      <p class="t-caption submit-api-note">
+        {{ isDefault && hasStoredRow ? t('settings.submitApi.defaultNote') : t('settings.submitApi.trustNote') }}
+      </p>
 
       <v-alert v-if="testMessage" :type="testAlertType" text dense>{{ testMessage }}</v-alert>
       <v-alert v-if="serverError" type="error" text dense>{{ serverError }}</v-alert>
 
-      <div v-if="confirmReset" class="submit-api-confirm">
-        <div class="t-body-lg">{{ t('settings.submitApi.resetConfirmTitle') }}</div>
-        <p class="t-body">{{ t('settings.submitApi.resetConfirmMessage') }}</p>
-        <div class="submit-api-actions">
-          <GButton tier="secondary" :disabled="busy" @click="confirmReset = false">{{ t('common.cancel') }}</GButton>
-          <GButton tier="destructive" :loading="resetting" @click="resetToDefault()">{{ t('settings.submitApi.reset') }}</GButton>
-        </div>
-      </div>
-      <div v-else class="submit-api-actions">
-        <GButton v-if="hasStoredRow" tier="tertiary" :disabled="busy" @click="confirmReset = true">
-          {{ t('settings.submitApi.reset') }}
-        </GButton>
-        <GButton tier="secondary" :loading="testing" :disabled="busy || !canSubmit" @click="runTest()">
+      <div class="submit-api-actions">
+        <GButton tier="secondary" :loading="testing" :disabled="busy || isDefault || !canSubmit" @click="runTest()">
           {{ t('settings.submitApi.test') }}
         </GButton>
-        <GButton tier="primary" :loading="saving" :disabled="busy || !canSubmit" @click="save()">
+        <GButton tier="primary" :loading="saving || resetting" :disabled="busy || !canSave" @click="save()">
           {{ t('common.save') }}
         </GButton>
       </div>
@@ -110,13 +136,17 @@ import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import ToggleSwitch from '@/shared/components/ToggleSwitch.vue';
 import snackbar from '@/plugins/snackbar';
+import assets from '@/utils/assets';
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useSubmitApiForm } from '@/modules/dashboard/composables/useSubmitApiForm';
 import {
   nexusNetworkParam,
+  submitApiProvider,
   type SubmitApiConfig,
+  type SubmitApiProvider,
+  type SubmitApiProviderChoice,
   type SubmitApiField,
   type SubmitApiSettingsResult,
   type SubmitApiTestResult,
@@ -134,14 +164,16 @@ const { t } = useTranslation();
 
 // OX Agent: Sensitive Data Protection prevented - the saved header value is write-only and never sent back to the page
 const form = useSubmitApiForm(computed(() => props.saved), computed(() => props.network));
-const { url, headerName, headerValue, headerValueMode, fallbackToDefault, validation, canSubmit, replaceSavedValue, removeSavedValue } = form;
+const {
+  url, headerName, headerValue, headerValueMode, fallbackToDefault, provider, validation, canSubmit,
+  replaceSavedValue, removeSavedValue, selectProvider,
+} = form;
 form.reset();
 
 const saving = ref(false);
 const testing = ref(false);
 const resetting = ref(false);
 const busy = computed(() => saving.value || testing.value || resetting.value);
-const confirmReset = ref(false);
 const serverError = ref('');
 const testResult = ref<SubmitApiTestResult | null>(null);
 
@@ -152,11 +184,24 @@ watch([url, headerName, headerValue, headerValueMode], () => {
 });
 
 const nexusNetwork = computed(() => nexusNetworkParam(props.network));
-const urlPlaceholder = computed(() => `https://nexus.gerowallet.io/api/transactions/submit?network=${nexusNetwork.value}`);
+// `network` is the Nexus query value (errors.nexusNetwork); `walletNetwork` the display name.
+const errorParams = computed(() => ({ network: nexusNetwork.value, walletNetwork: props.network }));
+const urlPlaceholder = computed(() => (provider.value === 'custom'
+  ? 'https://your-node.example/api/submit/tx'
+  : `https://nexus.gerowallet.io/api/transactions/submit?network=${nexusNetwork.value}`));
+
+// Provider names are brands and stay untranslated.
+const providerItems = computed<{ id: SubmitApiProviderChoice; label: string; logo: string | null }[]>(() => [
+  { id: 'default', label: t('settings.submitApi.providerDefault'), logo: assets.geroNoText },
+  { id: 'nexus', label: 'Nexus', logo: assets.nexusLogo },
+  { id: 'blockfrost', label: 'Blockfrost', logo: assets.blockfrostLogo },
+  { id: 'koios', label: 'Koios', logo: assets.koiosLogo },
+  { id: 'custom', label: t('settings.submitApi.statusCustom'), logo: null },
+]);
 
 function fieldError(field: SubmitApiField): string {
   const key = form.errorKey(field);
-  return key ? t(key, { network: nexusNetwork.value }) : '';
+  return key ? t(key, errorParams.value) : '';
 }
 
 async function send<T = undefined>(
@@ -169,10 +214,19 @@ async function send<T = undefined>(
 }
 
 function failureText(result: Extract<SubmitApiSettingsResult, { success: false }>): string {
-  return t(`settings.submitApi.errors.${result.error}`, { network: nexusNetwork.value });
+  return t(`settings.submitApi.errors.${result.error}`, errorParams.value);
 }
 
+// Default (Gero) with a saved endpoint: Save deletes it. Nothing saved: nothing to save.
+const isDefault = computed(() => provider.value === 'default');
+const canSave = computed(() => (isDefault.value ? props.hasStoredRow : canSubmit.value));
+const fieldsDisabled = computed(() => busy.value || isDefault.value);
+
 async function save(): Promise<void> {
+  if (isDefault.value) {
+    if (props.hasStoredRow) await resetToDefault();
+    return;
+  }
   if (props.walletId === null || !canSubmit.value) return;
   saving.value = true;
   serverError.value = '';
@@ -217,7 +271,6 @@ async function resetToDefault(): Promise<void> {
     }
   } finally {
     resetting.value = false;
-    confirmReset.value = false;
   }
 }
 
@@ -231,9 +284,20 @@ const TEST_KEYS: Record<SubmitApiTestResult['kind'], string> = {
   unreachable: 'testUnreachable',
 };
 
+// Provider-specific advice on an auth failure; anything else gets the generic message.
+const AUTH_KEYS: Partial<Record<SubmitApiProvider, string>> = {
+  nexus: 'testAuthNexus',
+  blockfrost: 'testAuthBlockfrost',
+};
+
+function testKey(kind: SubmitApiTestResult['kind']): string {
+  const provider = kind === 'auth' ? submitApiProvider(url.value) : null;
+  return (provider && AUTH_KEYS[provider]) || TEST_KEYS[kind];
+}
+
 const testMessage = computed(() => {
   const result = testResult.value;
-  return result ? t(`settings.submitApi.${TEST_KEYS[result.kind]}`, { status: result.status ?? '' }) : '';
+  return result ? t(`settings.submitApi.${testKey(result.kind)}`, { status: result.status ?? '' }) : '';
 });
 
 const testAlertType = computed(() => {
@@ -243,6 +307,18 @@ const testAlertType = computed(() => {
 </script>
 
 <style scoped lang="scss">
+.submit-api-provider {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--g-s-2);
+}
+
+.submit-api-provider-logo {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+
 .submit-api-note {
   margin: var(--g-s-1) 0 var(--g-s-3);
 }
@@ -267,7 +343,4 @@ const testAlertType = computed(() => {
   margin-top: var(--g-s-3);
 }
 
-.submit-api-confirm {
-  margin-top: var(--g-s-3);
-}
 </style>
