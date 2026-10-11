@@ -210,19 +210,18 @@ $warning-icon: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' vie
 .article-body :deep(ol) { list-style: none; counter-reset: step; display: flex; flex-direction: column; gap: var(--g-s-2); margin: 0 0 var(--g-s-3); padding: 0; }
 .article-body :deep(ol > li) {
   @include g-glass-tier;
-  counter-increment: step; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 14px; margin: 0; padding: 14px var(--g-s-4); color: var(--g-text-1);
+  counter-increment: step; display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: start; column-gap: 14px; row-gap: var(--g-s-3); margin: 0; padding: 14px var(--g-s-4); color: var(--g-text-1);
 }
 /* The step number is an avatar-style badge, so it keeps the accepted solid fill (--g-raised). */
 .article-body :deep(ol > li)::before {
-  content: counter(step); flex: none; display: inline-flex; align-items: center; justify-content: center;
+  content: counter(step); grid-column: 1; grid-row: 1; display: inline-flex; align-items: center; justify-content: center;
   width: 28px; height: 28px; border-radius: var(--g-r-pill); background: var(--g-raised); border: 1px solid var(--g-hairline-2);
   font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--g-text-1);
 }
-.article-body :deep(ol > li > p) { flex: 1 1 0; min-width: 0; margin: 3px 0 0; max-width: none; font-size: 14px; line-height: 1.6; color: var(--g-text-1); }
-/* A step screenshot goes on its own row (the ::after line break), aligned with the step text
-   (28px badge + 14px gap), at its natural size up to the row width. */
-.article-body :deep(ol > li)::after { content: ''; flex-basis: 100%; order: 1; }
-.article-body :deep(ol > li > img) { order: 2; flex: 0 1 auto; max-width: calc(100% - 42px); margin-left: 42px; }
+.article-body :deep(ol > li > p) { margin: 3px 0 0; max-width: none; font-size: 14px; line-height: 1.6; color: var(--g-text-1); }
+/* Step content sits in the second column in authored order (text, screenshot, more text), each on its own row. */
+.article-body :deep(ol > li > *) { grid-column: 2; }
+.article-body :deep(ol > li > img) { justify-self: start; }
 .article-body :deep(blockquote) {
   display: grid; grid-template-columns: 20px minmax(0, 1fr); column-gap: var(--g-s-3); align-items: start;
   margin: 0 0 var(--g-s-3); padding: 14px var(--g-s-4); border-radius: var(--g-r-card);
