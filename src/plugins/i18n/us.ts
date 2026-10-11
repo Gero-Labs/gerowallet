@@ -2942,6 +2942,7 @@ export default {
   'settings.submitApi.trustNote': 'Your endpoint sees every transaction it submits. If it does not forward one, the transaction stays pending until you remove it.',
   'settings.submitApi.test': 'Test',
   'settings.submitApi.defaultNote': 'This wallet will submit through Gero again, and the saved URL and header are deleted.',
+  'settings.submitApi.defaultActiveNote': 'This wallet submits through Gero. Choose a provider to use your own endpoint.',
   'settings.submitApi.saved': 'Submit API saved',
   'settings.submitApi.resetDone': 'Submit API reset to default',
   'settings.submitApi.testOk': 'Reachable, looks like a submit API.',

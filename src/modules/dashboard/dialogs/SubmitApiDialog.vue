@@ -110,10 +110,8 @@
           />
         </v-col>
       </v-row>
-      <!-- One slot for both notes, so picking Default (Gero) does not resize the dialog either. -->
-      <p class="t-caption submit-api-note">
-        {{ isDefault && hasStoredRow ? t('settings.submitApi.defaultNote') : t('settings.submitApi.trustNote') }}
-      </p>
+      <!-- One slot for every note, so picking Default (Gero) does not resize the dialog either. -->
+      <p class="t-caption submit-api-note">{{ t(noteKey) }}</p>
 
       <v-alert v-if="testMessage" :type="testAlertType" text dense>{{ testMessage }}</v-alert>
       <v-alert v-if="serverError" type="error" text dense>{{ serverError }}</v-alert>
@@ -221,6 +219,11 @@ function failureText(result: Extract<SubmitApiSettingsResult, { success: false }
 const isDefault = computed(() => provider.value === 'default');
 const canSave = computed(() => (isDefault.value ? props.hasStoredRow : canSubmit.value));
 const fieldsDisabled = computed(() => busy.value || isDefault.value);
+// Default (Gero) has no endpoint to warn about: say what saving does, or that Gero submits.
+const noteKey = computed(() => {
+  if (!isDefault.value) return 'settings.submitApi.trustNote';
+  return props.hasStoredRow ? 'settings.submitApi.defaultNote' : 'settings.submitApi.defaultActiveNote';
+});
 
 async function save(): Promise<void> {
   if (isDefault.value) {

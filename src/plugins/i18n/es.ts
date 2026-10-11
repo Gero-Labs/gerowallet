@@ -2876,6 +2876,7 @@ export default {
   'settings.submitApi.trustNote': 'Tu endpoint ve cada transacción que envía. Si no reenvía alguna, la transacción queda pendiente hasta que la elimines.',
   'settings.submitApi.test': 'Probar',
   'settings.submitApi.defaultNote': 'Esta billetera volverá a enviar a través de Gero, y se eliminarán la URL y el encabezado guardados.',
+  'settings.submitApi.defaultActiveNote': 'Esta billetera envía a través de Gero. Elige un proveedor para usar tu propio endpoint.',
   'settings.submitApi.saved': 'API de envío guardada',
   'settings.submitApi.resetDone': 'API de envío restablecida',
   'settings.submitApi.testOk': 'Accesible, parece una API de envío.',

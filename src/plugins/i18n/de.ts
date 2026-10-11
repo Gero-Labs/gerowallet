@@ -3432,6 +3432,7 @@ export default {
   'settings.submitApi.trustNote': 'Ihr Endpunkt sieht jede Transaktion, die er übermittelt. Leitet er eine nicht weiter, bleibt sie ausstehend, bis Sie sie entfernen.',
   'settings.submitApi.test': 'Testen',
   'settings.submitApi.defaultNote': 'Dieses Wallet übermittelt wieder über Gero. Die gespeicherte URL und der Header werden gelöscht.',
+  'settings.submitApi.defaultActiveNote': 'Dieses Wallet übermittelt über Gero. Wählen Sie einen Anbieter, um Ihren eigenen Endpunkt zu nutzen.',
   'settings.submitApi.saved': 'Submit-API gespeichert',
   'settings.submitApi.resetDone': 'Submit-API auf Standard zurückgesetzt',
   'settings.submitApi.testOk': 'Erreichbar, sieht nach einer Submit-API aus.',
