@@ -1,0 +1,20 @@
+{
+  "midnight": [
+    "NIGHT",
+    "DUST",
+    "proof server",
+    "prover",
+    "shielded",
+    "private balance",
+    "unshielded"
+  ],
+  "bitcoin": [
+    "BTC",
+    "bitcoin",
+    "satoshi",
+    "sats",
+    "confirmation",
+    "pending"
+  ],
+  "policy": "Weighted search aliases, never asset equivalence; translated aliases reviewed with each locale"
+}

@@ -12,6 +12,8 @@ import {
 } from '@/api/chatwootSupport.client';
 import type { SupportChatIdentity } from '@/services/support/identityCache';
 import type { SupportCableOptions } from '@/services/support/actionCable';
+import { walletStore } from '@/stores/walletStore';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
 
 const CARDANO_WALLET: SupportWalletSnapshot = {
   id: 1,
@@ -101,6 +103,32 @@ function deferred<T>() {
 }
 
 describe('useSupportChat', () => {
+  it.each(['lock', 'sync', 'flag', 'eligibility'])('disconnects signed support and clears visible history on %s even if the wallet object remains', async change => {
+    walletStore.loggedWallet = CARDANO_WALLET as never;
+    walletStore.isLocked = false;
+    walletStore.isSyncing = false;
+    featureFlagsStore.state.isInitialized = true;
+    featureFlagsStore.state.flags.isLiveChatEnabled = true;
+    const h = makeHarness({ wallet: undefined });
+    h.store[1] = cached();
+    await h.chat.enter();
+    expect(h.cable.connect).toHaveBeenCalled();
+    h.chat.messages.value = [{ id: 1, role: 'agent', text: 'Private reply', createdAt: 1 }];
+    if (change === 'lock') walletStore.isLocked = true;
+    if (change === 'sync') walletStore.isSyncing = true;
+    if (change === 'flag') featureFlagsStore.state.flags.isLiveChatEnabled = false;
+    if (change === 'eligibility') walletStore.loggedWallet = { ...CARDANO_WALLET, type: 'Ledger' } as never;
+    await nextTick();
+    expect(h.chat.isAvailable.value).toBe(false);
+    expect(h.cable.close).toHaveBeenCalled();
+    expect(h.chat.messages.value).toEqual([]);
+    walletStore.loggedWallet = null;
+    walletStore.isLocked = true;
+    walletStore.isSyncing = false;
+    featureFlagsStore.state.isInitialized = false;
+    featureFlagsStore.state.flags.isLiveChatEnabled = false;
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
   });

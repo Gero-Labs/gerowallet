@@ -1,5 +1,5 @@
 // Generates src/shared/components/iso/isoScenes.ts, the isometric illustrations used by
-// the Gero Card screens. Run `node scripts/design/iso-scenes.mjs` after changing a scene
+// the Gero Card, Earn and Help Center screens. Run `node scripts/design/iso-scenes.mjs` after changing a scene
 // (`--json <file>` also writes the scenes as JSON, for the design canvas).
 //
 // 2:1 dimetric projection (the Nexus / gerowallet.io / Midnight-deck grammar):
@@ -34,6 +34,13 @@ const GLYPHS = {
   warning: 'M0,-9.5 l10.5,18.5 h-21 z M0,-3 v5 M0,5.6 v0.2',
   pin: 'M0,11.2 c-5.5,-6 -8.5,-9.8 -8.5,-13.8 a8.5,8.5 0 1,1 17,0 c0,4 -3,7.8 -8.5,13.8 z M-3.2,-2.6 a3.2,3.2 0 1,0 6.4,0 a3.2,3.2 0 1,0 -6.4,0',
   key: 'M-11,0 a4.5,4.5 0 1,0 9,0 a4.5,4.5 0 1,0 -9,0 M-2,0 h13 M6.5,0 v4 M10,0 v3',
+  // Help Center: the question over the help plinth, the open guide, and the conversation.
+  question: 'M-5.5,-4.5 a5.5,5.5 0 1,1 9,4.3 c-2.3,1.6 -3.5,2.7 -3.5,5.4 M0,9.6 v0.2',
+  book: 'M-10,-7 c3,-1.6 6.5,-1.3 10,0.8 c3.5,-2.1 7,-2.4 10,-0.8 v14 c-3,-1.6 -6.5,-1.3 -10,0.8 c-3.5,-2.1 -7,-2.4 -10,-0.8 z M0,-6.2 v14',
+  chat: 'M-10,-7.5 h20 v12 h-10.5 l-5,4.5 v-4.5 h-4.5 z M-4,-1.5 v0.2 M0,-1.5 v0.2 M4,-1.5 v0.2',
+  // Help Center home: the email route and the news feed.
+  mail: 'M-10,-7 h20 v14 h-20 z M-10,-6.5 l10,7.5 l10,-7.5',
+  feed: 'M-7.5,7.5 v0.2 M-8,-1 a9,9 0 0,1 9,9 M-8,-9 a17,17 0 0,1 17,17',
 };
 
 const TONES = ['cyan', 'navy', 'green', 'amber', 'violet', 'graphite', 'slate'];
@@ -636,6 +643,118 @@ scene('earnStake', [200, 140], s => {
     p.realfi({ coin: [26, 22, pad.z + pad.h + 4 * COIN_T, 8] });
   });
 });
+
+// ── Help Center ───────────────────────────────────────────────────────────────
+
+// Help hero: the user's tile feeds the help plinth, where three steps climb to the
+// question; from the plinth one rail leads to the guides tile (the open book) and the
+// other to a person (the conversation).
+scene('helpHero', [320, 200], s => {
+  // The user, arriving with a question.
+  const user = { x: -52, y: 21, z: 0, w: 18, d: 18, h: 6 };
+  s.stack({ x: -52, y: 21, w: 18, d: 18 }, p => p.box({ ...user, tone: 'slate' }));
+  s.mark({ on: user, glyph: 'person' });
+  s.rail([[-34, 30], [0, 30]]);
+  s.flow([[-34, 30], [0, 30]], { count: 2 });
+  s.packet([-17, 30], { still: true });
+  // The help plinth: a dark tray on the navy base, and three steps that rise towards the
+  // viewer and brighten as they climb (painted in x order, so each nearer step covers the
+  // one behind it); the question stands over the top step.
+  const pad = { x: 10, y: 8, z: 14, w: 68, d: 44, h: 5 };
+  const top = { x: 52, y: 16, z: 19, w: 16, d: 28, h: 15 };
+  s.floor({ x: 0, y: 0, w: 88, d: 60, k: 0.95 });
+  s.stack({ x: 0, y: 0, w: 88, d: 60 }, p => {
+    p.box({ x: 0, y: 0, z: 0, w: 88, d: 60, h: 14, tone: 'navy' });
+    p.box({ ...pad, tone: 'graphite' });
+    p.box({ x: 16, y: 16, z: 19, w: 16, d: 28, h: 5, tone: 'navy' });
+    p.box({ x: 34, y: 16, z: 19, w: 16, d: 28, h: 10, tone: 'slate' });
+    p.box({ ...top, tone: 'cyan' });
+  });
+  s.mark({ on: top, glyph: 'question' });
+  // Two ways out: guides and a person. The rails share the plinth's exit, then part. Both
+  // tiles stand clear of the plinth on screen (centre x past the plinth's right corner), so
+  // their markers sit just over their own tiles instead of being lifted over the plinth.
+  const guides = { x: 130, y: -4, z: 0, w: 18, d: 18, h: 8 };
+  const person = { x: 150, y: 46, z: 0, w: 18, d: 18, h: 8 };
+  const toGuides = [[88, 30], [104, 30], [104, 5], [130, 5]];
+  const toPerson = [[88, 30], [104, 30], [104, 55], [150, 55]];
+  s.rail(toGuides);
+  s.rail(toPerson);
+  s.flow(toGuides, { dur: 3.4, phase: 0 });
+  s.flow(toPerson, { dur: 3.4, phase: 0.5 });
+  s.packet([104, 17], { still: true });
+  s.packet([127, 55], { still: true });
+  s.stack({ x: 130, y: -4, w: 18, d: 18 }, p => p.box({ ...guides, tone: 'cyan' }));
+  s.stack({ x: 150, y: 46, w: 18, d: 18 }, p => p.box({ ...person, tone: 'navy' }));
+  s.mark({ on: guides, glyph: 'book' });
+  s.mark({ on: person, glyph: 'chat' });
+}, 8);
+
+// Help support: the person's tile, where the route forks. One rail climbs to the support
+// desk (the conversation), the other runs down to the mail tile (email, open to everyone).
+scene('helpSupport', [220, 140], s => {
+  const you = { x: -40, y: 11, z: 0, w: 18, d: 18, h: 6 };
+  s.stack({ x: -40, y: 11, w: 18, d: 18 }, p => p.box({ ...you, tone: 'slate' }));
+  s.mark({ on: you, glyph: 'person' });
+  const toDesk = [[-22, 20], [-8, 20], [-8, 0], [10, 0]];
+  const toMail = [[-22, 20], [-8, 20], [-8, 45], [14, 45]];
+  s.rail(toDesk);
+  s.rail(toMail);
+  s.flow(toDesk, { dur: 3, phase: 0 });
+  s.flow(toMail, { dur: 3, phase: 0.5 });
+  s.packet([-8, 9], { still: true });
+  s.packet([3, 45], { still: true });
+  const desk = { x: 18, y: -9, z: 10, w: 18, d: 18, h: 10 };
+  s.floor({ x: 10, y: -17, w: 34, d: 34 });
+  s.stack({ x: 10, y: -17, w: 34, d: 34 }, p => {
+    p.box({ x: 10, y: -17, z: 0, w: 34, d: 34, h: 10, tone: 'navy' });
+    p.box({ ...desk, tone: 'cyan' });
+  });
+  s.mark({ on: desk, glyph: 'chat' });
+  const mail = { x: 14, y: 36, z: 0, w: 18, d: 18, h: 8 };
+  s.stack({ x: 14, y: 36, w: 18, d: 18 }, p => p.box({ ...mail, tone: 'graphite' }));
+  s.mark({ on: mail, glyph: 'mail' });
+});
+
+// Help tutorial: three steps rise towards the viewer on the navy base and brighten as they
+// climb, as in the hero; the open guide stands over the top step.
+scene('helpTutorial', [200, 140], s => {
+  const top = { x: 40, y: 12, z: 10, w: 12, d: 36, h: 18 };
+  s.floor({ x: 0, y: 0, w: 60, d: 60 });
+  s.stack({ x: 0, y: 0, w: 60, d: 60 }, p => {
+    p.box({ x: 0, y: 0, z: 0, w: 60, d: 60, h: 10, tone: 'navy' });
+    p.box({ x: 8, y: 12, z: 10, w: 12, d: 36, h: 6, tone: 'graphite' });
+    p.box({ x: 24, y: 12, z: 10, w: 12, d: 36, h: 12, tone: 'slate' });
+    p.box({ ...top, tone: 'cyan' });
+  });
+  s.mark({ on: top, glyph: 'book' });
+});
+
+// Help updates: the sources (the Gero blog, chain news, posts on X) feed one bus into the
+// updates hub, which carries the feed. The packets reach the junction a third of a cycle apart.
+scene('helpUpdates', [240, 150], s => {
+  for (const [y, tone] of [[-15, 'cyan'], [21, 'slate'], [57, 'graphite']]) {
+    s.stack({ x: -70, y, w: 18, d: 18 }, p => p.box({ x: -70, y, z: 0, w: 18, d: 18, h: 8, tone }));
+  }
+  const bus = [
+    [[-52, -6], [-40, -6], [-40, 30], [0, 30]],
+    [[-52, 30], [0, 30]],
+    [[-52, 66], [-40, 66], [-40, 30], [0, 30]],
+  ];
+  s.rail(bus[1]);
+  s.rail([[-52, -6], [-40, -6], [-40, 30], [-34, 30]]);
+  s.rail([[-52, 66], [-40, 66], [-40, 30], [-34, 30]]);
+  [0, 0.47, 0.33].forEach((phase, i) => s.flow(bus[i], { dur: 3.6, phase }));
+  s.packet([-40, 12], { still: true });
+  s.packet([-17, 30], { still: true });
+  const hub = { x: 12, y: 12, z: 12, w: 36, d: 36, h: 10 };
+  s.floor({ x: 0, y: 0, w: 60, d: 60 });
+  s.stack({ x: 0, y: 0, w: 60, d: 60 }, p => {
+    p.box({ x: 0, y: 0, z: 0, w: 60, d: 60, h: 12, tone: 'navy' });
+    p.box({ ...hub, tone: 'cyan' });
+  });
+  s.mark({ on: hub, glyph: 'feed' });
+}, 8);
 
 const names = Object.keys(scenes);
 const quote = text => `'${text}'`;

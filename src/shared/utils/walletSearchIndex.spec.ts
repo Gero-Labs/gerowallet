@@ -158,6 +158,17 @@ describe('chain isolation', () => {
   }
 
   const cardanoMainnet = gatesFor('Cardano', 'Mainnet');
+  it('replaces Blog discovery with Help under the rollout flag, retaining the blog alias', () => {
+    const inputs = { wallet: { chain: 'Midnight', network: 'Mainnet', type: 'Normal' }, hasBackupState: false, playlistLength: 0 };
+    for (const enabled of [false, true]) {
+      const gates = searchGates({ ...inputs, flags: { ...flags, isHelpCenterEnabled: () => enabled } });
+      expect(gates.help).toBe(enabled);
+      expect(gates.blog).toBe(!enabled);
+      const routes = pageResults('blog', { t, can: gate => gates[gate] }).map(result => result.route);
+      expect(routes).toContain(enabled ? '/help' : '/blog');
+      expect(routes).not.toContain(enabled ? '/blog' : '/help');
+    }
+  });
   const cardanoPreprod = gatesFor('Cardano', 'Preprod', { stakeAddress: 'stake_test1uqxyz0abc' });
   const apexVector = gatesFor('Apex Fusion Vector', 'Mainnet', {}, 3);
   const bitcoinMainnet = gatesFor('Bitcoin', 'Mainnet');

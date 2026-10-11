@@ -32,8 +32,31 @@
 
     <!-- Language Selector - Floating top-right -->
     <div class="language-selector-container">
+      <GButton
+        ref="helpButton"
+        class="welcome-help-button"
+        :class="{ 'welcome-help-button--open': helpOpen }"
+        compact
+        tier="tertiary"
+        aria-controls="whelp-panel"
+        :aria-expanded="helpOpen ? 'true' : 'false'"
+        data-test="help-button"
+        @click="toggleHelp()"
+      >
+        <v-icon left size="18">mdi-help-circle-outline</v-icon>{{ $t('help.welcome.title') }}
+      </GButton>
       <LanguageSelector />
     </div>
+
+    <!-- Help for someone outside their wallet. Floats over the welcome screen without taking it over,
+         so a setup in progress keeps going underneath. -->
+    <WelcomeHelpPanel
+      v-if="helpOpen"
+      :started="started"
+      :has-wallets="hasWallets"
+      :opener="helpButtonEl"
+      @close="helpOpen = false"
+    />
 
     <!-- Main container -->
     <div class="welcome-container">
@@ -76,7 +99,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import networks, { NetworkInfo } from '@/utils/networks';
 import assets from '@/utils/assets';
 import WalletOnboarding from '@/modules/welcome/components/WalletOnboarding/WalletOnboarding.vue';
@@ -84,8 +107,18 @@ import WalletCreation from '@/modules/welcome/components/WalletCreation/WalletCr
 import LegalFooter from '@/modules/welcome/components/LegalFooter/LegalFooter.vue';
 import LanguageSelector from '@/modules/navigation/components/LanguageSelector.vue';
 import OnboardingHero from '@/modules/welcome/components/onboarding/OnboardingHero.vue';
+import GButton from '@/shared/components/GButton/GButton.vue';
+import WelcomeHelpPanel from '@/modules/welcome/components/WelcomeHelp/WelcomeHelpPanel.vue';
 import { useAvailableWallets } from '@/shared/composables/useAvailableWallets';
 import { applyChainAccent } from '@/shared/composables/useChainAccent';
+
+// Help panel: one toggle button in the corner. The panel itself owns focus, Escape and its fallbacks.
+const helpOpen = ref(false);
+const helpButton = ref<InstanceType<typeof GButton> | null>(null);
+const helpButtonEl = computed<HTMLElement | null>(() => (helpButton.value?.$el as HTMLElement | undefined) ?? null);
+const toggleHelp = (): void => {
+  helpOpen.value = !helpOpen.value;
+};
 
 const DEV_NETWORKS_KEY = 'gero:devNetworks';
 
@@ -168,12 +201,26 @@ const onWalletListNetwork = (n: NetworkInfo): void => {
 }
 
 .language-selector-container {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--g-s-2);
   position: fixed;
   top: 0;
   right: 0;
   z-index: 100;
   border-radius: var(--g-r-control);
   padding: 4px 8px;
+}
+
+/* The Help button keeps a transparent border so the pressed state (raised fill, hairline) never shifts layout. */
+.language-selector-container .v-btn.g-btn.welcome-help-button {
+  border: 1px solid transparent;
+}
+.language-selector-container .v-btn.g-btn.welcome-help-button--open {
+  --g-btn-fg: var(--g-text-1);
+  background: var(--g-raised);
+  border-color: var(--g-hairline-2);
 }
 
 .welcome-container {

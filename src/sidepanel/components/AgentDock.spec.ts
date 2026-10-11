@@ -60,15 +60,11 @@ interface FlagsHolder {
 interface SheetVisibility {
   isAnySheetOpen: { value: boolean };
 }
-// Mirrors the one property NavigationDrawer.vue's own isApex/isMidnight
-// derivation reads (walletStore.loggedWallet?.chain) — a plain mutable
-// object, not a ref: the chain-accent tests below only need to set it BEFORE
-// each fresh mountDock() call (a new component instance re-evaluates its
-// computed from scratch), not react to it changing on an already-mounted
-// instance, so the ref-based reactivity flagsHolder needed above is
-// unnecessary machinery here.
+// Observe this shared object after Vue loads so mounted dock watchers can
+// exercise wallet switches and locks as well as chain-specific branding.
 interface MockWalletStore {
-  loggedWallet?: { chain?: string };
+  loggedWallet?: { chain?: string; id?: number };
+  isLocked: boolean;
 }
 
 // vi.mock(...) factories are hoisted above every import in this file — including
@@ -110,7 +106,7 @@ const { mockSupportChat, mockDock, flagsHolder, sheetVisibility, mockWalletStore
     // optional chaining, so no logged wallet falls through to the default
     // (Cardano) mark, matching every pre-existing test that doesn't care about
     // chain at all.
-    mockWalletStore: { loggedWallet: undefined } as MockWalletStore,
+    mockWalletStore: { loggedWallet: undefined, isLocked: false } as MockWalletStore,
   };
 });
 
@@ -200,6 +196,7 @@ function setCopilotEnabled(on: boolean): void {
 // later render (mount() only happens inside a test's it() callback, well after this
 // module has finished initializing).
 Object.assign(sheetVisibility, { isAnySheetOpen: ref(false) });
+Vue.observable(mockWalletStore);
 
 Object.assign(mockSupportChat, {
   messages: ref<SupportMessage[]>([]),
@@ -221,6 +218,7 @@ Object.assign(mockDock, {
 // is just an in-memory Vue.observable — mocking it would only hide the behavior
 // the hide tests exist to check.
 import { agentDockPrefsStore } from '@/stores/agentDockPrefsStore';
+import { clearHelpSupport, helpSupportIntent, openWalletSupport } from '@/modules/help/supportIntent';
 
 // @ts-ignore — tsconfig has no `*.vue` module shim, so `tsc` cannot resolve an
 // SFC imported from a .ts file. Vite/vitest resolve it fine; this keeps the
@@ -298,9 +296,11 @@ async function pickFiles(wrapper: Wrapper<Vue>, files: File[]): Promise<void> {
 }
 
 beforeEach(() => {
+  clearHelpSupport();
   setLiveChatEnabled(true);
   setCopilotEnabled(true);
   setWalletChain(undefined);
+  mockWalletStore.isLocked = false;
 
   mockDock.isOpen.value = true;
   mockDock.busy.value = false;
@@ -319,6 +319,79 @@ beforeEach(() => {
 afterEach(() => {
   activeWrapper?.destroy();
   activeWrapper = null;
+  clearHelpSupport();
+});
+
+describe('AgentDock Help entry', () => {
+  it('keeps the unsent draft, files and tab when navigation replaces the dock', async () => {
+    mockWalletStore.loggedWallet = { id: 7, chain: 'Cardano' };
+    const first = mountDock(); await clickCopilotToggle(first);
+    vmOf(first).draft = 'Assistant question';
+    // Crossing layouts (dashboard -> Help) mounts the new dock before destroying the old one.
+    const second = mount(AgentDock, { mocks: { $t } });
+    first.destroy(); activeWrapper = second;
+    expect(vmOf(second).mode).toBe('copilot'); expect(vmOf(second).draft).toBe('Assistant question');
+    await clickSupportToggle(second);
+    vmOf(second).draft = 'Support question'; vmOf(second).pendingFiles = [makeFile('notes.txt', 8)];
+    const third = mount(AgentDock, { mocks: { $t } });
+    second.destroy(); activeWrapper = third;
+    expect(vmOf(third).mode).toBe('support'); expect(vmOf(third).draft).toBe('Support question');
+    expect(vmOf(third).pendingFiles.map(file => file.name)).toEqual(['notes.txt']);
+  });
+  it('starts a dock empty when no other dock was alive to hand over', async () => {
+    mockWalletStore.loggedWallet = { id: 7, chain: 'Cardano' };
+    const first = mountDock(); await clickCopilotToggle(first);
+    vmOf(first).draft = 'Assistant question';
+    first.destroy(); activeWrapper = null;
+    const later = mountDock();
+    expect(vmOf(later).mode).toBe('support'); expect(vmOf(later).draft).toBe(''); expect(vmOf(later).pendingFiles).toEqual([]);
+  });
+  it('preserves the Assistant draft and open state when switching wallets', async () => {
+    mockWalletStore.loggedWallet = { id: 7, chain: 'Cardano' };
+    const wrapper = mountDock(); await clickCopilotToggle(wrapper);
+    vmOf(wrapper).draft = 'Assistant question'; vi.mocked(mockDock.close).mockClear();
+    mockWalletStore.loggedWallet = { id: 8, chain: 'Cardano' }; await Vue.nextTick();
+    expect(vmOf(wrapper).draft).toBe('Assistant question'); expect(mockDock.close).not.toHaveBeenCalled();
+    mockWalletStore.isLocked = true; await Vue.nextTick();
+    expect(vmOf(wrapper).draft).toBe(''); expect(mockDock.close).toHaveBeenCalled();
+  });
+  it('clears Support draft and attachments on wallet switch and on entering Assistant', async () => {
+    mockWalletStore.loggedWallet = { id: 7, chain: 'Cardano' };
+    const wrapper = mountDock(); const vm = vmOf(wrapper);
+    vm.draft = 'Support question'; vm.pendingFiles = [makeFile('private.txt', 8)];
+    mockWalletStore.loggedWallet = { id: 8, chain: 'Cardano' }; await Vue.nextTick();
+    expect(vm.draft).toBe(''); expect(vm.pendingFiles).toEqual([]); expect(mockDock.close).toHaveBeenCalled();
+    vm.draft = 'Another support question'; vm.pendingFiles = [makeFile('private.txt', 8)];
+    await clickCopilotToggle(wrapper);
+    expect(vm.draft).toBe(''); expect(vm.pendingFiles).toEqual([]);
+  });
+  it('clears Help context if the live-chat flag switches the dock to Assistant', async () => {
+    mockWalletStore.loggedWallet = { id: 7, chain: 'Cardano' };
+    openWalletSupport('Support-only question and context', 7);
+    const wrapper = mountDock();
+    await Vue.nextTick();
+    setLiveChatEnabled(false);
+    await Vue.nextTick();
+    expect(vmOf(wrapper).draft).toBe('');
+    expect(helpSupportIntent.active).toBe(false);
+    expect(mockDock.send).not.toHaveBeenCalled();
+  });
+
+  it('opens Support with editable multiline context and does not send until requested', async () => {
+    mockWalletStore.loggedWallet = { id: 7, chain: 'Cardano' };
+    const previousVisibility = agentDockPrefsStore.state.hidden;
+    openWalletSupport('My question\nGuide: receive\nChain: Cardano', 7);
+    const wrapper = mountDock();
+    await Vue.nextTick();
+    expect(mockDock.open).toHaveBeenCalled();
+    expect(helpSupportIntent.dockRequest).toBeNull();
+    expect(wrapper.find('textarea').element.value).toContain('\nGuide: receive');
+    expect(mockSupportChat.send).not.toHaveBeenCalled();
+    expect(agentDockPrefsStore.state.hidden).toBe(previousVisibility);
+    await wrapper.find('textarea').setValue('Only the question, context removed');
+    await wrapper.find('.agent-dock__send').trigger('click');
+    expect(mockSupportChat.send).toHaveBeenCalledWith('Only the question, context removed');
+  });
 });
 
 describe('AgentDock — flag off (isLiveChatEnabled: false)', () => {
@@ -638,7 +711,8 @@ describe('AgentDock — error banner', () => {
     mockSupportChat.errorKey.value = 'support.error.sendFailed';
     const wrapper = mountDock();
     await clickSupportToggle(wrapper);
-    expect(wrapper.find('.agent-dock__notice').text()).toBe('support.error.sendFailed');
+    expect(wrapper.find('.agent-dock__notice').text()).toContain('support.error.sendFailed');
+    expect(wrapper.find('.agent-dock__notice a').attributes('href')).toBe('mailto:support@gerowallet.io');
   });
 
   it('renders no banner when errorKey is null', async () => {
@@ -979,7 +1053,7 @@ describe('AgentDock — attachment picker and pending chips', () => {
     await pickFiles(wrapper, files);
 
     expect(wrapper.findAll('.agent-dock__pending-chip').length).toBe(5);
-    expect(wrapper.find('.agent-dock__notice').text()).toBe('support.error.tooManyFiles');
+    expect(wrapper.find('.agent-dock__notice').text()).toContain('support.error.tooManyFiles');
   });
 
   it('keeps the first 5 files when a later pick would exceed the cap across two picks', async () => {
@@ -991,7 +1065,7 @@ describe('AgentDock — attachment picker and pending chips', () => {
 
     const names = wrapper.findAll('.agent-dock__pending-chip').wrappers.map((w) => w.find('.agent-dock__pending-name').text());
     expect(names).toEqual(['a.txt', 'b.txt', 'c.txt', 'd.txt', 'e.txt']);
-    expect(wrapper.find('.agent-dock__notice').text()).toBe('support.error.tooManyFiles');
+    expect(wrapper.find('.agent-dock__notice').text()).toContain('support.error.tooManyFiles');
   });
 });
 
