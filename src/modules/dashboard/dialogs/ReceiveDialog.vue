@@ -624,6 +624,10 @@ function qrOptions(size: number, data: string): Partial<QrOptions> {
     qrOptions: { typeNumber: 0, mode: 'Byte', errorCorrectionLevel: 'Q' },
     imageOptions: { hideBackgroundDots: true, imageSize: 0.5, margin: Math.round(size * 0.05), crossOrigin: 'anonymous' },
     backgroundOptions: { color: QR_BACKGROUND },
+    // Whole-pixel dots shrink a long payment address's QR on the 192px render (more
+    // modules lose more to rounding), so the code changed size between tabs. Unrounded
+    // dots fill the box for every address; the 1024px export rounds for crisp PNG edges.
+    dotsOptions: { roundSize: size >= QR_EXPORT_SIZE },
     cornersSquareOptions: { type: 'extra-rounded' },
     cornersDotOptions: { type: 'dot' },
   };

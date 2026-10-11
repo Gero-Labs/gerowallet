@@ -4,6 +4,8 @@ import {
   isValidHeaderValue,
   nexusNetworkParam,
   submitApiLastResultKey,
+  submitApiPreset,
+  submitApiProvider,
   validateStoredSubmitApiConfig,
   validateSubmitApiInput,
   type SubmitApiInput,
@@ -67,6 +69,69 @@ describe('validateSubmitApiInput: Nexus network guard', () => {
 
   it('builds the Nexus network value from the wallet network', () => {
     expect(nexusNetworkParam('Preprod')).toBe('cardano-preprod');
+  });
+});
+
+describe('validateSubmitApiInput: provider network guard', () => {
+  it.each([
+    ['https://cardano-mainnet.blockfrost.io/api/v0/tx/submit', 'Preprod'],
+    ['https://cardano-preprod.blockfrost.io/api/v0/tx/submit', 'Mainnet'],
+    ['https://Cardano-Preview.Blockfrost.io/api/v0/tx/submit', 'Preprod'],
+    ['https://api.koios.rest/api/v1/submittx', 'Preview'],
+    ['https://preprod.koios.rest/api/v1/submittx', 'Mainnet'],
+  ])('rejects %s on a %s wallet', (url, network) => {
+    const v = validateSubmitApiInput(base({ url }), network);
+    expect(v.errors.url).toBe('providerNetwork');
+    expect(v.normalized).toBeNull();
+  });
+
+  it.each([
+    ['https://cardano-preprod.blockfrost.io/api/v0/tx/submit', 'Preprod'],
+    ['https://cardano-mainnet.blockfrost.io/api/v0/tx/submit', 'Mainnet'],
+    ['https://api.koios.rest/api/v1/submittx', 'Mainnet'],
+    ['https://preview.koios.rest/api/v1/submittx', 'Preview'],
+    // Hosts it cannot place on a network are left alone.
+    ['https://guild.koios.rest/api/v1/submittx', 'Mainnet'],
+    ['https://blockfrost.example/api/v0/tx/submit', 'Preprod'],
+    ['http://10.0.0.35:8090/api/submit/tx', 'Mainnet'],
+  ])('accepts %s on a %s wallet', (url, network) => {
+    expect(validateSubmitApiInput(base({ url }), network).errors).toEqual({});
+  });
+});
+
+describe('submitApiPreset', () => {
+  it.each([
+    ['nexus', 'Preprod', 'https://nexus.gerowallet.io/api/transactions/submit?network=cardano-preprod', 'X-Api-Key'],
+    ['blockfrost', 'Mainnet', 'https://cardano-mainnet.blockfrost.io/api/v0/tx/submit', 'project_id'],
+    ['blockfrost', 'Preview', 'https://cardano-preview.blockfrost.io/api/v0/tx/submit', 'project_id'],
+    ['koios', 'Mainnet', 'https://api.koios.rest/api/v1/submittx', ''],
+    ['koios', 'Preprod', 'https://preprod.koios.rest/api/v1/submittx', ''],
+    ['custom', 'Mainnet', '', ''],
+    ['default', 'Mainnet', '', ''],
+  ] as const)('%s on %s', (provider, network, url, headerName) => {
+    expect(submitApiPreset(provider, network)).toEqual({ url, headerName });
+  });
+
+  it.each(['Mainnet', 'Preprod', 'Preview'])('every provider preset passes validation on %s once its key is entered', network => {
+    for (const provider of ['nexus', 'blockfrost', 'koios'] as const) {
+      const preset = submitApiPreset(provider, network);
+      const headerValue = preset.headerName ? 'key' : '';
+      const v = validateSubmitApiInput(base({ ...preset, headerValue }), network);
+      expect(v.errors, `${provider} on ${network}`).toEqual({});
+      expect(submitApiProvider(preset.url)).toBe(provider);
+    }
+  });
+});
+
+describe('submitApiProvider', () => {
+  it.each([
+    ['https://nexus.gerowallet.io/api/transactions/submit?network=cardano-mainnet', 'nexus'],
+    ['https://cardano-preprod.blockfrost.io/api/v0/tx/submit', 'blockfrost'],
+    ['https://api.koios.rest/api/v1/submittx', 'koios'],
+    ['http://10.0.0.35:8090/api/submit/tx', null],
+    ['not a url', null],
+  ])('%s → %s', (url, provider) => {
+    expect(submitApiProvider(url)).toBe(provider);
   });
 });
 
@@ -194,6 +259,7 @@ describe('validateStoredSubmitApiConfig', () => {
     'string',
     { ...stored, version: 2 },
     { ...stored, url: 'ftp://x' },
+    { ...stored, url: 'https://cardano-preprod.blockfrost.io/api/v0/tx/submit' },
     { ...stored, headerName: null },
     { ...stored, hasAuth: false },
     { ...stored, fallbackToDefault: 'yes' },
