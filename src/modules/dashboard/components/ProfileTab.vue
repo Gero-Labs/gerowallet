@@ -93,7 +93,22 @@
             attach
             item-text="name"
             item-value="id"
-          ></v-select>
+          >
+            <template v-slot:item="{ item }">
+              <v-list-item-avatar size="20">
+                <v-img :src="EXPLORER_LOGOS[item.id]" alt="" />
+              </v-list-item-avatar>
+              <v-list-item-content>
+                <v-list-item-title>{{ item.name }}</v-list-item-title>
+              </v-list-item-content>
+            </template>
+            <template v-slot:selection="{ item }">
+              <v-avatar size="20" class="mr-2">
+                <v-img :src="EXPLORER_LOGOS[item.id]" alt="" />
+              </v-avatar>
+              <span>{{ item.name }}</span>
+            </template>
+          </v-select>
         </v-col>
       </v-row>
       <v-row no-gutters class="py-2">
@@ -179,6 +194,7 @@ import WalletStore from '@/stores/walletStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 import { useExplorer } from '@/shared/composables/useExplorer';
 import { DEFAULT_CARDANO_EXPLORER } from '@/shared/utils/explorer';
+import { EXPLORER_LOGOS } from '@/shared/utils/explorerLogos';
 import { setWalletConfiguration } from '@/db/wallet-db';
 import { isFeatureNew, markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
 
