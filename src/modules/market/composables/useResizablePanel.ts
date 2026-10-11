@@ -8,10 +8,14 @@ export const PANEL_KEY_STEP = 32;
 
 const STORAGE_KEY = 'gero.tokenDetailPanel.width';
 
+/** The widest the panel may get: the content area beside the nav drawer, never below the minimum. */
+export function maxPanelWidth(viewportWidth: number): number {
+  return Math.max(PANEL_MIN_WIDTH, viewportWidth - NAV_DRAWER_WIDTH);
+}
+
 /** Keeps a dragged width between the minimum and the content area beside the nav drawer. */
 export function clampPanelWidth(width: number, viewportWidth: number): number {
-  const max = Math.max(PANEL_MIN_WIDTH, viewportWidth - NAV_DRAWER_WIDTH);
-  return Math.min(Math.max(width, PANEL_MIN_WIDTH), max);
+  return Math.min(Math.max(width, PANEL_MIN_WIDTH), maxPanelWidth(viewportWidth));
 }
 
 // The width is a per-browser convenience: storage may be unavailable, and then the

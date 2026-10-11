@@ -14,6 +14,7 @@
       :aria-label="t('market.resizePanel')"
       :aria-valuenow="width === null ? undefined : Math.round(width)"
       :aria-valuemin="PANEL_MIN_WIDTH"
+      :aria-valuemax="handleMaxWidth()"
       tabindex="0"
       @pointerdown="startResize"
       @pointermove="moveResize"
@@ -340,7 +341,7 @@ import DustGenerationLine from '@/modules/dashboard/components/DustGenerationLin
 import { CNIGHT_ASSETS, isDustLineDismissed, dismissDustLineFor, useCnightDustRegistration } from '@/shared/composables/useCnightDustRegistration';
 import { getDustPending } from '@/shared/composables/useDustPending';
 import { getExplorerUrl } from '@/shared/utils/explorer';
-import { PANEL_MIN_WIDTH, useResizablePanel } from '@/modules/market/composables/useResizablePanel';
+import { PANEL_MIN_WIDTH, maxPanelWidth, useResizablePanel } from '@/modules/market/composables/useResizablePanel';
 
 const chainLogo = computed(() =>
   networks.resolveCurrencyImage(walletStore.loggedWallet?.chain, walletStore.loggedWallet?.network) || ''
@@ -353,6 +354,10 @@ const props = defineProps<{
 }>();
 
 const { width, resizing, panelStyle, startResize, moveResize, endResize, resetWidth, resizeByKey } = useResizablePanel();
+// Called from the template, so every re-render (each drag step or key press) re-reads the window.
+function handleMaxWidth(): number {
+  return maxPanelWidth(window.innerWidth);
+}
 
 defineEmits<{
   (e: 'close'): void;

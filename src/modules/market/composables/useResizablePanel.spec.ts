@@ -4,6 +4,7 @@ import {
   PANEL_KEY_STEP,
   PANEL_MIN_WIDTH,
   clampPanelWidth,
+  maxPanelWidth,
   useResizablePanel,
 } from './useResizablePanel';
 
@@ -50,6 +51,11 @@ describe('clampPanelWidth', () => {
 
   it('never goes below the minimum on a narrow window', () => {
     expect(clampPanelWidth(900, 600)).toBe(PANEL_MIN_WIDTH);
+  });
+
+  it('reports the maximum the handle can reach', () => {
+    expect(maxPanelWidth(VIEWPORT)).toBe(MAX);
+    expect(maxPanelWidth(600)).toBe(PANEL_MIN_WIDTH);
   });
 });
 
