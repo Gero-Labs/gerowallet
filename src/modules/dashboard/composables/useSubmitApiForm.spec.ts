@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ref } from 'vue';
+import { nextTick, ref } from 'vue';
 import { useSubmitApiForm } from './useSubmitApiForm';
 import type { SubmitApiConfig } from '@/shared/utils/submitApiConfig';
 
@@ -60,5 +60,69 @@ describe('useSubmitApiForm', () => {
     const form = setup(null);
     form.url.value = 'https://nexus.gerowallet.io/api/transactions/submit';
     expect(form.errorKey('url')).toBe('settings.submitApi.errors.nexusNetwork');
+  });
+
+  describe('provider selector', () => {
+    it('selects the provider of the saved URL, and Custom for any other host', () => {
+      expect(setup().provider.value).toBe('custom');
+      expect(setup({ ...SAVED, url: 'https://api.koios.rest/api/v1/submittx' }).provider.value).toBe('koios');
+      expect(setup(null).provider.value).toBe('default');
+    });
+
+    it('fills the URL and header name for the wallet network', () => {
+      const form = setup(null);
+      form.selectProvider('blockfrost');
+      expect(form.url.value).toBe('https://cardano-mainnet.blockfrost.io/api/v0/tx/submit');
+      expect(form.headerName.value).toBe('project_id');
+      expect(form.provider.value).toBe('blockfrost');
+      expect(form.canSubmit.value).toBe(false); // the project ID is still missing
+      form.headerValue.value = 'mainnetKEY';
+      expect(form.canSubmit.value).toBe(true);
+    });
+
+    it('drops a typed key when switching provider, so it never goes to another host', () => {
+      const form = setup(null);
+      form.selectProvider('nexus');
+      form.headerValue.value = 'nexus-key';
+      form.selectProvider('blockfrost');
+      expect(form.headerValue.value).toBe('');
+      expect(form.payload(7)).toMatchObject({ headerName: 'project_id', headerValue: null });
+    });
+
+    it('asks for a new key instead of keeping the saved one for another provider', () => {
+      const form = setup();
+      expect(form.headerValueMode.value).toBe('saved');
+      form.selectProvider('koios');
+      expect(form.headerValueMode.value).toBe('edit');
+      expect(form.payload(7)).toMatchObject({ url: 'https://api.koios.rest/api/v1/submittx', headerName: null, headerValue: null });
+    });
+
+    it('Default (Gero) clears the endpoint and lets go of a saved key', () => {
+      const form = setup();
+      form.selectProvider('default');
+      expect(form.provider.value).toBe('default');
+      expect(form.url.value).toBe('');
+      expect(form.headerName.value).toBe('');
+      expect(form.headerValueMode.value).toBe('edit');
+    });
+
+    it('Custom clears the URL and header for the user to fill in', () => {
+      const form = setup(null);
+      form.selectProvider('nexus');
+      form.selectProvider('custom');
+      expect(form.url.value).toBe('');
+      expect(form.headerName.value).toBe('');
+      expect(form.provider.value).toBe('custom');
+    });
+
+    it('follows a pasted URL', async () => {
+      const form = setup(null);
+      form.url.value = 'https://preprod.koios.rest/api/v1/submittx';
+      await nextTick();
+      expect(form.provider.value).toBe('koios');
+      form.url.value = 'http://10.0.0.35:8090/api/submit/tx';
+      await nextTick();
+      expect(form.provider.value).toBe('custom');
+    });
   });
 });

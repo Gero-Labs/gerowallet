@@ -1,18 +1,24 @@
 <template>
   <v-row v-if="visible" no-gutters class="py-2">
     <v-col cols="9" class="text-left">
-      <h3 class="t-body-lg">
-        {{ t('settings.submitApi.title') }}
-        <v-icon v-if="isNew" color="error" x-small class="ml-1">mdi-circle</v-icon>
-      </h3>
-      <span class="t-body">{{ t('settings.submitApi.helper') }}</span>
+      <!-- Title and helper mirror the sibling rows in AdvancedSettingsTab.vue; the status sits
+           beside the title (outside the heading, so its accessible name stays "Submit API"). -->
+      <div class="submit-api-title">
+        <h3>
+          {{ t('settings.submitApi.title') }}
+          <v-icon v-if="isNew" color="error" x-small class="ml-1">mdi-circle</v-icon>
+        </h3>
+        <span class="t-caption">{{ statusText }}</span>
+      </div>
+      <span class="helper my-0">{{ t('settings.submitApi.helper') }}</span>
       <p v-if="lastResultText" class="t-caption mb-0 mt-1">{{ lastResultText }}</p>
     </v-col>
-    <v-col cols="3" class="submit-api-row-actions">
-      <span class="t-caption">{{ statusText }}</span>
-      <GButton tier="secondary" compact block @click="openDialog()">
+    <!-- Same button as the Re-sync row above. -->
+    <v-col cols="3" class="submit-api-row-action">
+      <v-btn block outlined color="white" @click="openDialog()">
+        <v-icon left dark class="mr-1">mdi-tune-variant</v-icon>
         {{ t('settings.submitApi.configure') }}
-      </GButton>
+      </v-btn>
     </v-col>
     <SubmitApiDialog
       v-if="dialogOpen"
@@ -28,7 +34,6 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, toRefs, watch } from 'vue';
-import GButton from '@/shared/components/GButton/GButton.vue';
 import SubmitApiDialog from '@/modules/dashboard/dialogs/SubmitApiDialog.vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { isFeatureNew, markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
@@ -118,11 +123,17 @@ const lastResultText = computed(() => {
 </script>
 
 <style scoped lang="scss">
-.submit-api-row-actions {
+.submit-api-title {
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: var(--g-s-1);
-  text-align: center;
+  align-items: baseline;
+  gap: var(--g-s-2);
+
+  h3 {
+    color: var(--g-text-1);
+  }
+}
+
+.submit-api-row-action {
+  align-content: center;
 }
 </style>

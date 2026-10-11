@@ -29,6 +29,7 @@ export type SubmitApiErrorCode =
   | 'urlCredentials'
   | 'urlTooLong'
   | 'nexusNetwork'
+  | 'providerNetwork'
   | 'insecureAuth'
   | 'headerNameRequired'
   | 'headerNameInvalid'
@@ -167,6 +168,65 @@ function isNexusSubmitPath(pathname: string): boolean {
   return pathname.replace(/\/+$/, '').endsWith(NEXUS_SUBMIT_PATH);
 }
 
+/**
+ * The Cardano network a well-known provider host serves (`mainnet`, `preprod`, ...), or null
+ * for any other host. A Blockfrost project ID only works on its own network's host, so a
+ * mismatch would otherwise surface as a misleading 403 "Invalid project token".
+ */
+export function providerHostNetwork(hostname: string): string | null {
+  const host = hostname.toLowerCase();
+  const blockfrost = host.match(/^cardano-([a-z]+)\.blockfrost\.io$/);
+  if (blockfrost) return blockfrost[1];
+  const koios = host.match(/^(api|preprod|preview)\.koios\.rest$/);
+  if (koios) return koios[1] === 'api' ? 'mainnet' : koios[1];
+  return null;
+}
+
+function servesOtherNetwork(hostname: string, walletNetwork: string): boolean {
+  const hostNetwork = providerHostNetwork(hostname);
+  return hostNetwork !== null && hostNetwork !== walletNetwork.toLowerCase();
+}
+
+export type SubmitApiProvider = 'nexus' | 'blockfrost' | 'koios';
+
+/**
+ * An entry in the Settings provider selector: `default` is Gero's own path (no saved endpoint),
+ * `custom` any other endpoint (e.g. cardano-submit-api).
+ */
+export type SubmitApiProviderChoice = 'default' | SubmitApiProvider | 'custom';
+
+export interface SubmitApiPreset {
+  url: string;
+  headerName: string;
+}
+
+/** The submit URL and header name a provider expects on this wallet's network. Default and Custom have neither. */
+export function submitApiPreset(provider: SubmitApiProviderChoice, walletNetwork: string): SubmitApiPreset {
+  const network = walletNetwork.toLowerCase();
+  switch (provider) {
+    case 'nexus':
+      return { url: `https://nexus.gerowallet.io${NEXUS_SUBMIT_PATH}?network=${nexusNetworkParam(walletNetwork)}`, headerName: 'X-Api-Key' };
+    case 'blockfrost':
+      return { url: `https://cardano-${network}.blockfrost.io/api/v0/tx/submit`, headerName: 'project_id' };
+    case 'koios':
+      // Koios' public tier needs no key; a bearer token only raises the limits.
+      return { url: `https://${network === 'mainnet' ? 'api' : network}.koios.rest/api/v1/submittx`, headerName: '' };
+    default:
+      return { url: '', headerName: '' };
+  }
+}
+
+/** Which known provider a URL points at, to tailor messages. Null for anything else. */
+export function submitApiProvider(rawUrl: string): SubmitApiProvider | null {
+  const parsed = parseHttpUrl(rawUrl.trim());
+  if (!parsed) return null;
+  if (isNexusSubmitPath(parsed.pathname)) return 'nexus';
+  const host = parsed.hostname.toLowerCase();
+  if (host.endsWith('.blockfrost.io')) return 'blockfrost';
+  if (host === 'koios.rest' || host.endsWith('.koios.rest')) return 'koios';
+  return null;
+}
+
 export function validateSubmitApiInput(input: SubmitApiInput, walletNetwork: string): SubmitApiValidation {
   const errors: SubmitApiValidation['errors'] = {};
   const rawUrl = typeof input.url === 'string' ? input.url.trim() : '';
@@ -184,6 +244,7 @@ export function validateSubmitApiInput(input: SubmitApiInput, walletNetwork: str
   else if (isNexusSubmitPath(parsed.pathname) && parsed.searchParams.get('network') !== nexusNetworkParam(walletNetwork)) {
     errors.url = 'nexusNetwork';
   }
+  else if (servesOtherNetwork(parsed.hostname, walletNetwork)) errors.url = 'providerNetwork';
   // OX Agent: SSRF prevented - normalized URL length check (unicode expansion)
   else if (parsed.href.length > SUBMIT_API_MAX_URL_LENGTH) errors.url = 'urlTooLong';
 
