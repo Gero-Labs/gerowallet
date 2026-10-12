@@ -1,5 +1,3 @@
-// Note: ref, computed are auto-imported globally by unplugin-auto-import
-
 /**
  * Feature Notification System
  *
@@ -13,14 +11,18 @@
  * 4. Use computed properties to check if parent levels should show indicators
  */
 
+import { ref, computed } from 'vue';
 // Share the version used by the UI footer and extension manifest.
 import { version as currentAppVersion } from '../../../package.json';
+import { featureFlagsStore } from '@/stores/featureFlagsStore';
 
 // Feature definitions - add new features here
 export interface FeatureDefinition {
   id: string;           // Unique feature ID (e.g., 'settings.security.passKey' or 'navigation.governance')
   version: string;      // Version when feature was added
   path: string[];       // Path hierarchy (e.g., ['settings', 'security', 'passKey'] or ['navigation', 'governance'])
+  // Optional gate: a feature hidden behind a flag only counts as new while the flag is on
+  isEnabled?: () => boolean;
 }
 
 // Define all trackable features
@@ -90,6 +92,13 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     id: 'settings.advanced.autoWithdrawRewards',
     version: '2.7.0',
     path: ['settings', 'advanced', 'autoWithdrawRewards']
+  },
+  // Settings > Advanced > Submit API
+  {
+    id: 'settings.advanced.submitApi',
+    version: '2.7.3',
+    path: ['settings', 'advanced', 'submitApi'],
+    isEnabled: () => featureFlagsStore.isSubmitApiEnabled()
   },
   // Add more features here as needed
 ];
@@ -162,7 +171,9 @@ export function isFeatureNew(featureId: string): boolean {
   // Feature is new only if:
   // 1. It was added in the current version
   // 2. It hasn't been marked as seen
+  // 3. It is enabled (if isEnabled gate exists)
   if (feature.version !== currentAppVersion) return false;
+  if (feature.isEnabled && !feature.isEnabled()) return false;
   return !seenFeatures.value[featureId];
 }
 

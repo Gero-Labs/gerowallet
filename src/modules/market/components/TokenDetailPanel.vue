@@ -1,5 +1,29 @@
 <template>
-  <v-card flat class="token-detail-panel">
+  <v-card
+    flat
+    class="token-detail-panel"
+    :class="{ 'token-detail-panel--resizing': resizing }"
+    :style="resizable ? panelStyle : undefined"
+  >
+    <!-- Drag (or arrow keys) to widen the drawer; double-click or Home restores the default. -->
+    <div
+      v-if="resizable"
+      class="token-detail-resize"
+      role="separator"
+      aria-orientation="vertical"
+      :aria-label="t('market.resizePanel')"
+      :aria-valuenow="width === null ? undefined : Math.round(width)"
+      :aria-valuemin="PANEL_MIN_WIDTH"
+      :aria-valuemax="handleMaxWidth()"
+      tabindex="0"
+      @pointerdown="startResize"
+      @pointermove="moveResize"
+      @pointerup="endResize"
+      @pointercancel="endResize"
+      @lostpointercapture="endResize"
+      @dblclick="resetWidth()"
+      @keydown="resizeByKey"
+    ></div>
     <!-- Header -->
     <div class="d-flex align-center pa-4 pb-2">
       <v-avatar size="36" class="mr-3">
@@ -317,6 +341,7 @@ import DustGenerationLine from '@/modules/dashboard/components/DustGenerationLin
 import { CNIGHT_ASSETS, isDustLineDismissed, dismissDustLineFor, useCnightDustRegistration } from '@/shared/composables/useCnightDustRegistration';
 import { getDustPending } from '@/shared/composables/useDustPending';
 import { getExplorerUrl } from '@/shared/utils/explorer';
+import { PANEL_MIN_WIDTH, maxPanelWidth, useResizablePanel } from '@/modules/market/composables/useResizablePanel';
 
 const chainLogo = computed(() =>
   networks.resolveCurrencyImage(walletStore.loggedWallet?.chain, walletStore.loggedWallet?.network) || ''
@@ -324,7 +349,15 @@ const chainLogo = computed(() =>
 
 const props = defineProps<{
   token: MarketToken;
+  /** Drawer mode (Portfolio page): show the drag handle on the left edge. */
+  resizable?: boolean;
 }>();
+
+const { width, resizing, panelStyle, startResize, moveResize, endResize, resetWidth, resizeByKey } = useResizablePanel();
+// Called from the template, so every re-render (each drag step or key press) re-reads the window.
+function handleMaxWidth(): number {
+  return maxPanelWidth(window.innerWidth);
+}
 
 defineEmits<{
   (e: 'close'): void;
@@ -632,6 +665,68 @@ watch(selectedCurrency, () => {
   overflow: hidden;
   box-shadow: var(--g-shadow-sheet);
   animation: panelSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ═══ Resize handle (left edge) ═══ */
+.token-detail-resize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 10px;
+  z-index: 1;
+  cursor: col-resize;
+  touch-action: none;
+
+  /* Grip: always faintly visible so the edge reads as draggable. */
+  &::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 3px;
+    width: 4px;
+    height: 40px;
+    transform: translateY(-50%);
+    border-radius: var(--g-r-pill);
+    background: var(--g-hairline-3);
+    transition: background var(--g-dur-fast) ease;
+  }
+
+  /* Edge line: lights up on hover, focus and while dragging. */
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 2px;
+    background: var(--g-accent);
+    opacity: 0;
+    transition: opacity var(--g-dur-fast) ease;
+  }
+
+  &:hover::before,
+  &:focus-visible::before {
+    background: var(--g-accent);
+  }
+
+  &:hover::after,
+  &:focus-visible::after {
+    opacity: 0.6;
+  }
+}
+
+.token-detail-panel--resizing {
+  user-select: none;
+  cursor: col-resize;
+
+  .token-detail-resize::before {
+    background: var(--g-accent);
+  }
+
+  .token-detail-resize::after {
+    opacity: 1;
+  }
 }
 
 /* Raised card wrappers give the chart and the swap widget depth against the

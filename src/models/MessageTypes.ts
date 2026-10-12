@@ -188,4 +188,10 @@ export enum MessageTypes {
   // trezorDispatch.ts): the refusal index lives in the worker, so it asks before signing.
   // Answers { success, refused }. Extension-page-only (senderTrust).
   CIP113_SIGN_PREFLIGHT = 'CIP113_SIGN_PREFLIGHT',
+  // Submit API (Settings → Advanced): the per-wallet custom Cardano submit endpoint.
+  // Extension-page-only (addToOptions, default-deny for content scripts); each acts on
+  // the logged-in wallet and refuses a request naming another wallet id.
+  SET_SUBMIT_API = 'SET_SUBMIT_API',
+  TEST_SUBMIT_API = 'TEST_SUBMIT_API',
+  CLEAR_SUBMIT_API = 'CLEAR_SUBMIT_API',
 }

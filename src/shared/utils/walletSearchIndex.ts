@@ -46,6 +46,7 @@ export type SearchGate =
   | 'cashback'
   | 'mediaPlayer'
   | 'blog'
+  | 'help'
   | 'copilotFeed'
   | 'poolOperator'
   | 'swap'
@@ -71,6 +72,7 @@ export interface SearchFlags {
   isGeroCardEnabled(): boolean;
   isGoMiningEnabled(): boolean;
   isBlogEnabled(): boolean;
+  isHelpCenterEnabled?(): boolean;
   isCopilotEnabled(): boolean;
   isPoolOperatorEnabled(): boolean;
   isGovernanceEnabled(): boolean;
@@ -141,7 +143,8 @@ export function searchGates({ wallet, flags, hasBackupState, playlistLength, hol
     // from Cardano NFTs, so search names the chains it can come from.
     mediaPlayer: isCardanoFamily && chain !== Blockchain.APEX_VECTOR && playlistLength > 0,
     // Not chain features: the drawer shows these on every chain.
-    blog: flags.isBlogEnabled(),
+    blog: flags.isBlogEnabled() && !flags.isHelpCenterEnabled?.(),
+    help: !!flags.isHelpCenterEnabled?.(),
     copilotFeed: flags.isCopilotEnabled(),
     poolOperator: !!networks.resolveStakingSupport(chain, network) && flags.isPoolOperatorEnabled(),
     swap: !!networks.resolveSwapSupport(chain, network),
@@ -229,6 +232,7 @@ export const PAGE_INDEX: readonly PageEntry[] = [
   { route: '/swap', titleKey: 'navigation.swap', icon: 'mdi-swap-horizontal', requires: 'swap', keywords: ['swap', 'exchange', 'trade', 'dex', 'convert', 'pending orders', 'tauschen', 'handeln', 'intercambiar', 'convertir', 'órdenes pendientes'] },
   { route: '/cashback', titleKey: 'navigation.cashback', subtitleKey: 'navigation.activitiesRewards', icon: 'mdi-shopping', requires: 'cashback', keywords: ['cashback', 'shop', 'shopping', 'stores', 'bring', 'einkaufen', 'prämien', 'compras', 'tiendas'] },
   { route: '/media-player', titleKey: 'navigation.mediaPlayer', subtitleKey: 'navigation.media', icon: 'mdi-music-box-multiple-outline', requires: 'mediaPlayer', keywords: ['media player', 'music', 'audio', 'songs', 'playlist', 'musik', 'música', 'reproductor', 'canciones'] },
+  { route: '/help', titleKey: 'help.title', icon: 'mdi-help-circle-outline', requires: 'help', keywords: ['help', 'support', 'tutorial', 'blog', 'news', 'hilfe', 'ayuda', 'anleitung', 'tutoriales'] },
   { route: '/blog', titleKey: 'navigation.blog', icon: 'mdi-post-outline', requires: 'blog', keywords: ['blog', 'news', 'articles', 'nachrichten', 'artikel', 'noticias', 'artículos'] },
   { route: '/copilot-feed', titleKey: 'navigation.copilotFeed', icon: 'mdi-bell-outline', requires: 'copilotFeed', keywords: ['feed', 'copilot', 'news feed', 'insights'] },
   { route: '/pool-operator', titleKey: 'navigation.poolOperator', subtitleKey: 'navigation.developers', icon: 'mdi-server-network', requires: 'poolOperator', keywords: ['pool operator', 'spo', 'stake pool operator', 'kes', 'block producer', 'node', 'pool-betreiber', 'operador de pool', 'nodo'] },

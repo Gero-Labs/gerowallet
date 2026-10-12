@@ -36,6 +36,8 @@ import geroNoTextPrime from '@/assets/svg/gero-notext-prime.svg'
 import geroNoTextVector from '@/assets/svg/gero-notext-vector.svg'
 import geroNoTextMidnight from '@/assets/svg/gero-notext-midnight.svg'
 import nexusLogo from '@/assets/svg/nexus.svg'
+import koiosLogo from '@/assets/svg/koios.svg'
+import blockfrostLogo from '@/assets/img/blockfrost.png'
 import geroDashboardApex from '@/assets/svg/gero_dashboard_apex.svg'
 import geroDashboardPrime from '@/assets/svg/gero_dashboard_prime.svg'
 import geroDashboardVector from '@/assets/svg/gero_dashboard_vector.svg'
@@ -187,6 +189,8 @@ export default {
   geroNoTextVector,
   geroNoTextMidnight,
   nexusLogo,
+  koiosLogo,
+  blockfrostLogo,
   barChart,
   coinsStacked,
   blog,

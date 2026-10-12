@@ -8,11 +8,10 @@ import { Messaging } from '@/chrome/messaging';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
 import { mergeWitnessSets } from '@/shared/utils/witnessSets';
 import { isStakeKeyRegistered, StakeAccountError } from '@/shared/utils/stakeRegistration';
-import {
-  dappSubmitError,
-  describeSubmitFailure,
-  describeUnexpectedSubmitResponse,
-} from '@/chrome/submitErrors';
+import { describeUnexpectedSubmitResponse } from '@/chrome/submitErrors';
+import { dappRoutedError, describeRoutedFailure, fromFetchSubmit, submitCardanoTx } from '@/chrome/submitRouter';
+import { resetSubmitApi, saveSubmitApi, testSubmitApi } from '@/chrome/submitApiSettings';
+import type { SubmitApiSettingsError } from '@/shared/utils/submitApiConfig';
 import { APIError, BITCOIN_METHOD, CIP113_SIGN_REFUSAL_MESSAGE, DataSignError, MIDNIGHT_METHOD, MidnightErrorCode, METHOD, POPUP, SENDER, TARGET, TxSendError, TxSignError } from '@/chrome/config';
 import { toDappError } from '@/chrome/dappError';
 import { applyDappRequestBadge } from '@/chrome/dappRequestBadge';
@@ -1680,13 +1679,17 @@ app.add(METHOD.submitTx, async (request, sendResponse) => {
       });
       return;
     }
-    const response = await submitTx(request.data.tx, loggedWallet['chain'], loggedWallet['network'])
-    if (!response.ok) {
+    const outcome = await submitCardanoTx({
+      cbor: request.data.tx,
+      walletId: loggedWallet.id,
+      network: loggedWallet['network'],
+      defaultSubmit: fromFetchSubmit(() => submitTx(request.data.tx, loggedWallet['chain'], loggedWallet['network'])),
+    });
+    if (outcome.ok === false) {
       // The node's rejection reason is in the BODY, not in statusText -- reading it is
       // the difference between "value not conserved" and a bare "Bad Request". Never
       // let a failed read of it mask the real failure.
-      const body = await response.text().catch(() => '');
-      const error = dappSubmitError(response.status, body);
+      const error = dappRoutedError(outcome);
       console.error("Error in submitTx:", error);
       sendResponse({
         id: request.id,
@@ -1697,7 +1700,7 @@ app.add(METHOD.submitTx, async (request, sendResponse) => {
       return;
     }
     const txCbor = request.data.tx
-    const txIdResponse = await response.text();
+    const txIdResponse = outcome.body as string;
 
     // Validate txId format (must be 64 hex characters)
     const isValidTxId = /^[a-f0-9]{64}$/i.test(txIdResponse);
@@ -3330,6 +3333,34 @@ app.addToOptions(MessageTypes.SPO_NODE_FETCH, async (request, sendResponse) => {
   }
 });
 
+// Submit API (Settings → Advanced). Extension pages only; the logic and its tests
+// live in submitApiSettings.ts. A thrown error answers a generic code, never the error text.
+function submitApiWallet() {
+  const wallet = WalletStore.state.loggedWallet;
+  return wallet ? { id: wallet.id, chain: wallet.chain, network: wallet.network } : null;
+}
+
+function registerSubmitApiHandler(
+  method: MessageTypes,
+  run: (wallet: ReturnType<typeof submitApiWallet>, data: Record<string, unknown>) => Promise<unknown>,
+  failure: SubmitApiSettingsError,
+) {
+  app.addToOptions(method, async (request, sendResponse) => {
+    let data: unknown;
+    try {
+      data = await run(submitApiWallet(), (request.data ?? {}) as Record<string, unknown>);
+    } catch {
+      // OX Agent: Sensitive Data Protection prevented - errors answer a generic code, never their text
+      data = { success: false, error: failure };
+    }
+    sendResponse({ id: request.id, data, target: TARGET, sender: SENDER.extension });
+  });
+}
+
+registerSubmitApiHandler(MessageTypes.SET_SUBMIT_API, saveSubmitApi, 'saveFailed');
+registerSubmitApiHandler(MessageTypes.TEST_SUBMIT_API, testSubmitApi, 'testFailed');
+registerSubmitApiHandler(MessageTypes.CLEAR_SUBMIT_API, resetSubmitApi, 'saveFailed');
+
 // Bitcoin transaction signing handler (software wallets)
 app.addToOptions(MessageTypes.SIGN_BITCOIN_TX, async (request, sendResponse) => {
   try {
@@ -4828,14 +4859,17 @@ function setupWalletConnectCallbacks(wcService: WalletConnectServiceInstance) {
           }
           case 'cardano_submitTx': {
             const txCbor = wcRequest.params?.tx || wcRequest.params;
-            const response = await submitTx(txCbor, loggedWallet.chain, loggedWallet.network);
-            if (response.ok) {
-              const txHash = await response.text();
-              await wcService.respondSuccess(topic, id, txHash);
+            const outcome = await submitCardanoTx({
+              cbor: txCbor,
+              walletId: loggedWallet.id,
+              network: loggedWallet.network,
+              defaultSubmit: fromFetchSubmit(() => submitTx(txCbor, loggedWallet.chain, loggedWallet.network)),
+            });
+            if (outcome.ok === true) {
+              await wcService.respondSuccess(topic, id, outcome.body);
             } else {
               // statusText is "Bad Gateway" at best -- the node's reason is in the body.
-              const body = await response.text().catch(() => '');
-              await wcService.respondError(topic, id, 4100, describeSubmitFailure(response.status, body));
+              await wcService.respondError(topic, id, 4100, describeRoutedFailure(outcome));
             }
             return;
           }
@@ -5143,14 +5177,18 @@ app.addToOptions(MessageTypes.CIP45_INVOKE, async (request, sendResponse) => {
         break;
       }
       case 'submitTx': {
-        const response = await submitTx(params.tx, loggedWallet.chain, loggedWallet.network);
-        if (response.ok) {
-          reply({ success: true, result: await response.text() });
+        const outcome = await submitCardanoTx({
+          cbor: params.tx,
+          walletId: loggedWallet.id,
+          network: loggedWallet.network,
+          defaultSubmit: fromFetchSubmit(() => submitTx(params.tx, loggedWallet.chain, loggedWallet.network)),
+        });
+        if (outcome.ok === true) {
+          reply({ success: true, result: outcome.body });
         } else {
           // Same as the WalletConnect and CIP-30 paths: report the node's own reason
           // or explain that the outcome is unknown, instead of a bare status phrase.
-          const body = await response.text().catch(() => '');
-          fail(TxSendError.Failure.code, describeSubmitFailure(response.status, body));
+          fail(TxSendError.Failure.code, describeRoutedFailure(outcome));
         }
         break;
       }

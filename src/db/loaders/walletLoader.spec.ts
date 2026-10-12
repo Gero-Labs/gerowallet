@@ -1,5 +1,8 @@
-import { describe, it, expect } from 'vitest';
-import { TransactionsLoader } from './walletLoader';
+import 'fake-indexeddb/auto';
+import Dexie from 'dexie';
+import { describe, it, expect, vi } from 'vitest';
+import WalletStore from '@/stores/walletStore';
+import { ConfigLoader, TransactionsLoader, configRowsToMap, PRIVATE_CONFIG_KEYS } from './walletLoader';
 
 type Amount = { unit: string; quantity: number };
 type Utxo = { tx_hash?: string; output_index?: number; address?: string; amount?: Amount[] };
@@ -113,5 +116,40 @@ describe('TransactionsLoader.calculateFinalAssets', () => {
     const byUnit = Object.fromEntries(final.map((a) => [a.unit, a.quantity]));
 
     expect(byUnit).toEqual({ S: -7, R: 4 });
+  });
+});
+
+describe('configRowsToMap', () => {
+  it('maps config rows by key', () => {
+    expect(configRowsToMap([{ key: 'txAutoSubmit', value: true }])).toEqual({ txAutoSubmit: true });
+  });
+
+  it('never lets the Submit API secret into the store', () => {
+    const map = configRowsToMap([
+      { key: 'submitApi', value: { url: 'https://node.example' } },
+      { key: 'submitApiAuth', value: 'secret-key' },
+    ]);
+    expect(map).toEqual({ submitApi: { url: 'https://node.example' } });
+    expect(JSON.stringify(map)).not.toContain('secret-key');
+    expect(PRIVATE_CONFIG_KEYS.has('submitApiAuth')).toBe(true);
+  });
+});
+
+describe('ConfigLoader', () => {
+  it('hands WalletStore.setConfig no secret row', async () => {
+    const db = new Dexie('config-loader-spec');
+    db.version(1).stores({ config: 'key, value' });
+    await db.open();
+    await db.table('config').bulkPut([
+      { key: 'submitApi', value: { url: 'https://node.example' } },
+      { key: 'submitApiAuth', value: 'secret-key' },
+    ]);
+    const setConfig = vi.spyOn(WalletStore, 'setConfig');
+    const loader = new ConfigLoader(async () => db);
+    await loader.load();
+    expect(setConfig).toHaveBeenLastCalledWith({ submitApi: { url: 'https://node.example' } });
+    loader.unsubscribe();
+    setConfig.mockRestore();
+    await db.delete();
   });
 });

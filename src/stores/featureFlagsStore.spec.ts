@@ -58,3 +58,21 @@ test('reset() turns isCip45Enabled back off', () => {
   featureFlagsStore.reset();
   expect(featureFlagsStore.isCip45Enabled()).toBe(false);
 });
+
+test('exposes isSubmitApiEnabled, defaulting to false', () => {
+  featureFlagsStore.reset();
+  expect(featureFlagsStore.isSubmitApiEnabled()).toBe(false);
+});
+
+test('reflects a remote isSubmitApiEnabled flag once loaded', () => {
+  vi.mocked(featureFlagService.getFlag).mockImplementation((key: string, fallback: unknown) =>
+    key === 'isSubmitApiEnabled' ? true : fallback,
+  );
+  featureFlagsStore.loadFlags();
+  expect(featureFlagsStore.isSubmitApiEnabled()).toBe(true);
+});
+
+test('reset() turns isSubmitApiEnabled back off', () => {
+  featureFlagsStore.reset();
+  expect(featureFlagsStore.isSubmitApiEnabled()).toBe(false);
+});

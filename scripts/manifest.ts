@@ -121,6 +121,15 @@ function buildCSP(dev: boolean): string {
       : ['ws://127.0.0.1:*', 'http://localhost:6300', 'http://127.0.0.1:6300', 'http://localhost:6301', 'http://127.0.0.1:6301']),
     // SPO Node Monitor (Cloudflare Tunnel)
     'https://*.trycloudflare.com',
+    // Submit API (Settings → Advanced): a user can send Cardano transactions to an
+    // arbitrary submit endpoint, including a plain-http node on their LAN. CSP is
+    // static (fixed at install) and also governs the MV3 service worker, so only
+    // scheme sources can cover a user-chosen host. src/chrome/submitRouter.ts is
+    // the only code that sends to a user-chosen URL, and only to the saved,
+    // validated endpoint. connect-src is not remote code (remote-code-guard is
+    // unaffected).
+    'https:',
+    'http:',
   ];
 
   const scriptSrc = dev

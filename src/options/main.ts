@@ -9,6 +9,7 @@ import '../shared/styles/baseline.css';
 import '../shared/styles/iso.css';
 
 import Vue from 'vue';
+import { isPublicRoute } from '@/modules/navigation/helpAccess';
 import VueRouter from 'vue-router';
 import FlagIcon from 'vue-flag-icon';
 import i18n, { loadLanguage } from '../plugins/i18n';
@@ -127,6 +128,7 @@ void waitForOptionsStartup({
     () => walletStoreState.isLocked,
     (isLocked) => {
       if (isLocked
+        && !isPublicRoute(router.currentRoute)
         && router.currentRoute.path !== '/welcome'
         && router.currentRoute.name !== 'passkey-auth'
         && router.currentRoute.name !== 'ledger-ble-sign') {

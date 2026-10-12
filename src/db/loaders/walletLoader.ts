@@ -6,6 +6,7 @@ import networks from '@/utils/networks';
 import Loading from '@/stores/loading';
 import { debugLog } from '@/utils/debug';
 import { StoredTransaction, TxAsset } from '@/models/transaction.types';
+import { SUBMIT_API_AUTH_CONFIG_KEY } from '@/shared/utils/submitApiConfig';
 
 /** Loose UTxO shape used for input token-amount resolution (see resolveInputAmounts). */
 type ResolvableUtxo = { tx_hash?: string; output_index?: number; address?: string; amount?: unknown[] };
@@ -108,6 +109,22 @@ export class ContactsLoader extends BaseLoader {
 }
 
 /**
+ * Config rows that must never reach walletStore. Everything ConfigLoader loads is
+ * broadcast to every extension context and persisted in chrome.storage.local, where
+ * content-script storage listeners in every tab can see it. Readers of these rows
+ * query the wallet DB directly in the background (src/chrome/submitApiStore.ts).
+ */
+export const PRIVATE_CONFIG_KEYS: ReadonlySet<string> = new Set([SUBMIT_API_AUTH_CONFIG_KEY]);
+
+export function configRowsToMap(rows: Array<{ key: string; value: unknown }>): Record<string, unknown> {
+  return rows.reduce<Record<string, unknown>>((map, row) => {
+    // OX Agent: Sensitive Data Protection prevented - secret config rows are never broadcast
+    if (!PRIVATE_CONFIG_KEYS.has(row.key)) map[row.key] = row.value;
+    return map;
+  }, {});
+}
+
+/**
  * Loader for wallet configuration
  */
 export class ConfigLoader extends BaseLoader {
@@ -121,10 +138,7 @@ export class ConfigLoader extends BaseLoader {
     return this.createSubscription(
       () => walletDB.table('config').toArray(),
       (config) => {
-        WalletStore.setConfig(config.reduce(function(map, val) {
-          map[val.key] = val.value;
-          return map;
-        }, {}));
+        WalletStore.setConfig(configRowsToMap(config));
       }
     );
   }

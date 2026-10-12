@@ -49,6 +49,9 @@ beforeEach(() => {
   env.router = new VueRouter({ mode: 'abstract', routes: [
     { path: '/', component }, { path: '/welcome', component },
     { path: '/governance', component },
+    { path: '/help/articles/:slug', component, meta: { public: true } },
+    { path: '/blog', component, meta: { public: true } },
+    { path: '/blog/:slug', component, meta: { public: true } },
     { path: '/passkey-auth', name: 'passkey-auth', component },
     { path: '/ledger-ble-sign', name: 'ledger-ble-sign', component },
   ] });
@@ -72,6 +75,30 @@ afterEach(() => {
 });
 
 describe('options entry point', () => {
+  it.each(['/help/articles/backup?q=recovery&chain=midnight', '/blog', '/blog/security'])('preserves public %s through startup, unlock and lock', async path => {
+    await env.router.push(path);
+    await import('./main');
+    await tick();
+    expect(env.router.currentRoute.fullPath).toBe(path);
+    env.wallet.loggedWallet = { id: 1 };
+    env.wallet.isLocked = false;
+    await tick();
+    env.wallet.isLocked = true;
+    await tick();
+    expect(env.router.currentRoute.fullPath).toBe(path);
+  });
+
+  it('still evicts private content on lock', async () => {
+    env.wallet.loggedWallet = { id: 1 };
+    env.wallet.isLocked = false;
+    await env.router.push('/governance');
+    await import('./main');
+    await tick();
+    env.wallet.isLocked = true;
+    await tick();
+    expect(env.router.currentRoute.path).toBe('/welcome');
+  });
+
   it('mounts once after five seconds when all storage remains pending', async () => {
     storage.mockImplementation(() => {});
     env.hydration = () => new Promise(() => {});

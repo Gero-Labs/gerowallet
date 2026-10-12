@@ -375,6 +375,7 @@
         <TokenDetailPanel
           v-if="panelOpen && selectedToken"
           :token="selectedToken"
+          resizable
           @close="panelOpen = false"
           @swap="openSwap"
           @dust-setup="cnightDialogOpen = true"
