@@ -1,7 +1,10 @@
-import { computed, ref, type Ref } from 'vue';
+import { computed, ref, watch, type Ref } from 'vue';
 import {
+  submitApiPreset,
+  submitApiProvider,
   validateSubmitApiInput,
   type SubmitApiConfig,
+  type SubmitApiProviderChoice,
   type SubmitApiErrorCode,
   type SubmitApiField,
 } from '@/shared/utils/submitApiConfig';
@@ -18,15 +21,37 @@ export interface SubmitApiRequestPayload {
   fallbackToDefault: boolean;
 }
 
+function originOf(rawUrl: string): string | null {
+  try {
+    return new URL(rawUrl).origin;
+  } catch {
+    return null;
+  }
+}
+
+/** The selector entry a URL belongs to; null while the URL is empty. */
+function providerFor(rawUrl: string): SubmitApiProviderChoice | null {
+  return rawUrl.trim() ? submitApiProvider(rawUrl) ?? 'custom' : null;
+}
+
 export function useSubmitApiForm(saved: Ref<SubmitApiConfig | null>, network: Ref<string>) {
   const url = ref('');
   const headerName = ref('');
   const headerValue = ref('');
   const headerValueMode = ref<HeaderValueMode>('edit');
   const fallbackToDefault = ref(false);
+  /** The provider selector's choice. It follows the URL, so a pasted Blockfrost URL selects Blockfrost. */
+  const provider = ref<SubmitApiProviderChoice | null>(null);
+
+  watch(url, value => {
+    const derived = providerFor(value);
+    if (derived) provider.value = derived;
+  });
 
   function reset(): void {
     url.value = saved.value?.url ?? '';
+    // Nothing saved (or an unreadable row): Gero's own path is what this wallet uses.
+    provider.value = saved.value ? providerFor(url.value) : 'default';
     headerName.value = saved.value?.headerName ?? '';
     headerValue.value = '';
     headerValueMode.value = saved.value?.hasAuth ? 'saved' : 'edit';
@@ -44,13 +69,19 @@ export function useSubmitApiForm(saved: Ref<SubmitApiConfig | null>, network: Re
     headerName.value = '';
   }
 
-  const savedOrigin = computed<string | null>(() => {
-    try {
-      return saved.value ? new URL(saved.value.url).origin : null;
-    } catch {
-      return null;
-    }
-  });
+  const savedOrigin = computed<string | null>(() => (saved.value ? originOf(saved.value.url) : null));
+
+  /** Fills the URL and header name the chosen provider expects on this wallet's network. */
+  function selectProvider(choice: SubmitApiProviderChoice): void {
+    const preset = submitApiPreset(choice, network.value);
+    provider.value = choice;
+    url.value = preset.url;
+    headerName.value = preset.headerName;
+    // OX Agent: Sensitive Data Protection prevented - a key typed for one provider is never sent to another
+    headerValue.value = '';
+    // The saved secret belongs to the saved origin: another provider needs its own key.
+    if (headerValueMode.value === 'saved' && originOf(preset.url) !== savedOrigin.value) headerValueMode.value = 'edit';
+  }
 
   const validation = computed(() => validateSubmitApiInput(
     {
@@ -89,6 +120,7 @@ export function useSubmitApiForm(saved: Ref<SubmitApiConfig | null>, network: Re
     headerValue,
     headerValueMode,
     fallbackToDefault,
+    provider,
     validation,
     canSubmit,
     errorKey,
@@ -96,5 +128,6 @@ export function useSubmitApiForm(saved: Ref<SubmitApiConfig | null>, network: Re
     reset,
     replaceSavedValue,
     removeSavedValue,
+    selectProvider,
   };
 }
