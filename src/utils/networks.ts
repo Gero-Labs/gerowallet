@@ -54,9 +54,10 @@ export interface NetworkInfo {
   thorchainSupport: boolean;
   mempoolSupport: boolean;
   lightningSupport: boolean;
-  // CIP-113 `programmable_logic_base` script hashes. A list, not one value: a
-  // re-bootstrap changes the hash while existing holdings stay at the old script.
-  // Empty means CIP-113 is unavailable on this network, and it fails closed.
+  // CIP-113 `programmable_logic_base` script hashes. A list so a rollover can overlap;
+  // superseded deployments are removed on testnets and retained on mainnet until they
+  // drain (see cip113Deployments.ts). Empty means CIP-113 is
+  // unavailable on this network, and it fails closed.
   programmableLogicBaseScriptHashes?: string[];
   /**
    * RealFi Earn (USDr / sUSDr yield) availability for this network.
@@ -703,8 +704,7 @@ export default {
       return []
     }
     // Allowlist first, before the configured hashes are even consulted: a hash list on its
-    // own must never be enough to bring a network up, because the flag that would also
-    // have to be on is global and may already be. See CIP113_ALLOWED_NETWORKS.
+    // own must never be enough to bring a network up. See CIP113_ALLOWED_NETWORKS.
     if (!CIP113_ALLOWED_NETWORKS.includes(network)) {
       return []
     }

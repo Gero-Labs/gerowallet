@@ -40,7 +40,7 @@ Two consequences that catch people:
 - **`isBitcoinEnabled`** (default **false**) is the master visibility gate for Bitcoin, enforced in exactly three kinds of place: the onboarding family tile, six router guards, and the matching NavigationDrawer items. It is ANDed with the per-network capability in the six router guards and the six NavigationDrawer items. The onboarding family tile is the exception - `NetworkSelector.vue` checks the flag against the chain name alone.
 - **`isBitcoinGeroSyncEnabled`** defaults to **true** and is a kill-switch, not an enablement flag: false switches to the 60s Esplora poller.
 - **There is no `isMidnightEnabled`.** Midnight Mainnet is already selectable by ordinary users. Only Bitcoin is release-gated.
-- **CIP-113 has three gates**, not the two CLAUDE.md describes: `CIP113_ALLOWED_NETWORKS` (Preview only, checked first), the per-network script-hash list, and the runtime `isCip113Enabled` flag.
+- **CIP-113 has two build-time gates**: `CIP113_ALLOWED_NETWORKS` (mainnet, preprod and preview, checked first) and the per-network script-hash list, both in `cip113Deployments.ts`. It is live on all three networks.
 
 ## Adding chain-specific behaviour to an existing screen
 
