@@ -26,7 +26,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          fetch-depth: 1
+          fetch-depth: 0
 
       # Without node_modules the reviewer can only READ code: every attempt to
       # run vitest or eslint dies, and the review silently degrades into "I
@@ -35,7 +35,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '22.11.0'
+          node-version: '24.19.0'
           cache: 'npm'
 
       - name: Install dependencies
@@ -55,8 +55,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh pr diff ${{ github.event.pull_request.number }} --name-only \
-               | grep -qx '.github/workflows/claude-code-review.yml'; then
+          # The diff endpoint rejects PRs with more than 300 files. List files
+          # with pagination, and fail this step if the API request fails.
+          changed_files=$(gh api --paginate \
+            "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100" \
+            --jq '.[].filename')
+          if grep -Fxq '.github/workflows/claude-code-review.yml' <<< "$changed_files"; then
             echo "skip_gate=true" >> "$GITHUB_OUTPUT"
             echo "This PR edits the review workflow, so the action will skip itself; the completion gate cannot apply."
           else
@@ -83,10 +87,15 @@ jobs:
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
 
-            You are reviewing a pull request for a Cardano blockchain wallet Chrome extension (Manifest V3, Vue 2.7 + TypeScript).
+            You are reviewing a pull request for a Cardano blockchain wallet Chrome extension (Manifest V3, Vue + Vuetify + TypeScript).
             Read CLAUDE.md first for project conventions and architecture.
+            Read package.json for the dependency versions used by this branch.
 
             Focus ONLY on the files changed in this PR. Do NOT review the entire codebase.
+            Full git history is available. For large PRs, use
+            `git diff ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }} -- <path>`
+            and `git diff --name-only ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}`
+            instead of the GitHub diff endpoint, which rejects PRs over 300 files.
 
             Do the whole review yourself, in this session. Do NOT delegate to
             subagents: their results are not awaited here, which has produced
