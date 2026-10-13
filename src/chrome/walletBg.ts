@@ -664,6 +664,14 @@ export class WalletBg {
 
   /**
    * Load persisted keys from per-wallet DB so the receive dialog works before first sync.
+   *
+   * With no row to load, the keys are derived here instead. Once the subscription carries
+   * no credentials (CIP-113, see subscriptionCredentials()), gero-sync names only addresses
+   * that already have on-chain history, so for a wallet that has never been used it names
+   * none and syncKeys() never runs: no receive address, no DRep ID, no stake key to sign
+   * with. The derived set marks nothing as used, and the first sync that does name an
+   * address replaces it. It is not persisted, so the cached row only ever holds keys a
+   * sync resolved.
    */
   public async loadCachedKeys() {
     try {
@@ -673,9 +681,29 @@ export class WalletBg {
       if (row?.resolvedKeys) {
         debugLog('🔑 Loading cached keys from DB');
         WalletStore.setKeys(row.resolvedKeys);
+        return;
       }
     } catch (e) {
       debugLog('Failed to load cached keys:', e);
+    }
+    if (!this.derivesOwnAddress()) return;
+    debugLog('🔑 No cached keys; deriving them locally');
+    WalletStore.setKeys(this.resolvePathsForMissingAddresses([]));
+  }
+
+  /**
+   * Whether resolvePathsForMissingAddresses() yields this wallet's own addresses: a watch
+   * wallet's are built from the watched address, an HD wallet's from its xpub. A legacy
+   * Google wallet's address comes from a contract instead, and keys derived from the xpub
+   * would offer the user an address this wallet does not sync.
+   */
+  private derivesOwnAddress(): boolean {
+    if (this.chain === Blockchain.BITCOIN || this.chain === Blockchain.MIDNIGHT) return false;
+    if (this.type === WalletType.Watch) return true;
+    try {
+      return getAddress(this.publicKey, this.chain, this.network, 0).toBech32() === this.baseAddress;
+    } catch {
+      return false;
     }
   }
 
@@ -1337,12 +1365,17 @@ export class WalletBg {
    * Networks without a deployment take the non-empty branch, so the server-side filter
    * stays active there exactly as it does for any other credential list.
    *
-   * The empty list loses nothing the allowlist returned. Verified against mainnet gero-sync
+   * The empty list loses no UTxO the allowlist returned. Verified against mainnet gero-sync
    * on 2026-10-07: the allowlist only FILTERS the stake-anchored set and never reaches past
    * it — an allowlist naming a funded enterprise address's payment key returned none of its
    * UTxOs. So own-payment-key addresses outside this stake address (enterprise, or another
    * stake part) are not synced either way; that is a pre-existing gap, not a CIP-113 one.
    * Single source of truth: resubscribe() REPLACES the socket's credential set.
+   *
+   * What it does lose is the `addresses` echo. With credentials, gero-sync builds one
+   * address per credential; without, it names only addresses that have on-chain history,
+   * which for a never-used wallet is none (verified on preprod and mainnet, 2026-10-13).
+   * loadCachedKeys() derives that wallet's keys itself.
    *
    * LIMITATION — only the stake-key CIP-113 convention is discoverable this way. The
    * SUBSCRIBE is anchored on this wallet's stake address, so gero-sync only ever fans out
