@@ -7,6 +7,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
+import { scriptSource } from './script-source.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const output = path.join(root, 'spikes/vue3-migration/inventory.json');
@@ -53,17 +54,6 @@ const walk = (node, visitor) => { visitor(node); ts.forEachChild(node, child => 
 const key = node => node?.text ?? node?.getText();
 const prop = (node, name) => node.properties.find(item => key(item.name) === name)?.initializer;
 const normalize = text => text.replace(/\s+/g, ' ').trim();
-
-function scriptSource(file, text) {
-  if (!file.endsWith('.vue')) return text;
-  let script = text.replace(/[^\r\n]/g, ' ');
-  for (const match of text.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script\s*>/g)) {
-    const start = match.index + match[0].indexOf('>') + 1;
-    // Slice strings, not Unicode codepoints: TypeScript offsets are UTF-16.
-    script = script.slice(0, start) + match[1] + script.slice(start + match[1].length);
-  }
-  return script;
-}
 
 const parsed = new Map(sourceFiles.filter(file => /\.(vue|[cm]?[jt]sx?)$/.test(file)).map(file => [file,
   ts.createSourceFile(file, scriptSource(file, sources.get(file)), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS),

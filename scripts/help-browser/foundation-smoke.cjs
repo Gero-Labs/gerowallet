@@ -57,6 +57,8 @@ const WELCOME_QUERY = 'unlikely zebra words';
     assert.equal(await page.locator('.topic-tile').count(), 6);
     assert.equal(await page.locator('.topic-tile--muted').count(), 0);
     await chainPills.getByRole('button', { name: 'Midnight', exact: true }).click();
+    // The pressed state follows the asynchronous router navigation.
+    await chainPills.getByRole('button', { name: 'Midnight', exact: true, pressed: true }).waitFor();
     assert.equal(await chainPills.getByRole('button', { name: 'Midnight', exact: true }).getAttribute('aria-pressed'), 'true');
     assert.equal(await chainPills.getByRole('button', { name: 'All chains', exact: true }).getAttribute('aria-pressed'), 'false');
     await page.locator('.topic-tile--muted').first().waitFor();
