@@ -22,16 +22,17 @@ export function useExplorer() {
   );
 
   /**
-   * `chain` overrides the wallet's chain for flows that always live on one
-   * chain (cNIGHT DUST registration is a Cardano transaction).
+   * `chain` and `network` override the wallet's own for flows that always live
+   * on one chain: cNIGHT DUST registration is a Cardano transaction, and from a
+   * Midnight wallet it is on that network's Cardano twin (cardanoTwinNetwork).
    */
   function explorerUrl(
     type: ExplorerEntity,
     id: string | null | undefined,
-    options: { chain?: string } = {},
+    options: { chain?: string; network?: string } = {},
   ): string {
     if (!id) return '';
-    return getExplorerUrl(options.chain ?? chain.value, id, type, network.value, explorerId.value);
+    return getExplorerUrl(options.chain ?? chain.value, id, type, options.network ?? network.value, explorerId.value);
   }
 
   async function setExplorer(id: string): Promise<void> {

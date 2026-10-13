@@ -45,6 +45,14 @@ describe('useExplorer', () => {
     expect(explorerUrl('tx', TX, { chain: Blockchain.CARDANO })).toBe(`https://cexplorer.io/tx/${TX}`);
   });
 
+  it('lets a flow override the network too (a Midnight Stagenet wallet registers DUST on Preprod)', () => {
+    logIn(Blockchain.MIDNIGHT, Network.STAGENET);
+    const { explorerUrl } = useExplorer();
+    expect(explorerUrl('tx', TX, { chain: Blockchain.CARDANO })).toBe(`https://cexplorer.io/tx/${TX}`);
+    expect(explorerUrl('tx', TX, { chain: Blockchain.CARDANO, network: Network.PREPROD }))
+      .toBe(`https://preprod.cexplorer.io/tx/${TX}`);
+  });
+
   it('returns nothing for a missing id', () => {
     logIn(Blockchain.CARDANO, Network.MAINNET);
     expect(useExplorer().explorerUrl('tx', undefined)).toBe('');
