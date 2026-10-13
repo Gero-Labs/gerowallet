@@ -140,6 +140,18 @@ async function capture(name) {
     await page.waitForFunction(async () => (await indexedDB.databases()).some(db => db.name === 'GeroWalletDatabase' && db.version >= 160), null, { timeout: 30000 });
     await page.waitForFunction(async () => !!(await chrome.storage.local.get('geroStore')).geroStore, null, { timeout: 30000 });
     stage = 'seed public watch record';
+    assert.equal(new URL(worker.url()).host, new URL(page.url()).host, 'Watch setup worker and page must belong to the same extension');
+    // The page can finish schema setup before the worker. Opening too early in
+    // the worker can create an empty v1 database; inspect readiness without opening.
+    report.seedDatabaseVersion = await worker.evaluate(async () => {
+      const deadline = Date.now() + 30000;
+      while (Date.now() < deadline) {
+        const database = (await indexedDB.databases()).find(db => db.name === 'GeroWalletDatabase');
+        if (database?.version >= 160) return database.version;
+        await new Promise(resolve => setTimeout(resolve, 250));
+      }
+      throw new Error('Watch setup timed out waiting for the worker database schema; no record was seeded');
+    });
     await worker.evaluate(async record => {
       const db = await new Promise((resolve, reject) => {
         const request = indexedDB.open('GeroWalletDatabase');
