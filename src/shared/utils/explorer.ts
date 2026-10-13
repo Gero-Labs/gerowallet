@@ -1,6 +1,7 @@
 import { bech32 } from 'bech32';
 import { Blockchain, Network } from '@/models/types';
 import { parseGovActionId } from '@/shared/utils/govActionId';
+import { parseDRepId, toCip129 } from '@/shared/utils/drepId';
 
 /**
  * Block-explorer deep links.
@@ -15,7 +16,10 @@ import { parseGovActionId } from '@/shared/utils/govActionId';
  * the link falls back to DEFAULT_CARDANO_EXPLORER rather than disappearing.
  */
 
-/** What an explorer link points at. A UTxO (`txId#index`) has no page anywhere: link its 'tx'. */
+/**
+ * What an explorer link points at. A UTxO has no page on any explorer: a 'tx' link
+ * given `txHash#index` opens the transaction that created it.
+ */
 export type ExplorerEntity =
   | 'tx'
   | 'block'
@@ -68,6 +72,23 @@ function govActionHex(id: string): string | null {
   return parsed.txHash + parsed.index.toString(16).padStart(2, '0');
 }
 
+/**
+ * Any DRep id form (CIP-129, CIP-105, raw credential hex) as CIP-129 `drep1…`, the one
+ * form every explorer accepts. Null for the two keyword DReps, which have no page.
+ */
+function drepCip129(id: string): string | null {
+  const parsed = parseDRepId(id);
+  if (!parsed || parsed.form === 'keyword') return null;
+  return toCip129(parsed.credentialHex, parsed.credentialType);
+}
+
+function drepPath(prefix: string): PathBuilder {
+  return (id) => {
+    const drep = drepCip129(id);
+    return drep ? `${prefix}${drep}` : null;
+  };
+}
+
 function testnetHosts(domain: string): Partial<Record<string, string>> {
   return {
     [Network.MAINNET]: `https://${domain}`,
@@ -89,7 +110,7 @@ const CARDANO_EXPLORERS: Record<CardanoExplorerId, ExplorerDef> = {
       pool: id => `/pool/${seg(id)}`,
       asset: id => `/asset/${seg(id)}`,
       policy: id => `/policy/${seg(id)}`,
-      drep: id => `/drep/${seg(id)}`,
+      drep: drepPath('/drep/'),
       govAction: (id) => {
         const parsed = parseGovActionId(id);
         return parsed ? `/gov/action/${parsed.txHash}%23${parsed.index}` : null;
@@ -108,7 +129,7 @@ const CARDANO_EXPLORERS: Record<CardanoExplorerId, ExplorerDef> = {
       pool: id => `/pool/${seg(id)}`,
       asset: id => `/token/${seg(id)}`,
       policy: id => `/tokenPolicy/${seg(id)}`,
-      drep: id => `/drep/${seg(id)}`,
+      drep: drepPath('/drep/'),
       govAction: (id) => {
         const hex = govActionHex(id);
         return hex ? `/govAction/${hex}` : null;
@@ -127,7 +148,7 @@ const CARDANO_EXPLORERS: Record<CardanoExplorerId, ExplorerDef> = {
       pool: id => `/pools/${seg(id)}`,
       asset: id => `/tokens/${seg(id)}`,
       policy: id => `/policies/${seg(id)}`,
-      drep: id => `/dreps/${seg(id)}`,
+      drep: drepPath('/dreps/'),
       // CIP-129 gov_action1… 404s on AdaStat mainnet; the 66-hex form works everywhere.
       govAction: (id) => {
         const hex = govActionHex(id);
@@ -232,6 +253,8 @@ export function getExplorerUrl(
   explorerId?: string | null,
 ): string {
   if (!id) return '';
+  // A UTxO reference opens its transaction (no explorer has a UTxO page).
+  if (type === 'tx') id = id.split('#')[0];
   switch (chain) {
     case Blockchain.CARDANO: {
       const net = cardanoNetwork(network);

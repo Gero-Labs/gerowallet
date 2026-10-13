@@ -10,6 +10,7 @@
         <v-btn icon x-small class="ml-1" @click="copyToClipboard(drepId)">
           <v-icon x-small color="grey">mdi-content-copy</v-icon>
         </v-btn>
+        <ExplorerLink type="drep" :id="drepId" x-small />
       </div>
       <div v-else class="text-caption grey--text">No DRep ID available</div>
 
@@ -176,6 +177,7 @@ import filtersUtil from '@/shared/utils/filters';
 import networks from '@/utils/networks';
 import snackbar from '@/plugins/snackbar';
 import BottomSheet from '../../components/BottomSheet.vue';
+import ExplorerLink from '@/shared/components/ExplorerLink.vue';
 import { useChainContext } from '../../composables/useChainContext';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { openFullDashboard } from '@/shared/utils/openFullDashboard';
