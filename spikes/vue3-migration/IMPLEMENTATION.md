@@ -11,6 +11,11 @@ approval, and an AI review at the end. No branch, PR, tag, or package has been
 published. Acceptance below distinguishes implemented work from device and
 release evidence that still needs to be collected.
 
+The [integration evidence](evidence/integration.json) pins implementation commit
+`79bdb4572350f26666179c986358b54dec21a8a4`, the lockfile, test reports, both
+complete artifact manifests and verified ZIP hashes. Later evidence/document
+updates leave that tested production code unchanged.
+
 ## Ticket coverage
 
 | Ticket | Local implementation and evidence | Remaining acceptance |
@@ -95,6 +100,12 @@ repository lint and TypeScript have measured pre-existing debt; a failing
 baseline is not a passing check. The final evidence records both full results
 and the absence of introduced diagnostics. The new Vue-aware check also checks
 production component templates and their contracts.
+
+The final automated run passes all 5,040 tests across 437 files with zero skips.
+Full ESLint retains 116 errors versus 268 in the baseline; the Vue-aware check
+retains 56 TypeScript errors versus 242 baseline diagnostics. Both comparisons
+find zero introduced diagnostics, and production SFCs have none. Changed-file
+lint, the unchanged design budgets, and all 56 contrast checks pass.
 
 `typecheck` now uses `vue-tsc`; `typecheck:vue` is an explicit alias. The older
 TypeScript-only command remains available as `typecheck:ts` for baseline

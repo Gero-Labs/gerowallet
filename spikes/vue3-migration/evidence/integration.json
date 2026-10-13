@@ -1,0 +1,289 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-13T14:06:56.869Z",
+  "repository": "https://github.com/Gero-Labs/gerowallet",
+  "baseCommit": "50e0bcfe6ca8a6bace23f2a0010bad6d278b2d1a",
+  "branch": "migration/vue3-vuetify4",
+  "implementationCommit": "79bdb4572350f26666179c986358b54dec21a8a4",
+  "implementationTree": "90a66406b0ff186cb65cf4245e3186c62c909fc1",
+  "scope": "Local integration review. No push, remote PR, hosted CI run, tag, store submission or rollout.",
+  "toolchain": {
+    "node": "24.19.0",
+    "cleanInstallNpm": "11.1.0",
+    "lockGenerationNpm": "12.2.0",
+    "vue": "3.5.44",
+    "vuetify": "4.2.4",
+    "vite": "7.3.7",
+    "vitest": "4.1.11",
+    "playwright": "1.62.1"
+  },
+  "packageLockSha256": "1075fddbdf0d3ca79d86b4f59eb993934fe4a078b3c8017370c26feaced132b5",
+  "tests": {
+    "passed": 5040,
+    "total": 5040,
+    "failed": 0,
+    "skipped": 0,
+    "files": 437,
+    "report": "vue3-final-alias-full-suite.json"
+  },
+  "changedLint": {
+    "files": 548,
+    "errors": 0,
+    "warnings": 6
+  },
+  "fullLint": {
+    "baselineErrors": 268,
+    "currentErrors": 116,
+    "introduced": []
+  },
+  "types": {
+    "baselineFile": "baseline-typecheck.log",
+    "currentFile": "final-types.log",
+    "baseline": 242,
+    "current": 56,
+    "productionSfcDiagnostics": 0,
+    "added": []
+  },
+  "design": {
+    "unchangedBudgets": true,
+    "contrastChecksPassed": 56
+  },
+  "messagesCompiled": 16839,
+  "audit": {
+    "info": 0,
+    "low": 19,
+    "moderate": 31,
+    "high": 23,
+    "critical": 0,
+    "total": 73
+  },
+  "packages": {
+    "production": {
+      "sourceCommit": "79bdb4572350f26666179c986358b54dec21a8a4",
+      "version": "2.7.3",
+      "files": 1168,
+      "localWasmFiles": 8,
+      "identityVerified": false,
+      "artifactSha256": "7496712d42400bdf3b4027bd2c84f6b8adefe7f55e30ef00abd81e1ebaca6a4a",
+      "browser": {
+        "passed": true,
+        "name": "Gero Dashboard",
+        "version": "2.7.3",
+        "artifactHashes": {
+          "manifest.json": "12c4c0e6ada3175e290f221c3cfe6fdfcd6c15b5f307e1666675362f7c541e07",
+          "index.html": "a1721e2d3e39752d8c18b867cd8978eb4944608323997f6ae51559bfa66c5139",
+          "sidepanel/index.html": "1bf22c98c474f8e2b3a16439ad2a1f695d8a9b94ebf3be3045308cd841b2bce6"
+        },
+        "artifactSha256": "7496712d42400bdf3b4027bd2c84f6b8adefe7f55e30ef00abd81e1ebaca6a4a",
+        "blockedRequests": 10,
+        "pageErrors": [],
+        "browserVersion": "151.0.7922.34",
+        "nodeVersion": "v24.19.0",
+        "os": {
+          "platform": "win32",
+          "release": "10.0.26200",
+          "arch": "x64"
+        },
+        "coverage": "Actual extension pages in Chromium tabs, including sidepanel document and dashboard tab handoff; native browser side-panel chrome is not automated."
+      },
+      "observations": [
+        {
+          "root": "options",
+          "violations": []
+        },
+        {
+          "root": "sidepanel",
+          "violations": []
+        },
+        {
+          "root": "dashboard-from-sidepanel",
+          "violations": []
+        }
+      ],
+      "checksums": "integration-production-artifact.json"
+    },
+    "beta": {
+      "sourceCommit": "79bdb4572350f26666179c986358b54dec21a8a4",
+      "version": "2.7.3",
+      "files": 1168,
+      "localWasmFiles": 8,
+      "identityVerified": false,
+      "artifactSha256": "d873065d6fbfb3f6a38aa6de92cc2b6bc910b2985dd847a075371a9e755b0323",
+      "browser": {
+        "passed": true,
+        "name": "Gero Dashboard (Beta)",
+        "version": "2.7.3",
+        "artifactHashes": {
+          "manifest.json": "36b2e1c13fc4a224df68e64896a55ac9114e6dfdf033b6698f6af16c74c9a173",
+          "index.html": "a1721e2d3e39752d8c18b867cd8978eb4944608323997f6ae51559bfa66c5139",
+          "sidepanel/index.html": "1bf22c98c474f8e2b3a16439ad2a1f695d8a9b94ebf3be3045308cd841b2bce6"
+        },
+        "artifactSha256": "d873065d6fbfb3f6a38aa6de92cc2b6bc910b2985dd847a075371a9e755b0323",
+        "blockedRequests": 10,
+        "pageErrors": [],
+        "browserVersion": "151.0.7922.34",
+        "nodeVersion": "v24.19.0",
+        "os": {
+          "platform": "win32",
+          "release": "10.0.26200",
+          "arch": "x64"
+        },
+        "coverage": "Actual extension pages in Chromium tabs, including sidepanel document and dashboard tab handoff; native browser side-panel chrome is not automated."
+      },
+      "observations": [
+        {
+          "root": "options",
+          "violations": []
+        },
+        {
+          "root": "sidepanel",
+          "violations": []
+        },
+        {
+          "root": "dashboard-from-sidepanel",
+          "violations": []
+        }
+      ],
+      "checksums": "integration-beta-artifact.json"
+    }
+  },
+  "archives": [
+    {
+      "channel": "production",
+      "ok": true,
+      "files": 1168,
+      "file": "Gero-v2.7.3-vue3-production-local.zip",
+      "sha256": "732768c2a687883240f7ffdffd111d14d4d806f740a7c5d20b03d6bf63b9ca7f"
+    },
+    {
+      "channel": "beta",
+      "ok": true,
+      "files": 1168,
+      "file": "Gero-v2.7.3-vue3-beta-local.zip",
+      "sha256": "b3cf2c7fc1460fb242979418e99aee5a310180eedab2631b4115be04fe992329"
+    }
+  ],
+  "storeBrowser": {
+    "startedAt": "2026-10-13T13:57:40.602Z",
+    "checks": [
+      "Offline first login exits welcome after the normal synchronization safety timeout",
+      "Production UI creates Migration synthetic A; real background publishes its identity and wallet record offline",
+      "Browser restart hydrates the UI-created wallet from production persistence",
+      "A newly opened options page hydrates the live background wallet",
+      "Production side-panel UI renders the created wallet from real stores",
+      "Background lock broadcasts reach both options pages and side panel",
+      "Real password authentication unlocks all subscribed interfaces",
+      "Production UI creates Migration synthetic B; real background publishes its identity and wallet record offline",
+      "Second UI-created wallet replaces prior identity across subscribers",
+      "Real wallet switch replaces current identity without fixture-pinned fields",
+      "Real persistence stores the selected wallet and lock before process shutdown",
+      "Fresh browser process restores selected wallet and both records; existing no-unlock-method policy clears the stray lock"
+    ],
+    "errors": [],
+    "blockedRequests": 50,
+    "network": "Offline context, all HTTP routes aborted, dead proxy and DNS blocking; no transaction actions",
+    "fixtures": "No store/storage/IndexedDB writes from the harness; wallets created by production UI",
+    "manifestSha256": "12c4c0e6ada3175e290f221c3cfe6fdfcd6c15b5f307e1666675362f7c541e07",
+    "artifactSha256": "7496712d42400bdf3b4027bd2c84f6b8adefe7f55e30ef00abd81e1ebaca6a4a",
+    "nodeVersion": "v24.19.0",
+    "coverageLimits": [
+      "Fresh synthetic password wallets only; no existing user profile, live provider, hardware device, transaction signing or submission.",
+      "Side-panel document is opened in a browser tab; native browser side-panel chrome is not automated.",
+      "Offline wallet login publishes identity before first-restore synchronization completes. Wallet switching is verified at the real background broadcast boundary.",
+      "No configured session unlock method on these new wallets: startup intentionally clears a persisted stray lock, separately from password encryption used to protect wallet secrets."
+    ],
+    "sourceEvidence": [
+      {
+        "file": "src/services/walletManager.service.ts",
+        "symbol": "login / loginWallet",
+        "explanation": "Unchanged per-wallet pendingLogins deduplication and first-restore synchronization wait."
+      },
+      {
+        "file": "src/services/websocket.service.ts",
+        "symbol": "waitForSync",
+        "explanation": "Unchanged 300000ms offline synchronization safety timeout."
+      },
+      {
+        "file": "src/chrome/background.ts",
+        "symbol": "initializeBackground",
+        "explanation": "Startup calls walletManager.login and clears isLocked if persisted unlockMethod is absent."
+      }
+    ],
+    "extensionId": "bgpipimickeadkjlklgciifhnalhdjhe",
+    "chromium": "151.0.7922.34",
+    "firstLogin": {
+      "elapsedAfterIdentityMs": 300039,
+      "url": "chrome-extension://bgpipimickeadkjlklgciifhnalhdjhe/index.html#/",
+      "synchronization": "Timed out with every external network request blocked; this does not certify live synchronization."
+    },
+    "offlineLimitation": "First-restore login waits for network sync; the dashboard transition is not certified by this offline smoke.",
+    "persistedLockBeforeShutdown": true,
+    "configuredUnlockMethod": null,
+    "finalState": {
+      "walletId": 1,
+      "walletName": "Migration synthetic A",
+      "network": "Preprod",
+      "locked": false,
+      "wallets": [],
+      "updates": 1,
+      "syncing": true,
+      "transactionCount": 0
+    },
+    "persistedWallets": [
+      {
+        "id": 1,
+        "name": "Migration synthetic A"
+      },
+      {
+        "id": 2,
+        "name": "Migration synthetic B"
+      }
+    ],
+    "status": "passed",
+    "finishedAt": "2026-10-13T14:03:13.756Z"
+  },
+  "browserNotes": [
+    "Help published/news content uses labeled synthetic HTTP fixtures.",
+    "The store smoke creates encrypted synthetic wallets through production UI and observes real background messages without overriding verified state.",
+    "The raw store report sourceEvidence symbol initializeBackground means module startup; the script label was corrected after execution without changing behavior.",
+    "The raw store report offlineLimitation applies to the second wallet first-restore transition; firstLogin separately proves wallet A reaches the dashboard after the existing 300-second safety timeout.",
+    "Sidepanel document checks do not qualify native browser side-panel chrome."
+  ],
+  "releaseGates": [
+    "Final AI review and fixes",
+    "Physical PassKey and supported hardware acceptance",
+    "Live provider and three-chain test-network matrix",
+    "Existing encrypted-profile in-place upgrade and forward recovery",
+    "Supported OS/browser/locale/native sidepanel matrix",
+    "Stable production and beta store IDs",
+    "Remaining dependency advisory disposition",
+    "Hosted CI on reviewed release version, beta observation and separately authorized publication"
+  ],
+  "evidenceDirectory": "D:/GeroRepos/gitRepos/output/gerowallet-v01-2026-10-13",
+  "rawReportSha256": {
+    "vue3-final-alias-full-suite.json": "9886b8a0ee167f0dcb6d743f478f15ad2b638e123519eabd1bc0a174fc3b241a",
+    "final-ci.log": "cf17c47956e8f09446557dcc9c1431dc1bb360f2e89a13296b6d3b6f8ccc9269",
+    "final-changed-lint.json": "59ee704d19a4e041594b60b66faae94ebf7c82210a112e6394f969c7e7410086",
+    "qualification-full-lint.json": "44fd92b64b58e95c61851a9aa836a6480ed7dcd87c995d5bffa2536a27548b7d",
+    "final-lint-comparison.json": "d52aab73e20c29309d8e6a042e3533e498cf5f137a0b2e35f355334dfc2d8311",
+    "final-types.log": "1f3e49af9ec236885a084b2fa61b35c41405d7d00b26a3bdcd0a7551afdbc7e6",
+    "final-type-diagnostic-comparison.json": "d13749ea87955e9f87f8ffdaaa050a214a6bc32c7d417e2b2949243e9bcacd69",
+    "final-design.log": "4ba74234aa6e3b709e3bd01aeb48234ec88426c22ccefa596df371be05294617",
+    "final-audit.json": "afb2e6ea3dec5ef0f7d44d406f5b87d3e67ade1dc63e1c2dcb549390b68432a6",
+    "candidate-production-build.log": "a3bd7f45f350c4cd6c2e108138004784e1133cf55ae3f12365b91afe84d2f097",
+    "candidate-beta-build.log": "47c3df6d9421e29f8ce5bf15d469100f9551c7038f3f600d523b141199959e56",
+    "candidate-production-tdz.log": "8933898d1c69773774bde7a102eaca3c86ff88930e1ddde1009bbf83940e1dc7",
+    "candidate-beta-tdz.log": "8933898d1c69773774bde7a102eaca3c86ff88930e1ddde1009bbf83940e1dc7",
+    "candidate-production-artifact.json": "668cccffdc55c958c73597e5af1ccc6f809b9ef7c6307f773bf5f7ed3c11c1e6",
+    "candidate-beta-artifact.json": "dd68acf10acf2161f904283626c0b7bb64ffd55b80ebb4ba1d43a9e1917ea739",
+    "candidate-production-entrypoints/report.json": "7e19e32c1e7cf659f89dd7327971e4189369ddb83a97d34960fe703c8af9572a",
+    "candidate-beta-entrypoints/report.json": "608cc358e0853382122e276d88f6cd5af239c5246c83244e09a714a7ec4720c9",
+    "candidate-help-foundation.log": "6d530feb9c3b652cedc654eb0f40a41dc1fc6d18918d5b92a687fb08782563a9",
+    "candidate-help-published.log": "66120911dfc0fe0be9bb4160e23a05614279ee8893ab75c53dcdb772cc8a74d6",
+    "candidate-help-updates.log": "cee2c4ee1ecb3fedf45e6d11b22dae7ec1a0e485b1bc303c16660c5d8ab44181",
+    "wallet-library-esm-browser.log": "60fe3a700b670580628d672d26b4e8b3a7f4693590dab9062284fde3f0c7a1da",
+    "wallet-library-esm-browser-mini.log": "bfea1b9f158e0056f95bbe2c5a5fb483a34649493d40427186bb56f8a53684ff",
+    "candidate-archive-verification.json": "2d879a744fdbed040c1e5a097074908dbde802700faa13dd04208fcae938cbd2",
+    "store-browser-final/report.json": "27e48c7de416f1beccbb1231d6235d677d0242bd77b8e2cde54ab37d533b59bf"
+  }
+}

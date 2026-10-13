@@ -40,7 +40,7 @@ const report = { startedAt: new Date().toISOString(), profile, extension, checks
   sourceEvidence: [
     { file: 'src/services/walletManager.service.ts', symbol: 'login / loginWallet', explanation: 'Unchanged per-wallet pendingLogins deduplication and first-restore synchronization wait.' },
     { file: 'src/services/websocket.service.ts', symbol: 'waitForSync', explanation: 'Unchanged 300000ms offline synchronization safety timeout.' },
-    { file: 'src/chrome/background.ts', symbol: 'initializeBackground', explanation: 'Startup calls walletManager.login and clears isLocked if persisted unlockMethod is absent.' },
+    { file: 'src/chrome/background.ts', symbol: 'module startup', explanation: 'Startup calls walletManager.login and clears isLocked if persisted unlockMethod is absent.' },
   ],
 };
 let context;
@@ -136,7 +136,7 @@ async function createWallet(name, awaitInitialSync = false) {
     report.firstLogin = { elapsedAfterIdentityMs: Date.now() - started, url: page.url(), synchronization: 'Timed out with every external network request blocked; this does not certify live synchronization.' };
     check('Offline first login exits welcome after the normal synchronization safety timeout');
   } else if (page.url().includes('#/welcome')) {
-    report.offlineLimitation = 'First-restore login waits for network sync; the dashboard transition is not certified by this offline smoke.';
+    report.offlineLimitation = 'First-restore login waits for network sync. firstLogin records the bounded dashboard check for wallet A; wallet B dashboard completion and live synchronization are not certified.';
   }
   check(`Production UI creates ${name}; real background publishes its identity and wallet record offline`);
 }

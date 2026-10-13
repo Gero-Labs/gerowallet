@@ -11,23 +11,28 @@ production rollout was triggered during this work.
 
 Use this table to decide what the local evidence proves. Results are recorded
 on October 13, 2026, under
-`D:/GeroRepos/gitRepos/output/gerowallet-v01-2026-10-13/`. The final production
-and beta packages are being rebuilt after a browser CSP failure exposed a
-runtime `new Function` path in the draggable dependency. A prior package-check
-pass does not override that browser failure. Final artifact hashes and browser
-results must come from the replacement packages before they qualify for review.
+`D:/GeroRepos/gitRepos/output/gerowallet-v01-2026-10-13/`. Final production and
+beta packages were rebuilt after the browser check exposed a runtime
+`new Function` path in the draggable dependency. Both replacement packages pass
+the passive browser CSP checks. Their reports identify the complete artifact
+digest and verify that its files did not change during the run.
+
+The committed [integration record](evidence/integration.json) associates these
+results with implementation commit `79bdb4572350f26666179c986358b54dec21a8a4`.
+Both local ZIP archives were decompressed and every file hash matched its
+qualified artifact manifest. They remain version 2.7.3 local review packages.
 
 | Gate | Recorded result | Evidence and remaining work |
 | --- | --- | --- |
 | Reproducible dependency install | Pass locally | Normal `npm ci` completes with Node 24.19.0 and npm 11.1.0; no forced or legacy peer resolution. `final-ci.log` records the clean install. Hosted CI remains pending. |
-| Automated tests | Pass locally | `vue3-qualification-full-suite.json`: 437 files, 5,040 tests passed, zero failed or skipped. Tests use Vitest 4.1.11. This supersedes the earlier two-failure full-suite report. |
-| Changed-file lint and design | Pass locally | `final-changed-lint.json` reports zero errors across 536 files. `final-design.log` passes the unchanged design budgets and all 56 contrast checks. Recheck files changed after those reports before the final review. |
+| Automated tests | Pass locally | `vue3-final-alias-full-suite.json`: 437 files, 5,040 tests passed, zero failed or skipped, including the final ESM draggable resolution. Tests use Vitest 4.1.11. This supersedes the earlier two-failure full-suite report. |
+| Changed-file lint and design | Pass locally | `final-changed-lint.json` reports zero errors across 548 files. Full lint retains 116 errors versus 268 in the baseline, with zero introduced diagnostics. `final-design.log` passes the unchanged design budgets and all 56 contrast checks. The normal commit hooks also gate the final staged contents. |
 | TypeScript migration regression | Pass relative to baseline | `final-types.log` reports 56 existing diagnostics and zero production SFC diagnostics. `final-type-diagnostic-comparison.json` finds zero introduced normalized diagnostics against the 242-diagnostic baseline. The full typecheck still exits with errors; it is not an absolute clean result. |
 | Production translation compilation | Pass locally | All 16,839 messages across English, German, Spanish, and push catalogs compile with pinned compiler 11.4.14. Compiler, parity, and runtime tests pass. Visual locale acceptance remains open. |
 | Secret and persistence compatibility | Pass in automated scope | Eight compatibility suites pass 101 tests; real store/port and IndexedDB regressions also pass. These use frozen or synthetic fixtures and do not prove an existing browser profile upgrades in place. |
-| Production and beta package integrity | Requalification in progress | Earlier `production-artifact.json` and `beta-artifact.json` passed structural checks but precede the CSP correction. Replace both reports and retain their file/lockfile hashes, source revision, manifest, channel, and archive checksum. |
-| Real MV3 entrypoints and CSP | Open | The earlier beta entrypoint smoke failed on blocked JavaScript evaluation. Test both replacement packages in fresh extension profiles, including options, sidepanel document, worker startup, local WASM, navigation, and zero unexpected CSP or console failures. Opening the sidepanel document alone does not prove the native browser side-panel container. |
-| Real background synchronization and restart | Partial browser evidence | The current `store-browser/report.json` records eight successful checks using wallets created through production UI, real background messages, lock/unlock, and restart persistence, with no harness state writes. The run failed while switching back to the first wallet under offline conditions. Resolve and rerun; do not count that report as a passed gate. |
+| Production and beta package integrity | Pass locally, identity open | `candidate-production-artifact.json` and `candidate-beta-artifact.json` each pass with 1,168 files and eight local WASM files. Both full builds and remote-code checks pass; the TDZ guard reports 27 known and zero new observations. Public store identity remains unverified. |
+| Real MV3 entrypoints and CSP | Pass in automated scope | Both `candidate-*-entrypoints/report.json` reports pass with zero CSP violations and uncaught page errors. They exercise options, the sidepanel document, translated controls, and the dashboard tab handoff. All three Help browser suites and the ESM draggable desktop/mini fixtures pass. Native browser side-panel chrome and the full provider/device matrix remain open. |
+| Real background synchronization and restart | Pass in offline scope | `store-browser-final/report.json` passes 12 checks with zero page errors on the final production artifact. Production UI creates both synthetic wallets; real broadcasts, password unlock, switching, persistence, and process restart work without harness state writes. Wallet A reaches the dashboard after the existing 300-second offline safety timeout. Wallet B's first-restore dashboard and live synchronization are not certified. A saved lock is verified before restart; existing startup policy intentionally clears it when no session unlock method is configured. |
 | Dependency advisories | Reviewed numbers; release decision open | `final-audit.json` records 73 findings: 19 low, 31 moderate, 23 high, zero critical. Remaining advisories need recorded owners, exposure assessment, and release disposition. This is not a clean dependency audit. |
 | Stable store identity and exact candidate | Open | Local artifact reports explicitly set `identityVerified: false`. Match the intended production/beta public manifest key to the release owner's expected extension ID, then qualify the committed candidate and its retained archives. |
 | In-place upgrade and forward recovery | Open | Exercise an existing 2.7.3 profile and a higher-version recovery package without uninstalling. Cover supported secret formats, flag-on migration, flag-off readers, database state, browser restart, and worker termination. Follow the recovery procedure below. |
