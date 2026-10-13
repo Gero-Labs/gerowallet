@@ -188,7 +188,8 @@ import {
   DustSourceStage,
 } from '@/shared/composables/useDustSources';
 import { getDustPending } from '@/shared/composables/useDustPending';
-import { getExplorerUrl } from '@/shared/utils/explorer';
+import { useExplorer } from '@/shared/composables/useExplorer';
+import { cardanoTwinNetwork } from '@/chains/midnight/midnightConfig';
 import timeAgo from '@/plugins/time';
 import snackbar from '@/plugins/snackbar';
 
@@ -263,8 +264,14 @@ function rowNote(source: DustSource): string {
 function pendingTxHash(source: DustSource): string {
   return source.status?.registrationUtxoTxHash || getDustPending(source.stakeAddress)?.txHash || '';
 }
+const { explorerUrl } = useExplorer();
+// The registration is a Cardano transaction on the Midnight network's Cardano
+// twin (Stagenet registers on Preprod), not on the Midnight network itself.
 function pendingTxUrl(source: DustSource): string {
-  return getExplorerUrl(Blockchain.CARDANO, pendingTxHash(source), 'tx', walletStore.loggedWallet?.network);
+  return explorerUrl('tx', pendingTxHash(source), {
+    chain: Blockchain.CARDANO,
+    network: cardanoTwinNetwork(walletStore.loggedWallet?.network ?? ''),
+  });
 }
 function pendingElapsed(source: DustSource): string {
   const rec = getDustPending(source.stakeAddress);

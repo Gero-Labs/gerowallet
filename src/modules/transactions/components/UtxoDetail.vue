@@ -99,16 +99,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, toRefs } from 'vue';
+import { computed } from 'vue';
 import filters from '@/shared/utils/filters';
 import CopyButton from '@/shared/components/CopyButton.vue';
 import NetworkStore from '@/stores/networkStore';
-import { walletStore } from '@/stores/walletStore';
-import { getExplorerUrl } from '@/shared/utils/explorer';
+import { useExplorer } from '@/shared/composables/useExplorer';
 import { useTranslation } from '@/shared/composables/useTranslation';
 
 const { t } = useTranslation();
-const { loggedWallet } = toRefs(walletStore);
 
 const props = defineProps<{
   utxo: {
@@ -121,23 +119,17 @@ const props = defineProps<{
     tokenCount: number;
     assets: Map<string, bigint> | undefined;
     datumHash: string | null;
-    datum: any;
-    scriptReference: any;
+    // Only ever rendered through JSON.stringify.
+    datum: unknown;
+    scriptReference: unknown;
     isCollateral: boolean;
   };
 }>();
 
-// Shared explorer helper handles both Apex chains (incl. Vector → apexscan) and
-// Cardano networks; the previous inline logic only special-cased APEX_PRIME, so
-// a Vector UTxO link fell through to Cardano cexplorer (bug 954).
-const txUrl = computed(() =>
-  getExplorerUrl(
-    loggedWallet.value?.chain ?? '',
-    props.utxo.txHash,
-    'tx',
-    loggedWallet.value?.network,
-  ),
-);
+// No explorer has a page for a single UTxO, so link the transaction that made it.
+// Shared helper: inline logic here once sent Vector UTxOs to cexplorer (bug 954).
+const { explorerUrl } = useExplorer();
+const txUrl = computed(() => explorerUrl('tx', props.utxo.txHash));
 
 const tokenEntries = computed(() => {
   if (!props.utxo.assets) return [];

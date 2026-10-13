@@ -279,6 +279,8 @@ import { ref, computed, watch, nextTick } from 'vue';
 import { useStrikeDeposit } from '@/modules/market/composables/useStrikeDeposit';
 import { useStrikeOnboarding } from '@/modules/market/composables/useStrikeOnboarding';
 import { walletStore } from '@/stores/walletStore';
+import { Blockchain } from '@/models/types';
+import { useExplorer } from '@/shared/composables/useExplorer';
 import type { Cardano } from '@cardano-sdk/core';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import StrikeOnboarding from './StrikeOnboarding.vue';
@@ -383,12 +385,9 @@ const truncatedAddress = computed(() => {
   return `${addr.slice(0, 10)}…${addr.slice(-6)}`;
 });
 
-const explorerUrl = computed(() => {
-  if (!txHash.value) return '#';
-  const network = walletStore.loggedWallet?.network;
-  const prefix = network === 'Preprod' ? 'preprod.' : '';
-  return `https://${prefix}cexplorer.io/tx/${txHash.value}`;
-});
+// Previously hardcoded cexplorer and sent Preview wallets to mainnet.
+const { explorerUrl: explorerLink } = useExplorer();
+const explorerUrl = computed(() => explorerLink('tx', txHash.value, { chain: Blockchain.CARDANO }) || '#');
 
 const canQuote = computed(() => amountNum.value > 0 && amountNum.value <= availableAda.value);
 

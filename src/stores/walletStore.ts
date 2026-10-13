@@ -8,6 +8,7 @@ import { addConnectedDapp, removeDapp, setWalletConfiguration } from '@/db/walle
 import LoadingState from '@/stores/loading';
 import priceService from '@/stores/priceStore';
 import { Contact, Keys } from '@/models/types';
+import { EXPLORER_CONFIG_KEY } from '@/shared/utils/explorer';
 import type { IUnifiedUtxo, IBalance } from '@/chains/common/interfaces';
 
 interface WhitelistedEntry {
@@ -504,6 +505,16 @@ export default {
       walletStore.config.hideUnverifiedTokens = value;
       broadcastFromBackground({ config: walletStore.config });
       setWalletConfiguration(walletStore.loggedWallet.id, 'hideUnverifiedTokens', value);
+    }
+  },
+
+  async setExplorer(value: string) {
+    if (walletStore.config && walletStore.loggedWallet) {
+      // Replace rather than add the key in place: a new property on the
+      // observable config would not be reactive until ConfigLoader re-delivers.
+      walletStore.config = { ...walletStore.config, [EXPLORER_CONFIG_KEY]: value };
+      broadcastFromBackground({ config: walletStore.config });
+      await setWalletConfiguration(walletStore.loggedWallet.id, EXPLORER_CONFIG_KEY, value);
     }
   },
 

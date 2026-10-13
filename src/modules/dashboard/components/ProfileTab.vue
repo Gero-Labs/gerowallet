@@ -76,6 +76,41 @@
           ></v-select>
         </v-col>
       </v-row>
+      <v-row v-if="explorerOptions.length > 1" no-gutters class="py-2">
+        <v-col cols="7" class="text-left">
+          <h3 style="color: white">{{ $t('settings.blockExplorer') }}</h3>
+          <span class="helper">{{ $t('settings.blockExplorerHelper') }}</span>
+        </v-col>
+        <v-col cols="5" style="align-content: center">
+          <v-select
+            :items="explorerOptions"
+            outlined
+            dense
+            v-model="selectedExplorer"
+            :hint="explorerHint"
+            :persistent-hint="!!explorerHint"
+            :hide-details="!explorerHint"
+            attach
+            item-text="name"
+            item-value="id"
+          >
+            <template v-slot:item="{ item }">
+              <v-list-item-avatar size="20">
+                <v-img :src="EXPLORER_LOGOS[item.id]" alt="" />
+              </v-list-item-avatar>
+              <v-list-item-content>
+                <v-list-item-title>{{ item.name }}</v-list-item-title>
+              </v-list-item-content>
+            </template>
+            <template v-slot:selection="{ item }">
+              <v-avatar size="20" class="mr-2">
+                <v-img :src="EXPLORER_LOGOS[item.id]" alt="" />
+              </v-avatar>
+              <span>{{ item.name }}</span>
+            </template>
+          </v-select>
+        </v-col>
+      </v-row>
       <v-row no-gutters class="py-2">
         <v-col cols="7" class="text-left">
           <h3 style="color: white">
@@ -157,6 +192,9 @@ import { geroStore } from '@/stores/geroStore';
 import geroStoreDefault from '@/stores/geroStore';
 import WalletStore from '@/stores/walletStore';
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
+import { useExplorer } from '@/shared/composables/useExplorer';
+import { DEFAULT_CARDANO_EXPLORER } from '@/shared/utils/explorer';
+import { EXPLORER_LOGOS } from '@/shared/utils/explorerLogos';
 import { setWalletConfiguration } from '@/db/wallet-db';
 import { isFeatureNew, markFeatureAsSeen } from '@/shared/composables/useFeatureNotifications';
 
@@ -209,6 +247,26 @@ const selectedCurrency = computed({
 });
 
 const walletName = ref('');
+// Per-wallet: the choices depend on the wallet's chain and network. Hidden
+// when the chain has a single explorer (Apex) or none (Bitcoin, Midnight).
+const { explorerOptions, explorerId, setExplorer } = useExplorer();
+
+const selectedExplorer = computed({
+  get: () => explorerId.value,
+  set: (id: string) => {
+    setExplorer(id).catch((error) => {
+      console.error('Error saving explorer preference:', error);
+    });
+  },
+});
+
+const explorerHint = computed(() => {
+  const chosen = explorerOptions.value.find(option => option.id === explorerId.value);
+  if (!chosen?.partial) return '';
+  const fallback = explorerOptions.value.find(option => option.id === DEFAULT_CARDANO_EXPLORER);
+  return t('settings.blockExplorerPartial', { explorer: chosen.name, fallback: fallback?.name ?? '' });
+});
+
 // Use locale codes as select values and the persisted global preference as the
 // source of truth, just like the welcome-screen language selector.
 const loc = computed({
