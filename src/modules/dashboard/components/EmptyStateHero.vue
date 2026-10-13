@@ -16,10 +16,10 @@
         {{ $t('dashboard.emptyWelcomeSub', { ticker: currencyTicker }) }}
       </p>
       <div class="es-ctas">
-        <v-btn v-if="buySupported" large class="geroButton es-cta" @click="$emit('buy-crypto')">
+        <v-btn v-if="buySupported" size="large" class="geroButton es-cta" @click="$emit('buy-crypto')">
           {{ $t('dashboard.buy') }} {{ currencyTicker }}
         </v-btn>
-        <v-btn large outlined class="es-cta es-cta--ghost" @click="$emit('show-receive')">
+        <v-btn size="large" variant="outlined" class="es-cta es-cta--ghost" @click="$emit('show-receive')">
           {{ $t('dashboard.receiveAction') }}
         </v-btn>
       </div>
@@ -62,12 +62,12 @@
     <!-- ═══ Footnote: what the funds unlock ═══ -->
     <section v-if="perks.length" class="es-footnote es-reveal" style="--es-d: 260ms">
       <p class="es-eyebrow g-mono es-footnote__label">{{ $t('dashboard.onceFundedTitle') }}</p>
-      <template v-for="(perk, idx) in perks">
-        <button :key="perk.key" type="button" class="es-footnote__link" @click="perk.go()">
+      <template :key="perk.key" v-for="(perk, idx) in perks">
+        <button  type="button" class="es-footnote__link" @click="perk.go()">
           <v-icon size="14" color="var(--g-accent)">{{ perk.icon }}</v-icon>
           {{ $t(perk.title) }}
         </button>
-        <span v-if="idx < perks.length - 1" :key="`dot-${perk.key}`" class="es-footnote__dot">·</span>
+        <span v-if="idx < perks.length - 1"  class="es-footnote__dot">·</span>
       </template>
     </section>
 

@@ -52,7 +52,7 @@
         </div>
         <div class="key-row">
           <span class="key-value">{{ truncatedKey }}</span>
-          <v-btn icon x-small class="copy-btn" @click="copyKey()">
+          <v-btn icon size="x-small" class="copy-btn" @click="copyKey()">
             <v-icon size="14" :color="copied ? 'success' : 'var(--g-text-3)'">
               {{ copied ? 'mdi-check' : 'mdi-content-copy' }}
             </v-icon>
@@ -76,7 +76,7 @@
       <template v-else-if="!isConnected && !needsUnlock && !pendingMessage">
         <v-btn
           block
-          depressed
+          variant="flat"
           :loading="isLoading"
           class="connect-btn"
           @click="onPrepare()"
@@ -118,21 +118,21 @@
             v-model="password"
             :type="showPassword ? 'text' : 'password'"
             :label="$t('perpetuals.spendingPassword')"
-            :append-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
-            outlined
-            dense
+            :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+            variant="outlined"
+            density="compact"
             hide-details
             autocomplete="current-password"
             class="password-field"
             :disabled="isLoading"
-            @click:append="showPassword = !showPassword"
+            @click:append-inner="showPassword = !showPassword"
             @keyup.enter="onSubmit()"
           />
 
           <!-- Action button: Unlock if encrypted blob exists, otherwise sign + connect -->
           <v-btn
             block
-            depressed
+            variant="flat"
             :loading="isLoading"
             :disabled="!password"
             class="connect-btn"
@@ -146,7 +146,7 @@
         <v-btn
           v-if="showMessage"
           block
-          text
+          variant="text"
           :disabled="isLoading"
           class="disconnect-btn"
           @click="onCancel()"
@@ -162,7 +162,7 @@
         </div>
         <v-btn
           block
-          text
+          variant="text"
           :loading="isLoading"
           class="disconnect-btn"
           @click="onDisconnect()"

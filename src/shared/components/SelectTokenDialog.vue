@@ -13,9 +13,9 @@
       <v-text-field
         v-model="search"
         :placeholder="$t('assets.searchByNameTickerPolicy')"
-        outlined
+        variant="outlined"
         prepend-inner-icon="mdi-magnify"
-        @input="onSearchInput"
+        @update:model-value="onSearchInput"
         :loading="searchLoading"
       ></v-text-field>
     </v-card-title>
@@ -24,11 +24,11 @@
       <v-virtual-scroll :bench="0" :items="filteredTokens" height="300" item-height="64">
         <template v-slot:default="{ item }">
           <v-list-item :key="item.name" @click="onChange(item)">
-            <v-list-item-action>
+            <div class="g-list-action">
               <v-badge overlap avatar color="transparent" :offset-y="45" v-if="item['verified']">
                 <template v-slot:badge>
-                  <v-avatar color="transparent" tile>
-                    <v-icon small color="primary"> mdi-check-decagram </v-icon>
+                  <v-avatar color="transparent" rounded="0">
+                    <v-icon size="small" color="primary"> mdi-check-decagram </v-icon>
                   </v-avatar>
                 </template>
                 <v-avatar size="40">
@@ -38,16 +38,16 @@
               <v-avatar size="40" v-else>
                 <img :src="getTokenImage(item)" :alt="`${item['ticker']} Logo`" @error="e => handleImageError(e, item)" />
               </v-avatar>
-            </v-list-item-action>
-            <v-list-item-content>
+            </div>
+            <div class="g-list-content">
               <v-list-item-title>
                 {{ item['name'] }}
               </v-list-item-title>
               <v-list-item-subtitle>
                 {{ item['ticker'] }}
               </v-list-item-subtitle>
-            </v-list-item-content>
-            <v-list-item-content class="text-right">
+            </div>
+            <div class="text-right g-list-content">
               <v-list-item-title v-if="item['balance']">
                 {{ formatTokenBalance(item) }}
               </v-list-item-title>
@@ -55,7 +55,7 @@
                 {{ formatTokenPrice(item['price']) }}
               </v-list-item-subtitle>
               <v-list-item-subtitle v-else-if="item['price'] === 0"> N/A </v-list-item-subtitle>
-            </v-list-item-content>
+            </div>
           </v-list-item>
         </template>
       </v-virtual-scroll>
@@ -106,7 +106,7 @@ interface SelectableToken {
 }
 
 interface Props {
-  value?: SelectableToken | null;
+  modelValue?: SelectableToken | null;
   isOpen?: boolean;
   availableTokens?: SelectableToken[];
   searchMechanism?: Function;
@@ -117,7 +117,7 @@ const props = withDefaults(defineProps<Props>(), {
   availableTokens: () => [],
 });
 
-const emit = defineEmits(['close', 'input']);
+const emit = defineEmits(['close', 'update:modelValue']);
 
 const { loggedWallet } = toRefs(walletStore);
 const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
@@ -157,11 +157,11 @@ function getTokenPriceInUsd(token: SelectableToken | null): number {
 
 const selectedToken = computed({
   get() {
-    return props.value;
+    return props.modelValue;
   },
   set(newToken) {
     if (newToken && props.availableTokens.length > 0) {
-      emit('input', newToken);
+      emit('update:modelValue', newToken);
     }
   },
 });

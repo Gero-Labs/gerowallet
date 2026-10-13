@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { encryptDeviceShare, decryptDeviceShare, type DeviceShareSecret } from './deviceShareCipher';
 
-const prf = (bytes = 7): DeviceShareSecret => ({
+const prf = (bytes = 7): Extract<DeviceShareSecret, { kind: 'prf' }> => ({
   kind: 'prf',
   prfOutput: new Uint8Array(32).fill(bytes),
   credentialId: 'cred-AAAA',

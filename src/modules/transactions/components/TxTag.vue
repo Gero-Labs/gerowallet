@@ -1,6 +1,6 @@
 <template>
   <span class="tx-tag">
-    <v-icon v-if="tag.icon" x-small class="tx-tag__icon">{{ tag.icon }}</v-icon>
+    <v-icon v-if="tag.icon" size="x-small" class="tx-tag__icon">{{ tag.icon }}</v-icon>
     <span v-if="tag.handle" class="tx-tag__handle">$</span>{{ tag.label }}
   </span>
 </template>

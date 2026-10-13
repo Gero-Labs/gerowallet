@@ -127,7 +127,7 @@
         <div class="become-drep__main">
           <CustomStepper :steps="steps" :current-step="currentStep">
             <!-- Step 1: profile ------------------------------------------- -->
-            <v-stepper-content step="1" class="become-drep__content">
+            <v-stepper-window-item :value="1" class="become-drep__content">
               <div class="glass-panel become-drep__panel">
                 <div class="become-drep__panel-head">
                   <h2 class="t-heading">{{ $t('governance.drepProfileStep') }}</h2>
@@ -136,8 +136,8 @@
 
                 <v-text-field
                   v-model="profile.givenName"
-                  outlined
-                  dense
+                  variant="outlined"
+                  density="compact"
                   :label="$t('governance.drepGivenName')"
                   :hint="$t('governance.drepGivenNameHint')"
                   :counter="MAX_GIVEN_NAME_LENGTH"
@@ -148,8 +148,8 @@
 
                 <v-textarea
                   v-model="profile.objectives"
-                  outlined
-                  dense
+                  variant="outlined"
+                  density="compact"
                   rows="3"
                   auto-grow
                   :label="$t('governance.drepObjectives')"
@@ -162,8 +162,8 @@
 
                 <v-textarea
                   v-model="profile.motivations"
-                  outlined
-                  dense
+                  variant="outlined"
+                  density="compact"
                   rows="3"
                   auto-grow
                   :label="$t('governance.drepMotivations')"
@@ -176,8 +176,8 @@
 
                 <v-textarea
                   v-model="profile.qualifications"
-                  outlined
-                  dense
+                  variant="outlined"
+                  density="compact"
                   rows="3"
                   auto-grow
                   :label="$t('governance.drepQualifications')"
@@ -190,8 +190,8 @@
 
                 <v-text-field
                   v-model="paymentInput"
-                  outlined
-                  dense
+                  variant="outlined"
+                  density="compact"
                   :label="$t('governance.drepPaymentAddressOptional')"
                   :hint="$t('governance.drepOwnPaymentAddressHint')"
                   :error-messages="paymentErrors"
@@ -205,7 +205,7 @@
                      means copying a 103-character string between two screens. -->
                 <div v-if="ownAddress" class="become-drep__own">
                   <GButton tier="tertiary" compact :disabled="usingOwnAddress" @click="useOwnAddress()">
-                    <v-icon left size="16">mdi-wallet-outline</v-icon>
+                    <v-icon start size="16">mdi-wallet-outline</v-icon>
                     <!-- The label carries the disabled reason, so the button is
                          never inert without saying why. -->
                     {{ usingOwnAddress ? $t('governance.drepUsingThisWallet') : $t('governance.drepUseThisWallet') }}
@@ -225,10 +225,10 @@
                   </span>
                 </div>
               </div>
-            </v-stepper-content>
+            </v-stepper-window-item>
 
             <!-- Step 2: deposit, keys, hosting ---------------------------- -->
-            <v-stepper-content step="2" class="become-drep__content">
+            <v-stepper-window-item :value="2" class="become-drep__content">
               <div class="glass-panel become-drep__panel">
                 <div class="become-drep__panel-head">
                   <h2 class="t-heading">{{ $t('governance.drepStepDepositKeys') }}</h2>
@@ -272,7 +272,7 @@
                         <span class="t-body-sm become-drep__host-title">{{ $t('governance.drepHostStepDownload') }}</span>
                         <div class="become-drep__hosting-row">
                           <GButton tier="secondary" compact @click="downloadDocument()">
-                            <v-icon left size="16">mdi-download</v-icon>
+                            <v-icon start size="16">mdi-download</v-icon>
                             {{ $t('governance.drepDownloadFile') }}
                           </GButton>
                           <CopyButton small :value="anchor.text" />
@@ -312,8 +312,8 @@
                         <span class="t-body-sm become-drep__host-title">{{ $t('governance.drepHostStepLink') }}</span>
                         <v-text-field
                           v-model="anchorUrl"
-                          outlined
-                          dense
+                          variant="outlined"
+                          density="compact"
                           :label="$t('governance.drepAnchorUrl')"
                           :hint="$t('governance.drepAnchorUrlHint')"
                           :error-messages="anchorUrlError"
@@ -336,7 +336,7 @@
                         <p class="t-caption become-drep__host-note">{{ $t('governance.drepVerifyStakes') }}</p>
                         <div class="become-drep__hosting-row">
                           <GButton tier="secondary" compact @click="pickFile()">
-                            <v-icon left size="16">mdi-file-upload-outline</v-icon>
+                            <v-icon start size="16">mdi-file-upload-outline</v-icon>
                             {{ $t('governance.drepVerifyUpload') }}
                           </GButton>
                           <span v-if="anchorVerified" class="t-body-sm become-drep__ok">
@@ -364,27 +364,27 @@
                 <!-- Acknowledgements -->
                 <div class="become-drep__acks">
                   <span class="t-label">{{ $t('governance.drepBeforeYouSign') }}</span>
-                  <v-checkbox v-model="ackPublic" dense hide-details>
+                  <v-checkbox v-model="ackPublic" density="compact" hide-details>
                     <template #label>
                       <span class="t-body-sm">{{ $t('governance.drepAcknowledgePublic') }}</span>
                     </template>
                   </v-checkbox>
-                  <v-checkbox v-model="ackInactivity" dense hide-details>
+                  <v-checkbox v-model="ackInactivity" density="compact" hide-details>
                     <template #label>
                       <span class="t-body-sm">{{ $t('governance.drepAcknowledgeInactivity') }}</span>
                     </template>
                   </v-checkbox>
-                  <v-checkbox v-model="ackVotes" dense hide-details>
+                  <v-checkbox v-model="ackVotes" density="compact" hide-details>
                     <template #label>
                       <span class="t-body-sm">{{ $t('governance.drepAcknowledgeVotes') }}</span>
                     </template>
                   </v-checkbox>
                 </div>
               </div>
-            </v-stepper-content>
+            </v-stepper-window-item>
 
             <!-- Step 3: review and sign ----------------------------------- -->
-            <v-stepper-content step="3" class="become-drep__content">
+            <v-stepper-window-item :value="3" class="become-drep__content">
               <div class="glass-panel become-drep__panel">
                 <div class="become-drep__panel-head">
                   <h2 class="t-heading">{{ $t('governance.drepReviewStep') }}</h2>
@@ -463,7 +463,7 @@
 
                 <EmptyState v-else :message="$t('governance.noTransactionToSign')" />
               </div>
-            </v-stepper-content>
+            </v-stepper-window-item>
           </CustomStepper>
 
           <div class="become-drep__footer">
@@ -531,7 +531,7 @@
       :isOpen="!!overlay && !!loggedWallet && loggedWallet.type === WalletType.Keystone"
       :keystoneType="keystoneType"
       :keystoneCbor="keystoneCbor"
-      @close="overlay = false"
+      @close="resetState()"
       @scan="onKeystoneScan"
       @error="onKeystoneError"
       @progress="onKeystoneProgress"
@@ -851,7 +851,7 @@ async function onFileChosen(event: Event): Promise<void> {
 function downloadDocument(): void {
   // The bytes handed over here are the same ones that were hashed — that is the
   // whole point of routing both through buildCip119Anchor.
-  const blob = new Blob([anchor.value.bytes], { type: 'application/ld+json' });
+  const blob = new Blob([new Uint8Array(anchor.value.bytes)], { type: 'application/ld+json' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -1052,6 +1052,7 @@ const {
   passwordRules,
   isPrfWallet,
   handleSign,
+  resetState,
   handlePassKeySuccess,
   handlePassKeyError,
   handlePassKeyAuthSuccess,

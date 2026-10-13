@@ -14,14 +14,14 @@
       <div class="card-partner__trust">
         <article class="card-partner__tile glass-tier">
           <h3 class="card-partner__tile-title t-body-lg">
-            <v-icon small>mdi-shield-check-outline</v-icon>
+            <v-icon size="small">mdi-shield-check-outline</v-icon>
             {{ t('card.providerRegulated') }}
           </h3>
           <p class="t-body-sm">{{ t('card.providerRegulatedDesc') }}</p>
         </article>
         <article class="card-partner__tile glass-tier">
           <h3 class="card-partner__tile-title t-body-lg">
-            <v-icon small>mdi-account-check-outline</v-icon>
+            <v-icon size="small">mdi-account-check-outline</v-icon>
             {{ t('card.providerAmlKyc') }}
           </h3>
           <p class="t-body-sm">{{ t('card.providerAmlKycDesc') }}</p>
@@ -44,7 +44,7 @@
       <div class="card-partner__links">
         <GButton tier="tertiary" compact :href="CARD_PROVIDER.websiteUrl" target="_blank" rel="noopener noreferrer">
           {{ t('card.learnMoreKaiserex') }}
-          <v-icon small right>mdi-open-in-new</v-icon>
+          <v-icon size="small" end>mdi-open-in-new</v-icon>
         </GButton>
         <GButton tier="tertiary" compact :href="CARD_PROVIDER.termsUrl" target="_blank" rel="noopener noreferrer">
           {{ t('navigation.termsOfService') }}

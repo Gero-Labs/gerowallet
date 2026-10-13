@@ -235,7 +235,7 @@ User Login
          │
          ▼
 ┌────────────────────────────────┐
-│ walletStore (Vue Observable)   │
+│ walletStore (Vue reactive)   │
 │ - Update state                 │
 │ - Broadcast to UI contexts     │
 └────────┬───────────────────────┘
@@ -305,13 +305,14 @@ Hardware wallets (Ledger, Trezor, Keystone) use a **hybrid approach**:
 
 ## State Management
 
-### Vue Observable Stores
+### Vue reactive Stores
 
-Gero Wallet uses **custom Vue Observable stores** instead of Vuex for lightweight, performant state management:
+Gero Wallet uses **custom Vue reactive stores** instead of Vuex for lightweight, performant state management:
 
 ```typescript
 // Example store pattern
-const walletStore = Vue.observable({
+import { reactive } from 'vue';
+const walletStore = reactive({
   // State
   walletId: null,
   address: null,
@@ -455,7 +456,7 @@ await db.open();
 
 ### Data Persistence Strategy
 
-1. **Hot Path**: In-memory stores (Vue Observable) for UI reactivity
+1. **Hot Path**: In-memory stores (Vue reactive) for UI reactivity
 2. **Persistence**: IndexedDB for permanent storage
 3. **Sync**: Chrome Storage for cross-context state hydration
 4. **Cache**: Portfolio cache for expensive calculations
@@ -799,7 +800,7 @@ npm run build
 - `vite-plugin-wasm` - WebAssembly support (cryptography)
 - `vite-plugin-top-level-await` - Async WASM loading
 - `vite-plugin-node-polyfills` - Node.js compatibility (Buffer, process, etc.)
-- `@vitejs/plugin-vue2` - Vue.js 2.7 support
+- `@vitejs/plugin-vue2` - Vue.js 3.5 support
 - `unplugin-auto-import` - Auto-import Vue, Vuetify
 - `unplugin-vue-components` - Auto-import components
 
@@ -855,7 +856,7 @@ console.log(`⏱️ PERF: Operation took ${performance.now() - start}ms`);
 
 ```bash
 # 1. Install dependencies
-npm install
+npm ci
 
 # 2. Start dev server (hot reload)
 npm run dev

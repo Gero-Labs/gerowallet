@@ -1,0 +1,75 @@
+/* Preserve the existing wallet layout while Vuetify 4 supplies the controls.
+   Existing pages use the padded-column grid and Material 2 utility names.
+   Keep these rules scoped to the two Vuetify application roots. */
+/* These are the legacy color variables still consumed by wallet components.
+   Resolve the live theme channels in both app roots and teleported overlays. */
+:is(.v-application, .v-overlay-container) {
+  --v-primary-base: rgb(var(--v-theme-primary));
+  --v-anchor-base: rgb(var(--v-theme-primary));
+  --v-error-base: rgb(var(--v-theme-error));
+  --v-error: rgb(var(--v-theme-error));
+  --v-background-base: rgb(var(--v-theme-background));
+  --v-navigationDrawerBackground-base: rgb(var(--v-theme-navigationDrawerBackground));
+  --v-cardBackground-base: rgb(var(--v-theme-cardBackground));
+}
+
+.v-application {
+  --v-font-body: var(--g-font-ui);
+  --v-font-heading: var(--g-font-ui);
+}
+
+/* Vuetify 4 defaults to gap-based columns. The wallet's nested rows and pa-*
+   column overrides were designed around padded columns with negative rows. */
+.v-application .v-row {
+  --g-grid-gutter: 24px;
+  --v-col-gap-x: 0px;
+  --v-col-gap-y: 0px;
+  margin: calc(var(--g-grid-gutter) / -2);
+}
+.v-application .v-row--density-comfortable { --g-grid-gutter: 16px; }
+.v-application .v-row--density-compact { --g-grid-gutter: 8px; }
+.v-application .v-row--no-gutters { --g-grid-gutter: 0px; }
+.v-application .v-row > .v-col { padding: calc(var(--g-grid-gutter) / 2); }
+.v-application .v-row + .v-row { margin-top: calc(var(--g-grid-gutter) / 2); }
+
+/* VListItem now owns a grid shell and a content cell. Legacy content/action
+   wrappers live inside that cell and still need their horizontal layout. */
+.v-application :is(.v-list-item__content, .v-list-item-title):has(> .g-list-content, > .g-list-action) {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.v-application .g-list-content {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+.v-application .g-list-action {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+}
+.v-application .g-list-action:first-child { margin-inline-end: 16px; }
+.v-application .g-list-action:last-child { margin-inline-start: 16px; }
+
+/* Material 2 typography names no longer ship in Vuetify 4. Gero's own t-*
+   classes remain the preferred design ramp for new content. */
+.v-application :is(.text-h5, .headline) { font-size: 1.5rem; font-weight: 400; line-height: 1.33; }
+.v-application .text-h6 { font-size: 1.25rem; font-weight: 500; line-height: 1.6; letter-spacing: .0125em; }
+.v-application :is(.text-subtitle-1, .subtitle-1) { font-size: 1rem; font-weight: 400; line-height: 1.75; letter-spacing: .009375em; }
+.v-application :is(.text-subtitle-2, .subtitle-2) { font-size: 0.875rem; font-weight: 500; line-height: 1.57; letter-spacing: .007143em; }
+.v-application :is(.text-body-1, .body-1) { font-size: 1rem; font-weight: 400; line-height: 1.5; letter-spacing: .03125em; }
+.v-application :is(.text-body-2, .body-2) { font-size: 0.875rem; font-weight: 400; line-height: 1.43; letter-spacing: .017857em; }
+.v-application :is(.text-caption, .caption) { font-size: 0.75rem; font-weight: 400; line-height: 1.67; letter-spacing: .033333em; }
+
+.v-application :is(.primary--text, .accent--text) { color: var(--g-accent); }
+.v-application :is(.error--text, .red--text) { color: var(--g-error); }
+.v-application .success--text { color: var(--g-success); }
+.v-application .warning--text { color: var(--g-warning); }
+.v-application :is(.grey--text, .text--secondary) { color: var(--g-text-3); }
+.v-application .white--text { color: var(--g-text-1); }
+.v-application .black--text { color: var(--g-canvas); }
+.v-application .transparent { background-color: transparent; }

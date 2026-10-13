@@ -1,6 +1,6 @@
 <template>
   <span class="anchor t-caption" :class="`anchor--${tone}`">
-    <v-icon x-small :color="iconColor" class="mr-1">{{ icon }}</v-icon>
+    <v-icon size="x-small" :color="iconColor" class="mr-1">{{ icon }}</v-icon>
     {{ label }}
   </span>
 </template>

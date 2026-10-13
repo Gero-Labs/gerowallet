@@ -4,7 +4,7 @@
     max-width="1000"
     content-class="rounded-xxl dialogStyle"
     :persistent="true"
-    :value="isOpen"
+    :model-value="isOpen"
   >
     <div style="position: relative; overflow: hidden;">
       <!-- Background Image for Third Slide Only -->
@@ -39,7 +39,7 @@
         </div>
       </v-carousel-item>
       <v-carousel-item>
-        <v-layout class="mx-4 mt-12">
+        <div class="d-flex flex-wrap flex-grow-1 mx-4 mt-12">
           <v-row class="mx-10">
             <v-col cols="6">
               <v-card class="transparent">
@@ -110,7 +110,7 @@
               </v-card>
             </v-col>
           </v-row>
-        </v-layout>
+        </div>
       </v-carousel-item>
       <v-carousel-item style="justify-items: center;">
         <div class="pa-8" style="justify-items: center;">
@@ -127,10 +127,10 @@
                 color="warning"
                 height="28"
                 style="min-width: 100px; text-transform: none;"
-                depressed
+                variant="flat"
               >
-                <v-avatar tile size="14" class="mr-1">
-                  <v-img :src="assets.dollarShieldSvg" :alt="$t('common.buy')" contain></v-img>
+                <v-avatar rounded="0" size="14" class="mr-1">
+                  <v-img :src="assets.dollarShieldSvg" :alt="$t('common.buy')" ></v-img>
                 </v-avatar>
                 <span style="font-size: 12px;">{{ $t('navigation.buySell') }}</span>
               </v-btn>
@@ -141,13 +141,13 @@
                 color="var(--g-accent)"
                 height="28"
                 style="min-width: 80px; text-transform: none;"
-                depressed
+                variant="flat"
               >
-                <v-avatar tile size="14" class="mr-1">
+                <v-avatar rounded="0" size="14" class="mr-1">
                   <v-img
                     :src="assets.sendSvg"
                     :alt="$t('common.send')"
-                    contain
+
                     style="filter: invert(83%) sepia(48%) saturate(3753%) hue-rotate(133deg) brightness(92%) contrast(108%);"
                   ></v-img>
                 </v-avatar>
@@ -160,13 +160,13 @@
                 color="success"
                 height="28"
                 style="min-width: 80px; text-transform: none;"
-                depressed
+                variant="flat"
               >
-                <v-avatar tile size="14" class="mr-1">
+                <v-avatar rounded="0" size="14" class="mr-1">
                   <v-img
                     :src="assets.qrCodeSvg"
                     :alt="$t('common.receive')"
-                    contain
+
                     style="filter: invert(83%) sepia(16%) saturate(992%) hue-rotate(92deg) brightness(94%) contrast(92%);"
                   ></v-img>
                 </v-avatar>
@@ -179,13 +179,13 @@
                 color="error"
                 height="28"
                 style="min-width: 80px; text-transform: none;"
-                depressed
+                variant="flat"
               >
-                <v-avatar tile size="14" class="mr-1">
+                <v-avatar rounded="0" size="14" class="mr-1">
                   <v-img
                     :src="assets.swapSvg"
                     :alt="$t('swap.swap')"
-                    contain
+
                     style="filter: invert(62%) sepia(76%) saturate(306%) hue-rotate(314deg) brightness(105%) contrast(98%);"
                   ></v-img>
                 </v-avatar>
@@ -198,13 +198,13 @@
                 color="var(--g-info)"
                 height="28"
                 style="min-width: 90px; text-transform: none;"
-                depressed
+                variant="flat"
               >
-                <v-avatar tile size="14" class="mr-1">
+                <v-avatar rounded="0" size="14" class="mr-1">
                   <v-img
                     :src="assets.barChart"
                     :alt="$t('perpetuals.perpetuals')"
-                    contain
+
                     style="filter: invert(66%) sepia(41%) saturate(458%) hue-rotate(226deg) brightness(95%) contrast(96%);"
                   ></v-img>
                 </v-avatar>
@@ -214,10 +214,10 @@
           </div>
 
           <!-- Action Descriptions Grid -->
-          <v-row justify="center" style="max-width: 1000px; margin: 0 auto;" no-gutters>
+          <v-row class="justify-center"  style="max-width: 1000px; margin: 0 auto;" no-gutters>
             <v-col cols="12" md="2" lg="2" class="text-center pa-2" style="flex: 1;">
-              <v-avatar tile size="32" class="mb-2">
-                <v-img :src="assets.dollarShieldSvg" :alt="$t('common.buy')" contain></v-img>
+              <v-avatar rounded="0" size="32" class="mb-2">
+                <v-img :src="assets.dollarShieldSvg" :alt="$t('common.buy')" ></v-img>
               </v-avatar>
               <p style="color: var(--g-warning); font-size: 13px; font-weight: 500; margin-bottom: 6px;">
                 {{ $t('navigation.buySell') }}
@@ -228,11 +228,11 @@
             </v-col>
 
             <v-col cols="12" md="2" lg="2" class="text-center pa-2" style="flex: 1;">
-              <v-avatar tile size="32" class="mb-2">
+              <v-avatar rounded="0" size="32" class="mb-2">
                 <v-img
                   :src="assets.sendSvg"
                   :alt="$t('common.send')"
-                  contain
+
                   style="filter: invert(83%) sepia(48%) saturate(3753%) hue-rotate(133deg) brightness(92%) contrast(108%);"
                 ></v-img>
               </v-avatar>
@@ -245,11 +245,11 @@
             </v-col>
 
             <v-col cols="12" md="2" lg="2" class="text-center pa-2" style="flex: 1;">
-              <v-avatar tile size="32" class="mb-2">
+              <v-avatar rounded="0" size="32" class="mb-2">
                 <v-img
                   :src="assets.qrCodeSvg"
                   :alt="$t('common.receive')"
-                  contain
+
                   style="filter: invert(83%) sepia(16%) saturate(992%) hue-rotate(92deg) brightness(94%) contrast(92%);"
                 ></v-img>
               </v-avatar>
@@ -262,11 +262,11 @@
             </v-col>
 
             <v-col cols="12" md="2" lg="2" class="text-center pa-2" style="flex: 1;">
-              <v-avatar tile size="32" class="mb-2">
+              <v-avatar rounded="0" size="32" class="mb-2">
                 <v-img
                   :src="assets.swapSvg"
                   :alt="$t('swap.swap')"
-                  contain
+
                   style="filter: invert(62%) sepia(76%) saturate(306%) hue-rotate(314deg) brightness(105%) contrast(98%);"
                 ></v-img>
               </v-avatar>
@@ -279,11 +279,11 @@
             </v-col>
 
             <v-col cols="12" md="2" lg="2" class="text-center pa-2" style="flex: 1;">
-              <v-avatar tile size="32" class="mb-2">
+              <v-avatar rounded="0" size="32" class="mb-2">
                 <v-img
                   :src="assets.barChart"
                   :alt="$t('perpetuals.perpetuals')"
-                  contain
+
                   style="filter: invert(66%) sepia(41%) saturate(458%) hue-rotate(226deg) brightness(95%) contrast(96%);"
                 ></v-img>
               </v-avatar>
@@ -312,42 +312,42 @@
             <span>{{ $t('navigation.availableOnSocial') }}</span>
             <div>
               <v-btn icon href="https://gerowallet.io" target="_blank" class="mx-2">
-                <v-avatar size="36" tile>
+                <v-avatar size="36" rounded="0">
                   <v-icon style="font-size: 28px;">mdi-web</v-icon>
                 </v-avatar>
               </v-btn>
               <v-btn icon href="https://twitter.com/GeroWallet" target="_blank" class="mx-2">
-                <v-avatar tile>
-                  <v-img :src="assets.xSvg" width="24" height="24" alt="x" contain></v-img>
+                <v-avatar rounded="0">
+                  <v-img :src="assets.xSvg" width="24" height="24" alt="x" ></v-img>
                 </v-avatar>
               </v-btn>
               <v-btn icon href="https://discord.gg/37bvtyvchz" target="_blank" class="mx-2">
-                <v-avatar tile>
-                  <v-img :src="assets.discordSvg" width="24" height="24" alt="discord" contain></v-img>
+                <v-avatar rounded="0">
+                  <v-img :src="assets.discordSvg" width="24" height="24" alt="discord" ></v-img>
                 </v-avatar>
               </v-btn>
               <v-btn icon href="https://t.me/GeroWallet" target="_blank" class="mx-2">
-                <v-avatar tile>
-                  <v-img :src="assets.telegramSvg" width="24" height="24" alt="x" contain></v-img>
+                <v-avatar rounded="0">
+                  <v-img :src="assets.telegramSvg" width="24" height="24" alt="x" ></v-img>
                 </v-avatar>
               </v-btn>
               <v-btn icon href="https://www.youtube.com/@Gerowallet" target="_blank" class="mx-2">
-                <v-avatar size="36" tile>
+                <v-avatar size="36" rounded="0">
                   <v-icon style="font-size: 30px;">mdi-youtube</v-icon>
                 </v-avatar>
               </v-btn>
               <v-btn icon href="https://gerowallet.medium.com/" target="_blank" class="mx-2">
-                <v-avatar tile>
-                  <v-img :src="assets.mediumSvg" width="24" height="24" alt="x" contain></v-img>
+                <v-avatar rounded="0">
+                  <v-img :src="assets.mediumSvg" width="24" height="24" alt="x" ></v-img>
                 </v-avatar>
               </v-btn>
               <v-btn icon href="https://github.com/Gero-Labs/gerowallet" target="_blank" class="mx-2">
-                <v-avatar size="36" tile>
+                <v-avatar size="36" rounded="0">
                   <v-icon style="font-size: 30px;">mdi-github</v-icon>
                 </v-avatar>
               </v-btn>
             </div>
-            <v-btn class="geroButton mt-4" x-large style="font-size: 14px" @click="setWelcomeDone">
+            <v-btn class="geroButton mt-4" size="x-large" style="font-size: 14px" @click="setWelcomeDone">
               {{ $t('navigation.getStarted') }}
             </v-btn>
           </div>

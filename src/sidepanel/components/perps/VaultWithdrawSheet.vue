@@ -1,9 +1,9 @@
 <template>
   <BottomSheet
-    :value="value"
+    :model-value="modelValue"
     :title="$t('vaults.withdrawFrom', { name: vaultName })"
     height="85%"
-    @input="$emit('input', $event)"
+    @update:model-value="$emit('update:modelValue', $event)"
   >
     <div class="vwithdraw-content">
 
@@ -41,14 +41,14 @@
       <v-text-field
         v-model="password"
         :label="$t('perpetuals.spendingPassword')"
-        outlined
-        dense
-        dark
+        variant="outlined"
+        density="compact"
+        theme="dark"
         hide-details
         class="perp-input mt-3"
         :type="showPassword ? 'text' : 'password'"
-        :append-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
-        @click:append="showPassword = !showPassword"
+        :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+        @click:append-inner="showPassword = !showPassword"
       />
 
       <!-- ── Status Banners ── -->
@@ -76,7 +76,7 @@
       <!-- ── Withdraw Button ── -->
       <v-btn
         block
-        depressed
+        variant="flat"
         :loading="isWithdrawing"
         :disabled="!canWithdraw"
         class="action-btn mt-4"
@@ -104,14 +104,14 @@ import { useStrikeWithdraw } from '@/modules/market/composables/useStrikeWithdra
 
 // ── Props & Emits ─────────────────────────────────────────────────────────────
 const props = defineProps<{
-  value: boolean;
+  modelValue: boolean;
   vaultId: string;
   vaultName: string;
   currentValue: string;
 }>();
 
 const emit = defineEmits<{
-  (e: 'input', value: boolean): void;
+  (e: 'update:modelValue', value: boolean): void;
   (e: 'withdrawn'): void;
 }>();
 
@@ -170,7 +170,7 @@ async function handleWithdraw() {
 }
 
 // Reset on close
-watch(() => props.value, (val) => {
+watch(() => props.modelValue, (val) => {
   if (!val) {
     amount.value = '';
     password.value = '';

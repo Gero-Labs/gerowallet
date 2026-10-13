@@ -20,11 +20,11 @@
             target="_blank"
             rel="noopener noreferrer"
           >
-            <v-icon small left>mdi-open-in-new</v-icon>
+            <v-icon size="small" start>mdi-open-in-new</v-icon>
             {{ $t('miniGero.viewOnExplorer') }}
           </GButton>
           <GButton v-if="isCardanoMainnet" tier="secondary" compact @click="isReportDialogOpen = true">
-            <v-icon small left>mdi-flag-outline</v-icon>
+            <v-icon size="small" start>mdi-flag-outline</v-icon>
             {{ $t('navigation.reportTransaction') }}
           </GButton>
         </div>
@@ -37,7 +37,7 @@
           <span v-if="fiatLine" class="t-caption g-num">{{ fiatLine }}</span>
         </div>
         <span :class="['tx-status', `tx-status--${status}`]">
-          <v-icon x-small>{{ statusIcon }}</v-icon>
+          <v-icon size="x-small">{{ statusIcon }}</v-icon>
           {{ statusLabel }}
         </span>
       </div>
@@ -91,7 +91,7 @@
       <h4 class="t-label tx-ledger__label">{{ $t('transactions.balanceChange') }}</h4>
       <div v-for="row in visibleLedger" :key="row.key" class="tx-ledger__row">
         <v-avatar size="28" class="tx-ledger__logo">
-          <v-img :src="row.img" :alt="row.name" contain />
+          <v-img :src="row.img" :alt="row.name"  />
         </v-avatar>
         <span class="tx-ledger__name">{{ row.name }}</span>
         <span :class="['tx-ledger__amount', 'g-num', { 'tx-ledger__amount--in': row.positive }]">{{ row.amount }}</span>
@@ -119,10 +119,10 @@
           :aria-expanded="isOpen(section.key) ? 'true' : 'false'"
           @click="toggleSection(section.key)"
         >
-          <span class="tx-section__icon"><v-icon small>{{ section.icon }}</v-icon></span>
+          <span class="tx-section__icon"><v-icon size="small">{{ section.icon }}</v-icon></span>
           <span class="tx-section__title">{{ section.title }}</span>
           <span v-if="section.count" class="tx-count g-num">{{ section.count }}</span>
-          <v-icon small class="tx-section__chevron">mdi-chevron-down</v-icon>
+          <v-icon size="small" class="tx-section__chevron">mdi-chevron-down</v-icon>
         </button>
 
         <div v-if="isOpen(section.key)" class="tx-section__body">
@@ -149,7 +149,7 @@
               </div>
               <div v-if="utxo.tokens.length" class="tx-pills">
                 <span v-for="token in utxo.tokens" :key="token.key" class="tx-pill">
-                  <v-avatar size="18"><v-img :src="token.img" :alt="token.name" contain /></v-avatar>
+                  <v-avatar size="18"><v-img :src="token.img" :alt="token.name"  /></v-avatar>
                   <span class="tx-pill__qty g-num">{{ token.quantity }}</span>
                   <span class="tx-pill__name">{{ token.name }}</span>
                 </span>
@@ -174,7 +174,7 @@
 
             <div class="tx-flow">
               <span class="tx-flow__rule"></span>
-              <v-icon x-small class="tx-flow__icon">mdi-arrow-down</v-icon>
+              <v-icon size="x-small" class="tx-flow__icon">mdi-arrow-down</v-icon>
               <span v-if="networkFee">{{ $t('signTx.networkFee') }} {{ networkFee }}</span>
               <span class="tx-flow__rule"></span>
             </div>
@@ -200,7 +200,7 @@
               </div>
               <div v-if="utxo.tokens.length" class="tx-pills">
                 <span v-for="token in utxo.tokens" :key="token.key" class="tx-pill">
-                  <v-avatar size="18"><v-img :src="token.img" :alt="token.name" contain /></v-avatar>
+                  <v-avatar size="18"><v-img :src="token.img" :alt="token.name"  /></v-avatar>
                   <span class="tx-pill__qty g-num">{{ token.quantity }}</span>
                   <span class="tx-pill__name">{{ token.name }}</span>
                 </span>
@@ -229,38 +229,38 @@
             <div v-for="(certificate, index) in certificates" :key="`certificate_${index}`" class="tx-block">
               <div class="tx-block__title">{{ getCertificateType(certificate) }}</div>
               <dl class="tx-kv">
-                <template v-if="certificate.stakeCredential?.hash">
+                <template v-if="'stakeCredential' in certificate && certificate.stakeCredential?.hash">
                   <dt>{{ $t('transactions.stakeCredential') }}</dt>
                   <dd>
                     <span class="g-mono">{{ filters.truncate(certificate.stakeCredential.hash) }}</span>
                     <CopyButton x-small :value="certificate.stakeCredential.hash" />
                   </dd>
                 </template>
-                <template v-if="getCredentialType(certificate.stakeCredential?.type)">
+                <template v-if="'stakeCredential' in certificate && getCredentialType(certificate.stakeCredential?.type)">
                   <dt>{{ $t('transactions.credentialType') }}</dt>
                   <dd>{{ getCredentialType(certificate.stakeCredential.type) }}</dd>
                 </template>
-                <template v-if="certificate.deposit">
+                <template v-if="'deposit' in certificate && certificate.deposit">
                   <dt>{{ $t('poolOperator.deposit') }}</dt>
-                  <dd class="g-num">{{ filters.toCurrency(certificate.deposit, false, 0, currencySymbol) }}</dd>
+                  <dd class="g-num">{{ filters.toCurrency(certificate.deposit.toString(), false, 0, currencySymbol) }}</dd>
                 </template>
-                <template v-if="certificate.poolId">
+                <template v-if="'poolId' in certificate && certificate.poolId">
                   <dt>{{ $t('swap.pool') }}</dt>
                   <dd>
                     <v-avatar v-if="currentPoolMeta?.url_png_icon_64x64" size="20">
-                      <v-img :src="currentPoolMeta.url_png_icon_64x64" contain />
+                      <v-img :src="currentPoolMeta.url_png_icon_64x64"  />
                     </v-avatar>
                     <span v-if="txPoolTicker" class="tx-kv__strong">{{ txPoolTicker }}</span>
                     <span class="g-mono">{{ filters.truncate(certificate.poolId) }}</span>
                     <CopyButton x-small :value="certificate.poolId" />
                   </dd>
                 </template>
-                <template v-if="certificate.dRep">
+                <template v-if="'dRep' in certificate && certificate.dRep">
                   <dt>{{ $t('governance.dRep') }}</dt>
                   <dd class="tx-kv__stack">
                     <span class="tx-kv__row">
                       <v-avatar v-if="txDRep?.metadata?.meta_json?.body?.image?.contentUrl" size="20">
-                        <v-img :src="txDRep.metadata.meta_json.body.image.contentUrl" contain />
+                        <v-img :src="txDRep.metadata.meta_json.body.image.contentUrl"  />
                       </v-avatar>
                       <span class="tx-kv__strong">
                         {{ txDRep?.metadata?.meta_json?.body?.givenName || txDRep?.drep_id || drepIds[index].cip129 }}
@@ -835,7 +835,7 @@ const redeemerViews = computed(() => {
       purpose: String(redeemer.purpose).toUpperCase(),
       memory: filters.humanFileSize(redeemer.executionUnits.memory.toString()),
       steps: Number(redeemer.executionUnits.steps.toString()).toLocaleString('en-US'),
-      cbor: redeemer.data?.cbor?.toString() ?? '',
+      cbor: serialized?.data()?.toCbor() ?? '',
       dataHash: serialized?.data()?.hash() ?? '',
       dataJson: redeemer.data ? getRedeemerDataJson(redeemer.data) : '',
     };

@@ -3,10 +3,10 @@
     <!-- Sticky Header -->
     <div class="perps-header pa-3">
       <div class="d-flex align-center" style="gap: 8px;">
-        <v-btn icon small @click="$router.push('/')">
+        <v-btn icon size="small" @click="$router.push('/')">
           <v-icon color="var(--g-text-1)">mdi-arrow-left</v-icon>
         </v-btn>
-        <SymbolSelector :value="selectedSymbol" @input="selectedSymbol = $event" />
+        <SymbolSelector :model-value="selectedSymbol" @update:model-value="selectedSymbol = $event" />
         <span class="text-caption grey--text ml-auto">{{ $t('miniGero.perpsTitle') }}</span>
       </div>
     </div>
@@ -83,13 +83,13 @@
               </div>
               <v-btn
                 icon
-                x-small
+                size="x-small"
                 color="error"
                 :loading="closingPositions[pos.PositionID]"
                 :disabled="closingPositions[pos.PositionID]"
                 @click="handleClosePosition(pos)"
               >
-                <v-icon small>mdi-close</v-icon>
+                <v-icon size="small">mdi-close</v-icon>
               </v-btn>
             </div>
             <div class="position-card-body">
@@ -135,8 +135,8 @@
         <template v-else>
           <div class="d-flex justify-end mb-2">
             <v-btn
-              x-small
-              text
+              size="x-small"
+              variant="text"
               color="error"
               :loading="cancellingAll"
               @click="handleCancelAll"
@@ -156,13 +156,13 @@
                 </div>
                 <v-btn
                   icon
-                  x-small
+                  size="x-small"
                   color="error"
                   :loading="cancellingOrders[order.ID]"
                   :disabled="cancellingOrders[order.ID]"
                   @click="handleCancelOrder(order)"
                 >
-                  <v-icon small>mdi-close</v-icon>
+                  <v-icon size="small">mdi-close</v-icon>
                 </v-btn>
               </div>
               <div class="position-card-body">
@@ -250,7 +250,7 @@
             </div>
           </div>
           <div v-if="hasMoreClosed" class="text-center mt-3">
-            <v-btn x-small text color="success" :loading="loadingHistory" @click="loadMoreClosed">
+            <v-btn size="x-small" variant="text" color="success" :loading="loadingHistory" @click="loadMoreClosed">
               {{ $t('common.loadMore') }}
             </v-btn>
           </div>
@@ -294,7 +294,7 @@
             </div>
           </div>
           <div v-if="hasMoreFills" class="text-center mt-3">
-            <v-btn x-small text color="success" :loading="loadingHistory" @click="loadMoreFills">
+            <v-btn size="x-small" variant="text" color="success" :loading="loadingHistory" @click="loadMoreFills">
               {{ $t('common.loadMore') }}
             </v-btn>
           </div>

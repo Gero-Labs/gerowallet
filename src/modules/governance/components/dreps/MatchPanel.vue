@@ -20,21 +20,21 @@
         <div class="match__toggle">
           <v-switch
             v-model="criteria.participationOn"
-            dense
+            density="compact"
             hide-details
             class="match__switch"
             :label="$t('governance.matchShowsUp')"
           />
-          <v-select
+          <v-select item-title="text"
             v-if="criteria.participationOn"
             v-model="criteria.participationMin"
             :items="THRESHOLDS"
-            dense
+            density="compact"
             hide-details
-            outlined
+            variant="outlined"
             attach
             class="match__threshold"
-            :menu-props="{ offsetY: true }"
+            :menu-props="{ location: 'bottom' }"
             :aria-label="$t('governance.matchParticipationOver', { pct: criteria.participationMin })"
           />
         </div>
@@ -42,21 +42,21 @@
         <div class="match__toggle">
           <v-switch
             v-model="criteria.rationaleOn"
-            dense
+            density="compact"
             hide-details
             class="match__switch"
             :label="$t('governance.matchExplains')"
           />
-          <v-select
+          <v-select item-title="text"
             v-if="criteria.rationaleOn"
             v-model="criteria.rationaleMin"
             :items="THRESHOLDS"
-            dense
+            density="compact"
             hide-details
-            outlined
+            variant="outlined"
             attach
             class="match__threshold"
-            :menu-props="{ offsetY: true }"
+            :menu-props="{ location: 'bottom' }"
             :aria-label="$t('governance.matchRationaleOver', { pct: criteria.rationaleMin })"
           />
         </div>
@@ -64,7 +64,7 @@
         <div class="match__toggle">
           <v-switch
             v-model="criteria.focusOn"
-            dense
+            density="compact"
             hide-details
             class="match__switch"
             :disabled="!focusAvailable"
@@ -74,14 +74,14 @@
             v-if="criteria.focusOn && focusAvailable"
             v-model="criteria.focusArea"
             :items="focusItems"
-            item-text="label"
+            item-title="label"
             item-value="value"
-            dense
+            density="compact"
             hide-details
-            outlined
+            variant="outlined"
             attach
             class="match__threshold match__threshold--wide"
-            :menu-props="{ offsetY: true }"
+            :menu-props="{ location: 'bottom' }"
             :aria-label="$t('governance.matchFocus')"
           />
         </div>
@@ -90,7 +90,7 @@
         <div class="match__toggle">
           <v-switch
             v-model="criteria.outsideTopNOn"
-            dense
+            density="compact"
             hide-details
             class="match__switch"
             :disabled="!cutoffAvailable"
@@ -107,7 +107,7 @@
         <div class="match__toggle">
           <v-switch
             v-model="criteria.excludeInactiveOn"
-            dense
+            density="compact"
             hide-details
             class="match__switch"
             :label="$t('governance.matchExcludeInactive')"
@@ -147,7 +147,7 @@
               </template>
             </span>
             <GButton tier="tertiary" compact @click="reshuffle()">
-              <v-icon small left>mdi-shuffle-variant</v-icon>{{ $t('governance.matchReshuffle') }}
+              <v-icon size="small" start>mdi-shuffle-variant</v-icon>{{ $t('governance.matchReshuffle') }}
             </GButton>
           </div>
 
@@ -231,7 +231,7 @@
           </div>
 
           <div class="match__why">
-            <v-icon small color="var(--g-accent)">mdi-information-outline</v-icon>
+            <v-icon size="small" color="var(--g-accent)">mdi-information-outline</v-icon>
             <div>
               <span class="t-body-sm match__why-title">{{ $t('governance.matchWhyThisList') }}</span>
               <p class="t-caption match__why-body">{{ $t('governance.matchWhyThisListBody') }}</p>
@@ -245,7 +245,7 @@
 </template>
 
 <script setup lang="ts">
-import Vue, { computed, onUnmounted, reactive, ref, watch } from 'vue';
+import { computed, onUnmounted, reactive, ref, watch } from 'vue';
 import type { PropType } from 'vue';
 import { setWalletConfiguration } from '@/db/wallet-db';
 import { MATCH_CRITERIA_KEY } from '@/stores/governanceAlertsStore';
@@ -435,7 +435,7 @@ function persist(): void {
     // Vue.set, not assignment: the config bag is a plain object and this key is
     // new on first write, so a bare assignment would not be reactive for the
     // alerts store watching it.
-    Vue.set(walletStore.config, MATCH_CRITERIA_KEY, value);
+    walletStore.config[MATCH_CRITERIA_KEY] = value;
     void setWalletConfiguration(walletId, MATCH_CRITERIA_KEY, value);
   }, 300);
 }

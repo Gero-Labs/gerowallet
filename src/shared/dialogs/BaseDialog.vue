@@ -22,7 +22,7 @@
       </div>
       <v-card-title class="pa-0 pb-0">
         <v-list-item class="px-0" :two-line="!!subtitle" style="z-index: 1;">
-          <v-list-item-avatar class="ml-5 mr-3 my-4" v-if="img" :size="imgSize" tile>
+          <v-avatar class="ml-5 mr-3 my-4" v-if="img" :size="imgSize" rounded="0">
             <!-- imgColor paints the icon in an exact token via mask (crisp,
                  chain-aware); imgStyle is the legacy filter path. -->
             <span
@@ -30,25 +30,25 @@
               class="base-dialog-img-mask"
               :style="{ '--bd-img': `url(${img})`, backgroundColor: imgColor }"
             ></span>
-            <v-img v-else :src="img" contain :style="imgStyle"></v-img>
-          </v-list-item-avatar>
-          <v-list-item-icon class="ml-5 mr-3 my-4" v-if="icon">
+            <v-img v-else :src="img"  :style="imgStyle"></v-img>
+          </v-avatar>
+          <div class="ml-5 mr-3 my-4 g-list-icon" v-if="icon">
             <v-icon style="font-size: 56px">{{icon}}</v-icon>
-          </v-list-item-icon>
+          </div>
           <!-- Header illustration (e.g. an IsoScene) in place of img/icon. -->
-          <div v-if="$slots.art" class="base-dialog-art ml-5 mr-3 my-3" aria-hidden="true">
+          <div v-if="$slots['art']" class="base-dialog-art ml-5 mr-3 my-3" aria-hidden="true">
             <slot name="art"></slot>
           </div>
-          <v-list-item-content>
+          <div class="g-list-content">
             <v-list-item-title class="t-heading" style="max-width: 90%; display: -webkit-box; -webkit-line-clamp: 1;-webkit-box-orient: vertical;overflow: hidden;text-overflow: ellipsis;white-space: normal;">
               {{ title }}
-              <v-tooltip v-if="titleInfo" bottom max-width="300" content-class="custom-tooltip">
-                <template v-slot:activator="{ on, attrs }">
+              <v-tooltip location="bottom" v-if="titleInfo"  max-width="300" content-class="custom-tooltip">
+                <template v-slot:activator="{ props: activatorProps }">
                   <v-icon
-                    small
+                    size="small"
                     color="primary"
-                    v-bind="attrs"
-                    v-on="on"
+                    v-bind="activatorProps"
+
                     class="ml-1"
                   >
                     mdi-information-outline
@@ -63,7 +63,7 @@
             <v-list-item-subtitle style="white-space: normal;" v-if="subtitle2">
               {{ truncate(subtitle2) }}<CopyButton x-small :value="subtitle2" class="ml-1" />
             </v-list-item-subtitle>
-          </v-list-item-content>
+          </div>
         </v-list-item>
       </v-card-title>
       <slot></slot>

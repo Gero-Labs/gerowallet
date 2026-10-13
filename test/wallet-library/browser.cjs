@@ -86,7 +86,7 @@ const { tmpdir } = require('node:os');
     await page.getByRole('textbox', { name: 'Category name' }).fill('Research');
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await page.getByRole('button', { name: 'Research 0', exact: true }).waitFor();
-    await page.locator('.v-dialog__content--active').waitFor({ state: 'hidden' });
+    await page.locator('.v-dialog.v-overlay--active').waitFor({ state: 'hidden' });
     await page.waitForTimeout(350);
     const research = page.locator('.library-group').filter({ has: page.getByRole('button', { name: /Research/ }) });
     await drag(page.getByRole('button', { name: /Reorder Operating expenses/ }), research.locator('.library-wallets'));
@@ -110,7 +110,7 @@ const { tmpdir } = require('node:os');
     await page.getByRole('button', { name: 'Delete', exact: true }).click();
     await eventually(async () => await page.getByRole('button', { name: 'Research 1', exact: true }).count() === 0);
     assert.equal((await names()).length, 8);
-    await page.locator('.v-dialog__content--active').waitFor({ state: 'hidden' });
+    await page.locator('.v-dialog.v-overlay--active').waitFor({ state: 'hidden' });
     // Drag into a collapsed category: its drop area remains reachable.
     await page.getByRole('button', { name: 'Business 1', exact: true }).click();
     await eventually(async () => (await names(group('business'))).length === 0);

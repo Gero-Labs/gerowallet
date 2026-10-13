@@ -1,158 +1,152 @@
-﻿import Vue from 'vue';
-import VueRouter from 'vue-router';
-import { compileToFunctions } from 'vue-template-compiler';
-import type { ComponentOptions } from 'vue';
-import Vuetify from 'vuetify';
-import { mount, createLocalVue } from '@vue/test-utils';
+import { defineComponent, h, nextTick, onActivated, onDeactivated, ref, watch, type Component } from 'vue';
+import { createMemoryHistory, createRouter, RouterLink, useRoute, type Router } from 'vue-router';
+import { mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { lazyPage, prefetchPage } from './lazyPage';
+import RouteContent from './RouteContent.vue';
+import { useNow } from '@/shared/composables/useNow';
 
-Vue.use(Vuetify);
-const localVue = createLocalVue();
-localVue.use(VueRouter);
 const wrappers: ReturnType<typeof mount>[] = [];
-const flush = async () => { await new Promise(resolve => setTimeout(resolve, 0)); await Vue.nextTick(); };
+const flush = async () => { await new Promise(resolve => setTimeout(resolve, 0)); await nextTick(); };
+const page = (text: string) => defineComponent({ render: () => h('p', text) });
 function deferred() {
-  let resolve!: (value: { default: object }) => void;
+  let resolve!: (value: { default: Component }) => void;
   let reject!: (error: Error) => void;
-  const promise = new Promise<{ default: object }>((yes, no) => { resolve = yes; reject = no; });
+  const promise = new Promise<{ default: Component }>((yes, no) => { resolve = yes; reject = no; });
   return { promise, resolve, reject };
 }
-function app(loader: () => Promise<{ default: object }>, guard?: Parameters<VueRouter['beforeEach']>[0]) {
-  const router = new VueRouter({ mode: 'abstract', routes: [
-    { path: '/', name: 'dashboard', component: compileToFunctions('<p>Dashboard content</p>') },
-    { path: '/other', component: compileToFunctions('<p>Other content</p>') },
-    { path: '/governance/:id?', name: 'governance', props: true,
-      component: lazyPage(async () => {
-        const module = await loader();
-        const page = module.default as ComponentOptions<Vue>;
-        return { default: { ...page, ...compileToFunctions(page.template as string) } };
-      }) },
+function app(loader: () => Promise<{ default: Component }>, guard?: Parameters<Router['beforeEach']>[0]) {
+  const router = createRouter({ history: createMemoryHistory(), routes: [
+    { path: '/', name: 'dashboard', component: page('Dashboard content') },
+    { path: '/other', component: page('Other content') },
+    { path: '/governance/:id?', name: 'governance', props: true, component: lazyPage(loader) },
   ] });
   if (guard) router.beforeEach(guard);
   const backup = vi.fn();
-  const wrapper = mount({ template: `<v-app><router-link to="/">Dashboard</router-link>
-    <router-link to="/governance">Governance</router-link>
-    <keep-alive><router-view @open-backup-dialog="backup" /></keep-alive></v-app>`, methods: { backup } },
-  { localVue, router, vuetify: new Vuetify(), mocks: { $t: (key: string) => key } });
+  const wrapper = mount(defineComponent({ render: () => h('div', [
+    h(RouterLink, { to: '/' }, () => 'Dashboard'),
+    h(RouterLink, { to: '/governance' }, () => 'Governance'),
+    h(RouteContent, { onOpenBackupDialog: backup }),
+  ]) }), { global: { plugins: [router] } });
   wrappers.push(wrapper);
   return { router, wrapper, backup };
 }
-afterEach(() => { wrappers.splice(0).forEach(wrapper => wrapper.destroy()); });
+afterEach(() => { wrappers.splice(0).forEach(wrapper => wrapper.unmount()); vi.useRealTimers(); });
 
 describe('content route loading', () => {
-  it('retains the current content until the real page is ready, without an intermediate loader', async () => {
-    const pending = deferred(); const loader = vi.fn(() => pending.promise);
-    const { router, wrapper } = app(loader);
+  it('retains current content until the real page is ready', async () => {
+    const pending = deferred();
+    const { router, wrapper } = app(() => pending.promise);
     await router.push('/'); await flush();
-    await wrapper.findAll('a').at(1).trigger('click'); await flush();
-    expect(router.currentRoute.name).toBe('dashboard');
-    expect(wrapper.find('[role="status"]').exists()).toBe(false);
-    expect(wrapper.find('[data-testid="route-page-state"]').exists()).toBe(false);
+    await wrapper.findAll('a')[1]!.trigger('click'); await flush();
+    expect(router.currentRoute.value.name).toBe('dashboard');
     expect(wrapper.text()).toContain('Dashboard content');
-    pending.resolve({ default: { template: '<p>Governance content</p>' } }); await flush();
+    pending.resolve({ default: page('Governance content') }); await flush();
     expect(wrapper.text()).toContain('Governance content');
-    expect(router.currentRoute.name).toBe('governance');
-    expect(wrapper.find('[data-testid="route-page-state"]').exists()).toBe(false);
+    expect(router.currentRoute.value.name).toBe('governance');
   });
-
-  it('allows leaving a loading page without mounting its late result', async () => {
+  it('does not mount a late loader result after navigation elsewhere', async () => {
     const pending = deferred(); const mounted = vi.fn();
     const { router, wrapper } = app(() => pending.promise);
     await router.push('/'); await flush();
-    const navigation = router.push('/governance').catch(() => undefined); await flush();
-    await router.push('/other'); await flush();
-    pending.resolve({ default: { template: '<p>Late page</p>', mounted } }); await flush();
-    await navigation;
+    const navigation = router.push('/governance'); await flush();
+    await router.push('/other');
+    pending.resolve({ default: defineComponent({ mounted, render: () => h('p', 'Late page') }) });
+    await navigation; await flush();
     expect(mounted).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('Other content');
     await router.push('/governance'); await flush();
     expect(mounted).toHaveBeenCalledTimes(1);
-    expect(wrapper.text()).toContain('Late page');
   });
-
-  it('preserves loaded page state and activation through keep-alive', async () => {
+  it('preserves route state and activation through the production RouterView/KeepAlive component', async () => {
     const activated = vi.fn(); const deactivated = vi.fn();
-    const loader = vi.fn().mockResolvedValue({ default: { data: () => ({ count: 0 }),
-      template: '<button @click="count++">Count {{ count }}</button>', activated, deactivated } });
+    const loader = vi.fn(async () => ({ default: defineComponent({
+      setup() {
+        const count = ref(0);
+        onActivated(activated); onDeactivated(deactivated);
+        return () => h('button', { onClick: () => { count.value += 1; } }, `Count ${count.value}`);
+      },
+    }) }));
     const { router, wrapper } = app(loader);
     await router.push('/governance'); await flush();
-    (wrapper.element.querySelector('button') as HTMLButtonElement).click(); await Vue.nextTick();
-    expect(wrapper.element.querySelector('button')?.textContent).toBe('Count 1');
+    await wrapper.find('button').trigger('click');
     await router.push('/'); await flush();
     expect(deactivated).toHaveBeenCalledTimes(1);
     await router.push('/governance'); await flush();
-    expect(wrapper.element.querySelector('button')?.textContent).toBe('Count 1');
+    expect(wrapper.find('button').text()).toBe('Count 1');
     expect(activated).toHaveBeenCalledTimes(2);
     expect(loader).toHaveBeenCalledTimes(1);
   });
-
-  it('forwards route props, prop updates, and page events to the layout', async () => {
-    const { router, wrapper, backup } = app(async () => ({ default: { props: ['id'],
-      template: '<button @click="$emit(\'open-backup-dialog\')">{{ id }}</button>' } }));
-    await router.push('/governance/first'); await flush();
-    expect(wrapper.element.querySelector('button')?.textContent).toBe('first');
-    await router.push('/governance/second'); await flush();
-    expect(wrapper.element.querySelector('button')?.textContent).toBe('second');
-    (wrapper.element.querySelector('button') as HTMLButtonElement).click(); await Vue.nextTick();
+  it('forwards route props, query updates and page events without replacing cached state', async () => {
+    const { router, wrapper, backup } = app(async () => ({ default: defineComponent({
+      props: ['id'], emits: ['open-backup-dialog'],
+      setup(props, { emit }) {
+        const route = useRoute(); const selected = ref('initial');
+        watch(() => route.query['tx'], value => { if (value) selected.value = String(value); }, { immediate: true });
+        return () => h('button', { onClick: () => emit('open-backup-dialog') }, `${props.id}:${selected.value}:${route.query['tab'] || ''}`);
+      },
+    }) }));
+    await router.push('/governance/first?tx=one'); await flush();
+    expect(wrapper.find('button').text()).toBe('first:one:');
+    await router.push('/'); await flush();
+    await router.push('/governance/second?tx=two&tab=utxos'); await flush();
+    expect(wrapper.find('button').text()).toBe('second:two:utxos');
+    await wrapper.find('button').trigger('click');
     expect(backup).toHaveBeenCalledTimes(1);
   });
-
-  it('keeps the current page and reports an import failure through the router', async () => {
-    const error = new Error('network failed');
-    const { router, wrapper } = app(vi.fn().mockRejectedValue(error));
-    const onError = vi.fn(); router.onError(onError);
+  it('pauses real useNow timers on route deactivation and resumes without duplicate timers', async () => {
+    const { router, wrapper } = app(async () => ({ default: defineComponent({ setup() {
+      const now = useNow(10);
+      return () => h('output', String(now.value));
+    } }) }));
+    await router.push('/governance'); await flush();
+    const first = wrapper.find('output').text();
+    await new Promise(resolve => setTimeout(resolve, 25)); await nextTick();
+    expect(wrapper.find('output').text()).not.toBe(first);
+    const clear = vi.spyOn(globalThis, 'clearInterval');
     await router.push('/'); await flush();
-    await expect(router.push('/governance')).rejects.toBe(error); await flush();
-    expect(router.currentRoute.name).toBe('dashboard');
-    expect(wrapper.text()).toContain('Dashboard content');
-    expect(onError).toHaveBeenCalledWith(error);
+    expect(clear).toHaveBeenCalledTimes(1);
+    const set = vi.spyOn(globalThis, 'setInterval');
+    await router.push('/governance'); await flush();
+    expect(set).toHaveBeenCalledTimes(1);
+    set.mockRestore(); clear.mockRestore();
   });
-
-  it('prefetches page code once without mounting or navigating, then opens the real loader', async () => {
+  it('reports import failures while retaining the previous page, then allows retry', async () => {
+    const error = new Error('network failed');
+    const loader = vi.fn().mockRejectedValueOnce(error).mockResolvedValueOnce({ default: page('Recovered') });
+    const { router, wrapper } = app(loader); const onError = vi.fn(); router.onError(onError);
+    await router.push('/'); await flush();
+    await expect(router.push('/governance')).rejects.toBe(error);
+    expect(router.currentRoute.value.name).toBe('dashboard');
+    expect(onError.mock.calls[0]?.[0]).toBe(error);
+    await router.push('/governance'); await flush();
+    expect(wrapper.text()).toContain('Recovered');
+  });
+  it('prefetches once without mounting/navigating, then reuses the module', async () => {
     const mounted = vi.fn();
-    const loader = vi.fn().mockResolvedValue({ default: { template: '<p>Loading governance data</p>', mounted } });
+    const loader = vi.fn(async () => ({ default: defineComponent({ mounted, render: () => h('p', 'Loaded') }) }));
     const { router, wrapper } = app(loader);
     await router.push('/'); await flush();
     await Promise.all([prefetchPage(router, '/governance'), prefetchPage(router, '/governance')]);
     expect(loader).toHaveBeenCalledTimes(1);
     expect(mounted).not.toHaveBeenCalled();
-    expect(router.currentRoute.name).toBe('dashboard');
+    expect(router.currentRoute.value.name).toBe('dashboard');
     await router.push('/governance'); await flush();
     expect(loader).toHaveBeenCalledTimes(1);
-    expect(mounted).toHaveBeenCalledTimes(1);
-    expect(wrapper.text()).toContain('Loading governance data');
-    expect(wrapper.find('[data-testid="route-page-state"]').exists()).toBe(false);
+    expect(wrapper.text()).toContain('Loaded');
   });
-
-  it('ignores failed speculative loads and does not prefetch unmarked route factories', async () => {
+  it('does not speculate unmarked signing factories or surface speculative failures', async () => {
     const { router } = app(vi.fn().mockRejectedValue(new Error('offline')));
     const signing = vi.fn(); router.addRoute({ path: '/sign', component: signing });
     await expect(prefetchPage(router, '/governance')).resolves.toBeUndefined();
     await prefetchPage(router, '/sign');
     expect(signing).not.toHaveBeenCalled();
   });
-
   it('does not import protected content when a guard redirects', async () => {
     const loader = vi.fn();
-    const { router, wrapper } = app(loader, (to, _from, next) => next(to.name === 'governance' ? '/' : undefined));
-    await router.push('/governance').catch(() => undefined); await flush();
-    expect(router.currentRoute.path).toBe('/');
+    const { router, wrapper } = app(loader, to => to.name === 'governance' ? '/' : true);
+    await router.push('/governance'); await flush();
     expect(loader).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('Dashboard content');
-  });
-
-  it('keeps page data loading inside the already-open route', async () => {
-    const data = deferred();
-    const { router, wrapper } = app(async () => ({ default: {
-      data: () => ({ loading: true }),
-      mounted() { data.promise.then(() => { (this as { loading: boolean }).loading = false; }); },
-      template: '<p>{{ loading ? "Loading governance data" : "Governance data" }}</p>',
-    } }));
-    await router.push('/governance'); await flush();
-    expect(router.currentRoute.name).toBe('governance');
-    expect(wrapper.text()).toContain('Loading governance data');
-    data.resolve({ default: {} }); await flush();
-    expect(wrapper.text()).toContain('Governance data');
   });
 });

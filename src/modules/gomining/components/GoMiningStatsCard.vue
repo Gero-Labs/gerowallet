@@ -1,5 +1,5 @@
 <template>
-  <v-card outlined class="liquid-glass pa-4">
+  <v-card variant="outlined" class="liquid-glass pa-4">
     <div class="d-flex align-center mb-4" style="gap: 12px;">
       <v-avatar size="40" color="#F7931A20">
         <v-icon color="#F7931A" size="22">mdi-pickaxe</v-icon>
@@ -9,8 +9,8 @@
         <div class="text-caption text--secondary">{{ $t('gomining.poweredByGoMining') }}</div>
       </div>
       <v-spacer />
-      <v-btn icon small :loading="loading" @click="$emit('refresh')">
-        <v-icon small>mdi-refresh</v-icon>
+      <v-btn icon size="small" :loading="loading" @click="$emit('refresh')">
+        <v-icon size="small">mdi-refresh</v-icon>
       </v-btn>
     </div>
 

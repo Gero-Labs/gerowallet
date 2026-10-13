@@ -1,31 +1,36 @@
 <template>
-  <v-tooltip
+  <v-tooltip location="top"
     v-model="showTooltip"
-    top
+    :open-on-hover="false"
+    :open-on-focus="false"
+
     color="red"
   >
-    <template v-slot:activator="{ }">
+    <template v-slot:activator="{ props: activatorProps }">
+      <div v-bind="activatorProps">
       <v-otp-input
         ref="otpInputRef"
-        :value="value"
+        :model-value="modelValue"
         :length="length"
         type="password"
         inputmode="numeric"
         :error="!!error"
-        @input="handleInput"
+        @update:model-value="handleInput"
         @keydown="handleKeyDown"
         @finish="handleFinish"
       ></v-otp-input>
+      </div>
     </template>
     <span>{{ error }}</span>
   </v-tooltip>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, watch, onScopeDispose } from 'vue';
+import type { VOtpInput } from 'vuetify/components';
 
 interface Props {
-  value: string;
+  modelValue: string;
   length?: number;
   error?: string;
 }
@@ -36,14 +41,15 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const emit = defineEmits<{
-  (e: 'input', value: string): void;
+  (e: 'update:modelValue', value: string): void;
   (e: 'finish', value: string): void;
 }>();
 
-const otpInputRef = ref<any>(null);
+const otpInputRef = ref<InstanceType<typeof VOtpInput> | null>(null);
 const showTooltip = ref(false);
 const previousValue = ref('');
-let tooltipTimeout: any = null;
+let tooltipTimeout: ReturnType<typeof setTimeout> | null = null;
+onScopeDispose(() => { if (tooltipTimeout) clearTimeout(tooltipTimeout); });
 
 // Function to show error tooltip
 function showErrorTooltip() {
@@ -67,7 +73,7 @@ watch(() => props.error, (newError) => {
 
 // Watch value changes to detect when input is cleared with error present
 // This handles the case where same error is set multiple times
-watch(() => props.value, (newValue, oldValue) => {
+watch(() => props.modelValue, (newValue, oldValue) => {
   // If user starts typing, hide tooltip
   if (newValue && showTooltip.value) {
     showTooltip.value = false;
@@ -93,7 +99,7 @@ function handleKeyDown(event: KeyboardEvent) {
 
 function handleInput(value: string) {
   const filtered = value.replace(/\D/g, '');
-  emit('input', filtered);
+  emit('update:modelValue', filtered);
 }
 
 function handleFinish(value: string) {
@@ -104,7 +110,7 @@ function handleFinish(value: string) {
 // Expose methods for parent components
 defineExpose({
   focus: () => otpInputRef.value?.focus(),
-  resetValidation: () => otpInputRef.value?.resetValidation()
+  resetValidation: () => { showTooltip.value = false; if (tooltipTimeout) clearTimeout(tooltipTimeout); }
 });
 </script>
 

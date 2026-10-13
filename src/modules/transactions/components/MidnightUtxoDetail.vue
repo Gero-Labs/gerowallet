@@ -16,9 +16,9 @@
         {{ $t('transactions.amount') }}:
         <span class="mn-utxo-detail__amount ml-1">
           {{ utxo.amountFormatted }}
-          <v-tooltip v-if="utxo.isUnscaledAmount" top content-class="custom-tooltip">
-            <template v-slot:activator="{ on, attrs }">
-              <v-icon x-small color="warning" v-bind="attrs" v-on="on">mdi-help-circle-outline</v-icon>
+          <v-tooltip location="top" v-if="utxo.isUnscaledAmount"  content-class="custom-tooltip">
+            <template v-slot:activator="{ props: activatorProps }">
+              <v-icon size="x-small" color="warning" v-bind="activatorProps" >mdi-help-circle-outline</v-icon>
             </template>
             {{ $t('midnight.rawBalanceNotice') }}
           </v-tooltip>
@@ -42,8 +42,8 @@
       </div>
 
       <div class="mt-2">
-        <v-chip v-if="utxo.registeredForDustGeneration" small outlined color="success">
-          <v-icon small class="mr-1">mdi-lightning-bolt</v-icon>
+        <v-chip v-if="utxo.registeredForDustGeneration" size="small" variant="outlined" color="success">
+          <v-icon size="small" class="mr-1">mdi-lightning-bolt</v-icon>
           {{ $t('midnight.registered') }}
         </v-chip>
         <span v-else class="mn-utxo-detail__value">{{ $t('midnight.statusUnregistered') }}</span>

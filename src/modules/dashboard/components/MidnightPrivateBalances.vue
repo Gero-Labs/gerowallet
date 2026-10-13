@@ -3,7 +3,7 @@
     <div class="d-flex align-center">
       <span class="t-label">{{ t('midnight.privateBalances.title') }}</span>
       <v-spacer />
-      <v-btn small text :loading="syncing" @click="open = true">
+      <v-btn size="small" variant="text" :loading="syncing" @click="open = true">
         {{ t('midnight.privateBalances.refresh') }}
       </v-btn>
     </div>

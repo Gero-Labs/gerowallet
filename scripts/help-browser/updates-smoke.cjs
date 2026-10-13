@@ -68,6 +68,10 @@ let offline=false,empty=false;const requests=[],errors=[],eventBodies=[];
   assert.equal(await warning.count(),0,'A fresh source shows no notice');
   await fitShot(page,shot('updates-nexus-posts.png'));
   await pill('Gero blog').click();await rowCount(2);
+  // Both sources have two rows. Count alone can still match the previous
+  // Nexus response while the Router4 navigation/fetch is pending.
+  await page.locator('h2.update-title').filter({hasText:'Fixture Gero blog post'}).first().waitFor();
+  await page.locator('img.update-thumb').waitFor();
   assert.equal(await page.locator('img.update-thumb').count(),1);assert.equal(await warning.count(),0);
 
   // --- Home widgets: the blog thumbnail, the X post image and the Gero/Nexus switch ---
@@ -115,7 +119,7 @@ let offline=false,empty=false;const requests=[],errors=[],eventBodies=[];
   await page.waitForTimeout(2600); // Usage events are posted after 2 s without a new one; flush them before the outage below.
 
   // --- Lock and outage: the saved list and notice stay, then an authoritative empty list wins ---
-  await page.evaluate(async()=>{const m=await import('./js/activityTracker.service.js');window.helpSmokeStores=m;const w={id:90012,name:'Synthetic Updates',chain:'Midnight',network:'Mainnet',type:'Normal',icon:'gero'};m.geroStore.wallets={[w.id]:w};m.walletStore.loggedWallet=w;m.walletStore.isSyncing=false;m.walletStore.isLocked=false;});
+  await page.evaluate(async()=>{const [wallets,gero,flags]=await Promise.all([import('./js/walletStore.js'),import('./js/geroStore.js'),import('./js/featureFlagsStore.js')]); const m={walletStore:wallets.walletStore,geroStore:gero.geroStore,featureFlagsStore:flags.featureFlagsStore};window.helpSmokeStores=m;const w={id:90012,name:'Synthetic Updates',chain:'Midnight',network:'Mainnet',type:'Normal',icon:'gero'};m.geroStore.wallets={[w.id]:w};m.walletStore.loggedWallet=w;m.walletStore.isSyncing=false;m.walletStore.isLocked=false;});
   await header.waitFor({state:'hidden'});await rowCount(3);
   offline=true;const before=page.url();await page.evaluate(()=>window.helpSmokeStores.walletStore.isLocked=true);
   await header.waitFor();await page.waitForFunction(()=>document.body.innerText.includes('Showing saved updates'));

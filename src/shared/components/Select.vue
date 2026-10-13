@@ -1,26 +1,26 @@
 <template>
   <div class="custom-select" style="cursor: pointer!important;">
-    <v-select
-      solo
-      flat
+    <v-select item-title="name" item-value="id" return-object
+      variant="solo"
+
       :label="label"
       :items="items"
-      :value="value"
+      :model-value="modelValue"
       :disabled="disabled"
       :readonly="readonly"
       :autofocus="false"
-      :append-icon="readonly ? '' : 'mdi-menu-down'"
-      @input="$emit('input', $event)"
+      :menu-icon="readonly ? '' : 'mdi-menu-down'"
+      @update:model-value="$emit('update:modelValue', $event)"
       hide-details
-      dense
+      density="compact"
       attach
     >
-      <template v-slot:item="{ item }">
+      <template v-slot:item="{ item , props: itemProps }"><v-list-item v-bind="itemProps"><template #title>
         <v-avatar v-if="item.icon" size="20" class="mr-2">
           <v-img :src="assets.resolveIcon(item.icon)"></v-img>
         </v-avatar>
         {{ item.name }}
-      </template>
+      </template></v-list-item></template>
       <template v-slot:selection="{ item }">
         <v-avatar v-if="item.icon" size="20" class="mr-2">
           <v-img :src="assets.resolveIcon(item.icon)"></v-img>
@@ -35,14 +35,15 @@
 import assets from '@/utils/assets';
 
 interface Props {
-  items: any[];
-  value: any;
+  items: Array<{ id?: number | string; name?: string; icon?: string }>;
+  modelValue: { id?: number | string; name?: string; icon?: string } | null;
   label?: string;
   disabled?: boolean;
   readonly?: boolean;
 }
 
 defineProps<Props>()
+defineEmits<{ (event: 'update:modelValue', value: Props['modelValue']): void }>();
 </script>
 <style>
 .custom-select {

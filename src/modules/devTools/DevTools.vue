@@ -1,8 +1,8 @@
 <template>
-  <v-layout>
+  <div class="d-flex flex-wrap flex-grow-1">
     <v-row no-gutters>
       <v-col cols="12" class="pa-2">
-        <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass">
+        <v-card variant="outlined" class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass">
           <v-card-title class="row no-gutters d-flex justify-space-between">
             Tx Cbor Hex to JSON Converter
           </v-card-title>
@@ -11,13 +11,13 @@
               <v-col cols="6">
                 <v-textarea
                   v-model="txCborHex"
-                  outlined
+                  variant="outlined"
                   hide-details
                 >
                 </v-textarea>
               </v-col>
               <v-col cols="6" class="px-3">
-                <v-card outlined class="my-1" v-if="txJson">
+                <v-card variant="outlined" class="my-1" v-if="txJson">
                   <v-card-title class="pa-1" style="position: absolute; right: 0">
                     <CopyButton :value="txJson" small></CopyButton>
                   </v-card-title>
@@ -31,7 +31,7 @@
         </v-card>
       </v-col>
       <v-col cols="12" class="pa-2">
-        <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass">
+        <v-card variant="outlined" class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass">
           <v-card-title class="row no-gutters d-flex justify-space-between">
             WitnessSet Cbor Hex to JSON Converter
           </v-card-title>
@@ -40,7 +40,7 @@
               <v-col cols="6">
                 <v-textarea
                   v-model="witnessSetCborHex"
-                  outlined
+                  variant="outlined"
                   hide-details
                 >
                 </v-textarea>
@@ -53,7 +53,7 @@
         </v-card>
       </v-col>
       <v-col cols="12" class="pa-2">
-        <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass">
+        <v-card variant="outlined" class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass">
           <v-card-title class="row no-gutters d-flex justify-space-between">
             Address Cbor Hex to Bech32
           </v-card-title>
@@ -62,7 +62,7 @@
               <v-col cols="6">
                 <v-textarea
                   v-model="addressHex"
-                  outlined
+                  variant="outlined"
                   hide-details
                 >
                 </v-textarea>
@@ -75,7 +75,7 @@
         </v-card>
       </v-col>
       <v-col cols="12" class="pa-2">
-        <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass">
+        <v-card variant="outlined" class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass">
           <v-card-title class="row no-gutters d-flex justify-space-between">
             Address Bech32 to Hex
           </v-card-title>
@@ -84,7 +84,7 @@
               <v-col cols="6">
                 <v-textarea
                   v-model="addressBech32"
-                  outlined
+                  variant="outlined"
                   hide-details
                 >
                 </v-textarea>
@@ -97,7 +97,7 @@
         </v-card>
       </v-col>
       <v-col cols="12" class="pa-2">
-        <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass">
+        <v-card variant="outlined" class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass">
           <v-card-title class="row no-gutters d-flex justify-space-between">
             String to Hex
           </v-card-title>
@@ -106,7 +106,7 @@
               <v-col cols="6">
                 <v-textarea
                   v-model="messageDataText"
-                  outlined
+                  variant="outlined"
                   hide-details
                 >
                 </v-textarea>
@@ -119,7 +119,7 @@
         </v-card>
       </v-col>
       <v-col cols="12" class="pa-2">
-        <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass">
+        <v-card variant="outlined" class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass">
           <v-card-title class="row no-gutters d-flex justify-space-between">
             Utxo Cbor to Json
           </v-card-title>
@@ -128,7 +128,7 @@
               <v-col cols="6">
                 <v-textarea
                   v-model="utxoCbor"
-                  outlined
+                  variant="outlined"
                   hide-details
                 >
                 </v-textarea>
@@ -141,7 +141,7 @@
         </v-card>
       </v-col>
       <v-col cols="12" class="pa-2">
-        <v-card outlined class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass">
+        <v-card variant="outlined" class="row no-gutters fill-height d-flex justify-space-between align-content-space-between liquid-glass">
           <v-card-title class="row no-gutters d-flex justify-space-between">
             Lovelace to Value
           </v-card-title>
@@ -150,7 +150,7 @@
               <v-col cols="6">
                 <v-textarea
                   v-model="lovelace"
-                  outlined
+                  variant="outlined"
                   hide-details
                 >
                 </v-textarea>
@@ -163,7 +163,7 @@
         </v-card>
       </v-col>
     </v-row>
-  </v-layout>
+  </div>
 </template>
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';

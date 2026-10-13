@@ -9,7 +9,7 @@
         <p class="t-body">{{ t('card.applicationNotApprovedDesc') }}</p>
         <div class="card-hub__row">
           <GButton tier="secondary" :href="`mailto:${CARD_PROVIDER.supportEmail}`">
-            <v-icon small left>mdi-email-outline</v-icon>
+            <v-icon size="small" start>mdi-email-outline</v-icon>
             {{ t('card.contactSupport') }}
           </GButton>
         </div>
@@ -29,9 +29,9 @@
             <GButton tier="primary" @click="showRegistrationModal = true">{{ t('card.orderYourGeroCard') }}</GButton>
             <p class="t-body-sm">
               {{ t('card.newToKaiserex') }}
-              <v-tooltip top :open-delay="300" max-width="320">
-                <template #activator="{ on, attrs }">
-                  <button type="button" class="card-hub__term" v-bind="attrs" v-on="on">{{ t('card.kaiserex') }}</button>
+              <v-tooltip location="top"  :open-delay="300" max-width="320">
+                <template #activator="{ props: activatorProps }">
+                  <button type="button" class="card-hub__term" v-bind="activatorProps" >{{ t('card.kaiserex') }}</button>
                 </template>
                 <span class="t-caption">{{ t('card.kaiserexTooltip') }}</span>
               </v-tooltip>?
@@ -42,8 +42,8 @@
             <GButton tier="secondary" compact :loading="signingIn" @click="handleLogin">{{ t('card.signIn') }}</GButton>
           </div>
           <ul class="card-hub__trust">
-            <li><v-icon x-small>mdi-lock-outline</v-icon>{{ t('card.secureSignInWindow') }}</li>
-            <li><v-icon x-small>mdi-shield-check-outline</v-icon>{{ t('card.licensedRegulated') }} · FSP {{ CARD_PROVIDER.fspNumber }}</li>
+            <li><v-icon size="x-small">mdi-lock-outline</v-icon>{{ t('card.secureSignInWindow') }}</li>
+            <li><v-icon size="x-small">mdi-shield-check-outline</v-icon>{{ t('card.licensedRegulated') }} · FSP {{ CARD_PROVIDER.fspNumber }}</li>
           </ul>
         </div>
         <IsoScene name="hero" animated class="card-hub__art" :label="t('card.heroArtLabel')" />
@@ -66,8 +66,8 @@
           <h2 id="card-hub-pricing" class="t-heading">{{ t('card.pricingTitle') }}</h2>
           <p class="t-body-sm">{{ t('card.enjoyZeroFeesUntil') }}</p>
           <ul class="card-hub__checks">
-            <li><v-icon small>mdi-check</v-icon>{{ t('card.zeroMonthlyFees') }}</li>
-            <li><v-icon small>mdi-check</v-icon>{{ t('card.zeroAdaEurFees') }}</li>
+            <li><v-icon size="small">mdi-check</v-icon>{{ t('card.zeroMonthlyFees') }}</li>
+            <li><v-icon size="small">mdi-check</v-icon>{{ t('card.zeroAdaEurFees') }}</li>
           </ul>
         </div>
         <div class="card-hub__pricing-col">

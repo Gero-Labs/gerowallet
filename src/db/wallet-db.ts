@@ -1,4 +1,5 @@
 import Dexie from 'dexie';
+import { configureCloneBoundary } from '@/db/cloneBoundary';
 import {
   walletDBSchema,
   walletDBVersion
@@ -19,7 +20,7 @@ export async function getDb(id: number): Promise<Dexie | null> {
   // Publish the pending open before any asynchronous initialization. Parallel
   // background callers must share one connection, including on first login.
   const opening = Promise.resolve().then(async (): Promise<Dexie | null> => {
-    const db = new Dexie(dbName);
+    const db = configureCloneBoundary(new Dexie(dbName));
     try {
       // All historical changes were additive, with no data transformations.
       // The complete shared schema upgrades old wallets and retains multisig.

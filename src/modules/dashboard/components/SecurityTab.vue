@@ -1,17 +1,17 @@
 <template>
-  <v-tab-item eager>
+  <v-window-item eager>
     <v-list nav class="transparent px-0">
       <v-list-item class="px-2 py-1">
-        <v-list-item-avatar class="my-0" style="align-self: self-start;">
+        <v-avatar class="my-0" style="align-self: self-start;">
           <v-icon
-            left
-            dark
+            start
+            theme="dark"
             class="mr-1"
           >
             mdi-key-chain
           </v-icon>
-        </v-list-item-avatar>
-        <v-list-item-content class="py-0" style="align-self: self-start;">
+        </v-avatar>
+        <div class="py-0 g-list-content" style="align-self: self-start;">
           <v-list-item-title class="text-left">
             <h3 style="color: white; font-size: 16px;">{{ $t('settings.extendedPublicKey') }}</h3>
           </v-list-item-title>
@@ -21,13 +21,13 @@
           <v-list-item-subtitle class="text-left">
             <CopyButton v-if="loggedWallet" :title="filters.truncate(loggedWallet?.publicKey) " :value="loggedWallet?.publicKey" x-small />
           </v-list-item-subtitle>
-        </v-list-item-content>
-        <v-list-item-avatar size="120" rounded>
+        </div>
+        <v-avatar size="120" rounded>
           <div ref="qrCodeRef" style="width: 120px; height: 120px;"></div>
-        </v-list-item-avatar>
+        </v-avatar>
       </v-list-item>
       <v-list-item class="px-2 py-1" v-if="canBackup" @click="backupWalletDialog = true">
-        <v-list-item-avatar class="my-0">
+        <v-avatar class="my-0">
           <v-badge
             v-if="!backup"
             bordered
@@ -36,7 +36,7 @@
             overlap
           >
             <v-icon
-              dark
+              theme="dark"
               class="mr-1"
             >
               mdi-key
@@ -44,23 +44,23 @@
           </v-badge>
           <v-icon
             v-else
-            left
-            dark
+            start
+            theme="dark"
             class="mr-1"
           >
             mdi-key
           </v-icon>
-        </v-list-item-avatar>
-        <v-list-item-content class="py-0">
+        </v-avatar>
+        <div class="py-0 g-list-content">
           <v-list-item-title class="text-left">
             <h3 style="color: white; font-size: 16px;">{{ $t('settings.recoveryPhrase') }}
-              <v-tooltip top v-if="backup" content-class="custom-tooltip">
-                <template v-slot:activator="{ on, attrs }">
+              <v-tooltip location="top"  v-if="backup" content-class="custom-tooltip">
+                <template v-slot:activator="{ props: activatorProps }">
                   <v-icon
                     color="primary"
-                    small
-                    v-bind="attrs"
-                    v-on="on"
+                    size="small"
+                    v-bind="activatorProps"
+
                   >
                     mdi-shield-check-outline
                   </v-icon>
@@ -72,74 +72,74 @@
           <v-list-item-subtitle class="text-left">
             {{ backup ? $t('settings.seedPhraseMasterKey') : $t('settings.walletBackupRequired') }}
           </v-list-item-subtitle>
-        </v-list-item-content>
-        <v-list-item-icon class="my-0" style="align-self: center">
-          <v-icon large>
+        </div>
+        <div class="my-0 g-list-icon" style="align-self: center">
+          <v-icon size="large">
             mdi-chevron-right
           </v-icon>
-        </v-list-item-icon>
+        </div>
       </v-list-item>
 
       <!-- MPC "Sign in with Google": change recovery password -->
       <v-list-item v-if="isMpcWallet" class="px-2 py-1" @click="changeRecoveryPasswordDialog = true">
-        <v-list-item-avatar class="my-0">
+        <v-avatar class="my-0">
           <v-icon>mdi-form-textbox-password</v-icon>
-        </v-list-item-avatar>
-        <v-list-item-content class="py-0">
+        </v-avatar>
+        <div class="py-0 g-list-content">
           <v-list-item-title class="text-left">
             <h3 style="color: white; font-size: 16px;">{{ $t('security.mpcRecoveryChangeTitle') }}</h3>
           </v-list-item-title>
           <v-list-item-subtitle class="text-left">
             {{ $t('security.mpcRecoveryChangeRowSubtitle') }}
           </v-list-item-subtitle>
-        </v-list-item-content>
-        <v-list-item-icon class="my-0" style="align-self: center">
-          <v-icon large>mdi-chevron-right</v-icon>
-        </v-list-item-icon>
+        </div>
+        <div class="my-0 g-list-icon" style="align-self: center">
+          <v-icon size="large">mdi-chevron-right</v-icon>
+        </div>
       </v-list-item>
 
       <!-- MPC "Sign in with Google": reveal secret recovery phrase -->
       <v-list-item v-if="isMpcWallet" class="px-2 py-1" @click="revealRecoveryPhraseDialog = true">
-        <v-list-item-avatar class="my-0">
+        <v-avatar class="my-0">
           <v-icon>mdi-key-alert-outline</v-icon>
-        </v-list-item-avatar>
-        <v-list-item-content class="py-0">
+        </v-avatar>
+        <div class="py-0 g-list-content">
           <v-list-item-title class="text-left">
             <h3 style="color: white; font-size: 16px;">{{ $t('security.mpcRevealTitle') }}</h3>
           </v-list-item-title>
           <v-list-item-subtitle class="text-left">
             {{ $t('security.mpcRevealRowSubtitle') }}
           </v-list-item-subtitle>
-        </v-list-item-content>
-        <v-list-item-icon class="my-0" style="align-self: center">
-          <v-icon large>mdi-chevron-right</v-icon>
-        </v-list-item-icon>
+        </div>
+        <div class="my-0 g-list-icon" style="align-self: center">
+          <v-icon size="large">mdi-chevron-right</v-icon>
+        </div>
       </v-list-item>
 
       <v-list-item class="px-2 py-1" v-if="loggedWallet?.type === WalletType.Normal && !isPrfWallet" @click="changePasswordDialog = true">
-        <v-list-item-avatar class="my-0">
+        <v-avatar class="my-0">
           <v-icon>
             mdi-shield-key-outline
           </v-icon>
-        </v-list-item-avatar>
-        <v-list-item-content class="py-0">
+        </v-avatar>
+        <div class="py-0 g-list-content">
           <v-list-item-title class="text-left">
             <h3 style="color: white; font-size: 16px;">{{ $t('settings.spendingSecuritySettings') }}</h3>
           </v-list-item-title>
           <v-list-item-subtitle class="text-left">
             {{ $t('settings.modifySpendingSecuritySettings') }}
           </v-list-item-subtitle>
-        </v-list-item-content>
-        <v-list-item-icon class="my-0" style="align-self: center">
-          <v-icon large>
+        </div>
+        <div class="my-0 g-list-icon" style="align-self: center">
+          <v-icon size="large">
             mdi-chevron-right
           </v-icon>
-        </v-list-item-icon>
+        </div>
       </v-list-item>
 
       <!-- Lock Settings (Unlock Method + Auto-Lock) -->
       <v-list-item class="px-2 py-1" @click="handleLockSettingsClick">
-        <v-list-item-avatar class="my-0">
+        <v-avatar class="my-0">
           <!-- New Feature Notification Dot -->
           <NotificationDot
             :show="isFeatureNew('settings.security.lockSettings')"
@@ -151,8 +151,8 @@
               mdi-shield-lock-outline
             </v-icon>
           </NotificationDot>
-        </v-list-item-avatar>
-        <v-list-item-content class="py-0">
+        </v-avatar>
+        <div class="py-0 g-list-content">
           <v-list-item-title class="text-left">
             <h3 style="color: white; font-size: 16px;">
               {{ isPrfWallet ? $t('security.lockSettingsOnly') : $t('security.lockSettings') }}
@@ -166,30 +166,30 @@
               {{ $t('security.unlockMethod') }}: {{ unlockMethodText }} • {{ $t('security.autoLock') }}: {{ autoLockText }} • PassKey: {{ passKeyText }}
             </template>
           </v-list-item-subtitle>
-        </v-list-item-content>
-        <v-list-item-icon class="my-0" style="align-self: center">
-          <v-icon large>
+        </div>
+        <div class="my-0 g-list-icon" style="align-self: center">
+          <v-icon size="large">
             mdi-chevron-right
           </v-icon>
-        </v-list-item-icon>
+        </div>
       </v-list-item>
 
       <!-- Remote signing (cross-device) - flag-gated, Cardano software wallets -->
       <v-list-item v-if="canRemoteSigning" class="px-2 py-1" @click="handleRemoteSigningClick">
-        <v-list-item-avatar class="my-0">
+        <v-avatar class="my-0">
           <v-icon>mdi-cellphone-link</v-icon>
-        </v-list-item-avatar>
-        <v-list-item-content class="py-0">
+        </v-avatar>
+        <div class="py-0 g-list-content">
           <v-list-item-title class="text-left">
             <h3 style="color: white; font-size: 16px;">{{ $t('crossDevice.settings.title') }}</h3>
           </v-list-item-title>
           <v-list-item-subtitle class="text-left" :class="{ 'warning--text': remoteSigningNeedsProof }">
             {{ remoteSigningSubtitle }}
           </v-list-item-subtitle>
-        </v-list-item-content>
-        <v-list-item-icon class="my-0" style="align-self: center">
-          <v-icon large>mdi-chevron-right</v-icon>
-        </v-list-item-icon>
+        </div>
+        <div class="my-0 g-list-icon" style="align-self: center">
+          <v-icon size="large">mdi-chevron-right</v-icon>
+        </div>
       </v-list-item>
 
       <!-- Verify Address on Device (Hardware Wallets Only) -->
@@ -198,88 +198,88 @@
         class="px-2 py-1"
         @click="verifyAddressOnDevice"
       >
-        <v-list-item-avatar class="my-0">
+        <v-avatar class="my-0">
           <v-icon>
             mdi-shield-check
           </v-icon>
-        </v-list-item-avatar>
-        <v-list-item-content class="py-0">
+        </v-avatar>
+        <div class="py-0 g-list-content">
           <v-list-item-title class="text-left">
             <h3 style="color: white; font-size: 16px;">{{ $t('settings.verifyAddress') }}</h3>
           </v-list-item-title>
           <v-list-item-subtitle class="text-left">
             {{ $t('settings.verifyAddressOnDevice') }}
           </v-list-item-subtitle>
-        </v-list-item-content>
-        <v-list-item-icon class="my-0" style="align-self: center">
-          <v-icon large>
+        </div>
+        <div class="my-0 g-list-icon" style="align-self: center">
+          <v-icon size="large">
             mdi-chevron-right
           </v-icon>
-        </v-list-item-icon>
+        </div>
       </v-list-item>
 
       <!-- Two-Factor Authentication - DISABLED FOR NOW (see 2FA_IMPLEMENTATION_PLAN.md) -->
       <template v-if="false">
         <v-list-item class="px-2 py-1" @click="twoFactorDialog = true">
-          <v-list-item-avatar class="my-0">
+          <v-avatar class="my-0">
             <v-icon>
               mdi-two-factor-authentication
             </v-icon>
-          </v-list-item-avatar>
-          <v-list-item-content class="py-0">
+          </v-avatar>
+          <div class="py-0 g-list-content">
             <v-list-item-title class="text-left">
               <h3 style="color: white; font-size: 16px;">{{ $t('security.twoFactorAuth') }}</h3>
             </v-list-item-title>
             <v-list-item-subtitle class="text-left">
               {{ twoFactorEnabled ? $t('security.2FAEnabled') : $t('security.2FADisabled') }}
             </v-list-item-subtitle>
-          </v-list-item-content>
-          <v-list-item-icon class="my-0" style="align-self: center">
-            <v-icon large>
+          </div>
+          <div class="my-0 g-list-icon" style="align-self: center">
+            <v-icon size="large">
               mdi-chevron-right
             </v-icon>
-          </v-list-item-icon>
+          </div>
         </v-list-item>
 
         <v-divider />
       </template>
       <v-list-item>
-        <v-list-item-avatar size="30" class="my-0 ml-1 mr-5" tile>
-          <v-img :src="assets.cardanoShieldLogo" :alt="$t('common.cardanoShieldLogo')" contain />
-        </v-list-item-avatar>
-        <v-list-item-content>
+        <v-avatar size="30" class="my-0 ml-1 mr-5" rounded="0">
+          <v-img :src="assets.cardanoShieldLogo" :alt="$t('common.cardanoShieldLogo')"  />
+        </v-avatar>
+        <div class="g-list-content">
           <v-list-item-title class="text-left"><h2>Cardano Shield<v-icon>mdi-external-link</v-icon></h2></v-list-item-title>
-        </v-list-item-content>
+        </div>
       </v-list-item>
       <v-list-item class="px-2 py-1">
-        <v-list-item-avatar class="my-0">
+        <v-avatar class="my-0">
           <v-icon>
             mdi-security
           </v-icon>
-        </v-list-item-avatar>
-        <v-list-item-content class="py-0">
+        </v-avatar>
+        <div class="py-0 g-list-content">
           <v-list-item-title class="text-left">
             <h3 style="color: white; font-size: 16px;">{{ $t('settings.websiteProtection') }}</h3>
           </v-list-item-title>
           <v-list-item-subtitle class="text-left">
             {{ $t('settings.protectAgainstMalicious') }}
           </v-list-item-subtitle>
-        </v-list-item-content>
-        <v-list-item-action class="my-0">
+        </div>
+        <div class="my-0 g-list-action">
           <ToggleSwitch text-left="OFF" text-right="ON" font-size="10px" v-model="websiteProtection" />
-        </v-list-item-action>
+        </div>
       </v-list-item>
     </v-list>
 
     <!-- Verification Overlay -->
     <v-overlay
-      :value="showVerificationOverlay"
+      :model-value="showVerificationOverlay"
       opacity="0.95"
       z-index="9999"
     >
       <v-card class="verification-card px-3 pa-2 liquid-glass" elevation="8" max-width="400" rounded="lg">
         <v-card-title class="justify-center">
-          <v-icon left color="primary" large>mdi-lock-check</v-icon>
+          <v-icon start color="primary" size="large">mdi-lock-check</v-icon>
           {{ getVerifyTitle(unlockMethod) }}
         </v-card-title>
 
@@ -288,13 +288,13 @@
           <div v-if="unlockMethod === 'pin'" class="text-center">
             <v-card class="transparent" flat>
               <v-card-text class="text-center px-0">
-                <v-tooltip
+                <v-tooltip :open-on-hover="false" :open-on-focus="false" :open-on-click="false" location="top"
                   v-model="tooltip.enabled"
-                  top
+
                   color="red"
                 >
-                  <template v-slot:activator="{ }">
-                    <v-otp-input
+                  <template v-slot:activator="{ props: activatorProps }">
+                    <v-otp-input v-bind="activatorProps"
                       ref="verificationPinInput"
                       v-model="verificationInput"
                       :length="pinLength"
@@ -319,34 +319,34 @@
 
           <!-- Password Verification -->
           <div v-else-if="unlockMethod === 'password'">
-            <v-tooltip
+            <v-tooltip :open-on-hover="false" :open-on-focus="false" :open-on-click="false" location="top"
               v-model="tooltip.enabled"
-              top
+
               color="red"
             >
-              <template v-slot:activator="{ }">
-                <v-text-field
+              <template v-slot:activator="{ props: activatorProps }">
+                <v-text-field v-bind="activatorProps"
                   ref="verificationPasswordInput"
                   v-model="verificationInput"
                   :label="$t('security.spendingPassword')"
                   :type="showPassword ? 'text' : 'password'"
                   :rules="[rules.required()]"
-                  outlined
-                  dense
+                  variant="outlined"
+                  density="compact"
                   hide-details
                   :disabled="verifying"
                   @keydown.enter.stop="handleVerificationPasswordSubmit"
                 >
-                  <template v-slot:append>
+                  <template v-slot:append-inner>
                     <v-icon @click="showPassword = !showPassword" tabindex="-1">
                       {{ showPassword ? 'mdi-eye' : 'mdi-eye-off' }}
                     </v-icon>
                   </template>
-                  <template v-slot:append-outer>
+                  <template v-slot:append>
                     <v-btn
                       block
-                      outlined
-                      small
+                      variant="outlined"
+                      size="small"
                       color="primary"
                       class="ml-2 px-1"
                       style="height: 40px;"
@@ -368,8 +368,8 @@
           <!-- PassKey Option (if enabled) -->
           <div v-if="passKeyForUnlock && webAuthnCredentialId" class="text-center mt-4">
             <v-btn
-              small
-              text
+              size="small"
+              variant="text"
               color="primary"
               @click="handleVerificationPassKeyAuth"
               :loading="passKeyVerifying"
@@ -378,7 +378,7 @@
               <v-avatar size="18" class="mr-2">
                 <v-img
                   :src="assets.passKeySvg"
-                  contain
+
                   class="passkey-icon"
                   :style="{
                     width: '18px',
@@ -397,9 +397,9 @@
         <v-card-actions class="px-4 pb-4 pt-0">
           <v-btn
             block
-            text
+            variant="text"
             plain
-            small
+            size="small"
             @click="cancelVerification"
             :disabled="verifying"
             color="error"
@@ -429,7 +429,7 @@
 
     <!-- 2FA Dialog -->
     <TwoFactorSetupDialog v-model="twoFactorDialog" @updated="loadSecurityConfig" />
-  </v-tab-item>
+  </v-window-item>
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';

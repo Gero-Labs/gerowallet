@@ -21,12 +21,12 @@
     <!-- Node connected — schedule controls -->
     <template v-else>
       <div class="schedule-controls">
-        <v-btn-toggle v-model="scheduleView" mandatory dense class="schedule-toggle">
-          <v-btn x-small :value="'current'" class="toggle-btn">{{ $t('poolOperator.currentEpoch') }}</v-btn>
-          <v-btn x-small :value="'next'" class="toggle-btn">{{ $t('poolOperator.nextEpoch') }}</v-btn>
+        <v-btn-toggle v-model="scheduleView" mandatory density="compact" class="schedule-toggle">
+          <v-btn size="x-small" :value="'current'" class="toggle-btn">{{ $t('poolOperator.currentEpoch') }}</v-btn>
+          <v-btn size="x-small" :value="'next'" class="toggle-btn">{{ $t('poolOperator.nextEpoch') }}</v-btn>
         </v-btn-toggle>
-        <v-btn text x-small class="refresh-btn" @click="fetchSchedule" :loading="loading">
-          <v-icon x-small class="mr-1">mdi-refresh</v-icon>
+        <v-btn variant="text" size="x-small" class="refresh-btn" @click="fetchSchedule" :loading="loading">
+          <v-icon size="x-small" class="mr-1">mdi-refresh</v-icon>
           {{ $t('poolOperator.fetch') }}
         </v-btn>
       </div>
@@ -84,13 +84,13 @@
             </div>
             <div class="slot-status">
               <template v-if="slot.isPast">
-                <v-icon v-if="slot.produced" x-small color="success">mdi-check-circle</v-icon>
-                <v-icon v-else x-small color="error">mdi-close-circle</v-icon>
+                <v-icon v-if="slot.produced" size="x-small" color="success">mdi-check-circle</v-icon>
+                <v-icon v-else size="x-small" color="error">mdi-close-circle</v-icon>
               </template>
               <template v-else-if="slot.isNext">
                 <span class="next-badge">{{ $t('poolOperator.nextBlock') }}</span>
               </template>
-              <v-icon v-else x-small color="var(--g-text-3)">mdi-clock-outline</v-icon>
+              <v-icon v-else size="x-small" color="var(--g-text-3)">mdi-clock-outline</v-icon>
             </div>
           </div>
         </div>
@@ -110,6 +110,7 @@
 </template>
 
 <script setup lang="ts">
+import type { LeaderSlot } from '../types';
 import { ref, computed, toRefs, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { poolOperatorStore } from '@/stores/poolOperatorStore';
@@ -181,7 +182,7 @@ async function fetchSchedule() {
     // Expected response: { slots: [{ slot, slotInEpoch, timestamp, produced? }], epoch }
     if (data.slots && Array.isArray(data.slots)) {
       let foundNext = false;
-      slots.value = data.slots.map((s: any) => {
+      slots.value = data.slots.map((s: LeaderSlot) => {
         const isPast = s.timestamp < now;
         let isNext = false;
         if (!isPast && !foundNext) {
@@ -205,8 +206,8 @@ async function fetchSchedule() {
     }
 
     fetched.value = true;
-  } catch (e: any) {
-    error.value = e.message || t('errors.unknownError');
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : t('errors.unknownError');
     slots.value = [];
   } finally {
     loading.value = false;

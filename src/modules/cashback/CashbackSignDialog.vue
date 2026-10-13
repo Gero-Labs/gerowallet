@@ -17,8 +17,8 @@
         <PassKeyPasswordField
           v-if="usesPassword"
           ref="passwordField"
-          :value="spendingPassword"
-          @input="spendingPassword = $event"
+          :model-value="spendingPassword"
+          @update:model-value="spendingPassword = $event"
           dense
           outlined
           hide-details
@@ -36,7 +36,7 @@
           v-else-if="isPrfWallet"
           :disabled="loading"
           block
-          @click.native="armPassKey"
+          @click="armPassKey"
           @success="signWithPassKey"
           @error="onPassKeyError"
         />
@@ -46,20 +46,20 @@
           icon-left="mdi-usb"
           :text-right="t('wallet.bluetooth')"
           icon-right="mdi-bluetooth"
-          :value="isBluetooth"
+          :model-value="isBluetooth"
           :disabled="loading"
-          @input="isBluetooth = $event"
+          @update:model-value="isBluetooth = $event"
         />
-        <v-alert v-else-if="walletType === WalletType.Trezor" type="info" color="primary" text dense class="my-0">
+        <v-alert v-else-if="walletType === WalletType.Trezor" type="info" color="primary" variant="text" density="compact" class="my-0">
           {{ t('wallet.confirmOnTrezor') }}
         </v-alert>
-        <v-alert v-else type="warning" text dense class="my-0" data-testid="cashback-sign-unsupported">
+        <v-alert v-else type="warning" variant="text" density="compact" class="my-0" data-testid="cashback-sign-unsupported">
           {{ t('cashback.signUnsupportedWallet') }}
         </v-alert>
       </v-form>
     </v-card-text>
     <v-card-actions class="px-5 pb-5 pt-3">
-      <v-btn block outlined color="error" :disabled="loading" data-testid="cashback-sign-cancel" @click="cancel">
+      <v-btn block variant="outlined" color="error" data-testid="cashback-sign-cancel" @click="cancel">
         {{ t('common.cancel') }}
       </v-btn>
       <v-btn
@@ -77,7 +77,8 @@
   </BaseDialog>
 </template>
 <script setup lang="ts">
-import { computed, ref, toRefs, watch } from 'vue';
+import { computed, ref, toRefs, watch, provide, onScopeDispose } from 'vue';
+import { authorizationScopeKey } from '@/shared/composables/authorizationScope';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import PassKeyPasswordField from '@/shared/components/PassKeyPasswordField.vue';
 import PassKeyAuthButton from '@/shared/components/PassKeyAuthButton.vue';
@@ -142,7 +143,7 @@ const emit = defineEmits<{
 const { t } = useTranslation();
 const { loggedWallet, keys } = toRefs(walletStore);
 
-const form = ref<{ validate: () => boolean; resetValidation: () => void } | null>(null);
+const form = ref<{ validate: () => Promise<{ valid: boolean }>; resetValidation: () => void } | null>(null);
 const passwordField = ref<{ showError: (message: string) => void } | null>(null);
 const spendingPassword = ref('');
 const valid = ref(false);
@@ -152,6 +153,15 @@ const isBluetooth = ref(false);
 let openedForWalletId: number | null = null;
 /** The request shown when PassKey authentication started; null once it is stale. */
 let passKeyArmedFor: ApprovedRequest | null = null;
+let passKeyCurrent: (() => boolean) | null = null;
+let epoch = 0;
+let disposed = false;
+function captureAuthorization() {
+  const captured = epoch;
+  return () => !disposed && props.isOpen && captured === epoch;
+}
+provide(authorizationScopeKey, { capture: captureAuthorization });
+onScopeDispose(() => { disposed = true; epoch++; });
 
 const walletType = computed<string | undefined>(() => loggedWallet.value?.type);
 const isPrfWallet = computed(() =>
@@ -167,17 +177,23 @@ const canSign = computed(() =>
 
 // A new request, whether by opening or by replacing the one shown, starts from
 // a clean prompt: nothing typed for the old challenge carries over.
-watch(() => [props.isOpen, props.requestId] as const, ([open]) => {
+watch(() => [props.isOpen, props.requestId, props.message, props.address, props.origin,
+  loggedWallet.value?.id, loggedWallet.value?.chain, loggedWallet.value?.network, walletStore.isLocked] as const, ([open]) => {
+  epoch++;
   spendingPassword.value = '';
   valid.value = false;
   openedForWalletId = open ? (loggedWallet.value?.id ?? null) : null;
   // An authentication still in flight was started for a request that is gone.
   passKeyArmedFor = null;
+  passKeyCurrent = null;
+  loading.value = false;
   form.value?.resetValidation();
-});
+}, { flush: 'sync', immediate: true });
 
 function cancel() {
-  if (loading.value) return;
+  epoch++;
+  passKeyArmedFor = null;
+  passKeyCurrent = null;
   emit('close');
 }
 
@@ -200,18 +216,20 @@ function unwrapSignData(res: unknown): Signed {
   return { signature: response.data.signature, key: response.data.key };
 }
 
-async function signWithPassword(approved: ApprovedRequest): Promise<Signed> {
+async function signWithPassword(approved: ApprovedRequest, current: () => boolean): Promise<Signed | null> {
+  const password = spendingPassword.value;
   const verification = await Messaging.sendToBackgroundFromOptions({
     method: MessageTypes.VERIFY_SPENDING_PASSWORD,
-    data: { password: spendingPassword.value },
+    data: { password },
   }) as BackgroundResponse<VerifyPasswordResponse>;
+  if (!current()) return null;
   if (!verification?.data?.success) {
     passwordField.value?.showError(t('errors.wrongPassword'));
     throw new Error(t('errors.wrongPassword'));
   }
   return unwrapSignData(await Messaging.sendToBackgroundFromOptions({
     method: MessageTypes.SIGN_DATA,
-    data: { address: approved.address, payload: approved.payloadHex, password: spendingPassword.value, accountIndex: 0, isUsb: false },
+    data: { address: approved.address, payload: approved.payloadHex, password, accountIndex: 0, isUsb: false },
   }));
 }
 
@@ -246,23 +264,28 @@ function shownRequest(): ApprovedRequest {
   return { requestId: props.requestId, address: props.address, payloadHex: signPayloadHex(props.message) };
 }
 
-async function run(signer: (approved: ApprovedRequest) => Promise<Signed>, approved: ApprovedRequest = shownRequest()) {
-  if (loading.value) return;
+async function run(signer: (approved: ApprovedRequest, current: () => boolean) => Promise<Signed | null>, approved: ApprovedRequest = shownRequest()) {
+  if (loading.value || !props.isOpen) return;
+  const current = captureAuthorization();
   loading.value = true;
   try {
-    finish(approved, await signer(approved));
+    const signed = await signer(approved, current);
+    if (current() && signed) finish(approved, signed);
   } catch (error: unknown) {
+    if (!current()) return;
     console.error('Cashback claim signing failed:', error);
     snackbar.setError(getErrorMessage(error, t('cashback.signFailed')));
   } finally {
-    loading.value = false;
+    if (current()) loading.value = false;
   }
 }
 
 async function sign() {
   if (usesPassword.value) {
-    if (!form.value?.validate()) return;
-    await run(signWithPassword);
+    await run(async (approved, current) => {
+      if (!(await form.value?.validate())?.valid || !current()) return null;
+      return signWithPassword(approved, current);
+    });
   } else if (walletType.value === WalletType.Ledger) {
     await run(signWithLedger);
   } else if (walletType.value === WalletType.Trezor) {
@@ -273,14 +296,17 @@ async function sign() {
 function armPassKey() {
   if (loading.value) return;
   passKeyArmedFor = shownRequest();
+  passKeyCurrent = captureAuthorization();
 }
 
 async function signWithPassKey(privateKeyBytes: Uint8Array) {
   const approved = passKeyArmedFor;
+  const current = passKeyCurrent;
   passKeyArmedFor = null;
+  passKeyCurrent = null;
   // Authentication that finished for a request no longer shown (replaced, or
   // the prompt closed) was never approved for what is shown now: drop it.
-  if (!approved || !props.isOpen || approved.requestId !== props.requestId) {
+  if (!approved || !current?.() || approved.requestId !== props.requestId) {
     privateKeyBytes.fill(0);
     return;
   }

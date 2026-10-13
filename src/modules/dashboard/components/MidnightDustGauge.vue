@@ -3,7 +3,7 @@
     <!-- Header: label + live balance -->
     <div class="dust-gauge__head">
       <div class="dust-gauge__title">
-        <v-icon x-small class="mr-1" :color="isCharging || isFull ? '#ecc985' : undefined">
+        <v-icon size="x-small" class="mr-1" :color="isCharging || isFull ? '#ecc985' : undefined">
           {{ isCharging ? 'mdi-battery-charging-medium' : 'mdi-battery-50' }}
         </v-icon>
         {{ $t('midnight.dustBattery') }}
@@ -18,7 +18,7 @@
              the CTA on that boolean left the user with no way to register at
              all. The label changes; the door never closes. -->
         <button v-else type="button" class="dust-gauge__cta ml-3" @click="$emit('register')">
-          <v-icon x-small left>mdi-shield-star</v-icon>
+          <v-icon size="x-small" start>mdi-shield-star</v-icon>
           {{ isRegistered ? $t('midnight.manageDustRegistration') : $t('midnight.registerForDust') }}
         </button>
       </div>

@@ -2,28 +2,29 @@
   <div>
     <div class="d-flex align-center justify-space-between mb-2">
       <label class="text-body-2 font-weight-medium">{{ $t('poolOperator.relays') }}</label>
-      <v-btn x-small text color="primary" @click="addRelay">
-        <v-icon x-small class="mr-1">mdi-plus</v-icon>
+      <v-btn size="x-small" variant="text" color="primary" @click="addRelay">
+        <v-icon size="x-small" class="mr-1">mdi-plus</v-icon>
         {{ $t('common.add') }}
       </v-btn>
     </div>
 
     <div v-for="(relay, index) in localRelays" :key="index" class="mb-3">
-      <v-card outlined class="pa-3">
+      <v-card variant="outlined" class="pa-3">
         <div class="d-flex align-center mb-2">
-          <v-select
+          <v-select item-title="text"
             v-model="relay.type"
+            @update:model-value="emitUpdate"
             :items="relayTypes"
             :label="$t('poolOperator.relayType')"
-            outlined
-            dense
+            variant="outlined"
+            density="compact"
             hide-details
             attach
             style="max-width: 180px"
           />
           <v-spacer />
-          <v-btn icon x-small @click="removeRelay(index)">
-            <v-icon small color="error">mdi-delete</v-icon>
+          <v-btn icon size="x-small" @click="removeRelay(index)">
+            <v-icon size="small" color="error">mdi-delete</v-icon>
           </v-btn>
         </div>
 
@@ -32,15 +33,15 @@
           <v-text-field
             v-model="relay.hostname"
             :label="$t('poolOperator.hostname')"
-            outlined dense hide-details class="mb-2"
-            @input="emitUpdate"
+            variant="outlined" density="compact" hide-details class="mb-2"
+            @update:model-value="emitUpdate"
           />
           <v-text-field
             v-model.number="relay.port"
             :label="$t('poolOperator.port')"
             type="number"
-            outlined dense hide-details
-            @input="emitUpdate"
+            variant="outlined" density="compact" hide-details
+            @update:model-value="emitUpdate"
           />
         </template>
 
@@ -49,15 +50,15 @@
           <v-text-field
             v-model="relay.ip"
             :label="relay.type === 'ipv4' ? $t('poolOperator.ipv4Address') : $t('poolOperator.ipv6Address')"
-            outlined dense hide-details class="mb-2"
-            @input="emitUpdate"
+            variant="outlined" density="compact" hide-details class="mb-2"
+            @update:model-value="emitUpdate"
           />
           <v-text-field
             v-model.number="relay.port"
             :label="$t('poolOperator.port')"
             type="number"
-            outlined dense hide-details
-            @input="emitUpdate"
+            variant="outlined" density="compact" hide-details
+            @update:model-value="emitUpdate"
           />
         </template>
 
@@ -66,8 +67,8 @@
           <v-text-field
             v-model="relay.dnsName"
             :label="$t('poolOperator.srvDnsName')"
-            outlined dense hide-details
-            @input="emitUpdate"
+            variant="outlined" density="compact" hide-details
+            @update:model-value="emitUpdate"
           />
         </template>
       </v-card>
@@ -80,6 +81,7 @@
 </template>
 
 <script setup lang="ts">
+import type { Cardano } from '@cardano-sdk/core';
 import { ref, watch } from 'vue';
 
 
@@ -91,8 +93,8 @@ interface RelayEntry {
   dnsName?: string;
 }
 
-const props = defineProps<{ value: RelayEntry[] }>();
-const emit = defineEmits(['input']);
+const props = defineProps<{ modelValue: Cardano.Relay[] }>();
+const emit = defineEmits<{ (event: 'update:modelValue', value: Cardano.Relay[]): void }>();
 
 const localRelays = ref<RelayEntry[]>([]);
 
@@ -103,10 +105,12 @@ const relayTypes = [
   { text: 'SRV', value: 'srv' },
 ];
 
-watch(() => props.value, (val) => {
-  if (val && val.length > 0 && localRelays.value.length === 0) {
-    localRelays.value = [...val];
-  }
+watch(() => props.modelValue, (val) => {
+  localRelays.value = (val || []).map((relay): RelayEntry => {
+    if (relay.__typename === 'RelayByName') return { type: 'dns', hostname: relay.hostname, port: relay.port };
+    if (relay.__typename === 'RelayByNameMultihost') return { type: 'srv', dnsName: relay.dnsName };
+    return { type: relay.ipv6 ? 'ipv6' : 'ipv4', ip: relay.ipv6 || relay.ipv4, port: relay.port };
+  });
 }, { immediate: true });
 
 function addRelay() {
@@ -132,6 +136,6 @@ function emitUpdate() {
       return { __typename: 'RelayByNameMultihost' as const, dnsName: r.dnsName || '' };
     }
   });
-  emit('input', relays);
+  emit('update:modelValue', relays);
 }
 </script>

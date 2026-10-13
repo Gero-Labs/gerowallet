@@ -10,7 +10,7 @@
 
     <!-- Keep list scrolling/sorting separate from the sheet's dismissal gesture. -->
     <WalletLibrary :available-wallets="availableWallets" :loading-wallet-id="loadingWalletId"
-      @select="selectWallet" @pointerdown.native.stop />
+      @select="selectWallet" @pointerdown.stop />
 
     <!-- Add wallet -->
     <div class="add-wallet-section">

@@ -21,7 +21,7 @@
               <span class="token-ticker">{{ token.ticker }}</span>
               <v-icon
                 v-if="token.verified"
-                x-small
+                size="x-small"
                 color="var(--g-accent)"
                 class="ml-1"
                 style="margin-top: -1px; font-size: 11px;"
@@ -30,9 +30,9 @@
             </template>
             <!-- Non-native token (clickable to swap) -->
             <template v-else>
-              <v-menu offset-y max-height="240" min-width="240">
-                <template v-slot:activator="{ on, attrs }">
-                  <div class="token-selector-trigger" v-bind="attrs" v-on="on">
+              <v-menu  max-height="240" min-width="240">
+                <template v-slot:activator="{ props: activatorProps }">
+                  <div class="token-selector-trigger" v-bind="activatorProps" >
                     <v-avatar size="20" class="mr-1">
                       <img
                         :src="token.img"
@@ -41,10 +41,10 @@
                       />
                     </v-avatar>
                     <span class="token-ticker">{{ token.ticker }}</span>
-                    <v-icon x-small class="ml-1" style="opacity: 0.4; font-size: 11px;">mdi-chevron-down</v-icon>
+                    <v-icon size="x-small" class="ml-1" style="opacity: 0.4; font-size: 11px;">mdi-chevron-down</v-icon>
                   </div>
                 </template>
-                <v-list dense dark class="token-picker-list">
+                <v-list density="compact" theme="dark" class="token-picker-list">
                   <v-list-item
                     v-for="(available, aidx) in getAvailableTokens(index)"
                     :key="available.unit || `avail-${aidx}`"
@@ -53,14 +53,14 @@
                     <v-avatar size="20" class="mr-2">
                       <img :src="available.img" :alt="available.ticker" />
                     </v-avatar>
-                    <v-list-item-content>
+                    <div class="g-list-content">
                       <v-list-item-title style="font-size: 12px;">{{ available.ticker }}</v-list-item-title>
-                    </v-list-item-content>
-                    <v-list-item-action style="margin: 0; min-width: auto;">
+                    </div>
+                    <div class="g-list-action" style="margin: 0; min-width: auto;">
                       <span style="font-size: 11px; color: var(--g-text-3);">
                         {{ formatTokenBalance(available) }}
                       </span>
-                    </v-list-item-action>
+                    </div>
                   </v-list-item>
                 </v-list>
               </v-menu>
@@ -69,21 +69,21 @@
           </div>
           <div class="token-row__right">
             <v-text-field
-              :value="formatQuantityDisplay(token.quantity)"
-              @input="onQuantityInput(index, $event)"
+              :model-value="formatQuantityDisplay(token.quantity)"
+              @update:model-value="onQuantityInput(index, $event)"
               @keydown="blockNonNumeric"
               @paste="onPasteNumeric"
               type="text"
-              outlined
-              dense
+              variant="outlined"
+              density="compact"
               hide-details
               class="amount-input"
               placeholder="0"
               inputmode="decimal"
             />
             <v-btn
-              text
-              x-small
+              variant="text"
+              size="x-small"
               color="var(--g-accent)"
               class="max-btn"
               @click="setMax(index)"
@@ -93,11 +93,11 @@
           <v-btn
             v-if="index > 0"
             icon
-            x-small
+            size="x-small"
             class="remove-btn"
             @click="removeTokenSelector(index)"
           >
-            <v-icon x-small color="var(--g-text-3)">mdi-close</v-icon>
+            <v-icon size="x-small" color="var(--g-text-3)">mdi-close</v-icon>
           </v-btn>
         </div>
 
@@ -108,21 +108,21 @@
              Nexus 400) swallowed it and the user saw a bare "Insufficient balance" while
              the wallet already knew the number. -->
         <div
-          v-if="index === 0 && value && value.minAda > 0 && value.minAda > Number(token.quantity)"
+          v-if="index === 0 && modelValue && modelValue.minAda > 0 && modelValue.minAda > Number(token.quantity)"
           class="token-error token-error--clickable"
           @click="setMinimum(token)"
         >
-          {{ $t('assets.minRequired', { amount: value.minAda + ' ' + token.ticker }) }}
+          {{ $t('assets.minRequired', { amount: modelValue.minAda + ' ' + token.ticker }) }}
         </div>
 
         <!-- Shortage: quote the figure when we parsed one out of the build error, rather
              than a bare "Insufficient balance" that leaves the user guessing. -->
         <div
-          v-else-if="index === 0 && value && value.adaShortage > 0"
+          v-else-if="index === 0 && modelValue && modelValue.adaShortage > 0"
           class="token-error"
         >
-          {{ value.adaShortage > 0
-            ? $t('send.insufficientBalanceBy', { amount: value.adaShortage })
+          {{ modelValue.adaShortage > 0
+            ? $t('send.insufficientBalanceBy', { amount: modelValue.adaShortage })
             : $t('send.insufficientBalance') }}
         </div>
 
@@ -131,7 +131,7 @@
           v-if="index === 0 && lockedAdaForTokens > 0 && Number(token.quantity) > 0"
           class="token-info"
         >
-          <v-icon x-small color="warning" style="margin-top: -1px;" class="mr-1">mdi-lock-outline</v-icon>
+          <v-icon size="x-small" color="warning" style="margin-top: -1px;" class="mr-1">mdi-lock-outline</v-icon>
           <!-- Wallet state, not transaction state — mask the figure under Hide
                Balances while keeping the hint that tokens are locking ADA -->
           {{ hideBalances ? '••••••' : lockedAdaForTokens.toFixed(2) }} {{ token.ticker }} {{ $t('wallet.lockedForTokens') }}
@@ -139,7 +139,7 @@
 
         <!-- Info: ADA auto-set to min UTxO for tokens -->
         <div v-if="index === 0 && isAutoMinAda" class="token-info">
-          <v-icon x-small color="warning" class="mr-1" style="margin-top: -1px;">mdi-information-outline</v-icon>
+          <v-icon size="x-small" color="warning" class="mr-1" style="margin-top: -1px;">mdi-information-outline</v-icon>
           {{ $t('wallet.adaRequiredForTokens') }}
         </div>
       </div>
@@ -149,14 +149,14 @@
     <div class="add-asset-row">
       <div style="gap: 8px; display: flex;">
         <!-- Add token picker -->
-        <v-menu offset-y max-height="320" min-width="280" v-if="missingTokens.length > 0">
-          <template v-slot:activator="{ on, attrs }">
-            <v-btn text x-small color="var(--g-accent)" v-bind="attrs" v-on="on" class="add-asset-btn">
-              <v-icon x-small class="mr-1">mdi-plus</v-icon>
+        <v-menu  max-height="320" min-width="280" v-if="missingTokens.length > 0">
+          <template v-slot:activator="{ props: activatorProps }">
+            <v-btn variant="text" size="x-small" color="var(--g-accent)" v-bind="activatorProps"  class="add-asset-btn">
+              <v-icon size="x-small" class="mr-1">mdi-plus</v-icon>
               {{ $t('assets.addToken') }}
             </v-btn>
           </template>
-          <v-list dense dark class="token-picker-list">
+          <v-list density="compact" theme="dark" class="token-picker-list">
             <v-list-item
               v-for="(token, idx) in missingTokens"
               :key="token.unit || `missing-${idx}`"
@@ -165,40 +165,40 @@
               <v-avatar size="24" class="mr-2">
                 <img :src="token.img" :alt="token.ticker" />
               </v-avatar>
-              <v-list-item-content>
+              <div class="g-list-content">
                 <v-list-item-title style="font-size: 13px;">{{ token.ticker }}</v-list-item-title>
                 <v-list-item-subtitle style="font-size: 11px;">
                   {{ token.name || '' }}
                 </v-list-item-subtitle>
-              </v-list-item-content>
-              <v-list-item-action style="margin: 0; min-width: auto;">
+              </div>
+              <div class="g-list-action" style="margin: 0; min-width: auto;">
                 <span style="font-size: 11px; color: var(--g-text-3);">
                   {{ formatTokenBalance(token) }}
                 </span>
-              </v-list-item-action>
+              </div>
             </v-list-item>
           </v-list>
         </v-menu>
         <!-- Add NFT button -->
         <v-btn
           v-if="collectiblesCount > 0"
-          text x-small color="var(--g-accent)"
+          variant="text" size="x-small" color="var(--g-accent)"
           class="add-asset-btn"
           @click="$emit('openCollectiblesDialog')"
         >
-          <v-icon x-small class="mr-1">mdi-plus</v-icon>
+          <v-icon size="x-small" class="mr-1">mdi-plus</v-icon>
           {{ $t('assets.addCollectibleLabel') }}
         </v-btn>
       </div>
       <!-- Send entire wallet -->
       <div v-if="missingTokens.length > 0 || collectiblesCount > 0" class="send-all-row">
         <v-btn
-          text x-small
+          variant="text" size="x-small"
           color="var(--g-accent)"
           class="send-all-btn"
           @click="sendEntireWallet()"
         >
-          <v-icon x-small class="mr-1">mdi-send-variant-outline</v-icon>
+          <v-icon size="x-small" class="mr-1">mdi-send-variant-outline</v-icon>
           {{ $t('wallet.sendEntireWallet') }}
         </v-btn>
       </div>
@@ -209,7 +209,7 @@
       <v-chip
         v-for="(nft, idx) in selectedCollectibles"
         :key="nft.fingerprint || idx"
-        small
+        size="small"
         close
         class="nft-chip"
         @click:close="removeCollectible(idx)"
@@ -237,7 +237,7 @@ import { decimalToBaseUnits, baseUnitsToDecimalString } from '@/shared/utils/amo
 import { useCurrencyConverter } from '@/shared/composables/useCurrencyConverter';
 
 interface Props {
-  value: any;
+  modelValue: any;
   tokens: any[];
   /** Fingerprints of NFTs fully allocated to other recipient cards — hidden from picker */
   excludedCollectibleFingerprints?: Set<string>;
@@ -246,7 +246,7 @@ interface Props {
 }
 
 const props = defineProps<Props>();
-const emit = defineEmits(['input', 'setMax', 'openCollectiblesDialog', 'sendEntireWallet']);
+const emit = defineEmits(['update:modelValue', 'setMax', 'openCollectiblesDialog', 'sendEntireWallet']);
 
 const { loggedWallet, collections: resolvedCollections } = toRefs(walletStore);
 
@@ -290,7 +290,7 @@ function getTokenPriceInUsd(token: any): number {
 }
 
 const missingTokens = computed(() => {
-  // Must read from tokenModel (which mirrors props.value.selectedTokens), not
+  // Must read from tokenModel (which mirrors props.modelValue.selectedTokens), not
   // the local selectedTokens ref — the latter is only seeded on mount and
   // never updated, so it wrongly reports tokens already added as "missing"
   // and sendEntireWallet ends up pushing duplicates that over-commit balance.
@@ -305,9 +305,9 @@ const missingTokens = computed(() => {
   );
 });
 
-const tokenModel = computed({
+const tokenModel = computed<typeof props.tokens>({
   get() {
-    return props.value?.selectedTokens || [];
+    return props.modelValue?.selectedTokens || [];
   },
   set(newTokens) {
     // Preserve whatever the parent already tracks for collectibles — our
@@ -315,10 +315,10 @@ const tokenModel = computed({
     // is stale after send-entire-wallet (which populates the parent's
     // recipient directly via a UTxO scan). Emitting it here would wipe the
     // parent's authoritative list and strand assets in change.
-    emit('input', {
-      ...props.value,
+    emit('update:modelValue', {
+      ...props.modelValue,
       selectedTokens: newTokens,
-      selectedCollectibles: props.value?.selectedCollectibles ?? selectedCollectibles.value,
+      selectedCollectibles: props.modelValue?.selectedCollectibles ?? selectedCollectibles.value,
     });
   },
 });
@@ -404,7 +404,7 @@ function getTokenPriceInAda(token: any): number {
 
 // Calculate total amounts being sent
 /** ADA locked as min UTxO for native tokens remaining in wallet change output */
-const lockedAdaForTokens = computed(() => props.value?.lockedForTokens || 0);
+const lockedAdaForTokens = computed(() => props.modelValue?.lockedForTokens || 0);
 
 const totalAmounts = computed(() => {
   const nativeTicker = networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network);
@@ -544,7 +544,7 @@ function onPasteNumeric(e: ClipboardEvent) {
   const current = target.value;
   const newVal = current.slice(0, start) + cleaned + current.slice(end);
   target.value = newVal;
-  target.dispatchEvent(new Event('input'));
+  target.dispatchEvent(new Event('update:modelValue'));
 }
 
 function onQuantityInput(index: number, val: string) {
@@ -557,11 +557,11 @@ function onQuantityInput(index: number, val: string) {
 }
 
 function setMinimum(token: any) {
-  if (!props.value?.minAda) return;
+  if (!props.modelValue?.minAda) return;
   const updatedTokens = [...tokenModel.value];
   const idx = updatedTokens.findIndex((t: any) => t.ticker === token.ticker);
   if (idx >= 0) {
-    updatedTokens[idx] = { ...updatedTokens[idx], quantity: String(props.value.minAda) };
+    updatedTokens[idx] = { ...updatedTokens[idx], quantity: String(props.modelValue.minAda) };
     tokenModel.value = updatedTokens;
   }
 }
@@ -587,9 +587,9 @@ function removeTokenSelector(index: number) {
 /** Auto-set ADA to min UTxO if ADA quantity is 0 and a non-ADA token/NFT is present */
 function autoSetMinAda() {
   const adaToken = tokenModel.value[0];
-  if (adaToken && Number(adaToken.quantity) === 0 && props.value?.minAda > 0) {
+  if (adaToken && Number(adaToken.quantity) === 0 && props.modelValue?.minAda > 0) {
     const updatedTokens = [...tokenModel.value];
-    updatedTokens[0] = { ...updatedTokens[0], quantity: String(props.value.minAda) };
+    updatedTokens[0] = { ...updatedTokens[0], quantity: String(props.modelValue.minAda) };
     tokenModel.value = updatedTokens;
     isAutoMinAda.value = true;
   }
@@ -657,8 +657,8 @@ function sendEntireWallet() {
   // Always emit the final snapshot (tokens + collectibles together) so the
   // parent's recipient state matches what sendEntireWallet intended — any
   // earlier emit from tokenModel's setter used a stale collectibles value.
-  emit('input', {
-    ...props.value,
+  emit('update:modelValue', {
+    ...props.modelValue,
     selectedTokens: allTokens,
     selectedCollectibles: allCollectibles,
   });
@@ -689,15 +689,6 @@ function formatTokenBalance(token: any): string {
   if (!token?.balance) return '0';
   if (hideBalances.value) return '••••••';
   return filters.toCurrency(token.balance, false, 2, '', '', true, token.decimals);
-}
-
-// Legacy addToken — kept for backward compatibility with non-compact consumers
-function _addToken() {
-  const existingTickers = tokenModel.value.map((token: any) => token?.ticker);
-  const missing = props.tokens.filter((token: any) => !existingTickers.includes(token.ticker));
-  if (missing.length > 0) {
-    tokenModel.value = [...tokenModel.value, missing[0]];
-  }
 }
 
 function setMax(index: number) {
@@ -733,8 +724,8 @@ watch(
         collectible.toSendQuantity = 1;
       }
     });
-    emit('input', {
-      ...props.value,
+    emit('update:modelValue', {
+      ...props.modelValue,
       selectedCollectibles: newVal,
     });
     if (newVal.length > 0) autoSetMinAda();

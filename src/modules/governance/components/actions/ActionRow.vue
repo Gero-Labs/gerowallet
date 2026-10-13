@@ -71,7 +71,7 @@
           {{ $t('governance.approxExpiryDate', { date: expiresOn }) }}
         </span>
       </div>
-      <v-icon small class="action-row__chevron">mdi-chevron-right</v-icon>
+      <v-icon size="small" class="action-row__chevron">mdi-chevron-right</v-icon>
     </div>
   </button>
 </template>

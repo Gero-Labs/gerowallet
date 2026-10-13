@@ -1,8 +1,9 @@
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import * as market from '@/api/market-api';
 import { fetchSnapshots, type TokenRef } from './marketSnapshot';
 
 describe('fetchSnapshots', () => {
+  afterEach(() => vi.restoreAllMocks());
   it('matches refs against the bulk price list and marks held vs watched', async () => {
     vi.spyOn(market.default, 'getAllPrices').mockResolvedValue([
       { assetId: 'a', priceChange24h: 22, priceChange7d: -5 },

@@ -102,18 +102,19 @@
 </template>
 
 <script setup lang="ts">
+import type { DisplayNode, NodeStatus, NodeVersions, LeaderSchedule } from '../types';
 import { computed, ref, watch, onBeforeUnmount } from 'vue';
 
 const props = defineProps<{
-  node: any;
-  versions?: any;
-  schedule?: any;
+  node: DisplayNode;
+  versions?: NodeVersions;
+  schedule?: LeaderSchedule;
   nextCountdown?: string;
   visible?: boolean;
 }>();
 
-const liveData = ref<any>(null);
-let pollTimer: any = null;
+const liveData = ref<NodeStatus | null>(null);
+let pollTimer: ReturnType<typeof setInterval> = null;
 
 async function poll() {
   if (!props.node?.url) return;
@@ -142,8 +143,8 @@ watch(() => props.visible, (val) => {
 onBeforeUnmount(() => stopPolling());
 
 // Use live data if available, fall back to initial node.data
-const d = computed(() => liveData.value || props.node?.data || {});
-const _v = computed(() => props.versions);
+const d = computed<NodeStatus>(() => liveData.value || props.node?.data || {});
+
 
 const epochPct = computed(() => {
   const slot = d.value.epochSlot || 0;
@@ -200,15 +201,7 @@ const cpuClass = computed(() => {
 
 const nextSlotCountdown = computed(() => props.nextCountdown);
 
-function _formatUptime(seconds: number): string {
-  if (!seconds) return '--';
-  const d = Math.floor(seconds / 86400);
-  const h = Math.floor((seconds % 86400) / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  if (d > 0) return `${d}d ${h}h ${m}m`;
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
-}
+
 
 function fmtMem(mb: number): string {
   if (!mb) return '--';

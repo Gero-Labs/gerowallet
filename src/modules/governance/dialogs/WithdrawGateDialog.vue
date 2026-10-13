@@ -1,7 +1,7 @@
 <template>
   <BaseDialog
     :isOpen="isOpen"
-    @close="$emit('close')"
+    @close="resetState(); $emit('close')"
     :title="t('staking.withdrawStakingRewards')"
     icon="mdi-lock-open-outline"
     :loading="loading"
@@ -113,7 +113,7 @@
       :isOpen="overlay && loggedWallet?.type === WalletType.Keystone"
       :keystoneType="keystoneType"
       :keystoneCbor="keystoneCbor"
-      @close="overlay = false"
+      @close="resetState()"
       @scan="onKeystoneScan"
       @error="onKeystoneError"
       @progress="onKeystoneProgress"
@@ -137,8 +137,8 @@
  *     signature, one fee, no voice. Built locally because neither nexus
  *     builder can carry a certificate and a withdrawal in the same body.
  */
-import { ref, computed, watch, toRefs } from 'vue';
-import { useRouter } from 'vue-router/composables';
+import { ref, shallowRef, computed, watch, toRefs } from 'vue';
+import { useRouter } from 'vue-router';
 import { Cardano } from '@cardano-sdk/core';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
@@ -176,7 +176,7 @@ const GOV_TOOLS_DOCS_URL = 'https://docs.gov.tools/';
 
 // `undefined`, not `null`: useTransactionSigning types its tx as
 // `Ref<Cardano.Tx | undefined>` and watches it for the CBOR it signs.
-const tx = ref<Cardano.Tx | undefined>(undefined);
+const tx = shallowRef<Cardano.Tx | undefined>(undefined);
 const buildError = ref('');
 let buildSeq = 0;
 
@@ -216,6 +216,7 @@ const {
   onKeystoneError,
   onKeystoneProgress,
 } = useTransactionSigning({
+  active: () => props.isOpen,
   tx,
   successMessageKey: 'staking.withdrawalSubmitted',
   // Zero the local rewards balance so a second withdrawal before the next
@@ -224,7 +225,7 @@ const {
   onClose: () => emit('close'),
 });
 
-const form = ref<{ validate: () => boolean; resetValidation: () => void } | null>(null);
+const form = ref<{ validate: () => Promise<{ valid: boolean }>; resetValidation: () => void } | null>(null);
 
 function goToDReps(): void {
   emit('close');

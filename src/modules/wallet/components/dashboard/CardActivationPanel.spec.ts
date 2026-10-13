@@ -1,5 +1,5 @@
-import Vue, { nextTick } from 'vue';
-import Vuetify from 'vuetify';
+import { nextTick } from 'vue';
+import { createTestVuetify } from '@test/helpers/vuetify';
 import { mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -11,12 +11,11 @@ import CardActivationPanelSfc from './CardActivationPanel.vue';
 import cardStore from '@/stores/modules/card';
 import snackbar from '@/plugins/snackbar';
 
-Vue.use(Vuetify);
 const CardActivationPanel = CardActivationPanelSfc as unknown as Parameters<typeof mount>[0];
 const VALID_PAN = '4111111111111111';
 
 function render() {
-  return mount(CardActivationPanel, { vuetify: new Vuetify(), propsData: { orderUuid: 'order-1' } });
+  return mount(CardActivationPanel, { props: { orderUuid: 'order-1' }, global: { plugins: [createTestVuetify()] } });
 }
 
 async function type(wrapper: ReturnType<typeof render>, value: string) {

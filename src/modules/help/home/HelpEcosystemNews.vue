@@ -17,7 +17,7 @@
     </ul>
     <p v-if="failed && items.length" class="t-caption news-saved" role="status"><v-icon :size="14" color="var(--g-warning)" class="news-saved__icon">mdi-alert-outline</v-icon>{{ t('help.cachedUpdates') }}</p>
     <p v-else-if="!items.length" class="t-body-sm news-status" role="status">{{ t(loading ? 'help.loadingUpdates' : failed ? 'help.updatesUnavailable' : 'help.noUpdates') }}</p>
-    <GButton tier="tertiary" compact class="news-all" :to="updatesTo()" @click.native.capture="home('all_updates')">{{ t('help.updateSource.all') }}</GButton>
+    <GButton tier="tertiary" compact class="news-all" :to="updatesTo()" @click.capture="home('all_updates')">{{ t('help.updateSource.all') }}</GButton>
   </HelpCard>
 </template>
 

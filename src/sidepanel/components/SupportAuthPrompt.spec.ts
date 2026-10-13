@@ -1,3 +1,4 @@
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
 // src/sidepanel/components/SupportAuthPrompt.spec.ts
 //
 // The component is a thin shell over `useSupportAuthPrompt` (covered in its own
@@ -7,8 +8,8 @@
 // is not installed on this test's Vue instance, and TransactionAuthSection would
 // drag Dexie in with it.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mount, type Wrapper } from '@vue/test-utils';
-import Vue from 'vue';
+import { mount, type VueWrapper } from '@vue/test-utils';
+import * as Vue from 'vue';
 // @ts-ignore — tsconfig has no `*.vue` module shim, so `tsc` cannot resolve an
 // SFC imported from a .ts file. Vite/vitest resolve it fine; this keeps the
 // repo's typecheck error count where it was.
@@ -33,21 +34,18 @@ function makeChat(): SupportChat {
   });
 }
 
-function mountPrompt(): Wrapper<Vue> {
-  return mount(SupportAuthPrompt, {
-    mocks: { $t },
-    stubs: { 'v-dialog': true, 'v-icon': true, TransactionAuthSection: true },
-  });
+function mountPrompt(): VueWrapper {
+  return mount(SupportAuthPrompt, { global: { config: { globalProperties: mockGlobalProperties({ $t }) }, stubs: { 'v-dialog': true, 'v-icon': true, TransactionAuthSection: true } } });
 }
 
-let wrapper: Wrapper<Vue> | null = null;
+let wrapper: VueWrapper | null = null;
 
 beforeEach(() => {
   setSupportAuthPrompt(null);
 });
 
 afterEach(() => {
-  wrapper?.destroy();
+  wrapper?.unmount();
   wrapper = null;
   setSupportAuthPrompt(null);
 });
@@ -71,7 +69,7 @@ describe('SupportAuthPrompt', () => {
 
   it('unregisters on destroy, so a later send is a failure rather than a silent no-op', async () => {
     wrapper = mountPrompt();
-    wrapper.destroy();
+    wrapper.unmount();
     wrapper = null;
 
     const chat = makeChat();

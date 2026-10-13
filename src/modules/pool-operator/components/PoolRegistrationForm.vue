@@ -4,7 +4,7 @@
       <!-- Core Parameters -->
       <div class="form-section">
         <div class="section-label t-label">
-          <v-icon x-small color="var(--g-text-3)" class="mr-1">mdi-tune</v-icon>
+          <v-icon size="x-small" color="var(--g-text-3)" class="mr-1">mdi-tune</v-icon>
           {{ $t('poolOperator.coreParameters') }}
         </div>
         <div class="param-grid">
@@ -14,7 +14,7 @@
             suffix="ADA"
             :rules="[requiredRule, minValue(0)]"
             type="number"
-            outlined dense dark hide-details="auto"
+            variant="outlined" density="compact" theme="dark" hide-details="auto"
             class="glass-input"
           />
           <v-text-field
@@ -23,7 +23,7 @@
             suffix="ADA"
             :rules="[requiredRule, minValue(170)]"
             type="number"
-            outlined dense dark hide-details="auto"
+            variant="outlined" density="compact" theme="dark" hide-details="auto"
             class="glass-input"
           />
           <v-text-field
@@ -33,7 +33,7 @@
             :rules="[requiredRule, minValue(0), maxValue(100)]"
             type="number"
             step="0.01"
-            outlined dense dark hide-details="auto"
+            variant="outlined" density="compact" theme="dark" hide-details="auto"
             class="glass-input"
           />
         </div>
@@ -43,7 +43,7 @@
       <!-- Metadata -->
       <div class="form-section">
         <div class="section-label t-label">
-          <v-icon x-small color="var(--g-text-1)" class="mr-1">mdi-tag-text-outline</v-icon>
+          <v-icon size="x-small" color="var(--g-text-1)" class="mr-1">mdi-tag-text-outline</v-icon>
           {{ $t('poolOperator.poolMetadata') }}
         </div>
         <MetadataEditor v-model="metadata" />
@@ -52,7 +52,7 @@
       <!-- Relays -->
       <div class="form-section">
         <div class="section-label t-label">
-          <v-icon x-small color="var(--g-text-3)" class="mr-1">mdi-access-point-network</v-icon>
+          <v-icon size="x-small" color="var(--g-text-3)" class="mr-1">mdi-access-point-network</v-icon>
           {{ $t('poolOperator.relays') }}
         </div>
         <RelayEditor v-model="relays" />
@@ -64,15 +64,15 @@
         block
         class="mt-2 black--text font-weight-bold"
         style="border-radius: var(--g-r-control); text-transform: none; letter-spacing: normal"
-        :disabled="!valid"
+        :disabled="!valid || validating || regLoading"
         :loading="regLoading"
         @click="buildTransaction()"
       >
-        <v-icon left small>{{ isUpdate ? 'mdi-check-circle-outline' : 'mdi-rocket-launch-outline' }}</v-icon>
+        <v-icon start size="small">{{ isUpdate ? 'mdi-check-circle-outline' : 'mdi-rocket-launch-outline' }}</v-icon>
         {{ isUpdate ? $t('poolOperator.updatePool') : $t('poolOperator.registerPool') }}
       </v-btn>
       <div v-if="!isUpdate" class="deposit-note">
-        <v-icon x-small color="var(--g-text-3)" class="mr-1">mdi-information-outline</v-icon>
+        <v-icon size="x-small" color="var(--g-text-3)" class="mr-1">mdi-information-outline</v-icon>
         {{ $t('poolOperator.depositNote') }}
       </div>
     </v-form>
@@ -88,6 +88,9 @@
 </template>
 
 <script setup lang="ts">
+import type { VForm } from 'vuetify/components';
+import type { Cardano } from '@cardano-sdk/core';
+import type { PoolRelay } from '../types';
 import { ref, computed, toRefs } from 'vue';
 import { poolOperatorStore } from '@/stores/poolOperatorStore';
 import { usePoolRegistration } from '@/shared/composables/usePoolRegistration';
@@ -101,6 +104,8 @@ const requiredRule = (v: string) => !!v || 'Required';
 const minValue = (min: number) => (v: string) => !v || Number(v) >= min || `Min ${min}`;
 const maxValue = (max: number) => (v: string) => !v || Number(v) <= max || `Max ${max}`;
 
+const form = ref<InstanceType<typeof VForm> | null>(null);
+const validating = ref(false);
 const valid = ref(false);
 const pledge = ref(registeredParams.value?.pledge ? String(Number(registeredParams.value.pledge) / 1_000_000) : '');
 const cost = ref(registeredParams.value?.cost ? String(Number(registeredParams.value.cost) / 1_000_000) : '340');
@@ -111,13 +116,13 @@ const metadata = ref({
   url: registeredParams.value?.metadataUrl || '',
   hash: registeredParams.value?.metadataHash || '',
 });
-const relays = ref<any[]>(registeredParams.value?.relays?.length
-  ? registeredParams.value.relays.map((r: any) => {
-      if (r.dns || r.hostname || r.__typename === 'RelayByName') return { type: 'dns' as const, hostname: r.dns || r.hostname || '', port: r.port };
-      if (r.ipv4 || r.__typename === 'RelayByAddress' && !r.ipv6) return { type: 'ipv4' as const, ip: r.ipv4 || r.ip || '', port: r.port };
-      if (r.ipv6 || r.__typename === 'RelayByAddress' && r.ipv6) return { type: 'ipv6' as const, ip: r.ipv6 || r.ip || '', port: r.port };
-      if (r.srv || r.dnsName || r.__typename === 'RelayByNameMultihost') return { type: 'srv' as const, dnsName: r.srv || r.dnsName || '' };
-      return { type: 'dns' as const, hostname: r.dns || r.hostname || '', port: r.port };
+const relays = ref<Cardano.Relay[]>(registeredParams.value?.relays?.length
+  ? registeredParams.value.relays.map((r: PoolRelay) => {
+      if (r.dns || r.hostname || r.__typename === 'RelayByName') return { __typename: 'RelayByName' as const, hostname: r.dns || r.hostname || '', port: r.port };
+      if (r.ipv4 || r.__typename === 'RelayByAddress' && !r.ipv6) return { __typename: 'RelayByAddress' as const, ipv4: r.ipv4 || r.ip || '', port: r.port };
+      if (r.ipv6 || r.__typename === 'RelayByAddress' && r.ipv6) return { __typename: 'RelayByAddress' as const, ipv6: r.ipv6 || r.ip || '', port: r.port };
+      if (r.srv || r.dnsName || r.__typename === 'RelayByNameMultihost') return { __typename: 'RelayByNameMultihost' as const, dnsName: r.srv || r.dnsName || '' };
+      return { __typename: 'RelayByName' as const, hostname: r.dns || r.hostname || '', port: r.port };
     })
   : []);
 
@@ -133,6 +138,11 @@ const {
 } = usePoolRegistration();
 
 async function buildTransaction() {
+  if (validating.value || regLoading.value) return;
+  validating.value = true;
+  try {
+    const result = await form.value?.validate();
+    if (!result?.valid) return;
   const params = {
     pledge: BigInt(Math.round(parseFloat(pledge.value) * 1_000_000)),
     cost: BigInt(Math.round(parseFloat(cost.value) * 1_000_000)),
@@ -148,6 +158,7 @@ async function buildTransaction() {
   } else {
     await registerPool(params);
   }
+  } finally { validating.value = false; }
 }
 
 function onSigned() {

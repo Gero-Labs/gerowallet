@@ -1,5 +1,5 @@
-import Vue from 'vue';
-import Vuetify from 'vuetify';
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
+import { createTestVuetify } from '@test/helpers/vuetify';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import type { CardInfo } from '@/models/card';
@@ -14,7 +14,6 @@ vi.mock('@/stores/modules/card', () => ({ default: { activatePhysicalCard: vi.fn
 
 import CardStatusSectionSfc from './CardStatusSection.vue';
 
-Vue.use(Vuetify);
 const CardStatusSection = CardStatusSectionSfc as unknown as Parameters<typeof mount>[0];
 
 function card(data: Record<string, unknown>, balance?: { amount: number; currencyCode: string; state?: string }): CardInfo {
@@ -31,7 +30,7 @@ function card(data: Record<string, unknown>, balance?: { amount: number; currenc
 }
 
 function render(props: Record<string, unknown>) {
-  return mount(CardStatusSection, { vuetify: new Vuetify(), propsData: props, mocks: { $t: (key: string) => key } });
+  return mount(CardStatusSection, { props: props, global: { plugins: [createTestVuetify()], config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key }) } } });
 }
 
 describe('CardStatusSection', () => {
@@ -72,7 +71,7 @@ describe('CardStatusSection', () => {
     expect(wrapper.text()).toContain('card.trackerAwaitingPayment');
     await wrapper.findAll('button').filter(b => b.text() === 'card.completePayment').at(0).trigger('click');
     expect(wrapper.emitted('complete-payment')).toHaveLength(1);
-    wrapper.destroy();
+    wrapper.unmount();
   });
 
   it('says a detected payment is confirming instead of asking to pay again', () => {

@@ -4,8 +4,8 @@
       <v-icon size="14" color="var(--g-text-1)" class="mr-1">mdi-server-network</v-icon>
       <span>{{ $t('poolOperator.infrastructure') }}</span>
       <v-spacer />
-      <v-btn text x-small class="add-btn" @click="$emit('add-node')">
-        <v-icon x-small class="mr-1">mdi-plus</v-icon>
+      <v-btn variant="text" size="x-small" class="add-btn" @click="$emit('add-node')">
+        <v-icon size="x-small" class="mr-1">mdi-plus</v-icon>
         {{ $t('poolOperator.addNode') }}
       </v-btn>
     </div>
@@ -25,12 +25,12 @@
           <span class="step-text">{{ step.title }}</span>
           <div v-if="step.code" class="step-code" @click="copyText(step.code)">
             <code>{{ step.code }}</code>
-            <v-icon x-small color="var(--g-text-3)">mdi-content-copy</v-icon>
+            <v-icon size="x-small" color="var(--g-text-3)">mdi-content-copy</v-icon>
           </div>
         </div>
       </div>
-      <v-btn color="var(--g-accent)" block small class="mt-3 black--text font-weight-bold" style="text-transform:none;border-radius:var(--g-r-control)" @click="$emit('add-node')">
-        <v-icon small left>mdi-plus</v-icon>
+      <v-btn color="var(--g-accent)" block size="small" class="mt-3 black--text font-weight-bold" style="text-transform:none;border-radius:var(--g-r-control)" @click="$emit('add-node')">
+        <v-icon size="small" start>mdi-plus</v-icon>
         {{ $t('poolOperator.addFirstNode') }}
       </v-btn>
     </div>
@@ -42,8 +42,8 @@
       <span class="kes-badge" :class="kesBadgeClass">{{ kesRemaining }} {{ $t('poolOperator.periodsRemaining') }}</span>
       <span class="kes-days">{{ kesDays }}</span>
       <v-spacer />
-      <v-btn v-if="kesRemaining < 50" x-small :color="kesRemaining < 20 ? 'error' : 'warning'" class="black--text" style="text-transform:none;font-weight:700;border-radius:var(--g-r-control);letter-spacing:normal" @click="$emit('rotate-kes')">
-        <v-icon x-small left>mdi-key-change</v-icon>
+      <v-btn v-if="kesRemaining < 50" size="x-small" :color="kesRemaining < 20 ? 'error' : 'warning'" class="black--text" style="text-transform:none;font-weight:700;border-radius:var(--g-r-control);letter-spacing:normal" @click="$emit('rotate-kes')">
+        <v-icon size="x-small" start>mdi-key-change</v-icon>
         {{ $t('poolOperator.rotateNow') }}
       </v-btn>
     </div>
@@ -55,16 +55,16 @@
           <div class="nr-badge" :class="node.type === 'bp' ? 'nr-bp' : 'nr-relay'">
             <v-icon size="11" :color="node.type === 'bp' ? 'warning' : 'var(--g-accent)'">{{ node.type === 'bp' ? 'mdi-shield-star' : 'mdi-access-point' }}</v-icon>
           </div>
-          <span class="nr-name nrs-clickable" @click.stop="$emit('show-live', node)">{{ node.name }} <v-icon x-small color="var(--g-text-3)">mdi-monitor-dashboard</v-icon></span>
+          <span class="nr-name nrs-clickable" @click.stop="$emit('show-live', node)">{{ node.name }} <v-icon size="x-small" color="var(--g-text-3)">mdi-monitor-dashboard</v-icon></span>
           <span v-if="node.connected" class="nr-dot" />
           <span v-else class="nr-offline">{{ $t('poolOperator.offline') }}</span>
           <v-spacer />
-          <v-btn icon x-small class="nr-action" @click="$emit('edit-node', node)"><v-icon x-small color="var(--g-text-3)">mdi-pencil</v-icon></v-btn>
-          <v-btn icon x-small class="nr-action" @click="$emit('remove-node', node.id)"><v-icon x-small color="var(--g-text-3)">mdi-close</v-icon></v-btn>
+          <v-btn icon size="x-small" class="nr-action" @click="$emit('edit-node', node)"><v-icon size="x-small" color="var(--g-text-3)">mdi-pencil</v-icon></v-btn>
+          <v-btn icon size="x-small" class="nr-action" @click="$emit('remove-node', node.id)"><v-icon size="x-small" color="var(--g-text-3)">mdi-close</v-icon></v-btn>
         </div>
         <div v-if="node.data && node.connected" class="nr-stats">
           <span class="nrs"><strong>{{ node.data.blockHeight?.toLocaleString() }}</strong> Block</span>
-          <span class="nrs nrs-clickable" @click.stop="$emit('show-peers', node)"><strong>{{ node.data.peers }}</strong> Peers <v-icon x-small color="var(--g-text-3)">mdi-open-in-new</v-icon></span>
+          <span class="nrs nrs-clickable" @click.stop="$emit('show-peers', node)"><strong>{{ node.data.peers }}</strong> Peers <v-icon size="x-small" color="var(--g-text-3)">mdi-open-in-new</v-icon></span>
           <span class="nrs"><strong>{{ fmtMem(node.data.memoryMb) }}</strong> RAM</span>
           <span class="nrs"><strong>{{ node.data.cpuPercent?.toFixed(0) }}%</strong> CPU</span>
           <span class="nrs"><strong>{{ node.data.mempoolTxs }}</strong> Mempool</span>
@@ -80,7 +80,7 @@
           <span v-if="versions[node.id].versions?.geroNodeMonitor">agent <strong>{{ versions[node.id].versions.geroNodeMonitor }}</strong></span>
         </div>
         <div v-if="versions[node.id]?.updates && Object.keys(versions[node.id].updates).length" class="nr-update">
-          <v-icon x-small color="warning" class="mr-1">mdi-arrow-up-circle</v-icon>
+          <v-icon size="x-small" color="warning" class="mr-1">mdi-arrow-up-circle</v-icon>
           <span v-for="(u, k) in versions[node.id].updates" :key="k">{{ k === 'cardanoNode' ? 'Node' : k }} {{ u.current }} → {{ u.latest }}</span>
         </div>
       </div>
@@ -89,14 +89,15 @@
 </template>
 
 <script setup lang="ts">
+import type { DisplayNode, NodeStatus, NodeVersions } from '../types';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import snackbar from '@/plugins/snackbar';
 
 const { t } = useTranslation();
 
 defineProps<{
-  nodes: any[];
-  versions: Record<string, any>;
+  nodes: DisplayNode[];
+  versions: Record<string, NodeVersions>;
   kesRemaining?: number;
   kesPeriod?: number;
   kesColor: string;
@@ -113,7 +114,7 @@ function fmtMem(mb: number): string {
   return mb >= 1024 ? (mb / 1024).toFixed(1) + 'G' : mb + 'M';
 }
 
-function epochPct(d: any): string {
+function epochPct(d: NodeStatus): string {
   const total = (d.epochSlot || 0) + (d.epochSlotsRemaining || 0);
   return total ? ((d.epochSlot / total) * 100).toFixed(1) : '0';
 }

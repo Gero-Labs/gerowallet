@@ -68,7 +68,7 @@
     <div class="chart-wrapper">
       <TradingViewChart
         symbol="BTC/USD"
-        :data="chartData"
+        :data="convertedChartData"
         height="200px"
         :enable-realtime="true"
         :realtime-data="realtimeData"
@@ -82,14 +82,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
-import type { IChartApi } from 'lightweight-charts';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import type { IChartApi, Time } from 'lightweight-charts';
 import TradingViewChart from '@/shared/components/TradingViewChart.vue';
 import krakenApi, { type CandlestickDataPoint } from '@/api/kraken-api';
 import { priceStore } from '@/stores/priceStore';
 import bitcoinLogo from '@/assets/bitcoin-logo.svg';
 
 const chartData = ref<CandlestickDataPoint[]>([]);
+const convertedChartData = computed(() => chartData.value.map(candle => ({ ...candle, time: candle.time as Time })));
 const chart = ref<IChartApi | null>(null);
 let refreshInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -102,7 +103,7 @@ const realtimeData = computed(() =>
 const priceDirection = ref('');
 let lastPrice = 0;
 
-const _ = computed(() => {
+watch(ticker, () => {
   if (!ticker.value) return;
   const current = ticker.value.lastPrice;
   if (lastPrice && current !== lastPrice) {
@@ -110,7 +111,7 @@ const _ = computed(() => {
     setTimeout(() => { priceDirection.value = ''; }, 600);
   }
   lastPrice = current;
-  return current;
+
 });
 
 function formatPrice(value: number): string {

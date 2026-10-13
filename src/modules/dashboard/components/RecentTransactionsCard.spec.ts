@@ -1,16 +1,18 @@
-import Vue, { nextTick } from 'vue';
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
+import * as Vue from 'vue';
+import { nextTick } from 'vue';
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/stores/walletStore', () => ({
-  walletStore: Vue.observable({
+  walletStore: Vue.reactive({
     transactions: [] as unknown[],
     loggedWallet: { chain: 'Cardano', network: 'Mainnet' },
     isSyncing: false,
   }),
 }));
 vi.mock('@/stores/loading', () => ({
-  loadingState: Vue.observable({ connecting: false, syncPending: false, loadingTxs: false }),
+  loadingState: Vue.reactive({ connecting: false, syncPending: false, loadingTxs: false }),
 }));
 vi.mock('@/shared/composables/useTranslation', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('@/modules/dashboard/dialogs/TransactionDetailsDialog.vue', () => ({ default: { template: '<div />' } }));
@@ -36,16 +38,13 @@ function busyLabel(wrapper: ReturnType<typeof mount>): string | null {
 }
 
 function mountCard() {
-  return mount(RecentTransactionsCard, {
-    mocks: { $t: (key: string) => key },
-    stubs: {
+  return mount(RecentTransactionsCard, { global: { config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key }) }, stubs: {
       'v-card': { template: '<div><slot /></div>' },
       'v-card-text': { template: '<div><slot /></div>' },
       'v-progress-circular': { template: '<i class="spinner" :aria-label="$attrs[\'aria-label\']" />' },
       'v-icon': true,
       'router-link': true,
-    },
-  });
+    } } });
 }
 
 describe('Recent Transactions card while the wallet is still loading or syncing', () => {
@@ -62,7 +61,7 @@ describe('Recent Transactions card while the wallet is still loading or syncing'
     expect(wrapper.text()).toContain('transactions.noTransactionsFound');
     expect(wrapper.find('.recent-tx-skeleton').exists()).toBe(false);
     expect(busyLabel(wrapper)).toBeNull();
-    wrapper.destroy();
+    wrapper.unmount();
   });
 
   it.each([
@@ -80,7 +79,7 @@ describe('Recent Transactions card while the wallet is still loading or syncing'
     expect(wrapper.text()).not.toContain('transactions.noTransactionsFound');
     expect(wrapper.findAll('.recent-tx-skeleton').length).toBeGreaterThan(0);
     expect(busyLabel(wrapper)).toBe('dashboard.recentTransactionsLoading');
-    wrapper.destroy();
+    wrapper.unmount();
   });
 
   it('keeps last session\'s rows on screen with a header spinner, until the first sync answer', async () => {
@@ -99,7 +98,7 @@ describe('Recent Transactions card while the wallet is still loading or syncing'
     await nextTick();
     expect(busyLabel(wrapper)).toBeNull();
     expect(wrapper.findAll('.recent-tx-row')).toHaveLength(2);
-    wrapper.destroy();
+    wrapper.unmount();
   });
 
   it('does not spin the header indicator for an ordinary loader pass once rows are shown', async () => {
@@ -112,7 +111,7 @@ describe('Recent Transactions card while the wallet is still loading or syncing'
     expect(wrapper.findAll('.recent-tx-row')).toHaveLength(1);
     expect(busyLabel(wrapper)).toBeNull();
     expect(wrapper.find('.recent-tx-skeleton').exists()).toBe(false);
-    wrapper.destroy();
+    wrapper.unmount();
   });
 
   it('turns placeholders into rows when the answer delivers them', async () => {
@@ -127,7 +126,7 @@ describe('Recent Transactions card while the wallet is still loading or syncing'
     expect(wrapper.find('.recent-tx-skeleton').exists()).toBe(false);
     expect(wrapper.findAll('.recent-tx-row')).toHaveLength(1);
     expect(busyLabel(wrapper)).toBeNull();
-    wrapper.destroy();
+    wrapper.unmount();
   });
 
   it('shows at most the five newest rows, newest first', async () => {
@@ -136,6 +135,6 @@ describe('Recent Transactions card while the wallet is still loading or syncing'
     await nextTick();
     const rows = wrapper.findAll('.recent-tx-row');
     expect(rows).toHaveLength(5);
-    wrapper.destroy();
+    wrapper.unmount();
   });
 });

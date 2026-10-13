@@ -1,11 +1,11 @@
 <template>
-  <v-tab-item>
+  <v-window-item>
     <v-card flat class="transparent">
       <v-card-title class="px-0 text-left d-flex align-center">
         <span>{{ $t('settings.whatIsCollateral') }}</span>
-        <v-tooltip right max-width="320" content-class="custom-tooltip">
-          <template v-slot:activator="{ on, attrs }">
-            <v-icon small class="ml-2" color="grey lighten-1" v-bind="attrs" v-on="on">
+        <v-tooltip location="end"  max-width="320" content-class="custom-tooltip">
+          <template v-slot:activator="{ props: activatorProps }">
+            <v-icon size="small" class="ml-2" color="grey lighten-1" v-bind="activatorProps" >
               mdi-information-outline
             </v-icon>
           </template>
@@ -20,21 +20,21 @@
         <!-- Status: auto-detected (success) -->
         <v-alert
           v-if="collateral"
-          dense
-          outlined
+          density="compact"
+          variant="outlined"
           color="success"
           icon="mdi-check-circle-outline"
           class="mb-4"
         >
           <div class="font-weight-bold">{{ $t('settings.collateralAutoDetected') }}</div>
           <div class="caption mt-1">{{ $t('settings.collateralAutoDetectedDesc') }}</div>
-          <v-row no-gutters class="mt-3" align="center">
+          <v-row no-gutters class="mt-3 align-center" >
             <v-col cols="auto" class="caption mr-2">{{ $t('settings.collateralAmount') }}:</v-col>
             <v-col cols="auto" class="font-weight-medium">
               {{ filters.toCurrency(collateral[1].value.coins.toString(), false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', false, 6) }}
             </v-col>
           </v-row>
-          <v-row no-gutters class="mt-1" align="center">
+          <v-row no-gutters class="mt-1 align-center" >
             <v-col cols="auto" class="caption mr-2">{{ $t('settings.collateralUtxoRef') }}:</v-col>
             <v-col cols="auto" class="caption">
               {{ filters.truncate(`${collateral[0].txId}#${collateral[0].index}`) }}
@@ -51,8 +51,8 @@
              users who'd rather hold their own pure-ADA UTxO. -->
         <v-alert
           v-else
-          dense
-          outlined
+          density="compact"
+          variant="outlined"
           color="info"
           icon="mdi-shield-check-outline"
           class="mb-4"
@@ -61,8 +61,8 @@
           <div class="caption mt-1">{{ $t('settings.collateralGeroProvidedDesc') }}</div>
           <div class="mt-3">
             <v-btn
-              small
-              text
+              size="small"
+              variant="text"
               class="px-2"
               :loading="isCreating"
               @click="setCollateral"
@@ -73,7 +73,7 @@
         </v-alert>
       </v-card-text>
     </v-card>
-  </v-tab-item>
+  </v-window-item>
 </template>
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';

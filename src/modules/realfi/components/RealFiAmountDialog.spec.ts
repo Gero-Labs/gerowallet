@@ -1,3 +1,5 @@
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
+import * as Vue from 'vue';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -6,9 +8,11 @@ vi.mock('@/shared/dialogs/BaseDialog.vue', () => ({
   __esModule: true,
   default: {
     name: 'BaseDialog',
-    render(this: { $slots: { default?: unknown } }, h: (tag: string, children: unknown) => unknown) {
-      return h('div', this.$slots.default);
-    },
+    render(this: {
+    $slots: Vue.Slots;
+}) {
+    return Vue.h('div', this.$slots['default']?.());
+},
   },
 }));
 vi.mock('@/plugins/i18n', () => ({
@@ -29,34 +33,30 @@ function mountDialog(
   unlockDate?: string,
   extra: Record<string, unknown> = {},
 ) {
-  return mount(Dialog, {
-    propsData: { isOpen: true, mode, balanceUnits, unlockDate, ...extra },
-    mocks: { $t: (key: string) => key },
-    stubs: {
+  return mount(Dialog, { props: { isOpen: true, mode, balanceUnits, unlockDate, ...extra }, global: { config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key }) }, stubs: {
       'v-card-text': { template: '<div><slot /></div>' },
       'v-btn': {
-        props: ['disabled'],
+        props: ['disabled'], emits: ['click'],
         template: '<button :disabled="disabled" @click="$emit(\'click\')"><slot /></button>',
       },
       'v-text-field': {
-        props: ['value', 'errorMessages', 'suffix'],
+        props: ['modelValue', 'errorMessages', 'suffix'],
         template:
-          '<div><input :value="value" @input="$emit(\'input\', $event.target.value)" />' +
+          '<div><input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' +
           '<span class="err">{{ errorMessages }}</span><slot name="append" /></div>',
       },
-    },
-  });
+    } } });
 }
 
-type Wrapper = ReturnType<typeof mountDialog>;
+type VueWrapper = ReturnType<typeof mountDialog>;
 
-function button(w: Wrapper, label: string) {
-  const found = w.findAll('button').wrappers.find((b) => b.text() === label);
+function button(w: VueWrapper, label: string) {
+  const found = w.findAll('button').find((b) => b.text() === label);
   if (!found) throw new Error(`no button labelled ${label}`);
   return found;
 }
 
-async function type(w: Wrapper, value: string) {
+async function type(w: VueWrapper, value: string) {
   await w.find('input').setValue(value);
 }
 

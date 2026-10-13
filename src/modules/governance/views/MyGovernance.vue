@@ -13,11 +13,11 @@
            still there. -->
       <div class="my-governance__header-side">
         <GButton tier="secondary" compact @click="goToDReps()">
-          <v-icon left size="16" color="var(--g-accent)">mdi-account-group-outline</v-icon>
+          <v-icon start size="16" color="var(--g-accent)">mdi-account-group-outline</v-icon>
           {{ $t('governance.browseDReps') }}
         </GButton>
         <GButton tier="secondary" compact @click="goToActions()">
-          <v-icon left size="16" color="var(--g-accent)">mdi-gavel</v-icon>
+          <v-icon start size="16" color="var(--g-accent)">mdi-gavel</v-icon>
           {{ $t('governance.actionsTitle') }}
         </GButton>
       </div>
@@ -143,14 +143,14 @@
             <!-- The mechanics live behind this rather than on the card. A real
                  button, not an icon with a hover handler: it must be reachable
                  by keyboard and carry the baseline focus ring. -->
-            <v-tooltip bottom max-width="320" content-class="glass-popover">
-              <template #activator="{ on, attrs }">
+            <v-tooltip location="bottom"  max-width="320" content-class="glass-popover">
+              <template #activator="{ props: activatorProps }">
                 <button
                   type="button"
                   class="my-governance__manage-info"
-                  v-bind="attrs"
+                  v-bind="activatorProps"
                   :aria-label="String($t('common.learnMore'))"
-                  v-on="on"
+
                 >
                   <v-icon size="14">mdi-information-outline</v-icon>
                 </button>
@@ -169,7 +169,7 @@
 
           <div class="my-governance__change-row">
             <GButton tier="secondary" block @click="goToDReps()">
-              <v-icon left size="16" color="var(--g-accent)">mdi-account-search-outline</v-icon>
+              <v-icon start size="16" color="var(--g-accent)">mdi-account-search-outline</v-icon>
               {{ $t('governance.changeToAnotherDRep') }}
             </GButton>
             <GButton
@@ -179,7 +179,7 @@
               :loading="building === 'drep_always_abstain'"
               @click="delegateToPredefined('abstain')"
             >
-              <v-icon left size="16" color="var(--g-text-3)">mdi-minus-circle-outline</v-icon>
+              <v-icon start size="16" color="var(--g-text-3)">mdi-minus-circle-outline</v-icon>
               {{ isAbstaining ? $t('governance.alreadyAbstaining') : $t('governance.stepBackToAbstain') }}
             </GButton>
             <GButton
@@ -189,7 +189,7 @@
               :loading="building === 'drep_always_no_confidence'"
               @click="delegateToPredefined('noConfidence')"
             >
-              <v-icon left size="16" color="var(--g-warning)">mdi-close-circle-outline</v-icon>
+              <v-icon start size="16" color="var(--g-warning)">mdi-close-circle-outline</v-icon>
               {{ isNoConfidence ? $t('governance.alreadyNoConfidence') : $t('governance.chooseNoConfidence') }}
             </GButton>
           </div>
@@ -211,14 +211,14 @@
               </v-icon>
             </span>
             <span class="t-label my-governance__manage-title">{{ $t('governance.supportTitle') }}</span>
-            <v-tooltip bottom max-width="320" content-class="glass-popover">
-              <template #activator="{ on, attrs }">
+            <v-tooltip location="bottom"  max-width="320" content-class="glass-popover">
+              <template #activator="{ props: activatorProps }">
                 <button
                   type="button"
                   class="my-governance__manage-info"
-                  v-bind="attrs"
+                  v-bind="activatorProps"
                   :aria-label="String($t('common.learnMore'))"
-                  v-on="on"
+
                 >
                   <v-icon size="14">mdi-information-outline</v-icon>
                 </button>
@@ -250,7 +250,7 @@
 
           <div class="my-governance__support-row">
             <GButton tier="secondary" block @click="openSupportDialog()">
-              <v-icon left size="16" color="var(--g-accent)">mdi-gift-outline</v-icon>
+              <v-icon start size="16" color="var(--g-accent)">mdi-gift-outline</v-icon>
               {{ supportingNow ? $t('governance.supportChange') : $t('governance.supportStart') }}
             </GButton>
             <GButton v-if="supportingNow" tier="tertiary" block @click="openSupportDialog()">
@@ -460,7 +460,7 @@
  * of withholding rationales nobody asked for.
  */
 import { computed, ref, watch } from 'vue';
-import { useRouter } from 'vue-router/composables';
+import { useRouter } from 'vue-router';
 import { walletStore } from '@/stores/walletStore';
 import NetworkStore, { networkStore } from '@/stores/networkStore';
 import governanceActionsStore from '@/stores/governanceActionsStore';

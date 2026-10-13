@@ -1,14 +1,14 @@
 <template>
   <v-btn
     :color="color"
-    :large="large"
+    :size="large ? 'large' : 'default'"
     :block="block"
     :loading="loading"
     :disabled="disabled"
     @click="authenticate"
     class="passkey-auth-button"
   >
-    <v-icon :left="!iconOnly">{{ icon }}</v-icon>
+    <v-icon :start="!iconOnly">{{ icon }}</v-icon>
     <span v-if="!iconOnly">{{ buttonText }}</span>
   </v-btn>
 </template>
@@ -16,6 +16,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
+import { useAuthenticationFreshness } from '@/shared/composables/authorizationScope';
 
 interface Props {
   color?: string;
@@ -45,12 +46,15 @@ const emit = defineEmits<{
 
 const { t } = useTranslation();
 const loading = ref(false);
+const authorization = useAuthenticationFreshness();
 
 const buttonText = computed(() => {
   return props.text || t('security.authenticateWithPassKey');
 });
 
 async function authenticate() {
+  if (loading.value || props.disabled) return;
+  const current = authorization.capture();
   loading.value = true;
 
   try {
@@ -58,6 +62,7 @@ async function authenticate() {
     const { walletStore } = await import('@/stores/walletStore');
     const { decryptPrivateKeyWithPrf } = await import('@/shared/utils/webauthn-prf');
     const { evaluateWalletPrf } = await import('@/shared/utils/passkeyPrf');
+    if (!current()) return;
 
     const loggedWallet = walletStore.loggedWallet;
     if (!loggedWallet) {
@@ -87,6 +92,7 @@ async function authenticate() {
       // reuse the same gesture instead of prompting twice. Then pass the
       // pre-evaluated PRF into the Cardano private-key decryptor.
       const prfBuffer = await evaluateWalletPrf(loggedWallet);
+      if (!current()) { new Uint8Array(prfBuffer).fill(0); return; }
       emit('prf-output', new Uint8Array(prfBuffer));
       privateKeyBytes = await decryptPrivateKeyWithPrf(
         loggedWallet.prfEncryptedPrivateKey,
@@ -97,8 +103,10 @@ async function authenticate() {
     }
 
     // Emit success with private key bytes
+    if (!current()) { privateKeyBytes.fill(0); return; }
     emit('success', privateKeyBytes);
   } catch (error) {
+    if (!current()) return;
     console.error('PassKey authentication failed:', error);
     emit('error', error as Error);
   } finally {
@@ -122,7 +130,7 @@ async function authenticateInPopup(_wallet: unknown): Promise<Uint8Array> {
     const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
 
     const messageHandler = (event: MessageEvent) => {
-      if (event.origin !== extensionOrigin) return;
+      if (event.origin !== extensionOrigin || event.source !== popup) return;
 
       if (event.data.type === 'PASSKEY_AUTH_RESULT') {
         window.removeEventListener('message', messageHandler);

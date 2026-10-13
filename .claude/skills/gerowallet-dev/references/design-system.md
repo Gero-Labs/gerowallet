@@ -93,7 +93,7 @@ Note `contrast.mjs` checks the legacy `apex` key, not `apexPrime`/`apexVector`, 
 - **`@click="handler"` passes the Event as the first argument**, clobbering default parameters. Use `@click="handler()"` when the function has defaults, or you will set a boolean to a `MouseEvent`.
 - **Disabled states need `!important`** and must out-specify Vuetify, because an override flag beats an unflagged declaration at any specificity. Enabled states do not.
 - **Scoped selectors cannot reach Vuetify's detached dialog root.** A `content-class` rule must live in an unscoped block, with a unique name.
-- **Side panel**: a `BottomSheet` nested inside another one is trapped by `will-change: transform` + `overflow: hidden` on the parent, and Vue 2.7 has no `<Teleport>`. Use a Vuetify-detached `v-bottom-sheet` instead - `KeystoneSignSheet.vue` is the worked example.
+- **Side panel**: a `BottomSheet` nested inside another one is trapped by `will-change: transform` + `overflow: hidden` on the parent, so use a detached overlay or Vue 3 `<Teleport>` to escape that stacking context. The existing pattern uses `v-bottom-sheet` - `KeystoneSignSheet.vue` is the worked example.
 - **`ContentLayout` is a natural-flow scroll page.** A full-height route root needs a definite `height: calc(100vh - 80px)`; `height: 100%` resolves to auto and `min-height` does not let a child's `height: 100%` resolve. The side panel's `MiniLayout` is a proper flex column, so this is a ContentLayout-only trap.
 
 ## Motion

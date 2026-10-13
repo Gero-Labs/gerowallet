@@ -8,7 +8,7 @@
       :aria-current="stateOf(i) === 'current' ? 'step' : undefined"
     >
       <span class="card-steps__dot g-num" aria-hidden="true">
-        <v-icon v-if="stateOf(i) === 'done'" x-small>mdi-check</v-icon>
+        <v-icon v-if="stateOf(i) === 'done'" size="x-small">mdi-check</v-icon>
         <template v-else>{{ i + 1 }}</template>
       </span>
       <span class="card-steps__label">{{ step }}</span>

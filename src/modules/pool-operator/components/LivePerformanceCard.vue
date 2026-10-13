@@ -48,13 +48,13 @@
 
 <script setup lang="ts">
 defineProps<{
-  liveStake: any;
+  liveStake: string | number;
   delegators: number;
   blocks: number;
   ros: string;
 }>();
 
-function formatAdaShort(lovelace: any): string {
+function formatAdaShort(lovelace: string | number): string {
   if (!lovelace) return '0';
   const ada = Number(lovelace) / 1_000_000;
   if (ada >= 1_000_000) return (ada / 1_000_000).toFixed(2) + 'M';

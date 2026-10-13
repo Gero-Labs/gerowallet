@@ -12,7 +12,7 @@
           <span class="id-name">{{ name }}</span>
         </div>
         <div class="id-pool-id" @click="$emit('copy-id')">
-          {{ truncatedId }} <v-icon x-small color="var(--g-text-3)">mdi-content-copy</v-icon>
+          {{ truncatedId }} <v-icon size="x-small" color="var(--g-text-3)">mdi-content-copy</v-icon>
         </div>
       </div>
       <div class="id-actions">
@@ -20,17 +20,17 @@
           <span class="id-status-dot" />
           {{ statusText }}
         </div>
-        <v-tooltip v-if="isRegistered" bottom>
-          <template v-slot:activator="{ on }">
-            <v-btn icon x-small class="id-action-btn id-update" v-on="on" @click="$emit('update')">
+        <v-tooltip location="bottom" v-if="isRegistered" >
+          <template v-slot:activator="{ props: activatorProps }">
+            <v-btn v-bind="activatorProps" icon size="x-small" class="id-action-btn id-update"  @click="$emit('update')">
               <v-icon size="15" color="var(--g-accent)">mdi-pencil-outline</v-icon>
             </v-btn>
           </template>
           <span>{{ $t('poolOperator.updatePool') }}</span>
         </v-tooltip>
-        <v-tooltip v-if="isRegistered && !isRetiring" bottom>
-          <template v-slot:activator="{ on }">
-            <v-btn icon x-small class="id-action-btn id-retire" v-on="on" @click="$emit('retire')">
+        <v-tooltip location="bottom" v-if="isRegistered && !isRetiring" >
+          <template v-slot:activator="{ props: activatorProps }">
+            <v-btn v-bind="activatorProps" icon size="x-small" class="id-action-btn id-retire"  @click="$emit('retire')">
               <v-icon size="15" color="error">mdi-power</v-icon>
             </v-btn>
           </template>
@@ -43,10 +43,10 @@
     <div class="id-bottom" v-if="description || liveStake">
       <div v-if="description" class="id-desc">{{ description }}</div>
       <div v-if="liveStake" class="id-metrics">
-        <span class="id-metric"><v-icon x-small color="var(--g-text-3)" class="mr-1">mdi-chart-line</v-icon><strong>{{ formatAdaShort(liveStake) }}</strong> {{ $t('poolOperator.liveStake') }}</span>
-        <span class="id-metric"><v-icon x-small color="var(--g-text-3)" class="mr-1">mdi-account-group</v-icon><strong>{{ delegators?.toLocaleString() }}</strong> {{ $t('poolOperator.delegators') }}</span>
-        <span class="id-metric"><v-icon x-small color="var(--g-text-3)" class="mr-1">mdi-cube-outline</v-icon><strong>{{ blocks?.toLocaleString() }}</strong> {{ $t('poolOperator.blocksProduced') }}</span>
-        <span class="id-metric"><v-icon x-small color="var(--g-text-3)" class="mr-1">mdi-trending-up</v-icon><strong>{{ ros }}%</strong> {{ $t('poolOperator.ros') }}</span>
+        <span class="id-metric"><v-icon size="x-small" color="var(--g-text-3)" class="mr-1">mdi-chart-line</v-icon><strong>{{ formatAdaShort(liveStake) }}</strong> {{ $t('poolOperator.liveStake') }}</span>
+        <span class="id-metric"><v-icon size="x-small" color="var(--g-text-3)" class="mr-1">mdi-account-group</v-icon><strong>{{ delegators?.toLocaleString() }}</strong> {{ $t('poolOperator.delegators') }}</span>
+        <span class="id-metric"><v-icon size="x-small" color="var(--g-text-3)" class="mr-1">mdi-cube-outline</v-icon><strong>{{ blocks?.toLocaleString() }}</strong> {{ $t('poolOperator.blocksProduced') }}</span>
+        <span class="id-metric"><v-icon size="x-small" color="var(--g-text-3)" class="mr-1">mdi-trending-up</v-icon><strong>{{ ros }}%</strong> {{ $t('poolOperator.ros') }}</span>
       </div>
     </div>
   </div>
@@ -63,7 +63,7 @@ defineProps<{
   statusText: string;
   isRegistered: boolean;
   isRetiring: boolean;
-  liveStake?: any;
+  liveStake?: string | number;
   delegators?: number;
   blocks?: number;
   ros?: string;
@@ -71,7 +71,7 @@ defineProps<{
 
 defineEmits(['copy-id', 'update', 'retire']);
 
-function formatAdaShort(lovelace: any): string {
+function formatAdaShort(lovelace: string | number): string {
   if (!lovelace) return '0';
   const ada = Number(lovelace) / 1_000_000;
   if (ada >= 1_000_000) return (ada / 1_000_000).toFixed(2) + 'M';

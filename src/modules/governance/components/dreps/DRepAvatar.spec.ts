@@ -4,8 +4,8 @@
 // gateway will serve to an extension origin, so before the mapping below their
 // avatars simply did not appear — the bug that started this work.
 import { describe, it, expect } from 'vitest';
-import { mount, type Wrapper } from '@vue/test-utils';
-import Vue from 'vue';
+import { mount, type VueWrapper } from '@vue/test-utils';
+import * as Vue from 'vue';
 
 // @ts-ignore — tsconfig ships no `*.vue` shim; vite resolves this fine.
 import DRepAvatar from './DRepAvatar.vue';
@@ -15,8 +15,8 @@ import { ipfsPathOf, toInAppUrl, toExternalHref } from '@/modules/governance/uti
 const CID_V1 = 'bafybeickzy3mupolsvukd2pt7huyba7a3wkln7vcfr47wnjkna7no6g72u';
 const CID_V0 = 'QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG';
 
-function render(props: Record<string, unknown>): Wrapper<Vue> {
-  return mount(DRepAvatar, { propsData: props, stubs: { 'v-icon': true } });
+function render(props: Record<string, unknown>): VueWrapper {
+  return mount(DRepAvatar, { props: props, global: { stubs: { 'v-icon': true } } });
 }
 
 describe('DRepAvatar', () => {

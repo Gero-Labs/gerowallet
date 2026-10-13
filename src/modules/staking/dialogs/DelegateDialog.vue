@@ -1,22 +1,22 @@
 <template>
   <BaseDialog persistent :width="850"
     :isOpen="isOpen"
-    @close="$emit('close')"
+    @close="resetState(); $emit('close')"
     :title="t('staking.delegateYourStake')"
     :loading="loading"
     :min-height="639"
     :subtitle="t('staking.delegateSubtitle', { currency: networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network) })"
   >
     <v-card-text class="px-0 justify-center text-center" style="z-index: 1" v-if="pool">
-      <v-alert border="left" color="primary" type="info" prominent class="text-left">
+      <v-alert border="start" color="primary" type="info" prominent class="text-left">
         <ul>
           <li>{{ $t('staking.youCanOnlyDelegateToOne') }}</li>
           <li>{{ $t('staking.canSwitchPools') }}</li>
           <li>{{ $t('staking.canCancelDelegation') }}</li>
         </ul>
       </v-alert>
-      <v-list-item three-line class="px-0">
-        <v-list-item-content class="text-left">
+      <v-list-item lines="three" class="px-0">
+        <div class="text-left g-list-content">
           <v-list-item-title class="text-h5 mb-1">
             {{ `[${pool.ticker}] ${pool.name}` }}
           </v-list-item-title>
@@ -25,11 +25,11 @@
             >{{ filters.truncate(pool.pool_id_bech32)
             }}<CopyButton class="ml-1" :value="pool.pool_id_bech32" x-small></CopyButton
           ></v-list-item-subtitle>
-        </v-list-item-content>
+        </div>
 
-        <v-list-item-avatar size="80" v-if="poolExtendedInfo(pool)?.info?.url_png_icon_64x64">
+        <v-avatar size="80" v-if="poolExtendedInfo(pool)?.info?.url_png_icon_64x64">
           <img :src="poolExtendedInfo(pool).info.url_png_icon_64x64" alt="" @error="fallbackImage" />
-        </v-list-item-avatar>
+        </v-avatar>
       </v-list-item>
       <v-layout>
         <v-row no-gutters>
@@ -67,7 +67,7 @@
           rounded
           :color="filters.getColor(pool.live_saturation)"
           height="32"
-          :value="pool.live_saturation"
+          :model-value="pool.live_saturation"
           striped
         >
           <template v-slot:default="{ value }">
@@ -82,9 +82,9 @@
         <v-row no-gutters>
           <v-col :cols="cols">
             <h4>
-              <v-tooltip bottom content-class="custom-tooltip">
-                <template v-slot:activator="{ on, attrs }">
-                  <span v-bind="attrs" v-on="on" class="underline-tooltip">{{ $t('staking.delegationAmt') }}</span>
+              <v-tooltip location="bottom"  content-class="custom-tooltip">
+                <template v-slot:activator="{ props: activatorProps }">
+                  <span v-bind="activatorProps"  class="underline-tooltip">{{ $t('staking.delegationAmt') }}</span>
                 </template>
                 <div>
                   {{ $t('staking.delegationAmtTooltip') }}
@@ -104,9 +104,9 @@
           </v-col>
           <v-col :cols="cols">
             <h4>
-              <v-tooltip bottom content-class="custom-tooltip">
-                <template v-slot:activator="{ on, attrs }">
-                  <span v-bind="attrs" v-on="on" class="underline-tooltip">{{ $t('staking.epochYield') }}</span>
+              <v-tooltip location="bottom"  content-class="custom-tooltip">
+                <template v-slot:activator="{ props: activatorProps }">
+                  <span v-bind="activatorProps"  class="underline-tooltip">{{ $t('staking.epochYield') }}</span>
                 </template>
                 <div>
                   {{ $t('staking.epochYieldTooltip') }}
@@ -126,9 +126,9 @@
           </v-col>
           <v-col :cols="cols" v-if="depositFee > 0">
             <h4>
-              <v-tooltip bottom content-class="custom-tooltip">
-                <template v-slot:activator="{ on, attrs }">
-                  <span v-bind="attrs" v-on="on" class="underline-tooltip">{{ $t('staking.depositFee') }}</span>
+              <v-tooltip location="bottom"  content-class="custom-tooltip">
+                <template v-slot:activator="{ props: activatorProps }">
+                  <span v-bind="activatorProps"  class="underline-tooltip">{{ $t('staking.depositFee') }}</span>
                 </template>
                 <div>
                   <div>{{ $t('staking.depositFeeDesc1') }}</div>
@@ -150,9 +150,9 @@
           </v-col>
           <v-col :cols="cols">
             <h4>
-              <v-tooltip bottom content-class="custom-tooltip">
-                <template v-slot:activator="{ on, attrs }">
-                  <span v-bind="attrs" v-on="on" class="underline-tooltip">{{ $t('staking.txFee') }}</span>
+              <v-tooltip location="bottom"  content-class="custom-tooltip">
+                <template v-slot:activator="{ props: activatorProps }">
+                  <span v-bind="activatorProps"  class="underline-tooltip">{{ $t('staking.txFee') }}</span>
                 </template>
                 <div>
                   {{ $t('staking.txFeeTooltip') }}
@@ -235,7 +235,7 @@
       :isOpen="overlay && loggedWallet.type === WalletType.Keystone"
       :keystoneType="keystoneType"
       :keystoneCbor="keystoneCbor"
-      @close="overlay = false"
+      @close="resetState()"
       @scan="onKeystoneScan"
       @error="onKeystoneError"
       @progress="onKeystoneProgress"
@@ -258,13 +258,28 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 
 const { t } = useTranslation();
 
+interface DelegationPool {
+  ticker?: string;
+  name?: string;
+  description?: string;
+  pool_id_bech32?: string;
+  block_count?: number;
+  live_delegators?: number;
+  live_stake?: string | number;
+  ros?: number;
+  live_saturation?: number;
+  pool_extended_info?: string;
+}
+
+interface ExtendedPoolInfo { info?: { url_png_icon_64x64?: string } }
+
 const props = defineProps({
   isOpen: {
     type: Boolean,
     default: false,
   },
   pool: {
-    type: Object as () => any,
+    type: Object as () => DelegationPool,
   },
   tx: {
     type: Object as () => Cardano.Tx,
@@ -303,12 +318,13 @@ const {
   onKeystoneError,
   onKeystoneProgress,
 } = useTransactionSigning({
+  active: () => props.isOpen,
   tx: txRef,
   successMessageKey: 'staking.delegationTxSubmitted',
   onClose: () => emit('close'),
 });
 
-const formRef = ref<{ validate: () => boolean; resetValidation: () => void } | null>(null);
+const formRef = ref<{ validate: () => Promise<{ valid: boolean }>; resetValidation: () => void } | null>(null);
 
 watch(
   () => props.isOpen,
@@ -330,11 +346,11 @@ const depositFee = computed(() => {
   // (default client path) and Registration (Trezor) — not just the two legacy
   // types. Without this the deposit row is hidden on the majority first
   // delegation. Mirrors UnstakeDialog's both-generations check on the dereg side.
-  const registrationCert: any = props.tx.body.certificates?.find(cert =>
+  const registrationCert = props.tx.body.certificates?.find(cert =>
     Cardano.isCertType(cert, Cardano.StakeRegistrationCertificateTypes)
   );
 
-  return registrationCert && registrationCert.deposit ? Number(registrationCert?.deposit) : 0;
+  return registrationCert && 'deposit' in registrationCert && registrationCert.deposit ? Number(registrationCert.deposit) : 0;
 });
 
 const cols = computed(() => {
@@ -349,9 +365,9 @@ const signDelegationTx = async () => {
   await handleSign(formRef.value || undefined);
 };
 
-const poolExtendedInfo = (pool: any): any => {
+const poolExtendedInfo = (pool: DelegationPool): ExtendedPoolInfo | undefined => {
   if (pool && pool.pool_extended_info) {
-    const parsed = JSON.parse(pool.pool_extended_info);
+    const parsed: ExtendedPoolInfo = JSON.parse(pool.pool_extended_info);
     if (parsed?.info?.url_png_icon_64x64 && !parsed.info.url_png_icon_64x64.startsWith('http')) {
       parsed.info.url_png_icon_64x64 = '';
     }

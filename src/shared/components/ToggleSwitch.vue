@@ -2,19 +2,18 @@
   <div class="switch">
     <p class="left‐text my-auto "
        :style="{
-      color: !props.value ? '#ffffff' : '',
+      color: !props.modelValue ? '#ffffff' : '',
       fontSize: props.fontSize,
     }">
       {{ props.textLeft }}
-      <v-icon :color="props.value ? '#ffffff' : 'primary'" small v-if="props.iconLeft">
+      <v-icon :color="props.modelValue ? '#ffffff' : 'primary'" size="small" v-if="props.iconLeft">
         {{ props.iconLeft }}
       </v-icon>
     </p>
     <v-switch
       inset
-      dense
+      density="compact"
       v-model="model"
-      @change="toggleSwitch"
       color="inherit"
       hide-details
       style="margin-top: 0; align-items: center;"
@@ -23,10 +22,10 @@
     ></v-switch>
     <p class="right‐text my-auto"
        :style="{
-      color: props.value ? '#ffffff' : '',
+      color: props.modelValue ? '#ffffff' : '',
       fontSize: props.fontSize,
     }">
-      <v-icon :color="props.value ? 'primary' : '#ffffff'" small v-if="props.iconRight">
+      <v-icon :color="props.modelValue ? 'primary' : '#ffffff'" size="small" v-if="props.iconRight">
         {{ props.iconRight }}
       </v-icon>
       {{ props.textRight }}
@@ -36,7 +35,7 @@
 
 <script setup lang="ts">
 const props = defineProps({
-  value: {
+  modelValue: {
     type: Boolean,
     required: true
   },
@@ -65,17 +64,15 @@ const props = defineProps({
     default: '14px'
   }
 });
-const emit = defineEmits(['input', 'update:modelValue'])
+const emit = defineEmits(['update:modelValue'])
 
 const toggleSwitch = (value: boolean) => {
-  // Emit both events for Vue 2.7 compatibility
-  emit('input', value);
   emit('update:modelValue', value);
 }
 
 const model = computed<boolean>({
   get() {
-    return props.value
+    return props.modelValue
   },
   set(newVal: boolean) {
     toggleSwitch(newVal)

@@ -1,6 +1,6 @@
 <template>
   <BaseDialog
-    :isOpen="value"
+    :isOpen="modelValue"
     @close="close"
     :img="walletConnectLogo"
     imgColor="var(--g-accent)"
@@ -14,7 +14,7 @@
       <v-tabs
         v-model="tab"
         grow
-        background-color="transparent"
+        bg-color="transparent"
         color="var(--g-accent)"
         slider-color="var(--g-accent)"
         class="wc-tabs mb-4"
@@ -23,9 +23,9 @@
         <v-tab class="wc-tab">{{ $t('walletConnect.connectViaScan') }}</v-tab>
       </v-tabs>
 
-      <v-tabs-items v-model="tab" class="transparent">
+      <v-window v-model="tab" class="transparent">
         <!-- Paste URI -->
-        <v-tab-item>
+        <v-window-item>
           <!-- Caption above the field instead of a floating label: outlined
                fields mounted inside a dialog compute a zero-width label notch,
                so the border strikes through the label text. -->
@@ -36,18 +36,18 @@
             id="wc-uri-input"
             v-model="uri"
             :placeholder="$t('walletConnect.uriPlaceholder')"
-            outlined
-            dense
+            variant="outlined"
+            density="compact"
             clearable
             hide-details="auto"
             :error-messages="errorMessage"
             class="wc-input"
             @keyup.enter="pair"
           />
-        </v-tab-item>
+        </v-window-item>
 
         <!-- QR Scanner -->
-        <v-tab-item>
+        <v-window-item>
           <div v-if="tab === 1" class="wc-scanner">
             <AnimatedQRScanner
               mode="text"
@@ -58,8 +58,8 @@
           <div v-if="qrError" class="t-caption delta-down text-center mt-2">
             {{ qrError }}
           </div>
-        </v-tab-item>
-      </v-tabs-items>
+        </v-window-item>
+      </v-window>
     </v-card-text>
 
     <v-card-actions v-if="tab === 0" class="px-0 pt-4 pb-0">
@@ -91,11 +91,11 @@ const walletConnectLogo = assets.walletConnectLogo;
 const { t } = useTranslation();
 
 const props = defineProps<{
-  value: boolean;
+  modelValue: boolean;
 }>();
 
 const emit = defineEmits<{
-  (e: 'input', value: boolean): void;
+  (e: 'update:modelValue', value: boolean): void;
   (e: 'paired'): void;
 }>();
 
@@ -108,7 +108,7 @@ const qrError = ref('');
 const isValidUri = computed(() => (uri.value ?? '').trim().startsWith('wc:'));
 
 // Reset state when dialog opens
-watch(() => props.value, (open) => {
+watch(() => props.modelValue, (open) => {
   if (open) {
     uri.value = '';
     errorMessage.value = '';
@@ -131,7 +131,7 @@ const pair = async () => {
     const response = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.WC_PAIR,
       data: { uri: (uri.value ?? '').trim() },
-    });
+    }) as { data?: { success?: boolean; error?: string } };
 
     if (response.data?.success) {
       emit('paired');
@@ -159,7 +159,7 @@ const onQrError = (error: string) => {
 };
 
 const close = () => {
-  emit('input', false);
+  emit('update:modelValue', false);
 };
 </script>
 

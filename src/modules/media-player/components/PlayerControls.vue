@@ -1,26 +1,26 @@
 <template>
   <div v-if="currentTrack" class="text-center">
-    <v-btn :x-small="xSmall" :small="small" :x-large="xLarge" text icon color="primary" @click="MusicStore.toggleShuffle" :plain="!context.isShuffle">
+    <v-btn :x-small="xSmall" :small="small" :x-large="xLarge" variant="text" icon color="primary" @click="MusicStore.toggleShuffle" :plain="!context.isShuffle">
       <v-icon :x-small="xSmall" :small="small" :x-large="xLarge">
         mdi-shuffle
       </v-icon>
     </v-btn>
-    <v-btn :x-small="xSmall" :small="small" :large="large" :x-large="xLarge" text icon color="primary" @click="MusicStore.prevTrack">
+    <v-btn :x-small="xSmall" :small="small" :large="large" :x-large="xLarge" variant="text" icon color="primary" @click="MusicStore.prevTrack">
       <v-icon :x-small="xSmall" :small="small" :large="large" :x-large="xLarge">
         mdi-skip-previous
       </v-icon>
     </v-btn>
-    <v-btn :x-small="xSmall" :small="small" :large="large" :x-large="xLarge" text icon color="primary" @click="MusicStore.togglePlayPause">
+    <v-btn :x-small="xSmall" :small="small" :large="large" :x-large="xLarge" variant="text" icon color="primary" @click="MusicStore.togglePlayPause">
       <v-icon :x-small="xSmall" :small="small" :large="large" :x-large="xLarge">
         {{ context.isPlaying ? 'mdi-pause-circle' : 'mdi-play-circle'}}
       </v-icon>
     </v-btn>
-    <v-btn :x-small="xSmall" :small="small" :large="large" :x-large="xLarge" text icon color="primary" @click="MusicStore.nextTrack">
+    <v-btn :x-small="xSmall" :small="small" :large="large" :x-large="xLarge" variant="text" icon color="primary" @click="MusicStore.nextTrack">
       <v-icon :x-small="xSmall" :small="small" :large="large" :x-large="xLarge">
         mdi-skip-next
       </v-icon>
     </v-btn>
-    <v-btn :x-small="xSmall" :small="small" :x-large="xLarge" text icon color="primary" :plain="!context.isRepeat" @click="MusicStore.toggleRepeat">
+    <v-btn :x-small="xSmall" :small="small" :x-large="xLarge" variant="text" icon color="primary" :plain="!context.isRepeat" @click="MusicStore.toggleRepeat">
       <v-icon :x-small="xSmall" :small="small" :x-large="xLarge">
         mdi-repeat
       </v-icon>

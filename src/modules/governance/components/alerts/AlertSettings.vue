@@ -12,8 +12,8 @@
       <div class="alert-settings__row">
         <span class="t-body-2 alert-settings__label">{{ $t('governance.alerts.settingsInactivity') }}</span>
       </div>
-      <v-chip-group :value="settings.inactivityWarnAt" mandatory @change="onWarnAt">
-        <v-chip v-for="at in WARN_AT_CHOICES" :key="at" :value="at" small outlined class="g-num">
+      <v-chip-group :model-value="settings.inactivityWarnAt" mandatory @update:model-value="onWarnAt">
+        <v-chip v-for="at in WARN_AT_CHOICES" :key="at" :value="at" size="small" variant="outlined" class="g-num">
           {{ at }}
         </v-chip>
       </v-chip-group>
@@ -21,12 +21,12 @@
       <div class="alert-settings__row">
         <span class="t-body-2 alert-settings__label">{{ $t('governance.alerts.settingsRationale') }}</span>
         <v-switch
-          :input-value="settings.rationaleDropEnabled"
-          dense
+          :model-value="settings.rationaleDropEnabled"
+          density="compact"
           hide-details
           class="alert-settings__switch"
           :aria-label="$t('governance.alerts.settingsRationale')"
-          @change="onRationale"
+          @update:model-value="onRationale"
         />
       </div>
 

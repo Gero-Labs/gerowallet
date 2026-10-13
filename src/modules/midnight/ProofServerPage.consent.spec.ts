@@ -3,10 +3,11 @@
 // proof-server settings. This pins that the settings page can record it.
 import { describe, expect, it, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
-import Vue, { defineComponent, ref } from 'vue';
+import * as Vue from 'vue';
+import { defineComponent, ref } from 'vue';
 
 const state = vi.hoisted(() => ({ mode: 'zkpaas' as 'remote' | 'local' | 'zkpaas' }));
-const store = vi.hoisted(() => ({ shieldedProvingConsent: null as unknown }));
+let store = vi.hoisted(() => ({ shieldedProvingConsent: null as unknown }));
 
 vi.mock('@/chains/midnight/useProofServerSettings', () => ({
   formatRelativeTime: () => '',
@@ -25,8 +26,8 @@ vi.mock('@/chains/midnight/useProofServerSettings', () => ({
     lastCheckedAt: ref(null), lastCheckLatencyMs: ref(null), provingHistory: ref([]),
   }),
 }));
-vi.mock('@/stores/walletStore', () => ({ walletStore: Vue.observable({ loggedWallet: { chain: 'Midnight' } }) }));
-vi.mock('@/stores/midnightStore', () => ({ midnightStore: Vue.observable(store) }));
+vi.mock('@/stores/walletStore', () => ({ walletStore: Vue.reactive({ loggedWallet: { chain: 'Midnight' } }) }));
+vi.mock('@/stores/midnightStore', () => ({ midnightStore: (store = Vue.reactive(store)) }));
 vi.mock('@/shared/composables/useTranslation', () => ({
   useTranslation: () => ({ t: (key: string, args?: Record<string, string>) => (args?.['provider'] ? `${key}:${args['provider']}` : key) }),
 }));
@@ -36,10 +37,13 @@ vi.mock('@/modules/dashboard/dialogs/ShieldedProvingConsentDialog.vue', async ()
     default: define({
       name: 'ShieldedProvingConsentDialogStub',
       props: { isOpen: Boolean, provider: String },
-      render(h) {
-        const props = this.$props as { isOpen?: boolean; provider?: string };
-        return h('div', { attrs: { 'data-testid': 'consent-dialog', 'data-open': String(props.isOpen), 'data-provider': props.provider } });
-      },
+      render() {
+    const props = this.$props as {
+        isOpen?: boolean;
+        provider?: string;
+    };
+    return Vue.h('div', { 'data-testid': 'consent-dialog', 'data-open': String(props.isOpen), 'data-provider': props.provider });
+},
     }),
   };
 });
@@ -50,22 +54,20 @@ import ProofServerPage from './ProofServerPage.vue';
 // GButton is a <script setup> import (not stubbable by name); it renders a
 // v-btn and forwards its listeners, so the v-btn stub must be clickable.
 const VBtnStub = defineComponent({
-  render(h) {
-    return h('button', { attrs: this.$attrs, on: this.$listeners }, this.$slots['default']);
-  },
+  render() {
+    return Vue.h('button', { ...this.$attrs }, this.$slots['default']?.());
+},
 });
 
 function mountPage(mode: typeof state.mode, consent: unknown) {
   state.mode = mode;
   store.shieldedProvingConsent = consent;
-  return mount(ProofServerPage, {
-    stubs: {
+  return mount(ProofServerPage, { global: { stubs: {
       CopyButton: true, 'v-icon': true, 'v-layout': { template: '<div><slot /></div>' },
       'v-row': { template: '<div><slot /></div>' }, 'v-col': { template: '<div><slot /></div>' },
       'v-text-field': true, 'v-progress-circular': true, 'v-expansion-panels': true, 'v-expansion-panel': true,
       'v-expansion-panel-header': true, 'v-expansion-panel-content': true, 'v-btn': VBtnStub,
-    },
-  });
+    } } });
 }
 
 describe('proof-server settings: remote-prover consent', () => {

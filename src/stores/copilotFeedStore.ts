@@ -1,11 +1,12 @@
+import { plainStoreSnapshot } from '@/stores/serialization';
 // src/stores/copilotFeedStore.ts
-import Vue from 'vue';
+import { reactive } from 'vue';
 import { addFeedItems, type FeedItem, type FeedState } from '@/services/copilot/feedReducer';
 
 const STORE_KEY = 'copilotFeedStore';
 const MAX_ITEMS = 50;
 
-export const copilotFeedState = Vue.observable<FeedState>({ items: [], seen: [] });
+export const copilotFeedState = reactive<FeedState>({ items: [], seen: [] });
 
 const hasChromeStorage = typeof chrome !== 'undefined' && !!chrome.storage?.local;
 let writeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -24,7 +25,7 @@ function persist() {
   if (!hasChromeStorage) return;
   if (writeTimer) clearTimeout(writeTimer);
   writeTimer = setTimeout(() => {
-    chrome.storage.local.set({ [STORE_KEY]: { items: copilotFeedState.items, seen: copilotFeedState.seen } });
+    chrome.storage.local.set(plainStoreSnapshot({ [STORE_KEY]: { items: copilotFeedState.items, seen: copilotFeedState.seen } }));
   }, 300);
 }
 

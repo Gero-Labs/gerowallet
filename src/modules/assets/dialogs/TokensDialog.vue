@@ -1,16 +1,16 @@
 <template>
   <BaseDialog :isOpen="isDialogVisible" class="tokens-dialog" @close="handleClose"
-              :img="tokensData ? tokensData[0].img : null"
-              :title="modalData ? `${modalData.name} (${Number(modalData.quantity).toLocaleString('en-US')})` : ''"
-              :subtitle="description" :subtitle2="tokensData ? tokensData[0].policy_id : ''" :width="696" :min-height="646" :height="646">
+              :img="tokensData?.[0]?.img || null"
+              :title="modalData ? `${modalData.name} (${Number(modalData.quantity || modalData.items.length).toLocaleString('en-US')})` : ''"
+              :subtitle="description" :subtitle2="tokensData?.[0]?.policy_id || ''" :width="696" :min-height="646" :height="646">
     <v-card-text class="pa-3 justify-center text-center" style="z-index: 1">
         <v-row v-if="pickedToken === null">
           <v-col cols="6" xl="3" lg="3" md="3" sm="4" v-for="(token, index) in displayedTokens" :key="index" class="pa-1">
-            <v-card outlined class="pa-0 token-image" @click="handleTokenClick(token)"
+            <v-card variant="outlined" class="pa-0 token-image" @click="handleTokenClick(token)"
                     :style="{ backgroundImage: `linear-gradient(#ffffff00, #000000b3), url(${token.img})`,border: '1px solid #444', backgroundSize: 'cover', backgroundPosition: 'center', borderRadius: '8px' }">
               <div style="top: 0; position: absolute; display: flex" v-if="token.isScam">
-                <v-chip x-small color="#F97066" class="px-2 ma-2">
-                  <v-icon color="white" x-small style="margin-right: 3px">
+                <v-chip size="x-small" color="#F97066" class="px-2 ma-2">
+                  <v-icon color="white" size="x-small" style="margin-right: 3px">
                     mdi-alert-decagram
                   </v-icon>{{ t('assets.scamToken') }}
                 </v-chip>
@@ -24,7 +24,7 @@
       <AssetDetails :asset="pickedToken" v-else ref="assetDetailsRef" />
     </v-card-text>
     <v-card-actions class="justify-center py-0">
-      <v-btn text elevation="0" color="primary" v-if="pickedToken != null" @click="pickedToken = null">{{ t('common.back') }}</v-btn>
+      <v-btn variant="text" elevation="0" color="primary" v-if="pickedToken != null" @click="pickedToken = null">{{ t('common.back') }}</v-btn>
     </v-card-actions>
   </BaseDialog>
 </template>
@@ -37,16 +37,12 @@ import AssetDetails from '@/modules/assets/components/AssetDetails.vue';
 
 const { t } = useTranslation();
 
-const props = defineProps({
-  modalData: {
-    type: Object as () => any,
-    default: null,
-  },
-});
+type CollectionToken = InstanceType<typeof AssetDetails>['$props']['asset'] & { metadata?: unknown; img?: string; policy_id?: string; isScam?: boolean };
+const props = defineProps<{ modalData?: { name: string; quantity?: string | number; description?: string | string[]; items: CollectionToken[] } }>();
 
 const emit = defineEmits(['close']);
 
-const pickedToken = ref(null);
+const pickedToken = ref<CollectionToken | null>(null);
 const assetDetailsRef = ref<InstanceType<typeof AssetDetails> | null>(null);
 
 const description = computed(() => {
@@ -73,7 +69,7 @@ const isDialogVisible = computed(() => {
   return !!props.modalData;
 });
 
-const handleTokenClick = (token: any) => {
+const handleTokenClick = (token: CollectionToken) => {
   pickedToken.value = token;
 };
 

@@ -1,3 +1,5 @@
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
+import * as Vue from 'vue';
 import { ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -47,12 +49,12 @@ const { slotDiv } = vi.hoisted(() => ({
     default: {
       name,
       props,
-      render(
-        this: { $slots: { default?: unknown }; title?: string },
-        h: (...a: unknown[]) => unknown,
-      ) {
-        return h('div', { attrs: { 'data-title': this.title } }, this.$slots.default);
-      },
+      render(this: {
+    $slots: Vue.Slots;
+    title?: string;
+}) {
+    return Vue.h('div', { 'data-title': this.title }, this.$slots['default']?.());
+},
     },
   }),
 }));
@@ -66,23 +68,20 @@ import FlowSfc from './RealFiOrderFlow.vue';
 const Flow = FlowSfc as unknown as Parameters<typeof mount>[0];
 
 function mountFlow() {
-  return mount(Flow, {
-    mocks: { $t: (key: string) => key },
-    stubs: {
+  return mount(Flow, { global: { config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key }) }, stubs: {
       'v-card-text': { template: '<div><slot /></div>' },
       'v-progress-linear': true,
       'v-text-field': true,
-      'v-btn': { template: '<button @click="$emit(\'click\')"><slot /></button>' },
-    },
-  });
+      'v-btn': { emits: ['click'], template: '<button @click="$emit(\'click\')"><slot /></button>' },
+    } } });
 }
 
-type Wrapper = ReturnType<typeof mountFlow>;
+type VueWrapper = ReturnType<typeof mountFlow>;
 
-const transportPrompt = (w: Wrapper) => w.find('[data-title="realfi.order.ledgerTransport"]');
+const transportPrompt = (w: VueWrapper) => w.find('[data-title="realfi.order.ledgerTransport"]');
 
-function button(w: Wrapper, label: string) {
-  const found = w.findAll('button').wrappers.find((b) => b.text() === label);
+function button(w: VueWrapper, label: string) {
+  const found = w.findAll('button').find((b) => b.text() === label);
   if (!found) throw new Error(`no button labelled ${label}`);
   return found;
 }

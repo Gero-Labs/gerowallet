@@ -1,14 +1,15 @@
-import Vue from 'vue';
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
+import * as Vue from 'vue';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('@/stores/walletStore', () => ({ walletStore: Vue.observable({ transactions: [], loggedWallet: { chain: 'Midnight', network: 'Mainnet' } }) }));
-vi.mock('@/stores/midnightStore', () => ({ midnightStore: Vue.observable({ transactions: [] as unknown[] }) }));
+vi.mock('@/stores/walletStore', () => ({ walletStore: Vue.reactive({ transactions: [], loggedWallet: { chain: 'Midnight', network: 'Mainnet' } }) }));
+vi.mock('@/stores/midnightStore', () => ({ midnightStore: Vue.reactive({ transactions: [] as unknown[] }) }));
 vi.mock('@/chains/midnight/midnightTokenRegistry', () => ({
   midnightTokenMeta: (color: string) => (color === 'aa'.repeat(32) ? { symbol: 'USDM', decimals: 6 } : null),
 }));
 vi.mock('@/shared/composables/useTranslation', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
-vi.mock('../components/flows/TxDetailSheet.vue', () => ({ default: Vue.extend({ render(h) { return h('div'); } }) }));
+vi.mock('../components/flows/TxDetailSheet.vue', () => ({ default: Vue.defineComponent({ render() { return Vue.h('div'); } }) }));
 
 import ActivityPageSfc from './ActivityPage.vue';
 import { midnightStore } from '@/stores/midnightStore';
@@ -18,7 +19,7 @@ const ActivityPage = ActivityPageSfc as unknown as Parameters<typeof mount>[0];
 const USDM = 'aa'.repeat(32);
 
 function mountPage() {
-  return mount(ActivityPage, { mocks: { $t: (key: string) => key }, stubs: { 'v-icon': true, 'v-progress-circular': true } });
+  return mount(ActivityPage, { global: { config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key }) }, stubs: { 'v-icon': true, 'v-progress-circular': true } } });
 }
 
 describe('side-panel activity: Midnight rows', () => {
@@ -44,7 +45,7 @@ describe('side-panel activity: Midnight rows', () => {
       { hash: 'r', type: 'receive', token: USDM, amount: 10_000_000n, counterparty: '', timestamp: 1, status: 'confirmed', fee: 0n, isShielded: false },
     ];
     const wrapper = mountPage();
-    const [send, receive] = wrapper.findAll('.tx-item').wrappers;
+    const [send, receive] = wrapper.findAll('.tx-item');
     expect(send.text()).toContain('−1.50 NIGHT');
     expect(send.find('.tx-amount-col > div').classes()).toContain('error-text');
     expect(receive.text()).toContain('+10.00 USDM');

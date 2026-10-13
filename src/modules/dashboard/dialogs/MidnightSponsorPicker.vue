@@ -1,7 +1,7 @@
 <template>
   <div class="sponsor-picker">
     <div class="sponsor-picker__head">
-      <v-icon x-small color="var(--g-accent)" class="mr-1">mdi-lightning-bolt-outline</v-icon>
+      <v-icon size="x-small" color="var(--g-accent)" class="mr-1">mdi-lightning-bolt-outline</v-icon>
       <span class="t-label">{{ t('midnight.sponsor.title') }}</span>
     </div>
     <p class="t-caption sponsor-picker__lede">{{ t('midnight.sponsor.lede') }}</p>
@@ -20,7 +20,7 @@
         :key="candidate.walletId"
         type="button"
         class="sponsor-row"
-        :class="{ 'sponsor-row--active': value === candidate.walletId }"
+        :class="{ 'sponsor-row--active': modelValue === candidate.walletId }"
         :disabled="candidate.state !== 'ready'"
         @click="select(candidate)"
       >
@@ -47,12 +47,12 @@
           </span>
         </span>
         <!-- Which credential this wallet will ask for, up front. -->
-        <v-icon x-small class="sponsor-row__auth">
+        <v-icon size="x-small" class="sponsor-row__auth">
           {{ unlockOf(candidate.walletId) === 'prf' ? 'mdi-fingerprint' : 'mdi-key-outline' }}
         </v-icon>
         <!-- Explicit selection control: a border change alone reads as nothing
              having happened. -->
-        <span class="radio" :class="{ on: value === candidate.walletId }"><i></i></span>
+        <span class="radio" :class="{ on: modelValue === candidate.walletId }"><i></i></span>
       </button>
 
       <p v-if="lookupIncomplete" class="t-caption sponsor-picker__note">
@@ -92,13 +92,13 @@ import { chargePercent, type SponsorCandidate } from '@/chains/midnight/midnight
 // constructor (it warns on every render). Same shape as TxDetailSheet.
 const props = withDefaults(defineProps<{
   /** Currently selected sponsor wallet id, or null. */
-  value?: number | null;
+  modelValue?: number | null;
   senderWalletId: number;
   network: string;
-}>(), { value: null });
+}>(), { modelValue: null });
 
 const emit = defineEmits<{
-  (e: 'input', walletId: number | null): void;
+  (e: 'update:modelValue', walletId: number | null): void;
 }>();
 
 const { t } = useTranslation();
@@ -135,7 +135,7 @@ function unlockOf(walletId: number): string {
 
 function select(candidate: SponsorCandidate): void {
   if (candidate.state !== 'ready') return;
-  emit('input', props.value === candidate.walletId ? null : candidate.walletId);
+  emit('update:modelValue', props.modelValue === candidate.walletId ? null : candidate.walletId);
 }
 
 async function refresh(): Promise<void> {
@@ -146,8 +146,8 @@ async function refresh(): Promise<void> {
     lookupIncomplete.value = result.lookupIncomplete;
     // Drop a selection that is no longer payable, so a stale pick can't be
     // carried into the send.
-    const chosen = result.candidates.find((c) => c.walletId === props.value);
-    if (props.value != null && (!chosen || chosen.state !== 'ready')) emit('input', null);
+    const chosen = result.candidates.find((c) => c.walletId === props.modelValue);
+    if (props.modelValue != null && (!chosen || chosen.state !== 'ready')) emit('update:modelValue', null);
   } finally {
     loading.value = false;
   }

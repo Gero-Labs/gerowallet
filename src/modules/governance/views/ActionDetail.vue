@@ -7,7 +7,7 @@
   <div ref="proseRoot" class="action-detail">
     <div class="action-detail__nav">
       <GButton tier="tertiary" compact @click="goBack()">
-        <v-icon small class="mr-1">mdi-arrow-left</v-icon>
+        <v-icon size="small" class="mr-1">mdi-arrow-left</v-icon>
         {{ $t('governance.back') }}
       </GButton>
       <AsOf :timestamp="state.fetchedAt" />
@@ -77,7 +77,7 @@
         <!-- InfoAction is advisory: no threshold, can never ratify. An explicit
              panel — never a pass/fail tally. -->
         <div v-if="isInfoAction" class="action-detail__advisory glass-panel">
-          <v-icon small color="var(--g-text-2)" class="mr-2">mdi-information-outline</v-icon>
+          <v-icon size="small" color="var(--g-text-2)" class="mr-2">mdi-information-outline</v-icon>
           <span class="t-body-2">{{ $t('governance.infoActionAdvisory') }}</span>
         </div>
         <!-- Prose left, everything the reader can ACT on stacked in a rail on
@@ -135,7 +135,7 @@
                  Without one the column would sit blank under a bare id, so say
                  why, and offer the document itself when there is one to open. -->
             <div v-if="overviewNotice" class="action-detail__notice glass-panel">
-              <v-icon small color="var(--g-text-3)">mdi-file-document-outline</v-icon>
+              <v-icon size="small" color="var(--g-text-3)">mdi-file-document-outline</v-icon>
               <span class="t-body-2">{{ $t(overviewNotice) }}</span>
               <a
                 v-if="noticeLinksAnchor"
@@ -145,7 +145,7 @@
                 class="action-detail__link t-body-2"
               >
                 {{ $t('governance.metadataDocument') }}
-                <v-icon x-small class="ml-1">mdi-open-in-new</v-icon>
+                <v-icon size="x-small" class="ml-1">mdi-open-in-new</v-icon>
               </a>
             </div>
 
@@ -160,7 +160,7 @@
                 rel="noopener noreferrer"
                 class="action-detail__link t-body-2"
               >
-                <v-icon x-small class="mr-1">mdi-file-document-outline</v-icon>
+                <v-icon size="x-small" class="mr-1">mdi-file-document-outline</v-icon>
                 {{ $t('governance.metadataDocument') }}
               </a>
               <!-- `value` on each item, not the browser's own 1..n counting: an
@@ -185,7 +185,7 @@
                     rel="noopener noreferrer"
                     class="action-detail__link t-body-2"
                   >
-                    <v-icon x-small class="mr-1">{{ link.icon }}</v-icon>
+                    <v-icon size="x-small" class="mr-1">{{ link.icon }}</v-icon>
                     {{ link.label }}
                   </a>
                 </li>
@@ -271,7 +271,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router/composables';
+import { useRoute, useRouter } from 'vue-router';
 import { walletStore } from '@/stores/walletStore';
 import NetworkStore, { networkStore } from '@/stores/networkStore';
 import governanceActionsStore from '@/stores/governanceActionsStore';

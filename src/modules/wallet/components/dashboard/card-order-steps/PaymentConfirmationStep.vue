@@ -2,11 +2,11 @@
   <!-- Shown once the delivery fee was submitted; the dashboard tracker follows the rest. -->
   <div class="order-done">
     <p class="order-done__row t-body">
-      <v-icon small>mdi-truck-outline</v-icon>
+      <v-icon size="small">mdi-truck-outline</v-icon>
       {{ t('card.estimatedDelivery') }}
     </p>
     <p class="order-done__row t-body">
-      <v-icon small>mdi-email-outline</v-icon>
+      <v-icon size="small">mdi-email-outline</v-icon>
       {{ t('card.confirmationEmailSent') }}
     </p>
     <p class="t-caption">{{ t('card.followOrderOnDashboard') }}</p>

@@ -1,7 +1,7 @@
 <template>
   <v-app>
     <v-container fluid fill-height class="pa-0">
-      <v-row align="center" justify="center" class="fill-height">
+      <v-row   class="fill-height align-center justify-center">
         <v-col cols="12" class="text-center px-6">
           <div class="mb-4">
             <v-icon size="56" color="primary">mdi-bluetooth</v-icon>
@@ -10,7 +10,7 @@
           <h2 class="t-heading mb-2">{{ $t('wallet.ledgerBleSignTitle') }}</h2>
           <p class="t-body-sm text--secondary mb-6">{{ $t('wallet.ledgerBleSignHint') }}</p>
 
-          <v-alert v-if="bleUnavailable" type="warning" text class="mb-4 text-left">
+          <v-alert v-if="bleUnavailable" type="warning" variant="text" class="mb-4 text-left">
             {{ $t('wallet.ledgerBleUnavailable') }}
           </v-alert>
 
@@ -18,7 +18,7 @@
             v-if="!signing"
             block
             rounded
-            depressed
+            variant="flat"
             class="geroButton black--text font-weight-bold"
             :disabled="!ready || bleUnavailable"
             @click="startSigning()"
@@ -36,7 +36,7 @@
             <p class="t-caption text--secondary mt-2">{{ $t('wallet.ledgerCheckDeviceScreen') }}</p>
           </template>
 
-          <v-alert v-if="error" type="error" text class="mt-4 text-left">
+          <v-alert v-if="error" type="error" variant="text" class="mt-4 text-left">
             {{ error }}
           </v-alert>
         </v-col>

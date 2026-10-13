@@ -3,7 +3,7 @@
 // other snackbars (@voerro, one global bus for every host) keep their place at the
 // bottom; this store is separate so a push never moves them and they never move it.
 
-import Vue from 'vue';
+import { reactive } from 'vue';
 
 export interface NotifySnack {
   id: number;
@@ -28,7 +28,7 @@ interface NotifySnackState {
   items: NotifySnack[];
 }
 
-const state = Vue.observable<NotifySnackState>({ items: [] });
+const state = reactive<NotifySnackState>({ items: [] });
 let seq = 0;
 const timers = new Map<number, ReturnType<typeof setTimeout>>();
 

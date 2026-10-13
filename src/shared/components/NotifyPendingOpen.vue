@@ -21,7 +21,7 @@
 // switches by itself. The worker parks the intent in chrome.storage ('notifyPendingOpen'),
 // opens the dashboard on home, and this prompt asks once the dashboard is unlocked.
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { useRouter } from 'vue-router/composables';
+import { useRouter } from 'vue-router';
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import { Messaging } from '@/chrome/messaging';
@@ -81,7 +81,7 @@ async function switchWallet(): Promise<void> {
     if (!res?.data?.success) return;
     const route = routeFor(p.d, p.x as Parameters<typeof routeFor>[1], true);
     if (route.settingsTab) await chrome.storage.local.set({ openSettingsOnLoad: { tab: route.settingsTab } });
-    if (router.currentRoute.fullPath !== route.dashboard) await router.push(route.dashboard).catch(() => undefined);
+    if (router.currentRoute.value.fullPath !== route.dashboard) await router.push(route.dashboard).catch(() => undefined);
     await clear();
   } finally { switching.value = false; }
 }

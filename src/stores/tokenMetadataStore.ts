@@ -1,4 +1,4 @@
-import Vue from 'vue';
+import { reactive } from 'vue';
 import { parseHttpError } from '@/shared/utils/parser';
 import swapApi from '@/api/swap-api';
 import { getContextType } from '@/utils/storageSync';
@@ -12,7 +12,7 @@ export interface TokenMetadataStore {
 }
 
 // Create an observable state
-export const tokenMetadataStore = Vue.observable<TokenMetadataStore>({
+export const tokenMetadataStore = reactive<TokenMetadataStore>({
   tokens: {},
   blacklistPolicies: [],
 });

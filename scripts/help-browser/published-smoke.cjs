@@ -117,7 +117,7 @@ const requests=[],eventBodies=[];
 
   // --- A synthetic ready wallet, then a lock while the guide is open and the API is down ---
   await page.evaluate(async()=>{
-    const m=await import('./js/activityTracker.service.js'); window.helpSmokeStores=m;
+    const [wallets,gero,flags]=await Promise.all([import('./js/walletStore.js'),import('./js/geroStore.js'),import('./js/featureFlagsStore.js')]); const m={walletStore:wallets.walletStore,geroStore:gero.geroStore,featureFlagsStore:flags.featureFlagsStore}; window.helpSmokeStores=m;
     const w={id:90010,name:'Synthetic Help reader',chain:'Midnight',network:'Mainnet',type:'Normal',icon:'gero'};
     m.geroStore.wallets={[w.id]:w};m.walletStore.loggedWallet=w;m.walletStore.isSyncing=false;m.walletStore.isLocked=false;
   });

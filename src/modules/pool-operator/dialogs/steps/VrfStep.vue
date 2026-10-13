@@ -7,14 +7,14 @@
     <template v-else>
       <!-- Auto-detected from chain -->
       <template v-if="chainHash && !showUpload">
-        <v-alert type="success" dense outlined>
+        <v-alert type="success" density="compact" variant="outlined">
           {{ $t('poolOperator.vrfFoundOnChain') }}
           <div class="monospace-text text-caption mt-1">{{ chainHash }}</div>
         </v-alert>
         <v-btn color="primary" block class="mt-3" :loading="saving" @click="accept(chainHash)">
           {{ $t('poolOperator.useThisVrfKey') }}
         </v-btn>
-        <v-btn text x-small color="grey" class="mt-2" @click="showUpload = true">
+        <v-btn variant="text" size="x-small" color="grey" class="mt-2" @click="showUpload = true">
           {{ $t('poolOperator.rotatingVrfKey') }}
         </v-btn>
       </template>
@@ -22,12 +22,12 @@
       <!-- Upload path -->
       <template v-else>
         <p class="text-body-2 grey--text">{{ $t('poolOperator.importVrfKeyDescription') }}</p>
-        <v-alert type="info" dense text class="text-caption">{{ $t('poolOperator.vrfUploadOnlyPublic') }}</v-alert>
+        <v-alert type="info" density="compact" variant="text" class="text-caption">{{ $t('poolOperator.vrfUploadOnlyPublic') }}</v-alert>
         <v-file-input
           v-model="file" :label="$t('poolOperator.vrfKeyFile')" accept=".vkey,.json"
-          outlined dense prepend-icon="mdi-file-certificate-outline" @change="onFile"
+          variant="outlined" density="compact" prepend-icon="mdi-file-certificate-outline" @update:model-value="onFile"
         />
-        <v-alert v-if="error" type="error" dense outlined class="mt-2">{{ error }}</v-alert>
+        <v-alert v-if="error" type="error" density="compact" variant="outlined" class="mt-2">{{ error }}</v-alert>
       </template>
     </template>
   </div>

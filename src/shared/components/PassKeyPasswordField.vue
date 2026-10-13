@@ -1,37 +1,39 @@
 <template>
   <div class="passkey-password-field">
     <!-- Password Input with PassKey Icon -->
-    <v-tooltip
+    <v-tooltip location="top"
       v-model="errorTooltipEnabled"
-      top
+      :open-on-hover="false"
+      :open-on-focus="false"
+
       :color="errorTooltipColor"
     >
-      <template v-slot:activator="{ }">
+      <template v-slot:activator="{ props: activatorProps }">
         <v-text-field
           ref="passwordInput"
-          :value="value"
-          @input="$emit('input', $event)"
+          :model-value="modelValue"
+          @update:model-value="$emit('update:modelValue', $event)"
           :label="label || $t('wallet.spendingPassword')"
           :placeholder="placeholder"
           :type="showPassword ? 'text' : 'password'"
           :rules="rules"
-          :outlined="outlined"
-          :dense="dense"
+          :variant="outlined ? 'outlined' : 'filled'"
+          :density="(dense) ? 'compact' : 'default'"
           :hide-details="hideDetails"
           :disabled="disabled"
           :required="required"
           @keydown.enter.stop="$emit('enter')"
-          v-bind="$attrs"
+          v-bind="{ ...$attrs, ...activatorProps }"
           class="password-input"
         >
-          <template v-slot:append>
+          <template v-slot:append-inner>
             <v-icon @click="showPassword = !showPassword" tabindex="-1">
               {{ showPassword ? 'mdi-eye-off' : 'mdi-eye' }}
             </v-icon>
           </template>
-          <template v-slot:append-outer v-if="passKeyAvailable">
+          <template v-slot:append v-if="passKeyAvailable">
             <v-btn
-              small
+              size="small"
               icon
               class="passkey-icon-wrapper"
               @click="handlePassKeyClick"
@@ -41,7 +43,7 @@
               <v-avatar>
                 <v-img
                   :src="assets.passKeySvg"
-                  contain
+
                   class="passkey-icon"
                   :style="{
                     width: '24px',
@@ -62,7 +64,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, getCurrentInstance, nextTick } from 'vue';
+import { ref, onMounted, nextTick } from 'vue';
+import { useTranslation } from '@/shared/composables/useTranslation';
+import { useAuthenticationFreshness } from '@/shared/composables/authorizationScope';
 import { walletStore } from '@/stores/walletStore';
 import assets from '@/utils/assets';
 import { debugLog } from '@/utils/debug';
@@ -70,10 +74,10 @@ import { getDb } from '@/db/wallet-db';
 
 // Props
 interface Props {
-  value: string;
+  modelValue: string;
   label?: string;
   placeholder?: string;
-  rules?: any[];
+  rules?: (((value: string) => boolean | string) | ((value: string) => Promise<boolean | string>))[];
   outlined?: boolean;
   dense?: boolean;
   /** `'auto'` reserves space for a validation error only while one is shown. */
@@ -92,14 +96,14 @@ const props = withDefaults(defineProps<Props>(), {
 
 // Emits
 const emit = defineEmits<{
-  (e: 'input', value: string): void;
+  (e: 'update:modelValue', value: string): void;
   (e: 'enter'): void;
   (e: 'passkey-autofill-success'): void;
   (e: 'passkey-autofill-error', error: string): void;
 }>();
 
-// Access Vue instance for $t
-const vmProxy = getCurrentInstance()!.proxy as any;
+const { t } = useTranslation();
+const authorization = useAuthenticationFreshness();
 
 // Reactive state
 const showPassword = ref(false);
@@ -108,16 +112,19 @@ const passKeyLoading = ref(false);
 const errorTooltipEnabled = ref(false);
 const errorTooltipText = ref('');
 const errorTooltipColor = ref('red');
-const passwordInput = ref<any>(null);
+const passwordInput = ref<{ focus: () => void } | null>(null);
 const hasAutoTriggered = ref(false);
 
 // Check passkey availability on mount and auto-trigger
 onMounted(async () => {
+  const current = authorization.capture();
   debugLog('[PassKeyField] Component mounted in context:', window.location.href);
   debugLog('[PassKeyField] WebAuthn supported:', !!window.PublicKeyCredential);
   debugLog('[PassKeyField] Hostname:', window.location.hostname);
 
-  passKeyAvailable.value = await checkPassKeyAvailable();
+  const available = await checkPassKeyAvailable();
+  if (!current()) return;
+  passKeyAvailable.value = available;
   debugLog('[PassKeyField] checkPassKeyAvailable result:', passKeyAvailable.value);
 
   // Auto-trigger passkey authentication if available AND enabled in settings
@@ -127,11 +134,13 @@ onMounted(async () => {
 
     // Check if auto-trigger is enabled
     const autoTriggerEnabled = await checkAutoTriggerEnabled();
+    if (!current()) return;
     debugLog('[PassKeyField] Auto-trigger enabled:', autoTriggerEnabled);
 
     if (autoTriggerEnabled) {
       // Small delay to let the dialog render
       setTimeout(() => {
+        if (!current()) return;
         debugLog('🤖 Auto-triggering passkey authentication');
         handlePassKeyAutofill();
       }, 500);
@@ -223,6 +232,8 @@ function isSidepanelContext(): boolean {
  * Handle passkey authentication and password autofill
  */
 async function handlePassKeyAutofill() {
+  if (passKeyLoading.value || props.disabled) return;
+  const current = authorization.capture();
   passKeyLoading.value = true;
 
   const isSidepanel = isSidepanelContext();
@@ -246,6 +257,7 @@ async function handlePassKeyAutofill() {
 
     // Get encrypted password
     const encryptedPasswordConfig = await configTable.where({ key: 'passKeyEncryptedSpendingPassword' }).first();
+    if (!current()) return;
     if (!encryptedPasswordConfig || !encryptedPasswordConfig.value) {
       throw new Error('Encrypted password not found');
     }
@@ -269,6 +281,7 @@ async function handlePassKeyAutofill() {
       // Wait for authentication result via message
       const result = await new Promise<{ success: boolean; password?: string; error?: string }>((resolve) => {
         const messageHandler = (event: MessageEvent) => {
+          if (event.origin !== new URL(chrome.runtime.getURL('')).origin || event.source !== authWindow) return;
           if (event.data?.type === 'PASSKEY_AUTH_RESULT') {
             window.removeEventListener('message', messageHandler);
             authWindow.close();
@@ -284,6 +297,7 @@ async function handlePassKeyAutofill() {
           resolve({ success: false, error: 'Authentication timeout' });
         }, 60000);
       });
+      if (!current()) return;
 
       // In sidepanel mode, treat all popup errors as potential user cancellations
       // If there's a real error, the popup shows it for 3 seconds before closing
@@ -295,15 +309,17 @@ async function handlePassKeyAutofill() {
       }
 
       // Auto-fill password
-      emit('input', result.password);
+      emit('update:modelValue', result.password);
 
       // Wait for Vue to propagate the password value, then emit success
       await nextTick();
+      if (!current()) return;
       showSuccessFeedback();
       // emit('passkey-autofill-success');
     } else {
       // Normal context - decrypt directly using PRF (authentication happens during PRF evaluation)
       const { decryptSpendingPasswordWithPrf } = await import('@/shared/utils/webauthn-prf');
+      if (!current()) return;
 
       // Decrypt spending password using PRF (includes authentication)
       const decryptedPassword = await decryptSpendingPasswordWithPrf(
@@ -311,16 +327,20 @@ async function handlePassKeyAutofill() {
         credentialConfig.value,
         wallet.id
       );
+      if (!current()) return;
 
       // Auto-fill password
-      emit('input', decryptedPassword);
+      emit('update:modelValue', decryptedPassword);
 
       // Wait for Vue to propagate the password value, then emit success
       await nextTick();
+      if (!current()) return;
       showSuccessFeedback();
       // emit('passkey-autofill-success');
     }
-  } catch (error: any) {
+  } catch (caught: unknown) {
+    if (!current()) return;
+    const error = caught instanceof Error ? caught : new Error(t('security.passKeyAuthFailed'));
     console.error('❌ PassKey autofill failed:', error);
 
     // Check if this is a user cancellation (not an actual error)
@@ -337,7 +357,7 @@ async function handlePassKeyAutofill() {
       // Just reset the loading state, no error message
     } else {
       // Actual error - show error tooltip
-      errorTooltipText.value = error.message || vmProxy.$t('security.passKeyAuthFailed');
+      errorTooltipText.value = error.message || t('security.passKeyAuthFailed');
       errorTooltipEnabled.value = true;
       setTimeout(() => {
         errorTooltipEnabled.value = false;
@@ -355,7 +375,7 @@ async function handlePassKeyAutofill() {
  * Show success feedback
  */
 function showSuccessFeedback() {
-  errorTooltipText.value = vmProxy.$t('security.passKeyAuthSuccess');
+  errorTooltipText.value = t('security.passKeyAuthSuccess');
   errorTooltipColor.value = 'success';
   errorTooltipEnabled.value = true;
   setTimeout(() => {
@@ -443,7 +463,7 @@ defineExpose({
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
-.passkey-password-field ::v-deep .v-input__append-outer {
+.passkey-password-field :deep(.v-input__append) {
   margin: 0 0 0 4px !important;
 }
 </style>

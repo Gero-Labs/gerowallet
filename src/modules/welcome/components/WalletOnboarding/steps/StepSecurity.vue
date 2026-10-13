@@ -7,11 +7,11 @@
       <div class="step-section-label mb-2">{{ $t('welcome.walletName') }}</div>
       <v-text-field
         v-model="name"
-        dense
-        filled
+        density="compact"
+        variant="filled"
         :label="$t('welcome.walletName')"
         :placeholder="$t('welcome.walletNamePlaceholder')"
-        :rules="[value => rules.required()(value.trim()), rules.maxCharacters(50)]"
+        :rules="nameRules"
         class="mb-3"
       ></v-text-field>
 
@@ -36,17 +36,17 @@
             <div class="security-tile__head">
               <v-icon size="15" color="primary">mdi-shield-key</v-icon>
               <span class="security-tile__name">{{ $t('welcome.passKeyMethod') }}</span>
-              <v-tooltip bottom max-width="260" content-class="custom-tooltip">
-                <template v-slot:activator="{ on }">
-                  <v-icon x-small class="ml-auto" color="grey lighten-1" v-on="on" @click.stop>mdi-information-outline</v-icon>
+              <v-tooltip location="bottom"  max-width="260" content-class="custom-tooltip">
+                <template v-slot:activator="{ props: activatorProps }">
+                  <v-icon v-bind="activatorProps" size="x-small" class="ml-auto" color="grey lighten-1"  @click.stop>mdi-information-outline</v-icon>
                 </template>
                 <span class="text-body-2">{{ $t('welcome.passKeyLearnMoreFull') }}</span>
               </v-tooltip>
             </div>
             <div class="d-flex align-center mt-1">
               <v-progress-circular v-if="prfSupported === null" indeterminate size="12" width="2" color="primary" class="mr-1" />
-              <v-chip v-else-if="prfMode === 'security-key'" color="warning" outlined x-small class="mr-1">{{ $t('welcome.securityKeyRequired') }}</v-chip>
-              <v-chip v-else color="primary" x-small class="mr-1">{{ $t('welcome.recommended') }}</v-chip>
+              <v-chip v-else-if="prfMode === 'security-key'" color="warning" variant="outlined" size="x-small" class="mr-1">{{ $t('welcome.securityKeyRequired') }}</v-chip>
+              <v-chip v-else color="primary" size="x-small" class="mr-1">{{ $t('welcome.recommended') }}</v-chip>
             </div>
             <span class="security-tile__sub mt-1">{{ passKeySubText }}</span>
           </div>
@@ -69,7 +69,7 @@
 
       <!-- PRF not supported — compact inline notice -->
       <div v-else class="prf-notice mt-3">
-        <v-icon x-small color="warning" class="mr-1 flex-shrink-0">mdi-alert-outline</v-icon>
+        <v-icon size="x-small" color="warning" class="mr-1 flex-shrink-0">mdi-alert-outline</v-icon>
         <span>{{ $t('welcome.prfNotSupported') }}</span>
       </div>
 
@@ -78,7 +78,7 @@
 
     <!-- Navigation buttons -->
     <div class="onboarding-actions d-flex" style="gap: 12px;">
-      <v-btn text @click="$emit('back')">{{ $t('common.back') }}</v-btn>
+      <v-btn variant="text" @click="$emit('back')">{{ $t('common.back') }}</v-btn>
       <v-spacer />
       <v-btn
         class="onb-continue"
@@ -108,10 +108,8 @@ const emit = defineEmits<{
   (e: 'next'): void;
   (e: 'back'): void;
 }>();
-
-// Form
-const nameForm = ref<{ resetValidation: () => void } | null>(null);
 const nameValid = ref(false);
+const nameRules = [(value: string) => rules.required()(value.trim()), rules.maxCharacters(50)];
 
 // Wallet name
 const name = ref(generateWalletName());

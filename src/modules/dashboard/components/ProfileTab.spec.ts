@@ -1,16 +1,18 @@
-import Vue, { nextTick } from 'vue';
-import Vuetify from 'vuetify';
-import { mount } from '@vue/test-utils';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
+import * as Vue from 'vue';
+import { nextTick } from 'vue';
+import { createTestVuetify } from '@test/helpers/vuetify';
+import { mount, flushPromises, enableAutoUnmount } from '@vue/test-utils';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/stores/geroStore', () => ({
-  geroStore: Vue.observable({ config: { locale: 'us' }, wallets: {} }),
+  geroStore: Vue.reactive({ config: { locale: 'us' }, wallets: {} }),
   default: { setConfig: vi.fn(), setWalletName: vi.fn() },
 }));
 vi.mock('@/stores/walletStore', async () => {
   const { geroStore } = await import('@/stores/geroStore');
   return {
-    walletStore: Vue.observable({ config: { currency: 'usd' }, loggedWallet: { id: 1, name: 'Test', icon: 'https://example.com/avatar.png' } }),
+    walletStore: Vue.reactive({ config: { currency: 'usd' }, loggedWallet: { id: 1, name: 'Test', icon: 'https://example.com/avatar.png' } }),
     default: { setLocale: vi.fn(async (locale: string) => { geroStore.config.locale = locale; }) },
   };
 });
@@ -20,29 +22,31 @@ vi.mock('@/shared/composables/useFeatureNotifications', () => ({ isFeatureNew: (
 vi.mock('@/db/wallet-db', () => ({ setWalletConfiguration: vi.fn() }));
 vi.mock('@/utils/assets', () => ({ default: { resolveIcon: () => '' } }));
 vi.mock('@/utils/rules', () => ({ default: { required: () => true, minCharacters: () => true, maxCharacters: () => true } }));
-vi.mock('./EditableTextField.vue', () => ({ default: { render: (h: Vue.CreateElement) => h('div') } }));
-vi.mock('@/modules/dashboard/dialogs/ProfilePictureDialog.vue', () => ({ default: { render: (h: Vue.CreateElement) => h('div') } }));
+vi.mock('./EditableTextField.vue', () => ({ default: { render: () => Vue.h('div') } }));
+vi.mock('@/modules/dashboard/dialogs/ProfilePictureDialog.vue', () => ({ default: { render: () => Vue.h('div') } }));
 
 import ProfileTabSfc from './ProfileTab.vue';
 import { geroStore } from '@/stores/geroStore';
 import WalletStore from '@/stores/walletStore';
 
-Vue.use(Vuetify);
+enableAutoUnmount(afterEach);
+
 const ProfileTab = ProfileTabSfc as unknown as Parameters<typeof mount>[0];
 function mountProfile() {
-  return mount(ProfileTab, {
-    vuetify: new Vuetify(),
-    mocks: { $t: (key: string) => key },
-    stubs: { 'v-tab-item': { template: '<div><slot /></div>' }, flag: true, NotificationDot: { template: '<div><slot /></div>' } },
-  });
+  return mount(ProfileTab, { attachTo: document.body, global: { plugins: [createTestVuetify()], config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key }) }, stubs: { 'v-window-item': { template: '<div><slot /></div>' }, flag: true, NotificationDot: { template: '<div><slot /></div>' } } } });
 }
 function languageSelect(wrapper: ReturnType<typeof mount>) {
-  return wrapper.findAllComponents({ name: 'v-select' }).at(1);
+  return wrapper.findAllComponents({ name: 'VSelect' }).find(select => select.props('itemValue') === 'iso')!;
 }
-function chooseLanguage(select: ReturnType<typeof languageSelect>, iso: string) {
+async function chooseLanguage(select: ReturnType<typeof languageSelect>, iso: string) {
   const item = (select.props('items') as { name: string; iso: string }[]).find(language => language.iso === iso)!;
-  // Exercise Vuetify's item-to-value conversion, including the item-value prop.
-  (select.vm as Vue & { selectItem: (selected: typeof item) => void }).selectItem(item);
+  // Drive the real menu: item-to-value conversion and custom item slot click binding both matter.
+  await select.find('input').trigger('keydown', { key: 'ArrowDown' });
+  await flushPromises();
+  const option = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find(entry => entry.textContent?.includes(item.name));
+  expect(option, 'language option is rendered by the real VSelect menu').toBeDefined();
+  option!.click();
+  await flushPromises();
 }
 
 describe('wallet settings language selection', () => {
@@ -56,37 +60,34 @@ describe('wallet settings language selection', () => {
     const select = languageSelect(wrapper);
     expect(select.props('items')).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'Español', iso: 'es' })]));
     expect(select.props('itemValue')).toBe('iso');
-    chooseLanguage(select, 'es');
+    await chooseLanguage(select, 'es');
     await nextTick();
     expect(WalletStore.setLocale).toHaveBeenCalledWith('es');
-    expect(select.props('value')).toBe('es');
+    expect(select.props('modelValue')).toBe('es');
     expect(select.text()).toContain('Español');
-    wrapper.destroy();
   });
 
   it('shows saved Spanish after reopening and follows changes from the welcome screen', async () => {
     geroStore.config.locale = 'es';
     const wrapper = mountProfile();
     const select = languageSelect(wrapper);
-    expect(select.props('value')).toBe('es');
+    expect(select.props('modelValue')).toBe('es');
     expect(select.text()).toContain('Español');
     geroStore.config.locale = 'de';
     await nextTick();
-    expect(select.props('value')).toBe('de');
+    expect(select.props('modelValue')).toBe('de');
     expect(select.text()).toContain('Deutsch');
     expect(WalletStore.setLocale).not.toHaveBeenCalled();
-    wrapper.destroy();
   });
 
   it('ignores unsupported locales and reselecting the current language', async () => {
     const wrapper = mountProfile();
     const select = languageSelect(wrapper);
-    select.vm.$emit('input', 'us');
-    select.vm.$emit('input', 'fr');
+    select.vm.$emit('update:modelValue', 'us');
+    select.vm.$emit('update:modelValue', 'fr');
     await nextTick();
     expect(WalletStore.setLocale).not.toHaveBeenCalled();
-    expect(select.props('value')).toBe('us');
-    wrapper.destroy();
+    expect(select.props('modelValue')).toBe('us');
   });
 
   it('follows the saved language if the store rolls back a failed change', async () => {
@@ -98,11 +99,10 @@ describe('wallet settings language selection', () => {
     });
     const wrapper = mountProfile();
     const select = languageSelect(wrapper);
-    chooseLanguage(select, 'es');
+    await chooseLanguage(select, 'es');
     await nextTick();
     await nextTick();
-    expect(select.props('value')).toBe('us');
+    expect(select.props('modelValue')).toBe('us');
     expect(select.text()).toContain('English (US)');
-    wrapper.destroy();
   });
 });

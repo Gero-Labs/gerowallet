@@ -1,4 +1,5 @@
-import Vue from 'vue';
+import { plainStoreSnapshot } from '@/stores/serialization';
+import { reactive } from 'vue';
 import {
   deleteWallet,
   createNewWallet,
@@ -22,7 +23,7 @@ export interface GeroStore {
   config: any;
 }
 
-export const geroStore: GeroStore =  Vue.observable<GeroStore>({
+export const geroStore: GeroStore =  reactive<GeroStore>({
   wallets: {},
   network: networks[0],
   config: {
@@ -115,9 +116,9 @@ function broadcastFromBackground(updates: Partial<GeroStore>, immediate = false)
         // CRITICAL: Use the current in-memory store state as the base to avoid race conditions
         // DO NOT use chrome.storage.local.get() - it causes race conditions with liveQuery
         const finalState = { ...geroStore };
-        chrome.storage.local.set({
+        chrome.storage.local.set(plainStoreSnapshot({
           [STORE_NAME]: JSON.parse(JSON.stringify(finalState, serializeValue))
-        });
+        }));
       } catch (error) {
         console.error('Failed to persist gero store to storage (immediate):', Object.keys(updates), error);
       }
@@ -133,9 +134,9 @@ function broadcastFromBackground(updates: Partial<GeroStore>, immediate = false)
           // CRITICAL: Use the current in-memory store state as the base to avoid race conditions
           // DO NOT use chrome.storage.local.get() - it causes race conditions with liveQuery
           const finalState = { ...geroStore };
-          chrome.storage.local.set({
+          chrome.storage.local.set(plainStoreSnapshot({
             [STORE_NAME]: JSON.parse(JSON.stringify(finalState, serializeValue))
-          });
+          }));
         } catch (error) {
           console.error('Failed to persist gero store to storage:', Object.keys(updates), error);
         }
@@ -338,9 +339,10 @@ export default {
 
     if (wallet.type === WalletType.Normal) {
       try {
+        if (!wallet.encryptedPrivateKey) throw new Error('Encrypted private key not found');
         // Decrypts with the current password (throws on a wrong one) and seals
         // every password secret under the new one; see passwordRotation.ts.
-        const rotation = await prepareSpendingPasswordRotation(wallet, currentPassword, newPassword);
+        const rotation = await prepareSpendingPasswordRotation({ ...wallet, encryptedPrivateKey: wallet.encryptedPrivateKey }, currentPassword, newPassword);
 
         // Update database
         await dbUpdatePrivateKeyAndMnemonic(walletId, rotation.encryptedPrivateKey, rotation.encryptedMnemonic);

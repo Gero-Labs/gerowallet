@@ -1,7 +1,7 @@
 <template>
   <v-card 
     flat 
-    :outlined="outlined"
+    :variant="outlined ? 'outlined' : 'elevated'"
     :class="[
       'empty-state-mini',
       transparent ? 'simple-transparent-card' : 'liquid-glass',
@@ -37,14 +37,14 @@
         class="mb-1"
         @click="clickable ? $event.stopPropagation() : null; $emit('primary-action')"
       >
-        <v-icon left small>{{ primaryAction.icon }}</v-icon>
+        <v-icon start size="small">{{ primaryAction.icon }}</v-icon>
         {{ primaryAction.label }}
       </v-btn>
 
       <!-- Secondary Action -->
       <v-btn
         v-if="secondaryAction"
-        text
+        variant="text"
         :small="!large"
         @click="$emit('secondary-action')"
         class="secondary-action-btn"

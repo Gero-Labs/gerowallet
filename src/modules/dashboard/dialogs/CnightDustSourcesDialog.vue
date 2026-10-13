@@ -14,7 +14,7 @@
         <div class="t-label">{{ t('midnight.cnightDustDestination') }}</div>
         <div class="dest-row">
           <v-avatar size="28" color="teal darken-3" class="mr-3">
-            <v-icon small color="teal lighten-3">mdi-star-four-points</v-icon>
+            <v-icon size="small" color="teal lighten-3">mdi-star-four-points</v-icon>
           </v-avatar>
           <span class="dest-address">{{ middleTruncate(ownDustAddress, 20, 10) }}</span>
         </div>
@@ -50,19 +50,19 @@
           <div class="source-action">
             <!-- Generating to this wallet already -->
             <span v-if="rowState(source) === 'generatingHere'" class="state-chip state-chip--active">
-              <v-icon x-small color="var(--g-success)" class="mr-1">mdi-check-circle</v-icon>
+              <v-icon size="x-small" color="var(--g-success)" class="mr-1">mdi-check-circle</v-icon>
               {{ t('midnight.dustSourcesGeneratingHere') }}
             </span>
             <!-- More than one live registration UTxO: the whole set is
                  protocol-invalid. Neither action is meaningful until it's back
                  down to one, and consolidation lives on the Cardano wallet. -->
             <span v-else-if="rowState(source) === 'duplicated'" class="state-chip state-chip--warn">
-              <v-icon x-small color="var(--g-error)" class="mr-1">mdi-alert-outline</v-icon>
+              <v-icon size="x-small" color="var(--g-error)" class="mr-1">mdi-alert-outline</v-icon>
               {{ t('midnight.dustSourcesDuplicate') }}
             </span>
             <!-- Relay in flight -->
             <span v-else-if="rowState(source) === 'pending'" class="state-chip">
-              <v-icon x-small class="mr-1">mdi-clock-outline</v-icon>
+              <v-icon size="x-small" class="mr-1">mdi-clock-outline</v-icon>
               {{ t('midnight.statusPending') }}
             </span>
             <!-- No local keys -->
@@ -73,23 +73,23 @@
                  "unregistered" and "the query failed" look identical here and
                  registering over a live registration invalidates both. -->
             <span v-else-if="rowState(source) === 'unknown'" class="state-chip">
-              <v-icon x-small class="mr-1">mdi-help-circle-outline</v-icon>
+              <v-icon size="x-small" class="mr-1">mdi-help-circle-outline</v-icon>
               {{ t('midnight.dustSourcesUnknownState') }}
             </span>
             <!-- Exactly one live registration, pointed elsewhere (or not yet
                  relayed, so we can't see where): redirect, never register. -->
             <v-btn
               v-else-if="rowState(source) === 'registeredElsewhere'"
-              small outlined :disabled="working"
+              size="small" variant="outlined" :disabled="working"
               @click="openAuth(source, 'redirect')"
             >
-              <v-icon small left>mdi-swap-horizontal</v-icon>
+              <v-icon size="small" start>mdi-swap-horizontal</v-icon>
               {{ t('midnight.dustSourcesRedirectHere') }}
             </v-btn>
             <!-- Confirmed clear, with NIGHT: register -->
             <v-btn
               v-else
-              small class="geroButton"
+              size="small" class="geroButton"
               :disabled="working || !source.nightBalance"
               @click="openAuth(source, 'register')"
             >
@@ -127,7 +127,7 @@
             :title="pendingTxHash(source)"
           >
             {{ middleTruncate(pendingTxHash(source), 10, 6) }}
-            <v-icon x-small>mdi-open-in-new</v-icon>
+            <v-icon size="x-small">mdi-open-in-new</v-icon>
           </a>
           <span class="relay-time">{{ pendingElapsed(source) }}</span>
         </div>
@@ -139,7 +139,7 @@
             v-model="authPassword"
             :label="t('wallet.spendingPassword')"
             type="password"
-            outlined dense hide-details
+            variant="outlined" density="compact" hide-details
             :disabled="working"
             class="mb-2"
             @keydown.enter="confirmAction(source)"
@@ -150,14 +150,14 @@
           </div>
           <div v-if="authError" class="error--text text-caption mb-2">{{ authError }}</div>
           <div class="source-auth-actions">
-            <v-btn small text :disabled="working" @click="closeAuth">{{ t('common.cancel') }}</v-btn>
+            <v-btn size="small" variant="text" :disabled="working" @click="closeAuth">{{ t('common.cancel') }}</v-btn>
             <v-btn
-              small class="geroButton"
+              size="small" class="geroButton"
               :loading="working"
               :disabled="authEncryption === 'password' && !authPassword"
               @click="confirmAction(source)"
             >
-              <v-icon small left>{{ authEncryption === 'prf' ? 'mdi-fingerprint' : 'mdi-shield-check' }}</v-icon>
+              <v-icon size="small" start>{{ authEncryption === 'prf' ? 'mdi-fingerprint' : 'mdi-shield-check' }}</v-icon>
               {{ authAction === 'redirect' ? t('midnight.dustSourcesRedirectHere') : t('midnight.dustSourcesGenerateHere') }}
             </v-btn>
           </div>
@@ -168,7 +168,7 @@
     </v-card-text>
 
     <v-card-actions class="px-0 pt-2" style="display: block">
-      <v-btn block large outlined @click="$emit('close')">{{ t('common.close') }}</v-btn>
+      <v-btn block size="large" variant="outlined" @click="$emit('close')">{{ t('common.close') }}</v-btn>
     </v-card-actions>
   </BaseDialog>
 </template>

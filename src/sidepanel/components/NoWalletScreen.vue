@@ -6,7 +6,7 @@
       <p class="grey--text text-body-2 text-center mb-6">
         {{ $t('miniGero.createOrImport') }}
       </p>
-      <v-btn class="geroButton" rounded depressed @click="openDashboard">
+      <v-btn class="geroButton" rounded variant="flat" @click="openDashboard">
         {{ $t('miniGero.getStarted') }}
       </v-btn>
     </div>

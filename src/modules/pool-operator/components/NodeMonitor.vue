@@ -7,8 +7,8 @@
           <v-icon size="16" color="success" class="mr-2">mdi-server</v-icon>
           {{ $t('poolOperator.nodeMonitor') }}
         </div>
-        <v-btn text x-small class="action-btn" @click="showAddNode = true">
-          <v-icon x-small class="mr-1">mdi-plus</v-icon>
+        <v-btn variant="text" size="x-small" class="action-btn" @click="showAddNode = true">
+          <v-icon size="x-small" class="mr-1">mdi-plus</v-icon>
           {{ $t('poolOperator.addNode') }}
         </v-btn>
       </div>
@@ -32,8 +32,8 @@
             <div class="step-text">{{ $t('poolOperator.step1Description') }}</div>
             <div class="step-code">
               <code>pip3 install gero-node-monitor</code>
-              <v-btn icon x-small @click="copyText('pip3 install gero-node-monitor')" class="copy-btn">
-                <v-icon x-small>mdi-content-copy</v-icon>
+              <v-btn icon size="x-small" @click="copyText('pip3 install gero-node-monitor')" class="copy-btn">
+                <v-icon size="x-small">mdi-content-copy</v-icon>
               </v-btn>
             </div>
           </div>
@@ -45,8 +45,8 @@
             <div class="step-text">{{ $t('poolOperator.step2Description') }}</div>
             <div class="step-code">
               <code>gero-node-monitor --config</code>
-              <v-btn icon x-small @click="copyText('gero-node-monitor --config')" class="copy-btn">
-                <v-icon x-small>mdi-content-copy</v-icon>
+              <v-btn icon size="x-small" @click="copyText('gero-node-monitor --config')" class="copy-btn">
+                <v-icon size="x-small">mdi-content-copy</v-icon>
               </v-btn>
             </div>
           </div>
@@ -58,8 +58,8 @@
             <div class="step-text">{{ $t('poolOperator.step3Description') }}</div>
             <div class="step-code">
               <code>python3 gero-node-monitor-server.py</code>
-              <v-btn icon x-small @click="copyText('python3 gero-node-monitor-server.py')" class="copy-btn">
-                <v-icon x-small>mdi-content-copy</v-icon>
+              <v-btn icon size="x-small" @click="copyText('python3 gero-node-monitor-server.py')" class="copy-btn">
+                <v-icon size="x-small">mdi-content-copy</v-icon>
               </v-btn>
             </div>
           </div>
@@ -74,7 +74,7 @@
       </div>
 
       <v-btn color="var(--g-accent)" block class="mt-4 black--text font-weight-bold" style="text-transform: none; border-radius: var(--g-r-control)" @click="showAddNode = true">
-        <v-icon left small>mdi-plus</v-icon>
+        <v-icon start size="small">mdi-plus</v-icon>
         {{ $t('poolOperator.addFirstNode') }}
       </v-btn>
     </div>
@@ -86,7 +86,7 @@
         <div class="nc-header">
           <div class="nc-identity">
             <div class="nc-type-badge" :class="node.type === 'bp' ? 'badge-bp' : 'badge-relay'">
-              <v-icon x-small :color="node.type === 'bp' ? 'warning' : 'var(--g-accent)'">
+              <v-icon size="x-small" :color="node.type === 'bp' ? 'warning' : 'var(--g-accent)'">
                 {{ node.type === 'bp' ? 'mdi-shield-star' : 'mdi-access-point' }}
               </v-icon>
             </div>
@@ -100,8 +100,8 @@
               <span class="status-dot" />
               {{ node.connected ? $t('poolOperator.online') : $t('poolOperator.offline') }}
             </span>
-            <v-btn icon x-small @click="removeNode(node.id)" class="ml-1">
-              <v-icon x-small color="var(--g-text-3)">mdi-close</v-icon>
+            <v-btn icon size="x-small" @click="removeNode(node.id)" class="ml-1">
+              <v-icon size="x-small" color="var(--g-text-3)">mdi-close</v-icon>
             </v-btn>
           </div>
         </div>
@@ -147,7 +147,7 @@
 
         <!-- KES Warning -->
         <div v-if="node.type === 'bp' && node.data?.kesRemaining != null && node.data.kesRemaining < 50" class="nc-warning">
-          <v-icon x-small color="error" class="mr-1">mdi-alert</v-icon>
+          <v-icon size="x-small" color="error" class="mr-1">mdi-alert</v-icon>
           {{ $t('poolOperator.kesRotationNeeded') }}
         </div>
       </div>
@@ -159,14 +159,14 @@
         <v-card-title style="border-bottom: 1px solid var(--g-hairline-1)">
           {{ editingNodeId ? $t('poolOperator.editNode') : $t('poolOperator.addNode') }}
           <v-spacer />
-          <v-btn icon small @click="showAddNode = false"><v-icon small>mdi-close</v-icon></v-btn>
+          <v-btn icon size="small" @click="showAddNode = false"><v-icon size="small">mdi-close</v-icon></v-btn>
         </v-card-title>
         <v-card-text class="pt-4">
           <v-text-field
             v-model="newNodeName"
             :label="$t('poolOperator.nodeName')"
             placeholder="e.g., Block Producer, Relay EU-1"
-            outlined dense dark hide-details
+            variant="outlined" density="compact" theme="dark" hide-details
             class="glass-input mb-3"
           />
 
@@ -175,26 +175,26 @@
               class="type-option" :class="{ 'type-active': newNodeType === 'bp' }"
               @click="newNodeType = 'bp'"
             >
-              <v-icon small :color="newNodeType === 'bp' ? 'warning' : 'var(--g-text-3)'">mdi-shield-star</v-icon>
+              <v-icon size="small" :color="newNodeType === 'bp' ? 'warning' : 'var(--g-text-3)'">mdi-shield-star</v-icon>
               <span>{{ $t('poolOperator.blockProducer') }}</span>
             </div>
             <div
               class="type-option" :class="{ 'type-active': newNodeType === 'relay' }"
               @click="newNodeType = 'relay'"
             >
-              <v-icon small :color="newNodeType === 'relay' ? 'var(--g-accent)' : 'var(--g-text-3)'">mdi-access-point</v-icon>
+              <v-icon size="small" :color="newNodeType === 'relay' ? 'var(--g-accent)' : 'var(--g-text-3)'">mdi-access-point</v-icon>
               <span>{{ $t('poolOperator.relay') }}</span>
             </div>
           </div>
 
           <!-- Auto-detect -->
           <v-btn
-            block outlined dark small class="mb-3"
+            block variant="outlined" theme="dark" size="small" class="mb-3"
             style="text-transform: none; border-color: var(--g-hairline-2)"
             :loading="autoDetecting"
             @click="autoDetect"
           >
-            <v-icon small left>mdi-magnify</v-icon>
+            <v-icon size="small" start>mdi-magnify</v-icon>
             {{ $t('poolOperator.autoDetect') }}
           </v-btn>
 
@@ -204,7 +204,7 @@
             v-model="newNodeUrl"
             :label="$t('poolOperator.nodeEndpoint')"
             placeholder="https://your-tunnel.trycloudflare.com"
-            outlined dense dark hide-details
+            variant="outlined" density="compact" theme="dark" hide-details
             class="glass-input"
           />
 
@@ -213,17 +213,17 @@
             :label="$t('poolOperator.nodeAuthToken')"
             :hint="$t('poolOperator.nodeAuthTokenHint')"
             :type="showAuthToken ? 'text' : 'password'"
-            :append-icon="showAuthToken ? 'mdi-eye-off' : 'mdi-eye'"
-            @click:append="showAuthToken = !showAuthToken"
+            :append-inner-icon="showAuthToken ? 'mdi-eye-off' : 'mdi-eye'"
+            @click:append-inner="showAuthToken = !showAuthToken"
             autocomplete="off"
             spellcheck="false"
-            outlined dense dark persistent-hint
+            variant="outlined" density="compact" theme="dark" persistent-hint
             class="glass-input mt-3"
           />
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn text @click="showAddNode = false">{{ $t('common.cancel') }}</v-btn>
+          <v-btn variant="text" @click="showAddNode = false">{{ $t('common.cancel') }}</v-btn>
           <v-btn color="success" class="black--text" :disabled="!newNodeUrl || !newNodeName" @click="addNode" style="text-transform: none">
             {{ editingNodeId ? $t('common.save') : $t('poolOperator.addNode') }}
           </v-btn>

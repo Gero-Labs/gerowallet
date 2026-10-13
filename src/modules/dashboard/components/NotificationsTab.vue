@@ -1,6 +1,6 @@
 <template>
-  <v-tab-item>
-    <v-layout class="py-2 notify-tab" column>
+  <v-window-item>
+    <div class="d-flex flex-column py-2 notify-tab">
       <!-- B9: no push on this build or browser -->
       <div v-if="unsupported" class="notify-unsupported text-left">
         <v-icon color="var(--g-text-3)" class="mb-2">mdi-bell-off-outline</v-icon>
@@ -71,8 +71,8 @@
             </div>
             <span v-if="showTypes" class="helper my-0 d-block">{{ $t('notify.types.hint') }}</span>
           </div>
-          <template v-for="cat in categories">
-            <v-row :key="cat.id" no-gutters class="py-1">
+          <template :key="cat.id" v-for="cat in categories">
+            <v-row  no-gutters class="py-1">
               <v-col cols="9" class="text-left">
                 <button type="button" class="notify-row__label" :disabled="busy" @click="setCategory(cat.id, categoriesOff.includes(cat.id))">
                   <span class="notify-row-title">{{ cat.label }}</span>
@@ -81,7 +81,7 @@
                 </button>
               </v-col>
               <v-col cols="3" style="display: flex;">
-                <ToggleSwitch text-left="OFF" text-right="ON" font-size="10px" :value="!categoriesOff.includes(cat.id)" :disabled="busy" @input="(on) => setCategory(cat.id, on)" style="margin: auto" />
+                <ToggleSwitch text-left="OFF" text-right="ON" font-size="10px" :model-value="!categoriesOff.includes(cat.id)" :disabled="busy" @update:model-value="(on) => setCategory(cat.id, on)" style="margin: auto" />
               </v-col>
             </v-row>
             <template v-if="showTypes">
@@ -96,7 +96,7 @@
                   <!-- A switched-off category silences its alerts whatever their own setting: say so with a
                        chip instead of a greyed switch that would still read ON. The alert's own setting is kept. -->
                   <span v-if="categoriesOff.includes(cat.id)" class="t-label notify-type__chip">{{ $t('notify.types.off') }}</span>
-                  <ToggleSwitch v-else text-left="OFF" text-right="ON" font-size="10px" :value="!typesOff.includes(ty.id)" :disabled="busy" @input="(on) => setType(ty.id, on)" style="margin: auto" />
+                  <ToggleSwitch v-else text-left="OFF" text-right="ON" font-size="10px" :model-value="!typesOff.includes(ty.id)" :disabled="busy" @update:model-value="(on) => setType(ty.id, on)" style="margin: auto" />
                 </v-col>
               </v-row>
             </template>
@@ -128,7 +128,7 @@
               </button>
             </v-col>
             <v-col cols="3" style="display: flex;">
-              <ToggleSwitch text-left="OFF" text-right="ON" font-size="10px" :value="synced.showAmounts" :disabled="busy" @input="setShowAmounts" style="margin: auto" />
+              <ToggleSwitch text-left="OFF" text-right="ON" font-size="10px" :model-value="synced.showAmounts" :disabled="busy" @update:model-value="setShowAmounts" style="margin: auto" />
             </v-col>
           </v-row>
           <v-row no-gutters class="py-2">
@@ -142,8 +142,8 @@
                 type="number"
                 min="0"
                 step="1"
-                dense
-                outlined
+                density="compact"
+                variant="outlined"
                 hide-details
                 suffix="ADA"
                 class="notify-min-amount"
@@ -166,7 +166,7 @@
               </button>
             </v-col>
             <v-col cols="3" style="display: flex;">
-              <ToggleSwitch text-left="OFF" text-right="ON" font-size="10px" :value="muted" :disabled="busy" @input="setMuted" style="margin: auto" />
+              <ToggleSwitch text-left="OFF" text-right="ON" font-size="10px" :model-value="muted" :disabled="busy" @update:model-value="setMuted" style="margin: auto" />
             </v-col>
           </v-row>
         </template>
@@ -187,7 +187,7 @@
           </v-row>
         </template>
       </template>
-    </v-layout>
+    </div>
 
     <!-- Wallet proof under spending auth (the same step remote signing uses) -->
     <BaseDialog
@@ -206,8 +206,8 @@
           v-else
           v-model="authPassword"
           type="password"
-          outlined
-          dense
+          variant="outlined"
+          density="compact"
           autofocus
           hide-details
           :label="$t('wallet.spendingPassword')"
@@ -222,7 +222,7 @@
         </GButton>
       </v-card-actions>
     </BaseDialog>
-  </v-tab-item>
+  </v-window-item>
 </template>
 
 <script setup lang="ts">

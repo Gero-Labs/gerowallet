@@ -1,16 +1,16 @@
 <template>
   <v-dialog
-    :value="value"
+    :model-value="modelValue"
     max-width="480"
     scrollable
-    @input="$emit('input', $event)"
+    @update:model-value="$emit('update:modelValue', $event)"
   >
     <v-card class="perps-action-dialog">
       <v-card-title class="dialog-title">
         <span class="text-subtitle-1 font-weight-bold">{{ $t('perpetuals.withdraw') }}</span>
         <v-spacer />
-        <v-btn icon small @click="closeSheet()">
-          <v-icon small>mdi-close</v-icon>
+        <v-btn icon size="small" @click="closeSheet()">
+          <v-icon size="small">mdi-close</v-icon>
         </v-btn>
       </v-card-title>
       <v-divider />
@@ -89,7 +89,7 @@
 
         <v-btn
           block
-          depressed
+          variant="flat"
           :loading="withdrawStatus === 'quoting'"
           :disabled="!canQuote"
           class="action-btn mt-4"
@@ -149,14 +149,14 @@
           v-if="needsPassword"
           v-model="password"
           :label="$t('perpetuals.spendingPassword')"
-          outlined
-          dense
-          dark
+          variant="outlined"
+          density="compact"
+          theme="dark"
           hide-details
           class="perp-input mt-3"
           :type="showPassword ? 'text' : 'password'"
-          :append-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
-          @click:append="showPassword = !showPassword"
+          :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+          @click:append-inner="showPassword = !showPassword"
           @keydown.enter="confirmAndSign()"
         />
 
@@ -169,7 +169,7 @@
 
         <div class="btn-row mt-4">
           <v-btn
-            depressed
+            variant="flat"
             class="ghost-btn"
             :disabled="withdrawStatus === 'signing' || withdrawStatus === 'submitting'"
             @click="goBackToAmount()"
@@ -179,7 +179,7 @@
 
           <v-btn
             v-if="quoteExpired"
-            depressed
+            variant="flat"
             class="action-btn"
             :loading="withdrawStatus === 'quoting'"
             @click="requestQuoteClick()"
@@ -197,7 +197,7 @@
           />
           <v-btn
             v-else
-            depressed
+            variant="flat"
             :loading="withdrawStatus === 'signing' || withdrawStatus === 'submitting'"
             :disabled="!canSign"
             class="action-btn"
@@ -242,7 +242,7 @@
         <div class="btn-row mt-5" style="width:100%;">
           <v-btn
             v-if="withdrawStatus === 'settled'"
-            depressed
+            variant="flat"
             block
             class="action-btn"
             @click="closeAndEmit()"
@@ -250,10 +250,10 @@
             {{ $t('perps.withdraw.done') }}
           </v-btn>
           <template v-else-if="withdrawStatus === 'error'">
-            <v-btn depressed class="ghost-btn" @click="closeSheet()">
+            <v-btn variant="flat" class="ghost-btn" @click="closeSheet()">
               {{ $t('perps.withdraw.close') }}
             </v-btn>
-            <v-btn depressed class="action-btn" @click="retry()">
+            <v-btn variant="flat" class="action-btn" @click="retry()">
               {{ $t('perps.withdraw.retry') }}
             </v-btn>
           </template>
@@ -281,10 +281,10 @@ import snackbar from '@/plugins/snackbar';
 
 // ── Props & Emits ───────────────────────────────────────────────────────────
 const props = defineProps<{
-  value: boolean;
+  modelValue: boolean;
 }>();
 const emit = defineEmits<{
-  (e: 'input', value: boolean): void;
+  (e: 'update:modelValue', value: boolean): void;
   (e: 'withdrawn'): void;
 }>();
 
@@ -504,12 +504,12 @@ function retry() {
 }
 
 function closeSheet() {
-  emit('input', false);
+  emit('update:modelValue', false);
 }
 
 function closeAndEmit() {
   emit('withdrawn');
-  emit('input', false);
+  emit('update:modelValue', false);
 }
 
 // ── Lifecycle ───────────────────────────────────────────────────────────────
@@ -520,7 +520,7 @@ onBeforeUnmount(() => {
   if (tickHandle !== null) window.clearInterval(tickHandle);
 });
 
-watch(() => props.value, (val) => {
+watch(() => props.modelValue, (val) => {
   if (val) {
     resetWithdraw();
     amount.value = '';

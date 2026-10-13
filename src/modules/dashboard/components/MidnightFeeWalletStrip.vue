@@ -20,7 +20,7 @@
       <MidnightBattery small :pct="percent" :unknown="isUnknown" />
     </span>
     <span v-if="incoming" class="fw-num" :class="{ dim: isUnknown || networkMismatch }">{{ compactCharge }}</span>
-    <span class="chev"><v-icon x-small>mdi-chevron-right</v-icon></span>
+    <span class="chev"><v-icon size="x-small">mdi-chevron-right</v-icon></span>
   </button>
 
   <!-- FULL (dashboard): the inset card that lives inside the DUST battery
@@ -30,12 +30,12 @@
     <div class="fw-row">
       <span class="t-label">{{ t('midnight.sponsor.feeWallet') }}</span>
       <span v-if="incoming && !removed" class="fw-auth">
-        <v-icon x-small class="mr-1">mdi-key-outline</v-icon>{{ authLine }}
+        <v-icon size="x-small" class="mr-1">mdi-key-outline</v-icon>{{ authLine }}
       </span>
       <span class="grow"></span>
-      <v-tooltip v-if="incoming" top max-width="260" content-class="custom-tooltip">
-        <template #activator="{ on, attrs }">
-          <span class="fw-state on" v-bind="attrs" v-on="on">
+      <v-tooltip location="top" v-if="incoming"  max-width="260" content-class="custom-tooltip">
+        <template #activator="{ props: activatorProps }">
+          <span class="fw-state on" v-bind="activatorProps" >
             {{ t('midnight.sponsor.preSelected') }}
           </span>
         </template>
@@ -56,7 +56,7 @@
     <!-- OFF -->
     <template v-if="!incoming">
       <button type="button" class="btn-xs" @click="$emit('choose')">
-        {{ t('midnight.sponsor.title') }}<v-icon x-small>mdi-chevron-right</v-icon>
+        {{ t('midnight.sponsor.title') }}<v-icon size="x-small">mdi-chevron-right</v-icon>
       </button>
       <div v-if="!hasOwnDust" class="fw-sub">{{ t('midnight.sponsor.offNote') }}</div>
     </template>

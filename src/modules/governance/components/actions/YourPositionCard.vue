@@ -45,7 +45,7 @@ const props = defineProps({
 const { t } = useTranslation();
 
 const eyebrow = computed(() =>
-  String(props.position.who === 'self' ? t('governance.yourPosition') : t('governance.yourDRepPosition')),
+  String(!('who' in props.position) || props.position.who === 'self' ? t('governance.yourPosition') : t('governance.yourDRepPosition')),
 );
 </script>
 

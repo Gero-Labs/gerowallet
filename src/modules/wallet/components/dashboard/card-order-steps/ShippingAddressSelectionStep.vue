@@ -27,76 +27,76 @@
     <v-form ref="form" class="order-address__form" @submit.prevent>
       <div class="order-address__full">
         <PhoneNumberInput
-          :value="address.phone"
+          :model-value="address.phone"
           :label="t('card.phone')"
           :placeholder="t('card.enterPhone')"
           :disabled="locked"
           :rules="[rules.required()]"
           dense
-          @input="update('phone', $event)"
+          @update:model-value="update('phone', $event)"
         />
       </div>
       <v-text-field
         class="order-address__full"
-        :value="address.streetAddress"
+        :model-value="address.streetAddress"
         :label="t('card.streetAddress')"
         :placeholder="t('card.enterStreetAddress')"
         :disabled="locked"
         :rules="[rules.required(), maxLength(ADDRESS_LIMITS.streetAddress)]"
         :counter="ADDRESS_LIMITS.streetAddress"
         :maxlength="ADDRESS_LIMITS.streetAddress"
-        dense
-        outlined
-        @input="update('streetAddress', $event)"
+        density="compact"
+        variant="outlined"
+        @update:model-value="update('streetAddress', $event)"
       />
       <v-text-field
-        :value="address.city"
+        :model-value="address.city"
         :label="t('card.city')"
         :placeholder="t('card.enterCity')"
         :disabled="locked"
         :rules="[rules.required(), maxLength(ADDRESS_LIMITS.city)]"
         :maxlength="ADDRESS_LIMITS.city"
-        dense
-        outlined
-        @input="update('city', $event)"
+        density="compact"
+        variant="outlined"
+        @update:model-value="update('city', $event)"
       />
       <v-text-field
-        :value="address.stateProvince"
+        :model-value="address.stateProvince"
         :label="t('card.stateProvince')"
         :placeholder="t('card.enterState')"
         :disabled="locked"
         :rules="[rules.required(), maxLength(ADDRESS_LIMITS.stateProvince)]"
         :maxlength="ADDRESS_LIMITS.stateProvince"
-        dense
-        outlined
-        @input="update('stateProvince', $event)"
+        density="compact"
+        variant="outlined"
+        @update:model-value="update('stateProvince', $event)"
       />
       <v-text-field
-        :value="address.zipCode"
+        :model-value="address.zipCode"
         :label="t('card.zipCode')"
         :placeholder="t('card.enterZipCode')"
         :disabled="locked"
         :rules="[rules.required(), maxLength(ADDRESS_LIMITS.zipCode)]"
         :counter="ADDRESS_LIMITS.zipCode"
         :maxlength="ADDRESS_LIMITS.zipCode"
-        dense
-        outlined
-        @input="update('zipCode', $event)"
+        density="compact"
+        variant="outlined"
+        @update:model-value="update('zipCode', $event)"
       />
       <v-select
-        :value="address.countryCode"
+        :model-value="address.countryCode"
         :label="t('card.country')"
         :items="countries"
-        item-text="label"
+        item-title="label"
         item-value="code"
         :placeholder="t('card.selectCountry')"
         :disabled="locked"
         :rules="[rules.required()]"
         attach
-        :menu-props="{ top: true, offsetY: true }"
-        dense
-        outlined
-        @change="update('countryCode', $event)"
+        :menu-props="{ location: 'top' }"
+        density="compact"
+        variant="outlined"
+        @update:model-value="update('countryCode', $event)"
       >
         <template #selection="{ item }">
           <span class="order-address__country">
@@ -104,14 +104,14 @@
             {{ item.label }}
           </span>
         </template>
-        <template #item="{ item, attrs, on }">
-          <v-list-item v-bind="attrs" dense v-on="on">
-            <v-list-item-avatar size="24" tile>
+        <template #item="{ item, props: itemProps }">
+          <v-list-item v-bind="itemProps" :title="''" density="compact">
+            <v-avatar size="24" rounded="0">
               <flag :iso="item.code.toLowerCase()" class="order-address__flag" />
-            </v-list-item-avatar>
-            <v-list-item-content>
+            </v-avatar>
+            <div class="g-list-content">
               <v-list-item-title>{{ item.label }}</v-list-item-title>
-            </v-list-item-content>
+            </div>
           </v-list-item>
         </template>
       </v-select>
@@ -138,7 +138,7 @@ const props = defineProps<{
 const emit = defineEmits<{ (e: 'update:address', value: ShippingAddress): void }>();
 
 const { t } = useTranslation();
-const form = ref<{ validate: () => boolean; resetValidation: () => void } | null>(null);
+const form = ref<{ validate: () => Promise<{ valid: boolean }>; resetValidation: () => void } | null>(null);
 const choice = ref<'existing' | 'new'>(props.savedAddress ? 'existing' : 'new');
 const locked = computed(() => choice.value === 'existing');
 
@@ -155,8 +155,8 @@ function choose(next: 'existing' | 'new'): void {
 }
 
 /** True when every field passes; also shows the errors. */
-function validate(): boolean {
-  return form.value?.validate() ?? false;
+async function validate(): Promise<boolean> {
+  return (await form.value?.validate())?.valid ?? false;
 }
 
 defineExpose({ validate });

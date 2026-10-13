@@ -56,7 +56,7 @@ async function settle() {
   for (let i = 0; i < 6; i++) await Promise.resolve();
 }
 
-function open(onSync: (data: unknown) => unknown = vi.fn(), chain = 'CARDANO') {
+function open(onSync: (data: unknown) => Promise<void> = vi.fn(async () => {}), chain = 'CARDANO') {
   webSocketService.connect(chain, 'MAINNET', 'stake1test', 99, { onSync });
   const ws = FakeSocket.instances[FakeSocket.instances.length - 1];
   ws.onopen?.();

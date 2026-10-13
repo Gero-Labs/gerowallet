@@ -27,7 +27,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { useRoute } from 'vue-router/composables';
+import { useRoute } from 'vue-router';
 import MiniHeader from '../components/MiniHeader.vue';
 import BottomNav from '../components/BottomNav.vue';
 import SwapSheet from '../components/flows/SwapSheet.vue';

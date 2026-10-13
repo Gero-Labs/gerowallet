@@ -159,7 +159,7 @@ describe('origin hygiene wiring tripwires', () => {
   it('popup connects store the full origin, never the header hostname', () => {
     const src = read('popup/modules/views/DappConnect.vue');
     expect(src).not.toContain('addConnectedDapp(loggedWallet.value.id, vmProxy.$refs.popupHeader.domain)');
-    expect(src).toContain('new URL(String(vmProxy.$route.query?.website');
+    expect(src).toContain("new URL(String(vmProxy.$route.query?.['website']");
   });
 
   it('the side-panel header matches connected sites exactly, not by substring', () => {

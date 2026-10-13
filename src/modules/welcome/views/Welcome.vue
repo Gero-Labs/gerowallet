@@ -43,7 +43,7 @@
         data-test="help-button"
         @click="toggleHelp()"
       >
-        <v-icon left size="18">mdi-help-circle-outline</v-icon>{{ $t('help.welcome.title') }}
+        <v-icon start size="18">mdi-help-circle-outline</v-icon>{{ $t('help.welcome.title') }}
       </GButton>
       <LanguageSelector />
     </div>

@@ -27,7 +27,13 @@ vi.mock('@/chains/midnight/midnightZkpaas', () => ({
 }));
 
 import { MessageTypes } from '@/models/MessageTypes';
-import { buildAndSignUnshieldedTransfer, checkWalletProvingPreflight, registerNightForDust, sendShieldedNight, sendUnshieldedNight, shieldNight } from './midnight-tx.service';
+import { balanceConnectorTransaction, buildAndSignUnshieldedTransfer, checkWalletProvingPreflight, registerNightForDust, sendShieldedNight, sendUnshieldedNight, shieldNight } from './midnight-tx.service';
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(done => { resolve = done; });
+  return { promise, resolve };
+}
 
 describe('Midnight ledger-specific orchestration', () => {
   beforeEach(() => {
@@ -36,6 +42,90 @@ describe('Midnight ledger-specific orchestration', () => {
     mocks.proofServer.mode = 'remote';
     mocks.proofServer.localUrlLedger9 = 'http://localhost:6301';
     mocks.health.mockResolvedValue(true);
+  });
+
+  it.each(['send', 'connector'])('stops %s before building or signing when authorization becomes stale', async operation => {
+    let current = true;
+    const keys = deferred<{ data: { success: boolean; publicKeyHex: string; addressHex: string } }>();
+    const build = vi.fn();
+    mocks.api.mockReturnValue({ buildUnshieldedTx: build });
+    mocks.send.mockReturnValue(keys.promise);
+    const request = { fromAddress: 'sender', outputs: [], ttlMs: 12345 };
+    const result = operation === 'send'
+      ? sendUnshieldedNight('Preprod', request, {}, undefined, undefined, false, () => current)
+      : buildAndSignUnshieldedTransfer('Preprod', request, {}, undefined, () => current);
+    const rejected = expect(result).rejects.toThrow('Approval is no longer current');
+    expect(mocks.send).toHaveBeenCalledOnce();
+    current = false;
+    keys.resolve({ data: { success: true, publicKeyHex: '11', addressHex: '22' } });
+    await rejected;
+    expect(build).not.toHaveBeenCalled();
+    expect(mocks.send).toHaveBeenCalledOnce();
+  });
+
+  it.each(['send', 'connector'])('stops %s before signing when its transaction build becomes stale', async operation => {
+    let current = true;
+    const built = deferred<{ unprovenTxHex: string; txHash: string }>();
+    const build = vi.fn().mockReturnValue(built.promise);
+    mocks.api.mockReturnValue({ buildUnshieldedTx: build });
+    mocks.send.mockResolvedValue({ data: { success: true, publicKeyHex: '11', addressHex: '22' } });
+    const request = { fromAddress: 'sender', outputs: [], ttlMs: 12345 };
+    const result = operation === 'send'
+      ? sendUnshieldedNight('Preprod', request, {}, undefined, undefined, false, () => current)
+      : buildAndSignUnshieldedTransfer('Preprod', request, {}, undefined, () => current);
+    const rejected = expect(result).rejects.toThrow('Approval is no longer current');
+    await vi.waitFor(() => expect(build).toHaveBeenCalledOnce());
+    current = false;
+    built.resolve({ unprovenTxHex: 'aa', txHash: 'built' });
+    await rejected;
+    expect(mocks.send).toHaveBeenCalledOnce();
+  });
+
+  it('never submits a public transaction whose signing approval was cancelled', async () => {
+    let current = true;
+    const signed = deferred<{ data: { success: boolean; signedTxHex: string; proven: boolean } }>();
+    const submit = vi.fn();
+    mocks.api.mockReturnValue({ buildUnshieldedTx: async () => ({ unprovenTxHex: 'aa', txHash: 'built' }), submitMidnightTx: submit });
+    mocks.send.mockResolvedValueOnce({ data: { success: true, publicKeyHex: '11', addressHex: '22' } })
+      .mockReturnValueOnce(signed.promise);
+    const result = sendUnshieldedNight('Preprod', { fromAddress: 'sender', outputs: [], ttlMs: 12345 }, {}, undefined, undefined, false, () => current);
+    const rejected = expect(result).rejects.toThrow('Approval is no longer current');
+    await vi.waitFor(() => expect(mocks.send).toHaveBeenCalledTimes(2));
+    current = false;
+    signed.resolve({ data: { success: true, signedTxHex: 'bb', proven: false } });
+    await rejected;
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it.each(['remote', 'local'])('never submits a stale shielded signing result through %s proving', async mode => {
+    mocks.proofServer.mode = mode;
+    let current = true;
+    const signed = deferred<{ data: { success: boolean; signedTxHex: string; proven: boolean } }>();
+    const submit = vi.fn();
+    mocks.api.mockReturnValue({ submitProvenMidnightTx: submit, proveAndSubmitMidnightTx: submit });
+    mocks.send.mockReturnValue(signed.promise);
+    const result = sendShieldedNight('Preprod', [{ receiverAddress: 'recipient', amount: 1n, tokenType: '12'.repeat(32) }], {}, 'InBlock', undefined, false, undefined, () => current);
+    const rejected = expect(result).rejects.toThrow('Approval is no longer current');
+    await vi.waitFor(() => expect(mocks.send).toHaveBeenCalledOnce());
+    current = false;
+    signed.resolve({ data: { success: true, signedTxHex: 'bb', proven: mode === 'local' } });
+    await rejected;
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it('refuses stale connector balancing before dispatch and discards stale completions', async () => {
+    let current = false;
+    await expect(balanceConnectorTransaction('aa', {}, () => current)).rejects.toThrow('Approval is no longer current');
+    expect(mocks.send).not.toHaveBeenCalled();
+    current = true;
+    const signed = deferred<{ data: { success: boolean; tx: string } }>();
+    mocks.send.mockReturnValue(signed.promise);
+    const result = balanceConnectorTransaction('aa', {}, () => current);
+    const rejected = expect(result).rejects.toThrow('Approval is no longer current');
+    current = false;
+    signed.resolve({ data: { success: true, tx: 'signed' } });
+    await rejected;
+    expect(mocks.send).toHaveBeenCalledOnce();
   });
 
   it.each(['remote', 'local', 'zkpaas'])('refuses native NIGHT privacy conversion before authorization or HTTP (%s)', async mode => {

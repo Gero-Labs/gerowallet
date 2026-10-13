@@ -1,3 +1,4 @@
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import GuideSfc from './RealFiGettingStarted.vue';
@@ -20,21 +21,17 @@ const BASE = {
 };
 
 function mountGuide(props: Partial<typeof BASE> = {}) {
-  return mount(Guide, {
-    propsData: { ...BASE, ...props },
-    mocks: {
+  return mount(Guide, { props: { ...BASE, ...props }, global: { config: { globalProperties: mockGlobalProperties({
       $t: (key: string, values?: Record<string, unknown>) =>
         values ? `${key}${JSON.stringify(values)}` : key,
-    },
-    stubs: { 'v-btn': { template: '<button @click="$emit(\'click\')"><slot /></button>' } },
-  });
+    }) }, stubs: { 'v-btn': { emits: ['click'], template: '<button @click="$emit(\'click\')"><slot /></button>' } } } });
 }
 
 type Guide = ReturnType<typeof mountGuide>;
 
 /** Step 2's buttons, in order, as "label (tier)". */
 function acquireButtons(guide: Guide): string[] {
-  return guide.findAll('.realfi-getting-started__actions button').wrappers.map((b) => {
+  return guide.findAll('.realfi-getting-started__actions button').map((b) => {
     const tier = ['primary', 'secondary', 'tertiary'].find((t) => b.classes(`g-btn--${t}`));
     return `${b.text()} (${tier})`;
   });
@@ -81,13 +78,9 @@ describe('RealFiGettingStarted: getting USDrf', () => {
   });
 
   it('gives each step of the full guide its scene, and keeps the compact guide text-only', () => {
-    const scenes = (guide: Guide) => guide.findAllComponents(IsoSceneSfc as never).wrappers.map((s) => s.props('name'));
+    const scenes = (guide: Guide) => guide.findAllComponents(IsoSceneSfc).map((s) => s.props('name'));
     expect(scenes(mountGuide())).toEqual(['earnRegion', 'earnUsdcx', 'earnSwap', 'earnStake']);
-    expect(scenes(mount(GuideSfc as unknown as Parameters<typeof mount>[0], {
-      propsData: { ...BASE, compact: true },
-      mocks: { $t: (key: string) => key },
-      stubs: { 'v-btn': { template: '<button><slot /></button>' } },
-    }))).toEqual([]);
+    expect(scenes(mount(GuideSfc as unknown as Parameters<typeof mount>[0], { props: { ...BASE, compact: true }, global: { config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key }) }, stubs: { 'v-btn': { template: '<button><slot /></button>' } } } }))).toEqual([]);
   });
 
   it('says nothing about holdings when Gero cannot swap at all', () => {
@@ -103,7 +96,7 @@ describe('RealFiGettingStarted: steps you tick off', () => {
   type Step = { title: string; number: string; done: boolean };
 
   function steps(guide: Guide): Step[] {
-    return guide.findAll('.realfi-getting-started__step').wrappers.map((li) => ({
+    return guide.findAll('.realfi-getting-started__step').map((li) => ({
       title: li.find('.t-label').text(),
       number: li.find('.realfi-getting-started__number').text(),
       done: li.classes('realfi-getting-started__step--done'),
@@ -111,7 +104,7 @@ describe('RealFiGettingStarted: steps you tick off', () => {
   }
 
   function step(guide: Guide, title: string) {
-    return guide.findAll('.realfi-getting-started__step').wrappers.find((li) => li.find('.t-label').text() === title)!;
+    return guide.findAll('.realfi-getting-started__step').find((li) => li.find('.t-label').text() === title)!;
   }
 
   it('on mainnet, gets USDCx and USDrf in two steps, neither ticked yet', () => {
@@ -146,7 +139,7 @@ describe('RealFiGettingStarted: steps you tick off', () => {
   });
 
   it('makes every action on mainnet an outlined button, none a bare text button', () => {
-    const tiers = (guide: Guide) => guide.findAll('button').wrappers.map((b) => b.classes().find((c) => c.startsWith('g-btn--') && c !== 'g-btn--compact'));
+    const tiers = (guide: Guide) => guide.findAll('button').map((b) => b.classes().find((c) => c.startsWith('g-btn--') && c !== 'g-btn--compact'));
     expect(tiers(mountGuide())).toEqual(['g-btn--secondary', 'g-btn--secondary', 'g-btn--secondary']);
     expect(tiers(mountGuide({ canSwapUsdrf: false }))).toEqual(['g-btn--secondary', 'g-btn--secondary', 'g-btn--secondary']);
     expect(tiers(mountGuide({ canAcquire: false, canSwapUsdrf: false, swapStatus: 'unavailable', canRetryAvailability: true })))
@@ -173,6 +166,6 @@ describe('RealFiGettingStarted: steps you tick off', () => {
     const holding = mountGuide({ ...off, hasUsdcx: true });
     expect(step(holding, 'realfi.gettingStarted.usdcxTitle').text()).not.toContain(status);
     expect(step(holding, 'realfi.gettingStarted.acquireTitle').text()).toContain(status);
-    expect(holding.findAll('button').wrappers.map((b) => b.text())).toContain('realfi.gettingStarted.retryAvailability');
+    expect(holding.findAll('button').map((b) => b.text())).toContain('realfi.gettingStarted.retryAvailability');
   });
 });

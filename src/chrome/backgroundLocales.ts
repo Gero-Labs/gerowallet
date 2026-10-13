@@ -1,11 +1,8 @@
-// Background-only, and imported FIRST by background.ts.
-//
-// The background is one iife, so loadLanguage()'s
-// `import(`@/plugins/i18n/${lang}.ts`)` cannot split a chunk there: Rollup
-// inlines every locale and declares its namespace wherever the module happens to
-// land, which was after the reader in i18n.ts (scripts/check-bundle-tdz.mjs).
-// Eagerly importing the whole locale directory here lands every locale, present
-// and future, before anything that reads it. The options bundle is untouched and
-// keeps its lazy per-locale chunks. Specs are excluded: an eager glob would
-// bundle them into the worker and run their bodies there.
-import.meta.glob(['../plugins/i18n/*.ts', '!../plugins/i18n/*.spec.ts', '!../plugins/i18n/*.test.ts'], { eager: true });
+// Eager worker registration; the UI loads these same compiled modules lazily.
+// Keep this import before background services: explicit-locale notifications
+// must work before any UI selects a language. No DOM or runtime compiler.
+import de from 'virtual:gero-locales/de';
+import es from 'virtual:gero-locales/es';
+import { registerLocaleMessages } from '@/plugins/i18n';
+registerLocaleMessages('de', de);
+registerLocaleMessages('es', es);

@@ -34,15 +34,15 @@
       <div class="flex-grow-1">
         <div class="d-flex align-center">
           <span class="text-h6 font-weight-bold mr-2">{{ token.ticker }}</span>
-          <v-icon v-if="token.verified" small color="primary" class="mr-1">mdi-check-decagram</v-icon>
-          <v-tooltip v-if="isProgrammableRow(token)" top :open-delay="300" content-class="custom-tooltip">
-            <template v-slot:activator="{ on, attrs }">
+          <v-icon v-if="token.verified" size="small" color="primary" class="mr-1">mdi-check-decagram</v-icon>
+          <v-tooltip location="top" v-if="isProgrammableRow(token)"  :open-delay="300" content-class="custom-tooltip">
+            <template v-slot:activator="{ props: activatorProps }">
               <v-chip
-                x-small label
+                size="x-small" label
                 class="mr-1 flex-shrink-0"
                 style="height: 16px; font-size: 10px; padding: 0 5px; color: var(--g-warning); background: var(--g-warning-fill); border: 1px solid var(--g-warning-line);"
-                v-bind="attrs"
-                v-on="on"
+                v-bind="activatorProps"
+
               >
                 {{ $t('programmableTokens.badge') }}
               </v-chip>
@@ -52,15 +52,15 @@
         </div>
         <span class="text--secondary text-caption">{{ token.name }}</span>
       </div>
-      <v-btn icon small @click="toggleWatch(token.unit)" class="mr-1">
+      <v-btn icon size="small" @click="toggleWatch(token.unit)" class="mr-1">
         <v-icon :color="isWatched(token.unit) ? 'amber' : ''">
           {{ isWatched(token.unit) ? 'mdi-star' : 'mdi-star-outline' }}
         </v-icon>
       </v-btn>
-      <v-btn v-if="tokenExplorerUrl" icon small @click="openExplorer" class="mr-1">
-        <v-icon small>mdi-open-in-new</v-icon>
+      <v-btn v-if="tokenExplorerUrl" icon size="small" @click="openExplorer" class="mr-1">
+        <v-icon size="small">mdi-open-in-new</v-icon>
       </v-btn>
-      <v-btn icon small @click="$emit('close')">
+      <v-btn icon size="small" @click="$emit('close')">
         <v-icon>mdi-close</v-icon>
       </v-btn>
     </div>
@@ -93,7 +93,7 @@
             :title="dustRegTxHash"
           >
             {{ shortTx(dustRegTxHash) }}
-            <v-icon x-small>mdi-open-in-new</v-icon>
+            <v-icon size="x-small">mdi-open-in-new</v-icon>
           </a>
         </div>
 
@@ -141,11 +141,11 @@
 
             <!-- TA Indicator toggles -->
             <div class="d-flex align-center" style="gap: 2px">
-              <v-tooltip bottom :open-delay="300" content-class="custom-tooltip" v-for="ind in indicatorOptions" :key="ind.value">
-                <template v-slot:activator="{ on, attrs }">
+              <v-tooltip location="bottom"  :open-delay="300" content-class="custom-tooltip" v-for="ind in indicatorOptions" :key="ind.value">
+                <template v-slot:activator="{ props: activatorProps }">
                   <span
-                    v-bind="attrs"
-                    v-on="on"
+                    v-bind="activatorProps"
+
                     class="ind-btn"
                     :class="{ active: activeIndicators.includes(ind.value) }"
                     @click="toggleIndicator(ind.value)"
@@ -164,7 +164,7 @@
           </div>
           <template v-else>
             <div v-if="staleDataWarning" class="stale-warning">
-              <v-icon x-small color="warning" class="mr-1">mdi-alert-outline</v-icon>
+              <v-icon size="x-small" color="warning" class="mr-1">mdi-alert-outline</v-icon>
               {{ staleDataWarning }}
             </div>
             <TechnicalAnalysisChart
@@ -198,7 +198,7 @@
       <!-- ═══ RIGHT COLUMN: Swap/Depth tabs + Token Info ═══ -->
       <div class="right-col">
         <!-- Right column tabs -->
-        <v-tabs v-model="rightTab" dense background-color="transparent" height="28" class="detail-sub-tabs mb-3">
+        <v-tabs v-model="rightTab" density="compact" bg-color="transparent" height="28" class="detail-sub-tabs mb-3">
           <!-- Shown for a programmable token too: rightTab defaults here, and this is
                where the reason the widget is suppressed gets explained. -->
           <v-tab tab-value="swap">{{ $t('market.swap') }}</v-tab>
@@ -231,8 +231,7 @@
             <div class="info-item" v-for="stat in compactStats" :key="stat.label">
               <span class="info-label">{{ stat.label }}</span>
               <span class="info-value">
-                <component :is="stat.component" v-if="stat.component" v-bind="stat.componentProps" />
-                <template v-else>{{ stat.value }}</template>
+                {{ stat.value }}
               </span>
             </div>
           </div>
@@ -240,7 +239,7 @@
           <!-- Policy ID row -->
           <div v-if="tokenPolicyId" class="policy-row mt-2">
             <div class="d-flex align-center" style="gap: 4px">
-              <v-icon x-small :color="token.policyLocked ? 'success' : 'error'">
+              <v-icon size="x-small" :color="token.policyLocked ? 'success' : 'error'">
                 {{ token.policyLocked ? 'mdi-lock' : 'mdi-lock-open-variant' }}
               </v-icon>
               <span class="info-label">{{ $t('market.policy') }}</span>
@@ -250,14 +249,14 @@
             </div>
             <div class="policy-id text-caption text--secondary mt-1" :title="tokenPolicyId" @click="copyPolicyId">
               {{ tokenPolicyId }}
-              <v-icon x-small class="ml-1" style="opacity: 0.4">mdi-content-copy</v-icon>
+              <v-icon size="x-small" class="ml-1" style="opacity: 0.4">mdi-content-copy</v-icon>
             </div>
           </div>
 
           <!-- P&L Section (if user holds this token) -->
           <div v-if="tokenPnl" class="pnl-section mt-3">
             <span class="t-label d-block mb-2">{{ $t('market.pnl') }}</span>
-            <v-simple-table dense class="transparent stats-table">
+            <v-table density="compact" class="transparent stats-table">
               <tbody>
                 <tr>
                   <td class="pnl-cell-label">{{ $t('market.avgCostBasis') }}</td>
@@ -282,7 +281,7 @@
                   </td>
                 </tr>
               </tbody>
-            </v-simple-table>
+            </v-table>
           </div>
         </div>
 
@@ -318,6 +317,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, type Ref } from 'vue';
+import type { Time } from 'lightweight-charts';
 import { programmableTooltipKey, isProgrammableRow } from '@/shared/utils/programmableTokenDisplay';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useWatchlist } from '@/modules/market/composables/useWatchlist';
@@ -530,7 +530,7 @@ function candleCurrency(): string {
 }
 
 // Backend returns candles already converted — just pass through
-const convertedCandles = computed(() => candles.value);
+const convertedCandles = computed(() => candles.value.map(candle => ({ ...candle, time: candle.time as Time })));
 
 const staleDataWarning = computed(() => {
   if (!candles.value.length) return '';
@@ -594,7 +594,7 @@ function copyPolicyId() {
   if (tokenPolicyId.value) {
     navigator.clipboard.writeText(tokenPolicyId.value)
       .then(() => snackbar.fireSuccess(t('market.policyIdCopied')))
-      .catch(() => snackbar.fireError(t('market.copyFailed')));
+      .catch(() => snackbar.setError(t('market.copyFailed')));
   }
 }
 

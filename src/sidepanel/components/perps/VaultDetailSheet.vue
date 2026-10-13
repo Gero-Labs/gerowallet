@@ -1,10 +1,10 @@
 <template>
   <BottomSheet
-    :value="value"
+    :model-value="modelValue"
     height="85%"
     :show-handle="true"
     :draggable="true"
-    @input="$emit('input', $event)"
+    @update:model-value="$emit('update:modelValue', $event)"
   >
     <div class="vds-content">
 
@@ -21,7 +21,7 @@
             <span class="vds-vault-name">{{ vault.name }}</span>
             <div class="vds-header__badges">
               <v-chip
-                x-small
+                size="x-small"
                 :class="['vds-status-chip', `vds-status-chip--${vault.status}`]"
                 label
               >
@@ -92,7 +92,7 @@
             </div>
             <div class="vds-pos-row">
               <span class="vds-pos-label">{{ $t('vaults.pnl') }}</span>
-              <span :class="['vds-pos-value', pnlClass(userPosition.pnl)]">{{ formatPnl(userPosition.pnl) }}</span>
+              <span :class="['vds-pos-modelValue', pnlClass(userPosition.pnl)]">{{ formatPnl(userPosition.pnl) }}</span>
             </div>
           </div>
         </template>
@@ -120,7 +120,7 @@
         <!-- ── Section 6: Actions ── -->
         <div class="vds-actions">
           <v-btn
-            depressed
+            variant="flat"
             class="vds-btn vds-btn--deposit"
             @click="$emit('deposit')"
           >
@@ -128,7 +128,7 @@
             {{ $t('vaults.deposit') }}
           </v-btn>
           <v-btn
-            depressed
+            variant="flat"
             class="vds-btn vds-btn--withdraw"
             @click="$emit('withdraw')"
           >
@@ -163,11 +163,11 @@ const primaryColor = computed(() => themeColors.value.primary);
 // ── Props & Emits ─────────────────────────────────────────────────────────────
 const props = defineProps<{
   vaultId: string;
-  value: boolean;
+  modelValue: boolean;
 }>();
 
 defineEmits<{
-  (e: 'input', value: boolean): void;
+  (e: 'update:modelValue', value: boolean): void;
   (e: 'deposit'): void;
   (e: 'withdraw'): void;
 }>();
@@ -229,7 +229,7 @@ function onPeriodChange(period: VaultPeriod) {
 }
 
 // ── Watchers ──────────────────────────────────────────────────────────────────
-watch(() => [props.value, props.vaultId] as const, ([open, id]) => {
+watch(() => [props.modelValue, props.vaultId] as const, ([open, id]) => {
   if (open && id) loadAll();
 }, { immediate: true });
 

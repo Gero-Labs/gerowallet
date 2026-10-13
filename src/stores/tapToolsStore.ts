@@ -1,18 +1,22 @@
-import Vue from 'vue';
+import { plainStoreSnapshot } from '@/stores/serialization';
+import { reactive } from 'vue';
 import { parseHttpError } from '@/shared/utils/parser';
 import tapToolsApi from '@/api/tap-tools-api';
 import { getContextType } from '@/utils/storageSync';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
+import { isAxiosError } from 'axios';
+
+type Portfolio = Record<string, unknown> & { total_value?: number; change_24h_percent?: number; _timestamp?: number };
 
 export interface TapToolsStore {
-  portfolio: any;
-  portfolioTrendedValue: any;
+  portfolio: Portfolio;
+  portfolioTrendedValue: number[][] | Record<string, never>;
   tokens: {};
 }
 
 // Create observable state
-export const tapToolsStore = Vue.observable<TapToolsStore>({
+export const tapToolsStore = reactive<TapToolsStore>({
   portfolio: {},
   portfolioTrendedValue: {},
   tokens: {}
@@ -31,7 +35,7 @@ if (context === 'browser') {
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
       if (key in tapToolsStore) {
-        (tapToolsStore as any)[key] = updates[key as keyof TapToolsStore];
+        (tapToolsStore as unknown as Record<string, unknown>)[key] = updates[key as keyof TapToolsStore];
       }
     });
   });
@@ -54,30 +58,30 @@ function broadcastFromBackground(updates: Partial<TapToolsStore>) {
 
     // Also persist to storage as fallback
     chrome.storage.local.get(STORE_NAME, (result) => {
-      const current = result[STORE_NAME] || { portfolio: {}, portfolioTrendedValue: {}, tokens: {} };
-      chrome.storage.local.set({
+      const current = (result[STORE_NAME] as Partial<TapToolsStore> | undefined) || { portfolio: {}, portfolioTrendedValue: {}, tokens: {} };
+      chrome.storage.local.set(plainStoreSnapshot({
         [STORE_NAME]: { ...current, ...updates }
-      });
+      }));
     });
   }
 }
 
 export default {
-  setPortfolio(portfolio: any) {
+  setPortfolio(portfolio: Portfolio) {
     tapToolsStore.portfolio = portfolio;
 
     // Broadcast from a background context
     broadcastFromBackground({ portfolio });
   },
 
-  setPortfolioTrendedValue(portfolioTrendedValue: any) {
+  setPortfolioTrendedValue(portfolioTrendedValue: TapToolsStore['portfolioTrendedValue']) {
     tapToolsStore.portfolioTrendedValue = portfolioTrendedValue;
 
     // Broadcast from background context
     broadcastFromBackground({ portfolioTrendedValue });
   },
 
-  setTokens(tokens: any) {
+  setTokens(tokens: Record<string, unknown>) {
     tapToolsStore.tokens = tokens;
 
     // Broadcast from background context
@@ -106,8 +110,8 @@ export default {
       } else {
         console.warn('Failed to load portfolio:', parseHttpError(res));
       }
-    } catch (e: any) {
-      if (e.name === 'AxiosError') {
+    } catch (e) {
+      if (isAxiosError(e)) {
         if (e.status === 404) {
           console.warn('Portfolio not found for stake address:', stakeAddress);
           this.setPortfolio({});
@@ -121,7 +125,7 @@ export default {
     try {
       const res = await tapToolsApi.getPortfolioTrendedValue(stakeAddress, currency, timeframe);
       if (res?.status === 200) {
-        this.setPortfolioTrendedValue(res.data.map((element: any) => [element.time * 1000, element.value]));
+        this.setPortfolioTrendedValue(res.data.map((element: { time: number; value: number }) => [element.time * 1000, element.value]));
       } else {
         console.warn('Failed to load portfolio trended value:', parseHttpError(res));
       }

@@ -18,7 +18,8 @@
   </div>
 </template>
 <script setup lang="ts">
-import { toRefs, computed, getCurrentInstance } from 'vue'
+import { toRefs, computed } from 'vue'
+import { useTheme } from 'vuetify';
 import VueHighcharts from '@/shared/components/VueHighcharts.vue'
 import Highcharts from 'highcharts'
 import Highcharts3D from 'highcharts/highcharts-3d'
@@ -33,7 +34,7 @@ const { loading } = toRefs(loadingState)
 const collectiblesAmount = computed(() => {
   let amount = 0;
   if (collections.value) {
-    Object.values(collections.value).forEach((collection: any) => {
+    Object.values(collections.value).forEach((collection: { items?: unknown[] }) => {
       if (collection.items) {
         amount += collection.items.length
       }
@@ -42,7 +43,7 @@ const collectiblesAmount = computed(() => {
   return amount
 })
 
-const chartData = computed(() => {
+const chartData = computed<Array<[string, number]>>(() => {
   // Only compute when tokens or collections actually exist and have data
   if (!tokens.value || !collections.value) {
     return []
@@ -63,7 +64,7 @@ const chartData = computed(() => {
 });
 
 const filteredChartData = computed(() => {
-  return chartData.value.filter((d: any[]) => d[1] > 0)
+  return chartData.value.filter(d => d[1] > 0)
 })
 
 const isAllZeroes = computed(() => {
@@ -82,7 +83,7 @@ const computedColors = computed(() => {
   return colors
 })
 
-const vmProxy = getCurrentInstance()!.proxy as any
+const theme = useTheme();
 
 const chartOptions = computed(() => {
   // Don't render chart while wallet is loading to prevent flickering
@@ -102,12 +103,12 @@ const chartOptions = computed(() => {
   return {
     legend: {
       itemStyle: {
-        color: vmProxy.$vuetify.theme.isDark ? '#fff' : '#000'
+        color: theme.current.value.dark ? '#fff' : '#000'
       },
       itemHoverStyle: {
-        color: vmProxy.$vuetify.theme.isDark ? '#ccc' : '#ccc'
+        color: '#ccc'
       },
-      labelFormatter() {
+      labelFormatter(this: { name: string }) {
         return `<b>${this.name}</b>`
       }
     },
@@ -135,7 +136,7 @@ const chartOptions = computed(() => {
     title: {
       text: '',
       style: {
-        color: vmProxy.$vuetify.theme.isDark ? '#CCC' : '#000',
+        color: theme.current.value.dark ? '#CCC' : '#000',
       },
     },
     tooltip: {
@@ -179,7 +180,7 @@ const chartOptions = computed(() => {
         colorByPoint: true,
         data: filteredChartData.value,
         dataLabels: {
-          color: vmProxy.$vuetify.theme.isDark ? '#FFF' : '#000',
+          color: theme.current.value.dark ? '#FFF' : '#000',
           style: {
             strokeWidth: 0,
           },

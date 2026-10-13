@@ -1,5 +1,5 @@
 <template>
-  <v-card :outlined="!inSheet" :flat="inSheet" :color="inSheet ? 'transparent' : undefined" class="notifications-card notify-inbox" :class="{ 'notify-inbox--sheet': inSheet }" role="dialog" :aria-label="$t('navigation.notifications')">
+  <v-card :variant="inSheet ? 'flat' : 'outlined'" :flat="inSheet" :color="inSheet ? 'transparent' : undefined" class="notifications-card notify-inbox" :class="{ 'notify-inbox--sheet': inSheet }" role="dialog" :aria-label="$t('navigation.notifications')">
     <!-- Header: title, "N new" pill, mark-all -->
     <div class="notify-inbox__head">
       <div class="notify-inbox__title">
@@ -58,7 +58,7 @@
       </template>
 
       <div v-if="!items.length && !kesVisible" class="notify-inbox__empty">
-        <v-icon small color="var(--g-text-3)" class="mr-1">mdi-bell-check-outline</v-icon>
+        <v-icon size="small" color="var(--g-text-3)" class="mr-1">mdi-bell-check-outline</v-icon>
         {{ $t('navigation.nothingNew') }}
       </div>
     </div>
@@ -141,10 +141,10 @@ function open(item: NotifyInboxItem) {
   if (route.settingsTab) void chrome.storage.local.set({ openSettingsOnLoad: { tab: route.settingsTab } });
   if (inSheet.value) {
     if (route.settingsTab || route.sidepanel === null) { void openFullDashboard(`#${route.dashboard}`); return; }
-    if (router && router.currentRoute.fullPath !== route.sidepanel) router.push(route.sidepanel).catch(() => undefined);
+    if (router && router.currentRoute.value.fullPath !== route.sidepanel) router.push(route.sidepanel).catch(() => undefined);
     return;
   }
-  if (router && router.currentRoute.fullPath !== route.dashboard) router.push(route.dashboard).catch(() => undefined);
+  if (router && router.currentRoute.value.fullPath !== route.dashboard) router.push(route.dashboard).catch(() => undefined);
 }
 
 onMounted(() => notifyInboxStore.init());

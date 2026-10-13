@@ -1,3 +1,4 @@
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
 // The Bring portal bridge, end to end from a `SIGN_MESSAGE` postMessage to the
 // `SIGNATURE` / `ABORT_SIGN_MESSAGE` reply. The bug these pin: the portal used
 // to route its challenge through the CIP-30 `signData` handler as a webpage
@@ -6,8 +7,8 @@
 // what is under test is the binding of a request to the wallet it was made
 // for, and that exactly one answer reaches the portal.
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mount, type Wrapper } from '@vue/test-utils';
-import Vue from 'vue';
+import { mount, type VueWrapper } from '@vue/test-utils';
+import * as Vue from 'vue';
 import { Blockchain, Network } from '@/models/types';
 
 /** The prompt, reduced to the two answers it can give. A `<script setup>` import
@@ -15,25 +16,20 @@ import { Blockchain, Network } from '@/models/types';
 const SignDialogStub = vi.hoisted(() => ({
   name: 'CashbackSignDialogStub',
   props: ['isOpen', 'requestId', 'message', 'address', 'origin'],
-  // A render function, not a template: the test build of Vue has no template compiler.
-  render(h: (tag: string, data: object) => unknown) {
-    return h('div', {
-      attrs: {
-        'data-testid': 'dialog',
+  render(this: { isOpen: boolean; requestId: number; message: string; address: string; origin: string }) {
+    return Vue.h('div', { 'data-testid': 'dialog',
         'data-open': String(this.isOpen),
         'data-request-id': String(this.requestId),
         'data-message': this.message,
         'data-address': this.address,
-        'data-origin': this.origin,
-      },
-    });
+        'data-origin': this.origin });
   },
 }));
 vi.mock('./CashbackSignDialog.vue', () => ({ default: SignDialogStub }));
 vi.mock('@/api/cashback-api', () => ({
   default: { portal: vi.fn(async () => ({ portalUrl: 'https://portal.bringweb3.io/?token=abc', token: 'tok' })) },
 }));
-vi.mock('@/stores/walletStore', () => ({ walletStore: Vue.observable({ loggedWallet: null as unknown }) }));
+vi.mock('@/stores/walletStore', () => ({ walletStore: Vue.reactive({ loggedWallet: null as unknown }) }));
 vi.mock('@/plugins/snackbar', () => ({ default: { setError: vi.fn(), setSuccess: vi.fn() } }));
 const $t = (key: string): string => key;
 vi.mock('@/shared/composables/useTranslation', () => ({ useTranslation: () => ({ t: $t }) }));
@@ -51,15 +47,11 @@ function mainnetWallet(over: Record<string, unknown> = {}) {
   return { id: 1, chain: Blockchain.CARDANO, network: Network.MAINNET, baseAddress: ADDRESS, type: 'normal', ...over };
 }
 
-let wrapper: Wrapper<Vue>;
+let wrapper: VueWrapper;
 let postMessage: ReturnType<typeof vi.fn>;
 
 async function mountPortal() {
-  wrapper = mount(CashbackPortal, {
-    mocks: { $t },
-    stubs: { 'v-icon': true, 'v-btn': true, 'v-progress-circular': true },
-    attachTo: document.body,
-  });
+  wrapper = mount(CashbackPortal, { attachTo: document.body, global: { config: { globalProperties: mockGlobalProperties({ $t }) }, stubs: { 'v-icon': true, 'v-btn': true, 'v-progress-circular': true } } });
   await flush();
   const frame = wrapper.find('iframe').element as HTMLIFrameElement;
   postMessage = vi.fn();
@@ -116,7 +108,7 @@ describe('cashback claim signing bridge', () => {
     walletStore.loggedWallet = mainnetWallet();
   });
   afterEach(() => {
-    wrapper?.destroy();
+    wrapper?.unmount();
     vi.clearAllMocks();
     vi.useRealTimers();
   });

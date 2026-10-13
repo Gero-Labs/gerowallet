@@ -5,7 +5,7 @@
     <!-- ===== PRF PATH ===== -->
     <template v-if="securityMethod === 'prf'">
       <!-- Wallet summary card -->
-      <v-card class="mb-3" outlined style="background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.12);">
+      <v-card class="mb-3" variant="outlined" style="background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.12);">
         <v-card-text class="pa-3">
           <div class="d-flex align-center mb-2">
             <v-avatar size="32" class="mr-2">
@@ -31,7 +31,7 @@
             <v-col cols="6" class="pl-3">
               <div class="d-flex align-center">
                 <v-avatar size="20" class="mr-2">
-                  <v-img :src="network ? network.icon : ''" contain></v-img>
+                  <v-img :src="network ? network.icon : ''" ></v-img>
                 </v-avatar>
                 <div>
                   <div class="text-caption grey--text text--lighten-1" style="line-height: 1.2;">{{ $t('common.network') }}</div>
@@ -77,13 +77,13 @@
       <v-form ref="passwordForm" v-model="passwordFormValid">
         <v-text-field
           v-model="password"
-          dense
-          filled
+          density="compact"
+          variant="filled"
           :label="$t('welcome.password')"
           :placeholder="$t('welcome.password')"
           :type="show1 ? 'text' : 'password'"
-          :append-icon="show1 ? 'mdi-eye' : 'mdi-eye-off'"
-          @click:append="show1 = !show1"
+          :append-inner-icon="show1 ? 'mdi-eye' : 'mdi-eye-off'"
+          @click:append-inner="show1 = !show1"
           :rules="[
             rules.required(),
             rules.minCharacters(10),
@@ -97,13 +97,13 @@
 
         <v-text-field
           v-model="confirmPassword"
-          dense
-          filled
+          density="compact"
+          variant="filled"
           :label="$t('welcome.confirmPassword')"
           :placeholder="$t('welcome.confirmPassword')"
           :type="show2 ? 'text' : 'password'"
-          :append-icon="show2 ? 'mdi-eye' : 'mdi-eye-off'"
-          @click:append="show2 = !show2"
+          :append-inner-icon="show2 ? 'mdi-eye' : 'mdi-eye-off'"
+          @click:append-inner="show2 = !show2"
           :rules="[
             rules.required(),
             (v) => v === password || $t('welcome.passwordsMustMatch')
@@ -114,9 +114,9 @@
         <v-alert
           color="warning"
           icon="mdi-alert-outline"
-          outlined
-          dense
-          border="left"
+          variant="outlined"
+          density="compact"
+          border="start"
           class="mb-3"
         >
           <span class="text-body-2">{{ $t('welcome.passwordNoRecoveryWarning') }}</span>
@@ -153,7 +153,7 @@
 
     <!-- Navigation buttons -->
     <div class="onboarding-actions d-flex" style="gap: 12px;">
-      <v-btn text @click="$emit('back')">{{ $t('common.back') }}</v-btn>
+      <v-btn variant="text" @click="$emit('back')">{{ $t('common.back') }}</v-btn>
       <v-spacer />
       <v-btn
         class="onb-continue"
@@ -197,13 +197,10 @@ const router = vmProxy?.$router;
 // Wallet icon derived from network
 const walletIconSrc = computed(() => {
   const iconKey = networks.resolveIconColor(props.network?.blockchain || '', props.network?.network || '');
-  return (assets as Record<string, string>)[`${iconKey}Svg`] || '';
+  const icon = assets[`${iconKey}Svg` as keyof typeof assets];
+  return typeof icon === 'string' ? icon : '';
 });
-
-// Form refs and validation
-const prfForm = ref<{ resetValidation: () => void } | null>(null);
 const prfFormValid = ref(false);
-const passwordForm = ref<{ resetValidation: () => void } | null>(null);
 const passwordFormValid = ref(false);
 
 // Password fields

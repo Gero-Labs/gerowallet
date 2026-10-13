@@ -4,7 +4,7 @@
       <!-- DApp info -->
       <div class="d-flex align-center justify-center flex-column py-3">
         <v-avatar size="48" v-if="peerIcon">
-          <v-img :src="peerIcon" contain />
+          <v-img :src="peerIcon"  />
         </v-avatar>
         <v-icon v-else size="48" color="primary">mdi-link-variant</v-icon>
         <div class="text-h6 white--text mt-2">{{ peerName }}</div>
@@ -19,8 +19,8 @@
         <v-chip
           v-for="chain in requestedChainNames"
           :key="chain"
-          small
-          outlined
+          size="small"
+          variant="outlined"
           color="primary"
           class="mr-1 mb-1"
         >
@@ -46,7 +46,7 @@
     <v-card-actions class="justify-center py-2 px-4">
       <v-row>
         <v-col cols="6">
-          <v-btn block outlined color="error" style="text-transform: capitalize;" @click="reject">
+          <v-btn block variant="outlined" color="error" style="text-transform: capitalize;" @click="reject">
             {{ $t('walletConnect.reject') }}
           </v-btn>
         </v-col>
@@ -62,18 +62,24 @@
 
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
-import { computed, onMounted, ref, getCurrentInstance } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 import { Messaging } from '@/chrome/messaging';
 import { resolveGeroChain } from '@/services/walletConnect/chainUtils';
 
 const { t } = useTranslation();
-const _vmProxy = getCurrentInstance()!.proxy as any;
+
 
 const consent = ref(false);
 const loading = ref(false);
-const controller = ref<any>(null);
-const proposalData = ref<any>(null);
+const controller = ref<ReturnType<typeof Messaging.createInternalController> | null>(null);
+interface SessionProposal {
+  id: number;
+  proposer?: { metadata?: { name?: string; url?: string; icons?: string[] } };
+  requiredNamespaces?: Record<string, { chains?: string[] }>;
+  optionalNamespaces?: Record<string, { chains?: string[] }>;
+}
+const proposalData = ref<SessionProposal | null>(null);
 
 const peerName = computed(() => proposalData.value?.proposer?.metadata?.name || 'Unknown dApp');
 const peerUrl = computed(() => proposalData.value?.proposer?.metadata?.url || '');
@@ -83,7 +89,7 @@ const requestedChains = computed(() => {
   if (!proposalData.value) return [];
   const chains: string[] = [];
   const ns = { ...proposalData.value.requiredNamespaces, ...proposalData.value.optionalNamespaces };
-  for (const namespace of Object.values(ns) as any[]) {
+  for (const namespace of Object.values(ns)) {
     if (namespace.chains) chains.push(...namespace.chains);
   }
   return [...new Set(chains)];
@@ -102,7 +108,7 @@ const hasUnsupportedChains = computed(() => {
 
 const reject = async () => {
   try {
-    await controller.value.returnData({ data: { approved: false } });
+    await controller.value.returnData({ data: { approved: false }, error: undefined });
   } catch (e) {
     console.warn('[WCSessionProposal] returnData failed on reject:', e);
   }
@@ -112,7 +118,7 @@ const reject = async () => {
 const approve = async () => {
   loading.value = true;
   try {
-    await controller.value.returnData({ data: { approved: true, proposalId: proposalData.value?.id } });
+    await controller.value.returnData({ data: { approved: true, proposalId: proposalData.value?.id }, error: undefined });
   } catch (e) {
     console.warn('[WCSessionProposal] returnData failed on approve:', e);
   }
@@ -132,7 +138,11 @@ onMounted(async () => {
   // Get proposal data from background
   try {
     const data = await controller.value.requestData();
-    proposalData.value = data?.data || data;
+    const proposal = data?.data || data;
+    if (!proposal || typeof proposal !== 'object' || !('id' in proposal) || typeof proposal.id !== 'number') {
+      throw new Error('Invalid WalletConnect session proposal');
+    }
+    proposalData.value = proposal as SessionProposal;
   } catch (e) {
     console.error('[WCSessionProposal] Failed to get proposal data:', e);
   }

@@ -4,7 +4,6 @@ import { sharedConfig } from './vite.config.mts';
 import { isDev, r } from './scripts/utils';
 import packageJson from './package.json';
 import rollupTla from 'rollup-plugin-tla';
-import commonjs from '@rollup/plugin-commonjs';
 import wasm from 'vite-plugin-wasm';
 import { mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname } from 'node:path';
@@ -299,13 +298,23 @@ export default defineConfig({
     // https://github.com/vitejs/vite/issues/9320
     // https://github.com/vitejs/vite/issues/9186
     'process.env.NODE_ENV': JSON.stringify(isDev ? 'development' : 'production'),
-    // Service worker compatibility
-    'typeof document': '"undefined"',
-    'typeof window': '"undefined"',
+    // Service workers have neither document nor window. Keep native typeof
+    // checks: Vite 7's define transform accepts identifiers, not expressions.
     // Note: 'global' is handled by nodePolyfills plugin from sharedConfig
     // Don't define it here to avoid conflicts with terser minification
   },
   build: {
+    // This IIFE runs in an MV3 worker, where document-based preload is invalid.
+    modulePreload: false,
+    commonjsOptions: {
+      include: [/node_modules/],
+      requireReturnsDefault: 'auto',
+      defaultIsModuleExports: 'auto',
+      esmExternals: true,
+      transformMixedEsModules: true,
+      strictRequires: true,
+      ignore: (id) => id === 'window/window' || id.includes('window/window'),
+    },
     minify: isDev ? false : 'terser',
     target: 'es2020',
     assetsDir: '.',
@@ -404,19 +413,6 @@ export default pbkdf2Browser;
             return null;
           }
         },
-        commonjs({
-          include: [/node_modules/],
-          requireReturnsDefault: 'auto',
-          defaultIsModuleExports: 'auto',
-          esmExternals: true,
-          transformMixedEsModules: true,
-          strictRequires: true,
-          ignore: (id) => {
-            // Ignore spurious window/window imports
-            if (id === 'window/window' || id.includes('window/window')) return true;
-            return false;
-          },
-        }),
         wasm(),
         rollupTla(),
         // Service worker compatibility fixes

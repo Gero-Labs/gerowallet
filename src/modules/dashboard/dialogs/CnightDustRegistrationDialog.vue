@@ -57,13 +57,13 @@
           <div class="holdings-label t-label">{{ t('midnight.cnightDustDestination') }}</div>
           <!-- Picker when the user has other Midnight wallets imported and can
                still choose; otherwise the fixed same-seed / registered address. -->
-          <v-select
+          <v-select item-title="text"
             v-if="canPickDestination"
             v-model="selectedDestinationKey"
             :items="destinationSelectItems"
-            dense
+            density="compact"
             hide-details
-            outlined
+            variant="outlined"
             attach
             class="holdings-dest-select"
           />
@@ -78,7 +78,7 @@
                 : t('midnight.cnightDustDestinationOwn') }}
             </span>
             <span v-if="pendingDestination" class="holdings-dest-next">
-              <v-icon x-small class="mr-1">mdi-arrow-down</v-icon>
+              <v-icon size="x-small" class="mr-1">mdi-arrow-down</v-icon>
               <span class="g-mono">{{ middleTruncate(pendingDestination, 18, 8) }}</span>
               <span class="holdings-dest-note">{{ t('midnight.cnightDestinationChanging') }}</span>
             </span>
@@ -90,27 +90,27 @@
       <div class="flow-diagram">
         <div class="flow-stop">
           <div class="flow-stop-icon flow-stop-icon--cardano">
-            <v-icon small color="white">mdi-link-variant</v-icon>
+            <v-icon size="small" color="white">mdi-link-variant</v-icon>
           </div>
           <div class="flow-stop-label">Cardano {{ nightTicker }}</div>
         </div>
         <div class="flow-arrow">
-          <v-icon small color="var(--g-text-3)">mdi-arrow-right</v-icon>
+          <v-icon size="small" color="var(--g-text-3)">mdi-arrow-right</v-icon>
           <span class="flow-arrow-label t-label">{{ t('midnight.flowSign') }}</span>
         </div>
         <div class="flow-stop">
           <div class="flow-stop-icon flow-stop-icon--validator">
-            <v-icon small color="white">mdi-shield-key</v-icon>
+            <v-icon size="small" color="white">mdi-shield-key</v-icon>
           </div>
           <div class="flow-stop-label">{{ t('midnight.flowValidator') }}</div>
         </div>
         <div class="flow-arrow">
-          <v-icon small color="var(--g-text-3)">mdi-arrow-right</v-icon>
+          <v-icon size="small" color="var(--g-text-3)">mdi-arrow-right</v-icon>
           <span class="flow-arrow-label t-label">{{ t('midnight.relayFewHours') }}</span>
         </div>
         <div class="flow-stop">
           <div class="flow-stop-icon flow-stop-icon--midnight">
-            <v-icon small color="white">mdi-star-four-points</v-icon>
+            <v-icon size="small" color="white">mdi-star-four-points</v-icon>
           </div>
           <div class="flow-stop-label">{{ t('midnight.flowDust') }}</div>
         </div>
@@ -124,11 +124,11 @@
            (mainnet/preview only — no preprod portal exists). -->
       <template v-if="!canSignLocally">
         <div class="hardware-notice">
-          <v-icon small color="var(--g-text-3)" class="mr-2">mdi-usb-flash-drive-outline</v-icon>
+          <v-icon size="small" color="var(--g-text-3)" class="mr-2">mdi-usb-flash-drive-outline</v-icon>
           <span>{{ t('midnight.cnightHardwareNotice') }}</span>
         </div>
-        <v-btn v-if="portalUrl" block large outlined class="mt-3" @click="openPortal">
-          <v-icon left small>mdi-open-in-new</v-icon>
+        <v-btn v-if="portalUrl" block size="large" variant="outlined" class="mt-3" @click="openPortal">
+          <v-icon start size="small">mdi-open-in-new</v-icon>
           {{ t('midnight.cnightOpenPortal') }}
         </v-btn>
       </template>
@@ -139,7 +139,7 @@
            renders here. -->
       <template v-else-if="showConsolidationPanel">
         <div class="duplicate-banner">
-          <v-icon small color="var(--g-error)" class="mr-2">mdi-alert-outline</v-icon>
+          <v-icon size="small" color="var(--g-error)" class="mr-2">mdi-alert-outline</v-icon>
           <span>{{ t('midnight.cnightDuplicateBanner') }}</span>
         </div>
 
@@ -159,8 +159,8 @@
             </div>
             <v-btn
               v-if="!isPrimary(reg)"
-              small
-              outlined
+              size="small"
+              variant="outlined"
               color="error"
               :loading="isRemoving(reg)"
               :disabled="registering"
@@ -177,8 +177,8 @@
             v-model="localPassword"
             :label="t('wallet.spendingPassword')"
             type="password"
-            outlined
-            dense
+            variant="outlined"
+            density="compact"
             :disabled="registering"
             @keydown.enter="confirmRemove"
             class="mb-2 mt-3"
@@ -194,25 +194,25 @@
 
           <v-btn
             block
-            large
-            outlined
+            size="large"
+            variant="outlined"
             color="error"
             :loading="registering"
             :disabled="!canConfirm"
             @click="confirmRemove"
           >
-            <v-icon left>{{ isPrfWallet ? 'mdi-fingerprint' : 'mdi-trash-can-outline' }}</v-icon>
+            <v-icon start>{{ isPrfWallet ? 'mdi-fingerprint' : 'mdi-trash-can-outline' }}</v-icon>
             {{ isPrfWallet ? t('midnight.authorizeWithPasskey') : t('common.remove') }}
           </v-btn>
           <div class="text-center mt-2">
-            <v-btn small text :disabled="registering" @click="cancelRemove">
+            <v-btn size="small" variant="text" :disabled="registering" @click="cancelRemove">
               {{ t('common.cancel') }}
             </v-btn>
           </div>
         </template>
 
         <div v-else class="text-center mt-3">
-          <v-btn small text color="var(--g-text-2)" @click="$emit('close')">
+          <v-btn size="small" variant="text" color="var(--g-text-2)" @click="$emit('close')">
             {{ t('common.close') }}
           </v-btn>
         </div>
@@ -223,8 +223,8 @@
            above): offer a refresh instead of a dead-end Register loop. -->
       <template v-else-if="registrationStatus === 'Invalid'">
         <div class="invalid-hint">{{ t('midnight.cnightInvalidHint') }}</div>
-        <v-btn block outlined class="mt-3" :loading="statusLoading" @click="refreshStatus">
-          <v-icon left small>mdi-refresh</v-icon>
+        <v-btn block variant="outlined" class="mt-3" :loading="statusLoading" @click="refreshStatus">
+          <v-icon start size="small">mdi-refresh</v-icon>
           {{ t('common.refresh') }}
         </v-btn>
       </template>
@@ -234,12 +234,12 @@
         <template v-if="!inSigningPhase">
           <v-btn
             block
-            large
+            size="large"
             class="geroButton"
             :disabled="!hasNight"
             @click="startRegistration"
           >
-            <v-icon left>mdi-shield-plus</v-icon>
+            <v-icon start>mdi-shield-plus</v-icon>
             {{ t('midnight.registerForDust') }}
           </v-btn>
           <div v-if="!hasNight" class="no-night-hint">
@@ -254,8 +254,8 @@
             v-model="localPassword"
             :label="t('wallet.spendingPassword')"
             type="password"
-            outlined
-            dense
+            variant="outlined"
+            density="compact"
             :disabled="registering"
             @keydown.enter="confirmRegistration"
             class="mb-2"
@@ -271,26 +271,26 @@
 
           <v-btn
             block
-            large
+            size="large"
             class="geroButton"
             :loading="registering"
             :disabled="!canConfirm"
             @click="confirmRegistration"
           >
-            <v-icon left>{{ isPrfWallet ? 'mdi-fingerprint' : 'mdi-shield-check' }}</v-icon>
+            <v-icon start>{{ isPrfWallet ? 'mdi-fingerprint' : 'mdi-shield-check' }}</v-icon>
             {{ isPrfWallet ? t('midnight.authorizeWithPasskey') : t('midnight.signAndRegister') }}
           </v-btn>
 
           <div class="text-center mt-2">
-            <v-btn small text :disabled="registering" @click="resetState">
+            <v-btn size="small" variant="text" :disabled="registering" @click="resetState">
               {{ t('common.cancel') }}
             </v-btn>
           </div>
         </template>
 
         <div v-if="portalUrl" class="text-center mt-3">
-          <v-btn small text color="var(--g-text-2)" @click="openPortal">
-            <v-icon small left>mdi-open-in-new</v-icon>
+          <v-btn size="small" variant="text" color="var(--g-text-2)" @click="openPortal">
+            <v-icon size="small" start>mdi-open-in-new</v-icon>
             {{ t('midnight.cnightOpenPortal') }}
           </v-btn>
         </div>
@@ -307,8 +307,8 @@
           v-model="localPassword"
           :label="t('wallet.spendingPassword')"
           type="password"
-          outlined
-          dense
+          variant="outlined"
+          density="compact"
           :disabled="registering"
           @keydown.enter="confirmManage"
           class="mb-2 mt-3"
@@ -324,8 +324,8 @@
 
         <v-btn
           block
-          large
-          :outlined="manageMode === 'deregister'"
+          size="large"
+          :variant="manageMode === 'deregister' ? 'outlined' : 'elevated'"
           :class="manageMode === 'migrate' ? 'geroButton' : undefined"
           :color="manageMode === 'deregister' ? 'error' : undefined"
           :loading="registering"
@@ -333,28 +333,28 @@
           class="mt-1"
           @click="confirmManage"
         >
-          <v-icon left>{{ isPrfWallet ? 'mdi-fingerprint' : (manageMode === 'deregister' ? 'mdi-stop-circle-outline' : 'mdi-swap-horizontal') }}</v-icon>
+          <v-icon start>{{ isPrfWallet ? 'mdi-fingerprint' : (manageMode === 'deregister' ? 'mdi-stop-circle-outline' : 'mdi-swap-horizontal') }}</v-icon>
           {{ manageMode === 'deregister' ? t('midnight.cnightStopCta') : t('midnight.cnightMigrateCta') }}
         </v-btn>
         <div class="text-center mt-2">
-          <v-btn small text :disabled="registering" @click="resetState">
+          <v-btn size="small" variant="text" :disabled="registering" @click="resetState">
             {{ t('common.cancel') }}
           </v-btn>
         </div>
       </template>
 
       <template v-else>
-        <v-btn block large outlined @click="$emit('close')">
-          <v-icon v-if="registrationStatus === 'Pending'" left>mdi-clock-outline</v-icon>
+        <v-btn block size="large" variant="outlined" @click="$emit('close')">
+          <v-icon v-if="registrationStatus === 'Pending'" start>mdi-clock-outline</v-icon>
           {{ registrationStatus === 'Pending' ? t('common.close') : t('common.done') }}
         </v-btn>
         <div v-if="registrationStatus === 'Registered' && canSignLocally" class="manage-actions">
-          <v-btn small text color="var(--g-text-2)" :disabled="registering" @click="enterManage('migrate')">
-            <v-icon small left>mdi-swap-horizontal</v-icon>
+          <v-btn size="small" variant="text" color="var(--g-text-2)" :disabled="registering" @click="enterManage('migrate')">
+            <v-icon size="small" start>mdi-swap-horizontal</v-icon>
             {{ t('midnight.cnightMigrateCta') }}
           </v-btn>
-          <v-btn small text color="var(--g-text-3)" :disabled="registering" @click="enterManage('deregister')">
-            <v-icon small left>mdi-stop-circle-outline</v-icon>
+          <v-btn size="small" variant="text" color="var(--g-text-3)" :disabled="registering" @click="enterManage('deregister')">
+            <v-icon size="small" start>mdi-stop-circle-outline</v-icon>
             {{ t('midnight.cnightStopCta') }}
           </v-btn>
         </div>

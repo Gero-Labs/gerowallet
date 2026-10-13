@@ -33,7 +33,7 @@ describe('dappRequestHub', () => {
   it('resolves tabId from chrome.tabs.query when URL has none and connects with it', async () => {
     const { initDappRequestHub } = await import('./dappRequestHub');
     await initDappRequestHub();
-    expect(vi.mocked(chrome.runtime.connect).mock.calls[0][0].name).toBe('mini-gero-dapp-channel:42');
+    expect(chrome.runtime.connect).toHaveBeenCalledExactlyOnceWith({ name: 'mini-gero-dapp-channel:42' });
   });
 
   it('presents the first request and queues the second', async () => {

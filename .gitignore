@@ -95,3 +95,4 @@ email-templates/
 .worktrees/
 .playwright-mcp
 .midnight-expert
+!src/plugins/i18n-messages.d.ts

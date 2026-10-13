@@ -5,18 +5,18 @@
       v-model="exportMenu"
       :close-on-content-click="false"
       transition="scale-transition"
-      offset-y
+
     >
-      <template v-slot:activator="{ on, attrs }">
+      <template v-slot:activator="{ props: activatorProps }">
         <v-btn
-          x-small
-          outlined
+          size="x-small"
+          variant="outlined"
           class="export-csv-btn"
           :disabled="props.disabled"
-          v-bind="attrs"
-          v-on="on"
+          v-bind="activatorProps"
+
         >
-          <v-icon small left>mdi-download</v-icon>
+          <v-icon size="small" start>mdi-download</v-icon>
           {{ t('card.exportCSV') }}
         </v-btn>
       </template>
@@ -30,21 +30,21 @@
               <v-btn
                 v-for="option in quickDateOptions"
                 :key="option.key"
-                outlined
+                variant="outlined"
                 class="export-period-btn"
                 @click="handleQuickPeriod(option.key)"
               >
-                <v-icon small left>mdi-calendar-clock</v-icon>
+                <v-icon size="small" start>mdi-calendar-clock</v-icon>
                 {{ option.label }}
               </v-btn>
             </div>
             <v-btn
               block
-              outlined
+              variant="outlined"
               class="export-period-btn export-custom-btn"
               @click="handleCustomPeriod"
             >
-              <v-icon small left>mdi-calendar-range</v-icon>
+              <v-icon size="small" start>mdi-calendar-range</v-icon>
               {{ t('card.customDateRange') }}
             </v-btn>
           </div>
@@ -72,26 +72,26 @@
                   v-model="startDateMenu"
                   :close-on-content-click="false"
                   transition="scale-transition"
-                  offset-y
+
                   max-width="290px"
                 >
-                  <template v-slot:activator="{ on, attrs }">
+                  <template v-slot:activator="{ props: activatorProps }">
                     <v-text-field
                       v-model="formattedStartDate"
                       :label="t('card.from')"
                       prepend-inner-icon="mdi-calendar"
                       readonly
-                      outlined
-                      dense
-                      v-bind="attrs"
-                      v-on="on"
+                      variant="outlined"
+                      density="compact"
+                      v-bind="activatorProps"
+
                     ></v-text-field>
                   </template>
                   <v-date-picker
                     v-model="startDate"
                     :max="maxDate"
                     :min="minDate"
-                    @input="onStartDateChange"
+                    @update:model-value="onStartDateChange"
                   ></v-date-picker>
                 </v-menu>
               </v-col>
@@ -100,26 +100,26 @@
                   v-model="endDateMenu"
                   :close-on-content-click="false"
                   transition="scale-transition"
-                  offset-y
+
                   max-width="290px"
                 >
-                  <template v-slot:activator="{ on, attrs }">
+                  <template v-slot:activator="{ props: activatorProps }">
                     <v-text-field
                       v-model="formattedEndDate"
                       :label="t('card.to')"
                       prepend-inner-icon="mdi-calendar"
                       readonly
-                      outlined
-                      dense
-                      v-bind="attrs"
-                      v-on="on"
+                      variant="outlined"
+                      density="compact"
+                      v-bind="activatorProps"
+
                     ></v-text-field>
                   </template>
                   <v-date-picker
                     v-model="endDate"
                     :max="maxDate"
                     :min="startDate || minDate"
-                    @input="onEndDateChange"
+                    @update:model-value="onEndDateChange"
                   ></v-date-picker>
                 </v-menu>
               </v-col>
@@ -131,10 +131,10 @@
         </v-card-text>
         <v-card-actions class="export-date-range-actions">
           <v-spacer></v-spacer>
-          <v-btn outlined small class="export-dialog-close-btn" @click="exportDatePickerMenu = false">
+          <v-btn variant="outlined" size="small" class="export-dialog-close-btn" @click="exportDatePickerMenu = false">
             {{ t('card.close') }}
           </v-btn>
-          <v-btn small class="export-dialog-export-btn" @click="applyCustomExportDateRange">
+          <v-btn size="small" class="export-dialog-export-btn" @click="applyCustomExportDateRange">
             {{ t('card.export') }}
           </v-btn>
         </v-card-actions>

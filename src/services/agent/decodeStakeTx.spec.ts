@@ -118,7 +118,7 @@ describe('toDecodedStakeTx', () => {
     ];
     const verdict = verifyDelegateTx(toDecodedStakeTx(tx as never), {
       ownAddresses: [OWN_ADDR],
-      expectedPoolId: POOL_ID,
+      targetPoolId: POOL_ID,
       maxFeeLovelace: 1_000000n,
     });
     expect(verdict.ok).toBe(false);

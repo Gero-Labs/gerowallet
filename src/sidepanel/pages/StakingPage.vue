@@ -6,23 +6,23 @@
         v-model="activeTab"
         mandatory
         class="segment-toggle"
-        dense
+        density="compact"
         rounded
       >
         <v-btn
-          small
+          size="small"
           :class="{ 'segment-active': activeTab === 0 }"
           class="segment-btn text-none"
         >
-          <v-icon small class="mr-1">mdi-server-network</v-icon>
+          <v-icon size="small" class="mr-1">mdi-server-network</v-icon>
           {{ isApex ? $t('miniGero.delegation') : $t('miniGero.stakepool') }}
         </v-btn>
         <v-btn
-          small
+          size="small"
           :class="{ 'segment-active': activeTab === 1 }"
           class="segment-btn text-none"
         >
-          <v-icon small class="mr-1">{{ isApex ? 'mdi-trophy-outline' : 'mdi-vote' }}</v-icon>
+          <v-icon size="small" class="mr-1">{{ isApex ? 'mdi-trophy-outline' : 'mdi-vote' }}</v-icon>
           {{ isApex ? $t('miniGero.rewards') : $t('miniGero.governance') }}
         </v-btn>
       </v-btn-toggle>
@@ -53,7 +53,7 @@
             <span class="text-body-2 font-weight-bold" style="color: var(--g-accent);">{{ formattedRewards }}</span>
           </div>
           <div v-if="claimGatedByDRep" class="drep-warning">
-            <v-icon small color="warning" class="mr-1">mdi-alert-outline</v-icon>
+            <v-icon size="small" color="warning" class="mr-1">mdi-alert-outline</v-icon>
             <span class="text-caption warning--text">{{ $t('miniGero.drepRequired') }}</span>
           </div>
         </div>
@@ -71,8 +71,8 @@
         <v-btn
           v-if="claimGatedByDRep"
           block
-          text
-          small
+          variant="text"
+          size="small"
           :color="primaryColor"
           class="mt-2 text-none"
           @click="goToGovernance"

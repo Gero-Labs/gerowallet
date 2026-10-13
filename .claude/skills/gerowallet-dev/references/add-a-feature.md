@@ -56,7 +56,7 @@ Governance is the exception worth copying: its rows live in `src/modules/navigat
 Keyed by the same string in all five places:
 
 1. the `FeatureFlags` interface field
-2. the `Vue.observable` default
+2. the `reactive` default
 3. a line in `loadFlags()`
 4. a line in `subscribeToFlagChanges()`
 5. a field in `reset()`

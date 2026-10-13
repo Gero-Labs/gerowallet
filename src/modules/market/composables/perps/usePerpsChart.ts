@@ -1,5 +1,5 @@
 import { computed, ref, watch, type ComputedRef, type Ref } from 'vue';
-import type { IChartApi, Time } from 'lightweight-charts';
+import type { Time } from 'lightweight-charts';
 import { strikeMarketApi } from '@/api/strike-v2.market';
 import type { StrikeMarketConfig } from '@/api/strike-v2.types';
 
@@ -41,7 +41,6 @@ export function usePerpsChart(
     { label: 'Last Traded Price', value: 'last' },
   ];
   const chartLoading = ref(false);
-  let _chartInstance: IChartApi | null = null;
 
   // ---------------------------------------------------------------------------
   // Computed
@@ -87,9 +86,6 @@ export function usePerpsChart(
   // Chart callbacks
   // ---------------------------------------------------------------------------
 
-  function onChartReady(chart: IChartApi) {
-    _chartInstance = chart;
-  }
 
   async function loadChartData() {
     chartLoading.value = true;
@@ -109,27 +105,11 @@ export function usePerpsChart(
       });
 
       // Strike klines returns arrays: [openTime, open, high, low, close, volume, closeTime, ...]
-      chartData.value = klines.map((k: any) => {
-        const row = Array.isArray(k) ? k : k;
-        if (Array.isArray(row)) {
-          return {
-            time: Math.floor(Number(row[0]) / 1000) as any,
-            open: parseFloat(row[1]),
-            high: parseFloat(row[2]),
-            low: parseFloat(row[3]),
-            close: parseFloat(row[4]),
-            volume: parseFloat(row[5]),
-          };
-        }
-        return {
-          time: Math.floor(k.openTime / 1000) as any,
-          open: parseFloat(k.open),
-          high: parseFloat(k.high),
-          low: parseFloat(k.low),
-          close: parseFloat(k.close),
-          volume: parseFloat(k.volume),
-        };
-      });
+      chartData.value = klines.map(row => ({
+        time: Math.floor(Number(row[0]) / 1000) as Time,
+        open: Number(row[1]), high: Number(row[2]), low: Number(row[3]),
+        close: Number(row[4]), volume: Number(row[5]),
+      }));
     } catch (e) {
       console.warn('[Perps] Failed to load chart data:', e);
     } finally {
@@ -167,7 +147,6 @@ export function usePerpsChart(
     openInterest,
 
     // Functions
-    onChartReady,
     loadChartData,
     loadOpenInterest,
   };

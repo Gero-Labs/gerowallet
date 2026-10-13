@@ -1,7 +1,7 @@
 <template>
   <BaseDialog
     :isOpen="isOpen"
-    @close="$emit('close')"
+    @close="resetState(); $emit('close')"
     :title="t('governance.delegateToADRep')"
     icon="mdi-vote-outline"
     :loading="loading"
@@ -12,7 +12,7 @@
   >
     <v-card-text class="px-4 pt-2 pb-1" style="z-index: 1" v-if="drep">
       <!-- DRep Info - Compact horizontal card -->
-      <v-card flat outlined class="rounded-lg pa-3 mb-3 drep-info-card">
+      <v-card flat variant="outlined" class="rounded-lg pa-3 mb-3 drep-info-card">
         <div class="d-flex align-start">
           <v-avatar rounded size="48" v-if="drep.image" class="mr-3 flex-shrink-0">
             <img :src="drep.image" alt="" @error="fallbackImage" />
@@ -23,7 +23,7 @@
               <template v-if="drep.links">
                 <v-btn
                   icon
-                  x-small
+                  size="x-small"
                   v-for="(link, index) in toSafeLinks(drep.links)"
                   :key="index"
                   :href="link.href"
@@ -31,13 +31,13 @@
                   rel="noopener noreferrer"
                   class="ml-1"
                 >
-                  <v-avatar tile size="12" v-if="link.brand === 'x'">
+                  <v-avatar rounded="0" size="12" v-if="link.brand === 'x'">
                     <v-img :src="xLogo" alt="x"></v-img>
                   </v-avatar>
-                  <v-avatar tile size="12" v-else-if="link.brand === 'telegram'">
+                  <v-avatar rounded="0" size="12" v-else-if="link.brand === 'telegram'">
                     <v-img :src="telegramLogo" alt="x"></v-img>
                   </v-avatar>
-                  <v-icon x-small v-else>{{ link.icon }}</v-icon>
+                  <v-icon size="x-small" v-else>{{ link.icon }}</v-icon>
                 </v-btn>
               </template>
             </div>
@@ -55,7 +55,7 @@
                 <span class="drep-stat-label">{{ $t('governance.votes') }}</span>
               </div>
               <div v-if="drep.voting_power" class="drep-stat">
-                <span class="drep-stat-value">{{ toCurrency(drep.voting_power, false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}</span>
+                <span class="drep-stat-value">{{ toCurrency(drep.voting_power.toString(), false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network), '', true) }}</span>
                 <span class="drep-stat-label">{{ $t('governance.votingPower') }}</span>
               </div>
             </div>
@@ -67,14 +67,14 @@
       <v-card v-if="showCompensationSection" flat class="liquid-glass rounded-lg pa-3 mb-2">
         <div class="d-flex align-center justify-space-between">
           <div class="d-flex align-center">
-            <v-icon small color="primary" class="mr-2">mdi-gift-outline</v-icon>
+            <v-icon size="small" color="primary" class="mr-2">mdi-gift-outline</v-icon>
             <span class="text-body-2 white--text font-weight-medium">{{ $t('governance.supportDrep') }}</span>
           </div>
           <v-switch
             v-model="compensationEnabled"
             color="primary"
             hide-details
-            dense
+            density="compact"
             class="mt-0 pt-0"
           />
         </div>
@@ -89,11 +89,11 @@
               active-class="primary"
               class="mb-1"
             >
-              <v-chip small outlined pill :value="0">0.5%</v-chip>
-              <v-chip small outlined pill :value="1">1%</v-chip>
-              <v-chip small outlined pill :value="2">5%</v-chip>
-              <v-chip small outlined pill :value="3">10%</v-chip>
-              <v-chip small outlined pill :value="4">{{ $t('governance.customPercent') }}</v-chip>
+              <v-chip size="small" variant="outlined" pill :value="0">0.5%</v-chip>
+              <v-chip size="small" variant="outlined" pill :value="1">1%</v-chip>
+              <v-chip size="small" variant="outlined" pill :value="2">5%</v-chip>
+              <v-chip size="small" variant="outlined" pill :value="3">10%</v-chip>
+              <v-chip size="small" variant="outlined" pill :value="4">{{ $t('governance.customPercent') }}</v-chip>
             </v-chip-group>
             <v-slider
               v-if="compensationPresetIndex === 4"
@@ -106,12 +106,12 @@
               track-color="grey darken-3"
               class="mt-5 mb-0"
             >
-              <template v-slot:thumb-label="{ value }">
-                {{ (value / 10).toFixed(1) }}%
+              <template v-slot:thumb-label="{ modelValue }">
+                {{ (modelValue / 10).toFixed(1) }}%
               </template>
             </v-slider>
             <div class="text-caption text--secondary mt-1" style="line-height: 1.3">
-              <v-icon x-small color="info" class="mr-1">mdi-information-outline</v-icon>
+              <v-icon size="x-small" color="info" class="mr-1">mdi-information-outline</v-icon>
               {{ $t('governance.estimatedEpochDonation', {
                 amount: toCurrency(estimatedEpochDonation, false, 2, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network)),
                 balance: toCurrency(account?.controlled_amount || '0', false, 0, networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network))
@@ -139,7 +139,7 @@
           <v-col :cols="cols" v-if="compensationEnabled && compensationBasisPoints > 0">
             <div class="text-caption text--secondary">{{ $t('governance.drepCompensation') }}</div>
             <div class="text-body-2 mt-1">
-              <v-chip x-small color="primary" outlined>{{ compensationPercentDisplay }}</v-chip>
+              <v-chip size="x-small" color="primary" variant="outlined">{{ compensationPercentDisplay }}</v-chip>
             </div>
           </v-col>
           <v-col :cols="cols">
@@ -212,7 +212,7 @@
       :isOpen="overlay && loggedWallet.type === WalletType.Keystone"
       :keystoneType="keystoneType"
       :keystoneCbor="keystoneCbor"
-      @close="overlay = false"
+      @close="resetState()"
       @scan="onKeystoneScan"
       @error="onKeystoneError"
       @progress="onKeystoneProgress"
@@ -305,6 +305,7 @@ const {
   onKeystoneError,
   onKeystoneProgress,
 } = useTransactionSigning({
+  active: () => props.isOpen,
   tx: txRef,
   successMessageKey: 'governance.drepDelegationTxSubmitted',
   onClose: () => {
@@ -318,7 +319,7 @@ const {
   },
 });
 
-const form = ref<{ validate: () => boolean; resetValidation: () => void } | null>(null);
+const form = ref<{ validate: () => Promise<{ valid: boolean }>; resetValidation: () => void } | null>(null);
 
 const { toCurrency, truncate } = filters;
 

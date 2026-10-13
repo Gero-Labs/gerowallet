@@ -15,7 +15,7 @@ import type { MidnightSiteActivity, SiteActivityEvent } from '@/chains/midnight/
  *   `backgroundStoreMessaging.broadcastUpdate(STORE_NAME, ...)`.
  * - **Browser contexts** (popup, options, sidepanel) subscribe via
  *   `storeMessaging.subscribe(STORE_NAME, ...)` and reflect the broadcast in
- *   their own `Vue.observable` copy. They also hydrate from `chrome.storage`
+ *   their own `reactive` copy. They also hydrate from `chrome.storage`
  *   on init for fast cold starts.
  * - **`broadcastFromBackground`** is the only mutation entry point — actions
  *   call it after updating the in-memory state. Never write to `chrome.storage`
@@ -35,7 +35,7 @@ import type { MidnightSiteActivity, SiteActivityEvent } from '@/chains/midnight/
  *   gero-sync WS messages and Nexus REST responses
  */
 
-import Vue from 'vue';
+import { reactive } from 'vue';
 import { getContextType } from '@/utils/storageSync';
 import { StorePersister } from '@/utils/storePersistence';
 import storeMessaging from '@/services/storeMessaging.service';
@@ -352,7 +352,7 @@ const DEFAULT_PROOF_SERVER: MidnightStore['proofServer'] = {
 /** Ring-buffer cap for {@link MidnightStore.provingHistory}. */
 export const PROVING_HISTORY_LIMIT = 10;
 
-export const midnightStore = Vue.observable<MidnightStore>({
+export const midnightStore = reactive<MidnightStore>({
   isActive: false,
   lastSync: null,
   tip: { ...EMPTY_TIP },
@@ -514,10 +514,10 @@ function hydrateProvingHistory(stored: unknown): MidnightProvingLogEntry[] {
   return stored
     .filter((e): e is Record<string, unknown> => !!e && typeof e === 'object')
     .map((e) => ({
-      timestamp: typeof e.timestamp === 'number' ? e.timestamp : 0,
-      durationMs: typeof e.durationMs === 'number' ? e.durationMs : 0,
-      success: !!e.success,
-      error: typeof e.error === 'string' ? e.error : undefined,
+      timestamp: typeof e['timestamp'] === 'number' ? e['timestamp'] : 0,
+      durationMs: typeof e['durationMs'] === 'number' ? e['durationMs'] : 0,
+      success: !!e['success'],
+      error: typeof e['error'] === 'string' ? e['error'] : undefined,
     }))
     .slice(0, PROVING_HISTORY_LIMIT);
 }

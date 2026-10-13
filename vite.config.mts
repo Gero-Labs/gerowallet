@@ -1,7 +1,7 @@
 import wasm from 'vite-plugin-wasm';
 import { defineConfig, Plugin, UserConfig } from 'vite';
-import Vue from '@vitejs/plugin-vue2';
-import { VuetifyResolver } from 'unplugin-vue-components/resolvers';
+import Vue from '@vitejs/plugin-vue';
+import vuetify from 'vite-plugin-vuetify';
 import Components from 'unplugin-vue-components/vite';
 import AutoImport from 'unplugin-auto-import/vite';
 import { isDev, port, r } from './scripts/utils';
@@ -10,14 +10,14 @@ import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import copy from 'rollup-plugin-copy';
 import { existsSync, createReadStream, readFileSync } from 'node:fs';
 import { forbidRemoteCode } from './scripts/remote-code-guard.mjs';
+import { localeMessagesPlugin } from './scripts/i18n-compiler.mjs';
 
 // Absolute POSIX path: sass `@import` does not reliably resolve vite's `@/`
 // alias on Windows (r() yields backslashes), so we hand it a literal path.
 const tokensScss = r('src/shared/styles/_tokens.scss').replace(/\\/g, '/');
 
-// Silence dart-sass deprecation noise coming out of node_modules (Vuetify 2's
-// styles are written against the pre-3.0 API). All six IDs are valid on the
-// installed sass 1.101; `mixed-decls` is deliberately omitted because it is now
+// Silence dart-sass deprecation noise coming out of legacy dependency styles.
+// All six IDs are valid on the installed Sass; `mixed-decls` is omitted because it is now
 // obsolete and silencing it emits its own warning.
 const sassQuiet = {
   quietDeps: true,
@@ -89,6 +89,11 @@ export const sharedConfig: UserConfig = {
   resolve: {
     alias: {
       '@/': `${r('src')}/`,
+      // Precompiled SFCs need only the runtime. The draggable UMD entry embeds
+      // webpack global detection through Function(), which violates MV3 CSP.
+      'vue': 'vue/dist/vue.runtime.esm-bundler.js',
+      'vuedraggable': r('node_modules/vuedraggable/src/vuedraggable.js'),
+      'vue-i18n': 'vue-i18n/dist/vue-i18n.runtime.esm-bundler.js',
       'buffer': 'buffer',
       '@emurgo/cardano-message-signing-nodejs': '@emurgo/cardano-message-signing-browser',
       'lodash': 'lodash-es',
@@ -127,10 +132,17 @@ export const sharedConfig: UserConfig = {
     '__NAME__': JSON.stringify(packageJson.name),
     'APP_VERSION': JSON.stringify(packageJson.version),
     'process.env.NODE_ENV': JSON.stringify(isDev ? 'development' : 'production'),
+    '__VUE_OPTIONS_API__': true,
+    '__VUE_PROD_DEVTOOLS__': false,
+    '__VUE_PROD_HYDRATION_MISMATCH_DETAILS__': false,
+    '__VUE_I18N_FULL_INSTALL__': true,
+    '__VUE_I18N_LEGACY_API__': false,
+    '__INTLIFY_DROP_MESSAGE_COMPILER__': true,
   },
   plugins: [
     stubEffectApiDocs,
     forbidRemoteCode,
+    localeMessagesPlugin(),
     // Dev only: serve the vendored gero-swap widget from src/vendor at the same
     // /vendor/gero-swap/ path the built extension uses. Production wires these up
     // via the copy plugin + CSS href-rewrite at writeBundle, which don't run
@@ -156,18 +168,12 @@ export const sharedConfig: UserConfig = {
       template: {
         compilerOptions: {
           whitespace: 'condense',
+          isCustomElement: tag => tag === 'gero-swap',
         },
       },
     }),
-    Components({
-      // resolvers for custom components
-      resolvers: [
-        // Vuetify
-        VuetifyResolver(),
-      ],
-      version: 2.7,
-      dts: true,
-    }),
+    vuetify({ autoImport: true, styles: { configFile: r('src/shared/styles/vuetify-settings.scss') } }),
+    Components({ dts: true }),
     wasm(), // Enable WebAssembly support
     // topLevelAwait(), // Temporarily disabled due to array length error
     nodePolyfills({
@@ -203,6 +209,11 @@ export const sharedConfig: UserConfig = {
       'qrcode',
       'vue-i18n',
       'vuetify',
+      'vuetify/components/VOverlay',
+      'vuetify/components/VDialog',
+      'vuetify/components/VMenu',
+      'vuetify/components/VSelect',
+      'vuetify/components/VTooltip',
       'vue-router',
       'bip39',
       'blake2b',
@@ -232,7 +243,7 @@ export const sharedConfig: UserConfig = {
     holdUntilCrawlEnd: false, // Don't wait for all files
   },
   worker: {
-    plugins: [
+    plugins: () => [
       stubEffectApiDocs,
       wasm(),
       // topLevelAwait() // Temporarily disabled

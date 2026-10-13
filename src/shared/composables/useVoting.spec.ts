@@ -5,7 +5,7 @@ import { votingCapability, useVoting } from '@/shared/composables/useVoting';
 const CRED = '463796d2a39623a5441e9eab1594c2d21f96d2a544f49f82bc023bff';
 const TX_A = '941502b0aa104c850d1979232594459ad5be55bd7b18b6285bbaa32d5566213d';
 
-const { mockWalletStore, mockNetworkStore, mockBuildCardanoTransaction } = vi.hoisted(() => {
+let { mockWalletStore, mockNetworkStore, mockBuildCardanoTransaction } = vi.hoisted(() => {
   const mockBuildCardanoTransaction = vi.fn();
   const mockWalletStore: Record<string, unknown> = {};
   const mockNetworkStore: Record<string, unknown> = {};
@@ -14,11 +14,11 @@ const { mockWalletStore, mockNetworkStore, mockBuildCardanoTransaction } = vi.ho
 
 vi.mock('@/stores/walletStore', async () => {
   const { reactive } = await import('vue');
-  return { walletStore: reactive(mockWalletStore) };
+  return { walletStore: (mockWalletStore = reactive(mockWalletStore)) };
 });
 vi.mock('@/stores/networkStore', async () => {
   const { reactive } = await import('vue');
-  return { networkStore: reactive(mockNetworkStore) };
+  return { networkStore: (mockNetworkStore = reactive(mockNetworkStore)) };
 });
 vi.mock('@/shared/utils/builder', () => ({ buildCardanoTransaction: mockBuildCardanoTransaction }));
 

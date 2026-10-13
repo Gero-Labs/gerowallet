@@ -16,10 +16,10 @@
           :placeholder="t('search.globalPlaceholder')"
           prepend-inner-icon="mdi-magnify"
           hide-details
-          solo
-          flat
+          variant="solo"
+
           autofocus
-          dense
+          density="compact"
           class="global-search-input"
           @keydown.down.prevent="moveSelection(1)"
           @keydown.up.prevent="moveSelection(-1)"
@@ -44,10 +44,10 @@
 
         <!-- Grouped results -->
         <template v-else>
-          <template v-for="group in groupedResults">
-            <div :key="group.type + '-header'" v-if="group.items.length > 0">
+          <template :key="group.type + '-header'" v-for="group in groupedResults">
+            <div  v-if="group.items.length > 0">
               <div class="global-search-category-header">{{ groupLabel(group.type) }}</div>
-              <v-list dense class="transparent pa-0">
+              <v-list density="compact" class="transparent pa-0">
                 <v-list-item
                   v-for="result in group.items"
                   :key="result.id"
@@ -56,19 +56,19 @@
                   @click="navigateTo(result)"
                   @mouseenter="selectedIndex = result._flatIdx"
                 >
-                  <v-list-item-avatar size="28" class="mr-2">
+                  <v-avatar size="28" class="mr-2">
                     <v-img v-if="result.icon && !result.icon.startsWith('mdi-')" :src="result.icon" />
-                    <v-icon v-else small>{{ result.icon || 'mdi-circle' }}</v-icon>
-                  </v-list-item-avatar>
-                  <v-list-item-content>
+                    <v-icon v-else size="small">{{ result.icon || 'mdi-circle' }}</v-icon>
+                  </v-avatar>
+                  <div class="g-list-content">
                     <v-list-item-title class="text-body-2" :class="{ 'monospace': result.type === 'transaction' }">
                       {{ result.title }}
                     </v-list-item-title>
                     <v-list-item-subtitle class="text-caption">{{ result.subtitle }}</v-list-item-subtitle>
-                  </v-list-item-content>
-                  <v-list-item-action class="ma-0">
-                    <v-icon x-small color="grey lighten-1">mdi-chevron-right</v-icon>
-                  </v-list-item-action>
+                  </div>
+                  <div class="ma-0 g-list-action">
+                    <v-icon size="x-small" color="grey lighten-1">mdi-chevron-right</v-icon>
+                  </div>
                 </v-list-item>
               </v-list>
             </div>

@@ -1,4 +1,4 @@
-import VueRouter, { NavigationGuardNext, Route, RouteRecord } from 'vue-router';
+import { createRouter, createWebHashHistory, type NavigationGuardNext, type RouteLocationNormalized, type RouteRecordNormalized, type RouteRecordRaw } from 'vue-router';
 import { Blockchain } from '@/models/types';
 import { lazyPage } from './lazyPage';
 import HelpLayout from '@/modules/help/HelpLayout.vue';
@@ -55,7 +55,7 @@ import WalletStore from '@/stores/walletStore';
 import featureFlagsStore from '@/stores/featureFlagsStore';
 import networks from '@/utils/networks';
 
-const routes = [
+const routes: RouteRecordRaw[] = [
   {
     path: '/',
     name: 'dashboard',
@@ -116,7 +116,7 @@ const routes = [
   {
     path: '/governance',
     name: 'governance',
-    redirect: (to: Route) => ({ name: to.query.drep ? 'governanceDReps' : 'governanceMe', query: to.query }),
+    redirect: (to: RouteLocationNormalized) => ({ name: to.query['drep'] ? 'governanceDReps' : 'governanceMe', query: to.query }),
     meta: {
       layout: ContentLayout,
       requiresAuth: true,
@@ -424,14 +424,14 @@ const routes = [
     },
   },
   {
-    path: '*',
+    path: '/:pathMatch(.*)*',
     name: 'other',
     redirect: '/',
   },
 ];
 
-const router = new VueRouter({
-  mode: 'hash',
+const router = createRouter({
+  history: createWebHashHistory(),
   // base: process.env['BASE_URL'],
   routes,
 });
@@ -490,13 +490,12 @@ function isRouteUnderMaintenance(routeName: string | null | undefined): boolean 
   }
 }
 
-router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
+router.beforeEach(async (to: RouteLocationNormalized, from: RouteLocationNormalized, next: NavigationGuardNext) => {
   const isLoggedIn: boolean = !!WalletStore.state.loggedWallet;
   const isLocked: boolean = WalletStore.state.isLocked;
   const isSyncing: boolean = WalletStore.state.isSyncing;
-  const needsAuth: boolean = to.matched.some((routeRecord: RouteRecord) => routeRecord.meta['requiresAuth']);
+  const needsAuth: boolean = to.matched.some((routeRecord: RouteRecordNormalized) => routeRecord.meta['requiresAuth']);
   const isWelcome: boolean = to.name === 'welcome';
-  console.log(`[ROUTER] ${from.path} → ${to.path} | loggedIn=${isLoggedIn} locked=${isLocked} syncing=${isSyncing} welcome=${isWelcome}`);
 
   // Prevent redirect loops: if we're already being redirected to welcome, just allow it
   if (isWelcome && from.path === '/') {
@@ -508,11 +507,7 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
     // EXCEPT the passkey-auth popup: in a pre-switch/first-login unlock it resolves
     // its target wallet from the `walletId` query param, so it can run before any
     // wallet is the active/logged-in one.
-    let redirectTo = '/welcome';
-    if (to.path !== '/') {
-      redirectTo += `?redirect=${encodeURIComponent(to.fullPath)}`;
-    }
-    return next({ path: redirectTo });
+    return next({ path: '/welcome', query: to.path !== '/' ? { redirect: to.fullPath } : {} });
   }
   // ?addWallet=1 is the escape hatch for "Enter Setup" (WalletSelector.vue):
   // adding a wallet from an already-logged-in session used to force a global
@@ -541,11 +536,7 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
     // route. Redirecting is an in-app next(), so the window stays open showing
     // /welcome — nothing closes it, so tabs.onRemoved never fires, and the side panel
     // waits out its whole timeout for a result that can never come.
-    let redirectTo = '/welcome';
-    if (to.path !== '/') {
-      redirectTo += `?redirect=${encodeURIComponent(to.fullPath)}`;
-    }
-    return next({ path: redirectTo });
+    return next({ path: '/welcome', query: to.path !== '/' ? { redirect: to.fullPath } : {} });
   }
 
   // Check chain/network feature support for restricted routes
@@ -598,7 +589,7 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
       // config). Direct-URL visits from a non-Midnight wallet redirect home.
       proofServer: (c) => c === Blockchain.MIDNIGHT,
     };
-    const guard = routeNetworkGuards[to.name];
+    const guard = routeNetworkGuards[String(to.name)];
     if (guard && !guard(chain, network)) {
       return next({ path: '/' });
     }
@@ -606,8 +597,8 @@ router.beforeEach(async (to: Route, from: Route, next: NavigationGuardNext) => {
 
   // Check if the route is under maintenance
   // Only check maintenance if feature flags are initialized to avoid false redirects on page refresh
-  if (featureFlagsStore.state.isInitialized && isRouteUnderMaintenance(to.name)) {
-    console.warn(`🚧 Route "${to.name}" is under maintenance. Redirecting to dashboard.`);
+  if (featureFlagsStore.state.isInitialized && isRouteUnderMaintenance(typeof to.name === 'string' ? to.name : undefined)) {
+    console.warn(`🚧 Route "${String(to.name)}" is under maintenance. Redirecting to dashboard.`);
     return next({ path: '/' });
   }
 

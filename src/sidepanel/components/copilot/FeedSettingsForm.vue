@@ -32,12 +32,12 @@
           <span class="cat-row__desc">{{ $t('copilot.category.bagsDesc') }}</span>
         </div>
         <v-switch
-          :input-value="categories.bags"
-          dense
+          :model-value="categories.bags"
+          density="compact"
           hide-details
           inset
           class="cat-row__switch"
-          @change="(v) => $emit('update:category', 'bags', !!v)"
+          @update:model-value="(v) => $emit('update:category', 'bags', !!v)"
         />
       </div>
 
@@ -49,12 +49,12 @@
           </span>
         </div>
         <v-switch
-          :input-value="categories.watchlist"
-          dense
+          :model-value="categories.watchlist"
+          density="compact"
           hide-details
           inset
           class="cat-row__switch"
-          @change="(v) => $emit('update:category', 'watchlist', !!v)"
+          @update:model-value="(v) => $emit('update:category', 'watchlist', !!v)"
         />
       </div>
 
@@ -64,12 +64,12 @@
           <span class="cat-row__desc">{{ $t('copilot.category.whalesDesc') }}</span>
         </div>
         <v-switch
-          :input-value="categories.whales"
-          dense
+          :model-value="categories.whales"
+          density="compact"
           hide-details
           inset
           class="cat-row__switch"
-          @change="(v) => $emit('update:category', 'whales', !!v)"
+          @update:model-value="(v) => $emit('update:category', 'whales', !!v)"
         />
       </div>
 

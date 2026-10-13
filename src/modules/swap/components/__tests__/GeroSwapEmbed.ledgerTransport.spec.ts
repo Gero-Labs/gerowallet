@@ -1,6 +1,8 @@
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
-import Vue, { ref } from 'vue';
+import * as Vue from 'vue';
+import { ref } from 'vue';
 
 // The embed's own logic around the shared signer: which Ledger transport it asks for.
 // The signer is stubbed (useNativeSwapSigner has its own spec); its signTx reports the
@@ -18,7 +20,6 @@ vi.mock('@/modules/market/composables/useMarketData', () => ({
   marketTokensRef: ref([]),
 }));
 
-Vue.config.ignoredElements = [...(Vue.config.ignoredElements || []), 'gero-swap'];
 
 vi.mock('../../composables/useNativeSwapSigner', () => ({
   useNativeSwapSigner: (opts: { getIsBT?: () => boolean }) => {
@@ -51,12 +52,12 @@ const { slotDiv } = vi.hoisted(() => ({
     default: {
       name,
       props,
-      render(
-        this: { $slots: { default?: unknown }; title?: string },
-        h: (...a: unknown[]) => unknown,
-      ) {
-        return h('div', { attrs: { 'data-title': this.title } }, this.$slots.default);
-      },
+      render(this: {
+    $slots: Vue.Slots;
+    title?: string;
+}) {
+    return Vue.h('div', { 'data-title': this.title }, this.$slots['default']?.());
+},
     },
   }),
 }));
@@ -67,26 +68,23 @@ vi.mock('@/shared/components/PassKeyAuthButton.vue', () => slotDiv('PassKeyAuthB
 import GeroSwapEmbed from '../GeroSwapEmbed.vue';
 
 function mountEmbed() {
-  return mount(GeroSwapEmbed, {
-    mocks: { $t: (key: string) => key },
-    stubs: {
+  return mount(GeroSwapEmbed, { global: { config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key }) }, stubs: {
       'v-card-text': { template: '<div><slot /></div>' },
       'v-text-field': true,
-      'v-btn': { template: '<button @click="$emit(\'click\')"><slot /></button>' },
-    },
-  });
+      'v-btn': { emits: ['click'], template: '<button @click="$emit(\'click\')"><slot /></button>' },
+    } } });
 }
 
-type Wrapper = ReturnType<typeof mountEmbed>;
+type VueWrapper = ReturnType<typeof mountEmbed>;
 type WidgetSigner = { signTx(cbor: string): Promise<string> };
 
 /** The signer the embed hands the widget, i.e. what a swap or order cancel signs with. */
-const widgetSigner = (w: Wrapper) => (w.find('gero-swap').element as HTMLElement & { signer: WidgetSigner }).signer;
+const widgetSigner = (w: VueWrapper) => (w.find('gero-swap').element as HTMLElement & { signer: WidgetSigner }).signer;
 
-const transportPrompt = (w: Wrapper) => w.find('[data-title="wallet.ledgerTransport"]');
+const transportPrompt = (w: VueWrapper) => w.find('[data-title="wallet.ledgerTransport"]');
 
-function button(w: Wrapper, label: string) {
-  const found = w.findAll('button').wrappers.find((b) => b.text() === label);
+function button(w: VueWrapper, label: string) {
+  const found = w.findAll('button').find((b) => b.text() === label);
   if (!found) throw new Error(`no button labelled ${label}`);
   return found;
 }
@@ -152,7 +150,7 @@ describe('GeroSwapEmbed Ledger transport', () => {
 
     const signing = widgetSigner(w).signTx('84a0');
     await w.vm.$nextTick();
-    w.findAllComponents({ name: 'BaseDialog' }).wrappers
+    w.findAllComponents({ name: 'BaseDialog' })
       .find((d) => d.props('title') === 'wallet.ledgerTransport')!
       .vm.$emit('close');
 

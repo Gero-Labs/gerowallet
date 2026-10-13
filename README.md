@@ -3,9 +3,9 @@
 <div align="center">
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
+[![Node](https://img.shields.io/badge/node-24.19.0-brightgreen.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-4.9-blue.svg)](https://www.typescriptlang.org/)
-[![Vue](https://img.shields.io/badge/Vue.js-2.7-green.svg)](https://v2.vuejs.org/)
+[![Vue](https://img.shields.io/badge/Vue.js-3.5-green.svg)](https://vuejs.org/)
 
 A multi-chain, non-custodial wallet browser extension (Chrome Manifest V3) for Cardano, Midnight, and Apex Fusion.
 
@@ -78,9 +78,9 @@ Mini-Gero is a focused subset of the dashboard. Anything not in the side panel i
 
 ## Tech Stack
 
-- **Frontend**: Vue.js 2.7 + TypeScript + Vuetify 2.7 (Material Design)
-- **Build System**: Vite 4.5.5 with 4 separate configurations
-- **State Management**: Custom Vue Observable stores (lightweight, performant)
+- **Frontend**: Vue.js 3.5 + TypeScript + Vuetify 4.2 (Material Design)
+- **Build System**: Vite 7.3 with 4 separate configurations
+- **State Management**: Custom Vue reactive stores (lightweight, performant)
 - **Database**: Dexie 4.0.7 (IndexedDB wrapper with versioned schemas)
 - **Cardano SDK**: @cardano-sdk/core v0.46.9 (modern, preferred for new features)
 - **Data Layer**: Nexus (Gero backend) for blockchain data, prices, and DeFi routing
@@ -98,7 +98,7 @@ For complete technical details, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 Before you begin, ensure you have the following installed:
 
-- **Node.js 18+** and npm ([Download](https://nodejs.org/))
+- **Node.js 24.19+ (24.x)** and **npm 11.1.0**, matching CI ([Download](https://nodejs.org/))
 - **Docker Desktop** or **Rancher Desktop** ([Docker](https://www.docker.com/products/docker-desktop) | [Rancher](https://rancherdesktop.io/))
 - **Chrome** or any Chromium-based browser (Edge, Brave, etc.)
 - **Git** for version control
@@ -111,7 +111,7 @@ git clone https://github.com/Gero-Labs/gerowallet.git
 cd gerowallet
 
 # Install dependencies
-npm install
+npm ci
 
 # Create environment file (the three variables below are all you need —
 # see "Configure Environment")
@@ -253,7 +253,7 @@ gerowallet/
 │   │   ├── swap/            # DeFi token swaps
 │   │   ├── transactions/    # Transaction history
 │   │   └── ...              # Other feature modules
-│   ├── stores/              # Vue Observable state management
+│   ├── stores/              # Vue reactive state management
 │   │   ├── geroStore.ts     # Global app state
 │   │   ├── walletStore.ts   # Active wallet state
 │   │   └── ...              # Feature-specific stores
@@ -353,8 +353,8 @@ For complete architectural details, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ### For Developers
 
-- **Tech Stack**: Vue.js 2.7, TypeScript, Vite, Dexie, Cardano SDK
-- **Key Patterns**: Vue Observable stores, Chrome messaging, two-tier database
+- **Tech Stack**: Vue.js 3.5, TypeScript, Vite, Dexie, Cardano SDK
+- **Key Patterns**: Vue reactive stores, Chrome messaging, two-tier database
 - **Data Layer**: Nexus (Gero backend) — the single source for blockchain data, prices, and DeFi routing; the client carries no third-party provider keys
 
 ### Development Resources
@@ -362,8 +362,8 @@ For complete architectural details, see [ARCHITECTURE.md](ARCHITECTURE.md).
 - [Cardano Developer Docs](https://docs.cardano.org/)
 - [Cardano SDK Documentation](https://input-output-hk.github.io/cardano-js-sdk/)
 - [Chrome Extension Developer Guide](https://developer.chrome.com/docs/extensions/)
-- [Vue.js 2 Guide](https://v2.vuejs.org/v2/guide/)
-- [Vuetify 2 Components](https://v2.vuetifyjs.com/)
+- [Vue.js 3 Guide](https://vuejs.org/guide/)
+- [Vuetify 4 Components](https://vuetifyjs.com/)
 
 ---
 
@@ -482,8 +482,8 @@ Gero Wallet is built on the shoulders of giants. Special thanks to:
 ### Key Dependencies
 
 - [@cardano-sdk/core](https://github.com/input-output-hk/cardano-js-sdk) - Modern Cardano SDK
-- [Vue.js](https://v2.vuejs.org/) - Progressive JavaScript framework
-- [Vuetify](https://v2.vuetifyjs.com/) - Material Design component library
+- [Vue.js](https://vuejs.org/) - Progressive JavaScript framework
+- [Vuetify](https://vuetifyjs.com/) - Material Design component library
 - [Dexie.js](https://dexie.org/) - IndexedDB wrapper
 - And [many more](package.json)...
 

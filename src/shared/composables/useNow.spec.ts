@@ -1,4 +1,4 @@
-import { defineComponent, h } from 'vue';
+import { defineComponent, h, KeepAlive } from 'vue';
 import { mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useNow } from './useNow';
@@ -15,7 +15,7 @@ const Clock = defineComponent({
 const Host = defineComponent({
   props: { show: { type: Boolean, default: true } },
   setup(props) {
-    return () => h('keep-alive', [props.show ? h(Clock) : null]);
+    return () => h(KeepAlive, null, { default: () => props.show ? h(Clock) : null });
   },
 });
 
@@ -25,7 +25,7 @@ describe('useNow', () => {
 
   it('ticks while mounted and stops when the component goes away', async () => {
     vi.setSystemTime(1_000_000);
-    const wrapper = mount(Clock as unknown as Parameters<typeof mount>[0]);
+    const wrapper = mount(Clock);
     expect(wrapper.text()).toBe('1000000');
 
     // Fake timers move Date.now() along with the interval.
@@ -33,14 +33,14 @@ describe('useNow', () => {
     expect(wrapper.text()).toBe('1003000');
 
     const clear = vi.spyOn(globalThis, 'clearInterval');
-    wrapper.destroy();
+    wrapper.unmount();
     expect(clear).toHaveBeenCalledTimes(1);
     expect(vi.getTimerCount()).toBe(0);
   });
 
   it('pauses while kept alive off screen and resumes with a fresh value', async () => {
     vi.setSystemTime(1_000_000);
-    const wrapper = mount(Host as unknown as Parameters<typeof mount>[0]);
+    const wrapper = mount(Host);
     expect(vi.getTimerCount()).toBe(1);
 
     await wrapper.setProps({ show: false });
@@ -50,6 +50,6 @@ describe('useNow', () => {
     await wrapper.setProps({ show: true });
     expect(vi.getTimerCount()).toBe(1);
     expect(wrapper.text()).toBe('1060000');
-    wrapper.destroy();
+    wrapper.unmount();
   });
 });

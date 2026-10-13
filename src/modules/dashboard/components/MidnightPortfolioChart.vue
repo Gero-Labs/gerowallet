@@ -8,8 +8,8 @@
         <div class="metrics-header-row">
           <div class="portfolio-label t-label">{{ $t('dashboard.portfolio') }}</div>
           <v-spacer />
-          <v-btn icon x-small @click="$emit('refresh')">
-            <v-icon small>mdi-refresh</v-icon>
+          <v-btn icon size="x-small" @click="$emit('refresh')">
+            <v-icon size="small">mdi-refresh</v-icon>
           </v-btn>
         </div>
 

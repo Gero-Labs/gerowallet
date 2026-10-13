@@ -1,10 +1,10 @@
 <template>
-  <button v-if="clickable" type="button" class="card-chip is-clickable" :class="`card-chip--${tone}`" v-on="$listeners">
-    <v-icon v-if="icon" x-small>{{ icon }}</v-icon>
+  <button v-if="clickable" type="button" class="card-chip is-clickable" :class="`card-chip--${tone}`" >
+    <v-icon v-if="icon" size="x-small">{{ icon }}</v-icon>
     <slot />
   </button>
   <span v-else class="card-chip" :class="`card-chip--${tone}`">
-    <v-icon v-if="icon" x-small>{{ icon }}</v-icon>
+    <v-icon v-if="icon" size="x-small">{{ icon }}</v-icon>
     <slot />
   </span>
 </template>

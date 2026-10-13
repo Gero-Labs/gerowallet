@@ -1,175 +1,75 @@
-import Vue from 'vue';
-import VueI18n, { type LocaleMessageObject, type LocaleMessages } from 'vue-i18n';
+import { createI18n, type LocaleMessageValue } from 'vue-i18n';
+import us from 'virtual:gero-locales/us';
+import { READY_LANGUAGES } from './i18n.config';
 
+type Messages = Record<string, LocaleMessageValue<string>>;
+type Parameters = Record<string, unknown> | unknown[];
 
-// Vuetify locales — only import supported languages (us, de, es)
-import {
-  de as vuetifyDe,
-  en as vuetifyEn,
-  es as vuetifyEs,
-} from 'vuetify/src/locale';
-
-// Only load US English by default (other languages lazy-loaded on demand)
-import us from '@/plugins/i18n/us';
-import { pushStrings, type PushLocale } from '@/plugins/i18n/push';
-
-/**
- * Wrap translations with Vuetify locale support
- */
-type Messages = LocaleMessageObject;
-const wrapWithVuetify = (translations: Messages, vuetifyLocale: Messages, rtl = false, locale = 'en-US'): Messages => ({
-  rtl, // Fixed: Boolean instead of string
-  locale,
-  $vuetify: { ...vuetifyLocale },
-  ...translations,
-} as unknown as Messages);
-
-// Vuetify's own es table still has English (loading, input actions) and the
-// formal "Pulse"; these surface as screen-reader labels, so match our tú register.
-type VuetifyTable = Messages & { dataTable: { ariaLabel: Record<string, string> } };
-const vuetifyEsBase = vuetifyEs as unknown as VuetifyTable;
-const vuetifyEsPatched = {
-  ...vuetifyEsBase,
-  badge: 'Insignia',
-  loading: 'Cargando...',
-  dataTable: {
-    ...vuetifyEsBase.dataTable,
-    ariaLabel: {
-      ...vuetifyEsBase.dataTable.ariaLabel,
-      activateNone: 'Haz clic para quitar el orden.',
-      activateDescending: 'Haz clic para ordenar de forma descendente.',
-      activateAscending: 'Haz clic para ordenar de forma ascendente.',
-    },
-  },
-  input: {
-    clear: 'Borrar {0}',
-    prependAction: 'Acción inicial de {0}',
-    appendAction: 'Acción final de {0}',
-  },
-} as unknown as Messages;
-
-// Vuetify locale mapping — only supported languages
-const vuetifyLocales: Record<string, Messages> = {
-  de: vuetifyDe,
-  es: vuetifyEsPatched,
-  us: vuetifyEn,
-};
-
-// Push notification strings live in their own table (the service worker renders
-// from it without vue-i18n); merged here so the settings UI sees the same keys.
-const withPush = (lang: string, translations: Record<string, unknown>) => ({ ...translations, ...(pushStrings[lang as PushLocale] ?? {}) });
-
-// Initial messages with only US English
-const messages: LocaleMessages = {
-  us: wrapWithVuetify(withPush('us', us), vuetifyEn, false, 'en-US'),
-};
-
-/**
- * Lazy load language file
- */
-// An explicit, filtered map rather than a template-literal import: that form
-// globbed every module in the directory (push.ts, and any spec someone adds)
-// into the candidate set, and the background iife inlines all of them.
-const LOCALE_LOADERS = import.meta.glob<{ default: Record<string, string> }>([
-  './i18n/*.ts',
-  '!./i18n/us.ts',
-  '!./i18n/push.ts',
-  '!./i18n/*.spec.ts',
-  '!./i18n/*.test.ts',
-]);
-
-async function loadLanguage(lang: string): Promise<void> {
-  if (messages[lang]) return; // Already loaded
-
-  try {
-    const loader = LOCALE_LOADERS[`./i18n/${lang}.ts`];
-    if (!loader) throw new Error(`No locale file for ${lang}`);
-    const translations = await loader();
-    const vuetifyLocale = vuetifyLocales[lang] || vuetifyEn;
-    const isRTL = false; // No RTL languages currently supported
-
-    messages[lang] = wrapWithVuetify(withPush(lang, translations.default), vuetifyLocale, isRTL, getLocaleCode(lang));
-
-    i18n.setLocaleMessage(lang, messages[lang]);
-  } catch (error) {
-    console.warn(`Failed to load language ${lang}:`, error);
-    // Fallback to English if language fails to load
-    messages[lang] = messages['us'];
-    i18n.setLocaleMessage(lang, messages[lang]);
-  }
-}
-
-/**
- * Get full locale code for a language
- */
-function getLocaleCode(lang: string): string {
-  const localeCodes: Record<string, string> = {
-    de: 'de-DE',
-    // Neutral Latin American Spanish, the same register Lace ships.
-    es: 'es-419',
-    us: 'en-US',
-  };
-  return localeCodes[lang] || 'en-US';
-}
-
-Vue.use(VueI18n);
-
-const i18n: VueI18n = new VueI18n({
-  locale: 'us', // Initial locale
-  fallbackLocale: 'us', // Fallback to US English
-  messages, // Initial messages (only US)
-  silentTranslationWarn: true, // Silence warnings for missing keys (translations in progress)
-  silentFallbackWarn: true, // Silence warnings when falling back to English
+export const i18nPlugin = createI18n({
+  legacy: false,
+  globalInjection: true,
+  locale: 'us',
+  fallbackLocale: 'us',
+  messages: { us } as Record<string, Messages>,
+  missingWarn: import.meta.env.DEV,
+  fallbackWarn: import.meta.env.DEV,
 });
+const composer = i18nPlugin.global;
+const loaders: Record<string, () => Promise<{ default: Messages }>> = {
+  de: () => import('virtual:gero-locales/de'),
+  es: () => import('virtual:gero-locales/es'),
+};
+const pending = new Map<string, Promise<void>>();
 
-// CRITICAL: The IIFE below was causing issues because:
-// 1. It runs after a 100ms delay
-// 2. getSavedLocale() checks geroStore.config.locale first, which is always 'us' (default) before hydration
-// 3. This returns 'us' instead of checking localStorage/chrome.storage for the actual saved locale
-// 4. The IIFE then does nothing (savedLocale === 'us') or incorrectly sets locale
-//
-// The initial locale is now handled by main.ts/sidepanel main.ts which:
-// 1. Reads from chrome.storage.local.get() BEFORE Vue app mounts
-// 2. Loads the correct language file
-// 3. Sets i18n.locale correctly
-//
-// This IIFE is DISABLED to prevent race conditions.
-// DO NOT re-enable without understanding the full initialization order.
-//
-// (async () => {
-//   await new Promise(resolve => setTimeout(resolve, 100));
-//   const savedLocale = getSavedLocale();
-//   if (savedLocale !== 'us') {
-//     try {
-//       await loadLanguage(savedLocale);
-//       i18n.locale = savedLocale;
-//     } catch (error) {
-//       console.error('❌ Failed to load saved language:', savedLocale, error);
-//     }
-//   }
-// })();
-
-/**
- * Update i18n locale and load language file if needed
- * Centralized helper to avoid code duplication across stores
- * @param locale - The locale code to switch to (e.g., 'us', 'de')
- * @returns Promise<boolean> - true if locale was changed, false if already at target locale
- */
-async function updateI18nLocale(locale: string): Promise<boolean> {
+export function registerLocaleMessages(locale: string, messages: Messages): void {
+  composer.setLocaleMessage(locale, messages);
+}
+export async function loadLanguage(locale: string): Promise<void> {
+  if (!(READY_LANGUAGES as readonly string[]).includes(locale)) throw new Error(`Unsupported locale: ${locale}`);
+  if (composer.availableLocales.includes(locale)) return;
+  if (!pending.has(locale)) {
+    const load = loaders[locale];
+    if (!load) throw new Error(`No locale loader: ${locale}`);
+    pending.set(locale, load().then(({ default: messages }) => registerLocaleMessages(locale, messages)).finally(() => pending.delete(locale)));
+  }
+  await pending.get(locale);
+}
+export function getLocaleCode(locale: string): string {
+  return ({ us: 'en-US', de: 'de-DE', es: 'es-419' } as Record<string, string>)[locale] || 'en-US';
+}
+let localeRequest = 0;
+export async function updateI18nLocale(locale: string): Promise<boolean> {
+  const request = ++localeRequest;
+  if (composer.locale.value === locale) return false;
   try {
-    if (i18n.locale === locale) {
-      return false; // Already at target locale
-    }
-
     await loadLanguage(locale);
-    i18n.locale = locale;
+    if (request !== localeRequest) return false;
+    composer.locale.value = locale;
     return true;
   } catch (error) {
-    console.error('Failed to update i18n locale:', error);
+    console.error(`Failed to load locale ${locale}:`, error);
     return false;
   }
 }
 
-// Export i18n instance and helper functions
-export { loadLanguage, updateI18nLocale, getLocaleCode };
+/** Application translation API for services, including the DOM-free worker.
+ * Explicit-locale calls retain their meaning; rendering uses the Vue 3 composer.
+ */
+const i18n = {
+  get locale(): string { return composer.locale.value; },
+  set locale(locale: string) { composer.locale.value = locale; },
+  t(key: string, localeOrValues?: string | Parameters, values?: Parameters): string {
+    const locale = typeof localeOrValues === 'string' ? localeOrValues : composer.locale.value;
+    const parameters = typeof localeOrValues === 'string' ? values : localeOrValues;
+    return Array.isArray(parameters)
+      ? composer.t(key, parameters, { locale })
+      : composer.t(key, parameters || {}, { locale });
+  },
+  tc(key: string, choice = 1, values: Record<string, unknown> = {}): string {
+    return composer.t(key, values, choice);
+  },
+  te: composer.te,
+  getLocaleMessage: composer.getLocaleMessage,
+  setLocaleMessage: registerLocaleMessages,
+};
 export default i18n;

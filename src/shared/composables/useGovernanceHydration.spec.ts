@@ -7,7 +7,7 @@
 // delegation is not a commitment) and the login race the bootstrap exists to
 // survive (the tx history landing after the account).
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import Vue from 'vue';
+import * as Vue from 'vue';
 import { Cardano } from '@cardano-sdk/core';
 
 const getDRepById = vi.fn();

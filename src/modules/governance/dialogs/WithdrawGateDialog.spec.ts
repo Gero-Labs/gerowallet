@@ -1,6 +1,8 @@
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mount, type Wrapper } from '@vue/test-utils';
-import Vue, { ref, type CreateElement } from 'vue';
+import { mount, type VueWrapper } from '@vue/test-utils';
+import * as Vue from 'vue';
+import { ref, } from 'vue';
 import { Cardano } from '@cardano-sdk/core';
 import { Blockchain, Network, WalletType } from '@/models/types';
 import { walletStore } from '@/stores/walletStore';
@@ -9,26 +11,28 @@ import { buildCardanoTransaction } from '@/shared/utils/builder';
 
 const components = vi.hoisted(() => ({
   dialog: {
-    render(this: Vue, h: CreateElement) { return h('div', this.$slots['default']); },
+    render(this: Vue.ComponentPublicInstance) { return Vue.h('div', this.$slots['default']?.()); },
   },
   button: {
-    render(this: Vue, h: CreateElement) { return h('button', { on: this.$listeners }, this.$slots['default']); },
+    render(this: Vue.ComponentPublicInstance) { return Vue.h('button', { ...this.$attrs }, this.$slots['default']?.()); },
   },
   error: {
     props: ['message'],
-    render(this: Vue & { message: string }, h: CreateElement) { return h('div', String(this.message)); },
+    render(this: Vue.ComponentPublicInstance & {
+    message: string;
+}) { return Vue.h('div', String(this.message)); },
   },
-  empty: { render(h: CreateElement) { return h('div'); } },
+  empty: { render() { return Vue.h('div'); } },
 }));
 vi.mock('@/shared/dialogs/BaseDialog.vue', () => ({ default: components.dialog }));
 vi.mock('@/shared/dialogs/KeystoneSignDialog.vue', () => ({ default: components.empty }));
 vi.mock('@/shared/components/TransactionAuthSection.vue', () => ({ default: components.empty }));
 vi.mock('@/shared/components/GButton/GButton.vue', () => ({ default: components.button }));
 vi.mock('@/shared/components/feedback/ErrorState.vue', () => ({ default: components.error }));
-vi.mock('vue-router/composables', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('@/shared/composables/useTranslation', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
-vi.mock('@/stores/walletStore', () => ({ walletStore: Vue.observable({ loggedWallet: null, account: null, keys: null, utxos: [] }) }));
-vi.mock('@/stores/networkStore', () => ({ networkStore: Vue.observable({ epochParams: { stakeKeyDeposit: '2000000' }, tip: { slot: 100 } }) }));
+vi.mock('@/stores/walletStore', () => ({ walletStore: Vue.reactive({ loggedWallet: null, account: null, keys: null, utxos: [] }) }));
+vi.mock('@/stores/networkStore', () => ({ networkStore: Vue.reactive({ epochParams: { stakeKeyDeposit: '2000000' }, tip: { slot: 100 } }) }));
 vi.mock('@/chrome/messaging', () => ({ Messaging: { sendToBackgroundFromOptions: vi.fn() } }));
 vi.mock('@/shared/utils/builder', () => ({ buildCardanoTransaction: vi.fn() }));
 vi.mock('@/utils/networks', () => ({ default: { resolveCurrencySymbol: () => 'tADA' } }));
@@ -50,12 +54,12 @@ vi.mock('@/shared/composables/useTransactionSigning', () => ({
 // @ts-ignore — vite resolves Vue SFCs; the repository has no *.vue shim.
 import WithdrawGateDialog from './WithdrawGateDialog.vue';
 
-let wrapper: Wrapper<Vue>;
+let wrapper: VueWrapper;
 const send = vi.mocked(Messaging.sendToBackgroundFromOptions);
 const build = vi.mocked(buildCardanoTransaction);
 
 function mountGate() {
-  wrapper = mount(WithdrawGateDialog, { propsData: { isOpen: true }, mocks: { $t: (key: string) => key }, stubs: { 'v-icon': true } });
+  wrapper = mount(WithdrawGateDialog, { props: { isOpen: true }, global: { config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key }) }, stubs: { 'v-icon': true } } });
 }
 
 async function flush() {
@@ -85,7 +89,7 @@ describe('withdrawal gate registration preflight', () => {
     build.mockResolvedValue(tx());
   });
   afterEach(() => {
-    wrapper?.destroy();
+    wrapper?.unmount();
     vi.restoreAllMocks();
   });
 

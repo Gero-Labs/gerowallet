@@ -12,17 +12,17 @@
       <!-- Instructions Alert -->
       <v-alert
         color="white"
-        dense
-        outlined
+        density="compact"
+        variant="outlined"
         type="info"
         prominent
-        border="left"
+        border="start"
         v-if="!keystoneScan"
         class="mt-4 mb-4"
       >
         <ul class="text-left" style="line-height: 1.5">
           <li>{{ $t('wallet.unlockKeystone') }}</li>
-          <li>{{ $t('wallet.selectScanQR') }} <v-icon small>mdi-line-scan</v-icon></li>
+          <li>{{ $t('wallet.selectScanQR') }} <v-icon size="small">mdi-line-scan</v-icon></li>
           <li>{{ $t('wallet.useKeystoneToScan') }}</li>
           <li>{{ $t('wallet.approveAndScanNext') }}</li>
         </ul>
@@ -30,11 +30,11 @@
 
       <v-alert
         color="white"
-        dense
-        outlined
+        density="compact"
+        variant="outlined"
         type="info"
         prominent
-        border="left"
+        border="start"
         v-else
         class="mt-4 mb-4"
       >
@@ -65,7 +65,7 @@
       <!-- Actions -->
       <div class="text-center pt-4">
         <v-btn
-          text
+          variant="text"
           @click="handleBack"
           class="mr-2"
         >

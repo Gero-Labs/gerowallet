@@ -1,9 +1,9 @@
 <template>
   <v-bottom-sheet
-    :value="isOpen"
+    :model-value="isOpen"
     persistent
     content-class="ks-sheet-dialog"
-    @input="onInput"
+    @update:model-value="onInput"
   >
     <div class="ks-sheet">
       <div class="ks-handle"><div class="ks-handle-bar" /></div>
@@ -14,7 +14,7 @@
           <span class="ks-title">{{ t('wallet.keystoneSign') }}</span>
           <span class="ks-step">{{ keystoneScan ? t('wallet.scanQRCode') : t('wallet.instructions') }}</span>
         </div>
-        <v-btn icon small class="ks-close" :aria-label="t('common.close')" @click="handleClose">
+        <v-btn icon size="small" class="ks-close" :aria-label="t('common.close')" @click="handleClose">
           <v-icon size="18">mdi-close</v-icon>
         </v-btn>
       </div>
@@ -58,10 +58,10 @@
       </div>
 
       <div class="ks-footer">
-        <v-btn text rounded class="ks-back" @click="handleBack">
+        <v-btn variant="text" rounded class="ks-back" @click="handleBack">
           {{ keystoneScan ? t('common.back') : t('common.cancel') }}
         </v-btn>
-        <v-btn v-if="!keystoneScan" class="geroButton ks-next" rounded depressed @click="keystoneScan = true">
+        <v-btn v-if="!keystoneScan" class="geroButton ks-next" rounded variant="flat" @click="keystoneScan = true">
           {{ t('common.next') }}
         </v-btn>
       </div>

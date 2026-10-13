@@ -1,6 +1,6 @@
 <template>
   <v-dialog v-model="dialogVisible" fullscreen transition="dialog-bottom-transition">
-    <v-card dark class="perps-terminal">
+    <v-card theme="dark" class="perps-terminal">
 
       <!-- ═══════════════════════════════════════════════════════════════════
            ROW 1 — Symbol Tabs (scrollable)
@@ -17,7 +17,7 @@
             @click="selectedSymbol = name"
           >
             <v-icon
-              x-small
+              size="x-small"
               class="mr-1 star-icon"
               :color="isFavorite(name) ? 'var(--g-warning)' : 'var(--g-text-3)'"
               @click.stop="toggleFavorite(name)"
@@ -36,7 +36,7 @@
 
         <v-spacer />
 
-        <v-btn icon small class="mr-1" @click="close">
+        <v-btn icon size="small" class="mr-1" @click="close">
           <v-icon size="18">mdi-close</v-icon>
         </v-btn>
       </div>
@@ -52,9 +52,9 @@
 
         <template v-if="currentTicker">
           <div class="price-info-item">
-            <v-tooltip bottom content-class="custom-tooltip" max-width="260">
-              <template #activator="{ on, attrs }">
-                <span class="price-info-label price-info-label--dashed" v-bind="attrs" v-on="on">{{ $t('perpetuals.markPrice') }}</span>
+            <v-tooltip location="bottom"  content-class="custom-tooltip" max-width="260">
+              <template #activator="{ props: activatorProps }">
+                <span class="price-info-label price-info-label--dashed" v-bind="activatorProps" >{{ $t('perpetuals.markPrice') }}</span>
               </template>
               <span>{{ $t('perpetuals.markPriceTooltip') }}</span>
             </v-tooltip>
@@ -67,18 +67,18 @@
             >{{ formatPrice(liveMarkPrice ?? currentFunding?.markPrice) }}</span>
           </div>
           <div class="price-info-item">
-            <v-tooltip bottom content-class="custom-tooltip" max-width="260">
-              <template #activator="{ on, attrs }">
-                <span class="price-info-label price-info-label--dashed" v-bind="attrs" v-on="on">{{ $t('perpetuals.indexPrice') }}</span>
+            <v-tooltip location="bottom"  content-class="custom-tooltip" max-width="260">
+              <template #activator="{ props: activatorProps }">
+                <span class="price-info-label price-info-label--dashed" v-bind="activatorProps" >{{ $t('perpetuals.indexPrice') }}</span>
               </template>
               <span>{{ $t('perpetuals.indexPriceTooltip') }}</span>
             </v-tooltip>
             <span class="price-info-value">{{ formatPrice(liveIndexPrice ?? currentFunding?.indexPrice) }}</span>
           </div>
           <div class="price-info-item">
-            <v-tooltip bottom content-class="custom-tooltip" max-width="280">
-              <template #activator="{ on, attrs }">
-                <span class="price-info-label price-info-label--dashed" v-bind="attrs" v-on="on">{{ $t('perpetuals.fundingCountdown') }}</span>
+            <v-tooltip location="bottom"  content-class="custom-tooltip" max-width="280">
+              <template #activator="{ props: activatorProps }">
+                <span class="price-info-label price-info-label--dashed" v-bind="activatorProps" >{{ $t('perpetuals.fundingCountdown') }}</span>
               </template>
               <span>{{ $t('perpetuals.fundingCountdownTooltip') }}</span>
             </v-tooltip>
@@ -112,9 +112,9 @@
             <span class="price-info-value">${{ formatFullNumber(currentTicker.quoteVolume) }}</span>
           </div>
           <div class="price-info-item">
-            <v-tooltip bottom content-class="custom-tooltip" max-width="260">
-              <template #activator="{ on, attrs }">
-                <span class="price-info-label price-info-label--dashed" v-bind="attrs" v-on="on">{{ $t('perpetuals.openInterest') }}</span>
+            <v-tooltip location="bottom"  content-class="custom-tooltip" max-width="260">
+              <template #activator="{ props: activatorProps }">
+                <span class="price-info-label price-info-label--dashed" v-bind="activatorProps" >{{ $t('perpetuals.openInterest') }}</span>
               </template>
               <span>{{ $t('perpetuals.openInterestTooltip') }}</span>
             </v-tooltip>
@@ -153,14 +153,14 @@
               >
                 {{ tf }}
               </span>
-              <v-menu offset-y :attach="true" content-class="chart-price-menu">
-                <template #activator="{ on, attrs }">
-                  <span class="chart-toolbar__price-trigger" v-bind="attrs" v-on="on">
+              <v-menu  :attach="true" content-class="chart-price-menu">
+                <template #activator="{ props: activatorProps }">
+                  <span class="chart-toolbar__price-trigger" v-bind="activatorProps" >
                     {{ priceTypeOptions.find(o => o.value === chartPriceType)?.label }}
                     <v-icon size="14" class="ml-1">mdi-chevron-down</v-icon>
                   </span>
                 </template>
-                <v-list dense dark class="chart-price-list">
+                <v-list density="compact" theme="dark" class="chart-price-list">
                   <v-list-item
                     v-for="opt in priceTypeOptions"
                     :key="opt.value"
@@ -183,7 +183,7 @@
               theme="dark"
               :price-precision="symbolPrecision"
               :price-min-move="symbolMinMove"
-              @chartReady="onChartReady"
+
             />
           </div>
         </div>
@@ -338,7 +338,7 @@ const {
 const {
   chartData, chartTimeframe, chartPriceType, priceTypeOptions,
   candleIntervalSeconds, symbolPrecision, symbolMinMove,
-  openInterest, onChartReady, loadChartData, loadOpenInterest,
+  openInterest, loadChartData, loadOpenInterest,
 } = usePerpsChart(selectedSymbol, currentMarketConfig, {
   strikeRealtimeData, liveMarkPrice, liveIndexPrice, liveFundingRate, liveNextFundingTime, markPriceFlash,
 });

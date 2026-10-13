@@ -5,12 +5,12 @@ description: Use when building a feature, fixing a bug, reviewing code, or getti
 
 # Developing on Gero Wallet
 
-A Manifest V3 Chrome extension: Vue 2.7 + Vuetify 2.7 + TypeScript, four independent Vite bundles, three blockchains, keys held in the background service worker.
+A Manifest V3 Chrome extension: Vue 3.5 + Vuetify 4.2 + TypeScript, four independent Vite bundles, three blockchains, keys held in the background service worker.
 
 ## Start here: three facts that reverse your instincts
 
 **1. The two commands the PR checklist tells you to run are not gates and never pass.**
-`npm run typecheck` exits 2 with ~173 pre-existing errors after a build (~213 on a pristine clone, before `src/auto-imports.d.ts` is generated - that file is gitignored, so the extra ~40 are unresolved `ref`/`computed`). Most of the rest are unresolvable `.vue` modules. `vue-tsc` has no Vue 2.7 + TS 5.8 build. `npm run lint` exits 1 with 390 errors, all legacy `@typescript-eslint/no-explicit-any`. Never compare absolute counts between runs, and never read either as a verdict on your change. The PR template still asks for both; CONTRIBUTING.md has been corrected. Do not chase those errors and do not "fix" unrelated files.
+`npm run typecheck`, `npm run typecheck:vue`, and repo-wide lint still expose historical diagnostics. The Vue 3 toolchain now supports SFC type checking with vue-tsc; compare diagnostics with the baseline and fix new errors rather than relying on an absolute count. Lint every touched file and run the relevant regression tests. Do not suppress diagnostics or repair unrelated files to make a count look smaller.
 
 **2. What actually blocks you is the pre-commit hook and four required checks.**
 The hook (yorkie, from `package.json` `gitHooks`, not husky) runs on every commit:
@@ -38,7 +38,7 @@ Run cheap to expensive, and stop lying to yourself about what each one proves.
 | `npm run build:web -- --mode production` | ~90s | Every SFC parses and the bundle resolves. This is the real buildability gate, and what CI runs. |
 | `npm run dev` + load `extension/` in Chrome | minutes | The only thing that proves runtime behaviour. Nothing else does. |
 
-Never run `npm run build` to check your work: four parallel Vite builds at 6GB each, ~24GB peak, it OOMs laptops and runners.
+`npm run build` now builds the four production bundles sequentially. Keep that ordering: running four 6 GB Vite processes together can exhaust memory. For a UI-only change, use `npm run build:web -- --mode production`; release qualification needs all four bundles plus the packaged artifact checks.
 
 ## Non-negotiables
 

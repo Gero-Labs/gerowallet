@@ -1,13 +1,15 @@
-import Vue from 'vue';
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
+vi.mock('vue-router', () => ({ useRoute: () => ({ path: '/transactions', query: {} }), useRouter: () => ({ push: vi.fn() }) }));
+import * as Vue from 'vue';
 import { mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@/stores/walletStore', () => ({ walletStore: Vue.observable({
+vi.mock('@/stores/walletStore', () => ({ walletStore: Vue.reactive({
   transactions: [], loggedWallet: { chain: 'Cardano', network: 'Preprod' }, keys: {}, contacts: {}, config: {},
 }) }));
-vi.mock('@/stores/networkStore', () => ({ networkStore: Vue.observable({ assets: {} }) }));
-vi.mock('@/stores/loading', () => ({ loadingState: Vue.observable({ loadingTxs: false }) }));
-vi.mock('@/stores/priceStore', () => ({ priceStore: Vue.observable({ adaUsd: null }) }));
+vi.mock('@/stores/networkStore', () => ({ networkStore: Vue.reactive({ assets: {} }) }));
+vi.mock('@/stores/loading', () => ({ loadingState: Vue.reactive({ loadingTxs: false }) }));
+vi.mock('@/stores/priceStore', () => ({ priceStore: Vue.reactive({ adaUsd: null }) }));
 vi.mock('@/api/blockchain-api', () => ({ default: { getPoolById: vi.fn() } }));
 vi.mock('@/shared/composables/useTranslation', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('@/shared/composables/useCurrencyConverter', () => ({ useCurrencyConverter: () => ({ convertFiat: (n: number) => n, getCurrencySymbol: () => '$' }) }));
@@ -35,16 +37,13 @@ describe('day header net', () => {
       record('received', 10_000_000, 3600, false),
       record('failed-send', -2_000_000, 3 * 3600, true),
     ];
-    const wrapper = mount(TransactionsCard, {
-      mocks: { $route: { path: '/transactions' }, $t: (key: string) => key },
-      stubs: { 'v-tooltip': true, 'v-menu': true, 'v-pagination': true },
-    });
+    const wrapper = mount(TransactionsCard, { global: { config: { globalProperties: mockGlobalProperties({ $route: { path: '/transactions' }, $t: (key: string) => key }) }, stubs: { 'v-tooltip': true, 'v-menu': true, 'v-pagination': true } } });
     try {
       await vi.waitFor(() => expect(wrapper.find('[data-id="failed-send"]').exists()).toBe(true));
       // The failed row is still listed, but only the confirmed +10 counts
       expect(wrapper.find('.tx-day__net').text()).toMatch(/^\+ \S*10$/);
     } finally {
-      wrapper.destroy();
+      wrapper.unmount();
     }
   });
 });

@@ -50,7 +50,7 @@ html .v-application .display-3, html .v-application .display-4 {
               background-color var(--g-dur-fast) ease-out,
               filter var(--g-dur-fast) ease-out;
 }
-.v-application .v-btn:not(.v-btn--round):not(.v-btn--fab):not(.v-btn--tile) {
+.v-application .v-btn:not(.v-btn--round):not(.v-btn--fab):not(.v-btn--tile):not(.v-btn--icon):not(.v-btn--rounded) {
   border-radius: var(--g-r-control);
 }
 .v-application .v-btn:active {
@@ -64,7 +64,7 @@ html .v-application .display-3, html .v-application .display-4 {
    Specificity, spelled out, because it is easy to get wrong:
    Vuetify's enabled rule `.theme--dark.v-btn.v-btn--has-bg` is (0,3,0) with NO
    override flag, so (0,4,0) beats it cleanly and no flag is needed here. */
-.v-application .theme--dark.v-btn.geroButton {
+.v-application .v-btn.geroButton {
   background: linear-gradient(90deg, var(--g-grad-1), var(--g-grad-2));
   color: var(--g-on-grad);
   font-weight: 600;
@@ -84,8 +84,8 @@ html .v-application .display-3, html .v-application .display-4 {
    between two flagged declarations specificity decides -- so this rule must be
    flagged AND reach (0,5,0), or the disabled CTA renders Vuetify's translucent
    grey instead of the raised surface. */
-.v-application .theme--dark.v-btn.geroButton.v-btn--disabled,
-.v-application .theme--dark.v-btn.geroButton:disabled {
+.v-application .v-btn.geroButton.v-btn--disabled,
+.v-application .v-btn.geroButton:disabled {
   background: var(--g-raised) !important;
   color: var(--g-text-3) !important;
 }

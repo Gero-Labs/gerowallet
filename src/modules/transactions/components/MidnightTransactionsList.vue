@@ -14,9 +14,9 @@
       <div class="mn-tx-list__toolbar">
         <v-text-field
           v-model="searchInput"
-          dense
-          flat
-          solo
+          density="compact"
+
+          variant="solo"
           hide-details
           clearable
           :placeholder="$t('common.search')"
@@ -26,17 +26,17 @@
 
         <v-btn
           icon
-          small
+          size="small"
           :aria-label="$t('common.sortBy')"
           @click="sortDesc = !sortDesc"
         >
-          <v-icon small>{{ sortDesc ? 'mdi-sort-descending' : 'mdi-sort-ascending' }}</v-icon>
+          <v-icon size="small">{{ sortDesc ? 'mdi-sort-descending' : 'mdi-sort-ascending' }}</v-icon>
         </v-btn>
 
-        <v-select
+        <v-select item-title="text"
           v-model="sortBy"
           :items="sortOptions"
-          dense
+          density="compact"
           hide-details
           attach
           class="mn-tx-list__sort-select"
@@ -45,89 +45,89 @@
         <v-menu
           v-model="filterMenuOpen"
           :close-on-content-click="false"
-          offset-y
+
           nudge-bottom="4"
           min-width="260"
           max-width="320"
           transition="none"
         >
-          <template v-slot:activator="{ on, attrs }">
-            <v-btn icon small v-bind="attrs" v-on="on" :aria-label="$t('common.filter')">
-              <v-badge color="transparent" avatar :value="activeFilterCount > 0" :content="activeFilterCount" overlap>
+          <template v-slot:activator="{ props: activatorProps }">
+            <v-btn icon size="small" v-bind="activatorProps"  :aria-label="$t('common.filter')">
+              <v-badge color="transparent" avatar :model-value="activeFilterCount > 0" :content="activeFilterCount" overlap>
                 <template v-slot:badge>
                   <v-avatar size="14" height="14" color="primary">
                     <span style="font-size: 11px; color: var(--g-on-grad)">{{ activeFilterCount }}</span>
                   </v-avatar>
                 </template>
-                <v-icon small>mdi-tune-variant</v-icon>
+                <v-icon size="small">mdi-tune-variant</v-icon>
               </v-badge>
             </v-btn>
           </template>
-          <v-card class="glass-popover" dark>
+          <v-card class="glass-popover" theme="dark">
             <v-card-text class="pa-3">
               <div class="t-label mb-1">{{ $t('transactions.dateRange') }}</div>
               <div class="d-flex align-center" style="gap: 6px">
                 <v-menu
                   v-model="dateFromMenu"
                   :close-on-content-click="false"
-                  offset-y
+
                   min-width="auto"
                 >
-                  <template v-slot:activator="{ on, attrs }">
+                  <template v-slot:activator="{ props: activatorProps }">
                     <v-text-field
-                      :value="filterDateFrom || ''"
+                      :model-value="filterDateFrom || ''"
                       :placeholder="$t('transactions.from')"
-                      dense
-                      outlined
+                      density="compact"
+                      variant="outlined"
                       hide-details
                       readonly
                       clearable
-                      v-bind="attrs"
-                      v-on="on"
+                      v-bind="activatorProps"
+
                       @click:clear="filterDateFrom = null"
                     />
                   </template>
                   <v-date-picker
-                    :value="filterDateFrom"
-                    @input="filterDateFrom = $event; dateFromMenu = false"
+                    :model-value="filterDateFrom"
+                    @update:model-value="filterDateFrom = $event; dateFromMenu = false"
                     :min="earliestTxDate"
                     :max="filterDateTo || latestTxDate"
                     :events="transactionDates"
                     event-color="var(--g-accent)"
                     no-title
-                    dark
+                    theme="dark"
                     color="var(--g-accent)"
                   />
                 </v-menu>
                 <v-menu
                   v-model="dateToMenu"
                   :close-on-content-click="false"
-                  offset-y
+
                   min-width="auto"
                 >
-                  <template v-slot:activator="{ on, attrs }">
+                  <template v-slot:activator="{ props: activatorProps }">
                     <v-text-field
-                      :value="filterDateTo || ''"
+                      :model-value="filterDateTo || ''"
                       :placeholder="$t('transactions.to')"
-                      dense
-                      outlined
+                      density="compact"
+                      variant="outlined"
                       hide-details
                       readonly
                       clearable
-                      v-bind="attrs"
-                      v-on="on"
+                      v-bind="activatorProps"
+
                       @click:clear="filterDateTo = null"
                     />
                   </template>
                   <v-date-picker
-                    :value="filterDateTo"
-                    @input="filterDateTo = $event; dateToMenu = false"
+                    :model-value="filterDateTo"
+                    @update:model-value="filterDateTo = $event; dateToMenu = false"
                     :min="filterDateFrom || earliestTxDate"
                     :max="latestTxDate"
                     :events="transactionDates"
                     event-color="var(--g-accent)"
                     no-title
-                    dark
+                    theme="dark"
                     color="var(--g-accent)"
                   />
                 </v-menu>
@@ -137,7 +137,7 @@
 
               <div class="t-label mb-1">{{ $t('transactions.type') }}</div>
               <v-chip-group v-model="filterTypes" multiple column>
-                <v-chip v-for="opt in typeFilterOptions" :key="opt.value" :value="opt.value" small outlined filter>
+                <v-chip v-for="opt in typeFilterOptions" :key="opt.value" :value="opt.value" size="small" variant="outlined" filter>
                   {{ opt.text }}
                 </v-chip>
               </v-chip-group>
@@ -146,7 +146,7 @@
 
               <div class="t-label mb-1">{{ $t('transactions.tokens') }}</div>
               <v-chip-group v-model="filterTokens" multiple column>
-                <v-chip v-for="opt in tokenFilterOptions" :key="opt.value" :value="opt.value" small outlined filter>
+                <v-chip v-for="opt in tokenFilterOptions" :key="opt.value" :value="opt.value" size="small" variant="outlined" filter>
                   {{ opt.text }}
                 </v-chip>
               </v-chip-group>
@@ -155,14 +155,14 @@
 
               <v-btn
                 :disabled="activeFilterCount === 0"
-                text
+                variant="text"
                 block
-                small
+                size="small"
                 class="justify-start"
                 color="error"
                 @click="clearAllFilters()"
               >
-                <v-icon small class="mr-2">mdi-close-circle-outline</v-icon>
+                <v-icon size="small" class="mr-2">mdi-close-circle-outline</v-icon>
                 {{ $t('common.clearFilters') }}
               </v-btn>
             </v-card-text>
@@ -175,8 +175,8 @@
          exist -- never let this read as "empty wallet" (see e0af42bc). -->
     <div v-if="transactions.length > 0 && sorted.length === 0" class="mn-tx-list__empty">
       <div>{{ $t('common.noResults') }}</div>
-      <v-btn text small color="primary" class="mt-1" @click="clearAll">
-        <v-icon small class="mr-1">mdi-close-circle-outline</v-icon>
+      <v-btn variant="text" size="small" color="primary" class="mt-1" @click="clearAll">
+        <v-icon size="small" class="mr-1">mdi-close-circle-outline</v-icon>
         {{ $t('common.clearFilters') }}
       </v-btn>
     </div>
@@ -190,7 +190,7 @@
            and a one-click way back, same escape hatch as e0af42bc. -->
       <div v-if="hiddenByFilterCount > 0" class="mn-tx-list__hidden-notice">
         <span class="t-caption">{{ $t('market.hiddenByFilters', { count: hiddenByFilterCount }) }}</span>
-        <v-btn text x-small color="primary" @click="clearAllFilters">{{ $t('common.clearFilters') }}</v-btn>
+        <v-btn variant="text" size="x-small" color="primary" @click="clearAllFilters">{{ $t('common.clearFilters') }}</v-btn>
       </div>
 
       <div class="mn-tx-list__rows">
@@ -207,7 +207,7 @@
                 <!-- Attribution belongs here too: the full history is where a
                      user goes to reconcile, and it had none. -->
                 <span v-if="sponsorFor(tx.hash)" class="tx-chip">
-                  <v-icon x-small>mdi-lightning-bolt</v-icon>
+                  <v-icon size="x-small">mdi-lightning-bolt</v-icon>
                   {{ $t('midnight.sponsor.feeInline', { name: sponsorFor(tx.hash) }) }}
                 </span>
               </div>
@@ -222,16 +222,16 @@
             <div class="mn-tx-row__hash-text">{{ shortHash(tx.hash) }}</div>
             <div class="mn-tx-row__amount" :style="{ color: amountColor(tx.type) }">
               <span>{{ formatAmountSigned(tx) }}</span>
-              <v-tooltip v-if="isUnscaled(tx.token)" top content-class="custom-tooltip">
-                <template v-slot:activator="{ on, attrs }">
-                  <v-icon x-small color="warning" v-bind="attrs" v-on="on">mdi-help-circle-outline</v-icon>
+              <v-tooltip location="top" v-if="isUnscaled(tx.token)"  content-class="custom-tooltip">
+                <template v-slot:activator="{ props: activatorProps }">
+                  <v-icon size="x-small" color="warning" v-bind="activatorProps" >mdi-help-circle-outline</v-icon>
                 </template>
                 {{ $t('midnight.rawBalanceNotice') }}
               </v-tooltip>
             </div>
           </button>
-          <v-btn icon x-small class="ml-1" @click="copyHash(tx.hash)">
-            <v-icon x-small>mdi-content-copy</v-icon>
+          <v-btn icon size="x-small" class="ml-1" @click="copyHash(tx.hash)">
+            <v-icon size="x-small">mdi-content-copy</v-icon>
           </v-btn>
         </div>
       </div>

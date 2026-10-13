@@ -1,13 +1,10 @@
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
 import { describe, expect, it } from 'vitest';
 import { mount } from '@vue/test-utils';
 // @ts-ignore: tsconfig ships no `*.vue` shim; vite resolves this fine.
 import EmbeddedSiteWarning from './EmbeddedSiteWarning.vue';
 
-const mountWith = (embeddedIn: unknown) => mount(EmbeddedSiteWarning, {
-  propsData: { embeddedIn },
-  mocks: { $t: (key: string, args: { site: string }) => `${key}:${args.site}` },
-  stubs: { 'v-icon': true },
-});
+const mountWith = (embeddedIn: unknown) => mount(EmbeddedSiteWarning, { props: { embeddedIn }, global: { config: { globalProperties: mockGlobalProperties({ $t: (key: string, args: { site: string }) => `${key}:${args.site}` }) }, stubs: { 'v-icon': true } } });
 
 describe('EmbeddedSiteWarning', () => {
   it('names the embedding site when the request came from a cross-origin frame', () => {

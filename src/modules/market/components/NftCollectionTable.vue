@@ -8,21 +8,21 @@
 
     <!-- Empty state -->
     <div v-else-if="filteredCollections.length === 0" class="text-center py-6" style="opacity: 0.5">
-      <v-icon large class="mb-2">mdi-image-off-outline</v-icon>
+      <v-icon size="large" class="mb-2">mdi-image-off-outline</v-icon>
       <div>{{ $t('portfolio.noNftData') }}</div>
     </div>
 
     <!-- Data table -->
     <v-data-table
       v-else
-      dense
+      density="compact"
       class="transparent nft-collection-table market-token-table"
       :headers="headers"
       :items="filteredCollections"
+      item-value="policyId"
       :items-per-page="-1"
       hide-default-footer
-      :sort-by.sync="sortBy"
-      :sort-desc.sync="sortDesc"
+      v-model:sort-by="sortBy"
       :header-props="{ 'sort-icon': 'mdi-menu-up' }"
       @click:row="handleRowClick"
     >
@@ -33,17 +33,17 @@
 
       <!-- Collection name column (two-line: name + policyId) -->
       <template v-slot:[`item.policyId`]="{ item }">
-        <v-list-item dense class="px-0">
-          <v-list-item-action class="my-0" style="margin-right: 12px !important">
+        <v-list-item density="compact" class="px-0">
+          <div class="my-0 g-list-action" style="margin-right: 12px !important">
             <v-avatar size="28" rounded>
               <v-img v-if="item.img" :src="item.img" :alt="item.name" />
-              <v-icon v-else small>mdi-image-outline</v-icon>
+              <v-icon v-else size="small">mdi-image-outline</v-icon>
             </v-avatar>
-          </v-list-item-action>
-          <v-list-item-content>
+          </div>
+          <div class="g-list-content">
             <v-list-item-title style="font-size: 13px">
               <span class="font-weight-bold">{{ item.name }}</span>
-              <v-chip v-if="item.isScam" x-small color="error" class="ml-1" style="height: 16px; font-size: 11px; padding: 0 4px;">
+              <v-chip v-if="item.isScam" size="x-small" color="error" class="ml-1" style="height: 16px; font-size: 11px; padding: 0 4px;">
                 {{ $t('portfolio.scam') }}
               </v-chip>
             </v-list-item-title>
@@ -51,7 +51,7 @@
               {{ filters.truncate(item.policyId) }}
               <CopyButton :value="item.policyId" x-small class="ml-1" />
             </v-list-item-subtitle>
-          </v-list-item-content>
+          </div>
         </v-list-item>
       </template>
 
@@ -62,23 +62,23 @@
 
       <!-- Floor Price column (two-line: ADA + floor value) -->
       <template v-slot:[`item.floorPriceLovelace`]="{ item }">
-        <v-list-item v-if="item.floorPriceLovelace != null" two-line class="px-0" style="min-height: unset">
-          <v-list-item-content class="pa-0">
+        <v-list-item v-if="item.floorPriceLovelace != null" lines="two" class="px-0" style="min-height: unset">
+          <div class="pa-0 g-list-content">
             <v-list-item-title style="font-size: 13px; margin-bottom: 0; color: var(--g-accent);">
               {{ formatAda(item.floorPriceLovelace) }} &#8371;
             </v-list-item-title>
             <v-list-item-subtitle v-if="item.floorValueLovelace != null" style="font-size: 11px; opacity: 0.5">
               {{ formatCompact(item.floorValueLovelace / 1_000_000) }} &#8371; {{ $t('portfolio.total') }}
             </v-list-item-subtitle>
-          </v-list-item-content>
+          </div>
         </v-list-item>
         <span v-else style="font-size: 12px; opacity: 0.4">—</span>
       </template>
 
       <!-- Last Sale column (two-line: price + vs floor) -->
       <template v-slot:[`item.lastSalePriceLovelace`]="{ item }">
-        <v-list-item v-if="item.lastSalePriceLovelace != null" two-line class="px-0" style="min-height: unset">
-          <v-list-item-content class="pa-0">
+        <v-list-item v-if="item.lastSalePriceLovelace != null" lines="two" class="px-0" style="min-height: unset">
+          <div class="pa-0 g-list-content">
             <v-list-item-title style="font-size: 13px; margin-bottom: 0">
               {{ formatAda(item.lastSalePriceLovelace) }} &#8371;
             </v-list-item-title>
@@ -89,16 +89,16 @@
             >
               {{ lastSaleVsFloor(item) }}
             </v-list-item-subtitle>
-          </v-list-item-content>
+          </div>
         </v-list-item>
         <span v-else style="font-size: 12px; opacity: 0.4">—</span>
       </template>
 
       <!-- Volume column -->
       <template v-slot:[`item.totalVolumeLovelace`]="{ item }">
-        <v-tooltip v-if="item.totalVolumeLovelace != null" top :open-delay="300" content-class="custom-tooltip">
-          <template v-slot:activator="{ on, attrs }">
-            <span v-bind="attrs" v-on="on" style="font-size: 12px">
+        <v-tooltip location="top" v-if="item.totalVolumeLovelace != null"  :open-delay="300" content-class="custom-tooltip">
+          <template v-slot:activator="{ props: activatorProps }">
+            <span v-bind="activatorProps"  style="font-size: 12px">
               {{ formatCompact(item.totalVolumeLovelace / 1_000_000) }} &#8371;
             </span>
           </template>
@@ -118,7 +118,7 @@
       <!-- No data -->
       <template v-slot:no-data>
         <div class="text-center py-6" style="opacity: 0.5">
-          <v-icon large class="mb-2">mdi-image-off-outline</v-icon>
+          <v-icon size="large" class="mb-2">mdi-image-off-outline</v-icon>
           <div>{{ $t('portfolio.noNftData') }}</div>
         </div>
       </template>
@@ -128,6 +128,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import type { DataTableHeader, DataTableSortItem } from 'vuetify';
 import { useNftMarketData, type NftCollectionDisplay } from '@/modules/market/composables/useNftMarketData';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { formatCompact } from '@/modules/market/utils/formatters';
@@ -158,24 +159,23 @@ const filteredCollections = computed(() => {
   });
 });
 
-const sortBy = ref('floorValueLovelace');
-const sortDesc = ref(true);
+const sortBy = ref<DataTableSortItem[]>([{ key: 'floorValueLovelace', order: 'desc' }]);
 
-const headers = [
-  { text: '#', value: 'rank', sortable: false, width: '40px' },
-  { text: t('portfolio.collection'), value: 'policyId', sortable: true },
-  { text: t('portfolio.held'), value: 'quantity', sortable: true, width: '60px' },
-  { text: t('portfolio.floorPrice'), value: 'floorPriceLovelace', sortable: true, width: '110px' },
-  { text: t('portfolio.lastSale'), value: 'lastSalePriceLovelace', sortable: true, width: '110px' },
-  { text: t('portfolio.volume'), value: 'totalVolumeLovelace', sortable: true, width: '90px', class: 'hidden-sm-and-down', cellClass: 'hidden-sm-and-down' },
-  { text: t('portfolio.sales'), value: 'saleCount', sortable: true, width: '70px', class: 'hidden-md-and-down', cellClass: 'hidden-md-and-down' },
-];
+const headers = computed<DataTableHeader[]>(() => [
+  { title: '#', key: 'rank', sortable: false, width: '40px' },
+  { title: t('portfolio.collection'), key: 'policyId', sortable: true },
+  { title: t('portfolio.held'), key: 'quantity', sortable: true, width: '60px' },
+  { title: t('portfolio.floorPrice'), key: 'floorPriceLovelace', sortable: true, width: '110px' },
+  { title: t('portfolio.lastSale'), key: 'lastSalePriceLovelace', sortable: true, width: '110px' },
+  { title: t('portfolio.volume'), key: 'totalVolumeLovelace', sortable: true, width: '90px', headerProps: { class: 'hidden-sm-and-down' }, cellProps: { class: 'hidden-sm-and-down' } },
+  { title: t('portfolio.sales'), key: 'saleCount', sortable: true, width: '70px', headerProps: { class: 'hidden-md-and-down' }, cellProps: { class: 'hidden-md-and-down' } },
+]);
 
 onMounted(() => {
   fetchUserNftCollections();
 });
 
-function handleRowClick(item: any) {
+function handleRowClick(_event: Event, { item }: { item: NftCollectionDisplay }) {
   emit('collection-click', item.policyId);
 }
 
@@ -204,7 +204,7 @@ function lastSaleVsFloorColor(item: NftCollectionDisplay): string {
 </script>
 
 <style scoped>
-.nft-collection-table >>> .v-data-table__wrapper {
+.nft-collection-table >>> .v-table__wrapper {
   overflow-x: auto;
 }
 

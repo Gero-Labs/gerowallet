@@ -3,31 +3,34 @@ import '@fontsource-variable/inter';            // family: 'Inter Variable', wgh
 import '@fontsource/jetbrains-mono/400.css';    // family: 'JetBrains Mono'
 import '@fontsource/jetbrains-mono/500.css';
 import '@mdi/font/css/materialdesignicons.css';
-import 'vuetify/dist/vuetify.min.css';
+import 'vuetify/styles';
 import '../shared/styles/liquid-glass.css';
 import '../shared/styles/baseline.css';
+import '../shared/styles/vuetify-compat.css';
 import '../shared/styles/iso.css';
 
-import Vue from 'vue';
+import { createApp, watch } from 'vue';
 import { isPublicRoute } from '@/modules/navigation/helpAccess';
-import VueRouter from 'vue-router';
-import FlagIcon from 'vue-flag-icon';
-import i18n, { loadLanguage } from '../plugins/i18n';
+
+import FlagIcon from '@/shared/components/FlagIcon.vue';
+import i18n, { i18nPlugin, loadLanguage } from '../plugins/i18n';
 import vuetify from '../plugins/vuetify';
 import router from '../modules/navigation/router';
-import { ClickOutside } from 'vuetify/lib/directives';
+import { ClickOutside } from 'vuetify/directives';
 import App from './App.vue';
-import { geroStore } from '@/stores/geroStore';
-import Notifications from '@voerro/vue-notifications';
+import { geroStore, type GeroStore } from '@/stores/geroStore';
+import Notifications from '@/shared/components/ToastNotifications.vue';
 import featureFlagsStore from '@/stores/featureFlagsStore';
 import { walletStore as walletStoreState, hydrateWalletStore } from '@/stores/walletStore';
 import { activityTracker } from '@/services/activityTracker.service';
 import { waitForOptionsStartup } from './startup';
 
+type SavedStartupState = { geroStore?: Partial<GeroStore>; walletStore?: { config?: { locale?: string } } };
+
 function loadPersistedGero(): Promise<void> {
   return new Promise(resolve => {
     try {
-      chrome.storage.local.get('geroStore', ({ geroStore: saved } = {}) => {
+      chrome.storage.local.get<SavedStartupState>('geroStore', ({ geroStore: saved } = {}) => {
         if (chrome.runtime.lastError) {
           console.warn('Chrome storage error:', chrome.runtime.lastError.message);
           resolve();
@@ -46,7 +49,7 @@ function loadPersistedGero(): Promise<void> {
 async function loadSavedLocale(): Promise<void> {
   const initialLocale = i18n.locale;
   const locale = await new Promise<string>((resolve, reject) => {
-    chrome.storage.local.get(['walletStore', 'geroStore'], (saved = {}) => {
+    chrome.storage.local.get<SavedStartupState>(['walletStore', 'geroStore'], (saved = {}) => {
       if (chrome.runtime.lastError) {
         reject(new Error('Locale storage read failed'));
         return;
@@ -87,20 +90,14 @@ void waitForOptionsStartup({
     console.error('Feature flags initialization failed:', error);
   });
 
-  Vue.config.productionTip = false;
-  Vue.config.ignoredElements = [...(Vue.config.ignoredElements || []), 'gero-swap'];
-  Vue.use(FlagIcon);
-  Vue.use(VueRouter);
-  Vue.directive('click-outside', ClickOutside);
-  Vue.component('notifications', Notifications);
-
-  const app = new Vue({
-    vuetify,
-    i18n,
-    router,
-    render: h => h(App)
-  }).$mount('#app');
-
+  const app = createApp(App);
+  app.use(vuetify);
+  app.use(i18nPlugin);
+  app.use(router);
+  app.directive('click-outside', ClickOutside);
+  app.component('flag', FlagIcon);
+  app.component('notifications', Notifications);
+  app.mount('#app');
   // Initialize activity tracker based on wallet state
   const checkAndStartActivityTracker = () => {
     if (walletStoreState.loggedWallet && !walletStoreState.isLocked) {
@@ -111,7 +108,7 @@ void waitForOptionsStartup({
   };
 
   // Start/stop activity tracker based on wallet locked state
-  app.$watch(
+  const stopActivity = watch(
     () => [walletStoreState.loggedWallet, walletStoreState.isLocked],
     () => {
       checkAndStartActivityTracker();
@@ -124,14 +121,14 @@ void waitForOptionsStartup({
   // route while locked. ledger-ble-sign must stay too: navigating it away
   // leaves no beforeunload, so the side panel that opened it would wait out
   // its full timeout instead of seeing a cancellation.
-  app.$watch(
+  const stopLock = watch(
     () => walletStoreState.isLocked,
     (isLocked) => {
       if (isLocked
-        && !isPublicRoute(router.currentRoute)
-        && router.currentRoute.path !== '/welcome'
-        && router.currentRoute.name !== 'passkey-auth'
-        && router.currentRoute.name !== 'ledger-ble-sign') {
+        && !isPublicRoute(router.currentRoute.value)
+        && router.currentRoute.value.path !== '/welcome'
+        && router.currentRoute.value.name !== 'passkey-auth'
+        && router.currentRoute.value.name !== 'ledger-ble-sign') {
         router.push('/welcome');
       }
     }
@@ -150,8 +147,8 @@ void waitForOptionsStartup({
     const ready = walletStoreState.loggedWallet
       && !walletStoreState.isLocked
       && !walletStoreState.isSyncing;
-    if (ready && router.currentRoute.path === '/welcome' && router.currentRoute.query.addWallet !== '1') {
-      const redirect = router.currentRoute.query.redirect;
+    if (ready && router.currentRoute.value.path === '/welcome' && router.currentRoute.value.query['addWallet'] !== '1') {
+      const redirect = router.currentRoute.value.query['redirect'];
       const target = typeof redirect === 'string' && redirect.startsWith('/') && !redirect.startsWith('//')
         ? redirect : '/';
       // Go through the existing route guards again, including chain and
@@ -159,10 +156,11 @@ void waitForOptionsStartup({
       router.replace(target).catch(() => { /* swallow navigation failures */ });
     }
   };
-  app.$watch(
+  const stopReady = watch(
     () => [walletStoreState.loggedWallet, walletStoreState.isLocked, walletStoreState.isSyncing] as const,
     reconcileReadyRoute,
     { immediate: true }
   );
-  router.onReady(reconcileReadyRoute);
+  void router.isReady().then(reconcileReadyRoute);
+  app.onUnmount(() => { stopActivity(); stopLock(); stopReady(); });
 });

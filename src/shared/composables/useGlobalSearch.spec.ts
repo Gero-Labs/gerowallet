@@ -1,11 +1,12 @@
-import Vue, { nextTick, ref } from 'vue';
+import * as Vue from 'vue';
+import { nextTick, ref } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GovProposal } from '@/api/governance.types';
 
 vi.mock('@/shared/composables/useTranslation', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('@/stores/walletStore', () => ({
   default: { hasBackup: () => false },
-  walletStore: Vue.observable({
+  walletStore: Vue.reactive({
     loggedWallet: { chain: 'Cardano', network: 'Mainnet', type: 'Normal' },
     transactions: [],
     collections: {},

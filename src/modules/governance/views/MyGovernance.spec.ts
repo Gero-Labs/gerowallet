@@ -1,3 +1,5 @@
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
+vi.mock('@/shared/composables/useTranslation', async () => ({ useTranslation: (await import('@test/helpers/translations')).useMockTranslation }));
 // The governance home is a projection of ONE derived state, so what is worth
 // asserting here is the projection: that the state the wallet is actually in
 // decides which surface renders, and that the withdrawal gate is reachable from
@@ -7,8 +9,9 @@
 // — useWithdrawal drags the Cardano builder in, and the gate dialog drags the
 // whole signing stack. Neither is what this file owns.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mount, type Wrapper } from '@vue/test-utils';
-import Vue, { ref } from 'vue';
+import { mount, type VueWrapper } from '@vue/test-utils';
+import * as Vue from 'vue';
+import { ref } from 'vue';
 import { Cardano } from '@cardano-sdk/core';
 
 const withdraw = vi.fn();
@@ -49,7 +52,7 @@ vi.mock('@/modules/governance/dialogs/DRepDelegateDialog.vue', () => ({
 }));
 
 const push = vi.fn();
-vi.mock('vue-router/composables', () => ({ useRouter: () => ({ push: (...args: unknown[]) => push(...args) }) }));
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: (...args: unknown[]) => push(...args) }) }));
 
 // @ts-ignore — tsconfig ships no `*.vue` shim; vite resolves this fine.
 import MyGovernance from './MyGovernance.vue';
@@ -99,10 +102,8 @@ function represented(): void {
   } as unknown as typeof walletStore.account;
 }
 
-function mountPage(): Wrapper<Vue> {
-  return mount(MyGovernance, {
-    mocks: { $t },
-    stubs: {
+function mountPage(): VueWrapper {
+  return mount(MyGovernance, { global: { config: { globalProperties: mockGlobalProperties({ $t }) }, stubs: {
       'v-icon': true,
       'v-skeleton-loader': true,
       AsOf: true,
@@ -117,14 +118,13 @@ function mountPage(): Wrapper<Vue> {
       // against a button that does nothing.
       'v-btn': {
         inheritAttrs: false,
-        template: '<button v-bind="$attrs" v-on="$listeners"><slot /></button>',
+        template: '<button v-bind="$attrs"><slot /></button>',
       },
-    },
-  });
+    } } });
 }
 
 /** Every rendered GButton, matched by the class GButton always applies. */
-function buttonsLabelled(w: Wrapper<Vue>, label: string) {
+function buttonsLabelled(w: VueWrapper, label: string) {
   return w.findAll('.g-btn').filter(b => b.text().includes(label));
 }
 
@@ -134,7 +134,7 @@ async function settle(): Promise<void> {
   await Vue.nextTick();
 }
 
-let wrapper: Wrapper<Vue> | null = null;
+let wrapper: VueWrapper | null = null;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -159,7 +159,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  wrapper?.destroy();
+  wrapper?.unmount();
   wrapper = null;
   // The tile tests below drive the epoch through the real store; leaving a tip
   // behind would silently change every other case's expiry arithmetic.
@@ -176,7 +176,7 @@ function actionsLoaded(items: Record<string, unknown>[]): void {
 }
 
 /** Captions under the three health tiles — the line each tile hangs off its fact. */
-function tileCaptions(w: Wrapper<Vue>) {
+function tileCaptions(w: VueWrapper) {
   return w.findAll('.my-governance__tile .t-caption');
 }
 

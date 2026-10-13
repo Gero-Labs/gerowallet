@@ -1,5 +1,4 @@
-import type Vue from 'vue';
-import type { CreateElement } from 'vue';
+import * as Vue from 'vue';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -10,31 +9,28 @@ vi.mock('@/shared/dialogs/BaseDialog.vue', () => ({
   default: {
     name: 'BaseDialog',
     props: ['isOpen', 'title', 'subtitle', 'minHeight', 'width', 'persistent', 'img', 'imgStyle'],
-    render(this: Vue, h: CreateElement) {
-      return h('div', [
-        h('button', { attrs: { 'data-test': 'dismiss' }, on: { click: () => this.$emit('close') } }),
-        ...(this.$slots['default'] || []),
-      ]);
-    },
+    render(this: Vue.ComponentPublicInstance) {
+    return Vue.h('div', [
+        Vue.h('button', { 'data-test': 'dismiss', onClick: () => this.$emit('close') }),
+        ...(this.$slots['default']?.() || []),
+    ]);
+},
   },
 }));
 vi.mock('@/modules/swap/components/GeroSwapEmbed.vue', () => ({
   default: {
     name: 'GeroSwapEmbed',
     props: ['tokenIn', 'tokenOut', 'context'],
-    render(h) {
-      return h('div');
-    },
+    render() {
+    return Vue.h('div');
+},
   },
 }));
 
 import SwapDialog from './SwapDialog.vue';
 
 function mountDialog(propsData: Record<string, unknown> = {}) {
-  return mount(SwapDialog, {
-    propsData: { isOpen: true, ...propsData },
-    stubs: { 'v-card-text': true },
-  });
+  return mount(SwapDialog, { props: { isOpen: true, ...propsData }, global: { stubs: { 'v-card-text': true } } });
 }
 
 describe('SwapDialog', () => {
@@ -62,14 +58,15 @@ describe('SwapDialog', () => {
   });
 
   it('forwards submitted detail before closing', () => {
-    const wrapper = mountDialog();
     const order: string[] = [];
     const detail = { txHash: 'submitted-tx' };
-    wrapper.vm.$on('swap-submitted', forwarded => {
-      expect(forwarded).toBe(detail);
-      order.push('submitted');
+    const wrapper = mountDialog({
+      onSwapSubmitted: (forwarded: unknown) => {
+        expect(forwarded).toBe(detail);
+        order.push('submitted');
+      },
+      onClose: () => order.push('close'),
     });
-    wrapper.vm.$on('close', () => order.push('close'));
 
     wrapper.findComponent({ name: 'GeroSwapEmbed' }).vm.$emit('swap-submitted', detail);
 

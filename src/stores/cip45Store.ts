@@ -1,4 +1,5 @@
-import Vue from 'vue';
+import { plainStoreSnapshot } from '@/stores/serialization';
+import { reactive } from 'vue';
 import { getContextType } from '@/utils/storageSync';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
@@ -9,7 +10,7 @@ export interface Cip45State {
   session: Cip45Session | null;
 }
 
-export const cip45State = Vue.observable<Cip45State>({
+export const cip45State = reactive<Cip45State>({
   status: 'idle',
   session: null,
 });
@@ -42,7 +43,7 @@ function broadcastFromBackground(updates: Partial<Cip45State>) {
 
     if (storageWriteTimeout) clearTimeout(storageWriteTimeout);
     storageWriteTimeout = setTimeout(() => {
-      chrome.storage.local.set({ [STORE_NAME]: cip45State });
+      chrome.storage.local.set(plainStoreSnapshot({ [STORE_NAME]: cip45State }));
     }, 300);
   }
 }

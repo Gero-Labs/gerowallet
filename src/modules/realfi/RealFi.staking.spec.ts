@@ -1,3 +1,5 @@
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
+import * as Vue from 'vue';
 import { computed, reactive, ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -41,14 +43,14 @@ vi.mock('./composables/useRealFi', () => ({ useRealFi: () => state }));
 // `__esModule` lets Vue 2's async-component resolver unwrap `default`.
 vi.mock('./components/RealFiOrderFlow.vue', () => ({
   __esModule: true,
-  default: { name: 'RealFiOrderFlow', render: (h: (tag: string) => unknown) => h('div'), methods: { run } },
+  default: { name: 'RealFiOrderFlow', render: () => Vue.h('div'), methods: { run } },
 }));
 vi.mock('./components/RealFiAmountDialog.vue', () => ({
   __esModule: true,
   default: {
     name: 'RealFiAmountDialog',
     props: ['isOpen', 'mode', 'balanceUnits', 'unlockDate'],
-    render: (h: (tag: string) => unknown) => h('div'),
+    render: () => Vue.h('div'),
   },
 }));
 
@@ -81,20 +83,16 @@ async function settle(page: { vm: { $nextTick(): Promise<void> } }) {
 }
 
 async function mountPage() {
-  const page = mount(RealFi, {
-    mocks: {
-      $t: (key: string, values?: Record<string, unknown>) =>
-        values ? `${key}${JSON.stringify(values)}` : key,
-      $tc: (key: string, n: number) => `${key}(${n})`,
-    },
-    stubs: {
+  const page = mount(RealFi, { global: { config: { globalProperties: mockGlobalProperties({
+      $t: (key: string, values?: Record<string, unknown> | number) =>
+        typeof values === 'number' ? `${key}(${values})` : values ? `${key}${JSON.stringify(values)}` : key,
+    }) }, stubs: {
       'v-layout': { template: '<div><slot /></div>' },
       'v-row': { template: '<div><slot /></div>' },
       'v-col': { template: '<div><slot /></div>' },
-      'v-btn': { template: '<button @click="$emit(\'click\')"><slot /></button>' },
+      'v-btn': { emits: ['click'], template: '<button @click="$emit(\'click\')"><slot /></button>' },
       'v-progress-circular': true,
-    },
-  });
+    } } });
   await settle(page);
   return page;
 }
@@ -102,7 +100,7 @@ async function mountPage() {
 type Page = Awaited<ReturnType<typeof mountPage>>;
 
 function button(page: Page, label: string) {
-  const found = page.findAll('button').wrappers.find((b) => b.text() === label);
+  const found = page.findAll('button').find((b) => b.text() === label);
   if (!found) throw new Error(`no button labelled ${label}`);
   return found;
 }
@@ -189,7 +187,7 @@ describe('RealFi Earn page, in-wallet orders', () => {
     state.protocol.value = { nextCooldownSlot: null };
     const page = await mountPage();
 
-    expect(page.findAll('button').wrappers.map((b) => b.text())).not.toContain('staking.unstake');
+    expect(page.findAll('button').map((b) => b.text())).not.toContain('staking.unstake');
   });
 
   it('cancels every stranded order in one transaction', async () => {
@@ -242,7 +240,7 @@ describe('RealFi Earn page, in-wallet orders', () => {
 
     expect(page.text()).toContain('realfi.claim.from');
     expect(page.text()).not.toContain('realfi.claim.title');
-    expect(page.findAll('button').wrappers.map((b) => b.text())).not.toContain('dashboard.claim');
+    expect(page.findAll('button').map((b) => b.text())).not.toContain('dashboard.claim');
   });
 
   it('lets the owner cancel a single open order from its row', async () => {
@@ -296,7 +294,7 @@ describe('RealFi Earn page, right after an order is sent', () => {
     const page = await placeOrder('tx-new');
 
     expect(pendingRow(page).exists()).toBe(true);
-    expect(page.findAll('button').wrappers.map((b) => b.text())).not.toContain(
+    expect(page.findAll('button').map((b) => b.text())).not.toContain(
       'realfi.start.stakeCta',
     );
   });
@@ -328,7 +326,7 @@ describe('RealFi Earn page, right after an order is sent', () => {
 
     expect(pendingRow(page).exists()).toBe(true);
     // The wallet's balance has caught up by now, so new orders are offered again.
-    expect(page.findAll('button').wrappers.map((b) => b.text())).toContain('realfi.stakeAction');
+    expect(page.findAll('button').map((b) => b.text())).toContain('realfi.stakeAction');
   });
 
   it('gives up after 30 minutes: something else is wrong by then', async () => {
@@ -366,7 +364,7 @@ describe('RealFi Earn page, right after an order is sent', () => {
     ]);
     const page = await placeOrder('tx-new');
 
-    const labels = page.findAll('button').wrappers.map((b) => b.text());
+    const labels = page.findAll('button').map((b) => b.text());
     expect(labels).not.toContain('realfi.cancel.cta');
     expect(labels).not.toContain('dashboard.claim');
   });
@@ -529,7 +527,7 @@ describe('RealFi Earn page, where unstaked money is', () => {
 
     const card = page.find('.realfi-unstaking');
     expect(calls).toContainEqual(['realfi.claim.title', undefined]);
-    expect(card.findAll('button').wrappers.map((b) => b.text())).toContain('dashboard.claim');
+    expect(card.findAll('button').map((b) => b.text())).toContain('dashboard.claim');
     expect(page.find('.realfi-unstake__fill').classes()).toContain('realfi-unstake__fill--ready');
   });
 
@@ -591,7 +589,7 @@ describe('RealFi Earn page, where unstaked money is', () => {
       order({ action: 'Stake', status: 'Executed', amount: '9994980280' }),
     ]);
 
-    const rows = page.findAll('.realfi-order').wrappers.map((r) => r.text());
+    const rows = page.findAll('.realfi-order').map((r) => r.text());
     expect(rows[0]).toContain('5,000.00 sUSDrf');
     expect(rows[1]).toContain('9,994.98 USDrf');
   });

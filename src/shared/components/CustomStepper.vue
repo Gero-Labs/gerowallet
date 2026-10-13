@@ -1,16 +1,12 @@
 <template>
-  <v-stepper v-model="activeStep" flat class="stepper-container" non-linear alt-labels>
-    <v-stepper-items>
+  <v-stepper :model-value="currentStep" flat class="stepper-container" non-linear alt-labels>
+    <v-stepper-window :model-value="currentStep">
       <slot></slot>
-    </v-stepper-items>
+    </v-stepper-window>
   </v-stepper>
 </template>
 <script setup lang="ts">
-import { computed } from 'vue';
-
-
-
-const props = defineProps({
+defineProps({
   steps: {
     type: Array,
     required: true,
@@ -21,9 +17,6 @@ const props = defineProps({
   },
 });
 
-const activeStep = computed(() => {
-  return props.currentStep;
-});
 </script>
 <style scoped>
 /* The wrapped v-stepper otherwise renders Vuetify's default grey surface

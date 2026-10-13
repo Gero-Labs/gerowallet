@@ -13,8 +13,8 @@
       <v-text-field
         v-model="search"
         :placeholder="$t('assets.searchCollectibles')"
-        outlined
-        dense
+        variant="outlined"
+        density="compact"
         hide-details
         class="collectibles-search mb-3"
         prepend-inner-icon="mdi-magnify"
@@ -47,11 +47,11 @@
                   <!-- Scam badge -->
                   <v-chip
                     v-if="item.isScam"
-                    x-small
+                    size="x-small"
                     color="error"
                     class="scam-badge"
                   >
-                    <v-icon color="white" x-small class="mr-1">mdi-alert-decagram</v-icon>
+                    <v-icon color="white" size="x-small" class="mr-1">mdi-alert-decagram</v-icon>
                     {{ $t('assets.scamToken') }}
                   </v-chip>
 
@@ -63,7 +63,7 @@
                       size="18"
                       class="check-badge"
                     >
-                      <v-icon color="black" x-small>mdi-check-bold</v-icon>
+                      <v-icon color="black" size="x-small">mdi-check-bold</v-icon>
                     </v-avatar>
                   </v-scroll-y-transition>
 
@@ -73,8 +73,8 @@
 
                 <!-- Quantity controls (multi-quantity NFTs) -->
                 <div v-if="item.quantity > 1 && isSelected(item)" class="quantity-controls">
-                  <v-btn icon x-small @click.stop="decreaseQty(item)">
-                    <v-icon color="var(--g-accent)" small>mdi-minus-box-outline</v-icon>
+                  <v-btn icon size="x-small" @click.stop="decreaseQty(item)">
+                    <v-icon color="var(--g-accent)" size="small">mdi-minus-box-outline</v-icon>
                   </v-btn>
                   <input
                     :value="getSelectedItem(item)?.toSendQuantity || 1"
@@ -85,8 +85,8 @@
                     @input="onQtyInput(item, $event)"
                     @click.stop
                   />
-                  <v-btn icon x-small @click.stop="increaseQty(item)">
-                    <v-icon color="var(--g-accent)" small>mdi-plus-box-outline</v-icon>
+                  <v-btn icon size="x-small" @click.stop="increaseQty(item)">
+                    <v-icon color="var(--g-accent)" size="small">mdi-plus-box-outline</v-icon>
                   </v-btn>
                 </div>
               </div>
@@ -104,7 +104,7 @@
     <v-card-actions class="px-4 pb-4 pt-2" style="z-index: 1;">
       <v-spacer />
       <v-btn
-        outlined
+        variant="outlined"
         color="var(--g-accent)"
         class="done-button"
         @click="onDone()"

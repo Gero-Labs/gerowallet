@@ -1,6 +1,6 @@
 <template>
   <BaseDialog
-    :isOpen="props.value"
+    :isOpen="props.modelValue"
     icon="mdi-lock-clock"
     :imgSize="40"
     :title="$t('babylon.stakeDialog.title')"
@@ -259,7 +259,7 @@
               class="explorer-link"
               @click.stop
             >
-              <v-icon x-small class="mr-1">mdi-open-in-new</v-icon>
+              <v-icon size="x-small" class="mr-1">mdi-open-in-new</v-icon>
               {{ $t('babylon.stakeDialog.viewOnExplorer') }}
             </a>
           </div>
@@ -325,7 +325,7 @@ const { t } = useTranslation();
 const { loggedWallet, utxos } = toRefs(walletStore);
 
 const props = defineProps<{
-  value: boolean;
+  modelValue: boolean;
   params: BabylonParamVersion | null;
   selectedProvider: BabylonFinalityProvider | null;
   btcAddress: string;
@@ -334,7 +334,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'input', value: boolean): void;
+  (e: 'update:modelValue', value: boolean): void;
   (e: 'staked', txId: string): void;
 }>();
 
@@ -428,12 +428,12 @@ function validateAmount() {
 
 async function updateFeeEstimate() {
   try {
-    const { getBitcoinFeeEstimator } = await import('@/chains/bitcoin/bitcoinFeeEstimator');
+    const { getBitcoinFeeEstimator, FeePriority } = await import('@/chains/bitcoin/bitcoinFeeEstimator');
     const estimator = getBitcoinFeeEstimator();
     const [fast, medium, slow] = await Promise.all([
-      estimator.getFeeEstimate('fast'),
-      estimator.getFeeEstimate('medium'),
-      estimator.getFeeEstimate('slow'),
+      estimator.getFeeEstimate(FeePriority.FAST),
+      estimator.getFeeEstimate(FeePriority.MEDIUM),
+      estimator.getFeeEstimate(FeePriority.SLOW),
     ]);
     feeEstimates.value = { fast: fast.feeRate, medium: medium.feeRate, slow: slow.feeRate };
   } catch { /* fallback to defaults */ }
@@ -528,7 +528,7 @@ function explorerUrl(txId: string): string {
 }
 
 function closeDialog() {
-  emit('input', false);
+  emit('update:modelValue', false);
   currentStep.value = 1;
   amountBtc.value = '';
   password.value = '';

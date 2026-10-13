@@ -8,15 +8,15 @@
     <v-row no-gutters class="pb-2">
       <v-spacer></v-spacer>
       <v-btn-toggle color="primary" v-model="seedPhraseLength" mandatory>
-        <v-btn small value="12">
+        <v-btn size="small" value="12">
           <v-icon style="right: -5px">mdi-numeric-1</v-icon>
           <v-icon style="left: -5px">mdi-numeric-2</v-icon>
         </v-btn>
-        <v-btn small value="15">
+        <v-btn size="small" value="15">
           <v-icon style="right: -5px">mdi-numeric-1</v-icon>
           <v-icon style="left: -5px">mdi-numeric-5</v-icon>
         </v-btn>
-        <v-btn small value="24">
+        <v-btn size="small" value="24">
           <v-icon style="right: -5px">mdi-numeric-2</v-icon>
           <v-icon style="left: -5px">mdi-numeric-4</v-icon>
         </v-btn>
@@ -40,7 +40,7 @@
 
     <!-- Navigation buttons -->
     <div class="onboarding-actions d-flex" style="gap: 12px;">
-      <v-btn text @click="$emit('back')">{{ $t('common.back') }}</v-btn>
+      <v-btn variant="text" @click="$emit('back')">{{ $t('common.back') }}</v-btn>
       <v-spacer />
       <v-btn
         class="onb-continue"

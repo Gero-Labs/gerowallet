@@ -1,20 +1,20 @@
 <template>
-  <v-layout>
+  <div class="d-flex flex-wrap flex-grow-1">
     <v-row no-gutters>
       <v-col cols="12" class="pa-2" v-if="account?.controlled_amount && account?.pool_id">
         <StakingCard></StakingCard>
       </v-col>
       <v-col cols="12" class="pa-2">
-        <v-card flat outlined class="glass-panel">
+        <v-card flat variant="outlined" class="glass-panel">
           <v-card-title class="pa-0">
-            <v-list-item two-line>
-              <v-list-item-content>
+            <v-list-item lines="two">
+              <div class="g-list-content">
                 <v-list-item-title class="staking-header">
                   {{ $t('staking.availableStakePools') }}
                   <v-spacer></v-spacer>
                   <div class="staking-pro-toggle">
                     <p class="mr-5 my-auto">{{ $t('staking.pro') }}</p>
-                    <v-switch inset dense v-model="isPro" hide-details class="staking-switch"> </v-switch>
+                    <v-switch inset density="compact" v-model="isPro" hide-details class="staking-switch"> </v-switch>
                   </div>
                 </v-list-item-title>
                 <v-list-item-subtitle>
@@ -22,16 +22,16 @@
                   {{ networks.resolveCurrencySymbol(loggedWallet?.chain, loggedWallet?.network) }} tokens with
                   {{ loggedWallet?.chain }}'s extensive network of stake pools.
                 </v-list-item-subtitle>
-              </v-list-item-content>
-              <v-list-item-action class="staking-gero-support ma-0" v-if="geroPoolExists && !delegatingToGero">
+              </div>
+              <div class="staking-gero-support ma-0 g-list-action" v-if="geroPoolExists && !delegatingToGero">
                 <v-card-subtitle>
-                  <v-btn v-if="isDelegationPending" small class="geroButton" style="color: var(--g-on-grad)!important" disabled>
+                  <v-btn v-if="isDelegationPending" size="small" class="geroButton" style="color: var(--g-on-grad)!important" disabled>
                     <v-progress-circular indeterminate size="14" width="2" class="mr-2" />
                     {{ $t('staking.delegationPending') }}
                   </v-btn>
-                  <v-btn v-else small class="geroButton" style="color: var(--g-on-grad)!important" @click="delegateToGero">{{ $t('staking.stakeWithGero') }}</v-btn>
+                  <v-btn v-else size="small" class="geroButton" style="color: var(--g-on-grad)!important" @click="delegateToGero">{{ $t('staking.stakeWithGero') }}</v-btn>
                 </v-card-subtitle>
-              </v-list-item-action>
+              </div>
             </v-list-item>
           </v-card-title>
           <v-card-subtitle class="pt-5">
@@ -40,8 +40,8 @@
                 <v-text-field
                   v-model="search"
                   clearable
-                  outlined
-                  dense
+                  variant="outlined"
+                  density="compact"
                   :label="$t('staking.searchPoolNameTicker')"
                   prepend-inner-icon="mdi-magnify"
                   hide-details
@@ -50,7 +50,7 @@
               </v-col>
               <v-col class="px-1" cols="12" lg="3" md="4" sm="6" xs="12">
                 <v-switch
-                  dense
+                  density="compact"
                   v-model="hideSaturated"
                   :label="$t('staking.hideSaturated')"
                   hide-details
@@ -59,7 +59,7 @@
               </v-col>
               <v-col class="px-1" cols="12" lg="3" md="4" sm="6" xs="12">
                 <v-switch
-                  dense
+                  density="compact"
                   v-model="pledgeMet"
                   :label="$t('staking.pledgeMet')"
                   hide-details
@@ -71,101 +71,44 @@
           <v-card-text class="py-0">
             <!-- Error message -->
             <div v-if="poolsError" class="text-center py-4">
-              <v-icon color="error" large>mdi-alert</v-icon>
+              <v-icon color="error" size="large">mdi-alert</v-icon>
               <p class="mt-2 error--text">{{ poolsError }}</p>
               <v-btn @click="reloadWithFilters" color="primary">{{ $t('staking.retry') }}</v-btn>
             </div>
-            <v-data-table
+            <v-data-table-server
               v-if="isPro"
-              dense
+              density="compact"
               :headers="headers"
               :items="paginatedPools"
-              :items-per-page="15"
-              :page.sync="page"
-              @page-count="pageCount = $event"
+              :items-per-page="pageSize"
+              :items-length="paginationMeta?.total_items || 0"
+              item-value="pool_id_bech32"
+              v-model:page="page"
               :header-props="{ 'sort-icon': 'mdi-menu-up' }"
               :must-sort="true"
               hide-default-footer
               class="poolsTable transparent"
-              :sort-by.sync="sortBy"
-              :sort-desc.sync="sortDesc"
+              v-model:sort-by="tableSort"
               :loading="poolsLoading"
-              @click:row="delegate"
+              @click:row="(_event, { item }) => delegate(item)"
             >
               <template v-slot:[`item.name`]="{ item }">
-                <v-list-item three-line style="min-height: 68px" class="px-0">
-                  <v-list-item-avatar size="24" style="place-self: center; margin-right: 8px !important">
+                <v-list-item lines="three" style="min-height: 68px" class="px-0">
+                  <v-avatar size="24" style="place-self: center; margin-right: 8px !important">
                     <v-img
                       :src="poolIcon(item)"
                       alt=""
                       @error="assets.fallbackImage"
                       eager
                     ></v-img>
-                  </v-list-item-avatar>
-                  <v-list-item-content class="py-1">
+                  </v-avatar>
+                  <div class="py-1 g-list-content">
                     <v-list-item-title class="pool-name-title"
                       >{{ item.ticker ? `[${item.ticker}] ${item.name ? item.name : ''}` : (item.pool_id_bech32 ? `${item.pool_id_bech32.slice(0, 10)}…${item.pool_id_bech32.slice(-6)}` : 'Unknown Pool') }}
-                      <div class="ml-1">
-                        <v-btn icon x-small v-if="item?.homepage" @click.stop="" :href="item?.homepage" target="_blank">
-                          <v-icon small> mdi-web </v-icon>
-                        </v-btn>
-                        <v-btn
-                          icon
-                          x-small
-                          v-if="poolExtendedInfo(item)?.info?.social?.facebook_handle"
-                          @click.stop=""
-                          :href="'https://www.facebook.com/' + poolExtendedInfo(item)?.info?.social?.facebook_handle"
-                          target="_blank"
-                        >
-                          <v-icon small> mdi-facebook </v-icon>
-                        </v-btn>
-                        <v-btn
-                          icon
-                          x-small
-                          v-if="poolExtendedInfo(item)?.info?.social?.twitter_handle"
-                          @click.stop=""
-                          :href="'https://x.com/' + poolExtendedInfo(item)?.info?.social?.twitter_handle"
-                          target="_blank"
-                        >
-                          <v-avatar tile size="14">
-                            <v-img :src="assets.xSvg" alt="x"></v-img>
-                          </v-avatar>
-                        </v-btn>
-                        <v-btn
-                          icon
-                          x-small
-                          v-if="poolExtendedInfo(item)?.info?.social?.youtube_handle"
-                          @click.stop=""
-                          :href="'https://youtube.com/' + poolExtendedInfo(item)?.info?.social?.youtube_handle"
-                          target="_blank"
-                        >
-                          <v-icon small> mdi-youtube </v-icon>
-                        </v-btn>
-                        <v-btn
-                          icon
-                          x-small
-                          v-if="poolExtendedInfo(item)?.info?.social?.discord_handle"
-                          @click.stop=""
-                          :href="'https://discord.gg/' + poolExtendedInfo(item)?.info?.social?.discord_handle"
-                          target="_blank"
-                        >
-                          <v-avatar tile size="14">
-                            <v-img :src="assets.discordSvg" width="14" height="14" alt="discord" contain></v-img>
-                          </v-avatar>
-                        </v-btn>
-                        <v-btn
-                          icon
-                          x-small
-                          v-if="poolExtendedInfo(item)?.info?.social?.telegram_handle"
-                          @click.stop=""
-                          :href="'https://t.me/' + poolExtendedInfo(item)?.info?.social?.telegram_handle"
-                          target="_blank"
-                        >
-                          <v-avatar tile size="14">
-                            <v-img :src="assets.telegramSvg" alt="x"></v-img>
-                          </v-avatar>
-                        </v-btn>
-                      </div>
+                      <div class="ml-1"><v-btn v-for="link in poolLinks(item)" :key="link.href" icon size="x-small" @click.stop="" :href="link.href" target="_blank">
+  <v-avatar v-if="link.image" rounded="0" size="14"><v-img :src="link.image" alt="" /></v-avatar>
+  <v-icon v-else size="small">{{ link.icon }}</v-icon>
+</v-btn></div>
                     </v-list-item-title>
                     <v-list-item-subtitle class="pool-description" v-if="item.description">{{
                       item.description
@@ -174,7 +117,7 @@
                       {{ filters.truncate(item.pool_id_bech32) }}
                       <CopyButton :value="item.pool_id_bech32" x-small></CopyButton>
                     </v-list-item-subtitle>
-                  </v-list-item-content>
+                  </div>
                 </v-list-item>
               </template>
               <template v-slot:[`item.live_delegators`]="{ item }">
@@ -191,7 +134,7 @@
                   rounded
                   :color="filters.getColor(item.live_saturation)"
                   height="16"
-                  :value="item.live_saturation"
+                  :model-value="item.live_saturation"
                   striped
                 >
                   <template v-slot:default="{ value }">
@@ -213,7 +156,7 @@
                     v-if="Number(item.active_stake) - Number(item.live_stake) > 100000000"
                     class="stake-change-up"
                   >
-                    <v-icon x-small color="success" class="stake-arrow-icon">mdi-arrow-up-bold</v-icon>
+                    <v-icon size="x-small" color="success" class="stake-arrow-icon">mdi-arrow-up-bold</v-icon>
                     {{
                       filters.toCurrency(
                         Number(item.active_stake) - Number(item.live_stake),
@@ -229,7 +172,7 @@
                     v-else-if="Number(item.live_stake) - Number(item.active_stake) > 100000000"
                     class="stake-change-down"
                   >
-                    <v-icon x-small color="error" class="stake-arrow-icon-down">mdi-arrow-down-bold</v-icon>
+                    <v-icon size="x-small" color="error" class="stake-arrow-icon-down">mdi-arrow-down-bold</v-icon>
                     {{
                       filters.toCurrency(
                         Number(item.live_stake) - Number(item.active_stake),
@@ -267,12 +210,12 @@
                     true
                   )
                 }}
-                <v-icon x-small color="success" v-if="Number(item.pledge) <= Number(item.live_pledge)"
+                <v-icon size="x-small" color="success" v-if="Number(item.pledge) <= Number(item.live_pledge)"
                   >mdi-check</v-icon
                 >
-                <v-icon x-small color="error" v-else>mdi-close</v-icon>
+                <v-icon size="x-small" color="error" v-else>mdi-close</v-icon>
               </template>
-            </v-data-table>
+            </v-data-table-server>
             <v-row no-gutters v-else>
               <v-col
                 cols="12"
@@ -290,89 +233,26 @@
                   @click="delegate(pool)"
                 >
                     <v-list-item v-if="pool">
-                      <v-list-item-avatar size="32" class="mr-3 align-self-center">
+                      <v-avatar size="32" class="mr-3 align-self-center">
                         <v-img :src="poolIcon(pool)" alt="" @error="assets.fallbackImage" eager></v-img>
-                      </v-list-item-avatar>
-                      <v-list-item-content class="pb-0">
+                      </v-avatar>
+                      <div class="pb-0 g-list-content">
                         <v-list-item-title>
                           {{ pool.ticker ? `[${pool.ticker}] ${pool.name ? pool.name : ''}` : (pool.pool_id_bech32 ? `${pool.pool_id_bech32.slice(0, 10)}…${pool.pool_id_bech32.slice(-6)}` : 'Unknown Pool') }}
                         </v-list-item-title>
                         <v-list-item-subtitle>
-                          <v-btn
-                            icon
-                            x-small
-                            v-if="pool?.homepage"
-                            @click.stop=""
-                            :href="pool?.homepage"
-                            target="_blank"
-                          >
-                            <v-icon small> mdi-web </v-icon>
-                          </v-btn>
-                          <v-btn
-                            icon
-                            x-small
-                            v-if="poolExtendedInfo(pool)?.info?.social?.facebook_handle"
-                            @click.stop=""
-                            :href="'https://www.facebook.com/' + poolExtendedInfo(pool)?.info?.social?.facebook_handle"
-                            target="_blank"
-                          >
-                            <v-icon small> mdi-facebook </v-icon>
-                          </v-btn>
-                          <v-btn
-                            icon
-                            x-small
-                            v-if="poolExtendedInfo(pool)?.info?.social?.twitter_handle"
-                            @click.stop=""
-                            :href="'https://x.com/' + poolExtendedInfo(pool)?.info?.social?.twitter_handle"
-                            target="_blank"
-                          >
-                            <v-avatar tile size="14">
-                              <v-img :src="assets.xSvg" alt="x"></v-img>
-                            </v-avatar>
-                          </v-btn>
-                          <v-btn
-                            icon
-                            x-small
-                            v-if="poolExtendedInfo(pool)?.info?.social?.youtube_handle"
-                            @click.stop=""
-                            :href="'https://youtube.com/' + poolExtendedInfo(pool)?.info?.social?.youtube_handle"
-                            target="_blank"
-                          >
-                            <v-icon small> mdi-youtube </v-icon>
-                          </v-btn>
-                          <v-btn
-                            icon
-                            x-small
-                            v-if="poolExtendedInfo(pool)?.info?.social?.discord_handle"
-                            @click.stop=""
-                            :href="'https://discord.gg/' + poolExtendedInfo(pool)?.info?.social?.discord_handle"
-                            target="_blank"
-                          >
-                            <v-avatar tile size="14">
-                              <v-img :src="assets.discordSvg" alt="discord" width="14" height="14" contain></v-img>
-                            </v-avatar>
-                          </v-btn>
-                          <v-btn
-                            icon
-                            x-small
-                            v-if="poolExtendedInfo(pool)?.info?.social?.telegram_handle"
-                            @click.stop=""
-                            :href="'https://t.me/' + poolExtendedInfo(pool)?.info?.social?.telegram_handle"
-                            target="_blank"
-                          >
-                            <v-avatar tile size="14">
-                              <v-img :src="assets.telegramSvg" alt="telegram"></v-img>
-                            </v-avatar>
-                          </v-btn>
-                        </v-list-item-subtitle>
-                      </v-list-item-content>
-                      <v-list-item-avatar
+                          <v-btn v-for="link in poolLinks(pool)" :key="link.href" icon size="x-small" @click.stop="" :href="link.href" target="_blank">
+  <v-avatar v-if="link.image" rounded="0" size="14"><v-img :src="link.image" alt="" /></v-avatar>
+  <v-icon v-else size="small">{{ link.icon }}</v-icon>
+</v-btn></v-list-item-subtitle>
+                      </div>
+                      <v-avatar
                         class="ma-0"
                         size="32"
                         v-if="poolExtendedInfo(pool)?.info?.url_png_icon_64x64"
                       >
                         <v-img :src="poolExtendedInfo(pool).info.url_png_icon_64x64" eager></v-img>
-                      </v-list-item-avatar>
+                      </v-avatar>
                     </v-list-item>
                     <v-card-text class="pt-0">
                       <v-row no-gutters>
@@ -384,7 +264,7 @@
                             height="20"
                             rounded
                             striped
-                            :value="pool.live_saturation"
+                            :model-value="pool.live_saturation"
                             :color="filters.getColor(pool.live_saturation)"
                           >
                             <span>{{ (pool.live_saturation ?? 0) + '%' }}</span>
@@ -396,7 +276,7 @@
                           <span class="pool-card-label">{{ $t('staking.pledge') }}</span>
                         </v-col>
                         <v-col cols="7">
-                          <v-chip x-small class="pool-pledge-chip" v-if="loggedWallet">
+                          <v-chip size="x-small" class="pool-pledge-chip" v-if="loggedWallet">
                             {{
                               filters.toCurrency(
                                 pool.pledge,
@@ -446,7 +326,7 @@
               circle
               v-model="page"
               :length="numPages"
-              @input="loadPaginatedPools"
+              @update:model-value="loadPaginatedPools"
               :disabled="poolsLoading"
             ></v-pagination>
           </v-card-actions>
@@ -460,10 +340,11 @@
       :pool="selectedPool"
       :tx="txData"
     ></DelegateDialog>
-  </v-layout>
+  </div>
 </template>
 <script setup lang="ts">
 import { computed, onMounted, ref, toRefs, watch, onBeforeUnmount, getCurrentInstance } from 'vue';
+import type { DataTableHeader, DataTableSortItem } from 'vuetify';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { useDelegation } from '@/shared/composables/useDelegation';
 import debounce from 'lodash/debounce';
@@ -495,7 +376,6 @@ const {
 
 const page = ref<number>(1);
 const pageSize = ref<number>(15);
-const pageCount = ref<number>(0);
 
 // Use reactive filters from store
 const hideSaturated = computed({
@@ -543,32 +423,32 @@ const reloadWithFilters = () => {
 
 const sortBy = ref<string>('ros');
 const sortDesc = ref<boolean>(true);
+const tableSort = computed<DataTableSortItem[]>({
+  get: (): DataTableSortItem[] => [{ key: sortBy.value, order: sortDesc.value ? 'desc' : 'asc' }],
+  set: value => { sortBy.value = value[0]?.key || 'ros'; sortDesc.value = value[0]?.order === 'desc'; },
+});
 
-const headers = computed(() => {
+const headers = computed<DataTableHeader[]>(() => {
   return [
-    { text: t('common.name'), sortable: true, align: 'left', value: 'name' },
+    { title: t('common.name'), sortable: true, align: 'start', key: 'name' },
     {
-      text: t('staking.delegators'),
+      title: t('staking.delegators'),
       sortable: true,
-      align: 'center d-none d-lg-table-cell',
-      value: 'live_delegators',
+      align: 'center', headerProps: { class: 'd-none d-lg-table-cell' }, cellProps: { class: 'd-none d-lg-table-cell' },
+      key: 'live_delegators',
       width: 122,
     },
-    { text: t('staking.ros') + ' (%)', sortable: true, align: 'center d-none d-lg-table-cell', value: 'ros', width: 105 },
-    { text: t('staking.blocks'), sortable: true, align: 'center d-none d-lg-table-cell', value: 'block_count', width: 96 },
+    { title: t('staking.ros') + ' (%)', sortable: true, align: 'center', headerProps: { class: 'd-none d-lg-table-cell' }, cellProps: { class: 'd-none d-lg-table-cell' }, key: 'ros', width: 105 },
+    { title: t('staking.blocks'), sortable: true, align: 'center', headerProps: { class: 'd-none d-lg-table-cell' }, cellProps: { class: 'd-none d-lg-table-cell' }, key: 'block_count', width: 96 },
     {
-      text: t('staking.saturation'),
+      title: t('staking.saturation'),
       sortable: true,
       align: 'center',
-      value: 'live_saturation',
+      key: 'live_saturation',
       width: 128,
-      filter: value => {
-        if (!hideSaturated.value) return true;
-        return value < 99;
-      },
     },
-    { text: t('staking.fees'), sortable: true, align: 'center', value: 'fixed_cost', width: 131 },
-    { text: t('staking.pledge'), sortable: true, align: 'center d-none d-lg-table-cell', value: 'pledge', width: 96 },
+    { title: t('staking.fees'), sortable: true, align: 'center', key: 'fixed_cost', width: 131 },
+    { title: t('staking.pledge'), sortable: true, align: 'center', headerProps: { class: 'd-none d-lg-table-cell' }, cellProps: { class: 'd-none d-lg-table-cell' }, key: 'pledge', width: 96 },
   ];
 });
 
@@ -618,15 +498,28 @@ const numPages = computed(() => {
 
 watch([sortBy, sortDesc], ([newSortBy, newSortDesc]) => {
   if (newSortBy !== undefined && newSortDesc !== undefined) {
+    page.value = 1;
     loadPaginatedPools(1);
   }
 });
 
 type PoolExtendedInfo = {
-  info?: { url_png_icon_64x64?: string; url_png_logo?: string; [key: string]: unknown };
+  info?: { url_png_icon_64x64?: string; url_png_logo?: string; social?: { facebook_handle?: string; twitter_handle?: string; youtube_handle?: string; discord_handle?: string; telegram_handle?: string }; [key: string]: unknown };
   [key: string]: unknown;
 };
-type PoolRow = { pool_extended_info?: string; pool_id_bech32?: string; pool_id?: string };
+type PoolRow = { homepage?: string; pool_extended_info?: string; pool_id_bech32?: string; pool_id?: string };
+
+const poolLinks = (pool: PoolRow) => {
+  const social = poolExtendedInfo(pool)?.info?.social;
+  return [
+    { href: pool.homepage, icon: 'mdi-web', image: undefined },
+    { href: social?.facebook_handle && 'https://www.facebook.com/' + social.facebook_handle, icon: 'mdi-facebook', image: undefined },
+    { href: social?.twitter_handle && 'https://x.com/' + social.twitter_handle, image: assets.xSvg, icon: undefined },
+    { href: social?.youtube_handle && 'https://youtube.com/' + social.youtube_handle, icon: 'mdi-youtube', image: undefined },
+    { href: social?.discord_handle && 'https://discord.gg/' + social.discord_handle, image: assets.discordSvg, icon: undefined },
+    { href: social?.telegram_handle && 'https://t.me/' + social.telegram_handle, image: assets.telegramSvg, icon: undefined },
+  ].filter(link => !!link.href);
+};
 
 const poolExtendedInfoCache = new Map<string, PoolExtendedInfo>();
 const poolExtendedInfo = (pool: PoolRow | null | undefined) => {
@@ -705,7 +598,7 @@ onMounted(() => {
 // not a mount-time read: the page sits in ContentLayout's keep-alive, so a
 // second pool picked from search arrives on an already-mounted page.
 watch(
-  () => instance?.proxy?.$route?.query?.pool,
+  () => instance?.proxy?.$route?.query?.['pool'],
   (poolQuery) => {
     if (poolQuery && typeof poolQuery === 'string') {
       searchInput.value = poolQuery;
@@ -729,12 +622,12 @@ onBeforeUnmount(() => {
   background-color: transparent;
 }
 
-.v-data-table > .v-data-table__wrapper > table > tbody > tr > td,
-.v-data-table > .v-data-table__wrapper > table > tbody > tr > th,
-.v-data-table > .v-data-table__wrapper > table > tfoot > tr > td,
-.v-data-table > .v-data-table__wrapper > table > tfoot > tr > th,
-.v-data-table > .v-data-table__wrapper > table > thead > tr > td,
-.v-data-table > .v-data-table__wrapper > table > thead > tr > th {
+.v-data-table > .v-table__wrapper > table > tbody > tr > td,
+.v-data-table > .v-table__wrapper > table > tbody > tr > th,
+.v-data-table > .v-table__wrapper > table > tfoot > tr > td,
+.v-data-table > .v-table__wrapper > table > tfoot > tr > th,
+.v-data-table > .v-table__wrapper > table > thead > tr > td,
+.v-data-table > .v-table__wrapper > table > thead > tr > th {
   padding: 0 10px;
   transition: height 0.2s cubic-bezier(0.4, 0, 0.6, 1);
 }

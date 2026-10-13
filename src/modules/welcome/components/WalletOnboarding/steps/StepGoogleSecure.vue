@@ -7,8 +7,8 @@
       <div class="step-section-label mb-2">{{ $t('welcome.walletName') }}</div>
       <v-text-field
         v-model="name"
-        dense
-        filled
+        density="compact"
+        variant="filled"
         :label="$t('welcome.walletName')"
         :placeholder="$t('welcome.walletNamePlaceholder')"
         :rules="[rules.required(), rules.minCharacters(1), rules.maxCharacters(50)]"
@@ -23,12 +23,12 @@
         <div class="field-hint mb-2">{{ $t('welcome.spendingPasswordMpcHint') }}</div>
         <v-text-field
           v-model="spendingPassword"
-          dense
-          filled
+          density="compact"
+          variant="filled"
           :label="$t('welcome.spendingPassword')"
           :type="showSpending ? 'text' : 'password'"
-          :append-icon="showSpending ? 'mdi-eye' : 'mdi-eye-off'"
-          @click:append="showSpending = !showSpending"
+          :append-inner-icon="showSpending ? 'mdi-eye' : 'mdi-eye-off'"
+          @click:append-inner="showSpending = !showSpending"
           :rules="[
             rules.required(),
             rules.minCharacters(10),
@@ -41,8 +41,8 @@
         ></v-text-field>
         <v-text-field
           v-model="confirmSpendingPassword"
-          dense
-          filled
+          density="compact"
+          variant="filled"
           :label="$t('welcome.confirmPassword')"
           :type="showSpending ? 'text' : 'password'"
           :rules="[
@@ -60,21 +60,21 @@
         <v-btn
           class="passkey-auth-button mb-2"
           block
-          depressed
+          variant="flat"
           :color="passkey ? 'success' : 'primary'"
           :loading="enrolling"
           @click="secureWithPasskey()"
         >
-          <v-icon left small>{{ passkey ? 'mdi-check' : 'mdi-fingerprint' }}</v-icon>
+          <v-icon start size="small">{{ passkey ? 'mdi-check' : 'mdi-fingerprint' }}</v-icon>
           {{ passkey ? $t('welcome.passkeySecured') : $t('welcome.secureWithPasskey') }}
         </v-btn>
         <v-alert
           v-if="passkeyError"
           color="error"
           icon="mdi-alert-outline"
-          outlined
-          dense
-          border="left"
+          variant="outlined"
+          density="compact"
+          border="start"
           class="mb-2"
         >
           <span class="text-body-2">{{ passkeyError }}</span>
@@ -88,12 +88,12 @@
       <div class="field-hint mb-2">{{ $t('welcome.recoveryPasswordHint') }}</div>
       <v-text-field
         v-model="recoveryPassword"
-        dense
-        filled
+        density="compact"
+        variant="filled"
         :label="$t('welcome.recoveryPassword')"
         :type="showRecovery ? 'text' : 'password'"
-        :append-icon="showRecovery ? 'mdi-eye' : 'mdi-eye-off'"
-        @click:append="showRecovery = !showRecovery"
+        :append-inner-icon="showRecovery ? 'mdi-eye' : 'mdi-eye-off'"
+        @click:append-inner="showRecovery = !showRecovery"
         :rules="[
           rules.required(),
           rules.minCharacters(12),
@@ -105,7 +105,7 @@
       <!-- Strength meter: recovery password is the only recovery factor now -->
       <div v-if="recoveryPassword" class="recovery-strength mb-2">
         <v-progress-linear
-          :value="(recoveryScore.score / 4) * 100"
+          :model-value="(recoveryScore.score / 4) * 100"
           :color="recoveryStrengthColor"
           height="4"
           rounded
@@ -117,8 +117,8 @@
 
       <v-text-field
         v-model="confirmRecoveryPassword"
-        dense
-        filled
+        density="compact"
+        variant="filled"
         :label="$t('welcome.confirmRecoveryPassword')"
         :type="showRecovery ? 'text' : 'password'"
         :rules="[
@@ -131,9 +131,9 @@
         v-if="errorMessage && !alreadyEnrolled"
         color="error"
         icon="mdi-alert-outline"
-        outlined
-        dense
-        border="left"
+        variant="outlined"
+        density="compact"
+        border="start"
         class="mt-3 mb-0"
       >
         <span class="text-body-2">{{ errorMessage }}</span>
@@ -146,17 +146,17 @@
         v-if="alreadyEnrolled"
         color="warning"
         icon="mdi-alert-outline"
-        outlined
-        dense
-        border="left"
+        variant="outlined"
+        density="compact"
+        border="start"
         class="mt-3 mb-0"
       >
         <div class="text-body-2 font-weight-medium mb-1">{{ $t('welcome.googleAlreadyEnrolledTitle') }}</div>
         <div class="text-body-2 mb-2">{{ $t('welcome.googleAlreadyEnrolledWarning') }}</div>
         <v-btn
           color="warning"
-          outlined
-          small
+          variant="outlined"
+          size="small"
           :loading="resetting"
           :disabled="creating || resetting"
           @click="resetGoogleAccount()"
@@ -170,7 +170,7 @@
 
     <!-- Navigation buttons -->
     <div class="onboarding-actions d-flex" style="gap: 12px;">
-      <v-btn text @click="$emit('back')">{{ $t('common.back') }}</v-btn>
+      <v-btn variant="text" @click="$emit('back')">{{ $t('common.back') }}</v-btn>
       <v-spacer />
       <v-btn
         class="onb-continue"
@@ -221,8 +221,6 @@ const emit = defineEmits<{
 }>();
 
 const vmProxy = getCurrentInstance()!.proxy;
-
-const secureForm = ref<{ resetValidation: () => void } | null>(null);
 const formValid = ref(false);
 
 const name = ref(props.googleName?.trim() || generateWalletName());

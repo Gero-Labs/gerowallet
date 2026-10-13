@@ -15,8 +15,8 @@
       </div>
       <v-text-field
         v-model="search"
-        dense
-        outlined
+        density="compact"
+        variant="outlined"
         hide-details
         clearable
         prepend-inner-icon="mdi-magnify"
@@ -33,7 +33,7 @@
     <div class="drep-directory__match">
       <span class="t-body drep-directory__match-prompt">{{ $t('governance.matchPrompt') }}</span>
       <GButton tier="primary" @click="matchOpen = true">
-        <v-icon small left>mdi-account-search-outline</v-icon>{{ $t('governance.findMatch') }}
+        <v-icon size="small" start>mdi-account-search-outline</v-icon>{{ $t('governance.findMatch') }}
       </GButton>
     </div>
 
@@ -275,12 +275,12 @@
 
       <div v-if="totalPages > 1" class="text-center">
         <v-pagination
-          :value="page"
+          :model-value="page"
           :length="totalPages"
           :total-visible="5"
           circle
           class="compact-pagination"
-          @input="onPage"
+          @update:model-value="onPage"
         ></v-pagination>
       </div>
     </template>
@@ -306,7 +306,7 @@
 <script setup lang="ts">
 import '@/shared/styles/compact-pagination.css';
 import { computed, onMounted, onUnmounted, ref, watch, getCurrentInstance } from 'vue';
-import { useRouter } from 'vue-router/composables';
+import { useRouter } from 'vue-router';
 import blockchainApi from '@/api/blockchain-api';
 import { walletStore } from '@/stores/walletStore';
 import NetworkStore, { networkStore } from '@/stores/networkStore';

@@ -8,7 +8,7 @@
     >
       <div class="mtl-node__marker">
         <div class="mtl-dot">
-          <v-icon v-if="node.state === 'done'" x-small color="var(--g-canvas)">mdi-check</v-icon>
+          <v-icon v-if="node.state === 'done'" size="x-small" color="var(--g-canvas)">mdi-check</v-icon>
           <span v-else-if="node.state === 'active'" class="mtl-pulse"></span>
         </div>
         <div

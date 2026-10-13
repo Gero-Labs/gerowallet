@@ -1,5 +1,5 @@
 <template>
-  <div class="whelp" :class="{ 'whelp--phone': isPhone }">
+  <div ref="layer" class="whelp" :class="{ 'whelp--phone': isPhone }">
     <!-- Phone only: tapping the dimmed welcome screen closes the sheet. A button, hidden from assistive tech and the tab order. -->
     <button v-if="isPhone" type="button" class="whelp-scrim" tabindex="-1" aria-hidden="true" data-test="scrim" @click="close()"></button>
 
@@ -20,7 +20,7 @@
       <template v-if="current">
         <div class="whelp-bar">
           <GButton class="whelp-back" tier="tertiary" compact :aria-label="t('help.welcome.backToHelp')" data-test="back" @click="backToList()">
-            <v-icon left size="18" color="var(--g-text-2)">mdi-chevron-left</v-icon>{{ t('help.welcome.title') }}
+            <v-icon start size="18" color="var(--g-text-2)">mdi-chevron-left</v-icon>{{ t('help.welcome.title') }}
           </GButton>
           <GButton class="whelp-close" tier="tertiary" compact :aria-label="t('help.welcome.close')" data-test="close" @click="close()">
             <v-icon :size="isPhone ? 20 : 18">mdi-close</v-icon>
@@ -110,7 +110,7 @@
         </div>
         <GButton tier="tertiary" compact :href="`#${footerPath}`" target="_blank" rel="noopener" data-test="open-full" @click.prevent="openTab(footerPath)">
           {{ t(current ? 'help.welcome.openArticle' : 'help.welcome.openFull') }}
-          <v-icon right size="16">mdi-open-in-new</v-icon>
+          <v-icon end size="16">mdi-open-in-new</v-icon>
         </GButton>
       </footer>
     </component>
@@ -155,6 +155,7 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
 const { t, tc } = useTranslation();
 
 const panel = ref<HTMLElement | null>(null);
+const layer = ref<HTMLElement | null>(null);
 const heading = ref<HTMLElement | null>(null);
 const searchInput = ref<HTMLInputElement | null>(null);
 const scroller = ref<HTMLElement | null>(null);
@@ -261,7 +262,9 @@ onBeforeUnmount(() => {
   document.removeEventListener('keydown', onDocumentKeydown);
   phoneMedia?.removeEventListener?.('change', onPhoneChange);
   const active = document.activeElement;
-  const focusLost = !active || active === document.body || !!panel.value?.contains(active);
+  // Pointer clicks focus the scrim button even though it is outside the tab
+  // order. It belongs to this layer just as the panel's close button does.
+  const focusLost = !active || active === document.body || !!layer.value?.contains(active);
   const target = props.opener ?? openedFrom;
   if (focusLost && target?.isConnected) target.focus?.();
 });

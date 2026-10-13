@@ -1,5 +1,5 @@
 <template>
-  <BottomSheet :value="value" @input="onClose" :title="title" height="92%">
+  <BottomSheet :model-value="modelValue" @update:model-value="onClose" :title="title" height="92%">
     <div class="buy-sell-sheet">
 
       <!-- ═══════ STEP 1: BUY or SELL ═══════ -->
@@ -45,13 +45,13 @@
           @load="iframeLoading = false"
         />
         <v-btn
-          text
-          small
+          variant="text"
+          size="small"
           :color="primaryColor"
           class="back-btn"
           @click="goBack"
         >
-          <v-icon small left>mdi-arrow-left</v-icon>
+          <v-icon size="small" start>mdi-arrow-left</v-icon>
           {{ $t('common.back') }}
         </v-btn>
       </div>
@@ -71,10 +71,10 @@ import { useChainContext } from '../../composables/useChainContext';
 const { themeColors } = useChainContext();
 const primaryColor = computed(() => themeColors.value.primary);
 
-const moonPayApiKey = import.meta.env.VITE_MOONPAY_API_KEY;
+const moonPayApiKey = import.meta.env['VITE_MOONPAY_API_KEY'];
 
-const props = defineProps<{ value: boolean }>();
-const emit = defineEmits<{ (e: 'input', v: boolean): void }>();
+const props = defineProps<{ modelValue: boolean }>();
+const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>();
 
 const { t } = useTranslation();
 const { loggedWallet } = toRefs(walletStore);
@@ -132,11 +132,11 @@ function goBack() {
 }
 
 function onClose(v: boolean) {
-  emit('input', v);
+  emit('update:modelValue', v);
 }
 
 // Reset state when sheet closes
-watch(() => props.value, (open) => {
+watch(() => props.modelValue, (open) => {
   if (!open) {
     step.value = 1;
     method.value = null;

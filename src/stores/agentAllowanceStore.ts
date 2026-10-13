@@ -1,5 +1,6 @@
+import { plainStoreSnapshot } from '@/stores/serialization';
 // src/stores/agentAllowanceStore.ts
-import Vue from 'vue';
+import { reactive } from 'vue';
 import { recordSpend as ledgerRecordSpend } from '@/services/agent/allowanceLedger';
 import type { AllowanceConfig, AllowanceStatus, SpendRecord } from '@/services/agent/allowancePolicy';
 
@@ -85,7 +86,7 @@ export function deserializeState(serialized: SerializedState): AllowanceState {
 // Vue-observable store
 // ---------------------------------------------------------------------------
 
-export const agentAllowanceState = Vue.observable<AllowanceState>({ config: null, ledger: [] });
+export const agentAllowanceState = reactive<AllowanceState>({ config: null, ledger: [] });
 
 const hasChromeStorage = typeof chrome !== 'undefined' && !!chrome.storage?.local;
 let writeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -106,7 +107,7 @@ function persist(): void {
   if (writeTimer) clearTimeout(writeTimer);
   writeTimer = setTimeout(() => {
     const serialized = serializeState({ config: agentAllowanceState.config, ledger: agentAllowanceState.ledger });
-    chrome.storage.local.set({ [STORE_KEY]: serialized });
+    chrome.storage.local.set(plainStoreSnapshot({ [STORE_KEY]: serialized }));
   }, 300);
 }
 

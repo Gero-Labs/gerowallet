@@ -38,9 +38,9 @@
           <div class="mn-tx-utxos__entry-ref">{{ shortRef(u.intentHash) }}:{{ u.outputIndex }}</div>
           <div class="mn-tx-utxos__entry-amount">
             <span>{{ formatAmount(u) }}</span>
-            <v-tooltip v-if="isUnscaled(u.tokenType)" top content-class="custom-tooltip">
-              <template v-slot:activator="{ on, attrs }">
-                <v-icon x-small color="var(--g-warning)" v-bind="attrs" v-on="on">mdi-help-circle-outline</v-icon>
+            <v-tooltip location="top" v-if="isUnscaled(u.tokenType)"  content-class="custom-tooltip">
+              <template v-slot:activator="{ props: activatorProps }">
+                <v-icon size="x-small" color="var(--g-warning)" v-bind="activatorProps" >mdi-help-circle-outline</v-icon>
               </template>
               {{ $t('midnight.rawBalanceNotice') }}
             </v-tooltip>
@@ -64,9 +64,9 @@
           <div class="mn-tx-utxos__entry-ref">{{ shortRef(u.intentHash) }}:{{ u.outputIndex }}</div>
           <div class="mn-tx-utxos__entry-amount">
             <span>{{ formatAmount(u) }}</span>
-            <v-tooltip v-if="isUnscaled(u.tokenType)" top content-class="custom-tooltip">
-              <template v-slot:activator="{ on, attrs }">
-                <v-icon x-small color="var(--g-warning)" v-bind="attrs" v-on="on">mdi-help-circle-outline</v-icon>
+            <v-tooltip location="top" v-if="isUnscaled(u.tokenType)"  content-class="custom-tooltip">
+              <template v-slot:activator="{ props: activatorProps }">
+                <v-icon size="x-small" color="var(--g-warning)" v-bind="activatorProps" >mdi-help-circle-outline</v-icon>
               </template>
               {{ $t('midnight.rawBalanceNotice') }}
             </v-tooltip>

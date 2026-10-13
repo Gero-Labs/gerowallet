@@ -3,7 +3,7 @@
     <!-- {{ $t('miniGero.stakepool') }} Row -->
     <div class="status-row">
       <div class="status-label">
-        <v-icon small color="grey lighten-1" class="mr-1">mdi-server-network</v-icon>
+        <v-icon size="small" color="grey lighten-1" class="mr-1">mdi-server-network</v-icon>
         <span class="grey--text text--lighten-1 text-caption">{{ $t('miniGero.stakepool') }}</span>
       </div>
       <div class="status-value">
@@ -17,7 +17,7 @@
     <!-- DRep Row -->
     <div class="status-row">
       <div class="status-label">
-        <v-icon small color="grey lighten-1" class="mr-1">mdi-vote</v-icon>
+        <v-icon size="small" color="grey lighten-1" class="mr-1">mdi-vote</v-icon>
         <span class="grey--text text--lighten-1 text-caption">{{ $t('miniGero.drep') }}</span>
       </div>
       <div class="status-value">
@@ -28,7 +28,7 @@
     <!-- Rewards Row -->
     <div class="status-row rewards-row">
       <div class="status-label">
-        <v-icon small color="grey lighten-1" class="mr-1">mdi-gift-outline</v-icon>
+        <v-icon size="small" color="grey lighten-1" class="mr-1">mdi-gift-outline</v-icon>
         <span class="grey--text text--lighten-1 text-caption">{{ $t('miniGero.rewards') }}</span>
       </div>
       <div class="status-value d-flex align-center">
@@ -40,8 +40,8 @@
         </span>
         <v-btn
           v-if="hasRewards"
-          x-small
-          text
+          size="x-small"
+          variant="text"
           :color="primaryColor"
           class="ml-2 text-none claim-btn"
           :loading="claimLoading"
@@ -111,10 +111,9 @@ const delegatingTo = computed(() => {
   if (currentDRep.drep_id === 'drep_always_abstain') return t('miniGero.abstain');
   if (currentDRep.drep_id === 'drep_always_no_confidence') return t('miniGero.noConfidence');
 
-  const meta = currentDRep.metadata?.meta_json?.body?.givenName;
-  if (meta) {
-    return meta['@value'] || meta;
-  }
+  const meta = currentDRep.metadata?.meta_json?.body?.['givenName'];
+  if (typeof meta === 'string') return meta;
+  if (meta && typeof meta === 'object' && '@value' in meta && typeof meta['@value'] === 'string') return meta['@value'];
   return filters.truncate(currentDRep.drep_id);
 });
 </script>

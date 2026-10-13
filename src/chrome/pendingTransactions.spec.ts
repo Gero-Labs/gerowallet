@@ -55,11 +55,13 @@ describe('submitted transaction visibility', () => {
       }).toAddress().toBech32(), value: { coins: 1_000_000n },
     });
     const tx = Serialization.Transaction.fromCore({
+      // Serialization derives the submitted hash from the body, not this core fixture ID.
+      id: Cardano.TransactionId('0'.repeat(64)),
       body: { inputs: [input[0]], outputs, fee: 200_000n, certificates,
         withdrawals: kind === 'withdrawal' ? [{ stakeAddress: bg.stakeAddress as Cardano.RewardAccount, quantity: 1_000_000n }] : undefined,
       },
       witness: { signatures: new Map() }, isValid: true,
-    } as Cardano.Tx);
+    });
     const hash = tx.body().hash();
     vi.spyOn(bg.api, 'submitTx').mockResolvedValue(hash);
     expect(await bg.submitTx(tx.toCbor(), [input])).toBe(hash);

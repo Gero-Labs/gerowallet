@@ -3,15 +3,15 @@
     <!-- Blockchain family -->
     <div class="t-label mb-2">{{ $t('welcome.blockchain') }}</div>
     <div class="chain-row" :class="{ 'mb-3': devMode }">
-      <template v-for="(fam, idx) in families">
+      <template :key="'break-' + idx" v-for="(fam, idx) in families">
         <!-- Force the Apex chains onto a second row → 3 (Cardano/Midnight/Bitcoin) + 2 (Apex Prime/Vector) -->
         <div
           v-if="idx > 0 && fam.name.includes('Apex') && !families[idx - 1].name.includes('Apex')"
-          :key="'break-' + idx"
+
           class="chain-row__break"
         ></div>
         <button
-          :key="fam.name"
+
           type="button"
           class="chain-tile"
           :class="{ 'chain-tile--active': fam.name === activeFamily, 'chain-tile--disabled': !isFamilySelectable(fam) }"
@@ -20,7 +20,7 @@
           @click="selectFamily(fam)"
         >
           <v-avatar size="26" class="chain-tile__icon">
-            <v-img :src="fam.icon" contain></v-img>
+            <v-img :src="fam.icon" ></v-img>
           </v-avatar>
           <span class="chain-tile__label">{{ fam.name }}</span>
           <div v-if="!isFamilySelectable(fam)" class="ribbon top-right" aria-hidden="true">

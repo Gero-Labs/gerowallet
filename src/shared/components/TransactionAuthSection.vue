@@ -19,7 +19,7 @@
         :height="buttonHeight"
         :disabled="loading"
         :loading="loading"
-        :outlined="submitOutlined"
+        :variant="submitOutlined ? 'outlined' : 'elevated'"
         :class="buttonClass"
         :style="buttonStyle"
       >
@@ -30,9 +30,9 @@
     <!-- Password Wallet: Password Field -->
     <PassKeyPasswordField
       v-else-if="isPasswordWallet && !isSigned"
-      :ref="el => $emit('password-field-ref', el)"
-      :value="password"
-      @input="$emit('update:password', $event)"
+      :ref="setPasswordRef"
+      :model-value="password"
+      @update:model-value="$emit('update:password', $event)"
       outlined
       dense
       hide-details
@@ -54,8 +54,8 @@
           icon-left="mdi-usb"
           :text-right="bluetoothText"
           icon-right="mdi-bluetooth"
-          :value="isBT"
-          @input="$emit('update:isBT', $event)"
+          :model-value="isBT"
+          @update:model-value="$emit('update:isBT', $event)"
           :disabled="loading"
         />
       </v-card-subtitle>
@@ -67,7 +67,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, useSlots } from 'vue';
+import { computed, useSlots, type ComponentPublicInstance } from 'vue';
 import { WalletType } from '@/models/types';
 import PassKeyAuthButton from './PassKeyAuthButton.vue';
 import PassKeyPasswordField from './PassKeyPasswordField.vue';
@@ -110,7 +110,7 @@ const props = withDefaults(defineProps<Props>(), {
   passwordRules: () => [],
 });
 
-defineEmits<{
+const emit = defineEmits<{
   (e: 'passkey-success', bytes: Uint8Array): void;
   /**
    * Raw PRF output from the WebAuthn ceremony, emitted alongside `passkey-success`.
@@ -128,6 +128,11 @@ defineEmits<{
   (e: 'update:isBT', value: boolean): void;
   (e: 'password-field-ref', ref: InstanceType<typeof PassKeyPasswordField> | null): void;
 }>();
+
+function setPasswordRef(instance: Element | ComponentPublicInstance | null) {
+  // This function ref is attached only to PassKeyPasswordField above.
+  emit('password-field-ref', instance as InstanceType<typeof PassKeyPasswordField> | null);
+}
 
 const isPasswordWallet = computed(() =>
   props.walletType === WalletType.Normal && !props.isPrfWallet
@@ -151,7 +156,7 @@ const hasContent = computed(() =>
   props.isPrfWallet ||
   (isPasswordWallet.value && !props.isSigned) ||
   props.showBtToggle ||
-  !!slots.default,
+  !!slots['default'],
 );
 </script>
 

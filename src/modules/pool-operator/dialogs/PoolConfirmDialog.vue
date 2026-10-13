@@ -11,7 +11,7 @@
 
       <v-card-text>
         <!-- Transaction Summary -->
-        <v-card outlined class="mb-4 pa-3">
+        <v-card variant="outlined" class="mb-4 pa-3">
           <div class="text-caption grey--text mb-2">{{ $t('poolOperator.poolId') }}</div>
           <div class="monospace-text text-body-2 mb-3">{{ poolOperatorStore.poolId }}</div>
 
@@ -34,8 +34,8 @@
               v-model="signing.spendingPassword.value"
               :label="$t('wallet.spendingPassword')"
               type="password"
-              outlined
-              dense
+              variant="outlined"
+              density="compact"
               hide-details
               class="mb-4"
               @keydown.enter="handleSign"
@@ -103,8 +103,8 @@
               v-model="signing.spendingPassword.value"
               :label="$t('poolOperator.coldKeyPassword')"
               type="password"
-              outlined
-              dense
+              variant="outlined"
+              density="compact"
               hide-details
               class="mb-4"
             />
@@ -134,7 +134,7 @@
         <div v-else class="text-center py-4">
           <v-icon size="48" color="success">mdi-check-circle</v-icon>
           <h4 class="mt-3">{{ $t('common.success') }}</h4>
-          <v-btn color="primary" text class="mt-3" @click="close">
+          <v-btn color="primary" variant="text" class="mt-3" @click="close">
             {{ $t('common.close') }}
           </v-btn>
         </div>
@@ -148,14 +148,14 @@
             <div class="ledger-stranded-title">{{ $t('poolOperator.ledgerStrandedTitle') }}</div>
             <div class="ledger-stranded-text">{{ $t('poolOperator.ledgerStrandedBody') }}</div>
             <div class="ledger-stranded-actions">
-              <v-btn text small color="error" :loading="signing.loading.value" @click="retrySweep">
+              <v-btn variant="text" size="small" color="error" :loading="signing.loading.value" @click="retrySweep">
                 {{ $t('poolOperator.ledgerRetrySweep') }}
               </v-btn>
               <template v-if="confirmForceClose">
-                <v-btn text small @click="confirmForceClose = false">
+                <v-btn variant="text" size="small" @click="confirmForceClose = false">
                   {{ $t('common.cancel') }}
                 </v-btn>
-                <v-btn text small color="error" @click="close">
+                <v-btn variant="text" size="small" color="error" @click="close">
                   {{ $t('poolOperator.ledgerCloseAnyway') }}
                 </v-btn>
               </template>
@@ -176,16 +176,16 @@ import { WalletType } from '@/models/types';
 import { usePoolSigning, type PoolSigningPhase } from '@/shared/composables/usePoolSigning';
 
 const props = defineProps<{
-  value: boolean;
+  modelValue: boolean;
   tx: Cardano.Tx | null;
   isUpdate: boolean;
 }>();
 
-const emit = defineEmits(['input', 'signed', 'close']);
+const emit = defineEmits(['update:modelValue', 'signed', 'close']);
 
-const dialog = ref(props.value);
-watch(() => props.value, (v) => { dialog.value = v; });
-watch(dialog, (v) => { emit('input', v); });
+const dialog = ref(props.modelValue);
+watch(() => props.modelValue, (v) => { dialog.value = v; });
+watch(dialog, (v) => { emit('update:modelValue', v); });
 
 const txRef = toRef(props, 'tx');
 

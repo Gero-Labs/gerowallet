@@ -5,7 +5,7 @@
     :content="content"
     :overlap="overlap"
     :bordered="bordered"
-    :value="show"
+    :model-value="show"
     class="notification-badge"
     :class="{ 'notification-badge--pulse': pulse }"
   >

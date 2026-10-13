@@ -12,16 +12,16 @@
     <CardAddressRow v-if="address" :label="t('card.payTo')" :address="address" />
 
     <p v-if="countdown" class="fee-panel__expiry t-body-sm">
-      <v-icon small>mdi-clock-outline</v-icon>
+      <v-icon size="small">mdi-clock-outline</v-icon>
       {{ t('card.addressValidFor', { time: countdown }) }}
     </p>
     <p v-else-if="expired" class="fee-panel__expiry is-expired t-body-sm" role="alert">
-      <v-icon small>mdi-clock-alert-outline</v-icon>
+      <v-icon size="small">mdi-clock-alert-outline</v-icon>
       {{ t('card.paymentExpired') }}
     </p>
 
     <div class="fee-panel__notice">
-      <v-icon small>mdi-information-outline</v-icon>
+      <v-icon size="small">mdi-information-outline</v-icon>
       <div>
         <p class="t-body-sm fee-panel__notice-title">{{ t('card.importantInformation') }}</p>
         <p class="t-body-sm">{{ t('card.paymentCoversShippingOnly') }} {{ t('card.notATopUp') }}</p>

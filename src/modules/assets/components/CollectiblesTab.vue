@@ -26,11 +26,11 @@
             >
               <!-- Overlay badges -->
               <div class="card-badges">
-                <v-chip small outlined class="quantity-chip">
+                <v-chip size="small" variant="outlined" class="quantity-chip">
                   {{ Number(collection.quantity || 1).toLocaleString('en-US') }} {{ $t('assets.items') }}
                 </v-chip>
-                <v-chip v-if="collection.isScam" small color="error">
-                  <v-icon left x-small>mdi-alert-decagram</v-icon>
+                <v-chip v-if="collection.isScam" size="small" color="error">
+                  <v-icon start size="x-small">mdi-alert-decagram</v-icon>
                   {{ $t('assets.scam') }}
                 </v-chip>
               </div>
@@ -97,7 +97,7 @@ interface CollectionEntry {
   description?: string | string[];
   quantity?: number;
   isScam?: boolean;
-  items: { metadata?: unknown }[];
+  items: NonNullable<InstanceType<typeof TokensDialog>['$props']['modalData']>['items'];
 }
 
 // Advanced Gallery Features

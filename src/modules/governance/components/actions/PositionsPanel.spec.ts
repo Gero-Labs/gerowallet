@@ -1,3 +1,5 @@
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
+vi.mock('@/shared/composables/useTranslation', async () => ({ useTranslation: (await import('@test/helpers/translations')).useMockTranslation }));
 // The product complaint this panel answers was "just a list of drep hashes".
 // What is pinned below is the part that must not regress into a wrong CLAIM:
 // the four your-DRep states, absent optional fields rendering as nothing rather
@@ -7,8 +9,8 @@
 // `<script setup>` imports that Vue 2.7 resolves lexically, so they render for
 // real.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mount, type Wrapper } from '@vue/test-utils';
-import Vue from 'vue';
+import { mount, type VueWrapper } from '@vue/test-utils';
+import * as Vue from 'vue';
 
 const getDRepsPaginated = vi.fn();
 // The dialog fetches from an author's host; these cases are about the panel,
@@ -56,14 +58,8 @@ function committeeVote(over: Partial<GovVote> = {}): GovVote {
   };
 }
 
-function mountPanel(props: Record<string, unknown> = {}): Wrapper<Vue> {
-  return mount(PositionsPanel, {
-    mocks: { $t },
-    // `loaded` defaults to false on the component, because an unfetched list
-    // must not read as "nobody voted". Every case below that is ABOUT the
-    // fetched list therefore says so; the not-yet-loaded case passes false.
-    propsData: { votes: [vote()], total: 1, loaded: true, chain: 'Cardano', network: 'Mainnet', ...props },
-    stubs: {
+function mountPanel(props: Record<string, unknown> = {}): VueWrapper {
+  return mount(PositionsPanel, { props: { votes: [vote()], total: 1, loaded: true, chain: 'Cardano', network: 'Mainnet', ...props }, global: { config: { globalProperties: mockGlobalProperties({ $t }) }, stubs: {
       'v-icon': true,
       'v-chip': true,
       'v-chip-group': true,
@@ -71,10 +67,9 @@ function mountPanel(props: Record<string, unknown> = {}): Wrapper<Vue> {
       'v-skeleton-loader': true,
       'v-btn': {
         inheritAttrs: false,
-        template: '<button v-bind="$attrs" v-on="$listeners"><slot /></button>',
+        template: '<button v-bind="$attrs"><slot /></button>',
       },
-    },
-  });
+    } } });
 }
 
 /** Let the mounted panel's name lookup settle. */
@@ -85,7 +80,7 @@ async function settle(): Promise<void> {
   }
 }
 
-let wrapper: Wrapper<Vue> | null = null;
+let wrapper: VueWrapper | null = null;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -94,7 +89,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  wrapper?.destroy();
+  wrapper?.unmount();
   wrapper = null;
 });
 

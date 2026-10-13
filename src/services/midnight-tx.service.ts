@@ -22,6 +22,7 @@
 
 import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
+import { StaleApprovalError } from '@/shared/composables/useApprovalFreshness';
 import { getMidnightApi } from '@/api/midnight-api';
 import { midnightStore } from '@/stores/midnightStore';
 import { assertNativeNightConversionSupported, validateShieldedTokenType } from '@/chains/midnight/midnightTokenCapabilities';
@@ -42,6 +43,10 @@ export interface MidnightSendCredentials {
   password?: string;
   /** Raw PRF output bytes from a WebAuthn ceremony (PRF/PassKey wallets). */
   prfSecret?: Uint8Array;
+}
+
+function assertCurrentApproval(current: () => boolean): void {
+  if (!current()) throw new StaleApprovalError();
 }
 
 /**
@@ -221,25 +226,32 @@ export async function sendUnshieldedNight(
   onStage?: (stage: MidnightSendStage) => void,
   sponsor?: MidnightSponsor,
   forceRemote = false,
+  current: () => boolean = () => true,
 ): Promise<SubmitMidnightTxResponse> {
+  assertCurrentApproval(current);
   const target = forceRemote ? null : resolveWalletProvingTarget(network);
   assertWalletProving(target);
   if (target) {
     const { checkProofServerHealth } = await import('@/chains/midnight/midnightLocalProver');
+    assertCurrentApproval(current);
     if (!await checkProofServerHealth(target.url, { headers: target.headers, acceptNotFound: target.lenientHealth })) {
       throw new ProofServerUnreachableError(target.url);
     }
   }
+  assertCurrentApproval(current);
   onStage?.('authorizing');
   const { publicKeyHex, addressHex } = await getWalletKeys(credentials);
+  assertCurrentApproval(current);
   onStage?.('building');
   const built = await buildUnshielded(network, { ...baseRequest, publicKeyHex, addressHex });
+  assertCurrentApproval(current);
   onStage?.('working');
   if (target) onStage?.(target.stage);
   const { signedTxHex, proven, ledgerTxHash } = await balanceAndSignInBg(
     built.unprovenTxHex, baseRequest.ttlMs, credentials, sponsor,
     target ? { url: target.url, headers: target.headers } : undefined,
   );
+  assertCurrentApproval(current);
   onStage?.('submitting');
   const result = proven
     ? await getMidnightApi(network).submitProvenMidnightTx({ signedTxHex, waitFor: 'InBlock' })
@@ -267,21 +279,28 @@ export async function buildAndSignUnshieldedTransfer(
   credentials: MidnightSendCredentials,
   /** The prover the user approved this transfer for; the build refuses if it changed. */
   expectedProver?: WalletProver,
+  current: () => boolean = () => true,
 ): Promise<{ tx: string }> {
+  assertCurrentApproval(current);
   const target = resolveWalletProvingTarget(network);
   assertWalletProving(target, expectedProver);
   if (target) {
     const { checkProofServerHealth } = await import('@/chains/midnight/midnightLocalProver');
+    assertCurrentApproval(current);
     if (!await checkProofServerHealth(target.url, { headers: target.headers, acceptNotFound: target.lenientHealth })) {
       throw new ProofServerUnreachableError(target.url);
     }
   }
+  assertCurrentApproval(current);
   const { publicKeyHex, addressHex } = await getWalletKeys(credentials);
+  assertCurrentApproval(current);
   const built = await buildUnshielded(network, { ...baseRequest, publicKeyHex, addressHex });
+  assertCurrentApproval(current);
   const { signedTxHex } = await balanceAndSignInBg(
     built.unprovenTxHex, baseRequest.ttlMs, credentials, undefined,
     target ? { url: target.url, headers: target.headers } : undefined,
   );
+  assertCurrentApproval(current);
   return { tx: signedTxHex };
 }
 
@@ -294,7 +313,9 @@ export async function buildAndSignUnshieldedTransfer(
 export async function balanceConnectorTransaction(
   tx: string,
   credentials: MidnightSendCredentials,
+  current: () => boolean = () => true,
 ): Promise<{ tx: string }> {
+  assertCurrentApproval(current);
   const response = await Messaging.sendToBackgroundFromOptions({
     method: MessageTypes.BALANCE_MIDNIGHT_CONNECTOR_TX,
     data: {
@@ -303,6 +324,7 @@ export async function balanceConnectorTransaction(
       prfSecret: credentials.prfSecret ? Array.from(credentials.prfSecret) : undefined,
     },
   }) as { data: { success: boolean; tx?: string; error?: string } };
+  assertCurrentApproval(current);
   if (!response?.data?.success || !response.data.tx) {
     throw new Error(response?.data?.error || 'Midnight balancing failed');
   }
@@ -558,7 +580,9 @@ export async function sendShieldedNight(
   onStage?: (stage: MidnightSendStage) => void,
   forceRemote = false,
   sponsor?: MidnightSponsor,
+  current: () => boolean = () => true,
 ): Promise<SubmitMidnightTxResponse> {
+  assertCurrentApproval(current);
   if (outputs.length === 0) {
     throw new Error('sendShieldedNight: at least one output is required');
   }
@@ -569,10 +593,12 @@ export async function sendShieldedNight(
   assertWalletProving(target);
   if (target) {
     const { checkProofServerHealth } = await import('@/chains/midnight/midnightLocalProver');
+    assertCurrentApproval(current);
     const healthy = await checkProofServerHealth(target.url, {
       headers: target.headers,
       acceptNotFound: target.lenientHealth,
     });
+    assertCurrentApproval(current);
     if (!healthy) {
       throw new ProofServerUnreachableError(target.url);
     }
@@ -580,6 +606,7 @@ export async function sendShieldedNight(
     const { signedTxHex, proven, ledgerTxHash } = await buildAndSignShieldedInBg(
       outputs, credentials, { url: target.url, headers: target.headers }, sponsor,
     );
+    assertCurrentApproval(current);
     if (!proven) {
       // Defensive: the BG only skips proving when `proving` is absent from
       // the request, which it never is on this branch. Should be
@@ -595,6 +622,7 @@ export async function sendShieldedNight(
 
   onStage?.('working');
   const { signedTxHex } = await buildAndSignShieldedInBg(outputs, credentials, undefined, sponsor);
+  assertCurrentApproval(current);
   onStage?.('submitting');
   const result = await api.proveAndSubmitMidnightTx({ signedTxHex, waitFor });
   onStage?.('done');

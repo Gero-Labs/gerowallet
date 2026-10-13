@@ -22,7 +22,15 @@ describe('signTx approval surfaces share one summary', () => {
 
   it('the popup blocks Sign (button, PassKey and Enter) until a network mismatch is acknowledged', () => {
     const src = read('popup/modules/views/SignTx.vue');
-    expect(src).toMatch(/const sign = async \(\) => \{\s*\/\/[^\n]*\n\s*if \(signBlocked\.value\) return;/);
+    const start = src.indexOf('const sign = () => approval.run(async () => {');
+    expect(start).toBeGreaterThan(-1);
+    const sign = src.slice(start);
+    const gate = sign.indexOf('if (signBlocked.value) return;');
+    expect(gate).toBeGreaterThan(-1);
+    expect(sign.indexOf('approval.run(')).toBeGreaterThan(-1);
+    // The gate must still run before any awaited authorization/signing work,
+    // even when single-flight protection wraps the handler.
+    expect(gate).toBeLessThan(sign.indexOf('await '));
     expect((src.match(/signBlocked/g) ?? []).length).toBeGreaterThanOrEqual(4);
   });
 

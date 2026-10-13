@@ -1,4 +1,5 @@
-import Vue from 'vue';
+import { plainStoreSnapshot } from '@/stores/serialization';
+import { reactive } from 'vue';
 import { getContextType } from '@/utils/storageSync';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
@@ -9,7 +10,7 @@ export interface WalletConnectState {
   isInitialized: boolean;
 }
 
-export const walletConnectState = Vue.observable<WalletConnectState>({
+export const walletConnectState = reactive<WalletConnectState>({
   activeSessions: [],
   isInitialized: false,
 });
@@ -21,7 +22,7 @@ if (context === 'browser') {
   storeMessaging.subscribe(STORE_NAME, (updates: Partial<WalletConnectState>) => {
     Object.keys(updates).forEach(key => {
       if (key in walletConnectState) {
-        (walletConnectState as any)[key] = updates[key as keyof WalletConnectState];
+        (walletConnectState as unknown as Record<string, unknown>)[key] = updates[key as keyof WalletConnectState];
       }
     });
   });
@@ -42,7 +43,7 @@ function broadcastFromBackground(updates: Partial<WalletConnectState>) {
 
     if (storageWriteTimeout) clearTimeout(storageWriteTimeout);
     storageWriteTimeout = setTimeout(() => {
-      chrome.storage.local.set({ [STORE_NAME]: walletConnectState });
+      chrome.storage.local.set(plainStoreSnapshot({ [STORE_NAME]: walletConnectState }));
     }, 300);
   }
 }

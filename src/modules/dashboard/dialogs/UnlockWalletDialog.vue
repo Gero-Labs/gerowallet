@@ -1,6 +1,6 @@
 <template>
   <BaseDialog persistent
-    :is-open="value"
+    :is-open="modelValue"
     :title="t('security.walletLocked')"
     :subtitle="unlockDescription"
     :width="400"
@@ -23,35 +23,35 @@
           <template v-if="!googleEmail && !mpcSessionActive">
             <v-btn
               class="mpc-google-btn"
-              depressed
-              outlined
+              variant="outlined"
+
               :loading="signingInGoogle"
               @click="signInWithGoogle()"
             >
               <v-avatar size="18" class="mr-2">
-                <v-img :src="assets.google" contain />
+                <v-img :src="assets.google"  />
               </v-avatar>
               {{ $t('welcome.googleSignInButton') }}
             </v-btn>
           </template>
           <template v-else-if="mpcUsesPasskey">
             <div v-if="googleEmail" class="mb-3 text-body-2 white--text">{{ $t('welcome.googleSignedInAs', { email: googleEmail }) }}</div>
-            <v-tooltip
+            <v-tooltip :open-on-hover="false" :open-on-focus="false" :open-on-click="false" location="top"
               v-model="tooltip.enabled"
-              top
+
               color="red"
             >
-              <template v-slot:activator="{ }">
-                <v-btn
+              <template v-slot:activator="{ props: activatorProps }">
+                <v-btn v-bind="activatorProps"
                   class="mpc-google-btn"
                   block
-                  depressed
-                  outlined
+                  variant="outlined"
+
                   :loading="unlocking"
                   :disabled="!canUnlock"
                   @click="handleMpcUnlock()"
                 >
-                  <v-icon left small>mdi-fingerprint</v-icon>
+                  <v-icon start size="small">mdi-fingerprint</v-icon>
                   {{ $t('security.usePassKey') }}
                 </v-btn>
               </template>
@@ -60,29 +60,29 @@
           </template>
           <template v-else>
             <div v-if="googleEmail" class="mb-3 text-body-2 white--text">{{ $t('welcome.googleSignedInAs', { email: googleEmail }) }}</div>
-            <v-tooltip
+            <v-tooltip :open-on-hover="false" :open-on-focus="false" :open-on-click="false" location="top"
               v-model="tooltip.enabled"
-              top
+
               color="red"
             >
-              <template v-slot:activator="{ }">
-                <v-text-field
+              <template v-slot:activator="{ props: activatorProps }">
+                <v-text-field v-bind="activatorProps"
                   v-model="password"
                   :label="$t('security.spendingPassword')"
                   :type="show ? 'text' : 'password'"
                   :error="passwordError"
-                  outlined
-                  dense
+                  variant="outlined"
+                  density="compact"
                   hide-details
-                  :append-icon="show ? 'mdi-eye-off' : 'mdi-eye'"
-                  @click:append="show = !show"
+                  :append-inner-icon="show ? 'mdi-eye-off' : 'mdi-eye'"
+                  @click:append-inner="show = !show"
                   @keydown.enter.stop="handleMpcUnlock()"
                 >
-                  <template v-slot:append-outer>
+                  <template v-slot:append>
                     <v-btn
                       block
-                      outlined
-                      small
+                      variant="outlined"
+                      size="small"
                       color="primary"
                       class="ml-2 px-1"
                       style="height: 40px;"
@@ -113,8 +113,8 @@
             <!-- PassKey indicator/button (if PassKey is enabled) -->
             <div v-if="passKeyEnabled && webAuthnCredentialId" class="mt-4 text-center">
               <v-btn
-                small
-                text
+                size="small"
+                variant="text"
                 color="primary"
                 @click="handlePassKeyAuth"
                 :loading="passKeyLoading"
@@ -122,7 +122,7 @@
                 <v-avatar size="18" class="mr-2">
                   <v-img
                     :src="assets.passKeySvg"
-                    contain
+
                     class="passkey-icon"
                     :style="{
                   width: '18px',
@@ -141,13 +141,13 @@
           <!-- Pattern Input -->
           <div v-else-if="unlockMethod === 'pattern'" class="text-center unlock-method-container unlock-method-content">
             <div class="pattern-tooltip-anchor">
-              <v-tooltip
+              <v-tooltip :open-on-hover="false" :open-on-focus="false" :open-on-click="false" location="top"
                 v-model="patternTooltip"
-                top
+
                 color="red"
               >
-                <template v-slot:activator="{ }">
-                  <div class="pattern-tooltip-target"></div>
+                <template v-slot:activator="{ props: activatorProps }">
+                  <div v-bind="activatorProps" class="pattern-tooltip-target"></div>
                 </template>
                 <span>{{ patternError }}</span>
               </v-tooltip>
@@ -160,8 +160,8 @@
             <!-- PassKey indicator/button (if PassKey is enabled) -->
             <div v-if="passKeyEnabled && webAuthnCredentialId" class="mt-4 text-center">
               <v-btn
-                small
-                text
+                size="small"
+                variant="text"
                 color="primary"
                 @click="handlePassKeyAuth"
                 :loading="passKeyLoading"
@@ -169,7 +169,7 @@
                 <v-avatar size="18" class="mr-2">
                   <v-img
                     :src="assets.passKeySvg"
-                    contain
+
                     class="passkey-icon"
                     :style="{
                   width: '18px',
@@ -186,30 +186,30 @@
           </div>
 
           <div v-else class="unlock-method-content">
-            <v-tooltip
+            <v-tooltip :open-on-hover="false" :open-on-focus="false" :open-on-click="false" location="top"
               v-model="tooltip.enabled"
-              top
+
               color="red"
             >
-              <template v-slot:activator="{ }">
-                <v-text-field
+              <template v-slot:activator="{ props: activatorProps }">
+                <v-text-field v-bind="activatorProps"
                   ref="passwordInputRef"
                   v-model="password"
                   :label="configLoaded ? (isPrfWallet ? $t('security.lockPassword') : $t('security.spendingPassword')) : $t('wallet.password')"
                   :type="show ? 'text' : 'password'"
                   :error="passwordError"
-                  outlined
-                  dense
+                  variant="outlined"
+                  density="compact"
                   hide-details
-                  :append-icon="show ? 'mdi-eye-off' : 'mdi-eye'"
-                  @click:append="show = !show"
+                  :append-inner-icon="show ? 'mdi-eye-off' : 'mdi-eye'"
+                  @click:append-inner="show = !show"
                   @keydown.enter.stop="handleUnlock()"
                 >
-                  <template v-slot:append-outer>
+                  <template v-slot:append>
                     <v-btn
                       block
-                      outlined
-                      small
+                      variant="outlined"
+                      size="small"
                       color="primary"
                       class="ml-2 px-1"
                       style="height: 40px;"
@@ -231,8 +231,8 @@
             <!-- PassKey indicator/button (if PassKey is enabled) -->
             <div v-if="passKeyEnabled && webAuthnCredentialId" class="mt-4 text-center">
               <v-btn
-                small
-                text
+                size="small"
+                variant="text"
                 color="primary"
                 @click="handlePassKeyAuth"
                 :loading="passKeyLoading"
@@ -240,7 +240,7 @@
                 <v-avatar size="18" class="mr-2">
                   <v-img
                     :src="assets.passKeySvg"
-                    contain
+
                     class="passkey-icon"
                     :style="{
                   width: '18px',
@@ -263,10 +263,10 @@
     <v-card-actions v-if="walletStore.loggedWallet" class="px-6 pb-6 pt-0">
       <v-btn
         block
-        text
+        variant="text"
         color="error"
         plain
-        small
+        size="small"
         @click="handleLogout"
       >
         {{ $t('security.logoutInstead') }}
@@ -308,7 +308,7 @@ interface BackgroundMessageResponse {
 const { t } = useTranslation();
 // Define props and emits
 const props = defineProps<{
-  value: boolean;
+  modelValue: boolean;
   // Optional: for pre-login unlock (when no wallet is logged in yet)
   preLoginWalletId?: number | null;
   preLoginWalletName?: string | null;
@@ -320,7 +320,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'input', value: boolean): void;
+  (e: 'update:modelValue', value: boolean): void;
   (e: 'unlocked'): void;
   (e: 'logged-out'): void;
 }>();
@@ -756,7 +756,7 @@ async function handleMpcUnlock() {
     }) as BackgroundMessageResponse;
 
     if (response?.data?.success) {
-      emit('input', false);
+      emit('update:modelValue', false);
       emit('unlocked');
     } else {
       showError(response?.data?.error || t('security.unlockFailed'));
@@ -832,7 +832,7 @@ async function handleUnlock(passKeyAuthenticated = false) {
     }) as BackgroundMessageResponse;
     debugLog('Unlock response:', response);
     if (response.data?.success) {
-      emit('input', false);
+      emit('update:modelValue', false);
       emit('unlocked');
     } else {
       // Show errors for each unlock method
@@ -872,7 +872,7 @@ async function handleLogout() {
       data: {}
     });
 
-    emit('input', false);
+    emit('update:modelValue', false);
     emit('logged-out');
   } catch (error) {
     console.error('Logout error:', error);
@@ -880,7 +880,7 @@ async function handleLogout() {
 }
 
 function handleClose() {
-  emit('input', false);
+  emit('update:modelValue', false);
 }
 
 function resetForm() {
@@ -920,7 +920,7 @@ function resetForm() {
 watch(password, (newVal) => { if (newVal.length > 0) passwordError.value = false; });
 
 // Watch for dialog open/close
-watch(() => props.value, async (newVal) => {
+watch(() => props.modelValue, async (newVal) => {
   if (newVal) {
     // Load config and wallet info
     await Promise.all([

@@ -1,4 +1,4 @@
-import Vue from 'vue';
+import { reactive } from 'vue';
 import governanceApi from '@/api/governance-api';
 import { sameDRep } from '@/shared/utils/drepId';
 import { isOpen } from '@/shared/utils/govLifecycle';
@@ -214,7 +214,7 @@ export function awaitingVoteCount(yourVotes: YourVotesState): number | null {
   return Math.max(0, yourVotes.resolved.length - Object.keys(yourVotes.byAction).length);
 }
 
-const state = Vue.observable<GovernanceActionsState>({
+const state = reactive<GovernanceActionsState>({
   actions: [],
   actionsNetwork: null,
   page: 1,

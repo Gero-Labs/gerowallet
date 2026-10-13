@@ -12,7 +12,7 @@
         class="reward-row"
       >
         <div class="reward-icon">
-          <v-icon small :color="themeColors.primary">mdi-star-circle-outline</v-icon>
+          <v-icon size="small" :color="themeColors.primary">mdi-star-circle-outline</v-icon>
         </div>
         <div class="reward-info">
           <div class="reward-title text-body-2 white--text">{{ $t('miniGero.rewardsEpoch', { epoch: r.epoch }) }}</div>

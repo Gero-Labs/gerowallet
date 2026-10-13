@@ -11,7 +11,7 @@
     </div>
 
     <div v-if="!connected" class="peers-offline">
-      <v-icon small color="var(--g-text-3)">mdi-server-off</v-icon>
+      <v-icon size="small" color="var(--g-text-3)">mdi-server-off</v-icon>
       <span>{{ $t('poolOperator.noPeerData') }}</span>
     </div>
 
@@ -26,7 +26,7 @@
         <span>{{ $t('poolOperator.loadingPeerDetails') }}</span>
       </div>
       <div v-else-if="fetchFailed" class="peers-hint">
-        <v-icon x-small color="var(--g-text-3)" class="mr-1">mdi-information-outline</v-icon>
+        <v-icon size="x-small" color="var(--g-text-3)" class="mr-1">mdi-information-outline</v-icon>
         <span>{{ $t('poolOperator.peersEndpointUnavailable') }}</span>
       </div>
     </div>
@@ -68,7 +68,7 @@
         <span class="sort-label">{{ $t('common.sortBy') }}:</span>
         <span v-for="opt in sortOptions" :key="opt.key" class="sort-opt" :class="{ 'sort-active': sortBy === opt.key }" @click="toggleSort(opt.key)">
           {{ opt.label }}
-          <v-icon v-if="sortBy === opt.key" x-small :style="{ transform: sortAsc ? '' : 'rotate(180deg)' }">mdi-arrow-up</v-icon>
+          <v-icon v-if="sortBy === opt.key" size="x-small" :style="{ transform: sortAsc ? '' : 'rotate(180deg)' }">mdi-arrow-up</v-icon>
         </span>
       </div>
 
@@ -102,6 +102,10 @@
 </template>
 
 <script setup lang="ts">
+import type { NodeStatus } from '../types';
+interface Peer { address: string; port: number; direction: string; rtt?: number; state?: string; relay?: boolean; trustable?: boolean; configured?: boolean }
+interface PeerData { mode: string; peers: Peer[]; inbound?: number; outbound?: number; bidirectional?: number; hotPeers?: number; warmPeers?: number; coldPeers?: number }
+
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 
@@ -110,27 +114,27 @@ const { t } = useTranslation();
 const props = defineProps<{
   connected: boolean;
   nodeUrl?: string;
-  nodeData?: any;
+  nodeData?: NodeStatus;
 }>();
 
 const loading = ref(false);
-const peerData = ref<any>(null);
+const peerData = ref<PeerData | null>(null);
 const fetchFailed = ref(false);
 const filter = ref('all');
 const sortBy = ref('rtt');
 const sortAsc = ref(true);
-let pollTimer: any = null;
+let pollTimer: ReturnType<typeof setInterval> = null;
 
 
-function isRelay(peer: any): boolean {
+function isRelay(peer: Peer): boolean {
   // Only trust explicit signals — server's relay flag or trustable topology peers
   if (peer.relay) return true;
   if (peer.trustable) return true;
   return false;
 }
 
-const relayCount = computed(() => peerData.value?.peers?.filter((p: any) => isRelay(p)).length || 0);
-const configuredCount = computed(() => peerData.value?.peers?.filter((p: any) => p.configured).length || 0);
+const relayCount = computed(() => peerData.value?.peers?.filter((p) => isRelay(p)).length || 0);
+const configuredCount = computed(() => peerData.value?.peers?.filter((p) => p.configured).length || 0);
 
 const sortOptions = computed(() => [
   { key: 'rtt', label: 'RTT' },

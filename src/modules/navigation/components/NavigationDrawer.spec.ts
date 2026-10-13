@@ -1,3 +1,4 @@
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
 // The Governance section of the drawer, as rendered.
 //
 // It used to be one expandable row with a submenu, and that submenu is the bug
@@ -6,8 +7,8 @@
 // bring it back. The pages are a SECTION now, so the property to hold is
 // simpler and stronger: every governance page is a row, on every page, always.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mount, type Wrapper } from '@vue/test-utils';
-import Vue from 'vue';
+import { mount, type VueWrapper, type DOMWrapper } from '@vue/test-utils';
+import * as Vue from 'vue';
 
 const h = vi.hoisted(() => ({
   route: { path: '/governance/dreps', query: {} as Record<string, unknown>, meta: { public: false } },
@@ -42,17 +43,14 @@ import { Messaging } from '@/chrome/messaging';
 import { MessageTypes } from '@/models/MessageTypes';
 import cardStore from '@/stores/modules/card';
 
-function mountDrawer(path: string): Wrapper<Vue> {
+function mountDrawer(path: string): VueWrapper {
   h.route.path = path;
-  return mount(NavigationDrawer, {
-    propsData: { value: true },
-    mocks: {
+  return mount(NavigationDrawer, { props: { modelValue: true }, global: { config: { globalProperties: mockGlobalProperties({
       $t,
       $route: h.route,
-      $router: { push: h.push, replace: h.replace, currentRoute: h.route },
-      $vuetify: { breakpoint: { mobile: false }, theme: { dark: true } },
-    },
-    stubs: {
+      $router: { push: h.push, replace: h.replace, currentRoute: Vue.ref(h.route) },
+      $vuetify: { display: { mobile: false }, theme: { current: { dark: true } } },
+    }) }, stubs: {
       // The drawer itself renders its content through named slots.
       'v-navigation-drawer': {
         template: '<div><slot name="prepend" /><slot /><slot name="append" /></div>',
@@ -61,16 +59,15 @@ function mountDrawer(path: string): Wrapper<Vue> {
       'v-img': true,
       'v-icon': true,
       'v-badge': { template: '<span><slot /></span>' },
-      'v-tooltip': { template: '<span><slot name="activator" :on="{}" :attrs="{}" /></span>' },
+      'v-tooltip': { template: '<span><slot name="activator" :props="{}" /></span>' },
       'v-chip': true,
       'v-progress-circular': true,
       'v-divider': true,
       'v-btn': {
         inheritAttrs: false,
-        template: '<button v-bind="$attrs" v-on="$listeners"><slot /></button>',
+        template: '<button v-bind="$attrs" ><slot /></button>',
       },
-    },
-  });
+    } } });
 }
 
 /**
@@ -78,24 +75,24 @@ function mountDrawer(path: string): Wrapper<Vue> {
  * `v-list-item` stays an unresolved element and its `to` is a plain attribute —
  * which is exactly the binding under test.
  */
-function rowLinks(w: Wrapper<Vue>): string[] {
-  return w.findAll('.menuItem').wrappers.map(linkOf);
+function rowLinks(w: VueWrapper): string[] {
+  return w.findAll('.menuItem').map(linkOf);
 }
 
 /** `attributes()` is typed `string | void`; narrow once rather than at each use. */
-function linkOf(row: Wrapper<Vue>): string {
+function linkOf(row: DOMWrapper<Element>): string {
   const to = row.attributes('to');
   return typeof to === 'string' ? to : '';
 }
 
 /** Only the governance rows, in render order. */
-function governanceLinks(w: Wrapper<Vue>): string[] {
+function governanceLinks(w: VueWrapper): string[] {
   return rowLinks(w).filter(link => link.startsWith('/governance'));
 }
 
 /** The section headings the drawer renders, in order. */
-function sectionHeadings(w: Wrapper<Vue>): string[] {
-  return w.findAll('v-subheader').wrappers.map(node => node.text().trim());
+function sectionHeadings(w: VueWrapper): string[] {
+  return w.findAll('v-list-subheader').map(node => node.text().trim());
 }
 
 /**
@@ -103,15 +100,15 @@ function sectionHeadings(w: Wrapper<Vue>): string[] {
  * stay in the DOM with `display: none` rather than being removed — asserting on
  * presence alone would pass for a row nobody can click.
  */
-function visibleGovernanceLinks(w: Wrapper<Vue>): string[] {
+function visibleGovernanceLinks(w: VueWrapper): string[] {
   return w
     .findAll('.menuItem')
-    .wrappers.filter(row => (row.element as HTMLElement).style.display !== 'none')
+    .filter(row => (row.element as HTMLElement).style.display !== 'none')
     .map(linkOf)
     .filter(link => link.startsWith('/governance'));
 }
 
-let wrapper: Wrapper<Vue> | null = null;
+let wrapper: VueWrapper | null = null;
 
 /** Every concrete governance page a user can be standing on. */
 const GOVERNANCE_PAGES = [
@@ -149,6 +146,7 @@ describe('NavigationDrawer: public Help session actions', () => {
     vi.mocked(Messaging.sendToBackgroundFromOptions).mockResolvedValue(undefined);
     wrapper = mountDrawer('/help/articles/backup');
     for (let i = 0; i < 8; i++) await Vue.nextTick();
+    await vi.waitFor(() => expect(wrapper!.find('[aria-label="security.lock"]').exists()).toBe(true));
     await wrapper.find('[aria-label="security.lock"]').trigger('click');
     for (let i = 0; i < 8; i++) await Vue.nextTick();
     expect(Messaging.sendToBackgroundFromOptions).toHaveBeenCalledWith({ method: MessageTypes.LOCK, data: {} });
@@ -177,6 +175,7 @@ describe('NavigationDrawer: public Help session actions', () => {
     vi.mocked(Messaging.sendToBackgroundFromOptions).mockResolvedValue(undefined);
     wrapper = mountDrawer('/governance');
     for (let i = 0; i < 8; i++) await Vue.nextTick();
+    await vi.waitFor(() => expect(wrapper!.find('[aria-label="security.lock"]').exists()).toBe(true));
     await wrapper.find('[aria-label="security.lock"]').trigger('click');
     for (let i = 0; i < 8; i++) await Vue.nextTick();
     expect(h.replace).toHaveBeenCalledWith('/welcome');
@@ -184,7 +183,7 @@ describe('NavigationDrawer: public Help session actions', () => {
 });
 
 afterEach(() => {
-  wrapper?.destroy();
+  wrapper?.unmount();
   wrapper = null;
   vi.restoreAllMocks();
 });
@@ -196,7 +195,7 @@ describe('NavigationDrawer: the Governance section', () => {
     for (const path of GOVERNANCE_PAGES) {
       wrapper = mountDrawer(path);
       expect(visibleGovernanceLinks(wrapper), path).toEqual(GOVERNANCE_ITEMS.map(item => item.link));
-      wrapper.destroy();
+      wrapper.unmount();
       wrapper = null;
     }
   });
@@ -217,7 +216,7 @@ describe('NavigationDrawer: the Governance section', () => {
     wrapper = mountDrawer('/governance/dreps');
     const rows = wrapper
       .findAll('.menuItem')
-      .wrappers.filter(row => linkOf(row).startsWith('/governance'));
+      .filter(row => linkOf(row).startsWith('/governance'));
     expect(rows.length).toBe(GOVERNANCE_ITEMS.length);
     for (const row of rows) {
       expect(row.attributes('active-class')).toBe('activePageDark');

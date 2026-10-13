@@ -1,5 +1,6 @@
 import { Cardano, Serialization } from '@cardano-sdk/core';
-import { Ref, ComputedRef, toRefs, ref, computed } from 'vue';
+import { Ref, ComputedRef, toRefs, ref, computed, watch, getCurrentScope, onScopeDispose, getCurrentInstance, provide } from 'vue';
+import { authorizationScopeKey } from './authorizationScope';
 import { serializeCardanoJsSdkTx } from '@/chrome/cardanoJsSdkCbor';
 import { CIP113_SIGN_REFUSAL_MESSAGE } from '@/chrome/config';
 import { BackgroundResponse, Messaging, SignTxResponse, VerifyPasswordResponse } from '@/chrome/messaging';
@@ -42,6 +43,18 @@ export interface TransactionSigningOptions {
   successMessageKey: string;
   onSuccess?: (txId: string) => void;
   onClose?: () => void;
+  active?: () => boolean;
+}
+
+export interface SigningForm {
+  validate: () => Promise<{ valid: boolean }>;
+}
+
+interface SigningAttempt {
+  current: () => boolean;
+  tx: Cardano.Tx;
+  cbor: string;
+  password: string;
 }
 
 export interface TransactionSigningReturn {
@@ -70,7 +83,8 @@ export interface TransactionSigningReturn {
   signLedgerTx: () => Promise<boolean>;
   submitTx: () => Promise<void>;
   signOnAnotherDevice: () => Promise<void>;
-  handleSign: (formRef?: { validate: () => boolean }) => Promise<void>;
+  handleSign: (formRef?: SigningForm) => Promise<void>;
+  captureAuthorization: () => () => boolean;
   resetState: () => void;
   handlePassKeySuccess: () => void;
   handlePassKeyError: (error: string) => void;
@@ -104,6 +118,48 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
   const keystoneScan = ref(false);
   const keystoneType = ref('');
   const keystoneCbor = ref('');
+  let authorizationEpoch = 0;
+  let disposed = false;
+  let authorizedAttempt: SigningAttempt | null = null;
+  let keystoneApproval: { attempt: SigningAttempt; requestId: string } | null = null;
+  let submitting = false;
+  const deferredAuth = new Set<ReturnType<typeof setTimeout>>();
+  const captureAuthorization = () => {
+    const epoch = authorizationEpoch;
+    const tx = options.tx.value;
+    let cbor: string | undefined;
+    try { cbor = tx ? serializeCardanoJsSdkTx(tx) : undefined; }
+    catch { return () => false; }
+    return () => {
+      if (disposed || epoch !== authorizationEpoch || !(options.active?.() ?? true) || options.tx.value !== tx) return false;
+      // SDK objects can be deliberately marked raw. Verify the body as well
+      // as the Vue epoch so mutation outside a reactive proxy cannot reuse it.
+      try { return !tx || serializeCardanoJsSdkTx(tx) === cbor; }
+      catch { return false; }
+    };
+  };
+  if (getCurrentInstance()) provide(authorizationScopeKey, { capture: captureAuthorization });
+
+  function beginAttempt(): SigningAttempt | null {
+    if (loading.value || disposed || !(options.active?.() ?? true) || !options.tx.value) return null;
+    // A manual attempt supersedes delayed autofill callbacks and any other
+    // authentication ceremony still pending for this same screen.
+    authorizationEpoch++;
+    for (const timer of deferredAuth) clearTimeout(timer);
+    deferredAuth.clear();
+    const current = captureAuthorization();
+    const tx = options.tx.value;
+    let cbor: string;
+    try { cbor = serializeCardanoJsSdkTx(tx); }
+    catch (error) {
+      snackbar.setError(error instanceof Error ? friendlyTxError(error) : t('errors.unknownError'));
+      return null;
+    }
+    const attempt = { tx, cbor, password: spendingPassword.value, current };
+    authorizedAttempt = attempt;
+    loading.value = true;
+    return attempt;
+  }
 
   // PRF wallet detection
   const isPrfWallet = computed(() => {
@@ -154,18 +210,32 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
   };
 
   const resetState = () => {
+    authorizationEpoch++;
+    authorizedAttempt = null;
+    keystoneApproval = null;
+    for (const timer of deferredAuth) clearTimeout(timer);
+    deferredAuth.clear();
     spendingPassword.value = '';
     isSubmit.value = false;
     txCbor.value = '';
     txWitnesses.value = null;
+    privateKeyBytes.value?.fill(0);
     privateKeyBytes.value = null;
     loading.value = false;
+    overlay.value = false;
+    keystoneScan.value = false;
   };
 
-  const signTx = async (): Promise<boolean> => {
+  watch(options.tx, resetState, { deep: true, flush: 'sync' });
+  watch(() => [loggedWallet.value?.id, loggedWallet.value?.chain, loggedWallet.value?.network,
+    loggedWallet.value?.webAuthnCredentialId, walletStore.isLocked, options.active?.()], resetState, { flush: 'sync' });
+  if (getCurrentScope()) onScopeDispose(() => { disposed = true; resetState(); });
+
+  const signTx = async (attempt = beginAttempt()): Promise<boolean> => {
+    if (!attempt?.current()) return false;
     loading.value = true;
     try {
-      const tx = options.tx.value;
+      const tx = attempt.tx;
       if (!tx) {
         throw new Error(t('common.noTransactionToSign'));
       }
@@ -176,9 +246,10 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       if (!isPrfWallet.value && !isMpcWallet.value) {
         const passwordVerification = (await Messaging.sendToBackgroundFromOptions({
           method: MessageTypes.VERIFY_SPENDING_PASSWORD,
-          data: { password: spendingPassword.value },
+          data: { password: attempt.password },
         })) as BackgroundResponse<VerifyPasswordResponse>;
 
+        if (!attempt.current()) return false;
         if (!passwordVerification.data.success) {
           passwordField.value?.showError(t('errors.wrongPassword'));
           loading.value = false;
@@ -187,13 +258,13 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       }
 
       // Serialize the Cardano.Tx to CBOR
-      txCbor.value = serializeCardanoJsSdkTx(tx);
+      txCbor.value = attempt.cbor;
 
       // Prepare signing data
       const signingData: SignTxRequestData = {
         txCbor: txCbor.value,
         partialSign: false,
-        password: spendingPassword.value,
+        password: attempt.password,
         accountIndex: 0,
         utxos: utxos.value,
         addresses: keys.value,
@@ -205,12 +276,14 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
         signingData.privateKeyBytes = Array.from(privateKeyBytes.value);
       }
 
+      if (!attempt.current()) return false;
       // Sign the transaction via background message
       const witnessResult = (await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.SIGN_TX,
         data: signingData,
       })) as { data: { witnesses?: string; error?: string } };
 
+      if (!attempt.current()) return false;
       if (witnessResult.data.error) {
         throw new Error(witnessResult.data.error);
       }
@@ -218,15 +291,17 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       txWitnesses.value = witnessResult.data.witnesses;
       return true;
     } catch (e) {
+      if (!attempt.current()) return false;
       console.error('Error signing transaction:', e);
       snackbar.setError(e instanceof Error ? friendlyTxError(e) : t('errors.unknownError'));
       return false;
     } finally {
-      loading.value = false;
+      if (attempt.current()) loading.value = false;
     }
   };
 
-  const signLedgerTx = async (): Promise<boolean> => {
+  const signLedgerTx = async (attempt = beginAttempt()): Promise<boolean> => {
+    if (!attempt?.current()) return false;
     loading.value = true;
     // The button spinner alone cannot resolve: the Ledger is holding the
     // transaction on its own screen waiting for a button press. Show the
@@ -234,12 +309,12 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
     // `txToLedger` overwrites the label as it moves through its stages.
     hardwareLoading.begin('Ledger', t('wallet.ledgerPreparingTransaction') as string);
     try {
-      const tx = options.tx.value;
+      const tx = attempt.tx;
       if (!tx) {
         throw new Error(t('common.noTransactionToSign'));
       }
 
-      txCbor.value = serializeCardanoJsSdkTx(tx);
+      txCbor.value = attempt.cbor;
 
       const signatures: Cardano.Signatures = await ledgerUtils.txToLedger(
         tx,
@@ -253,29 +328,32 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
         signatures,
       });
 
+      if (!attempt.current()) return false;
       txWitnesses.value = transactionWitnessSet.toCbor();
       return true;
     } catch (e) {
+      if (!attempt.current()) return false;
       ledgerUtils.ledgerErrorHandling(e);
       return false;
     } finally {
-      loading.value = false;
+      if (attempt.current()) loading.value = false;
       hardwareLoading.end();
     }
   };
 
-  const signTrezorTx = async (): Promise<boolean> => {
+  const signTrezorTx = async (attempt: SigningAttempt): Promise<boolean> => {
+    if (!attempt.current()) return false;
     loading.value = true;
     // Trezor publishes no intermediate stages, so this label stands for the
     // whole call — from connecting to the confirmation the device is waiting on.
     hardwareLoading.begin('Trezor', t('wallet.confirmOnTrezor') as string);
     try {
-      const tx = options.tx.value;
+      const tx = attempt.tx;
       if (!tx) {
         throw new Error(t('common.noTransactionToSign'));
       }
 
-      txCbor.value = serializeCardanoJsSdkTx(tx);
+      txCbor.value = attempt.cbor;
 
       // Send serialized transaction to background for Trezor signing
       const data = {
@@ -289,6 +367,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
           data,
         })) as BackgroundResponse<SignTxResponse>;
 
+      if (!attempt.current()) return false;
       if (!response.data.success) {
         throw new Error(response.data.error || t('wallet.trezorSigningFailed'));
       }
@@ -314,6 +393,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       txWitnesses.value = transactionWitnessSet.toCbor();
       return true;
     } catch (e) {
+      if (!attempt.current()) return false;
       console.error('Error signing transaction with Trezor:', e);
       if (e instanceof Error) {
         if (e.message.includes('Failure_ActionCancelled') || e.message.includes('cancelled') || e.message.includes('aborted')) {
@@ -328,14 +408,15 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       }
       return false;
     } finally {
-      loading.value = false;
+      if (attempt.current()) loading.value = false;
       hardwareLoading.end();
     }
   };
 
-  const signKeystoneTx = async (): Promise<boolean> => {
+  const signKeystoneTx = async (attempt: SigningAttempt): Promise<boolean> => {
+    if (!attempt.current()) return false;
     try {
-      const tx = options.tx.value;
+      const tx = attempt.tx;
       if (!tx) {
         throw new Error(t('common.noTransactionToSign'));
       }
@@ -346,13 +427,14 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       }
 
       // Serialize transaction to CBOR
-      txCbor.value = serializeCardanoJsSdkTx(tx);
+      txCbor.value = attempt.cbor;
 
       // Convert Cardano.Tx to Serialization.Transaction for Keystone
       const txSerialized = Serialization.Transaction.fromCbor(txCbor.value);
 
       // Create signing request UR from SDK (NOT stored in reactive ref to avoid Vue Observer wrapping)
       const signRequestResponse: KeystoneSignRequestResponse = createKeystoneSignRequest(txSerialized, loggedWallet.value, utxos.value as Cardano.Utxo[], keys.value);
+      keystoneApproval = { attempt, requestId: signRequestResponse.requestId };
 
       // Extract type and cbor as plain strings to avoid Vue reactivity wrapping
       keystoneType.value = signRequestResponse.ur.type;
@@ -371,8 +453,14 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
   };
 
   const onKeystoneScan = async (ur: UR) => {
+    const qr = keystoneApproval;
+    const attempt = qr?.attempt;
+    if (!attempt?.current() || authorizedAttempt !== attempt || !overlay.value) return;
     try {
       const signature = parseSignature(ur);
+      if (!qr.requestId || signature?.requestId !== qr.requestId) {
+        throw new Error(t('wallet.invalidKeystoneSignature'));
+      }
 
       // Validate witness set before using it
       if (!signature?.witnessSet || typeof signature.witnessSet !== 'string') {
@@ -381,6 +469,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
 
       // Get witness set from signature (already a hex string)
       txWitnesses.value = signature.witnessSet;
+      keystoneApproval = null;
 
       // Close overlay
       overlay.value = false;
@@ -388,7 +477,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
 
       // Submit if txAutoSubmit is enabled
       if (config.value?.txAutoSubmit) {
-        await submitTx();
+        await submitTx(attempt);
       } else {
         isSubmit.value = true;
       }
@@ -413,23 +502,26 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
     if (keystoneScan.value) {
       keystoneScan.value = false;
     } else {
-      overlay.value = false;
+      resetState();
     }
   };
 
-  const submitTx = async (): Promise<void> => {
+  const submitTx = async (attempt = authorizedAttempt): Promise<void> => {
+    if (!attempt?.current() || submitting || !txWitnesses.value) return;
+    submitting = true;
     try {
       loading.value = true;
 
       const submitResult = (await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.SUBMIT_TX,
         data: {
-          txCbor: txCbor.value,
+          txCbor: attempt.cbor,
           witnessHex: txWitnesses.value,
           utxos: utxos.value,
         },
       })) as { data: { txId?: string; error?: string } };
 
+      if (!attempt.current()) return;
       if (submitResult.data.error) {
         throw new Error(submitResult.data.error);
       }
@@ -438,11 +530,15 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
       options.onSuccess?.(submitResult.data.txId || '');
       options.onClose?.();
     } catch (e) {
+      if (!attempt.current()) return;
       console.error('Error submitting transaction:', e);
       snackbar.setError(e instanceof Error ? friendlyTxError(e) : t('errors.unknownError'));
     } finally {
-      loading.value = false;
-      isSubmit.value = false;
+      submitting = false;
+      if (attempt.current()) {
+        loading.value = false;
+        isSubmit.value = false;
+      }
     }
   };
 
@@ -451,15 +547,16 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
   // witness set is routed into the existing submit path (which re-checks the
   // tx body hash before broadcasting).
   const signOnAnotherDevice = async (): Promise<void> => {
-    loading.value = true;
+    const attempt = beginAttempt();
+    if (!attempt) return;
     try {
-      const tx = options.tx.value;
+      const tx = attempt.tx;
       if (!tx) {
         throw new Error(t('common.noTransactionToSign'));
       }
 
       // Serialize the ORIGINAL unsigned tx and hand it to the other device.
-      txCbor.value = serializeCardanoJsSdkTx(tx);
+      txCbor.value = attempt.cbor;
       const result = (await Messaging.sendToBackgroundFromOptions({
         method: MessageTypes.REQUEST_CROSS_DEVICE_SIGNATURE,
         data: {
@@ -470,9 +567,10 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
         },
       })) as { data: { decision?: string; witnessSetCbor?: string; reason?: string } };
 
+      if (!attempt.current()) return;
       if (result.data.decision === 'approved' && result.data.witnessSetCbor) {
         txWitnesses.value = result.data.witnessSetCbor;
-        await submitTx();
+        await submitTx(attempt);
       } else if (result.data.reason === 'expired') {
         snackbar.setError(t('crossDevice.requestExpired'));
       } else if (result.data.reason === CIP113_SIGN_REFUSAL_MESSAGE) {
@@ -483,65 +581,65 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
         snackbar.setError(t('crossDevice.requestRejected'));
       }
     } catch (e) {
+      if (!attempt.current()) return;
       console.error('Error signing on another device:', e);
       snackbar.setError(e instanceof Error ? e.message : t('crossDevice.requestRejected'));
     } finally {
-      loading.value = false;
+      if (attempt.current()) loading.value = false;
     }
   };
 
-  const handleSign = async (formRef?: { validate: () => boolean }): Promise<void> => {
+  const handleSign = async (formRef?: SigningForm): Promise<void> => {
+    if (loading.value) return;
     if (isSubmit.value) {
       await submitTx();
-    } else if (requiresRemoteForSend.value) {
+      return;
+    }
+    if (requiresRemoteForSend.value) {
       // Policy gate: local signing is disabled; the Send must be approved on a
       // trusted device. Covers every local path (password, PassKey/PRF, autofill)
       // since they all funnel through handleSign.
       snackbar.setError(t('crossDevice.settings.policyRequireHint'));
-    } else {
+      return;
+    }
+    const attempt = beginAttempt();
+    if (!attempt) return;
+    try {
       // MPC (Sign-in-with-Google) wallets are WalletType.Google but sign locally
       // like a Normal wallet — via the session-cached reconstructed key. Without
       // this branch, clicking Sign on an MPC wallet fell through and did nothing.
       if (loggedWallet.value?.type === WalletType.Normal || loggedWallet.value?.type === WalletType.Google) {
-        if (!formRef || formRef.validate()) {
-          const isValid = await signTx();
-          if (!isValid) return;
-
-          if (config.value?.txAutoSubmit) {
-            await submitTx();
-          } else {
-            isSubmit.value = true;
-          }
-        }
+        if (formRef && !(await formRef.validate()).valid) return;
+        if (!attempt.current()) return;
+        if (!(await signTx(attempt))) return;
       } else if (loggedWallet.value?.type === WalletType.Keystone) {
-        await signKeystoneTx();
+        await signKeystoneTx(attempt);
         // Keystone shows overlay - signing continues via QR scan
+        return;
       } else if (loggedWallet.value?.type === WalletType.Ledger) {
-        const isValid = await signLedgerTx();
-        if (!isValid) return;
-
-        if (config.value?.txAutoSubmit) {
-          await submitTx();
-        } else {
-          isSubmit.value = true;
-        }
+        if (!(await signLedgerTx(attempt))) return;
       } else if (loggedWallet.value?.type === WalletType.Trezor) {
-        const isValid = await signTrezorTx();
-        if (!isValid) return;
-
-        if (config.value?.txAutoSubmit) {
-          await submitTx();
-        } else {
-          isSubmit.value = true;
-        }
+        if (!(await signTrezorTx(attempt))) return;
+      } else {
+        return;
       }
+      if (!attempt.current()) return;
+      if (config.value?.txAutoSubmit) await submitTx(attempt);
+      else isSubmit.value = true;
+    } catch (error) {
+      if (attempt.current()) snackbar.setError(error instanceof Error ? friendlyTxError(error) : t('errors.unknownError'));
+    } finally {
+      if (attempt.current()) loading.value = false;
     }
   };
 
   const handlePassKeySuccess = () => {
-    setTimeout(() => {
-      handleSign();
+    const current = captureAuthorization();
+    const timer = setTimeout(() => {
+      deferredAuth.delete(timer);
+      if (current()) void handleSign();
     }, 300);
+    deferredAuth.add(timer);
   };
 
   const handlePassKeyError = (error: string) => {
@@ -550,16 +648,16 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
   };
 
   const handlePassKeyAuthSuccess = (pkBytes: Uint8Array) => {
+    if (!(options.active?.() ?? true) || disposed) { pkBytes.fill(0); return; }
     privateKeyBytes.value = pkBytes;
     // Automatically proceed to sign after successful authentication
-    setTimeout(() => {
-      handleSign();
-    }, 300);
+    handlePassKeySuccess();
   };
 
   const handlePassKeyAuthError = (error: Error) => {
     console.error('PassKey authentication error:', error);
     snackbar.setError(error.message || t('security.passKeyAuthFailed'));
+    privateKeyBytes.value?.fill(0);
     privateKeyBytes.value = null;
   };
 
@@ -590,6 +688,7 @@ export function useTransactionSigning(options: TransactionSigningOptions): Trans
     submitTx,
     signOnAnotherDevice,
     handleSign,
+    captureAuthorization,
     resetState,
     handlePassKeySuccess,
     handlePassKeyError,

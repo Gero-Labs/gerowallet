@@ -8,9 +8,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Cardano blockchain wallet Chrome extension (Manifest V3). Multi-chain light wallet with portfolio, staking, governance, DeFi, multi-sig, and SPO dashboard.
 
 ## Tech Stack
-- **Frontend**: Vue.js 2.7 + TypeScript + Vuetify 2.7
-- **Build**: Vite 4.5.5 (4 configs: main, background, content, inject)
-- **State**: Custom Vue Observable stores (not Vuex)
+- **Frontend**: Vue.js 3.5 + TypeScript + Vuetify 4.2
+- **Build**: Vite 7.3 (4 configs: main, background, content, inject)
+- **State**: Custom Vue reactive stores (not Vuex)
 - **DB**: Dexie 4.0.7 (IndexedDB) with versioned schemas
 - **Cardano**: `@cardano-sdk/core` v0.46.9 (preferred for new features)
 - **Hardware Wallets**: Ledger, Trezor, Keystone
@@ -22,7 +22,7 @@ Cardano blockchain wallet Chrome extension (Manifest V3). Multi-chain light wall
 src/
   chrome/          # Extension: background.ts, walletBg.ts, messaging.ts, cardanoJsSdkCbor.ts
   modules/         # Feature modules (Vue components): dashboard, staking, governance, swap, pool-operator, etc.
-  stores/          # Vue Observable stores: walletStore, geroStore, networkStore, poolOperatorStore, etc.
+  stores/          # Vue reactive stores: walletStore, geroStore, networkStore, poolOperatorStore, etc.
   services/        # Business logic: sync, websocket (Gero Sync), walletManager, storeMessaging
   db/              # Database: gero-db.ts (app-level), wallet-db.ts (per-wallet)
   api/             # Data clients, routed through gero-backend/Nexus: blockchain-api, nexus-tx-api, market-api, spo-api

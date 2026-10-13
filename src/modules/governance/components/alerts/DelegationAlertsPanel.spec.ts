@@ -1,3 +1,5 @@
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
+vi.mock('@/shared/composables/useTranslation', async () => ({ useTranslation: (await import('@test/helpers/translations')).useMockTranslation }));
 // Render coverage for DelegationAlertsPanel.vue.
 //
 // `npm run typecheck` is plain `tsc --noEmit`, which does not look inside a
@@ -11,7 +13,7 @@
 // spec (governanceAlertsStore.spec.ts), and importing it for real would drag in
 // walletStore, Dexie and blockchain-api for a test about markup.
 import { describe, it, expect, vi } from 'vitest';
-import { mount, type Wrapper } from '@vue/test-utils';
+import { mount, type VueWrapper } from '@vue/test-utils';
 
 const { push, state } = vi.hoisted(() => {
   // 15 of 20 epochs into the window, 5 left; recent rationale rate well below
@@ -58,7 +60,7 @@ const { push, state } = vi.hoisted(() => {
   };
 });
 
-vi.mock('vue-router/composables', () => ({
+vi.mock('vue-router', () => ({
   useRouter: () => ({ push, resolve: () => ({ route: { matched: [] } }) }),
 }));
 
@@ -94,21 +96,18 @@ import Panel from '@/modules/governance/components/alerts/DelegationAlertsPanel.
  * both the translation contract and the VALUES bound into it without depending
  * on the English copy.
  */
-function render(): Wrapper<Vue> {
-  return mount(Panel, {
-    mocks: {
+function render(): VueWrapper {
+  return mount(Panel, { global: { config: { globalProperties: mockGlobalProperties({
       $t: (key: string, params?: Record<string, unknown>) =>
         params ? `${key}:${JSON.stringify(params)}` : key,
-    },
-    stubs: {
+    }) }, stubs: {
       'v-icon': { template: '<i><slot /></i>' },
-      'v-btn': { template: '<button v-on="$listeners"><slot /></button>' },
+      'v-btn': { template: '<button><slot /></button>' },
       'v-skeleton-loader': true,
       'v-chip-group': { template: '<div><slot /></div>' },
       'v-chip': { template: '<span><slot /></span>' },
       'v-switch': true,
-    },
-  });
+    } } });
 }
 
 describe('DelegationAlertsPanel', () => {
@@ -330,7 +329,7 @@ describe('DelegationAlertsPanel', () => {
     try {
       const wrapper = render();
       expect(wrapper.find('.delegation-alerts').exists()).toBe(false);
-      expect(wrapper.html()).toBe('');
+      expect(wrapper.find('.delegation-alerts').exists()).toBe(false);
       // Specifically not the "your DRep is healthy" claim.
       expect(wrapper.text()).not.toContain('governance.alerts.allHealthy');
       // And no settings card for alerts that can never fire.

@@ -1,3 +1,5 @@
+import * as Vue from 'vue';
+import type { Component } from 'vue';
 import { nextTick, type Ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -13,17 +15,17 @@ const h = vi.hoisted(() => ({
   track: vi.fn(),
 }));
 vi.mock('../helpAnalytics', () => ({ trackHelp: h.track }));
-vi.mock('@/stores/walletStore', async () => ({ walletStore: (await import('vue')).reactive(h.wallet) }));
+vi.mock('@/stores/walletStore', async () => ({ walletStore: (h.wallet = Vue.reactive(h.wallet)) }));
 vi.mock('@/stores/featureFlagsStore', async () => {
-  const state = (await import('vue')).reactive(h.flags);
+  const state = (h.flags = Vue.reactive(h.flags));
   return { featureFlagsStore: { state, isLiveChatEnabled: () => state.live } };
 });
 vi.mock('@/shared/composables/useAvailableWallets', async () => {
   const { reactive, computed: vueComputed } = await import('vue');
-  const saved = reactive(h.saved);
+  const saved = (h.saved = reactive(h.saved));
   return { useAvailableWallets: () => ({ hasWallets: vueComputed(() => saved.value) }) };
 });
-vi.mock('vue-router/composables', () => ({ useRoute: () => h.route, useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }));
+vi.mock('vue-router', () => ({ useRoute: () => h.route, useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }));
 vi.mock('@/shared/composables/useTranslation', async () => {
   const { translate, translateChoice } = await import('../helpTestSupport');
   return { useTranslation: () => ({ t: translate, tc: translateChoice }) };
@@ -46,7 +48,7 @@ import { answers, topicIndex } from '../helpContent';
 
 const stubs = { 'v-btn': vBtnStub, 'v-icon': true, 'router-link': { props: ['to'], template: '<a :href="to.path"><slot /></a>' } };
 const wrappers: Array<ReturnType<typeof mount>> = [];
-const show = (component: unknown, propsData: Record<string, unknown> = {}) => { const wrapper = mount(component as never, { propsData, stubs }); wrappers.push(wrapper); return wrapper; };
+const show = (component: Component, props: Record<string, unknown> = {}) => { const wrapper = mount(component, { props, global: { stubs } }); wrappers.push(wrapper); return wrapper; };
 const eligible = { id: 42, chain: 'Cardano', network: 'Mainnet', type: 'Normal', stakeAddress: 'stake1test' };
 beforeEach(() => {
   clearHelpSupport(); h.pages = {}; h.failed = []; h.track.mockReset(); h.route.query = {};
@@ -54,7 +56,7 @@ beforeEach(() => {
   h.flags.isInitialized = false; h.flags.live = false; h.saved.value = false;
   vi.stubEnv('VITE_BACKEND_URL', 'https://backend.test');
 });
-afterEach(() => { wrappers.splice(0).forEach(wrapper => wrapper.destroy()); clearHelpSupport(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+afterEach(() => { wrappers.splice(0).forEach(wrapper => wrapper.unmount()); clearHelpSupport(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 describe('support widget', () => {
   const action = (wrapper: ReturnType<typeof show>) => wrapper.find('.support-action');
@@ -140,7 +142,7 @@ describe('Latest on X card', () => {
     expect(h.request.value).toMatchObject({ source: 'gero-x', limit: 1 });
     expect(wrapper.find('.x-text').text()).toBe('Gero post');
     expect(wrapper.find('.x-name').text()).toBe('Gero on X');
-    const [gero, nexus] = wrapper.findAll('.x-toggle__button').wrappers;
+    const [gero, nexus] = wrapper.findAll('.x-toggle__button');
     expect([gero.attributes('aria-pressed'), nexus.attributes('aria-pressed')]).toEqual(['true', 'false']);
     await nexus.trigger('click'); await nextTick();
     expect(h.request.value).toMatchObject({ source: 'nexus-x', limit: 1 });
@@ -230,7 +232,7 @@ describe('topics card', () => {
     const wrapper = show(HelpTopicsCard, { topics, basic: true });
     const tiles = wrapper.findAll('.topic-tile');
     expect(tiles).toHaveLength(6);
-    const card = tiles.wrappers.find(tile => tile.text().includes('Gero Card'))!;
+    const card = tiles.find(tile => tile.text().includes('Gero Card'))!;
     expect(card.classes()).toContain('topic-tile--muted');
     expect(card.text()).toContain('Cardano only');
     expect(card.text()).not.toContain('answers');

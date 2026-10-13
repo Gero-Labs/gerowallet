@@ -2,16 +2,16 @@
   <div class="depth-chart-container">
     <div class="d-flex align-center justify-space-between mb-2">
       <span class="text-caption text--secondary">{{ $t('market.depthChart') }}</span>
-      <v-btn-toggle v-model="depthSource" dense mandatory class="depth-toggle">
-        <v-btn x-small value="simulated">AMM</v-btn>
-        <v-btn x-small value="real">Orders</v-btn>
+      <v-btn-toggle v-model="depthSource" density="compact" mandatory class="depth-toggle">
+        <v-btn size="x-small" value="simulated">AMM</v-btn>
+        <v-btn size="x-small" value="real">Orders</v-btn>
       </v-btn-toggle>
     </div>
     <div v-if="loading" class="d-flex justify-center py-6">
       <v-progress-circular indeterminate size="24" color="primary" />
     </div>
     <div v-else-if="!orderBook" class="text-center py-6 text--secondary text-caption">
-      <v-icon small class="mb-1" style="opacity: 0.3">mdi-chart-areaspline</v-icon>
+      <v-icon size="small" class="mb-1" style="opacity: 0.3">mdi-chart-areaspline</v-icon>
       <div>{{ $t('market.noDepthData') }}</div>
     </div>
     <div v-else ref="chartEl" class="depth-area" style="height: 180px"></div>
@@ -20,7 +20,7 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
-import { createChart, AreaSeries, type IChartApi, type SolidColor } from 'lightweight-charts';
+import { createChart, AreaSeries, type IChartApi, type SolidColor, type UTCTimestamp } from 'lightweight-charts';
 import marketApi, { type OrderBook } from '@/api/market-api';
 import { useNativeCurrency } from '@/modules/market/composables/useNativeCurrency';
 
@@ -107,7 +107,7 @@ function renderChart() {
   const bidData = bids.map(b => {
     const val = runningBid / LOVELACE; // Convert lovelace → ADA
     runningBid -= b.size;
-    return { time: Math.round(b.price * priceScale) as any, value: val };
+    return { time: Math.round(b.price * priceScale) as UTCTimestamp, value: val };
   });
 
   // Build cumulative ask depth (from inside out)
@@ -116,7 +116,7 @@ function renderChart() {
   let cumAsk = 0;
   const askData = asks.map(a => {
     cumAsk += a.size;
-    return { time: Math.round(a.price * priceScale) as any, value: cumAsk / LOVELACE };
+    return { time: Math.round(a.price * priceScale) as UTCTimestamp, value: cumAsk / LOVELACE };
   });
 
   chart = createChart(chartEl.value, {

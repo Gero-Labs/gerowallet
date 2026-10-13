@@ -64,8 +64,8 @@
       <div v-if="rows.length >= CONTROLS_MIN_ROWS" class="positions__controls">
         <v-text-field
           v-model="search"
-          dense
-          outlined
+          density="compact"
+          variant="outlined"
           hide-details
           clearable
           prepend-inner-icon="mdi-magnify"
@@ -81,8 +81,8 @@
               :key="option.value"
               :value="option.value"
               :disabled="option.count === 0"
-              small
-              outlined
+              size="small"
+              variant="outlined"
             >
               {{ option.label }}
               <span class="g-num ml-1">{{ option.count }}</span>
@@ -98,8 +98,8 @@
               :key="option.value"
               :value="option.value"
               :disabled="option.count === 0"
-              small
-              outlined
+              size="small"
+              variant="outlined"
             >
               {{ option.label }}
               <span class="g-num ml-1">{{ option.count }}</span>
@@ -126,8 +126,8 @@
         <div v-if="summary.anyVotedAt" class="positions__filter">
           <span class="t-label">{{ $t('governance.sortBy') }}</span>
           <v-chip-group v-model="sort" mandatory>
-            <v-chip value="newest" small outlined>{{ $t('governance.sortNewest') }}</v-chip>
-            <v-chip value="oldest" small outlined>{{ $t('governance.sortOldest') }}</v-chip>
+            <v-chip value="newest" size="small" variant="outlined">{{ $t('governance.sortNewest') }}</v-chip>
+            <v-chip value="oldest" size="small" variant="outlined">{{ $t('governance.sortOldest') }}</v-chip>
           </v-chip-group>
         </div>
 

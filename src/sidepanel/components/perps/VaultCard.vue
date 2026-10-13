@@ -7,7 +7,7 @@
         <v-icon v-if="vault.is_verified" size="14" :color="primaryColor" class="ml-1">mdi-check-decagram</v-icon>
       </div>
       <v-chip
-        x-small
+        size="x-small"
         :class="['vault-type-chip', vault.type === 'protocol' ? 'chip--protocol' : 'chip--user']"
         label
       >

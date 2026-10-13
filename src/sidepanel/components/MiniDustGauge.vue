@@ -5,7 +5,7 @@
   <v-card flat class="glass-liquid mini-dust" :class="{ 'is-charging': isCharging, 'is-full': isFull }">
     <div class="mini-dust__row">
       <span class="mini-dust__label">
-        <v-icon x-small class="mr-1" :color="isCharging || isFull ? '#ecc985' : '#888'">
+        <v-icon size="x-small" class="mr-1" :color="isCharging || isFull ? '#ecc985' : '#888'">
           {{ isCharging ? 'mdi-battery-charging-medium' : 'mdi-battery-50' }}
         </v-icon>
         {{ $t('midnight.dustBattery') }}

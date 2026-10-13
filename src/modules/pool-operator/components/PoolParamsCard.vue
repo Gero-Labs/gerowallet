@@ -65,14 +65,14 @@
           <span class="meta-label">URL</span>
           <span class="meta-value meta-link" @click="copyText(metadataUrl)">
             {{ metadataUrl }}
-            <v-icon x-small color="var(--g-text-3)">mdi-content-copy</v-icon>
+            <v-icon size="x-small" color="var(--g-text-3)">mdi-content-copy</v-icon>
           </span>
         </div>
         <div v-if="metadataHash" class="meta-row">
           <span class="meta-label">Hash</span>
           <span class="meta-value meta-hash" @click="copyText(metadataHash)">
             {{ truncateHash(metadataHash) }}
-            <v-icon x-small color="var(--g-text-3)">mdi-content-copy</v-icon>
+            <v-icon size="x-small" color="var(--g-text-3)">mdi-content-copy</v-icon>
           </span>
         </div>
       </div>
@@ -87,7 +87,7 @@
           <div v-for="(owner, i) in owners" :key="i" class="meta-row">
             <span class="meta-value meta-hash" @click="copyText(owner)">
               {{ truncateHash(owner) }}
-              <v-icon x-small color="var(--g-text-3)">mdi-content-copy</v-icon>
+              <v-icon size="x-small" color="var(--g-text-3)">mdi-content-copy</v-icon>
             </span>
           </div>
         </div>
@@ -99,7 +99,7 @@
           <div class="meta-row">
             <span class="meta-value meta-hash" @click="copyText(rewardAddr)">
               {{ truncateHash(rewardAddr) }}
-              <v-icon x-small color="var(--g-text-3)">mdi-content-copy</v-icon>
+              <v-icon size="x-small" color="var(--g-text-3)">mdi-content-copy</v-icon>
             </span>
           </div>
         </div>
@@ -109,19 +109,20 @@
 </template>
 
 <script setup lang="ts">
+import type { PoolRelay } from '../types';
 import snackbar from '@/plugins/snackbar';
 import { useTranslation } from '@/shared/composables/useTranslation';
 
 const { t } = useTranslation();
 
 defineProps<{
-  pledge: any;
-  cost: any;
+  pledge: string | number;
+  cost: string | number;
   margin: string;
   saturation: string;
-  relays: any[];
+  relays: PoolRelay[];
   ros: string;
-  livePledge: any;
+  livePledge: string | number;
   pledgeMet: boolean;
   metadataUrl?: string;
   metadataHash?: string;
@@ -129,34 +130,34 @@ defineProps<{
   owners?: string[];
 }>();
 
-function formatAda(lovelace: any): string {
+function formatAda(lovelace: string | number): string {
   if (!lovelace && lovelace !== 0) return '0';
   return (Number(lovelace) / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 0 });
 }
 
-function relayType(r: any): string {
+function relayType(r: PoolRelay): string {
   if (r.dns || r.hostname || r.__typename === 'RelayByName') return 'DNS';
   if (r.ipv4 || r.ipv6 || r.__typename === 'RelayByAddress') return r.ipv6 ? 'IPv6' : 'IPv4';
   if (r.srv || r.dnsName || r.__typename === 'RelayByNameMultihost') return 'SRV';
   return 'Relay';
 }
 
-function relayIcon(r: any): string {
+function relayIcon(r: PoolRelay): string {
   if (r.srv || r.dnsName || r.__typename === 'RelayByNameMultihost') return 'mdi-dns';
   if (r.ipv4 || r.ipv6 || r.__typename === 'RelayByAddress') return 'mdi-ip-network';
   return 'mdi-web';
 }
 
-function relayColor(r: any): string {
+function relayColor(r: PoolRelay): string {
   if (r.ipv4 || r.ipv6 || r.__typename === 'RelayByAddress') return 'var(--g-warning)';
   return 'var(--g-accent)';
 }
 
-function relayAddr(r: any): string {
+function relayAddr(r: PoolRelay): string {
   return r.dns || r.hostname || r.ipv4 || r.ipv6 || r.srv || r.dnsName || r.ip || '';
 }
 
-function relayPort(r: any): number | undefined {
+function relayPort(r: PoolRelay): number | undefined {
   return r.port || undefined;
 }
 

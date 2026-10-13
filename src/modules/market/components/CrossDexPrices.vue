@@ -5,7 +5,7 @@
       <v-progress-circular indeterminate size="24" color="primary" />
     </div>
     <div v-else-if="errorMsg" class="text-center py-4 text-caption" style="color: #F97066">{{ errorMsg }}</div>
-    <v-simple-table v-else-if="prices.length" dense class="transparent dex-table">
+    <v-table v-else-if="prices.length" density="compact" class="transparent dex-table">
       <thead>
         <tr>
           <th style="font-size: 11px">DEX</th>
@@ -19,7 +19,7 @@
         <tr v-for="(p, idx) in prices" :key="idx" :class="{ 'best-price': p.isBest }">
           <td style="font-size: 12px">
             {{ formatDexName(p.dex || 'Unknown') }}
-            <v-chip v-if="p.isBest" x-small color="primary" class="ml-1">{{ $t('market.bestPrice') }}</v-chip>
+            <v-chip v-if="p.isBest" size="x-small" color="primary" class="ml-1">{{ $t('market.bestPrice') }}</v-chip>
           </td>
           <td class="text-right" style="font-size: 12px">{{ formatPrice(p.priceAda) }}</td>
           <td class="text-right" style="font-size: 12px">${{ formatPrice(p.priceUsd) }}</td>
@@ -27,7 +27,7 @@
           <td class="text-right" style="font-size: 12px">${{ formatCompact(p.volume24h || 0) }}</td>
         </tr>
       </tbody>
-    </v-simple-table>
+    </v-table>
     <div v-else class="text-center py-4 text--secondary text-caption">{{ $t('market.na') }}</div>
   </div>
 </template>
@@ -60,7 +60,7 @@ async function loadPrices() {
     prices.value = raw
       .sort((a, b) => (b.liquidity ?? b.tvl ?? 0) - (a.liquidity ?? a.tvl ?? 0))
       .map(p => ({ ...p, isBest: p.priceUsd === bestPrice }));
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.warn('CrossDexPrices: failed to load', err);
     errorMsg.value = t('market.failedToLoadDexPrices');
     prices.value = [];

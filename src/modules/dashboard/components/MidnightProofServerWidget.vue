@@ -4,7 +4,7 @@
          Recent Transactions "View all" link pattern, tokenized). -->
     <div class="ps-widget__head">
       <div class="ps-widget__title t-label">
-        <v-icon x-small class="mr-1">mdi-server-security</v-icon>
+        <v-icon size="x-small" class="mr-1">mdi-server-security</v-icon>
         {{ t('midnight.proofServerPage.title') }}
       </div>
       <router-link to="/proof-server" class="ps-widget__link">

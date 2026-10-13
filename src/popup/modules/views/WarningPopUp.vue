@@ -26,15 +26,15 @@
           <v-btn id="report-btn" @click="reportSite">{{ $t('navigation.reportSiteAsSafe') }}</v-btn>
         </div>
         <div class="my-2 d-flex" style="justify-content: space-between; width: 100%">
-          <v-btn outlined @click="safety">
-            <v-icon small class="mr-1">
+          <v-btn variant="outlined" @click="safety">
+            <v-icon size="small" class="mr-1">
               mdi-arrow-left
             </v-icon>
             {{ $t('navigation.backToSafety') }}
           </v-btn>
           <v-btn class="geroButton" @click="proceed" :disabled="!valid" style="text-transform: uppercase; color: black!important;">
             {{ $t('navigation.continueToSite') }}
-            <v-icon small class="mr-1" style="color: black!important;">
+            <v-icon size="small" class="mr-1" style="color: black!important;">
               mdi-arrow-right
             </v-icon>
           </v-btn>
@@ -44,7 +44,8 @@
   </v-form>
 </template>
 <script setup lang="ts">
-import { ref, onMounted, getCurrentInstance } from 'vue';
+import { ref, onMounted } from 'vue';
+import { useRoute } from 'vue-router';
 import PopupHeader from '@/popup/modules/components/PopupHeader.vue';
 import { Messaging } from '@/chrome/messaging';
 
@@ -69,10 +70,10 @@ const reportSite = async () => {
   window.close();
 };
 
-const vmProxy = getCurrentInstance()!.proxy as any
+const route = useRoute();
 
 onMounted(async () => {
-  const queryParams = vmProxy.$route.query;
+  const queryParams = route.query;
   if (Object.keys(queryParams).length > 0) {
     suspiciousUrl.value = queryParams['website'] as string;
   } else {

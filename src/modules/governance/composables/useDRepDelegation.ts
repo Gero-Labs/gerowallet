@@ -1,4 +1,4 @@
-import { ref, type Ref } from 'vue';
+import { ref, shallowRef, type Ref } from 'vue';
 import { Cardano, Serialization } from '@cardano-sdk/core';
 import { HexBlob } from '@cardano-sdk/util';
 import { buildCardanoTransaction } from '@/shared/utils/builder';
@@ -62,7 +62,7 @@ export function useDRepDelegation(): UseDRepDelegation {
   const { t } = useTranslation();
 
   const selectedDRep = ref<DelegateTarget | undefined>(undefined);
-  const tx = ref<Cardano.Tx | undefined>(undefined);
+  const tx = shallowRef<Cardano.Tx | undefined>(undefined);
   const isDialogOpen = ref(false);
   /** The id currently building, so only the clicked row shows a spinner. */
   const building = ref<string | null>(null);

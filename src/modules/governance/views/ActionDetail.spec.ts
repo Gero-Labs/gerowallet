@@ -1,3 +1,5 @@
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
+vi.mock('@/shared/composables/useTranslation', async () => ({ useTranslation: (await import('@test/helpers/translations')).useMockTranslation }));
 // Two guarantees about the Overview tab's prose and its reference list, both of
 // which were broken and both of which are invisible to a unit test of the
 // renderer alone, because they only exist where the two meet in the DOM:
@@ -17,8 +19,8 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
-import { mount, type Wrapper } from '@vue/test-utils';
-import Vue from 'vue';
+import { mount, type VueWrapper } from '@vue/test-utils';
+import * as Vue from 'vue';
 
 const getProposal = vi.fn();
 const getVotingSummary = vi.fn();
@@ -40,7 +42,7 @@ vi.mock('@/api/blockchain-api', () => ({ default: { getDRepById: vi.fn() } }));
 /** Which tab the mocked route is on. Mutable so a case can open the Votes tab. */
 const routeQuery = vi.hoisted(() => ({ value: {} as Record<string, string> }));
 
-vi.mock('vue-router/composables', () => ({
+vi.mock('vue-router', () => ({
   useRoute: () => ({ params: { txHash: 'aa'.repeat(32), index: '0' }, query: routeQuery.value }),
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
@@ -58,9 +60,9 @@ vi.mock('@/modules/governance/components/actions/BodyTallyCard.vue', () => ({
   default: {
     name: 'BodyTallyCard',
     props: ['result', 'composition', 'counts', 'thresholdNote'],
-    render(h: (tag: string, data: Record<string, unknown>) => unknown) {
-      return h('div', { class: 'body-card' });
-    },
+    render() {
+    return Vue.h('div', { class: 'body-card' });
+},
   },
 }));
 vi.mock('@/modules/governance/components/actions/StatusPill.vue', () => ({
@@ -144,19 +146,15 @@ function summary(over: Record<string, unknown> = {}) {
   return { yesVotesCast: 3, noVotesCast: 1, abstainVotesCast: 0, ...over } as never;
 }
 
-function mountPage(): Wrapper<Vue> {
-  return mount(ActionDetail, {
-    attachTo: document.body,
-    mocks: { $t },
-    stubs: {
+function mountPage(): VueWrapper {
+  return mount(ActionDetail, { attachTo: document.body, global: { config: { globalProperties: mockGlobalProperties({ $t }) }, stubs: {
       'v-icon': true,
       'v-skeleton-loader': true,
       'v-btn': {
         inheritAttrs: false,
-        template: '<button v-bind="$attrs" v-on="$listeners"><slot /></button>',
+        template: '<button v-bind="$attrs"><slot /></button>',
       },
-    },
-  });
+    } } });
 }
 
 async function settle(): Promise<void> {
@@ -166,7 +164,7 @@ async function settle(): Promise<void> {
   }
 }
 
-let wrapper: Wrapper<Vue> | null = null;
+let wrapper: VueWrapper | null = null;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -186,7 +184,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  wrapper?.destroy();
+  wrapper?.unmount();
   wrapper = null;
   vi.restoreAllMocks();
 });
@@ -271,7 +269,7 @@ describe('ActionDetail overview rail', () => {
 
     // Tallies first, the positions card last: the summary is read before the
     // buttons that lead away from it.
-    const order = wrapper.findAll('.action-detail__rail > *').wrappers.map(cell => cell.classes().join(' '));
+    const order = wrapper.findAll('.action-detail__rail > *').map(cell => cell.classes().join(' '));
     expect(order).toEqual(['body-card', 'body-card', 'action-detail__rail-card glass-panel']);
 
     const grid = rule('.action-detail__overview-grid');
@@ -406,7 +404,7 @@ describe('ActionDetail committee names', () => {
     // It changes at most once a term, and the detail view asks on every action.
     wrapper = mountPage();
     await settle();
-    wrapper.destroy();
+    wrapper.unmount();
     wrapper = mountPage();
     await settle();
 
@@ -439,12 +437,8 @@ describe('ActionDetail without its metadata document', () => {
   const $tWithParams = (key: string, params?: Record<string, unknown>): string =>
     params ? `${key}:${JSON.stringify(params)}` : key;
 
-  function mountWithParams(): Wrapper<Vue> {
-    return mount(ActionDetail, {
-      attachTo: document.body,
-      mocks: { $t: $tWithParams },
-      stubs: { 'v-icon': true, 'v-skeleton-loader': true, 'v-btn': true },
-    });
+  function mountWithParams(): VueWrapper {
+    return mount(ActionDetail, { attachTo: document.body, global: { config: { globalProperties: mockGlobalProperties({ $t: $tWithParams }) }, stubs: { 'v-icon': true, 'v-skeleton-loader': true, 'v-btn': true } } });
   }
 
   /** The production response: no title, no prose, no document. */
@@ -463,7 +457,7 @@ describe('ActionDetail without its metadata document', () => {
   }
 
   function badgeAttrs(): Record<string, unknown> {
-    return (wrapper as Wrapper<Vue>).findComponent({ name: 'AnchorBadge' }).vm.$attrs;
+    return (wrapper as VueWrapper).findComponent({ name: 'AnchorBadge' }).vm.$attrs;
   }
 
   it('reads an old-Nexus "false" with no document in hand as no verdict, not a mismatch', async () => {
@@ -555,9 +549,9 @@ describe('ActionDetail without its metadata document', () => {
     const LIVE = summary({ ccYesVotes: 2, ccNoVotes: 0, ccAbstainVotes: 0, ccYesPct: 14.29, ccNoPct: 85.71 });
 
     function committeeCard() {
-      return (wrapper as Wrapper<Vue>)
+      return (wrapper as VueWrapper)
         .findAllComponents({ name: 'BodyTallyCard' })
-        .wrappers.find(card => (card.props('result') as { body: string }).body === 'CC');
+        .find(card => (card.props('result') as { body: string }).body === 'CC');
     }
 
     it('counts 2 yes votes as 2 of the 7 seats against the 2/3 quorum', async () => {

@@ -1,5 +1,5 @@
 <template>
-  <v-layout>
+  <div class="d-flex flex-wrap flex-grow-1">
     <v-row no-gutters>
       <v-col cols="12" class="spo-page">
         <!-- Loading -->
@@ -40,8 +40,8 @@
 
             <!-- Register button (full width, only when not registered) -->
             <div v-if="!isRegistered" class="grid-full action-bar">
-              <v-btn small color="primary" class="black--text action-btn-primary" @click="showUpdateDialog = true">
-                <v-icon small left>mdi-plus-circle-outline</v-icon>
+              <v-btn size="small" color="primary" class="black--text action-btn-primary" @click="showUpdateDialog = true">
+                <v-icon size="small" start>mdi-plus-circle-outline</v-icon>
                 {{ $t('poolOperator.registerPool') }}
               </v-btn>
             </div>
@@ -112,7 +112,7 @@
                 <span v-if="liveNode?.data?.uptimeSeconds" class="glv-title-dim">up {{ Math.floor(liveNode.data.uptimeSeconds / 86400) }}d {{ Math.floor((liveNode.data.uptimeSeconds % 86400) / 3600) }}h</span>
                 <span v-if="liveNode?.data?.tipHash" class="glv-title-hash">{{ liveNode.data.tipHash }}</span>
                 <v-spacer />
-                <v-btn icon small @click="showLiveDialog = false"><v-icon small>mdi-close</v-icon></v-btn>
+                <v-btn icon size="small" @click="showLiveDialog = false"><v-icon size="small">mdi-close</v-icon></v-btn>
               </v-card-title>
               <v-card-text class="pa-0">
                 <NodeLiveView
@@ -134,7 +134,7 @@
                 <v-icon color="info" class="mr-2">mdi-lan</v-icon>
                 {{ $t('poolOperator.networkPeers') }}: {{ peersNode?.name }}
                 <v-spacer />
-                <v-btn icon small @click="showPeersDialog = false"><v-icon small>mdi-close</v-icon></v-btn>
+                <v-btn icon size="small" @click="showPeersDialog = false"><v-icon size="small">mdi-close</v-icon></v-btn>
               </v-card-title>
               <v-card-text class="pa-0">
                 <PeersCard
@@ -153,15 +153,15 @@
                 <v-icon color="warning" class="mr-2">mdi-key-change</v-icon>
                 {{ $t('poolOperator.kesRotation') }}
                 <v-spacer />
-                <v-btn icon small @click="showKesRotation = false"><v-icon small>mdi-close</v-icon></v-btn>
+                <v-btn icon size="small" @click="showKesRotation = false"><v-icon size="small">mdi-close</v-icon></v-btn>
               </v-card-title>
               <v-card-text class="pt-4">
                 <div v-if="!kesRotateSuccess">
                   <p style="font-size: 13px; color: var(--g-text-3)">{{ $t('poolOperator.remoteRotatePassKeyDescription') }}</p>
-                  <v-alert v-if="kesRotateError" type="error" dense outlined class="mt-3" style="font-size: 13px">{{ kesRotateError }}</v-alert>
+                  <v-alert v-if="kesRotateError" type="error" density="compact" variant="outlined" class="mt-3" style="font-size: 13px">{{ kesRotateError }}</v-alert>
                   <div v-if="kesRotateSteps.length" class="mt-3">
                     <div v-for="(step, i) in kesRotateSteps" :key="i" style="font-size: 12px; color: var(--g-text-2); padding: 2px 0">
-                      <v-icon x-small color="success" class="mr-1">mdi-check</v-icon> {{ step }}
+                      <v-icon size="x-small" color="success" class="mr-1">mdi-check</v-icon> {{ step }}
                     </div>
                   </div>
                 </div>
@@ -172,11 +172,11 @@
               </v-card-text>
               <v-card-actions>
                 <v-spacer />
-                <v-btn v-if="kesRotateSuccess" text @click="showKesRotation = false">{{ $t('common.close') }}</v-btn>
+                <v-btn v-if="kesRotateSuccess" variant="text" @click="showKesRotation = false">{{ $t('common.close') }}</v-btn>
                 <template v-else>
-                  <v-btn text @click="showKesRotation = false">{{ $t('common.cancel') }}</v-btn>
+                  <v-btn variant="text" @click="showKesRotation = false">{{ $t('common.cancel') }}</v-btn>
                   <v-btn color="warning" class="black--text" style="text-transform:none;font-weight:700;border-radius:var(--g-r-control)" :loading="kesRotating" @click="rotateKesRemote">
-                    <v-icon left small>mdi-fingerprint</v-icon>
+                    <v-icon start size="small">mdi-fingerprint</v-icon>
                     {{ $t('poolOperator.rotateNow') }}
                   </v-btn>
                 </template>
@@ -192,7 +192,7 @@
               <v-icon color="primary" class="mr-2">{{ isRegistered ? 'mdi-pencil-outline' : 'mdi-plus-circle-outline' }}</v-icon>
               {{ isRegistered ? $t('poolOperator.updatePool') : $t('poolOperator.registerPool') }}
               <v-spacer />
-              <v-btn icon small @click="showUpdateDialog = false"><v-icon small>mdi-close</v-icon></v-btn>
+              <v-btn icon size="small" @click="showUpdateDialog = false"><v-icon size="small">mdi-close</v-icon></v-btn>
             </v-card-title>
             <v-card-text class="pt-4">
               <PoolRegistrationForm @close="showUpdateDialog = false" />
@@ -207,7 +207,7 @@
               <v-icon color="error" class="mr-2">mdi-power</v-icon>
               {{ $t('poolOperator.retirePool') }}
               <v-spacer />
-              <v-btn icon small @click="showRetireDialog = false"><v-icon small>mdi-close</v-icon></v-btn>
+              <v-btn icon size="small" @click="showRetireDialog = false"><v-icon size="small">mdi-close</v-icon></v-btn>
             </v-card-title>
             <v-card-text class="pt-4">
               <PoolRetirementForm @close="showRetireDialog = false" />
@@ -216,10 +216,12 @@
         </v-dialog>
       </v-col>
     </v-row>
-  </v-layout>
+  </div>
 </template>
 
 <script setup lang="ts">
+import { isAxiosError } from 'axios';
+import type { DisplayNode, NodeVersions, PoolInfo, LeaderSchedule, Ratio, KesRotateResponse } from './types';
 import { ref, computed, toRefs, onMounted, watch } from 'vue';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { poolOperatorStore, loadPoolOperatorConfig } from '@/stores/poolOperatorStore';
@@ -246,33 +248,33 @@ const loaded = ref(false);
 const showUpdateDialog = ref(false);
 const showRetireDialog = ref(false);
 const showPeersDialog = ref(false);
-const peersNode = ref<any>(null);
+const peersNode = ref<DisplayNode | null>(null);
 const showLiveDialog = ref(false);
-const liveNode = ref<any>(null);
+const liveNode = ref<DisplayNode | null>(null);
 
-function showPeersForNode(node: any) {
+function showPeersForNode(node: DisplayNode) {
   peersNode.value = node;
   showPeersDialog.value = true;
 }
 
-function showLiveForNode(node: any) {
+function showLiveForNode(node: DisplayNode) {
   liveNode.value = node;
   showLiveDialog.value = true;
 }
 
 const showKesRotation = ref(false);
-const nodeMonitorRef = ref<any>(null);
+const nodeMonitorRef = ref<InstanceType<typeof NodeMonitor> | null>(null);
 
 // Pool data
-const poolInfo = ref<any>(null);
+const poolInfo = ref<PoolInfo | null>(null);
 const poolIcon = ref<string | undefined>(undefined);
 const pledgeMet = ref(true);
-const nodeVersions = ref<Record<string, any>>({});
+const nodeVersions = ref<Record<string, NodeVersions>>({});
 
 // Leader schedule
 const scheduleLoading = ref(false);
-const currentSchedule = ref<any>(undefined);
-const nextSchedule = ref<any>(undefined);
+const currentSchedule = ref<LeaderSchedule>();
+const nextSchedule = ref<LeaderSchedule>();
 
 // KES rotation
 const kesRotating = ref(false);
@@ -338,7 +340,7 @@ const kesUrgencyClass = computed(() => {
 const currentNextSlot = computed(() => {
   if (!currentSchedule.value?.slots) return undefined;
   const now = Date.now() / 1000;
-  return currentSchedule.value.slots.find((s: any) => s.timestamp > now && s.produced === null);
+  return currentSchedule.value.slots.find((s) => s.timestamp > now && s.produced === null);
 });
 
 const currentNextCountdown = computed(() => {
@@ -357,7 +359,7 @@ const setupSteps = computed(() => [
   { title: t('poolOperator.step4Title'), code: undefined },
 ]);
 
-function formatMargin(margin: any): string {
+function formatMargin(margin: Ratio | null | undefined): string {
   if (!margin || !margin.denominator) return '0';
   const val = (margin.numerator / margin.denominator) * 100;
   return isNaN(val) ? '0' : val.toFixed(2);
@@ -406,8 +408,8 @@ async function fetchPoolData() {
         };
       }
     }
-  } catch (e: any) {
-    if (e.message?.includes('404') || e.response?.status === 404) {
+  } catch (e: unknown) {
+    if ((e instanceof Error && e.message.includes('404')) || (isAxiosError(e) && e.response?.status === 404)) {
       poolOperatorStore.isRegistered = false;
     }
   }
@@ -441,7 +443,7 @@ async function fetchNodeVersions() {
 
 // Node management
 function openAddNode() { nodeMonitorRef.value?.openAddDialog(); }
-function editNode(node: any) { nodeMonitorRef.value?.openEditDialog(node); }
+function editNode(node: DisplayNode) { nodeMonitorRef.value?.openEditDialog(node); }
 async function removeNode(nodeId: string) {
   poolOperatorStore.nodes = poolOperatorStore.nodes.filter(n => n.id !== nodeId);
   const wid = walletStore.loggedWallet?.id;
@@ -491,12 +493,12 @@ async function rotateKesRemote() {
     const result = await Messaging.sendToBackgroundFromOptions({
       method: MessageTypes.SPO_NODE_FETCH,
       data: { url: bpNode.value.url + '/kes-rotate', timeout: 60000, method: 'POST', body: JSON.stringify({ coldKeyHex }) },
-    }) as any;
+    }) as { data?: KesRotateResponse & { body?: KesRotateResponse } };
     const data = result?.data?.body || result?.data;
     if (data?.error) { kesRotateError.value = data.error; }
     else if (data?.success) { kesRotateSteps.value = ['Cold key decrypted', ...(data.steps || [])]; kesRotateSuccess.value = true; }
     else { kesRotateError.value = 'Unexpected response'; }
-  } catch (e: any) { kesRotateError.value = e.message || 'Failed'; }
+  } catch (e: unknown) { kesRotateError.value = e instanceof Error ? e.message : 'Failed'; }
   finally { kesRotating.value = false; }
 }
 

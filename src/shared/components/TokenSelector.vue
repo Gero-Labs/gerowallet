@@ -8,7 +8,7 @@
       <v-row no-gutters class="pb-1" v-if="!bottomTitle">
         <v-col cols="12" style="display: flex; align-items: center">
           <v-list-item class="px-0" style="padding-bottom: 0 !important; min-height: 0">
-            <v-list-item-content class="pa-0" style="padding-bottom: 0 !important">
+            <div class="pa-0 g-list-content" style="padding-bottom: 0 !important">
               <v-list-item-title
                 class="ma-0"
                 :style="{
@@ -22,9 +22,9 @@
                 <v-spacer></v-spacer>
                 <div style="flex-flow: column; display: flex; justify-self: right; align-self: end">
                   <v-btn
-                    text
+                    variant="text"
                     plain
-                    small
+                    size="small"
                     @click="setMax"
                     :ripple="false"
                     color="primary"
@@ -43,14 +43,14 @@
                   >
                 </div>
               </v-list-item-title>
-            </v-list-item-content>
+            </div>
           </v-list-item>
         </v-col>
       </v-row>
       <div style="display: flex; align-items: center">
         <v-card
           class="card-container px-2 py-1"
-          outlined
+          variant="outlined"
           :style="{
             backgroundColor: backgroundColor + '!important',
             paddingTop: '0!important',
@@ -61,8 +61,8 @@
             Balance: {{ balance }}
           </v-card-subtitle>
           <v-card-text style="display: flex" class="pa-0">
-            <v-list-item two-line class="px-0" style="flex-basis: min-content; text-align: left">
-              <v-list-item-content class="py-0">
+            <v-list-item lines="two" class="px-0" style="flex-basis: min-content; text-align: left">
+              <div class="py-0 g-list-content">
                 <v-list-item-title class="ma-0" style="height: 32px">
                   <span v-if="tokenLock" style="font-size: 16px">
                     <v-badge
@@ -74,8 +74,8 @@
                       class="mr-1"
                     >
                       <template v-slot:badge>
-                        <v-avatar color="transparent" tile>
-                          <v-icon small color="primary"> mdi-check-decagram </v-icon>
+                        <v-avatar color="transparent" rounded="0">
+                          <v-icon size="small" color="primary"> mdi-check-decagram </v-icon>
                         </v-avatar>
                       </template>
                       <v-avatar size="30">
@@ -89,8 +89,8 @@
                   </span>
                   <v-btn
                     v-else
-                    large
-                    text
+                    size="large"
+                    variant="text"
                     plain
                     :ripple="false"
                     style="font-size: 16px; letter-spacing: normal; height: 32px"
@@ -106,8 +106,8 @@
                       class="mr-1"
                     >
                       <template v-slot:badge>
-                        <v-avatar color="transparent" tile>
-                          <v-icon small color="primary"> mdi-check-decagram </v-icon>
+                        <v-avatar color="transparent" rounded="0">
+                          <v-icon size="small" color="primary"> mdi-check-decagram </v-icon>
                         </v-avatar>
                       </template>
                       <v-avatar size="30">
@@ -118,7 +118,7 @@
                       <img :src="getTokenImage(selectedToken)" :alt="`${selectedToken.ticker} Logo`" @error="handleImageError" />
                     </v-avatar>
                     {{ selectedToken.ticker }}
-                    <v-icon v-if="!tokenLock" class="toggleUpDown" :class="{ rotate: selectTokenDialog }" small
+                    <v-icon v-if="!tokenLock" class="toggleUpDown" :class="{ rotate: selectTokenDialog }" size="small"
                       >mdi-chevron-down</v-icon
                     >
                   </v-btn>
@@ -126,10 +126,10 @@
                 <v-list-item-subtitle class="light-text" style="align-content: end">
                   {{ selectedToken.name }}
                 </v-list-item-subtitle>
-              </v-list-item-content>
+              </div>
             </v-list-item>
-            <v-list-item two-line class="px-0" style="flex-basis: max-content; text-align: right">
-              <v-list-item-content class="py-0">
+            <v-list-item lines="two" class="px-0" style="flex-basis: max-content; text-align: right">
+              <div class="py-0 g-list-content">
                 <v-list-item-title class="ma-0">
                   <CurrencyTextField
                     v-model="selectedToken.quantity"
@@ -163,9 +163,9 @@
                     class="pa-0"
                     :ripple="false"
                     color="error"
-                    text
+                    variant="text"
                     plain
-                    x-small
+                    size="x-small"
                     style="text-transform: unset; letter-spacing: normal; font-size: 14px"
                     @click="selectedToken.quantity = minimum + ''"
                   >
@@ -181,16 +181,16 @@
                   v-else
                 >
                   {{ getCurrencySymbol() }}{{ convertFiat(tokenPricePerUnit).toFixed(4)
-                  }}<v-icon x-small style="margin-bottom: 1px; margin-left: 1px" v-if="priceImpact > 3" color="warning"
+                  }}<v-icon size="x-small" style="margin-bottom: 1px; margin-left: 1px" v-if="priceImpact > 3" color="warning"
                     >mdi-alert-rhombus-outline</v-icon
                   >
                 </v-list-item-subtitle>
-              </v-list-item-content>
+              </div>
             </v-list-item>
           </v-card-text>
         </v-card>
-        <v-btn icon small @click="removeTokenSelector" v-if="index !== 0" class="ml-1">
-          <v-icon small color="primary">mdi-minus-box-outline</v-icon>
+        <v-btn icon size="small" @click="removeTokenSelector" v-if="index !== 0" class="ml-1">
+          <v-icon size="small" color="primary">mdi-minus-box-outline</v-icon>
         </v-btn>
       </div>
     </v-card-text>
@@ -230,7 +230,7 @@ const props = defineProps({
     type: String,
     default: 'white',
   },
-  value: {
+  modelValue: {
     type: Object,
     required: false,
   },
@@ -291,7 +291,7 @@ const props = defineProps({
     default: 0,
   },
 });
-const emit = defineEmits(['input', 'change', 'setMax', 'remove']);
+const emit = defineEmits(['update:modelValue', 'change', 'setMax', 'remove']);
 
 const { loggedWallet } = toRefs(walletStore);
 const { convertFiat, getCurrencySymbol } = useCurrencyConverter();
@@ -344,44 +344,15 @@ const tokenPricePerUnit = computed(() => {
   return calculatedPrice || 0;
 });
 
-// Calculate token value in USD based on quantity
-const tokenValue = computed(() => {
-  if (!selectedToken.value || !selectedToken.value.quantity) return 0;
-
-  const quantityStr = String(selectedToken.value.quantity || '0')
-    .replace(/,/g, '')
-    .replace(/\s/g, '');
-  const quantity = parseFloat(quantityStr);
-  if (!quantity || quantity <= 0 || isNaN(quantity)) return 0;
-  
-  return quantity * tokenPricePerUnit.value;
-});
-
-// Format price string for display (fallback to prop if provided, otherwise use calculated)
-const _displayPrice = computed(() => {
-  // If price prop is provided and valid, use it
-  if (props.price && !isNaN(Number(props.price.replaceAll(',', '')))) {
-    return props.price;
-  }
-
-  // Otherwise calculate from token value
-  if (tokenValue.value > 0) {
-    return tokenValue.value.toLocaleString('en-US');
-  }
-
-  return '';
-});
-
 const selectTokenDialog = ref<boolean>(false);
-const _amount = ref('');
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- v-model token is a dynamic display bag (balance/decimals/ticker/unit/…) shaped by the parent
 const selectedToken: any = computed({
   get() {
-    return props.value;
+    return props.modelValue;
   },
   set(newToken) {
-    emit('input', newToken);
+    emit('update:modelValue', newToken);
   },
 });
 
@@ -407,30 +378,6 @@ const balance = computed(() => {
   return String(selectedToken.value.balance || 0);
 });
 
-const _errors = computed(() => {
-  const errors = [];
-  if (props.adaShortage !== 0) {
-    errors.push(
-      `Insufficient Funds. Shortage: ${filters.toCurrency(
-        props.adaShortage,
-        false,
-        3,
-        '',
-        ' ' + selectedToken.value.ticker,
-        true,
-        0
-      )}`
-    );
-  } else if (
-    selectedToken.value.ticker ===
-      networks.resolveCurrencyTicker(loggedWallet.value?.chain, loggedWallet.value?.network) &&
-    props.minimum > selectedToken.value.quantity
-  ) {
-    errors.push(`Min. Required: ${props.minimum + ' ' + selectedToken.value.ticker}`);
-  }
-  return errors;
-});
-
 function quantityChange(val) {
   emit('change', val ? val.replace(/^0+/, '') : 0);
 }
@@ -445,8 +392,8 @@ function removeTokenSelector() {
   emit('remove', props.index);
 }
 
-// Note: Watch removed - selectedToken is already a computed ref that tracks props.value
-// The previous watch was redundant and caused warnings when props.value was undefined
+// Note: Watch removed - selectedToken is already a computed ref that tracks props.modelValue
+// The previous watch was redundant and caused warnings when props.modelValue was undefined
 
 function handleImageError(event) {
   event.target.onerror = null;

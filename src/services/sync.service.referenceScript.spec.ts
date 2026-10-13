@@ -48,7 +48,7 @@ describe('UTxOs pushed by gero-sync', () => {
     const applyUtxos = vi.fn().mockResolvedValue(undefined);
     const service = new SyncService({ applyUtxos } as unknown as WalletBg);
     vi.spyOn(service, 'healMissingTxCbor').mockResolvedValue();
-    vi.spyOn(service as never, 'refreshAccountRewards').mockResolvedValue(undefined as never);
+    vi.spyOn(service as unknown as { refreshAccountRewards(): Promise<void> }, 'refreshAccountRewards').mockResolvedValue(undefined);
 
     await service.setSync({
       type: 'SYNC',

@@ -3,11 +3,13 @@ import { resolve } from 'path';
 import wasm from 'vite-plugin-wasm';
 import topLevelAwait from 'vite-plugin-top-level-await';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
-import Vue from '@vitejs/plugin-vue2';
+import Vue from '@vitejs/plugin-vue';
+import { localeMessagesPlugin } from './scripts/i18n-compiler.mjs';
 
 export default defineConfig({
   plugins: [
-    Vue(),
+    Vue({ template: { compilerOptions: { isCustomElement: tag => tag === 'gero-swap' } } }),
+    localeMessagesPlugin(),
     wasm(),
     topLevelAwait(),
     nodePolyfills({
@@ -19,10 +21,17 @@ export default defineConfig({
       include: ['crypto', 'buffer', 'stream', 'util'],
     }),
   ],
+  define: {
+    __VUE_OPTIONS_API__: true,
+    __VUE_PROD_DEVTOOLS__: false,
+    __VUE_I18N_FULL_INSTALL__: true,
+    __VUE_I18N_LEGACY_API__: false,
+    __INTLIFY_DROP_MESSAGE_COMPILER__: true,
+  },
   test: {
     globals: true,
     environment: 'happy-dom',
-    setupFiles: [],
+    setupFiles: ['test/setup.ts'],
     testTimeout: 30000,
     // `.claude/worktrees/*` holds per-developer agent worktrees — full checkouts
     // of other branches, gitignored (see .gitignore's `.claude/`). Without this
@@ -50,13 +59,16 @@ export default defineConfig({
         // @cardano-sdk/hardware-ledger's ESM build imports
         // '@cardano-foundation/ledgerjs-hw-app-cardano/dist/utils/address' with no extension,
         // which Node's ESM loader rejects. Inlined, Vite resolves it, as the app build does.
-        inline: ['@cardano-sdk/hardware-ledger'],
+        inline: ['@cardano-sdk/hardware-ledger', 'vuetify'],
       },
     },
   },
   resolve: {
     alias: {
       '@/': `${resolve(__dirname, 'src')}/`,
+      '@test/': `${resolve(__dirname, 'test')}/`,
+      'vuedraggable': resolve(__dirname, 'node_modules/vuedraggable/src/vuedraggable.js'),
+      'vue-i18n': 'vue-i18n/dist/vue-i18n.runtime.esm-bundler.js',
       'buffer': 'buffer',
       '@noble/ciphers/chacha': '@noble/ciphers/chacha.js',
       '@noble/hashes/pbkdf2': '@noble/hashes/pbkdf2.js',

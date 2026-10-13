@@ -3,15 +3,15 @@
     <component :is="$route.meta['layout'] || 'div'">
       <router-view></router-view>
     </component>
-    <v-overlay v-show="isLoading" opacity="0.9" style="text-align: center;">
+    <v-overlay :model-value="isLoading" persistent class="align-center justify-center" opacity="0.9" style="text-align: center;">
       <v-card flat style="background-color: transparent!important; text-align: -webkit-center;">
         <video :src="assetsUtil.loadingAnimation" playsinline autoplay muted loop style="width: 120px; object-fit: contain; object-position: center bottom; left: 0; top: 0;">
         </video>
         <v-progress-linear
-            :value="progress"
+            :model-value="progress"
             :indeterminate="progress === 0"
             color="#16d9f3"
-            background-color="rgba(255,255,255,0.15)"
+            bg-color="rgba(255,255,255,0.15)"
             height="20"
             rounded
             class="glow-bar"
@@ -30,23 +30,12 @@
     <NotifySnackbar />
     <!-- A notification about a wallet other than the open one asks before switching (B4). -->
     <NotifyPendingOpen v-if="isDashboardShell" />
-    <v-snackbar
-      content-class="custom-snackbar"
-      outlined
-        v-model="snackbarPlugin.active"
-        :timeout="snackbarPlugin.timeout"
-        :color="snackbarPlugin.color"
-        bottom
-        style="font-family: var(--g-font-ui);"
-        transition="scroll-y-transition"
-    >
-      {{ snackbarPlugin.text }}
-    </v-snackbar>
   </div>
 </template>
 <script setup lang="ts">
-import { ref, computed, toRefs, watch, getCurrentInstance, onMounted } from 'vue'
-import snackbar from "@/plugins/snackbar";
+import { ref, computed, toRefs, watch, onMounted } from 'vue'
+import { useRoute } from 'vue-router';
+import i18n, { updateI18nLocale } from '@/plugins/i18n';
 import assts from '@/utils/assets';
 import { loadingState } from '@/stores/loading';
 import { geroStore } from '@/stores/geroStore';
@@ -76,9 +65,8 @@ useGovernanceHydration();
 const { loading, isRestoring, text, progress } = toRefs(loadingState);
 const geroConfig = toRefs(geroStore).config;
 
-const snackbarPlugin = ref(snackbar);
 const assetsUtil = ref(assts);
-const vmProxy = getCurrentInstance()!.proxy;
+const route = useRoute();
 
 const isLoading = computed(() => {
   return loading.value || isRestoring.value;
@@ -93,7 +81,7 @@ const isLoading = computed(() => {
 // layout it already declares in router.ts. The Gero Companion dock used to be
 // gated here too; it now lives inside ContentLayout's <v-app>, where Vuetify's
 // overlay stacking and scroll lock can see it.
-const isDashboardShell = computed(() => vmProxy.$route?.meta?.['layout'] === ContentLayout);
+const isDashboardShell = computed(() => route.meta?.['layout'] === ContentLayout);
 
 // Check auto-lock immediately when page loads/becomes visible
 onMounted(async () => {
@@ -129,34 +117,11 @@ onMounted(async () => {
 // CRITICAL: The initial locale is set by main.ts BEFORE Vue mounts
 // This watcher should only react to SUBSEQUENT changes made by the user
 watch(() => geroConfig.value?.locale, async (newLocale, oldLocale) => {
-  // Skip if no locale value or i18n not ready
-  if (!newLocale || !vmProxy.$i18n) return;
-
-  // CRITICAL: Skip if this is the initial watcher run and i18n is already set correctly
-  // This prevents the watcher from overwriting the locale set by main.ts
-  // The geroStore default is 'us', but main.ts may have already loaded 'de' from storage
-  if (vmProxy.$i18n.locale === newLocale) {
-    return; // Already at the correct locale, no action needed
-  }
-
-  // Skip if oldLocale is undefined/null (first run) and newLocale is the default 'us'
-  // This means geroStore hasn't been hydrated yet, so trust main.ts's locale setting
-  if (!oldLocale && newLocale === 'us' && vmProxy.$i18n.locale !== 'us') {
-    console.log('🔄 App.vue: Skipping initial hydration reset, current i18n.locale:', vmProxy.$i18n.locale);
-    return;
-  }
-
-  // Proceed with locale change
-  console.log('🔄 App.vue: Locale change detected:', oldLocale, '->', newLocale);
-  const { loadLanguage } = await import('@/plugins/i18n');
-  try {
-    await loadLanguage(newLocale);
-    vmProxy.$i18n.locale = newLocale;
-    console.log('✅ App.vue: i18n.locale updated to:', newLocale);
-  } catch (error) {
-    console.error(`Failed to load language ${newLocale}:`, error);
-  }
-}, { immediate: true, deep: true });
+  if (!newLocale || i18n.locale === newLocale) return;
+  // The persisted locale was loaded before mount; ignore an unhydrated default.
+  if (!oldLocale && newLocale === 'us' && i18n.locale !== 'us') return;
+  await updateI18nLocale(newLocale);
+}, { immediate: true });
 </script>
 <style lang="scss">
 .v-application {

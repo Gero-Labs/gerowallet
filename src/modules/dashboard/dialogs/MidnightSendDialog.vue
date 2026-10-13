@@ -7,7 +7,7 @@
       :loading="false"
       :min-height="0"
       :subtitle="t('wallet.quickSendSubtitle', { currency: selectedTicker })"
-      :persistent="sending"
+      :persistent="sendDispatched"
       :img="assets.sendSvg"
       :width="sending ? 468 : 428"
       imgStyle="filter: brightness(0) saturate(100%) invert(100%) sepia(49%) saturate(2%) hue-rotate(47deg) brightness(118%) contrast(101%);"
@@ -17,10 +17,10 @@
       <v-card-title v-if="!sending" style="display: block;" class="pa-0">
         <v-stepper v-model="currentStep" flat class="stepper-container" non-linear alt-labels>
           <v-stepper-header>
-            <template v-for="(item, index) in steps">
+            <template :key="item.name" v-for="(item, index) in steps">
               <div
                 class="custom-step"
-                :key="item.name"
+
                 :class="{ active: currentStep === index + 1, done: currentStep > index + 1, next: currentStep < index + 1 }"
               >
                 <div class="icon-container">
@@ -33,7 +33,7 @@
                 </div>
                 <span class="step-label">{{ item.label }}</span>
               </div>
-              <div class="divider" :class="{ 'active-divider': currentStep > index + 1 }" :key="index"
+              <div class="divider" :class="{ 'active-divider': currentStep > index + 1 }"
                    v-if="index < steps.length - 1"></div>
             </template>
           </v-stepper-header>
@@ -67,7 +67,7 @@
 
         <CustomStepper v-else :currentStep="currentStep" :steps="steps">
           <!-- ── Step 1: Recipient + amount ── -->
-          <v-stepper-content step="1">
+          <v-stepper-window-item :value="1">
             <div class="step-recipients-wrapper">
               <div class="step-recipients-inner" :class="{ shake: shakeError }">
                 <!-- Balance selector, NOT a privacy mode toggle. Shielded and unshielded
@@ -82,7 +82,7 @@
                 <v-tabs
                   v-if="shieldedAvailable"
                   v-model="activeTab"
-                  background-color="transparent"
+                  bg-color="transparent"
                   centered
                   grow
                   hide-slider
@@ -108,15 +108,15 @@
                       <v-text-field
                         v-model="recipient"
                         :placeholder="recipientPlaceholder"
-                        outlined
-                        dense
+                        variant="outlined"
+                        density="compact"
                         hide-details="auto"
                         class="address-input"
                         :rules="addressRules"
                         :disabled="sending"
                         color="var(--g-accent)"
                       >
-                        <template v-slot:append>
+                        <template v-slot:append-inner>
                           <v-icon
                             v-if="recipient"
                             style="font-size: 14px; cursor: pointer; opacity: 0.6;"
@@ -127,12 +127,12 @@
                       </v-text-field>
                       <v-btn
                         icon
-                        small
+                        size="small"
                         class="address-row__icon-btn"
                         :disabled="sending"
                         @click="qrScanDialog = true"
                       >
-                        <v-icon small color="var(--g-accent)">mdi-qrcode</v-icon>
+                        <v-icon size="small" color="var(--g-accent)">mdi-qrcode</v-icon>
                       </v-btn>
                       <QRAddressScannerDialog
                         :isOpen="qrScanDialog"
@@ -154,9 +154,9 @@
                             v-model="selectedToken"
                             :items="assetOptions"
                             item-value="value"
-                            item-text="ticker"
-                            dense
-                            outlined
+                            item-title="ticker"
+                            density="compact"
+                            variant="outlined"
                             hide-details
                             attach
                             class="asset-select"
@@ -169,7 +169,7 @@
                             </v-avatar>
                             <span class="token-ticker">{{ selectedTicker }}</span>
                             <v-icon
-                              x-small
+                              size="x-small"
                               color="var(--g-accent)"
                               class="ml-1"
                               style="margin-top: -1px; font-size: 11px;"
@@ -183,8 +183,8 @@
                             type="number"
                             min="0"
                             :step="amountStep"
-                            outlined
-                            dense
+                            variant="outlined"
+                            density="compact"
                             hide-details="auto"
                             class="amount-input"
                             placeholder="0"
@@ -192,8 +192,8 @@
                             :disabled="sending"
                           />
                           <v-btn
-                            text
-                            x-small
+                            variant="text"
+                            size="x-small"
                             color="var(--g-accent)"
                             class="max-btn"
                             :disabled="sending"
@@ -202,19 +202,19 @@
                         </div>
                       </div>
                       <div v-if="isShielded" class="token-info">
-                        <v-icon x-small color="var(--g-text-3)" class="mr-1">mdi-information-outline</v-icon>
+                        <v-icon size="x-small" color="var(--g-text-3)" class="mr-1">mdi-information-outline</v-icon>
                         {{ t('midnight.send.shieldedBalanceNote') }}
                       </div>
                       <div v-if="mayLackDust" class="token-info">
-                        <v-icon x-small color="var(--g-warning)" class="mr-1">mdi-alert-outline</v-icon>
+                        <v-icon size="x-small" color="var(--g-warning)" class="mr-1">mdi-alert-outline</v-icon>
                         {{ t('midnight.send.noDustFee') }}
                       </div>
                       <MidnightSponsorPicker
                         v-if="mayLackDust && loggedWallet"
-                        :value="sponsorWalletId"
+                        :model-value="sponsorWalletId"
                         :sender-wallet-id="loggedWallet.id"
                         :network="loggedWallet.network"
-                        @input="sponsorWalletId = $event"
+                        @update:model-value="sponsorWalletId = $event"
                       />
                       <!-- Unlock block for the chosen sponsor. Both branches name
                            BOTH wallets: the single likeliest mistake here is
@@ -225,8 +225,8 @@
                             v-model="sponsorPassword"
                             type="password"
                             autocomplete="off"
-                            dense
-                            outlined
+                            density="compact"
+                            variant="outlined"
                             hide-details="auto"
                             :label="t('midnight.sponsor.passwordLabel', { name: sponsorWallet.name })"
                           />
@@ -240,7 +240,7 @@
                              sign of a second credential was the browser's own
                              prompt, mid-send. -->
                         <div v-else class="sponsor-unlock__passkey">
-                          <v-icon small class="mr-2">mdi-fingerprint</v-icon>
+                          <v-icon size="small" class="mr-2">mdi-fingerprint</v-icon>
                           <span>
                             {{ t('midnight.sponsor.passkeyNotice', {
                               name: sponsorWallet.name,
@@ -251,7 +251,7 @@
 
                       </div>
                       <div v-else-if="rawUnits" class="token-info">
-                        <v-icon x-small color="var(--g-text-3)" class="mr-1">mdi-information-outline</v-icon>
+                        <v-icon size="x-small" color="var(--g-text-3)" class="mr-1">mdi-information-outline</v-icon>
                         {{ t('midnight.send.rawUnitsNote') }}
                       </div>
                     </div>
@@ -278,10 +278,10 @@
                 </div>
               </div>
             </div>
-          </v-stepper-content>
+          </v-stepper-window-item>
 
           <!-- ── Step 2: Summary + auth ── -->
-          <v-stepper-content step="2">
+          <v-stepper-window-item :value="2">
             <div class="midnight-summary-wrapper">
               <TransactionDetailsCard
                 :outputs="reviewOutputs"
@@ -334,7 +334,7 @@
                 <span>{{ t('midnight.send.dustLowHint', { percent: dustBattery.percent }) }}</span>
               </div>
             </div>
-          </v-stepper-content>
+          </v-stepper-window-item>
         </CustomStepper>
       </v-card-text>
 
@@ -369,10 +369,10 @@
           <div class="midnight-prover-fallback-body">
             <span>{{ proverFallbackText }}</span>
             <div class="midnight-prover-fallback-actions">
-              <v-btn text x-small color="var(--g-accent)" @click="openProofServerSettings">
+              <v-btn variant="text" size="x-small" color="var(--g-accent)" @click="openProofServerSettings">
                 {{ t('midnight.proofServer.openSettings') }}
               </v-btn>
-              <v-btn text x-small color="var(--g-accent)" @click="useCloudForThisTransaction">
+              <v-btn variant="text" size="x-small" color="var(--g-accent)" @click="useCloudForThisTransaction">
                 {{ t('midnight.proofServer.useCloudOnce') }}
               </v-btn>
             </div>
@@ -385,13 +385,13 @@
 
         <div>
           <v-btn
-            text
+            variant="text"
             @click="prevStep"
             v-if="currentStep > 1"
             class="mr-2"
             :disabled="sending || checkingLocalProver"
           >
-            <v-icon small class="mr-1">mdi-arrow-left</v-icon>{{ t('common.back') }}
+            <v-icon size="small" class="mr-1">mdi-arrow-left</v-icon>{{ t('common.back') }}
           </v-btn>
           <!-- Step 1: advance to the review. -->
           <v-btn
@@ -400,7 +400,7 @@
             @click="nextStep()"
             :disabled="sending"
           >{{ t('common.continue') + ' ' }}
-            <v-icon style="color: var(--g-on-grad)!important;" small class="ml-1">mdi-arrow-right</v-icon>
+            <v-icon style="color: var(--g-on-grad)!important;" size="small" class="ml-1">mdi-arrow-right</v-icon>
           </v-btn>
           <!-- Step 2: password wallets submit here (TransactionAuthSection only
                renders the field for them); PRF wallets submit via the PassKey
@@ -470,11 +470,12 @@ import {
 import { debugLog } from '@/utils/debug';
 import rules from '@/utils/rules';
 import assets from '@/utils/assets';
+import { awaitFreshApproval, useApprovalFreshness } from '@/shared/composables/useApprovalFreshness';
 
 interface Props {
   isOpen: boolean;
 }
-defineProps<Props>();
+const props = defineProps<Props>();
 const emit = defineEmits(['close']);
 
 const { t } = useTranslation();
@@ -656,18 +657,19 @@ watch(mayLackDust, (needsSponsor) => {
  * approval is raised before any network work starts — the review step warns
  * the user to expect two.
  */
-async function buildSponsorArg() {
+async function buildSponsorArg(current: () => boolean) {
   const sponsor = sponsorWallet.value;
   if (!sponsor) return undefined;
 
   if (sponsor.encryptionMethod === 'prf') {
     if (!sponsor.webAuthnCredentialId) throw new Error(t('midnight.sponsor.unlockFailed') as string);
-    const { evaluateWalletPrf } = await import('@/shared/utils/passkeyPrf');
+    const { evaluateWalletPrf } = await awaitFreshApproval(() => import('@/shared/utils/passkeyPrf'), current);
     const buf = await evaluateWalletPrf({
       id: sponsor.id,
       webAuthnCredentialId: sponsor.webAuthnCredentialId,
       webAuthnTransports: sponsor.webAuthnTransports,
     });
+    if (!current()) { new Uint8Array(buf).fill(0); return undefined; }
     return { walletId: sponsor.id, prfSecret: new Uint8Array(buf) };
   }
 
@@ -691,7 +693,7 @@ const formattedAvailable = computed(() => {
 // paid in DUST and is tiny, matching the Cardano flow's fee row.
 const feeEstimateDisplay = '< 0.000001';
 
-const step1FormRef = ref<{ validate: () => boolean } | null>(null);
+const step1FormRef = ref<{ validate: () => Promise<{ valid: boolean }> } | null>(null);
 const step1Valid = ref(false);
 const recipient = ref('');
 
@@ -724,6 +726,7 @@ const errorMessage = ref<string | null>(null);
 // broadcasts into midnightStore.sendProgress.
 type SendStageOrIdle = MidnightSendStage | 'idle';
 const sendStage = ref<SendStageOrIdle>('idle');
+const sendDispatched = computed(() => sending.value && sendStage.value !== 'idle' && sendStage.value !== 'authorizing');
 
 // `provingLocal`/`provingZkpaas` share `working`'s rank: the three are
 // mutually exclusive (wallet-side shielded sends emit a proving stage in
@@ -867,6 +870,27 @@ const localProverUnavailable = ref(false);
 // stored proofServer.mode. Consumed (reset to false) the moment sendShielded
 // reads it.
 const forceRemoteForNextSend = ref(false);
+let pendingAuthorization: (() => boolean) | null = null;
+const approval = useApprovalFreshness(
+  () => [loggedWallet.value?.id, loggedWallet.value?.chain, loggedWallet.value?.network, walletStore.isLocked,
+    recipient.value, amount.value, selectedToken.value, activeTab.value, sponsorWalletId.value, midnightStore.proofServer],
+  () => props.isOpen,
+  () => {
+    pendingCredentials.value?.prfSecret?.fill(0);
+    pendingCredentials.value = null;
+    pendingAuthorization = null;
+    consentDialogOpen.value = false;
+    localProverUnavailable.value = false;
+    checkingLocalProver.value = false;
+    forceRemoteForNextSend.value = false;
+  },
+);
+
+function rememberCredentials(credentials: { password?: string; prfSecret?: Uint8Array }, current: () => boolean) {
+  if (!current()) { credentials.prfSecret?.fill(0); return; }
+  pendingCredentials.value = credentials;
+  pendingAuthorization = current;
+}
 
 const passwordRules = [rules.required()];
 
@@ -983,14 +1007,17 @@ function initialsOf(name: string): string {
 }
 
 // ── Step navigation ──
-function nextStep() {
+async function nextStep() {
+  const current = approval.capture();
   errorMessage.value = null;
   if (currentStep.value === 1) {
     if (blockedByFee.value) {
       errorMessage.value = t('midnight.send.noDustFee');
       return;
     }
-    if (!step1FormRef.value?.validate()) {
+    const validation = await step1FormRef.value?.validate();
+    if (!current()) return;
+    if (!validation?.valid) {
       shakeError.value = true;
       setTimeout(() => { shakeError.value = false; }, 400);
       return;
@@ -1000,6 +1027,7 @@ function nextStep() {
 }
 
 function prevStep() {
+  approval.invalidate();
   errorMessage.value = null;
   localProverUnavailable.value = false;
   currentStep.value = 1;
@@ -1020,19 +1048,20 @@ function hasFreshConsent(provider: MidnightRemoteProver): boolean {
 
 async function submitWithPassword() {
   if (!preflight() || isPrfWallet.value) return;
-  await routeSend({ password: password.value });
+  await approval.run(() => routeSend({ password: password.value }, approval.capture()));
 }
 
 async function onPasskeyPrfOutput(prfBytes: Uint8Array) {
-  if (!preflight() || !isPrfWallet.value) return;
-  await routeSend({ prfSecret: prfBytes });
+  if (!preflight() || !isPrfWallet.value) { prfBytes.fill(0); return; }
+  await approval.run(() => routeSend({ prfSecret: prfBytes }, approval.capture()));
 }
 
 function onPasskeyError(error: Error) {
   errorMessage.value = error?.message || 'PassKey authentication failed';
 }
 
-async function routeSend(credentials: { password?: string; prfSecret?: Uint8Array }) {
+async function routeSend(credentials: { password?: string; prfSecret?: Uint8Array }, current: () => boolean) {
+  if (!current()) { credentials.prfSecret?.fill(0); return; }
   const mode = midnightStore.proofServer.mode;
   // Local proof-server mode never needs cloud consent — witness data stays
   // on the user's machine — so it skips the consent dialog entirely and
@@ -1041,18 +1070,18 @@ async function routeSend(credentials: { password?: string; prfSecret?: Uint8Arra
   // third party, so it is consent-gated exactly like Gero Cloud and THEN
   // preflighted like local.
   if (mode === 'local') {
-    await routeWalletProvedShielded(credentials);
+    await routeWalletProvedShielded(credentials, current);
     return;
   }
   if (hasFreshConsent(mode === 'zkpaas' ? 'zkpaas' : 'cloud')) {
     if (mode === 'zkpaas') {
-      await routeWalletProvedShielded(credentials);
+      await routeWalletProvedShielded(credentials, current);
       return;
     }
-    await dispatchSend(credentials);
+    await dispatchSend(credentials, current);
     return;
   }
-  pendingCredentials.value = credentials;
+  rememberCredentials(credentials, current);
   consentProvider.value = mode === 'zkpaas' ? 'zkpaas' : 'cloud';
   consentDialogOpen.value = true;
 }
@@ -1066,30 +1095,30 @@ async function routeSend(credentials: { password?: string; prfSecret?: Uint8Arra
  * doomed send. Target resolution lives in the tx service so the two can
  * never disagree about which URL/auth a send would use.
  */
-async function routeWalletProvedShielded(credentials: { password?: string; prfSecret?: Uint8Array }) {
+async function routeWalletProvedShielded(credentials: { password?: string; prfSecret?: Uint8Array }, current: () => boolean) {
   errorMessage.value = null;
   localProverUnavailable.value = false;
   checkingLocalProver.value = true;
   try {
-    const { checkWalletProvingPreflight } = await import('@/services/midnight-tx.service');
+    const { checkWalletProvingPreflight } = await awaitFreshApproval(() => import('@/services/midnight-tx.service'), current);
     const network = loggedWallet.value?.network ?? '';
-    const ok = await checkWalletProvingPreflight(network);
+    const ok = await awaitFreshApproval(() => checkWalletProvingPreflight(network), current);
     if (!ok) {
       // The preflight collapses "unconfigured" and "unreachable" into one
       // boolean; recover the reason so the fallback can name the actual
       // problem (a local server on the wrong ledger profile is running and
       // answering — "start it" is the wrong instruction).
-      const { resolveProvingTarget } = await import('@/chains/midnight/midnightProvingTarget');
+      const { resolveProvingTarget } = await awaitFreshApproval(() => import('@/chains/midnight/midnightProvingTarget'), current);
       const target = resolveProvingTarget(network, midnightStore.proofServer);
       proverFallbackReason.value = target.kind === 'unconfigured' ? target.reason : undefined;
-      pendingCredentials.value = credentials;
+      rememberCredentials(credentials, current);
       localProverUnavailable.value = true;
       return;
     }
   } finally {
     checkingLocalProver.value = false;
   }
-  await dispatchSend(credentials);
+  await dispatchSend(credentials, current);
 }
 
 /** "Open settings" fallback action — navigates to Settings > Advanced (the
@@ -1109,12 +1138,13 @@ function openProofServerSettings() {
  */
 function useCloudForThisTransaction() {
   const credentials = pendingCredentials.value;
-  if (!credentials) return;
+  const current = pendingAuthorization;
+  if (!credentials || !current?.()) return;
   localProverUnavailable.value = false;
   forceRemoteForNextSend.value = true;
   if (hasFreshConsent('cloud')) {
     pendingCredentials.value = null;
-    void dispatchSend(credentials);
+    void approval.run(() => dispatchSend(credentials, current));
     return;
   }
   // pendingCredentials stays set — onConsentAccepted below reads it once the
@@ -1125,6 +1155,7 @@ function useCloudForThisTransaction() {
 }
 
 function onConsentClose() {
+  approval.invalidate();
   consentDialogOpen.value = false;
   pendingCredentials.value = null;
   forceRemoteForNextSend.value = false;
@@ -1133,30 +1164,32 @@ function onConsentClose() {
 async function onConsentAccepted() {
   consentDialogOpen.value = false;
   const credentials = pendingCredentials.value;
+  const current = pendingAuthorization;
   pendingCredentials.value = null;
-  if (!credentials) return;
+  if (!credentials || !current?.()) return;
   const mode = midnightStore.proofServer.mode;
   const recipient = forceRemoteForNextSend.value || mode !== 'zkpaas' ? 'cloud' : 'zkpaas';
   if (!forceRemoteForNextSend.value && mode !== 'local' && recipient !== consentProvider.value) {
-    await routeSend(credentials);
+    await approval.run(() => routeSend(credentials, current));
     return;
   }
   // A freshly-consented zkPaaS send still needs its preflight; the one-off
   // "use Gero Cloud" fallback (forceRemoteForNextSend) goes straight to the
   // remote path instead — sendShielded consumes that flag.
   if (!forceRemoteForNextSend.value && midnightStore.proofServer.mode === 'zkpaas') {
-    await routeWalletProvedShielded(credentials);
+    await approval.run(() => routeWalletProvedShielded(credentials, current));
     return;
   }
-  await dispatchSend(credentials);
+  await approval.run(() => dispatchSend(credentials, current));
 }
 
-async function dispatchSend(credentials: { password?: string; prfSecret?: Uint8Array }) {
-  if (isShielded.value) await sendShielded(credentials);
-  else await sendUnshielded(credentials);
+async function dispatchSend(credentials: { password?: string; prfSecret?: Uint8Array }, current: () => boolean) {
+  if (!current()) { credentials.prfSecret?.fill(0); return; }
+  if (isShielded.value) await sendShielded(credentials, current);
+  else await sendUnshielded(credentials, current);
 }
 
-async function sendUnshielded(credentials: { password?: string; prfSecret?: Uint8Array }) {
+async function sendUnshielded(credentials: { password?: string; prfSecret?: Uint8Array }, current: () => boolean) {
   const wallet = loggedWallet.value;
   if (!wallet) return;
   const forceRemote = forceRemoteForNextSend.value;
@@ -1164,8 +1197,11 @@ async function sendUnshielded(credentials: { password?: string; prfSecret?: Uint
   localProverUnavailable.value = false;
   sending.value = true;
   sendStage.value = 'authorizing';
+  let sponsor: Awaited<ReturnType<typeof buildSponsorArg>>;
   try {
-    const { sendUnshieldedNight } = await import('@/services/midnight-tx.service');
+    const { sendUnshieldedNight } = await awaitFreshApproval(() => import('@/services/midnight-tx.service'), current);
+    sponsor = await buildSponsorArg(current);
+    if (!current()) { sponsor?.prfSecret?.fill(0); return; }
     const result = await sendUnshieldedNight(
       wallet.network,
       {
@@ -1178,10 +1214,12 @@ async function sendUnshielded(credentials: { password?: string; prfSecret?: Uint
         ttlMs: Date.now() + 5 * 60_000,
       },
       credentials,
-      (stage) => { sendStage.value = stage; },
-      await buildSponsorArg(),
+      (stage) => { if (current()) sendStage.value = stage; },
+      sponsor,
       forceRemote,
+      current,
     );
+    if (!current()) return;
     debugLog('🌙 Midnight unshielded tx submitted:', result.txHash, 'ledger:', result.ledgerTxHash ?? 'n/a',
       'status:', result.status, 'sponsor:', sponsorWalletId.value ?? 'none');
     // The hash history will know this tx by — the ledger hash, not the
@@ -1219,20 +1257,24 @@ async function sendUnshielded(credentials: { password?: string; prfSecret?: Uint
       }
     }
     // Show it in history right away — gero-sync backfills the confirmed entry.
-    void addOptimisticPendingTx(historyHash);
+    if (!current()) return;
+    void addOptimisticPendingTx(historyHash, current);
     // Brief completed-state hold so the user sees the timeline finish.
     await new Promise((r) => setTimeout(r, 550));
+    if (!current()) return;
     resetForm();
     emit('close');
   } catch (e) {
+    if (!current()) return;
     errorMessage.value = e instanceof Error ? e.message : String(e);
   } finally {
+    sponsor?.prfSecret?.fill(0);
     sending.value = false;
     sendStage.value = 'idle';
   }
 }
 
-async function sendShielded(credentials: { password?: string; prfSecret?: Uint8Array }) {
+async function sendShielded(credentials: { password?: string; prfSecret?: Uint8Array }, current: () => boolean) {
   const wallet = loggedWallet.value;
   if (!wallet) return;
   // Consumed here (not left for sendShieldedNight to re-read) so a second,
@@ -1247,8 +1289,11 @@ async function sendShielded(credentials: { password?: string; prfSecret?: Uint8A
   localProverUnavailable.value = false;
   sending.value = true;
   sendStage.value = 'authorizing';
+  let sponsor: Awaited<ReturnType<typeof buildSponsorArg>>;
   try {
-    const { sendShieldedNight } = await import('@/services/midnight-tx.service');
+    const { sendShieldedNight } = await awaitFreshApproval(() => import('@/services/midnight-tx.service'), current);
+    sponsor = await buildSponsorArg(current);
+    if (!current()) { sponsor?.prfSecret?.fill(0); return; }
     const result = await sendShieldedNight(
       wallet.network,
       [{
@@ -1258,16 +1303,20 @@ async function sendShielded(credentials: { password?: string; prfSecret?: Uint8A
       }],
       credentials,
       'InBlock',
-      (stage) => { sendStage.value = stage; },
+      (stage) => { if (current()) sendStage.value = stage; },
       forceRemote,
-      await buildSponsorArg(),
+      sponsor,
+      current,
     );
+    if (!current()) return;
     debugLog('🌙 Midnight shielded tx submitted:', result.txHash, 'ledger:', result.ledgerTxHash ?? 'n/a', 'status:', result.status);
-    void addOptimisticPendingTx(historyHashForSubmittedTx(result), true);
+    void addOptimisticPendingTx(historyHashForSubmittedTx(result), current, true);
     await new Promise((r) => setTimeout(r, 550));
+    if (!current()) return;
     resetForm();
     emit('close');
   } catch (e) {
+    if (!current()) return;
     // Named rather than instanceof-checked: ProofServerUnreachableError is
     // reached here via a dynamic import, and name-based matching sidesteps
     // any doubt about identity across that boundary. Thrown by
@@ -1276,13 +1325,14 @@ async function sendShielded(credentials: { password?: string; prfSecret?: Uint8A
     // reaching it here means the server dropped in the narrow window between
     // that preflight and this call. Same fallback either way.
     if (e instanceof Error && e.name === 'ProofServerUnreachableError') {
-      pendingCredentials.value = credentials;
+      rememberCredentials(credentials, current);
       proverFallbackReason.value = (e as { reason?: ProvingUnconfiguredTarget['reason'] }).reason;
       localProverUnavailable.value = true;
     } else {
       errorMessage.value = e instanceof Error ? e.message : String(e);
     }
   } finally {
+    sponsor?.prfSecret?.fill(0);
     sending.value = false;
     sendStage.value = 'idle';
   }
@@ -1290,23 +1340,25 @@ async function sendShielded(credentials: { password?: string; prfSecret?: Uint8A
 
 // Insert the just-submitted tx into history immediately (values captured
 // synchronously so a later resetForm can't blank them out).
-async function addOptimisticPendingTx(hash: string, shielded = false) {
+async function addOptimisticPendingTx(hash: string, current: () => boolean, shielded = false) {
   const amountBig = parseAmount(amount.value);
   const to = recipient.value.trim();
   // Preserve the selected public or private custom token in pending history.
   const token = selectedToken.value;
   try {
     const { addPendingMidnightTx } = await import('@/services/midnight-tx.service');
+    if (!current()) return;
     await addPendingMidnightTx(hash, amountBig, to, shielded, token);
   } catch {
     /* non-fatal — gero-sync backfills the confirmed entry */
   }
 }
 
-// Block dismissal while a send is running (the BG work continues even if the
-// UI closes, so keep the timeline visible until it resolves).
+// Authentication can be cancelled. Once building/signing has started, keep
+// the timeline visible until the already-dispatched work resolves.
 function onDialogClose() {
-  if (sending.value) return;
+  if (sendDispatched.value) return;
+  approval.invalidate();
   // Abandon any pending local-prover-fallback attempt rather than letting it
   // resurface stale on next open — matches the existing consent-cancel
   // behaviour (onConsentClose), which drops pendingCredentials the same way.

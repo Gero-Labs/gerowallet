@@ -16,7 +16,7 @@
           {{ hideBalances ? '••••••' : formattedDustBalance }} {{ dustTicker }}
         </span>
         <span v-if="nightChange24h !== null" class="ml-2">
-          <v-icon x-small :color="nightChange24h >= 0 ? 'success' : 'error'">
+          <v-icon size="x-small" :color="nightChange24h >= 0 ? 'success' : 'error'">
             {{ nightChange24h >= 0 ? 'mdi-arrow-up' : 'mdi-arrow-down' }}
           </v-icon>
           {{ Math.abs(nightChange24h).toFixed(2) }}%
@@ -27,7 +27,7 @@
           {{ hideBalances ? '••••••' : formattedAdaBalance }} {{ currencyTicker }}
         </span>
         <span v-if="priceChange !== null" class="ml-2">
-          <v-icon x-small :color="priceChange >= 0 ? 'success' : 'error'">
+          <v-icon size="x-small" :color="priceChange >= 0 ? 'success' : 'error'">
             {{ priceChange >= 0 ? 'mdi-arrow-up' : 'mdi-arrow-down' }}
           </v-icon>
           {{ Math.abs(priceChange).toFixed(2) }}%
@@ -46,11 +46,11 @@
     <v-btn
       v-if="showBuySell"
       rounded
-      small
+      size="small"
       class="buy-sell-btn mt-3 geroButton"
       @click="$emit('buy-sell')"
     >
-      <v-icon small left>mdi-swap-horizontal</v-icon>
+      <v-icon size="small" start>mdi-swap-horizontal</v-icon>
       {{ $t('miniGero.buySell', { ticker: currencyTicker }) }}
     </v-btn>
   </div>

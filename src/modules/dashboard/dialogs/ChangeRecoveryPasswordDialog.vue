@@ -10,7 +10,7 @@
     @close="handleClose"
   >
     <v-card-text class="px-3 pb-4">
-      <v-alert type="info" text dense class="mb-4">
+      <v-alert type="info" variant="text" density="compact" class="mb-4">
         {{ t('security.mpcRecoveryChangeInfo') }}
       </v-alert>
 
@@ -18,17 +18,17 @@
         v-model="newPassword"
         :label="t('security.mpcRecoveryNewPassword')"
         :type="showPw ? 'text' : 'password'"
-        :append-icon="showPw ? 'mdi-eye-off' : 'mdi-eye'"
-        @click:append="showPw = !showPw"
-        outlined
-        dense
+        :append-inner-icon="showPw ? 'mdi-eye-off' : 'mdi-eye'"
+        @click:append-inner="showPw = !showPw"
+        variant="outlined"
+        density="compact"
         :disabled="busy"
         :error-messages="lengthError"
       />
 
       <!-- Strength meter (Task 11 shared validator) -->
       <v-progress-linear
-        :value="(strength.score + 1) * 20"
+        :model-value="(strength.score + 1) * 20"
         :color="strengthColor"
         height="6"
         rounded
@@ -42,15 +42,15 @@
         v-model="confirmPassword"
         :label="t('security.mpcRecoveryConfirmPassword')"
         :type="showPw ? 'text' : 'password'"
-        outlined
-        dense
+        variant="outlined"
+        density="compact"
         :disabled="busy"
         :error-messages="mismatchError"
       />
 
       <v-divider class="my-3" />
 
-      <v-alert v-if="errorMessage" type="error" text dense class="mb-2">
+      <v-alert v-if="errorMessage" type="error" variant="text" density="compact" class="mb-2">
         {{ errorMessage }}
       </v-alert>
 
@@ -60,16 +60,16 @@
            awaited round-trip and risk the browser treating it as an unrequested
            popup — same reason LockScreen.vue keeps them as separate buttons. -->
       <template v-if="!googleIdToken">
-        <v-btn block outlined :loading="signingInGoogle" @click="handleGoogleSignIn">
+        <v-btn block variant="outlined" :loading="signingInGoogle" @click="handleGoogleSignIn">
           <v-avatar size="18" class="mr-2">
-            <v-img :src="assets.google" contain />
+            <v-img :src="assets.google"  />
           </v-avatar>
           {{ t('welcome.googleSignInButton') }}
         </v-btn>
       </template>
       <template v-else-if="isMpcPasskeyWallet && !passkeySecret">
-        <v-btn block outlined color="primary" :loading="verifyingPasskey" @click="handleVerifyPasskey">
-          <v-icon left small>mdi-fingerprint</v-icon>
+        <v-btn block variant="outlined" color="primary" :loading="verifyingPasskey" @click="handleVerifyPasskey">
+          <v-icon start size="small">mdi-fingerprint</v-icon>
           {{ t('security.usePassKey') }}
         </v-btn>
       </template>
@@ -78,10 +78,10 @@
         v-model="devicePassword"
         :label="t('security.spendingPassword')"
         :type="showDevicePw ? 'text' : 'password'"
-        :append-icon="showDevicePw ? 'mdi-eye-off' : 'mdi-eye'"
-        @click:append="showDevicePw = !showDevicePw"
-        outlined
-        dense
+        :append-inner-icon="showDevicePw ? 'mdi-eye-off' : 'mdi-eye'"
+        @click:append-inner="showDevicePw = !showDevicePw"
+        variant="outlined"
+        density="compact"
         :disabled="busy"
         @keydown.enter.stop="submit"
       />

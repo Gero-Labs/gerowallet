@@ -1,10 +1,12 @@
-import Vue from 'vue';
+import { reactive } from 'vue';
 import { PaginatedResponse, PaginationParams, PaginationMeta } from '@/models/types';
 import blockchainApi from '@/api/blockchain-api';
+import type { Wallet } from '@/models/types';
+import type { DRepRecord } from '@/shared/utils/drepStats';
 
 export interface GovernanceStore {
-  dreps: any[];
-  currentDRep: any | null;
+  dreps: DRepRecord[];
+  currentDRep: DRepRecord | null;
   paginationMeta: PaginationMeta | null;
   loading: boolean;
   drepLoading: boolean;
@@ -17,7 +19,7 @@ export interface GovernanceStore {
   currentCompensationBps: number | null;
 }
 
-export const governanceStore = Vue.observable<GovernanceStore>({
+export const governanceStore = reactive<GovernanceStore>({
   dreps: [],
   currentDRep: null,
   paginationMeta: null,
@@ -32,7 +34,7 @@ export const governanceStore = Vue.observable<GovernanceStore>({
 });
 
 const governanceStoreActions = {
-  async loadDRepsPaginated(wallet: any, params: PaginationParams = {}) {
+  async loadDRepsPaginated(wallet: Pick<Wallet, 'chain' | 'network'>, params: PaginationParams = {}) {
     governanceStore.loading = true;
     governanceStore.error = null;
 
@@ -46,21 +48,21 @@ const governanceStoreActions = {
         sort_direction: params.sort_direction,
       };
 
-      const response: PaginatedResponse<any> = await blockchainApi.getDRepsPaginated(requestParams, wallet.chain, wallet.network);
+      const response: PaginatedResponse<DRepRecord> = await blockchainApi.getDRepsPaginated(requestParams, wallet.chain, wallet.network);
 
       // For server-side pagination, always replace dreps with current page data
       governanceStore.dreps = response.items || [];
 
       governanceStore.paginationMeta = response.meta;
-    } catch (error: any) {
-      governanceStore.error = error?.message || 'Failed to load DReps';
+    } catch (error) {
+      governanceStore.error = error instanceof Error ? error.message : 'Failed to load DReps';
       console.error('❌ Error loading paginated DReps:', error);
     } finally {
       governanceStore.loading = false;
     }
   },
 
-  async loadDRepById(wallet: any, drepId: string) {
+  async loadDRepById(wallet: Pick<Wallet, 'chain' | 'network'>, drepId: string) {
     governanceStore.drepLoading = true;
     governanceStore.drepError = null;
 
@@ -79,8 +81,8 @@ const governanceStoreActions = {
       } else {
         governanceStore.drepError = 'DRep not found';
       }
-    } catch (error: any) {
-      governanceStore.drepError = error?.message || 'Failed to load DRep';
+    } catch (error) {
+      governanceStore.drepError = error instanceof Error ? error.message : 'Failed to load DRep';
       console.error('Error loading DRep by ID:', error);
     } finally {
       governanceStore.drepLoading = false;
@@ -97,7 +99,7 @@ const governanceStoreActions = {
     governanceStore.error = null;
   },
 
-  setDReps(dreps: any[]) {
+  setDReps(dreps: DRepRecord[]) {
     governanceStore.dreps = dreps;
   },
 
@@ -113,7 +115,7 @@ const governanceStoreActions = {
     governanceStore.error = error;
   },
 
-  setCurrentDRep(drep: any | null) {
+  setCurrentDRep(drep: DRepRecord | null) {
     governanceStore.currentDRep = drep;
   },
 

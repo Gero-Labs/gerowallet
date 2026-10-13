@@ -10,7 +10,7 @@
         <div class="token-info">
           <div class="token-name text-body-2 white--text text-truncate" style="font-weight: 600">
             {{ nightTicker }}
-            <v-icon x-small color="primary" class="ml-1" style="margin-top: -2px">mdi-check-decagram</v-icon>
+            <v-icon size="x-small" color="primary" class="ml-1" style="margin-top: -2px">mdi-check-decagram</v-icon>
           </div>
           <div class="token-amount text-caption grey--text">
             {{ hideBalances ? '••••••' : formattedNightBalance }}
@@ -66,7 +66,7 @@
         <div class="token-info">
           <div class="token-name text-body-2 white--text text-truncate" style="font-weight: 600">
             {{ nativeTicker }}
-            <v-icon x-small color="primary" class="ml-1" style="margin-top: -2px">mdi-check-decagram</v-icon>
+            <v-icon size="x-small" color="primary" class="ml-1" style="margin-top: -2px">mdi-check-decagram</v-icon>
           </div>
           <div class="token-amount text-caption grey--text">
             {{ hideBalances ? '••••••' : formattedAdaBalance }}
@@ -109,22 +109,22 @@
           <div class="token-info">
             <div class="token-name text-body-2 white--text text-truncate">
               {{ getTokenName(token) }}
-              <v-tooltip v-if="token.isProgrammable" top :open-delay="300" content-class="custom-tooltip">
-                <template v-slot:activator="{ on, attrs }">
+              <v-tooltip location="top" v-if="token.isProgrammable"  :open-delay="300" content-class="custom-tooltip">
+                <template v-slot:activator="{ props: activatorProps }">
                   <v-icon
-                    x-small
+                    size="x-small"
                     color="var(--g-warning)"
                     class="ml-1"
                     style="margin-top: -2px"
-                    v-bind="attrs"
-                    v-on="on"
+                    v-bind="activatorProps"
+
                   >mdi-lock-outline</v-icon>
                 </template>
                 {{ $t(programmableTooltipKey(token.unit)) }}
               </v-tooltip>
               <v-icon
                 v-else-if="token.verified"
-                x-small
+                size="x-small"
                 color="primary"
                 class="ml-1"
                 style="margin-top: -2px"
@@ -154,7 +154,7 @@
     <!-- The lock icon on a row says a token is different; this says what to do about it.
          Shown only when the wallet actually holds one, so it never becomes chrome. -->
     <div v-if="hasProgrammableHoldings" class="programmable-note text-caption">
-      <v-icon x-small color="var(--g-warning)" class="mr-1">mdi-lock-outline</v-icon>
+      <v-icon size="x-small" color="var(--g-warning)" class="mr-1">mdi-lock-outline</v-icon>
       {{ $t('programmableTokens.listFootnote') }}
     </div>
 

@@ -1,7 +1,7 @@
 <template>
   <v-btn class="px-1" :icon="!!!title" :text="!!title" :x-small="xSmall" :small="small" :large="large" :x-large="xLarge" :color="colorB" @click.stop="copy" :style="xSmall && !title ? { width: '16px', height: '16px', marginTop: '0px'} : {}">
     <v-avatar v-if="avatar" :size="size" style="margin-right: 2px">
-      <v-img :src="avatar" :alt="$t('common.avatar')" contain />
+      <v-img :src="avatar" :alt="$t('common.avatar')"  />
     </v-avatar>
     <span v-if="title" class="mr-1" style="text-transform: none">{{title}}</span>
     <v-icon :x-small="xSmall" :small="small" :large="large" :x-large="xLarge">
@@ -48,7 +48,7 @@ const props = defineProps({
     required: false,
   },
   avatar: {
-    type: [Object, String],
+    type: String,
     required: false,
   }
 });

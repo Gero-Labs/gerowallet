@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const lend = vi.fn();
 const cosign = vi.fn();
-const sendToBackgroundFromOptions = vi.fn(async () => ({}));
+const sendToBackgroundFromOptions = vi.fn<(...args: unknown[]) => Promise<Record<string, never>>>(async () => ({}));
 vi.mock('@/api/nexus-collateral-api', () => ({
   nexusCollateralApi: { lend: (...a: unknown[]) => lend(...a), cosign: (...a: unknown[]) => cosign(...a) },
   lendRef: (l: { txHash: string; outputIndex: number }) => `${l.txHash}#${l.outputIndex}`,

@@ -20,14 +20,14 @@
       </div>
       <div v-if="title" class="bottom-sheet-header">
         <span class="text-subtitle-1 white--text font-weight-bold">{{ title }}</span>
-        <v-btn v-if="variant !== 'trust'" icon small @click="close" class="white--text">
-          <v-icon small>mdi-close</v-icon>
+        <v-btn v-if="variant !== 'trust'" icon size="small" @click="close" class="white--text">
+          <v-icon size="small">mdi-close</v-icon>
         </v-btn>
       </div>
       <div class="bottom-sheet-content" ref="contentRef">
         <slot />
       </div>
-      <div v-if="$slots.footer" class="bottom-sheet-footer">
+      <div v-if="$slots['footer']" class="bottom-sheet-footer">
         <slot name="footer" />
       </div>
     </div>
@@ -40,7 +40,7 @@ import { createSpring, projectMomentum, rubberBand } from '../composables/sheetP
 import { useSheetVisibility } from '../composables/useSheetVisibility';
 
 const props = withDefaults(defineProps<{
-  value: boolean;
+  modelValue: boolean;
   title?: string;
   height?: string;
   persistent?: boolean;
@@ -56,7 +56,7 @@ const props = withDefaults(defineProps<{
 });
 
 const emit = defineEmits<{
-  (e: 'input', value: boolean): void;
+  (e: 'update:modelValue', value: boolean): void;
   (e: 'close'): void;
   (e: 'escape'): void;
 }>();
@@ -138,7 +138,7 @@ let previouslyFocused: HTMLElement | null = null;
 const { markSheetOpened, markSheetClosed } = useSheetVisibility();
 let holdsOpenCredit = false; // guards against double-increment/decrement
 
-watch(() => props.value, async (val) => {
+watch(() => props.modelValue, async (val) => {
   if (val) {
     if (!holdsOpenCredit) { holdsOpenCredit = true; markSheetOpened(); }
     previouslyFocused = document.activeElement as HTMLElement | null;
@@ -182,7 +182,7 @@ function finishClose() {
   spring.setValue(0);
   translateY.value = 0;
   if (holdsOpenCredit) { holdsOpenCredit = false; markSheetClosed(); }
-  emit('input', false);
+  emit('update:modelValue', false);
   emit('close');
   previouslyFocused?.focus?.();
   previouslyFocused = null;

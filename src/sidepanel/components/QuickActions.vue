@@ -13,11 +13,11 @@
           borderColor: action.borderColor,
         }"
       >
-        <v-avatar tile size="18">
+        <v-avatar rounded="0" size="18">
           <v-img
             :src="action.svg"
             :alt="action.label"
-            contain
+
             :style="{ filter: action.filter }"
           />
         </v-avatar>

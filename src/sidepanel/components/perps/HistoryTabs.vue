@@ -2,21 +2,21 @@
   <div class="history-tabs">
     <v-tabs
       v-model="activeTab"
-      background-color="transparent"
+      bg-color="transparent"
       :slider-color="primaryColor"
-      dense
+      density="compact"
       class="ht-tabs"
-      @change="onTabChange"
+      @update:model-value="onTabChange"
     >
       <v-tab class="ht-tab">{{ $t('perpetuals.fills') }}</v-tab>
       <v-tab class="ht-tab">{{ $t('perpetuals.funding') }}</v-tab>
       <v-tab class="ht-tab">{{ $t('perpetuals.transactions') }}</v-tab>
     </v-tabs>
 
-    <v-tabs-items v-model="activeTab" class="ht-items">
+    <v-window v-model="activeTab" class="ht-items">
 
       <!-- ── FILLS TAB ──────────────────────────────────────────────────── -->
-      <v-tab-item>
+      <v-window-item>
         <div class="ht-pane">
           <div v-if="loading" class="ht-skeleton">
             <div v-for="i in 4" :key="i" class="ht-skeleton-row" />
@@ -73,10 +73,10 @@
             </div>
           </div>
         </div>
-      </v-tab-item>
+      </v-window-item>
 
       <!-- ── FUNDING TAB ─────────────────────────────────────────────────── -->
-      <v-tab-item>
+      <v-window-item>
         <div class="ht-pane">
           <!-- Running total -->
           <div v-if="fundingHistory.length" class="ht-funding-total">
@@ -112,10 +112,10 @@
             </div>
           </div>
         </div>
-      </v-tab-item>
+      </v-window-item>
 
       <!-- ── TRANSACTIONS TAB ───────────────────────────────────────────── -->
-      <v-tab-item>
+      <v-window-item>
         <div class="ht-pane">
           <div v-if="loading" class="ht-skeleton">
             <div v-for="i in 4" :key="i" class="ht-skeleton-row" />
@@ -148,9 +148,9 @@
             </div>
           </div>
         </div>
-      </v-tab-item>
+      </v-window-item>
 
-    </v-tabs-items>
+    </v-window>
   </div>
 </template>
 

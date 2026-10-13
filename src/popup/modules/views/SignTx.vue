@@ -3,7 +3,7 @@
     <PopupHeader :title="t('navigation.transactionSummary')" ref="popupHeader" :show-website="!(route.query['website'] === 'undefined' || Object.keys(route.query).length === 0)">
       <v-card-text class="d-flex flex-column justify-space-between pa-0" style="flex: 1 1 auto; overflow-y: auto; max-height: 100%; height: 0;">
         <EmbeddedSiteWarning class="mb-2" :embedded-in="request?.embeddedIn" />
-        <DappAddress class="mb-2" :address="recipient" :risk="risks?.addressRisk" />
+        <DappAddress class="mb-2" :address="recipient" :risk="typeof risks?.addressRisk === 'number' ? DappRisk[risks.addressRisk] : risks?.addressRisk" />
         <!-- Every output, not just the first recipient (same card as the side panel). -->
         <TransactionDetailsCard
           v-if="approvalCard"
@@ -14,9 +14,9 @@
         />
         <TransactionCard v-if="swapDetails" :transaction="swapDetails.give" :risk="true">
           {{ $t('navigation.youreGiving') }}
-          <v-tooltip bottom>
-            <template v-slot:activator="{ on, attrs }">
-              <v-icon class="ml-1" small color="#C4C4C4" v-bind="attrs" v-on="on">
+          <v-tooltip location="bottom" >
+            <template v-slot:activator="{ props: activatorProps }">
+              <v-icon class="ml-1" size="small" color="#C4C4C4" v-bind="activatorProps" >
                 mdi-information-outline
               </v-icon>
             </template>
@@ -27,9 +27,9 @@
         </TransactionCard>
         <TransactionCard v-if="swapDetails" :transaction="swapDetails.receive" :risk="risks?.receivingRisk">
           {{ $t('navigation.youreReceiving') }}
-          <v-tooltip bottom content-class="custom-tooltip">
-            <template v-slot:activator="{ on, attrs }">
-              <v-icon class="ml-1" small color="#C4C4C4" v-bind="attrs" v-on="on">
+          <v-tooltip location="bottom"  content-class="custom-tooltip">
+            <template v-slot:activator="{ props: activatorProps }">
+              <v-icon class="ml-1" size="small" color="#C4C4C4" v-bind="activatorProps" >
                 mdi-information-outline
               </v-icon>
             </template>
@@ -40,7 +40,7 @@
         </TransactionCard>
         <v-row no-gutters style="flex: none; position: relative;">
           <v-col cols="12" class="justify-center text-center">
-            <TransactionRisk :risk="risks?.score" :loading="loading" />
+            <TransactionRisk :risk="typeof risks?.score === 'number' ? DappScore[risks.score] : risks?.score" :loading="loading" />
           </v-col>
           <div style="position: absolute; bottom: 0; right: 0;">
             <CopyButton x-small :value="request?.data ? request?.data.tx : ''" :title="'CBOR'"></CopyButton>
@@ -53,17 +53,17 @@
           v-if="approvalSummary"
           class="mt-2"
           :summary="approvalSummary"
-          :network-ack.sync="networkMismatchAck"
+          v-model:network-ack="networkMismatchAck"
         />
       </v-card-text>
       <v-card-actions class="justify-center pa-0 pt-2">
-        <v-layout>
+        <div class="flex-grow-1">
           <v-row>
             <v-col cols="12" v-if="loggedWallet.type === WalletType.Normal && !isPrfWallet">
               <PassKeyPasswordField
                 ref="passwordField"
-                :value="spendingPassword"
-                @input="spendingPassword = $event"
+                :model-value="spendingPassword"
+                @update:model-value="spendingPassword = $event"
                 outlined
                 dense
                 hide-details="auto"
@@ -113,21 +113,21 @@
               </v-card-subtitle>
             </v-col>
             <v-col cols="12" v-else-if="loggedWallet.type === WalletType.Keystone" class="pt-3 pb-0">
-              <v-alert type="info" color="primary" text border="left" dense class="py-1 my-0" style="line-height: 1.2">
+              <v-alert type="info" color="primary" variant="text" border="start" density="compact" class="py-1 my-0" style="line-height: 1.2">
                 <span style="color: white; font-size: 12px">
                   {{ $t('wallet.scanQRWithKeystone') }}
                 </span>
               </v-alert>
             </v-col>
             <v-col cols="12" v-else-if="loggedWallet.type === WalletType.Trezor" class="pt-3 pb-0">
-              <v-alert type="info" color="primary" text border="left" dense class="py-1 my-0" style="line-height: 1.2">
+              <v-alert type="info" color="primary" variant="text" border="start" density="compact" class="py-1 my-0" style="line-height: 1.2">
                 <span style="color: white; font-size: 12px">
                   {{ $t('wallet.signTxWithTrezor') }}
                 </span>
               </v-alert>
             </v-col>
             <v-col :cols="isPrfWallet ? 12 : 6">
-              <v-btn block outlined color="error" class="capitalize" @click="decline" :disabled="txSignLoading">
+              <v-btn block variant="outlined" color="error" class="capitalize" @click="decline">
                 {{ $t('wallet.decline') }}
               </v-btn>
             </v-col>
@@ -138,22 +138,24 @@
               </v-btn>
             </v-col>
           </v-row>
-        </v-layout>
+        </div>
       </v-card-actions>
 
       <!-- Keystone QR Code Overlay -->
       <v-overlay
-        :absolute="true"
+
         opacity="0.99"
-        :value="keystoneOverlay"
-        class="hardwareOverlay"
+        :model-value="keystoneOverlay"
+        persistent
+        contained
+        class="hardwareOverlay align-center justify-center"
       >
         <v-alert
           color="white"
-          dense
-          outlined
+          density="compact"
+          variant="outlined"
           type="info"
-          border="left"
+          border="start"
           prominent
           v-if="!keystoneScan"
           class="mt-2 mb-2"
@@ -161,7 +163,7 @@
           <b style="font-size: 16px;">{{ $t('wallet.instructions') }}</b>
           <ul class="text-left" style="line-height: 1.3; font-size: 11px; margin-top: 4px; padding-left: 10px;">
             <li>{{ $t('wallet.unlockKeystone') }}</li>
-            <li>{{ $t('wallet.selectScanQR') }} <v-icon x-small>mdi-line-scan</v-icon></li>
+            <li>{{ $t('wallet.selectScanQR') }} <v-icon size="x-small">mdi-line-scan</v-icon></li>
             <li>{{ $t('wallet.useKeystoneToScan') }}</li>
             <li>{{ $t('wallet.approveAndScanNext') }}</li>
           </ul>
@@ -169,10 +171,10 @@
 
         <v-alert
           color="white"
-          dense
-          outlined
+          density="compact"
+          variant="outlined"
           type="info"
-          border="left"
+          border="start"
           v-else
           class="mt-2 mb-2"
           prominent
@@ -200,12 +202,12 @@
         </div>
 
         <div class="text-center pt-2">
-          <v-btn text small @click="backKeystoneScan" class="mr-2">
+          <v-btn variant="text" size="small" @click="backKeystoneScan" class="mr-2">
             {{ keystoneScan ? $t('common.back') : $t('common.cancel') }}
           </v-btn>
           <v-btn
             v-if="!keystoneScan"
-            small
+            size="small"
             class="geroButton"
             style="color: black!important;"
             @click="keystoneScan = true"
@@ -218,8 +220,9 @@
   </v-form>
 </template>
 <script setup lang="ts">
+import { useApprovalFreshness, awaitFreshApproval, StaleApprovalError } from "@/shared/composables/useApprovalFreshness";
 import type { Cip45Authorization } from '@/services/cip45/types';
-import type { TxScanResponse } from '@/models/cardano-shield-types';
+import { DappRisk, DappScore, type TxScanResponse } from '@/models/cardano-shield-types';
 import { getErrorMessage } from '@/shared/utils/errorHandler';
 import { validateCip45Signing } from '@/services/cip45/signingAuthorization';
 import { useTranslation } from '@/shared/composables/useTranslation';
@@ -270,10 +273,11 @@ import AnimatedQRScanner from '@/shared/components/AnimatedQRScanner.vue';
 import { debugLog } from '@/utils/debug';
 
 const { t } = useTranslation();
-const { loggedWallet, config, utxos, keys } = toRefs(walletStore);
+const { loggedWallet, config, keys } = toRefs(walletStore);
+const utxos = computed(() => loggedWallet.value?.chain === Blockchain.CARDANO ? walletStore.utxos as Cardano.Utxo[] : []);
 
 const isBT = ref(false);
-const risks = ref<TxScanResponse | { addressRisk: 'unknown'; score: 'unknown' }>(undefined);
+const risks = ref<TxScanResponse | { addressRisk: 'unknown'; score: 'unknown'; receivingRisk?: boolean }>(undefined);
 const spendingPassword = ref('');
 const privateKeyBytes = ref<Uint8Array | null>(null);
 interface SignTxRequest {
@@ -294,14 +298,14 @@ const txSignLoading = ref(false);
 const loading = ref(true);
 const controller = ref<ReturnType<typeof Messaging.createInternalController> | null>(null);
 const witnesses = ref<string>(undefined);
-const form = ref<{ validate(): boolean } | null>(null);
-const popupHeader = ref<InstanceType<typeof PopupHeader> | null>(null);
+const form = ref<{ validate(): Promise<{ valid: boolean }> } | null>(null);
 // Keystone state
 const keystoneOverlay = ref(false);
 const keystoneScan = ref(false);
 const keystoneType = ref('');
 const keystoneCbor = ref('');
-const keystoneUseHash = ref(false);
+let keystoneApprovalCurrent: (() => boolean) | null = null;
+let keystoneRequestId = '';
 
 const addresses = computed(() => {
   return new Set([...keys.value.payment, ...keys.value.change].map(el => el.address));
@@ -356,22 +360,6 @@ const txMetadata = computed(() => {
 const txBody = computed<Cardano.TxBody | undefined>(() => {
   return tx.value?.body;
 })
-
-const _certificate = computed(() => {
-  return txBody.value?.certificates;
-});
-
-const _withdrawals = computed(() => {
-  return txBody.value?.withdrawals;
-});
-
-const _minting = computed(() => {
-  return txBody.value?.mint;
-});
-
-const _script = computed(() => {
-  return tx.value?.witness;
-});
 
 const outputs = computed<Cardano.TxOut[]>(() => {
   return txBody.value?.outputs || [];
@@ -468,7 +456,7 @@ const swapDetails = computed(() => {
   return {
     give: {
       total: Number(0 - totalGive),
-      txFee: txFee.value ? txFee.value.toString() : '0',
+      txFee: Number(txFee.value ?? 0n),
       provider: networks.resolveCurrencySymbol(loggedWallet.value?.chain, loggedWallet.value?.network),
       assets: assetsGive,
     },
@@ -483,23 +471,33 @@ const swapDetails = computed(() => {
   };
 });
 
+
+const approval = useApprovalFreshness(
+  () => [request.value, loggedWallet.value?.id, loggedWallet.value?.chain, loggedWallet.value?.network, loggedWallet.value?.webAuthnCredentialId, loggedWallet.value?.encryptionMethod],
+  () => !!request.value && !!loggedWallet.value && !walletStore.isLocked,
+  () => { privateKeyBytes.value?.fill(0); privateKeyBytes.value = null; keystoneApprovalCurrent = null; keystoneOverlay.value = false; keystoneScan.value = false; keystoneCbor.value = ''; witnesses.value = undefined; },
+);
 const handlePassKeyError = (error: string) => {
   debugLog('[PassKey] Autofill error in SignTx:', error);
   snackbar.setError(error || t('security.passKeyAuthFailed'));
 };
 
 const handlePassKeySuccess = () => {
+  const approvalCurrent = approval.capture();
   debugLog('[PassKey] Autofill successful in SignTx - triggering sign');
   // Automatically trigger sign after successful PassKey autofill
   setTimeout(() => {
+    if (!approvalCurrent()) return;
     sign();
   }, 300); // Small delay for UX feedback
 };
 
 const handlePassKeyAuthSuccess = (pkBytes: Uint8Array) => {
+  const approvalCurrent = approval.capture();
   privateKeyBytes.value = pkBytes;
   // Automatically proceed to sign after successful authentication
   setTimeout(() => {
+    if (!approvalCurrent()) return;
     sign();
   }, 300);
 };
@@ -511,25 +509,28 @@ const handlePassKeyAuthError = (error: Error) => {
 };
 
 const decline = async () => {
+  approval.invalidate();
   await controller.value.returnData({ data: undefined, error: TxSignError.UserDeclined });
   window.close();
 };
 
-const sign = async () => {
+const sign = () => approval.run(async () => {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) return;
   // Enter in the password field calls sign() directly; honour the same gate.
   if (signBlocked.value) return;
   if (!txAutoSubmit.value && witnesses.value) {
-    await confirm();
+    await awaitFreshApproval(async () => (confirm()), approvalCurrent);
   }
   const signAndReturnTx = async () => {
     txSignLoading.value = true;
     try {
-      await validateCip45Signing(request.value?.data);
+      await awaitFreshApproval(async () => (validateCip45Signing(request.value?.data)), approvalCurrent);
       const txCbor = request.value?.data?.tx;
       const partialSign = request.value?.data?.partialSign;
       const mergeWitnesses = request.value?.data?.mergeWitnesses;
       if (loggedWallet.value.type === WalletType.Normal) {
-        const witnessResult = await Messaging.sendToBackgroundFromOptions({
+        const witnessResult = await awaitFreshApproval(async () => (Messaging.sendToBackgroundFromOptions({
           method: MessageTypes.SIGN_TX,
           data: {
             cip45Authorization: request.value?.data?.cip45Authorization,
@@ -542,7 +543,7 @@ const sign = async () => {
             mergeWitnesses: mergeWitnesses || false,
             privateKeyBytes: privateKeyBytes.value ? Array.from(privateKeyBytes.value) : undefined,
           }
-        }) as { data: { witnesses?: string; error?: string } };
+        })), approvalCurrent) as { data: { witnesses?: string; error?: string } };
 
         debugLog('[NORMAL-SIGN] Transaction signed successfully:', witnessResult);
 
@@ -553,7 +554,7 @@ const sign = async () => {
         debugLog('[NORMAL-SIGN] Signed transaction witness:', witnessResult.data.witnesses);
         witnesses.value = witnessResult.data.witnesses;
         if (txAutoSubmit.value) {
-          await confirm();
+          await awaitFreshApproval(async () => (confirm()), approvalCurrent);
         }
       } else if (loggedWallet.value.type === WalletType.Ledger) {
         hardwareLoading.begin('Ledger', t('wallet.ledgerPreparingTransaction') as string);
@@ -568,22 +569,23 @@ const sign = async () => {
             if (loggedWallet.value.chain === Blockchain.CARDANO) {
               path = `m/${purpose.hdwallet}'/${coin_type.cardano}'/${index}'`
             }
-            await ledger.initLedger(isBT.value, path)
+            await awaitFreshApproval(async () => (ledger.initLedger(isBT.value, path)), approvalCurrent)
             const fullTx = Serialization.Transaction.fromCbor(Serialization.TxCBOR(txCbor));
             existingWitnesses = fullTx.witnessSet();
           } catch (e) {
+    if (e instanceof StaleApprovalError) return;
             debugLog('[LEDGER-SIGN] Could not extract existing witnesses:', e);
           }
         }
 
-        const signatures: Cardano.Signatures = await ledgerUtils.txToLedger(
+        const signatures: Cardano.Signatures = await awaitFreshApproval(async () => (ledgerUtils.txToLedger(
           tx,
           keys.value,
           utxos.value,
           !isBT.value, // isUsb flag (inverted from isBT)
           networks.resolveNetwork(loggedWallet.value.chain, loggedWallet.value.network),
           txCbor // Pass original CBOR for multisig transactions to preserve exact byte representation
-        );
+        )), approvalCurrent);
 
         // Merge Ledger signatures with existing witnesses
         let finalWitnessSet: Serialization.TransactionWitnessSet;
@@ -615,7 +617,7 @@ const sign = async () => {
 
         witnesses.value = finalWitnessSet.toCbor();
         if (txAutoSubmit.value) {
-          await confirm();
+          await awaitFreshApproval(async () => (confirm()), approvalCurrent);
         }
       } else if (loggedWallet.value.type === WalletType.Trezor) {
         // Extract existing witnesses if this is a partial sign (swap/multisig transaction)
@@ -625,6 +627,7 @@ const sign = async () => {
             const fullTx = Serialization.Transaction.fromCbor(Serialization.TxCBOR(txCbor));
             existingWitnesses = fullTx.witnessSet();
           } catch (e) {
+    if (e instanceof StaleApprovalError) return;
             debugLog('[TREZOR-SIGN] Could not extract existing witnesses:', e);
           }
         }
@@ -638,11 +641,11 @@ const sign = async () => {
           txCbor
         };
         const response = (featureFlagsStore.state.flags.isTrezorWebUsbEnabled
-          ? await dispatchTrezor(data)
-          : await Messaging.sendToBackgroundFromOptions({
+          ? await awaitFreshApproval(async () => (dispatchTrezor(data)), approvalCurrent)
+          : await awaitFreshApproval(async () => (Messaging.sendToBackgroundFromOptions({
             method: MessageTypes.TREZOR,
             data,
-          })) as BackgroundResponse<SignTxResponse>;
+          })), approvalCurrent)) as BackgroundResponse<SignTxResponse>;
 
         hardwareLoading.end();
 
@@ -686,11 +689,11 @@ const sign = async () => {
         debugLog('[TREZOR-SIGN] Signing successful:', finalWitnessSet.toCbor());
         witnesses.value = finalWitnessSet.toCbor();
         if (txAutoSubmit.value) {
-          await confirm();
+          await awaitFreshApproval(async () => (confirm()), approvalCurrent);
         }
       } else if (loggedWallet.value.type === WalletType.Keystone) {
         try {
-          await validateCip45Signing(request.value?.data);
+          await awaitFreshApproval(async () => (validateCip45Signing(request.value?.data)), approvalCurrent);
           // Create transaction object from CBOR
           const fullTx = Serialization.Transaction.fromCbor(Serialization.TxCBOR(txCbor));
 
@@ -705,17 +708,20 @@ const sign = async () => {
           // Store UR data for QR code and signing mode
           keystoneType.value = signRequestResponse.ur.type;
           keystoneCbor.value = signRequestResponse.ur.cbor.toString('hex');
-          keystoneUseHash.value = signRequestResponse.useHash;
+          keystoneRequestId = signRequestResponse.requestId;
 
           // Show overlay with animated QR code
-          keystoneOverlay.value = true;
+          keystoneApprovalCurrent = approvalCurrent;
+    keystoneOverlay.value = true;
           keystoneScan.value = false;
         } catch (e: unknown) {
+    if (e instanceof StaleApprovalError) return;
           debugLog('[KEYSTONE-SIGN] Error:', e);
           snackbar.setError(getErrorMessage(e) || t('wallet.keystoneSigningFailed'));
         }
       }
     } catch (e: unknown) {
+    if (e instanceof StaleApprovalError) return;
       hardwareLoading.setLoading(false);
       if (e instanceof DeviceStatusError) {
         const error: DeviceStatusError = e;
@@ -740,31 +746,34 @@ const sign = async () => {
   if (loggedWallet.value.type === WalletType.Normal) {
     // PRF wallets: Skip password verification, go directly to signing (will trigger PassKey in background)
     if (isPrfWallet.value) {
-      await signAndReturnTx();
+      await awaitFreshApproval(async () => (signAndReturnTx()), approvalCurrent);
     } else {
       // Normal password-based wallets: Verify password first
-      if (form.value.validate()) {
+      if ((await awaitFreshApproval(async () => (form.value.validate()), approvalCurrent)).valid) {
 
-        const passwordVerification = await Messaging.sendToBackgroundFromOptions({
+        const passwordVerification = await awaitFreshApproval(async () => (Messaging.sendToBackgroundFromOptions({
           method: MessageTypes.VERIFY_SPENDING_PASSWORD,
           data: { password: spendingPassword.value }
-        }) as BackgroundResponse<VerifyPasswordResponse>;
+        })), approvalCurrent) as BackgroundResponse<VerifyPasswordResponse>;
 
         if (passwordVerification.data.success) {
-          await signAndReturnTx();
+          await awaitFreshApproval(async () => (signAndReturnTx()), approvalCurrent);
         } else {
           passwordField.value?.showError(t('wallet.invalidSpendingPassword'));
         }
       }
     }
   } else {
-    await signAndReturnTx();
+    await awaitFreshApproval(async () => (signAndReturnTx()), approvalCurrent);
   }
-};
+});
 
-const onKeystoneScan = async (ur: UR) => {
+const onKeystoneScan = (ur: UR) => approval.run(async () => {
+  const approvalCurrent = keystoneApprovalCurrent;
+  if (!approvalCurrent?.() || !keystoneOverlay.value) return;
+  keystoneApprovalCurrent = null;
   try {
-    await validateCip45Signing(request.value?.data);
+    await awaitFreshApproval(async () => (validateCip45Signing(request.value?.data)), approvalCurrent);
     const txCbor = request.value?.data?.tx;
     const partialSign = request.value?.data?.partialSign;
     const mergeWitnesses = request.value?.data?.mergeWitnesses;
@@ -777,34 +786,19 @@ const onKeystoneScan = async (ur: UR) => {
       existingWitnesses = fullTx.witnessSet();
     }
 
-    // For hash-based signing, the SDK's parseSignature returns empty data
-    // We need to extract the witness set directly from the UR CBOR
-    let witnessSetHex: string;
-
-    if (keystoneUseHash.value) {
-      // Hash-based signing: UR CBOR contains the witness set directly
-      debugLog('[Keystone] Processing hash-based signature, extracting witness set from CBOR');
-      if (!ur.cbor || ur.cbor.length === 0) {
-        throw new Error('Empty CBOR data in hash-based signature');
-      }
-      // The CBOR from hash-based signing IS the witness set
-      witnessSetHex = ur.cbor.toString('hex');
-      debugLog('[Keystone] Extracted witness set hex:', witnessSetHex.substring(0, 100) + '...');
-    } else {
-      // Full CBOR signing: use SDK's parseSignature
-      debugLog('[Keystone] Processing full CBOR signature');
-      const signature = parseSignature(ur);
-
-      if (!signature.witnessSet || signature.witnessSet.length === 0) {
-        throw new Error('Keystone returned empty witness set');
-      }
-      witnessSetHex = signature.witnessSet;
+    const signature = parseSignature(ur);
+    if (!keystoneRequestId || signature.requestId !== keystoneRequestId) {
+      throw new Error('Keystone response does not match the approved request');
     }
+    // The SDK unwraps the tagged response in both full-transaction and hash modes.
+    const witnessSetHex = signature.witnessSet;
+    if (!witnessSetHex) throw new Error('Keystone returned empty witness set');
 
     let signatures: Cardano.Signatures;
     try {
       signatures = Serialization.TransactionWitnessSet.fromCbor(witnessSetHex).toCore().signatures;
     } catch (error) {
+    if (error instanceof StaleApprovalError) return;
       console.error('[Keystone] Failed to parse witness set CBOR:', error);
       throw new Error(`Failed to parse Keystone signature: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
@@ -844,15 +838,16 @@ const onKeystoneScan = async (ur: UR) => {
 
     // Submit if txAutoSubmit is enabled
     if (txAutoSubmit.value) {
-      await confirm();
+      await awaitFreshApproval(async () => (confirm()), approvalCurrent);
     }
   } catch (error) {
+    if (error instanceof StaleApprovalError) return;
     debugLog('[Keystone] Error processing signature:', error);
     snackbar.setError(error instanceof Error ? error.message : t('wallet.keystoneQRScanError'));
     keystoneOverlay.value = false;
     keystoneScan.value = false;
   }
-};
+});
 
 const onKeystoneError = (error: string) => {
   debugLog('[Keystone] Scanner error:', error);
@@ -867,18 +862,22 @@ const backKeystoneScan = () => {
   if (keystoneScan.value) {
     keystoneScan.value = false;
   } else {
+    approval.invalidate();
     keystoneOverlay.value = false;
   }
 };
 
 const confirm = async () => {
+  const approvalCurrent = approval.capture();
+  if (!approvalCurrent()) return;
   try {
-    await validateCip45Signing(request.value?.data);
-  } catch {
+    await awaitFreshApproval(async () => (validateCip45Signing(request.value?.data)), approvalCurrent);
+  } catch (error) {
+    if (error instanceof StaleApprovalError) return;
     await decline();
     return;
   }
-  await controller.value.returnData({ data: witnesses.value, error: undefined });
+  await awaitFreshApproval(async () => (controller.value.returnData({ data: witnesses.value, error: undefined })), approvalCurrent);
   window.close();
 };
 

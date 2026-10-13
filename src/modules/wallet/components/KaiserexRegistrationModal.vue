@@ -19,7 +19,7 @@
     <div class="card-register">
       <div class="card-register__note">
         <span class="card-register__chip">
-          <v-icon x-small>mdi-lock-outline</v-icon>
+          <v-icon size="x-small">mdi-lock-outline</v-icon>
           {{ t('card.secureFormBy') }} · {{ host }}
         </span>
         <span class="t-caption">{{ t('card.activationEmailNote') }}</span>

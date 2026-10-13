@@ -1,6 +1,6 @@
 // src/sidepanel/composables/useSupportChat.spec.ts
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import Vue from 'vue';
+import * as Vue from 'vue';
 import { nextTick } from 'vue';
 import { createSupportChat, type SupportChatDeps, type SupportWalletSnapshot } from './useSupportChat';
 import {
@@ -583,7 +583,7 @@ describe('useSupportChat', () => {
     });
 
     it('does not clear another wallet when a history 404 arrives after switching', async () => {
-      const active = Vue.observable({ wallet: CARDANO_WALLET as SupportWalletSnapshot });
+      const active = Vue.reactive({ wallet: CARDANO_WALLET as SupportWalletSnapshot });
       const h = makeHarness({ wallet: () => active.wallet });
       h.store[1] = cached();
       h.store[2] = cached({ identifier: 'v1:bb', sourceId: 'src-2', conversationId: 77 });
@@ -727,7 +727,7 @@ describe('useSupportChat', () => {
 
   describe('wallet switch', () => {
     it('resets the thread and re-reads the cache for the new wallet', async () => {
-      const active = Vue.observable({ wallet: CARDANO_WALLET as SupportWalletSnapshot });
+      const active = Vue.reactive({ wallet: CARDANO_WALLET as SupportWalletSnapshot });
       const h = makeHarness({ wallet: () => active.wallet });
       h.store[1] = cached();
       h.store[2] = cached({ identifier: 'v1:bb', sourceId: 'src-2', conversationId: 77 });
@@ -747,7 +747,7 @@ describe('useSupportChat', () => {
     });
 
     it('a switch mid-send never touches the new wallet (no cross-wallet write or delivery)', async () => {
-      const active = Vue.observable({ wallet: CARDANO_WALLET as SupportWalletSnapshot });
+      const active = Vue.reactive({ wallet: CARDANO_WALLET as SupportWalletSnapshot });
       const h = makeHarness({ wallet: () => active.wallet });
       // Wallet 1 has an identity but no contact yet, so the send must call
       // ensureContact — which is where we freeze it.
@@ -780,7 +780,7 @@ describe('useSupportChat', () => {
     });
 
     it('a switch mid-send never wipes the new wallet\'s cache during ChatAuthError recovery', async () => {
-      const active = Vue.observable({ wallet: CARDANO_WALLET as SupportWalletSnapshot });
+      const active = Vue.reactive({ wallet: CARDANO_WALLET as SupportWalletSnapshot });
       const h = makeHarness({ wallet: () => active.wallet });
       h.store[1] = cached();
       h.store[2] = cached({ identifier: 'v1:bb', sourceId: 'src-2', conversationId: 77 });
@@ -803,7 +803,7 @@ describe('useSupportChat', () => {
     });
 
     it('leaves no orphan optimistic bubble when a switch abandons the send after the POST', async () => {
-      const active = Vue.observable({ wallet: CARDANO_WALLET as SupportWalletSnapshot });
+      const active = Vue.reactive({ wallet: CARDANO_WALLET as SupportWalletSnapshot });
       const h = makeHarness({ wallet: () => active.wallet });
       h.store[1] = cached();
       h.store[2] = cached({ identifier: 'v1:bb', sourceId: 'src-2', conversationId: 77 });

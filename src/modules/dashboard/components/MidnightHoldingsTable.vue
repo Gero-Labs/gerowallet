@@ -7,7 +7,7 @@
   <div class="midnight-holdings-table-root">
   <MidnightPrivateBalances />
   <v-data-table
-    dense
+    density="compact"
     class="transparent tokens-table market-token-table"
     :headers="headers"
     :items="rows"
@@ -20,21 +20,21 @@
     </template>
 
     <template v-slot:[`item.name`]="{ item }">
-      <v-list-item dense class="px-0">
-        <v-list-item-action class="my-0" style="margin-right: 12px !important">
+      <v-list-item density="compact" class="px-0">
+        <div class="my-0 g-list-action" style="margin-right: 12px !important">
           <v-avatar size="28" :color="item.iconBg">
-            <v-img v-if="item.image" :src="item.image" contain width="20" height="20" />
-            <v-icon v-else small :color="item.iconColor">{{ item.icon }}</v-icon>
+            <v-img v-if="item.image" :src="item.image"  width="20" height="20" />
+            <v-icon v-else size="small" :color="item.iconColor">{{ item.icon }}</v-icon>
           </v-avatar>
-        </v-list-item-action>
-        <v-list-item-content>
+        </div>
+        <div class="g-list-content">
           <v-list-item-title style="font-size: 13px">
             <span class="font-weight-bold">{{ item.ticker }}</span>
           </v-list-item-title>
           <v-list-item-subtitle style="font-size: 10px; opacity: 0.5">
             {{ item.name }}
           </v-list-item-subtitle>
-        </v-list-item-content>
+        </div>
       </v-list-item>
     </template>
 

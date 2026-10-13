@@ -1,3 +1,4 @@
+import * as Vue from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const h = vi.hoisted(() => ({
@@ -5,8 +6,8 @@ const h = vi.hoisted(() => ({
   route: { path: '/help', fullPath: '/help', query: {} as Record<string, string> },
   replace: vi.fn().mockResolvedValue(undefined),
 }));
-vi.mock('@/stores/walletStore', async () => ({ walletStore: (await import('vue')).reactive(h.wallet) }));
-vi.mock('vue-router/composables', () => ({ useRoute: () => h.route, useRouter: () => ({ replace: h.replace }) }));
+vi.mock('@/stores/walletStore', async () => ({ walletStore: (h.wallet = Vue.reactive(h.wallet)) }));
+vi.mock('vue-router', () => ({ useRoute: () => h.route, useRouter: () => ({ replace: h.replace }) }));
 import { helpSectionFor, useHelpNavigation } from './helpNavigation';
 
 beforeEach(() => { h.wallet.loggedWallet = null; h.wallet.isLocked = true; h.route.path = '/help'; h.route.query = {}; h.replace.mockClear(); });

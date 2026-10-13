@@ -1,0 +1,205 @@
+# Vue 3 release and recovery readiness
+
+This document records the local release preparation for
+[V14](https://github.com/Gero-Labs/gerowallet/issues/1296). It does not approve a
+production release. The working tree contains the migration, and the package
+version remains `2.7.3`. A future release version must be committed and reviewed
+before you run a release workflow. No workflow, tag, store submission, or
+production rollout was triggered during this work.
+
+## Qualification gates
+
+Use this table to decide what the local evidence proves. Results are recorded
+on October 13, 2026, under
+`D:/GeroRepos/gitRepos/output/gerowallet-v01-2026-10-13/`. The final production
+and beta packages are being rebuilt after a browser CSP failure exposed a
+runtime `new Function` path in the draggable dependency. A prior package-check
+pass does not override that browser failure. Final artifact hashes and browser
+results must come from the replacement packages before they qualify for review.
+
+| Gate | Recorded result | Evidence and remaining work |
+| --- | --- | --- |
+| Reproducible dependency install | Pass locally | Normal `npm ci` completes with Node 24.19.0 and npm 11.1.0; no forced or legacy peer resolution. `final-ci.log` records the clean install. Hosted CI remains pending. |
+| Automated tests | Pass locally | `vue3-qualification-full-suite.json`: 437 files, 5,040 tests passed, zero failed or skipped. Tests use Vitest 4.1.11. This supersedes the earlier two-failure full-suite report. |
+| Changed-file lint and design | Pass locally | `final-changed-lint.json` reports zero errors across 536 files. `final-design.log` passes the unchanged design budgets and all 56 contrast checks. Recheck files changed after those reports before the final review. |
+| TypeScript migration regression | Pass relative to baseline | `final-types.log` reports 56 existing diagnostics and zero production SFC diagnostics. `final-type-diagnostic-comparison.json` finds zero introduced normalized diagnostics against the 242-diagnostic baseline. The full typecheck still exits with errors; it is not an absolute clean result. |
+| Production translation compilation | Pass locally | All 16,839 messages across English, German, Spanish, and push catalogs compile with pinned compiler 11.4.14. Compiler, parity, and runtime tests pass. Visual locale acceptance remains open. |
+| Secret and persistence compatibility | Pass in automated scope | Eight compatibility suites pass 101 tests; real store/port and IndexedDB regressions also pass. These use frozen or synthetic fixtures and do not prove an existing browser profile upgrades in place. |
+| Production and beta package integrity | Requalification in progress | Earlier `production-artifact.json` and `beta-artifact.json` passed structural checks but precede the CSP correction. Replace both reports and retain their file/lockfile hashes, source revision, manifest, channel, and archive checksum. |
+| Real MV3 entrypoints and CSP | Open | The earlier beta entrypoint smoke failed on blocked JavaScript evaluation. Test both replacement packages in fresh extension profiles, including options, sidepanel document, worker startup, local WASM, navigation, and zero unexpected CSP or console failures. Opening the sidepanel document alone does not prove the native browser side-panel container. |
+| Real background synchronization and restart | Partial browser evidence | The current `store-browser/report.json` records eight successful checks using wallets created through production UI, real background messages, lock/unlock, and restart persistence, with no harness state writes. The run failed while switching back to the first wallet under offline conditions. Resolve and rerun; do not count that report as a passed gate. |
+| Dependency advisories | Reviewed numbers; release decision open | `final-audit.json` records 73 findings: 19 low, 31 moderate, 23 high, zero critical. Remaining advisories need recorded owners, exposure assessment, and release disposition. This is not a clean dependency audit. |
+| Stable store identity and exact candidate | Open | Local artifact reports explicitly set `identityVerified: false`. Match the intended production/beta public manifest key to the release owner's expected extension ID, then qualify the committed candidate and its retained archives. |
+| In-place upgrade and forward recovery | Open | Exercise an existing 2.7.3 profile and a higher-version recovery package without uninstalling. Cover supported secret formats, flag-on migration, flag-off readers, database state, browser restart, and worker termination. Follow the recovery procedure below. |
+| Physical authentication and signing | Open | Test PassKey and supported Ledger, Trezor, and Keystone paths on the supported platforms and test networks. Include Cardano, Bitcoin, and Midnight where supported, cancellation/replacement while authorization is pending, and fresh approval after replacement. Mocked signing tests do not establish physical device acceptance. |
+| Full UI and provider acceptance | Open | Complete desktop/narrow, locale, cached navigation, real native sidepanel, and provider integration checks across the supported chain matrix. Record any unavailable provider or platform explicitly. |
+| Final review, beta observation, and publication | Open | Complete the final AI review and address findings on the candidate. Obtain the release owner's decision, run the approved beta observation period, confirm store access and lead times, then authorize V16 publication separately. No store action has occurred. |
+
+The release owner must keep a separate record for each channel. Include the
+reviewed source commit, lockfile hash, artifact report, ZIP checksum, browser
+version, operating system, device/firmware versions where relevant, scenario
+outcomes, and unresolved limitations. Source changes that affect the tested
+behavior require refreshed evidence. Formatting this document does not make an
+older package the reviewed candidate.
+
+## Local compatibility evidence
+
+The compatibility run on October 13, 2026 uses Node `24.19.0` and the installed
+Vue `3.5.44` / Vuetify `4.2.4` dependency graph. The eight suites below pass all
+101 tests. The JSON report is saved outside the checkout at
+`D:/GeroRepos/gitRepos/output/gerowallet-v01-2026-10-13/v14-compatibility-tests.json`.
+Use the final integration evidence to associate these results with a committed
+candidate and its lockfile; this local run is not an immutable release artifact.
+
+```sh
+node scripts/check-secret-envelope-readers.mjs
+npx vitest run --maxWorkers=1 \
+  src/shared/utils/legacyCryptoJs.spec.ts \
+  src/shared/utils/secretReaders.spec.ts \
+  src/shared/utils/secretEnvelope.spec.ts \
+  src/shared/utils/secretWriters.spec.ts \
+  src/shared/utils/webauthn-prf.spec.ts \
+  src/chrome/secretMigration.spec.ts \
+  scripts/check-secret-envelope-readers.spec.mjs \
+  scripts/remote-code-guard.spec.mjs
+```
+
+The source reader guard passes. The frozen fixtures verify legacy CryptoJS,
+raw PBKDF2 root and key blobs, `gpw1` text, and purpose-bound `gpw2` secrets.
+Writer and migration tests cover flag behavior, key equivalence, failed writes,
+concurrent unlocks, and password rotation across related secrets. PassKey
+encryption remains a separate supported path.
+
+The Vue migration does not change database versions or encryption formats:
+
+| Storage | Current version | Recovery requirement |
+| --- | --- | --- |
+| `GeroWalletDatabase` | 16 | Keep all current wallet fields and secret readers. |
+| `wallet-{id}` | 11 | Preserve config, contacts, transactions, caches, and multisig records. |
+| Chain cache databases | 5 | Keep chain and network scope separate. |
+| Portfolio database | 1 | Preserve its existing schema. |
+| Chrome local storage | Existing keys | Preserve flags, selected wallet, lock state, and scoped caches. |
+
+The new IndexedDB boundary removes Vue proxies without JSON conversion. Its
+tests preserve dates, typed arrays, maps, sets, big integers, cycles, encrypted
+strings, and transaction rollback. The production store integration test uses
+real stores and messages with simulated Chrome ports and IndexedDB; it does not
+replace a browser-profile upgrade rehearsal.
+
+## Package gate
+
+The new [artifact checker](../../scripts/check-release-artifact.mjs) validates
+the emitted directory before archiving. Its negative regression suite passes
+18 tests. Run it after all four bundles and `build:prepare` finish:
+
+```sh
+node scripts/check-release-artifact.mjs extension \
+  --expected-version "$CANDIDATE_VERSION" \
+  --expected-id "$CHROME_EXTENSION_ID" \
+  --report release-evidence/artifact.json
+node scripts/check-bundle-tdz.mjs
+```
+
+The gate checks these properties:
+
+- Package, lockfile, and generated manifest versions match the explicit version.
+- The manifest uses MV3 and preserves the classic background IIFE format.
+- Both UI pages, the worker, icons, content scripts, HTML asset references,
+  web-accessible resources, and local WASM files are present.
+- Production script CSP allows only local code and optional WASM compilation.
+  Remote scripts, JavaScript `unsafe-eval`, duplicate CSP directives, and
+  executable remote asset references fail.
+- The existing remote-code guard scans emitted JavaScript and HTML, including
+  copied vendor files. Dynamically constructed remote URLs still require review.
+- Nested ZIP or CRX archives fail, preventing an old release from entering the
+  new package. Archive outside `extension/`.
+- The supplied public manifest key derives the expected extension ID. A local
+  run without `--expected-id` explicitly reports identity as unverified.
+- The report records permissions, host permissions, CSP, local WASM paths,
+  per-file SHA-256 hashes, lockfile hash, Node version, and check time.
+
+The initial check correctly rejected a shared development output directory
+containing an old ZIP and incomplete assets. Subsequent prepared production and
+beta directories passed the structural checker, but browser execution exposed
+the CSP issue recorded above. The replacement candidates must pass both the
+artifact checker and real extension execution. Checker regression tests alone
+do not certify a package, and structural success alone does not certify its
+runtime behavior.
+
+## Release workflow behavior
+
+The repaired [CI workflow](../../.github/workflows/ci-cd.yml) builds the selected
+commit once on a hosted runner with Node `24.19.0`, npm `11.1.0`, and `npm ci`.
+It runs the test suite, reader guard, sequential production build, artifact
+gate, and background TDZ guard before uploading the extension and evidence.
+The ZIP is outside the extension directory. A checksum file accompanies it.
+
+For a manual run, you must supply `expected_version` matching the reviewed
+package and lockfile. `dry_run` defaults to `true`. The repository must provide
+`MANIFEST_KEY` as a variable or secret and `CHROME_EXTENSION_ID` as a variable.
+These must identify the intended store channel. The build report records the
+source SHA, workflow run, and beta/production channel from configuration.
+
+With `dry_run=false`, the tag job downloads that run's tested artifact. It
+checks the source SHA, version, identity, lockfile hash, directory hashes, and
+ZIP checksum again, then creates only `v<version>` on that exact SHA. It refuses
+an existing tag. It neither bumps versions after testing nor commits to `main`,
+rebuilds the artifact, or submits anything to the Chrome Web Store.
+
+The YAML parses locally, and the package gate's regression tests pass. The
+workflow itself has not been dispatched. Runner behavior, repository variables,
+store permissions, protected release environments, and store acceptance need
+verification under the release owner's authority.
+
+## Forward recovery package
+
+Recovery is a new, higher-version package built from a compatible source
+baseline. Historical `main`, an old tag, or the old ZIP in a developer output
+folder is not an acceptable recovery candidate merely because its UI worked.
+Follow the existing
+[secret-envelope runbook](../../.github/runbooks/secret-envelope.md).
+
+Before a rollout, prepare a recovery candidate that meets every condition:
+
+1. Keep readers for every format already written, including `gpw2`, plus current
+   database versions, fields, and storage namespaces. Never downgrade migrated
+   encrypted secrets to a weaker format.
+2. Run the reader guard against the recovery source ref and its working tree,
+   then run the frozen readers, writers, migration, PassKey, and persistence
+   suites using the recovery candidate's own lockfile.
+3. Use the same store channel and extension ID as the release being recovered.
+   Give the package a reviewed version higher than the failed release. Preserve
+   required permissions and CSP; record any intentional difference explicitly.
+4. Build all bundles and local WASM from that source, run both package guards,
+   and retain the source SHA, lockfile hash, ZIP hash, and artifact report.
+5. Install the release and then the forward recovery package in place in a
+   disposable profile. Keep the extension key and installation directory stable.
+   Do not uninstall: uninstalling destroys the state this rehearsal must verify.
+6. Reopen encrypted accounts, verify addresses and scoped settings, lock and
+   unlock, change the spending password, reopen again, and perform supported
+   test-network signing on Cardano, Bitcoin, and Midnight. Exercise password,
+   PassKey, and relevant hardware paths. Use synthetic wallets only.
+7. Recheck those wallets after worker termination and browser restart. Test
+   flag-on migration and flag-off recovery; already migrated wallets must remain
+   readable when `isKeyEnvelopeV2Enabled` is turned off.
+
+Turning off that flag stops new migrations; it does not undo prior writes.
+Do not ask users for passwords, phrases, private keys, or encrypted blobs when
+collecting recovery evidence. The existing runbook's format labels and outcome
+counters are the appropriate diagnostic output.
+
+## Remaining release acceptance
+
+Keep V14 open until evidence exists for both the release and recovery packages.
+The local work above does not establish the following external acceptance:
+
+- A clean final package passes all gates at the final reviewed commit.
+- Disposable-profile in-place upgrade and forward recovery pass with stable
+  identity, real background login, persistence, and all supported secret formats.
+- The named release owner and escalation contact have the artifact location,
+  channel ID, submission access, and post-install verification checklist.
+- The store's review lead time and rollout capabilities are confirmed for the
+  December 23, 2026 target and December 31, 2026 deadline. Use the approved beta
+  channel if controlled percentage rollout is unavailable.
+- Exact-candidate integration, hardware, supported-platform, and real browser
+  evidence from V13/V15 is attached before V16 publication authority is used.

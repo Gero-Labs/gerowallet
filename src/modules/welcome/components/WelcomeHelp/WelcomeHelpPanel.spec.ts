@@ -1,5 +1,6 @@
-import Vue, { nextTick } from 'vue';
-import { mount, type Wrapper } from '@vue/test-utils';
+import * as Vue from 'vue';
+import { nextTick } from 'vue';
+import { mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const h = vi.hoisted(() => ({
@@ -20,23 +21,23 @@ vi.mock('@/api/help.api', () => ({
   helpLocale: () => 'en-US',
 }));
 vi.mock('@/modules/navigation/helpAccess', () => ({ openWelcomeHelp: h.openTab }));
-vi.mock('@/shared/components/iso/IsoScene.vue', () => ({ default: { render: (c: Vue.CreateElement) => c('svg', { class: 'iso-stub' }) } }));
+vi.mock('@/shared/components/iso/IsoScene.vue', () => ({ default: { render: () => Vue.h('svg', { class: 'iso-stub' }) } }));
 vi.mock('@/shared/components/GButton/GButton.vue', () => ({
   default: {
     inheritAttrs: false,
-    render(this: Vue, c: Vue.CreateElement) {
-      const link = !!this.$attrs['href'];
-      return c(link ? 'a' : 'button', { attrs: { ...(link ? {} : { type: 'button' }), ...this.$attrs }, on: this.$listeners }, this.$slots['default']);
-    },
+    render(this: Vue.ComponentPublicInstance) {
+    const link = !!this.$attrs['href'];
+    return Vue.h(link ? 'a' : 'button', { ...(link ? {} : { type: 'button' }), ...this.$attrs, ...this.$attrs }, this.$slots['default']?.());
+},
   },
 }));
 import WelcomeHelpPanel from './WelcomeHelpPanel.vue';
 
 // The icon name goes in an attribute so it never leaks into a control's text.
 const stubs = {
-  'v-icon': { render(this: Vue, c: Vue.CreateElement) { return c('i', { class: 'v-icon', attrs: { 'data-icon': this.$slots['default']?.[0]?.text?.trim() } }); } },
+  'v-icon': { render(this: Vue.ComponentPublicInstance) { return Vue.h('i', { class: 'v-icon', 'data-icon': String(this.$slots['default']?.()?.[0]?.children ?? '').trim() }); } },
 };
-const mounted: Wrapper<Vue>[] = [];
+const mounted: VueWrapper[] = [];
 const roots: HTMLElement[] = [];
 
 function setViewport(phone: boolean): void {
@@ -56,19 +57,15 @@ function show(props: { started?: boolean; hasWallets?: boolean; opener?: HTMLEle
   const root = document.createElement('div');
   document.body.appendChild(root);
   roots.push(root);
-  const wrapper = mount(WelcomeHelpPanel, {
-    attachTo: root,
-    propsData: { started: false, hasWallets: false, ...props },
-    stubs,
-  });
+  const wrapper = mount(WelcomeHelpPanel, { attachTo: root, props: { started: false, hasWallets: false, ...props }, global: { stubs } });
   mounted.push(wrapper);
   return wrapper;
 }
 
-const rowTitles = (wrapper: Wrapper<Vue>, section?: string) =>
-  wrapper.findAll(section ? `[data-section="${section}"] .whelp-row__title` : '.whelp-row__title').wrappers.map(row => row.text());
-const sectionIds = (wrapper: Wrapper<Vue>) => wrapper.findAll('[data-section]').wrappers.map(section => section.attributes('data-section'));
-const byTest = (wrapper: Wrapper<Vue>, name: string) => wrapper.find(`[data-test="${name}"]`);
+const rowTitles = (wrapper: VueWrapper, section?: string) =>
+  wrapper.findAll(section ? `[data-section="${section}"] .whelp-row__title` : '.whelp-row__title').map(row => row.text());
+const sectionIds = (wrapper: VueWrapper) => wrapper.findAll('[data-section]').map(section => section.attributes('data-section'));
+const byTest = (wrapper: VueWrapper, name: string) => wrapper.find(`[data-test="${name}"]`);
 
 beforeEach(() => {
   setViewport(false);
@@ -77,7 +74,7 @@ beforeEach(() => {
   h.updates.mockReset().mockResolvedValue({ items: [], total: 0, nextCursor: null, sources: [] });
 });
 afterEach(() => {
-  mounted.splice(0).forEach(wrapper => wrapper.destroy());
+  mounted.splice(0).forEach(wrapper => wrapper.unmount());
   roots.splice(0).forEach(root => root.remove());
   vi.useRealTimers();
 });
@@ -130,7 +127,7 @@ describe('welcome help panel: desktop', () => {
 
   it('stops listening for Escape once it is gone', () => {
     const wrapper = show();
-    wrapper.destroy();
+    wrapper.unmount();
     document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(wrapper.emitted('close')).toBeUndefined();
   });
@@ -143,7 +140,7 @@ describe('welcome help panel: desktop', () => {
     const wrapper = show({ opener });
     await nextTick();
     expect(document.activeElement).toBe(wrapper.find('#whelp-search').element);
-    wrapper.destroy();
+    wrapper.unmount();
     expect(document.activeElement).toBe(opener);
   });
 
@@ -155,13 +152,13 @@ describe('welcome help panel: desktop', () => {
     trigger.focus();
     const first = show();
     await nextTick();
-    first.destroy();
+    first.unmount();
     expect(document.activeElement).toBe(trigger);
 
     const second = show();
     await nextTick();
     other.focus();
-    second.destroy();
+    second.unmount();
     expect(document.activeElement).toBe(other);
   });
 
@@ -190,7 +187,7 @@ describe('welcome help panel: desktop', () => {
     const wrapper = show(props);
     expect(sectionIds(wrapper)).toEqual(sections);
     for (const id of sections) expect(rowTitles(wrapper, id)).toEqual((rows as Record<string, string[]>)[id]);
-    expect(wrapper.findAll('[data-section] h3').wrappers.map(heading => heading.text()))
+    expect(wrapper.findAll('[data-section] h3').map(heading => heading.text()))
       .toEqual(sections.map(id => `help.welcome.${id === 'common' ? 'common' : id}`));
     // Each row names its topic.
     expect(wrapper.find('[data-section] .t-caption').text()).toMatch(/^help\.topic\./);
@@ -245,8 +242,8 @@ describe('welcome help panel: desktop', () => {
 });
 
 describe('welcome help panel: answer view', () => {
-  const open = async (wrapper: Wrapper<Vue>, title: string) => {
-    await wrapper.findAll('.whelp-row').wrappers.find(row => row.text().includes(title))!.trigger('click');
+  const open = async (wrapper: VueWrapper, title: string) => {
+    await wrapper.findAll('.whelp-row').find(row => row.text().includes(title))!.trigger('click');
   };
 
   it('swaps in the answer as numbered steps without leaving the screen', async () => {
@@ -258,12 +255,12 @@ describe('welcome help panel: answer view', () => {
     expect(title.text()).toBe('Restore an existing wallet');
     expect(title.attributes('lang')).toBe('en');
     const steps = wrapper.findAll('[data-test="steps"] li');
-    expect(steps.wrappers.map(step => step.find('p').text())).toEqual([
+    expect(steps.map(step => step.find('p').text())).toEqual([
       'Use the import or restore option on the welcome screen and select the correct chain.',
       'Enter recovery information only in the wallet restoration flow, never in chat or email.',
       'Check the restored addresses and network before moving funds.',
     ]);
-    expect(steps.wrappers.map(step => step.find('.whelp-step__number').text())).toEqual(['1', '2', '3']);
+    expect(steps.map(step => step.find('.whelp-step__number').text())).toEqual(['1', '2', '3']);
     expect(wrapper.find('[data-test="steps"]').attributes('lang')).toBe('en');
     expect(wrapper.find('.whelp-chip').text()).toBe('help.topic.start');
     // Moves focus onto the new heading.
@@ -289,7 +286,7 @@ describe('welcome help panel: answer view', () => {
     const setup = show({ started: true, hasWallets: false });
     await open(setup, 'Set up your first Gero wallet');
     expect(setup.findAll('[data-test="steps"] li')).toHaveLength(3);
-    expect(setup.findAll('[data-test="steps"] p').wrappers.map(step => step.text())).not.toContain('Help stays available while setup is open.');
+    expect(setup.findAll('[data-test="steps"] p').map(step => step.text())).not.toContain('Help stays available while setup is open.');
     expect(byTest(setup, 'setup-caption').exists()).toBe(true);
   });
 
@@ -297,7 +294,7 @@ describe('welcome help panel: answer view', () => {
     const wrapper = show({ started: true, hasWallets: false });
     await open(wrapper, 'Restore an existing wallet');
     const related = wrapper.findAll('.whelp-answer__related .whelp-row');
-    expect(related.wrappers.map(row => row.find('.whelp-row__title').text())).toEqual([
+    expect(related.map(row => row.find('.whelp-row__title').text())).toEqual([
       'Set up your first Gero wallet', 'Use Gero with a hardware wallet', 'Keep your recovery phrase safe',
     ]);
     await related.at(1).trigger('click');
@@ -507,12 +504,26 @@ describe("welcome help panel: what's new", () => {
 
     const signal = h.updates.mock.calls[0]![1] as AbortSignal;
     expect(signal.aborted).toBe(false);
-    wrapper.destroy();
+    wrapper.unmount();
     expect(signal.aborted).toBe(true);
   });
 });
 
 describe('welcome help panel: phone sheet', () => {
+  it('restores the opener after a pointer-focused scrim closes the sheet', async () => {
+    setViewport(true);
+    const opener = document.createElement('button');
+    document.body.appendChild(opener);
+    roots.push(opener);
+    const wrapper = show({ opener });
+    await nextTick();
+    const scrim = wrapper.find<HTMLButtonElement>('.whelp-scrim');
+    scrim.element.focus();
+    await scrim.trigger('click');
+    expect(wrapper.emitted('close')).toHaveLength(1);
+    wrapper.unmount();
+    expect(document.activeElement).toBe(opener);
+  });
   beforeEach(() => setViewport(true));
 
   it('is a modal bottom sheet over a scrim, with a grabber and no sub-line or scene', () => {
@@ -610,8 +621,8 @@ describe('welcome help panel: phone sheet', () => {
 describe('welcome help panel: anonymous usage counts', () => {
   const counted = () => h.track.mock.calls.map(([event]) => event);
   const event = (type: string, subject?: string) => ({ type, ...(subject ? { subject } : {}), surface: 'welcome', chain: 'all' });
-  const open = async (wrapper: Wrapper<Vue>, title: string) => {
-    await wrapper.findAll('.whelp-row').wrappers.find(row => row.text().includes(title))!.trigger('click');
+  const open = async (wrapper: VueWrapper, title: string) => {
+    await wrapper.findAll('.whelp-row').find(row => row.text().includes(title))!.trigger('click');
   };
 
   it.each([
@@ -663,7 +674,7 @@ describe('welcome help panel: anonymous usage counts', () => {
     await wrapper.find('#whelp-search').setValue('   ');
     vi.advanceTimersByTime(2000);
     await wrapper.find('#whelp-search').setValue('hardware');
-    wrapper.destroy();
+    wrapper.unmount();
     vi.advanceTimersByTime(2000);
     expect(counted()).toEqual([event('welcome_open', 'saved')]);
   });

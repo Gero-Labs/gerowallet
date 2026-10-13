@@ -4,9 +4,9 @@
     <!-- Google sign-in -->
     <div class="step-section-label mb-2">{{ $t('welcome.onboardingStepGoogleSignIn') }}</div>
     <template v-if="!email">
-      <v-btn class="onb-btn google-signin-btn" depressed outlined :loading="signingIn" @click="signIn()">
+      <v-btn class="onb-btn google-signin-btn" variant="outlined" :loading="signingIn" @click="signIn()">
         <v-avatar size="18" class="mr-2">
-          <v-img :src="google" contain />
+          <v-img :src="google"  />
         </v-avatar>
         {{ $t('welcome.googleSignInButton') }}
       </v-btn>
@@ -15,7 +15,7 @@
       <div class="signed-in-row">
         <v-icon color="success" size="18" class="mr-1">mdi-check-circle</v-icon>
         <span class="text-body-2 white--text">{{ $t('welcome.googleSignedInAs', { email }) }}</span>
-        <v-btn text x-small color="primary" class="ml-2" @click="changeAccount()">
+        <v-btn variant="text" size="x-small" color="primary" class="ml-2" @click="changeAccount()">
           {{ $t('welcome.googleChangeAccount') }}
         </v-btn>
       </div>
@@ -28,8 +28,8 @@
       <div class="step-section-label mb-2">{{ $t('welcome.walletName') }}</div>
       <v-text-field
         v-model="name"
-        dense
-        filled
+        density="compact"
+        variant="filled"
         :label="$t('welcome.walletName')"
         :placeholder="$t('welcome.walletNamePlaceholder')"
         :rules="[rules.required(), rules.minCharacters(1), rules.maxCharacters(50)]"
@@ -41,12 +41,12 @@
       <div class="field-hint mb-2">{{ $t('welcome.restoreRecoveryPasswordHint') }}</div>
       <v-text-field
         v-model="recoveryPassword"
-        dense
-        filled
+        density="compact"
+        variant="filled"
         :label="$t('welcome.recoveryPassword')"
         :type="showRecovery ? 'text' : 'password'"
-        :append-icon="showRecovery ? 'mdi-eye' : 'mdi-eye-off'"
-        @click:append="showRecovery = !showRecovery"
+        :append-inner-icon="showRecovery ? 'mdi-eye' : 'mdi-eye-off'"
+        @click:append-inner="showRecovery = !showRecovery"
         :rules="[rules.required(), rules.minCharacters(12)]"
         class="mb-2"
       ></v-text-field>
@@ -58,12 +58,12 @@
         <div class="step-section-label mb-2">{{ $t('welcome.newSpendingPassword') }}</div>
         <v-text-field
           v-model="spendingPassword"
-          dense
-          filled
+          density="compact"
+          variant="filled"
           :label="$t('welcome.newSpendingPassword')"
           :type="showSpending ? 'text' : 'password'"
-          :append-icon="showSpending ? 'mdi-eye' : 'mdi-eye-off'"
-          @click:append="showSpending = !showSpending"
+          :append-inner-icon="showSpending ? 'mdi-eye' : 'mdi-eye-off'"
+          @click:append-inner="showSpending = !showSpending"
           :rules="[
             rules.required(),
             rules.minCharacters(10),
@@ -76,8 +76,8 @@
         ></v-text-field>
         <v-text-field
           v-model="confirmSpendingPassword"
-          dense
-          filled
+          density="compact"
+          variant="filled"
           :label="$t('welcome.confirmNewSpendingPassword')"
           :type="showSpending ? 'text' : 'password'"
           :rules="[
@@ -93,21 +93,21 @@
         <v-btn
           class="passkey-auth-button mb-2"
           block
-          depressed
+          variant="flat"
           :color="enrolledPasskey ? 'success' : 'primary'"
           :loading="enrollingPasskey"
           @click="setUpPasskey()"
         >
-          <v-icon left small>{{ enrolledPasskey ? 'mdi-check' : 'mdi-fingerprint' }}</v-icon>
+          <v-icon start size="small">{{ enrolledPasskey ? 'mdi-check' : 'mdi-fingerprint' }}</v-icon>
           {{ enrolledPasskey ? $t('welcome.passkeySecured') : $t('welcome.setUpPasskeyThisDevice') }}
         </v-btn>
         <v-alert
           v-if="passkeyError"
           color="error"
           icon="mdi-alert-outline"
-          outlined
-          dense
-          border="left"
+          variant="outlined"
+          density="compact"
+          border="start"
           class="mb-2"
         >
           <span class="text-body-2">{{ passkeyError }}</span>
@@ -118,9 +118,9 @@
         v-if="errorMessage"
         color="error"
         icon="mdi-alert-outline"
-        outlined
-        dense
-        border="left"
+        variant="outlined"
+        density="compact"
+        border="start"
         class="mt-3 mb-0"
       >
         <span class="text-body-2">{{ errorMessage }}</span>
@@ -130,7 +130,7 @@
 
     <!-- Navigation buttons (footer — outside the scroll region above) -->
     <div class="onboarding-actions d-flex" style="gap: 12px;">
-      <v-btn text @click="$emit('back')">{{ $t('common.back') }}</v-btn>
+      <v-btn variant="text" @click="$emit('back')">{{ $t('common.back') }}</v-btn>
       <v-spacer />
       <v-btn
         color="primary"
@@ -169,8 +169,6 @@ defineEmits<{ (e: 'back'): void }>();
 
 const vmProxy = getCurrentInstance()!.proxy;
 const router = vmProxy?.$router;
-
-const restoreForm = ref<{ resetValidation: () => void } | null>(null);
 const formValid = ref(false);
 
 const signingIn = ref(false);

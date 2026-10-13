@@ -1,3 +1,4 @@
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
 // A rationale is a document on a host nobody in this codebase controls, so the
 // only thing that says whether it is what the voter published is the
 // blake2b-256 recorded on chain with the vote. Every assertion here is about
@@ -5,8 +6,8 @@
 // be vouched for is shown under an amber warning rather than hidden, and a
 // document that never arrived shows a reason plus a way out to the browser.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mount, type Wrapper } from '@vue/test-utils';
-import Vue from 'vue';
+import { mount, type VueWrapper } from '@vue/test-utils';
+import * as Vue from 'vue';
 import { blake2bHex } from 'blakejs';
 
 // BaseDialog drags the whole Vuetify overlay stack in. What this file owns is
@@ -18,10 +19,12 @@ vi.mock('@/shared/dialogs/BaseDialog.vue', () => ({
   default: {
     name: 'BaseDialog',
     props: ['isOpen', 'title', 'subtitle', 'icon', 'size', 'minHeight', 'height'],
-    render(h: (tag: string, data: unknown, children: unknown) => unknown) {
-      const self = this as unknown as { $slots: { default?: unknown } };
-      return h('div', { class: 'base-dialog' }, self.$slots.default);
-    },
+    render() {
+    const self = this as unknown as {
+        $slots: Vue.Slots;
+    };
+    return Vue.h('div', { class: 'base-dialog' }, self.$slots['default']?.());
+},
   },
 }));
 
@@ -52,12 +55,8 @@ function response(bytes: Uint8Array, options: { ok?: boolean; contentLength?: st
   };
 }
 
-function render(props: Record<string, unknown>): Wrapper<Vue> {
-  return mount(RationaleDialog, {
-    propsData: { isOpen: true, ...props },
-    mocks: { $t },
-    stubs: { 'v-icon': true, 'v-skeleton-loader': true },
-  });
+function render(props: Record<string, unknown>): VueWrapper {
+  return mount(RationaleDialog, { props: { isOpen: true, ...props }, global: { config: { globalProperties: mockGlobalProperties({ $t }) }, stubs: { 'v-icon': true, 'v-skeleton-loader': true } } });
 }
 
 /** Let the fetch and the hash settle. */
@@ -67,7 +66,7 @@ async function settle(): Promise<void> {
   await Vue.nextTick();
 }
 
-let wrapper: Wrapper<Vue> | null = null;
+let wrapper: VueWrapper | null = null;
 
 beforeEach(() => {
   fetchMock.mockReset();
@@ -75,7 +74,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  wrapper?.destroy();
+  wrapper?.unmount();
   wrapper = null;
   vi.unstubAllGlobals();
 });

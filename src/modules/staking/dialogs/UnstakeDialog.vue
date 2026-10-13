@@ -1,7 +1,7 @@
 <template>
   <BaseDialog :width="850"
     :isOpen="isOpen"
-    @close="$emit('close')"
+    @close="resetState(); $emit('close')"
     :min-height="300"
     :title="t('staking.unstakeFromPool')"
     :subtitle="t('staking.unstakeSubtitle')"
@@ -11,7 +11,7 @@
     <v-card-text class="px-3 justify-center text-center" style="z-index: 1">
       <v-alert
         v-if="drepBlocked"
-        border="left"
+        border="start"
         color="warning"
         type="warning"
         prominent
@@ -23,8 +23,8 @@
         </p>
       </v-alert>
       <v-alert
-        outlined
-        border="left"
+        variant="outlined"
+        border="start"
         color="warning"
         type="warning"
         prominent
@@ -93,7 +93,7 @@
             <v-btn
               v-if="!isPrfWallet && isSubmit"
               color="error"
-              outlined
+              variant="outlined"
               elevation="0"
               @click="signUnStakeTx"
               height="40"
@@ -107,7 +107,7 @@
             <v-btn
               v-else-if="!isPrfWallet && !isSubmit"
               color="error"
-              outlined
+              variant="outlined"
               elevation="0"
               @click="signUnStakeTx"
               height="40"
@@ -128,7 +128,7 @@
       :isOpen="overlay && loggedWallet?.type === WalletType.Keystone"
       :keystoneType="keystoneType"
       :keystoneCbor="keystoneCbor"
-      @close="overlay = false"
+      @close="resetState()"
       @scan="onKeystoneScan"
       @error="onKeystoneError"
       @progress="onKeystoneProgress"
@@ -194,6 +194,7 @@ const {
   onKeystoneError,
   onKeystoneProgress,
 } = useTransactionSigning({
+  active: () => props.isOpen,
   tx: txRef,
   successMessageKey: 'staking.unstakeTxSubmitted',
   // Unstake sweeps outstanding rewards — zero the local balance so a second
@@ -202,7 +203,7 @@ const {
   onClose: () => emit('close'),
 });
 
-const form = ref<{ validate: () => boolean; resetValidation: () => void } | null>(null);
+const form = ref<{ validate: () => Promise<{ valid: boolean }>; resetValidation: () => void } | null>(null);
 
 // Conway blocker (issue 951): with pending rewards and no DRep delegation the
 // unstake tx cannot succeed (dereg needs a zero reward balance, withdrawal

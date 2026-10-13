@@ -1,14 +1,14 @@
 <template>
   <div v-if="currentTrack" class="current-track">
     <v-list-item  :three-line="context.minimized" :two-line="!context.minimized" class="pr-0">
-      <v-list-item-avatar rounded size="56">
+      <v-avatar rounded size="56">
         <v-img
           class="current-track__img"
           :src="currentTrack.img"
-          contain
+
         />
-      </v-list-item-avatar>
-      <v-list-item-content :class="context.minimized ? 'marquee' : ''" style="min-width: 100px;">
+      </v-avatar>
+      <div class="g-list-content" :class="context.minimized ? 'marquee' : ''" style="min-width: 100px;">
         <v-list-item-title :class="context.minimized ? 'marquee__item' : ''" style="text-overflow: unset;overflow: visible;">
             {{ currentTrack.title }}
         </v-list-item-title>
@@ -18,7 +18,7 @@
         <v-list-item-subtitle style="text-overflow: unset;overflow: visible;" v-show="context.minimized">
           <PlayerControls x-small></PlayerControls>
         </v-list-item-subtitle>
-      </v-list-item-content>
+      </div>
     </v-list-item>
   </div>
 </template>

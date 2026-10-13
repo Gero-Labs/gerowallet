@@ -30,14 +30,14 @@
           :label="$t('poolOperator.retirementEpoch')"
           :rules="[requiredRule, minValue(minEpoch), maxValue(maxEpoch)]"
           type="number"
-          outlined dense dark hide-details="auto"
+          variant="outlined" density="compact" theme="dark" hide-details="auto"
           class="glass-input mt-3"
         />
       </div>
 
       <!-- Deposit return info -->
       <div class="return-info mt-3">
-        <v-icon x-small color="success" class="mr-1">mdi-arrow-down-circle</v-icon>
+        <v-icon size="x-small" color="success" class="mr-1">mdi-arrow-down-circle</v-icon>
         <span>{{ $t('poolOperator.depositReturn') }}</span>
       </div>
 
@@ -50,7 +50,7 @@
         :loading="retLoading"
         @click="buildRetirement()"
       >
-        <v-icon left small>mdi-power</v-icon>
+        <v-icon start size="small">mdi-power</v-icon>
         {{ $t('poolOperator.retirePool') }}
       </v-btn>
     </v-form>

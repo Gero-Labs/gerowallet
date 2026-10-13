@@ -13,19 +13,19 @@
     </v-card-subtitle>
     <v-card-text class="pa-0">
       <v-tabs v-model="tab" fixed-tabs >
-        <v-tab>
+        <v-tab :value="0">
           {{ $t('assets.files') }}
         </v-tab>
-        <v-tab>
+        <v-tab :value="1">
           {{ $t('assets.metadata') }}
         </v-tab>
       </v-tabs>
-      <v-tabs-items
+      <v-window
         v-model="tab"
         class="transparent"
       >
-        <v-tab-item :transition="false">
-          <v-card outlined rounded flat>
+        <v-window-item :value="0" :transition="false">
+          <v-card variant="outlined" rounded flat>
             <v-card-text v-if="files[selectedFile]"
                          flat rounded class="transparent text-center justify-center fill-height pb-0"
                          style="margin: auto; height: 233px" >
@@ -38,9 +38,9 @@
               >
                 <template v-slot:placeholder>
                   <v-row
-                    class="fill-height ma-0"
-                    align="center"
-                    justify="center"
+                    class="fill-height ma-0 align-center justify-center"
+
+
                   >
                     <v-progress-circular
                       indeterminate
@@ -68,11 +68,11 @@
                 show-arrows
                 mandatory
               >
-                <v-slide-item
-                  v-for="(file, index) in files" :key="index"
-                  v-slot="{ active, toggle }" class="mx-4"
+                <v-slide-group-item
+                  v-for="(file, index) in files" :key="index" :value="index"
+                  v-slot="{ isSelected, toggle }" class="mx-4"
                 >
-                  <v-card rounded outlined :class="active ? 'primary' : 'transparent'">
+                  <v-card rounded variant="outlined" :class="isSelected ? 'primary' : 'transparent'">
                     <v-btn elevation="0" width="40" height="40" class="pa-0" @click="toggle" style="min-width: 35px!important;">
                       <v-avatar size="40" rounded>
                         <v-icon v-if="isImage(file.mediaType)">
@@ -87,20 +87,20 @@
                       </v-avatar>
                     </v-btn>
                   </v-card>
-                </v-slide-item>
+                </v-slide-group-item>
               </v-slide-group>
             </v-card-text>
           </v-card>
-        </v-tab-item>
-        <v-tab-item :transition="false">
-          <v-card outlined rounded flat>
+        </v-window-item>
+        <v-window-item :value="1" :transition="false">
+          <v-card variant="outlined" rounded flat>
             <v-card-text class="text-left" style="font-size: 12px;font-family: monospace!important; height: 307px; overflow-y: auto; white-space: pre;" >
               <CopyButton small :value="JSON.stringify(metadata)" style="position: absolute;right: 16px;"></CopyButton>
               {{JSON.stringify(metadata, null, 2)}}
             </v-card-text>
           </v-card>
-        </v-tab-item>
-      </v-tabs-items>
+        </v-window-item>
+      </v-window>
     </v-card-text>
   </v-card>
 </template>
@@ -112,35 +112,18 @@ import filters from '@/shared/utils/filters';
 
 
 
-const props = defineProps({
-  asset: {
-    type: Object as () => any,
-    default: () => {
-    },
-  },
-  totalAssets: {
-    type: Number,
-    default: () => 0,
-  },
-});
+interface AssetFile { src: string; mediaType: string }
+interface DetailAsset {
+  name: string;
+  unit: string;
+  fingerprint: string;
+  onchain_metadata?: { image?: string; mediaType?: string; files?: AssetFile[]; [key: string]: unknown };
+}
+const props = defineProps<{ asset: DetailAsset; totalAssets?: number }>();
 
 const autoGrowHack = ref<boolean>(false);
-const editedAsset = ref<any>({
-  asset_name: '',
-  description: '',
-  state: '',
-  fingerprint: '',
-  policy_id: '',
-  sold_to: undefined,
-  date_sold: undefined,
-  nftmetadata: undefined,
-  image: '',
-  media_type: '',
-  additional_files: [],
-});
-const additional_attributes = ref<any>([]);
-const tab = ref(null);
-const selectedFile = ref(null);
+const tab = ref(0);
+const selectedFile = ref(0);
 const audioElement = ref<HTMLAudioElement | null>(null);
 const videoElement = ref<HTMLVideoElement | null>(null);
 
@@ -212,17 +195,7 @@ watch(tab, () => {
   forceReRender()
 })
 
-watch(props.asset, (val) => {
-  editedAsset.value = {...val}
-})
-
-watch(additional_attributes, (newVal: any[]) => {
-  const additionalAttributes = {}
-  newVal.forEach(element => {
-    additionalAttributes[element.name] = element.value
-  })
-  editedAsset.value.additional_attributes = additionalAttributes
-}, { deep: true })
+watch(() => props.asset, () => { stopMedia(); selectedFile.value = 0; });
 </script>
 <style scoped>
 .videoClass {

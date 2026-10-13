@@ -11,14 +11,14 @@
         <div v-for="(asset, index) in shownAssets" :key="asset.currency" class="asset-entry">
           <div class="pr-1"></div>
           <div>
-            <v-chip pill small class="px-1" outlined :key="`asset_${index}`" :color="risk ? 'error' : 'primary'" style="margin: 2px!important;">
+            <v-chip pill size="small" class="px-1" variant="outlined" :key="`asset_${index}`" :color="risk ? 'error' : 'primary'" style="margin: 2px!important;">
               <v-avatar v-if="asset.img" left>
-                <v-img :src="asset.img" :alt="`${asset.currency} Logo`" contain>
+                <v-img :src="asset.img" :alt="`${asset.currency} Logo`" >
                   <template v-slot:placeholder>
                     <v-row
-                      class="fill-height ma-0"
-                      align="center"
-                      justify="center"
+                      class="fill-height ma-0 align-center justify-center"
+
+
                     >
                       <v-progress-circular
                         size="14"
@@ -47,7 +47,7 @@
   </v-card>
 </template>
 <script setup lang="ts">
-import { ref, watch, onMounted, toRefs } from 'vue';
+import { ref, watch, onMounted, toRefs, type PropType } from 'vue';
 import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
 import { walletStore } from '@/stores/walletStore';
@@ -55,12 +55,14 @@ import { Cardano } from '@cardano-sdk/core';
 
 
 
+interface TransactionAsset { currency: string; amount: number; id?: string; img?: string }
+interface TransactionAmount { provider?: string; total?: number; txFee?: number; assets?: TransactionAsset[] }
 const props = defineProps({
   risk: {
     type: Boolean,
   },
   transaction: {
-    type: Object,
+    type: Object as PropType<TransactionAmount>,
   },
   withBg: {
     type: Boolean,
@@ -70,10 +72,10 @@ const props = defineProps({
 
 const { loggedWallet, tokens } = toRefs(walletStore);
 
-const amount = ref<any>(undefined);
+const amount = ref<TransactionAmount | undefined>(undefined);
 const showAllAssets = ref(true);
 const hiddenAssets = ref(0);
-const shownAssets = ref<any[]>([]);
+const shownAssets = ref<TransactionAsset[]>([]);
 
 const { toCurrency } = filters;
 
@@ -85,9 +87,9 @@ const decimals = (unit: string) => {
   return decimals;
 };
 
-const getAssetName = (assetId: any) => {
+const getAssetName = (assetId: string) => {
   try {
-    const assetName = Cardano.AssetId.getAssetName(assetId);
+    const assetName = Cardano.AssetId.getAssetName(Cardano.AssetId(assetId));
     return Cardano.AssetName.toUTF8(assetName, true);
   } catch (error) {
     // Fallback: extract asset name hex from asset ID (after policy ID)
@@ -111,7 +113,7 @@ const toggleAllAssets = () => {
   showAllAssets.value = !showAllAssets.value;
 };
 
-const updateAssets = (newVal: any) => {
+const updateAssets = (newVal: TransactionAmount) => {
   amount.value = newVal;
   if (amount.value?.assets?.length < 5) {
     shownAssets.value = amount.value?.assets;

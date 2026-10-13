@@ -16,7 +16,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router/composables';
+import { useRoute, useRouter } from 'vue-router';
 import ContentLayout from '@/modules/navigation/layouts/ContentLayout.vue';
 import { walletStore } from '@/stores/walletStore';
 import { isHelpReady } from '@/modules/navigation/helpAccess';
@@ -46,12 +46,12 @@ watch(ready, async () => {
   const target = root.value?.querySelector<HTMLElement>('[data-help-scroll]');
   if (target) target.scrollTop = scrollPositions.get(path) ?? 0;
 });
-watch(() => route.query.support, async intent => {
+watch(() => route.query['support'], async intent => {
   if (intent !== '1') return;
   await nextTick();
   openSupport();
   const query = { ...route.query };
-  delete query.support;
+  delete query['support'];
   void router.replace({ path: route.path, query }).catch(() => {});
 }, { immediate: true });
 </script>

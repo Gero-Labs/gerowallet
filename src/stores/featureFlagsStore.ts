@@ -1,4 +1,5 @@
-import Vue from 'vue';
+import { plainStoreSnapshot } from '@/stores/serialization';
+import { reactive } from 'vue';
 import featureFlagService from '@/services/featureFlag.service';
 
 // Build-time default for the CIP-45 flag (dev/test only); a flag-service value still wins.
@@ -109,7 +110,7 @@ interface FeatureFlagsState {
   isLoading: boolean;
 }
 
-const featureFlagsState = Vue.observable<FeatureFlagsState>({
+const featureFlagsState = reactive<FeatureFlagsState>({
   flags: {
     swapEnabled: false,
     isGeroCardEnabled: false,
@@ -154,7 +155,7 @@ const featureFlagsState = Vue.observable<FeatureFlagsState>({
  */
 function persistFlagsForBackground(): void {
   if (typeof chrome !== 'undefined' && chrome.storage?.local) {
-    void chrome.storage.local.set({ featureFlags: { ...featureFlagsState.flags } });
+    void chrome.storage.local.set(plainStoreSnapshot({ featureFlags: { ...featureFlagsState.flags } }));
   }
 }
 
@@ -233,98 +234,98 @@ export const featureFlagsStore = {
    */
   subscribeToFlagChanges(): void {
     featureFlagService.onFlagChange('isSwapEnabled', (newValue) => {
-      Vue.set(featureFlagsState.flags, 'swapEnabled', newValue);
+      featureFlagsState.flags['swapEnabled'] = newValue === true;
     });
     featureFlagService.onFlagChange('isGeroCardEnabled', (newValue) => {
-      Vue.set(featureFlagsState.flags, 'isGeroCardEnabled', newValue);
+      featureFlagsState.flags['isGeroCardEnabled'] = newValue === true;
     });
     featureFlagService.onFlagChange('isHelpCenterEnabled', (value) => {
-      Vue.set(featureFlagsState.flags, 'isHelpCenterEnabled', value);
+      featureFlagsState.flags['isHelpCenterEnabled'] = value === true;
     });
     featureFlagService.onFlagChange('isBlogEnabled', (newValue) => {
-      Vue.set(featureFlagsState.flags, 'isBlogEnabled', newValue);
+      featureFlagsState.flags['isBlogEnabled'] = newValue === true;
     });
     featureFlagService.onFlagChange('isPhysicalCardOrderingEnabled', (newValue) => {
-      Vue.set(featureFlagsState.flags, 'isPhysicalCardOrderingEnabled', newValue);
+      featureFlagsState.flags['isPhysicalCardOrderingEnabled'] = newValue === true;
     });
     featureFlagService.onFlagChange('isGoMiningEnabled', (newValue) => {
-      Vue.set(featureFlagsState.flags, 'isGoMiningEnabled', newValue);
+      featureFlagsState.flags['isGoMiningEnabled'] = newValue === true;
     });
     featureFlagService.onFlagChange('isBitcoinEnabled', (newValue) => {
-      Vue.set(featureFlagsState.flags, 'isBitcoinEnabled', newValue);
+      featureFlagsState.flags['isBitcoinEnabled'] = newValue === true;
     });
     featureFlagService.onFlagChange('isPoolOperatorEnabled', (newValue) => {
-      Vue.set(featureFlagsState.flags, 'isPoolOperatorEnabled', newValue);
+      featureFlagsState.flags['isPoolOperatorEnabled'] = newValue === true;
     });
     featureFlagService.onFlagChange('isGovernanceEnabled', (newValue) => {
-      Vue.set(featureFlagsState.flags, 'isGovernanceEnabled', newValue);
+      featureFlagsState.flags['isGovernanceEnabled'] = newValue === true;
     });
     featureFlagService.onFlagChange('isGovernanceVotingEnabled', (newValue) => {
-      Vue.set(featureFlagsState.flags, 'isGovernanceVotingEnabled', newValue);
+      featureFlagsState.flags['isGovernanceVotingEnabled'] = newValue === true;
     });
     featureFlagService.onFlagChange('isRealFiEnabled', (newValue) => {
-      Vue.set(featureFlagsState.flags, 'isRealFiEnabled', newValue);
+      featureFlagsState.flags['isRealFiEnabled'] = newValue === true;
     });
     featureFlagService.onFlagChange('isRealFiStakingEnabled', (newValue) => {
-      Vue.set(featureFlagsState.flags, 'isRealFiStakingEnabled', newValue);
+      featureFlagsState.flags['isRealFiStakingEnabled'] = newValue === true;
     });
     featureFlagService.onFlagChange('isRealFiUsdrfSwapEnabled', (newValue) => {
-      Vue.set(featureFlagsState.flags, 'isRealFiUsdrfSwapEnabled', newValue);
+      featureFlagsState.flags['isRealFiUsdrfSwapEnabled'] = newValue === true;
     });
     featureFlagService.onFlagChange('isNexusWithdrawalEnabled', (newValue) => {
-      Vue.set(featureFlagsState.flags, 'isNexusWithdrawalEnabled', newValue);
+      featureFlagsState.flags['isNexusWithdrawalEnabled'] = newValue === true;
     });
     featureFlagService.onFlagChange('isNexusUnstakeEnabled', (newValue) => {
-      Vue.set(featureFlagsState.flags, 'isNexusUnstakeEnabled', newValue);
+      featureFlagsState.flags['isNexusUnstakeEnabled'] = newValue === true;
     });
     featureFlagService.onFlagChange('isNexusDelegateEnabled', (newValue) => {
-      Vue.set(featureFlagsState.flags, 'isNexusDelegateEnabled', newValue);
+      featureFlagsState.flags['isNexusDelegateEnabled'] = newValue === true;
     });
     featureFlagService.onFlagChange('isNexusVoteDelegationEnabled', (newValue) => {
-      Vue.set(featureFlagsState.flags, 'isNexusVoteDelegationEnabled', newValue);
+      featureFlagsState.flags['isNexusVoteDelegationEnabled'] = newValue === true;
     });
     featureFlagService.onFlagChange('isCrossDeviceSigningEnabled', (newValue) => {
-      Vue.set(featureFlagsState.flags, 'isCrossDeviceSigningEnabled', newValue);
+      featureFlagsState.flags['isCrossDeviceSigningEnabled'] = newValue === true;
       // Mirror the live flip so the background picks it up on next login.
       persistFlagsForBackground();
     });
     featureFlagService.onFlagChange('isCopilotEnabled', (newValue) => {
-      Vue.set(featureFlagsState.flags, 'isCopilotEnabled', newValue);
+      featureFlagsState.flags['isCopilotEnabled'] = newValue === true;
     });
     featureFlagService.onFlagChange('isBitcoinGeroSyncEnabled', (newValue) => {
-      Vue.set(featureFlagsState.flags, 'isBitcoinGeroSyncEnabled', newValue);
+      featureFlagsState.flags['isBitcoinGeroSyncEnabled'] = newValue === true;
       // Mirror the live flip so the background picks it up on next login.
       persistFlagsForBackground();
     });
     featureFlagService.onFlagChange('isMidnightConvertEnabled', (newValue) => {
-      Vue.set(featureFlagsState.flags, 'isMidnightConvertEnabled', newValue);
+      featureFlagsState.flags['isMidnightConvertEnabled'] = newValue === true;
     });
     featureFlagService.onFlagChange('isGoogleWalletEnabled', (newValue) => {
-      Vue.set(featureFlagsState.flags, 'isGoogleWalletEnabled', newValue);
+      featureFlagsState.flags['isGoogleWalletEnabled'] = newValue === true;
     });
     featureFlagService.onFlagChange('isWalletConnectEnabled', (newValue) => {
-      Vue.set(featureFlagsState.flags, 'isWalletConnectEnabled', newValue);
+      featureFlagsState.flags['isWalletConnectEnabled'] = newValue === true;
       // Mirror the live flip so the background picks it up on next login/init.
       persistFlagsForBackground();
     });
     featureFlagService.onFlagChange('isCip45Enabled', (newValue) => {
-      Vue.set(featureFlagsState.flags, 'isCip45Enabled', newValue);
+      featureFlagsState.flags['isCip45Enabled'] = newValue === true;
       // Mirror the live flip so the background picks it up on next login/init.
       persistFlagsForBackground();
     });
     featureFlagService.onFlagChange('isLiveChatEnabled', (newValue) => {
-      Vue.set(featureFlagsState.flags, 'isLiveChatEnabled', newValue);
+      featureFlagsState.flags['isLiveChatEnabled'] = newValue === true;
     });
     featureFlagService.onFlagChange('isSubmitApiEnabled', (newValue) => {
-      Vue.set(featureFlagsState.flags, 'isSubmitApiEnabled', newValue === true);
+      featureFlagsState.flags['isSubmitApiEnabled'] = newValue === true;
     });
     featureFlagService.onFlagChange('isKeyEnvelopeV2Enabled', (newValue) => {
-      Vue.set(featureFlagsState.flags, 'isKeyEnvelopeV2Enabled', newValue === true);
+      featureFlagsState.flags['isKeyEnvelopeV2Enabled'] = newValue === true;
       // Mirror the live flip (on or off) so writers and the migration see it immediately.
       persistFlagsForBackground();
     });
     featureFlagService.onFlagChange('collateralTrustedDapps', (newValue) => {
-      Vue.set(featureFlagsState.flags, 'collateralTrustedDapps', Array.isArray(newValue) ? newValue : []);
+      featureFlagsState.flags['collateralTrustedDapps'] = Array.isArray(newValue) ? newValue : [];
       // Mirror the live change so the background collateral gate picks it up.
       persistFlagsForBackground();
     });
@@ -566,8 +567,9 @@ export const featureFlagsStore = {
    * Reset flags (disable all until re-initialized).
    */
   reset(): void {
-    Vue.set(featureFlagsState, 'flags', {
+    featureFlagsState.flags = {
       swapEnabled: false,
+      isTrezorWebUsbEnabled: false,
       isGeroCardEnabled: false,
       isBlogEnabled: false,
       isHelpCenterEnabled: false,
@@ -595,7 +597,7 @@ export const featureFlagsStore = {
       isSubmitApiEnabled: false,
       isKeyEnvelopeV2Enabled: false,
       collateralTrustedDapps: [],
-    });
+    };
     featureFlagsState.isInitialized = false;
     featureFlagsState.isLoading = false;
   },

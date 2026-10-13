@@ -1,4 +1,4 @@
-import Vue from 'vue';
+import { reactive } from 'vue';
 
 /**
  * Pool Operator Store
@@ -49,7 +49,7 @@ export interface PoolOperatorState {
   error: string | null;
 }
 
-export const poolOperatorStore: PoolOperatorState = Vue.observable({
+export const poolOperatorStore: PoolOperatorState = reactive({
   coldKeySource: 'none' as 'none' | 'imported' | 'ledger',
   coldKeyHash: null,
   vrfKeyHash: null,

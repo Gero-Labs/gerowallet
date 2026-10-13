@@ -220,7 +220,10 @@ const WELCOME_QUERY = 'unlikely zebra words';
     await goReader();
     await readerBody.waitFor();
     await page.evaluate(async () => {
-      const m = await import('./js/activityTracker.service.js');
+      const [wallets, gero, flags] = await Promise.all([
+        import('./js/walletStore.js'), import('./js/geroStore.js'), import('./js/featureFlagsStore.js'),
+      ]);
+      const m = { walletStore: wallets.walletStore, geroStore: gero.geroStore, featureFlagsStore: flags.featureFlagsStore };
       window.helpSmokeStores = m;
       const wallet = { id: 90001, name: 'Help smoke wallet', chain: 'Midnight', network: 'Mainnet', type: 'Normal', icon: 'gero' };
       m.geroStore.wallets = { [wallet.id]: wallet };

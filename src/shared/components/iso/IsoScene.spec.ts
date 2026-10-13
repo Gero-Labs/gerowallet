@@ -13,28 +13,28 @@ describe('IsoScene', () => {
 
   it('is still by default', () => {
     stubReducedMotion(false);
-    const html = mount(IsoScene, { propsData: { name: 'hero' } }).html();
+    const html = mount(IsoScene, { props: { name: 'hero' } }).html();
     expect(html).not.toContain('animateMotion');
   });
 
   it('moves when animated', () => {
     stubReducedMotion(false);
-    const html = mount(IsoScene, { propsData: { name: 'hero', animated: true } }).html();
+    const html = mount(IsoScene, { props: { name: 'hero', animated: true } }).html();
     expect(html).toContain('animateMotion');
     expect(html).toContain('stroke-dashoffset');
   });
 
   it('stays still for people who asked for reduced motion', () => {
     stubReducedMotion(true);
-    const html = mount(IsoScene, { propsData: { name: 'hero', animated: true } }).html();
+    const html = mount(IsoScene, { props: { name: 'hero', animated: true } }).html();
     expect(html).not.toContain('animateMotion');
     expect(html).not.toContain('<animate');
   });
 
   it('puts the real card artwork on the card and gives every instance its own gradient ids', () => {
     stubReducedMotion(false);
-    const first = mount(IsoScene, { propsData: { name: 'hero' } }).html();
-    const second = mount(IsoScene, { propsData: { name: 'hero' } }).html();
+    const first = mount(IsoScene, { props: { name: 'hero' } }).html();
+    const second = mount(IsoScene, { props: { name: 'hero' } }).html();
     expect(first).toContain('front_card_no_mcx2');
     expect(first).not.toContain('__CARD_IMG__');
     expect(first).not.toContain('__UID__');
@@ -45,9 +45,9 @@ describe('IsoScene', () => {
 
   it('is hidden from assistive tech unless labelled', () => {
     stubReducedMotion(false);
-    expect(mount(IsoScene, { propsData: { name: 'pin' } }).attributes('aria-hidden')).toBe('true');
-    const labelled = mount(IsoScene, { propsData: { name: 'pin', label: 'Keypad' } });
-    expect(labelled.attributes('role')).toBe('img');
-    expect(labelled.attributes('aria-label')).toBe('Keypad');
+    expect(mount(IsoScene, { props: { name: 'pin' } }).find('svg').attributes('aria-hidden')).toBe('true');
+    const labelled = mount(IsoScene, { props: { name: 'pin', label: 'Keypad' } });
+    expect(labelled.find('svg').attributes('role')).toBe('img');
+    expect(labelled.find('svg').attributes('aria-label')).toBe('Keypad');
   });
 });

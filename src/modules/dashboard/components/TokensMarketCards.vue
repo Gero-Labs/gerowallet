@@ -2,7 +2,7 @@
   <v-row no-gutters class="owned-tokens-market-cards">
     <!-- Top by Volume (from owned tokens) -->
     <v-col cols="12" lg="4" md="4" sm="4" class="pr-2">
-      <v-card flat outlined class="compact-card volume-card liquid-glass-compact" style="position: relative">
+      <v-card flat variant="outlined" class="compact-card volume-card liquid-glass-compact" style="position: relative">
         <!-- Coming Soon Overlay -->
         <div class="coming-soon-overlay">
           <div class="coming-soon-content">
@@ -15,9 +15,9 @@
         <div class="card-content-blur">
           <!-- Last refresh timestamp badge -->
           <div v-if="lastRefreshTime" class="refresh-badge">
-            <v-tooltip bottom content-class="refresh-tooltip">
-              <template v-slot:activator="{ on, attrs }">
-                <v-icon small :color="primaryColor" v-bind="attrs" v-on="on" class="refresh-icon">
+            <v-tooltip location="bottom"  content-class="refresh-tooltip">
+              <template v-slot:activator="{ props: activatorProps }">
+                <v-icon size="small" :color="primaryColor" v-bind="activatorProps"  class="refresh-icon">
                   mdi-clock-outline
                 </v-icon>
               </template>
@@ -29,12 +29,12 @@
           </div>
 
           <v-card-title class="px-2 py-1">
-            <v-icon left size="16" class="volume-icon">mdi-trending-up</v-icon>
+            <v-icon start size="16" class="volume-icon">mdi-trending-up</v-icon>
             <span class="text-subtitle-1">{{ t('dashboard.topVolume') }}</span>
           </v-card-title>
           <v-card-text class="px-2 pt-0 pb-1">
             <div v-if="loading" class="text-center py-4">
-              <v-progress-circular indeterminate small></v-progress-circular>
+              <v-progress-circular indeterminate size="small"></v-progress-circular>
             </div>
             <div v-else-if="error" class="text-center py-4">
               <div class="caption grey--text">{{ error }}</div>
@@ -79,7 +79,7 @@
 
     <!-- Top by Price Change (from owned tokens) -->
     <v-col cols="12" lg="4" md="4" sm="4" class="px-2">
-      <v-card flat outlined class="compact-card gainers-card liquid-glass-compact" style="position: relative">
+      <v-card flat variant="outlined" class="compact-card gainers-card liquid-glass-compact" style="position: relative">
         <!-- Coming Soon Overlay -->
         <div class="coming-soon-overlay">
           <div class="coming-soon-content">
@@ -92,9 +92,9 @@
         <div class="card-content-blur">
           <!-- Last refresh timestamp badge -->
           <div v-if="lastRefreshTime" class="refresh-badge">
-            <v-tooltip bottom content-class="refresh-tooltip">
-              <template v-slot:activator="{ on, attrs }">
-                <v-icon small :color="primaryColor" v-bind="attrs" v-on="on" class="refresh-icon">
+            <v-tooltip location="bottom"  content-class="refresh-tooltip">
+              <template v-slot:activator="{ props: activatorProps }">
+                <v-icon size="small" :color="primaryColor" v-bind="activatorProps"  class="refresh-icon">
                   mdi-clock-outline
                 </v-icon>
               </template>
@@ -106,12 +106,12 @@
           </div>
 
           <v-card-title class="px-2 py-1">
-            <v-icon left size="16" class="gainers-icon">mdi-chart-line</v-icon>
+            <v-icon start size="16" class="gainers-icon">mdi-chart-line</v-icon>
             <span class="text-subtitle-1">{{ t('dashboard.topGainers') }}</span>
           </v-card-title>
           <v-card-text class="px-2 pt-0 pb-1">
             <div v-if="loading" class="text-center py-4">
-              <v-progress-circular indeterminate small></v-progress-circular>
+              <v-progress-circular indeterminate size="small"></v-progress-circular>
             </div>
             <div v-else-if="error" class="text-center py-4">
               <div class="caption grey--text">{{ error }}</div>
@@ -145,7 +145,7 @@
                 </div>
                 <div class="text-right">
                   <div class="d-flex align-center">
-                    <v-avatar tile size="12" class="mr-1">
+                    <v-avatar rounded="0" size="12" class="mr-1">
                       <v-img :src="getChangeIcon(token.dailyPriceChange)" :alt="t('dashboard.trend')" />
                     </v-avatar>
                     <span :class="getChangeColor(token.dailyPriceChange)">
@@ -163,7 +163,7 @@
 
     <!-- Top by Market Cap (from owned tokens) -->
     <v-col cols="12" lg="4" md="4" sm="4" class="pl-2">
-      <v-card flat outlined class="compact-card mcap-card liquid-glass-compact" style="position: relative">
+      <v-card flat variant="outlined" class="compact-card mcap-card liquid-glass-compact" style="position: relative">
         <!-- Coming Soon Overlay -->
         <div class="coming-soon-overlay">
           <div class="coming-soon-content">
@@ -176,9 +176,9 @@
         <div class="card-content-blur">
           <!-- Last refresh timestamp badge -->
           <div v-if="lastRefreshTime" class="refresh-badge">
-            <v-tooltip bottom content-class="refresh-tooltip">
-              <template v-slot:activator="{ on, attrs }">
-                <v-icon small :color="primaryColor" v-bind="attrs" v-on="on" class="refresh-icon">
+            <v-tooltip location="bottom"  content-class="refresh-tooltip">
+              <template v-slot:activator="{ props: activatorProps }">
+                <v-icon size="small" :color="primaryColor" v-bind="activatorProps"  class="refresh-icon">
                   mdi-clock-outline
                 </v-icon>
               </template>
@@ -190,12 +190,12 @@
           </div>
 
           <v-card-title class="py-1">
-            <v-icon left size="16" class="mcap-icon">mdi-finance</v-icon>
+            <v-icon start size="16" class="mcap-icon">mdi-finance</v-icon>
             <span class="text-subtitle-1">{{ t('dashboard.topTVL') }}</span>
           </v-card-title>
           <v-card-text class="pt-0 pb-1">
             <div v-if="loading" class="text-center py-4">
-              <v-progress-circular indeterminate small></v-progress-circular>
+              <v-progress-circular indeterminate size="small"></v-progress-circular>
             </div>
             <div v-else-if="error" class="text-center py-4">
               <div class="caption grey--text">{{ error }}</div>
@@ -349,7 +349,10 @@ const loadMarketData = async (isBackgroundRefresh = false) => {
 
     debugLog('Using mock market data:', mockData);
 
-    charli3Store.setMarketData(mockData as any);
+    const complete = (items: typeof mockData.topVolume | typeof mockData.topGainers | typeof mockData.topTvl) => items.map(token => ({
+      description: '', currency: 'USD', dailyVolume: 0, dailyPriceChange: 0, currentTvl: 0, ...token,
+    }));
+    charli3Store.setMarketData({ topVolume: complete(mockData.topVolume), topGainers: complete(mockData.topGainers), topTvl: complete(mockData.topTvl) });
   } catch (error) {
     console.error('Failed to load market data:', error);
     charli3Store.setError(error instanceof Error ? error.message : 'Failed to load market data');
@@ -360,7 +363,7 @@ const loadMarketData = async (isBackgroundRefresh = false) => {
   }
 };
 
-const onImageError = (token: any) => {
+const onImageError = (token: { logoUrl?: string }) => {
   // If image fails to load, clear the logoUrl to show placeholder
   token.logoUrl = null;
 };

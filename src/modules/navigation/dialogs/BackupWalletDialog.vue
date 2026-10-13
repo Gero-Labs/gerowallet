@@ -5,7 +5,7 @@
     style="opacity: 0.9"
     content-class="rounded-xxl dialogStyle darken"
     :is-open="props.isOpen"
-    @close="$emit('close')"
+    @close="approval.invalidate(); $emit('close')"
     scrollable
     max-width="850"
     :width="598"
@@ -21,21 +21,21 @@
         non-linear
       >
         <v-stepper-header style="box-shadow: none; height: 32px" >
-          <v-stepper-step
+          <v-stepper-item
             class="py-0"
             :complete="step > 1"
-            step="1"
+            value="1"
           >
             Seed Phrase
-          </v-stepper-step>
+          </v-stepper-item>
           <v-divider></v-divider>
-          <v-stepper-step
+          <v-stepper-item
             class="py-0"
             :complete="step > 2"
-            step="2"
+            value="2"
           >
             Confirm Phrase
-          </v-stepper-step>
+          </v-stepper-item>
         </v-stepper-header>
       </v-stepper>
     </v-card-title>
@@ -47,38 +47,38 @@
         non-linear
       >
         <v-stepper-header style="display: none">
-          <v-stepper-step
+          <v-stepper-item
             :complete="step > 1"
-            step="1"
+            value="1"
           >
             {{ $t('navigation.walletCreation') }}
-          </v-stepper-step>
+          </v-stepper-item>
           <v-divider></v-divider>
-          <v-stepper-step
+          <v-stepper-item
             :complete="step > 2"
-            step="2"
+            value="2"
           >
             Seed Phrase
-          </v-stepper-step>
+          </v-stepper-item>
           <v-divider></v-divider>
-          <v-stepper-step
-            step="3"
+          <v-stepper-item
+            :value="3"
           >
             Confirm Phrase
-          </v-stepper-step>
+          </v-stepper-item>
         </v-stepper-header>
-        <v-stepper-items>
-          <v-stepper-content step="1" style="text-align: -webkit-center;" class="pa-0">
+        <v-stepper-window :model-value="step">
+          <v-stepper-window-item :value="1" style="text-align: -webkit-center;" class="pa-0">
             <v-form ref="form2" v-model="valid">
               <v-card flat class="transparent" style="max-width: 556px; min-height: 500px;">
                 <v-card-text class="pa-0 text-left">
                   <v-alert
                     color="error"
-                    dense
-                    outlined
+                    density="compact"
+                    variant="outlined"
                     type="error"
                     prominent
-                    border="left"
+                    border="start"
                   >
                     <ul>
                       <li>{{ $t('wallet.backupWriteDownOrder') }}</li>
@@ -86,41 +86,43 @@
                       <li>{{ $t('wallet.saveSeedPhraseSafe') }}</li>
                     </ul>
                   </v-alert>
-                  <v-hover v-slot="{ hover }">
-                    <v-card flat outlined class="mb-4"
+                  <v-hover v-slot="{ isHovering: hover, props: hoverProps }">
+                    <v-card v-bind="hoverProps" flat variant="outlined" class="mb-4 position-relative"
                             :style="overlay ? {backgroundColor: 'black'} : {backgroundColor: 'transparent'}">
                       <v-row no-gutters>
                         <v-col class="pa-2" cols="12" md="3" sm="4" v-for="(item,index) in seedPhrase" :key="index">
-                          <v-chip color="#5553" large style="width: 100%; height: 30px"><span
+                          <v-chip color="#5553" size="large" style="width: 100%; height: 30px"><span
                             style="color: #2f9cac">{{ (index + 1) + '.' }}</span>&nbsp;&nbsp;{{ item }}
                           </v-chip>
                         </v-col>
                       </v-row>
                       <v-overlay
-                        :absolute="true"
+                        contained
+                        persistent
+                        class="align-center justify-center"
                         :opacity="hover ? 0.4 : 1"
                         :style=" hover && overlay ? { backdropFilter: 'blur(6px)' } : {}"
-                        color="black"
-                        :value="overlay"
+                        scrim="black"
+                        :model-value="overlay"
                       >
                         <v-form ref="formUnlock" v-model="validUnlock" style="max-width: 340px">
                           <v-list-item class="px-0">
-                            <v-list-item-content>
+                            <div class="g-list-content">
                               <v-list-item-title>
                                 {{ isPrfWallet ? $t('wallet.passkeyProtected') : $t('wallet.passwordProtected') }}
                               </v-list-item-title>
                               <v-list-item-subtitle>
                                 {{ isPrfWallet ? $t('wallet.usePassKeyToUnlock') : $t('wallet.enterPasswordToUnlock') }}
                               </v-list-item-subtitle>
-                            </v-list-item-content>
+                            </div>
                           </v-list-item>
 
                           <!-- Password field for normal wallets -->
                           <template v-if="!isPrfWallet">
                             <PassKeyPasswordField
                               ref="passwordField"
-                              :value="password"
-                              @input="password = $event"
+                              :model-value="password"
+                              @update:model-value="password = $event"
                               outlined
                               dense
                               :rules="[rules.required()]"
@@ -147,7 +149,7 @@
                               :loading="decryptingWithPassKey"
                             >
                               <v-avatar size="18" class="mr-1">
-                                <v-img :src="assets.passKeySvg" contain></v-img>
+                                <v-img :src="assets.passKeySvg" ></v-img>
                               </v-avatar>
                               {{ t('security.usePassKey').toUpperCase() }}
                             </v-btn>
@@ -167,10 +169,10 @@
                 </v-card-text>
               </v-card>
             </v-form>
-          </v-stepper-content>
+          </v-stepper-window-item>
 
-          <v-stepper-content step="2" style="text-align: -webkit-center;" class="pa-0">
-            <v-form ref="form" v-model="valid2" style="padding-top: 12px; padding-bottom: 12px">
+          <v-stepper-window-item :value="2" style="text-align: -webkit-center;" class="pa-0">
+            <v-form ref="form" :model-value="valid2" style="padding-top: 12px; padding-bottom: 12px">
               <v-card flat class="transparent d-flex row fill-height" style="max-width: 556px; min-height: 500px;">
                 <v-card-text class="px-0 d-flex row justify-space-around mt-2">
                   <v-card-text class="pa-0">
@@ -178,14 +180,14 @@
                     <v-card flat class="mt-3" style="background-color: transparent!important;">
                       <v-row no-gutters>
                         <v-col class="pa-2" cols="12" md="3" sm="3" v-for="(item,index) in seedPhraseReplaced" :key="index">
-                          <v-chip :color="item.state ? '#2f9cac' : '#5553'" class="justify-center" large style="width: 100%; height: 30px" @click="fillNext(index)" :disabled="!item.state">
+                          <v-chip :color="item.state ? '#2f9cac' : '#5553'" class="justify-center" size="large" style="width: 100%; height: 30px" @click="fillNext(index)" :disabled="!item.state">
                             <span :style="!item.state ? {color: '#515151'} : {color: 'inherit'}">{{ item.word }}</span>
                           </v-chip>
                         </v-col>
                       </v-row>
                     </v-card>
                   </v-card-text>
-                  <v-card flat outlined class="mb-4" style="background-color: transparent!important;">
+                  <v-card flat variant="outlined" class="mb-4" style="background-color: transparent!important;">
                     <v-row no-gutters>
                       <v-col class="pa-2 px-1" cols="12" md="3" sm="4" v-for="(item,index) in seedPhraseToConfirm" :key="index">
                         <div style="display: flex; line-height: 2.14">
@@ -195,7 +197,7 @@
                           <v-chip v-if="typeof item === 'object'" color="#2f9cac" style="width: 100%; height: 30px" @click="removeWord(item, index)">
                             {{ item.word }}
                           </v-chip>
-                          <v-chip  v-else :color="isNextToFill(index) ? '#898989' : '#5553'" large :outlined="item === ''" style="width: 100%; height: 30px">
+                          <v-chip  v-else :color="isNextToFill(index) ? '#898989' : '#5553'" size="large" :variant="item === '' ? 'outlined' : 'tonal'" style="width: 100%; height: 30px">
                             {{ item }}
                           </v-chip>
                         </div>
@@ -204,8 +206,8 @@
                   </v-card>
                   <div style="width: 100%" class="text-right">
                     <v-spacer></v-spacer>
-                    <v-btn color="primary" text plain :disabled="!seedPhraseReplaced.some(item => !item.state)" @click="reset">
-                      <v-icon small>
+                    <v-btn color="primary" variant="text" plain :disabled="!seedPhraseReplaced.some(item => !item.state)" @click="reset">
+                      <v-icon size="small">
                         mdi-reload
                       </v-icon>
                       Reset
@@ -214,15 +216,15 @@
                 </v-card-text>
               </v-card>
             </v-form>
-          </v-stepper-content>
-        </v-stepper-items>
+          </v-stepper-window-item>
+        </v-stepper-window>
       </v-stepper>
     </v-card-text>
     <v-card-actions class="pa-0 align-self-end" style="width: 100%">
       <v-spacer></v-spacer>
       <v-btn
         v-if="step == 2"
-        text
+        variant="text"
         color="primary"
         @click="back"
         elevation="0"
@@ -253,6 +255,7 @@ import { SecretPurpose, decrypt } from '@/shared/utils/crypto';
 import snackbar from '@/plugins/snackbar';
 import WalletStore, { walletStore } from '@/stores/walletStore';
 import assets from '@/utils/assets';
+import { useApprovalFreshness } from '@/shared/composables/useApprovalFreshness';
 
 const { t } = useTranslation();
 
@@ -282,6 +285,11 @@ const password = ref<string>('');
 const passwordField = ref<{ showError: (msg: string) => void } | null>(null);
 const decryptingWithPassKey = ref<boolean>(false);
 const backup = computed(() => config.value?.backup || false);
+const approval = useApprovalFreshness(
+  () => [loggedWallet.value?.id, loggedWallet.value?.chain, loggedWallet.value?.network, walletStore.isLocked],
+  () => props.isOpen,
+  () => resetDialog(),
+);
 
 // Check if wallet uses PRF encryption
 const isPrfWallet = computed(() => {
@@ -349,26 +357,28 @@ const isDisabled = computed(() => {
 
 const backupWallet = async (): Promise<void> => {
   if (step.value === 1) {
-    backupWalletStep1()
+    await backupWalletStep1()
   } else if (step.value === 2) {
-    backupWalletStep2()
+    await backupWalletStep2()
   }
 }
 
 const vmProxy = getCurrentInstance()!.proxy as unknown as {
-  $refs: Record<string, { validate: () => boolean; resetValidation: () => void }>;
+  $refs: Record<string, { validate: () => Promise<{ valid: boolean }>; resetValidation: () => void }>;
   $snackbar?: { setError: (msg: string) => void };
 }
 
-const backupWalletStep1 = (): void => {
-  if (vmProxy.$refs['form2'].validate()) {
+const backupWalletStep1 = (): Promise<void> => approval.run(async () => {
+  const current = approval.capture();
+  if ((await vmProxy.$refs['form2'].validate()).valid && current()) {
     step.value = 2
     seedPhrase.value = bip39.generateMnemonic(256).split(' ');
   }
-}
+});
 
-const backupWalletStep2 = (): void => {
-  if (vmProxy.$refs['form'].validate()) {
+const backupWalletStep2 = (): Promise<void> => approval.run(async () => {
+  const current = approval.capture();
+  if ((await vmProxy.$refs['form'].validate()).valid && current()) {
     // Set backup status using walletStore setBackup function
     WalletStore.setBackup(true);
     emit('close')
@@ -377,7 +387,7 @@ const backupWalletStep2 = (): void => {
       snackbar.fireSuccess(t('wallet.walletBackedUp'))
     })
   }
-}
+});
 
 const resetDialog = (): void => {
   recoverSeedChecked.value = false
@@ -387,6 +397,7 @@ const resetDialog = (): void => {
   overlay.value = true
   seedPhraseToConfirm.value = []
   seedPhraseReplaced.value = []
+  seedPhrase.value = [];
   persistent.value = false
   password.value = ''
   step.value = 1
@@ -403,7 +414,7 @@ const shuffleArray = (array: { word: string, state: boolean }[]) => {
   return array
 }
 
-const randomReplace = (array: string[], count: number) => {
+const randomReplace = (array: string[], count: number): [Array<string | SeedWord>, SeedWord[]] => {
   const replaced: { word: string, state: boolean }[] = [];
   const indices = new Set();
   do {
@@ -419,10 +430,13 @@ const randomReplace = (array: string[], count: number) => {
   return [res, shuffleArray(replaced)]
 }
 
-const decryptMnemonic = async (): Promise<void> => {
-  if (vmProxy.$refs['formUnlock'].validate()) {
+const decryptMnemonic = (): Promise<void> => approval.run(async () => {
+  const current = approval.capture();
+  const wallet = { ...loggedWallet.value };
+  const enteredPassword = password.value;
+  if ((await vmProxy.$refs['formUnlock'].validate()).valid && current() && enteredPassword === password.value) {
     try {
-      const decryptedMnemonic = decrypt(loggedWallet.value.encryptedMnemonic, password.value, SecretPurpose.Mnemonic)
+      const decryptedMnemonic = decrypt(wallet.encryptedMnemonic, enteredPassword, SecretPurpose.Mnemonic)
       if (!bip39.validateMnemonic(decryptedMnemonic)) {
         throw new Error('Invalid Password')
       }
@@ -434,27 +448,31 @@ const decryptMnemonic = async (): Promise<void> => {
       console.log(e) //TODO
     }
   }
-}
+});
 
-const decryptMnemonicWithPassKey = async (): Promise<void> => {
+const decryptMnemonicWithPassKey = (): Promise<void> => approval.run(async () => {
+  const current = approval.capture();
+  const wallet = { ...loggedWallet.value };
   decryptingWithPassKey.value = true;
   try {
     console.log('🔐 Decrypting mnemonic with PassKey for PRF wallet');
 
     // Check if mnemonic is backed up
-    if (!loggedWallet.value.prfEncryptedMnemonic) {
+    if (!wallet.prfEncryptedMnemonic) {
       throw new Error(t('wallet.mnemonicNotBackedUp'));
     }
 
     // Import PRF decryption function
     const { decryptMnemonicWithPrf } = await import('@/shared/utils/webauthn-prf');
+    if (!current()) return;
 
     // Decrypt mnemonic using PRF (triggers PassKey prompt)
     const decryptedMnemonic = await decryptMnemonicWithPrf(
-      loggedWallet.value.prfEncryptedMnemonic,
-      loggedWallet.value.webAuthnCredentialId,
-      loggedWallet.value.id.toString()
+      wallet.prfEncryptedMnemonic,
+      wallet.webAuthnCredentialId,
+      wallet.id.toString()
     );
+    if (!current()) return;
 
     // Validate mnemonic
     if (!bip39.validateMnemonic(decryptedMnemonic)) {
@@ -468,6 +486,7 @@ const decryptMnemonicWithPassKey = async (): Promise<void> => {
 
     console.log('✅ Mnemonic decrypted successfully');
   } catch (e: unknown) {
+    if (!current()) return;
     console.error('❌ PassKey mnemonic decryption failed:', e);
 
     // Show user-friendly error
@@ -480,21 +499,22 @@ const decryptMnemonicWithPassKey = async (): Promise<void> => {
   } finally {
     decryptingWithPassKey.value = false;
   }
-}
+});
 
 watch(() => props.isOpen, (val) => {
   if (!val) {
     resetDialog()
   } else {
     nextTick(() => {
-      vmProxy.$refs['formUnlock'].resetValidation()
-      vmProxy.$refs['form'].resetValidation()
-      vmProxy.$refs['form2'].resetValidation()
+      vmProxy.$refs['formUnlock']?.resetValidation()
+      vmProxy.$refs['form']?.resetValidation()
+      vmProxy.$refs['form2']?.resetValidation()
     })
   }
 })
 
 const back = (): void => {
+  approval.invalidate();
   seedPhrase.value = bip39.generateMnemonic(256).split(' ');
   overlay.value = true
   valid.value = false

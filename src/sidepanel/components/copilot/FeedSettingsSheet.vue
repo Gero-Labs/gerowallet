@@ -1,17 +1,17 @@
 <template>
   <!-- Wide (dashboard): centered dialog. Narrow (sidepanel): bottom sheet. -->
   <v-dialog
-    v-if="$vuetify.breakpoint.mdAndUp"
-    :value="value"
+    v-if="$vuetify.display.mdAndUp"
+    :model-value="modelValue"
     max-width="480"
     scrollable
-    @input="$emit('input', $event)"
+    @update:model-value="$emit('update:modelValue', $event)"
   >
     <div class="settings-dialog">
       <div class="settings-dialog__head">
         <span class="settings-dialog__title">{{ $t('copilot.settings.title') }}</span>
-        <v-btn icon small class="white--text" @click="$emit('input', false)">
-          <v-icon small>mdi-close</v-icon>
+        <v-btn icon size="small" class="white--text" @click="$emit('update:modelValue', false)">
+          <v-icon size="small">mdi-close</v-icon>
         </v-btn>
       </div>
       <div class="settings-dialog__body">
@@ -22,10 +22,10 @@
 
   <BottomSheet
     v-else
-    :value="value"
+    :model-value="modelValue"
     :title="$t('copilot.settings.title')"
     height="80%"
-    @input="$emit('input', $event)"
+    @update:model-value="$emit('update:modelValue', $event)"
   >
     <FeedSettingsContent @rerun="onReRunSetup" @reset="settings.reset" />
   </BottomSheet>
@@ -36,15 +36,15 @@ import BottomSheet from '@/sidepanel/components/BottomSheet.vue';
 import FeedSettingsContent from './FeedSettingsContent.vue';
 import { copilotFeedSettings } from '@/sidepanel/composables/useCopilotFeedSettings';
 
-defineProps<{ value: boolean }>();
-const emit = defineEmits<{ (e: 'input', v: boolean): void }>();
+defineProps<{ modelValue: boolean }>();
+const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>();
 
 const settings = copilotFeedSettings;
 
 function onReRunSetup() {
   // Flip onboarding off so FeedPage re-renders the wizard, then close the sheet.
   settings.resetOnboarding();
-  emit('input', false);
+  emit('update:modelValue', false);
 }
 </script>
 

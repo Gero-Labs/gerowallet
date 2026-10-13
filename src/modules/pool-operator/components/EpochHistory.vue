@@ -5,8 +5,8 @@
         <v-icon size="14" color="var(--g-text-1)" class="mr-1">mdi-chart-timeline-variant</v-icon>
         {{ $t('poolOperator.epochHistory') }}
       </div>
-      <v-btn text x-small class="refresh-btn" @click="fetchHistory" :loading="loading">
-        <v-icon x-small class="mr-1">mdi-refresh</v-icon>
+      <v-btn variant="text" size="x-small" class="refresh-btn" @click="fetchHistory" :loading="loading">
+        <v-icon size="x-small" class="mr-1">mdi-refresh</v-icon>
       </v-btn>
     </div>
 
@@ -22,17 +22,17 @@
 
     <!-- Data Table -->
     <v-data-table
-      v-else-if="history.length"
+      v-if="history.length"
       :headers="headers"
-      :items="paginatedItems"
-      :items-per-page="-1"
-      dense
+      :items="tableItems"
+      :items-per-page="perPage"
+      v-model:page="currentPage"
+      density="compact"
       class="transparent epoch-table"
-      sort-by="epoch"
-      :sort-desc="true"
+      :sort-by="[{ key: 'epoch', order: 'desc' }]"
       hide-default-footer
       :header-props="{ 'sort-icon': 'mdi-menu-up' }"
-      @click:row="selectEpoch"
+      @click:row="(_event, { item }) => selectEpoch(item)"
     >
       <!-- Pagination -->
       <template v-slot:body.append>
@@ -53,11 +53,11 @@
         <span class="num-value">{{ item.activeStake }}</span>
       </template>
       <template v-slot:item.blocks="{ item }">
-        <span class="block-count" :class="blockClass(item.luck)">{{ item.blocks }}</span>
+        <span class="block-count" :class="blockClass(Number(item.luck))">{{ item.blocks }}</span>
       </template>
       <template v-slot:item.luck="{ item }">
         <span v-if="item.luck === '--'" class="text-muted">--</span>
-        <span v-else class="luck-badge" :class="luckBadgeClass(item.luck)">{{ item.luck }}%</span>
+        <span v-else class="luck-badge" :class="luckBadgeClass(Number(item.luck))">{{ item.luck }}%</span>
       </template>
       <template v-slot:item.spoRewards="{ item }">
         <span class="num-value reward-spo">{{ item.spoRewards }}</span>
@@ -82,7 +82,7 @@
           <v-icon size="18" color="var(--g-accent)" class="mr-2">mdi-cube-outline</v-icon>
           {{ $t('poolOperator.epoch') }} {{ selectedEpoch?.epoch }} · {{ $t('poolOperator.blocks') }}
           <v-spacer />
-          <v-btn icon small @click="showBlockDetail = false"><v-icon small>mdi-close</v-icon></v-btn>
+          <v-btn icon size="small" @click="showBlockDetail = false"><v-icon size="small">mdi-close</v-icon></v-btn>
         </v-card-title>
         <v-card-text class="pt-3">
           <div v-if="blocksLoading" class="text-center py-4">
@@ -91,7 +91,7 @@
           <div v-else-if="epochBlocks.length">
             <div v-for="block in epochBlocks" :key="block.block_hash" class="block-item">
               <div class="block-slot">
-                <v-icon x-small color="var(--g-text-3)" class="mr-1">mdi-clock-outline</v-icon>
+                <v-icon size="x-small" color="var(--g-text-3)" class="mr-1">mdi-clock-outline</v-icon>
                 {{ $t('poolOperator.slot') }} {{ block.epoch_slot }}
               </div>
               <div class="block-info">
@@ -100,7 +100,7 @@
               </div>
               <div class="block-hash" @click="copyHash(block.block_hash)">
                 {{ block.block_hash.substring(0, 16) }}...
-                <v-icon x-small color="var(--g-text-3)">mdi-content-copy</v-icon>
+                <v-icon size="x-small" color="var(--g-text-3)">mdi-content-copy</v-icon>
               </div>
             </div>
           </div>
@@ -116,6 +116,7 @@
 <script setup lang="ts">
 import '@/shared/styles/compact-pagination.css';
 import { ref, computed, toRefs, onMounted, watch } from 'vue';
+import type { DataTableHeader } from 'vuetify';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { poolOperatorStore } from '@/stores/poolOperatorStore';
 import { walletStore } from '@/stores/walletStore';
@@ -133,10 +134,6 @@ const history = ref<PoolEpochHistory[]>([]);
 const currentPage = ref(1);
 const perPage = 10;
 const totalPages = computed(() => Math.ceil(tableItems.value.length / perPage));
-const paginatedItems = computed(() => {
-  const start = (currentPage.value - 1) * perPage;
-  return tableItems.value.slice(start, start + perPage);
-});
 
 const showBlockDetail = ref(false);
 const selectedEpoch = ref<{ epoch: number } | null>(null);
@@ -168,16 +165,16 @@ type RawPoolHistoryRow = Partial<PoolEpochHistory> & {
   epochRos?: number;
 };
 
-const headers = computed(() => [
-  { text: t('poolOperator.epoch'), value: 'epoch', sortable: true },
-  { text: t('poolOperator.activeStake'), value: 'activeStake', sortable: true, align: 'end' },
-  { text: t('poolOperator.blocksProduced'), value: 'blocks', sortable: true, align: 'end' },
-  { text: t('poolOperator.expected'), value: 'expected', sortable: true, align: 'end' },
-  { text: t('poolOperator.luck'), value: 'luck', sortable: true, align: 'end' },
-  { text: t('poolOperator.spoRewards'), value: 'spoRewards', sortable: true, align: 'end' },
-  { text: t('poolOperator.delegatorRewards'), value: 'delegRewards', sortable: true, align: 'end' },
-  { text: t('poolOperator.delegators'), value: 'delegators', sortable: true, align: 'end' },
-  { text: t('poolOperator.ros'), value: 'ros', sortable: true, align: 'end' },
+const headers = computed<DataTableHeader[]>(() => [
+  { title: t('poolOperator.epoch'), key: 'epoch', sortable: true },
+  { title: t('poolOperator.activeStake'), key: 'activeStake', sortable: true, align: 'end' },
+  { title: t('poolOperator.blocksProduced'), key: 'blocks', sortable: true, align: 'end' },
+  { title: t('poolOperator.expected'), key: 'expected', sortable: true, align: 'end' },
+  { title: t('poolOperator.luck'), key: 'luck', sortable: true, align: 'end' },
+  { title: t('poolOperator.spoRewards'), key: 'spoRewards', sortable: true, align: 'end' },
+  { title: t('poolOperator.delegatorRewards'), key: 'delegRewards', sortable: true, align: 'end' },
+  { title: t('poolOperator.delegators'), key: 'delegators', sortable: true, align: 'end' },
+  { title: t('poolOperator.ros'), key: 'ros', sortable: true, align: 'end' },
 ]);
 
 const tableItems = computed(() => {
@@ -253,7 +250,7 @@ const chartOptions = computed(() => {
       spacingTop: 10,
       spacingBottom: 5,
     },
-    title: { text: undefined },
+    title: { title: undefined },
     credits: { enabled: false },
     legend: {
       enabled: true,
@@ -268,27 +265,27 @@ const chartOptions = computed(() => {
     },
     yAxis: [
       { // 0: Blocks
-        title: { text: undefined },
+        title: { title: undefined },
         labels: { style: { color: 'rgba(45,240,247,0.6)', fontSize: '9px' } },
         gridLineColor: 'rgba(255,255,255,0.04)',
         min: 0,
       },
       { // 1: Stake (ADA)
-        title: { text: undefined },
+        title: { title: undefined },
         labels: { style: { color: 'rgba(253,176,34,0.6)', fontSize: '9px' }, formatter(this: AxisLabelCtx) { return formatAda(String(this.value * 1_000_000)); } },
         opposite: true,
         gridLineWidth: 0,
         min: 0,
       },
       { // 2: Delegators
-        title: { text: undefined },
+        title: { title: undefined },
         labels: { enabled: false },
         gridLineWidth: 0,
         min: 0,
         visible: false,
       },
       { // 3: Rewards (ADA)
-        title: { text: undefined },
+        title: { title: undefined },
         labels: { enabled: false },
         gridLineWidth: 0,
         min: 0,
@@ -485,7 +482,7 @@ watch(poolId, (id) => { if (id) fetchHistory(); });
 }
 
 /* Data table — matches MarketTokenTable style */
-.epoch-table >>> .v-data-table__wrapper {
+.epoch-table >>> .v-table__wrapper {
   overflow-x: auto;
 }
 

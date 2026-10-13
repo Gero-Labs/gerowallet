@@ -1,5 +1,5 @@
 <template>
-  <v-tab-item>
+  <v-window-item>
     <v-data-table
       v-if="contacts"
       :headers="headers"
@@ -7,7 +7,7 @@
       class="transparent"
       :header-props="{ 'sort-icon': 'mdi-menu-up' }"
       hide-default-footer
-      disable-pagination
+      :items-per-page="-1"
     >
       <template v-slot:top>
         <v-toolbar flat class="transparent my-2">
@@ -27,9 +27,9 @@
               <v-alert
                 v-if="handleWarning.show"
                 type="warning"
-                dense
-                outlined
-                border="left"
+                density="compact"
+                variant="outlined"
+                border="start"
                 style="font-size: 12px"
                 class="mb-2"
               >
@@ -40,19 +40,19 @@
                 <div style="font-size: 11px; opacity: 0.8">
                   {{ $t('wallet.contactCurrentAddress') }}: {{ filters.shortenStringWithEllipsis(handleWarning.newAddress, 20) }}
                 </div>
-                <v-btn x-small color="warning" class="mt-2" @click="applyFreshAddress">
+                <v-btn size="x-small" color="warning" class="mt-2" @click="applyFreshAddress">
                   {{ $t('wallet.contactUpdateAddress') }}
                 </v-btn>
               </v-alert>
               <div style="display: flex; align-items: flex-start; gap: 12px">
                 <v-avatar v-if="handleImg || resolving" size="106" rounded style="border-radius: 8px; border: 1px #444 solid; flex-shrink: 0">
-                  <v-img v-if="handleImg" :src="handleImg" contain />
+                  <v-img v-if="handleImg" :src="handleImg"  />
                   <v-progress-circular v-else indeterminate color="primary" />
                 </v-avatar>
                 <div style="flex: 1; min-width: 0">
                   <v-text-field
-                    outlined
-                    dense
+                    variant="outlined"
+                    density="compact"
                     v-model="editedItem.name"
                     :label="$t('common.name')"
                     :maxlength="40"
@@ -60,8 +60,8 @@
                     :rules="[rules.required(), rules.maxCharacters(40), rules.minCharacters(3)]"
                   ></v-text-field>
                   <v-text-field
-                    outlined
-                    dense
+                    variant="outlined"
+                    density="compact"
                     v-model="editedItem.address"
                     :label="$t('common.address')"
                     :rules="[rules.recipientRules(loggedWallet?.chain, loggedWallet?.network)]"
@@ -74,7 +74,7 @@
               <v-spacer></v-spacer>
               <v-btn
                 color="primary"
-                text
+                variant="text"
                 @click="close"
               >
                 {{ $t('common.cancel') }}
@@ -94,7 +94,7 @@
             </div>
             <v-card-actions class="px-3">
               <v-spacer></v-spacer>
-              <v-btn color="primary" text @click="closeDelete">{{ $t('common.cancel') }}</v-btn>
+              <v-btn color="primary" variant="text" @click="closeDelete">{{ $t('common.cancel') }}</v-btn>
               <v-btn color="primary" @click="deleteItemConfirm">{{ $t('common.yes') }}</v-btn>
             </v-card-actions>
           </BaseDialog>
@@ -105,23 +105,24 @@
       </template>
       <template v-slot:[`item.actions`]="{ item }">
         <v-icon
-          small
+          size="small"
           class="mr-2"
           @click="editItem(item)"
         >
           mdi-pencil
         </v-icon>
         <v-icon
-          small
+          size="small"
           @click="deleteItem(item)"
         >
           mdi-delete
         </v-icon>
       </template>
     </v-data-table>
-  </v-tab-item>
+  </v-window-item>
 </template>
 <script setup lang="ts">
+import type { DataTableHeader } from 'vuetify';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, watch, nextTick, toRefs } from 'vue';
 import rules from '@/utils/rules';
@@ -146,10 +147,10 @@ const dialog = ref<boolean>(false);
 const dialogDelete = ref<boolean>(false);
 const editedAddress = ref<string | null>(null);
 
-const headers = ref([
-  { text: t('common.name'), value: 'name', width: '20%' },
-  { text: t('common.address'), value: 'address', width: '75%' },
-  { text: t('common.actions'), value: 'actions', sortable: false, width: '5%' },
+const headers = ref<DataTableHeader[]>([
+  { title: t('common.name'), key: 'name', width: '20%' },
+  { title: t('common.address'), key: 'address', width: '75%' },
+  { title: t('common.actions'), key: 'actions', sortable: false, width: '5%' },
 ]);
 
 const editedItem = ref<Contact>({

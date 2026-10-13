@@ -1,4 +1,4 @@
-import Vue from 'vue';
+import { reactive } from 'vue';
 import { Cardano } from '@cardano-sdk/core';
 import { getContextType } from '@/utils/storageSync';
 import { StorePersister } from '@/utils/storePersistence';
@@ -53,7 +53,7 @@ export interface NetworkStore {
 }
 
 // Create observable state
-export const networkStore = Vue.observable<NetworkStore>({
+export const networkStore = reactive<NetworkStore>({
   assets: {},
   epochParams: null,
   tip: null,

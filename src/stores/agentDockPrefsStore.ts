@@ -1,3 +1,4 @@
+import { plainStoreSnapshot } from '@/stores/serialization';
 // src/stores/agentDockPrefsStore.ts
 // One persisted user preference: whether the Gero Companion dock (the floating
 // support/assistant FAB) is hidden. It is a deliberate user choice, not a
@@ -5,12 +6,12 @@
 // whether the user wants to see it, because the FAB is fixed-positioned and can
 // sit over content the user is trying to read.
 //
-// Mirrors copilotPrefsStore's lightweight pattern: a Vue.observable +
+// Mirrors copilotPrefsStore's lightweight pattern: a reactive +
 // chrome.storage.local with a load-on-init read and a storage.onChanged
 // listener, so the dashboard and the Settings toggle stay in sync while both
 // are on screen. No debounce (a single boolean flipped by hand, not a stream of
 // writes) and no background broadcast (UI-mutated only).
-import Vue from 'vue';
+import { reactive } from 'vue';
 
 const STORE_KEY = 'agentDockPrefs';
 
@@ -24,7 +25,7 @@ export interface AgentDockPrefs {
   hydrated: boolean;
 }
 
-export const agentDockPrefsState = Vue.observable<AgentDockPrefs>({
+export const agentDockPrefsState = reactive<AgentDockPrefs>({
   hidden: false,
   hydrated: false,
 });
@@ -62,7 +63,7 @@ export const agentDockPrefsStore = {
   setHidden(hidden: boolean): void {
     if (agentDockPrefsState.hidden === hidden) return;
     agentDockPrefsState.hidden = hidden;
-    if (hasChromeStorage) chrome.storage.local.set({ [STORE_KEY]: { hidden } });
+    if (hasChromeStorage) chrome.storage.local.set(plainStoreSnapshot({ [STORE_KEY]: { hidden } }));
   },
 };
 

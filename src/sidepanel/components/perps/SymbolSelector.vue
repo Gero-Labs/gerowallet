@@ -2,20 +2,20 @@
   <v-menu
     v-model="open"
     :close-on-content-click="false"
-    offset-y
+
     nudge-bottom="4"
     content-class="symbol-selector-menu"
     min-width="260"
     max-height="360"
   >
-    <template #activator="{ on, attrs }">
+    <template #activator="{ props: activatorProps }">
       <button
         class="symbol-selector-btn"
-        v-bind="attrs"
-        v-on="on"
+        v-bind="activatorProps"
+
         :aria-label="$t('perpetuals.selectMarket')"
       >
-        <span class="symbol-selector-btn__name">{{ value }}</span>
+        <span class="symbol-selector-btn__name">{{ modelValue }}</span>
         <span
           class="symbol-selector-btn__badge"
           :class="currentChangeClass"
@@ -32,10 +32,10 @@
       </div>
       <v-text-field
         v-model="search"
-        dense
+        density="compact"
         hide-details
-        solo
-        flat
+        variant="solo"
+
         clearable
         prepend-inner-icon="mdi-magnify"
         class="symbol-selector-search mx-2 mb-1"
@@ -43,15 +43,15 @@
         autofocus
       />
       <v-divider />
-      <v-list dense class="symbol-selector-list pa-0">
+      <v-list density="compact" class="symbol-selector-list pa-0">
         <v-list-item
           v-for="sym in filteredSymbols"
           :key="sym.symbol"
-          :class="{ 'symbol-selector-list__item--active': sym.symbol === value }"
+          :class="{ 'symbol-selector-list__item--active': sym.symbol === modelValue }"
           class="symbol-selector-list__item"
           @click="select(sym.symbol)"
         >
-          <v-list-item-content>
+          <div class="g-list-content">
             <div class="d-flex align-center justify-space-between">
               <span class="symbol-selector-list__symbol text-body-2 font-weight-medium">
                 {{ sym.symbol }}
@@ -68,12 +68,12 @@
                 </span>
               </div>
             </div>
-          </v-list-item-content>
+          </div>
         </v-list-item>
         <v-list-item v-if="filteredSymbols.length === 0" disabled>
-          <v-list-item-content>
+          <div class="g-list-content">
             <span class="text-caption text--secondary">—</span>
-          </v-list-item-content>
+          </div>
         </v-list-item>
       </v-list>
     </div>
@@ -89,11 +89,11 @@ import { useStrikeMarket } from '@/modules/market/composables/useStrikeMarket';
 // ---------------------------------------------------------------------------
 
 const props = defineProps<{
-  value: string;
+  modelValue: string;
 }>();
 
 const emit = defineEmits<{
-  (e: 'input', value: string): void;
+  (e: 'update:modelValue', value: string): void;
 }>();
 
 // ---------------------------------------------------------------------------
@@ -119,7 +119,7 @@ const filteredSymbols = computed(() => {
   return symbols.value.filter((s) => s.symbol.toLowerCase().includes(q));
 });
 
-const currentTicker = computed(() => getTicker(props.value));
+const currentTicker = computed(() => getTicker(props.modelValue));
 
 const currentChangeDisplay = computed(() => {
   return formatChange(currentTicker.value?.priceChangePercent);
@@ -159,7 +159,7 @@ function changeClass(raw: string | undefined): string {
 }
 
 function select(symbol: string) {
-  emit('input', symbol);
+  emit('update:modelValue', symbol);
   open.value = false;
   search.value = '';
 }

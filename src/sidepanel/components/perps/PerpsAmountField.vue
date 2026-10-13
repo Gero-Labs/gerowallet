@@ -2,7 +2,7 @@
   <div class="af" :class="{ 'af--focus': focused }" :style="{ '--af-accent': accent }">
     <input
       ref="inputEl"
-      :value="value"
+      :value="modelValue"
       inputmode="decimal"
       type="text"
       spellcheck="false"
@@ -33,7 +33,7 @@
 import { ref } from 'vue';
 
 withDefaults(defineProps<{
-  value: string;
+  modelValue: string;
   currency: string;
   placeholder?: string;
   accent?: string;
@@ -45,7 +45,7 @@ withDefaults(defineProps<{
 });
 
 const emit = defineEmits<{
-  (e: 'input', value: string): void;
+  (e: 'update:modelValue', value: string): void;
   (e: 'max'): void;
   (e: 'submit'): void;
 }>();
@@ -61,7 +61,7 @@ function onInput(e: Event): void {
   if (dot !== -1) {
     cleaned = cleaned.slice(0, dot + 1) + cleaned.slice(dot + 1).replace(/\./g, '');
   }
-  emit('input', cleaned);
+  emit('update:modelValue', cleaned);
 }
 
 function focus(): void {

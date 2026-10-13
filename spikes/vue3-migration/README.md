@@ -1,5 +1,11 @@
 # Vue 3 migration pilot
 
+This is the frozen V01 experiment and Vue 2 baseline record. The production
+migration now lives on `migration/vue3-vuetify4`; see
+[implementation and verification](IMPLEMENTATION.md) for its scope and results.
+Statements below about unchanged production dependencies describe the V01
+checkpoint, not the current integration branch.
+
 This isolated extension supports [V01](https://github.com/Gero-Labs/gerowallet/issues/1283)
 of [the migration epic](https://github.com/Gero-Labs/gerowallet/issues/1282).
 It proves selected framework contracts before the production wallet changes.

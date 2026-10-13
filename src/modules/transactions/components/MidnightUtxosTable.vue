@@ -13,9 +13,9 @@
       <div class="mn-utxos-table__toolbar">
         <v-text-field
           v-model="search"
-          dense
-          flat
-          solo
+          density="compact"
+
+          variant="solo"
           hide-details
           clearable
           :placeholder="$t('common.search')"
@@ -25,17 +25,17 @@
 
         <v-btn
           icon
-          small
+          size="small"
           :aria-label="$t('common.sortBy')"
           @click="sortDesc = !sortDesc"
         >
-          <v-icon small>{{ sortDesc ? 'mdi-sort-descending' : 'mdi-sort-ascending' }}</v-icon>
+          <v-icon size="small">{{ sortDesc ? 'mdi-sort-descending' : 'mdi-sort-ascending' }}</v-icon>
         </v-btn>
 
-        <v-select
+        <v-select item-title="text"
           v-model="sortBy"
           :items="sortOptions"
-          dense
+          density="compact"
           hide-details
           attach
           class="mn-utxos-table__sort-select"
@@ -66,9 +66,9 @@
           </div>
           <div class="mn-utxo-row__amount">
             <span>{{ row.amountFormatted }}</span>
-            <v-tooltip v-if="row.isUnscaledAmount" top content-class="custom-tooltip">
-              <template v-slot:activator="{ on, attrs }">
-                <v-icon x-small color="warning" v-bind="attrs" v-on="on">mdi-help-circle-outline</v-icon>
+            <v-tooltip location="top" v-if="row.isUnscaledAmount"  content-class="custom-tooltip">
+              <template v-slot:activator="{ props: activatorProps }">
+                <v-icon size="x-small" color="warning" v-bind="activatorProps" >mdi-help-circle-outline</v-icon>
               </template>
               {{ $t('midnight.rawBalanceNotice') }}
             </v-tooltip>

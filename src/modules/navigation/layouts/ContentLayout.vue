@@ -29,9 +29,9 @@
             }"
           ></div>
 
-          <v-layout :align-start="true">
+          <div class="d-flex align-start">
             <NavigationDrawer v-model="drawer" />
-            <v-sheet data-help-scroll ref="scrollContainer" style="height: 100vh; width: 100%; overflow-y: scroll; background-color: transparent" @scroll.native="onSheetScroll">
+            <v-sheet data-help-scroll ref="scrollContainer" style="height: 100vh; width: 100%; overflow-y: scroll; background-color: transparent" @scroll="onSheetScroll">
               <v-row no-gutters v-if="isBeta">
                 <v-col cols="12">
                   <v-alert color="warning" style="color: black" class="pa-2 px-3 text-center">
@@ -46,19 +46,18 @@
                   </v-alert>
                 </v-col>
               </v-row>
-              <v-layout column class="no-gutters px-4 transparent" :justify-start="true">
-                <v-app-bar ref="navBarRef" flat color="transparent" style="max-height: 55px">
-                  <v-app-bar-nav-icon v-if="$vuetify.breakpoint.mobile" @click.stop="drawer = !drawer" />
+              <div class="d-flex flex-column justify-start no-gutters px-4 bg-transparent">
+                <v-toolbar ref="navBarRef" flat color="transparent" style="max-height: 55px">
+                  <v-app-bar-nav-icon v-if="$vuetify.display.mobile" @click.stop="drawer = !drawer" />
 
                   <!-- Global Search Field -->
-                  <v-tooltip bottom :disabled="!compactNav" content-class="custom-tooltip">
-                    <template v-slot:activator="{ on, attrs }">
+                  <v-tooltip location="bottom" :disabled="!compactNav" content-class="custom-tooltip">
+                    <template v-slot:activator="{ props: activatorProps }">
                       <div
-                        ref="searchFieldRef"
                         :class="['nav-search-field', { 'nav-search-compact': compactNav }]"
                         @click="openGlobalSearch"
-                        v-bind="attrs"
-                        v-on="on"
+                        v-bind="activatorProps"
+
                       >
                         <v-icon size="16" color="info" class="nav-search-icon">mdi-magnify</v-icon>
                         <template v-if="!compactNav">
@@ -77,7 +76,7 @@
                   <v-spacer />
 
                   <v-tooltip
-                    bottom
+                    location="bottom"
                     :content-class="
                       (isMidnight ? isMidnightConnected : connected)
                         ? 'network-tooltip'
@@ -86,15 +85,15 @@
                         : 'network-tooltip offline'
                     "
                   >
-                    <template v-slot:activator="{ on, attrs }">
+                    <template v-slot:activator="{ props: activatorProps }">
                       <div
                         style="display: flex; align-items: center; gap: 4px"
                         :style="{ minWidth: (compactNav || isMidnight || isBitcoin) ? '20px' : '60px' }"
-                        v-bind="attrs"
-                        v-on="on"
+                        v-bind="activatorProps"
+
                       >
                         <v-icon
-                          small
+                          size="small"
                           :color="(isMidnight ? isMidnightConnected : connected) ? primaryColor : (isMidnight ? isMidnightConnecting : connecting) ? 'warning' : 'error'"
                           :class="{ 'sync-animation': (isMidnight ? isMidnightConnected : isSyncing), 'connecting-animation': (isMidnight ? isMidnightConnecting : connecting) }"
                         >
@@ -110,9 +109,9 @@
                           class="epoch-progress-liquid-glass"
                           height="8"
                           :buffer-value="isMidnight ? 100 : epochSlotPercentage"
-                          :value="isMidnight ? 100 : epochSlotPercentage"
+                          :model-value="isMidnight ? 100 : epochSlotPercentage"
                           :color="(isMidnight ? isMidnightConnected : connected) ? primaryColor : (isMidnight ? isMidnightConnecting : connecting) ? 'warning' : 'error'"
-                          background-color="transparent"
+                          bg-color="transparent"
                           style="width: 50px"
                           striped
                           :stream="isMidnight ? isMidnightConnected : connected"
@@ -132,7 +131,7 @@
                         <div><strong>Block:</strong> {{ btcTipHeight ?? 'N/A' }}</div>
                       </template>
                       <template v-else>
-                        <div><strong>{{ t('navigation.epoch') }}:</strong> {{ tip?.epoch || 'N/A' }}</div>
+                        <div><strong>{{ t('navigation.epoch') }}:</strong> {{ tip && 'epoch' in tip ? tip.epoch : 'N/A' }}</div>
                         <div><strong>{{ t('navigation.progress') }}:</strong> {{ epochSlotPercentage.toFixed(1) }}%</div>
                       </template>
                       <div>
@@ -150,14 +149,14 @@
                   <!-- Notifications Menu -->
                   <v-menu
                     v-model="notificationsMenu"
-                    offset-y
-                    nudge-left="75"
+                    location="bottom end"
+                    :offset="[0, -75]"
                     :close-on-content-click="false"
                     transition="none"
                   >
-                    <template v-slot:activator="{ on, attrs }">
-                      <v-btn class="ml-4 toolbar-icon-btn" icon v-bind="attrs" v-on="on">
-                        <v-badge :value="kesWarningVisible || inboxUnread > 0" :content="inboxUnread > 0 ? String(inboxUnread) : undefined" :dot="inboxUnread === 0" :color="inboxUnread > 0 ? 'var(--g-accent)' : 'error'" overlap>
+                    <template v-slot:activator="{ props: activatorProps }">
+                      <v-btn class="ml-4 toolbar-icon-btn" icon v-bind="activatorProps">
+                        <v-badge :model-value="kesWarningVisible || inboxUnread > 0" :content="inboxUnread > 0 ? String(inboxUnread) : undefined" :dot="inboxUnread === 0" :color="inboxUnread > 0 ? 'var(--g-accent)' : 'error'">
                           <v-icon size="20">mdi-bell-outline</v-icon>
                         </v-badge>
                       </v-btn>
@@ -172,18 +171,18 @@
                     />
                   </v-menu>
 
-                  <v-tooltip bottom content-class="custom-tooltip">
-                    <template v-slot:activator="{ on, attrs }">
-                      <v-btn icon class="ml-3 toolbar-icon-btn" v-bind="attrs" v-on="on" @click="toggleHideBalances()">
+                  <v-tooltip location="bottom" content-class="custom-tooltip">
+                    <template v-slot:activator="{ props: activatorProps }">
+                      <v-btn icon class="ml-3 toolbar-icon-btn" v-bind="activatorProps" @click="toggleHideBalances()">
                         <v-icon size="20">{{ hideBalances ? 'mdi-eye-off-outline' : 'mdi-eye-outline' }}</v-icon>
                       </v-btn>
                     </template>
                     <span>{{ hideBalances ? t('dashboard.showBalances') : t('dashboard.hideBalances') }}</span>
                   </v-tooltip>
 
-                  <v-tooltip bottom content-class="custom-tooltip">
-                    <template v-slot:activator="{ on }">
-                      <v-btn icon class="ml-3 toolbar-icon-btn" v-on="on" @click="openMiniMode">
+                  <v-tooltip location="bottom" content-class="custom-tooltip">
+                    <template v-slot:activator="{ props: activatorProps }">
+                      <v-btn icon class="ml-3 toolbar-icon-btn" v-bind="activatorProps" @click="openMiniMode">
                         <v-avatar size="23">
                           <img :src="assets.miniModeSvg" :alt="t('miniGero.miniMode')" />
                         </v-avatar>
@@ -202,50 +201,48 @@
                       <img :src="assets.settingsSvg" :alt="t('common.settings')" />
                     </v-avatar>
                   </v-btn>
-                </v-app-bar>
+                </v-toolbar>
                 <v-row no-gutters v-if="shouldBackup && !isWalletEmpty">
                   <v-col cols="12">
                     <v-alert
                       type="error"
                       prominent
-                      dismissible
+                      closable
                       rounded
-                      outlined
+                      variant="outlined"
                       color="error"
                       class="py-2 px-4 ma-2"
                       style="overflow: hidden"
                     >
                       <v-list-item>
-                        <v-list-item-content>
+                        <div>
                           <v-list-item-title style="white-space: break-spaces">
                             {{ $t('settings.backupYourSeedPhrase') }}
                           </v-list-item-title>
                           <v-list-item-subtitle style="white-space: break-spaces">
                             <span>{{ $t('settings.backupSeedPhraseWarning') }}</span>
                           </v-list-item-subtitle>
-                        </v-list-item-content>
-                        <v-list-item-action>
-                          <v-btn depressed color="error" @click="backupWalletDialog = true">{{ $t('common.backup') }}</v-btn>
-                        </v-list-item-action>
+                        </div>
+                        <template #append>
+                          <v-btn variant="flat" color="error" @click="backupWalletDialog = true">{{ $t('common.backup') }}</v-btn>
+                        </template>
                       </v-list-item>
                     </v-alert>
                   </v-col>
                 </v-row>
                 <SettingsDialog :isOpen="currentDialog === dialogs.SETTINGS" :initial-tab="settingsInitialTab" @close="closeDialog(); settingsInitialTab = undefined" />
                 <v-sheet class="transparent pt-2">
-                  <keep-alive>
-                    <slot name="help-content">
-                      <router-view @open-backup-dialog="handleOpenBackupDialog" />
-                    </slot>
-                  </keep-alive>
+                  <slot name="help-content">
+                    <RouteContent @open-backup-dialog="handleOpenBackupDialog" />
+                  </slot>
                 </v-sheet>
-              </v-layout>
+              </div>
               <Player
                 v-if="currentPage.name !== 'mediaPlayer' && musicPlaylist?.length > 0 && context.shown"
                 style="position: sticky; bottom: 0"
               />
             </v-sheet>
-          </v-layout>
+          </div>
         </v-container>
       </v-main>
 
@@ -281,6 +278,7 @@
 
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
+import RouteContent from '../RouteContent.vue';
 import { computed, getCurrentInstance, onBeforeUnmount, onMounted, ref, toRefs, watch } from 'vue';
 import NavigationDrawer from '../components/NavigationDrawer.vue';
 import SettingsDialog from '@/modules/dashboard/dialogs/SettingsDialog.vue';
@@ -372,7 +370,6 @@ const currentDialog = ref<string | null>(null);
 // Compact nav mode — collapse labels to icons when toolbar is narrow
 const compactNav = ref(false);
 const navBarRef = ref(null);
-const searchFieldRef = ref<HTMLElement | null>(null);
 let navBarObserver: ResizeObserver | null = null;
 const dialogs = { SETTINGS: 'SETTINGS' };
 const backupWalletDialog = ref(false);
@@ -495,7 +492,7 @@ function closeWelcomeDialog() {
 function closeChangeLogDialog() {
   changeLog.enabled = false;
   if (Object.keys(vmProxy.$route.query)?.length > 0) {
-    vmProxy.$router.replace({ query: null });
+    vmProxy.$router.replace({ query: {} });
   }
 }
 function closeDialog() {
@@ -627,8 +624,8 @@ const openSettingsFromFlag = (flag: unknown) => {
   chrome.storage.local.remove('openSettingsOnLoad');
 };
 const handleStorageChange = (changes: { [key: string]: chrome.storage.StorageChange }, area: string) => {
-  if (area === 'local' && changes.openSettingsOnLoad?.newValue) {
-    openSettingsFromFlag(changes.openSettingsOnLoad.newValue);
+  if (area === 'local' && changes['openSettingsOnLoad']?.newValue) {
+    openSettingsFromFlag(changes['openSettingsOnLoad'].newValue);
   }
 };
 chrome.storage.onChanged.addListener(handleStorageChange);
@@ -644,7 +641,7 @@ onMounted(async () => {
   // registered, so check the flag once on mount. The already-open-tab path
   // is handled by handleStorageChange, which removes the flag before mount.
   chrome.storage.local.get('openSettingsOnLoad', (result) => {
-    if (result.openSettingsOnLoad) openSettingsFromFlag(result.openSettingsOnLoad);
+    if (result['openSettingsOnLoad']) openSettingsFromFlag(result['openSettingsOnLoad']);
   });
 
   // Chain colors are applied by useChainAccent (bootstrapped in options/App.vue
@@ -1034,4 +1031,3 @@ div.v-toolbar__content {
 
 
 </style>
-

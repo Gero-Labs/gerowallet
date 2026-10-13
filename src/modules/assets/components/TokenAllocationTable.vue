@@ -1,13 +1,13 @@
 <template>
-  <v-card outlined class="no-gutters fill-height liquid-glass" :loading="loadingTxs">
+  <v-card variant="outlined" class="no-gutters fill-height liquid-glass" :loading="loadingTxs">
     <v-card-title class="token-allocation-title" ref="headerRef">
       {{ $t('assets.tokenHoldings') }}
       <!-- Top-level search box -->
       <v-text-field
         v-model="searchTerm"
-        dense
-        flat
-        solo
+        density="compact"
+
+        variant="solo"
         hide-details
         :placeholder="currentTab === 0 ? $t('assets.searchAssets') : $t('assets.searchCollections')"
         prepend-inner-icon="mdi-magnify"
@@ -20,13 +20,13 @@
         v-if="loggedWallet?.chain === Blockchain.CARDANO && loggedWallet?.network === Network.MAINNET"
         v-model="filtersMenu"
         :close-on-content-click="false"
-        offset-y
+
         eager
         transition="none"
       >
-        <template v-slot:activator="{ on, attrs }">
+        <template v-slot:activator="{ props: activatorProps }">
           <v-badge
-            :value="filtersAmount"
+            :model-value="filtersAmount > 0"
             :content="filtersAmount"
             bordered
             color="primary"
@@ -35,9 +35,9 @@
           >
             <v-btn
               icon
-              plain
-              v-bind="attrs"
-              v-on="on"
+              variant="plain"
+              v-bind="activatorProps"
+
             >
               <v-icon>
                 mdi-filter
@@ -45,51 +45,51 @@
             </v-btn>
           </v-badge>
         </template>
-        <v-card outlined class="liquid-glass-dialog" style="border: 1px solid rgba(255, 255, 255, 0.15) !important;">
+        <v-card variant="outlined" class="liquid-glass-dialog" style="border: 1px solid rgba(255, 255, 255, 0.15) !important;">
           <v-card-text class="pa-0">
             <div class="filter-header px-3 py-2" style="background-color: rgba(255, 255, 255, 0.05); border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
               <div class="text-caption" style="color: #00c7f3; font-weight: 600;">
                 {{ currentTab === 0 ? $t('assets.assetsFilters') : $t('assets.collectiblesFilters') }}
               </div>
             </div>
-            <v-list dense class="transparent">
+            <v-list density="compact" class="transparent">
               <v-list-item v-if="loggedWallet?.chain === Blockchain.CARDANO && loggedWallet?.network === Network.MAINNET && currentTab === 0">
-                <v-list-item-action>
-                  <v-switch v-model="hideUnverified" inset dense class="mr-5 mt-0" hide-details/>
-                </v-list-item-action>
+                <div class="g-list-action">
+                  <v-switch v-model="hideUnverified" inset density="compact" class="mr-5 mt-0" hide-details/>
+                </div>
                 <v-list-item-title>
                   {{ $t('assets.hideUnverifiedTokens') }}
                 </v-list-item-title>
               </v-list-item>
               <v-list-item>
-                <v-list-item-action>
-                  <v-switch v-model="hideScam" inset dense class="mr-5 mt-0" hide-details v-if="loggedWallet?.chain === Blockchain.CARDANO && loggedWallet?.network === Network.MAINNET && currentTab === 0"/>
-                  <v-switch v-model="hideScam" inset dense class="mr-5 mt-0" hide-details v-if="currentTab === 1"/>
-                </v-list-item-action>
+                <div class="g-list-action">
+                  <v-switch v-model="hideScam" inset density="compact" class="mr-5 mt-0" hide-details v-if="loggedWallet?.chain === Blockchain.CARDANO && loggedWallet?.network === Network.MAINNET && currentTab === 0"/>
+                  <v-switch v-model="hideScam" inset density="compact" class="mr-5 mt-0" hide-details v-if="currentTab === 1"/>
+                </div>
                 <v-list-item-title>
                   {{ currentTab === 0 ? $t('assets.hideScamTokens') : $t('assets.hideScamCollectibles') }}
                 </v-list-item-title>
               </v-list-item>
               <v-list-item v-if="currentTab === 1">
-                <v-list-item-content>
+                <div class="g-list-content">
                   <v-list-item-title>{{ $t('assets.sortBy') }}</v-list-item-title>
-                  <v-select
+                  <v-select item-title="text"
                     v-model="collectiblesSortBy"
                     :items="collectiblesSortOptions"
-                    dense
-                    outlined
+                    density="compact"
+                    variant="outlined"
                     hide-details
                     style="margin-top: 8px; max-width: 158px;"
                     class="sort-select-small"
                   ></v-select>
-                </v-list-item-content>
+                </div>
               </v-list-item>
             </v-list>
             <v-divider></v-divider>
           </v-card-text>
           <v-card-actions class="justify-center">
-            <v-btn block small color="error" :disabled="filtersAmount === 0" @click="clearFilters">
-              <v-icon small class="pr-1">
+            <v-btn block size="small" color="error" :disabled="filtersAmount === 0" @click="clearFilters">
+              <v-icon size="small" class="pr-1">
                 mdi-filter-remove
               </v-icon>
               {{ $t('common.clearFilters') }}
@@ -97,13 +97,13 @@
           </v-card-actions>
         </v-card>
       </v-menu>
-      <v-tabs class="ml-1 responsive-tabs" @change="handleSwitchTab" height="30" style="flex: 0 1 auto;width: unset;border-radius: 10px" background-color="transparent">
-        <v-tab class="responsive-tab">
+      <v-tabs :model-value="currentTab" class="ml-1 responsive-tabs" @update:model-value="handleSwitchTab" height="30" style="flex: 0 1 auto;width: unset;border-radius: 10px" bg-color="transparent">
+        <v-tab :value="0" class="responsive-tab">
           <v-icon class="tab-icon" :class="{ 'd-none': !useIconMode }">mdi-chart-line</v-icon>
           <span class="tab-text" :class="{ 'd-none': useIconMode }">{{ $t('assets.assets') }}</span>
           <span class="tab-count" style="color: white">&nbsp;{{ `(${tokensCount})` }}</span>
         </v-tab>
-        <v-tab class="responsive-tab" :disabled="collectiblesLength === 0">
+        <v-tab :value="1" class="responsive-tab" :disabled="collectiblesLength === 0">
           <v-icon class="tab-icon" :class="{ 'd-none': !useIconMode }">mdi-image-multiple</v-icon>
           <span class="tab-text" :class="{ 'd-none': useIconMode }">{{ $t('assets.collectibles') }}</span>
           <span class="tab-count" style="color: white">&nbsp;{{`(${collectiblesLength})`}}</span>
@@ -111,8 +111,8 @@
       </v-tabs>
     </v-card-title>
     <v-card-text class="pa-0">
-      <v-tabs-items v-model="currentTab" class="transparent">
-        <v-tab-item>
+      <v-window v-model="currentTab" class="transparent">
+        <v-window-item :value="0">
           <TokensTab
             :sort-options="sortOptions"
             @update:sort-options="sortOptions = $event"
@@ -121,16 +121,16 @@
             :search-term="currentTab === 0 ? searchTerm : ''"
             :container-height="sharedContainerHeight"
           />
-        </v-tab-item>
-        <v-tab-item>
+        </v-window-item>
+        <v-window-item :value="1">
           <CollectiblesTab
             :hide-scam="hideScam"
             :search-term="currentTab === 1 ? searchTerm : ''"
             :sort-by="collectiblesSortBy"
             :container-height="sharedContainerHeight"
           />
-        </v-tab-item>
-      </v-tabs-items>
+        </v-window-item>
+      </v-window>
     </v-card-text>
   </v-card>
 </template>

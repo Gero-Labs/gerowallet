@@ -88,12 +88,12 @@
   --g-ease: cubic-bezier(0.2, 0, 0, 1);
   --g-ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
 
-  /* z ladder: Vuetify dialogs/menus keep their internal ~202 stack;
+  /* z ladder: Vuetify dialogs/menus keep their internal 2000+ stack;
      our sheets sit at 100 so a v-dialog opened from a sheet renders above it */
   --g-z-sticky: 10;
   --g-z-dock: 90;
   --g-z-sheet: 100;
-  --g-z-toast: 1100;
+  --g-z-toast: 3100; /* Above Vuetify's dialogs, whose stack starts at 2000. */
 
   /* Shadows: ONLY for true overlays */
   --g-shadow-sheet: 0 24px 64px rgba(0, 0, 0, 0.55);

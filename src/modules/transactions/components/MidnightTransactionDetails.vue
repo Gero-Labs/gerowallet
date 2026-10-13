@@ -73,9 +73,9 @@
         {{ $t('transactions.amount') }}:
         <span class="mn-tx-details__amount ml-1" :class="amountClass">
           {{ formattedAmount }}
-          <v-tooltip v-if="isUnscaledAmount" top content-class="custom-tooltip">
-            <template v-slot:activator="{ on, attrs }">
-              <v-icon x-small color="warning" v-bind="attrs" v-on="on">mdi-help-circle-outline</v-icon>
+          <v-tooltip location="top" v-if="isUnscaledAmount"  content-class="custom-tooltip">
+            <template v-slot:activator="{ props: activatorProps }">
+              <v-icon size="x-small" color="warning" v-bind="activatorProps" >mdi-help-circle-outline</v-icon>
             </template>
             {{ $t('midnight.rawBalanceNotice') }}
           </v-tooltip>

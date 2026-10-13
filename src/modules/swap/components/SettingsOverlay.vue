@@ -1,20 +1,21 @@
 <template>
   <v-overlay
-    absolute
-    :value="value"
+    contained
+    persistent
+    :model-value="modelValue"
     opacity="0.94"
     class="settingsOverlay"
-    color="black"
+    scrim="black"
   >
     <v-card class="fill-height transparent">
       <v-card-title>
-        <v-btn small icon @click="closeOverlay">
+        <v-btn size="small" icon @click="closeOverlay">
           <v-icon>mdi-cog</v-icon>
         </v-btn>
         <v-spacer></v-spacer>
         {{ $t('swap.settings') }}
         <v-spacer></v-spacer>
-        <v-btn small icon @click="closeOverlay">
+        <v-btn size="small" icon @click="closeOverlay">
           <v-icon>mdi-window-close</v-icon>
         </v-btn>
       </v-card-title>
@@ -22,7 +23,7 @@
         <div class="d-flex justify-space-between justify-center">
           <span class="d-flex flex-column">
             <span style="font-size: 13px; color: white">{{ $t('swap.slippageTolerance') }}</span>
-            <v-btn class="px-0 justify-start" text plain :ripple="false" small
+            <v-btn class="px-0 justify-start" variant="text" plain :ripple="false" size="small"
                    style="text-transform: capitalize; word-break: break-word; letter-spacing: normal; font-size: 10px; min-height: 18px;"
                    href="https://www.investopedia.com/terms/s/slippage.asp" target="_blank">
               {{ $t('swap.learnMore') }}
@@ -30,17 +31,17 @@
           </span>
           <v-btn-toggle mandatory active-class="geroButton" class="transparent" v-model="slippageToleranceType"
                         style="align-items: center;">
-            <v-btn small color="black" :value="'auto'" rounded style="text-transform: capitalize; font-size: 10px; min-height: 24px;" class="pa-1">
+            <v-btn size="small" color="black" :value="'auto'" rounded style="text-transform: capitalize; font-size: 10px; min-height: 24px;" class="pa-1">
               {{ $t('swap.auto') }}
             </v-btn>
-            <v-btn small color="black" :value="'custom'" rounded style="text-transform: capitalize; font-size: 10px; min-height: 24px;" class="pa-1">
+            <v-btn size="small" color="black" :value="'custom'" rounded style="text-transform: capitalize; font-size: 10px; min-height: 24px;" class="pa-1">
               {{ $t('swap.custom') }}
             </v-btn>
           </v-btn-toggle>
         </div>
         <div class="d-flex justify-center">
           <v-btn-toggle mandatory active-class="geroButton" class="transparent" v-model="slippageTolerance"
-                        style="align-items: center;" @change="onSlippageToleranceChange">
+                        style="align-items: center;" @update:model-value="onSlippageToleranceChange">
             <v-btn rounded :value="0.5" class="pa-1" style="border-color: black!important; font-size: 11px;" height="36"
                    :disabled="automaticSlippage == 'on' || unlimitedSlippage == 'on'">
               0.5
@@ -63,8 +64,8 @@
                 v-model="customSlippageTolerance"
                 :disabled="automaticSlippage == 'on' || slippageToleranceType == 'auto' || unlimitedSlippage == 'on'"
                 :class="slippageTolerance === -1 ? 'centered-input transparent text-black' : automaticSlippage == 'on' || slippageToleranceType == 'auto' || unlimitedSlippage == 'on' ? 'centered-input transparent text-white opacity' : 'centered-input transparent text-white'"
-                dense
-                solo
+                density="compact"
+                variant="solo"
                 hide-details
                 height="32"
                 style="border-top-left-radius: 0; border-bottom-left-radius: 0; height: 34px; border: 1px solid black; font-size: 11px;"
@@ -72,7 +73,7 @@
                 hide-spin-buttons
                 :min="0"
                 :max="100">
-                <template v-slot:append>
+                <template v-slot:append-inner>
                   <span
                     :style="slippageTolerance === -1 ? {color: 'black', fontSize: '11px'} : automaticSlippage == 'on' || slippageToleranceType == 'auto' || unlimitedSlippage == 'on' ? {color: 'white', opacity: '0.3', fontSize: '11px'} : {color: 'white', fontSize: '11px'}">%</span>
                 </template>
@@ -83,12 +84,12 @@
         <div class="d-flex justify-space-between justify-center">
                         <span class="d-flex flex-column">
                           <span style="font-size: 13px; color: white">{{ $t('swap.unlimitedSlippage') }}</span>
-                          <v-tooltip
+                          <v-tooltip :open-on-hover="false" :open-on-focus="false" :open-on-click="false" location="bottom"
                             v-model="unlimitedSlippageTooltipEnabled"
-                            bottom
+
                           >
-                            <template v-slot:activator="{ }">
-                              <v-btn class="px-0 justify-start" text plain :ripple="false" small
+                            <template v-slot:activator="{ props: activatorProps }">
+                              <v-btn v-bind="activatorProps" class="px-0 justify-start" variant="text" plain :ripple="false" size="small"
                                      style="text-transform: capitalize; word-break: break-word; letter-spacing: normal; font-size: 10px; min-height: 18px;"
                                      @click="unlimitedSlippageTooltipEnabled = true"
                                      v-click-outside="disableUnlimitedSlippageTooltip">
@@ -101,11 +102,11 @@
                           </v-tooltip>
                         </span>
           <v-btn-toggle mandatory active-class="geroButton" class="transparent" v-model="unlimitedSlippage"
-                        style="align-items: center;" @change="unlimitedSlippageChange">
-            <v-btn small color="black" :value="'off'" rounded style="text-transform: capitalize; font-size: 10px; min-height: 24px;" class="pa-1">
+                        style="align-items: center;" @update:model-value="unlimitedSlippageChange">
+            <v-btn size="small" color="black" :value="'off'" rounded style="text-transform: capitalize; font-size: 10px; min-height: 24px;" class="pa-1">
               OFF
             </v-btn>
-            <v-btn small color="black" :value="'on'" rounded style="text-transform: capitalize; font-size: 10px; min-height: 24px;" class="pa-1"
+            <v-btn size="small" color="black" :value="'on'" rounded style="text-transform: capitalize; font-size: 10px; min-height: 24px;" class="pa-1"
                    :disabled="automaticSlippage === 'on'">
               ON
             </v-btn>
@@ -114,12 +115,12 @@
         <div class="d-flex justify-space-between justify-center">
                         <span class="d-flex flex-column">
                           <span style="font-size: 13px; color: white">Automatic Slippage</span>
-                          <v-tooltip
+                          <v-tooltip :open-on-hover="false" :open-on-focus="false" :open-on-click="false" location="bottom"
                             v-model="automaticSlippageTooltipEnabled"
-                            bottom
+
                           >
-                            <template v-slot:activator="{ }">
-                              <v-btn class="px-0 justify-start" text plain :ripple="false" small
+                            <template v-slot:activator="{ props: activatorProps }">
+                              <v-btn v-bind="activatorProps" class="px-0 justify-start" variant="text" plain :ripple="false" size="small"
                                      style="text-transform: capitalize; word-break: break-word; letter-spacing: normal; font-size: 10px; min-height: 18px;"
                                      @click="automaticSlippageTooltipEnabled = true"
                                      v-click-outside="disableAutomaticSlippageTooltip">
@@ -133,10 +134,10 @@
                         </span>
           <v-btn-toggle mandatory active-class="geroButton" class="transparent" v-model="automaticSlippage"
                         style="align-items: center;">
-            <v-btn small color="black" :value="'off'" rounded style="text-transform: capitalize; font-size: 10px; min-height: 24px;" class="pa-1">
+            <v-btn size="small" color="black" :value="'off'" rounded style="text-transform: capitalize; font-size: 10px; min-height: 24px;" class="pa-1">
               OFF
             </v-btn>
-            <v-btn small color="black" :value="'on'" rounded style="text-transform: capitalize; font-size: 10px; min-height: 24px;" class="pa-1"
+            <v-btn size="small" color="black" :value="'on'" rounded style="text-transform: capitalize; font-size: 10px; min-height: 24px;" class="pa-1"
                    :disabled="unlimitedSlippage === 'on'">
               ON
             </v-btn>
@@ -150,13 +151,13 @@
 import { ref, computed, watch } from 'vue';
 
 interface Props {
-  value?: boolean;
+  modelValue?: boolean;
 }
 
 defineProps<Props>();
 
 const emit = defineEmits<{
-  input: [value: boolean];
+  'update:modelValue': [value: boolean];
   setSlippage: [value: string];
 }>();
 
@@ -183,7 +184,7 @@ const customSlippageTolerance = computed({
   get() {
     return customSlippage.value;
   },
-  set(val: any) {
+  set(val: string | number) {
     if (val === '') {
       val = 0;
     }
@@ -222,7 +223,7 @@ const unlimitedSlippageChange = (val: string) => {
 };
 
 const closeOverlay = () => {
-  emit('input', false);
+  emit('update:modelValue', false);
 };
 
 watch(slippage, (val) => {

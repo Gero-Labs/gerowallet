@@ -1,25 +1,27 @@
-import { mount, type Wrapper } from '@vue/test-utils';
-import Vue, { nextTick, type CreateElement, type Ref } from 'vue';
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
+import { mount, type VueWrapper } from '@vue/test-utils';
+import * as Vue from 'vue';
+import { nextTick,  type Ref } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /** The live DUST reading both screens consume, driven directly by each test. */
 interface LiveDust { dustBalance: Ref<bigint>; settled: Ref<boolean> }
 /** The `<script setup>` bindings these tests read or drive, reached through the instance. */
 interface SetupState {
-  recipient: { value: unknown };
-  amount: { value: unknown };
+  recipient: unknown;
+  amount: unknown;
   /** Side panel only. */
-  step: { value: unknown };
+  step: unknown;
   /** Dashboard only. */
-  currentStep: { value: unknown };
-  sponsorWalletId: { value: unknown };
-  blockedByFee: { value: unknown };
+  currentStep: unknown;
+  sponsorWalletId: unknown;
+  blockedByFee: unknown;
 }
 
 const review = vi.hoisted(() => ({ live: {} as LiveDust, sponsorId: null as number | null }));
 const ui = vi.hoisted(() => ({
-  slot: { render(this: Vue, h: CreateElement) { return h('div', this.$slots['default']); } },
-  blank: { render(h: CreateElement) { return h('div'); } },
+  slot: { render(this: Vue.ComponentPublicInstance) { return Vue.h('div', this.$slots['default']?.()); } },
+  blank: { render() { return Vue.h('div'); } },
 }));
 vi.mock('@/shared/dialogs/BaseDialog.vue', () => ({ default: ui.slot }));
 vi.mock('@/sidepanel/components/BottomSheet.vue', () => ({ default: ui.slot }));
@@ -31,8 +33,8 @@ vi.mock('@/modules/dashboard/components/MidnightPrivateBalances.vue', () => ({ d
 vi.mock('@/modules/dashboard/dialogs/ShieldedProvingConsentDialog.vue', () => ({ default: ui.blank }));
 vi.mock('@/modules/dashboard/dialogs/QRAddressScannerDialog.vue', () => ({ default: ui.blank }));
 vi.mock('@/modules/dashboard/dialogs/MidnightSponsorPicker.vue', () => ({ default: {
-  name: 'ReviewSponsorPicker', props: ['value', 'senderWalletId', 'network'],
-  render(h: CreateElement) { return h('div', { attrs: { 'data-sponsor-picker': 'true' } }); },
+  name: 'ReviewSponsorPicker', props: ['modelValue', 'senderWalletId', 'network'],
+  render() { return Vue.h('div', { 'data-sponsor-picker': 'true' }); },
 } }));
 vi.mock('@/shared/composables/useMidnightDustLive', async () => {
   const { ref } = await import('vue');
@@ -76,47 +78,44 @@ vi.mock('@/utils/debug', () => ({ debugLog: vi.fn() }));
 import Dialog from '@/modules/dashboard/dialogs/MidnightSendDialog.vue';
 import Sheet from '@/sidepanel/components/flows/MidnightSendSheet.vue';
 
-const views: Wrapper<Vue>[] = [];
-const buttonStub = { props: ['disabled'], template: '<button :disabled="disabled" @click="$emit(\'click\')"><slot /></button>' };
-const formStub = { methods: { validate: () => true }, template: '<div><slot /></div>' };
-function mountScreen(component: typeof Dialog) {
-  const slots = Object.fromEntries(['v-card', 'v-card-title', 'v-card-text', 'v-card-actions', 'v-stepper', 'v-stepper-header', 'v-stepper-items', 'v-stepper-content', 'v-tabs', 'v-tab', 'v-tabs-items', 'v-tab-item', 'v-row', 'v-col', 'v-expand-transition', 'v-fade-transition', 'v-slide-y-transition'].map((name) => [name, ui.slot]));
-  const wrapper = mount(component, {
-    propsData: { isOpen: true, value: true },
-    mocks: { $t: (key: string) => key },
-    stubs: { ...slots, 'v-btn': buttonStub, 'v-form': formStub, 'v-icon': true, 'v-avatar': true, 'v-spacer': true, 'v-text-field': true, 'v-select': true, 'v-menu': true, 'v-progress-linear': true, 'v-progress-circular': true, 'v-tooltip': true },
-  });
+const views: VueWrapper[] = [];
+const buttonStub = { props: ['disabled'], emits: ['click'],
+        template: '<button :disabled="disabled" @click="$emit(\'click\')"><slot /></button>' };
+const formStub = { methods: { validate: async () => ({ valid: true, errors: [] }) }, template: '<div><slot /></div>' };
+function mountScreen(component: Vue.Component) {
+  const slots = Object.fromEntries(['v-card', 'v-card-title', 'v-card-text', 'v-card-actions', 'v-stepper', 'v-stepper-header', 'v-stepper-window', 'v-stepper-window-item', 'v-tabs', 'v-tab', 'v-window', 'v-window-item', 'v-row', 'v-col', 'v-expand-transition', 'v-fade-transition', 'v-slide-y-transition'].map((name) => [name, ui.slot]));
+  const wrapper = mount(component, { props: { isOpen: true, modelValue: true }, global: { config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key }) }, stubs: { ...slots, 'v-btn': buttonStub, 'v-form': formStub, 'v-icon': true, 'v-avatar': true, 'v-spacer': true, 'v-text-field': true, 'v-select': true, 'v-menu': true, 'v-progress-linear': true, 'v-progress-circular': true, 'v-tooltip': true } } });
   views.push(wrapper);
   return wrapper;
 }
 async function settle() { for (let i = 0; i < 10; i++) { await Promise.resolve(); await nextTick(); } }
-function state(wrapper: Wrapper<Vue>): SetupState {
-  return (wrapper.vm as unknown as { _setupState: SetupState })._setupState;
+function state(wrapper: VueWrapper): SetupState {
+  return (wrapper.vm.$ as unknown as { setupState: SetupState }).setupState;
 }
-function button(wrapper: Wrapper<Vue>, text: string) {
-  const found = wrapper.findAll('button').wrappers.find((entry) => entry.text().includes(text));
+function button(wrapper: VueWrapper, text: string) {
+  const found = wrapper.findAll('button').find((entry) => entry.text().includes(text));
   if (!found) throw new Error(`Missing button ${text}`);
   return found;
 }
 beforeEach(() => { review.live.dustBalance.value = 0n; review.live.settled.value = true; review.sponsorId = null; });
-afterEach(() => { views.splice(0).forEach((wrapper) => wrapper.destroy()); });
+afterEach(() => { views.splice(0).forEach((wrapper) => wrapper.unmount()); });
 
 describe.each([['dashboard', Dialog], ['side panel', Sheet]] as const)('%s send wiring', (surface, component) => {
   it('renders warning and picker on unverified zero and permits proceeding without a sponsor', async () => {
     const wrapper = mountScreen(component);
     const setup = state(wrapper);
-    setup.recipient.value = 'mn_addr1destination';
-    setup.amount.value = '1';
-    if (surface === 'side panel') setup.step.value = 2;
+    setup.recipient = 'mn_addr1destination';
+    setup.amount = '1';
+    if (surface === 'side panel') setup.step = 2;
     await settle();
     expect(wrapper.text()).toContain('midnight.send.noDustFee');
     expect(wrapper.find('[data-sponsor-picker]').exists()).toBe(true);
-    expect(setup.sponsorWalletId.value).toBeNull();
+    expect(setup.sponsorWalletId).toBeNull();
     const next = button(wrapper, surface === 'dashboard' ? 'common.continue' : 'miniGero.review');
     expect(next.attributes('disabled')).toBeUndefined();
     await next.trigger('click');
     await settle();
-    expect(surface === 'dashboard' ? setup.currentStep.value : setup.step.value).toBe(surface === 'dashboard' ? 2 : 3);
+    expect(surface === 'dashboard' ? setup.currentStep : setup.step).toBe(surface === 'dashboard' ? 2 : 3);
   });
 
   it('restores a saved sponsor and lets the picker clear it while the zero stays unverified', async () => {
@@ -124,11 +123,11 @@ describe.each([['dashboard', Dialog], ['side panel', Sheet]] as const)('%s send 
     const wrapper = mountScreen(component);
     await settle();
     const picker = wrapper.findComponent({ name: 'ReviewSponsorPicker' });
-    expect(picker.props('value')).toBe(2);
-    picker.vm.$emit('input', null);
+    expect(picker.props('modelValue')).toBe(2);
+    picker.vm.$emit('update:modelValue', null);
     await settle();
-    expect(state(wrapper).sponsorWalletId.value).toBeNull();
-    expect(state(wrapper).blockedByFee.value).toBe(false);
+    expect(state(wrapper).sponsorWalletId).toBeNull();
+    expect(state(wrapper).blockedByFee).toBe(false);
   });
 
   it('hides the warning and picker while unsettled or positive', async () => {

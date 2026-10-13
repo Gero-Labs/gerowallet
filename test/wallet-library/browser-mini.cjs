@@ -52,7 +52,7 @@ const { tmpdir } = require('node:os');
       await page.getByRole('textbox', { name: 'Category name' }).fill('Mini category');
       await page.getByRole('button', { name: 'Save', exact: true }).click();
       await page.getByRole('button', { name: 'Mini category 0', exact: true }).waitFor({ state: 'attached' });
-      await page.locator('.v-dialog__content--active').waitFor({ state: 'hidden' });
+      await page.locator('.v-dialog.v-overlay--active').waitFor({ state: 'hidden' });
       if (mode === 'sheet') assert.equal(await page.getByRole('dialog', { name: 'Select Wallet', exact: true }).isVisible(), true);
       await page.setViewportSize({ width: 320, height: 600 });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);

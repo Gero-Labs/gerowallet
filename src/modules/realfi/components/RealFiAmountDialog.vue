@@ -16,8 +16,8 @@
 
       <v-text-field
         v-model="input"
-        outlined
-        dense
+        variant="outlined"
+        density="compact"
         autofocus
         inputmode="decimal"
         class="g-num"

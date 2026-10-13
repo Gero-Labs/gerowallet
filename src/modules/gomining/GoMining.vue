@@ -1,5 +1,5 @@
 <template>
-  <v-layout column class="gomining-page">
+  <div class="d-flex flex-column gomining-page">
 
     <!-- ── Loading / initializing ──────────────────────────────────────── -->
     <div v-if="state === 'loading'" class="d-flex flex-column align-center justify-center fill-height pa-8">
@@ -14,8 +14,8 @@
       <div class="text-body-2 text--secondary text-center mb-6" style="max-width: 400px;">
         {{ errorMessage || $t('gomining.connectionFailedDescription') }}
       </div>
-      <v-btn color="primary" outlined @click="initialize">
-        <v-icon left small>mdi-refresh</v-icon>
+      <v-btn color="primary" variant="outlined" @click="initialize">
+        <v-icon start size="small">mdi-refresh</v-icon>
         {{ $t('common.tryAgain') }}
       </v-btn>
     </div>
@@ -35,8 +35,8 @@
               <div class="text-caption text--secondary">{{ $t('gomining.subtitle') }}</div>
             </div>
             <v-spacer />
-            <v-chip x-small color="success" outlined style="border-radius: 6px !important;">
-              <v-icon x-small left>mdi-check-circle</v-icon>
+            <v-chip size="x-small" color="success" variant="outlined" style="border-radius: 6px !important;">
+              <v-icon size="x-small" start>mdi-check-circle</v-icon>
               {{ $t('gomining.connected') }}
             </v-chip>
           </div>
@@ -48,11 +48,11 @@
         <v-col cols="12">
           <v-tabs v-model="activeTab" color="primary" height="36">
             <v-tab class="text-capitalize">
-              <v-icon small left>mdi-view-dashboard</v-icon>
+              <v-icon size="small" start>mdi-view-dashboard</v-icon>
               {{ $t('gomining.tabOverview') }}
             </v-tab>
             <v-tab class="text-capitalize">
-              <v-icon small left>mdi-pickaxe</v-icon>
+              <v-icon size="small" start>mdi-pickaxe</v-icon>
               {{ $t('gomining.tabMyMiners') }}
               <v-badge
                 v-if="miners.length"
@@ -63,21 +63,21 @@
               />
             </v-tab>
             <v-tab class="text-capitalize">
-              <v-icon small left>mdi-store</v-icon>
+              <v-icon size="small" start>mdi-store</v-icon>
               {{ $t('gomining.tabShop') }}
             </v-tab>
             <v-tab class="text-capitalize">
-              <v-icon small left>mdi-chart-line</v-icon>
+              <v-icon size="small" start>mdi-chart-line</v-icon>
               {{ $t('gomining.tabEarnings') }}
             </v-tab>
           </v-tabs>
         </v-col>
       </v-row>
 
-      <v-tabs-items v-model="activeTab" class="transparent-tabs">
+      <v-window v-model="activeTab" class="transparent-tabs">
 
         <!-- ─ Tab 0: Overview ───────────────────────────────────────────── -->
-        <v-tab-item>
+        <v-window-item>
           <v-row no-gutters class="pa-2">
 
             <!-- Stats card (full width) -->
@@ -101,9 +101,9 @@
 
             <!-- Earnings chart -->
             <v-col cols="12" sm="6" md="8" class="pa-2">
-              <v-card outlined class="liquid-glass pa-4 fill-height earnings-chart-card">
+              <v-card variant="outlined" class="liquid-glass pa-4 fill-height earnings-chart-card">
                 <div class="d-flex align-center mb-3" style="gap: 8px;">
-                  <v-icon small color="#F7931A">mdi-chart-bar</v-icon>
+                  <v-icon size="small" color="#F7931A">mdi-chart-bar</v-icon>
                   <span class="text-subtitle-2 font-weight-bold">{{ $t('gomining.earningsHistory') }}</span>
                   <v-spacer />
                   <span class="text-caption text--secondary">{{ $t('gomining.last14Days') }}</span>
@@ -121,14 +121,14 @@
 
                 <!-- Bar chart -->
                 <div v-else class="earnings-bars d-flex align-end" style="height: 100px; gap: 3px;">
-                  <v-tooltip
+                  <v-tooltip location="top"
                     v-for="(pt, i) in earningsChart.slice(-14)"
                     :key="i"
-                    top
+
                   >
-                    <template #activator="{ on }">
-                      <div
-                        v-on="on"
+                    <template #activator="{ props: activatorProps }">
+                      <div v-bind="activatorProps"
+
                         class="earnings-bar"
                         :style="barStyle(pt.amount)"
                       />
@@ -140,10 +140,10 @@
             </v-col>
 
           </v-row>
-        </v-tab-item>
+        </v-window-item>
 
         <!-- ─ Tab 1: My Miners ──────────────────────────────────────────── -->
-        <v-tab-item>
+        <v-window-item>
           <v-row no-gutters class="pa-2">
             <v-col cols="12" class="pa-2">
               <GoMiningMinersGrid
@@ -153,10 +153,10 @@
               />
             </v-col>
           </v-row>
-        </v-tab-item>
+        </v-window-item>
 
         <!-- ─ Tab 2: Shop ────────────────────────────────────────────────── -->
-        <v-tab-item>
+        <v-window-item>
           <v-row no-gutters class="pa-2">
             <v-col cols="12" class="pa-2">
               <GoMiningShop
@@ -166,15 +166,15 @@
               />
             </v-col>
           </v-row>
-        </v-tab-item>
+        </v-window-item>
 
         <!-- ─ Tab 3: Earnings ────────────────────────────────────────────── -->
-        <v-tab-item>
+        <v-window-item>
           <v-row no-gutters class="pa-2">
             <v-col cols="12" class="pa-2">
-              <v-card outlined class="liquid-glass">
+              <v-card variant="outlined" class="liquid-glass">
                 <v-card-title class="d-flex align-center" style="gap: 8px;">
-                  <v-icon color="primary" small>mdi-chart-line</v-icon>
+                  <v-icon color="primary" size="small">mdi-chart-line</v-icon>
                   <span class="text-subtitle-1 font-weight-bold">{{ $t('gomining.earningsHistory') }}</span>
                 </v-card-title>
 
@@ -196,7 +196,7 @@
                   :items="incomeHistory"
                   :items-per-page="10"
                   class="transparent-table"
-                  dense
+                  density="compact"
                 >
                   <template #item.amount="{ item }">
                     <span class="success--text font-weight-medium">
@@ -210,9 +210,9 @@
               </v-card>
             </v-col>
           </v-row>
-        </v-tab-item>
+        </v-window-item>
 
-      </v-tabs-items>
+      </v-window>
     </template>
 
     <!-- ── Dialogs ─────────────────────────────────────────────────────── -->
@@ -232,7 +232,7 @@
       :collection="selectedCollection"
     />
 
-  </v-layout>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -287,9 +287,9 @@ const selectedCollection = ref<GoMiningCollection | null>(null);
 
 // ─── Earnings headers ─────────────────────────────────────────────────────────
 const earningsHeaders = computed(() => [
-  { text: 'Date', value: 'date', sortable: true },
-  { text: 'Amount', value: 'amount', sortable: true },
-  { text: 'Currency', value: 'currency', sortable: false },
+  { title: 'Date', key: 'date', sortable: true },
+  { title: 'Amount', key: 'amount', sortable: true },
+  { title: 'Currency', key: 'currency', sortable: false },
 ]);
 
 // ─── Initialization ───────────────────────────────────────────────────────────
@@ -312,10 +312,10 @@ async function initialize() {
 
     // Load all data in parallel (non-blocking after initial auth)
     await refreshAll();
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('⛏ GoMining: initialization failed', error);
     state.value = 'error';
-    errorMessage.value = error?.message ?? '';
+    errorMessage.value = error instanceof Error ? error.message : '';
   }
 }
 
@@ -419,7 +419,7 @@ const maxEarnings = computed(() => {
   return Math.max(...earningsChart.value.map(p => p.amount), 0.000001);
 });
 
-function barStyle(amount: number): object {
+function barStyle(amount: number) {
   const pct = Math.max(4, (amount / maxEarnings.value) * 100);
   return {
     flex: 1,

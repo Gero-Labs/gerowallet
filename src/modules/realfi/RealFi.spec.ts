@@ -1,3 +1,4 @@
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
 import { ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -57,27 +58,23 @@ import IsoSceneSfc from '@/shared/components/iso/IsoScene.vue';
 const RealFi = RealFiSfc as unknown as Parameters<typeof mount>[0];
 
 function mountPage() {
-  return mount(RealFi, {
-    mocks: {
-      $t: (key: string, values?: Record<string, unknown>) =>
-        values ? `${key}${JSON.stringify(values)}` : key,
-      $tc: (key: string, n: number) => `${key}(${n})`,
-    },
-    stubs: {
+  return mount(RealFi, { global: { config: { globalProperties: mockGlobalProperties({
+      $t: (key: string, values?: Record<string, unknown> | number) =>
+        typeof values === 'number' ? `${key}(${values})` : values ? `${key}${JSON.stringify(values)}` : key,
+    }) }, stubs: {
       'v-layout': { template: '<div><slot /></div>' },
       'v-row': { template: '<div><slot /></div>' },
       'v-col': { template: '<div><slot /></div>' },
       // GButton renders a v-btn and forwards its listeners to it, so stubbing v-btn
       // keeps GButton's own wiring in the path under test.
-      'v-btn': { template: '<button @click="$emit(\'click\')"><slot /></button>' },
-    },
-  });
+      'v-btn': { emits: ['click'], template: '<button @click="$emit(\'click\')"><slot /></button>' },
+    } } });
 }
 
 type Page = ReturnType<typeof mountPage>;
 
 function button(page: Page, label: string) {
-  const found = page.findAll('button').wrappers.find((b) => b.text() === label);
+  const found = page.findAll('button').find((b) => b.text() === label);
   if (!found) throw new Error(`no button labelled ${label}`);
   return found;
 }
@@ -175,14 +172,14 @@ describe('RealFi Earn page', () => {
 
   describe('start screen art', () => {
     it('shows the animated Earn scene, named for assistive tech, until there is a position', () => {
-      const start = mountPage().findAllComponents(IsoSceneSfc as never).wrappers
+      const start = mountPage().findAllComponents(IsoSceneSfc)
         .find((scene) => scene.props('name') === 'earnHero');
       expect(start, 'no Earn hero scene').toBeDefined();
       expect(start!.props('animated')).toBe(true);
       expect(start!.props('label')).toBe('realfi.start.artLabel');
 
       withOrders([]);
-      const names = mountPage().findAllComponents(IsoSceneSfc as never).wrappers.map((scene) => scene.props('name'));
+      const names = mountPage().findAllComponents(IsoSceneSfc).map((scene) => scene.props('name'));
       expect(names).not.toContain('earnHero');
     });
   });
@@ -220,7 +217,7 @@ describe('RealFi Earn page', () => {
       state.referrals.value = { code: null, invitedCount: 3, rewardPoints: 40 };
       const card = mountPage()
         .findAll('.realfi-card')
-        .wrappers.find((c) => c.text().includes('realfi.referrals.label'));
+        .find((c) => c.text().includes('realfi.referrals.label'));
       expect(card, 'no referrals card').toBeDefined();
       const text = card!.text();
       expect(text).toContain('realfi.referrals.invited');
@@ -320,7 +317,7 @@ describe('RealFi Earn page', () => {
         order('Rejected'),
         order('Executed'),
       ]);
-      const pills = mountPage().findAll('.realfi-pill').wrappers;
+      const pills = mountPage().findAll('.realfi-pill');
       expect(pills.map((p) => p.text())).toEqual([
         'realfi.statuses.heldForScreening',
         'realfi.statuses.invalidatedBlockedScreening',

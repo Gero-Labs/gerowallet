@@ -1,6 +1,6 @@
 <template>
-  <v-autocomplete v-model="mnemonic" outlined dense hide-details hide-no-data
-                  :search-input.sync="search"
+  <v-autocomplete item-title="text" v-model="mnemonic" variant="outlined" density="compact" hide-details hide-no-data
+                  v-model:search="search"
                   :items="englishWords" auto-select-first :rules="[rules.required()]"
                   @keydown.tab.exact="handleTab" @keydown.shift.tab="handleShiftTab"
   >
@@ -11,6 +11,7 @@
 </template>
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, getCurrentInstance } from 'vue';
+import { useTheme } from 'vuetify';
 import rules from "@/utils/rules";
 import * as bip39 from "bip39";
 
@@ -18,20 +19,21 @@ const props = defineProps({
   index: {
     type: Number,
   },
-  value: {
+  modelValue: {
     type: String,
     default: '',
   },
 });
 
-const emit = defineEmits(['input']);
+const emit = defineEmits(['update:modelValue']);
 
 const instance = getCurrentInstance();
-const mnemonic = ref('');
+const mnemonic = ref(props.modelValue);
+const theme = useTheme();
 
 // Get primary color from Vuetify theme
 const primaryColor = computed(() => {
-  return String(instance?.proxy?.$vuetify?.theme?.currentTheme?.primary);
+  return String(theme.current.value.colors['primary']);
 });
 const search = ref('');
 
@@ -63,8 +65,9 @@ const handleShiftTab = (event: KeyboardEvent) => {
 };
 
 const focusPreviousCell = () => {
-  const currentCell = instance?.proxy?.$el?.closest('.v-input');
-  const parentRow = currentCell?.closest('.row');
+  const root = instance?.proxy?.$el;
+  const currentCell = root instanceof HTMLElement ? root.closest('.v-input') : null;
+  const parentRow = currentCell?.closest('.v-row');
   const cells = Array.from(parentRow?.querySelectorAll('.v-input') || []);
   const currentIndex = cells.indexOf(currentCell);
   const previousCell = cells[Math.max(currentIndex - 1, 0)];
@@ -78,8 +81,9 @@ const focusPreviousCell = () => {
 };
 
 const focusNextCell = () => {
-  const currentCell = instance?.proxy?.$el?.closest('.v-input');
-  const parentRow = currentCell?.closest('.row');
+  const root = instance?.proxy?.$el;
+  const currentCell = root instanceof HTMLElement ? root.closest('.v-input') : null;
+  const parentRow = currentCell?.closest('.v-row');
   const cells = Array.from(parentRow?.querySelectorAll('.v-input') || []);
   const currentIndex = cells.indexOf(currentCell);
   const nextCell = cells[currentIndex + 1];
@@ -92,12 +96,12 @@ const focusNextCell = () => {
   }
 };
 
-watch(() => props.value, (val) => {
+watch(() => props.modelValue, (val) => {
   mnemonic.value = val;
 });
 
 watch(mnemonic, (val) => {
-  emit('input', val);
+  emit('update:modelValue', val);
 });
 </script>
 <style scoped>

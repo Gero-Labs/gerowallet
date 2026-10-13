@@ -5,10 +5,10 @@
       :label="$t('card.countryCode')"
       :items="countries"
       return-object
-      outlined
-      :dense="dense"
+      variant="outlined"
+      :density="(dense) ? 'compact' : 'default'"
       hide-details
-      item-text="dialCode"
+      item-title="dialCode"
       style="max-width: 180px;"
       class="country-code-select"
       :disabled="disabled"
@@ -21,23 +21,23 @@
           +{{ item.dialCode }}
         </span>
       </template>
-      <template v-slot:item="{ item, attrs, on }">
-        <v-list-item v-on="on" v-bind="attrs" dense class="px-2">
-          <v-list-item-avatar size="24" tile>
+      <template v-slot:item="{ item, props: itemProps }">
+        <v-list-item v-bind="itemProps" :title="''" density="compact" class="px-2">
+          <v-avatar size="24" rounded="0">
             <flag :iso="item.countryCode.toLowerCase()" style="width: 28px; height: 20px;"></flag>
-          </v-list-item-avatar>
-          <v-list-item-content>
+          </v-avatar>
+          <div class="g-list-content">
             <v-list-item-title>
               +{{ item.dialCode }} {{ item.countryName }}
             </v-list-item-title>
-          </v-list-item-content>
+          </div>
         </v-list-item>
       </template>
     </v-select>
     <v-text-field
       v-model="phoneNumberLocal"
-      outlined
-      :dense="dense"
+      variant="outlined"
+      :density="(dense) ? 'compact' : 'default'"
       :label="label"
       type="tel"
       :placeholder="placeholder"
@@ -51,7 +51,8 @@
 </template>
 
 <script lang="ts">
-import { defineComponent } from 'vue';
+import { defineComponent, markRaw, type PropType } from 'vue';
+import type { VTextField } from 'vuetify/components';
 import {
   parsePhoneNumber,
   getCountryCodeForRegionCode,
@@ -93,15 +94,16 @@ export default defineComponent({
       type: String,
       default: ''
     },
-    value: {
+    modelValue: {
       type: String,
       default: ''
     },
     rules: {
-      type: Array,
+      type: Array as PropType<InstanceType<typeof VTextField>['$props']['rules']>,
       default: () => []
     }
   },
+  emits: ['update:modelValue', 'change'],
   data() {
     const countries = generateCountriesList();
     return {
@@ -119,7 +121,7 @@ export default defineComponent({
       // Combine passed rules with awesome-phonenumber validation
       const awesomePhoneRule = (value: string) => {
         if (!value) return true; // Let required rule handle empty values
-        return this.isValid || this.$i18n.t('common.invalidPhoneNumber');
+        return this.isValid || this.$t('common.invalidPhoneNumber');
       };
       return [...this.rules, awesomePhoneRule];
     }
@@ -146,12 +148,12 @@ export default defineComponent({
     },
   },
   mounted() {
-    if (this.value) {
-      this.parsePhone(this.value);
+    if (this.modelValue) {
+      this.parsePhone(this.modelValue);
     }
   },
   watch: {
-    value(newVal: string) {
+    modelValue(newVal: string) {
       if (newVal !== this.phoneNumberLocal) {
         this.parsePhone(newVal);
       }
@@ -166,14 +168,14 @@ export default defineComponent({
           }
         }
       }
-      this.parsedPhoneNumber = parsePhoneNumber(newVal, { regionCode: this.selectedCountry.countryCode });
-      this.$emit('input', this.parsedPhoneNumber?.number?.e164 || newVal);
+      this.parsedPhoneNumber = markRaw(parsePhoneNumber(newVal, { regionCode: this.selectedCountry.countryCode }));
+      this.$emit('update:modelValue', this.parsedPhoneNumber?.number?.e164 || newVal);
       this.$emit('change', this.parsedPhoneNumber);
     },
     selectedCountry() {
       if (this.phoneNumberLocal) {
-        this.parsedPhoneNumber = parsePhoneNumber(this.phoneNumberLocal, { regionCode: this.selectedCountry.countryCode });
-        this.$emit('input', this.parsedPhoneNumber?.number?.e164 || this.phoneNumberLocal);
+        this.parsedPhoneNumber = markRaw(parsePhoneNumber(this.phoneNumberLocal, { regionCode: this.selectedCountry.countryCode }));
+        this.$emit('update:modelValue', this.parsedPhoneNumber?.number?.e164 || this.phoneNumberLocal);
         this.$emit('change', this.parsedPhoneNumber);
       }
     }

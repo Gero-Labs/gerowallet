@@ -16,7 +16,7 @@
         v-model="tab"
         color="white"
         class="v-tabs-border-bottom mb-0"
-        background-color="transparent"
+        bg-color="transparent"
         show-arrows
       >
         <v-tab
@@ -26,7 +26,7 @@
           style="word-break: keep-all;"
         >
           {{ tab.label }}
-          <v-icon color="error" x-small class="ml-1" v-if="tab.badge">
+          <v-icon color="error" size="x-small" class="ml-1" v-if="tab.badge">
             mdi-circle
           </v-icon>
         </v-tab>
@@ -44,7 +44,7 @@
 <!--        :disabled="true"-->
 <!--      />-->
 
-      <v-tabs-items v-model="tab" class="transparent" style="overflow: visible">
+      <v-window v-model="tab" class="transparent" style="overflow: visible">
         <ProfileTab @close="$emit('close')" />
 <!--        <PasswordTab />-->
         <CollateralTab />
@@ -53,7 +53,7 @@
         <SecurityTab />
         <NotificationsTab :active="isOpen && tab === notificationsTabIndex" />
         <AdvancedSettingsTab @loading="loadingChange" />
-      </v-tabs-items>
+      </v-window>
     </v-card-text>
   </BaseDialog>
 </template>

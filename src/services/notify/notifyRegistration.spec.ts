@@ -13,7 +13,7 @@ const CONFIG: NotifyConfig = {
   vapidKid: 'v1', categories: ['funds'], securityCategories: ['remoteSigning'], networks: ['cardano-preprod'],
   servedCategories: { webpush: { 'cardano-preprod': ['funds'] } }, limits: { walletsPerDevice: 20, devicesPerWallet: 50, paymentCredsPerLink: 200, paymentCredsPerWallet: 200 }, serverTime: 0,
 };
-const PREFS: WalletPrefs = { synced: { categoriesOff: [], showAmounts: false, minReceiveLovelace: 1_000_000, updatedAt: null }, device: { muted: false } };
+const PREFS: WalletPrefs = { synced: { categoriesOff: [], typesOff: [], showAmounts: false, minReceiveLovelace: 1_000_000, updatedAt: null }, device: { muted: false } };
 type Call = { m: string; path?: string; body?: unknown };
 
 function fakeServer() {
@@ -456,7 +456,7 @@ describe('wallet removal (§8.5, §8.6)', () => {
 
   it('disableWallet removes only the link; prefs writes go through PUT …/prefs', async () => {
     const m = await optedIn();
-    expect(await m.reg.setPrefs(4, { synced: { categoriesOff: ['staking'], showAmounts: true, minReceiveLovelace: 2_000_000 } })).toBe('ok');
+    expect(await m.reg.setPrefs(4, { synced: { categoriesOff: ['staking'], typesOff: [], showAmounts: true, minReceiveLovelace: 2_000_000 } })).toBe('ok');
     expect(m.fake.calls[0]).toMatchObject({ m: 'PUT /prefs', body: { synced: { categoriesOff: ['staking'] } } });
     await m.reg.disableWallet(4);
     expect(m.fake.calls.map((c) => c.m)).toEqual(['PUT /prefs', 'DELETE /wallet']);
@@ -468,10 +468,10 @@ describe('wallet removal (§8.5, §8.6)', () => {
 describe('settings refresh (§4.8)', () => {
   it('refreshPrefs replaces the stored synced prefs with the server\'s (another device wrote them)', async () => {
     const m = await optedIn();
-    m.fake.server.prefs = { synced: { categoriesOff: ['funds'], showAmounts: true, minReceiveLovelace: 5_000_000, updatedAt: 7 }, device: { muted: false } };
+    m.fake.server.prefs = { synced: { categoriesOff: ['funds'], typesOff: [], showAmounts: true, minReceiveLovelace: 5_000_000, updatedAt: 7 }, device: { muted: false } };
     expect(await m.reg.refreshPrefs(4)).toBe('ok');
     expect(m.fake.calls.map((c) => c.m)).toEqual(['GET /prefs']);
-    expect((await m.store.getWallet(4))?.prefs?.synced).toEqual({ categoriesOff: ['funds'], showAmounts: true, minReceiveLovelace: 5_000_000, updatedAt: 7 });
+    expect((await m.store.getWallet(4))?.prefs?.synced).toEqual({ categoriesOff: ['funds'], typesOff: [], showAmounts: true, minReceiveLovelace: 5_000_000, updatedAt: 7 });
   });
 
   it('refreshPrefs on a link the server dropped marks the wallet unregistered; an unregistered wallet is not fetched', async () => {

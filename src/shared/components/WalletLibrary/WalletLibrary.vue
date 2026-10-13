@@ -1,7 +1,7 @@
 <template>
   <div class="wallet-library" :class="{ 'wallet-library--sorting': dragging }">
     <div class="library-toolbar">
-      <v-text-field v-model="query" class="library-search" outlined dense hide-details clearable
+      <v-text-field v-model="query" class="library-search" variant="outlined" density="compact" hide-details clearable
         prepend-inner-icon="mdi-magnify" :label="t('walletLibrary.search')" type="search"
         :placeholder="t('walletLibrary.searchPlaceholder')" @keydown.esc.stop="query = ''" />
       <div class="library-toolbar-bottom">
@@ -10,29 +10,29 @@
             {{ t('walletLibrary.allWallets') }} <span class="library-count">{{ wallets.length }}</span>
           </button>
           <button type="button" class="filter-button" :aria-pressed="favoritesOnly" @click="favoritesOnly = true">
-            <v-icon small>mdi-star-outline</v-icon> {{ t('walletLibrary.favorites') }} <span class="library-count">{{ favoriteCount }}</span>
+            <v-icon size="small">mdi-star-outline</v-icon> {{ t('walletLibrary.favorites') }} <span class="library-count">{{ favoriteCount }}</span>
           </button>
         </div>
         <div class="library-tools">
-          <v-menu offset-y left>
-            <template #activator="{ on, attrs }">
-              <v-btn icon small v-bind="attrs" v-on="on" :disabled="!ready" class="library-sort"
+          <v-menu location="start"  >
+            <template #activator="{ props: activatorProps }">
+              <v-btn icon size="small" v-bind="activatorProps"  :disabled="!ready" class="library-sort"
                 :class="{ 'library-sort--active': sort !== 'custom' }"
                 :aria-label="t('common.sortBy') + ': ' + sortLabel(sort)" :title="t('common.sortBy') + ': ' + sortLabel(sort)">
-                <v-icon small>mdi-sort</v-icon>
+                <v-icon size="small">mdi-sort</v-icon>
               </v-btn>
             </template>
-            <v-list dense role="menu" :aria-label="t('common.sortBy')">
-              <v-subheader>{{ t('common.sortBy') }}</v-subheader>
+            <v-list density="compact" role="menu" :aria-label="t('common.sortBy')">
+              <v-list-subheader>{{ t('common.sortBy') }}</v-list-subheader>
               <v-list-item v-for="option in WALLET_SORTS" :key="option" role="menuitemradio"
-                :aria-checked="String(sort === option)" :input-value="sort === option" @click="sort = option">
+                :aria-checked="String(sort === option)" :active="sort === option" @click="sort = option">
                 <v-list-item-title>{{ sortLabel(option) }}</v-list-item-title>
-                <v-list-item-action class="my-0"><v-icon v-if="sort === option" small>mdi-check</v-icon></v-list-item-action>
+                <div class="my-0 g-list-action"><v-icon v-if="sort === option" size="small">mdi-check</v-icon></div>
               </v-list-item>
             </v-list>
           </v-menu>
-          <v-btn icon small :disabled="saving || !ready" :aria-label="t('walletLibrary.newCategory')"
-            :title="t('walletLibrary.newCategory')" @click="editCategory(null)"><v-icon small>mdi-folder-plus-outline</v-icon></v-btn>
+          <v-btn icon size="small" :disabled="saving || !ready" :aria-label="t('walletLibrary.newCategory')"
+            :title="t('walletLibrary.newCategory')" @click="editCategory(null)"><v-icon size="small">mdi-folder-plus-outline</v-icon></v-btn>
         </div>
       </div>
       <div class="library-guidance">
@@ -40,7 +40,7 @@
         <p class="library-results library-save-status" role="status">{{ pendingCount ? t('walletLibrary.saving') : '' }}</p>
       </div>
       <p v-if="query" class="library-results" role="status">{{ t('walletLibrary.results', { count: filtered.length, total: wallets.length }) }}<span v-if="indexing"> &middot; {{ t('walletLibrary.indexing') }}</span></p>
-      <v-alert v-if="error" dense text type="error" role="alert" class="library-error">{{ t('walletLibrary.' + error) }}</v-alert>
+      <v-alert v-if="error" density="compact" variant="text" type="error" role="alert" class="library-error">{{ t('walletLibrary.' + error) }}</v-alert>
     </div>
 
     <div class="library-scroll" :aria-busy="!ready || saving">
@@ -54,18 +54,18 @@
           <div class="group-heading">
             <button type="button" class="group-toggle" :aria-expanded="group.expanded"
               :aria-controls="groupDomId(group.key)" :disabled="saving || filtering || group.favorites"
-              @click="run(() => repository.setCollapsed(group.id, !group.collapsed))">
-              <v-icon small>{{ group.expanded ? 'mdi-chevron-down' : 'mdi-chevron-right' }}</v-icon>
-              <v-icon small>{{ group.favorites ? 'mdi-star' : 'mdi-folder-outline' }}</v-icon>
+              @click="toggleCollapsed(group)">
+              <v-icon size="small">{{ group.expanded ? 'mdi-chevron-down' : 'mdi-chevron-right' }}</v-icon>
+              <v-icon size="small">{{ group.favorites ? 'mdi-star' : 'mdi-folder-outline' }}</v-icon>
               <span class="group-name">{{ group.favorites ? t('walletLibrary.favorites') : group.name || t('walletLibrary.uncategorized') }}</span>
               <span class="library-count">{{ filtering ? group.wallets.length : group.total }}</span>
             </button>
-            <v-menu v-if="group.id" offset-y>
-              <template #activator="{ on, attrs }">
-                <v-btn icon x-small v-bind="attrs" v-on="on" :disabled="saving"
-                  :aria-label="t('walletLibrary.categoryActions', { name: group.name })"><v-icon small>mdi-dots-horizontal</v-icon></v-btn>
+            <v-menu v-if="group.id" >
+              <template #activator="{ props: activatorProps }">
+                <v-btn icon size="x-small" v-bind="activatorProps"  :disabled="saving"
+                  :aria-label="t('walletLibrary.categoryActions', { name: group.name })"><v-icon size="small">mdi-dots-horizontal</v-icon></v-btn>
               </template>
-              <v-list dense>
+              <v-list density="compact">
                 <v-list-item @click="editCategory(group)"><v-list-item-title>{{ t('walletLibrary.renameCategory') }}</v-list-item-title></v-list-item>
                 <v-list-item @click="deleting = group"><v-list-item-title>{{ t('walletLibrary.deleteCategory') }}</v-list-item-title></v-list-item>
               </v-list>
@@ -73,18 +73,19 @@
           </div>
           <Draggable :id="groupDomId(group.key)" tag="ul" class="library-wallets"
             :class="{ 'library-wallets--target': dragging && (!group.expanded || !group.wallets.length) }"
-            :value="group.expanded ? group.wallets : []" group="wallet-library" handle=".wallet-drag" draggable=".library-wallet"
+            :model-value="group.expanded ? group.wallets : []" item-key="id" group="wallet-library" handle=".wallet-drag" draggable=".library-wallet"
             :disabled="!reorderable || !ready" :animation="150" :force-fallback="true" :fallback-on-body="true"
             :fallback-tolerance="4" :scroll-sensitivity="80" :scroll-speed="16" :empty-insert-threshold="24"
             ghost-class="library-wallet--ghost" fallback-class="library-wallet--fallback"
             @start="dragging = true" @end="dragging = false" @change="reordered($event, group)">
-              <li v-for="(wallet, index) in (group.expanded ? group.wallets : [])" :key="wallet.id" class="library-wallet glass-liquid"
+            <template #item="{ element: wallet, index }">
+              <li class="library-wallet glass-liquid"
                 :data-wallet-id="wallet.id" :class="{ 'library-wallet--locked': wallet.id === lockedWalletId }">
                 <button type="button" class="wallet-drag" :disabled="!reorderable || !ready"
                   :aria-label="t('walletLibrary.reorderWallet', { name: wallet.name })" :title="t('walletLibrary.keyboardHint')"
                   @keydown.alt.up.prevent="moveStep(wallet, group, index, -1)"
                   @keydown.alt.down.prevent="moveStep(wallet, group, index, 1)">
-                  <v-icon small>mdi-drag-vertical</v-icon>
+                  <v-icon size="small">mdi-drag-vertical</v-icon>
                 </button>
                 <button type="button" class="wallet-open" :disabled="loadingWalletId != null"
                   :aria-busy="loadingWalletId === wallet.id" :title="displayAddress(wallet)" @click="$emit('select', wallet.id)"
@@ -94,7 +95,7 @@
                     <v-progress-circular v-if="loadingWalletId === wallet.id" class="wallet-chain" size="16" width="2" indeterminate color="var(--g-accent)" />
                     <v-avatar v-else class="wallet-chain" size="16"><v-img :src="networkIcon(wallet)" /></v-avatar></span>
                   <span class="wallet-copy">
-                    <span class="wallet-name">{{ wallet.name }} <v-icon v-if="wallet.id === lockedWalletId" x-small :title="t('walletLibrary.locked')">mdi-lock-outline</v-icon></span>
+                    <span class="wallet-name">{{ wallet.name }} <v-icon v-if="wallet.id === lockedWalletId" size="x-small" :title="t('walletLibrary.locked')">mdi-lock-outline</v-icon></span>
                     <span v-if="loadingWalletId === wallet.id" class="wallet-network" role="status">{{ t('miniGero.unlocking') }}</span>
                     <span v-else class="wallet-network">{{ wallet.chain }} &middot; {{ wallet.network }}<span v-if="walletKind(wallet)"> &middot; {{ walletKind(wallet) }}</span></span>
                     <span v-if="displayAddress(wallet)" class="wallet-address" :class="{ 'wallet-address--match': matchedAddress(wallet) }" :title="displayAddress(wallet)">{{ shortAddress(displayAddress(wallet)) }}</span>
@@ -102,14 +103,14 @@
                   <img v-if="walletTypeIcon(wallet)" class="wallet-hardware" :src="walletTypeIcon(wallet)"
                     :alt="wallet.type" :title="wallet.type" width="18" height="18" />
                 </button>
-                <v-btn icon small class="wallet-favorite" :class="{ 'wallet-favorite--active': wallet.isFavorite }"
+                <v-btn icon size="small" class="wallet-favorite" :class="{ 'wallet-favorite--active': wallet.isFavorite }"
                   :disabled="!ready" :aria-pressed="!!wallet.isFavorite" :aria-label="t(wallet.isFavorite ? 'walletLibrary.unfavorite' : 'walletLibrary.favorite', { name: wallet.name })"
-                  @click="toggleFavorite(wallet.id)"><v-icon small>{{ wallet.isFavorite ? 'mdi-star' : 'mdi-star-outline' }}</v-icon></v-btn>
-                <v-menu offset-y>
-                  <template #activator="{ on, attrs }"><v-btn icon small v-bind="attrs" v-on="on" :disabled="saving"
-                    :aria-label="t('walletLibrary.walletActions', { name: wallet.name })"><v-icon small>mdi-dots-vertical</v-icon></v-btn></template>
-                  <v-list dense>
-                    <v-subheader>{{ t('walletLibrary.moveTo') }}</v-subheader>
+                  @click="toggleFavorite(wallet.id)"><v-icon size="small">{{ wallet.isFavorite ? 'mdi-star' : 'mdi-star-outline' }}</v-icon></v-btn>
+                <v-menu >
+                  <template #activator="{ props: activatorProps }"><v-btn icon size="small" v-bind="activatorProps"  :disabled="saving"
+                    :aria-label="t('walletLibrary.walletActions', { name: wallet.name })"><v-icon size="small">mdi-dots-vertical</v-icon></v-btn></template>
+                  <v-list density="compact">
+                    <v-list-subheader>{{ t('walletLibrary.moveTo') }}</v-list-subheader>
                     <v-list-item :disabled="group.id === null" @click="moveCategory(wallet.id, null)"><v-list-item-title>{{ t('walletLibrary.uncategorized') }}</v-list-item-title></v-list-item>
                     <v-list-item v-for="category in preferences.categories" :key="category.id" :disabled="group.id === category.id" @click="moveCategory(wallet.id, category.id)"><v-list-item-title>{{ category.name }}</v-list-item-title></v-list-item>
                     <v-divider />
@@ -118,9 +119,12 @@
                   </v-list>
                 </v-menu>
               </li>
-            <li v-if="(group.expanded && !group.wallets.length) || (dragging && !group.expanded)" slot="footer" class="group-empty">
+            </template>
+            <template #footer>
+            <li v-if="(group.expanded && !group.wallets.length) || (dragging && !group.expanded)" class="group-empty">
               {{ t(group.favorites ? 'walletLibrary.noFavorites' : 'walletLibrary.emptyCategory') }}
             </li>
+            </template>
           </Draggable>
         </section>
       </template>
@@ -131,12 +135,12 @@
       <v-card class="library-dialog">
         <v-card-title>{{ t(editingId ? 'walletLibrary.renameCategory' : 'walletLibrary.newCategory') }}</v-card-title>
         <v-card-text><form id="wallet-category-form" @submit.prevent="saveCategory">
-          <v-text-field v-model="categoryName" outlined autofocus :label="t('walletLibrary.categoryName')" counter="48" maxlength="48" :disabled="saving" :error-messages="categoryError ? [categoryError] : []" />
+          <v-text-field v-model="categoryName" variant="outlined" autofocus :label="t('walletLibrary.categoryName')" counter="48" maxlength="48" :disabled="saving" :error-messages="categoryError ? [categoryError] : []" />
         </form></v-card-text>
         <v-card-actions><v-spacer /><GButton tier="tertiary" :disabled="saving" @click="categoryDialog = false">{{ t('walletLibrary.cancel') }}</GButton><GButton tier="primary" type="submit" form="wallet-category-form" :loading="saving" :disabled="!categoryName.trim()">{{ t('walletLibrary.save') }}</GButton></v-card-actions>
       </v-card>
     </v-dialog>
-    <v-dialog :value="!!deleting" max-width="420" :persistent="saving" @input="!$event && (deleting = null)">
+    <v-dialog :model-value="!!deleting" max-width="420" :persistent="saving" @update:model-value="!$event && (deleting = null)">
       <v-card class="library-dialog"><v-card-title>{{ t('walletLibrary.deleteCategory') }}</v-card-title>
         <v-card-text>{{ t('walletLibrary.deleteExplanation', { name: deleting ? deleting.name : '' }) }}</v-card-text>
         <v-card-actions><v-spacer /><GButton tier="tertiary" :disabled="saving" @click="deleting = null">{{ t('walletLibrary.cancel') }}</GButton><GButton tier="destructive" :loading="saving" @click="deleteCategory">{{ t('walletLibrary.delete') }}</GButton></v-card-actions>
@@ -199,6 +203,7 @@ const matchedAddress = (wallet: LibraryWallet): string => {
   return (term && fields.find(address => address.toLowerCase().includes(term))) || '';
 };
 const displayAddress = (wallet: LibraryWallet) => matchedAddress(wallet) || wallet.addresses[0] || wallet.stakeAddress;
+function toggleCollapsed(group: WalletGroup) { void run(() => repository.setCollapsed(group.id, !group.collapsed)); }
 function clearFilters() { query.value = ''; favoritesOnly.value = false; }
 function editCategory(category: WalletCategory | null) {
   editingId.value = category?.id || null; categoryName.value = category?.name || ''; categoryError.value = ''; categoryDialog.value = true;

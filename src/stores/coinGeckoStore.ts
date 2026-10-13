@@ -1,15 +1,23 @@
-import Vue from 'vue';
+import { plainStoreSnapshot } from '@/stores/serialization';
+import { reactive } from 'vue';
 import coinGeckoApi from '@/api/coinGecko.api';
 import { getContextType } from '@/utils/storageSync';
 import storeMessaging from '@/services/storeMessaging.service';
 import backgroundStoreMessaging from '@/chrome/storeMessagingBg';
 
+interface CoinQuote { usd?: number; usd_24h_change?: number; usd_market_cap?: number; usd_24h_vol?: number }
+interface CoinCache {
+  [key: string]: CoinQuote | number;
+  'apex-4'?: CoinQuote;
+  cardano?: CoinQuote;
+  _timestamp?: number;
+}
 export interface CoinGeckoStore {
-  cache: Record<string, any>;
+  cache: CoinCache;
 }
 
 // Create observable state
-export const coinGeckoStore = Vue.observable<CoinGeckoStore>({
+export const coinGeckoStore = reactive<CoinGeckoStore>({
   cache: {}
 });
 
@@ -26,7 +34,7 @@ if (context === 'browser') {
     // Apply updates to the observable state
     Object.keys(updates).forEach(key => {
       if (key in coinGeckoStore) {
-        (coinGeckoStore as any)[key] = updates[key as keyof CoinGeckoStore];
+        (coinGeckoStore as unknown as Record<string, unknown>)[key] = updates[key as keyof CoinGeckoStore];
       }
     });
   });
@@ -63,10 +71,10 @@ function broadcastFromBackground(updates: Partial<CoinGeckoStore>) {
     }));
 
     chrome.storage.local.get(STORE_NAME, (result) => {
-      const current = result[STORE_NAME] || { cache: {} };
-      chrome.storage.local.set({
+      const current = (result[STORE_NAME] as Partial<CoinGeckoStore> | undefined) || { cache: {} };
+      chrome.storage.local.set(plainStoreSnapshot({
         [STORE_NAME]: { ...current, ...serializedUpdates }
-      });
+      }));
     });
   }
 }
@@ -81,7 +89,7 @@ export default {
     }
   },
 
-  setCache(cache: Record<string, any>) {
+  setCache(cache: CoinGeckoStore['cache']) {
     coinGeckoStore.cache = cache;
 
     // Broadcast from background context
@@ -108,13 +116,14 @@ export default {
 
   // Utility method to get price for a specific coin
   getPrice(coinId: string): number | undefined {
-    return coinGeckoStore.cache[coinId]?.usd;
+    const entry = coinGeckoStore.cache[coinId];
+    return typeof entry === 'object' ? entry.usd : undefined;
   },
 
   // Utility method to check if the cache is stale (older than 5 minutes)
   isCacheStale(maxAge: number = 5 * 60 * 1000): boolean {
     const cacheTimestamp = coinGeckoStore.cache['_timestamp'];
-    if (!cacheTimestamp) return true;
+    if (typeof cacheTimestamp !== 'number' || !cacheTimestamp) return true;
     return Date.now() - cacheTimestamp > maxAge;
   }
 };

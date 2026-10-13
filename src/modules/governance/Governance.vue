@@ -2,7 +2,7 @@
 
 <script setup lang="ts">
 import { onMounted } from 'vue';
-import { useRoute, useRouter } from 'vue-router/composables';
+import { useRoute, useRouter } from 'vue-router';
 
 // /governance lands on My governance — the hub's home, which answers "what is
 // my stake doing" before the chain-wide surfaces. This shell only exists so the
@@ -12,7 +12,7 @@ import { useRoute, useRouter } from 'vue-router/composables';
 const route = useRoute();
 const router = useRouter();
 onMounted(() => {
-  if (route.query.drep) {
+  if (route.query['drep']) {
     router.replace({ name: 'governanceDReps', query: route.query });
   } else {
     router.replace({ name: 'governanceMe', query: route.query });

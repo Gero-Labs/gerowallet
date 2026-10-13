@@ -1,10 +1,14 @@
 # State and persistence
 
-Two independent layers with different owners: `Vue.observable` stores synced across contexts, and Dexie/IndexedDB owned by the background.
+Two independent layers with different owners: `reactive` stores synced across contexts, and Dexie/IndexedDB owned by the background.
 
 ## Stores
 
-A store is a plain `Vue.observable<T>({...})` object plus a module-level `STORE_NAME` (which doubles as its `chrome.storage.local` key) and `const context = getContextType()`. No Vuex, no Pinia, no base class - every store re-implements the same ~40 lines by hand.
+Use `reactive` from Vue. Chrome messages use plain serialized snapshots; Dexie
+write middleware unwraps Vue proxies without losing typed arrays, Maps, or Dates.
+Never send a reactive proxy directly to a structured-clone boundary.
+
+A store is a plain `reactive<T>({...})` object plus a module-level `STORE_NAME` (which doubles as its `chrome.storage.local` key) and `const context = getContextType()`. No Vuex, no Pinia, no base class - every store re-implements the same ~40 lines by hand.
 
 Smallest complete example to copy: `src/stores/cip45Store.ts` (64 lines). Canonical full example: `src/stores/walletStore.ts`.
 
@@ -28,7 +32,7 @@ UI page
 
 Two rules fall straight out of that:
 
-**Declare every field in the `Vue.observable({...})` literal with a default.** The subscribe handler drops unknown keys via `if (key in store)`, and Vue 2 only installs reactive getters on properties present at creation. A field added only to the type and the setter works in the background and never appears in the UI, with no error.
+**Declare every field in the `reactive({...})` literal with a default.** The subscribe handler drops unknown keys via `if (key in store)`,. A field added only to the type and the setter works in the background and never appears in the UI, with no error.
 
 **Use the in-memory store as the base for the `chrome.storage` write**, never `chrome.storage.local.get()`. The read-modify-write version races the Dexie liveQuery; the fix is commented in `geroStore.ts:108`. Copy `broadcastFromBackground` from `walletStore.ts`, `geroStore.ts`, `networkStore.ts`, `tokenMetadataStore.ts`, `cip45Store.ts` or `loading.ts`. Do **not** copy it from `tapToolsStore`, `coinGeckoStore`, `charli3Store` or `musicStore` - those still carry the racy pattern. (`stores/modules/card.ts` has no `broadcastFromBackground` at all and never persists, so it is not a store template either.)
 
@@ -53,7 +57,7 @@ Timed-out operations continue in the background. Late wallet readiness revisits
 the requested route through the normal guards; locked wallets, signing popups,
 and an explicit `addWallet=1` flow retain their existing restrictions.
 
-Lightweight UI-owned preferences use a simpler pattern - `Vue.observable` + direct `chrome.storage.local` + an `onChanged` listener + an explicit `hydrated` flag so the UI does not flash the default. See `src/stores/agentDockPrefsStore.ts`.
+Lightweight UI-owned preferences use a simpler pattern - `reactive` + direct `chrome.storage.local` + an `onChanged` listener + an explicit `hydrated` flag so the UI does not flash the default. See `src/stores/agentDockPrefsStore.ts`.
 
 `featureFlagsStore` is UI-only (an `EventSource` cannot run in an MV3 worker) and mirrors its flags into a separate `featureFlags` storage key that the background reads.
 
@@ -77,7 +81,7 @@ await setWalletConfiguration(walletId, 'myKey', value);
 
 That round trip is the point: it is what makes the value durable and consistent across contexts. `setWalletConfiguration` is callable from any context (Dexie's cross-context storage-mutated channel carries the change to the background).
 
-**Only 7-8 keys are seeded into a new wallet's `config` table** (`createNewWalletDb`: currency, txAutoSubmit, tokenAllocationSort, hideScamTokens, hideUnverifiedTokens, stakingProView, locale, plus `backup` when a mnemonic exists). For any other key, `walletStore.config.yourKey = value` is a plain assignment onto an object Vue 2 has already observed, so **it is not reactive and nothing re-renders** until the liveQuery round trip replaces the whole object. Always go through `setWalletConfiguration`, and never latch a local ref.
+**Only 7-8 keys are seeded into a new wallet's `config` table** (`createNewWalletDb`: currency, txAutoSubmit, tokenAllocationSort, hideScamTokens, hideUnverifiedTokens, stakingProView, locale, plus `backup` when a mnemonic exists). Vue 3 tracks new properties, but direct component assignments still bypass durable background-owned configuration writes. Always go through `setWalletConfiguration`, and never latch a local ref.
 
 **Read config with an explicit fallback.** `ConfigLoader` **replaces** `walletStore.config` wholesale from the DB rows, so the defaults declared in the observable literal are destroyed the first time it fires, and only 7-8 keys are seeded into a new wallet's `config` table:
 

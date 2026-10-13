@@ -24,12 +24,12 @@
 
       <v-btn
         icon
-        outlined
+        variant="outlined"
         class="topup-amount__swap"
         :aria-label="t('card.switchCurrency')"
         @click="inEur = !inEur"
       >
-        <v-icon small>mdi-swap-vertical</v-icon>
+        <v-icon size="small">mdi-swap-vertical</v-icon>
       </v-btn>
 
       <div class="topup-amount__field">
@@ -44,7 +44,7 @@
     <div class="topup-amount__meta">
       <span class="t-body-sm">{{ t('card.yourAdaBalance') }} <span class="g-num topup-amount__balance">₳{{ adaBalance }}</span></span>
       <span class="t-caption topup-amount__min" :class="{ 'is-error': belowMinimum }">
-        <v-icon x-small>mdi-information-outline</v-icon>
+        <v-icon size="x-small">mdi-information-outline</v-icon>
         {{ t('card.minimumTopUp', { amount: minAda }) }}
       </span>
     </div>

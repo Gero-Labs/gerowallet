@@ -15,9 +15,9 @@
         </CardChip>
       </template>
       <ul class="order-type__checks">
-        <li><v-icon small>mdi-check</v-icon>{{ t('card.instantActivation') }}</li>
-        <li><v-icon small>mdi-check</v-icon>{{ t('card.onlinePayments') }}</li>
-        <li><v-icon small>mdi-check</v-icon>{{ t('card.noShippingRequired') }}</li>
+        <li><v-icon size="small">mdi-check</v-icon>{{ t('card.instantActivation') }}</li>
+        <li><v-icon size="small">mdi-check</v-icon>{{ t('card.onlinePayments') }}</li>
+        <li><v-icon size="small">mdi-check</v-icon>{{ t('card.noShippingRequired') }}</li>
       </ul>
       <template #aside>
         <IsoScene name="virtual" class="order-type__art" />
@@ -37,9 +37,9 @@
         <CardChip>{{ physicalBadge }}</CardChip>
       </template>
       <ul class="order-type__checks">
-        <li><v-icon small>mdi-check</v-icon>{{ t('card.physicalCardDelivered') }}</li>
-        <li><v-icon small>mdi-check</v-icon>{{ t('card.inStorePayments') }}</li>
-        <li><v-icon small>mdi-check</v-icon>{{ t('card.atmWithdrawals') }}</li>
+        <li><v-icon size="small">mdi-check</v-icon>{{ t('card.physicalCardDelivered') }}</li>
+        <li><v-icon size="small">mdi-check</v-icon>{{ t('card.inStorePayments') }}</li>
+        <li><v-icon size="small">mdi-check</v-icon>{{ t('card.atmWithdrawals') }}</li>
       </ul>
       <template #aside>
         <IsoScene name="physical" class="order-type__art" />

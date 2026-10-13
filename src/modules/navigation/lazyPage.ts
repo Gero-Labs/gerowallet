@@ -1,5 +1,5 @@
 import type { Component } from 'vue';
-import type VueRouter from 'vue-router';
+import type { Router } from 'vue-router';
 
 const preloaders = new WeakMap<object, () => Promise<Component>>();
 
@@ -20,8 +20,9 @@ export function lazyPage(loader: () => Promise<{ default: Component }>) {
 }
 
 /** Warm only content-page factories when an enabled navigation item is targeted. */
-export async function prefetchPage(router: VueRouter, path: string): Promise<void> {
-  await Promise.all(router.getMatchedComponents(path).map(async component => {
+export async function prefetchPage(router: Router, path: string): Promise<void> {
+  const components = router.resolve(path).matched.flatMap(record => Object.values(record.components || {}));
+  await Promise.all(components.map(async component => {
     const load = preloaders.get(component);
     // Speculation must not navigate or surface an error before a real click.
     if (load) await load().catch(() => undefined);

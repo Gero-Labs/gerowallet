@@ -1,16 +1,16 @@
 <template>
   <v-dialog
-    :value="isOpen"
+    :model-value="isOpen"
     max-width="480"
     scrollable
-    @input="(v) => { if (!v) $emit('close'); }"
+    @update:model-value="(v) => { if (!v) $emit('close'); }"
   >
     <v-card class="liquid-glass remote-signing-card" rounded="lg">
       <v-card-title class="d-flex align-center px-4 pt-4 pb-2">
-        <v-icon left color="var(--g-accent)" class="mr-2">mdi-cellphone-link</v-icon>
+        <v-icon start color="var(--g-accent)" class="mr-2">mdi-cellphone-link</v-icon>
         <span class="rs-title">{{ $t('crossDevice.settings.title') }}</span>
         <v-spacer />
-        <v-btn icon small @click="$emit('close')"><v-icon>mdi-close</v-icon></v-btn>
+        <v-btn icon size="small" @click="$emit('close')"><v-icon>mdi-close</v-icon></v-btn>
       </v-card-title>
 
       <v-card-text class="px-4 pb-4">
@@ -21,22 +21,22 @@
             <div class="rs-hint">{{ $t('crossDevice.settings.enableHint') }}</div>
           </div>
           <v-switch
-            :input-value="enabled"
+            :model-value="enabled"
             :loading="busy"
             color="var(--g-accent)"
             inset
             hide-details
             class="mt-0 ml-2"
-            @change="onToggleEnabled"
+            @update:model-value="onToggleEnabled"
           />
         </div>
 
         <template v-if="enabled">
           <!-- A1: no valid wallet-control proof for this device; re-sign one under auth -->
-          <v-alert v-if="needsProof" dense text type="warning" class="rs-note mt-3 mb-0">
+          <v-alert v-if="needsProof" density="compact" variant="text" type="warning" class="rs-note mt-3 mb-0">
             <div class="d-flex align-center">
               <span class="rs-note-text flex-grow-1">{{ $t('crossDevice.settings.reconfirmBody') }}</span>
-              <v-btn small outlined color="warning" class="ml-3" :loading="busy" @click="startReconfirm">
+              <v-btn size="small" variant="outlined" color="warning" class="ml-3" :loading="busy" @click="startReconfirm">
                 {{ $t('crossDevice.settings.reconfirm') }}
               </v-btn>
             </div>
@@ -46,7 +46,7 @@
 
           <!-- Signing policy -->
           <div class="rs-label mb-1">{{ $t('crossDevice.settings.policy') }}</div>
-          <v-radio-group :value="policy" hide-details class="mt-0 rs-policy" @change="onPolicyChange">
+          <v-radio-group :model-value="policy" hide-details class="mt-0 rs-policy" @update:model-value="onPolicyChange">
             <v-radio value="ask" color="var(--g-accent)">
               <template #label>
                 <div>
@@ -76,13 +76,13 @@
               <div class="rs-hint">{{ $t('crossDevice.settings.serveProofsHint') }}</div>
             </div>
             <v-switch
-              :input-value="serveProofs"
+              :model-value="serveProofs"
               :loading="busy"
               color="var(--g-accent)"
               inset
               hide-details
               class="mt-0 ml-2"
-              @change="onToggleServeProofs"
+              @update:model-value="onToggleServeProofs"
             />
           </div>
           <div v-if="serveProofs" class="rs-hint rs-serve-note">
@@ -109,7 +109,7 @@
             class="black--text font-weight-bold rs-pair-btn"
             @click="openPairingQr"
           >
-            <v-icon left small>mdi-qrcode-scan</v-icon>
+            <v-icon start size="small">mdi-qrcode-scan</v-icon>
             {{ $t('crossDevice.pair.button') }}
           </v-btn>
 
@@ -140,7 +140,7 @@
                   class="rs-badge"
                   :class="pairVerified(entry.device.deviceId) ? 'rs-verified' : 'rs-sas'"
                 >
-                  <v-icon x-small :color="pairVerified(entry.device.deviceId) ? 'success' : 'var(--g-text-3)'">
+                  <v-icon size="x-small" :color="pairVerified(entry.device.deviceId) ? 'success' : 'var(--g-text-3)'">
                     {{ pairVerified(entry.device.deviceId) ? 'mdi-shield-check' : 'mdi-shield-account-outline' }}
                   </v-icon>
                   {{ pairVerified(entry.device.deviceId) ? $t('crossDevice.settings.walletVerified') : $t('crossDevice.settings.sasOnly') }}
@@ -158,22 +158,22 @@
                    silently does nothing is worse than not showing it. -->
               <div v-if="entry.trusted && serveProofs" class="rs-serve d-flex align-center mt-1">
                 <v-switch
-                  :input-value="deviceServes(entry.device.deviceId)"
+                  :model-value="deviceServes(entry.device.deviceId)"
                   :loading="busy"
                   color="var(--g-accent)"
                   inset
                   hide-details
-                  dense
+                  density="compact"
                   class="mt-0 mr-2"
-                  @change="onToggleDeviceServe(entry.device.deviceId, $event)"
+                  @update:model-value="onToggleDeviceServe(entry.device.deviceId, $event)"
                 />
                 <span class="rs-hint">{{ $t('crossDevice.settings.serveThisDevice') }}</span>
               </div>
             </div>
             <v-btn
               v-if="!entry.trusted"
-              small
-              outlined
+              size="small"
+              variant="outlined"
               color="var(--g-accent)"
               :disabled="!entry.online"
               :loading="busy"
@@ -181,8 +181,8 @@
             >{{ $t('crossDevice.settings.pair') }}</v-btn>
             <v-btn
               v-else
-              small
-              text
+              size="small"
+              variant="text"
               color="error"
               :loading="busy"
               @click="onUntrust(entry.device.deviceId)"
@@ -190,9 +190,9 @@
           </div>
         </template>
 
-        <v-alert dense text color="var(--g-text-3)" class="rs-note mt-4 mb-0">
+        <v-alert density="compact" variant="text" color="var(--g-text-3)" class="rs-note mt-4 mb-0">
           <div class="d-flex">
-            <v-icon small color="var(--g-text-3)" class="mr-2 mt-1">mdi-information-outline</v-icon>
+            <v-icon size="small" color="var(--g-text-3)" class="mr-2 mt-1">mdi-information-outline</v-icon>
             <span class="rs-note-text">{{ $t('crossDevice.settings.securityNote') }}</span>
           </div>
         </v-alert>
@@ -200,7 +200,7 @@
     </v-card>
 
     <!-- SAS pairing confirmation: the code must be compared on both devices -->
-    <v-dialog :value="!!pairingCandidate" max-width="360" @input="(v) => { if (!v) pairingCandidate = null; }">
+    <v-dialog :model-value="!!pairingCandidate" max-width="360" @update:model-value="(v) => { if (!v) pairingCandidate = null; }">
       <v-card class="liquid-glass rs-confirm-card" rounded="lg" v-if="pairingCandidate">
         <v-card-title class="rs-title px-4 pt-4 pb-1">{{ $t('crossDevice.settings.pairConfirmTitle') }}</v-card-title>
         <v-card-text class="px-4 pb-2">
@@ -210,9 +210,9 @@
           <div class="rs-confirm-code">{{ fingerprint(pairingCandidate.device.pubKey) }}</div>
         </v-card-text>
         <v-card-actions class="px-4 pb-4 pt-0">
-          <v-btn text small @click="pairingCandidate = null">{{ $t('common.cancel') }}</v-btn>
+          <v-btn variant="text" size="small" @click="pairingCandidate = null">{{ $t('common.cancel') }}</v-btn>
           <v-spacer />
-          <v-btn small color="var(--g-accent)" class="black--text font-weight-bold" :loading="busy" @click="confirmPairing">
+          <v-btn size="small" color="var(--g-accent)" class="black--text font-weight-bold" :loading="busy" @click="confirmPairing">
             {{ $t('crossDevice.settings.pairConfirmMatch') }}
           </v-btn>
         </v-card-actions>
@@ -220,12 +220,12 @@
     </v-dialog>
 
     <!-- QR scan-to-pair: the phone scans this code; we poll for the pinned result -->
-    <v-dialog :value="qrDialogOpen" max-width="360" @input="(v) => { if (!v) closePairingQr(); }">
+    <v-dialog :model-value="qrDialogOpen" max-width="360" @update:model-value="(v) => { if (!v) closePairingQr(); }">
       <v-card class="liquid-glass rs-confirm-card" rounded="lg">
         <v-card-title class="rs-title px-4 pt-4 pb-1">
           <span>{{ qrState === 'paired' ? $t('crossDevice.pair.pairedTitle') : $t('crossDevice.pair.title') }}</span>
           <v-spacer />
-          <v-btn icon small @click="closePairingQr"><v-icon>mdi-close</v-icon></v-btn>
+          <v-btn icon size="small" @click="closePairingQr"><v-icon>mdi-close</v-icon></v-btn>
         </v-card-title>
         <v-card-text class="px-4 pb-4 text-center">
           <!-- minting the payload -->
@@ -264,7 +264,7 @@
           <div v-else-if="qrState === 'expired'">
             <v-icon color="warning" size="40">mdi-clock-alert-outline</v-icon>
             <p class="rs-hint mt-3 mb-3">{{ $t('crossDevice.pair.expired') }}</p>
-            <v-btn small color="var(--g-accent)" class="black--text font-weight-bold" @click="openPairingQr">
+            <v-btn size="small" color="var(--g-accent)" class="black--text font-weight-bold" @click="openPairingQr">
               {{ $t('crossDevice.pair.newCode') }}
             </v-btn>
           </div>
@@ -273,7 +273,7 @@
     </v-dialog>
 
     <!-- Enable-time auth: sign the one-time wallet-control proof before turning on -->
-    <v-dialog :value="enableAuthOpen" max-width="380" persistent @input="(v) => { if (!v) cancelEnableAuth(); }">
+    <v-dialog :model-value="enableAuthOpen" max-width="380" persistent @update:model-value="(v) => { if (!v) cancelEnableAuth(); }">
       <v-card class="liquid-glass rs-confirm-card" rounded="lg">
         <v-card-title class="rs-title px-4 pt-4 pb-1">
           {{ $t(reconfirmMode ? 'crossDevice.settings.reconfirmTitle' : 'crossDevice.settings.enableAuthTitle') }}
@@ -293,8 +293,8 @@
             v-else
             v-model="enablePassword"
             type="password"
-            outlined
-            dense
+            variant="outlined"
+            density="compact"
             autofocus
             hide-details
             :label="$t('wallet.spendingPassword')"
@@ -305,11 +305,11 @@
           <div v-if="enableError" class="rs-error mt-2">{{ enableError }}</div>
         </v-card-text>
         <v-card-actions class="px-4 pb-4 pt-0">
-          <v-btn text small :disabled="enableBusy" @click="cancelEnableAuth">{{ $t('common.cancel') }}</v-btn>
+          <v-btn variant="text" size="small" :disabled="enableBusy" @click="cancelEnableAuth">{{ $t('common.cancel') }}</v-btn>
           <v-spacer />
           <v-btn
             v-if="!isPrfWallet"
-            small
+            size="small"
             color="var(--g-accent)"
             class="black--text font-weight-bold"
             :loading="enableBusy"

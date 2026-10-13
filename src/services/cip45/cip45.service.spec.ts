@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import Vue from 'vue';
+import * as Vue from 'vue';
 import type { Cip45Pairing } from './types';
 
 interface MockConnectMessage {
@@ -37,7 +37,7 @@ vi.mock('@/chrome/messaging', () => ({
 
 // Reactive mock so the wallet-switch watcher notices loggedWallet.id changes.
 vi.mock('@/stores/walletStore', () => ({
-  walletStore: Vue.observable({ loggedWallet: { id: 'w1', chain: 'Cardano', network: 'Mainnet' }, isLocked: false }),
+  walletStore: Vue.reactive({ loggedWallet: { id: 'w1', chain: 'Cardano', network: 'Mainnet' }, isLocked: false }),
   default: {},
 }));
 

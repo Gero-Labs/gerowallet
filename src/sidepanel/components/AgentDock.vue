@@ -60,7 +60,7 @@
               :aria-selected="activeMode === 'copilot'"
               aria-controls="agent-dock-thread"
               :disabled="!copilotEnabled"
-              :aria-disabled="String(!copilotEnabled)"
+              :aria-disabled="!copilotEnabled"
               @click="enterCopilotMode()"
             >{{ $t('support.toggle.copilot') }}</button>
           </div>
