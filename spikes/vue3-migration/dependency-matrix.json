@@ -1,0 +1,1721 @@
+{
+  "schemaVersion": 1,
+  "checkedDate": "2026-10-13",
+  "timezone": "Asia/Jerusalem",
+  "baseline": {
+    "repository": "Gero-Labs/gerowallet",
+    "branch": "migration/v01-foundation-pilot",
+    "commit": "50e0bcfe6ca8a6bace23f2a0010bad6d278b2d1a",
+    "walletVersion": "2.7.3",
+    "earlierPlanningAudit": "ec6b105693858ccc2ef1562aecb43d407a76210b"
+  },
+  "scope": "V01 isolated dependency decisions only. No production manifest or root lockfile changes are made by this matrix. Registry peer compatibility is evidence for selection, not proof the full wallet has migrated.",
+  "runtime": {
+    "selectedNode": "24.19.0",
+    "source": "Bundled workspace runtime supplied for this task",
+    "hostPathNode": "20.11.0",
+    "requirement": "Use exact Node24.19.0 for the isolated pilot and record its npm version. PATH Node20.11.0 does not meet selected plugin/Sass/i18n engines.",
+    "observedCI": {
+      "node": "22.11.0 in dev-bundle-gate, midnight-ledger-verify, help-browser-evidence, eslint-check, lockfile-check and ci-cd build jobs; ci-cd publish still uses Node16",
+      "npm": "lockfile-check and ci-cd build explicitly install npm11.1.0; other Node22.11 jobs use the setup runtime default unless separately configured",
+      "evidence": [".github/workflows/dev-bundle-gate.yml:91", ".github/workflows/midnight-ledger-verify.yml:32", ".github/workflows/lockfile-check.yml:41", ".github/workflows/lockfile-check.yml:44", ".github/workflows/ci-cd.yml:24", ".github/workflows/ci-cd.yml:27", ".github/workflows/ci-cd.yml:112"]
+    },
+    "requiredCIChange": "V03 must update all build/test/install workflow Node pins together. Node22.11.0 is below Vite/plugin-vue >=22.12 requirements. Recommend the tested Node24.19.0 toolchain; a maintained patched Node22 >=22.12 may instead be selected only with the same clean-install/build evidence. Pin npm consistently and preserve lockfile workflow compatibility; do not silently standardize on the older PATH npm10. V14 must replace the remaining Node16 publish/install path.",
+    "reportedHostBaseline": "Parent execution reports a full baseline npm ci under Node24.19.0 succeeded with1766 packages. This does not establish the upgraded host dependency tree."
+  },
+  "strategy": {
+    "vue": "3.5.44",
+    "vuetifyCheckpoint": "3.13.6",
+    "vuetifyTarget": "4.2.4",
+    "router": "4.6.4",
+    "i18n": "11.4.14",
+    "vite": "7.3.7",
+    "typescript": "5.9.3",
+    "sourcePolicy": "Exact stable semver only; no beta/rc Vue, Vuetify, or Router builds. vuedraggable4.1.0 is stable despite its npm next tag.",
+    "hostV03": "Do not copy a successful tiny pilot lock over the host. Regenerate the root lock in V03 with all chain SDKs, four build configurations, test plugins and engine constraints; run npm ci without force or legacy-peer-deps. Any install peer conflict is a decision to resolve, not suppress.",
+    "compat": "Pilot uses native Vue3, no @vue/compat. A temporary compat option must be separately justified and cannot make Vuetify2 compatible or remain in final V12 artifacts.",
+    "vendor": "Do not rewrite or deduplicate compiled src/vendor/gero-swap internals into the host runtime. Preserve the custom-element boundary and local assets.",
+    "typecheck": "Pilot typecheck is separate from legacy root tsc. Existing host type errors cannot be treated as proof the Vue3 migration fails or passes."
+  },
+  "cspI18n": {
+    "runtime": "vue-i18n11 uses JIT by default; official docs distinguish runtime-only distributions and precompiled AST resources. Choose one tested production setup and verify in MV3.",
+    "selected": "Use pinned @intlify/message-compiler11.4.14 baseCompile at build time to generate static ESM message functions from an explicit list of locale files. The pilot run.mjs compiles every us/de/es sample message, maps locale imports to generated modules, aliases vue-i18n to its runtime-only bundle and sets __INTLIFY_DROP_MESSAGE_COMPILER__=true. No dynamic Function construction or string compiler is needed at runtime.",
+    "productionFollowup": "V06 must adapt the explicit-file precompilation stage to every host TypeScript locale message, including lazy resources and merged UI messages. Pilot sample compilation is not proof that the existing production catalogs compile. Preserve the same11.4.14 compiler grammar in the exhaustive gate and packaged build.",
+    "constraints": [
+      "Current TS locale modules need an explicit build transform/preprocessing path; the pilot's JSON samples do not prove production-catalog coverage.",
+      "Preserve literal dotted-key resolution, named placeholders and plurals; escape literal special characters without changing displayed copy.",
+      "All us/de/es messages and lazy chunks must be processed; preserve worker locale evaluation ordering and independent push renderer.",
+      "No unsafe-eval/new Function requirement, remote compiler, remote scripts or server-fetched executable messages. Validate installed production CSP and final bundle guards."
+    ],
+    "source": "https://vue-i18n.intlify.dev/guide/advanced/optimization"
+  },
+  "directVueCoverage": {
+    "method": "Inspect direct package names and locked dependency/peer edges involving Vue, plus source imports and active build config. Generated vendor bundles are excluded from host consumer counts.",
+    "directPackages": [
+      "@vueuse/core",
+      "@vueuse/rxjs",
+      "vue",
+      "vue-class-component",
+      "vue-flag-icon",
+      "vue-i18n",
+      "vue-property-decorator",
+      "vue-router",
+      "vuedraggable",
+      "vuetify",
+      "@vitejs/plugin-vue2",
+      "@voerro/vue-notifications",
+      "@vue/test-utils",
+      "eslint-plugin-vue",
+      "unplugin-vue-components",
+      "vue-eslint-parser",
+      "vue-template-compiler"
+    ],
+    "allHaveDecision": true,
+    "searchScope": [
+      "src",
+      "test",
+      "scripts",
+      "root Vite/Vitest/ESLint configs"
+    ],
+    "unusedSearchNote": "No imports found for vue-class-component, vue-property-decorator or @vueuse/rxjs. Recheck at integration because main development may advance."
+  },
+  "dependencies": [
+    {
+      "name": "playwright",
+      "baseline": null,
+      "action": "add-pilot",
+      "target": { "name": "playwright", "version": "1.62.1" },
+      "owners": ["V01", "V02"],
+      "consumers": ["spikes/vue3-migration/scripts/browser-test.mjs"],
+      "rationale": "Pin the actual browser automation package used by both isolated targets; the separate @playwright/test runner is unnecessary for this executable Node assertion harness.",
+      "validation": "Both final target locks contain1.62.1; reports record Chromium151.0.7922.34, Node24.19.0 and14 passing MV3 checks. This pilot does not replace the external production E2E suite."
+    },
+    {
+      "name": "vue",
+      "baseline": {
+        "kind": "dependencies",
+        "range": "^2.7.16",
+        "locked": "2.7.16"
+      },
+      "action": "upgrade",
+      "target": {
+        "name": "vue",
+        "version": "3.5.44"
+      },
+      "owners": [
+        "V03",
+        "V04",
+        "V05"
+      ],
+      "consumers": [
+        "src/options/main.ts",
+        "src/sidepanel/main.ts",
+        "src/stores",
+        "src/shared/composables"
+      ],
+      "rationale": "Latest stable registry tag on 2026-10-13; replaces planned 3.5.43. Options API and existing Composition API code can be migrated incrementally; a complete component rewrite is unnecessary.",
+      "validation": "Both real apps, all four extension bundles, reactivity/persistence and async authorization tests. Compile templates ahead of time; no runtime template compilation under extension CSP."
+    },
+    {
+      "name": "vue-template-compiler",
+      "baseline": {
+        "kind": "devDependencies",
+        "range": "^2.7.16",
+        "locked": "2.7.16"
+      },
+      "action": "replace",
+      "target": {
+        "name": "@vue/compiler-sfc",
+        "version": "3.5.44"
+      },
+      "owners": [
+        "V03"
+      ],
+      "consumers": [
+        "vite.config.mts",
+        "vitest.config.mts",
+        "package.json"
+      ],
+      "rationale": "Vue 2 compiler is incompatible with Vue 3; pin compiler to exact runtime patch.",
+      "validation": "Ensure one host Vue 3 runtime/compiler patch and remove Vue 2 compiler from final host tree.",
+      "baselineCompilerNote": "Vue 2.7.16 also contains a nested @vue/compiler-sfc 2.7.16; it is not a root direct dependency."
+    },
+    {
+      "name": "vuetify",
+      "baseline": {
+        "kind": "dependencies",
+        "range": "^2.7.2",
+        "locked": "2.7.2"
+      },
+      "action": "upgrade",
+      "target": {
+        "name": "vuetify",
+        "version": "4.2.4"
+      },
+      "owners": [
+        "V03",
+        "V07",
+        "V08",
+        "V09",
+        "V10",
+        "V11",
+        "V12"
+      ],
+      "consumers": [
+        "src/plugins/vuetify.ts",
+        "src/plugins/i18n.ts",
+        "src/options/main.ts",
+        "src/sidepanel/main.ts",
+        "src/shared/styles",
+        "src/components.d.ts"
+      ],
+      "rationale": "Stable v4 destination with a separate v3 migration checkpoint; both accept Vue ^3.5.0. Do not use v4 beta/dev tags.",
+      "validation": "Same representative slice on checkpoint and target, then full final feature parity, awaited form validation, theme/locale/overlay behavior and production CSP.",
+      "checkpoint": {
+        "name": "vuetify",
+        "version": "3.13.6",
+        "purpose": "Internal migration checkpoint; no public v3 rollout required."
+      },
+      "latestStableObserved": "4.2.4"
+    },
+    {
+      "name": "vue-router",
+      "baseline": {
+        "kind": "dependencies",
+        "range": "^3.6.5",
+        "locked": "3.6.5"
+      },
+      "action": "upgrade",
+      "target": {
+        "name": "vue-router",
+        "version": "4.6.4"
+      },
+      "owners": [
+        "V04"
+      ],
+      "consumers": [
+        "src/modules/navigation/router.ts",
+        "src/sidepanel/router.ts",
+        "src/modules/navigation/lazyPage.ts",
+        "src/modules/navigation/layouts/ContentLayout.vue"
+      ],
+      "rationale": "Latest stable 4.x patch. Router 5.4.0 is the registry latest; deliberately defer a second router major and its new optional integrations.",
+      "validation": "Hash routes, initial navigation, guards, lazy preload API, query/deep links and RouterView/KeepAlive navigation-away/back timer/selection tests.",
+      "latestStableObserved": "5.4.0",
+      "selection": "Required Vue 2 to Vue 3 router migration; v5 reconsideration is separate and must not add Pinia."
+    },
+    {
+      "name": "vue-i18n",
+      "baseline": {
+        "kind": "dependencies",
+        "range": "^8.28.2",
+        "locked": "8.28.2"
+      },
+      "action": "upgrade",
+      "target": {
+        "name": "vue-i18n",
+        "version": "11.4.14"
+      },
+      "owners": [
+        "V06"
+      ],
+      "consumers": [
+        "src/plugins/i18n.ts",
+        "src/plugins/i18n/us.ts",
+        "src/plugins/i18n/de.ts",
+        "src/plugins/i18n/es.ts",
+        "src/shared/composables/useTranslation.ts",
+        "src/chrome/backgroundLocales.ts"
+      ],
+      "rationale": "Stable supported-major destination; minimum Node >=22. Preserve literal dotted keys, lazy locales, plural/interpolation contracts and worker locale-table isolation.",
+      "validation": "Compile every production message with the selected production compiler; escaped literal @ and other special characters, us/de/es lazy loading, fallback and Vuetify locale adapter. Exercise packaged CSP with no unsafe-eval."
+    },
+    {
+      "name": "@intlify/unplugin-vue-i18n",
+      "baseline": null,
+      "action": "rejected-candidate",
+      "target": null,
+      "consideredVersion": "11.2.5",
+      "owners": [
+        "V03",
+        "V06"
+      ],
+      "consumers": [
+        "vite.config.mts (new locale compilation integration)"
+      ],
+      "rationale": "The official plugin is compatible with Vite7, but its pilot install introduced the unresolved braces advisory chain and deprecated build-side i18n10 dependency. The final pilot instead uses direct pinned message-compiler with an explicit locale-file transform; this plugin is not in the selected install.",
+      "validation": "Verify final pilot locks omit this candidate and its unused transitive chain. A future switch back requires fresh audit, complete TS-locale compilation and installed CSP proof."
+    },
+    {
+      "name": "@intlify/message-compiler",
+      "baseline": null,
+      "action": "add",
+      "target": {
+        "name": "@intlify/message-compiler",
+        "version": "11.4.14"
+      },
+      "owners": [
+        "V06"
+      ],
+      "consumers": [
+        "spikes/vue3-migration/scripts/run.mjs:27",
+        "spikes/vue3-migration/scripts/run.mjs:34",
+        "V06 exhaustive production-catalog compilation gate (new)"
+      ],
+      "rationale": "Selected prebuild compiler for static message functions, pinned to the i18n runtime version. An explicit-file transform avoids the rejected plugin's glob dependency and verifies messages with the same grammar used to build the shipped resources.",
+      "validation": "Run over all messages including lazy locales and shared push strings used by the UI. Do not rewrite background notification rendering to depend on a Vue runtime."
+    },
+    {
+      "name": "@vueuse/core",
+      "baseline": {
+        "kind": "dependencies",
+        "range": "6.9.2",
+        "locked": "6.9.2"
+      },
+      "action": "upgrade",
+      "target": {
+        "name": "@vueuse/core",
+        "version": "15.0.0"
+      },
+      "owners": [
+        "V05",
+        "V09",
+        "V11"
+      ],
+      "consumers": [
+        "src/modules/blog/Blog.vue:94",
+        "src/modules/wallet/pages/HomeSection.vue:11",
+        "src/modules/wallet/components/dashboard/RecentTransactionsSection.vue:69",
+        "src/modules/dashboard/components/TokensMarketCards.vue:246"
+      ],
+      "rationale": "Current stable Vue 3-only line; peers Vue ^3.5.0, Node >=22. Remove host dependence on vue-demi where no remaining dependency requires it.",
+      "validation": "Verify useIntervalFn immediate/start/stop and activation/unmount behavior; useIntersectionObserver lifecycle/visibility behavior and no duplicate timers."
+    },
+    {
+      "name": "@vueuse/rxjs",
+      "baseline": {
+        "kind": "dependencies",
+        "range": "6.9.2",
+        "locked": "6.9.2"
+      },
+      "action": "remove",
+      "target": null,
+      "owners": [
+        "V03",
+        "V05"
+      ],
+      "consumers": [],
+      "rationale": "No source imports or useObservable/useSubject consumers found in tracked src, test, or scripts. Removing this Vue adapter does not mean removing RxJS used by chain SDKs.",
+      "validation": "Repeat source search when integrating and ensure Midnight streams still pass tests.",
+      "searchEvidence": "rg -n 'vue-class-component|vue-property-decorator|@vueuse/rxjs|useObservable|useSubject|from .vue-demi' src test scripts with source-file globs produced no matches."
+    },
+    {
+      "name": "vue-class-component",
+      "baseline": {
+        "kind": "dependencies",
+        "range": "^7.2.3",
+        "locked": "7.2.6"
+      },
+      "action": "remove",
+      "target": null,
+      "owners": [
+        "V03"
+      ],
+      "consumers": [],
+      "rationale": "No source consumers; locked 7.2.6 requires Vue ^2.0.0. Do not introduce another class-component migration framework.",
+      "validation": "Repeat import/decorator search before removal; all SFCs still compile."
+    },
+    {
+      "name": "vue-property-decorator",
+      "baseline": {
+        "kind": "dependencies",
+        "range": "^9.1.2",
+        "locked": "9.1.2"
+      },
+      "action": "remove",
+      "target": null,
+      "owners": [
+        "V03"
+      ],
+      "consumers": [],
+      "rationale": "No source consumers; removing unused package avoids keeping the Vue 2 class-component dependency contract.",
+      "validation": "Repeat import/decorator search before removal; all SFCs still compile."
+    },
+    {
+      "name": "vuedraggable",
+      "baseline": {
+        "kind": "dependencies",
+        "range": "2.24.3",
+        "locked": "2.24.3"
+      },
+      "action": "upgrade",
+      "target": {
+        "name": "vuedraggable",
+        "version": "4.1.0"
+      },
+      "owners": [
+        "V07",
+        "V09"
+      ],
+      "consumers": [
+        "src/shared/components/WalletLibrary/WalletLibrary.vue:74",
+        "src/shared/components/WalletLibrary/WalletLibrary.vue:150"
+      ],
+      "rationale": "Vue 3 stable semver release uses npm 'next' tag while npm 'latest' still points at Vue 2 version 2.24.3; pin 4.1.0 explicitly. It is not a prerelease.",
+      "validation": "Migrate item slot/item-key contract, group sorting, persistence, drag handles, accessibility and keyboard fallback; retain tested Sortable override.",
+      "transitiveOverride": {
+        "sortablejs": "1.15.7"
+      },
+      "caveat": "v4.1.0 is an older stable release; assess maintenance/advisories and sorting behavior before host acceptance. Its own dependency is SortableJS 1.14.0, so preserve and explicitly retest existing 1.15.7 override."
+    },
+    {
+      "name": "vue-flag-icon",
+      "baseline": {
+        "kind": "dependencies",
+        "range": "^2.1.0",
+        "locked": "2.1.0"
+      },
+      "action": "replace",
+      "target": {
+        "name": "flag-icons",
+        "version": "6.15.0"
+      },
+      "owners": [
+        "V07"
+      ],
+      "consumers": [
+        "src/options/main.ts:14",
+        "src/modules/navigation/components/LanguageSelector.vue",
+        "src/modules/dashboard/components/ProfileTab.vue",
+        "src/modules/wallet/components/dashboard/card-order-steps/ShippingAddressSelectionStep.vue",
+        "src/shared/components/PhoneNumberInput.vue"
+      ],
+      "rationale": "Remove Vue 2 registration wrapper, retain already locked flag CSS/assets and expose a small Vue 3 local component with the existing iso prop. Avoid unrelated asset refresh.",
+      "validation": "Verify all country/language selectors in both apps; local asset URLs, sizing and accessible country labels.",
+      "replacementKind": "Local Vue 3 adapter plus explicit existing transitive flag-icons dependency",
+      "latestStableObserved": "7.5.0"
+    },
+    {
+      "name": "@voerro/vue-notifications",
+      "baseline": {
+        "kind": "devDependencies",
+        "range": "^1.0.1",
+        "locked": "1.0.1"
+      },
+      "action": "replace",
+      "target": null,
+      "owners": [
+        "V07"
+      ],
+      "consumers": [
+        "src/options/main.ts:21",
+        "src/sidepanel/main.ts:13",
+        "src/options/App.vue:28",
+        "src/sidepanel/App.vue:3",
+        "src/plugins/snackbar.ts:11",
+        "src/plugins/snackbar.ts:20"
+      ],
+      "rationale": "Active dependency imports Vue ^2.5.11 and registers a global notify function. Replace its rendering with Vuetify VSnackbar through the existing snackbar service interface; do not simply delete callers.",
+      "validation": "Success/error messages, timing, queue behavior, overlay stacking, localization, accessibility and two independently booted app surfaces.",
+      "replacementKind": "Local Vue 3/Vuetify notification host; no new external notification dependency"
+    },
+    {
+      "name": "@vitejs/plugin-vue2",
+      "baseline": {
+        "kind": "devDependencies",
+        "range": "^2.2.0",
+        "locked": "2.3.4"
+      },
+      "action": "replace",
+      "target": {
+        "name": "@vitejs/plugin-vue",
+        "version": "6.0.10"
+      },
+      "owners": [
+        "V03"
+      ],
+      "consumers": [
+        "vite.config.mts:3",
+        "vitest.config.mts:6",
+        "test/wallet-library/vite.config.mts"
+      ],
+      "rationale": "Official Vue 3 SFC plugin; accepts Vite5/6/7/8 but Node requires ^20.19.0 or >=22.12.0.",
+      "validation": "Both app entrypoints and Vue SFC tests use same compiler, custom-element recognition is compilerOptions.isCustomElement and Vue2 ignoredElements assumptions are removed."
+    },
+    {
+      "name": "vite",
+      "baseline": {
+        "kind": "devDependencies",
+        "range": "^4.5.5",
+        "locked": "4.5.14"
+      },
+      "action": "upgrade",
+      "target": {
+        "name": "vite",
+        "version": "7.3.7"
+      },
+      "owners": [
+        "V03",
+        "V14"
+      ],
+      "consumers": [
+        "vite.config.mts",
+        "vite.config.background.mts",
+        "vite.config.content.mts",
+        "vite.config.inject.mts",
+        "vitest.config.mts"
+      ],
+      "rationale": "Current supported 7.3 line receives important/security backports. It retains the Rollup toolchain, avoiding simultaneous Vite8 Rolldown conversion. Vite4 and5 are unsupported; simply swapping the Vue plugin on Vite4 is not the release target.",
+      "validation": "V03 must clean-install the host lock and run all four bundles sequentially, production CSP/remote-code/TDZ guards, manifest/assets/WASM parity, dev/HMR and worker runtime checks.",
+      "latestStableObserved": "8.3.4",
+      "supportSource": "https://vite.dev/releases",
+      "migrationSource": "https://vite.dev/guide/migration"
+    },
+    {
+      "name": "unplugin-auto-import",
+      "baseline": {
+        "kind": "devDependencies",
+        "range": "^0.19.0",
+        "locked": "0.19.0"
+      },
+      "action": "retain",
+      "target": {
+        "name": "unplugin-auto-import",
+        "version": "0.19.0"
+      },
+      "owners": [
+        "V03"
+      ],
+      "consumers": [
+        "vite.config.mts:184",
+        "src/auto-imports.d.ts (generated)"
+      ],
+      "rationale": "Existing Vue preset is compatible with Vue3 and avoids unrelated plugin API upgrades during migration; no mandatory Vite peer bound in locked package.",
+      "validation": "Regenerate declarations from Vue3; ensure auto-imported APIs resolve to the single host runtime.",
+      "latestStableObserved": "21.1.0"
+    },
+    {
+      "name": "unplugin-vue-components",
+      "baseline": {
+        "kind": "devDependencies",
+        "range": "^0.28.0",
+        "locked": "0.28.0"
+      },
+      "action": "retain",
+      "target": {
+        "name": "unplugin-vue-components",
+        "version": "0.28.0"
+      },
+      "owners": [
+        "V03",
+        "V07"
+      ],
+      "consumers": [
+        "vite.config.mts:162",
+        "src/components.d.ts (generated)"
+      ],
+      "rationale": "Package peers explicitly allow Vue2 or3. Keep local-component auto-discovery, change version:2.7 to3, and replace the Vuetify2 resolver path.",
+      "validation": "Regenerate declarations and verify every used component/directive resolves from Vuetify3/4 public exports.",
+      "latestStableObserved": "32.1.0"
+    },
+    {
+      "name": "vite-plugin-vuetify",
+      "baseline": null,
+      "action": "add",
+      "target": {
+        "name": "vite-plugin-vuetify",
+        "version": "2.1.3"
+      },
+      "owners": [
+        "V03",
+        "V07"
+      ],
+      "consumers": [
+        "vite.config.mts (replacement Vuetify resolver integration)"
+      ],
+      "rationale": "Official optional Vuetify loader supports Vite>=5 and Vuetify>=3. Host should use this instead of the existing Vuetify2 resolver unless explicit component imports are chosen.",
+      "validation": "Verify component tree-shaking, directives and Sass/CSS behavior against both Vuetify checkpoints.",
+      "pilotRequired": false,
+      "pilotAlternative": "Pilot uses explicit vuetify/components and vuetify/directives imports; this plugin is unnecessary there."
+    },
+    {
+      "name": "@vue/test-utils",
+      "baseline": {
+        "kind": "devDependencies",
+        "range": "^1.3.6",
+        "locked": "1.3.6"
+      },
+      "action": "upgrade",
+      "target": {
+        "name": "@vue/test-utils",
+        "version": "2.5.1"
+      },
+      "owners": [
+        "V02",
+        "V03"
+      ],
+      "consumers": [
+        "src/**/*.spec.ts with mount/shallowMount/createLocalVue",
+        "test/wallet-library"
+      ],
+      "rationale": "Vue3 testing package; peers Vue3/compiler-dom3/server-renderer3. v1 helpers/mount option contracts must migrate with the components.",
+      "validation": "Port mount globals/plugins/mocks and wrapper collection APIs without relaxing behavioral assertions; browser tests remain required for extension-context behavior."
+    },
+    {
+      "name": "@vue/compiler-dom",
+      "baseline": null,
+      "action": "add",
+      "target": {
+        "name": "@vue/compiler-dom",
+        "version": "3.5.44"
+      },
+      "owners": [
+        "V03"
+      ],
+      "consumers": [
+        "@vue/test-utils peer dependency"
+      ],
+      "rationale": "Align compiler patch with Vue runtime; dev-only explicit peer for deterministic testing resolution.",
+      "validation": "One matching compiler patch in lockfile."
+    },
+    {
+      "name": "@vue/server-renderer",
+      "baseline": null,
+      "action": "add",
+      "target": {
+        "name": "@vue/server-renderer",
+        "version": "3.5.44"
+      },
+      "owners": [
+        "V03"
+      ],
+      "consumers": [
+        "@vue/test-utils peer dependency"
+      ],
+      "rationale": "Testing peer dependency only; this browser extension does not gain an SSR runtime feature.",
+      "validation": "Match Vue peer exactly; do not introduce SSR bundles."
+    },
+    {
+      "name": "vitest",
+      "baseline": {
+        "kind": "devDependencies",
+        "range": "^3.2.4",
+        "locked": "3.2.7"
+      },
+      "action": "retain",
+      "target": {
+        "name": "vitest",
+        "version": "3.2.7"
+      },
+      "owners": [
+        "V02",
+        "V03"
+      ],
+      "consumers": [
+        "vitest.config.mts",
+        "src/**/*.spec.ts",
+        "test/**/*.test.ts"
+      ],
+      "rationale": "Existing test runner supports Vite7 through its own vite dependency. Separate Vue Test Utils migration from unrelated Vitest4/5 changes.",
+      "validation": "Run required suites and the full deterministic baseline under the selected host toolchain; verify single Vite7 resolution and unchanged assertions.",
+      "latestStableObserved": "5.0.4",
+      "retentionGate": "V03 must check supported-version/security requirements before final lock approval. This is a compatibility checkpoint choice, not a claim that Vitest3 receives ongoing maintenance. If rejected, upgrade vitest/@vitest/ui together to5.0.4 with an explicit test-runner migration and rerun baseline."
+    },
+    {
+      "name": "@vitest/ui",
+      "baseline": {
+        "kind": "devDependencies",
+        "range": "^3.2.7",
+        "locked": "3.2.7"
+      },
+      "action": "retain",
+      "target": {
+        "name": "@vitest/ui",
+        "version": "3.2.7"
+      },
+      "owners": [
+        "V02",
+        "V03"
+      ],
+      "consumers": [
+        "Developer Vitest UI"
+      ],
+      "rationale": "Keep exact matching version with retained Vitest3.2.7.",
+      "validation": "No mixed-major UI/runner dependencies."
+    },
+    {
+      "name": "typescript",
+      "baseline": {
+        "kind": "devDependencies",
+        "range": "^5.8.2",
+        "locked": "5.9.3"
+      },
+      "action": "retain",
+      "target": {
+        "name": "typescript",
+        "version": "5.9.3"
+      },
+      "owners": [
+        "V03"
+      ],
+      "consumers": [
+        "tsconfig.json",
+        "All typed source and Vite configs"
+      ],
+      "rationale": "Current locked compiler is accepted by Vue/Vuetify/Volar peers. Do not add a TypeScript7 native compiler migration to the framework pilot.",
+      "validation": "Isolated pilot vue-tsc gate and migrated host SFC types; record existing host baseline separately.",
+      "latestStableObserved": "7.0.2"
+    },
+    {
+      "name": "vue-tsc",
+      "baseline": null,
+      "action": "add",
+      "target": {
+        "name": "vue-tsc",
+        "version": "3.3.13"
+      },
+      "owners": [
+        "V03"
+      ],
+      "consumers": [
+        "Vue3 isolated and later host typecheck gate"
+      ],
+      "rationale": "Official Vue SFC checking wrapper; peers TypeScript>=5.0.0.",
+      "validation": "Pilot typecheck must pass. Establish host baseline and gate touched/migrated files without claiming current root tsc passes."
+    },
+    {
+      "name": "sass",
+      "baseline": {
+        "kind": "devDependencies",
+        "range": "~1.104.0",
+        "locked": "1.104.0"
+      },
+      "action": "retain",
+      "target": {
+        "name": "sass",
+        "version": "1.104.0"
+      },
+      "owners": [
+        "V03",
+        "V07"
+      ],
+      "consumers": [
+        "src/shared/styles",
+        "Vuetify Sass/CSS imports"
+      ],
+      "rationale": "Existing lock is within Vite7 sass ^1.70.0 peer range; minimum Node20.19 is already higher than local PATH Node20.11.",
+      "validation": "Modern Sass API configuration and Vuetify theme/style compilation; don't silence all deprecations.",
+      "latestStableObserved": "1.105.1"
+    },
+    {
+      "name": "happy-dom",
+      "baseline": {
+        "kind": "devDependencies",
+        "range": "^20.14.3",
+        "locked": "20.14.3"
+      },
+      "action": "retain",
+      "target": {
+        "name": "happy-dom",
+        "version": "20.14.3"
+      },
+      "owners": [
+        "V02",
+        "V03"
+      ],
+      "consumers": [
+        "vitest.config.mts"
+      ],
+      "rationale": "Avoid a DOM emulator major change while porting Vue tests; existing version accepts Node>=20.",
+      "validation": "Use explicit extension contexts in store tests and real Chromium for Chrome APIs; happy-dom success does not verify broadcast/CSP behavior.",
+      "latestStableObserved": "21.0.1"
+    },
+    {
+      "name": "eslint-plugin-vue",
+      "baseline": {
+        "kind": "devDependencies",
+        "range": "^9.33.0",
+        "locked": "9.33.0"
+      },
+      "action": "retain",
+      "target": {
+        "name": "eslint-plugin-vue",
+        "version": "9.33.0"
+      },
+      "owners": [
+        "V03"
+      ],
+      "consumers": [
+        "eslint.config.mjs"
+      ],
+      "rationale": "Current plugin supports Vue3 rules; framework migration does not require an ESLint major change.",
+      "validation": "Verify existing flat config loads and lint touched files. Review Vue3-specific rule selection in V03; preserve existing required checks."
+    },
+    {
+      "name": "vue-eslint-parser",
+      "baseline": {
+        "kind": "devDependencies",
+        "range": "^9.4.2",
+        "locked": "9.4.3"
+      },
+      "action": "retain",
+      "target": {
+        "name": "vue-eslint-parser",
+        "version": "9.4.3"
+      },
+      "owners": [
+        "V03"
+      ],
+      "consumers": [
+        "eslint.config.mjs"
+      ],
+      "rationale": "Existing parser handles Vue3 SFCs and is compatible with current ESLint8.57.1.",
+      "validation": "Parse migrated templates/script setup; parser/toolchain upgrade can be separate if a demonstrated incompatibility appears."
+    },
+    {
+      "name": "vite-plugin-node-stdlib-browser",
+      "baseline": {
+        "kind": "devDependencies",
+        "range": "^0.2.1",
+        "locked": "0.2.1"
+      },
+      "action": "remove",
+      "target": null,
+      "owners": [
+        "V03"
+      ],
+      "consumers": [],
+      "rationale": "Locked0.2.1 declares Vite2/3/4 only; no tracked source/config import found. Keeping it would create an avoidable peer conflict on Vite7.",
+      "validation": "Repeat tracked import/config search and verify all four bundles with existing node-polyfills plugin. Do not remove node-stdlib-browser transitively needed by other code."
+    },
+    {
+      "name": "vite-plugin-node-polyfills",
+      "baseline": {
+        "kind": "devDependencies",
+        "range": "^0.28.0",
+        "locked": "0.28.0"
+      },
+      "action": "retain",
+      "target": {
+        "name": "vite-plugin-node-polyfills",
+        "version": "0.28.0"
+      },
+      "owners": [
+        "V03",
+        "V14"
+      ],
+      "consumers": [
+        "vite.config.mts:9",
+        "vitest.config.mts:5",
+        "test/wallet-library/vite.config.mts"
+      ],
+      "rationale": "Peers include Vite7; preserve configured Buffer/process/global and Node builtin shims.",
+      "validation": "Sequential four-bundle host build, production artifact guards and extension load smoke are required before host acceptance."
+    },
+    {
+      "name": "vite-plugin-wasm",
+      "baseline": {
+        "kind": "devDependencies",
+        "range": "^3.6.0",
+        "locked": "3.6.0"
+      },
+      "action": "retain",
+      "target": {
+        "name": "vite-plugin-wasm",
+        "version": "3.6.0"
+      },
+      "owners": [
+        "V03",
+        "V14"
+      ],
+      "consumers": [
+        "vite.config.mts:1",
+        "vite.config.background.mts:8",
+        "vitest.config.mts:3"
+      ],
+      "rationale": "Peers include Vite7; preserve local WASM loading and extension CSP behavior.",
+      "validation": "Sequential four-bundle host build, production artifact guards and extension load smoke are required before host acceptance."
+    },
+    {
+      "name": "vite-plugin-top-level-await",
+      "baseline": {
+        "kind": "devDependencies",
+        "range": "^1.4.4",
+        "locked": "1.6.0"
+      },
+      "action": "retain",
+      "target": {
+        "name": "vite-plugin-top-level-await",
+        "version": "1.6.0"
+      },
+      "owners": [
+        "V03",
+        "V14"
+      ],
+      "consumers": [
+        "vitest.config.mts:4"
+      ],
+      "rationale": "Peer Vite>=2.8 includes7; web build invocation is currently disabled and must not be silently reenabled.",
+      "validation": "Sequential four-bundle host build, production artifact guards and extension load smoke are required before host acceptance."
+    },
+    {
+      "name": "@rollup/plugin-commonjs",
+      "baseline": {
+        "kind": "devDependencies",
+        "range": "^28.0.3",
+        "locked": "28.0.9"
+      },
+      "action": "retain",
+      "target": {
+        "name": "@rollup/plugin-commonjs",
+        "version": "28.0.9"
+      },
+      "owners": [
+        "V03",
+        "V14"
+      ],
+      "consumers": [
+        "vite.config.background.mts:7"
+      ],
+      "rationale": "Peer Rollup4 supported; host background CommonJS/SDK packaging still needs runtime proof.",
+      "validation": "Sequential four-bundle host build, production artifact guards and extension load smoke are required before host acceptance."
+    },
+    {
+      "name": "rollup-plugin-tla",
+      "baseline": {
+        "kind": "devDependencies",
+        "range": "^0.0.2",
+        "locked": "0.0.2"
+      },
+      "action": "retain",
+      "target": {
+        "name": "rollup-plugin-tla",
+        "version": "0.0.2"
+      },
+      "owners": [
+        "V03",
+        "V14"
+      ],
+      "consumers": [
+        "vite.config.background.mts:6"
+      ],
+      "rationale": "Existing background top-level-await adapter has no restrictive peer; absence of peer conflicts is not compatibility proof.",
+      "validation": "Sequential four-bundle host build, production artifact guards and extension load smoke are required before host acceptance."
+    },
+    {
+      "name": "rollup-plugin-copy",
+      "baseline": {
+        "kind": "devDependencies",
+        "range": "^3.5.0",
+        "locked": "3.5.0"
+      },
+      "action": "retain",
+      "target": {
+        "name": "rollup-plugin-copy",
+        "version": "3.5.0"
+      },
+      "owners": [
+        "V03",
+        "V14"
+      ],
+      "consumers": [
+        "vite.config.mts:10"
+      ],
+      "rationale": "Preserve local WASM/vendor/assets copying and generated output structure.",
+      "validation": "Sequential four-bundle host build, production artifact guards and extension load smoke are required before host acceptance."
+    },
+    {
+      "name": "vite-bundle-analyzer",
+      "baseline": {
+        "kind": "devDependencies",
+        "range": "^1.3.9",
+        "locked": "1.3.9"
+      },
+      "action": "remove",
+      "target": null,
+      "owners": [
+        "V03"
+      ],
+      "consumers": [],
+      "rationale": "No tracked source/config import found. Remove unused locked1.3.9 tooling only after repeating search at integration; not part of pilot.",
+      "validation": "No build scripts depend on CLI usage; current scripts do not name this package."
+    },
+    {
+      "name": "rxjs",
+      "baseline": null,
+      "action": "add-explicit-if-needed",
+      "target": {
+        "name": "rxjs",
+        "version": "7.8.2"
+      },
+      "owners": [
+        "V03",
+        "V05"
+      ],
+      "consumers": [
+        "src/chains/midnight/midnightPrivateSync.ts:5",
+        "src/chains/midnight/midnightPrivateSync8.ts:29"
+      ],
+      "rationale": "RxJS is currently transitive but imported directly by source. Removing unused @vueuse/rxjs must not remove chain observable support; promote current7.8.2 to direct dependency when regenerating host lock.",
+      "validation": "Midnight chain/stream suites pass; no unnecessary RxJS API upgrade.",
+      "baselineTransitive": "7.8.2"
+    },
+    {
+      "name": "@types/chrome",
+      "baseline": {
+        "kind": "devDependencies",
+        "range": "^0.2.9",
+        "locked": "0.2.9"
+      },
+      "action": "upgrade",
+      "target": {
+        "name": "@types/chrome",
+        "version": "0.3.5"
+      },
+      "owners": [
+        "V03"
+      ],
+      "consumers": [
+        "Chrome MV3 pilot and later host API typings"
+      ],
+      "rationale": "Latest exact typing package for isolated extension pilot; host type-only change must be assessed against existing callbacks.",
+      "validation": "Pilot typecheck and host changed-file diagnostics; does not change runtime Chrome permissions."
+    }
+  ],
+  "pilotEvidence": {
+    "scope": "Synthetic isolated MV3 extension pilot; no production wallet, encrypted storage, WebAuthn, hardware, chain, actual swap-widget implementation or real signing proof. Sidepanel document tested at375x820, not browser-native side-panel chrome.",
+    "reportsAndLocksVerifiedOn": "2026-10-13",
+    "pathBase": "spikes/vue3-migration",
+    "inputValidation": "Every recorded input SHA256 matched current files for both targets; target manifests'12 exact direct dependencies match their locks and matrix selection (Vuetify3 checkpoint versus4 final). The matrix is metadata and is not a browser report input, so this evidence-link update does not invalidate browser runs.",
+    "checksPerTarget": 14,
+    "targets": [
+      {
+        "target": "vuetify3",
+        "report": "evidence/pilot-vuetify3.json",
+        "reportSha256": "dd1beb9e3ac84756862d60aefc10af5d68b41726da0fc8b615a33abc5ef1ce2b",
+        "lock": "targets/vuetify3/package-lock.json",
+        "lockSha256": "59adad220dff08cf90c6949f462e68bdf698e888c1e2098707c58b8b3c4808b8",
+        "auditReport": "evidence/audit-vuetify3.json",
+        "auditSha256": "788defa61b8b4d8df17abeb6231073521f6f2bddd858b134fcb5e01455fd45ad",
+        "passed": true,
+        "checks": 14,
+        "node": "24.19.0",
+        "playwright": "1.62.1",
+        "chromium": "151.0.7922.34",
+        "finished": "2026-10-13T12:01:23.015Z",
+        "allInputHashesVerified": true,
+        "actualLockedDirectDependencies": {
+          "vue-tsc": "3.3.13",
+          "@types/chrome": "0.3.5",
+          "vue-router": "4.6.4",
+          "@vue/compiler-sfc": "3.5.44",
+          "vue": "3.5.44",
+          "typescript": "5.9.3",
+          "@intlify/message-compiler": "11.4.14",
+          "vuetify": "3.13.6",
+          "playwright": "1.62.1",
+          "@vitejs/plugin-vue": "6.0.10",
+          "vite": "7.3.7",
+          "vue-i18n": "11.4.14"
+        },
+        "rejectedPluginPresent": false,
+        "i18n10Present": false,
+        "auditVulnerabilities": 0,
+        "selectedVersionsMatchMatrix": true
+      },
+      {
+        "target": "vuetify4",
+        "report": "evidence/pilot-vuetify4.json",
+        "reportSha256": "8f413d0a6abdcb4674f88230837604818ee5a5061619bed217263e0bcb15077a",
+        "lock": "targets/vuetify4/package-lock.json",
+        "lockSha256": "886680b8a760161764493eb8b655a6fd8cca7996d030f9039a9d72b655a2b0de",
+        "auditReport": "evidence/audit-vuetify4.json",
+        "auditSha256": "7c3df572050e7dba5c3e09c5551aebefa0efeb17fd7718982a396204067e8c17",
+        "passed": true,
+        "checks": 14,
+        "node": "24.19.0",
+        "playwright": "1.62.1",
+        "chromium": "151.0.7922.34",
+        "finished": "2026-10-13T12:02:12.863Z",
+        "allInputHashesVerified": true,
+        "actualLockedDirectDependencies": {
+          "vue-tsc": "3.3.13",
+          "@types/chrome": "0.3.5",
+          "vue-router": "4.6.4",
+          "@vue/compiler-sfc": "3.5.44",
+          "vue": "3.5.44",
+          "typescript": "5.9.3",
+          "@intlify/message-compiler": "11.4.14",
+          "vuetify": "4.2.4",
+          "playwright": "1.62.1",
+          "@vitejs/plugin-vue": "6.0.10",
+          "vite": "7.3.7",
+          "vue-i18n": "11.4.14"
+        },
+        "rejectedPluginPresent": false,
+        "i18n10Present": false,
+        "auditVulnerabilities": 0,
+        "selectedVersionsMatchMatrix": true
+      }
+    ]
+  },
+  "evaluatedToolingRisks": [
+    {
+      "package": "@intlify/unplugin-vue-i18n@11.2.5",
+      "status": "Rejected candidate; removed from final pilot dependency selection",
+      "advisory": "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm",
+      "severity": "high",
+      "chain": "@intlify/unplugin-vue-i18n11.2.5 -> fast-glob3.3.3 -> micromatch4.0.8 -> braces3.0.3",
+      "evidence": "Initial pilot vuetify3 candidate lock inspected; the pilot executor reported four audit entries for this transitive chain. GitHub advisory checked2026-10-13 lists affected braces<=3.0.3 and no patched release. Four package audit entries do not mean four independent vulnerabilities. Final locks omit the plugin and nested i18n10 path. Both saved audit reports contain zero vulnerabilities; their hashes and passing browser reports are linked in pilotEvidence.",
+      "impact": "The identified path is build tooling. Malicious deeply nested glob input can exhaust the Node stack. Current pilot uses a fixed developer-controlled locale include path; this observation is not a security waiver or a guarantee that every host input is safe.",
+      "resolution": "Choose the implemented narrow explicit-file precompilation transform with @intlify/message-compiler11.4.14. No advisory waiver, audit-force fix or peer suppression was used. Host dependencies have a separate broader audit and must be evaluated in V03; a clean pilot audit does not cover the wallet.",
+      "deprecatedTransitive": "The rejected plugin's @intlify/vue-i18n-extensions brought nested vue-i18n10.0.8. It was build-side, not the app runtime; removing the plugin removes this unused dependency path. Final application runtime and selected compiler remain11.4.14."
+    }
+  ],
+  "registryEvidence": [
+    {
+      "name": "playwright",
+      "version": "1.62.1",
+      "peerDependencies": null,
+      "peerDependenciesMeta": null,
+      "engines": { "node": ">=20" },
+      "deprecated": null,
+      "integrity": "sha512-0M+L3LAD8/nm554LOla9Ayx0j0tmFZ0FBcoQ7F1VuVHpM/XpiC8RcDzBQB8W5+hA8L22THxELzeF+2WcUzvcLg==",
+      "source": "https://registry.npmjs.org/playwright/1.62.1"
+    },
+    {
+      "name": "vue",
+      "version": "3.5.44",
+      "peerDependencies": {
+        "typescript": "*"
+      },
+      "peerDependenciesMeta": {
+        "typescript": {
+          "optional": true
+        }
+      },
+      "engines": null,
+      "deprecated": null,
+      "integrity": "sha512-dvvmaOCG7lAMkJTPqPwWeGMsPS6DIsFsfZDUgBp9V6mHf9b3+/wyVwYR4Es+WV6uJC0FKRxp81Obcq0ZwUcGFQ==",
+      "source": "https://registry.npmjs.org/vue/3.5.44"
+    },
+    {
+      "name": "@vue/compiler-sfc",
+      "version": "3.5.44",
+      "peerDependencies": null,
+      "peerDependenciesMeta": null,
+      "engines": null,
+      "deprecated": null,
+      "integrity": "sha512-dzHmQ4jXTpdr5FjIQUeykVakN/uzqFbUo9/C5ikBFg3a3PeM6uRxeczx1ZbXBML0/zJstEh3ygYipzR5Z7b2Pw==",
+      "source": "https://registry.npmjs.org/@vue%2fcompiler-sfc/3.5.44"
+    },
+    {
+      "name": "@vue/compiler-dom",
+      "version": "3.5.44",
+      "peerDependencies": null,
+      "peerDependenciesMeta": null,
+      "engines": null,
+      "deprecated": null,
+      "integrity": "sha512-W5AoBFWdw1lQAKiHowkfgFKFab82oSRT6sGsPfw/q1GRjsy/ZJFLHGhJyBRIFN9APLTUduDH9U2JAiPOIyKuYg==",
+      "source": "https://registry.npmjs.org/@vue%2fcompiler-dom/3.5.44"
+    },
+    {
+      "name": "@vue/server-renderer",
+      "version": "3.5.44",
+      "peerDependencies": null,
+      "peerDependenciesMeta": null,
+      "engines": null,
+      "deprecated": null,
+      "integrity": "sha512-R4S1UoH4h5Frrauv8Z5XE5TxV9oBiUSgWIC4TyVK1FK+RocRnOLwFA5Xcmo2011RlgJp+AbZCnw6afrhlgRuUQ==",
+      "source": "https://registry.npmjs.org/@vue%2fserver-renderer/3.5.44"
+    },
+    {
+      "name": "vuetify",
+      "version": "3.13.6",
+      "peerDependencies": {
+        "vue": "^3.5.0",
+        "typescript": ">=4.7",
+        "vite-plugin-vuetify": ">=2.1.0",
+        "webpack-plugin-vuetify": ">=3.1.0"
+      },
+      "peerDependenciesMeta": {
+        "typescript": {
+          "optional": true
+        },
+        "vite-plugin-vuetify": {
+          "optional": true
+        },
+        "webpack-plugin-vuetify": {
+          "optional": true
+        }
+      },
+      "engines": null,
+      "deprecated": null,
+      "integrity": "sha512-Rt5dHb5zjiIOdZ/10/IVsTzLdKPLplVMv2hDXx2+LMHMFtt6Ks3NTA2eKqXBWVZZ5ZVIRdJBNBSP4/Iri8UdnA==",
+      "source": "https://registry.npmjs.org/vuetify/3.13.6"
+    },
+    {
+      "name": "vuetify",
+      "version": "4.2.4",
+      "peerDependencies": {
+        "vue": "^3.5.0 || ^3.6.0-0",
+        "typescript": ">=4.7",
+        "vite-plugin-vuetify": ">=2.1.0",
+        "webpack-plugin-vuetify": ">=3.1.0"
+      },
+      "peerDependenciesMeta": {
+        "typescript": {
+          "optional": true
+        },
+        "vite-plugin-vuetify": {
+          "optional": true
+        },
+        "webpack-plugin-vuetify": {
+          "optional": true
+        }
+      },
+      "engines": null,
+      "deprecated": null,
+      "integrity": "sha512-zLYtVGJcg2hK3DHoeiBXSImpzg4E0N19p3zCgGnNhMp/YwaVQZXP4cPkIKeL/evVnUeLP/CjSnFsFBThWSl2Ew==",
+      "source": "https://registry.npmjs.org/vuetify/4.2.4"
+    },
+    {
+      "name": "vue-router",
+      "version": "4.6.4",
+      "peerDependencies": {
+        "vue": "^3.5.0"
+      },
+      "peerDependenciesMeta": null,
+      "engines": null,
+      "deprecated": null,
+      "integrity": "sha512-Hz9q5sa33Yhduglwz6g9skT8OBPii+4bFn88w6J+J4MfEo4KRRpmiNG/hHHkdbRFlLBOqxN8y8gf2Fb0MTUgVg==",
+      "source": "https://registry.npmjs.org/vue-router/4.6.4"
+    },
+    {
+      "name": "vue-i18n",
+      "version": "11.4.14",
+      "peerDependencies": {
+        "vue": "^3.0.0"
+      },
+      "peerDependenciesMeta": null,
+      "engines": {
+        "node": ">= 22"
+      },
+      "deprecated": null,
+      "integrity": "sha512-oRFZtQjRDRQtfxu7tFlsZlnCa5gPkg/KX89kJDKdC9bz4GIYgo3cAMaD0XFeUx/WHuKoVbDMRTIo9Hvg67HnPw==",
+      "source": "https://registry.npmjs.org/vue-i18n/11.4.14"
+    },
+    {
+      "name": "@intlify/unplugin-vue-i18n",
+      "version": "11.2.5",
+      "peerDependencies": {
+        "vue": "^3.2.25",
+        "vite": "^6.0.0 || ^7.0.0 || ^8.0.0",
+        "vue-i18n": "*",
+        "petite-vue-i18n": "*"
+      },
+      "peerDependenciesMeta": {
+        "vite": {
+          "optional": true
+        },
+        "vue-i18n": {
+          "optional": true
+        },
+        "petite-vue-i18n": {
+          "optional": true
+        }
+      },
+      "engines": {
+        "node": ">= 22.13"
+      },
+      "deprecated": null,
+      "integrity": "sha512-wLpS0cZTNAzaNL/STjjwSFhLunuoARKzEJh7jM/G00A40cVH+GEPhdo/WsvnesPvQVoN6JfjI/mGXwDNnTbvhg==",
+      "source": "https://registry.npmjs.org/@intlify%2funplugin-vue-i18n/11.2.5"
+    },
+    {
+      "name": "@intlify/message-compiler",
+      "version": "11.4.14",
+      "peerDependencies": null,
+      "peerDependenciesMeta": null,
+      "engines": {
+        "node": ">= 22"
+      },
+      "deprecated": null,
+      "integrity": "sha512-y79GatHfMhN672Vooxw0v6mgX/vclFHggO1ENL6aH/QubLXiV529WXu/+FhVUbYF+HLTeDDkQpmnpfvSJddBCg==",
+      "source": "https://registry.npmjs.org/@intlify%2fmessage-compiler/11.4.14"
+    },
+    {
+      "name": "@vueuse/core",
+      "version": "15.0.0",
+      "peerDependencies": {
+        "vue": "^3.5.0"
+      },
+      "peerDependenciesMeta": null,
+      "engines": {
+        "node": ">=22"
+      },
+      "deprecated": null,
+      "integrity": "sha512-Zv67h5mrk7YHDJsRObx+DXaCBz6RKBUpxqLesJ+3xZNPG6yuQs7ja7kg3veFrrouYLWAqydQ7CwGEbLVxB43Ng==",
+      "source": "https://registry.npmjs.org/@vueuse%2fcore/15.0.0"
+    },
+    {
+      "name": "vuedraggable",
+      "version": "4.1.0",
+      "peerDependencies": {
+        "vue": "^3.0.1"
+      },
+      "peerDependenciesMeta": null,
+      "engines": null,
+      "deprecated": null,
+      "integrity": "sha512-FU5HCWBmsf20GpP3eudURW3WdWTKIbEIQxh9/8GE806hydR9qZqRRxRE3RjqX7PkuLuMQG/A7n3cfj9rCEchww==",
+      "source": "https://registry.npmjs.org/vuedraggable/4.1.0"
+    },
+    {
+      "name": "flag-icons",
+      "version": "6.15.0",
+      "peerDependencies": null,
+      "peerDependenciesMeta": null,
+      "engines": null,
+      "deprecated": null,
+      "integrity": "sha512-ARo9Q+aATZEjyjveeec9e+orx+xLWUBdOX9baOKoGqDzMbvZ65ghPhaHbVt5T7ZB+Q4OFsB4Hr+eQnpV8Q+dLA==",
+      "source": "https://registry.npmjs.org/flag-icons/6.15.0"
+    },
+    {
+      "name": "@vitejs/plugin-vue",
+      "version": "6.0.10",
+      "peerDependencies": {
+        "vue": "^3.2.25 || ^3.6.0-rc.10",
+        "vite": "^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0"
+      },
+      "peerDependenciesMeta": null,
+      "engines": {
+        "node": "^20.19.0 || >=22.12.0"
+      },
+      "deprecated": null,
+      "integrity": "sha512-b80aUQh3n+qEzzZm5oQp3rT2QImeCx58K6eFl/RkJ3d65KW0kTuv5lNsLRVAjbW9YRUpo/wzmvzMgV34bTAItA==",
+      "source": "https://registry.npmjs.org/@vitejs%2fplugin-vue/6.0.10"
+    },
+    {
+      "name": "vite",
+      "version": "7.3.7",
+      "peerDependencies": {
+        "tsx": "^4.8.1",
+        "jiti": ">=1.21.0",
+        "less": "^4.0.0",
+        "sass": "^1.70.0",
+        "yaml": "^2.4.2",
+        "stylus": ">=0.54.8",
+        "terser": "^5.16.0",
+        "sugarss": "^5.0.0",
+        "@types/node": "^20.19.0 || >=22.12.0",
+        "lightningcss": "^1.21.0",
+        "sass-embedded": "^1.70.0"
+      },
+      "peerDependenciesMeta": {
+        "tsx": {
+          "optional": true
+        },
+        "jiti": {
+          "optional": true
+        },
+        "less": {
+          "optional": true
+        },
+        "sass": {
+          "optional": true
+        },
+        "yaml": {
+          "optional": true
+        },
+        "stylus": {
+          "optional": true
+        },
+        "terser": {
+          "optional": true
+        },
+        "sugarss": {
+          "optional": true
+        },
+        "@types/node": {
+          "optional": true
+        },
+        "lightningcss": {
+          "optional": true
+        },
+        "sass-embedded": {
+          "optional": true
+        }
+      },
+      "engines": {
+        "node": "^20.19.0 || >=22.12.0"
+      },
+      "deprecated": null,
+      "integrity": "sha512-AHEzTORMbi7/7aXp7w7KZ5+DCUdSeLsJz0grY8xHpc9DHdYb0vQu6DqJfm2tOw3gDExNgPgnJTXxM6syYFHaCA==",
+      "source": "https://registry.npmjs.org/vite/7.3.7"
+    },
+    {
+      "name": "vite-plugin-vuetify",
+      "version": "2.1.3",
+      "peerDependencies": {
+        "vue": "^3.0.0",
+        "vite": ">=5",
+        "vuetify": ">=3"
+      },
+      "peerDependenciesMeta": null,
+      "engines": {
+        "node": "^18.0.0 || >=20.0.0"
+      },
+      "deprecated": null,
+      "integrity": "sha512-Q4SC/4TqbNvaZIFb9YsfBqkGlYHbJJJ6uU3CnRBZqLUF3s5eCMVZAaV4GkTbehIH/bhSj42lMXztOwc71u6rVw==",
+      "source": "https://registry.npmjs.org/vite-plugin-vuetify/2.1.3"
+    },
+    {
+      "name": "vitest",
+      "version": "3.2.7",
+      "peerDependencies": {
+        "jsdom": "*",
+        "happy-dom": "*",
+        "@vitest/ui": "3.2.7",
+        "@types/node": "^18.0.0 || ^20.0.0 || >=22.0.0",
+        "@types/debug": "^4.1.12",
+        "@vitest/browser": "3.2.7",
+        "@edge-runtime/vm": "*"
+      },
+      "peerDependenciesMeta": {
+        "jsdom": {
+          "optional": true
+        },
+        "happy-dom": {
+          "optional": true
+        },
+        "@vitest/ui": {
+          "optional": true
+        },
+        "@types/node": {
+          "optional": true
+        },
+        "@types/debug": {
+          "optional": true
+        },
+        "@vitest/browser": {
+          "optional": true
+        },
+        "@edge-runtime/vm": {
+          "optional": true
+        }
+      },
+      "engines": {
+        "node": "^18.0.0 || ^20.0.0 || >=22.0.0"
+      },
+      "deprecated": null,
+      "integrity": "sha512-KrxIJ62Fd89gfysR4WotlgZABiz2dqFPgqGzX7s+CwsqLFomRH7777ZcrOD6+WVAh7khPQP41A+BKbpcJFrdEg==",
+      "source": "https://registry.npmjs.org/vitest/3.2.7"
+    },
+    {
+      "name": "@vitest/ui",
+      "version": "3.2.7",
+      "peerDependencies": {
+        "vitest": "3.2.7"
+      },
+      "peerDependenciesMeta": null,
+      "engines": null,
+      "deprecated": null,
+      "integrity": "sha512-eVtcpJXGhS0GjMuHROfbXLhlxooyUcuip8GNzzjDD5jzafZqzanJH4W3VGmUxHNx4fv6qQGUGJHRpGUdj+9D6Q==",
+      "source": "https://registry.npmjs.org/@vitest%2fui/3.2.7"
+    },
+    {
+      "name": "@vue/test-utils",
+      "version": "2.5.1",
+      "peerDependencies": {
+        "vue": "3.x",
+        "@vue/compiler-dom": "3.x",
+        "@vue/server-renderer": "3.x"
+      },
+      "peerDependenciesMeta": {
+        "@vue/server-renderer": {
+          "optional": true
+        }
+      },
+      "engines": null,
+      "deprecated": null,
+      "integrity": "sha512-V/4a99odJ7hapr0bRt35XxljGk8hefq31gSOnlKTcEq2fUeoj2qb+FcpJYfQu4qfYhW9Ug+O2+CZ3QmZ7gXDzA==",
+      "source": "https://registry.npmjs.org/@vue%2ftest-utils/2.5.1"
+    },
+    {
+      "name": "typescript",
+      "version": "5.9.3",
+      "peerDependencies": null,
+      "peerDependenciesMeta": null,
+      "engines": {
+        "node": ">=14.17"
+      },
+      "deprecated": null,
+      "integrity": "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==",
+      "source": "https://registry.npmjs.org/typescript/5.9.3"
+    },
+    {
+      "name": "vue-tsc",
+      "version": "3.3.13",
+      "peerDependencies": {
+        "typescript": ">=5.0.0"
+      },
+      "peerDependenciesMeta": null,
+      "engines": null,
+      "deprecated": null,
+      "integrity": "sha512-jE4/bXdOMSHVxEGgQCqNllJy+9N3Gx6tfSAsg0yhFK/MAN6eXqISihupnDEKSCt12VVnjN2gI3AqLYcqoh5x/A==",
+      "source": "https://registry.npmjs.org/vue-tsc/3.3.13"
+    },
+    {
+      "name": "sass",
+      "version": "1.104.0",
+      "peerDependencies": null,
+      "peerDependenciesMeta": null,
+      "engines": {
+        "node": ">=20.19.0"
+      },
+      "deprecated": null,
+      "integrity": "sha512-btHMApW2bgolvClhRW8AlQJzgI9lUB3pPSofBQQT+E46GWvf9o0TVQ13SYv5riWZVFyPN+JNz3TKW9XhBlc10w==",
+      "source": "https://registry.npmjs.org/sass/1.104.0"
+    },
+    {
+      "name": "happy-dom",
+      "version": "20.14.3",
+      "peerDependencies": null,
+      "peerDependenciesMeta": null,
+      "engines": {
+        "node": ">=20.0.0"
+      },
+      "deprecated": null,
+      "integrity": "sha512-0KMb/Eh8rsd+aMNkOk5h8LkAjo9Na1aksnEGmsuZf+GXl6UkAdIi0VbUHU7d59lXhNmawODgwwuCMiZpCxwwCw==",
+      "source": "https://registry.npmjs.org/happy-dom/20.14.3"
+    },
+    {
+      "name": "unplugin-auto-import",
+      "version": "0.19.0",
+      "peerDependencies": {
+        "@nuxt/kit": "^3.2.2",
+        "@vueuse/core": "*"
+      },
+      "peerDependenciesMeta": {
+        "@nuxt/kit": {
+          "optional": true
+        },
+        "@vueuse/core": {
+          "optional": true
+        }
+      },
+      "engines": {
+        "node": ">=14"
+      },
+      "deprecated": null,
+      "integrity": "sha512-W97gTDEWu/L1EcKCXY5Ni8bsMW1E9kv12wYQv3mYpd7zcFctXYlLKsqeva6sbCQbzS8t9AG/XdU5/WkEJKPlFw==",
+      "source": "https://registry.npmjs.org/unplugin-auto-import/0.19.0"
+    },
+    {
+      "name": "unplugin-vue-components",
+      "version": "0.28.0",
+      "peerDependencies": {
+        "vue": "2 || 3",
+        "@nuxt/kit": "^3.2.2",
+        "@babel/parser": "^7.15.8"
+      },
+      "peerDependenciesMeta": {
+        "@nuxt/kit": {
+          "optional": true
+        },
+        "@babel/parser": {
+          "optional": true
+        }
+      },
+      "engines": {
+        "node": ">=14"
+      },
+      "deprecated": null,
+      "integrity": "sha512-jiTGtJ3JsRFBjgvyilfrX7yUoGKScFgbdNw+6p6kEXU+Spf/rhxzgvdfuMcvhCcLmflB/dY3pGQshYBVGOUx7Q==",
+      "source": "https://registry.npmjs.org/unplugin-vue-components/0.28.0"
+    },
+    {
+      "name": "eslint-plugin-vue",
+      "version": "9.33.0",
+      "peerDependencies": {
+        "eslint": "^6.2.0 || ^7.0.0 || ^8.0.0 || ^9.0.0"
+      },
+      "peerDependenciesMeta": null,
+      "engines": {
+        "node": "^14.17.0 || >=16.0.0"
+      },
+      "deprecated": null,
+      "integrity": "sha512-174lJKuNsuDIlLpjeXc5E2Tss8P44uIimAfGD0b90k0NoirJqpG7stLuU9Vp/9ioTOrQdWVREc4mRd1BD+CvGw==",
+      "source": "https://registry.npmjs.org/eslint-plugin-vue/9.33.0"
+    },
+    {
+      "name": "vue-eslint-parser",
+      "version": "9.4.3",
+      "peerDependencies": {
+        "eslint": ">=6.0.0"
+      },
+      "peerDependenciesMeta": null,
+      "engines": {
+        "node": "^14.17.0 || >=16.0.0"
+      },
+      "deprecated": null,
+      "integrity": "sha512-2rYRLWlIpaiN8xbPiDyXZXRgLGOtWxERV7ND5fFAv5qo1D2N9Fu9MNajBNc6o13lZ+24DAWCkQCvj4klgmcITg==",
+      "source": "https://registry.npmjs.org/vue-eslint-parser/9.4.3"
+    },
+    {
+      "name": "vite-plugin-node-polyfills",
+      "version": "0.28.0",
+      "peerDependencies": {
+        "vite": "^2.0.0 || ^3.0.0 || ^4.0.0 || ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0"
+      },
+      "peerDependenciesMeta": null,
+      "engines": null,
+      "deprecated": null,
+      "integrity": "sha512-NXct/ci2ef4fRyCfTb8fk2HmR80Rv7icLd+cRH41TnUugDzdKMFKqFPpZYCFUInZMMem9bkLv5pkq02+7Xu7+w==",
+      "source": "https://registry.npmjs.org/vite-plugin-node-polyfills/0.28.0"
+    },
+    {
+      "name": "vite-plugin-wasm",
+      "version": "3.6.0",
+      "peerDependencies": {
+        "vite": "^2 || ^3 || ^4 || ^5 || ^6 || ^7 || ^8"
+      },
+      "peerDependenciesMeta": null,
+      "engines": null,
+      "deprecated": null,
+      "integrity": "sha512-mL/QPziiIA4RAA6DkaZZzOstdwbW5jO4Vz7Zenj0wieKWBlNvIvX5L5ljum9lcUX0ShNfBgCNLKTjNkRVVqcsw==",
+      "source": "https://registry.npmjs.org/vite-plugin-wasm/3.6.0"
+    },
+    {
+      "name": "vite-plugin-top-level-await",
+      "version": "1.6.0",
+      "peerDependencies": {
+        "vite": ">=2.8"
+      },
+      "peerDependenciesMeta": null,
+      "engines": null,
+      "deprecated": null,
+      "integrity": "sha512-bNhUreLamTIkoulCR9aDXbTbhLk6n1YE8NJUTTxl5RYskNRtzOR0ASzSjBVRtNdjIfngDXo11qOsybGLNsrdww==",
+      "source": "https://registry.npmjs.org/vite-plugin-top-level-await/1.6.0"
+    },
+    {
+      "name": "@rollup/plugin-commonjs",
+      "version": "28.0.9",
+      "peerDependencies": {
+        "rollup": "^2.68.0||^3.0.0||^4.0.0"
+      },
+      "peerDependenciesMeta": {
+        "rollup": {
+          "optional": true
+        }
+      },
+      "engines": {
+        "node": ">=16.0.0 || 14 >= 14.17"
+      },
+      "deprecated": null,
+      "integrity": "sha512-PIR4/OHZ79romx0BVVll/PkwWpJ7e5lsqFa3gFfcrFPWwLXLV39JVUzQV9RKjWerE7B845Hqjj9VYlQeieZ2dA==",
+      "source": "https://registry.npmjs.org/@rollup%2fplugin-commonjs/28.0.9"
+    },
+    {
+      "name": "rollup-plugin-tla",
+      "version": "0.0.2",
+      "peerDependencies": null,
+      "peerDependenciesMeta": null,
+      "engines": {
+        "node": "^14.18 || >= 16",
+        "pnpm": ">=6"
+      },
+      "deprecated": null,
+      "integrity": "sha512-Z0P100crQTAjmQIXEC5J6ECupL4G8M3CTwTRK0D4J+5rMakimVa58n06kE3vnLSy/xZHnuerEpXdUW6s5G4HYg==",
+      "source": "https://registry.npmjs.org/rollup-plugin-tla/0.0.2"
+    },
+    {
+      "name": "rollup-plugin-copy",
+      "version": "3.5.0",
+      "peerDependencies": null,
+      "peerDependenciesMeta": null,
+      "engines": {
+        "node": ">=8.3"
+      },
+      "deprecated": null,
+      "integrity": "sha512-wI8D5dvYovRMx/YYKtUNt3Yxaw4ORC9xo6Gt9t22kveWz1enG9QrhVlagzwrxSC455xD1dHMKhIJkbsQ7d48BA==",
+      "source": "https://registry.npmjs.org/rollup-plugin-copy/3.5.0"
+    },
+    {
+      "name": "rxjs",
+      "version": "7.8.2",
+      "peerDependencies": null,
+      "peerDependenciesMeta": null,
+      "engines": null,
+      "deprecated": null,
+      "integrity": "sha512-dhKf903U/PQZY6boNNtAGdWbG85WAbjT/1xYoZIC7FAY0yWapOBQVsVrDl58W86//e1VpMNBtRV4MaXfdMySFA==",
+      "source": "https://registry.npmjs.org/rxjs/7.8.2"
+    },
+    {
+      "name": "sortablejs",
+      "version": "1.15.7",
+      "peerDependencies": null,
+      "peerDependenciesMeta": null,
+      "engines": null,
+      "deprecated": null,
+      "integrity": "sha512-Kk8wLQPlS+yi1ZEf48a4+fzHa4yxjC30M/Sr2AnQu+f/MPwvvX9XjZ6OWejiz8crBsLwSq8GHqaxaET7u6ux0A==",
+      "source": "https://registry.npmjs.org/sortablejs/1.15.7"
+    },
+    {
+      "name": "@types/chrome",
+      "version": "0.3.5",
+      "peerDependencies": {},
+      "peerDependenciesMeta": null,
+      "engines": null,
+      "deprecated": null,
+      "integrity": "sha512-7HYsK7xalNxzLwGrP9lkCQPAA6V56VtPpOmv2CQnBnMzX5/Hpr+Iv5fqaIOIY/H/Q6ZBksLmurWh7zXPcZ4B7Q==",
+      "source": "https://registry.npmjs.org/@types%2fchrome/0.3.5"
+    }
+  ],
+  "officialReferences": [
+    {
+      "url": "https://vite.dev/releases",
+      "supports": "Vite7.3 supported important/security patch line; Vite4/5 unsupported."
+    },
+    {
+      "url": "https://vite.dev/guide/migration",
+      "supports": "Vite8 introduces Rolldown migration breadth; defer it from the Vue3 host conversion."
+    },
+    {
+      "url": "https://vuejs.org/guide/scaling-up/tooling",
+      "supports": "Vue3 SFC compiler tooling and vue-tsc."
+    },
+    {
+      "url": "https://router.vuejs.org/guide/migration/",
+      "supports": "VueRouter3 to4 APIs and RouterView/KeepAlive slot changes."
+    },
+    {
+      "url": "https://router.vuejs.org/guide/migration/v4-to-v5",
+      "supports": "Separate Router5 migration exists; latest overall is intentionally not selected."
+    },
+    {
+      "url": "https://vue-i18n.intlify.dev/guide/advanced/optimization",
+      "supports": "Production precompilation, runtime-only bundles and CSP/JIT options."
+    },
+    {
+      "url": "https://github.com/SortableJS/vue.draggable.next",
+      "supports": "Stable Vue3 wrapper and item slot/item-key migration."
+    },
+    {
+      "url": "https://vitest.dev/guide/migration/",
+      "supports": "Vitest5 changes defaults/APIs; defer unrelated test-runner major until separately qualified."
+    },
+    {
+      "url": "https://vuetifyjs.com/en/getting-started/upgrade-guide/",
+      "supports": "Use official version-specific Vuetify migration guides alongside registry peer evidence."
+    }
+  ],
+  "acceptanceBeforeHostFreeze": [
+    "V01 pilot installs/builds/loads both Vuetify targets under exact Node and captures actual dependency trees and artifact hashes.",
+    "No ERESOLVE suppression, mismatched host Vue compiler/runtime, or retained Vue2-only dependency in shipped host tree.",
+    "V03 clean host install and sequential background/content/inject/web builds pass existing required checks and guards; extension runtime boot is tested.",
+    "V02/V05 tests verify production background synchronization without pinned-state fixture overrides; V08 async invalidation behavior is tested.",
+    "V06 exhaustive message compilation and semantic locale tests pass on the chosen production compiler; all four host bundles retain production CSP.",
+    "Recheck exact stable patches and support/security status at the December4 dependency freeze; changes require explicit review and affected regression reruns."
+  ]
+}
