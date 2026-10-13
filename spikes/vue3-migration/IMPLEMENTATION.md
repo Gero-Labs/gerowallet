@@ -1,28 +1,49 @@
 # Vue 3 migration implementation and verification
 
-The local branch `migration/vue3-vuetify4` migrates GeroWallet 2.7.3 from Vue 2
+The branch `migration/vue3-vuetify4` migrates GeroWallet 2.7.3 from Vue 2
 and Vuetify 2 to native Vue 3.5.44 and Vuetify 4.2.4. Its base is development
 commit `50e0bcfe6ca8a6bace23f2a0010bad6d278b2d1a`. The package version remains
-2.7.3 for local review; this is not a store release or a version bump.
+2.7.3 for review and dry-run qualification. No release version bump is included.
 
 This work implements [epic #1282](https://github.com/Gero-Labs/gerowallet/issues/1282).
-The user requested a local PR, continued implementation without intermediate
-approval, and an AI review at the end. No branch, PR, tag, or package has been
-published. Acceptance below distinguishes implemented work from device and
-release evidence that still needs to be collected.
+The user initially requested a local PR and an AI review, then authorized branch
+publication and a hosted dry run. The branch is now pushed. Production tagging,
+store submission, and rollout remain outside that authorization. Acceptance
+below distinguishes implemented work from device and release evidence.
+
+## Current review-fix candidate
+
+The [review response](REVIEW-RESPONSE.md) describes the source fixes in
+`4f57b4fb` and the native Vuetify navigation fix in `020c7805`. Use the
+[review-fix evidence record](evidence/review-fixes.json) for the latest tested
+source, test results, package hashes, populated-wallet browser coverage, and
+hosted workflow status. Refreshed qualification must identify the candidate it
+actually exercised; results below for older packages are historical.
+
+The production public manifest key matches the canonical store ID. The
+[hosted dry run](https://github.com/Gero-Labs/gerowallet/actions/runs/38424347669)
+passes on packaging commit `e872dd09`, including 5,076 tests, the complete build,
+and artifact identity/integrity checks. Its publish job is skipped. This result
+does not authorize production publication.
+
+## Historical integration evidence
 
 The [integration evidence](evidence/integration.json) pins implementation commit
 `79bdb4572350f26666179c986358b54dec21a8a4`, the lockfile, test reports, both
-complete artifact manifests and verified ZIP hashes. Later evidence/document
-updates leave that tested production code unchanged.
+complete artifact manifests, and verified ZIP hashes. It preserves the original
+local-only qualification scope. The subsequent review fixes change production
+code, so this record does not certify the current candidate.
 
 ## Ticket coverage
+
+The table records implementation scope and remaining release acceptance. Check
+the current evidence record for the qualification status of the reviewed source.
 
 | Ticket | Local implementation and evidence | Remaining acceptance |
 | --- | --- | --- |
 | [V01 #1283](https://github.com/Gero-Labs/gerowallet/issues/1283) | Frozen dependency/inventory baseline; independent Vuetify 3 and 4 pilots, each with 14 passing browser checks. | Review target and final forecast. |
 | [V02 #1284](https://github.com/Gero-Labs/gerowallet/issues/1284) | Vue Test Utils 2 harness, reconciled legacy explorer expectations, deterministic timeout test, migrated browser fixtures, new real-control regression tests. | Complete supported-platform and encrypted-profile matrix. |
-| [V03 #1285](https://github.com/Gero-Labs/gerowallet/issues/1285) | Node 24.19, Vite 7.3.7, Vue plugin, normal peer resolution, clean lockfile install, all four extension build configurations. | Hosted CI run on the reviewed commit. |
+| [V03 #1285](https://github.com/Gero-Labs/gerowallet/issues/1285) | Node 24.19, Vite 7.3.7, Vue plugin, normal peer resolution, clean lockfile install, all four extension build configurations; hosted dry run passes on `e872dd09`. | Required pull-request checks after review and integration. |
 | [V04 #1286](https://github.com/Gero-Labs/gerowallet/issues/1286) | Both createApp roots, Router 4, late hydration guards, query handling, RouterView/KeepAlive conversion, real away/back lifecycle tests. | Supported-browser smoke at the reviewed candidate. |
 | [V05 #1287](https://github.com/Gero-Labs/gerowallet/issues/1287) | Reactive stores; proxy-safe Chrome and Dexie boundaries; real store/port integration without published-state overrides; persistence and rollback tests. | In-place browser-profile upgrade and recovery rehearsal. |
 | [V06 #1288](https://github.com/Gero-Labs/gerowallet/issues/1288) | I18n 11.4.14 runtime-only build; exhaustive production-compiler pass over 16,839 messages; literal-at-sign escaping; locale/plural tests. | Visual locale sweep at narrow and desktop widths. |
@@ -31,11 +52,11 @@ updates leave that tested production code unchanged.
 | [V09 #1291](https://github.com/Gero-Labs/gerowallet/issues/1291) | Dashboard, assets, contacts, send/history, market tables, sidepanel and draggable library migrated; browser drag/persistence regressions. | Full three-chain visual and transaction matrix. |
 | [V10 #1292](https://github.com/Gero-Labs/gerowallet/issues/1292) | Swap custom-element boundary preserved; perps/earn/vault controls and native tables migrated. | Live provider integration and test-network transaction acceptance. |
 | [V11 #1293](https://github.com/Gero-Labs/gerowallet/issues/1293) | Staking, governance, pool registration, card and Help controls migrated; real pool/relay and Help navigation regressions. | Provider/device checks and final visual review. |
-| [V12 #1294](https://github.com/Gero-Labs/gerowallet/issues/1294) | Vuetify 4 final runtime; Vue 2 host plugins/compiler/decorators removed; no compat runtime. | Final AI review of coordinated migration. |
+| [V12 #1294](https://github.com/Gero-Labs/gerowallet/issues/1294) | Vuetify 4 final runtime; Vue 2 host plugins/compiler/decorators removed; no compat runtime; AI review source findings addressed. | Close review acceptance against the refreshed candidate evidence. |
 | [V13 #1295](https://github.com/Gero-Labs/gerowallet/issues/1295) | Automated suite, source/type baseline comparison, production browser checks and artifact qualification. | External matrix and exact-reviewed-candidate acceptance. |
-| [V14 #1296](https://github.com/Gero-Labs/gerowallet/issues/1296) | Artifact/version/CSP/WASM/hash checker and negative tests; compatible secret-reader suites; tested-artifact release workflow and forward-recovery runbook. | Stable store identity, real profile upgrade/recovery, release-owner access. |
+| [V14 #1296](https://github.com/Gero-Labs/gerowallet/issues/1296) | Artifact/version/CSP/WASM/hash checker and negative tests; compatible secret-reader suites; tested-artifact release workflow and forward-recovery runbook; production identity configuration verified. | Exact-package channel identity, real profile upgrade/recovery, and release-owner access. |
 | [V15 #1297](https://github.com/Gero-Labs/gerowallet/issues/1297) | Contributor/runtime/API guidance, implementation ledger and release/recovery instructions. | Final reviewer handoff and platform evidence. |
-| [V16 #1298](https://github.com/Gero-Labs/gerowallet/issues/1298) | Local release preparation only; manual workflow defaults to dry run and cannot rebuild or mutate the tested source before tagging. | Beta distribution, observation, store submission and rollout. |
+| [V16 #1298](https://github.com/Gero-Labs/gerowallet/issues/1298) | Branch publication and hosted dry-run qualification authorized; manual workflow defaults to dry run and cannot rebuild or mutate the tested source before tagging. | Separately authorized beta distribution, observation, store submission, and rollout. |
 
 No issue is automatically closed by this local implementation. In particular,
 an integration-branch change is not equivalent to a store rollout.
@@ -97,15 +118,17 @@ node scripts/check-release-artifact.mjs extension --expected-version 2.7.3 --rep
 
 Use the changed-file ESLint gate enforced by the normal pre-commit hook. Full
 repository lint and TypeScript have measured pre-existing debt; a failing
-baseline is not a passing check. The final evidence records both full results
-and the absence of introduced diagnostics. The new Vue-aware check also checks
+baseline is not a passing check. Evidence must record both full results and
+introduced diagnostics. The new Vue-aware check also checks
 production component templates and their contracts.
 
-The final automated run passes all 5,040 tests across 437 files with zero skips.
-Full ESLint retains 116 errors versus 268 in the baseline; the Vue-aware check
-retains 56 TypeScript errors versus 242 baseline diagnostics. Both comparisons
-find zero introduced diagnostics, and production SFCs have none. Changed-file
-lint, the unchanged design budgets, and all 56 contrast checks pass.
+The historical integration run passed all 5,040 tests across 437 files with zero
+skips. Full ESLint retained 116 errors versus 268 in the baseline; the Vue-aware
+check retained 56 TypeScript errors versus 242 baseline diagnostics. Both
+comparisons found zero introduced diagnostics, and production SFCs had none.
+Changed-file lint, the unchanged design budgets, and all 56 contrast checks
+passed. Use the [review-fix record](evidence/review-fixes.json) for the refreshed
+results after the review and populated-wallet runtime fixes.
 
 `typecheck` now uses `vue-tsc`; `typecheck:vue` is an explicit alias. The older
 TypeScript-only command remains available as `typecheck:ts` for baseline
@@ -145,12 +168,12 @@ The target remains December 23, 2026, with December 24–31 reserved for store
 delays and recovery. Retain a separate 20% effort reserve for review fixes and
 regressions. Its calendar allocation depends on measured review and external
 test turnaround; this implementation does not invent the user's availability
-or promise that the reserve is funded. The AI review and first physical test
-matrix are the next forecast checkpoints.
+or promise that the reserve is funded. Review-fix acceptance and the first
+physical test matrix are the next forecast checkpoints.
 
 Prioritize review of signing freshness and QR correlation, serialized wallet
 data, background bundling, router/KeepAlive behavior, native forms/tables, and
 the exact-artifact release workflow. Keep physical device evidence, existing
-encrypted-profile upgrade/recovery, full platform coverage, store identity and
-submission authority as explicit release gates. The local branch must not be
-presented as production-qualified until those gates pass.
+encrypted-profile upgrade/recovery, full platform coverage, exact-package
+channel identity, and submission authority as explicit release gates. The
+branch must not be presented as production-qualified until those gates pass.

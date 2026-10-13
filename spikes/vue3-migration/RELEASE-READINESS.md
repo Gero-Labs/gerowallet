@@ -1,28 +1,52 @@
 # Vue 3 release and recovery readiness
 
-This document records the local release preparation for
+This document records release preparation for
 [V14](https://github.com/Gero-Labs/gerowallet/issues/1296). It does not approve a
-production release. The working tree contains the migration, and the package
-version remains `2.7.3`. A future release version must be committed and reviewed
-before you run a release workflow. No workflow, tag, store submission, or
-production rollout was triggered during this work.
+production release. The migration branch is pushed, and the package version
+remains `2.7.3` for the authorized hosted dry run. A future release version must
+be committed and reviewed before publication. Production tagging, store
+submission, and rollout require separate authorization.
 
-## Qualification gates
+## Current candidate and qualification
 
-Use this table to decide what the local evidence proves. Results are recorded
-on October 13, 2026, under
-`D:/GeroRepos/gitRepos/output/gerowallet-v01-2026-10-13/`. Final production and
-beta packages were rebuilt after the browser check exposed a runtime
-`new Function` path in the draggable dependency. Both replacement packages pass
-the passive browser CSP checks. Their reports identify the complete artifact
-digest and verify that its files did not change during the run.
+The [review response](REVIEW-RESPONSE.md) records fixes from the AI review and
+populated-wallet browser qualification. Commits `4f57b4fb` and `020c7805` change
+production code after the original integration record. Use the
+[review-fix evidence record](evidence/review-fixes.json) for current tests,
+artifact hashes, runtime coverage, source identity, and hosted workflow status.
+Do not transfer a passing result from an older package to the current source.
+
+The production public manifest key matches the canonical store ID, and GitHub's
+identity settings use those existing values. The
+[hosted dry run](https://github.com/Gero-Labs/gerowallet/actions/runs/38424347669)
+passes on `e872dd09`, including 5,076 tests, a complete production build, and
+the expected-ID artifact gate. The retained ZIP and downloaded directory both
+match every recorded checksum. The publish job is skipped. Local production and
+beta checks also pass against their configured channel identities; release-owner
+channel approval remains separate.
+
+Keep physical signing, existing-profile upgrade and recovery, full provider and
+platform coverage, and publication authority as explicit release gates. The
+latest record distinguishes completed checks from pending or unavailable
+coverage; it does not close those gates by implication.
+
+## Historical integration qualification
+
+The following table preserves results from October 13, 2026, under
+`D:/GeroRepos/gitRepos/output/gerowallet-v01-2026-10-13/`. Production and beta
+packages at that checkpoint were rebuilt after browser testing exposed a
+runtime `new Function` path in the draggable dependency. Both replacement
+packages passed the passive browser CSP checks. Their reports identify the
+complete artifact digest and verify that files did not change during the run.
 
 The committed [integration record](evidence/integration.json) associates these
 results with implementation commit `79bdb4572350f26666179c986358b54dec21a8a4`.
 Both local ZIP archives were decompressed and every file hash matched its
-qualified artifact manifest. They remain version 2.7.3 local review packages.
+qualified artifact manifest. They remain historical version 2.7.3 review
+packages, not the current review-fix candidate. Statuses in this table describe
+that checkpoint; use the current record above for subsequent qualification.
 
-| Gate | Recorded result | Evidence and remaining work |
+| Gate | Historical result | Evidence and remaining work at that checkpoint |
 | --- | --- | --- |
 | Reproducible dependency install | Pass locally | Normal `npm ci` completes with Node 24.19.0 and npm 11.1.0; no forced or legacy peer resolution. `final-ci.log` records the clean install. Hosted CI remains pending. |
 | Automated tests | Pass locally | `vue3-final-alias-full-suite.json`: 437 files, 5,040 tests passed, zero failed or skipped, including the final ESM draggable resolution. Tests use Vitest 4.1.11. This supersedes the earlier two-failure full-suite report. |
@@ -47,14 +71,15 @@ outcomes, and unresolved limitations. Source changes that affect the tested
 behavior require refreshed evidence. Formatting this document does not make an
 older package the reviewed candidate.
 
-## Local compatibility evidence
+## Historical compatibility evidence
 
 The compatibility run on October 13, 2026 uses Node `24.19.0` and the installed
 Vue `3.5.44` / Vuetify `4.2.4` dependency graph. The eight suites below pass all
 101 tests. The JSON report is saved outside the checkout at
 `D:/GeroRepos/gitRepos/output/gerowallet-v01-2026-10-13/v14-compatibility-tests.json`.
-Use the final integration evidence to associate these results with a committed
-candidate and its lockfile; this local run is not an immutable release artifact.
+The integration evidence associates these results with its committed candidate
+and lockfile. The current candidate needs its own recorded compatibility checks;
+this historical local run is not an immutable release artifact.
 
 ```sh
 node scripts/check-secret-envelope-readers.mjs
@@ -123,10 +148,10 @@ The gate checks these properties:
 - The report records permissions, host permissions, CSP, local WASM paths,
   per-file SHA-256 hashes, lockfile hash, Node version, and check time.
 
-The initial check correctly rejected a shared development output directory
-containing an old ZIP and incomplete assets. Subsequent prepared production and
+The historical initial check correctly rejected a shared development output
+directory containing an old ZIP and incomplete assets. Prepared production and
 beta directories passed the structural checker, but browser execution exposed
-the CSP issue recorded above. The replacement candidates must pass both the
+the CSP issue recorded above. Every subsequent candidate must pass both the
 artifact checker and real extension execution. Checker regression tests alone
 do not certify a package, and structural success alone does not certify its
 runtime behavior.
@@ -151,10 +176,11 @@ ZIP checksum again, then creates only `v<version>` on that exact SHA. It refuses
 an existing tag. It neither bumps versions after testing nor commits to `main`,
 rebuilds the artifact, or submits anything to the Chrome Web Store.
 
-The YAML parses locally, and the package gate's regression tests pass. The
-workflow itself has not been dispatched. Runner behavior, repository variables,
-store permissions, protected release environments, and store acceptance need
-verification under the release owner's authority.
+The authorized `dry_run=true`, `expected_version=2.7.3` hosted invocation passes.
+Its run URL, tested commit, outcome, and measured runner resources are in the
+[current evidence record](evidence/review-fixes.json). Store permissions, protected release
+environments, and store acceptance remain separate release-owner checks.
+The authorized dry run does not authorize `dry_run=false` or production tagging.
 
 ## Forward recovery package
 
