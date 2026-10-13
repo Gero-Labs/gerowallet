@@ -664,6 +664,14 @@ export class WalletBg {
 
   /**
    * Load persisted keys from per-wallet DB so the receive dialog works before first sync.
+   *
+   * With no row to load, the keys are derived here instead. Once the subscription carries
+   * no credentials (CIP-113, see subscriptionCredentials()), gero-sync names only addresses
+   * that already have on-chain history, so for a wallet that has never been used it names
+   * none and syncKeys() never runs: no receive address, no DRep ID, no stake key to sign
+   * with. The derived set marks nothing as used, and the first sync that does name an
+   * address replaces it. It is not persisted, so the cached row only ever holds keys a
+   * sync resolved.
    */
   public async loadCachedKeys() {
     try {
@@ -673,9 +681,29 @@ export class WalletBg {
       if (row?.resolvedKeys) {
         debugLog('🔑 Loading cached keys from DB');
         WalletStore.setKeys(row.resolvedKeys);
+        return;
       }
     } catch (e) {
       debugLog('Failed to load cached keys:', e);
+    }
+    if (!this.derivesOwnAddress()) return;
+    debugLog('🔑 No cached keys; deriving them locally');
+    WalletStore.setKeys(this.resolvePathsForMissingAddresses([]));
+  }
+
+  /**
+   * Whether resolvePathsForMissingAddresses() yields this wallet's own addresses: a watch
+   * wallet's are built from the watched address, an HD wallet's from its xpub. A legacy
+   * Google wallet's address comes from a contract instead, and keys derived from the xpub
+   * would offer the user an address this wallet does not sync.
+   */
+  private derivesOwnAddress(): boolean {
+    if (this.chain === Blockchain.BITCOIN || this.chain === Blockchain.MIDNIGHT) return false;
+    if (this.type === WalletType.Watch) return true;
+    try {
+      return getAddress(this.publicKey, this.chain, this.network, 0).toBech32() === this.baseAddress;
+    } catch {
+      return false;
     }
   }
 
