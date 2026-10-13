@@ -127,7 +127,7 @@
               </v-alert>
             </v-col>
             <v-col :cols="isPrfWallet ? 12 : 6">
-              <v-btn block variant="outlined" color="error" class="capitalize" @click="decline">
+              <v-btn block variant="outlined" color="error" class="capitalize" @click="decline" :disabled="txSignLoading">
                 {{ $t('wallet.decline') }}
               </v-btn>
             </v-col>
@@ -220,6 +220,7 @@
   </v-form>
 </template>
 <script setup lang="ts">
+import { computed, getCurrentInstance, onMounted, ref, toRefs } from 'vue';
 import { useApprovalFreshness, awaitFreshApproval, StaleApprovalError } from "@/shared/composables/useApprovalFreshness";
 import type { Cip45Authorization } from '@/services/cip45/types';
 import { DappRisk, DappScore, type TxScanResponse } from '@/models/cardano-shield-types';

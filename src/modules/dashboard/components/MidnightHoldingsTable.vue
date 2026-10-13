@@ -129,15 +129,15 @@ function formatBigDecimal(value: bigint, divisor: bigint, fractionDigits: number
 // Inactive columns use an em-dash placeholder; once price feeds + indexer
 // historical data are wired they'll fill in without layout changes.
 const headers = computed(() => [
-  { text: '#', value: 'rank', align: 'center' as const, sortable: false, width: 40 },
-  { text: t('market.token'), value: 'name', align: 'start' as const, sortable: false },
-  { text: 'Balance', value: 'balance', align: 'end' as const, sortable: false },
-  { text: 'Price', value: 'price', align: 'end' as const, sortable: false },
-  { text: 'Value', value: 'value', align: 'end' as const, sortable: false },
-  { text: '24H', value: 'change24h', align: 'end' as const, sortable: false },
-  { text: 'MCap', value: 'mcap', align: 'end' as const, sortable: false },
-  { text: 'Avg Cost', value: 'avgCost', align: 'end' as const, sortable: false },
-  { text: 'P&L', value: 'pnl', align: 'end' as const, sortable: false },
+  { title: t('market.rank'), key: 'rank', align: 'center' as const, sortable: false, width: 40 },
+  { title: t('market.token'), key: 'name', align: 'start' as const, sortable: false },
+  { title: t('market.balance'), key: 'balance', align: 'end' as const, sortable: false },
+  { title: t('market.price'), key: 'price', align: 'end' as const, sortable: false },
+  { title: t('market.value'), key: 'value', align: 'end' as const, sortable: false },
+  { title: t('market.change24h'), key: 'change24h', align: 'end' as const, sortable: false },
+  { title: t('market.marketCap'), key: 'mcap', align: 'end' as const, sortable: false },
+  { title: t('market.avgCost'), key: 'avgCost', align: 'end' as const, sortable: false },
+  { title: t('market.totalPnl'), key: 'pnl', align: 'end' as const, sortable: false },
 ]);
 
 interface MidnightHoldingRow {

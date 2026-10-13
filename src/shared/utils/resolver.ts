@@ -5,6 +5,7 @@ import { isNotNil } from '@cardano-sdk/util';
 import { Hash28ByteBase16, Bip32PrivateKey } from '@cardano-sdk/crypto';
 import TokenMetadataStore from '@/stores/tokenMetadataStore';
 import NetworkStore from '@/stores/networkStore';
+import { unwrapForIndexedDB } from '@/db/cloneBoundary';
 import { resolveIconUrl, type IconPlaceholders } from '@/shared/utils/iconResolver';
 import * as bip39 from 'bip39';
 import { Buffer } from 'buffer';
@@ -343,7 +344,7 @@ export function resolveAsset(token: any): any {
   let policy_id: string;
   let asset_name: string;
 
-  const asset = structuredClone(NetworkStore.state.assets[unit]);
+  const asset = structuredClone(unwrapForIndexedDB(NetworkStore.state.assets[unit]));
   if (!asset) {
     // TODO
   }
@@ -402,7 +403,7 @@ export function resolveAsset(token: any): any {
           asset.metadata = cip68Data
         }
         if (label === 333 && asset.metadata && !asset.metadata.decimals) {
-          const token = structuredClone(TokenMetadataStore.state.tokens[asset.asset])
+          const token = structuredClone(unwrapForIndexedDB(TokenMetadataStore.state.tokens[asset.asset]))
           if (token?.decimals) {
             asset.metadata.decimals = token.decimals
           } else {

@@ -64,19 +64,19 @@ export default defineConfig({
     },
   },
   resolve: {
-    alias: {
-      '@/': `${resolve(__dirname, 'src')}/`,
-      '@test/': `${resolve(__dirname, 'test')}/`,
-      'vuedraggable': resolve(__dirname, 'node_modules/vuedraggable/src/vuedraggable.js'),
-      'vue-i18n': 'vue-i18n/dist/vue-i18n.runtime.esm-bundler.js',
-      'buffer': 'buffer',
-      '@noble/ciphers/chacha': '@noble/ciphers/chacha.js',
-      '@noble/hashes/pbkdf2': '@noble/hashes/pbkdf2.js',
-      '@noble/hashes/sha2': '@noble/hashes/sha2.js',
+    alias: [
+      { find: '@/', replacement: `${resolve(__dirname, 'src')}/` },
+      { find: '@test/', replacement: `${resolve(__dirname, 'test')}/` },
+      { find: 'vuedraggable', replacement: resolve(__dirname, 'node_modules/vuedraggable/src/vuedraggable.js') },
+      { find: /^vue-i18n$/, replacement: 'vue-i18n/dist/vue-i18n.runtime.esm-bundler.js' },
+      { find: 'buffer', replacement: 'buffer' },
+      { find: '@noble/ciphers/chacha', replacement: '@noble/ciphers/chacha.js' },
+      { find: '@noble/hashes/pbkdf2', replacement: '@noble/hashes/pbkdf2.js' },
+      { find: '@noble/hashes/sha2', replacement: '@noble/hashes/sha2.js' },
       // Test-only: the browser emurgo message-signing WASM can't load in the node
       // test runner; the nodejs variant has an identical API + a Node-loadable WASM.
-      '@emurgo/cardano-message-signing-browser': '@emurgo/cardano-message-signing-nodejs',
-    },
+      { find: '@emurgo/cardano-message-signing-browser', replacement: '@emurgo/cardano-message-signing-nodejs' },
+    ],
     extensions: ['.js', '.json', '.jsx', '.mjs', '.ts', '.tsx', '.vue'],
     mainFields: ['module', 'main'],
   },

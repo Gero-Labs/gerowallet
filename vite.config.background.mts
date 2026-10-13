@@ -267,9 +267,11 @@ export default defineConfig({
       // ('pbkdf2' -> 'pbkdf2/browser') races with the virtual module plugin because Vite
       // aliases resolve BEFORE Rollup plugins, causing sporadic "pbkdf2Sync is not exported"
       // errors when the alias wins the race.
-      const aliases = { ...sharedConfig.resolve?.alias } as Record<string, string>;
-      delete aliases['pbkdf2'];
-      return aliases;
+      const sharedAliases = sharedConfig.resolve?.alias ?? [];
+      const aliases = Array.isArray(sharedAliases)
+        ? sharedAliases
+        : Object.entries(sharedAliases).map(([find, replacement]) => ({ find, replacement }));
+      return aliases.filter(alias => alias.find !== 'pbkdf2');
     })(),
   },
   server: {

@@ -1,4 +1,3 @@
-import { plainStoreSnapshot } from '@/stores/serialization';
 import { reactive } from 'vue';
 import {
   deleteWallet,
@@ -116,9 +115,9 @@ function broadcastFromBackground(updates: Partial<GeroStore>, immediate = false)
         // CRITICAL: Use the current in-memory store state as the base to avoid race conditions
         // DO NOT use chrome.storage.local.get() - it causes race conditions with liveQuery
         const finalState = { ...geroStore };
-        chrome.storage.local.set(plainStoreSnapshot({
+        chrome.storage.local.set({
           [STORE_NAME]: JSON.parse(JSON.stringify(finalState, serializeValue))
-        }));
+        });
       } catch (error) {
         console.error('Failed to persist gero store to storage (immediate):', Object.keys(updates), error);
       }
@@ -134,9 +133,9 @@ function broadcastFromBackground(updates: Partial<GeroStore>, immediate = false)
           // CRITICAL: Use the current in-memory store state as the base to avoid race conditions
           // DO NOT use chrome.storage.local.get() - it causes race conditions with liveQuery
           const finalState = { ...geroStore };
-          chrome.storage.local.set(plainStoreSnapshot({
+          chrome.storage.local.set({
             [STORE_NAME]: JSON.parse(JSON.stringify(finalState, serializeValue))
-          }));
+          });
         } catch (error) {
           console.error('Failed to persist gero store to storage:', Object.keys(updates), error);
         }

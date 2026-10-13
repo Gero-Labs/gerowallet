@@ -50,31 +50,59 @@ export function compileMessages(messages, locale) {
   return { code: `export default {${fields.join(',')}};`, count };
 }
 
-export async function compileCatalogs(root = repository) {
+function catalogCompiler(root) {
   const directory = resolve(root, 'src/plugins/i18n');
   const pushPath = resolve(directory, 'push.ts');
-  const push = readLiteralModule(await readFile(pushPath, 'utf8'), pushPath, 'pushStrings');
-  const compiled = {};
-  for (const locale of locales) {
-    const path = resolve(directory, `${locale}.ts`);
-    const messages = readLiteralModule(await readFile(path, 'utf8'), path);
-    compiled[locale] = { ...compileMessages({ ...messages, ...push[locale] }, locale), paths: [path, pushPath] };
-  }
-  return compiled;
+  const paths = Object.fromEntries(locales.map(locale => [locale, resolve(directory, `${locale}.ts`)]));
+  let push;
+  const compiled = new Map();
+  return {
+    paths: [...Object.values(paths), pushPath],
+    localePaths(locale) { return [paths[locale], pushPath]; },
+    compile(locale) {
+      if (!compiled.has(locale)) {
+        // Cache the promises before awaiting: parallel virtual-module loads
+        // share both the push catalog read and each locale's compilation.
+        push ??= readFile(pushPath, 'utf8').then(source => readLiteralModule(source, pushPath, 'pushStrings'));
+        compiled.set(locale, (async () => {
+          const [source, pushMessages] = await Promise.all([readFile(paths[locale], 'utf8'), push]);
+          const messages = readLiteralModule(source, paths[locale]);
+          return { ...compileMessages({ ...messages, ...pushMessages[locale] }, locale), paths: [paths[locale], pushPath] };
+        })());
+      }
+      return compiled.get(locale);
+    },
+  };
+}
+
+export async function compileCatalogs(root = repository) {
+  const compiler = catalogCompiler(root);
+  return Object.fromEntries(await Promise.all(locales.map(async locale => [locale, await compiler.compile(locale)])));
 }
 
 /** UI, service-worker and tests share these modules. Raw catalog imports stay strings. */
-export function localeMessagesPlugin() {
+export function localeMessagesPlugin(root = repository) {
+  let compiler = catalogCompiler(root);
+  const watchedPaths = new Set(compiler.paths);
   return {
     name: 'gero-precompiled-locale-messages', enforce: 'pre',
     resolveId(id) { if (id.startsWith(prefix)) return `\0${id}`; },
-    async buildStart() { await compileCatalogs(); },
+    async buildStart() {
+      compiler = catalogCompiler(root);
+      // Watch every shipped catalog even if it is not imported (or fails to
+      // compile), so correcting it can recover a failed watch build.
+      for (const path of compiler.paths) this.addWatchFile(path);
+      await Promise.all(locales.map(locale => compiler.compile(locale)));
+    },
+    watchChange(file) {
+      if (watchedPaths.has(resolve(file))) compiler = catalogCompiler(root);
+    },
     async load(id) {
       if (!id.startsWith(`\0${prefix}`)) return;
       const locale = id.slice(prefix.length + 1);
       if (!locales.includes(locale)) throw new Error(`Unsupported shipped locale: ${locale}`);
-      const compiled = (await compileCatalogs())[locale];
-      for (const path of compiled.paths) this.addWatchFile(path);
+      for (const path of compiler.localePaths(locale)) this.addWatchFile(path);
+      const compiled = await compiler.compile(locale);
       return { code: compiled.code, map: null };
     },
   };

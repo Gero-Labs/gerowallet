@@ -26,7 +26,7 @@ jobs:
     outputs:
       version: ${{ steps.candidate.outputs.version }}
     env:
-      NODE_OPTIONS: "--max-old-space-size=4096"
+      NODE_OPTIONS: "--max-old-space-size=4096 --max-semi-space-size=128"
       MANIFEST_KEY: ${{ vars.MANIFEST_KEY || secrets.MANIFEST_KEY }}
       EXPECTED_EXTENSION_ID: ${{ vars.CHROME_EXTENSION_ID }}
     steps:
@@ -124,7 +124,14 @@ jobs:
         run: node scripts/check-secret-envelope-readers.mjs
 
       - name: Build Chrome Extension
-        run: npm run build
+        run: |
+          mkdir -p release-evidence
+          node --input-type=module <<'NODE' > release-evidence/build-runtime.json
+          import os from 'node:os';
+          import v8 from 'node:v8';
+          console.log(JSON.stringify({ node: process.version, nodeOptions: process.env.NODE_OPTIONS, heapLimitBytes: v8.getHeapStatistics().heap_size_limit, systemMemoryBytes: os.totalmem() }, null, 2));
+          NODE
+          /usr/bin/time --verbose --output=release-evidence/build-resources.txt npm run build
 
       - name: Verify and archive the exact built candidate
         env:

@@ -9,9 +9,9 @@ define: { __VUE_OPTIONS_API__: true, __VUE_PROD_DEVTOOLS__: false, __VUE_I18N_FU
 optimizeDeps: { entries: [resolve('test/wallet-library/index.html')] },
 css: { preprocessorOptions: { scss: { additionalData: `@import "${resolve('src/shared/styles/_tokens.scss').replace(/\\/g, '/')}";\n`, quietDeps: true, silenceDeprecations: ['import'] } } },
 resolve: { alias: [
-  { find: 'vue', replacement: 'vue/dist/vue.runtime.esm-bundler.js' },
+  { find: /^vue$/, replacement: 'vue/dist/vue.runtime.esm-bundler.js' },
   { find: 'vuedraggable', replacement: resolve('node_modules/vuedraggable/src/vuedraggable.js') },
-  { find: 'vue-i18n', replacement: 'vue-i18n/dist/vue-i18n.runtime.esm-bundler.js' },
+  { find: /^vue-i18n$/, replacement: 'vue-i18n/dist/vue-i18n.runtime.esm-bundler.js' },
   { find: '@/options/modules/welcome/components/WalletsListLogin.vue', replacement: resolve('test/wallet-library/WalletsListFixture.vue') },
   { find: '@/db/gero-db', replacement: resolve('test/wallet-library/database.ts') },
   { find: '@/stores/geroStore', replacement: resolve('test/wallet-library/store.ts') },

@@ -1,5 +1,5 @@
 import { captureMidnightSigningSession } from '@/chains/midnight/midnightSigningSession';
-import Dexie from 'dexie';
+import type Dexie from 'dexie';
 import { type StoredTransaction } from '@/models/transaction.types';
 import { Api } from '@/api/api';
 import { Cardano, Serialization } from '@cardano-sdk/core';
@@ -12,7 +12,7 @@ import {
 } from '@/chrome/submitErrors';
 import { fromAxiosSubmit, isRoutedSubmitError, routedSubmitError, submitCardanoTx } from '@/chrome/submitRouter';
 import networks from '@/utils/networks';
-import { blockChainDBSchema, blockChainDBVersion } from '@/db/schema';
+import { getBlockchainDb } from '@/db';
 import {
   Blockchain,
   HARDENED,
@@ -108,8 +108,6 @@ import {
   assertNativeNightConversionSupported,
   validateShieldedTokenType,
 } from '@/chains/midnight/midnightTokenCapabilities';
-
-let blockchainDb: Dexie = null;
 
 /**
  * Row shape of the per-wallet `account` table — the persisted (possibly
@@ -3286,22 +3284,9 @@ export class WalletBg {
   }
 
   public async getBlockchainDb(): Promise<Dexie> {
-    if (!blockchainDb) {
-      const dbName = `${this.chain}_${this.network}`;
-      blockchainDb = new Dexie(dbName);
-      blockchainDb.version(blockChainDBVersion).stores(blockChainDBSchema);
-    }
-
-    if (!blockchainDb.isOpen()) {
-      try {
-        await blockchainDb.open();
-      } catch (err) {
-        console.error('Error opening blockchain DB:', err);
-        throw err; // or return null, depending on your error-handling strategy
-      }
-    }
-
-    return blockchainDb;
+    const db = await getBlockchainDb(this.chain, this.network);
+    if (!db) throw new Error(`Blockchain database unavailable: ${this.chain}_${this.network}`);
+    return db;
   }
 
 }
