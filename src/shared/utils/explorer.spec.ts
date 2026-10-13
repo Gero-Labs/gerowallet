@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { bech32 } from 'bech32';
 import { Blockchain, Network } from '@/models/types';
 import { explorersFor, getExplorerUrl, resolveExplorerId } from '@/shared/utils/explorer';
+import { toCip129 } from '@/shared/utils/drepId';
 
 const TX = '7ecfdae7a4a2b8ea1bd2b4cb6b3d1b4ec5e9e5e3c5f4b0c7f6c3e9d2a1b0c9d8';
 const POOL_HEX = '0f292fcaa02b8b2f9b3c8f9fd8e0bb21abedb692a6d5058df3ef2735';
@@ -8,6 +10,8 @@ const POOL_BECH32 = 'pool1pu5jlj4q9w9jlxeu370a3c9myx47md5j5m2str0naunn2q3lkdy';
 // CIP-129's own example: tx 15f82a36…c916, index 0.
 const GOV_CIP129 = 'gov_action1zhuz5djmmmjg8f9s8pe6grfc98xg3szglums8cgm6qwancp4eytqqmpu0pr';
 const GOV_TX = '15f82a365bdee483a4b03873a40d3829cc88c048ff3703e11bd01dd9e035c916';
+const DREP_HEX = 'ab'.repeat(28);
+const DREP = toCip129(DREP_HEX)!; // CIP-129 drep1…
 
 const cardano = (type: Parameters<typeof getExplorerUrl>[2], id: string, explorer?: string, network?: string) =>
   getExplorerUrl(Blockchain.CARDANO, id, type, network ?? Network.MAINNET, explorer);
@@ -29,6 +33,12 @@ describe('getExplorerUrl: Cardano default (no saved choice)', () => {
   it('returns nothing for an empty id', () => {
     expect(cardano('tx', '')).toBe('');
   });
+
+  it('opens the creating transaction for a UTxO reference', () => {
+    expect(cardano('tx', `${TX}#3`)).toBe(`https://cexplorer.io/tx/${TX}`);
+    expect(cardano('tx', `${TX}#0`, 'cardanoscan')).toBe(`https://cardanoscan.io/transaction/${TX}`);
+    expect(getExplorerUrl(Blockchain.APEX_VECTOR, `${TX}#1`, 'tx')).toBe(`https://vector.apexscan.org/en/transaction/${TX}`);
+  });
 });
 
 describe('getExplorerUrl: chosen Cardano explorer', () => {
@@ -45,7 +55,7 @@ describe('getExplorerUrl: chosen Cardano explorer', () => {
     expect(cardano('address', 'addr1q9', 'adastat')).toBe('https://adastat.net/addresses/addr1q9');
     expect(cardano('stake', 'stake1uxyz', 'adastat')).toBe('https://adastat.net/accounts/stake1uxyz');
     expect(cardano('pool', POOL_BECH32, 'adastat')).toBe(`https://adastat.net/pools/${POOL_BECH32}`);
-    expect(cardano('drep', 'drep1xyz', 'adastat')).toBe('https://adastat.net/dreps/drep1xyz');
+    expect(cardano('drep', DREP, 'adastat')).toBe(`https://adastat.net/dreps/${DREP}`);
     expect(cardano('epoch', '660', 'adastat', Network.PREPROD)).toBe('https://preprod.adastat.net/epochs/660');
   });
 
@@ -57,7 +67,7 @@ describe('getExplorerUrl: chosen Cardano explorer', () => {
 
   it('falls back to Cexplorer for an entity the chosen explorer has no page for', () => {
     expect(cardano('tx', TX, 'poolpm')).toBe(`https://cexplorer.io/tx/${TX}`);
-    expect(cardano('drep', 'drep1xyz', 'poolpm', Network.PREPROD)).toBe('https://preprod.cexplorer.io/drep/drep1xyz');
+    expect(cardano('drep', DREP, 'poolpm', Network.PREPROD)).toBe(`https://preprod.cexplorer.io/drep/${DREP}`);
     // pool.pm needs the fingerprint; a policy+name unit is not one.
     expect(cardano('asset', 'ab12cd', 'poolpm')).toBe('https://cexplorer.io/asset/ab12cd');
   });
@@ -68,6 +78,21 @@ describe('getExplorerUrl: chosen Cardano explorer', () => {
 
   it('percent-encodes ids into a single path segment', () => {
     expect(cardano('address', '../evil?x=1', 'cardanoscan')).toBe('https://cardanoscan.io/address/..%2Fevil%3Fx%3D1');
+  });
+});
+
+describe('getExplorerUrl: DReps', () => {
+  it('links every DRep id form as CIP-129, the form every explorer accepts', () => {
+    const cip105 = bech32.encode('drep_vkh', bech32.toWords(Uint8Array.from(Buffer.from(DREP_HEX, 'hex'))), 200);
+    expect(cardano('drep', DREP_HEX)).toBe(`https://cexplorer.io/drep/${DREP}`);
+    expect(cardano('drep', cip105, 'adastat')).toBe(`https://adastat.net/dreps/${DREP}`);
+    expect(cardano('drep', DREP, 'cardanoscan')).toBe(`https://cardanoscan.io/drep/${DREP}`);
+  });
+
+  it('gives the keyword DReps and garbage no link', () => {
+    expect(cardano('drep', 'drep_always_abstain')).toBe('');
+    expect(cardano('drep', 'drep_always_no_confidence', 'adastat')).toBe('');
+    expect(cardano('drep', 'drep1xyz')).toBe('');
   });
 });
 
@@ -107,7 +132,7 @@ describe('getExplorerUrl: other chains', () => {
   });
 
   it('returns nothing for an entity apexscan has no page for', () => {
-    expect(getExplorerUrl(Blockchain.APEX_PRIME, 'drep1xyz', 'drep')).toBe('');
+    expect(getExplorerUrl(Blockchain.APEX_PRIME, DREP, 'drep')).toBe('');
   });
 
   it('keeps Bitcoin on mempool.space', () => {

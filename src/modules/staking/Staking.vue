@@ -116,6 +116,7 @@
                     <v-list-item-subtitle class="pool-id-subtitle mr-1">
                       {{ filters.truncate(item.pool_id_bech32) }}
                       <CopyButton :value="item.pool_id_bech32" x-small></CopyButton>
+                      <ExplorerLink type="pool" :id="item.pool_id_bech32" x-small />
                     </v-list-item-subtitle>
                   </div>
                 </v-list-item>
@@ -349,6 +350,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { useDelegation } from '@/shared/composables/useDelegation';
 import debounce from 'lodash/debounce';
 import CopyButton from '@/shared/components/CopyButton.vue';
+import ExplorerLink from '@/shared/components/ExplorerLink.vue';
 import DelegateDialog from '@/modules/staking/dialogs/DelegateDialog.vue';
 import StakingCard from '@/modules/dashboard/components/StakingCard.vue';
 import networks from '@/utils/networks';

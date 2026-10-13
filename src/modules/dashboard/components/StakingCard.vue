@@ -19,6 +19,7 @@
                 <span v-if="pool" class="stk-pill"><span class="stk-dot"></span>{{ $t('staking.delegating') }}</span>
                 <span v-if="account?.pool_id" class="stk-pid">{{ filters.truncate(account.pool_id) }}</span>
                 <CopyButton v-if="account?.pool_id" :value="account.pool_id" x-small />
+                <ExplorerLink type="pool" :id="account?.pool_id" x-small />
               </div>
             </div>
             <div class="stk-socials">
@@ -129,6 +130,7 @@ import { toRefs, computed, ref, watch, onMounted } from 'vue';
 import RewardsChart from './RewardsChart.vue';
 import filters from '@/shared/utils/filters';
 import CopyButton from '@/shared/components/CopyButton.vue';
+import ExplorerLink from '@/shared/components/ExplorerLink.vue';
 import UnstakeDialog from '@/modules/staking/dialogs/UnstakeDialog.vue';
 import WithdrawalDialog from '@/modules/staking/dialogs/WithdrawalDialog.vue';
 import WithdrawGateDialog from '@/modules/governance/dialogs/WithdrawGateDialog.vue';

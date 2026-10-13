@@ -24,7 +24,8 @@
           <v-list-item-subtitle v-if="pool"
             >{{ filters.truncate(pool.pool_id_bech32)
             }}<CopyButton class="ml-1" :value="pool.pool_id_bech32" x-small></CopyButton
-          ></v-list-item-subtitle>
+          ><ExplorerLink type="pool" :id="pool.pool_id_bech32" x-small
+          /></v-list-item-subtitle>
         </div>
 
         <v-avatar size="80" v-if="poolExtendedInfo(pool)?.info?.url_png_icon_64x64">
@@ -248,6 +249,7 @@ import { useTransactionSigning } from '@/shared/composables/useTransactionSignin
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
+import ExplorerLink from '@/shared/components/ExplorerLink.vue';
 import TransactionAuthSection from '@/shared/components/TransactionAuthSection.vue';
 import networks from '@/utils/networks';
 import { WalletType } from '@/models/types';
@@ -349,8 +351,10 @@ const depositFee = computed(() => {
   const registrationCert = props.tx.body.certificates?.find(cert =>
     Cardano.isCertType(cert, Cardano.StakeRegistrationCertificateTypes)
   );
+  // The legacy StakeRegistration cert carries no deposit field; the Conway ones do.
+  const deposit = registrationCert && 'deposit' in registrationCert ? registrationCert.deposit : undefined;
 
-  return registrationCert && 'deposit' in registrationCert && registrationCert.deposit ? Number(registrationCert.deposit) : 0;
+  return deposit ? Number(deposit) : 0;
 });
 
 const cols = computed(() => {
@@ -365,7 +369,7 @@ const signDelegationTx = async () => {
   await handleSign(formRef.value || undefined);
 };
 
-const poolExtendedInfo = (pool: DelegationPool): ExtendedPoolInfo | undefined => {
+const poolExtendedInfo = (pool: DelegationPool | undefined): ExtendedPoolInfo | undefined => {
   if (pool && pool.pool_extended_info) {
     const parsed: ExtendedPoolInfo = JSON.parse(pool.pool_extended_info);
     if (parsed?.info?.url_png_icon_64x64 && !parsed.info.url_png_icon_64x64.startsWith('http')) {

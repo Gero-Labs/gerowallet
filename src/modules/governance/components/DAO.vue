@@ -340,6 +340,7 @@
               {{ loggedWallet?.stakeAddress || '\u2014' }}
             </span>
             <CopyButton v-if="loggedWallet?.stakeAddress" x-small :value="loggedWallet.stakeAddress" />
+            <ExplorerLink type="stake" :id="loggedWallet?.stakeAddress" x-small />
           </v-card>
         </v-card-text>
         <v-card-actions class="px-6 pb-4">
@@ -368,6 +369,7 @@ import { computed, onMounted, reactive, ref, toRefs } from 'vue';
 import assets from '@/utils/assets';
 import VueHighcharts from '@/shared/components/VueHighcharts.vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
+import ExplorerLink from '@/shared/components/ExplorerLink.vue';
 import clarityApi, { type VotingPowerCalculation, type DaoDetails, type MembershipWorkflow } from '@/api/clarity-api';
 import snackbar from '@/plugins/snackbar';
 import { sanitizeRichText } from '@/shared/utils/sanitizeHtml';

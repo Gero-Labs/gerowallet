@@ -10,6 +10,7 @@
     <v-card-subtitle class="py-0 pb-3">
       {{ $t('assets.fingerprint') }}: {{  filters.truncate(asset.fingerprint) }}
       <CopyButton class="ml-1" :value="asset.fingerprint" x-small></CopyButton>
+      <ExplorerLink type="asset" :id="asset.fingerprint" x-small />
     </v-card-subtitle>
     <v-card-text class="pa-0">
       <v-tabs v-model="tab" fixed-tabs >
@@ -107,6 +108,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import CopyButton from '@/shared/components/CopyButton.vue';
+import ExplorerLink from '@/shared/components/ExplorerLink.vue';
 import assets from '@/utils/assets';
 import filters from '@/shared/utils/filters';
 
@@ -132,7 +134,7 @@ const metadata = computed(() => {
 });
 
 const files = computed(() => {
-  const files = []
+  const files: AssetFile[] = []
   if (props.asset && props.asset.onchain_metadata) {
     let image = ''
     let mediaType = ''
