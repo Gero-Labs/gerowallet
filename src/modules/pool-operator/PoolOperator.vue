@@ -112,7 +112,7 @@
                 <span v-if="liveNode?.data?.uptimeSeconds" class="glv-title-dim">up {{ Math.floor(liveNode.data.uptimeSeconds / 86400) }}d {{ Math.floor((liveNode.data.uptimeSeconds % 86400) / 3600) }}h</span>
                 <span v-if="liveNode?.data?.tipHash" class="glv-title-hash">{{ liveNode.data.tipHash }}</span>
                 <v-spacer />
-                <v-btn icon size="small" @click="showLiveDialog = false"><v-icon size="small">mdi-close</v-icon></v-btn>
+                <v-btn icon variant="text" size="small" @click="showLiveDialog = false"><v-icon size="small">mdi-close</v-icon></v-btn>
               </v-card-title>
               <v-card-text class="pa-0">
                 <NodeLiveView
@@ -134,7 +134,7 @@
                 <v-icon color="info" class="mr-2">mdi-lan</v-icon>
                 {{ $t('poolOperator.networkPeers') }}: {{ peersNode?.name }}
                 <v-spacer />
-                <v-btn icon size="small" @click="showPeersDialog = false"><v-icon size="small">mdi-close</v-icon></v-btn>
+                <v-btn icon variant="text" size="small" @click="showPeersDialog = false"><v-icon size="small">mdi-close</v-icon></v-btn>
               </v-card-title>
               <v-card-text class="pa-0">
                 <PeersCard
@@ -153,7 +153,7 @@
                 <v-icon color="warning" class="mr-2">mdi-key-change</v-icon>
                 {{ $t('poolOperator.kesRotation') }}
                 <v-spacer />
-                <v-btn icon size="small" @click="showKesRotation = false"><v-icon size="small">mdi-close</v-icon></v-btn>
+                <v-btn icon variant="text" size="small" @click="showKesRotation = false"><v-icon size="small">mdi-close</v-icon></v-btn>
               </v-card-title>
               <v-card-text class="pt-4">
                 <div v-if="!kesRotateSuccess">
@@ -192,7 +192,7 @@
               <v-icon color="primary" class="mr-2">{{ isRegistered ? 'mdi-pencil-outline' : 'mdi-plus-circle-outline' }}</v-icon>
               {{ isRegistered ? $t('poolOperator.updatePool') : $t('poolOperator.registerPool') }}
               <v-spacer />
-              <v-btn icon size="small" @click="showUpdateDialog = false"><v-icon size="small">mdi-close</v-icon></v-btn>
+              <v-btn icon variant="text" size="small" @click="showUpdateDialog = false"><v-icon size="small">mdi-close</v-icon></v-btn>
             </v-card-title>
             <v-card-text class="pt-4">
               <PoolRegistrationForm @close="showUpdateDialog = false" />
@@ -207,7 +207,7 @@
               <v-icon color="error" class="mr-2">mdi-power</v-icon>
               {{ $t('poolOperator.retirePool') }}
               <v-spacer />
-              <v-btn icon size="small" @click="showRetireDialog = false"><v-icon size="small">mdi-close</v-icon></v-btn>
+              <v-btn icon variant="text" size="small" @click="showRetireDialog = false"><v-icon size="small">mdi-close</v-icon></v-btn>
             </v-card-title>
             <v-card-text class="pt-4">
               <PoolRetirementForm @close="showRetireDialog = false" />

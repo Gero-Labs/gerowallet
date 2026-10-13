@@ -83,7 +83,7 @@
       </div>
 
       <!-- Expand toggle -->
-      <v-btn icon size="x-small" @click="expanded = !expanded" class="expand-btn">
+      <v-btn icon variant="text" size="x-small" @click="expanded = !expanded" class="expand-btn">
         <v-icon size="x-small">{{ expanded ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
       </v-btn>
     </div>

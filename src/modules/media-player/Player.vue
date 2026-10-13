@@ -8,10 +8,10 @@
       </div>
 
       <div style="flex: none; align-self: start;" v-show="!context.minimized">
-        <v-btn icon size="x-small" color="white" @click="MusicStore.setMinimized">
+        <v-btn icon variant="text" size="x-small" color="white" @click="MusicStore.setMinimized">
           <v-icon size="x-small">mdi-window-minimize</v-icon>
         </v-btn>
-        <v-btn icon size="x-small" color="white" class="mr-2" @click="MusicStore.setMediaPlayerShown(!context.shown)">
+        <v-btn icon variant="text" size="x-small" color="white" class="mr-2" @click="MusicStore.setMediaPlayerShown(!context.shown)">
           <v-icon size="x-small">mdi-window-close</v-icon>
         </v-btn>
       </div>

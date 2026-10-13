@@ -337,8 +337,9 @@ watch(() => props.isOpen, (val) => {
   background-color: transparent;
 }
 
-.stepper-container .v-stepper__header {
+.stepper-container :deep(.v-stepper-header) {
   box-shadow: none;
+  align-items: stretch;
 }
 .custom-step {
   display: flex;

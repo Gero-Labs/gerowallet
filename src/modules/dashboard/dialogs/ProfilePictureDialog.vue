@@ -584,7 +584,7 @@ defineExpose({ open });
 }
 
 /* ── NFT search ── */
-.nft-search ::v-deep .v-input__slot {
+.nft-search :deep(.v-field) {
   border-radius: var(--g-r-control) !important;
 }
 

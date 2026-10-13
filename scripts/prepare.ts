@@ -3,6 +3,7 @@ import { execSync } from 'node:child_process'
 import fs from 'fs-extra'
 import chokidar from 'chokidar'
 import { isDev, log, port, r } from './utils'
+import { createDevEntryHtml } from './dev-entry-html'
 
 /**
  * Copy assets that are needed during development
@@ -54,19 +55,13 @@ async function copyDevAssets() {
  */
 async function stubIndexHtml() {
   // Stub options → extension/index.html
-  let optionsData = await fs.readFile(r(`src/options/index.html`), 'utf-8')
-  optionsData = optionsData
-    .replace('"./main.ts"', `"http://localhost:${port}/options/main.ts"`)
-    .replace('<div id="app"></div>', '<div id="app">Vite server did not start</div>')
+  const optionsData = createDevEntryHtml(await fs.readFile(r(`src/options/index.html`), 'utf-8'), 'options', port)
   await fs.writeFile(r(`extension/index.html`), optionsData, 'utf-8')
   log('PRE', `stub options`)
 
   // Stub sidepanel → extension/sidepanel/index.html
   await fs.ensureDir(r('extension/sidepanel'))
-  let sidepanelData = await fs.readFile(r(`src/sidepanel/index.html`), 'utf-8')
-  sidepanelData = sidepanelData
-    .replace('"./main.ts"', `"http://localhost:${port}/sidepanel/main.ts"`)
-    .replace('<div id="app"></div>', '<div id="app">Vite server did not start</div>')
+  const sidepanelData = createDevEntryHtml(await fs.readFile(r(`src/sidepanel/index.html`), 'utf-8'), 'sidepanel', port)
   await fs.writeFile(r(`extension/sidepanel/index.html`), sidepanelData, 'utf-8')
   log('PRE', `stub sidepanel`)
 }

@@ -34,7 +34,7 @@
           <template v-slot:append v-if="passKeyAvailable">
             <v-btn
               size="small"
-              icon
+              icon variant="text"
               class="passkey-icon-wrapper"
               @click="handlePassKeyClick"
               :disabled="passKeyLoading || disabled"

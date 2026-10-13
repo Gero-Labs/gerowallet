@@ -24,7 +24,7 @@
             </template>
             <span>{{ portfolioMode === 'ada-only' ? $t('dashboard.adaOnlyTooltip') : $t('dashboard.fullPortfolioTooltip') }}</span>
           </v-tooltip>
-          <v-btn icon size="x-small" @click="handleRefresh" :disabled="isRefreshing">
+          <v-btn icon variant="text" size="x-small" @click="handleRefresh" :disabled="isRefreshing">
             <v-icon size="small" :class="{ 'rotating': isRefreshing }">mdi-refresh</v-icon>
           </v-btn>
         </div>

@@ -14,7 +14,7 @@
           <span class="ks-title">{{ t('wallet.keystoneSign') }}</span>
           <span class="ks-step">{{ keystoneScan ? t('wallet.scanQRCode') : t('wallet.instructions') }}</span>
         </div>
-        <v-btn icon size="small" class="ks-close" :aria-label="t('common.close')" @click="handleClose">
+        <v-btn icon variant="text" size="small" class="ks-close" :aria-label="t('common.close')" @click="handleClose">
           <v-icon size="18">mdi-close</v-icon>
         </v-btn>
       </div>

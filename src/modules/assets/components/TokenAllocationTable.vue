@@ -81,6 +81,7 @@
                     hide-details
                     style="margin-top: 8px; max-width: 158px;"
                     class="sort-select-small"
+                    attach
                   ></v-select>
                 </div>
               </v-list-item>
@@ -396,57 +397,35 @@ watch([tokensCount, collectiblesLength, searchTerm], debouncedCheck)
 
 .top-level-search.v-text-field {
   background: transparent !important;
-  background-color: transparent !important;
 }
 
-.top-level-search >>> .v-input__slot {
+.top-level-search :deep(.v-field) {
   background: transparent !important;
-  background-color: transparent !important;
   box-shadow: none !important;
 }
 
-.top-level-search >>> .v-input__control {
-  background: transparent !important;
-  background-color: transparent !important;
-}
-
-.top-level-search >>> .v-text-field__slot {
-  background: transparent !important;
-  background-color: transparent !important;
-}
-
-.top-level-search >>> .v-input__slot:before {
-  border: none !important;
-}
-
-.top-level-search >>> .v-input__slot:after {
-  border: none !important;
-}
-
-.top-level-search.v-text-field--solo > .v-input__control > .v-input__slot {
-  background: transparent !important;
-}
-
-/* Override Vuetify v-select height with higher specificity */
-.sort-select-small.v-text-field--outlined.v-input--dense.v-text-field--single-line > .v-input__control > .v-input__slot,
-.sort-select-small.v-text-field--outlined.v-input--dense.v-text-field--outlined > .v-input__control > .v-input__slot {
+/* The existing compact filter select is 32px tall, including its input. */
+.sort-select-small :deep(.v-field--variant-outlined) {
+  --v-input-control-height: 32px;
+  --v-field-padding-top: 0px;
+  --v-field-padding-bottom: 0px;
   min-height: 32px !important;
   height: 32px !important;
+}
+
+.sort-select-small :deep(.v-field__input) {
+  min-height: 32px !important;
   padding-top: 0 !important;
   padding-bottom: 0 !important;
 }
 
-.sort-select-small.v-select .v-input__control {
-  height: 32px !important;
-  min-height: 32px !important;
-}
-
-.sort-select-small .v-select__selection {
+.sort-select-small :deep(.v-select__selection) {
   line-height: 30px !important;
 }
 
-.sort-select-small.v-text-field--outlined.v-input--dense:not(.v-text-field--solo) .v-input__append-inner {
-  margin-top: 4px !important;
+.sort-select-small :deep(.v-field__append-inner) {
+  align-items: center;
+  padding-top: 0;
 }
 
 /* Liquid glass styling for the main filters dialog */

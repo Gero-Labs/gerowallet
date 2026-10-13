@@ -689,9 +689,11 @@ watch(() => account.value, (acc) => {
 }
 
 /* ── Inputs ── */
-.perp-input :deep(.v-input__slot) {
+.perp-input :deep(.v-field) {
+  --v-input-control-height: 34px;
+  --v-input-padding-top: calc((var(--v-input-control-height) - 1.5rem) / 2);
+  --v-field-padding-bottom: var(--v-input-padding-top);
   background: var(--g-hairline-1) !important;
-  border-color: var(--g-hairline-2) !important;
   min-height: 34px !important;
 }
 
@@ -700,7 +702,7 @@ watch(() => account.value, (acc) => {
   color: var(--g-text-3) !important;
 }
 
-.perp-input :deep(input) {
+.perp-input :deep(input.v-field__input) {
   font-size: 12px !important;
   font-family: var(--g-font-mono) !important;
   color: var(--g-text-1) !important;
@@ -720,16 +722,17 @@ watch(() => account.value, (acc) => {
   margin-top: 0 !important;
 }
 
-.perp-input :deep(fieldset) {
-  border-color: var(--g-hairline-2) !important;
+.perp-input :deep(.v-field__outline) {
+  --v-field-border-opacity: 1;
+  color: var(--g-hairline-2) !important;
 }
 
-.perp-input :deep(.v-input__slot:hover fieldset) {
-  border-color: var(--g-hairline-3) !important;
+.perp-input :deep(.v-field:hover .v-field__outline) {
+  color: var(--g-hairline-3) !important;
 }
 
-.perp-input :deep(.v-input--is-focused fieldset) {
-  border-color: var(--g-accent) !important;
+.perp-input :deep(.v-field--focused .v-field__outline) {
+  color: var(--g-accent) !important;
 }
 
 /* ── Size % Buttons ── */

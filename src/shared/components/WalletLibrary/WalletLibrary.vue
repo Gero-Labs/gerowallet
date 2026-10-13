@@ -16,7 +16,7 @@
         <div class="library-tools">
           <v-menu location="start"  >
             <template #activator="{ props: activatorProps }">
-              <v-btn icon size="small" v-bind="activatorProps"  :disabled="!ready" class="library-sort"
+              <v-btn icon variant="text" size="small" v-bind="activatorProps"  :disabled="!ready" class="library-sort"
                 :class="{ 'library-sort--active': sort !== 'custom' }"
                 :aria-label="t('common.sortBy') + ': ' + sortLabel(sort)" :title="t('common.sortBy') + ': ' + sortLabel(sort)">
                 <v-icon size="small">mdi-sort</v-icon>
@@ -31,7 +31,7 @@
               </v-list-item>
             </v-list>
           </v-menu>
-          <v-btn icon size="small" :disabled="saving || !ready" :aria-label="t('walletLibrary.newCategory')"
+          <v-btn icon variant="text" size="small" :disabled="saving || !ready" :aria-label="t('walletLibrary.newCategory')"
             :title="t('walletLibrary.newCategory')" @click="editCategory(null)"><v-icon size="small">mdi-folder-plus-outline</v-icon></v-btn>
         </div>
       </div>
@@ -62,7 +62,7 @@
             </button>
             <v-menu v-if="group.id" >
               <template #activator="{ props: activatorProps }">
-                <v-btn icon size="x-small" v-bind="activatorProps"  :disabled="saving"
+                <v-btn icon variant="text" size="x-small" v-bind="activatorProps"  :disabled="saving"
                   :aria-label="t('walletLibrary.categoryActions', { name: group.name })"><v-icon size="small">mdi-dots-horizontal</v-icon></v-btn>
               </template>
               <v-list density="compact">
@@ -103,11 +103,11 @@
                   <img v-if="walletTypeIcon(wallet)" class="wallet-hardware" :src="walletTypeIcon(wallet)"
                     :alt="wallet.type" :title="wallet.type" width="18" height="18" />
                 </button>
-                <v-btn icon size="small" class="wallet-favorite" :class="{ 'wallet-favorite--active': wallet.isFavorite }"
+                <v-btn icon variant="text" size="small" class="wallet-favorite" :class="{ 'wallet-favorite--active': wallet.isFavorite }"
                   :disabled="!ready" :aria-pressed="!!wallet.isFavorite" :aria-label="t(wallet.isFavorite ? 'walletLibrary.unfavorite' : 'walletLibrary.favorite', { name: wallet.name })"
                   @click="toggleFavorite(wallet.id)"><v-icon size="small">{{ wallet.isFavorite ? 'mdi-star' : 'mdi-star-outline' }}</v-icon></v-btn>
                 <v-menu >
-                  <template #activator="{ props: activatorProps }"><v-btn icon size="small" v-bind="activatorProps"  :disabled="saving"
+                  <template #activator="{ props: activatorProps }"><v-btn icon variant="text" size="small" v-bind="activatorProps"  :disabled="saving"
                     :aria-label="t('walletLibrary.walletActions', { name: wallet.name })"><v-icon size="small">mdi-dots-vertical</v-icon></v-btn></template>
                   <v-list density="compact">
                     <v-list-subheader>{{ t('walletLibrary.moveTo') }}</v-list-subheader>

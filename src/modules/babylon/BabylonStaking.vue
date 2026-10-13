@@ -11,7 +11,7 @@
         <div class="text-caption babylon-subtitle">{{ $t('babylon.subtitle') }}</div>
       </div>
       <v-spacer />
-      <v-btn size="small" icon :loading="loading" @click="refresh" class="refresh-btn">
+      <v-btn size="small" icon variant="text" :loading="loading" @click="refresh" class="refresh-btn">
         <v-icon size="small">mdi-refresh</v-icon>
       </v-btn>
     </div>
@@ -44,7 +44,7 @@
             </div>
           </div>
         </div>
-        <v-btn icon size="x-small" class="intro-dismiss" @click="dismissIntro">
+        <v-btn icon variant="text" size="x-small" class="intro-dismiss" @click="dismissIntro">
           <v-icon size="small" style="opacity: 0.45;">mdi-close</v-icon>
         </v-btn>
       </div>
@@ -204,7 +204,7 @@
                 {{ $t(`babylon.tooltip.state.${d.state}`) || d.state }}
               </v-tooltip>
               <v-spacer />
-              <v-btn icon size="x-small" @click="openTx(d.staking_tx_hash_hex)" style="opacity: 0.5;">
+              <v-btn icon variant="text" size="x-small" @click="openTx(d.staking_tx_hash_hex)" style="opacity: 0.5;">
                 <v-icon size="x-small">mdi-open-in-new</v-icon>
               </v-btn>
             </div>
@@ -330,7 +330,7 @@
                 <!-- Website icon -->
                 <v-btn
                   v-if="provider.description.website"
-                  icon size="x-small"
+                  icon variant="text" size="x-small"
                   style="width: 14px; height: 14px; opacity: 0.35;"
                   @click.stop="openWebsite(provider.description.website)"
                 >
@@ -1126,14 +1126,20 @@ onMounted(() => refresh());
 .pcol-label:hover { opacity: 0.6; }
 
 /* ── Provider search ── */
-.provider-search :deep(.v-input__control) {
-  min-height: 34px !important;
-}
-.provider-search :deep(.v-input__slot) {
+.provider-search :deep(.v-field) {
+  --v-input-control-height: 32px;
+  --v-field-input-padding-top: 0px;
+  --v-field-input-padding-bottom: 0px;
+  --v-field-padding-start: 0px;
+  --v-field-padding-end: 0px;
   background: var(--bab-glass) !important;
   border: 1px solid var(--bab-border) !important;
   border-radius: var(--g-r-control) !important;
   font-size: 12px;
+  padding-inline: 0;
+}
+.provider-search :deep(.v-field__overlay) {
+  opacity: 0;
 }
 .provider-search :deep(input::placeholder) { opacity: 0.35; }
 

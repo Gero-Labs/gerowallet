@@ -42,7 +42,7 @@
                 <v-card-title>
                   {{ $t('wallet.contactAdded') }}
                   <v-spacer></v-spacer>
-                  <v-btn icon size="small" @click="saveContactMenu = false" :disabled="!valid">
+                  <v-btn icon variant="text" size="small" @click="saveContactMenu = false" :disabled="!valid">
                     <v-icon>
                       mdi-window-close
                     </v-icon>
@@ -134,7 +134,7 @@
                 <v-card-title>
                   {{ $t('wallet.contacts') }}
                   <v-spacer></v-spacer>
-                  <v-btn icon size="small" @click="contactsMenu = false">
+                  <v-btn icon variant="text" size="small" @click="contactsMenu = false">
                     <v-icon>
                       mdi-window-close
                     </v-icon>
@@ -146,7 +146,7 @@
                       {{ filters.truncate(item.address) }}<CopyButton x-small :value="item.address" />
                     </template>
                     <template v-slot:[`item.actions`]="{ item }">
-                      <v-btn color="error" icon size="x-small" @click.stop="removeCont(item)">
+                      <v-btn color="error" icon variant="text" size="x-small" @click.stop="removeCont(item)">
                         <v-icon size="x-small">
                           mdi-trash-can
                         </v-icon>
@@ -508,13 +508,18 @@ watch(() => props.sendData.recipientAddress, async (newAddress) => {
     text-align: left;
   }
 
-  .recipient-address > .v-input__control > .v-input__slot {
+  .recipient-address > .v-input__control > .v-field {
     background-color: var(--g-raised);
     border-radius: var(--g-r-control);
-    padding: 5px 10px;
+    padding: 0 12px;
+    --v-field-padding-start: 0px;
+    --v-field-padding-end: 12px;
+    --v-field-input-padding-top: 6px;
+    --v-field-input-padding-bottom: 0px;
 
     & textarea {
       resize: none;
+      line-height: 1.75;
     }
   }
 }

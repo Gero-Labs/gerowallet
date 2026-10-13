@@ -54,14 +54,14 @@ defineEmits<{ (event: 'update:modelValue', value: Props['modelValue']): void }>(
     font-weight: 500;
   }
 
-  .v-input__control > .v-input__slot {
+  .v-field {
     background-color: #0F0F0F !important;
     border: 1px solid #272930 !important;
     border-radius: 10px;
 
-    & > .v-select__slot {
-      padding: 0 10px !important;
-    }
+    --v-field-padding-start: 0px;
+    --v-field-padding-end: 0px;
+    padding: 0 10px !important;
   }
 }
 </style>

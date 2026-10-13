@@ -69,7 +69,7 @@
 
         <!-- Swap direction button -->
         <div class="swap-arrow-wrapper">
-          <v-btn icon size="small" class="swap-arrow-btn" @click="swapAssets">
+          <v-btn icon variant="text" size="small" class="swap-arrow-btn" @click="swapAssets">
             <v-icon color="var(--g-accent)" size="18">mdi-swap-vertical</v-icon>
           </v-btn>
         </div>

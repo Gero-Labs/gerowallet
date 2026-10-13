@@ -277,14 +277,14 @@ const setOrderBookContainer = (element: unknown) => { obContainerRef.value = ele
   min-height: 28px !important;
 }
 
-.ob-tick-list .v-list-item__title {
+.ob-tick-list .v-list-item-title {
   font-size: 11px !important;
   font-weight: 500;
   color: var(--g-text-1);
   font-family: var(--g-font-mono);
 }
 
-.ob-tick-list__item--active .v-list-item__title {
+.ob-tick-list__item--active .v-list-item-title {
   color: var(--g-success);
   font-weight: 600;
 }

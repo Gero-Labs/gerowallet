@@ -66,15 +66,15 @@
                 <v-list-item-title class="ma-0" style="height: 32px">
                   <span v-if="tokenLock" style="font-size: 16px">
                     <v-badge
-                      overlap
-                      avatar
                       color="transparent"
-                      :offset-y="34 + props.badgeOffsetY"
+                      :offset-y="22 + props.badgeOffsetY"
+                      width="20"
+                      height="20"
                       v-if="selectedToken.verified"
-                      class="mr-1"
+                      class="mr-1 token-verification-badge"
                     >
                       <template v-slot:badge>
-                        <v-avatar color="transparent" rounded="0">
+                        <v-avatar color="transparent" rounded="0" size="20">
                           <v-icon size="small" color="primary"> mdi-check-decagram </v-icon>
                         </v-avatar>
                       </template>
@@ -94,19 +94,19 @@
                     plain
                     :ripple="false"
                     style="font-size: 16px; letter-spacing: normal; height: 32px"
-                    class="pa-0"
+                    class="pa-0 token-select-button"
                     @click="selectTokenDialog = true"
                   >
                     <v-badge
-                      overlap
-                      avatar
                       color="transparent"
-                      :offset-y="34 + props.badgeOffsetY"
+                      :offset-y="22 + props.badgeOffsetY"
+                      width="20"
+                      height="20"
                       v-if="selectedToken.verified"
-                      class="mr-1"
+                      class="mr-1 token-verification-badge"
                     >
                       <template v-slot:badge>
-                        <v-avatar color="transparent" rounded="0">
+                        <v-avatar color="transparent" rounded="0" size="20">
                           <v-icon size="small" color="primary"> mdi-check-decagram </v-icon>
                         </v-avatar>
                       </template>
@@ -189,7 +189,7 @@
             </v-list-item>
           </v-card-text>
         </v-card>
-        <v-btn icon size="small" @click="removeTokenSelector" v-if="index !== 0" class="ml-1">
+        <v-btn icon variant="text" size="small" @click="removeTokenSelector" v-if="index !== 0" class="ml-1">
           <v-icon size="small" color="primary">mdi-minus-box-outline</v-icon>
         </v-btn>
       </div>
@@ -413,30 +413,26 @@ function handleImageError(event) {
   height: 21px;
 }
 
-.v-text-field.v-text-field--solo:not(.v-text-field--solo-flat) > .v-input__control > .v-input__slot {
+.card-container :deep(.v-field--variant-solo) {
   box-shadow: none !important;
 }
 
-.large-input >>> input {
+/* VBadge no longer has an avatar mode. Keep the original 20px verification
+   mark, including the part that extends outside the token button. */
+.token-verification-badge :deep(.v-badge__badge) {
+  padding: 0;
+}
+.token-select-button {
+  overflow: visible;
+}
+
+.large-input :deep(input) {
   font-size: 16px;
   font-weight: 500;
   padding: 0;
 }
 
-.v-text-field--outlined .v-input__prepend-outer,
-.v-text-field--outlined .v-input__append-outer {
-  margin-top: 9px !important;
-}
-
-.v-application--is-ltr .v-input__prepend-outer {
-  margin-right: 4px !important;
-}
-
-.v-application--is-ltr .v-input__append-outer {
-  margin-left: 4px !important;
-}
-
-.theme--dark.v-text-field--solo.transparent > .v-input__control > .v-input__slot {
-  background: #ffffff00 !important;
+.card-container :deep(.v-text-field.transparent .v-field--variant-solo) {
+  background: transparent !important;
 }
 </style>

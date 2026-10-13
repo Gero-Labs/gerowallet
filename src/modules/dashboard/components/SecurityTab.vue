@@ -23,7 +23,7 @@
           </v-list-item-subtitle>
         </div>
         <v-avatar size="120" rounded>
-          <div ref="qrCodeRef" style="width: 120px; height: 120px;"></div>
+          <div ref="qrCodeRef" class="security-public-key-qr" style="width: 120px; height: 120px;"></div>
         </v-avatar>
       </v-list-item>
       <v-list-item class="px-2 py-1" v-if="canBackup" @click="backupWalletDialog = true">
@@ -1009,43 +1009,44 @@ watch(showVerificationOverlay, async (newValue) => {
 });
 </script>
 <style scoped>
+/* Vuetify no longer scales nested SVGs to their avatar's dimensions. Keep
+   the complete QR viewBox visible instead of clipping its 170px drawing. */
+.security-public-key-qr :deep(svg) {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 /* Make PIN password dots bigger and textboxes square */
 .verification-card ::v-deep .v-otp-input {
   display: inline-flex !important;
   justify-content: center;
   width: auto !important;
-  gap: 12px !important;
 }
 
-.verification-card ::v-deep .v-otp-input input {
-  font-size: 32px !important;
-  font-weight: bold !important;
-  width: 56px !important;
+.verification-card ::v-deep .v-otp-input__content {
+  gap: 12px;
+  padding: 0;
+  width: auto;
+  max-width: none;
   height: 56px !important;
-  min-width: 56px !important;
+}
+
+.verification-card ::v-deep .v-otp-input .v-field {
+  width: 56px !important;
+  min-width: 56px;
   max-width: 56px !important;
   flex: 0 0 56px !important;
   border-radius: 8px !important;
 }
 
-.verification-card ::v-deep .v-otp-input .v-input {
-  width: 56px !important;
-  max-width: 56px !important;
-  flex: 0 0 56px !important;
+.verification-card ::v-deep .v-otp-input__field {
+  font-size: 32px !important;
+  font-weight: bold !important;
 }
 
-.verification-card ::v-deep .v-otp-input .v-input__control {
-  width: 56px !important;
-  max-width: 56px !important;
-}
-
-.verification-card ::v-deep .v-otp-input .v-input__slot {
-  width: 56px !important;
-  max-width: 56px !important;
-}
-
-/* Remove margin from append-outer slot */
-:deep(.v-input__append-outer) {
+/* The former append-outer slot is the native append cell. */
+:deep(.v-input__append) {
   margin: 0!important;
 }
 </style>

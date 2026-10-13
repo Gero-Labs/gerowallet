@@ -8,7 +8,7 @@
           bg-color="transparent"
           :color="primaryColor"
           :slider-color="primaryColor"
-          centered
+          align-tabs="center"
           density="compact"
         >
           <v-tab>{{ $t('midnight.common.public') }}</v-tab>

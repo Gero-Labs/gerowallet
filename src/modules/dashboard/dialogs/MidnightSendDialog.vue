@@ -83,7 +83,7 @@
                   v-if="shieldedAvailable"
                   v-model="activeTab"
                   bg-color="transparent"
-                  centered
+            align-tabs="center"
                   grow
                   hide-slider
                   class="mb-1 midnight-send-tabs"
@@ -126,7 +126,7 @@
                         </template>
                       </v-text-field>
                       <v-btn
-                        icon
+                        icon variant="text"
                         size="small"
                         class="address-row__icon-btn"
                         :disabled="sending"
@@ -1478,8 +1478,10 @@ function shortToken(colour: string): string {
 .stepper-container {
   background-color: transparent;
 }
-.stepper-container :deep(.v-stepper__header) {
+.stepper-container :deep(.v-stepper-header) {
   box-shadow: none;
+  align-items: stretch;
+  margin-bottom: 8px;
 }
 .stepper-container .custom-step {
   display: flex;
@@ -1525,7 +1527,7 @@ function shortToken(colour: string): string {
 .stepper-container .divider.active-divider {
   background-color: var(--g-accent);
 }
-:deep(.v-stepper__content) {
+:deep(.v-stepper-window-item) {
   padding: 0;
 }
 
@@ -1564,7 +1566,10 @@ function shortToken(colour: string): string {
   flex: 1;
   min-width: 0;
 }
-.address-input :deep(.v-input__slot) {
+.address-input :deep(.v-field) {
+  --v-input-control-height: 32px;
+  --v-field-input-padding-top: 4px;
+  --v-field-input-padding-bottom: 4px;
   background-color: var(--g-raised) !important;
   border-radius: var(--g-r-control);
   min-height: 32px !important;
@@ -1574,15 +1579,15 @@ function shortToken(colour: string): string {
   font-size: 12px;
   padding: 4px 0;
 }
-.address-input :deep(fieldset) {
-  border-color: transparent !important;
+.address-input :deep(.v-field__outline) {
+  color: transparent;
 }
-.address-input :deep(.v-input--is-focused fieldset) {
-  border-color: var(--g-accent) !important;
-  border-width: 1px !important;
+.address-input :deep(.v-field--focused .v-field__outline) {
+  color: var(--g-accent);
+  --v-field-border-width: 1px;
 }
-.address-input.error--text :deep(fieldset) {
-  border-color: var(--g-error) !important;
+.address-input :deep(.v-field--error .v-field__outline) {
+  color: var(--g-error);
 }
 
 .assets-section {
@@ -1634,7 +1639,10 @@ function shortToken(colour: string): string {
   max-width: 140px;
   flex-shrink: 1;
 }
-.amount-input :deep(.v-input__slot) {
+.amount-input :deep(.v-field) {
+  --v-input-control-height: 28px;
+  --v-field-input-padding-top: 0px;
+  --v-field-input-padding-bottom: 0px;
   background-color: transparent !important;
   border: none !important;
   min-height: 28px !important;
@@ -1655,8 +1663,8 @@ function shortToken(colour: string): string {
 .amount-input :deep(input[type='number']) {
   -moz-appearance: textfield;
 }
-.amount-input :deep(fieldset) {
-  border: none !important;
+.amount-input :deep(.v-field__outline) {
+  display: none;
 }
 .max-btn {
   text-transform: none !important;

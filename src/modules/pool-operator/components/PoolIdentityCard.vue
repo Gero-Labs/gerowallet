@@ -22,7 +22,7 @@
         </div>
         <v-tooltip location="bottom" v-if="isRegistered" >
           <template v-slot:activator="{ props: activatorProps }">
-            <v-btn v-bind="activatorProps" icon size="x-small" class="id-action-btn id-update"  @click="$emit('update')">
+            <v-btn v-bind="activatorProps" icon variant="text" size="x-small" class="id-action-btn id-update"  @click="$emit('update')">
               <v-icon size="15" color="var(--g-accent)">mdi-pencil-outline</v-icon>
             </v-btn>
           </template>
@@ -30,7 +30,7 @@
         </v-tooltip>
         <v-tooltip location="bottom" v-if="isRegistered && !isRetiring" >
           <template v-slot:activator="{ props: activatorProps }">
-            <v-btn v-bind="activatorProps" icon size="x-small" class="id-action-btn id-retire"  @click="$emit('retire')">
+            <v-btn v-bind="activatorProps" icon variant="text" size="x-small" class="id-action-btn id-retire"  @click="$emit('retire')">
               <v-icon size="15" color="error">mdi-power</v-icon>
             </v-btn>
           </template>

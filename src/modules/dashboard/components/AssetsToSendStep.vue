@@ -92,7 +92,7 @@
           <!-- Remove button (not for first/native token) -->
           <v-btn
             v-if="index > 0"
-            icon
+            icon variant="text"
             size="x-small"
             class="remove-btn"
             @click="removeTokenSelector(index)"
@@ -810,7 +810,10 @@ defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQu
   flex-shrink: 1;
 }
 
-.amount-input :deep(.v-input__slot) {
+.amount-input :deep(.v-field) {
+  --v-input-control-height: 28px;
+  --v-field-input-padding-top: 0px;
+  --v-field-input-padding-bottom: 0px;
   background-color: transparent !important;
   border: none !important;
   min-height: 28px !important;
@@ -836,8 +839,8 @@ defineExpose({ collections, selectedCollectibles, updateCollectibles, decreaseQu
   -moz-appearance: textfield;
 }
 
-.amount-input :deep(fieldset) {
-  border: none !important;
+.amount-input :deep(.v-field__outline) {
+  display: none;
 }
 
 .max-btn {

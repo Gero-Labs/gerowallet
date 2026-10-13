@@ -391,11 +391,18 @@ function onImgError(event: Event) {
   padding: 0 14px 8px;
 }
 
-.search-input >>> .v-input__slot {
+.search-input :deep(.v-field) {
+  --v-input-control-height: 38px;
+  --v-field-input-padding-top: 0px;
+  --v-field-input-padding-bottom: 0px;
   background: var(--g-hairline-1) !important;
-  border-color: var(--g-hairline-1) !important;
   border-radius: var(--g-r-control) !important;
   min-height: 38px !important;
+}
+
+.search-input :deep(.v-field:not(.v-field--focused):not(.v-field--error) .v-field__outline) {
+  --v-field-border-opacity: 1;
+  color: var(--g-hairline-1);
 }
 
 .filter-chips {

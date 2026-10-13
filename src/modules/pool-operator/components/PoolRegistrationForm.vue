@@ -210,16 +210,16 @@ function onSigned() {
   justify-content: center;
 }
 
-.glass-input >>> .v-input__slot {
+.glass-input :deep(.v-field) {
   background: var(--g-raised) !important;
   border-color: var(--g-hairline-1) !important;
 }
 
-.glass-input >>> .v-input__slot:hover {
+.glass-input :deep(.v-field:hover) {
   border-color: var(--g-hairline-3) !important;
 }
 
-.glass-input >>> .v-text-field__suffix {
+.glass-input :deep(.v-text-field__suffix) {
   color: var(--g-text-3);
   font-size: 12px;
 }

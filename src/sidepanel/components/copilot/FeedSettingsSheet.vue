@@ -10,7 +10,7 @@
     <div class="settings-dialog">
       <div class="settings-dialog__head">
         <span class="settings-dialog__title">{{ $t('copilot.settings.title') }}</span>
-        <v-btn icon size="small" class="white--text" @click="$emit('update:modelValue', false)">
+        <v-btn icon variant="text" size="small" class="white--text" @click="$emit('update:modelValue', false)">
           <v-icon size="small">mdi-close</v-icon>
         </v-btn>
       </div>

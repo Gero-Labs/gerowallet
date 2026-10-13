@@ -7,10 +7,10 @@
       <header class="feed-page__head">
         <h2 class="feed-page__title">{{ $t('copilot.feedTitle') }}</h2>
         <div class="feed-page__actions">
-          <v-btn icon size="small" @click="settingsOpen = true">
+          <v-btn icon variant="text" size="small" @click="settingsOpen = true">
             <v-icon size="small" color="var(--g-text-1)">mdi-cog-outline</v-icon>
           </v-btn>
-          <v-btn icon size="small" :disabled="feed.busy.value" @click="feed.refresh()">
+          <v-btn icon variant="text" size="small" :disabled="feed.busy.value" @click="feed.refresh()">
             <v-icon size="small" color="var(--g-text-1)">mdi-refresh</v-icon>
           </v-btn>
         </div>

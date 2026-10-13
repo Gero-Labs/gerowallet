@@ -10,10 +10,10 @@
         <div class="text-caption text--secondary">{{ $t('mempool.subtitle') }}</div>
       </div>
       <v-spacer />
-      <v-btn size="small" icon :loading="loading" @click="refresh" class="mr-1">
+      <v-btn size="small" icon variant="text" :loading="loading" @click="refresh" class="mr-1">
         <v-icon size="small">mdi-refresh</v-icon>
       </v-btn>
-      <v-btn size="small" icon @click="openMempoolSpace">
+      <v-btn size="small" icon variant="text" @click="openMempoolSpace">
         <v-icon size="small">mdi-open-in-new</v-icon>
       </v-btn>
     </div>

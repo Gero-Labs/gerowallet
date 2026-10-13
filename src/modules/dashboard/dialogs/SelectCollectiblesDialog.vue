@@ -73,7 +73,7 @@
 
                 <!-- Quantity controls (multi-quantity NFTs) -->
                 <div v-if="item.quantity > 1 && isSelected(item)" class="quantity-controls">
-                  <v-btn icon size="x-small" @click.stop="decreaseQty(item)">
+                  <v-btn icon variant="text" size="x-small" @click.stop="decreaseQty(item)">
                     <v-icon color="var(--g-accent)" size="small">mdi-minus-box-outline</v-icon>
                   </v-btn>
                   <input
@@ -85,7 +85,7 @@
                     @input="onQtyInput(item, $event)"
                     @click.stop
                   />
-                  <v-btn icon size="x-small" @click.stop="increaseQty(item)">
+                  <v-btn icon variant="text" size="x-small" @click.stop="increaseQty(item)">
                     <v-icon color="var(--g-accent)" size="small">mdi-plus-box-outline</v-icon>
                   </v-btn>
                 </div>
@@ -224,7 +224,7 @@ function onClose() {
 </script>
 
 <style scoped>
-.collectibles-search :deep(.v-input__slot) {
+.collectibles-search :deep(.v-field) {
   background-color: var(--g-raised) !important;
   border-radius: var(--g-r-control);
 }

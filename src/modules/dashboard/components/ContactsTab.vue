@@ -10,13 +10,13 @@
       :items-per-page="-1"
     >
       <template v-slot:top>
-        <v-toolbar flat class="transparent my-2">
+        <v-toolbar flat class="contacts-toolbar transparent my-2">
           <v-toolbar-title>
             {{ $t('common.addEditDeleteContacts') }}<br/>
             <span class="subtitle">{{ $t('common.contactsHelper') }}</span>
           </v-toolbar-title>
-          <v-spacer></v-spacer>
           <v-btn
+            class="flex-shrink-0"
             style="letter-spacing: normal; background: var(--g-grad); color: var(--g-canvas)"
             @click="dialog = true"
           >
@@ -282,7 +282,18 @@ const save = async () => {
 </script>
 
 <style scoped>
+.contacts-toolbar :deep(.v-toolbar__content) {
+  height: auto !important;
+  min-height: 64px;
+  gap: 12px;
+}
+
+.contacts-toolbar :deep(.v-toolbar-title__placeholder) {
+  white-space: normal;
+}
+
 .subtitle {
+  display: inline-block;
   font-size: 14px;
   font-weight: 400;
   line-height: 20px;

@@ -4,8 +4,8 @@
     persistent
     max-width="420"
     theme="dark"
-    overlay-color="#000"
-    overlay-opacity="0.6"
+    scrim="var(--g-canvas)"
+    :opacity="0.6"
     @update:model-value="onDialogInput"
   >
     <div class="twap-dialog">
@@ -323,7 +323,10 @@ async function submit(): Promise<void> {
   color: var(--g-error) !important;
 }
 
-.td-input :deep(.v-input__slot) {
+.td-input :deep(.v-field) {
+  --v-input-control-height: 36px;
+  --v-input-padding-top: calc((var(--v-input-control-height) - 1.5rem) / 2);
+  --v-field-padding-bottom: var(--v-input-padding-top);
   background: rgba(255, 255, 255, 0.03) !important;
   border-radius: var(--g-r-control) !important;
   min-height: 36px !important;

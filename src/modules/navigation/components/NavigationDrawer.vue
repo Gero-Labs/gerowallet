@@ -50,40 +50,42 @@
           @focusin="prefetchItem(item)"
           @pointerdown="prefetchItem(item)"
         >
-          <v-avatar rounded="0" size="18" :style="item.soon || item.loading || item.underMaintenance ? { filter: 'opacity(0.5)' } : {}">
-            <v-badge :model-value="!!item.notificationDot" dot color="error" overlap bordered>
-              <v-icon v-if="item.icon?.startsWith('mdi-')" size="18" color="var(--g-accent)">{{ item.icon }}</v-icon>
-              <!-- Non-special SVG marks tint to the chain accent via a mask (a
-                   color filter can't resolve an arbitrary themeable hex). -->
-              <span
-                v-else-if="!item.special"
-                class="nav-svg-icon"
-                role="img"
-                :aria-label="item.title"
-                :style="{ maskImage: `url(${item.icon})`, WebkitMaskImage: `url(${item.icon})` }"
-              />
-              <v-img
-                v-else
-                width="18"
-                height="18"
-                :src="item.icon"
-                :alt="item.title"
+          <template #prepend>
+            <v-avatar rounded="0" size="18" :style="item.soon || item.loading || item.underMaintenance ? { filter: 'opacity(0.5)' } : {}">
+              <v-badge :model-value="!!item.notificationDot" dot color="error" overlap bordered>
+                <v-icon v-if="item.icon?.startsWith('mdi-')" size="18" color="var(--g-accent)">{{ item.icon }}</v-icon>
+                <!-- Non-special SVG marks tint to the chain accent via a mask (a
+                     color filter can't resolve an arbitrary themeable hex). -->
+                <span
+                  v-else-if="!item.special"
+                  class="nav-svg-icon"
+                  role="img"
+                  :aria-label="item.title"
+                  :style="{ maskImage: cssUrl(item.icon), WebkitMaskImage: cssUrl(item.icon) }"
+                />
+                <v-img
+                  v-else
+                  width="18"
+                  height="18"
+                  :src="item.icon"
+                  :alt="item.title"
 
-              />
-            </v-badge>
-          </v-avatar>
+                />
+              </v-badge>
+            </v-avatar>
+          </template>
 
           <div class="g-list-content">
             <v-list-item-title style="font-weight: 500">
               {{ item.title }}
             </v-list-item-title>
           </div>
-          <!-- Mini Player Button for Media Player item -->
-          <div class="g-list-action" v-if="item.title === 'Media Player' && musicPlaylist?.length > 0">
-            <v-tooltip location="end" >
+          <template #append v-if="(item.title === 'Media Player' && musicPlaylist?.length > 0) || item.loading || item.underMaintenance || item.new">
+            <!-- Mini Player Button for Media Player item -->
+            <v-tooltip v-if="item.title === 'Media Player' && musicPlaylist?.length > 0" location="end" >
               <template v-slot:activator="{ props: activatorProps }">
                 <v-btn
-                  icon
+                  icon variant="text"
                   size="x-small"
                   v-bind="activatorProps"
 
@@ -95,29 +97,24 @@
               </template>
               <span>{{ $t('navigation.miniPlayer') }}</span>
             </v-tooltip>
-          </div>
-          <div class="g-list-action" v-else-if="item.loading">
-            <v-progress-circular size="16" width="2" indeterminate></v-progress-circular>
-          </div>
-          <div v-else-if="item.underMaintenance" class="ma-0 g-list-action">
+            <v-progress-circular v-else-if="item.loading" size="16" width="2" indeterminate></v-progress-circular>
             <v-chip
+              v-else-if="item.underMaintenance"
               variant="outlined"
               class="px-1"
               size="x-small"
               color="warning"
               style="margin-left: 1px; margin-bottom: 1px; scale: 0.9"
             ><v-icon color="warning" size="x-small" class="mr-1">mdi-hammer-screwdriver</v-icon> {{ $t('common.maintenance') }}</v-chip>
-          </div>
-          <div class="g-list-action" v-else-if="item.new">
             <v-chip
-              v-if="item.new"
+              v-else-if="item.new"
               class="my-2 px-2"
               color="primary"
               size="x-small"
             >
               {{ $t('common.new') }}
             </v-chip>
-          </div>
+          </template>
         </v-list-item>
 
         <v-list-item
@@ -128,9 +125,11 @@
           link
           @click="openExternalLink(item.href)"
         >
-          <v-avatar>
-            <v-img :src="item.icon" :alt="item.title"></v-img>
-          </v-avatar>
+          <template #prepend>
+            <v-avatar>
+              <v-img :src="item.icon" :alt="item.title"></v-img>
+            </v-avatar>
+          </template>
 
           <div class="g-list-content">
             <v-list-item-title style="font-weight: 500">
@@ -146,9 +145,9 @@
             </v-list-item-title>
           </div>
 
-          <div class="g-list-action">
+          <template #append>
             <v-icon size="small">mdi-open-in-new</v-icon>
-          </div>
+          </template>
         </v-list-item>
       </template>
     </v-list>
@@ -156,10 +155,12 @@
     <!-- Append slot -->
     <template #append>
       <v-divider></v-divider>
-      <v-list-item lines="three" class="px-0">
-        <v-avatar style="margin: auto" class="mr-3" size="40">
-          <v-img v-if="account" :src="avatar" />
-        </v-avatar>
+      <v-list-item lines="three" class="px-0" prepend-gap="12">
+        <template #prepend>
+          <v-avatar size="40">
+            <v-img v-if="account" :src="avatar" />
+          </v-avatar>
+        </template>
 
         <div class="py-0 g-list-content" style="align-self: initial">
           <v-list-item-title class="mb-0" style="font-size: 14px" v-if="account && !editingName">
@@ -179,7 +180,7 @@
               @keydown.esc="cancelEditingName"
               @blur="onNameInputBlur"
             />
-            <v-btn icon size="x-small" @mousedown.prevent="saveWalletName" :disabled="!isNameValid" color="success" class="ml-1" style="width: 16px; height: 16px;">
+            <v-btn icon variant="text" size="x-small" @mousedown.prevent="saveWalletName" :disabled="!isNameValid" color="success" class="ml-1" style="width: 16px; height: 16px;">
               <v-icon style="font-size: 12px;">mdi-check</v-icon>
             </v-btn>
           </v-list-item-title>
@@ -191,27 +192,29 @@
           </v-list-item-subtitle>
         </div>
 
-        <div style="margin: auto" class="d-flex flex-row g-list-action">
-          <v-tooltip location="top" v-if="hasUnlockMethod"  content-class="custom-tooltip">
-            <template v-slot:activator="{ props: activatorProps }">
-              <v-btn icon :aria-label="t('security.lock')" @click="submitLock" v-bind="activatorProps" >
-                <v-icon size="18">mdi-lock</v-icon>
-              </v-btn>
-            </template>
-            <span>{{ $t('security.lock') }}</span>
-          </v-tooltip>
+        <template #append>
+          <div class="d-flex flex-row">
+            <v-tooltip location="top" v-if="hasUnlockMethod"  content-class="custom-tooltip">
+              <template v-slot:activator="{ props: activatorProps }">
+                <v-btn icon variant="text" :aria-label="t('security.lock')" @click="submitLock" v-bind="activatorProps" >
+                  <v-icon size="18">mdi-lock</v-icon>
+                </v-btn>
+              </template>
+              <span>{{ $t('security.lock') }}</span>
+            </v-tooltip>
 
-          <v-tooltip location="top"  content-class="custom-tooltip">
-            <template v-slot:activator="{ props: activatorProps }">
-              <v-btn icon :aria-label="t('wallet.logout')" @click="submitLogout" v-bind="activatorProps" >
-                <v-avatar rounded="0" size="18">
-                  <v-img :src="assts.logout" alt="logout"></v-img>
-                </v-avatar>
-              </v-btn>
-            </template>
-            <span>{{ $t('wallet.logout') }}</span>
-          </v-tooltip>
-        </div>
+            <v-tooltip location="top"  content-class="custom-tooltip">
+              <template v-slot:activator="{ props: activatorProps }">
+                <v-btn icon variant="text" :aria-label="t('wallet.logout')" @click="submitLogout" v-bind="activatorProps" >
+                  <v-avatar rounded="0" size="18">
+                    <v-img :src="assts.logout" alt="logout"></v-img>
+                  </v-avatar>
+                </v-btn>
+              </template>
+              <span>{{ $t('wallet.logout') }}</span>
+            </v-tooltip>
+          </div>
+        </template>
       </v-list-item>
     </template>
   </v-navigation-drawer>
@@ -241,6 +244,7 @@ import LoadingState from '@/stores/loading';
 import { Blockchain } from '@/models/types';
 import assets from '@/utils/assets';
 import { updateVuetifyTheme } from '@/plugins/vuetify';
+import { cssUrl } from '@/shared/utils/cssUrl';
 import { debugLog } from '@/utils/debug';
 import { hasNewFeaturesInPath } from '@/shared/composables/useFeatureNotifications';
 import { GOVERNANCE_ITEMS } from '@/modules/navigation/components/governanceNav';
@@ -860,7 +864,7 @@ onUnmounted(() => {
   }
 }
 
-.v-subheader {
+.v-list-subheader {
   font-size: 11px;
   text-align: left;
   letter-spacing: 0.08em;

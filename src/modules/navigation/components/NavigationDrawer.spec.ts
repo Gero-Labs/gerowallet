@@ -55,6 +55,9 @@ function mountDrawer(path: string): VueWrapper {
       'v-navigation-drawer': {
         template: '<div><slot name="prepend" /><slot /><slot name="append" /></div>',
       },
+      'v-list-item': {
+        template: '<div><slot name="prepend" /><slot /><slot name="append" /></div>',
+      },
       'router-link': { props: ['to'], template: '<a :href="to"><slot /></a>' },
       'v-img': true,
       'v-icon': true,
@@ -72,8 +75,8 @@ function mountDrawer(path: string): VueWrapper {
 
 /**
  * Every drawer row's target, in render order. Only Vuetify's injections are
- * installed here, so `v-list-item` stays an unresolved element and its `to` is
- * a plain attribute — which is exactly the binding under test. The separate
+ * installed here, so the list-item stub preserves its `to` as a plain
+ * attribute — which is exactly the binding under test. The separate
  * runtime spec mounts the native drawer, list items and router together.
  */
 function rowLinks(w: VueWrapper): string[] {

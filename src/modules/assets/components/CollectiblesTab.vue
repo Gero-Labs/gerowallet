@@ -450,38 +450,6 @@ onUnmounted(() => {
 }
 
 /* Gallery Controls */
-.gallery-controls {
-  padding: 8px 16px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--g-hairline-1);
-  border-radius: 0;
-}
-
-.collection-search .v-input__control,
-.sort-select .v-input__control {
-  background: rgba(255, 255, 255, 0.05) !important;
-}
-
-.collection-search .v-input__control .v-input__slot,
-.sort-select .v-input__control .v-input__slot {
-  border: 1px solid var(--g-hairline-2) !important;
-}
-
-.gallery-controls .v-text-field .v-input__prepend-inner {
-  align-self: center !important;
-  margin-top: 0 !important;
-  padding-top: 0 !important;
-}
-
-.gallery-controls .v-text-field .v-input__prepend-inner .v-input__icon {
-  align-items: center !important;
-  justify-content: center !important;
-}
-
-.gallery-controls .v-text-field .v-input__prepend-inner .v-icon {
-  font-size: 16px !important;
-}
-
 /* Reduce z-index of collectible cards when select is open */
 .nft-collection-card {
   position: relative;
@@ -493,27 +461,6 @@ onUnmounted(() => {
 </style>
 
 <style>
-/* Override Vuetify v-select height with higher specificity */
-.sort-select-small.v-text-field--outlined.v-input--dense.v-text-field--single-line > .v-input__control > .v-input__slot,
-.sort-select-small.v-text-field--outlined.v-input--dense.v-text-field--outlined > .v-input__control > .v-input__slot {
-  min-height: 32px !important;
-  height: 32px !important;
-  padding-top: 0 !important;
-  padding-bottom: 0 !important;
-}
-
-.sort-select-small.v-select .v-input__control {
-  height: 32px !important;
-  min-height: 32px !important;
-}
-
-.sort-select-small .v-select__selection {
-  line-height: 30px !important;
-}
-
-.sort-select-small.v-text-field--outlined.v-input--dense:not(.v-text-field--solo) .v-input__append-inner {
-  margin-top: 4px !important;
-}
 .grid-7-cols {
   grid-template-columns: repeat(7, 1fr);
 }

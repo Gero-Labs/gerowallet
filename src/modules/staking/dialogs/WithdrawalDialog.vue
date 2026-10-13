@@ -70,7 +70,7 @@
         <v-row no-gutters>
           <v-col :cols="cols">
             <h4>{{ $t('staking.rewardsAmount') }}
-              <v-btn size="x-small" icon>
+              <v-btn size="x-small" icon variant="text">
                 <v-icon size="small">mdi-information-outline</v-icon>
               </v-btn>
             </h4>

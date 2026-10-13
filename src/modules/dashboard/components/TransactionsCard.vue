@@ -1539,28 +1539,34 @@ a.tx-list__title:hover {
   font-size: 12px !important;
 }
 
-.filter-date-field ::v-deep .v-input__slot {
-  min-height: 30px !important;
+.filter-date-field :deep(.v-field) {
+  --v-input-control-height: 32px;
+  --v-field-input-padding-top: 0px;
+  --v-field-input-padding-bottom: 0px;
+  --v-field-padding-start: 0px;
+  --v-field-padding-end: 0px;
+  font-size: inherit;
   padding: 0 8px !important;
   align-items: center !important;
 }
 
-.filter-date-field ::v-deep .v-input__prepend-inner {
-  margin-top: 4px !important;
+.filter-date-field :deep(.v-field__prepend-inner) {
   margin-right: 4px !important;
   padding-right: 0 !important;
   display: flex !important;
   align-items: center !important;
-  height: 100% !important;
+  padding-top: 0 !important;
 }
 
-.filter-date-field ::v-deep .v-input__append-inner {
-  margin-top: 4px !important;
+.filter-date-field :deep(.v-field__clearable),
+.filter-date-field :deep(.v-field__append-inner) {
+  padding-top: 0 !important;
   display: flex !important;
   align-items: center !important;
 }
 
-.filter-date-field ::v-deep .v-input__append-inner .v-icon {
+.filter-date-field :deep(.v-field__clearable .v-icon),
+.filter-date-field :deep(.v-field__append-inner .v-icon) {
   font-size: 14px !important;
 }
 

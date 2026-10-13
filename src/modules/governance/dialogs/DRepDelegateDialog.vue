@@ -22,7 +22,7 @@
               <span class="text-subtitle-1 white--text font-weight-bold text-truncate">{{ drep.name }}</span>
               <template v-if="drep.links">
                 <v-btn
-                  icon
+                  icon variant="text"
                   size="x-small"
                   v-for="(link, index) in toSafeLinks(drep.links)"
                   :key="index"

@@ -341,7 +341,7 @@
     <template v-slot:[`item.watchlist`]="{ item }">
       <v-tooltip location="bottom"  :open-delay="300" content-class="custom-tooltip">
         <template v-slot:activator="{ props: activatorProps }">
-          <v-btn icon size="x-small" v-bind="activatorProps"  @click.stop="toggleWatch(item.unit)">
+          <v-btn icon variant="text" size="x-small" v-bind="activatorProps"  @click.stop="toggleWatch(item.unit)">
             <v-icon size="small" :color="isWatched(item.unit) ? 'amber' : ''">
               {{ isWatched(item.unit) ? 'mdi-star' : 'mdi-star-outline' }}
             </v-icon>

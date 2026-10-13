@@ -417,7 +417,7 @@ video {
   border-left: 3px solid #00c7f3 !important;
 }
 
-.current-playing .v-list-item__title {
+.current-playing .v-list-item-title {
   color: #00c7f3 !important;
   font-weight: 600 !important;
 }

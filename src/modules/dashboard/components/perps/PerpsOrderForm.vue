@@ -996,10 +996,19 @@ async function placeOrderAction() {
   font-size: 12px !important;
 }
 
-.of-input ::v-deep .v-input__slot {
+.of-input :deep(.v-field) {
+  --v-input-control-height: 32px;
+  --v-field-padding-top: 0px;
+  --v-field-padding-bottom: 0px;
+  --v-field-input-padding-top: 0px;
+  --v-field-input-padding-bottom: 0px;
   min-height: 32px !important;
   background: var(--g-raised) !important;
   border-color: var(--g-raised) !important;
+}
+
+.of-input :deep(.v-field:not(.v-field--error, .v-field--focused) .v-field__outline) {
+  color: var(--g-raised);
 }
 
 .of-input ::v-deep input {
@@ -1093,14 +1102,14 @@ async function placeOrderAction() {
   padding: 0 12px !important;
 }
 
-.of-asset-list .v-list-item__title {
+.of-asset-list .v-list-item-title {
   font-size: 12px !important;
   font-weight: 500;
   color: var(--g-text-3);
   text-align: right;
 }
 
-.of-asset-list .v-list-item:hover .v-list-item__title {
+.of-asset-list .v-list-item:hover .v-list-item-title {
   color: var(--g-text-1);
 }
 
@@ -1108,7 +1117,7 @@ async function placeOrderAction() {
   opacity: 1 !important;
 }
 
-.of-asset-list__current-item .v-list-item__title {
+.of-asset-list__current-item .v-list-item-title {
   color: var(--g-text-1) !important;
   font-weight: 600 !important;
 }

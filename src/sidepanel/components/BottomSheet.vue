@@ -20,7 +20,7 @@
       </div>
       <div v-if="title" class="bottom-sheet-header">
         <span class="text-subtitle-1 white--text font-weight-bold">{{ title }}</span>
-        <v-btn v-if="variant !== 'trust'" icon size="small" @click="close" class="white--text">
+        <v-btn v-if="variant !== 'trust'" icon variant="text" size="small" @click="close" class="white--text">
           <v-icon size="small">mdi-close</v-icon>
         </v-btn>
       </div>

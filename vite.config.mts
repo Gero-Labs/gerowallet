@@ -209,11 +209,11 @@ export const sharedConfig: UserConfig = {
       'qrcode',
       'vue-i18n',
       'vuetify',
-      'vuetify/components/VOverlay',
-      'vuetify/components/VDialog',
-      'vuetify/components/VMenu',
-      'vuetify/components/VSelect',
-      'vuetify/components/VTooltip',
+      // Template auto-imports appear after Vite's dependency scan. Prebundle
+      // their native entrypoints together so opening another screen does not
+      // invalidate the dependency URLs already being loaded by the browser.
+      'vuetify/components/*',
+      'vuetify/directives',
       'vue-router',
       'bip39',
       'blake2b',
@@ -239,8 +239,9 @@ export const sharedConfig: UserConfig = {
         '.ts': 'tsx',
       },
     },
-    force: isDev, // Force re-optimization in dev mode to catch changes
-    holdUntilCrawlEnd: false, // Don't wait for all files
+    // Reuse Vite's dependency cache between starts (lockfile/config changes
+    // invalidate it automatically), and finish crawling before serving it.
+    holdUntilCrawlEnd: true,
   },
   worker: {
     plugins: () => [

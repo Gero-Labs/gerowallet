@@ -158,28 +158,33 @@ let formattedValue = computed({
 })
 </script>
 <style>
-.currency-text-field.v-text-field.v-text-field--solo.text-right .v-input__control {
+.currency-text-field.text-right .v-field {
   direction: rtl;
 }
 
-.currency-text-field.text-right .v-input__control input {
+.currency-text-field.text-right input.v-field__input {
   direction: ltr;
   text-align: right;
 }
 
-.currency-text-field.text-right .v-input__control .v-input__slot {
-  padding: 0 !important;
-}
-
-.currency-text-field.transparent .v-input__control .v-input__slot {
+.currency-text-field.transparent .v-field {
   background-color: transparent!important;
 }
 
-.currency-text-field .v-input__control .v-input__slot {
+.currency-text-field .v-field {
+  --v-input-control-height: 48px;
+  --v-field-input-padding-top: 0px;
+  --v-field-input-padding-bottom: 0px;
+  font-size: inherit;
+}
+
+.currency-text-field .v-field__input {
   padding: 0 !important;
 }
 
-.currency-text-field.dense .v-input__control .v-input__slot {
+.currency-text-field.dense .v-field,
+.currency-text-field.dense .v-field__input {
+  --v-input-control-height: 30px;
   min-height: 30px!important;
   height: 30px!important;
 }
@@ -193,7 +198,7 @@ let formattedValue = computed({
   min-height: 30px!important;
   height: 30px!important;
 }
-.v-text-field.v-text-field--solo .v-input__control {
+.currency-text-field .v-input__control {
   min-height: 30px;
   padding: 0;
 }

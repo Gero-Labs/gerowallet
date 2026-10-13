@@ -48,12 +48,12 @@
 <script setup lang="ts">
 import { useTranslation } from '@/shared/composables/useTranslation';
 const { t } = useTranslation();
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import snackbar from '@/plugins/snackbar';
 import type { VTextField, VForm } from 'vuetify/components';
 
 interface Props {
-  value?: string;
+  modelValue?: string;
   outlined?: boolean;
   dense?: boolean;
   hideDetails?: boolean;
@@ -69,16 +69,26 @@ interface Props {
 }
 
 const props = defineProps<Props>();
-const emit = defineEmits(['onSave'])
+const emit = defineEmits<{
+  onSave: [value: string];
+  'update:modelValue': [value: string];
+}>();
 
 const disabled = ref(true)
-let value = ref(props.value)
+const value = ref(props.modelValue ?? '')
 let prevValue = ''
 const form = ref<InstanceType<typeof VForm> | null>(null);
 const saving = ref(false);
 const valid = ref<boolean>(false)
 
 const isValid = computed(() => valid.value)
+
+// Profile data can arrive after this field mounts. Keep the saved name in sync
+// without publishing an unfinished edit to the parent.
+watch(() => props.modelValue, (name) => {
+  value.value = name ?? '';
+  disabled.value = true;
+});
 
 const enableEditing = () => {
   prevValue = structuredClone(value.value)
@@ -101,6 +111,7 @@ const saveEditing = async () => {
   if (!isValid) {
     return
   }
+  emit('update:modelValue', value.value)
   emit('onSave', value.value)
   snackbar.fireSuccess(t('settings.walletNameUpdated'))
   disabled.value = true

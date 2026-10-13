@@ -6,18 +6,28 @@ import { en, de, es } from 'vuetify/locale';
 import i18n, { getLocaleCode } from '@/plugins/i18n';
 import { chainAccents, chainKeyFor } from '@/config/themes';
 
+// Existing Gero neutral tokens, shared by legacy and native Vuetify slots.
+const raisedBackground = '#12151B';
+const textPrimary = '#F7F8F9';
+
 // Single color source. Dark-only: the light palette was unreachable (no code
 // path ever flipped theme.dark) and is deleted.
 const vuetify = createVuetify({
   directives,
   // Preserve the wallet's existing responsive layout at the Router/Vuetify cutover.
-  display: { thresholds: { xs: 0, sm: 600, md: 960, lg: 1280, xl: 1920, xxl: 2560 } },
+  display: { mobileBreakpoint: 1264, thresholds: { xs: 0, sm: 600, md: 960, lg: 1280, xl: 1920, xxl: 2560 } },
   locale: { locale: 'en', fallback: 'en', messages: { en, de, es } },
   icons: { defaultSet: 'mdi', aliases, sets: { mdi } },
   defaults: {
     VBtn: { variant: 'elevated' },
-    VTextField: { variant: 'filled' },
-    VSelect: { variant: 'filled' },
+    VChip: { variant: 'flat' },
+    VTabs: { color: 'primary' },
+    VTextField: { variant: 'filled', color: 'primary' },
+    VTextarea: { color: 'primary' },
+    VSelect: { variant: 'filled', color: 'primary' },
+    VAutocomplete: { color: 'primary' },
+    VCombobox: { color: 'primary' },
+    VSwitch: { color: 'primary' },
   },
   theme: {
     defaultTheme: 'dark',
@@ -34,13 +44,16 @@ const vuetify = createVuetify({
         info: '#7AA7FF',
         background: '#000000',
         surface: '#0C0E12',
+        // Native controls otherwise inherit Vuetify's lavender thumb and grey surfaces.
+        'surface-bright': textPrimary,
+        'surface-light': raisedBackground,
         contentBackground: '#000000',
         navigationDrawerBackground: '#000000',
         appBarBackground: '#0C0E12',
         cardBackground: '#0C0E12',
-        raisedBackground: '#12151B',
+        raisedBackground,
         overlayBackground: '#1A1E26',
-        textPrimary: '#F7F8F9',
+        textPrimary,
         textSecondary: '#B8BCC4',
         textMuted: '#7A8088',
         // legacy alias, still referenced as a color name in a few files

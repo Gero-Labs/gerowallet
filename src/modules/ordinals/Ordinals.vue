@@ -10,7 +10,7 @@
         <div class="text-caption text--secondary">{{ $t('ordinals.subtitle') }}</div>
       </div>
       <v-spacer />
-      <v-btn size="small" icon :loading="loading" @click="refresh">
+      <v-btn size="small" icon variant="text" :loading="loading" @click="refresh">
         <v-icon size="small">mdi-refresh</v-icon>
       </v-btn>
     </div>
@@ -180,7 +180,7 @@
                 {{ $t('ordinals.balance') }}: <span class="font-weight-medium">{{ formatRuneBalance(rune.balance) }}</span>
               </div>
             </div>
-            <v-btn icon size="x-small" @click.stop="viewRuneOnOrdinals(rune.rune.id)">
+            <v-btn icon variant="text" size="x-small" @click.stop="viewRuneOnOrdinals(rune.rune.id)">
               <v-icon size="x-small" color="grey">mdi-open-in-new</v-icon>
             </v-btn>
           </div>
@@ -196,7 +196,7 @@
             {{ $t('ordinals.inscription') }} #{{ selectedInscription.number.toLocaleString() }}
           </span>
           <v-spacer />
-          <v-btn icon size="small" @click="detailDialog = false">
+          <v-btn icon variant="text" size="small" @click="detailDialog = false">
             <v-icon size="small">mdi-close</v-icon>
           </v-btn>
         </div>

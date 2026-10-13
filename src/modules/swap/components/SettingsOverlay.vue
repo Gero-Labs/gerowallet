@@ -9,13 +9,13 @@
   >
     <v-card class="fill-height transparent">
       <v-card-title>
-        <v-btn size="small" icon @click="closeOverlay">
+        <v-btn size="small" icon variant="text" @click="closeOverlay">
           <v-icon>mdi-cog</v-icon>
         </v-btn>
         <v-spacer></v-spacer>
         {{ $t('swap.settings') }}
         <v-spacer></v-spacer>
-        <v-btn size="small" icon @click="closeOverlay">
+        <v-btn size="small" icon variant="text" @click="closeOverlay">
           <v-icon>mdi-window-close</v-icon>
         </v-btn>
       </v-card-title>

@@ -3,8 +3,10 @@
     <div v-for="message in toastMessages" :key="message.id"
       class="gero-toast" :class="`gero-toast--${message.theme}`" role="status">
       <span>{{ message.text }}</span>
-      <v-btn icon="mdi-close" variant="text" size="small"
-        :aria-label="$t('common.close')" @click="dismissToast(message.id)" />
+      <v-btn icon variant="text" :size="24" class="gero-toast__close"
+        :aria-label="$t('common.close')" @click="dismissToast(message.id)">
+        <v-icon :size="16">mdi-close</v-icon>
+      </v-btn>
     </div>
   </div>
 </template>
@@ -16,7 +18,7 @@ import { toastMessages, dismissToast } from '@/plugins/snackbar';
 <style scoped>
 .gero-toast-host {
   position: fixed;
-  top: var(--g-s-4);
+  bottom: var(--g-s-4);
   right: var(--g-s-4);
   z-index: var(--g-z-toast);
   display: grid;
@@ -25,10 +27,11 @@ import { toastMessages, dismissToast } from '@/plugins/snackbar';
   pointer-events: none;
 }
 .gero-toast {
-  display: flex;
-  align-items: center;
-  gap: var(--g-s-2);
+  position: relative;
   padding: var(--g-s-3) var(--g-s-4);
+  padding-inline-end: calc(var(--g-s-4) + var(--g-s-6));
+  font-size: 14px;
+  line-height: 1.5;
   border: 1px solid var(--g-hairline-3);
   border-radius: var(--g-r-control);
   background: var(--g-overlay);
@@ -36,6 +39,13 @@ import { toastMessages, dismissToast } from '@/plugins/snackbar';
   box-shadow: var(--g-shadow-menu);
   overflow-wrap: anywhere;
   pointer-events: auto;
+}
+.gero-toast__close {
+  position: absolute;
+  inset-inline-end: var(--g-s-3);
+  top: 0;
+  bottom: 0;
+  margin-block: auto;
 }
 .gero-toast--error { border-color: rgb(var(--v-theme-error)); }
 .gero-toast--success { border-color: rgb(var(--v-theme-success)); }

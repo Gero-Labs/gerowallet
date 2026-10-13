@@ -3,8 +3,8 @@
     v-model="dialogOpen"
     max-width="520"
     transition="g-dialog-transition"
-    overlay-color="var(--g-canvas)"
-    overlay-opacity="0.6"
+    scrim="var(--g-canvas)"
+    :opacity="0.6"
     content-class="help-support-dialog"
   >
     <section class="support-sheet glass-overlay" role="document" aria-labelledby="help-support-title">

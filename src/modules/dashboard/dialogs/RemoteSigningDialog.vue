@@ -10,7 +10,7 @@
         <v-icon start color="var(--g-accent)" class="mr-2">mdi-cellphone-link</v-icon>
         <span class="rs-title">{{ $t('crossDevice.settings.title') }}</span>
         <v-spacer />
-        <v-btn icon size="small" @click="$emit('close')"><v-icon>mdi-close</v-icon></v-btn>
+        <v-btn icon variant="text" size="small" @click="$emit('close')"><v-icon>mdi-close</v-icon></v-btn>
       </v-card-title>
 
       <v-card-text class="px-4 pb-4">
@@ -225,7 +225,7 @@
         <v-card-title class="rs-title px-4 pt-4 pb-1">
           <span>{{ qrState === 'paired' ? $t('crossDevice.pair.pairedTitle') : $t('crossDevice.pair.title') }}</span>
           <v-spacer />
-          <v-btn icon size="small" @click="closePairingQr"><v-icon>mdi-close</v-icon></v-btn>
+          <v-btn icon variant="text" size="small" @click="closePairingQr"><v-icon>mdi-close</v-icon></v-btn>
         </v-card-title>
         <v-card-text class="px-4 pb-4 text-center">
           <!-- minting the payload -->

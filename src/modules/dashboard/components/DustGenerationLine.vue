@@ -21,7 +21,7 @@
       </v-btn>
     </div>
 
-    <v-btn icon size="x-small" class="dust-line-close" :title="t('common.remove')" @click.stop="$emit('dismiss')">
+    <v-btn icon variant="text" size="x-small" class="dust-line-close" :title="t('common.remove')" @click.stop="$emit('dismiss')">
       <v-icon size="x-small">mdi-close</v-icon>
     </v-btn>
   </div>

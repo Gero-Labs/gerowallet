@@ -17,7 +17,7 @@
             {{item.domain}}
           </template>
           <template v-slot:[`item.actions`]="{ item }">
-            <v-btn size="small" icon @click="confirmRemove(item)">
+            <v-btn size="small" icon variant="text" @click="confirmRemove(item)">
               <v-icon size="small" color="red">
                 mdi-trash-can
               </v-icon>
@@ -30,7 +30,7 @@
     <!-- WalletConnect Sessions -->
     <v-card v-if="wcEnabled" flat class="transparent mt-4">
       <v-card-title class="px-0 py-2 d-flex align-center">
-        <span class="wc-logo mr-2" :style="{ '--wc-img': `url(${walletConnectLogo})` }"></span>
+        <span class="wc-logo mr-2" :style="{ '--wc-img': cssUrl(walletConnectLogo) }"></span>
         <span style="font-size: 14px;">{{ $t('walletConnect.sessions') }}</span>
         <v-spacer />
         <v-btn size="small" variant="text" color="primary" @click="showPairDialog = true">
@@ -53,7 +53,7 @@
               <v-list-item-subtitle>{{ session.peerMeta.url }}</v-list-item-subtitle>
             </div>
             <div class="g-list-action">
-              <v-btn size="small" icon @click="confirmWcDisconnect(session)">
+              <v-btn size="small" icon variant="text" @click="confirmWcDisconnect(session)">
                 <v-icon size="small" color="red">mdi-link-variant-off</v-icon>
               </v-btn>
             </div>
@@ -88,7 +88,7 @@
               <v-list-item-subtitle>{{ cip45Session.dappUrl }}</v-list-item-subtitle>
             </div>
             <div class="g-list-action">
-              <v-btn size="small" icon @click="confirmCip45Disconnect(cip45Session)">
+              <v-btn size="small" icon variant="text" @click="confirmCip45Disconnect(cip45Session)">
                 <v-icon size="small" color="red">mdi-link-variant-off</v-icon>
               </v-btn>
             </div>
@@ -174,6 +174,7 @@
 </template>
 <script setup lang="ts">
 import type { DataTableHeader } from 'vuetify';
+import { cssUrl } from '@/shared/utils/cssUrl';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, ref, toRefs } from 'vue';
 import WalletStore, { walletStore } from '@/stores/walletStore';
@@ -224,8 +225,8 @@ const confirmCip45Dialog = ref(false);
 const cip45SessionToDisconnect = ref<Cip45Session | null>(null);
 
 const headers = ref<DataTableHeader[]>([
-  { title: t('settings.domain'), align: 'end' as const, sortable: true, key: "domain", width: '99%'},
-  { title: "", align: 'end' as const, sortable: false, key: "actions" },
+  { title: t('settings.domain'), align: 'start' as const, sortable: true, key: "domain", width: '99%'},
+  { title: "", align: 'start' as const, sortable: false, key: "actions" },
 ]);
 
 // DApp methods

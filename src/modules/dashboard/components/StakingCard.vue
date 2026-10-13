@@ -22,16 +22,16 @@
               </div>
             </div>
             <div class="stk-socials">
-              <v-btn v-if="pool?.homepage" icon size="x-small" class="stk-soc" :href="pool.homepage" target="_blank" :aria-label="$t('staking.website')">
+              <v-btn v-if="pool?.homepage" icon variant="text" size="x-small" class="stk-soc" :href="pool.homepage" target="_blank" :aria-label="$t('staking.website')">
                 <v-icon size="15">mdi-web</v-icon>
               </v-btn>
-              <v-btn v-if="poolExtendedInfo?.info?.social?.twitter_handle" icon size="x-small" class="stk-soc" :href="'https://x.com/' + poolExtendedInfo.info.social.twitter_handle" target="_blank" aria-label="X">
+              <v-btn v-if="poolExtendedInfo?.info?.social?.twitter_handle" icon variant="text" size="x-small" class="stk-soc" :href="'https://x.com/' + poolExtendedInfo.info.social.twitter_handle" target="_blank" aria-label="X">
                 <v-avatar rounded="0" size="13"><v-img :src="assets.xSvg" alt="x" /></v-avatar>
               </v-btn>
-              <v-btn v-if="poolExtendedInfo?.info?.social?.youtube_handle" icon size="x-small" class="stk-soc" :href="'https://youtube.com/' + poolExtendedInfo.info.social.youtube_handle" target="_blank" aria-label="YouTube">
+              <v-btn v-if="poolExtendedInfo?.info?.social?.youtube_handle" icon variant="text" size="x-small" class="stk-soc" :href="'https://youtube.com/' + poolExtendedInfo.info.social.youtube_handle" target="_blank" aria-label="YouTube">
                 <v-icon size="15">mdi-youtube</v-icon>
               </v-btn>
-              <v-btn v-if="poolExtendedInfo?.info?.social?.telegram_handle" icon size="x-small" class="stk-soc" :href="'https://t.me/' + poolExtendedInfo.info.social.telegram_handle" target="_blank" aria-label="Telegram">
+              <v-btn v-if="poolExtendedInfo?.info?.social?.telegram_handle" icon variant="text" size="x-small" class="stk-soc" :href="'https://t.me/' + poolExtendedInfo.info.social.telegram_handle" target="_blank" aria-label="Telegram">
                 <v-avatar rounded="0" size="13"><v-img :src="assets.telegramSvg" alt="telegram" /></v-avatar>
               </v-btn>
             </div>

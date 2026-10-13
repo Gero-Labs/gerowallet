@@ -105,7 +105,7 @@
                   <div class="py-1 g-list-content">
                     <v-list-item-title class="pool-name-title"
                       >{{ item.ticker ? `[${item.ticker}] ${item.name ? item.name : ''}` : (item.pool_id_bech32 ? `${item.pool_id_bech32.slice(0, 10)}…${item.pool_id_bech32.slice(-6)}` : 'Unknown Pool') }}
-                      <div class="ml-1"><v-btn v-for="link in poolLinks(item)" :key="link.href" icon size="x-small" @click.stop="" :href="link.href" target="_blank">
+                      <div class="ml-1"><v-btn v-for="link in poolLinks(item)" :key="link.href" icon variant="text" size="x-small" @click.stop="" :href="link.href" target="_blank">
   <v-avatar v-if="link.image" rounded="0" size="14"><v-img :src="link.image" alt="" /></v-avatar>
   <v-icon v-else size="small">{{ link.icon }}</v-icon>
 </v-btn></div>
@@ -241,7 +241,7 @@
                           {{ pool.ticker ? `[${pool.ticker}] ${pool.name ? pool.name : ''}` : (pool.pool_id_bech32 ? `${pool.pool_id_bech32.slice(0, 10)}…${pool.pool_id_bech32.slice(-6)}` : 'Unknown Pool') }}
                         </v-list-item-title>
                         <v-list-item-subtitle>
-                          <v-btn v-for="link in poolLinks(pool)" :key="link.href" icon size="x-small" @click.stop="" :href="link.href" target="_blank">
+                          <v-btn v-for="link in poolLinks(pool)" :key="link.href" icon variant="text" size="x-small" @click.stop="" :href="link.href" target="_blank">
   <v-avatar v-if="link.image" rounded="0" size="14"><v-img :src="link.image" alt="" /></v-avatar>
   <v-icon v-else size="small">{{ link.icon }}</v-icon>
 </v-btn></v-list-item-subtitle>
@@ -745,7 +745,7 @@ onBeforeUnmount(() => {
   box-shadow: var(--g-shadow-menu);
 }
 
-.pool-card .v-list-item__title {
+.pool-card .v-list-item-title {
   font-size: 14px;
   font-weight: 600;
   color: var(--g-text-1);

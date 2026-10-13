@@ -1,6 +1,28 @@
 /* Preserve the existing wallet layout while Vuetify 4 supplies the controls.
    Existing pages use the padded-column grid and Material 2 utility names.
-   Keep these rules scoped to the two Vuetify application roots. */
+   Apply the same layout inside the app and Vuetify's teleported overlays. */
+/* Vuetify 2 removed browser-default margins/padding from every element. Keep
+   that foundation inside wallet surfaces; native components and explicit
+   utilities remain in stronger layers and supply their own spacing. */
+@layer vuetify-core.reset {
+  :where(.v-application, .v-overlay-container),
+  :where(.v-application, .v-overlay-container) * {
+    margin: 0;
+    padding: 0;
+  }
+  /* The old reset removed browser button chrome. Plain wallet actions (such
+     as library rows, drag handles and category toggles) still rely on it.
+     Keep this below component styles and leave keyboard focus rings intact. */
+  :where(.v-application, .v-overlay-container) button {
+    background-color: transparent;
+    border-style: none;
+  }
+}
+@layer vuetify-core.base {
+  :where(.v-application, .v-overlay-container) p { margin-bottom: 16px; }
+  :where(.v-application, .v-overlay-container) :is(ol, ul) { padding-left: 24px; }
+}
+
 /* These are the legacy color variables still consumed by wallet components.
    Resolve the live theme channels in both app roots and teleported overlays. */
 :is(.v-application, .v-overlay-container) {
@@ -13,63 +35,226 @@
   --v-cardBackground-base: rgb(var(--v-theme-cardBackground));
 }
 
-.v-application {
+:is(.v-application, .v-overlay-container) {
   --v-font-body: var(--g-font-ui);
   --v-font-heading: var(--g-font-ui);
 }
 
-/* Vuetify 4 defaults to gap-based columns. The wallet's nested rows and pa-*
-   column overrides were designed around padded columns with negative rows. */
-.v-application .v-row {
-  --g-grid-gutter: 24px;
-  --v-col-gap-x: 0px;
-  --v-col-gap-y: 0px;
-  margin: calc(var(--g-grid-gutter) / -2);
+/* Keep component defaults below Vuetify's utility layer so explicit pa-/px-/py-
+   spacing and display classes still win, as they did before the migration. */
+@layer vuetify-overrides {
+  /* Borderless fields still need visible keyboard focus. Paint it on the
+     complete field (including icons), using its radius and native theme/error
+     color. Outlined and underlined variants already own a focus border. */
+  :is(.v-application, .v-overlay-container) .v-field:is(.v-field--variant-solo, .v-field--variant-solo-filled, .v-field--variant-solo-inverted, .v-field--variant-plain):has(input:focus-visible, textarea:focus-visible, select:focus-visible) > .v-field__outline {
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 2px currentColor;
+  }
+  /* Windows high contrast suppresses shadows. Keep the same field boundary
+     visible with a system-color outline that follows its existing corners. */
+  @media (forced-colors: active) {
+    :is(.v-application, .v-overlay-container) .v-field:is(.v-field--variant-solo, .v-field--variant-solo-filled, .v-field--variant-solo-inverted, .v-field--variant-plain):has(input:focus-visible, textarea:focus-visible, select:focus-visible) > .v-field__outline {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+  }
+
+  /* The old outer tab group filled flex headers and kept borders outside the
+     tab strip's height. Counting a bottom border inside that height clips the
+     selected tab's 2px slider in Settings and the compact history tabs. */
+  :is(.v-application, .v-overlay-container) .v-tabs:not(.v-tabs--vertical):not(.v-tabs--inset) {
+    flex: 1 1 auto;
+    width: 100%;
+    box-sizing: content-box;
+  }
+
+  /* Vuetify 2 icon buttons used the selected button height without the extra
+     touch-target expansion. Numeric size/height props remain inline overrides;
+     explicit compact/comfortable density keeps its native calculation. */
+  :is(.v-application, .v-overlay-container) .v-btn--icon.v-btn--density-default {
+    width: var(--v-btn-height);
+    height: var(--v-btn-height);
+  }
+  :is(.v-application, .v-overlay-container) .v-btn--size-large:not(.v-btn--icon, .v-btn--stacked) { --v-btn-size: 0.875rem; }
+  :is(.v-application, .v-overlay-container) .v-btn--size-x-large:not(.v-btn--icon, .v-btn--stacked) { --v-btn-size: 1rem; }
+
+  /* Native table slots retain their structure and sizing props. Restore only
+     the old default/dense row heights and typography, below custom tables. */
+  :is(.v-application, .v-overlay-container) .v-table--density-default {
+    --v-table-header-height: 48px;
+    --v-table-row-height: 48px;
+  }
+  :is(.v-application, .v-overlay-container) .v-table--density-compact {
+    --v-table-header-height: 32px;
+    --v-table-row-height: 32px;
+  }
+  :is(.v-application, .v-overlay-container) .v-table > .v-table__wrapper > table > thead > tr > th {
+    font-size: 12px;
+    font-weight: 700;
+  }
+  :is(.v-application, .v-overlay-container) .v-table > .v-table__wrapper > table > tbody > tr > td {
+    font-size: 14px;
+  }
+
+  /* Legacy dense lists carried a smaller type ramp, not just less padding. */
+  :is(.v-application, .v-overlay-container) .v-list-item :is(.v-list-item-title, .v-list-item-subtitle) {
+    line-height: 1.2;
+    letter-spacing: normal;
+  }
+  :is(.v-application, .v-overlay-container) .v-list-item--density-compact :is(.v-list-item-title, .v-list-item-subtitle) {
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1rem;
+  }
+  :is(.v-application, .v-overlay-container) .v-list-item:has(> .v-list-item__content > .g-list-content) {
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+  :is(.v-application, .v-overlay-container) .v-list-item__content > .g-list-content { padding: 12px 0; }
+  :is(.v-application, .v-overlay-container) .v-list-item--density-compact > .v-list-item__content > .g-list-content { padding: 8px 0; }
+  :is(.v-application, .v-overlay-container) .g-list-content > .v-list-item-title:not(:last-child) { margin-bottom: 2px; }
+
+  /* VTab now renders VBtn. Retain the previous tab typography rather than
+     inheriting the wallet's CTA casing/weight/radius. Page-specific tab styles
+     and Vuetify utility classes still take precedence over these defaults. */
+  :is(.v-application, .v-overlay-container) .v-tab {
+    letter-spacing: .0892857143em;
+    text-indent: 0;
+    text-transform: uppercase;
+    transition: none;
+  }
+  :is(.v-application, .v-overlay-container) .v-tabs .v-tab:not(.v-tab--selected) {
+    color: rgba(var(--v-theme-on-surface), .6);
+  }
+
+  /* Vue 2 avatars were transparent unless a color was supplied. Many wallet
+     icons use avatars only for sizing, so the native flat surface becomes an
+     unwanted rectangle. Explicit color utilities and inline colors still win. */
+  :is(.v-application, .v-overlay-container) .v-avatar--variant-flat {
+    background: transparent;
+    color: inherit;
+  }
+
+  /* Vuetify 2 sized plain image slots to the avatar. Native avatars now only
+     size VImg, leaving token logos at their intrinsic dimensions and clipping
+     them. Restore the plain-image rule without changing VImg cover/contain or
+     explicit per-image overrides. */
+  :is(.v-application, .v-overlay-container) .v-avatar > img {
+    border-radius: inherit;
+    display: inline-flex;
+    height: inherit;
+    width: inherit;
+  }
+
+  /* Measured Vuetify 2 dark neutral-chip fill (RGB 85/85/85 in its palette).
+     This preserves a legacy surface, not a new design color. Explicit theme
+     color utilities and inline fills retain their native contrasting text. */
+  :is(.v-application, .v-overlay-container) .v-chip--variant-flat {
+    background: rgb(85, 85, 85);
+    color: rgb(var(--v-theme-on-surface));
+  }
+
+  /* The wallet's nested rows use padded columns with negative row margins. */
+  :is(.v-application, .v-overlay-container) .v-row {
+    --g-grid-gutter: 24px;
+    --v-col-gap-x: 0px;
+    --v-col-gap-y: 0px;
+    margin: calc(var(--g-grid-gutter) / -2);
+  }
+  :is(.v-application, .v-overlay-container) .v-row--density-comfortable { --g-grid-gutter: 16px; }
+  :is(.v-application, .v-overlay-container) .v-row--density-compact { --g-grid-gutter: 8px; }
+  :is(.v-application, .v-overlay-container) .v-row--no-gutters { --g-grid-gutter: 0px; }
+  :is(.v-application, .v-overlay-container) .v-row > .v-col { padding: calc(var(--g-grid-gutter) / 2); }
+  :is(.v-application, .v-overlay-container) .v-row + .v-row { margin-top: calc(var(--g-grid-gutter) / 2); }
+
+  /* Legacy card titles are wrapping header rows, often with a spacer/search. */
+  :is(.v-application, .v-overlay-container) .v-card-title {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    font-size: 1.25rem;
+    font-weight: 500;
+    line-height: 2rem;
+    letter-spacing: .0125em;
+    white-space: normal;
+    padding: 16px;
+  }
+
+  /* V4 dialogs reset card text to the surrounding 16px body ramp. Retain the
+     former 14px/22px card copy so settings rows and dialog content keep scale. */
+  :is(.v-application, .v-overlay-container) .v-card > :is(.v-card-text, .v-card-subtitle) {
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 1.375rem;
+    letter-spacing: .0071428571em;
+    color: rgba(var(--v-theme-on-surface), .7);
+  }
+  :is(.v-application, .v-overlay-container) .v-card > .v-card-subtitle {
+    opacity: 1;
+    padding: 16px;
+  }
+  :is(.v-application, .v-overlay-container) .v-card-title + .v-card-subtitle {
+    padding-top: 0;
+    margin-top: -16px;
+  }
+  :is(.v-application, .v-overlay-container) .v-card-subtitle + .v-card-text { padding-top: 0; }
+  /* V2 form controls owned their foreground; V4 fields inherit from card copy. */
+  :is(.v-application, .v-overlay-container) .v-card-text .v-input { color: rgb(var(--v-theme-on-surface)); }
+  :is(.v-application, .v-overlay-container) .v-dialog > .v-overlay__content > .v-card > :is(.v-card-text, .v-card-subtitle) {
+    padding: 0 24px 20px;
+  }
+
+  /* Legacy leading avatars/icons live inside the content cell. Native prepend
+     slots own their own spacing; explicit margin utilities still take priority. */
+  :is(.v-application, .v-overlay-container) .v-list-item__content > .v-avatar:has(+ .g-list-content) {
+    margin-inline-end: 16px;
+  }
+  :is(.v-application, .v-overlay-container) .v-list-item__content > .g-list-icon:has(+ .g-list-content) {
+    margin-inline-end: 32px;
+  }
 }
-.v-application .v-row--density-comfortable { --g-grid-gutter: 16px; }
-.v-application .v-row--density-compact { --g-grid-gutter: 8px; }
-.v-application .v-row--no-gutters { --g-grid-gutter: 0px; }
-.v-application .v-row > .v-col { padding: calc(var(--g-grid-gutter) / 2); }
-.v-application .v-row + .v-row { margin-top: calc(var(--g-grid-gutter) / 2); }
 
 /* VListItem now owns a grid shell and a content cell. Legacy content/action
    wrappers live inside that cell and still need their horizontal layout. */
-.v-application :is(.v-list-item__content, .v-list-item-title):has(> .g-list-content, > .g-list-action) {
+:is(.v-application, .v-overlay-container) :is(.v-list-item__content, .v-list-item-title):has(> .g-list-content, > .g-list-action) {
   display: flex;
   align-items: center;
   min-width: 0;
 }
-.v-application .g-list-content {
+:is(.v-application, .v-overlay-container) .g-list-content {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
   min-width: 0;
   overflow: hidden;
 }
-.v-application .g-list-action {
+:is(.v-application, .v-overlay-container) .g-list-action {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
 }
-.v-application .g-list-action:first-child { margin-inline-end: 16px; }
-.v-application .g-list-action:last-child { margin-inline-start: 16px; }
+:is(.v-application, .v-overlay-container) .g-list-action:first-child { margin-inline-end: 16px; }
+:is(.v-application, .v-overlay-container) .g-list-action:last-child { margin-inline-start: 16px; }
 
-/* Material 2 typography names no longer ship in Vuetify 4. Gero's own t-*
-   classes remain the preferred design ramp for new content. */
-.v-application :is(.text-h5, .headline) { font-size: 1.5rem; font-weight: 400; line-height: 1.33; }
-.v-application .text-h6 { font-size: 1.25rem; font-weight: 500; line-height: 1.6; letter-spacing: .0125em; }
-.v-application :is(.text-subtitle-1, .subtitle-1) { font-size: 1rem; font-weight: 400; line-height: 1.75; letter-spacing: .009375em; }
-.v-application :is(.text-subtitle-2, .subtitle-2) { font-size: 0.875rem; font-weight: 500; line-height: 1.57; letter-spacing: .007143em; }
-.v-application :is(.text-body-1, .body-1) { font-size: 1rem; font-weight: 400; line-height: 1.5; letter-spacing: .03125em; }
-.v-application :is(.text-body-2, .body-2) { font-size: 0.875rem; font-weight: 400; line-height: 1.43; letter-spacing: .017857em; }
-.v-application :is(.text-caption, .caption) { font-size: 0.75rem; font-weight: 400; line-height: 1.67; letter-spacing: .033333em; }
+/* Material 2 typography names no longer ship in Vuetify 4. Keep their defaults
+   in the typography layer so explicit font-weight helpers can still win.
+   Gero's own t-* classes remain the preferred design ramp for new content. */
+@layer vuetify-utilities.typography {
+  :is(.v-application, .v-overlay-container) :is(.text-h5, .headline) { font-size: 1.5rem; font-weight: 400; line-height: 1.33; }
+  :is(.v-application, .v-overlay-container) .text-h6 { font-size: 1.25rem; font-weight: 500; line-height: 1.6; letter-spacing: .0125em; }
+  :is(.v-application, .v-overlay-container) :is(.text-subtitle-1, .subtitle-1) { font-size: 1rem; font-weight: 400; line-height: 1.75; letter-spacing: .009375em; }
+  :is(.v-application, .v-overlay-container) :is(.text-subtitle-2, .subtitle-2) { font-size: 0.875rem; font-weight: 500; line-height: 1.57; letter-spacing: .007143em; }
+  :is(.v-application, .v-overlay-container) :is(.text-body-1, .body-1) { font-size: 1rem; font-weight: 400; line-height: 1.5; letter-spacing: .03125em; }
+  :is(.v-application, .v-overlay-container) :is(.text-body-2, .body-2) { font-size: 0.875rem; font-weight: 400; line-height: 1.43; letter-spacing: .017857em; }
+  :is(.v-application, .v-overlay-container) :is(.text-caption, .caption) { font-size: 0.75rem; font-weight: 400; line-height: 1.67; letter-spacing: .033333em; }
+}
 
-.v-application :is(.primary--text, .accent--text) { color: var(--g-accent); }
-.v-application :is(.error--text, .red--text) { color: var(--g-error); }
-.v-application .success--text { color: var(--g-success); }
-.v-application .warning--text { color: var(--g-warning); }
-.v-application :is(.grey--text, .text--secondary) { color: var(--g-text-3); }
-.v-application .white--text { color: var(--g-text-1); }
-.v-application .black--text { color: var(--g-canvas); }
-.v-application .transparent { background-color: transparent; }
+:is(.v-application, .v-overlay-container) :is(.primary--text, .accent--text) { color: var(--g-accent); }
+:is(.v-application, .v-overlay-container) :is(.error--text, .red--text) { color: var(--g-error); }
+:is(.v-application, .v-overlay-container) .success--text { color: var(--g-success); }
+:is(.v-application, .v-overlay-container) .warning--text { color: var(--g-warning); }
+:is(.v-application, .v-overlay-container) :is(.grey--text, .text--secondary) { color: var(--g-text-3); }
+:is(.v-application, .v-overlay-container) .white--text { color: var(--g-text-1); }
+:is(.v-application, .v-overlay-container) .black--text { color: var(--g-canvas); }
+:is(.v-application, .v-overlay-container) .transparent { background-color: transparent; }

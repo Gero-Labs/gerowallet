@@ -12,9 +12,10 @@
     </p>
     <v-switch
       inset
+      size="small"
       density="compact"
       v-model="model"
-      color="inherit"
+      color="primary"
       hide-details
       style="margin-top: 0; align-items: center;"
       class="toggleSwitch"
@@ -34,6 +35,8 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
+
 const props = defineProps({
   modelValue: {
     type: Boolean,
@@ -81,13 +84,11 @@ const model = computed<boolean>({
 </script>
 
 <style>
-.toggleSwitch .v-input--selection-controls__input {
-  margin-left: 16px!important;
-}
 .switch {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
+  column-gap: var(--g-s-2);
 }
 
 .left‐text {
@@ -96,19 +97,20 @@ const model = computed<boolean>({
 
 .toggleSwitch {
   justify-self: center; /* always center column */
+  --v-input-control-height: 28px;
 }
 
 .right‐text {
   justify-self: start; /* push right text up against the switch */
 }
 
-.toggleSwitch .v-input--switch__track {
-  color: #ffffff2b !important;
+.toggleSwitch .v-switch__track {
+  background-color: #ffffff2b !important;
   opacity: 1;
   border: 1px solid #ffffff12;
 }
 
-.toggleSwitch .v-input--switch__thumb {
-  color: var(--v-primary-base)!important;
+.toggleSwitch .v-switch__thumb {
+  background-color: var(--v-primary-base)!important;
 }
 </style>

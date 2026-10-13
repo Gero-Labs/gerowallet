@@ -178,16 +178,16 @@ function handleRowClick(_event: Event, { item }: { item: UtxoRow }) {
 </script>
 
 <style scoped>
-.utxos-table >>> .v-table__wrapper {
+.utxos-table :deep(.v-table__wrapper) {
   overflow-y: auto;
 }
-.utxos-table >>> tr {
+.utxos-table :deep(tr) {
   cursor: pointer;
 }
-.utxos-table >>> tr:hover {
+.utxos-table :deep(tr:hover) {
   background: rgba(255, 255, 255, 0.05) !important;
 }
-.utxos-table >>> tr.selected-utxo {
+.utxos-table :deep(tr.selected-utxo) {
   background: rgba(255, 255, 255, 0.08) !important;
 }
 .table-container {
@@ -218,28 +218,9 @@ function handleRowClick(_event: Event, { item }: { item: UtxoRow }) {
   background: transparent !important;
 }
 
-.top-level-search >>> .v-input__slot {
+.top-level-search :deep(.v-field) {
   background: transparent !important;
   box-shadow: none !important;
 }
 
-.top-level-search >>> .v-input__control {
-  background: transparent !important;
-}
-
-.top-level-search >>> .v-text-field__slot {
-  background: transparent !important;
-}
-
-.top-level-search >>> .v-input__slot:before {
-  border: none !important;
-}
-
-.top-level-search >>> .v-input__slot:after {
-  border: none !important;
-}
-
-.top-level-search.v-text-field--solo > .v-input__control > .v-input__slot {
-  background: transparent !important;
-}
 </style>

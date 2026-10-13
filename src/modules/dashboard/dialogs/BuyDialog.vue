@@ -26,7 +26,7 @@
           <v-stepper-header style="box-shadow: unset">
             <v-stepper-item
               :complete="step > 1"
-              value="1"
+              :value="1"
             >
               {{ $t('wallet.buySell') }}
             </v-stepper-item>
@@ -37,7 +37,7 @@
               {{ $t('wallet.finalize') }}
             </v-stepper-item>
           </v-stepper-header>
-          <v-stepper-window :model-value="step">
+          <v-stepper-window :model-value="step" class="ma-0">
             <v-stepper-window-item :value="1" class="overflow-visible pa-0" style="height: 400px">
               <v-card class="transparent fill-height" flat style="align-content: center;">
                 <v-row class="px-6" style="gap: 0;">

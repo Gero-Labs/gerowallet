@@ -181,7 +181,7 @@ const close = () => {
   color: var(--g-text-3);
 }
 
-.cip45-tab.v-tab--active {
+.cip45-tab.v-tab--selected {
   color: var(--g-text-1);
 }
 
@@ -195,7 +195,7 @@ const close = () => {
   padding-top: var(--g-s-2);
 }
 
-.cip45-input :deep(.v-input__slot) {
+.cip45-input :deep(.v-field) {
   border-radius: var(--g-r-control);
 }
 

@@ -9,7 +9,7 @@
         <div class="text-caption text--secondary">{{ $t('gomining.poweredByGoMining') }}</div>
       </div>
       <v-spacer />
-      <v-btn icon size="small" :loading="loading" @click="$emit('refresh')">
+      <v-btn icon variant="text" size="small" :loading="loading" @click="$emit('refresh')">
         <v-icon size="small">mdi-refresh</v-icon>
       </v-btn>
     </div>

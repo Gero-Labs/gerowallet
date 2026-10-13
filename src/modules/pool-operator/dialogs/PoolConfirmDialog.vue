@@ -4,7 +4,7 @@
       <v-card-title>
         {{ isUpdate ? $t('poolOperator.updatePool') : $t('poolOperator.registerPool') }}
         <v-spacer />
-        <v-btn icon @click="close" :disabled="signing.loading.value">
+        <v-btn icon variant="text" @click="close" :disabled="signing.loading.value">
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>

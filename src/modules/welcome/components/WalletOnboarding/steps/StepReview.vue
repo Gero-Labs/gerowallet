@@ -15,6 +15,7 @@
                 <div class="text-caption grey--text text--lighten-1" style="line-height: 1.2;">{{ $t('welcome.walletName') }}</div>
                 <v-text-field
                   v-model="walletName"
+                  variant="plain"
                   density="compact"
                   hide-details
                   class="wallet-name-field mt-0 pt-0"
@@ -199,11 +200,6 @@ const walletCreationStep3 = (): Promise<void> => approval.run(async () => {
     font-weight: 500;
     color: white;
     padding: 0;
-  }
-
-  ::v-deep .v-input__slot::before,
-  ::v-deep .v-input__slot::after {
-    display: none;
   }
 }
 </style>

@@ -311,37 +311,37 @@
           <div class="text-center pt-6">
             <span>{{ $t('navigation.availableOnSocial') }}</span>
             <div>
-              <v-btn icon href="https://gerowallet.io" target="_blank" class="mx-2">
+              <v-btn icon variant="text" href="https://gerowallet.io" target="_blank" class="mx-2">
                 <v-avatar size="36" rounded="0">
                   <v-icon style="font-size: 28px;">mdi-web</v-icon>
                 </v-avatar>
               </v-btn>
-              <v-btn icon href="https://twitter.com/GeroWallet" target="_blank" class="mx-2">
+              <v-btn icon variant="text" href="https://twitter.com/GeroWallet" target="_blank" class="mx-2">
                 <v-avatar rounded="0">
                   <v-img :src="assets.xSvg" width="24" height="24" alt="x" ></v-img>
                 </v-avatar>
               </v-btn>
-              <v-btn icon href="https://discord.gg/37bvtyvchz" target="_blank" class="mx-2">
+              <v-btn icon variant="text" href="https://discord.gg/37bvtyvchz" target="_blank" class="mx-2">
                 <v-avatar rounded="0">
                   <v-img :src="assets.discordSvg" width="24" height="24" alt="discord" ></v-img>
                 </v-avatar>
               </v-btn>
-              <v-btn icon href="https://t.me/GeroWallet" target="_blank" class="mx-2">
+              <v-btn icon variant="text" href="https://t.me/GeroWallet" target="_blank" class="mx-2">
                 <v-avatar rounded="0">
                   <v-img :src="assets.telegramSvg" width="24" height="24" alt="x" ></v-img>
                 </v-avatar>
               </v-btn>
-              <v-btn icon href="https://www.youtube.com/@Gerowallet" target="_blank" class="mx-2">
+              <v-btn icon variant="text" href="https://www.youtube.com/@Gerowallet" target="_blank" class="mx-2">
                 <v-avatar size="36" rounded="0">
                   <v-icon style="font-size: 30px;">mdi-youtube</v-icon>
                 </v-avatar>
               </v-btn>
-              <v-btn icon href="https://gerowallet.medium.com/" target="_blank" class="mx-2">
+              <v-btn icon variant="text" href="https://gerowallet.medium.com/" target="_blank" class="mx-2">
                 <v-avatar rounded="0">
                   <v-img :src="assets.mediumSvg" width="24" height="24" alt="x" ></v-img>
                 </v-avatar>
               </v-btn>
-              <v-btn icon href="https://github.com/Gero-Labs/gerowallet" target="_blank" class="mx-2">
+              <v-btn icon variant="text" href="https://github.com/Gero-Labs/gerowallet" target="_blank" class="mx-2">
                 <v-avatar size="36" rounded="0">
                   <v-icon style="font-size: 30px;">mdi-github</v-icon>
                 </v-avatar>

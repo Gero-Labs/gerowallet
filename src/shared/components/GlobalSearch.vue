@@ -261,13 +261,15 @@ watch(isOpen, (val) => {
   background-color: transparent !important;
 }
 
-.global-search-input >>> .v-input__slot {
+.global-search-input :deep(.v-field) {
   background-color: transparent !important;
+  border-radius: var(--g-r-card) var(--g-r-card) 0 0;
   padding: 8px 16px !important;
 }
 
-.global-search-input >>> input {
+.global-search-input :deep(input) {
   font-size: 15px !important;
+  padding-inline: 0;
 }
 
 .global-search-results {

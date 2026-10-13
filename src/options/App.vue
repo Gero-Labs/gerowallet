@@ -137,7 +137,7 @@ watch(() => geroConfig.value?.locale, async (newLocale, oldLocale) => {
   background-color: var(--v-cardBackground-base) !important;
 }
 /* Softens the page around an open dialog so the dialog's glass reads as the top layer. */
-.v-dialog__content--active {
+.v-dialog.v-overlay--active {
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
 }
@@ -155,7 +155,7 @@ watch(() => geroConfig.value?.locale, async (newLocale, oldLocale) => {
   background: #000000e0;
 }
 
-.v-dialog:not(.v-dialog--fullscreen) {
+.v-dialog:not(.v-dialog--fullscreen) > .v-overlay__content {
   max-height: 100%;
 }
 

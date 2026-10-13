@@ -1,10 +1,10 @@
 <template>
-  <v-btn class="px-1" :icon="!!!title" :text="!!title" :x-small="xSmall" :small="small" :large="large" :x-large="xLarge" :color="colorB" @click.stop="copy" :style="xSmall && !title ? { width: '16px', height: '16px', marginTop: '0px'} : {}">
+  <v-btn class="px-1" :icon="!title" variant="text" :size="buttonSize" :color="colorB" @click.stop="copy" :style="xSmall && !title ? { width: '16px', height: '16px', marginTop: '0px'} : {}">
     <v-avatar v-if="avatar" :size="size" style="margin-right: 2px">
       <v-img :src="avatar" :alt="$t('common.avatar')"  />
     </v-avatar>
     <span v-if="title" class="mr-1" style="text-transform: none">{{title}}</span>
-    <v-icon :x-small="xSmall" :small="small" :large="large" :x-large="xLarge">
+    <v-icon :size="iconSize">
       {{ icon }}
     </v-icon>
   </v-btn>
@@ -55,6 +55,22 @@ const props = defineProps({
 
 const icon = ref('mdi-content-copy');
 const colorB = ref<string | undefined>(undefined);
+
+const buttonSize = computed(() => {
+  if (props.xSmall) return 'x-small';
+  if (props.small) return 'small';
+  if (props.large) return 'large';
+  if (props.xLarge) return 'x-large';
+  return 'default';
+});
+
+const iconSize = computed(() => {
+  if (props.xSmall) return 12;
+  if (props.small) return 16;
+  if (props.large) return 36;
+  if (props.xLarge) return 40;
+  return 24;
+});
 
 const size = computed(() => {
   if (props.xSmall) return 12

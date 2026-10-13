@@ -1,0 +1,6 @@
+/* Load as the first standalone stylesheet in both entry pages. Vite may emit
+   component CSS before vuetify/styles, so establish the native cascade here. */
+@layer vuetify-core, vuetify-components, vuetify-overrides, vuetify-utilities, vuetify-final;
+@layer vuetify-core { @layer reset, base; }
+@layer vuetify-utilities { @layer theme-base, typography, helpers, theme-background, theme-foreground; }
+@layer vuetify-final { @layer transitions, trumps; }

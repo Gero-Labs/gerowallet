@@ -24,7 +24,7 @@
           <v-stepper-item
             class="py-0"
             :complete="step > 1"
-            value="1"
+            :value="1"
           >
             Seed Phrase
           </v-stepper-item>
@@ -32,7 +32,7 @@
           <v-stepper-item
             class="py-0"
             :complete="step > 2"
-            value="2"
+            :value="2"
           >
             Confirm Phrase
           </v-stepper-item>
@@ -49,14 +49,14 @@
         <v-stepper-header style="display: none">
           <v-stepper-item
             :complete="step > 1"
-            value="1"
+            :value="1"
           >
             {{ $t('navigation.walletCreation') }}
           </v-stepper-item>
           <v-divider></v-divider>
           <v-stepper-item
             :complete="step > 2"
-            value="2"
+            :value="2"
           >
             Seed Phrase
           </v-stepper-item>
@@ -67,7 +67,7 @@
             Confirm Phrase
           </v-stepper-item>
         </v-stepper-header>
-        <v-stepper-window :model-value="step">
+        <v-stepper-window :model-value="step" class="ma-0">
           <v-stepper-window-item :value="1" style="text-align: -webkit-center;" class="pa-0">
             <v-form ref="form2" v-model="valid">
               <v-card flat class="transparent" style="max-width: 556px; min-height: 500px;">

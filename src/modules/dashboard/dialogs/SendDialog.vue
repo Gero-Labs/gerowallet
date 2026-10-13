@@ -141,6 +141,7 @@
               ref="summaryRef"
               :recipients="recipients"
               :tx-data="tx"
+              :active="isOpen && currentStep === 2"
               @next="handleSign"
               @prev="prevStep"
             />
@@ -172,7 +173,7 @@
             :wallet-type="loggedWallet?.type"
             :is-prf-wallet="isPrfWallet"
             :is-signed="isSubmit"
-            :loading="txSignLoading"
+            :loading="txSignLoading || !summaryReady"
             :password="spendingPassword"
             @update:password="spendingPassword = $event"
             :password-label="t('wallet.spendingPassword')"
@@ -230,7 +231,7 @@
             variant="text"
             class="ml-2"
             @click="signOnAnotherDevice()"
-            :disabled="txSignLoading"
+            :disabled="txSignLoading || !summaryReady"
             :loading="txSignLoading"
           >
             <v-icon size="small" class="mr-1">mdi-cellphone-link</v-icon>
@@ -367,6 +368,14 @@ const steps = ref([
 ]);
 
 const tx = ref<Cardano.Tx | undefined>(undefined);
+const summaryRef = ref<InstanceType<typeof SummaryStep>>();
+
+function isSummaryReady(): boolean {
+  return props.isOpen && currentStep.value === 2 && txValid.value &&
+    !feePending.value && !walletStore.isLocked &&
+    !!summaryRef.value?.isReadyFor(tx.value);
+}
+const summaryReady = computed(isSummaryReady);
 
 // Transaction signing composable (handles sign, submit, password, hardware wallets, Keystone)
 const {
@@ -394,7 +403,7 @@ const {
   onKeystoneError,
   onKeystoneProgress,
 } = useTransactionSigning({
-  active: () => props.isOpen,
+  active: isSummaryReady,
   tx,
   successMessageKey: 'wallet.txSubmittedSuccess',
   onSuccess: () => {
@@ -448,7 +457,7 @@ const isWalletEmpty = computed(() => {
 
 const isValid = computed(() => {
   if (currentStep.value === 1) {
-    if (!txValid.value) return false;
+    if (!txValid.value || !tx.value || feePending.value) return false;
     return recipients.value.every((r: SendRecipient) => {
       const addr = r.resolvedAddress ?? r.address;
       const rule = rules.recipientRules(loggedWallet.value?.chain, loggedWallet.value?.network);
@@ -461,6 +470,7 @@ const isValid = computed(() => {
     });
   }
   if (currentStep.value === 2) {
+    if (!isSummaryReady()) return false;
     if (isSubmit.value) return true; // Already signed, just need confirm click
     if (loggedWallet.value?.type === WalletType.Normal) {
       if (isPrfWallet.value) return true; // PRF handled by TransactionAuthSection
@@ -785,12 +795,9 @@ async function buildTx(options?: { selectAll?: boolean }) {
   }
 }
 
-const summaryRef = ref<InstanceType<typeof SummaryStep>>();
-
 async function nextStep() {
   if (currentStep.value === 1) {
     if (!isValid.value) return;
-    summaryRef.value?.scanTx(tx.value);
     currentStep.value++;
   } else if (currentStep.value === 2) {
     if (!isValid.value) return;
@@ -1527,8 +1534,10 @@ onMounted(() => {
 .stepper-container {
   background-color: transparent !important;
 
-  & .v-stepper__header {
+  & :deep(.v-stepper-header) {
     box-shadow: none;
+    align-items: stretch;
+    margin-bottom: 8px;
   }
 
   .custom-step {
@@ -1583,7 +1592,7 @@ onMounted(() => {
   }
 }
 
-.v-stepper__content {
+:deep(.v-stepper-window-item) {
   padding: 0;
 }
 </style>

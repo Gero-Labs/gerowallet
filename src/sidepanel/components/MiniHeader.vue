@@ -32,7 +32,7 @@
     <div class="header-right">
       <v-tooltip location="bottom" v-if="connectedSiteEntry"  content-class="custom-tooltip">
         <template v-slot:activator="{ props: activatorProps }">
-          <v-btn v-bind="activatorProps" icon size="x-small" @click="disconnectActiveSite" class="toolbar-btn" >
+          <v-btn v-bind="activatorProps" icon variant="text" size="x-small" @click="disconnectActiveSite" class="toolbar-btn" >
             <v-icon size="16" color="success">mdi-link-variant</v-icon>
           </v-btn>
         </template>
@@ -40,7 +40,7 @@
       </v-tooltip>
       <v-tooltip location="bottom"  content-class="custom-tooltip">
         <template v-slot:activator="{ props: activatorProps }">
-          <v-btn v-bind="activatorProps" icon size="x-small" @click="toggleHideBalances()" class="toolbar-btn" >
+          <v-btn v-bind="activatorProps" icon variant="text" size="x-small" @click="toggleHideBalances()" class="toolbar-btn" >
             <v-icon size="18" color="var(--g-text-3)">{{ hideBalances ? 'mdi-eye-off-outline' : 'mdi-eye-outline' }}</v-icon>
           </v-btn>
         </template>
@@ -48,19 +48,19 @@
       </v-tooltip>
       <v-tooltip location="bottom"  content-class="custom-tooltip">
         <template v-slot:activator="{ props: activatorProps }">
-          <v-btn v-bind="activatorProps" icon size="x-small" @click="openFullDashboard" class="toolbar-btn" >
+          <v-btn v-bind="activatorProps" icon variant="text" size="x-small" @click="openFullDashboard" class="toolbar-btn" >
             <v-icon size="20" color="var(--g-text-3)">mdi-fullscreen</v-icon>
           </v-btn>
         </template>
         <span>{{ $t('miniGero.openFullDashboard') }}</span>
       </v-tooltip>
       <!-- The bell: the same inbox as the dashboard's, in a bottom sheet (B-M3). -->
-      <v-btn icon size="x-small" @click="$emit('notifications')" class="toolbar-btn" :aria-label="$t('navigation.notifications')">
+      <v-btn icon variant="text" size="x-small" @click="$emit('notifications')" class="toolbar-btn" :aria-label="$t('navigation.notifications')">
         <v-badge :model-value="inboxUnread > 0" :content="String(inboxUnread)" color="var(--g-accent)" overlap>
           <v-icon size="18" color="var(--g-text-3)">mdi-bell-outline</v-icon>
         </v-badge>
       </v-btn>
-      <v-btn icon size="x-small" @click="$emit('settings')" class="toolbar-btn">
+      <v-btn icon variant="text" size="x-small" @click="$emit('settings')" class="toolbar-btn">
         <v-icon size="18" color="var(--g-text-3)">mdi-cog-outline</v-icon>
       </v-btn>
     </div>

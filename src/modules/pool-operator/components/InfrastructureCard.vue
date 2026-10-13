@@ -59,8 +59,8 @@
           <span v-if="node.connected" class="nr-dot" />
           <span v-else class="nr-offline">{{ $t('poolOperator.offline') }}</span>
           <v-spacer />
-          <v-btn icon size="x-small" class="nr-action" @click="$emit('edit-node', node)"><v-icon size="x-small" color="var(--g-text-3)">mdi-pencil</v-icon></v-btn>
-          <v-btn icon size="x-small" class="nr-action" @click="$emit('remove-node', node.id)"><v-icon size="x-small" color="var(--g-text-3)">mdi-close</v-icon></v-btn>
+          <v-btn icon variant="text" size="x-small" class="nr-action" @click="$emit('edit-node', node)"><v-icon size="x-small" color="var(--g-text-3)">mdi-pencil</v-icon></v-btn>
+          <v-btn icon variant="text" size="x-small" class="nr-action" @click="$emit('remove-node', node.id)"><v-icon size="x-small" color="var(--g-text-3)">mdi-close</v-icon></v-btn>
         </div>
         <div v-if="node.data && node.connected" class="nr-stats">
           <span class="nrs"><strong>{{ node.data.blockHeight?.toLocaleString() }}</strong> Block</span>

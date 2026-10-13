@@ -125,7 +125,7 @@
             >
               <span
                 class="qa-mask-icon"
-                :style="{ '--qa-icon': `url(${assets.barChart})` }"
+                :style="{ '--qa-icon': cssUrl(assets.barChart) }"
                 role="img"
                 :aria-label="$t('perpetuals.perpetuals')"
               ></span>
@@ -158,6 +158,7 @@
 </template>
 <script setup lang="ts">
 import { toRefs, computed } from 'vue';
+import { cssUrl } from '@/shared/utils/cssUrl';
 import ReceiveDialog from '@/modules/dashboard/dialogs/ReceiveDialog.vue';
 import SwapDialog from '@/modules/dashboard/dialogs/SwapDialog.vue';
 import SendDialog from '@/modules/dashboard/dialogs/SendDialog.vue';
@@ -322,7 +323,7 @@ const isPerpetualsDisabled = computed(() => {
 
 .expandable-button .v-img {
   backdrop-filter: none !important;
-  filter: none !important;
+  /* Preserve the Send/Receive/Swap SVG tint filters on Vuetify's image root. */
 }
 
 /* Mask-painted icon: exact token color instead of an approximate CSS filter. */

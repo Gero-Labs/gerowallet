@@ -284,7 +284,7 @@ const rows = computed<MidnightHoldingRow[]>(() => [
 }
 
 
-.tokens-table ::v-deep .v-data-table__wrapper {
+.tokens-table :deep(.v-table__wrapper) {
   background: transparent;
 }
 

@@ -22,7 +22,7 @@
           <!-- Action buttons (only when expanded) -->
           <v-tooltip location="bottom" v-if="isExpanded"  content-class="custom-tooltip">
             <template v-slot:activator="{ props: activatorProps }">
-              <v-btn icon size="x-small" v-bind="activatorProps"  @click.stop="$emit('duplicate')">
+              <v-btn icon variant="text" size="x-small" v-bind="activatorProps"  @click.stop="$emit('duplicate')">
                 <v-icon style="font-size: 13px;" color="var(--g-text-3)">mdi-content-duplicate</v-icon>
               </v-btn>
             </template>
@@ -30,7 +30,7 @@
           </v-tooltip>
           <v-tooltip location="bottom" v-if="isExpanded && canDelete"  content-class="custom-tooltip">
             <template v-slot:activator="{ props: activatorProps }">
-              <v-btn icon size="x-small" v-bind="activatorProps"  @click.stop="$emit('remove')">
+              <v-btn icon variant="text" size="x-small" v-bind="activatorProps"  @click.stop="$emit('remove')">
                 <v-icon style="font-size: 13px;" color="error">mdi-trash-can-outline</v-icon>
               </v-btn>
             </template>
@@ -96,7 +96,7 @@
 
           <!-- Contact book button -->
           <v-btn
-            icon
+            icon variant="text"
             size="small"
             class="address-row__icon-btn"
             @click="contactsDialog = true"
@@ -105,13 +105,13 @@
           </v-btn>
 
           <!-- Contacts dialog -->
-          <v-dialog v-model="contactsDialog" max-width="480" overlay-color="var(--g-overlay)" overlay-opacity="0.7">
+          <v-dialog v-model="contactsDialog" max-width="480" scrim="var(--g-overlay)" :opacity="0.7">
             <v-card class="contacts-dialog-card">
               <v-card-title class="contacts-dialog-header">
                 <v-icon size="small" color="var(--g-accent)" class="mr-2">mdi-book-open-variant-outline</v-icon>
                 {{ $t('wallet.contacts') }}
                 <v-spacer />
-                <v-btn icon size="small" @click="contactsDialog = false">
+                <v-btn icon variant="text" size="small" @click="contactsDialog = false">
                   <v-icon>mdi-window-close</v-icon>
                 </v-btn>
               </v-card-title>
@@ -132,7 +132,7 @@
                     class="add-contact-input mr-2"
                   />
                   <v-btn
-                    icon size="small"
+                    icon variant="text" size="small"
                     color="var(--g-accent)"
                     :disabled="!newContactName || !newContactAddress"
                     @click="addNewContact()"
@@ -154,7 +154,7 @@
                       <span class="contact-item__name">{{ contact.name || $t('wallet.unnamed') }}</span>
                       <span class="contact-item__address">{{ filters.truncate(contact.address) }}</span>
                     </div>
-                    <v-btn icon size="x-small" @click.stop="deleteContact(contact.address)" class="ml-1">
+                    <v-btn icon variant="text" size="x-small" @click.stop="deleteContact(contact.address)" class="ml-1">
                       <v-icon size="x-small" color="error">mdi-trash-can-outline</v-icon>
                     </v-btn>
                   </div>
@@ -169,7 +169,7 @@
 
           <!-- QR scan button -->
           <v-btn
-            icon
+            icon variant="text"
             size="small"
             class="address-row__icon-btn"
             @click="qrScanDialog = true"
@@ -555,33 +555,39 @@ defineExpose({ cardTotalAmounts });
   min-width: 0;
 }
 
-.address-input :deep(.v-input__slot) {
+.address-input :deep(.v-field) {
+  --v-input-control-height: 32px;
+  --v-field-padding-start: 0px;
+  --v-field-padding-end: 0px;
+  --v-field-input-padding-top: 0px;
+  --v-field-input-padding-bottom: 0px;
   background-color: var(--g-raised) !important;
   border-radius: var(--g-r-control);
   min-height: 32px !important;
   padding: 0 8px !important;
 }
 
-.address-input :deep(input) {
+.address-input :deep(input.v-field__input) {
+  min-height: 32px;
   font-size: 12px;
   padding: 4px 0;
 }
 
-.address-input :deep(fieldset) {
-  border-color: transparent !important;
+.address-input :deep(.v-field__outline) {
+  color: transparent;
+  --v-field-border-width: 1px;
 }
 
 .address-input :deep(.v-text-field__suffix) {
   font-size: 11px;
 }
 
-.address-input :deep(.v-input__slot:hover fieldset) {
-  border-color: var(--g-hairline-2) !important;
+.address-input :deep(.v-field:hover .v-field__outline) {
+  color: var(--g-hairline-2);
 }
 
-.address-input.error--text :deep(fieldset) {
-  border-color: var(--g-error) !important;
-  border-width: 1px !important;
+.address-input :deep(.v-field--error .v-field__outline) {
+  color: var(--g-error);
 }
 
 .address-append-icons {
@@ -590,9 +596,8 @@ defineExpose({ cardTotalAmounts });
   gap: 4px;
 }
 
-.address-input :deep(.v-input--is-focused fieldset) {
-  border-color: var(--g-accent) !important;
-  border-width: 1px !important;
+.address-input :deep(.v-field--focused:not(.v-field--error) .v-field__outline) {
+  color: var(--g-accent);
 }
 
 /* ─── Handle resolved address ─── */
@@ -688,19 +693,23 @@ defineExpose({ cardTotalAmounts });
   min-width: 0;
 }
 
-.add-contact-input :deep(.v-input__slot) {
+.add-contact-input :deep(.v-field) {
+  --v-input-control-height: 32px;
+  --v-field-input-padding-top: 0px;
+  --v-field-input-padding-bottom: 0px;
   background-color: var(--g-raised) !important;
   border-radius: var(--g-r-control);
   min-height: 32px !important;
   padding: 0 8px !important;
 }
 
-.add-contact-input :deep(input) {
+.add-contact-input :deep(input.v-field__input) {
+  min-height: 32px;
   font-size: 12px;
 }
 
-.add-contact-input :deep(fieldset) {
-  border-color: transparent !important;
+.add-contact-input :deep(.v-field__outline) {
+  color: transparent;
 }
 
 /* ─── Save contact icon ─── */

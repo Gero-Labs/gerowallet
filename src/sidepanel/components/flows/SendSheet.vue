@@ -28,7 +28,7 @@
               <span class="step-label">{{ $t('miniGero.recipientAddress') }}</span>
               <span v-if="step > 1" class="step-summary">{{ handleName || truncateAddr(paymentAddress) }}</span>
             </div>
-            <v-btn v-if="step > 1 && !submitting" icon size="x-small" @click.stop="editStep(1)">
+            <v-btn v-if="step > 1 && !submitting" icon variant="text" size="x-small" @click.stop="editStep(1)">
               <v-icon size="small" :color="primaryColor">mdi-pencil</v-icon>
             </v-btn>
           </div>
@@ -122,7 +122,7 @@
               <span class="step-label">{{ $t('wallet.assetsToSend') }}</span>
               <span v-if="step > 2" class="step-summary">{{ assetsSummary }}</span>
             </div>
-            <v-btn v-if="step > 2 && !submitting" icon size="x-small" @click.stop="editStep(2)">
+            <v-btn v-if="step > 2 && !submitting" icon variant="text" size="x-small" @click.stop="editStep(2)">
               <v-icon size="small" :color="primaryColor">mdi-pencil</v-icon>
             </v-btn>
           </div>
@@ -176,7 +176,7 @@
                   <span class="white--text text-body-2 font-weight-bold">{{ token.ticker || token.name }}</span>
                   <v-spacer />
                   <span class="grey--text text-caption">{{ formatTokenBalance(token) }}</span>
-                  <v-btn icon size="x-small" class="ml-1" @click="removeExtraToken(idx)">
+                  <v-btn icon variant="text" size="x-small" class="ml-1" @click="removeExtraToken(idx)">
                     <v-icon size="small" color="error">mdi-close</v-icon>
                   </v-btn>
                 </div>
@@ -1643,13 +1643,19 @@ function teardownNftObserver() {
 }
 
 /* ── Inputs ── */
-.mini-input >>> .v-input__slot {
+.mini-input :deep(.v-field) {
+  --v-input-control-height: 36px;
+  --v-field-input-padding-top: 0px;
+  --v-field-input-padding-bottom: 0px;
   background: var(--g-hairline-1) !important;
-  border-color: var(--g-hairline-2) !important;
   min-height: 36px !important;
 }
-.mini-input >>> .v-text-field__slot input,
-.mini-input >>> .v-text-field__slot textarea {
+.mini-input :deep(.v-field:not(.v-field--focused):not(.v-field--error) .v-field__outline) {
+  --v-field-border-opacity: 1;
+  color: var(--g-hairline-2);
+}
+.mini-input :deep(input.v-field__input),
+.mini-input :deep(textarea.v-field__input) {
   color: var(--g-text-1) !important;
   font-size: 13px;
 }
@@ -1723,7 +1729,7 @@ function teardownNftObserver() {
 .amount-row {
   position: relative;
 }
-.amount-field >>> .v-text-field__slot input {
+.amount-field :deep(input.v-field__input) {
   font-size: 20px !important;
   font-weight: 600;
 }

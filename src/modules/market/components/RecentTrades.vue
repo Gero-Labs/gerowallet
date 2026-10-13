@@ -19,7 +19,7 @@
       <v-tooltip location="bottom"  :open-delay="300" content-class="custom-tooltip">
         <template v-slot:activator="{ props: activatorProps }">
           <v-btn
-            icon
+            icon variant="text"
             size="x-small"
             v-bind="activatorProps"
 

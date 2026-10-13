@@ -322,13 +322,12 @@ function txStatusClass(status: TransactionStatus): string {
   font-size: 11px !important;
   font-weight: 700 !important;
   letter-spacing: 0.08em !important;
-  text-transform: uppercase !important;
   color: var(--g-text-3) !important;
   min-width: 0 !important;
   padding: 0 12px !important;
 }
 
-.ht-tab.v-tab--active {
+.ht-tab.v-tab--selected {
   color: var(--g-text-1) !important;
 }
 

@@ -4,7 +4,7 @@
       <v-card-title class="text-h5">
         {{ $t('receive.receiveTitle') }}
         <v-spacer></v-spacer>
-        <v-btn icon @click="closeDialog">
+        <v-btn icon variant="text" @click="closeDialog">
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>
@@ -34,7 +34,7 @@
               <div class="text-body-2 monospace flex-grow-1" style="word-break: break-all;">
                 {{ currentAddress }}
               </div>
-              <v-btn icon @click="copyAddress" class="ml-2">
+              <v-btn icon variant="text" @click="copyAddress" class="ml-2">
                 <v-icon>{{ copiedAddress ? 'mdi-check' : 'mdi-content-copy' }}</v-icon>
               </v-btn>
             </div>
@@ -118,14 +118,14 @@
               </div>
               <div>
                 <v-btn
-                  icon
+                  icon variant="text"
                   size="small"
                   @click="previousAddress"
                   :disabled="currentAddressIndex === 0"
                 >
                   <v-icon>mdi-chevron-left</v-icon>
                 </v-btn>
-                <v-btn icon size="small" @click="nextAddress">
+                <v-btn icon variant="text" size="small" @click="nextAddress">
                   <v-icon>mdi-chevron-right</v-icon>
                 </v-btn>
               </div>

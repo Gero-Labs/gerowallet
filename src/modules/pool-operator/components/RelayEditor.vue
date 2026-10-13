@@ -23,7 +23,7 @@
             style="max-width: 180px"
           />
           <v-spacer />
-          <v-btn icon size="x-small" @click="removeRelay(index)">
+          <v-btn icon variant="text" size="x-small" @click="removeRelay(index)">
             <v-icon size="small" color="error">mdi-delete</v-icon>
           </v-btn>
         </div>

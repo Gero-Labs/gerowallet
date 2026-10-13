@@ -25,7 +25,7 @@
         />
 
         <v-btn
-          icon
+          icon variant="text"
           size="small"
           :aria-label="$t('common.sortBy')"
           @click="sortDesc = !sortDesc"
@@ -52,7 +52,7 @@
           transition="none"
         >
           <template v-slot:activator="{ props: activatorProps }">
-            <v-btn icon size="small" v-bind="activatorProps"  :aria-label="$t('common.filter')">
+            <v-btn icon variant="text" size="small" v-bind="activatorProps"  :aria-label="$t('common.filter')">
               <v-badge color="transparent" avatar :model-value="activeFilterCount > 0" :content="activeFilterCount" overlap>
                 <template v-slot:badge>
                   <v-avatar size="14" height="14" color="primary">
@@ -230,7 +230,7 @@
               </v-tooltip>
             </div>
           </button>
-          <v-btn icon size="x-small" class="ml-1" @click="copyHash(tx.hash)">
+          <v-btn icon variant="text" size="x-small" class="ml-1" @click="copyHash(tx.hash)">
             <v-icon size="x-small">mdi-content-copy</v-icon>
           </v-btn>
         </div>

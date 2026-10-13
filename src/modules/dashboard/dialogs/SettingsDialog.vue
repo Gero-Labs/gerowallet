@@ -12,7 +12,7 @@
   >
     <v-card-title class="px-2 py-0">
       <v-tabs
-        centered
+        align-tabs="center"
         v-model="tab"
         color="white"
         class="v-tabs-border-bottom mb-0"

@@ -4,7 +4,7 @@
     <!-- ── Sticky Header ── -->
     <div class="vaults-header pa-3">
       <div class="d-flex align-center" style="gap: 8px;">
-        <v-btn icon size="small" @click="$router.push('/')">
+        <v-btn icon variant="text" size="small" @click="$router.push('/')">
           <v-icon color="white">mdi-arrow-left</v-icon>
         </v-btn>
         <span class="vaults-title">{{ $t('vaults.title') }}</span>

@@ -23,7 +23,7 @@
             <span class="queue-strip-method">{{ queuedItemMethod(item) }}</span>
             <span class="queue-strip-domain">· {{ queuedItemDomain(item) }}</span>
           </span>
-          <v-btn icon size="x-small" :aria-label="$t('miniGero.reject')" @click="rejectQueued(item.requestId)">
+          <v-btn icon variant="text" size="x-small" :aria-label="$t('miniGero.reject')" @click="rejectQueued(item.requestId)">
             <v-icon size="14" color="var(--g-text-3)">mdi-close</v-icon>
           </v-btn>
         </div>

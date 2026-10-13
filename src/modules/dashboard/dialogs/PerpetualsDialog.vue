@@ -36,7 +36,7 @@
 
         <v-spacer />
 
-        <v-btn icon size="small" class="mr-1" @click="close">
+        <v-btn icon variant="text" size="small" class="mr-1" @click="close">
           <v-icon size="18">mdi-close</v-icon>
         </v-btn>
       </div>
@@ -765,13 +765,13 @@ function onLogoError(e: Event) {
   min-height: 32px !important;
 }
 
-.chart-price-list .v-list-item__title {
+.chart-price-list .v-list-item-title {
   font-size: 12px !important;
   font-weight: 500;
   color: var(--g-text-1);
 }
 
-.chart-price-list__item--active .v-list-item__title {
+.chart-price-list__item--active .v-list-item-title {
   color: var(--g-success);
   font-weight: 600;
 }

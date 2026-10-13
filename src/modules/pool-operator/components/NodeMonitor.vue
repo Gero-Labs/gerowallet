@@ -32,7 +32,7 @@
             <div class="step-text">{{ $t('poolOperator.step1Description') }}</div>
             <div class="step-code">
               <code>pip3 install gero-node-monitor</code>
-              <v-btn icon size="x-small" @click="copyText('pip3 install gero-node-monitor')" class="copy-btn">
+              <v-btn icon variant="text" size="x-small" @click="copyText('pip3 install gero-node-monitor')" class="copy-btn">
                 <v-icon size="x-small">mdi-content-copy</v-icon>
               </v-btn>
             </div>
@@ -45,7 +45,7 @@
             <div class="step-text">{{ $t('poolOperator.step2Description') }}</div>
             <div class="step-code">
               <code>gero-node-monitor --config</code>
-              <v-btn icon size="x-small" @click="copyText('gero-node-monitor --config')" class="copy-btn">
+              <v-btn icon variant="text" size="x-small" @click="copyText('gero-node-monitor --config')" class="copy-btn">
                 <v-icon size="x-small">mdi-content-copy</v-icon>
               </v-btn>
             </div>
@@ -58,7 +58,7 @@
             <div class="step-text">{{ $t('poolOperator.step3Description') }}</div>
             <div class="step-code">
               <code>python3 gero-node-monitor-server.py</code>
-              <v-btn icon size="x-small" @click="copyText('python3 gero-node-monitor-server.py')" class="copy-btn">
+              <v-btn icon variant="text" size="x-small" @click="copyText('python3 gero-node-monitor-server.py')" class="copy-btn">
                 <v-icon size="x-small">mdi-content-copy</v-icon>
               </v-btn>
             </div>
@@ -100,7 +100,7 @@
               <span class="status-dot" />
               {{ node.connected ? $t('poolOperator.online') : $t('poolOperator.offline') }}
             </span>
-            <v-btn icon size="x-small" @click="removeNode(node.id)" class="ml-1">
+            <v-btn icon variant="text" size="x-small" @click="removeNode(node.id)" class="ml-1">
               <v-icon size="x-small" color="var(--g-text-3)">mdi-close</v-icon>
             </v-btn>
           </div>
@@ -159,7 +159,7 @@
         <v-card-title style="border-bottom: 1px solid var(--g-hairline-1)">
           {{ editingNodeId ? $t('poolOperator.editNode') : $t('poolOperator.addNode') }}
           <v-spacer />
-          <v-btn icon size="small" @click="showAddNode = false"><v-icon size="small">mdi-close</v-icon></v-btn>
+          <v-btn icon variant="text" size="small" @click="showAddNode = false"><v-icon size="small">mdi-close</v-icon></v-btn>
         </v-card-title>
         <v-card-text class="pt-4">
           <v-text-field
@@ -733,7 +733,7 @@ watch(() => poolOperatorStore.nodes.length, (len) => {
   background: var(--g-hairline-1);
 }
 
-.glass-input ::v-deep .v-input__slot {
+.glass-input :deep(.v-field) {
   background: var(--g-hairline-1) !important;
   border-color: var(--g-hairline-1) !important;
 }

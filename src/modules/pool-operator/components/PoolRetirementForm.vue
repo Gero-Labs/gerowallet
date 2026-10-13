@@ -178,7 +178,7 @@ function onSigned() {
   justify-content: center;
 }
 
-.glass-input >>> .v-input__slot {
+.glass-input :deep(.v-field) {
   background: var(--g-hairline-1) !important;
   border-color: var(--g-hairline-1) !important;
 }

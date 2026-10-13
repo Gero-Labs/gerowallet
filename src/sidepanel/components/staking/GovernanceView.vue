@@ -7,7 +7,7 @@
       </div>
       <div class="drep-id-row" v-if="drepId">
         <span class="text-caption white--text">{{ truncate(drepId) }}</span>
-        <v-btn icon size="x-small" class="ml-1" @click="copyToClipboard(drepId)">
+        <v-btn icon variant="text" size="x-small" class="ml-1" @click="copyToClipboard(drepId)">
           <v-icon size="x-small" color="grey">mdi-content-copy</v-icon>
         </v-btn>
       </div>
@@ -109,7 +109,7 @@
       <!-- Pagination -->
       <div v-if="totalPages > 1" class="pagination-row">
         <v-btn
-          icon
+          icon variant="text"
           size="x-small"
           :disabled="currentPage <= 1 || loading"
           @click="loadDReps(currentPage - 1)"
@@ -118,7 +118,7 @@
         </v-btn>
         <span class="text-caption grey--text">{{ currentPage }} / {{ totalPages }}</span>
         <v-btn
-          icon
+          icon variant="text"
           size="x-small"
           :disabled="currentPage >= totalPages || loading"
           @click="loadDReps(currentPage + 1)"
@@ -390,13 +390,17 @@ onMounted(async () => {
   flex: 1;
 }
 
-.delegation-select ::v-deep .v-input__slot {
+.delegation-select :deep(.v-field) {
+  --v-input-control-height: 36px;
+  --v-field-input-padding-top: 0px;
+  --v-field-input-padding-bottom: 0px;
   background: var(--g-surface) !important;
   min-height: 36px !important;
 }
 
-.delegation-select ::v-deep .v-input__slot fieldset {
-  border-color: var(--g-hairline-1) !important;
+.delegation-select :deep(.v-field:not(.v-field--focused):not(.v-field--error) .v-field__outline) {
+  --v-field-border-opacity: 1;
+  color: var(--g-hairline-1);
 }
 
 .delegate-action-btn {
@@ -412,13 +416,17 @@ onMounted(async () => {
   color: var(--g-text-1) !important;
 }
 
-.drep-search ::v-deep .v-input__slot {
+.drep-search :deep(.v-field) {
+  --v-input-control-height: 36px;
+  --v-field-input-padding-top: 0px;
+  --v-field-input-padding-bottom: 0px;
   background: var(--g-surface) !important;
   min-height: 36px !important;
 }
 
-.drep-search ::v-deep .v-input__slot fieldset {
-  border-color: var(--g-hairline-1) !important;
+.drep-search :deep(.v-field:not(.v-field--focused):not(.v-field--error) .v-field__outline) {
+  --v-field-border-opacity: 1;
+  color: var(--g-hairline-1);
 }
 
 .drep-list {

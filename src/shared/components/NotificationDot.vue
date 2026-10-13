@@ -3,7 +3,7 @@
     :color="color"
     :dot="dot"
     :content="content"
-    :overlap="overlap"
+    :floating="!overlap"
     :bordered="bordered"
     :model-value="show"
     class="notification-badge"

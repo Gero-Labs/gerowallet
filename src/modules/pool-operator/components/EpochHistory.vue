@@ -82,7 +82,7 @@
           <v-icon size="18" color="var(--g-accent)" class="mr-2">mdi-cube-outline</v-icon>
           {{ $t('poolOperator.epoch') }} {{ selectedEpoch?.epoch }} · {{ $t('poolOperator.blocks') }}
           <v-spacer />
-          <v-btn icon size="small" @click="showBlockDetail = false"><v-icon size="small">mdi-close</v-icon></v-btn>
+          <v-btn icon variant="text" size="small" @click="showBlockDetail = false"><v-icon size="small">mdi-close</v-icon></v-btn>
         </v-card-title>
         <v-card-text class="pt-3">
           <div v-if="blocksLoading" class="text-center py-4">

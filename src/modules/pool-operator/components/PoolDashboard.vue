@@ -40,7 +40,7 @@
             </div>
             <v-tooltip location="bottom" v-if="isRegistered"  content-class="custom-tooltip">
               <template v-slot:activator="{ props: activatorProps }">
-                <v-btn v-bind="activatorProps" icon size="x-small" class="hero-icon-btn update-btn"  @click="$emit('update')">
+                <v-btn v-bind="activatorProps" icon variant="text" size="x-small" class="hero-icon-btn update-btn"  @click="$emit('update')">
                   <v-icon size="16" color="var(--g-accent)">mdi-pencil-outline</v-icon>
                 </v-btn>
               </template>
@@ -48,7 +48,7 @@
             </v-tooltip>
             <v-tooltip location="bottom" v-if="isRegistered && !isRetiring"  content-class="custom-tooltip">
               <template v-slot:activator="{ props: activatorProps }">
-                <v-btn v-bind="activatorProps" icon size="x-small" class="hero-icon-btn retire-btn"  @click="$emit('retire')">
+                <v-btn v-bind="activatorProps" icon variant="text" size="x-small" class="hero-icon-btn retire-btn"  @click="$emit('retire')">
                   <v-icon size="16" color="error">mdi-power</v-icon>
                 </v-btn>
               </template>
@@ -250,10 +250,10 @@
                 <span class="nd-name">{{ node.name }}</span>
                 <span v-if="node.connected" class="nd-dot" />
                 <span v-else class="nd-offline-label">{{ $t('poolOperator.offline') }}</span>
-                <v-btn icon size="x-small" class="nd-action" @click.stop="$emit('edit-node', node)">
+                <v-btn icon variant="text" size="x-small" class="nd-action" @click.stop="$emit('edit-node', node)">
                   <v-icon size="x-small" color="var(--g-text-3)">mdi-pencil</v-icon>
                 </v-btn>
-                <v-btn icon size="x-small" class="nd-action" @click.stop="$emit('remove-node', node.id)">
+                <v-btn icon variant="text" size="x-small" class="nd-action" @click.stop="$emit('remove-node', node.id)">
                   <v-icon size="x-small" color="var(--g-text-3)">mdi-close</v-icon>
                 </v-btn>
               </div>
@@ -336,7 +336,7 @@
             <v-icon color="warning" class="mr-2">mdi-key-change</v-icon>
             {{ $t('poolOperator.kesRotation') }}
             <v-spacer />
-            <v-btn icon size="small" @click="showKesRotation = false"><v-icon size="small">mdi-close</v-icon></v-btn>
+            <v-btn icon variant="text" size="small" @click="showKesRotation = false"><v-icon size="small">mdi-close</v-icon></v-btn>
           </v-card-title>
           <v-card-text class="pt-4">
             <!-- Current Status -->

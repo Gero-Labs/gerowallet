@@ -3,7 +3,7 @@
     <!-- Sticky Header -->
     <div class="perps-header pa-3">
       <div class="d-flex align-center" style="gap: 8px;">
-        <v-btn icon size="small" @click="$router.push('/')">
+        <v-btn icon variant="text" size="small" @click="$router.push('/')">
           <v-icon color="var(--g-text-1)">mdi-arrow-left</v-icon>
         </v-btn>
         <SymbolSelector :model-value="selectedSymbol" @update:model-value="selectedSymbol = $event" />
@@ -82,7 +82,7 @@
                 >{{ pos.Side.toUpperCase() }}</span>
               </div>
               <v-btn
-                icon
+                icon variant="text"
                 size="x-small"
                 color="error"
                 :loading="closingPositions[pos.PositionID]"
@@ -155,7 +155,7 @@
                   <span class="order-type-label">{{ order.Type }}</span>
                 </div>
                 <v-btn
-                  icon
+                  icon variant="text"
                   size="x-small"
                   color="error"
                   :loading="cancellingOrders[order.ID]"

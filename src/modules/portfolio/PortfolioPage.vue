@@ -52,7 +52,7 @@
               <!-- Register-for-DUST lives in the DUST battery panel; the reset
                    icon is the only toolbar action here. -->
               <v-btn
-                icon
+                icon variant="text"
                 size="small"
                 class="flex-shrink-0 mr-1"
                 :loading="resettingCache"
@@ -227,10 +227,10 @@
 
               <!-- NFT view toggle (only in collectibles mode) -->
               <div v-if="activeView === 'collectibles'" class="d-flex align-center flex-shrink-0" style="gap: 2px;">
-                <v-btn icon size="x-small" :class="{ 'mode-active': nftViewMode === 'table' }" class="mode-btn" @click="nftViewMode = 'table'">
+                <v-btn icon variant="text" size="x-small" :class="{ 'mode-active': nftViewMode === 'table' }" class="mode-btn" @click="nftViewMode = 'table'">
                   <v-icon size="small">mdi-table</v-icon>
                 </v-btn>
-                <v-btn icon size="x-small" :class="{ 'mode-active': nftViewMode === 'gallery' }" class="mode-btn" @click="nftViewMode = 'gallery'">
+                <v-btn icon variant="text" size="x-small" :class="{ 'mode-active': nftViewMode === 'gallery' }" class="mode-btn" @click="nftViewMode = 'gallery'">
                   <v-icon size="small">mdi-view-grid</v-icon>
                 </v-btn>
               </div>
@@ -258,7 +258,7 @@
                 transition="none"
               >
                 <template v-slot:activator="{ props: activatorProps }">
-                  <v-btn icon size="small" v-bind="activatorProps"  class="flex-shrink-0 filter-menu-btn">
+                  <v-btn icon variant="text" size="small" v-bind="activatorProps"  class="flex-shrink-0 filter-menu-btn">
                     <v-badge :model-value="(isMainnetCardano && !verifiedOnly) || !showSnekfun || (!isApex && hasCustomColumns)" dot color="primary" overlap>
                       <v-icon size="small">mdi-tune</v-icon>
                     </v-badge>
@@ -1182,6 +1182,12 @@ function closeDustRegistration() {
   border-radius: var(--g-r-control) !important;
 }
 
+/* Neutral tabs used the theme divider before Vuetify's outlined variant
+   switched to the full text color. Keep the selected accent rule below. */
+.filter-chip-bar .v-chip--variant-outlined {
+  border-color: rgba(var(--v-border-color), var(--v-border-opacity));
+}
+
 /* Selected chip: cyan-accented (tint + hairline) so the active tab clearly
    reads as the chain accent. The geroButton gradient doesn't apply to a v-chip
    (it rendered a dull grey), so we tint it here instead. The icon stays
@@ -1200,39 +1206,40 @@ function closeDustRegistration() {
   max-width: 440px;
 }
 
-/* A Vuetify solo field defaults to ~48px via .v-input__control — override both
-   the control and the slot so the field height matches the 34px chips. */
-.header-search ::v-deep .v-input__control,
-.header-search ::v-deep .v-input__slot {
+/* Match the 28px filter chips at every layer of Vuetify's field. */
+.header-search :deep(.v-input__control),
+.header-search :deep(.v-field),
+.header-search :deep(.v-field__input) {
   min-height: 28px !important;
   height: 28px !important;
 }
 
-.header-search ::v-deep .v-input__slot {
+.header-search :deep(.v-field) {
   border-radius: var(--g-r-control) !important;
   padding: 0 12px !important;
 }
 
-.header-search ::v-deep input {
+.header-search :deep(input) {
   font-size: 12px;
+  padding: 0;
 }
 
-.header-search ::v-deep input::placeholder {
+.header-search :deep(input::placeholder) {
   font-size: 12px;
   opacity: 0.5;
 }
 
-.header-search ::v-deep .v-input__prepend-inner {
+.header-search :deep(.v-field__prepend-inner) {
   margin-top: 0 !important;
   align-self: center;
 }
 
-.header-search ::v-deep .v-input__prepend-inner .v-icon {
+.header-search :deep(.v-field__prepend-inner .v-icon) {
   font-size: 18px;
   opacity: 0.55;
 }
 
-.header-search ::v-deep .v-input__icon--clear .v-icon {
+.header-search :deep(.v-field__clearable .v-icon) {
   font-size: 16px;
 }
 
@@ -1280,7 +1287,7 @@ function closeDustRegistration() {
   background: transparent;
 }
 
-.holdings-table-card ::v-deep .v-data-table-header th {
+.holdings-table-card :deep(.v-data-table__th) {
   /* Transparent over the glass-panel material: a solid fill here reads as an
      opaque slab once the card is see-through. Header tier is carried by the
      tracked-caps text-3 type + hairline divider (headers are not sticky). */
@@ -1427,7 +1434,7 @@ function closeDustRegistration() {
   isolation: isolate !important;
 }
 
-.filter-panel-search .v-input__slot {
+.filter-panel-search .v-field {
   min-height: 34px !important;
   font-size: 13px;
   background: var(--g-hairline-1) !important;
@@ -1435,12 +1442,17 @@ function closeDustRegistration() {
   color: var(--g-text-1) !important;
 }
 
-.filter-panel-search .v-input__slot input {
+.filter-panel-search .v-field__input {
+  min-height: 34px;
+  padding-block: 0;
+}
+
+.filter-panel-search .v-field input {
   color: var(--g-text-1) !important;
   caret-color: var(--g-text-1) !important;
 }
 
-.filter-panel-search .v-input__slot input::placeholder {
+.filter-panel-search .v-field input::placeholder {
   color: var(--g-text-3) !important;
 }
 
@@ -1448,7 +1460,7 @@ function closeDustRegistration() {
   min-height: 36px !important;
 }
 
-.filter-panel .v-subheader {
+.filter-panel .v-list-subheader {
   color: var(--g-text-3) !important;
 }
 </style>

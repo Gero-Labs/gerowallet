@@ -67,7 +67,7 @@
           <v-icon color="success">mdi-check-circle</v-icon>
           {{ $t('poolOperator.kesKeysGenerated') }}
           <v-spacer />
-          <v-btn icon size="small" @click="showOutput = false">
+          <v-btn icon variant="text" size="small" @click="showOutput = false">
             <v-icon size="small">mdi-close</v-icon>
           </v-btn>
         </v-card-title>
@@ -367,12 +367,12 @@ function downloadFile(filename: string, content: string) {
   border-radius: var(--g-r-control);
 }
 
-.glass-input >>> .v-input__slot {
+.glass-input :deep(.v-field) {
   background: var(--g-raised) !important;
   border-color: var(--g-hairline-1) !important;
 }
 
-.glass-input >>> .v-input__slot:hover {
+.glass-input :deep(.v-field:hover) {
   border-color: var(--g-hairline-3) !important;
 }
 </style>

@@ -1,6 +1,6 @@
 <template>
   <div v-if="currentTrack" class="current-track">
-    <v-list-item  :three-line="context.minimized" :two-line="!context.minimized" class="pr-0">
+    <v-list-item :lines="context.minimized ? 'three' : 'two'" class="pr-0">
       <v-avatar rounded size="56">
         <v-img
           class="current-track__img"

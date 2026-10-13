@@ -52,15 +52,15 @@
         </div>
         <span class="text--secondary text-caption">{{ token.name }}</span>
       </div>
-      <v-btn icon size="small" @click="toggleWatch(token.unit)" class="mr-1">
+      <v-btn icon variant="text" size="small" @click="toggleWatch(token.unit)" class="mr-1">
         <v-icon :color="isWatched(token.unit) ? 'amber' : ''">
           {{ isWatched(token.unit) ? 'mdi-star' : 'mdi-star-outline' }}
         </v-icon>
       </v-btn>
-      <v-btn v-if="tokenExplorerUrl" icon size="small" @click="openExplorer" class="mr-1">
+      <v-btn v-if="tokenExplorerUrl" icon variant="text" size="small" @click="openExplorer" class="mr-1">
         <v-icon size="small">mdi-open-in-new</v-icon>
       </v-btn>
-      <v-btn icon size="small" @click="$emit('close')">
+      <v-btn icon variant="text" size="small" @click="$emit('close')">
         <v-icon>mdi-close</v-icon>
       </v-btn>
     </div>
@@ -201,9 +201,9 @@
         <v-tabs v-model="rightTab" density="compact" bg-color="transparent" height="28" class="detail-sub-tabs mb-3">
           <!-- Shown for a programmable token too: rightTab defaults here, and this is
                where the reason the widget is suppressed gets explained. -->
-          <v-tab tab-value="swap">{{ $t('market.swap') }}</v-tab>
-          <v-tab tab-value="depth">{{ $t('market.depth') }}</v-tab>
-          <v-tab v-if="!isApex && token.unit !== 'lovelace'" tab-value="markets">{{ $t('market.markets') }}</v-tab>
+          <v-tab value="swap">{{ $t('market.swap') }}</v-tab>
+          <v-tab value="depth">{{ $t('market.depth') }}</v-tab>
+          <v-tab v-if="!isApex && token.unit !== 'lovelace'" value="markets">{{ $t('market.markets') }}</v-tab>
         </v-tabs>
 
         <!-- Swap tab -->
@@ -1004,11 +1004,6 @@ watch(selectedCurrency, () => {
   padding: 0 10px;
   letter-spacing: 0;
   transition: color 0.15s ease;
-}
-
-.detail-sub-tabs ::v-deep .v-tabs-slider {
-  height: 2px;
-  transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* ═══ Currency pills ═══ */

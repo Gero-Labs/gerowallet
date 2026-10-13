@@ -5,7 +5,7 @@
         <v-icon color="primary" class="mr-2">mdi-cart-plus</v-icon>
         {{ $t('gomining.buyMiner') }}
         <v-spacer />
-        <v-btn icon @click="close">
+        <v-btn icon variant="text" @click="close">
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>

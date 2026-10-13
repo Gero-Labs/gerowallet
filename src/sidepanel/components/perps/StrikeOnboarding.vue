@@ -52,7 +52,7 @@
         </div>
         <div class="key-row">
           <span class="key-value">{{ truncatedKey }}</span>
-          <v-btn icon size="x-small" class="copy-btn" @click="copyKey()">
+          <v-btn icon variant="text" size="x-small" class="copy-btn" @click="copyKey()">
             <v-icon size="14" :color="copied ? 'success' : 'var(--g-text-3)'">
               {{ copied ? 'mdi-check' : 'mdi-content-copy' }}
             </v-icon>
@@ -498,22 +498,24 @@ watch(isConnected, (val) => {
   width: 100%;
 }
 
-.password-field ::v-deep .v-input__slot {
+.password-field :deep(.v-field) {
+  --v-input-control-height: 42px;
   background: var(--g-raised) !important;
   border-radius: var(--g-r-control) !important;
   min-height: 42px;
 }
 
-.password-field ::v-deep fieldset {
-  border-color: var(--g-hairline-2) !important;
+.password-field :deep(.v-field__outline) {
+  --v-field-border-opacity: 1;
+  color: var(--g-hairline-2) !important;
 }
 
-.password-field ::v-deep input {
+.password-field :deep(input.v-field__input) {
   color: var(--g-text-1) !important;
   font-size: 13px !important;
 }
 
-.password-field ::v-deep .v-label {
+.password-field :deep(.v-label) {
   font-size: 12px !important;
   color: var(--g-text-3) !important;
 }

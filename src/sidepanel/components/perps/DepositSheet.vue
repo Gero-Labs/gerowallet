@@ -9,7 +9,7 @@
       <v-card-title class="dialog-title">
         <span class="text-subtitle-1 font-weight-bold">{{ $t('perpetuals.deposit') }}</span>
         <v-spacer />
-        <v-btn icon size="small" @click="closeAndReset()">
+        <v-btn icon variant="text" size="small" @click="closeAndReset()">
           <v-icon size="small">mdi-close</v-icon>
         </v-btn>
       </v-card-title>
@@ -614,7 +614,8 @@ watch(() => props.modelValue, (val) => {
 .balance-value:hover { opacity: 0.85; }
 
 /* ── Inputs ── */
-.perp-input :deep(.v-input__slot) {
+.perp-input :deep(.v-field) {
+  --v-input-control-height: 40px;
   background: var(--g-hairline-1) !important;
   min-height: 40px !important;
 }
@@ -622,7 +623,7 @@ watch(() => props.modelValue, (val) => {
   font-size: 12px !important;
   color: var(--g-text-3) !important;
 }
-.perp-input :deep(input) {
+.perp-input :deep(input.v-field__input) {
   font-size: 13px !important;
   font-family: var(--g-font-mono) !important;
   color: var(--g-text-1) !important;
@@ -633,11 +634,12 @@ watch(() => props.modelValue, (val) => {
   color: var(--g-text-3) !important;
   font-weight: 600 !important;
 }
-.perp-input :deep(fieldset) {
-  border-color: var(--g-hairline-2) !important;
+.perp-input :deep(.v-field__outline) {
+  --v-field-border-opacity: 1;
+  color: var(--g-hairline-2) !important;
 }
-.perp-input :deep(.v-input--is-focused fieldset) {
-  border-color: var(--g-accent) !important;
+.perp-input :deep(.v-field--focused .v-field__outline) {
+  color: var(--g-accent) !important;
 }
 
 /* ── Preview Card ── */

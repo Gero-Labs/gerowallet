@@ -24,7 +24,7 @@
         />
 
         <v-btn
-          icon
+          icon variant="text"
           size="small"
           :aria-label="$t('common.sortBy')"
           @click="sortDesc = !sortDesc"
