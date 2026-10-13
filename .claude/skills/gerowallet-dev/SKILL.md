@@ -23,7 +23,7 @@ Required on `development`: `Production bundle (SFC parse)`, `npm ci (lock in syn
 ## Before writing code
 
 - **Search for it first.** Most "add X" tasks are already half-built. Transactions already has a CSV export; `dashboard.hideBalances` already exists; four near-identical `export` i18n keys already exist. Grep the module, the i18n values, and `git log --oneline -- <path>` before designing anything.
-- **Trust code over docs.** README.md and ARCHITECTURE.md are broadly good; CLAUDE.md is authoritative on intent but carries stale specifics (dependency versions, `src/popup` as a live entry, WASM in `public/`, "two gates" for CIP-113, the `minFee` formula). `package.json` is the only truth for versions. See `references/doc-drift.md`.
+- **Trust code over docs.** README.md and ARCHITECTURE.md are broadly good; CLAUDE.md is authoritative on intent but carries stale specifics (dependency versions, `src/popup` as a live entry, WASM in `public/`, the `minFee` formula). `package.json` is the only truth for versions. See `references/doc-drift.md`.
 - **Ask which chain.** Cardano, Bitcoin and Midnight are three separate code paths on the same screens. A fix verified on one is not a fix. See `references/chains.md`.
 
 ## The verification ladder

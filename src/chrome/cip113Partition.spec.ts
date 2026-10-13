@@ -10,9 +10,9 @@ import { classifyUtxoAddress } from './serialization';
 
 const NETWORK_ID = Cardano.NetworkId.Testnet;
 
-// A well-formed programmable_logic_base hash from the preprod reference deployment, used
-// only as test fixture data. cip113Deployments.ts ships CIP113_BASE_PREPROD empty: that
-// deployment predates the current contracts and is not confirmed on-chain.
+// A well-formed programmable_logic_base hash from the earlier preprod reference deployment,
+// used only as test fixture data. cip113Deployments.ts has removed it: that deployment
+// predates the current contracts.
 const PLB = 'a48744c1584c58c2995cba1fa26b37f3999ee8cedac0ef241662f53d';
 const OWN_PAYMENT = '00000000000000000000000000000000000000000000000000000001';
 const OWN_STAKE = '00000000000000000000000000000000000000000000000000000002';
@@ -82,7 +82,7 @@ describe('classifyUtxoAddress — CIP-113 partition', () => {
 
   // Sending an empty `credentials` list turns off gero-sync's payment-credential filter,
   // so on a CIP-113-configured network these fallbacks are the only gate left. They fail
-  // closed there and stay permissive everywhere else, so mainnet behaviour is unchanged.
+  // closed there and stay permissive wherever the CIP-113 gate is shut.
   it('drops unparseable addresses once the server-side filter is off', () => {
     expect(classifyUtxoAddress('not-an-address', ownPaymentCreds, plbSet, ownerCreds)).toBe('foreign');
     expect(classifyUtxoAddress('', ownPaymentCreds, plbSet, ownerCreds)).toBe('foreign');
@@ -145,8 +145,10 @@ describe('classifyUtxoAddress — CIP-113 partition', () => {
 });
 
 describe('classifyUtxoAddress — multiple deployments per network', () => {
-  // Preview was re-bootstrapped on 2026-08-13; tokens minted before that stay at
-  // the older base address. Recognising only the newest hides them completely.
+  // Preview was re-bootstrapped on 2026-08-13; tokens minted before that stay at the
+  // older base address. The list mechanism can recognise both during a rollover; the
+  // shipped testnet policy is to remove the superseded one, while mainnet must retain it
+  // until it drains (see cip113Deployments.ts).
   const OLD_PLB = '8adfe689f4049706f893745f9e8af24cc2cade650de9bac05e3d403f';
   const NEW_PLB = '33ceea92481cd6cc5b9ad1750302642042bb8ea5d028b830ad86fc31';
   const bothDeployments = new Set([NEW_PLB, OLD_PLB]);
@@ -165,11 +167,10 @@ describe('classifyUtxoAddress — multiple deployments per network', () => {
     expect(classifyUtxoAddress(atNewDeployment, ownPaymentCreds, bothDeployments, ownerCreds)).toBe('programmable');
   });
 
-  // Exercises the list mechanism a future rotation needs, not today's shipped config:
-  // preview deliberately ships only the newest hash, because the older deployments
-  // predate the current contracts (see cip113Deployments.ts). This proves what that
-  // rotation would rely on — a still-held but unconfigured hash reads as somebody
-  // else's and its UTxOs silently disappear from the portfolio.
+  // Exercises the list mechanism, not today's shipped config: each network ships only its
+  // current deployment and superseded testnet ones were removed (see cip113Deployments.ts). This
+  // pins what removal means for the classifier — a still-held but unconfigured hash reads
+  // as 'foreign' and its UTxOs drop out of the portfolio.
   it('loses the superseded deployment if only the newest is configured', () => {
     const newOnly = new Set([NEW_PLB]);
     expect(classifyUtxoAddress(atNewDeployment, ownPaymentCreds, newOnly, ownerCreds)).toBe('programmable');
