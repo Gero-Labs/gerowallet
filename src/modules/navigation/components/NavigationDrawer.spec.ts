@@ -9,6 +9,7 @@ import { mockGlobalProperties } from '@test/helpers/globalProperties';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, type VueWrapper, type DOMWrapper } from '@vue/test-utils';
 import * as Vue from 'vue';
+import { createVuetify } from 'vuetify';
 
 const h = vi.hoisted(() => ({
   route: { path: '/governance/dreps', query: {} as Record<string, unknown>, meta: { public: false } },
@@ -45,11 +46,10 @@ import cardStore from '@/stores/modules/card';
 
 function mountDrawer(path: string): VueWrapper {
   h.route.path = path;
-  return mount(NavigationDrawer, { props: { modelValue: true }, global: { config: { globalProperties: mockGlobalProperties({
+  return mount(NavigationDrawer, { props: { modelValue: true }, global: { plugins: [createVuetify({ theme: { defaultTheme: 'dark' } })], config: { globalProperties: mockGlobalProperties({
       $t,
       $route: h.route,
       $router: { push: h.push, replace: h.replace, currentRoute: Vue.ref(h.route) },
-      $vuetify: { display: { mobile: false }, theme: { current: { dark: true } } },
     }) }, stubs: {
       // The drawer itself renders its content through named slots.
       'v-navigation-drawer': {
@@ -71,9 +71,10 @@ function mountDrawer(path: string): VueWrapper {
 }
 
 /**
- * Every drawer row's target, in render order. Vuetify is not installed here, so
- * `v-list-item` stays an unresolved element and its `to` is a plain attribute —
- * which is exactly the binding under test.
+ * Every drawer row's target, in render order. Only Vuetify's injections are
+ * installed here, so `v-list-item` stays an unresolved element and its `to` is
+ * a plain attribute — which is exactly the binding under test. The separate
+ * runtime spec mounts the native drawer, list items and router together.
  */
 function rowLinks(w: VueWrapper): string[] {
   return w.findAll('.menuItem').map(linkOf);

@@ -1,12 +1,12 @@
 <template>
   <v-navigation-drawer
     v-model="drawer"
-    :temporary="breakpoint.mobile"
+    :temporary="mobile"
     width="270"
     height="100vh"
     style="min-width: 270px; min-height: 100%"
     class="px-3 liquid-glass-nav-drawer"
-    :absolute="breakpoint.mobile"
+    :absolute="mobile"
   >
     <!-- Prepend slot -->
     <template #prepend>
@@ -221,6 +221,7 @@
 import { isPublicRoute } from '@/modules/navigation/helpAccess';
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { ref, computed, watch, onMounted, nextTick, getCurrentInstance, toRefs } from 'vue'
+import { useDisplay, useTheme } from 'vuetify';
 import networks from '@/utils/networks'
 import { musicStore } from '@/stores/musicStore'
 import MusicStoreModule from '@/stores/musicStore'
@@ -275,10 +276,12 @@ const isBeta = ref<boolean>(import.meta.env['VITE_IS_BETA'] === 'true')
 const props = defineProps<{ modelValue: boolean }>()
 const emit = defineEmits(['update:modelValue'])
 
-// Access Vuetify instance
+// Composition injections are available in setup; $vuetify is installed later
+// by the options mixin, after this component's setup has finished.
+const { mobile } = useDisplay();
+const theme = useTheme();
+const themeDark = computed(() => theme.current.value.dark);
 const vmProxy = getCurrentInstance()!.proxy
-const breakpoint = vmProxy.$vuetify.display
-const themeDark = computed(() => vmProxy.$vuetify.theme.current.dark)
 const router = vmProxy.$router
 
 function prefetchItem(item: NavigationItemUnion) {
@@ -529,7 +532,7 @@ const isBlogEnabledByFeatureFlag = computed(() => {
 // Drawer getter/setter
 const drawer = computed({
   get() {
-    return breakpoint.mobile ? props.modelValue : true
+    return mobile.value ? props.modelValue : true
   },
   set(val: boolean) {
     emit('update:modelValue', val)
@@ -537,7 +540,7 @@ const drawer = computed({
 })
 
 // Watch mobile breakpoint to auto-close drawer
-watch(() => breakpoint.mobile,
+watch(mobile,
   (newVal, oldVal) => {
     if (oldVal === false && newVal === true) {
       drawer.value = false
