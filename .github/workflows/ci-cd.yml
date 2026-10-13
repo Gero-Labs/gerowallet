@@ -75,6 +75,7 @@ jobs:
       # only written to the file, never echoed.
       - name: Write production env
         env:
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
           VITE_NEXUS_URL: ${{ vars.VITE_NEXUS_URL }}
           VITE_BACKEND_URL: ${{ vars.VITE_BACKEND_URL }}
           VITE_APP_NAME: ${{ vars.VITE_APP_NAME }}
@@ -89,11 +90,13 @@ jobs:
           VITE_CASHBACK_ENVIRONMENT: ${{ vars.VITE_CASHBACK_ENVIRONMENT }}
           VITE_CASHBACK_IDENTIFIER: ${{ vars.VITE_CASHBACK_IDENTIFIER }}
           VITE_IS_BETA: ${{ vars.VITE_IS_BETA }}
+          VITE_CIP45_DEFAULT_ENABLED: ${{ vars.VITE_CIP45_DEFAULT_ENABLED }}
           VITE_USE_MOCK_PROOF: ${{ vars.VITE_USE_MOCK_PROOF }}
           VITE_MOONPAY_API_KEY: ${{ secrets.VITE_MOONPAY_API_KEY }}
           VITE_GUARDARIAN_API_KEY: ${{ secrets.VITE_GUARDARIAN_API_KEY }}
         run: |
           {
+            echo "GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID"
             echo "VITE_NEXUS_URL=$VITE_NEXUS_URL"
             echo "VITE_BACKEND_URL=$VITE_BACKEND_URL"
             echo "VITE_APP_NAME=$VITE_APP_NAME"
@@ -108,6 +111,7 @@ jobs:
             echo "VITE_CASHBACK_ENVIRONMENT=$VITE_CASHBACK_ENVIRONMENT"
             echo "VITE_CASHBACK_IDENTIFIER=$VITE_CASHBACK_IDENTIFIER"
             echo "VITE_IS_BETA=$VITE_IS_BETA"
+            echo "VITE_CIP45_DEFAULT_ENABLED=$VITE_CIP45_DEFAULT_ENABLED"
             # Pinned off: debugLog() output includes wallet records, unlock
             # responses and PRF metadata, so a release must never enable it.
             echo "VITE_DEBUG_STORES=false"
