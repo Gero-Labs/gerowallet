@@ -30,8 +30,8 @@ function artifactDigest() {
 }
 const report = { startedAt: new Date().toISOString(), extension, profile, checks: [], errors: [], blockedRequests: [],
   runtimeConsoleErrors: [], otherConsoleErrors: [], networkConsoleErrorCount: 0,
+  publicBackendRequestCount: 0,
   artifactSha256: artifactDigest(),
-  publicAddressSha256: createHash('sha256').update(address).digest('hex'),
   fixtureBoundary: 'Only a public Watch wallet record is seeded. All balances, assets, NFTs and transactions come through real production login, public sync, database loaders and broadcasts. No store fields are pinned or overridden.',
   approvalBoundary: 'Approval presentation uses a previously confirmed public transaction supplied through a fixture popup port. No approval, signature, or submission is dispatched.',
   coverageLimits: [
@@ -60,6 +60,9 @@ async function launch() {
     await route.abort();
   });
   context.on('page', target => target.on('pageerror', error => report.errors.push({ stage, message: error.message })));
+  context.on('request', request => {
+    if (['api.gerowallet.io', 'sync.gerowallet.io'].includes(new URL(request.url()).hostname)) report.publicBackendRequestCount++;
+  });
   context.on('console', message => {
     if (message.type() !== 'error') return;
     const text = message.text();
@@ -88,20 +91,36 @@ async function launch() {
 }
 async function observe(target) {
   await target.evaluate(() => {
+    // Hash navigation retains this document and its live subscription. Replacing
+    // it would discard observed fields from stores that only broadcast changes.
+    if (window.__watchReviewObserver) return;
     const state = { walletId: null, tokenCount: 0, collectionCount: 0, transactionCount: 0, assetCount: 0, syncing: true, updates: 0 };
     const port = chrome.runtime.connect({ name: 'store-sync' });
-    port.onMessage.addListener(message => {
-      if (message.type !== 'STORE_UPDATE') return;
-      const update = message.updates;
-      if (message.storeName === 'walletStore') {
+    const chunks = new Map();
+    const applyUpdate = (storeName, update) => {
+      if (storeName === 'walletStore') {
         if ('loggedWallet' in update) state.walletId = update.loggedWallet?.id ?? null;
         if ('tokens' in update) state.tokenCount = Object.keys(update.tokens || {}).length;
         if ('collections' in update) state.collectionCount = Object.keys(update.collections || {}).length;
         if ('transactions' in update) state.transactionCount = update.transactions?.length ?? 0;
         if ('isSyncing' in update) state.syncing = update.isSyncing;
       }
-      if (message.storeName === 'networkStore' && 'assets' in update) state.assetCount = Object.keys(update.assets || {}).length;
+      if (storeName === 'networkStore' && 'assets' in update) state.assetCount = Object.keys(update.assets || {}).length;
       state.updates++;
+    };
+    port.onMessage.addListener(message => {
+      if (message.type === 'STORE_UPDATE') applyUpdate(message.storeName, message.updates);
+      // Large production snapshots use the same JSON update split across messages.
+      // Observe both transport forms without replacing or pinning application state.
+      if (message.type !== 'STORE_UPDATE_CHUNK') return;
+      const pending = chunks.get(message.updateId) || { parts: [], received: 0 };
+      if (pending.parts[message.chunkIndex] === undefined) pending.received++;
+      pending.parts[message.chunkIndex] = message.data;
+      chunks.set(message.updateId, pending);
+      if (pending.received === message.totalChunks) {
+        applyUpdate(message.storeName, JSON.parse(pending.parts.join('')));
+        chunks.delete(message.updateId);
+      }
     });
     port.postMessage({ type: 'STORE_SUBSCRIBE', storeName: 'walletStore' });
     port.postMessage({ type: 'STORE_SUBSCRIBE', storeName: 'networkStore' });
@@ -157,6 +176,7 @@ async function capture(name) {
     assert.equal(report.state.login.status, 'success', 'Real LOGIN must complete');
     assert.ok(report.state.assetCount > 0 && report.state.tokenCount > 0, 'Public sync must deliver populated asset and token stores');
     assert.ok(report.state.transactionCount > 0, 'Public sync must deliver history');
+    report.postLoginState = { ...report.state };
     check('Real production Watch login hydrates populated token and transaction stores from public mainnet data');
     stage = 'dashboard and portfolio';
     await page.goto(`${base}/index.html#/`);
@@ -165,8 +185,12 @@ async function capture(name) {
     await page.locator('.market-token-table').waitFor({ timeout: 45000 });
     await page.locator('.market-token-table .token-ticker').first().waitFor();
     await capture('watch-dashboard');
-    report.holdings = await page.locator('.market-token-table .token-ticker').allTextContents();
-    assert.ok(report.holdings.length > 1, 'Dashboard must render native tokens alongside ADA');
+    report.holdingsRowCount = await page.locator('.market-token-table .token-ticker').count();
+    assert.ok(report.holdingsRowCount > 1, 'Dashboard must render native tokens alongside ADA');
+    await page.waitForFunction(() => {
+      const state = window.__watchReviewObserver.state;
+      return state.walletId === 1 && state.tokenCount > 0 && state.assetCount > 0 && state.transactionCount > 0;
+    }, null, { timeout: 30000 });
     report.state = await page.evaluate(() => ({ ...window.__watchReviewObserver.state }));
     check('Populated dashboard renders navigation drawer and portfolio token rows');
     const collectibles = page.getByText('Collectibles', { exact: true }).first();
@@ -219,10 +243,18 @@ async function capture(name) {
       } finally { db.close(); }
     });
     assert.ok(archived?.cbor, 'Public history must contain a token-bearing transaction with CBOR');
+    assert.ok(archived.labels.length > 0, 'Selected token must have a metadata-backed display label');
     await page.goto(`${base}/index.html#/transactions?tx=${archived.id}`);
     await page.locator('.tx-split__detail').waitFor();
+    // Token pills are created only when this disclosure is open. A transaction
+    // may contain tokens in another output without a token movement in our ledger.
+    const utxos = page.locator('.tx-split__detail .tx-section__head').filter({ hasText: 'UTxOs' });
+    if (await utxos.getAttribute('aria-expanded') !== 'true') await utxos.click();
+    for (const more of await page.locator('.tx-split__detail .tx-io-more').all()) await more.click();
+    for (const more of await page.locator('.tx-split__detail .tx-utxo .tx-more').all()) await more.click();
     await page.waitForFunction(labels => [...document.querySelectorAll('.tx-split__detail .tx-pill__name, .tx-split__detail .tx-ledger')]
       .some(element => labels.some(label => element.textContent.includes(label))), archived.labels, { timeout: 30000 });
+    report.transactionDetailTokenLabelCount = await page.locator('.tx-split__detail .tx-pill__name').count();
     await capture('watch-transaction-detail');
     check('A token-bearing transaction opens its full details without clone errors');
     stage = 'archived transaction approval presentation';
@@ -237,6 +269,11 @@ async function capture(name) {
     }, archived.cbor);
     await page.goto(`${base}/index.html#/sign-tx?website=https%3A%2F%2Freview.invalid`);
     await page.locator('.tx-details').waitFor({ timeout: 30000 });
+    await page.locator('.tx-details .tx-asset-pill').first().hover();
+    await page.locator('.tx-asset-tooltip .tx-asset-name').first().waitFor();
+    report.approvalOutputCount = await page.locator('.tx-details .tx-output-row').count();
+    report.approvalAssetLabelCount = await page.locator('.tx-asset-tooltip .tx-asset-name').count();
+    assert.ok(report.approvalOutputCount > 0 && report.approvalAssetLabelCount > 0, 'Approval must render outputs and asset labels');
     await capture('watch-approval-presentation');
     check('Production sign-tx popup presents an archived token transaction; no signing or approval action is taken');
     report.approvalArchivedCborPresent = true;

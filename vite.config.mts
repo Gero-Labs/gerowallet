@@ -396,7 +396,9 @@ export default defineConfig(({ command }) => {
           copy({
             targets: [
               { src: 'src/assets/public/*', dest: 'extension/public', flatten: true },
-              { src: 'src/assets/notifications/*', dest: 'extension/public/notifications', flatten: true },
+              // Match manifest resources and background notification URLs, as
+              // the dev prepare step does. Clean CI has no old public assets.
+              { src: 'src/assets/notifications/*', dest: 'extension/public', flatten: true },
               // Skip large images for faster build
               {
                 src: 'src/assets/!(emptyState|welcome|cashbackcarousel|cardanoBg|apex|bg-dapp).*',

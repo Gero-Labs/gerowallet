@@ -168,6 +168,20 @@ jobs:
           retention-days: 90
           if-no-files-found: error
 
+      # Preserve diagnostics even when a build or validation gate fails. This
+      # artifact contains reports only, never an unvalidated extension or ZIP.
+      - name: Upload build diagnostics
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: gero-build-diagnostics-${{ github.sha }}
+          path: |
+            release-evidence/build-runtime.json
+            release-evidence/build-resources.txt
+            release-evidence/artifact.json
+          retention-days: 90
+          if-no-files-found: warn
+
   publish:
     needs: build
     runs-on: ubuntu-latest

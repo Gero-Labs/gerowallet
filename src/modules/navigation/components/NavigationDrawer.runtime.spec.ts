@@ -4,6 +4,7 @@ import { defineComponent, h, nextTick, ref } from 'vue';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import { VApp, VNavigationDrawer } from 'vuetify/components';
 import { createTestVuetify } from '@test/helpers/vuetify';
+import { mockGlobalProperties } from '@test/helpers/globalProperties';
 
 vi.mock('@/chrome/messaging', () => ({
   Messaging: { sendToBackgroundFromOptions: vi.fn(), sendToBackground: vi.fn() },
@@ -48,7 +49,7 @@ async function mountNativeDrawer() {
   }), {
     global: {
       plugins: [vuetify, router],
-      config: { globalProperties: { $t: (key: string) => key } },
+      config: { globalProperties: mockGlobalProperties({ $t: (key: string) => key }) },
     },
   });
   await flushPromises();
