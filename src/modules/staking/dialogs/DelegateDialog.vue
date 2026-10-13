@@ -24,7 +24,8 @@
           <v-list-item-subtitle v-if="pool"
             >{{ filters.truncate(pool.pool_id_bech32)
             }}<CopyButton class="ml-1" :value="pool.pool_id_bech32" x-small></CopyButton
-          ></v-list-item-subtitle>
+          ><ExplorerLink type="pool" :id="pool.pool_id_bech32" x-small
+          /></v-list-item-subtitle>
         </v-list-item-content>
 
         <v-list-item-avatar size="80" v-if="poolExtendedInfo(pool)?.info?.url_png_icon_64x64">
@@ -248,6 +249,7 @@ import { useTransactionSigning } from '@/shared/composables/useTransactionSignin
 import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
+import ExplorerLink from '@/shared/components/ExplorerLink.vue';
 import TransactionAuthSection from '@/shared/components/TransactionAuthSection.vue';
 import networks from '@/utils/networks';
 import { WalletType } from '@/models/types';
@@ -258,13 +260,29 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 
 const { t } = useTranslation();
 
+/** The pool row this dialog shows (the template reads these; the rest passes through). */
+interface DelegatePool {
+  ticker?: string;
+  name?: string;
+  description?: string;
+  pool_id_bech32?: string;
+  pool_extended_info?: string;
+  [key: string]: unknown;
+}
+
+/** The parts of a pool's extended metadata JSON this dialog reads. */
+interface PoolExtendedInfo {
+  info?: { url_png_icon_64x64?: string; [key: string]: unknown };
+  [key: string]: unknown;
+}
+
 const props = defineProps({
   isOpen: {
     type: Boolean,
     default: false,
   },
   pool: {
-    type: Object as () => any,
+    type: Object as () => DelegatePool,
   },
   tx: {
     type: Object as () => Cardano.Tx,
@@ -330,11 +348,13 @@ const depositFee = computed(() => {
   // (default client path) and Registration (Trezor) — not just the two legacy
   // types. Without this the deposit row is hidden on the majority first
   // delegation. Mirrors UnstakeDialog's both-generations check on the dereg side.
-  const registrationCert: any = props.tx.body.certificates?.find(cert =>
+  const registrationCert = props.tx.body.certificates?.find(cert =>
     Cardano.isCertType(cert, Cardano.StakeRegistrationCertificateTypes)
   );
+  // The legacy StakeRegistration cert carries no deposit field; the Conway ones do.
+  const deposit = registrationCert && 'deposit' in registrationCert ? registrationCert.deposit : undefined;
 
-  return registrationCert && registrationCert.deposit ? Number(registrationCert?.deposit) : 0;
+  return deposit ? Number(deposit) : 0;
 });
 
 const cols = computed(() => {
@@ -349,9 +369,9 @@ const signDelegationTx = async () => {
   await handleSign(formRef.value || undefined);
 };
 
-const poolExtendedInfo = (pool: any): any => {
+const poolExtendedInfo = (pool: DelegatePool | undefined): PoolExtendedInfo | undefined => {
   if (pool && pool.pool_extended_info) {
-    const parsed = JSON.parse(pool.pool_extended_info);
+    const parsed: PoolExtendedInfo = JSON.parse(pool.pool_extended_info);
     if (parsed?.info?.url_png_icon_64x64 && !parsed.info.url_png_icon_64x64.startsWith('http')) {
       parsed.info.url_png_icon_64x64 = '';
     }

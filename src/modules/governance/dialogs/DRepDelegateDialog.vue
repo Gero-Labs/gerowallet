@@ -42,7 +42,7 @@
               </template>
             </div>
             <div class="text-caption text--secondary mt-1" v-if="drep.id">
-              {{ truncate(drep.id) }}<CopyButton class="ml-1" v-if="drep.id" :value="drep.id" x-small></CopyButton>
+              {{ truncate(drep.id) }}<CopyButton class="ml-1" v-if="drep.id" :value="drep.id" x-small></CopyButton><ExplorerLink type="drep" :id="drep.id" x-small />
             </div>
             <!-- Inline stats row -->
             <div class="d-flex mt-2" style="gap: 12px">
@@ -229,6 +229,7 @@ import BaseDialog from '@/shared/dialogs/BaseDialog.vue';
 import KeystoneSignDialog from '@/shared/dialogs/KeystoneSignDialog.vue';
 import filters from '@/shared/utils/filters';
 import CopyButton from '@/shared/components/CopyButton.vue';
+import ExplorerLink from '@/shared/components/ExplorerLink.vue';
 import { Cardano } from '@cardano-sdk/core';
 import networks from '@/utils/networks';
 import { WalletType } from '@/models/types';

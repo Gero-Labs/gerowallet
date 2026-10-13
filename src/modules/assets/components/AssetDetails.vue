@@ -10,6 +10,7 @@
     <v-card-subtitle class="py-0 pb-3">
       {{ $t('assets.fingerprint') }}: {{  filters.truncate(asset.fingerprint) }}
       <CopyButton class="ml-1" :value="asset.fingerprint" x-small></CopyButton>
+      <ExplorerLink type="asset" :id="asset.fingerprint" x-small />
     </v-card-subtitle>
     <v-card-text class="pa-0">
       <v-tabs v-model="tab" fixed-tabs >
@@ -107,14 +108,31 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import CopyButton from '@/shared/components/CopyButton.vue';
+import ExplorerLink from '@/shared/components/ExplorerLink.vue';
 import assets from '@/utils/assets';
 import filters from '@/shared/utils/filters';
 
 
 
+/** One media entry of CIP-25 / CIP-68 metadata. */
+interface AssetFile {
+  src: string;
+  mediaType?: string;
+  [key: string]: unknown;
+}
+
+/** The asset this card shows. On-chain metadata is free-form: only the fields read here are typed. */
+interface AssetRecord {
+  name?: string;
+  unit?: string;
+  fingerprint?: string;
+  onchain_metadata?: { image?: string; mediaType?: string; files?: AssetFile[]; [key: string]: unknown };
+  [key: string]: unknown;
+}
+
 const props = defineProps({
   asset: {
-    type: Object as () => any,
+    type: Object as () => AssetRecord,
     default: () => {
     },
   },
@@ -125,7 +143,7 @@ const props = defineProps({
 });
 
 const autoGrowHack = ref<boolean>(false);
-const editedAsset = ref<any>({
+const editedAsset = ref<Record<string, unknown>>({
   asset_name: '',
   description: '',
   state: '',
@@ -138,7 +156,7 @@ const editedAsset = ref<any>({
   media_type: '',
   additional_files: [],
 });
-const additional_attributes = ref<any>([]);
+const additional_attributes = ref<Array<{ name: string; value: unknown }>>([]);
 const tab = ref(null);
 const selectedFile = ref(null);
 const audioElement = ref<HTMLAudioElement | null>(null);
@@ -149,7 +167,7 @@ const metadata = computed(() => {
 });
 
 const files = computed(() => {
-  const files = []
+  const files: AssetFile[] = []
   if (props.asset && props.asset.onchain_metadata) {
     let image = ''
     let mediaType = ''
@@ -216,8 +234,8 @@ watch(props.asset, (val) => {
   editedAsset.value = {...val}
 })
 
-watch(additional_attributes, (newVal: any[]) => {
-  const additionalAttributes = {}
+watch(additional_attributes, (newVal) => {
+  const additionalAttributes: Record<string, unknown> = {}
   newVal.forEach(element => {
     additionalAttributes[element.name] = element.value
   })

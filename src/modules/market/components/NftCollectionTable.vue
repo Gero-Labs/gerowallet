@@ -50,6 +50,7 @@
             <v-list-item-subtitle class="d-flex align-center" style="font-size: 11px; opacity: 0.5">
               {{ filters.truncate(item.policyId) }}
               <CopyButton :value="item.policyId" x-small class="ml-1" />
+              <ExplorerLink type="policy" :id="item.policyId" x-small />
             </v-list-item-subtitle>
           </v-list-item-content>
         </v-list-item>
@@ -133,6 +134,7 @@ import { useTranslation } from '@/shared/composables/useTranslation';
 import { formatCompact } from '@/modules/market/utils/formatters';
 import filters from '@/shared/utils/filters';
 import CopyButton from '@/shared/components/CopyButton.vue';
+import ExplorerLink from '@/shared/components/ExplorerLink.vue';
 
 const props = withDefaults(defineProps<{
   hideScam?: boolean;
@@ -175,7 +177,7 @@ onMounted(() => {
   fetchUserNftCollections();
 });
 
-function handleRowClick(item: any) {
+function handleRowClick(item: { policyId: string }) {
   emit('collection-click', item.policyId);
 }
 

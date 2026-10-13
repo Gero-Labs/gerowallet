@@ -138,10 +138,12 @@
                   <div class="tx-utxo__line tx-utxo__line--primary">
                     <span class="g-mono">{{ filters.truncate(utxo.ref) }}</span>
                     <CopyButton v-if="utxo.ref" x-small :value="utxo.ref" />
+                    <ExplorerLink type="tx" :id="utxo.ref" x-small />
                   </div>
                   <div class="tx-utxo__line">
                     <span class="g-mono">{{ filters.truncate(utxo.address) }}</span>
                     <CopyButton v-if="utxo.address" x-small :value="utxo.address" />
+                    <ExplorerLink type="address" :id="utxo.address" x-small />
                     <span v-if="utxo.own" class="tx-you">{{ $t('governance.you') }}</span>
                   </div>
                 </div>
@@ -193,6 +195,7 @@
                   <div class="tx-utxo__line">
                     <span class="g-mono">{{ filters.truncate(utxo.address) }}</span>
                     <CopyButton v-if="utxo.address" x-small :value="utxo.address" />
+                    <ExplorerLink type="address" :id="utxo.address" x-small />
                     <span v-if="utxo.own" class="tx-you">{{ $t('governance.you') }}</span>
                   </div>
                 </div>
@@ -253,6 +256,7 @@
                     <span v-if="txPoolTicker" class="tx-kv__strong">{{ txPoolTicker }}</span>
                     <span class="g-mono">{{ filters.truncate(certificate.poolId) }}</span>
                     <CopyButton x-small :value="certificate.poolId" />
+                    <ExplorerLink type="pool" :id="certificate.poolId" x-small />
                   </dd>
                 </template>
                 <template v-if="certificate.dRep">
@@ -275,6 +279,7 @@
                       <a href="https://cips.cardano.org/cip/CIP-0129" target="_blank" rel="noopener noreferrer">CIP-129</a>
                       <span class="g-mono">{{ filters.truncate(drepIds[index].cip129) }}</span>
                       <CopyButton x-small :value="drepIds[index].cip129" />
+                      <ExplorerLink type="drep" :id="drepIds[index].cip129" x-small />
                     </span>
                   </dd>
                 </template>
@@ -300,11 +305,13 @@
                 <dd>
                   <span class="g-mono">{{ filters.truncate(mint.policyId) }}</span>
                   <CopyButton x-small :value="mint.policyId" />
+                  <ExplorerLink type="policy" :id="mint.policyId" x-small />
                 </dd>
                 <dt>{{ $t('assets.fingerprint') }}</dt>
                 <dd>
                   <span class="g-mono">{{ filters.truncate(mint.fingerprint) }}</span>
                   <CopyButton x-small :value="mint.fingerprint" />
+                  <ExplorerLink type="asset" :id="mint.fingerprint" x-small />
                 </dd>
               </dl>
             </div>
@@ -317,6 +324,7 @@
               <dd>
                 <span class="g-mono">{{ filters.truncate(withdrawal.stakeAddress) }}</span>
                 <CopyButton x-small :value="withdrawal.stakeAddress" />
+                <ExplorerLink type="stake" :id="withdrawal.stakeAddress" x-small />
               </dd>
               <dt>{{ $t('common.amount') }}</dt>
               <dd class="g-num">{{ filters.toCurrency(withdrawal.quantity, false, 0, currencySymbol) }}</dd>
@@ -384,6 +392,7 @@
             <div v-for="(collateral, index) in collaterals" :key="`collateral_${index}`" class="tx-ref-row">
               <span class="g-mono">{{ filters.truncate(`${collateral.txId}#${collateral.index}`) }}</span>
               <CopyButton x-small :value="`${collateral.txId}#${collateral.index}`" />
+              <ExplorerLink type="tx" :id="collateral.txId" x-small />
             </div>
             <div v-if="liveTx.body?.collateralReturn" class="tx-block">
               <div class="tx-block__title">{{ $t('transactions.collateralReturn') }}</div>
@@ -396,6 +405,7 @@
                     x-small
                     :value="liveTx.body.collateralReturn.address"
                   />
+                  <ExplorerLink type="address" :id="liveTx.body.collateralReturn.address" x-small />
                 </dd>
                 <dt>{{ $t('common.amount') }}</dt>
                 <dd class="g-num">
@@ -410,6 +420,7 @@
             <div v-for="(referenceInput, index) in referenceInputs" :key="`reference_input_${index}`" class="tx-ref-row">
               <span class="g-mono">{{ filters.truncate(`${referenceInput.txId}#${referenceInput.index}`) }}</span>
               <CopyButton x-small :value="`${referenceInput.txId}#${referenceInput.index}`" />
+              <ExplorerLink type="tx" :id="referenceInput.txId" x-small />
             </div>
           </template>
         </div>
@@ -423,6 +434,7 @@
 import { useTranslation } from '@/shared/composables/useTranslation';
 import { computed, ref, toRefs, watch } from 'vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
+import ExplorerLink from '@/shared/components/ExplorerLink.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import TxGlyph from '@/modules/transactions/components/TxGlyph.vue';
 import TxTag from '@/modules/transactions/components/TxTag.vue';

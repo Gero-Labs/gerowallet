@@ -24,6 +24,7 @@
           {{ utxo.address }}
         </span>
         <CopyButton x-small :value="utxo.address" class="ml-1 flex-shrink-0" />
+        <ExplorerLink type="address" :id="utxo.address" x-small class="flex-shrink-0" />
       </div>
 
       <!-- ADA Amount -->
@@ -102,6 +103,7 @@
 import { computed } from 'vue';
 import filters from '@/shared/utils/filters';
 import CopyButton from '@/shared/components/CopyButton.vue';
+import ExplorerLink from '@/shared/components/ExplorerLink.vue';
 import NetworkStore from '@/stores/networkStore';
 import { useExplorer } from '@/shared/composables/useExplorer';
 import { useTranslation } from '@/shared/composables/useTranslation';

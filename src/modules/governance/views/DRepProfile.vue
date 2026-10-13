@@ -39,7 +39,7 @@
               </span>
             </div>
             <div class="t-caption g-mono drep-profile__id">
-              {{ truncate(drepId) }}<CopyButton v-if="drepId" class="ml-1" x-small :value="drepId" />
+              {{ truncate(drepId) }}<CopyButton v-if="drepId" class="ml-1" x-small :value="drepId" /><ExplorerLink type="drep" :id="drepId" x-small />
             </div>
             <p v-if="bio" class="t-body drep-profile__bio">{{ bio }}</p>
           </div>
@@ -269,6 +269,7 @@ import filters from '@/shared/utils/filters';
 import networks from '@/utils/networks';
 import { debugLog } from '@/utils/debug';
 import CopyButton from '@/shared/components/CopyButton.vue';
+import ExplorerLink from '@/shared/components/ExplorerLink.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import EmptyState from '@/shared/components/feedback/EmptyState.vue';
 import ErrorState from '@/shared/components/feedback/ErrorState.vue';

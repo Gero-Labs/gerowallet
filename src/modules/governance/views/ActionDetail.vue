@@ -49,6 +49,7 @@
           <span v-if="expiresOn" :title="$t('governance.approxExpiryHint')">
             {{ $t('governance.approxExpiryDate', { date: expiresOn }) }}
           </span>
+          <ExplorerLink type="govAction" :id="govActionId" x-small />
         </div>
         <!-- The single-action vote CTA is withheld in 2.7.1: it gated on the
              wallet HAVING a DRep key rather than on that DRep being registered
@@ -109,6 +110,7 @@
                     <span>{{ $t('governance.recipientAddress') }}</span>
                     <span class="g-mono" :title="withdrawal.rewardAddress">{{ withdrawal.shortAddress }}</span>
                     <CopyButton x-small :value="withdrawal.rewardAddress" />
+                    <ExplorerLink type="stake" :id="withdrawal.rewardAddress" x-small />
                   </span>
                 </li>
               </ul>
@@ -311,6 +313,7 @@ import EmptyState from '@/shared/components/feedback/EmptyState.vue';
 import ErrorState from '@/shared/components/feedback/ErrorState.vue';
 import GButton from '@/shared/components/GButton/GButton.vue';
 import CopyButton from '@/shared/components/CopyButton.vue';
+import ExplorerLink from '@/shared/components/ExplorerLink.vue';
 
 const TABS = [
   { id: 'overview', labelKey: 'governance.overview' },
