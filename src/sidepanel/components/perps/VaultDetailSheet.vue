@@ -122,7 +122,7 @@
           <v-btn
             variant="flat"
             class="vds-btn vds-btn--deposit"
-            @click="$emit('deposit')"
+            disabled
           >
             <v-icon size="14" class="mr-1">mdi-bank-transfer-in</v-icon>
             {{ $t('vaults.deposit') }}
@@ -130,12 +130,13 @@
           <v-btn
             variant="flat"
             class="vds-btn vds-btn--withdraw"
-            @click="$emit('withdraw')"
+            disabled
           >
             <v-icon size="14" class="mr-1">mdi-bank-transfer-out</v-icon>
             {{ $t('vaults.withdraw') }}
           </v-btn>
         </div>
+        <p class="t-caption mt-2" role="status">{{ $t('vaults.transfersUnavailable') }}</p>
 
       </template>
 

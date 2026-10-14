@@ -158,7 +158,7 @@
                   </v-btn>
                 </div>
                 <div
-                  v-if="minAda > 0 && (parseFloat(adaAmount) || 0) < minAda"
+                  v-if="minAdaLovelace > 0n && decimalToBaseUnits(adaAmount, 6) < minAdaLovelace"
                   class="text-caption mt-1 min-ada-hint"
                   @click="fillMinAda"
                 >
