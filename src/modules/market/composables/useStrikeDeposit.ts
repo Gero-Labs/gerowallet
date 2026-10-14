@@ -340,7 +340,7 @@ export function useStrikeDeposit() {
 
       // Deposit complete from the wallet's side. We emit 'confirmed' as the
       // terminal status because legacy consumers (the dashboard
-      // PerpsAccountSection / VaultDepositSheet) listen for 'confirmed'; the
+      // PerpsAccountSection) listen for 'confirmed'; the
       // side-panel sheet treats 'credited' and 'confirmed' as equivalent. The
       // balance updates on Strike once on-chain confirmations land.
       status.value = 'confirmed';

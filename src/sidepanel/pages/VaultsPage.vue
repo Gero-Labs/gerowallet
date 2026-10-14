@@ -159,28 +159,9 @@
       :vault-id="selectedVaultId"
       :model-value="showDetail"
       @update:model-value="showDetail = $event"
-      @deposit="onDepositRequest()"
-      @withdraw="onWithdrawRequest()"
     />
-
-    <!-- ── Deposit Sheet ── -->
-    <VaultDepositSheet
-      v-if="selectedVaultId && showDeposit"
-      :vault-id="selectedVaultId"
-      :vault-name="selectedVaultName"
-      :model-value="showDeposit"
-      @update:model-value="showDeposit = $event"
-    />
-
-    <!-- ── Withdraw Sheet ── -->
-    <VaultWithdrawSheet
-      v-if="selectedVaultId && showWithdraw"
-      :vault-id="selectedVaultId"
-      :vault-name="selectedVaultName"
-      :model-value="showWithdraw"
-      :current-value="userPositions.find(position => position.vault_id === selectedVaultId)?.current_value || '0'"
-      @update:model-value="showWithdraw = $event"
-    />
+    <!-- Vault deposit/withdraw sheets were removed: the account funding APIs
+         cannot target a vault. Add them back with a verified vault-transfer API. -->
 
   </div>
 </template>
@@ -191,8 +172,6 @@ import { useStrikeVaults } from '@/modules/market/composables/useStrikeVaults';
 import { useStrikeOnboarding } from '@/modules/market/composables/useStrikeOnboarding';
 import VaultCard from '../components/perps/VaultCard.vue';
 import VaultDetailSheet from '../components/perps/VaultDetailSheet.vue';
-import VaultDepositSheet from '../components/perps/VaultDepositSheet.vue';
-import VaultWithdrawSheet from '../components/perps/VaultWithdrawSheet.vue';
 import StrikeOnboarding from '../components/perps/StrikeOnboarding.vue';
 import { useChainContext } from '../composables/useChainContext';
 
@@ -216,10 +195,7 @@ const { isConnected } = useStrikeOnboarding();
 // ── State ─────────────────────────────────────────────────────────────────────
 
 const selectedVaultId = ref<string>('');
-const selectedVaultName = ref<string>('');
 const showDetail = ref(false);
-const showDeposit = ref(false);
-const showWithdraw = ref(false);
 const searchQuery = ref('');
 const activeFilter = ref<'all' | 'verified' | 'protocol'>('all');
 const sortBy = ref<'tvl' | 'apr' | 'pnl'>('tvl');
@@ -277,18 +253,7 @@ const hasMore = computed(() => filteredVaults.value.length > visibleCount.value)
 
 function openDetail(vaultId: string) {
   selectedVaultId.value = vaultId;
-  selectedVaultName.value = vaultNameById(vaultId);
   showDetail.value = true;
-}
-
-function onDepositRequest() {
-  showDetail.value = false;
-  showDeposit.value = true;
-}
-
-function onWithdrawRequest() {
-  showDetail.value = false;
-  showWithdraw.value = true;
 }
 
 function onConnected() {

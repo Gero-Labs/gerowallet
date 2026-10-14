@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { decimalToBaseUnits, baseUnitsToDecimalString } from './amount';
+import { decimalToBaseUnits, baseUnitsToDecimalString, exceedsDecimals } from './amount';
 
 describe('decimalToBaseUnits', () => {
   // The defect #933 was filed for: Math.floor(Number(x) * 10 ** d) lands just
@@ -70,6 +70,29 @@ describe('decimalToBaseUnits', () => {
     expect(decimalToBaseUnits(null, 6)).toBe(BigInt(0));
     expect(decimalToBaseUnits(undefined, 6)).toBe(BigInt(0));
     expect(decimalToBaseUnits('abc', 6)).toBe(BigInt(0));
+  });
+
+  it('coerces numeric decimals from metadata and rejects unusable ones', () => {
+    expect(decimalToBaseUnits('1.5', '6' as unknown as number)).toBe(1500000n);
+    expect(decimalToBaseUnits('0.29', '2' as unknown as number)).toBe(29n);
+    for (const decimals of [NaN, -1, 1.5, 'six' as unknown as number]) {
+      expect(decimalToBaseUnits('1.5', decimals)).toBe(0n);
+    }
+  });
+});
+
+describe('exceedsDecimals', () => {
+  it.each([
+    ['0.001', 2, true],
+    ['1.239', 2, true],
+    ['1e-1000000000', 6, true],
+    ['1.230', 2, false],
+    ['.29e1', 2, false],
+    ['1.000001', 6, false],
+    ['', 6, false],
+    ['invalid', 6, false],
+  ] as const)('reports whether %s loses digits at %i decimals', (amount, decimals, expected) => {
+    expect(exceedsDecimals(amount, decimals)).toBe(expected);
   });
 });
 

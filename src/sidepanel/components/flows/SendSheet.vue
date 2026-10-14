@@ -147,7 +147,7 @@
                     density="compact"
                     theme="dark"
                     hide-details="auto"
-                    :error-messages="adaError"
+                    :error-messages="isExactAmount(adaAmount, 6) ? '' : $t('send.invalidAmount')"
                     class="mini-input amount-field"
                     placeholder="0.00"
                     step="0.1"
@@ -162,7 +162,7 @@
                   class="text-caption mt-1 min-ada-hint"
                   @click="fillMinAda"
                 >
-                  {{ $t('wallet.minAdaRequired', { amount: minAda.toFixed(2) }) }}
+                  {{ $t('wallet.minAdaRequired', { amount: baseUnitsToDecimalString(minAdaLovelace, 6) }) }}
                 </div>
               </div>
 
@@ -188,6 +188,7 @@
                     density="compact"
                     theme="dark"
                     hide-details="auto"
+                    :error-messages="isExactAmount(token.sendAmount, token.decimals ?? 0) ? '' : $t('send.invalidAmount')"
                     class="mini-input amount-field"
                     placeholder="0"
                     step="1"
@@ -325,11 +326,11 @@
                 </div>
                 <div class="review-row">
                   <span class="detail-label">ADA</span>
-                  <span class="detail-value white--text font-weight-bold">{{ adaAmount || '0' }} ₳</span>
+                  <span class="detail-value white--text font-weight-bold">{{ baseUnitsToDecimalString(sentOutput?.value.coins ?? 0n, 6) }} ₳</span>
                 </div>
-                <div v-for="token in extraTokens" :key="'r-' + token.unit" class="review-row">
+                <div v-for="token in reviewTokens" :key="'r-' + token.unit" class="review-row">
                   <span class="detail-label">{{ token.ticker || token.name }}</span>
-                  <span class="detail-value white--text">{{ token.sendAmount || '0' }}</span>
+                  <span class="detail-value white--text">{{ token.quantity }}</span>
                 </div>
                 <div v-for="nft in selectedNfts" :key="'rn-' + nft.unit" class="review-row">
                   <span class="detail-label">{{ nft.name || 'NFT' }}</span>
@@ -580,7 +581,7 @@ import { remoteSigningStore } from '@/stores/remoteSigningStore';
 import { useChainContext } from '../../composables/useChainContext';
 import { useApprovalFreshness, awaitFreshApproval, StaleApprovalError } from '@/shared/composables/useApprovalFreshness';
 import { authorizationScopeKey } from '@/shared/composables/authorizationScope';
-import { baseUnitsToDecimalString, decimalToBaseUnits } from '@/shared/utils/amount';
+import { baseUnitsToDecimalString, decimalToBaseUnits, exceedsDecimals } from '@/shared/utils/amount';
 
 const { themeColors } = useChainContext();
 const primaryColor = computed(() => themeColors.value.primary);
@@ -655,7 +656,6 @@ const showQR = ref(false);
 
 // Step 2: Assets
 const adaAmount = ref('');
-const adaError = ref('');
 const extraTokens = ref<SendToken[]>([]);
 const selectedNfts = ref<NftRow[]>([]);
 const showTokenPicker = ref(false);
@@ -667,10 +667,11 @@ const nftListEl = ref<HTMLElement | null>(null);
 const nftSentinelEl = ref<HTMLElement | null>(null);
 let nftObserver: IntersectionObserver | null = null;
 const minAdaLovelace = ref(0n);
-const minAda = computed(() => Number(minAdaLovelace.value) / 1_000_000);
 
 // Step 3: Review
 const tx = shallowRef<Cardano.Tx | undefined>(undefined);
+// The recipient output exactly as built, so Review shows what is signed.
+const sentOutput = shallowRef<Cardano.TxOut | undefined>(undefined);
 const txFee = ref<bigint>(BigInt(0));
 const txBuilt = ref(false);
 const txBuildError = ref('');
@@ -899,12 +900,23 @@ const filteredNfts = computed(() => {
 
 const visibleNfts = computed(() => filteredNfts.value.slice(0, nftDisplayCount.value));
 
+/** Amounts the build would truncate or drop must be corrected, never silently changed. */
+function isExactAmount(amount: string | undefined, decimals: number): boolean {
+  return !exceedsDecimals(amount, decimals) && decimalToBaseUnits(amount, decimals) >= 0n;
+}
+
 const isAssetsValid = computed(() => {
+  if (!isExactAmount(adaAmount.value, 6) || !extraTokens.value.every(t => isExactAmount(t.sendAmount, t.decimals ?? 0))) return false;
   const hasAda = decimalToBaseUnits(adaAmount.value, 6) > 0n;
   const hasTokens = extraTokens.value.some(t => decimalToBaseUnits(t.sendAmount, t.decimals ?? 0) > 0n);
   const hasNfts = selectedNfts.value.length > 0;
   return hasAda || hasTokens || hasNfts;
 });
+
+const reviewTokens = computed(() => extraTokens.value.flatMap((token) => {
+  const quantity = sentOutput.value?.value.assets?.get(token.unit as Cardano.AssetId);
+  return quantity ? [{ ...token, quantity: baseUnitsToDecimalString(quantity, token.decimals ?? 0) }] : [];
+}));
 
 const assetsSummary = computed(() => {
   const parts: string[] = [];
@@ -1062,6 +1074,7 @@ async function buildTransaction() {
   const current = approval.capture();
   if (!current()) return false;
   txBuilt.value = false;
+  sentOutput.value = undefined;
   txBuildError.value = '';
   buildingTx.value = true;
 
@@ -1136,6 +1149,7 @@ async function buildTransaction() {
     tx.value = Serialization.Transaction.fromCbor(HexBlob(tx_cbor)).toCore();
 
     txFee.value = tx.value.body.fee;
+    sentOutput.value = outputs[0];
     txBuilt.value = true;
     return true;
   } catch (e: unknown) {
@@ -1438,7 +1452,6 @@ function resetAll() {
   showContacts.value = false;
   showQR.value = false;
   adaAmount.value = '';
-  adaError.value = '';
   extraTokens.value = [];
   selectedNfts.value = [];
   showTokenPicker.value = false;
@@ -1449,6 +1462,7 @@ function resetAll() {
   teardownNftObserver();
   minAdaLovelace.value = 0n;
   tx.value = undefined;
+  sentOutput.value = undefined;
   txFee.value = BigInt(0);
   txBuilt.value = false;
   txBuildError.value = '';
@@ -1476,6 +1490,7 @@ watch(() => props.modelValue, (val) => {
 
 function clearBuiltTransaction() {
   tx.value = undefined;
+  sentOutput.value = undefined;
   txBuilt.value = false;
 }
 // Compare primitive sources individually so an equal wallet broadcast does not

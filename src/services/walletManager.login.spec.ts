@@ -102,7 +102,7 @@ describe('wallet login after worker startup', () => {
     else await instance.logout();
     env.locked.mockClear();
     verified.resolve();
-    await expect(result).resolves.toBe(false);
+    await expect(result).rejects.toThrow('unlock-target-changed');
     expect(env.locked).not.toHaveBeenCalled();
     expect(env.state.isLocked).toBe(true);
   });

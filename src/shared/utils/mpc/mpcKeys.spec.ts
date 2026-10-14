@@ -131,7 +131,7 @@ describe('mpcKeys — real cross-share invariant (no stubs)', () => {
 
     await expect(
       reconstructAndValidateEntropy(walletA.recoveryShare, collidingLoginShare, await deriveExpectedXpub(walletA.entropy)),
-    ).rejects.toThrow('shares must contain unique values but a duplicate was found');
+    ).rejects.toBeInstanceOf(MpcValidationError);
   });
 
   it('reconstructs the original wallet from the offline device+recovery 2-of-2', async (ctx) => {

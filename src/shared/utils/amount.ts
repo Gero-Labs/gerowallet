@@ -10,26 +10,53 @@
  */
 
 /**
- * Convert a human decimal amount (e.g. "0.29") to base units (e.g. 29n for a
- * 2-decimal token). Extra fractional digits beyond `decimals` are truncated
- * toward zero. Comma-grouped input and scientific notation are supported.
- * Invalid input yields 0n.
+ * Split a decimal amount into its significant digits and the position of the
+ * decimal point within them, or null for invalid or non-finite input.
  */
-export function decimalToBaseUnits(amount: string | number | null | undefined, decimals: number): bigint {
+function parseDecimal(amount: string | number | null | undefined): { negative: boolean; digits: string; point: number } | null {
   const str = String(amount ?? '').trim().replace(/,/g, '');
   const match = /^([+-]?)(?:(\d+)(?:\.(\d*))?|\.(\d+))(?:[eE]([+-]?\d+))?$/.exec(str);
   // Preserve the existing non-finite-input guard; Number never supplies digits
   // for the conversion, so integers above 2^53 retain their exact value.
-  if (!match || !Number.isFinite(Number(str))) return BigInt(0);
+  if (!match || !Number.isFinite(Number(str))) return null;
   const [, sign, whole = '', fraction = '', leadingFraction = '', exponent = '0'] = match;
-  const digits = whole + (fraction || leadingFraction);
-  if (!/[1-9]/.test(digits)) return BigInt(0);
-  const position = whole.length + parseInt(exponent, 10) + decimals;
+  return { negative: sign === '-', digits: whole + (fraction || leadingFraction), point: whole.length + parseInt(exponent, 10) };
+}
+
+/** Token metadata may carry decimals as a string; anything but a non-negative integer is unusable. */
+function decimalPlaces(decimals: number): number | null {
+  const places = Number(decimals);
+  return Number.isSafeInteger(places) && places >= 0 ? places : null;
+}
+
+/**
+ * Convert a human decimal amount (e.g. "0.29") to base units (e.g. 29n for a
+ * 2-decimal token). Extra fractional digits beyond `decimals` are truncated
+ * toward zero. Comma-grouped input and scientific notation are supported.
+ * Invalid input or invalid `decimals` yields 0n.
+ */
+export function decimalToBaseUnits(amount: string | number | null | undefined, decimals: number): bigint {
+  const parsed = parseDecimal(amount);
+  const places = decimalPlaces(decimals);
+  if (!parsed || places === null || !/[1-9]/.test(parsed.digits)) return BigInt(0);
+  const { digits } = parsed;
+  const position = parsed.point + places;
   // Shift directly to base units, including valid number inputs like ".5e1".
   // Tiny exponents truncate to zero without allocating their leading zeroes.
   if (position <= 0) return BigInt(0);
   const units = BigInt(position < digits.length ? digits.slice(0, position) : digits.padEnd(position, '0'));
-  return sign === '-' ? -units : units;
+  return parsed.negative ? -units : units;
+}
+
+/**
+ * True when `amount` has non-zero digits beyond `decimals` places, i.e. when
+ * decimalToBaseUnits would silently truncate part of it.
+ */
+export function exceedsDecimals(amount: string | number | null | undefined, decimals: number): boolean {
+  const parsed = parseDecimal(amount);
+  const places = decimalPlaces(decimals);
+  if (!parsed || places === null) return false;
+  return /[1-9]/.test(parsed.digits.slice(Math.max(parsed.point + places, 0)));
 }
 
 /**

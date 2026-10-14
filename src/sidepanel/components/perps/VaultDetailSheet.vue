@@ -169,8 +169,6 @@ const props = defineProps<{
 
 defineEmits<{
   (e: 'update:modelValue', value: boolean): void;
-  (e: 'deposit'): void;
-  (e: 'withdraw'): void;
 }>();
 
 // ── Composable ────────────────────────────────────────────────────────────────

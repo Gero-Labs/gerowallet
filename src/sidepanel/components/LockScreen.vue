@@ -283,7 +283,7 @@ async function handlePinFinish(pin: string) {
     }, () => !disposed && walletStore.loggedWallet?.id === walletId) as BackgroundMessageResponse;
 
     if (!response.data?.success) {
-      pinError.value = response.error ? t('security.unlockFailed') : response.data?.error || 'Incorrect PIN';
+      pinError.value = response.error ? t('security.unlockFailed') : response.data?.error || t('security.incorrectPin');
       pinCode.value = '';
     }
   } catch (e: unknown) {
@@ -312,7 +312,7 @@ async function handlePasswordUnlock() {
     }, () => !disposed && walletStore.loggedWallet?.id === walletId) as BackgroundMessageResponse;
 
     if (!response.data?.success) {
-      error.value = response.error ? t('security.unlockFailed') : response.data?.error || 'Invalid password';
+      error.value = response.error ? t('security.unlockFailed') : response.data?.error || t('errors.wrongPassword');
     }
   } catch (e: unknown) {
     error.value = getErrorMessage(e, 'Unlock failed');

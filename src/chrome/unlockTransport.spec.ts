@@ -34,6 +34,23 @@ describe('unlock transport after worker termination', () => {
     expect(send).toHaveBeenCalledTimes(1);
   });
 
+  it('waits for a slow cold start instead of failing the first probes', async () => {
+    send.mockImplementationOnce(() => new Promise(resolve => setTimeout(() => resolve({ data: { ready: true } }), 2_000)))
+      .mockResolvedValueOnce({ data: { success: true } });
+    const result = sendUnlockAfterWake(request, () => true);
+    await vi.runAllTimersAsync();
+    await expect(result).resolves.toEqual({ data: { success: true } });
+    expect(send.mock.calls.map(([message]) => message.method)).toEqual(['BACKGROUND_READY', 'UNLOCK']);
+  });
+
+  it('bounds an unanswered unlock without replaying the credentials', async () => {
+    send.mockResolvedValueOnce({ data: { ready: true } }).mockImplementationOnce(() => new Promise(() => {}));
+    const result = sendUnlockAfterWake(request, () => true);
+    await vi.runAllTimersAsync();
+    await expect(result).resolves.toEqual({ error: 'unlock-transport-timeout' });
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
   it('bounds unresponsive probes and never sends credentials without readiness', async () => {
     send.mockImplementation(() => new Promise(() => {}));
     const result = sendUnlockAfterWake(request, () => true);

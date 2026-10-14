@@ -76,6 +76,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   walletStore.loggedWallet = { id: 1, chain: Blockchain.CARDANO, network: Network.MAINNET, type: WalletType.Normal } as never;
   walletStore.isLocked = false;
+  // Module-level mock stores outlive each test; reset what individual tests assign.
+  walletStore.account = undefined as never;
+  networkStore.epochParams = {} as never;
   mocks.minCoin.mockReturnValue(1n);
   mocks.send.mockImplementation(async ({ method }) => {
     if (method === MessageTypes.VERIFY_SPENDING_PASSWORD) return { data: { success: true } };
@@ -112,6 +115,28 @@ describe('side-panel exact transaction amounts', () => {
     await view.goToStep(3);
     expect(mocks.build).not.toHaveBeenCalled();
     expect(view.step).toBe(2);
+  });
+
+  it.each([['2', '0.001'], ['2', '1.239'], ['2', '-1'], ['2.0000001', '1']])('does not build ADA %s with token %s when the build would change an amount', async (ada, amount) => {
+    const view = recipient();
+    view.adaAmount = ada;
+    view.extraTokens = [{ unit: 'token', sendAmount: amount, decimals: 2 }];
+    await view.goToStep(3);
+    expect(mocks.build).not.toHaveBeenCalled();
+    expect(view.step).toBe(2);
+  });
+
+  it('reviews the exact built output, including the minimum-ADA top-up', async () => {
+    mocks.minCoin.mockReturnValue(1500000n);
+    const { wrapper, view } = render();
+    Object.assign(view, { step: 2, address: 'recipient', paymentAddress: 'recipient', adaAmount: '' });
+    view.extraTokens = [{ unit: 'token', sendAmount: '.29e1', decimals: 2 }];
+    await view.goToStep(3);
+    await flushPromises();
+    const review = wrapper.get('.review-card').text();
+    expect(review).toContain('1.5 ₳');
+    expect(review).toContain('2.9');
+    expect(review).not.toContain('.29e1');
   });
 
   it.each([
